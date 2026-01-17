@@ -77,10 +77,15 @@ export function ChatInput() {
 
   const handleWarpOpen = async () => {
     if (!selectedProjectId) return
-    const result = await openInWarp()
+    // input 값이 있으면 command로 전달
+    const result = await openInWarp(input.trim() || undefined)
     if (!result.success && result.error) {
       console.error('Failed to open Warp:', result.error)
       // TODO: Show toast notification
+    }
+    // 성공 시 input 초기화
+    if (result.success && input.trim()) {
+      setInput('')
     }
   }
 

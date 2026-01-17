@@ -27,6 +27,9 @@ from api.mcp import router as mcp_router
 # Usage router for Claude Code stats
 from api.usage import router as usage_router
 
+# Claude sessions router for external session monitoring
+from api.claude_sessions import router as claude_sessions_router
+
 # Check if database mode is enabled
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 
@@ -99,6 +102,9 @@ def create_app(
 
     # Usage router for Claude Code stats
     app.include_router(usage_router, prefix="/api")
+
+    # Claude sessions router for external session monitoring
+    app.include_router(claude_sessions_router, prefix="/api")
 
     return app
 

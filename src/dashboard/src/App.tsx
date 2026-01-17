@@ -12,6 +12,7 @@ import { AgentsPage } from './pages/AgentsPage'
 import { ActivityPage } from './pages/ActivityPage'
 import { MonitorPage } from './pages/MonitorPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { ClaudeSessionsPage } from './pages/ClaudeSessionsPage'
 import {
   SidebarSkeleton,
   DashboardSkeleton,
@@ -21,6 +22,7 @@ import {
   ActivitySkeleton,
   MonitorSkeleton,
   SettingsSkeleton,
+  ClaudeSessionsSkeleton,
 } from './components/skeletons'
 import { Skeleton } from './components/ui/Skeleton'
 import { RotateCcw, Trash2 } from 'lucide-react'
@@ -32,6 +34,7 @@ const viewTitles: Record<string, string> = {
   agents: 'Agents',
   activity: 'Activity',
   monitor: 'Monitor',
+  'claude-sessions': 'Claude Sessions',
   settings: 'Settings',
 }
 
@@ -88,6 +91,8 @@ export default function App() {
         return <ActivityPage />
       case 'monitor':
         return <MonitorPage />
+      case 'claude-sessions':
+        return <ClaudeSessionsPage />
       case 'settings':
         return <SettingsPage />
       default:
@@ -109,6 +114,8 @@ export default function App() {
         return <ActivitySkeleton />
       case 'monitor':
         return <MonitorSkeleton />
+      case 'claude-sessions':
+        return <ClaudeSessionsSkeleton />
       case 'settings':
         return <SettingsSkeleton />
       default:

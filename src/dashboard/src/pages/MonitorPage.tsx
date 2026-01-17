@@ -135,7 +135,7 @@ export function MonitorPage() {
               onClick={() => runAllChecks(selectedProjectId)}
               disabled={isAnyRunning}
               className={cn(
-                'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap',
                 'bg-primary-600 hover:bg-primary-700 text-white',
                 isAnyRunning && 'opacity-50 cursor-not-allowed'
               )}

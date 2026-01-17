@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type ViewType = 'dashboard' | 'projects' | 'tasks' | 'agents' | 'activity' | 'monitor' | 'settings'
+export type ViewType = 'dashboard' | 'projects' | 'tasks' | 'agents' | 'activity' | 'monitor' | 'claude-sessions' | 'settings'
 
 interface NavigationState {
   currentView: ViewType

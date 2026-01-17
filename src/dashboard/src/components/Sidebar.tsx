@@ -7,6 +7,7 @@ import {
   Activity,
   FolderKanban,
   Monitor,
+  Code2,
 } from 'lucide-react'
 import { useEffect } from 'react'
 import { useOrchestrationStore } from '../stores/orchestration'
@@ -19,6 +20,7 @@ const navigation: { name: string; icon: typeof LayoutDashboard; view: ViewType }
   { name: 'Agents', icon: Users, view: 'agents' },
   { name: 'Activity', icon: Activity, view: 'activity' },
   { name: 'Monitor', icon: Monitor, view: 'monitor' },
+  { name: 'Claude Sessions', icon: Code2, view: 'claude-sessions' },
 ]
 
 export function Sidebar() {

@@ -140,6 +140,22 @@ class AgentState(TypedDict):
 | GET | `/api/rag/projects/{id}/stats` | 인덱스 통계 조회 |
 | DELETE | `/api/rag/projects/{id}/index` | 프로젝트 인덱스 삭제 |
 
+#### Claude Sessions (외부 세션 모니터링) Endpoints
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/claude-sessions` | 세션 목록 조회 (정렬/필터 지원) |
+| GET | `/api/claude-sessions/{id}` | 세션 상세 정보 (recent_messages 포함) |
+| GET | `/api/claude-sessions/{id}/stream` | 실시간 SSE 스트리밍 |
+| GET | `/api/claude-sessions/{id}/transcript` | Raw 트랜스크립트 (페이지네이션) |
+| POST | `/api/claude-sessions/{id}/save` | 세션 DB 저장 (USE_DATABASE=true 필요) |
+
+**쿼리 파라미터** (`GET /api/claude-sessions`):
+- `status`: `active` | `idle` | `completed` - 상태 필터
+- `sort_by`: `last_activity` | `created_at` | `message_count` | `estimated_cost` | `project_name`
+- `sort_order`: `asc` | `desc` (기본: `desc`)
+- `limit`: 최대 반환 개수 (기본: 50)
+
 ### 핵심 기능
 
 #### 1. LLM 기반 태스크 분해
@@ -261,6 +277,53 @@ container = client.containers.run(
 ```
 
 **빌드**: `./infra/scripts/build-sandbox.sh`
+
+#### 10. Claude Sessions 모니터링
+
+외부에서 실행 중인 Claude Code 세션을 실시간 모니터링합니다.
+
+```python
+# services/claude_session_monitor.py
+class ClaudeSessionMonitor:
+    def discover_sessions(self) -> list[ClaudeSessionInfo]
+    def get_session_details(self, session_id: str) -> ClaudeSessionDetail
+    async def watch_session(self, session_id: str) -> AsyncIterator[ClaudeSessionDetail]
+```
+
+**주요 기능**:
+- `~/.claude/projects/` 디렉토리 스캔으로 세션 자동 발견
+- 파일 캐싱 (mtime + size 기반 무효화)
+- 실시간 SSE 스트리밍
+- Tool Use 입력값 추적 (`tool_input`)
+
+**Dashboard 컴포넌트**:
+
+| 컴포넌트 | 설명 |
+|----------|------|
+| `SessionList` | 세션 목록 (정렬, 자동 새로고침) |
+| `SessionCard` | 세션 카드 (상태, 토큰, 비용) |
+| `SessionDetails` | 상세 정보 + Recent Activity |
+| `TranscriptViewer` | Raw 트랜스크립트 (JSON Tree 뷰) |
+
+**정렬 옵션**:
+- 마지막 활동 (기본, DESC)
+- 생성일
+- 메시지 수
+- 비용
+- 프로젝트명
+
+**Store** (`stores/claudeSessions.ts`):
+```typescript
+interface ClaudeSessionsState {
+  sessions: ClaudeSessionInfo[]
+  sortBy: SortField
+  sortOrder: 'asc' | 'desc'
+  // actions
+  fetchSessions: (status?: SessionStatus) => Promise<void>
+  setSortBy: (field: SortField) => void
+  setSortOrder: (order: SortOrder) => void
+}
+```
 
 ## Claude Code Commands
 
