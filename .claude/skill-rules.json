@@ -1,0 +1,250 @@
+{
+  "react-native-patterns": {
+    "type": "guideline",
+    "enforcement": "require",
+    "priority": "critical",
+    "description": "React Native/Expo 핵심 패턴 가이드",
+    "promptTriggers": {
+      "keywords": ["useEffect", "component", "screen", "hook", "navigation", "컴포넌트", "화면"],
+      "intentPatterns": [
+        "(create|add|make).*?(component|screen|hook)",
+        "(fix|debug).*?(useEffect|hook)",
+        "(생성|만들|추가).*?(컴포넌트|화면|훅)"
+      ]
+    },
+    "fileTriggers": {
+      "pathPatterns": ["**/components/**/*.tsx", "**/screens/**/*.tsx", "**/hooks/**/*.ts"],
+      "contentPatterns": ["useEffect", "useState", "React.FC"]
+    }
+  },
+
+  "useeffect-cleanup": {
+    "type": "guardrail",
+    "enforcement": "require",
+    "priority": "critical",
+    "description": "useEffect cleanup 함수 필수 확인",
+    "promptTriggers": {
+      "keywords": ["useEffect", "subscription", "interval", "listener", "구독", "타이머"],
+      "intentPatterns": [
+        "useEffect.*?(subscribe|interval|timer|listener)",
+        "(add|remove).*?(subscription|listener)"
+      ]
+    },
+    "reminder": "useEffect에서 구독/타이머는 반드시 cleanup 함수에서 정리하세요"
+  },
+
+  "firebase-integration": {
+    "type": "domain",
+    "enforcement": "require",
+    "priority": "high",
+    "description": "Firebase 통합 패턴 (Auth, Firestore)",
+    "promptTriggers": {
+      "keywords": ["firebase", "firestore", "auth", "인증", "데이터베이스"],
+      "intentPatterns": [
+        "(firebase|firestore).*?(setup|config|integration)",
+        "(auth|인증).*?(login|signup|logout)"
+      ]
+    },
+    "fileTriggers": {
+      "pathPatterns": ["**/services/firebase/**", "**/services/auth/**"],
+      "contentPatterns": ["firebase", "firestore", "auth"]
+    }
+  },
+
+  "seoul-api-integration": {
+    "type": "domain",
+    "enforcement": "require",
+    "priority": "critical",
+    "description": "Seoul Open Data API 통합 패턴",
+    "promptTriggers": {
+      "keywords": ["seoul api", "서울 api", "실시간 도착", "arrival", "subway", "지하철"],
+      "intentPatterns": [
+        "(seoul|서울).*?(api|데이터)",
+        "(실시간|realtime).*?(arrival|도착)",
+        "(fetch|get).*?(train|subway)"
+      ]
+    },
+    "fileTriggers": {
+      "pathPatterns": ["**/services/api/**", "**/seoulSubwayApi.ts"],
+      "contentPatterns": ["seoulSubwayApi", "ARRIVAL_INFO", "STATION"]
+    },
+    "reminder": "API 폴링 간격은 최소 30초를 유지하세요"
+  },
+
+  "expo-notifications": {
+    "type": "domain",
+    "enforcement": "suggest",
+    "priority": "high",
+    "description": "Expo Push Notifications 패턴",
+    "promptTriggers": {
+      "keywords": ["notification", "push", "알림", "푸시"],
+      "intentPatterns": [
+        "(notification|알림).*?(send|schedule|push)",
+        "expo.*?notification"
+      ]
+    },
+    "fileTriggers": {
+      "pathPatterns": ["**/services/notification/**"],
+      "contentPatterns": ["Notifications", "scheduleNotification", "ExpoPushToken"]
+    }
+  },
+
+  "navigation-patterns": {
+    "type": "guideline",
+    "enforcement": "suggest",
+    "priority": "high",
+    "description": "React Navigation 6.x 패턴",
+    "promptTriggers": {
+      "keywords": ["navigation", "navigate", "screen", "stack", "tab", "네비게이션"],
+      "intentPatterns": [
+        "(navigation|navigate).*?(screen|page)",
+        "(add|create).*?(screen|route)"
+      ]
+    },
+    "fileTriggers": {
+      "pathPatterns": ["**/navigation/**"],
+      "contentPatterns": ["createStackNavigator", "createBottomTabNavigator", "useNavigation"]
+    }
+  },
+
+  "typescript-strict": {
+    "type": "guardrail",
+    "enforcement": "block",
+    "priority": "critical",
+    "description": "TypeScript strict mode 준수",
+    "promptTriggers": {
+      "keywords": ["any", "타입", "type", "interface"],
+      "intentPatterns": [
+        ".*?:\\s*any\\b",
+        "(add|define).*?(type|interface)"
+      ]
+    },
+    "blockedPatterns": [
+      ": any",
+      "as any"
+    ],
+    "reminder": "any 타입 대신 구체적인 타입이나 unknown을 사용하세요"
+  },
+
+  "error-handling": {
+    "type": "guideline",
+    "enforcement": "require",
+    "priority": "high",
+    "description": "에러 처리 및 Sentry 통합",
+    "promptTriggers": {
+      "keywords": ["error", "catch", "try", "에러", "오류", "예외"],
+      "intentPatterns": [
+        "(handle|catch).*?(error|exception)",
+        "try.*?catch"
+      ]
+    },
+    "fileTriggers": {
+      "pathPatterns": ["**/services/**", "**/hooks/**"],
+      "contentPatterns": ["try", "catch", "throw", "Error"]
+    },
+    "reminder": "에러는 빈 배열/null 반환으로 처리하고, Sentry로 전송하세요"
+  },
+
+  "async-storage": {
+    "type": "domain",
+    "enforcement": "suggest",
+    "priority": "normal",
+    "description": "AsyncStorage 캐싱 패턴",
+    "promptTriggers": {
+      "keywords": ["storage", "cache", "persist", "캐시", "저장"],
+      "intentPatterns": [
+        "(async)?storage.*?(save|get|set)",
+        "(cache|persist).*?(data|state)"
+      ]
+    },
+    "fileTriggers": {
+      "pathPatterns": ["**/utils/storageUtils.ts", "**/services/data/**"],
+      "contentPatterns": ["AsyncStorage", "setItem", "getItem"]
+    }
+  },
+
+  "test-coverage": {
+    "type": "validation",
+    "enforcement": "require",
+    "priority": "high",
+    "description": "Jest 테스트 커버리지 (75% statements)",
+    "promptTriggers": {
+      "keywords": ["test", "jest", "coverage", "테스트", "커버리지"],
+      "intentPatterns": [
+        "(write|add).*?test",
+        "(run|check).*?coverage"
+      ]
+    },
+    "fileTriggers": {
+      "pathPatterns": ["**/__tests__/**", "**/*.test.ts", "**/*.test.tsx"],
+      "contentPatterns": ["describe", "it", "expect", "jest"]
+    },
+    "thresholds": {
+      "statements": 75,
+      "functions": 70,
+      "branches": 60
+    }
+  },
+
+  "performance-optimization": {
+    "type": "guideline",
+    "enforcement": "suggest",
+    "priority": "normal",
+    "description": "React Native 성능 최적화",
+    "promptTriggers": {
+      "keywords": ["performance", "optimize", "memo", "callback", "성능", "최적화"],
+      "intentPatterns": [
+        "(optimize|improve).*?(performance|speed)",
+        "(use)?memo.*?(component|function)"
+      ]
+    },
+    "fileTriggers": {
+      "pathPatterns": ["**/components/**"],
+      "contentPatterns": ["React.memo", "useMemo", "useCallback"]
+    }
+  },
+
+  "checklist-generator": {
+    "type": "tool",
+    "enforcement": "suggest",
+    "priority": "normal",
+    "description": "자동 체크리스트 생성",
+    "promptTriggers": {
+      "keywords": ["checklist", "체크리스트", "TODO", "확인사항"],
+      "intentPatterns": [
+        "(create|generate).*?(checklist|todo)",
+        "(verify|check).*?list"
+      ]
+    }
+  },
+
+  "code-simplifier": {
+    "type": "agent",
+    "enforcement": "suggest",
+    "priority": "normal",
+    "description": "코드 단순화 및 리팩토링",
+    "agentFile": ".claude/agents/code-simplifier.md",
+    "model": "haiku",
+    "promptTriggers": {
+      "keywords": ["simplify", "refactor", "단순화", "리팩토링", "개선"],
+      "intentPatterns": [
+        "(simplify|refactor).*?(code|function)",
+        "(reduce|줄이).*?(complexity|복잡도)"
+      ]
+    }
+  },
+
+  "parallel-coordinator": {
+    "type": "framework",
+    "enforcement": "suggest",
+    "priority": "high",
+    "description": "병렬 에이전트 조정",
+    "promptTriggers": {
+      "keywords": ["parallel", "병렬", "동시", "concurrent", "에이전트"],
+      "intentPatterns": [
+        "(parallel|병렬).*?(task|작업)",
+        "(coordinate|조정).*?(agent|에이전트)"
+      ]
+    }
+  }
+}

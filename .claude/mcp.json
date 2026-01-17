@@ -1,0 +1,82 @@
+{
+  "mcpServers": {
+    "claude-in-chrome": {
+      "disabled": true,
+      "_note": "Disabled to save ~14K tokens. Enable when needed for Chrome automation."
+    },
+    "codex-cli": {
+      "command": "npx",
+      "args": ["-y", "codex-mcp-server"],
+      "disabled": false
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"],
+      "disabled": false
+    },
+    "magic": {
+      "command": "npx",
+      "args": ["-y", "@21st-dev/magic"],
+      "env": {
+        "TWENTYFIRST_API_KEY": "${TWENTYFIRST_API_KEY}"
+      },
+      "disabled": true,
+      "_note": "Disabled to save ~3.4K tokens. Enable when working with 21st.dev UI components."
+    },
+    "tavily": {
+      "command": "npx",
+      "args": ["-y", "tavily-mcp@latest"],
+      "env": {
+        "TAVILY_API_KEY": "${TAVILY_API_KEY}"
+      },
+      "disabled": false
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"],
+      "disabled": true,
+      "_note": "Disabled to save ~14K tokens. Enable when needed for browser automation."
+    },
+    "shadcn": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-shadcn"],
+      "disabled": true,
+      "_note": "Enable when working with shadcn components"
+    },
+    "serena": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server", "--context", "ide-assistant"],
+      "disabled": true,
+      "_note": "Enable for IDE assistant features"
+    },
+    "morphllm-fast-apply": {
+      "command": "npx",
+      "args": ["-y", "@morph-llm/morph-fast-apply", "/Users/younghwankang/Work/liveMetro"],
+      "env": {
+        "MORPH_API_KEY": "${MORPH_API_KEY}"
+      },
+      "disabled": true,
+      "_note": "Enable for fast code application"
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      },
+      "disabled": true,
+      "_note": "Enable for GitHub integration"
+    },
+    "claude-context": {
+      "command": "npx",
+      "args": ["-y", "@zilliz/claude-context-mcp@latest"],
+      "env": {
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}",
+        "MILVUS_ADDRESS": "${MILVUS_ADDRESS}",
+        "MILVUS_TOKEN": "${MILVUS_TOKEN}"
+      },
+      "disabled": true,
+      "_note": "Enable for vector context search"
+    }
+  }
+}

@@ -1,0 +1,108 @@
+version: '3.9'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: ags-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: agent_orchestrator
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ags-network
+
+  # Redis for caching and queues
+  redis:
+    image: redis:7-alpine
+    container_name: ags-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ags-network
+
+  # Backend API (development)
+  backend:
+    build:
+      context: ../../src/backend
+      dockerfile: ../../infra/docker/Dockerfile.backend
+    container_name: ags-backend
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/agent_orchestrator
+      - REDIS_URL=redis://redis:6379/0
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DEBUG=true
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../../src/backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ags-network
+    profiles:
+      - full
+
+  # Dashboard (development)
+  dashboard:
+    build:
+      context: ../../src/dashboard
+      dockerfile: ../../infra/docker/Dockerfile.dashboard
+    container_name: ags-dashboard
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../../src/dashboard:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - ags-network
+    profiles:
+      - full
+
+  # Sandbox image builder (run with: docker-compose build sandbox)
+  # Note: This service is not meant to run; it only builds the sandbox image
+  # Actual sandbox containers are created dynamically by sandbox_manager.py
+  sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox
+    image: ags-sandbox:latest
+    container_name: ags-sandbox-builder
+    profiles:
+      - build-only
+    # Security constraints (for reference - applied at runtime)
+    # network_mode: none
+    # mem_limit: 512m
+    # read_only: false
+    # user: sandbox
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  ags-network:
+    driver: bridge

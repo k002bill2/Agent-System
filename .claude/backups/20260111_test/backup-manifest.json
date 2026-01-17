@@ -1,0 +1,16 @@
+{
+  "version": "1.0.0",
+  "created_at": "2026-01-11T01:00:16Z",
+  "project_name": "LiveMetro",
+  "project_path": "/Users/younghwankang/Work/LiveMetro",
+  "backup_name": "20260111_test",
+  "git_commit": "4164f76",
+  "git_branch": "main",
+  "stats": {
+    "total_files": 122,
+    "commands_count": 12,
+    "skills_count": 17,
+    "agents_count": 11,
+    "hooks_count": 7
+  }
+}

@@ -1,0 +1,38 @@
+# Sandbox Dockerfile for secure command execution
+# This image runs commands in an isolated environment with limited permissions
+
+FROM python:3.11-slim
+
+# Install common development tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    git \
+    jq \
+    vim \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for sandboxed execution
+RUN useradd -m -s /bin/bash sandbox \
+    && mkdir -p /workspace \
+    && chown -R sandbox:sandbox /workspace
+
+# Set resource limits
+# Note: Additional limits are enforced at container runtime
+
+# Set working directory
+WORKDIR /workspace
+
+# Switch to non-root user
+USER sandbox
+
+# Default environment
+ENV HOME=/home/sandbox
+ENV PATH="/home/sandbox/.local/bin:$PATH"
+ENV PYTHONUNBUFFERED=1
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD echo "sandbox healthy" || exit 1
+
+# Default command (can be overridden)
+CMD ["bash"]
