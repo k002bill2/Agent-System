@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================
-# AGS (Agent Orchestration System) - Stop All Services
+# AOS (Agent Orchestration Service) - Stop All Services
 # ============================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,7 +14,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-echo -e "${YELLOW}Stopping all AGS services...${NC}"
+echo -e "${YELLOW}Stopping all AOS services...${NC}"
 echo ""
 
 # Stop Dashboard

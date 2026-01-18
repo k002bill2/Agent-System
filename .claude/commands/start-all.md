@@ -1,10 +1,10 @@
 ---
-description: AGS 전체 서비스 시작 (인프라 + Backend + Dashboard)
+description: AOS 전체 서비스 시작 (인프라 + Backend + Dashboard)
 ---
 
 # Start All Services
 
-Agent Orchestration System의 모든 서비스를 한번에 시작합니다.
+Agent Orchestration Service의 모든 서비스를 한번에 시작합니다.
 
 ## 실행
 

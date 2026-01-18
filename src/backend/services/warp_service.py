@@ -107,8 +107,8 @@ class WarpService:
             }
 
         # Create launch configuration
-        config_name = f"ags-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        tab_title = title or "AGS Task"
+        config_name = f"aos-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        tab_title = title or "AOS Task"
 
         config = {
             "name": config_name,
@@ -165,7 +165,7 @@ class WarpService:
 
     def cleanup_old_configs(self, max_age_hours: int = 24) -> int:
         """
-        Clean up old AGS launch configurations.
+        Clean up old AOS launch configurations.
 
         Args:
             max_age_hours: Remove configs older than this many hours
@@ -179,7 +179,7 @@ class WarpService:
         removed = 0
         cutoff = datetime.now().timestamp() - (max_age_hours * 3600)
 
-        for config_file in self.launch_config_dir.glob("ags-*.yaml"):
+        for config_file in self.launch_config_dir.glob("aos-*.yaml"):
             try:
                 if config_file.stat().st_mtime < cutoff:
                     config_file.unlink()

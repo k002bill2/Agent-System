@@ -63,7 +63,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app(
-    title: str = "Agent Orchestration System",
+    title: str = "Agent Orchestration Service",
     debug: bool = False,
 ) -> FastAPI:
     """Create and configure the FastAPI application."""

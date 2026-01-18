@@ -32,11 +32,11 @@ class MCPService:
         self._session_tasks: dict[str, dict] = {}  # session_id -> task info
 
     def get_tool_definitions(self) -> list[MCPToolDefinition]:
-        """Return available AGS tools for MCP clients."""
+        """Return available AOS tools for MCP clients."""
         return [
             MCPToolDefinition(
-                name="ags_create_task",
-                description="Create and execute a new task in AGS orchestration system",
+                name="aos_create_task",
+                description="Create and execute a new task in AOS orchestration system",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -57,8 +57,8 @@ class MCPService:
                 }
             ),
             MCPToolDefinition(
-                name="ags_get_status",
-                description="Get status of an AGS session or task",
+                name="aos_get_status",
+                description="Get status of an AOS session or task",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -71,8 +71,8 @@ class MCPService:
                 }
             ),
             MCPToolDefinition(
-                name="ags_list_agents",
-                description="List available agents in AGS system",
+                name="aos_list_agents",
+                description="List available agents in AOS system",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -84,7 +84,7 @@ class MCPService:
                 }
             ),
             MCPToolDefinition(
-                name="ags_run_check",
+                name="aos_run_check",
                 description="Run project verification checks (typecheck, lint, test, build)",
                 inputSchema={
                     "type": "object",
@@ -103,8 +103,8 @@ class MCPService:
                 }
             ),
             MCPToolDefinition(
-                name="ags_list_projects",
-                description="List all registered projects in AGS",
+                name="aos_list_projects",
+                description="List all registered projects in AOS",
                 inputSchema={
                     "type": "object",
                     "properties": {}
@@ -174,15 +174,15 @@ class MCPService:
     async def _execute_tool(self, name: str, arguments: dict[str, Any]) -> MCPToolResult:
         """Execute a tool and return result."""
         try:
-            if name == "ags_create_task":
+            if name == "aos_create_task":
                 return await self._tool_create_task(arguments)
-            elif name == "ags_get_status":
+            elif name == "aos_get_status":
                 return await self._tool_get_status(arguments)
-            elif name == "ags_list_agents":
+            elif name == "aos_list_agents":
                 return await self._tool_list_agents(arguments)
-            elif name == "ags_run_check":
+            elif name == "aos_run_check":
                 return await self._tool_run_check(arguments)
-            elif name == "ags_list_projects":
+            elif name == "aos_list_projects":
                 return await self._tool_list_projects(arguments)
             else:
                 return MCPToolResult(
@@ -196,7 +196,7 @@ class MCPService:
             )
 
     async def _tool_create_task(self, args: dict[str, Any]) -> MCPToolResult:
-        """Create a new task in AGS."""
+        """Create a new task in AOS."""
         project_id = args.get("project_id")
         task = args.get("task")
         agent_type = args.get("agent_type")
@@ -230,7 +230,7 @@ class MCPService:
 - Task: {task}
 - Agent: {agent_type or 'auto-select'}
 
-To track progress, use ags_get_status with session_id: {session_id}"""
+To track progress, use aos_get_status with session_id: {session_id}"""
 
         return MCPToolResult(
             content=[{"type": "text", "text": result_text}]

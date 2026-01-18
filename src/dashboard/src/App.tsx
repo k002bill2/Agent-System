@@ -144,7 +144,7 @@ export default function App() {
           ) : (
             <>
               <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
-                {viewTitles[currentView] || 'Agent Orchestrator'}
+                {viewTitles[currentView] || 'Agent Orchestration Service'}
               </h1>
               <div className="ml-auto flex items-center gap-4">
                 <CostBadge />

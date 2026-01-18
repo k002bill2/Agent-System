@@ -1,5 +1,5 @@
 {
-  "name": "agent-orchestrator-dashboard",
+  "name": "agent-orchestration-service-dashboard",
   "private": true,
   "version": "0.1.0",
   "type": "module",

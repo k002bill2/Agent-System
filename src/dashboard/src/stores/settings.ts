@@ -77,6 +77,23 @@ const defaultNotifications: NotificationSettings = {
   soundVolume: 50,
 }
 
+// Settings migration function
+const migrateSettings = () => {
+  const OLD_KEY = 'agent-orchestrator-settings'
+  const NEW_KEY = 'agent-orchestration-service-settings'
+
+  const oldData = localStorage.getItem(OLD_KEY)
+  if (oldData && !localStorage.getItem(NEW_KEY)) {
+    localStorage.setItem(NEW_KEY, oldData)
+    console.log('✅ Settings migrated from AGS to AOS')
+  }
+}
+
+// Run migration before creating store
+if (typeof window !== 'undefined') {
+  migrateSettings()
+}
+
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
@@ -110,7 +127,7 @@ export const useSettingsStore = create<SettingsState>()(
         })),
     }),
     {
-      name: 'agent-orchestrator-settings',
+      name: 'agent-orchestration-service-settings',
       partialize: (state) => ({
         llmProvider: state.llmProvider,
         model: state.model,
@@ -125,7 +142,8 @@ export const useSettingsStore = create<SettingsState>()(
 
 // Initialize theme on load
 if (typeof window !== 'undefined') {
-  const stored = localStorage.getItem('agent-orchestrator-settings')
+  const NEW_KEY = 'agent-orchestration-service-settings'
+  const stored = localStorage.getItem(NEW_KEY)
   let currentTheme: Theme = 'light'
 
   if (stored) {
@@ -142,7 +160,7 @@ if (typeof window !== 'undefined') {
 
   // Listen for system theme changes (only applies when theme is 'system')
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-    const stored = localStorage.getItem('agent-orchestrator-settings')
+    const stored = localStorage.getItem(NEW_KEY)
     if (stored) {
       try {
         const { state } = JSON.parse(stored)

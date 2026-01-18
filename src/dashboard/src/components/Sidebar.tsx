@@ -37,10 +37,10 @@ export function Sidebar() {
       <div className="h-14 flex items-center px-4 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-accent rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-sm">AO</span>
+            <span className="text-white font-bold text-sm">AOS</span>
           </div>
           <span className="font-semibold text-gray-900 dark:text-white">
-            Orchestrator
+            Orchestration Service
           </span>
         </div>
       </div>

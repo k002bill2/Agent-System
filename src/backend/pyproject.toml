@@ -1,7 +1,7 @@
 [project]
-name = "agent-orchestrator"
+name = "agent-orchestration-service"
 version = "0.1.0"
-description = "Agent Orchestration System with LangGraph"
+description = "Agent Orchestration Service with LangGraph"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

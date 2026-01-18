@@ -15,7 +15,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # Sandbox configuration
-DEFAULT_IMAGE = "ags-sandbox:latest"
+DEFAULT_IMAGE = "aos-sandbox:latest"
 DEFAULT_MEMORY_LIMIT = "512m"
 DEFAULT_CPU_LIMIT = 1.0
 DEFAULT_TIMEOUT = 120  # seconds
@@ -156,7 +156,7 @@ class SandboxManager:
         self._ensure_available()
 
         timeout = timeout or self.timeout
-        container_name = f"ags-sandbox-{task_id[:8]}"
+        container_name = f"aos-sandbox-{task_id[:8]}"
 
         # Prepare volumes
         volumes = {}
@@ -284,7 +284,7 @@ class SandboxManager:
         try:
             containers = self.client.containers.list(
                 all=True,
-                filters={"name": "ags-sandbox-"},
+                filters={"name": "aos-sandbox-"},
             )
 
             for container in containers:

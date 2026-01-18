@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================
-# AGS (Agent Orchestration System) - All Services Startup
+# AOS (Agent Orchestration Service) - All Services Startup
 # ============================================================
 set -e
 
@@ -20,7 +20,7 @@ PID_DIR="$PROJECT_ROOT/.pids"
 mkdir -p "$PID_DIR"
 
 echo -e "${BLUE}============================================================${NC}"
-echo -e "${BLUE}   Agent Orchestration System - Starting All Services${NC}"
+echo -e "${BLUE}   Agent Orchestration Service - Starting All Services${NC}"
 echo -e "${BLUE}============================================================${NC}"
 echo ""
 

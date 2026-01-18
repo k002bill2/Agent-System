@@ -1,10 +1,10 @@
 ---
-description: AGS 전체 서비스 중지
+description: AOS 전체 서비스 중지
 ---
 
 # Stop All Services
 
-Agent Orchestration System의 모든 서비스를 중지합니다.
+Agent Orchestration Service의 모든 서비스를 중지합니다.
 
 ## 실행
 

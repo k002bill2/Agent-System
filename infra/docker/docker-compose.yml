@@ -4,7 +4,7 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
-    container_name: ags-postgres
+    container_name: aos-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -20,12 +20,12 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - ags-network
+      - aos-network
 
   # Redis for caching and queues
   redis:
     image: redis:7-alpine
-    container_name: ags-redis
+    container_name: aos-redis
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
@@ -37,14 +37,14 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - ags-network
+      - aos-network
 
   # Backend API (development)
   backend:
     build:
       context: ../../src/backend
       dockerfile: ../../infra/docker/Dockerfile.backend
-    container_name: ags-backend
+    container_name: aos-backend
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/agent_orchestrator
       - REDIS_URL=redis://redis:6379/0
@@ -60,7 +60,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - ags-network
+      - aos-network
     profiles:
       - full
 
@@ -69,7 +69,7 @@ services:
     build:
       context: ../../src/dashboard
       dockerfile: ../../infra/docker/Dockerfile.dashboard
-    container_name: ags-dashboard
+    container_name: aos-dashboard
     ports:
       - "5173:5173"
     volumes:
@@ -78,7 +78,7 @@ services:
     depends_on:
       - backend
     networks:
-      - ags-network
+      - aos-network
     profiles:
       - full
 
@@ -89,8 +89,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.sandbox
-    image: ags-sandbox:latest
-    container_name: ags-sandbox-builder
+    image: aos-sandbox:latest
+    container_name: aos-sandbox-builder
     profiles:
       - build-only
     # Security constraints (for reference - applied at runtime)
@@ -104,5 +104,5 @@ volumes:
   redis_data:
 
 networks:
-  ags-network:
+  aos-network:
     driver: bridge

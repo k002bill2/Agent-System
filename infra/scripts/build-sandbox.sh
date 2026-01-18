@@ -9,10 +9,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DOCKER_DIR="$PROJECT_ROOT/infra/docker"
 
-IMAGE_NAME="ags-sandbox"
+IMAGE_NAME="aos-sandbox"
 IMAGE_TAG="latest"
 
-echo "=== Building AGS Sandbox Image ==="
+echo "=== Building AOS Sandbox Image ==="
 echo "Project root: $PROJECT_ROOT"
 echo "Docker dir: $DOCKER_DIR"
 echo ""

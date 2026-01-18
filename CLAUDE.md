@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-이 저장소는 **Agent Orchestration System (AGS)** - LangGraph 기반 멀티 에이전트 오케스트레이션 시스템입니다. Claude Code 설정과 실제 시스템 소스 코드를 함께 관리하는 하이브리드 모노레포 구조입니다.
+이 저장소는 **Agent Orchestration Service (AOS)** - LangGraph 기반 멀티 에이전트 오케스트레이션 서비스입니다. Claude Code 설정과 실제 시스템 소스 코드를 함께 관리하는 하이브리드 모노레포 구조입니다.
 
 ## Directory Structure
 
@@ -268,7 +268,7 @@ class ParallelExecutorNode(BaseNode):
 ```python
 # services/sandbox_manager.py
 container = client.containers.run(
-    "ags-sandbox:latest",
+    "aos-sandbox:latest",
     command=["bash", "-c", command],
     network_mode="none",   # 네트워크 차단
     mem_limit="512m",      # 메모리 제한
@@ -457,9 +457,9 @@ docker-compose --profile full up -d
 ./infra/scripts/build-sandbox.sh
 
 # 빌드 검증
-docker run --rm ags-sandbox:latest whoami     # → sandbox
-docker run --rm ags-sandbox:latest pwd        # → /workspace
-docker run --rm ags-sandbox:latest python --version  # → Python 3.11.x
+docker run --rm aos-sandbox:latest whoami     # → sandbox
+docker run --rm aos-sandbox:latest pwd        # → /workspace
+docker run --rm aos-sandbox:latest python --version  # → Python 3.11.x
 ```
 
 **보안 특성**:

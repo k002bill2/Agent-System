@@ -1,6 +1,6 @@
-# Agent Orchestration System (AGS)
+# Agent Orchestration Service (AOS)
 
-LangGraph 기반 멀티 에이전트 오케스트레이션 시스템입니다.
+LangGraph 기반 멀티 에이전트 오케스트레이션 서비스입니다.
 
 ## Features
 
