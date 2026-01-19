@@ -6,7 +6,10 @@ import { ClaudeUsageDashboard } from '../components/usage/ClaudeUsageDashboard'
 export function DashboardPage() {
   const { sessionId, connected, tasks, agents, messages } = useOrchestrationStore()
 
-  const taskStats = Object.values(tasks).reduce(
+  // Filter out deleted tasks for statistics
+  const activeTasks = Object.values(tasks).filter((t) => !t.isDeleted)
+
+  const taskStats = activeTasks.reduce(
     (acc, task) => {
       acc.total++
       if (task.status === 'completed') acc.completed++

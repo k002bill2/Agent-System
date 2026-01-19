@@ -66,3 +66,7 @@ async def session_id(engine):
     yield session_id
     # Cleanup
     await engine.delete_session(session_id)
+
+
+# Note: Agent Registry reset is handled in individual test setup_method
+# to avoid conflicts with class-based test fixtures

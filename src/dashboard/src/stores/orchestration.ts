@@ -24,6 +24,9 @@ export interface Task {
   error?: string
   createdAt: string
   updatedAt: string
+  // Soft delete fields
+  isDeleted: boolean
+  deletedAt: string | null
 }
 
 export interface Agent {
@@ -99,6 +102,9 @@ interface OrchestrationState {
   warpInstalled: boolean | null
   warpLoading: boolean
 
+  // Task filters
+  showDeletedTasks: boolean
+
   // Actions
   fetchProjects: () => Promise<void>
   selectProject: (projectId: string | null) => void
@@ -114,6 +120,17 @@ interface OrchestrationState {
   checkWarpStatus: () => Promise<void>
   _hasHydrated: boolean
   setHasHydrated: (state: boolean) => void
+  // Task deletion actions
+  deleteTask: (taskId: string) => Promise<{ success: boolean; error?: string; deletedIds?: string[] }>
+  cancelSingleTask: (taskId: string) => Promise<{ success: boolean; error?: string }>
+  getTaskDeletionInfo: (taskId: string) => Promise<{
+    exists: boolean
+    childrenCount?: number
+    inProgressCount?: number
+    inProgressIds?: string[]
+    canDelete?: boolean
+  }>
+  setShowDeletedTasks: (show: boolean) => void
 }
 
 export const useOrchestrationStore = create<OrchestrationState>()(
@@ -145,6 +162,9 @@ export const useOrchestrationStore = create<OrchestrationState>()(
   // Warp integration - initial state
   warpInstalled: null,
   warpLoading: false,
+
+  // Task filters - initial state
+  showDeletedTasks: false,
 
   // Hydration state
   _hasHydrated: false,
@@ -480,6 +500,125 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       return { success: false, error: 'Failed to connect to server' }
     }
   },
+
+  // Delete task (soft delete)
+  deleteTask: async (taskId: string) => {
+    const { sessionId } = get()
+    if (!sessionId) {
+      return { success: false, error: 'No active session' }
+    }
+
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/tasks/${taskId}`, {
+        method: 'DELETE',
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        return {
+          success: false,
+          error: error.detail?.message || error.detail || 'Failed to delete task',
+        }
+      }
+
+      const data = await res.json()
+
+      // Update local state to mark tasks as deleted
+      set((state) => {
+        const updatedTasks = { ...state.tasks }
+        const deletedIds = data.deleted_task_ids || []
+        const now = new Date().toISOString()
+
+        for (const id of deletedIds) {
+          if (updatedTasks[id]) {
+            updatedTasks[id] = {
+              ...updatedTasks[id],
+              isDeleted: true,
+              deletedAt: now,
+            }
+          }
+        }
+
+        return { tasks: updatedTasks }
+      })
+
+      return { success: true, deletedIds: data.deleted_task_ids }
+    } catch (e) {
+      console.error('Failed to delete task:', e)
+      return { success: false, error: 'Failed to connect to server' }
+    }
+  },
+
+  // Cancel a single task
+  cancelSingleTask: async (taskId: string) => {
+    const { sessionId } = get()
+    if (!sessionId) {
+      return { success: false, error: 'No active session' }
+    }
+
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/tasks/${taskId}/cancel`, {
+        method: 'POST',
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        return {
+          success: false,
+          error: error.detail || 'Failed to cancel task',
+        }
+      }
+
+      // Update local state
+      set((state) => ({
+        tasks: {
+          ...state.tasks,
+          [taskId]: {
+            ...state.tasks[taskId],
+            status: 'cancelled' as TaskStatus,
+          },
+        },
+      }))
+
+      return { success: true }
+    } catch (e) {
+      console.error('Failed to cancel task:', e)
+      return { success: false, error: 'Failed to connect to server' }
+    }
+  },
+
+  // Get task deletion info
+  getTaskDeletionInfo: async (taskId: string) => {
+    const { sessionId } = get()
+    if (!sessionId) {
+      return { exists: false }
+    }
+
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/tasks/${taskId}/deletion-info`)
+
+      if (!res.ok) {
+        return { exists: false }
+      }
+
+      const data = await res.json()
+      return {
+        exists: data.exists,
+        childrenCount: data.children_count,
+        inProgressCount: data.in_progress_count,
+        inProgressIds: data.in_progress_ids,
+        canDelete: data.can_delete,
+      }
+    } catch (e) {
+      console.error('Failed to get deletion info:', e)
+      return { exists: false }
+    }
+  },
+
+  // Set show deleted tasks filter
+  setShowDeletedTasks: (show: boolean) => {
+    set({ showDeletedTasks: show })
+  },
 }),
     {
       name: 'orchestration-storage',
@@ -517,6 +656,9 @@ function transformTask(raw: Record<string, unknown>): Task {
     error: raw.error as string | undefined,
     createdAt: (raw.created_at ?? raw.createdAt ?? new Date().toISOString()) as string,
     updatedAt: (raw.updated_at ?? raw.updatedAt ?? new Date().toISOString()) as string,
+    // Soft delete fields
+    isDeleted: (raw.is_deleted ?? raw.isDeleted ?? false) as boolean,
+    deletedAt: (raw.deleted_at ?? raw.deletedAt ?? null) as string | null,
   }
 }
 

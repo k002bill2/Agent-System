@@ -4,6 +4,7 @@ import { useNavigationStore } from '../stores/navigation'
 import { cn } from '../lib/utils'
 import { VerticalSplitPanel } from '../components/VerticalSplitPanel'
 import { ProjectFilter, ProjectBadge } from '../components/ProjectFilter'
+import { DeleteTaskDialog } from '../components/DeleteTaskDialog'
 import {
   ChevronRight,
   ChevronDown,
@@ -14,14 +15,18 @@ import {
   XCircle,
   Filter,
   SplitSquareVertical,
+  Trash2,
+  StopCircle,
+  Loader2,
 } from 'lucide-react'
 
-const statusFilters: { label: string; value: TaskStatus | 'all' }[] = [
+const statusFilters: { label: string; value: TaskStatus | 'all' | 'deleted' }[] = [
   { label: 'All', value: 'all' },
   { label: 'Pending', value: 'pending' },
   { label: 'In Progress', value: 'in_progress' },
   { label: 'Completed', value: 'completed' },
   { label: 'Failed', value: 'failed' },
+  { label: 'Deleted', value: 'deleted' },
 ]
 
 const statusIcons: Record<TaskStatus, typeof CheckCircle> = {
@@ -48,6 +53,8 @@ function TaskNode({
   onSelect,
   sessionProjectId,
   showProjectBadge = false,
+  onDeleteClick,
+  onCancelClick,
 }: {
   task: Task
   tasks: Record<string, Task>
@@ -56,16 +63,21 @@ function TaskNode({
   onSelect: (id: string) => void
   sessionProjectId: string | null
   showProjectBadge?: boolean
+  onDeleteClick?: (task: Task) => void
+  onCancelClick?: (task: Task) => void
 }) {
   const [expanded, setExpanded] = useState(true)
   const hasChildren = task.children.length > 0
-  const StatusIcon = statusIcons[task.status] || Circle
+  const StatusIcon = task.status === 'in_progress' ? Loader2 : (statusIcons[task.status] || Circle)
+  const isInProgress = task.status === 'in_progress'
+  const canShowActions = !task.isDeleted
 
   return (
     <div>
       <div
         className={cn(
-          'flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors',
+          'group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors',
+          task.isDeleted && 'opacity-50',
           selectedTaskId === task.id
             ? 'bg-primary-50 dark:bg-primary-900/20'
             : 'hover:bg-gray-100 dark:hover:bg-gray-700'
@@ -90,8 +102,49 @@ function TaskNode({
         ) : (
           <div className="w-5" />
         )}
-        <StatusIcon className={cn('w-4 h-4', statusColors[task.status])} />
-        <span className="flex-1 text-sm text-gray-900 dark:text-white truncate">{task.title}</span>
+        <StatusIcon
+          className={cn(
+            'w-4 h-4',
+            statusColors[task.status],
+            isInProgress && 'animate-spin'
+          )}
+        />
+        <span className={cn(
+          'flex-1 text-sm text-gray-900 dark:text-white truncate',
+          task.isDeleted && 'line-through'
+        )}>
+          {task.title}
+        </span>
+
+        {/* Action buttons */}
+        {canShowActions && (
+          <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+            {isInProgress ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onCancelClick?.(task)
+                }}
+                className="p-1 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 rounded text-yellow-600 dark:text-yellow-400"
+                title="Cancel task"
+              >
+                <StopCircle className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDeleteClick?.(task)
+                }}
+                className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded text-red-600 dark:text-red-400"
+                title="Delete task"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        )}
+
         {showProjectBadge && level === 0 && (
           <ProjectBadge projectId={sessionProjectId} />
         )}
@@ -111,6 +164,8 @@ function TaskNode({
                 onSelect={onSelect}
                 sessionProjectId={sessionProjectId}
                 showProjectBadge={showProjectBadge}
+                onDeleteClick={onDeleteClick}
+                onCancelClick={onCancelClick}
               />
             )
           })}
@@ -121,14 +176,32 @@ function TaskNode({
 }
 
 export function TasksPage() {
-  const { tasks, sessionProjectId } = useOrchestrationStore()
+  const { tasks, sessionProjectId, deleteTask, cancelSingleTask, getTaskDeletionInfo } = useOrchestrationStore()
   const { projectFilter } = useNavigationStore()
-  const [filter, setFilter] = useState<TaskStatus | 'all'>('all')
+  const [filter, setFilter] = useState<TaskStatus | 'all' | 'deleted'>('all')
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [isSplitMode, setIsSplitMode] = useState(true)
 
+  // Delete dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null)
+  const [deletionInfo, setDeletionInfo] = useState<{
+    childrenCount?: number
+    inProgressCount?: number
+    inProgressIds?: string[]
+    canDelete?: boolean
+  } | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
   const taskList = Object.values(tasks)
-  const rootTasks = taskList.filter((t) => t.parentId === null)
+
+  // Filter out deleted tasks unless "deleted" filter is selected
+  const rootTasks = taskList.filter((t) => {
+    if (t.parentId !== null) return false
+    if (filter === 'deleted') return t.isDeleted
+    return !t.isDeleted
+  })
 
   // 프로젝트 필터 적용 (현재는 단일 세션이므로 sessionProjectId로 필터)
   const projectFilteredTasks = projectFilter
@@ -136,13 +209,68 @@ export function TasksPage() {
     : rootTasks
 
   const filteredRootTasks =
-    filter === 'all' ? projectFilteredTasks : projectFilteredTasks.filter((t) => t.status === filter)
+    filter === 'all' || filter === 'deleted'
+      ? projectFilteredTasks
+      : projectFilteredTasks.filter((t) => t.status === filter)
 
   const selectedTask = selectedTaskId ? tasks[selectedTaskId] : null
 
   const renderStatusIcon = (status: TaskStatus) => {
     const IconComponent = statusIcons[status] || Circle
     return <IconComponent className={cn('w-4 h-4', statusColors[status] || 'text-gray-400')} />
+  }
+
+  // Handle delete button click
+  const handleDeleteClick = async (task: Task) => {
+    setTaskToDelete(task)
+    setDeleteError(null)
+    setIsDeleting(false)
+
+    // Fetch deletion info
+    const info = await getTaskDeletionInfo(task.id)
+    setDeletionInfo(info)
+    setDeleteDialogOpen(true)
+  }
+
+  // Handle cancel button click
+  const handleCancelClick = async (task: Task) => {
+    const result = await cancelSingleTask(task.id)
+    if (!result.success) {
+      // Show error somehow - for now just log
+      console.error('Failed to cancel task:', result.error)
+    }
+  }
+
+  // Handle delete confirm
+  const handleDeleteConfirm = async () => {
+    if (!taskToDelete) return
+
+    setIsDeleting(true)
+    setDeleteError(null)
+
+    const result = await deleteTask(taskToDelete.id)
+
+    if (result.success) {
+      setDeleteDialogOpen(false)
+      setTaskToDelete(null)
+      setDeletionInfo(null)
+      // Clear selection if deleted task was selected
+      if (selectedTaskId === taskToDelete.id) {
+        setSelectedTaskId(null)
+      }
+    } else {
+      setDeleteError(result.error || 'Failed to delete task')
+    }
+
+    setIsDeleting(false)
+  }
+
+  // Handle dialog close
+  const handleDialogClose = () => {
+    setDeleteDialogOpen(false)
+    setTaskToDelete(null)
+    setDeletionInfo(null)
+    setDeleteError(null)
   }
 
   return (
@@ -176,7 +304,7 @@ export function TasksPage() {
         <div className="flex-1 overflow-y-auto p-2">
           {filteredRootTasks.length === 0 ? (
             <div className="p-4 text-center text-gray-500 dark:text-gray-400">
-              No tasks found
+              {filter === 'deleted' ? 'No deleted tasks' : 'No tasks found'}
             </div>
           ) : (
             filteredRootTasks.map((task) => (
@@ -188,6 +316,8 @@ export function TasksPage() {
                 onSelect={setSelectedTaskId}
                 sessionProjectId={sessionProjectId}
                 showProjectBadge={!projectFilter}
+                onDeleteClick={handleDeleteClick}
+                onCancelClick={handleCancelClick}
               />
             ))
           )}
@@ -361,6 +491,17 @@ export function TasksPage() {
           </div>
         )}
       </div>
+
+      {/* Delete Task Dialog */}
+      <DeleteTaskDialog
+        isOpen={deleteDialogOpen}
+        onClose={handleDialogClose}
+        onConfirm={handleDeleteConfirm}
+        task={taskToDelete}
+        deletionInfo={deletionInfo}
+        isDeleting={isDeleting}
+        error={deleteError}
+      />
     </div>
   )
 }

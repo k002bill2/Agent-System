@@ -63,6 +63,10 @@ class TaskNode(BaseModel):
     max_retries: int = 3
     error_history: list[str] = Field(default_factory=list)
 
+    # Soft delete fields
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
+
 
 def merge_messages(left: list[dict], right: list[dict]) -> list[dict]:
     """Merge message lists by appending new messages."""

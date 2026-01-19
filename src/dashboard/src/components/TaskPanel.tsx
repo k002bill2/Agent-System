@@ -75,8 +75,11 @@ function TaskNode({ task, depth, allTasks }: TaskNodeProps) {
 
 export function TaskPanel() {
   const { tasks, rootTaskId, isProcessing } = useOrchestrationStore()
-  const taskList = Object.values(tasks)
-  const rootTask = rootTaskId ? tasks[rootTaskId] : null
+  // Filter out deleted tasks
+  const taskList = Object.values(tasks).filter((t) => !t.isDeleted)
+  const rootTask = rootTaskId && tasks[rootTaskId] && !tasks[rootTaskId].isDeleted
+    ? tasks[rootTaskId]
+    : null
 
   return (
     <div className="w-80 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col">

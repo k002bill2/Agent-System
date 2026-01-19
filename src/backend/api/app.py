@@ -34,6 +34,9 @@ from api.usage import router as usage_router
 # Claude sessions router for external session monitoring
 from api.claude_sessions import router as claude_sessions_router
 
+# Agent registry, orchestrator, and MCP manager router
+from api.agents import router as agents_router
+
 # Check if database mode is enabled
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 
@@ -109,6 +112,9 @@ def create_app(
 
     # Claude sessions router for external session monitoring
     app.include_router(claude_sessions_router, prefix="/api")
+
+    # Agent registry, orchestrator, and MCP manager router
+    app.include_router(agents_router, prefix="/api")
 
     return app
 

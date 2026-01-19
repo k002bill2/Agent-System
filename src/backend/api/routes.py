@@ -181,6 +181,113 @@ async def get_task(
     return task.model_dump() if hasattr(task, "model_dump") else task
 
 
+@router.delete("/sessions/{session_id}/tasks/{task_id}")
+async def delete_task(
+    session_id: str,
+    task_id: str,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """
+    Soft delete a task and its children.
+
+    Rules:
+    - Cannot delete in_progress tasks (cancel first)
+    - Cannot delete if any child is in_progress
+    - Deletes cascade to all children
+    """
+    from services.task_service import TaskService
+
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    tasks = state.get("tasks", {})
+
+    # Validate deletion
+    validation = TaskService.validate_deletion(task_id, tasks)
+    if not validation.can_delete:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": validation.reason,
+                "in_progress_task_ids": validation.in_progress_task_ids,
+            },
+        )
+
+    # Perform soft delete
+    result = TaskService.soft_delete_task(task_id, tasks, include_children=True)
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.error)
+
+    return {
+        "success": True,
+        "deleted_task_ids": result.deleted_task_ids,
+        "message": f"Deleted {len(result.deleted_task_ids)} task(s)",
+    }
+
+
+@router.get("/sessions/{session_id}/tasks/{task_id}/deletion-info")
+async def get_task_deletion_info(
+    session_id: str,
+    task_id: str,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """
+    Get information about what would happen if a task is deleted.
+
+    Returns:
+    - children_count: number of child tasks that would be deleted
+    - in_progress_count: number of in_progress tasks blocking deletion
+    - can_delete: whether deletion is possible
+    """
+    from services.task_service import TaskService
+
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    tasks = state.get("tasks", {})
+    info = TaskService.get_deletion_info(task_id, tasks)
+
+    if not info.get("exists"):
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    return info
+
+
+@router.post("/sessions/{session_id}/tasks/{task_id}/cancel")
+async def cancel_single_task(
+    session_id: str,
+    task_id: str,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """
+    Cancel a single task if it's in progress.
+
+    This changes the task status from in_progress to cancelled,
+    allowing it to be deleted.
+    """
+    from services.task_service import TaskService
+
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    tasks = state.get("tasks", {})
+    result = TaskService.cancel_task(task_id, tasks)
+
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.error)
+
+    return {
+        "success": True,
+        "task_id": result.task_id,
+        "previous_status": result.previous_status,
+        "new_status": "cancelled",
+        "message": "Task cancelled successfully",
+    }
+
+
 @router.get("/sessions/{session_id}/tree", response_model=TaskTree | None)
 async def get_task_tree(
     session_id: str,

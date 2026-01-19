@@ -24,13 +24,23 @@ Agent System/
 ├── src/                  # 시스템 소스코드
 │   ├── backend/          # Python (LangGraph + FastAPI)
 │   │   ├── agents/       # 에이전트 정의
+│   │   │   ├── specialists/  # 전문 에이전트 (UI, Backend, Test)
+│   │   │   └── lead_orchestrator.py
 │   │   ├── orchestrator/ # 오케스트레이션 로직
+│   │   ├── services/     # 서비스 레이어
+│   │   │   ├── agent_registry.py   # 에이전트 등록소
+│   │   │   └── mcp_manager.py      # MCP 서버 관리
 │   │   ├── api/          # FastAPI 라우터
+│   │   │   └── agents.py # Agent/MCP API
 │   │   └── models/       # 데이터 모델
 │   └── dashboard/        # React 대시보드
 │       ├── src/
 │       │   ├── components/
+│       │   │   ├── AgentCard.tsx      # 에이전트 카드
+│       │   │   ├── AgentStatsPanel.tsx
+│       │   │   └── TaskAnalyzer.tsx   # 태스크 분석 UI
 │       │   ├── stores/
+│       │   │   └── agents.ts          # Agent Registry 스토어
 │       │   └── hooks/
 │       └── package.json
 │
@@ -324,6 +334,107 @@ interface ClaudeSessionsState {
   setSortOrder: (order: SortOrder) => void
 }
 ```
+
+#### 11. Agent Registry (에이전트 등록소)
+
+에이전트 등록, 검색, 상태 관리를 담당하는 중앙 시스템입니다.
+
+```python
+# services/agent_registry.py
+class AgentRegistry:
+    def register(self, agent: AgentMetadata) -> bool
+    def get_by_category(self, category: AgentCategory) -> list[AgentMetadata]
+    def find_by_capability(self, query: str) -> list[tuple[AgentMetadata, int]]
+    def select_best_agent(self, task: str) -> AgentMetadata | None
+```
+
+**기본 등록 에이전트** (7종):
+| Agent ID | 카테고리 | 설명 |
+|----------|----------|------|
+| `mobile-ui-specialist` | development | React Native UI/UX |
+| `backend-integration-specialist` | development | Firebase, API 통합 |
+| `test-automation-specialist` | quality | Jest 테스트 자동화 |
+| `lead-orchestrator` | orchestration | 멀티 에이전트 조정 |
+| `quality-validator` | quality | 코드 품질 검증 |
+| `code-simplifier` | quality | 복잡도 분석 |
+| `performance-optimizer` | development | 성능 최적화 |
+
+#### 12. Lead Orchestrator (리드 오케스트레이터)
+
+복잡한 태스크를 분석하고 전문 에이전트에게 위임하는 상위 조정자입니다.
+
+```python
+# agents/lead_orchestrator.py
+class LeadOrchestratorAgent(BaseAgent):
+    async def execute(self, task: str, context: dict) -> AgentResult:
+        # 1. 태스크 복잡도 분석
+        # 2. 서브태스크 분해
+        # 3. 에이전트 선택 및 할당
+        # 4. 실행 전략 결정 (sequential/parallel/mixed)
+```
+
+**분석 결과**:
+```python
+class TaskAnalysis(BaseModel):
+    complexity_score: int         # 1-10
+    effort_level: EffortLevel     # quick/medium/thorough
+    requires_decomposition: bool
+    subtasks: list[SubtaskPlan]
+    execution_strategy: ExecutionStrategy
+```
+
+**노력 스케일링** (`EffortLevel`):
+- `quick`: 단순 태스크 (복잡도 1-3)
+- `medium`: 중간 복잡도 (4-6)
+- `thorough`: 복잡한 태스크 (7-10)
+
+#### 13. MCP Manager (Model Context Protocol)
+
+외부 도구 연동을 위한 MCP 서버 관리자입니다.
+
+```python
+# services/mcp_manager.py
+class MCPManager:
+    async def start_server(self, server_id: str) -> bool
+    async def call_tool(self, call: MCPToolCall) -> MCPToolResult
+    def find_tool(self, tool_name: str) -> tuple[str, MCPToolSchema] | None
+```
+
+**기본 MCP 서버**:
+| Server ID | 타입 | 설명 |
+|-----------|------|------|
+| `filesystem` | FILESYSTEM | 파일 시스템 접근 |
+| `github` | GITHUB | GitHub API 연동 |
+| `playwright` | PLAYWRIGHT | 브라우저 자동화 |
+
+**도구 호출 예시**:
+```python
+call = MCPToolCall(
+    server_id="github",
+    tool_name="list_issues",
+    arguments={"repo": "owner/repo", "state": "open"}
+)
+result = await mcp_manager.call_tool(call)
+```
+
+#### Agent API Endpoints
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/agents` | 에이전트 목록 조회 |
+| GET | `/api/agents/stats` | 레지스트리 통계 |
+| POST | `/api/agents/search` | 능력 기반 검색 |
+| POST | `/api/agents/orchestrate/analyze` | 태스크 분석 |
+| GET | `/api/agents/mcp/servers` | MCP 서버 목록 |
+| POST | `/api/agents/mcp/servers/{id}/start` | MCP 서버 시작 |
+| POST | `/api/agents/mcp/tools/call` | MCP 도구 호출 |
+
+**Dashboard 컴포넌트** (Agents 페이지):
+| 컴포넌트 | 설명 |
+|----------|------|
+| `AgentCard` | 에이전트 카드 (능력, 상태, 통계) |
+| `AgentStatsPanel` | 레지스트리 통계 패널 |
+| `TaskAnalyzer` | 태스크 분석 UI |
 
 ## Claude Code Commands
 
