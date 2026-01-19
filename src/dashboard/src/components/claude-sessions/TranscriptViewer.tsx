@@ -12,10 +12,11 @@ import {
   Search,
   Filter,
   Loader2,
+  Brain,
 } from 'lucide-react'
 import { TranscriptEntry } from '../../types/claudeSession'
 
-type FilterType = 'all' | 'user' | 'assistant' | 'tool_use' | 'tool_result'
+type FilterType = 'all' | 'user' | 'assistant' | 'tool_use' | 'tool_result' | 'thinking'
 
 const filterOptions: { value: FilterType; label: string; icon: React.ReactNode }[] = [
   { value: 'all', label: 'All', icon: null },
@@ -23,6 +24,7 @@ const filterOptions: { value: FilterType; label: string; icon: React.ReactNode }
   { value: 'assistant', label: 'Assistant', icon: <Bot className="w-3 h-3" /> },
   { value: 'tool_use', label: 'Tool Use', icon: <Wrench className="w-3 h-3" /> },
   { value: 'tool_result', label: 'Tool Result', icon: <CheckCircle className="w-3 h-3" /> },
+  { value: 'thinking', label: 'Thinking', icon: <Brain className="w-3 h-3" /> },
 ]
 
 function formatTimestamp(timestamp: string): string {
@@ -47,6 +49,13 @@ function getEntryTypeLabel(entry: TranscriptEntry): { type: string; detail?: str
   if (msgType === 'assistant') {
     const content = entry.message?.content
     if (Array.isArray(content)) {
+      // Thinking 감지
+      const hasThinking = content.some(
+        (c: unknown) => typeof c === 'object' && c !== null && 'type' in c && c.type === 'thinking'
+      )
+      if (hasThinking) return { type: 'thinking', detail: 'Thinking' }
+
+      // Tool Use 감지
       const toolUse = content.find(
         (c: unknown) => typeof c === 'object' && c !== null && 'type' in c && c.type === 'tool_use'
       ) as { name?: string } | undefined
@@ -70,6 +79,8 @@ function getEntryIcon(type: string) {
       return <Wrench className="w-4 h-4 text-orange-500" />
     case 'tool_result':
       return <CheckCircle className="w-4 h-4 text-green-500" />
+    case 'thinking':
+      return <Brain className="w-4 h-4 text-pink-500" />
     default:
       return <Bot className="w-4 h-4 text-gray-500" />
   }

@@ -5,11 +5,14 @@ Discovers and monitors external Claude Code sessions by scanning
 """
 
 import json
+import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import AsyncIterator
+
+import httpx
 
 from models.claude_session import (
     ClaudeSessionInfo,
@@ -504,6 +507,182 @@ class ClaudeSessionMonitor:
                 yield details
 
             await asyncio.sleep(interval_seconds)
+
+    def _get_summary_cache_path(self, session_id: str) -> Path:
+        """Get cache file path for session summary.
+
+        Args:
+            session_id: Session UUID
+
+        Returns:
+            Path to the summary cache file
+        """
+        return Path.home() / ".claude" / "session_summaries" / f"{session_id}.txt"
+
+    def _get_first_messages(
+        self, session_id: str, limit: int = 5
+    ) -> list[dict]:
+        """Get first N user/assistant messages from a session.
+
+        Args:
+            session_id: Session UUID
+            limit: Maximum number of messages to return
+
+        Returns:
+            List of message dicts with type and content
+        """
+        # Find session file
+        session_file = None
+        for project_dir in self.projects_dir.iterdir():
+            if not project_dir.is_dir():
+                continue
+            candidate = project_dir / f"{session_id}.jsonl"
+            if candidate.exists():
+                session_file = candidate
+                break
+
+        if session_file is None:
+            return []
+
+        messages = []
+        with open(session_file, "r", encoding="utf-8") as f:
+            for line in f:
+                if len(messages) >= limit:
+                    break
+
+                line = line.strip()
+                if not line:
+                    continue
+
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                msg_type = entry.get("type", "")
+                if msg_type == "user":
+                    message_data = entry.get("message", {})
+                    content = message_data.get("content", "")
+                    if isinstance(content, list) and len(content) > 0:
+                        first_item = content[0]
+                        if isinstance(first_item, dict):
+                            content = first_item.get("text", "")
+                        else:
+                            content = str(first_item)
+                    if content:
+                        messages.append({"role": "user", "content": content[:500]})
+
+                elif msg_type == "assistant":
+                    message_data = entry.get("message", {})
+                    content_list = message_data.get("content", [])
+                    if isinstance(content_list, list):
+                        for item in content_list:
+                            if isinstance(item, dict) and item.get("type") == "text":
+                                text = item.get("text", "")
+                                if text:
+                                    messages.append({"role": "assistant", "content": text[:500]})
+                                    break
+
+        return messages
+
+    def _format_messages_for_prompt(self, messages: list[dict]) -> str:
+        """Format messages for LLM prompt.
+
+        Args:
+            messages: List of message dicts
+
+        Returns:
+            Formatted string for prompt
+        """
+        formatted = []
+        for msg in messages:
+            role = "사용자" if msg["role"] == "user" else "어시스턴트"
+            content = msg["content"][:200]  # Truncate for prompt
+            formatted.append(f"{role}: {content}")
+        return "\n".join(formatted)
+
+    async def generate_summary(self, session_id: str) -> str:
+        """Generate AI summary for a session.
+
+        Uses Haiku model for cost efficiency. Caches result to file.
+
+        Args:
+            session_id: Session UUID
+
+        Returns:
+            Generated summary string
+        """
+        logger = logging.getLogger(__name__)
+
+        # 1. Check cache
+        cache_path = self._get_summary_cache_path(session_id)
+        if cache_path.exists():
+            logger.info(f"Using cached summary for session {session_id}")
+            return cache_path.read_text().strip()
+
+        # 2. Get first messages
+        messages = self._get_first_messages(session_id, limit=5)
+        if not messages:
+            return "대화 내용 없음"
+
+        # 3. Call Haiku for summary
+        prompt = f"""다음 대화의 주제를 한 문장(30자 이내)으로 요약해주세요.
+마침표 없이 간결하게 작성하세요.
+
+대화:
+{self._format_messages_for_prompt(messages)}
+
+요약:"""
+
+        try:
+            ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+            ollama_model = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{ollama_base_url}/api/generate",
+                    json={
+                        "model": ollama_model,
+                        "prompt": prompt,
+                        "stream": False,
+                        "options": {
+                            "num_predict": 50,
+                            "temperature": 0.3,
+                        },
+                    },
+                )
+                response.raise_for_status()
+                data = response.json()
+                summary = data.get("response", "").strip()
+
+                # Clean up: take first line only
+                if "\n" in summary:
+                    summary = summary.split("\n")[0].strip()
+
+            # 4. Save to cache
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(summary)
+
+            logger.info(f"Generated summary for session {session_id}: {summary}")
+            return summary
+
+        except Exception as e:
+            logger.error(f"Failed to generate summary for {session_id}: {e}")
+            return "요약 생성 실패"
+
+    def get_cached_summary(self, session_id: str) -> str | None:
+        """Get cached summary if exists.
+
+        Args:
+            session_id: Session UUID
+
+        Returns:
+            Cached summary or None
+        """
+        cache_path = self._get_summary_cache_path(session_id)
+        if cache_path.exists():
+            return cache_path.read_text().strip()
+        return None
 
 
 # Global monitor instance

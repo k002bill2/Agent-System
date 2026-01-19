@@ -8,7 +8,7 @@ import {
   TranscriptResponse,
 } from '../types/claudeSession'
 
-const API_BASE = 'http://localhost:8000/api'
+const API_BASE = '/api'
 
 export type SortField = 'last_activity' | 'created_at' | 'message_count' | 'estimated_cost' | 'project_name'
 export type SortOrder = 'asc' | 'desc'
@@ -54,6 +54,13 @@ interface ClaudeSessionsState {
   setAutoRefresh: (enabled: boolean) => void
   setRefreshInterval: (seconds: number) => void
   clearError: () => void
+  generateSummary: (sessionId: string) => Promise<void>
+  generateSummaryQuiet: (sessionId: string) => Promise<void>
+  setAutoGenerateSummaries: (enabled: boolean) => void
+
+  // Summary generation state
+  generatingSummaryFor: string | null
+  autoGenerateSummaries: boolean
 
   // SSE connection
   eventSource: EventSource | null
@@ -88,22 +95,25 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
   error: null,
 
+  generatingSummaryFor: null,
+  autoGenerateSummaries: true,  // Auto-generate summaries by default
+
   eventSource: null,
 
   // Actions
   fetchSessions: async (status?: SessionStatus) => {
-    const { sortBy, sortOrder } = get()
+    const { sortBy, sortOrder, autoGenerateSummaries } = get()
     set({ isLoading: true, error: null })
 
     try {
-      const url = new URL(`${API_BASE}/claude-sessions`)
+      const params = new URLSearchParams()
       if (status) {
-        url.searchParams.set('status', status)
+        params.set('status', status)
       }
-      url.searchParams.set('sort_by', sortBy)
-      url.searchParams.set('sort_order', sortOrder)
+      params.set('sort_by', sortBy)
+      params.set('sort_order', sortOrder)
 
-      const res = await fetch(url.toString())
+      const res = await fetch(`${API_BASE}/claude-sessions?${params.toString()}`)
       if (!res.ok) {
         throw new Error(`Failed to fetch sessions: ${res.statusText}`)
       }
@@ -115,6 +125,15 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
         activeCount: data.active_count,
         isLoading: false,
       })
+
+      // Auto-generate summaries for sessions without one
+      if (autoGenerateSummaries) {
+        const sessionsWithoutSummary = data.sessions.filter(s => !s.summary)
+        // Generate summaries one by one to avoid overwhelming the LLM
+        for (const session of sessionsWithoutSummary) {
+          await get().generateSummaryQuiet(session.session_id)
+        }
+      }
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
       set({ error: errorMessage, isLoading: false })
@@ -194,11 +213,11 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
     set({ isLoadingTranscript: true, error: null })
 
     try {
-      const url = new URL(`${API_BASE}/claude-sessions/${sessionId}/transcript`)
-      url.searchParams.set('offset', offset.toString())
-      url.searchParams.set('limit', limit.toString())
+      const params = new URLSearchParams()
+      params.set('offset', offset.toString())
+      params.set('limit', limit.toString())
 
-      const res = await fetch(url.toString())
+      const res = await fetch(`${API_BASE}/claude-sessions/${sessionId}/transcript?${params.toString()}`)
       if (!res.ok) {
         throw new Error(`Failed to fetch transcript: ${res.statusText}`)
       }
@@ -229,11 +248,16 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   },
 
   startStreaming: (sessionId: string) => {
-    const { eventSource: existing, stopStreaming } = get()
+    const { eventSource: existing, stopStreaming, selectedSession } = get()
 
     // Close existing connection
     if (existing) {
       stopStreaming()
+    }
+
+    // Don't start streaming for completed sessions
+    if (selectedSession?.status === 'completed') {
+      return
     }
 
     const eventSource = new EventSource(
@@ -243,9 +267,11 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
     eventSource.addEventListener('session_update', (event) => {
       try {
         const data: ClaudeSessionDetail = JSON.parse(event.data)
-        set({ selectedSession: data })
+        // Preserve existing summary if server doesn't send one
+        const currentSummary = get().selectedSession?.summary
+        set({ selectedSession: { ...data, summary: data.summary || currentSummary } })
 
-        // Also update in sessions list
+        // Also update in sessions list (preserve existing summary)
         set((state) => ({
           sessions: state.sessions.map((s) =>
             s.session_id === sessionId
@@ -256,6 +282,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
                   tool_call_count: data.tool_call_count,
                   last_activity: data.last_activity,
                   estimated_cost: data.estimated_cost,
+                  summary: data.summary || s.summary,
                 }
               : s,
           ),
@@ -268,7 +295,9 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
     eventSource.addEventListener('session_completed', (event) => {
       try {
         const data: ClaudeSessionDetail = JSON.parse(event.data)
-        set({ selectedSession: data })
+        // Preserve existing summary if server doesn't send one
+        const currentSummary = get().selectedSession?.summary
+        set({ selectedSession: { ...data, summary: data.summary || currentSummary } })
       } catch (e) {
         console.error('Failed to parse session completed:', e)
       }
@@ -279,8 +308,13 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       stopStreaming()
     })
 
-    eventSource.addEventListener('error', (event) => {
-      console.error('SSE error:', event)
+    eventSource.addEventListener('error', () => {
+      // SSE connection closed - this is normal for completed sessions
+      // Only log if we expected the connection to stay open
+      const currentSession = get().selectedSession
+      if (currentSession && currentSession.status !== 'completed') {
+        console.warn('SSE connection closed unexpectedly')
+      }
       stopStreaming()
     })
 
@@ -293,5 +327,63 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       eventSource.close()
       set({ eventSource: null })
     }
+  },
+
+  generateSummary: async (sessionId: string) => {
+    set({ generatingSummaryFor: sessionId })
+
+    try {
+      const res = await fetch(`${API_BASE}/claude-sessions/${sessionId}/summary`, {
+        method: 'POST',
+      })
+      if (!res.ok) {
+        throw new Error(`Failed to generate summary: ${res.statusText}`)
+      }
+
+      const data = await res.json()
+
+      // Update session in list
+      set((state) => ({
+        sessions: state.sessions.map((s) =>
+          s.session_id === sessionId ? { ...s, summary: data.summary } : s
+        ),
+        generatingSummaryFor: null,
+      }))
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage, generatingSummaryFor: null })
+    }
+  },
+
+  // Quiet version - shows loading state but no error display (for auto-generation)
+  generateSummaryQuiet: async (sessionId: string) => {
+    set({ generatingSummaryFor: sessionId })
+
+    try {
+      const res = await fetch(`${API_BASE}/claude-sessions/${sessionId}/summary`, {
+        method: 'POST',
+      })
+      if (!res.ok) {
+        set({ generatingSummaryFor: null })
+        return
+      }
+
+      const data = await res.json()
+
+      // Update session in list
+      set((state) => ({
+        sessions: state.sessions.map((s) =>
+          s.session_id === sessionId ? { ...s, summary: data.summary } : s
+        ),
+        generatingSummaryFor: null,
+      }))
+    } catch {
+      // Silently ignore errors for auto-generation
+      set({ generatingSummaryFor: null })
+    }
+  },
+
+  setAutoGenerateSummaries: (enabled: boolean) => {
+    set({ autoGenerateSummaries: enabled })
   },
 }))

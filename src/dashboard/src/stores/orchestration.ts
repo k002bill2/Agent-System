@@ -153,7 +153,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
   // Fetch projects from API
   fetchProjects: async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/projects')
+      const res = await fetch('/api/projects')
       if (res.ok) {
         const projects = await res.json()
         set({ projects })
@@ -175,7 +175,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
     // Create session via REST API first (with project context)
     let sessionId: string
     try {
-      const res = await fetch('http://localhost:8000/api/sessions', {
+      const res = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ project_id: selectedProjectId }),
@@ -188,7 +188,8 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       return
     }
 
-    const ws = new WebSocket(`ws://localhost:8000/ws/${sessionId}`)
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/${sessionId}`)
 
     ws.onopen = () => {
       set({ connected: true, sessionId, sessionProjectId: selectedProjectId, ws, isInitialLoading: false })
@@ -247,19 +248,24 @@ export const useOrchestrationStore = create<OrchestrationState>()(
 
     // Verify session exists on server
     try {
-      const res = await fetch(`http://localhost:8000/api/sessions/${sessionId}`)
+      const res = await fetch(`/api/sessions/${sessionId}`)
       if (!res.ok) {
-        console.log('Session no longer exists, clearing stored session')
-        set({ sessionId: null, isInitialLoading: false })
+        console.log('Session no longer exists, creating new session')
+        set({ sessionId: null, sessionProjectId: null })
+        // Create new session instead of just clearing
+        get().connect()
         return
       }
     } catch (e) {
       console.error('Failed to verify session:', e)
-      set({ isInitialLoading: false })
+      set({ sessionId: null, sessionProjectId: null })
+      // Create new session on error
+      get().connect()
       return
     }
 
-    const ws = new WebSocket(`ws://localhost:8000/ws/${sessionId}`)
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/${sessionId}`)
 
     ws.onopen = () => {
       set({ connected: true, ws, isInitialLoading: false })
@@ -430,7 +436,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
   // Check Warp installation status
   checkWarpStatus: async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/warp/status')
+      const res = await fetch('/api/warp/status')
       if (res.ok) {
         const data = await res.json()
         set({ warpInstalled: data.installed })
@@ -451,7 +457,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
     set({ warpLoading: true })
 
     try {
-      const res = await fetch('http://localhost:8000/api/warp/open', {
+      const res = await fetch('/api/warp/open', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

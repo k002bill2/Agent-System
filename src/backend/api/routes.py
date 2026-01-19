@@ -239,95 +239,11 @@ async def get_projects():
     ]
 
 
-@router.get("/projects/{project_id}", response_model=ProjectResponse)
-async def get_project_by_id(project_id: str):
-    """Get a specific project."""
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    return ProjectResponse(
-        id=project.id,
-        name=project.name,
-        path=project.path,
-        description=project.description,
-        has_claude_md=project.claude_md is not None,
-    )
-
-
-@router.post("/projects", response_model=ProjectResponse)
-async def create_project(request: ProjectCreate):
-    """Register a new project."""
-    from pathlib import Path
-
-    # Validate path exists
-    if not Path(request.path).exists():
-        raise HTTPException(status_code=400, detail=f"Path does not exist: {request.path}")
-
-    project = register_project(request.id, request.path)
-
-    return ProjectResponse(
-        id=project.id,
-        name=project.name,
-        path=project.path,
-        description=project.description,
-        has_claude_md=project.claude_md is not None,
-    )
-
-
-@router.put("/projects/{project_id}", response_model=ProjectResponse)
-async def update_project_endpoint(project_id: str, request: ProjectUpdate):
-    """Update project name, description, or path."""
-    try:
-        project = update_project(project_id, request.name, request.description, request.path)
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return ProjectResponse(
-        id=project.id,
-        name=project.name,
-        path=project.path,
-        description=project.description,
-        has_claude_md=project.claude_md is not None,
-        vector_store_initialized=project.vector_store_initialized,
-        indexed_at=project.indexed_at,
-    )
-
-
-@router.delete("/projects/{project_id}")
-async def delete_project(project_id: str):
-    """
-    Delete a project.
-
-    This removes:
-    - The symlink in projects/ directory (if exists)
-    - The project from registry
-    - The RAG vector index (if exists)
-
-    IMPORTANT: Source files are NEVER deleted, only the symlink.
-    """
-    from pathlib import Path
-
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    # Remove symlink if exists in projects/ directory
-    projects_dir = get_projects_dir()
-    symlink_path = projects_dir / project_id
-
-    if symlink_path.is_symlink():
-        symlink_path.unlink()
-
-    # TODO: Remove RAG vector index when RAG service is available
-    # await rag_service.delete_index(project_id)
-
-    # Remove from registry
-    unregister_project(project_id)
-
-    return {"message": f"Project '{project_id}' removed successfully"}
+@router.get("/projects/templates")
+async def list_templates():
+    """List available project templates."""
+    from services.project_template_service import get_templates
+    return get_templates()
 
 
 @router.post("/projects/link", response_model=ProjectResponse)
@@ -432,11 +348,95 @@ async def create_project_from_template(request: ProjectCreateFromTemplate):
     )
 
 
-@router.get("/projects/templates")
-async def list_templates():
-    """List available project templates."""
-    from services.project_template_service import get_templates
-    return get_templates()
+@router.get("/projects/{project_id}", response_model=ProjectResponse)
+async def get_project_by_id(project_id: str):
+    """Get a specific project."""
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    return ProjectResponse(
+        id=project.id,
+        name=project.name,
+        path=project.path,
+        description=project.description,
+        has_claude_md=project.claude_md is not None,
+    )
+
+
+@router.post("/projects", response_model=ProjectResponse)
+async def create_project(request: ProjectCreate):
+    """Register a new project."""
+    from pathlib import Path
+
+    # Validate path exists
+    if not Path(request.path).exists():
+        raise HTTPException(status_code=400, detail=f"Path does not exist: {request.path}")
+
+    project = register_project(request.id, request.path)
+
+    return ProjectResponse(
+        id=project.id,
+        name=project.name,
+        path=project.path,
+        description=project.description,
+        has_claude_md=project.claude_md is not None,
+    )
+
+
+@router.put("/projects/{project_id}", response_model=ProjectResponse)
+async def update_project_endpoint(project_id: str, request: ProjectUpdate):
+    """Update project name, description, or path."""
+    try:
+        project = update_project(project_id, request.name, request.description, request.path)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return ProjectResponse(
+        id=project.id,
+        name=project.name,
+        path=project.path,
+        description=project.description,
+        has_claude_md=project.claude_md is not None,
+        vector_store_initialized=project.vector_store_initialized,
+        indexed_at=project.indexed_at,
+    )
+
+
+@router.delete("/projects/{project_id}")
+async def delete_project(project_id: str):
+    """
+    Delete a project.
+
+    This removes:
+    - The symlink in projects/ directory (if exists)
+    - The project from registry
+    - The RAG vector index (if exists)
+
+    IMPORTANT: Source files are NEVER deleted, only the symlink.
+    """
+    from pathlib import Path
+
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Remove symlink if exists in projects/ directory
+    projects_dir = get_projects_dir()
+    symlink_path = projects_dir / project_id
+
+    if symlink_path.is_symlink():
+        symlink_path.unlink()
+
+    # TODO: Remove RAG vector index when RAG service is available
+    # await rag_service.delete_index(project_id)
+
+    # Remove from registry
+    unregister_project(project_id)
+
+    return {"message": f"Project '{project_id}' removed successfully"}
 
 
 # ─────────────────────────────────────────────────────────────

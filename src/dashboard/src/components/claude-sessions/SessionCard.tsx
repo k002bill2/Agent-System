@@ -1,6 +1,7 @@
 import { cn } from '../../lib/utils'
 import { ClaudeSessionInfo, SessionStatus } from '../../types/claudeSession'
-import { Clock, MessageSquare, Wrench, DollarSign, GitBranch } from 'lucide-react'
+import { useClaudeSessionsStore } from '../../stores/claudeSessions'
+import { Clock, MessageSquare, Wrench, DollarSign, GitBranch, Sparkles, Loader2 } from 'lucide-react'
 
 interface SessionCardProps {
   session: ClaudeSessionInfo
@@ -42,6 +43,14 @@ function formatCost(cost: number): string {
 }
 
 export function SessionCard({ session, isSelected, onClick }: SessionCardProps) {
+  const { generateSummary, generatingSummaryFor } = useClaudeSessionsStore()
+  const isGenerating = generatingSummaryFor === session.session_id
+
+  const handleGenerateSummary = (e: React.MouseEvent) => {
+    e.stopPropagation() // Prevent card click
+    generateSummary(session.session_id)
+  }
+
   return (
     <button
       onClick={onClick}
@@ -52,12 +61,31 @@ export function SessionCard({ session, isSelected, onClick }: SessionCardProps) 
           : 'bg-white border-gray-200 hover:border-gray-300 dark:bg-gray-800 dark:border-gray-700 dark:hover:border-gray-600'
       )}
     >
-      {/* Header: Slug & Status */}
+      {/* Header: Title & Status */}
       <div className="flex items-center justify-between mb-2">
-        <h3 className="font-medium text-gray-900 dark:text-white truncate flex-1 mr-2">
-          {session.slug || session.session_id.slice(0, 8)}
-        </h3>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-1 min-w-0 mr-2">
+          <h3 className="font-medium text-gray-900 dark:text-white truncate">
+            {session.summary || session.slug || session.session_id.slice(0, 8)}
+          </h3>
+          {!session.summary && (
+            <button
+              onClick={handleGenerateSummary}
+              disabled={isGenerating}
+              className={cn(
+                'flex-shrink-0 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors',
+                isGenerating && 'cursor-not-allowed opacity-50'
+              )}
+              title="AI 요약 생성"
+            >
+              {isGenerating ? (
+                <Loader2 className="w-3.5 h-3.5 text-primary-500 animate-spin" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              )}
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
           <span
             className={cn(
               'w-2 h-2 rounded-full',
@@ -71,9 +99,14 @@ export function SessionCard({ session, isSelected, onClick }: SessionCardProps) 
         </div>
       </div>
 
-      {/* Project Name */}
+      {/* Project Name & Slug */}
       <div className="text-sm text-gray-600 dark:text-gray-300 mb-3 truncate">
         {session.project_name || session.project_path}
+        {session.summary && session.slug && (
+          <span className="text-gray-400 dark:text-gray-500 ml-2">
+            · {session.slug}
+          </span>
+        )}
       </div>
 
       {/* Stats Row */}

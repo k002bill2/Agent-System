@@ -129,6 +129,12 @@ async def list_sessions(
     # Apply limit
     sessions = sessions[:limit]
 
+    # Add cached summaries to sessions
+    for session in sessions:
+        cached_summary = monitor.get_cached_summary(session.session_id)
+        if cached_summary:
+            session.summary = cached_summary
+
     return ClaudeSessionResponse(
         sessions=sessions,
         total_count=len(sessions),
@@ -151,6 +157,11 @@ async def get_session(session_id: str) -> ClaudeSessionDetail:
 
     if details is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    # Add cached summary if exists
+    cached_summary = monitor.get_cached_summary(session_id)
+    if cached_summary:
+        details.summary = cached_summary
 
     return details
 
@@ -359,4 +370,54 @@ async def get_session_transcript(
         "limit": limit,
         "total_count": total_count,
         "has_more": offset + len(entries) < total_count,
+    }
+
+
+@router.post("/{session_id}/summary")
+async def generate_session_summary(session_id: str) -> dict:
+    """Generate AI summary for a session.
+
+    Uses Haiku model for cost efficiency.
+    Summary is cached to file for future requests.
+
+    Args:
+        session_id: Session UUID
+
+    Returns:
+        Generated or cached summary
+    """
+    monitor = get_monitor()
+
+    # Verify session exists
+    details = monitor.get_session_details(session_id)
+    if details is None:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    # Generate or retrieve cached summary
+    summary = await monitor.generate_summary(session_id)
+
+    return {
+        "session_id": session_id,
+        "summary": summary,
+    }
+
+
+@router.get("/{session_id}/summary")
+async def get_session_summary(session_id: str) -> dict:
+    """Get cached summary for a session (if exists).
+
+    Args:
+        session_id: Session UUID
+
+    Returns:
+        Cached summary or null
+    """
+    monitor = get_monitor()
+
+    # Check cached summary
+    summary = monitor.get_cached_summary(session_id)
+
+    return {
+        "session_id": session_id,
+        "summary": summary,
     }

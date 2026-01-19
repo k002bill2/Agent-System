@@ -78,6 +78,9 @@ class ClaudeSessionInfo(BaseModel):
     file_path: str = Field(default="", description="Path to the .jsonl file")
     file_size: int = Field(default=0, description="File size in bytes")
 
+    # AI-generated summary
+    summary: str | None = Field(default=None, description="AI-generated conversation summary")
+
 
 class ClaudeSessionDetail(ClaudeSessionInfo):
     """Detailed session information with recent messages."""

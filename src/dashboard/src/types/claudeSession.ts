@@ -45,6 +45,7 @@ export interface ClaudeSessionInfo {
   estimated_cost: number
   file_path: string
   file_size: number
+  summary?: string  // AI-generated conversation summary
 }
 
 export interface ClaudeSessionDetail extends ClaudeSessionInfo {

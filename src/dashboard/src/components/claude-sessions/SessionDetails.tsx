@@ -128,7 +128,7 @@ function OverviewContent({ session }: { session: ClaudeSessionDetail }) {
       <div className="p-4 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-            {session.slug || 'Session Details'}
+            {session.summary || session.slug || 'Session Details'}
           </h2>
           <span
             className={cn(
