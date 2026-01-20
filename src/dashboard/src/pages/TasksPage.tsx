@@ -18,6 +18,7 @@ import {
   Trash2,
   StopCircle,
   Loader2,
+  RefreshCw,
 } from 'lucide-react'
 
 const statusFilters: { label: string; value: TaskStatus | 'all' | 'deleted' }[] = [
@@ -55,6 +56,7 @@ function TaskNode({
   showProjectBadge = false,
   onDeleteClick,
   onCancelClick,
+  onRetryClick,
 }: {
   task: Task
   tasks: Record<string, Task>
@@ -65,11 +67,13 @@ function TaskNode({
   showProjectBadge?: boolean
   onDeleteClick?: (task: Task) => void
   onCancelClick?: (task: Task) => void
+  onRetryClick?: (task: Task) => void
 }) {
   const [expanded, setExpanded] = useState(true)
   const hasChildren = task.children.length > 0
   const StatusIcon = task.status === 'in_progress' ? Loader2 : (statusIcons[task.status] || Circle)
   const isInProgress = task.status === 'in_progress'
+  const isRetryable = task.status === 'failed' || task.status === 'cancelled'
   const canShowActions = !task.isDeleted
 
   return (
@@ -131,16 +135,30 @@ function TaskNode({
                 <StopCircle className="w-4 h-4" />
               </button>
             ) : (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onDeleteClick?.(task)
-                }}
-                className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded text-red-600 dark:text-red-400"
-                title="Delete task"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              <>
+                {isRetryable && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onRetryClick?.(task)
+                    }}
+                    className="p-1 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded text-blue-600 dark:text-blue-400"
+                    title="Retry task"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                )}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onDeleteClick?.(task)
+                  }}
+                  className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded text-red-600 dark:text-red-400"
+                  title="Delete task"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </>
             )}
           </div>
         )}
@@ -166,6 +184,7 @@ function TaskNode({
                 showProjectBadge={showProjectBadge}
                 onDeleteClick={onDeleteClick}
                 onCancelClick={onCancelClick}
+                onRetryClick={onRetryClick}
               />
             )
           })}
@@ -176,7 +195,7 @@ function TaskNode({
 }
 
 export function TasksPage() {
-  const { tasks, sessionProjectId, deleteTask, cancelSingleTask, getTaskDeletionInfo } = useOrchestrationStore()
+  const { tasks, sessionProjectId, deleteTask, cancelSingleTask, getTaskDeletionInfo, retryTask } = useOrchestrationStore()
   const { projectFilter } = useNavigationStore()
   const [filter, setFilter] = useState<TaskStatus | 'all' | 'deleted'>('all')
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
@@ -238,6 +257,14 @@ export function TasksPage() {
     if (!result.success) {
       // Show error somehow - for now just log
       console.error('Failed to cancel task:', result.error)
+    }
+  }
+
+  // Handle retry button click
+  const handleRetryClick = async (task: Task) => {
+    const result = await retryTask(task.id)
+    if (!result.success) {
+      console.error('Failed to retry task:', result.error)
     }
   }
 
@@ -318,6 +345,7 @@ export function TasksPage() {
                 showProjectBadge={!projectFilter}
                 onDeleteClick={handleDeleteClick}
                 onCancelClick={handleCancelClick}
+                onRetryClick={handleRetryClick}
               />
             ))
           )}

@@ -119,6 +119,51 @@ async def get_session(
     )
 
 
+@router.get("/sessions/{session_id}/info")
+async def get_session_info(
+    session_id: str,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """Get session metadata info including TTL status.
+
+    Returns session info for checking expiration and activity.
+    """
+    from services.session_service import get_session_service
+
+    service = get_session_service()
+    info = await service.get_session_info(session_id)
+    if not info:
+        raise HTTPException(status_code=404, detail="Session not found or expired")
+
+    return info
+
+
+@router.post("/sessions/{session_id}/refresh")
+async def refresh_session(
+    session_id: str,
+    extend_days: int | None = None,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """Refresh session expiration time.
+
+    Call this on page load or when the user returns to extend the session.
+    """
+    from services.session_service import get_session_service
+
+    service = get_session_service()
+    if not await service.refresh_session(session_id, extend_days):
+        raise HTTPException(status_code=404, detail="Session not found or expired")
+
+    # Get updated info
+    info = await service.get_session_info(session_id)
+    return {
+        "message": "Session refreshed",
+        "session_id": session_id,
+        "expires_at": info.get("expires_at") if info else None,
+        "ttl_remaining_hours": info.get("ttl_remaining_hours") if info else None,
+    }
+
+
 @router.delete("/sessions/{session_id}")
 async def delete_session(
     session_id: str,
@@ -128,6 +173,54 @@ async def delete_session(
     if not await engine.delete_session(session_id):
         raise HTTPException(status_code=404, detail="Session not found")
     return {"message": "Session deleted"}
+
+
+@router.get("/sessions/{session_id}/sync")
+async def sync_session(
+    session_id: str,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """
+    Synchronize session state with the client.
+
+    Returns the full session state including tasks, which the client
+    can use to validate and sync its local state.
+
+    If session is not found, returns 404 so client knows to clear local state.
+    """
+    from services.session_service import get_session_service
+
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found or expired")
+
+    # Get session metadata
+    service = get_session_service()
+    session_info = await service.get_session_info(session_id)
+
+    # Transform tasks for client
+    tasks = {}
+    for task_id, task in state.get("tasks", {}).items():
+        if hasattr(task, "model_dump"):
+            task_dict = task.model_dump()
+        else:
+            task_dict = task
+        # Only include non-deleted tasks
+        if not task_dict.get("is_deleted", False):
+            tasks[task_id] = task_dict
+
+    return {
+        "session_id": session_id,
+        "session_info": session_info,
+        "tasks": tasks,
+        "root_task_id": state.get("root_task_id"),
+        "agents": state.get("agents", {}),
+        "pending_approvals": state.get("pending_approvals", {}),
+        "waiting_for_approval": state.get("waiting_for_approval", False),
+        "token_usage": state.get("token_usage", {}),
+        "total_cost": state.get("total_cost", 0),
+        "project": state.get("project"),
+    }
 
 
 @router.post("/sessions/{session_id}/tasks", response_model=TaskResponse)
@@ -285,6 +378,41 @@ async def cancel_single_task(
         "previous_status": result.previous_status,
         "new_status": "cancelled",
         "message": "Task cancelled successfully",
+    }
+
+
+@router.post("/sessions/{session_id}/tasks/{task_id}/retry")
+async def retry_task(
+    session_id: str,
+    task_id: str,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """
+    Retry a failed or cancelled task.
+
+    This resets the task status to pending, clears the error,
+    and increments retry_count for tracking. The orchestrator will
+    automatically pick up the task for re-execution.
+    """
+    from services.task_service import TaskService
+
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    tasks = state.get("tasks", {})
+    result = TaskService.retry_task(task_id, tasks)
+
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.error)
+
+    return {
+        "success": True,
+        "task_id": result.task_id,
+        "previous_status": result.previous_status,
+        "new_status": "pending",
+        "retry_count": result.retry_count,
+        "message": "Task queued for retry",
     }
 
 

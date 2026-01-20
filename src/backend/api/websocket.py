@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -18,6 +19,9 @@ from models.message import (
 )
 from models.hitl import ApprovalStatus
 from api.deps import get_engine
+
+# Heartbeat configuration
+WS_HEARTBEAT_INTERVAL = int(os.getenv("WS_HEARTBEAT_INTERVAL", "20"))
 
 
 websocket_router = APIRouter()
@@ -53,6 +57,25 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+async def heartbeat_task(session_id: str, websocket: WebSocket, interval: int = WS_HEARTBEAT_INTERVAL):
+    """
+    Server-side heartbeat task.
+    Sends periodic PING messages to keep the connection alive.
+    """
+    try:
+        while True:
+            await asyncio.sleep(interval)
+            if websocket.client_state.name == "CONNECTED":
+                await websocket.send_json({
+                    "type": "ping",
+                    "session_id": session_id,
+                })
+    except asyncio.CancelledError:
+        pass  # Task was cancelled, clean exit
+    except Exception:
+        pass  # Connection closed or other error
+
+
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
     """
     WebSocket endpoint for orchestration streaming.
@@ -62,6 +85,9 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     - Server sends: { "type": "task_started|task_progress|agent_thinking|...", "payload": {...} }
     """
     await manager.connect(session_id, websocket)
+
+    # Start server-side heartbeat task
+    heartbeat = asyncio.create_task(heartbeat_task(session_id, websocket))
 
     try:
         engine = get_engine()
@@ -91,6 +117,11 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
             # Handle different message types
             if message.type == MessageType.PING:
+                # Refresh session TTL on ping (heartbeat)
+                from services.session_service import get_session_service
+                session_service = get_session_service()
+                await session_service.refresh_session(session_id)
+
                 await manager.send_message(
                     session_id,
                     Message(type=MessageType.PONG, session_id=session_id),
@@ -225,16 +256,26 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     )
 
     except WebSocketDisconnect:
-        manager.disconnect(session_id)
+        pass  # Normal disconnection
     except Exception as e:
-        await manager.send_message(
-            session_id,
-            Message(
-                type=MessageType.ERROR,
-                payload={"code": "INTERNAL_ERROR", "message": str(e)},
-                session_id=session_id,
-            ),
-        )
+        try:
+            await manager.send_message(
+                session_id,
+                Message(
+                    type=MessageType.ERROR,
+                    payload={"code": "INTERNAL_ERROR", "message": str(e)},
+                    session_id=session_id,
+                ),
+            )
+        except Exception:
+            pass  # Connection already closed
+    finally:
+        # Cancel heartbeat task and disconnect
+        heartbeat.cancel()
+        try:
+            await heartbeat
+        except asyncio.CancelledError:
+            pass
         manager.disconnect(session_id)
 
 

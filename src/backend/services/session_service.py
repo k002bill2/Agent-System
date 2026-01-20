@@ -5,7 +5,7 @@ Provides an abstraction layer over storage (in-memory or database).
 
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +19,59 @@ from models.project import Project
 # Environment variable to control storage mode
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 
+# Session TTL configuration (in days)
+SESSION_TTL_DAYS = int(os.getenv("SESSION_TTL_DAYS", "7"))
+# Inactive session cleanup threshold (in hours)
+SESSION_INACTIVE_HOURS = int(os.getenv("SESSION_INACTIVE_HOURS", "24"))
+
+
+class SessionMetadata:
+    """Metadata for session management."""
+
+    def __init__(
+        self,
+        session_id: str,
+        created_at: datetime,
+        last_activity: datetime,
+        expires_at: datetime,
+    ):
+        self.session_id = session_id
+        self.created_at = created_at
+        self.last_activity = last_activity
+        self.expires_at = expires_at
+
+    def is_expired(self) -> bool:
+        """Check if the session has expired."""
+        return datetime.utcnow() > self.expires_at
+
+    def is_inactive(self, threshold_hours: int = SESSION_INACTIVE_HOURS) -> bool:
+        """Check if the session is inactive beyond the threshold."""
+        threshold = datetime.utcnow() - timedelta(hours=threshold_hours)
+        return self.last_activity < threshold
+
+    def touch(self) -> None:
+        """Update last activity timestamp."""
+        self.last_activity = datetime.utcnow()
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for serialization."""
+        return {
+            "session_id": self.session_id,
+            "created_at": self.created_at.isoformat(),
+            "last_activity": self.last_activity.isoformat(),
+            "expires_at": self.expires_at.isoformat(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SessionMetadata":
+        """Create from dictionary."""
+        return cls(
+            session_id=data["session_id"],
+            created_at=datetime.fromisoformat(data["created_at"]),
+            last_activity=datetime.fromisoformat(data["last_activity"]),
+            expires_at=datetime.fromisoformat(data["expires_at"]),
+        )
+
 
 class SessionService:
     """Service for managing orchestration sessions.
@@ -29,6 +82,7 @@ class SessionService:
     def __init__(self, use_database: bool = USE_DATABASE):
         self.use_database = use_database
         self._memory_sessions: dict[str, AgentState] = {}
+        self._session_metadata: dict[str, SessionMetadata] = {}
 
     async def create_session(
         self,
@@ -36,9 +90,13 @@ class SessionService:
         max_iterations: int = 100,
         project: Project | None = None,
         session_id: str | None = None,
+        ttl_days: int | None = None,
     ) -> str:
         """Create a new orchestration session."""
         session_id = session_id or str(uuid.uuid4())
+        now = datetime.utcnow()
+        ttl = ttl_days or SESSION_TTL_DAYS
+
         state = create_initial_state(
             session_id=session_id,
             user_id=user_id,
@@ -56,6 +114,18 @@ class SessionService:
             if project.claude_md:
                 state["system_context"] = project.claude_md
 
+        # Create session metadata
+        metadata = SessionMetadata(
+            session_id=session_id,
+            created_at=now,
+            last_activity=now,
+            expires_at=now + timedelta(days=ttl),
+        )
+        self._session_metadata[session_id] = metadata
+
+        # Add metadata to state for persistence
+        state["_metadata"] = metadata.to_dict()
+
         if self.use_database:
             async with async_session_factory() as db:
                 repo = SessionRepository(db)
@@ -71,15 +141,46 @@ class SessionService:
 
         return session_id
 
-    async def get_session(self, session_id: str) -> AgentState | None:
-        """Get session state."""
+    async def get_session(self, session_id: str, update_activity: bool = True) -> AgentState | None:
+        """Get session state.
+
+        Args:
+            session_id: The session ID
+            update_activity: Whether to update last_activity timestamp
+
+        Returns:
+            Session state or None if not found or expired
+        """
+        state = None
+
         if self.use_database:
             async with async_session_factory() as db:
                 repo = SessionRepository(db)
                 state = await repo.get_state(session_id)
-                return state
         else:
-            return self._memory_sessions.get(session_id)
+            state = self._memory_sessions.get(session_id)
+
+        if not state:
+            return None
+
+        # Restore or create metadata
+        metadata = self._session_metadata.get(session_id)
+        if not metadata and state.get("_metadata"):
+            metadata = SessionMetadata.from_dict(state["_metadata"])
+            self._session_metadata[session_id] = metadata
+
+        # Check expiration
+        if metadata and metadata.is_expired():
+            # Session expired, clean up
+            await self.delete_session(session_id)
+            return None
+
+        # Update last activity
+        if metadata and update_activity:
+            metadata.touch()
+            state["_metadata"] = metadata.to_dict()
+
+        return state
 
     async def update_session(self, session_id: str, state: AgentState) -> bool:
         """Update session state."""
@@ -97,6 +198,9 @@ class SessionService:
 
     async def delete_session(self, session_id: str) -> bool:
         """Delete a session."""
+        # Remove metadata
+        self._session_metadata.pop(session_id, None)
+
         if self.use_database:
             async with async_session_factory() as db:
                 repo = SessionRepository(db)
@@ -108,6 +212,89 @@ class SessionService:
                 del self._memory_sessions[session_id]
                 return True
             return False
+
+    async def refresh_session(self, session_id: str, extend_days: int | None = None) -> bool:
+        """Refresh session expiration time.
+
+        Args:
+            session_id: The session ID
+            extend_days: Days to extend from now (default: SESSION_TTL_DAYS)
+
+        Returns:
+            True if session was refreshed
+        """
+        state = await self.get_session(session_id, update_activity=False)
+        if not state:
+            return False
+
+        metadata = self._session_metadata.get(session_id)
+        if metadata:
+            extend = extend_days or SESSION_TTL_DAYS
+            metadata.expires_at = datetime.utcnow() + timedelta(days=extend)
+            metadata.touch()
+            state["_metadata"] = metadata.to_dict()
+            await self.update_session(session_id, state)
+            return True
+
+        return False
+
+    async def get_session_info(self, session_id: str) -> dict | None:
+        """Get session metadata info without loading full state.
+
+        Returns session info including TTL status.
+        """
+        state = await self.get_session(session_id, update_activity=False)
+        if not state:
+            return None
+
+        metadata = self._session_metadata.get(session_id)
+        if not metadata:
+            return None
+
+        now = datetime.utcnow()
+        return {
+            "session_id": session_id,
+            "created_at": metadata.created_at.isoformat(),
+            "last_activity": metadata.last_activity.isoformat(),
+            "expires_at": metadata.expires_at.isoformat(),
+            "is_expired": metadata.is_expired(),
+            "is_inactive": metadata.is_inactive(),
+            "ttl_remaining_hours": max(0, (metadata.expires_at - now).total_seconds() / 3600),
+        }
+
+    async def cleanup_expired_sessions(self) -> int:
+        """Clean up expired and inactive sessions.
+
+        Returns:
+            Number of sessions cleaned up
+        """
+        cleaned = 0
+
+        # Get all session IDs to check
+        session_ids = list(self._session_metadata.keys())
+
+        for session_id in session_ids:
+            metadata = self._session_metadata.get(session_id)
+            if metadata and (metadata.is_expired() or metadata.is_inactive()):
+                await self.delete_session(session_id)
+                cleaned += 1
+
+        # Also check memory sessions without metadata (legacy)
+        if not self.use_database:
+            for session_id in list(self._memory_sessions.keys()):
+                if session_id not in self._session_metadata:
+                    # Old session without metadata, check if it has embedded metadata
+                    state = self._memory_sessions.get(session_id)
+                    if state and state.get("_metadata"):
+                        try:
+                            metadata = SessionMetadata.from_dict(state["_metadata"])
+                            if metadata.is_expired() or metadata.is_inactive():
+                                await self.delete_session(session_id)
+                                cleaned += 1
+                        except Exception:
+                            pass  # Invalid metadata, skip
+
+        return cleaned
 
     async def list_sessions(
         self,

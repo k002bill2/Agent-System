@@ -31,6 +31,16 @@ class TaskCancelResult(BaseModel):
     error: str | None = None
 
 
+class TaskRetryResult(BaseModel):
+    """Result of task retry operation."""
+
+    success: bool
+    task_id: str
+    previous_status: str | None = None
+    retry_count: int = 0
+    error: str | None = None
+
+
 class TaskService:
     """Service for managing task operations."""
 
@@ -239,3 +249,60 @@ class TaskService:
             "in_progress_ids": in_progress,
             "can_delete": len(in_progress) == 0 and not task.is_deleted,
         }
+
+    @staticmethod
+    def retry_task(
+        task_id: str,
+        tasks: dict[str, TaskNode],
+    ) -> TaskRetryResult:
+        """
+        Retry a failed or cancelled task.
+
+        Resets the task status to pending, clears the error,
+        and increments retry_count for tracking.
+
+        Only failed or cancelled tasks can be retried.
+        """
+        task = tasks.get(task_id)
+        if not task:
+            return TaskRetryResult(
+                success=False,
+                task_id=task_id,
+                error=f"Task '{task_id}' not found",
+            )
+
+        if task.is_deleted:
+            return TaskRetryResult(
+                success=False,
+                task_id=task_id,
+                error="Cannot retry a deleted task",
+            )
+
+        # Only allow retry for failed or cancelled tasks
+        retryable_statuses = {TaskStatus.FAILED, TaskStatus.CANCELLED}
+        if task.status not in retryable_statuses:
+            return TaskRetryResult(
+                success=False,
+                task_id=task_id,
+                previous_status=task.status.value,
+                retry_count=task.retry_count,
+                error=f"Task is not retryable (current status: {task.status.value}). Only failed or cancelled tasks can be retried.",
+            )
+
+        previous_status = task.status.value
+
+        # Reset task for retry
+        task.status = TaskStatus.PENDING
+        if task.error:
+            # Save error to history before clearing
+            task.error_history.append(task.error)
+        task.error = None
+        task.retry_count += 1
+        task.updated_at = datetime.utcnow()
+
+        return TaskRetryResult(
+            success=True,
+            task_id=task_id,
+            previous_status=previous_status,
+            retry_count=task.retry_count,
+        )

@@ -5,6 +5,32 @@ import { notificationService } from '../services/notificationService'
 // Types
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled'
 
+// Connection status for auto-reconnect
+export type ConnectionStatus =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'failed'
+
+// Reconnect configuration
+const RECONNECT_CONFIG = {
+  maxAttempts: 5,
+  baseDelay: 1000,
+  maxDelay: 30000,
+  heartbeatInterval: 25000,
+}
+
+// Exponential backoff with jitter
+const calculateBackoff = (attempt: number): number => {
+  const delay = Math.min(
+    RECONNECT_CONFIG.baseDelay * Math.pow(2, attempt),
+    RECONNECT_CONFIG.maxDelay
+  )
+  // Add jitter (0-1000ms)
+  return delay + Math.random() * 1000
+}
+
 export interface Project {
   id: string
   name: string
@@ -64,6 +90,16 @@ export interface TokenUsage {
   call_count: number
 }
 
+export interface SessionInfo {
+  session_id: string
+  created_at: string
+  last_activity: string
+  expires_at: string
+  is_expired: boolean
+  is_inactive: boolean
+  ttl_remaining_hours: number
+}
+
 interface OrchestrationState {
   // Connection
   sessionId: string | null
@@ -72,6 +108,13 @@ interface OrchestrationState {
   ws: WebSocket | null
   isInitialLoading: boolean
   isIntentionalDisconnect: boolean
+  // Auto-reconnect
+  connectionStatus: ConnectionStatus
+  reconnectAttempt: number
+  reconnectTimer: ReturnType<typeof setTimeout> | null
+  heartbeatTimer: ReturnType<typeof setInterval> | null
+  // Session TTL
+  sessionInfo: SessionInfo | null
 
   // Projects
   projects: Project[]
@@ -111,6 +154,7 @@ interface OrchestrationState {
   connect: () => void
   disconnect: () => void
   reconnect: () => void
+  refreshSession: () => Promise<boolean>
   sendMessage: (content: string) => void
   cancelTask: () => void
   approveOperation: (approvalId: string, note?: string) => Promise<void>
@@ -131,6 +175,8 @@ interface OrchestrationState {
     canDelete?: boolean
   }>
   setShowDeletedTasks: (show: boolean) => void
+  // Task retry action
+  retryTask: (taskId: string) => Promise<{ success: boolean; error?: string; retryCount?: number }>
 }
 
 export const useOrchestrationStore = create<OrchestrationState>()(
@@ -143,6 +189,13 @@ export const useOrchestrationStore = create<OrchestrationState>()(
   ws: null,
   isInitialLoading: true,
   isIntentionalDisconnect: false,
+  // Auto-reconnect initial state
+  connectionStatus: 'disconnected',
+  reconnectAttempt: 0,
+  reconnectTimer: null,
+  heartbeatTimer: null,
+  // Session TTL
+  sessionInfo: null,
   projects: [],
   selectedProjectId: null,
   tasks: {},
@@ -212,8 +265,24 @@ export const useOrchestrationStore = create<OrchestrationState>()(
     const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/${sessionId}`)
 
     ws.onopen = () => {
-      set({ connected: true, sessionId, sessionProjectId: selectedProjectId, ws, isInitialLoading: false })
-      console.log('WebSocket connected')
+      // Start heartbeat timer
+      const heartbeatTimer = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'ping', session_id: sessionId }))
+        }
+      }, RECONNECT_CONFIG.heartbeatInterval)
+
+      set({
+        connected: true,
+        sessionId,
+        sessionProjectId: selectedProjectId,
+        ws,
+        isInitialLoading: false,
+        connectionStatus: 'connected',
+        reconnectAttempt: 0,
+        heartbeatTimer,
+      })
+      console.log('[WS] Connected with heartbeat')
     }
 
     ws.onmessage = (event) => {
@@ -227,60 +296,163 @@ export const useOrchestrationStore = create<OrchestrationState>()(
     }
 
     ws.onclose = (event) => {
-      const { isIntentionalDisconnect } = get()
-      set({ connected: false, ws: null })
+      const { isIntentionalDisconnect, reconnectAttempt, heartbeatTimer } = get()
+
+      // Clear heartbeat timer
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer)
+      }
+
+      set({
+        connected: false,
+        ws: null,
+        connectionStatus: 'disconnected',
+        heartbeatTimer: null,
+      })
+
       console.log('[WS] Disconnected:', { code: event.code, reason: event.reason })
-      // 의도적인 종료가 아닐 때만 알림
-      if (!isIntentionalDisconnect) {
+
+      // Auto-reconnect if not intentional and within max attempts
+      if (!isIntentionalDisconnect && reconnectAttempt < RECONNECT_CONFIG.maxAttempts) {
+        const delay = calculateBackoff(reconnectAttempt)
+        const nextAttempt = reconnectAttempt + 1
+
+        set({
+          connectionStatus: 'reconnecting',
+          reconnectAttempt: nextAttempt,
+        })
+
+        console.log(`[WS] Reconnecting in ${Math.round(delay / 1000)}s (attempt ${nextAttempt}/${RECONNECT_CONFIG.maxAttempts})`)
+
+        notificationService.notify('재연결 시도 중...', {
+          body: `${nextAttempt}/${RECONNECT_CONFIG.maxAttempts} (${Math.round(delay / 1000)}초 후)`,
+        })
+
+        const timer = setTimeout(() => {
+          get().reconnect()
+        }, delay)
+
+        set({ reconnectTimer: timer })
+      } else if (reconnectAttempt >= RECONNECT_CONFIG.maxAttempts) {
+        set({ connectionStatus: 'failed' })
         notificationService.notifyConnectionLost()
       }
+
       set({ isIntentionalDisconnect: false })
     }
 
     ws.onerror = (error) => {
       console.error('[WS] Error:', error)
+      // Note: onclose will be called after onerror, so we just log here
     }
   },
 
   // Disconnect
   disconnect: () => {
-    const { ws } = get()
+    const { ws, reconnectTimer, heartbeatTimer } = get()
+
+    // Clear timers
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+    }
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer)
+    }
+
     // 의도적 종료 플래그 설정
     set({ isIntentionalDisconnect: true })
     if (ws) {
       ws.close()
     }
-    set({ connected: false, ws: null, sessionId: null })
+    set({
+      connected: false,
+      ws: null,
+      sessionId: null,
+      connectionStatus: 'disconnected',
+      reconnectAttempt: 0,
+      reconnectTimer: null,
+      heartbeatTimer: null,
+    })
   },
 
   // Reconnect to existing session
   reconnect: async () => {
-    const { sessionId, connected, ws: existingWs } = get()
+    const { sessionId, connected, ws: existingWs, connectionStatus } = get()
 
-    // Already connected
+    // Already connected or connecting
     if (connected && existingWs) return
+    if (connectionStatus === 'connecting') return
 
     // No session to reconnect to
     if (!sessionId) {
-      set({ isInitialLoading: false })
+      set({ isInitialLoading: false, connectionStatus: 'disconnected' })
       return
     }
 
-    // Verify session exists on server
+    set({ connectionStatus: 'connecting' })
+
+    // Sync session state from server (validates session and gets latest tasks)
     try {
-      const res = await fetch(`/api/sessions/${sessionId}`)
-      if (!res.ok) {
-        console.log('Session no longer exists, creating new session')
-        set({ sessionId: null, sessionProjectId: null })
-        // Create new session instead of just clearing
-        get().connect()
+      const syncRes = await fetch(`/api/sessions/${sessionId}/sync`)
+
+      if (!syncRes.ok) {
+        // Session expired or not found - clear local state
+        console.log('[Session] Session expired or not found, clearing local state')
+        set({
+          sessionId: null,
+          sessionProjectId: null,
+          sessionInfo: null,
+          tasks: {},
+          rootTaskId: null,
+          agents: {},
+          pendingApprovals: {},
+          waitingForApproval: false,
+          tokenUsage: {},
+          totalCost: 0,
+          messages: [],
+          reconnectAttempt: 0,
+          connectionStatus: 'disconnected',
+          isInitialLoading: false,
+        })
+        // Don't auto-create new session - let user decide
         return
       }
+
+      // Sync server state to local
+      const syncData = await syncRes.json()
+      console.log('[Session] Synced from server:', {
+        taskCount: Object.keys(syncData.tasks || {}).length,
+        ttl: syncData.session_info?.ttl_remaining_hours?.toFixed(1),
+      })
+
+      // Transform and merge tasks from server
+      const serverTasks: Record<string, Task> = {}
+      for (const [id, raw] of Object.entries(syncData.tasks || {})) {
+        serverTasks[id] = transformTask(raw as Record<string, unknown>)
+      }
+
+      set({
+        sessionInfo: syncData.session_info,
+        tasks: serverTasks,
+        rootTaskId: syncData.root_task_id,
+        agents: syncData.agents || {},
+        pendingApprovals: syncData.pending_approvals || {},
+        waitingForApproval: syncData.waiting_for_approval || false,
+        tokenUsage: syncData.token_usage || {},
+        totalCost: syncData.total_cost || 0,
+      })
     } catch (e) {
-      console.error('Failed to verify session:', e)
-      set({ sessionId: null, sessionProjectId: null })
-      // Create new session on error
-      get().connect()
+      console.error('[Session] Failed to sync session:', e)
+      set({
+        sessionId: null,
+        sessionProjectId: null,
+        sessionInfo: null,
+        tasks: {},
+        rootTaskId: null,
+        reconnectAttempt: 0,
+        connectionStatus: 'disconnected',
+        isInitialLoading: false,
+      })
       return
     }
 
@@ -288,8 +460,22 @@ export const useOrchestrationStore = create<OrchestrationState>()(
     const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/${sessionId}`)
 
     ws.onopen = () => {
-      set({ connected: true, ws, isInitialLoading: false })
-      console.log('WebSocket reconnected to session:', sessionId)
+      // Start heartbeat timer
+      const heartbeatTimer = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'ping', session_id: sessionId }))
+        }
+      }, RECONNECT_CONFIG.heartbeatInterval)
+
+      set({
+        connected: true,
+        ws,
+        isInitialLoading: false,
+        connectionStatus: 'connected',
+        reconnectAttempt: 0,
+        heartbeatTimer,
+      })
+      console.log('[WS] Reconnected to session:', sessionId)
     }
 
     ws.onmessage = (event) => {
@@ -303,24 +489,69 @@ export const useOrchestrationStore = create<OrchestrationState>()(
     }
 
     ws.onclose = (event) => {
-      const { isIntentionalDisconnect } = get()
-      set({ connected: false, ws: null })
+      const { isIntentionalDisconnect, reconnectAttempt, heartbeatTimer } = get()
+
+      // Clear heartbeat timer
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer)
+      }
+
+      set({
+        connected: false,
+        ws: null,
+        connectionStatus: 'disconnected',
+        heartbeatTimer: null,
+      })
+
       console.log('[WS] Disconnected:', { code: event.code, reason: event.reason })
-      // 의도적인 종료가 아닐 때만 알림
-      if (!isIntentionalDisconnect) {
+
+      // Auto-reconnect if not intentional and within max attempts
+      if (!isIntentionalDisconnect && reconnectAttempt < RECONNECT_CONFIG.maxAttempts) {
+        const delay = calculateBackoff(reconnectAttempt)
+        const nextAttempt = reconnectAttempt + 1
+
+        set({
+          connectionStatus: 'reconnecting',
+          reconnectAttempt: nextAttempt,
+        })
+
+        console.log(`[WS] Reconnecting in ${Math.round(delay / 1000)}s (attempt ${nextAttempt}/${RECONNECT_CONFIG.maxAttempts})`)
+
+        notificationService.notify('재연결 시도 중...', {
+          body: `${nextAttempt}/${RECONNECT_CONFIG.maxAttempts} (${Math.round(delay / 1000)}초 후)`,
+        })
+
+        const timer = setTimeout(() => {
+          get().reconnect()
+        }, delay)
+
+        set({ reconnectTimer: timer })
+      } else if (reconnectAttempt >= RECONNECT_CONFIG.maxAttempts) {
+        set({ connectionStatus: 'failed' })
         notificationService.notifyConnectionLost()
       }
+
       set({ isIntentionalDisconnect: false })
     }
 
     ws.onerror = (error) => {
       console.error('[WS] Error:', error)
+      // Note: onclose will be called after onerror, so we just log here
     }
   },
 
   // Clear all session data
   clearSession: () => {
-    const { ws } = get()
+    const { ws, reconnectTimer, heartbeatTimer } = get()
+
+    // Clear timers
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+    }
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer)
+    }
+
     // 의도적 종료 플래그 설정
     set({ isIntentionalDisconnect: true })
     if (ws) {
@@ -331,6 +562,10 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       sessionProjectId: null,
       connected: false,
       ws: null,
+      connectionStatus: 'disconnected',
+      reconnectAttempt: 0,
+      reconnectTimer: null,
+      heartbeatTimer: null,
       tasks: {},
       rootTaskId: null,
       currentTaskId: null,
@@ -342,7 +577,38 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       waitingForApproval: false,
       tokenUsage: {},
       totalCost: 0,
+      sessionInfo: null,
     })
+  },
+
+  // Refresh session TTL
+  refreshSession: async () => {
+    const { sessionId } = get()
+    if (!sessionId) return false
+
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/refresh`, {
+        method: 'POST',
+      })
+
+      if (!res.ok) {
+        console.log('[Session] Refresh failed, session may be expired')
+        return false
+      }
+
+      // Update session info
+      const infoRes = await fetch(`/api/sessions/${sessionId}/info`)
+      if (infoRes.ok) {
+        const sessionInfo = await infoRes.json()
+        set({ sessionInfo })
+        console.log(`[Session] Refreshed, TTL: ${sessionInfo.ttl_remaining_hours.toFixed(1)} hours`)
+      }
+
+      return true
+    } catch (e) {
+      console.error('[Session] Refresh error:', e)
+      return false
+    }
   },
 
   // Send message
@@ -618,6 +884,47 @@ export const useOrchestrationStore = create<OrchestrationState>()(
   // Set show deleted tasks filter
   setShowDeletedTasks: (show: boolean) => {
     set({ showDeletedTasks: show })
+  },
+
+  // Retry a failed or cancelled task
+  retryTask: async (taskId: string) => {
+    const { sessionId } = get()
+    if (!sessionId) {
+      return { success: false, error: 'No active session' }
+    }
+
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/tasks/${taskId}/retry`, {
+        method: 'POST',
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        return {
+          success: false,
+          error: error.detail || 'Failed to retry task',
+        }
+      }
+
+      const data = await res.json()
+
+      // Update local state
+      set((state) => ({
+        tasks: {
+          ...state.tasks,
+          [taskId]: {
+            ...state.tasks[taskId],
+            status: 'pending' as TaskStatus,
+            error: undefined,
+          },
+        },
+      }))
+
+      return { success: true, retryCount: data.retry_count }
+    } catch (e) {
+      console.error('Failed to retry task:', e)
+      return { success: false, error: 'Failed to connect to server' }
+    }
   },
 }),
     {
