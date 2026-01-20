@@ -29,18 +29,26 @@ Agent System/
 │   │   ├── orchestrator/ # 오케스트레이션 로직
 │   │   ├── services/     # 서비스 레이어
 │   │   │   ├── agent_registry.py   # 에이전트 등록소
-│   │   │   └── mcp_manager.py      # MCP 서버 관리
+│   │   │   ├── mcp_manager.py      # MCP 서버 관리
+│   │   │   └── feedback_service.py # RLHF 피드백 서비스
 │   │   ├── api/          # FastAPI 라우터
-│   │   │   └── agents.py # Agent/MCP API
+│   │   │   ├── agents.py # Agent/MCP API
+│   │   │   └── feedback.py # RLHF Feedback API
 │   │   └── models/       # 데이터 모델
 │   └── dashboard/        # React 대시보드
 │       ├── src/
 │       │   ├── components/
 │       │   │   ├── AgentCard.tsx      # 에이전트 카드
 │       │   │   ├── AgentStatsPanel.tsx
-│       │   │   └── TaskAnalyzer.tsx   # 태스크 분석 UI
+│       │   │   ├── TaskAnalyzer.tsx   # 태스크 분석 UI
+│       │   │   └── feedback/          # RLHF 피드백 컴포넌트
+│       │   │       ├── FeedbackButton.tsx
+│       │   │       ├── FeedbackModal.tsx
+│       │   │       ├── FeedbackHistoryPanel.tsx
+│       │   │       └── DatasetPanel.tsx
 │       │   ├── stores/
-│       │   │   └── agents.ts          # Agent Registry 스토어
+│       │   │   ├── agents.ts          # Agent Registry 스토어
+│       │   │   └── feedback.ts        # RLHF Feedback 스토어
 │       │   └── hooks/
 │       └── package.json
 │
@@ -165,6 +173,20 @@ class AgentState(TypedDict):
 - `sort_by`: `last_activity` | `created_at` | `message_count` | `estimated_cost` | `project_name`
 - `sort_order`: `asc` | `desc` (기본: `desc`)
 - `limit`: 최대 반환 개수 (기본: 50)
+
+#### RLHF Feedback Endpoints
+
+| Method | Path | 설명 |
+|--------|------|------|
+| POST | `/api/feedback` | 피드백 제출 |
+| GET | `/api/feedback` | 피드백 목록 조회 (필터/페이지네이션) |
+| GET | `/api/feedback/stats` | 피드백 통계 |
+| GET | `/api/feedback/{id}` | 단일 피드백 조회 |
+| POST | `/api/feedback/{id}/process` | 피드백 → 데이터셋 변환 |
+| POST | `/api/feedback/process-batch` | 일괄 처리 |
+| POST | `/api/feedback/process-pending` | 대기 중 자동 처리 |
+| GET | `/api/feedback/dataset/stats` | 데이터셋 통계 |
+| GET | `/api/feedback/dataset/export` | 데이터셋 내보내기 (JSONL/CSV) |
 
 ### 핵심 기능
 
@@ -435,6 +457,48 @@ result = await mcp_manager.call_tool(call)
 | `AgentCard` | 에이전트 카드 (능력, 상태, 통계) |
 | `AgentStatsPanel` | 레지스트리 통계 패널 |
 | `TaskAnalyzer` | 태스크 분석 UI |
+
+#### RLHF Feedback API Endpoints
+
+에이전트 실행 결과에 대한 사용자 피드백을 수집하고 Fine-tuning용 데이터셋으로 변환합니다.
+
+| Method | Path | 설명 |
+|--------|------|------|
+| POST | `/api/feedback` | 피드백 제출 |
+| GET | `/api/feedback` | 피드백 목록 조회 (필터/페이지네이션) |
+| GET | `/api/feedback/stats` | 피드백 통계 |
+| GET | `/api/feedback/{id}` | 단일 피드백 조회 |
+| POST | `/api/feedback/{id}/process` | 단일 피드백 처리 (데이터셋 변환) |
+| POST | `/api/feedback/process-batch` | 피드백 일괄 처리 |
+| POST | `/api/feedback/process-pending` | 대기 중인 피드백 일괄 처리 |
+| GET | `/api/feedback/dataset/stats` | 데이터셋 통계 |
+| GET | `/api/feedback/dataset/export` | 데이터셋 내보내기 (JSONL/CSV) |
+
+**피드백 유형** (`FeedbackType`):
+- `implicit`: 사용자가 에이전트 결과를 수정
+- `explicit_positive`: 결과에 만족 (👍)
+- `explicit_negative`: 결과에 불만족 (👎)
+
+**부정 피드백 사유** (`FeedbackReason`):
+- `incorrect`: 결과가 틀림
+- `incomplete`: 불완전한 결과
+- `off_topic`: 주제에서 벗어남
+- `style`: 스타일/형식 문제
+- `performance`: 성능 문제
+- `other`: 기타
+
+**데이터셋 출력 형식** (JSONL):
+```jsonl
+{"messages": [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}], "metadata": {"feedback_type": "implicit", "agent_id": "mobile-ui-specialist"}}
+```
+
+**Dashboard 컴포넌트** (Feedback 탭):
+| 컴포넌트 | 설명 |
+|----------|------|
+| `FeedbackButton` | 👍/👎 피드백 버튼 |
+| `FeedbackModal` | 부정 피드백 사유 선택 모달 |
+| `FeedbackHistoryPanel` | 피드백 히스토리 목록 |
+| `DatasetPanel` | 데이터셋 통계 및 내보내기 |
 
 ## Claude Code Commands
 

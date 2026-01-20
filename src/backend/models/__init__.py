@@ -21,6 +21,22 @@ from models.hitl import (
     is_approval_required,
 )
 from models.task_plan import TaskPlanResult, SubtaskPlan
+from models.feedback import (
+    FeedbackType,
+    FeedbackReason,
+    FeedbackStatus,
+    FeedbackSubmit,
+    FeedbackResponse,
+    FeedbackEntry,
+    FeedbackQueryParams,
+    FeedbackStats,
+    DatasetEntry,
+    DatasetExportOptions,
+    DatasetStats,
+    ProcessFeedbackRequest,
+    ProcessFeedbackResult,
+    BatchProcessResult,
+)
 
 __all__ = [
     # Agent state
@@ -53,4 +69,19 @@ __all__ = [
     # Task Plan
     "TaskPlanResult",
     "SubtaskPlan",
+    # Feedback (RLHF)
+    "FeedbackType",
+    "FeedbackReason",
+    "FeedbackStatus",
+    "FeedbackSubmit",
+    "FeedbackResponse",
+    "FeedbackEntry",
+    "FeedbackQueryParams",
+    "FeedbackStats",
+    "DatasetEntry",
+    "DatasetExportOptions",
+    "DatasetStats",
+    "ProcessFeedbackRequest",
+    "ProcessFeedbackResult",
+    "BatchProcessResult",
 ]

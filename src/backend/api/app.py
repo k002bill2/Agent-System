@@ -37,6 +37,9 @@ from api.claude_sessions import router as claude_sessions_router
 # Agent registry, orchestrator, and MCP manager router
 from api.agents import router as agents_router
 
+# RLHF feedback router
+from api.feedback import router as feedback_router
+
 # Check if database mode is enabled
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 
@@ -115,6 +118,9 @@ def create_app(
 
     # Agent registry, orchestrator, and MCP manager router
     app.include_router(agents_router, prefix="/api")
+
+    # RLHF feedback router
+    app.include_router(feedback_router, prefix="/api")
 
     return app
 

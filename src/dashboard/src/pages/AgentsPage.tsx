@@ -14,6 +14,8 @@ import { AgentCard } from '../components/AgentCard'
 import { AgentStatsPanel } from '../components/AgentStatsPanel'
 import { TaskAnalyzer } from '../components/TaskAnalyzer'
 import { MCPManagerTab } from '../components/mcp/MCPManagerTab'
+import { FeedbackHistoryPanel, DatasetPanel } from '../components/feedback'
+import { useFeedbackStore } from '../stores/feedback'
 import {
   Bot,
   CheckCircle,
@@ -29,6 +31,7 @@ import {
   RefreshCw,
   Sparkles,
   Server,
+  MessageSquare,
 } from 'lucide-react'
 
 // Orchestration agent status icons
@@ -65,7 +68,7 @@ const categoryOptions: { value: AgentCategory | null; label: string; icon: typeo
   { value: 'research', label: 'Research', icon: Search },
 ]
 
-type TabType = 'registry' | 'analyzer' | 'active' | 'mcp'
+type TabType = 'registry' | 'analyzer' | 'active' | 'mcp' | 'feedback'
 
 export function AgentsPage() {
   // Orchestration store (active agents)
@@ -87,6 +90,9 @@ export function AgentsPage() {
     clearError,
   } = useAgentsStore()
 
+  // Feedback store (for count)
+  const { feedbacks, fetchFeedbacks } = useFeedbackStore()
+
   // Local state
   const [activeTab, setActiveTab] = useState<TabType>('registry')
 
@@ -94,7 +100,8 @@ export function AgentsPage() {
   useEffect(() => {
     fetchAgents()
     fetchStats()
-  }, [fetchAgents, fetchStats])
+    fetchFeedbacks()
+  }, [fetchAgents, fetchStats, fetchFeedbacks])
 
   // Orchestration agents
   const agentList = Object.values(orchestrationAgents)
@@ -109,11 +116,14 @@ export function AgentsPage() {
     fetchStats()
   }
 
+  const pendingFeedbackCount = feedbacks.filter((f) => f.status === 'pending').length
+
   const tabs = [
     { id: 'registry' as const, label: 'Agent Registry', icon: Bot, count: registryAgents.length },
     { id: 'analyzer' as const, label: 'Task Analyzer', icon: Sparkles },
     { id: 'active' as const, label: 'Active Agents', icon: Clock, count: filteredOrchestrationAgents.length },
     { id: 'mcp' as const, label: 'MCP Manager', icon: Server },
+    { id: 'feedback' as const, label: 'Feedback', icon: MessageSquare, count: pendingFeedbackCount || undefined },
   ]
 
   return (
@@ -330,6 +340,55 @@ export function AgentsPage() {
       )}
 
       {activeTab === 'mcp' && <MCPManagerTab />}
+
+      {activeTab === 'feedback' && (
+        <div className="space-y-6">
+          {/* Sub-tabs for History and Dataset */}
+          <FeedbackTabContent />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================================================
+// Feedback Tab Content (with sub-tabs)
+// ============================================================================
+
+function FeedbackTabContent() {
+  const [subTab, setSubTab] = useState<'history' | 'dataset'>('history')
+
+  return (
+    <div className="space-y-4">
+      {/* Sub-tabs */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setSubTab('history')}
+          className={cn(
+            'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+            subTab === 'history'
+              ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
+              : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+          )}
+        >
+          Feedback History
+        </button>
+        <button
+          onClick={() => setSubTab('dataset')}
+          className={cn(
+            'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+            subTab === 'dataset'
+              ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
+              : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+          )}
+        >
+          Dataset
+        </button>
+      </div>
+
+      {/* Content */}
+      {subTab === 'history' && <FeedbackHistoryPanel />}
+      {subTab === 'dataset' && <DatasetPanel />}
     </div>
   )
 }
