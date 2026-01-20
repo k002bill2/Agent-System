@@ -35,6 +35,14 @@ except ImportError:
     def get_project_context(*args, **kwargs):
         return ""
 
+# Optional MCP Tool Executor - gracefully handle missing dependencies
+try:
+    from orchestrator.tools import MCPToolExecutor
+    MCP_AVAILABLE = True
+except ImportError:
+    MCP_AVAILABLE = False
+    MCPToolExecutor = None
+
 
 class BaseNode(ABC):
     """Base class for all graph nodes."""
@@ -497,6 +505,11 @@ After completing all necessary tool calls, provide a final summary."""
         self.tools = tools or []
         self._tools_by_name = {tool.name: tool for tool in self.tools}
 
+        # MCP Tool Executor 초기화
+        self._mcp_executor: MCPToolExecutor | None = None
+        if MCP_AVAILABLE and MCPToolExecutor:
+            self._mcp_executor = MCPToolExecutor()
+
         # Bind tools to LLM if available
         if self.llm and self.tools:
             self.llm_with_tools = self.llm.bind_tools(self.tools)
@@ -504,7 +517,35 @@ After completing all necessary tool calls, provide a final summary."""
             self.llm_with_tools = self.llm
 
     async def _execute_tool(self, tool_name: str, tool_args: dict) -> str:
-        """Execute a tool and return the result."""
+        """
+        Execute a tool and return the result.
+
+        MCP 도구를 우선적으로 찾아 실행하고, 없으면 기본 도구를 실행합니다.
+        """
+        # 1. MCP 도구 먼저 확인
+        if self._mcp_executor:
+            await self._mcp_executor.initialize()
+            mcp_tool = self._mcp_executor.find_mcp_tool(tool_name)
+
+            if mcp_tool:
+                result = await self._mcp_executor.execute(tool_name, tool_args)
+                if result.success:
+                    # content를 문자열로 변환
+                    if result.content:
+                        texts = []
+                        for item in result.content:
+                            if isinstance(item, dict) and item.get("type") == "text":
+                                texts.append(item.get("text", ""))
+                            elif isinstance(item, dict):
+                                texts.append(json.dumps(item, ensure_ascii=False))
+                            else:
+                                texts.append(str(item))
+                        return "\n".join(texts)
+                    return "MCP tool executed successfully (no content)"
+                else:
+                    return f"MCP Error: {result.error}"
+
+        # 2. 기본 도구 실행
         if tool_name not in self._tools_by_name:
             return f"Error: Unknown tool '{tool_name}'"
 

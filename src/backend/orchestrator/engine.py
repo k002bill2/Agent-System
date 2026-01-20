@@ -11,8 +11,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # LLM Provider selection
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")  # "ollama" or "anthropic"
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "google")  # "ollama", "anthropic", or "google"
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+GOOGLE_MODEL = os.getenv("GOOGLE_MODEL", "gemini-2.0-flash-exp")
 
 
 def get_llm():
@@ -22,6 +23,12 @@ def get_llm():
         return ChatAnthropic(
             model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
             api_key=os.getenv("ANTHROPIC_API_KEY"),
+        )
+    elif LLM_PROVIDER == "google":
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        return ChatGoogleGenerativeAI(
+            model=GOOGLE_MODEL,
+            google_api_key=os.getenv("GOOGLE_API_KEY"),
         )
     else:
         from langchain_ollama import ChatOllama

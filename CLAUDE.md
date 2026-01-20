@@ -516,11 +516,18 @@ export const useStore = create<State>((set, get) => ({
 ## Environment Variables
 
 ```bash
-# Required
-ANTHROPIC_API_KEY=your_api_key
+# LLM Provider (google, anthropic, ollama 중 선택)
+LLM_PROVIDER=google  # 기본값: google
 
-# LLM Provider (ollama 또는 anthropic)
-LLM_PROVIDER=anthropic
+# Google (Gemini)
+GOOGLE_API_KEY=your_google_api_key
+GOOGLE_MODEL=gemini-2.0-flash-exp
+
+# Anthropic (Claude)
+ANTHROPIC_API_KEY=your_anthropic_api_key
+ANTHROPIC_MODEL=claude-sonnet-4-20250514
+
+# Ollama (로컬)
 OLLAMA_MODEL=qwen2.5:7b
 OLLAMA_BASE_URL=http://localhost:11434
 

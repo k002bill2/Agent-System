@@ -13,6 +13,7 @@ import { ProjectFilter, ProjectBadge } from '../components/ProjectFilter'
 import { AgentCard } from '../components/AgentCard'
 import { AgentStatsPanel } from '../components/AgentStatsPanel'
 import { TaskAnalyzer } from '../components/TaskAnalyzer'
+import { MCPManagerTab } from '../components/mcp/MCPManagerTab'
 import {
   Bot,
   CheckCircle,
@@ -27,6 +28,7 @@ import {
   Filter,
   RefreshCw,
   Sparkles,
+  Server,
 } from 'lucide-react'
 
 // Orchestration agent status icons
@@ -63,7 +65,7 @@ const categoryOptions: { value: AgentCategory | null; label: string; icon: typeo
   { value: 'research', label: 'Research', icon: Search },
 ]
 
-type TabType = 'registry' | 'analyzer' | 'active'
+type TabType = 'registry' | 'analyzer' | 'active' | 'mcp'
 
 export function AgentsPage() {
   // Orchestration store (active agents)
@@ -111,6 +113,7 @@ export function AgentsPage() {
     { id: 'registry' as const, label: 'Agent Registry', icon: Bot, count: registryAgents.length },
     { id: 'analyzer' as const, label: 'Task Analyzer', icon: Sparkles },
     { id: 'active' as const, label: 'Active Agents', icon: Clock, count: filteredOrchestrationAgents.length },
+    { id: 'mcp' as const, label: 'MCP Manager', icon: Server },
   ]
 
   return (
@@ -325,6 +328,8 @@ export function AgentsPage() {
           )}
         </div>
       )}
+
+      {activeTab === 'mcp' && <MCPManagerTab />}
     </div>
   )
 }

@@ -21,13 +21,11 @@ from agents.lead_orchestrator import (
     get_lead_orchestrator,
 )
 from services.mcp_manager import (
-    MCPManager,
     MCPServerConfig,
     MCPServerType,
     MCPServerStatus,
     MCPToolCall,
     MCPToolResult,
-    get_mcp_manager_sync,
 )
 
 
@@ -98,6 +96,14 @@ class AgentSearchResult(BaseModel):
     score: int
 
 
+class MCPToolSchemaResponse(BaseModel):
+    """MCP 도구 스키마 응답."""
+
+    name: str
+    description: str
+    input_schema: dict[str, Any] = {}
+
+
 class MCPServerResponse(BaseModel):
     """MCP 서버 정보 응답."""
 
@@ -107,6 +113,7 @@ class MCPServerResponse(BaseModel):
     description: str
     status: str
     tool_count: int
+    tools: list[MCPToolSchemaResponse] = []
     pid: int | None = None
     started_at: str | None = None
     last_error: str | None = None
@@ -360,6 +367,14 @@ def _server_to_response(info) -> MCPServerResponse:
         description=info.config.description,
         status=info.status.value,
         tool_count=len(info.tools),
+        tools=[
+            MCPToolSchemaResponse(
+                name=tool.name,
+                description=tool.description,
+                input_schema=tool.input_schema,
+            )
+            for tool in info.tools
+        ],
         pid=info.pid,
         started_at=info.started_at.isoformat() if info.started_at else None,
         last_error=info.last_error,
@@ -374,7 +389,9 @@ async def list_mcp_servers(running_only: bool = False):
     Args:
         running_only: 실행 중인 서버만 반환
     """
-    manager = get_mcp_manager_sync()
+    from services.mcp_manager import get_mcp_manager
+
+    manager = await get_mcp_manager()
 
     if running_only:
         servers = manager.get_running_servers()
@@ -387,7 +404,9 @@ async def list_mcp_servers(running_only: bool = False):
 @router.get("/mcp/servers/{server_id}", response_model=MCPServerResponse)
 async def get_mcp_server(server_id: str):
     """특정 MCP 서버 정보 조회."""
-    manager = get_mcp_manager_sync()
+    from services.mcp_manager import get_mcp_manager
+
+    manager = await get_mcp_manager()
     info = manager.get_server(server_id)
 
     if not info:
@@ -443,7 +462,9 @@ async def restart_mcp_server(server_id: str):
 @router.get("/mcp/servers/{server_id}/tools")
 async def get_mcp_server_tools(server_id: str):
     """MCP 서버의 도구 목록 조회."""
-    manager = get_mcp_manager_sync()
+    from services.mcp_manager import get_mcp_manager
+
+    manager = await get_mcp_manager()
     info = manager.get_server(server_id)
 
     if not info:
@@ -493,7 +514,9 @@ async def call_mcp_tool(request: MCPToolCallRequest):
 @router.get("/mcp/tools")
 async def list_all_mcp_tools():
     """모든 MCP 서버의 도구 목록 조회."""
-    manager = get_mcp_manager_sync()
+    from services.mcp_manager import get_mcp_manager
+
+    manager = await get_mcp_manager()
     tools = manager.get_available_tools()
 
     return {
@@ -514,6 +537,8 @@ async def list_all_mcp_tools():
 @router.get("/mcp/stats", response_model=MCPManagerStatsResponse)
 async def get_mcp_stats():
     """MCP 매니저 통계 조회."""
-    manager = get_mcp_manager_sync()
+    from services.mcp_manager import get_mcp_manager
+
+    manager = await get_mcp_manager()
     stats = manager.get_stats()
     return MCPManagerStatsResponse(**stats)
