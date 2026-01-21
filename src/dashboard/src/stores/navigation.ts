@@ -1,6 +1,25 @@
 import { create } from 'zustand'
 
-export type ViewType = 'dashboard' | 'projects' | 'tasks' | 'agents' | 'activity' | 'monitor' | 'claude-sessions' | 'settings'
+export type ViewType =
+  | 'login'
+  | 'auth-callback-google'
+  | 'auth-callback-github'
+  | 'dashboard'
+  | 'projects'
+  | 'tasks'
+  | 'agents'
+  | 'activity'
+  | 'monitor'
+  | 'claude-sessions'
+  | 'settings'
+
+// Views that don't require authentication
+export const PUBLIC_VIEWS: ViewType[] = ['login', 'auth-callback-google', 'auth-callback-github']
+
+// Check if a view is public (doesn't require auth)
+export function isPublicView(view: ViewType): boolean {
+  return PUBLIC_VIEWS.includes(view)
+}
 
 interface NavigationState {
   currentView: ViewType

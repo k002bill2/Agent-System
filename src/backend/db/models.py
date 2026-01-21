@@ -219,3 +219,30 @@ class DatasetEntryModel(Base):
         Index("ix_dataset_positive", "is_positive"),
         Index("ix_dataset_feedback", "feedback_id"),
     )
+
+
+class UserModel(Base):
+    """User model for OAuth authentication."""
+
+    __tablename__ = "users"
+
+    id = Column(String(36), primary_key=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    name = Column(String(255), nullable=True)
+    avatar_url = Column(String(500), nullable=True)
+
+    # OAuth provider info
+    oauth_provider = Column(String(50), nullable=False)  # google | github
+    oauth_provider_id = Column(String(255), nullable=False)
+
+    # Status flags
+    is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    last_login_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("ix_users_provider_id", "oauth_provider", "oauth_provider_id"),
+    )

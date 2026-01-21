@@ -96,6 +96,22 @@ class MCPToolResult(BaseModel):
     execution_time_ms: int = 0
 
 
+class MCPBatchToolCall(BaseModel):
+    """MCP 배치 도구 호출 요청."""
+
+    calls: list[MCPToolCall]
+    max_concurrent: int = Field(default=3, ge=1, le=10, description="최대 동시 실행 수")
+
+
+class MCPBatchToolResult(BaseModel):
+    """MCP 배치 도구 호출 결과."""
+
+    results: list[MCPToolResult] = Field(default_factory=list)
+    total_execution_time_ms: int = 0
+    success_count: int = 0
+    failure_count: int = 0
+
+
 # 기본 MCP 서버 설정
 DEFAULT_MCP_SERVERS: list[MCPServerConfig] = [
     MCPServerConfig(
@@ -500,6 +516,70 @@ class MCPManager:
             arguments=arguments,
             timeout_ms=timeout_ms,
         ))
+
+    async def call_tools_batch(self, batch_call: MCPBatchToolCall) -> MCPBatchToolResult:
+        """
+        다중 MCP 도구 병렬 호출.
+
+        Args:
+            batch_call: 배치 호출 요청 (도구 호출 목록 + 동시 실행 수)
+
+        Returns:
+            배치 호출 결과 (개별 결과 + 통계)
+        """
+        import time
+        start_time = time.time()
+
+        if not batch_call.calls:
+            return MCPBatchToolResult(
+                results=[],
+                total_execution_time_ms=0,
+                success_count=0,
+                failure_count=0,
+            )
+
+        semaphore = asyncio.Semaphore(batch_call.max_concurrent)
+
+        async def execute_with_semaphore(call: MCPToolCall) -> MCPToolResult:
+            async with semaphore:
+                try:
+                    return await self.call_tool(call)
+                except Exception as e:
+                    return MCPToolResult(
+                        success=False,
+                        error=str(e),
+                        execution_time_ms=0,
+                    )
+
+        # 모든 호출을 병렬 실행
+        results = await asyncio.gather(
+            *[execute_with_semaphore(call) for call in batch_call.calls],
+            return_exceptions=True,
+        )
+
+        # 예외 처리 및 결과 변환
+        processed_results: list[MCPToolResult] = []
+        for result in results:
+            if isinstance(result, Exception):
+                processed_results.append(MCPToolResult(
+                    success=False,
+                    error=str(result),
+                    execution_time_ms=0,
+                ))
+            else:
+                processed_results.append(result)
+
+        # 통계 계산
+        total_execution_time = int((time.time() - start_time) * 1000)
+        success_count = sum(1 for r in processed_results if r.success)
+        failure_count = len(processed_results) - success_count
+
+        return MCPBatchToolResult(
+            results=processed_results,
+            total_execution_time_ms=total_execution_time,
+            success_count=success_count,
+            failure_count=failure_count,
+        )
 
     def get_stats(self) -> dict[str, Any]:
         """매니저 통계 반환."""

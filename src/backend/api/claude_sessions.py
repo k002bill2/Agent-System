@@ -85,7 +85,7 @@ async def list_sessions(
     status: SessionStatus | None = None,
     sort_by: SortField = "last_activity",
     sort_order: SortOrder = "desc",
-    limit: int = 50,
+    limit: int = 100000,
 ) -> ClaudeSessionResponse:
     """List all discovered Claude Code sessions.
 

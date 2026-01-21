@@ -11,6 +11,8 @@ from services.mcp_manager import (
     MCPToolCall,
     MCPToolResult,
     MCPToolSchema,
+    MCPBatchToolCall,
+    MCPBatchToolResult,
     get_mcp_manager_sync,
 )
 
@@ -268,3 +270,163 @@ class TestMCPServerStatus:
         assert MCPServerStatus.STARTING.value == "starting"
         assert MCPServerStatus.RUNNING.value == "running"
         assert MCPServerStatus.ERROR.value == "error"
+
+
+class TestMCPBatchToolCall:
+    """MCPBatchToolCall 모델 테스트."""
+
+    def test_creation_with_defaults(self):
+        """기본값으로 생성."""
+        batch = MCPBatchToolCall(calls=[])
+        assert batch.max_concurrent == 3
+        assert len(batch.calls) == 0
+
+    def test_creation_with_calls(self):
+        """호출 목록과 함께 생성."""
+        calls = [
+            MCPToolCall(server_id="server1", tool_name="tool1"),
+            MCPToolCall(server_id="server2", tool_name="tool2"),
+        ]
+        batch = MCPBatchToolCall(calls=calls, max_concurrent=5)
+
+        assert len(batch.calls) == 2
+        assert batch.max_concurrent == 5
+
+    def test_max_concurrent_bounds(self):
+        """max_concurrent 경계값 테스트."""
+        # 최소값
+        batch_min = MCPBatchToolCall(calls=[], max_concurrent=1)
+        assert batch_min.max_concurrent == 1
+
+        # 최대값
+        batch_max = MCPBatchToolCall(calls=[], max_concurrent=10)
+        assert batch_max.max_concurrent == 10
+
+
+class TestMCPBatchToolResult:
+    """MCPBatchToolResult 모델 테스트."""
+
+    def test_empty_result(self):
+        """빈 결과 테스트."""
+        result = MCPBatchToolResult()
+        assert len(result.results) == 0
+        assert result.total_execution_time_ms == 0
+        assert result.success_count == 0
+        assert result.failure_count == 0
+
+    def test_result_with_data(self):
+        """데이터가 있는 결과 테스트."""
+        results = [
+            MCPToolResult(success=True, execution_time_ms=100),
+            MCPToolResult(success=False, error="Error", execution_time_ms=50),
+        ]
+        batch_result = MCPBatchToolResult(
+            results=results,
+            total_execution_time_ms=150,
+            success_count=1,
+            failure_count=1,
+        )
+
+        assert len(batch_result.results) == 2
+        assert batch_result.success_count == 1
+        assert batch_result.failure_count == 1
+
+
+class TestMCPManagerBatchCall:
+    """MCP Manager 배치 호출 테스트."""
+
+    def setup_method(self):
+        """테스트 전 매니저 생성."""
+        self.manager = MCPManager()
+
+    @pytest.mark.asyncio
+    async def test_call_tools_batch_empty(self):
+        """빈 배치 호출 테스트."""
+        batch_call = MCPBatchToolCall(calls=[])
+        result = await self.manager.call_tools_batch(batch_call)
+
+        assert len(result.results) == 0
+        assert result.success_count == 0
+        assert result.failure_count == 0
+
+    @pytest.mark.asyncio
+    async def test_call_tools_batch_server_not_found(self):
+        """존재하지 않는 서버로 배치 호출."""
+        calls = [
+            MCPToolCall(server_id="nonexistent", tool_name="test"),
+        ]
+        batch_call = MCPBatchToolCall(calls=calls)
+        result = await self.manager.call_tools_batch(batch_call)
+
+        assert len(result.results) == 1
+        assert result.results[0].success is False
+        assert "not found" in result.results[0].error.lower()
+        assert result.failure_count == 1
+
+    @pytest.mark.asyncio
+    async def test_call_tools_batch_mixed_results(self):
+        """성공/실패 혼합 배치 호출 테스트."""
+        # 서버 등록
+        config1 = MCPServerConfig(
+            id="mock-server1",
+            type=MCPServerType.CUSTOM,
+            name="Mock Server 1",
+            command="mock",
+        )
+        config2 = MCPServerConfig(
+            id="mock-server2",
+            type=MCPServerType.CUSTOM,
+            name="Mock Server 2",
+            command="mock",
+        )
+        self.manager.register_server(config1)
+        self.manager.register_server(config2)
+
+        # 호출 목록 (하나는 존재하지 않는 서버)
+        calls = [
+            MCPToolCall(server_id="mock-server1", tool_name="test"),
+            MCPToolCall(server_id="nonexistent", tool_name="test"),
+        ]
+        batch_call = MCPBatchToolCall(calls=calls)
+        result = await self.manager.call_tools_batch(batch_call)
+
+        assert len(result.results) == 2
+        # 두 번째는 서버가 없어서 실패
+        assert result.results[1].success is False
+        assert result.total_execution_time_ms > 0
+
+    @pytest.mark.asyncio
+    async def test_call_tools_batch_respects_max_concurrent(self):
+        """max_concurrent 설정 준수 테스트."""
+        # 많은 호출 생성
+        calls = [
+            MCPToolCall(server_id=f"server{i}", tool_name="test")
+            for i in range(10)
+        ]
+        batch_call = MCPBatchToolCall(calls=calls, max_concurrent=2)
+        result = await self.manager.call_tools_batch(batch_call)
+
+        # 모든 호출이 처리됨 (서버가 없어 실패하지만)
+        assert len(result.results) == 10
+        assert result.failure_count == 10  # 서버가 없어 모두 실패
+
+    @pytest.mark.asyncio
+    async def test_call_tools_batch_handles_exceptions(self):
+        """예외 처리 테스트."""
+        with patch.object(self.manager, 'call_tool', side_effect=Exception("Test error")):
+            # 서버 등록
+            config = MCPServerConfig(
+                id="error-server",
+                type=MCPServerType.CUSTOM,
+                name="Error Server",
+                command="mock",
+            )
+            self.manager.register_server(config)
+
+            calls = [MCPToolCall(server_id="error-server", tool_name="test")]
+            batch_call = MCPBatchToolCall(calls=calls)
+            result = await self.manager.call_tools_batch(batch_call)
+
+            assert len(result.results) == 1
+            assert result.results[0].success is False
+            assert "Test error" in result.results[0].error

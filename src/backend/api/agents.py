@@ -26,6 +26,8 @@ from services.mcp_manager import (
     MCPServerStatus,
     MCPToolCall,
     MCPToolResult,
+    MCPBatchToolCall,
+    MCPBatchToolResult,
 )
 
 
@@ -135,6 +137,22 @@ class MCPToolCallResponse(BaseModel):
     content: list[dict[str, Any]] = []
     error: str | None = None
     execution_time_ms: int = 0
+
+
+class MCPBatchToolCallRequest(BaseModel):
+    """MCP 배치 도구 호출 요청."""
+
+    calls: list[MCPToolCallRequest] = Field(..., description="도구 호출 목록")
+    max_concurrent: int = Field(3, ge=1, le=10, description="최대 동시 실행 수")
+
+
+class MCPBatchToolCallResponse(BaseModel):
+    """MCP 배치 도구 호출 응답."""
+
+    results: list[MCPToolCallResponse] = Field(default_factory=list, description="개별 결과 목록")
+    total_execution_time_ms: int = Field(0, description="전체 실행 시간 (ms)")
+    success_count: int = Field(0, description="성공한 호출 수")
+    failure_count: int = Field(0, description="실패한 호출 수")
 
 
 class MCPManagerStatsResponse(BaseModel):
@@ -508,6 +526,50 @@ async def call_mcp_tool(request: MCPToolCallRequest):
         content=result.content,
         error=result.error,
         execution_time_ms=result.execution_time_ms,
+    )
+
+
+@router.post("/mcp/tools/batch-call", response_model=MCPBatchToolCallResponse)
+async def batch_call_mcp_tools(request: MCPBatchToolCallRequest):
+    """
+    MCP 다중 도구 병렬 호출.
+
+    여러 도구를 동시에 실행하고 모든 결과를 반환합니다.
+    max_concurrent로 동시 실행 수를 제한할 수 있습니다.
+    """
+    from services.mcp_manager import get_mcp_manager
+
+    manager = await get_mcp_manager()
+
+    # Request를 내부 모델로 변환
+    batch_call = MCPBatchToolCall(
+        calls=[
+            MCPToolCall(
+                server_id=call.server_id,
+                tool_name=call.tool_name,
+                arguments=call.arguments,
+                timeout_ms=call.timeout_ms,
+            )
+            for call in request.calls
+        ],
+        max_concurrent=request.max_concurrent,
+    )
+
+    result = await manager.call_tools_batch(batch_call)
+
+    return MCPBatchToolCallResponse(
+        results=[
+            MCPToolCallResponse(
+                success=r.success,
+                content=r.content,
+                error=r.error,
+                execution_time_ms=r.execution_time_ms,
+            )
+            for r in result.results
+        ],
+        total_execution_time_ms=result.total_execution_time_ms,
+        success_count=result.success_count,
+        failure_count=result.failure_count,
     )
 
 

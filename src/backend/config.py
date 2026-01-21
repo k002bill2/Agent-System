@@ -13,8 +13,16 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     google_api_key: str = ""
 
+    # LLM Provider Settings
+    llm_provider: str = "google"
+    google_model: str = "gemini-2.0-flash-exp"
+    anthropic_model: str = "claude-sonnet-4-20250514"
+    ollama_model: str = "qwen2.5:7b"
+    ollama_base_url: str = "http://localhost:11434"
+
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/agent_orchestrator"
+    use_database: bool = False
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
@@ -34,6 +42,23 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://localhost:5173",
     ]
+
+    # OAuth/JWT Settings
+    session_secret_key: str = ""  # JWT signing key
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 15
+    refresh_token_expire_days: int = 7
+
+    # Google OAuth
+    google_client_id: str = ""
+    google_client_secret: str = ""
+
+    # GitHub OAuth
+    github_client_id: str = ""
+    github_client_secret: str = ""
+
+    # Frontend URL for OAuth redirects
+    frontend_url: str = "http://localhost:5173"
 
     class Config:
         env_file = ".env"

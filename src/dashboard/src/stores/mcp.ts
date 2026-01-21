@@ -43,11 +43,37 @@ export interface MCPToolCallResult {
   execution_time_ms: number
 }
 
+// 배치 호출을 위한 타입
+export interface MCPToolSelection {
+  serverId: string
+  serverName: string
+  toolName: string
+  toolDescription: string
+  arguments: Record<string, unknown>
+}
+
+export interface MCPBatchToolCallResult {
+  results: Array<{
+    success: boolean
+    content?: unknown[]
+    error?: string
+    execution_time_ms: number
+  }>
+  total_execution_time_ms: number
+  success_count: number
+  failure_count: number
+}
+
 interface MCPState {
   // Data
   servers: MCPServer[]
   stats: MCPManagerStats | null
   lastToolResult: MCPToolCallResult | null
+
+  // Batch call state
+  selectedTools: MCPToolSelection[]
+  lastBatchResult: MCPBatchToolCallResult | null
+  isCallingBatch: boolean
 
   // UI State
   isLoading: boolean
@@ -68,6 +94,14 @@ interface MCPState {
   setStatusFilter: (status: MCPServerStatus | null) => void
   clearError: () => void
   clearToolResult: () => void
+
+  // Batch call actions
+  addToolToSelection: (selection: MCPToolSelection) => void
+  removeToolFromSelection: (serverId: string, toolName: string) => void
+  updateToolArguments: (serverId: string, toolName: string, args: Record<string, unknown>) => void
+  clearSelectedTools: () => void
+  callToolsBatch: (maxConcurrent?: number) => Promise<MCPBatchToolCallResult | null>
+  clearBatchResult: () => void
 }
 
 const API_BASE = 'http://localhost:8000/api'
@@ -77,6 +111,12 @@ export const useMCPStore = create<MCPState>((set, get) => ({
   servers: [],
   stats: null,
   lastToolResult: null,
+
+  // Batch call initial state
+  selectedTools: [],
+  lastBatchResult: null,
+  isCallingBatch: false,
+
   isLoading: false,
   error: null,
   selectedServerId: null,
@@ -264,5 +304,80 @@ export const useMCPStore = create<MCPState>((set, get) => ({
 
   clearToolResult: () => {
     set({ lastToolResult: null })
+  },
+
+  // Batch call actions
+  addToolToSelection: (selection: MCPToolSelection) => {
+    const { selectedTools } = get()
+
+    // 중복 방지: 같은 서버+도구 조합이 이미 있으면 추가하지 않음
+    const exists = selectedTools.some(
+      (t) => t.serverId === selection.serverId && t.toolName === selection.toolName
+    )
+
+    if (!exists) {
+      set({ selectedTools: [...selectedTools, selection] })
+    }
+  },
+
+  removeToolFromSelection: (serverId: string, toolName: string) => {
+    const { selectedTools } = get()
+    set({
+      selectedTools: selectedTools.filter(
+        (t) => !(t.serverId === serverId && t.toolName === toolName)
+      ),
+    })
+  },
+
+  updateToolArguments: (serverId: string, toolName: string, args: Record<string, unknown>) => {
+    const { selectedTools } = get()
+    set({
+      selectedTools: selectedTools.map((t) =>
+        t.serverId === serverId && t.toolName === toolName ? { ...t, arguments: args } : t
+      ),
+    })
+  },
+
+  clearSelectedTools: () => {
+    set({ selectedTools: [] })
+  },
+
+  callToolsBatch: async (maxConcurrent = 3) => {
+    const { selectedTools } = get()
+
+    if (selectedTools.length === 0) return null
+
+    set({ isCallingBatch: true, error: null, lastBatchResult: null })
+
+    try {
+      const response = await fetch(`${API_BASE}/agents/mcp/tools/batch-call`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          calls: selectedTools.map((t) => ({
+            server_id: t.serverId,
+            tool_name: t.toolName,
+            arguments: t.arguments,
+          })),
+          max_concurrent: maxConcurrent,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to call tools batch: ${response.statusText}`)
+      }
+
+      const result: MCPBatchToolCallResult = await response.json()
+      set({ lastBatchResult: result, isCallingBatch: false })
+      return result
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to call tools batch'
+      set({ error: errorMessage, isCallingBatch: false })
+      return null
+    }
+  },
+
+  clearBatchResult: () => {
+    set({ lastBatchResult: null })
   },
 }))

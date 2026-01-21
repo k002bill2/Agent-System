@@ -1,0 +1,28 @@
+
+Please provide the following information about the functionality or feature you want to test:
+
+1.  **Name of the functionality/feature:** (e.g., user login, product search, payment processing)
+
+2.  **Description:** Briefly describe what the functionality/feature does.
+
+3.  **Specific scenarios to be covered:** List the different scenarios you want to test.  Be as specific as possible.  For example:
+    *   For user login:
+        *   Valid username and password
+        *   Invalid username
+        *   Invalid password
+        *   Username and password with special characters
+        *   ...
+    *   For product search:
+        *   Search with valid keywords
+        *   Search with invalid keywords
+        *   Search with empty keywords
+        *   Search with special characters
+        *   ...
+
+4.  **Expected outcomes for each scenario:**  For each scenario listed above, describe the expected result.  For example:
+    *   For user login with valid username and password:
+        *   Expected outcome: User is successfully logged in and redirected to the home page.
+    *   For product search with invalid keywords:
+        *   Expected outcome: No products are found and a "No products found" message is displayed.
+
+5.  **Any other relevant information:**  Are there any specific edge cases, limitations, or performance considerations that should be taken into account during testing?

@@ -40,6 +40,9 @@ from api.agents import router as agents_router
 # RLHF feedback router
 from api.feedback import router as feedback_router
 
+# OAuth authentication router
+from api.auth import router as auth_router
+
 # Check if database mode is enabled
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 
@@ -121,6 +124,9 @@ def create_app(
 
     # RLHF feedback router
     app.include_router(feedback_router, prefix="/api")
+
+    # OAuth authentication router
+    app.include_router(auth_router, prefix="/api")
 
     return app
 

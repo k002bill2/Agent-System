@@ -4,7 +4,8 @@ import { ChatInput } from './components/ChatInput'
 import { ApprovalBanner } from './components/ApprovalModal'
 import { CostBadge } from './components/CostMonitor'
 import { useOrchestrationStore } from './stores/orchestration'
-import { useNavigationStore } from './stores/navigation'
+import { useNavigationStore, isPublicView } from './stores/navigation'
+import { useAuthStore } from './stores/auth'
 import { DashboardPage } from './pages/DashboardPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { TasksPage } from './pages/TasksPage'
@@ -13,6 +14,8 @@ import { ActivityPage } from './pages/ActivityPage'
 import { MonitorPage } from './pages/MonitorPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ClaudeSessionsPage } from './pages/ClaudeSessionsPage'
+import { LoginPage } from './pages/LoginPage'
+import { AuthCallbackPage } from './pages/AuthCallbackPage'
 import {
   SidebarSkeleton,
   DashboardSkeleton,
@@ -47,16 +50,70 @@ export default function App() {
     sessionId,
     isInitialLoading,
     connected,
-    _hasHydrated,
+    _hasHydrated: orchestrationHydrated,
   } = useOrchestrationStore()
-  const { currentView } = useNavigationStore()
+  const { currentView, setView } = useNavigationStore()
+  const {
+    _hasHydrated: authHydrated,
+    fetchCurrentUser,
+    user,
+  } = useAuthStore()
 
   // Track if we've initialized connection
   const hasInitialized = useRef(false)
 
-  // Auto-reconnect on page load if session exists
+  // Handle OAuth callback URL detection on initial load
   useEffect(() => {
-    if (_hasHydrated && !hasInitialized.current) {
+    const path = window.location.pathname
+    if (path === '/auth/callback/google') {
+      setView('auth-callback-google')
+    } else if (path === '/auth/callback/github') {
+      setView('auth-callback-github')
+    }
+  }, [setView])
+
+  // Get accessToken directly for dependency tracking
+  const { accessToken, refreshToken } = useAuthStore()
+
+  // Redirect to login if not authenticated (after hydration)
+  useEffect(() => {
+    // Skip redirect check for auth callback views (they handle their own flow)
+    // Check both currentView state AND URL path to handle initial load race condition
+    const path = window.location.pathname
+    const isAuthCallbackPath = path === '/auth/callback/google' || path === '/auth/callback/github'
+    const isAuthCallbackView = currentView === 'auth-callback-google' || currentView === 'auth-callback-github'
+
+    if (isAuthCallbackPath || isAuthCallbackView) {
+      return
+    }
+    if (authHydrated && !accessToken && !refreshToken && !isPublicView(currentView)) {
+      setView('login')
+    }
+  }, [authHydrated, accessToken, refreshToken, currentView, setView])
+
+  // Fetch current user on mount if authenticated but no user data
+  useEffect(() => {
+    if (authHydrated && (accessToken || refreshToken) && !user) {
+      fetchCurrentUser()
+    }
+  }, [authHydrated, accessToken, refreshToken, user, fetchCurrentUser])
+
+  // Check if authenticated
+  const isLoggedIn = !!(accessToken || refreshToken)
+
+  // Debug logging
+  console.log('[App] Auth state:', {
+    authHydrated,
+    currentView,
+    isLoggedIn,
+    hasAccessToken: !!accessToken,
+    hasRefreshToken: !!refreshToken,
+    hasUser: !!user
+  })
+
+  // Auto-reconnect on page load if session exists (only for authenticated users)
+  useEffect(() => {
+    if (orchestrationHydrated && authHydrated && isLoggedIn && !hasInitialized.current) {
       hasInitialized.current = true
       if (sessionId && !connected) {
         // Existing session found, try to reconnect
@@ -71,7 +128,37 @@ export default function App() {
         disconnect()
       }
     }
-  }, [_hasHydrated]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [orchestrationHydrated, authHydrated, isLoggedIn]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Show loading while hydrating
+  if (!authHydrated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-500 dark:text-gray-400">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Handle public views (login, OAuth callbacks)
+  if (currentView === 'login') {
+    return <LoginPage />
+  }
+
+  if (currentView === 'auth-callback-google') {
+    return <AuthCallbackPage provider="google" />
+  }
+
+  if (currentView === 'auth-callback-github') {
+    return <AuthCallbackPage provider="github" />
+  }
+
+  // Redirect to login if not authenticated
+  if (!isLoggedIn) {
+    return <LoginPage />
+  }
 
   const renderContent = () => {
     if (isInitialLoading) {
