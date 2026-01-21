@@ -2,6 +2,22 @@ import { create } from 'zustand'
 
 const API_BASE = import.meta.env.VITE_API_URL || ''
 
+// Helper to extract error message from API response
+function extractErrorMessage(detail: unknown, fallback: string): string {
+  if (typeof detail === 'string') return detail
+  if (detail && typeof detail === 'object') {
+    const obj = detail as Record<string, unknown>
+    if (obj.message && typeof obj.message === 'string') return obj.message
+    if (obj.msg && typeof obj.msg === 'string') return obj.msg
+    // FastAPI validation errors
+    if (Array.isArray(detail)) {
+      return detail.map((e: { msg?: string }) => e.msg || '').filter(Boolean).join(', ') || fallback
+    }
+    return JSON.stringify(detail)
+  }
+  return fallback
+}
+
 export interface Project {
   id: string
   name: string
@@ -106,7 +122,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
       })
       if (!response.ok) {
         const data = await response.json()
-        throw new Error(data.detail || 'Failed to create project')
+        throw new Error(extractErrorMessage(data.detail, 'Failed to create project'))
       }
       await get().fetchProjects()
       set({ isLoading: false, modalMode: null })
@@ -128,7 +144,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
       })
       if (!response.ok) {
         const data = await response.json()
-        throw new Error(data.detail || 'Failed to link project')
+        throw new Error(extractErrorMessage(data.detail, 'Failed to link project'))
       }
       await get().fetchProjects()
       set({ isLoading: false, modalMode: null })
@@ -150,7 +166,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
       })
       if (!response.ok) {
         const data = await response.json()
-        throw new Error(data.detail || 'Failed to update project')
+        throw new Error(extractErrorMessage(data.detail, 'Failed to update project'))
       }
       await get().fetchProjects()
       set({ isLoading: false, modalMode: null, editingProject: null })
@@ -170,7 +186,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
       })
       if (!response.ok) {
         const data = await response.json()
-        throw new Error(data.detail || 'Failed to delete project')
+        throw new Error(extractErrorMessage(data.detail, 'Failed to delete project'))
       }
       await get().fetchProjects()
       set({ isLoading: false })
@@ -187,10 +203,12 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
     try {
       const response = await fetch(`${API_BASE}/api/rag/projects/${id}/index`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force_reindex: false }),
       })
       if (!response.ok) {
         const data = await response.json()
-        throw new Error(data.detail || 'Failed to index project')
+        throw new Error(extractErrorMessage(data.detail, 'Failed to index project'))
       }
       await get().fetchProjects()
       set({ isLoading: false })

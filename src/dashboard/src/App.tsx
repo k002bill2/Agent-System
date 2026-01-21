@@ -50,6 +50,7 @@ export default function App() {
     sessionId,
     isInitialLoading,
     connected,
+    connectionStatus,
     _hasHydrated: orchestrationHydrated,
   } = useOrchestrationStore()
   const { currentView, setView } = useNavigationStore()
@@ -113,22 +114,42 @@ export default function App() {
 
   // Auto-reconnect on page load if session exists (only for authenticated users)
   useEffect(() => {
-    if (orchestrationHydrated && authHydrated && isLoggedIn && !hasInitialized.current) {
-      hasInitialized.current = true
-      if (sessionId && !connected) {
-        // Existing session found, try to reconnect
-        reconnect()
-      } else if (!sessionId) {
-        // No session, create new one
-        connect()
+    const initSession = async () => {
+      if (orchestrationHydrated && authHydrated && isLoggedIn && !hasInitialized.current) {
+        hasInitialized.current = true
+        if (sessionId && !connected) {
+          // Existing session found, try to reconnect
+          reconnect()
+        } else if (!sessionId) {
+          // No session, create new one
+          connect()
+        }
       }
     }
+    initSession()
     return () => {
       if (hasInitialized.current) {
         disconnect()
       }
     }
   }, [orchestrationHydrated, authHydrated, isLoggedIn]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // If reconnect failed and no session, create new one (avoid infinite loop by checking connectionStatus)
+  useEffect(() => {
+    const shouldCreateNewSession =
+      orchestrationHydrated &&
+      authHydrated &&
+      isLoggedIn &&
+      hasInitialized.current &&
+      !sessionId &&
+      !connected &&
+      connectionStatus === 'disconnected' // Only when fully disconnected, not during connecting/reconnecting
+
+    if (shouldCreateNewSession) {
+      console.log('[App] Session lost after reconnect, creating new session')
+      connect()
+    }
+  }, [orchestrationHydrated, authHydrated, isLoggedIn, sessionId, connected, connectionStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Show loading while hydrating
   if (!authHydrated) {

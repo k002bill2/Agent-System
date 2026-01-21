@@ -56,8 +56,8 @@ _indexing_status: dict[str, str] = {}
 @router.post("/projects/{project_id}/index", response_model=IndexResponse)
 async def index_project(
     project_id: str,
-    request: IndexRequest,
     background_tasks: BackgroundTasks,
+    request: IndexRequest | None = None,
 ) -> IndexResponse:
     """
     Index a project's files for RAG search.
@@ -84,12 +84,15 @@ async def index_project(
 
     _indexing_status[project_id] = "indexing"
 
+    # Use default values if no request body
+    force_reindex = request.force_reindex if request else False
+
     try:
         store = get_vector_store()
         result = await store.index_project(
             project_id=project.id,
             project_path=project.path,
-            force_reindex=request.force_reindex,
+            force_reindex=force_reindex,
         )
 
         _indexing_status[project_id] = "completed"

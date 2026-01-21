@@ -10,14 +10,17 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from pydantic import BaseModel
 
-# Use HuggingFace embeddings as default (lightweight, no API key needed)
-try:
-    from langchain_huggingface import HuggingFaceEmbeddings
-    DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-except ImportError:
-    # Fallback to OpenAI embeddings if HuggingFace not available
-    from langchain_openai import OpenAIEmbeddings
+# Determine embedding provider based on environment
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "google")
+
+# Set default embedding model based on provider
+if LLM_PROVIDER == "google":
+    DEFAULT_EMBEDDING_MODEL = "models/embedding-001"
+elif LLM_PROVIDER == "openai":
     DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
+else:
+    # Fallback to HuggingFace (free, no API key)
+    DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 
 class IndexingResult(BaseModel):
@@ -88,19 +91,43 @@ class ProjectVectorStore:
         self._collections: dict[str, Chroma] = {}
 
     def _create_embeddings(self, model_name: str | None = None) -> Embeddings:
-        """Create embeddings instance."""
+        """Create embeddings instance based on LLM_PROVIDER."""
         model = model_name or DEFAULT_EMBEDDING_MODEL
 
+        # Google Gemini embeddings
+        if LLM_PROVIDER == "google" or "embedding-001" in model:
+            try:
+                from langchain_google_genai import GoogleGenerativeAIEmbeddings
+                return GoogleGenerativeAIEmbeddings(model=model)
+            except ImportError:
+                print("[RAG] langchain-google-genai not installed, trying alternatives...")
+
+        # HuggingFace embeddings (free, no API key)
         if "sentence-transformers" in model or "all-MiniLM" in model:
             try:
                 from langchain_huggingface import HuggingFaceEmbeddings
                 return HuggingFaceEmbeddings(model_name=model)
             except ImportError:
-                pass
+                print("[RAG] langchain-huggingface not installed, trying OpenAI...")
 
-        # Fallback to OpenAI
-        from langchain_openai import OpenAIEmbeddings
-        return OpenAIEmbeddings(model=model)
+        # OpenAI embeddings (fallback)
+        if LLM_PROVIDER == "openai" or os.getenv("OPENAI_API_KEY"):
+            from langchain_openai import OpenAIEmbeddings
+            return OpenAIEmbeddings(model=model if "text-embedding" in model else "text-embedding-3-small")
+
+        # Final fallback: try Google again with explicit API key check
+        google_api_key = os.getenv("GOOGLE_API_KEY")
+        if google_api_key:
+            from langchain_google_genai import GoogleGenerativeAIEmbeddings
+            return GoogleGenerativeAIEmbeddings(
+                model="models/embedding-001",
+                google_api_key=google_api_key
+            )
+
+        raise ValueError(
+            "No embedding provider available. Please set one of: "
+            "GOOGLE_API_KEY, OPENAI_API_KEY, or install langchain-huggingface"
+        )
 
     def _get_collection_name(self, project_id: str) -> str:
         """Generate a valid Chroma collection name."""

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useAuthStore, exchangeOAuthCode } from '../stores/auth'
 import { useNavigationStore } from '../stores/navigation'
 import { Loader2, AlertCircle, CheckCircle } from 'lucide-react'
@@ -10,11 +10,18 @@ interface AuthCallbackPageProps {
 export function AuthCallbackPage({ provider }: AuthCallbackPageProps) {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
   const [error, setError] = useState<string | null>(null)
+  const hasProcessed = useRef(false) // Prevent double execution in Strict Mode
 
   const { setTokens, setUser } = useAuthStore()
   const { setView } = useNavigationStore()
 
   useEffect(() => {
+    // Prevent double execution (React Strict Mode calls useEffect twice)
+    if (hasProcessed.current) {
+      return
+    }
+    hasProcessed.current = true
+
     const handleCallback = async () => {
       // Get code from URL query params
       const urlParams = new URLSearchParams(window.location.search)
@@ -31,8 +38,10 @@ export function AuthCallbackPage({ provider }: AuthCallbackPageProps) {
 
       // Check for missing code
       if (!code) {
-        setStatus('error')
-        setError('Authorization code not found')
+        // If no code and status is still loading, it might be a redirect after success
+        // Don't show error, just redirect to dashboard
+        console.log('[Auth] No code found, redirecting to dashboard')
+        setView('dashboard')
         return
       }
 
