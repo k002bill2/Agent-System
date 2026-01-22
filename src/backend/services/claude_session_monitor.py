@@ -7,6 +7,8 @@ Discovers and monitors external Claude Code sessions by scanning
 import json
 import logging
 import os
+
+logger = logging.getLogger(__name__)
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -683,6 +685,106 @@ class ClaudeSessionMonitor:
         if cache_path.exists():
             return cache_path.read_text().strip()
         return None
+
+    def delete_session(self, session_id: str) -> bool:
+        """Delete a session file.
+
+        Args:
+            session_id: Session UUID
+
+        Returns:
+            True if deleted, False if not found
+        """
+        # Find session file
+        for project_dir in self.projects_dir.iterdir():
+            if not project_dir.is_dir():
+                continue
+            session_file = project_dir / f"{session_id}.jsonl"
+            if session_file.exists():
+                # Delete session file
+                session_file.unlink()
+                # Also delete summary cache if exists
+                cache_path = self._get_summary_cache_path(session_id)
+                if cache_path.exists():
+                    cache_path.unlink()
+                # Invalidate cache
+                _session_cache.invalidate(session_file)
+                logger.info(f"Deleted session {session_id}")
+                return True
+        return False
+
+    def delete_empty_sessions(self) -> list[str]:
+        """Delete all sessions with 0 messages.
+
+        Returns:
+            List of deleted session IDs
+        """
+        deleted = []
+        sessions = self.discover_sessions()
+
+        for session in sessions:
+            if session.message_count == 0:
+                if self.delete_session(session.session_id):
+                    deleted.append(session.session_id)
+
+        logger.info(f"Deleted {len(deleted)} empty sessions")
+        return deleted
+
+    def get_empty_sessions(self) -> list[ClaudeSessionInfo]:
+        """Get all sessions with 0 messages.
+
+        Returns:
+            List of empty sessions
+        """
+        sessions = self.discover_sessions()
+        return [s for s in sessions if s.message_count == 0]
+
+    def get_ghost_sessions(self) -> list[ClaudeSessionInfo]:
+        """Get all ghost sessions (message_count > 0 but no real user/assistant messages).
+
+        These sessions have metadata entries but no actual conversation.
+
+        Returns:
+            List of ghost sessions
+        """
+        sessions = self.discover_sessions()
+        return [
+            s for s in sessions
+            if s.message_count > 0
+            and s.user_message_count == 0
+            and s.assistant_message_count == 0
+        ]
+
+    def delete_ghost_sessions(self) -> list[str]:
+        """Delete all ghost sessions.
+
+        Returns:
+            List of deleted session IDs
+        """
+        deleted = []
+        ghost_sessions = self.get_ghost_sessions()
+
+        for session in ghost_sessions:
+            if self.delete_session(session.session_id):
+                deleted.append(session.session_id)
+
+        logger.info(f"Deleted {len(deleted)} ghost sessions")
+        return deleted
+
+    def is_ghost_session(self, session: ClaudeSessionInfo) -> bool:
+        """Check if a session is a ghost session.
+
+        Args:
+            session: Session info to check
+
+        Returns:
+            True if session has entries but no real messages
+        """
+        return (
+            session.message_count > 0
+            and session.user_message_count == 0
+            and session.assistant_message_count == 0
+        )
 
 
 # Global monitor instance

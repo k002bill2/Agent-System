@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useClaudeSessionsStore, SortField } from '../../stores/claudeSessions'
 import { SessionCard } from './SessionCard'
-import { RefreshCw, Circle, CircleDot, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { RefreshCw, Circle, CircleDot, ArrowUpDown, ArrowUp, ArrowDown, Trash2, Search, FolderOpen, X, Check } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { SessionStatus } from '../../types/claudeSession'
 
@@ -28,15 +28,34 @@ export function SessionList({ statusFilter }: SessionListProps) {
     refreshInterval,
     sortBy,
     sortOrder,
+    projectFilter,
+    searchQuery,
     fetchSessions,
     selectSession,
     setAutoRefresh,
     setSortBy,
     setSortOrder,
+    setProjectFilter,
+    setSearchQuery,
+    getFilteredSessions,
+    getUniqueProjects,
+    deleteEmptySessions,
+    deleteGhostSessions,
+    getEmptySessionsCount,
+    getGhostSessionsCount,
   } = useClaudeSessionsStore()
 
   const [showSortMenu, setShowSortMenu] = useState(false)
+  const [showProjectMenu, setShowProjectMenu] = useState(false)
+  const [isDeletingEmpty, setIsDeletingEmpty] = useState(false)
+  const [isDeletingGhost, setIsDeletingGhost] = useState(false)
   const sortMenuRef = useRef<HTMLDivElement>(null)
+  const projectMenuRef = useRef<HTMLDivElement>(null)
+  const emptyCount = getEmptySessionsCount()
+  const ghostCount = getGhostSessionsCount()
+  const deletableCount = emptyCount + ghostCount
+  const uniqueProjects = getUniqueProjects()
+  const filteredSessions = getFilteredSessions()
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -58,6 +77,20 @@ export function SessionList({ statusFilter }: SessionListProps) {
     }
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showSortMenu])
+
+  // Close project menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (projectMenuRef.current && !projectMenuRef.current.contains(event.target as Node)) {
+        setShowProjectMenu(false)
+      }
+    }
+
+    if (showProjectMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showProjectMenu])
 
   const handleSortFieldChange = (field: SortField) => {
     if (field === sortBy) {
@@ -90,6 +123,41 @@ export function SessionList({ statusFilter }: SessionListProps) {
     fetchSessions(statusFilter)
   }
 
+  const handleDeleteDeletable = async () => {
+    if (deletableCount === 0) return
+
+    const message = []
+    if (emptyCount > 0) message.push(`빈 세션 ${emptyCount}개`)
+    if (ghostCount > 0) message.push(`유령 세션 ${ghostCount}개`)
+    if (!confirm(`${message.join(' + ')}를 삭제하시겠습니까?\n\n유령 세션: 메시지 카운터만 있고 실제 대화가 없는 세션`)) return
+
+    let totalDeleted = 0
+
+    if (emptyCount > 0) {
+      setIsDeletingEmpty(true)
+      try {
+        const result = await deleteEmptySessions()
+        totalDeleted += result.deletedCount
+      } finally {
+        setIsDeletingEmpty(false)
+      }
+    }
+
+    if (ghostCount > 0) {
+      setIsDeletingGhost(true)
+      try {
+        const result = await deleteGhostSessions()
+        totalDeleted += result.deletedCount
+      } finally {
+        setIsDeletingGhost(false)
+      }
+    }
+
+    if (totalDeleted > 0) {
+      alert(`총 ${totalDeleted}개의 세션이 삭제되었습니다.`)
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -104,6 +172,83 @@ export function SessionList({ statusFilter }: SessionListProps) {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Delete empty/ghost sessions button */}
+          {deletableCount > 0 && (
+            <button
+              onClick={handleDeleteDeletable}
+              disabled={isDeletingEmpty || isDeletingGhost}
+              className={cn(
+                'p-2 rounded-lg transition-colors flex items-center gap-1',
+                'bg-red-100 text-red-600 hover:bg-red-200',
+                'dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40',
+                'disabled:opacity-50'
+              )}
+              title={`삭제 가능: 빈 ${emptyCount}개 + 유령 ${ghostCount}개`}
+            >
+              <Trash2 className={cn('w-4 h-4', (isDeletingEmpty || isDeletingGhost) && 'animate-pulse')} />
+              <span className="text-xs font-medium">{deletableCount}</span>
+            </button>
+          )}
+
+          {/* Project filter dropdown */}
+          {uniqueProjects.length > 0 && (
+            <div ref={projectMenuRef} className="relative">
+              <button
+                onClick={() => setShowProjectMenu(!showProjectMenu)}
+                className={cn(
+                  'p-2 rounded-lg transition-colors',
+                  projectFilter
+                    ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
+                )}
+                title={projectFilter ? `프로젝트: ${projectFilter}` : '프로젝트 필터'}
+              >
+                <FolderOpen className="w-4 h-4" />
+              </button>
+
+              {showProjectMenu && (
+                <div className="absolute right-0 mt-1 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50 max-h-60 overflow-y-auto">
+                  <button
+                    onClick={() => {
+                      setProjectFilter(null)
+                      setShowProjectMenu(false)
+                    }}
+                    className={cn(
+                      'w-full flex items-center justify-between px-3 py-2 text-sm',
+                      'hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors',
+                      !projectFilter
+                        ? 'text-blue-600 dark:text-blue-400 font-medium'
+                        : 'text-gray-700 dark:text-gray-300'
+                    )}
+                  >
+                    <span>전체</span>
+                    {!projectFilter && <Check className="w-4 h-4" />}
+                  </button>
+                  <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
+                  {uniqueProjects.map((project) => (
+                    <button
+                      key={project}
+                      onClick={() => {
+                        setProjectFilter(project)
+                        setShowProjectMenu(false)
+                      }}
+                      className={cn(
+                        'w-full flex items-center justify-between px-3 py-2 text-sm',
+                        'hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors',
+                        projectFilter === project
+                          ? 'text-blue-600 dark:text-blue-400 font-medium'
+                          : 'text-gray-700 dark:text-gray-300'
+                      )}
+                    >
+                      <span className="truncate">{project}</span>
+                      {projectFilter === project && <Check className="w-4 h-4 flex-shrink-0 ml-2" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Sort dropdown */}
           <div ref={sortMenuRef} className="relative">
             <button
@@ -183,6 +328,35 @@ export function SessionList({ statusFilter }: SessionListProps) {
         </div>
       </div>
 
+      {/* Search Bar */}
+      <div className="p-3 border-b border-gray-200 dark:border-gray-700">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="세션 검색..."
+            className={cn(
+              'w-full pl-9 pr-8 py-2 text-sm rounded-lg',
+              'bg-gray-100 dark:bg-gray-700',
+              'text-gray-900 dark:text-white',
+              'placeholder-gray-500 dark:placeholder-gray-400',
+              'border border-transparent focus:border-blue-500 focus:ring-1 focus:ring-blue-500',
+              'outline-none transition-colors'
+            )}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Session List */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {isLoading && sessions.length === 0 ? (
@@ -195,17 +369,28 @@ export function SessionList({ statusFilter }: SessionListProps) {
               />
             ))}
           </div>
-        ) : sessions.length === 0 ? (
+        ) : filteredSessions.length === 0 ? (
           // Empty state
           <div className="flex flex-col items-center justify-center h-48 text-gray-500 dark:text-gray-400">
-            <p className="text-sm">No sessions found</p>
-            <p className="text-xs mt-1">
-              Start a Claude Code session in another terminal
-            </p>
+            {sessions.length === 0 ? (
+              <>
+                <p className="text-sm">No sessions found</p>
+                <p className="text-xs mt-1">
+                  Start a Claude Code session in another terminal
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm">검색 결과 없음</p>
+                <p className="text-xs mt-1">
+                  다른 검색어를 시도해보세요
+                </p>
+              </>
+            )}
           </div>
         ) : (
           // Session cards
-          sessions.map((session) => (
+          filteredSessions.map((session) => (
             <SessionCard
               key={session.session_id}
               session={session}

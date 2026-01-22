@@ -83,6 +83,7 @@ SortOrder = Literal["asc", "desc"]
 @router.get("", response_model=ClaudeSessionResponse)
 async def list_sessions(
     status: SessionStatus | None = None,
+    project: str | None = None,
     sort_by: SortField = "last_activity",
     sort_order: SortOrder = "desc",
     limit: int = 100000,
@@ -91,6 +92,7 @@ async def list_sessions(
 
     Args:
         status: Optional filter by session status
+        project: Optional filter by project name
         sort_by: Field to sort by (last_activity, created_at, message_count, estimated_cost, project_name)
         sort_order: Sort order (asc, desc)
         limit: Maximum number of sessions to return
@@ -104,6 +106,10 @@ async def list_sessions(
     # Filter by status if specified
     if status:
         sessions = [s for s in sessions if s.status == status]
+
+    # Filter by project if specified
+    if project:
+        sessions = [s for s in sessions if s.project_name == project]
 
     # Count active sessions (before sorting/limiting)
     active_count = sum(1 for s in sessions if s.status == SessionStatus.ACTIVE)
@@ -141,6 +147,65 @@ async def list_sessions(
         active_count=active_count,
     )
 
+
+# ========================================
+# Static routes (must come before /{session_id})
+# ========================================
+
+@router.get("/empty/list")
+async def list_empty_sessions() -> dict:
+    """List all sessions with 0 messages.
+
+    Returns:
+        List of empty sessions
+    """
+    monitor = get_monitor()
+    empty_sessions = monitor.get_empty_sessions()
+
+    return {
+        "empty_count": len(empty_sessions),
+        "sessions": [s.model_dump() for s in empty_sessions],
+    }
+
+
+@router.get("/ghost/list")
+async def list_ghost_sessions() -> dict:
+    """List all ghost sessions (message_count > 0 but no real user/assistant messages).
+
+    These sessions have metadata entries but no actual conversation.
+
+    Returns:
+        List of ghost sessions
+    """
+    monitor = get_monitor()
+    ghost_sessions = monitor.get_ghost_sessions()
+
+    return {
+        "ghost_count": len(ghost_sessions),
+        "sessions": [s.model_dump() for s in ghost_sessions],
+    }
+
+
+@router.delete("/ghost")
+async def delete_ghost_sessions() -> dict:
+    """Delete all ghost sessions.
+
+    Returns:
+        List of deleted session IDs and count
+    """
+    monitor = get_monitor()
+    deleted_ids = monitor.delete_ghost_sessions()
+
+    return {
+        "success": True,
+        "deleted_count": len(deleted_ids),
+        "deleted_ids": deleted_ids,
+    }
+
+
+# ========================================
+# Dynamic routes (/{session_id})
+# ========================================
 
 @router.get("/{session_id}", response_model=ClaudeSessionDetail)
 async def get_session(session_id: str) -> ClaudeSessionDetail:
@@ -420,4 +485,42 @@ async def get_session_summary(session_id: str) -> dict:
     return {
         "session_id": session_id,
         "summary": summary,
+    }
+
+
+@router.delete("/{session_id}")
+async def delete_session(session_id: str) -> dict:
+    """Delete a specific session.
+
+    Args:
+        session_id: Session UUID
+
+    Returns:
+        Success status and message
+    """
+    monitor = get_monitor()
+
+    if monitor.delete_session(session_id):
+        return {
+            "success": True,
+            "message": f"Session {session_id} deleted successfully",
+        }
+    else:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+
+@router.delete("")
+async def delete_empty_sessions() -> dict:
+    """Delete all sessions with 0 messages.
+
+    Returns:
+        List of deleted session IDs and count
+    """
+    monitor = get_monitor()
+    deleted_ids = monitor.delete_empty_sessions()
+
+    return {
+        "success": True,
+        "deleted_count": len(deleted_ids),
+        "deleted_ids": deleted_ids,
     }

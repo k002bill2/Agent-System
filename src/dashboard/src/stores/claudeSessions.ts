@@ -36,6 +36,10 @@ interface ClaudeSessionsState {
   sortBy: SortField
   sortOrder: SortOrder
 
+  // Filtering
+  projectFilter: string | null
+  searchQuery: string
+
   // Auto-refresh
   autoRefresh: boolean
   refreshInterval: number // in seconds
@@ -47,6 +51,10 @@ interface ClaudeSessionsState {
   fetchSessions: (status?: SessionStatus) => Promise<void>
   setSortBy: (field: SortField) => void
   setSortOrder: (order: SortOrder) => void
+  setProjectFilter: (project: string | null) => void
+  setSearchQuery: (query: string) => void
+  getFilteredSessions: () => ClaudeSessionInfo[]
+  getUniqueProjects: () => string[]
   fetchSessionDetails: (sessionId: string) => Promise<void>
   fetchTranscript: (sessionId: string, offset?: number, limit?: number, append?: boolean) => Promise<void>
   clearTranscript: () => void
@@ -57,6 +65,14 @@ interface ClaudeSessionsState {
   generateSummary: (sessionId: string) => Promise<void>
   generateSummaryQuiet: (sessionId: string) => Promise<void>
   setAutoGenerateSummaries: (enabled: boolean) => void
+
+  // Delete actions
+  deleteSession: (sessionId: string) => Promise<boolean>
+  deleteEmptySessions: () => Promise<{ deletedCount: number; deletedIds: string[] }>
+  deleteGhostSessions: () => Promise<{ deletedCount: number; deletedIds: string[] }>
+  getEmptySessionsCount: () => number
+  getGhostSessionsCount: () => number
+  isGhostSession: (session: ClaudeSessionInfo) => boolean
 
   // Summary generation state
   generatingSummaryFor: string | null
@@ -90,6 +106,10 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   sortBy: 'last_activity',
   sortOrder: 'desc',
 
+  // Filtering initial state
+  projectFilter: null,
+  searchQuery: '',
+
   autoRefresh: true,
   refreshInterval: 5,
 
@@ -102,13 +122,16 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
   // Actions
   fetchSessions: async (status?: SessionStatus) => {
-    const { sortBy, sortOrder, autoGenerateSummaries } = get()
+    const { sortBy, sortOrder, projectFilter, autoGenerateSummaries } = get()
     set({ isLoading: true, error: null })
 
     try {
       const params = new URLSearchParams()
       if (status) {
         params.set('status', status)
+      }
+      if (projectFilter) {
+        params.set('project', projectFilter)
       }
       params.set('sort_by', sortBy)
       params.set('sort_order', sortOrder)
@@ -148,6 +171,43 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   setSortOrder: (order: SortOrder) => {
     set({ sortOrder: order })
     get().fetchSessions()
+  },
+
+  setProjectFilter: (project: string | null) => {
+    set({ projectFilter: project })
+    get().fetchSessions()
+  },
+
+  setSearchQuery: (query: string) => {
+    set({ searchQuery: query })
+  },
+
+  getFilteredSessions: () => {
+    const { sessions, searchQuery } = get()
+    if (!searchQuery.trim()) {
+      return sessions
+    }
+
+    const lowerQuery = searchQuery.toLowerCase()
+    return sessions.filter((session) => {
+      const searchTargets = [
+        session.summary,
+        session.slug,
+        session.session_id,
+        session.project_name,
+      ]
+      return searchTargets.some((target) =>
+        target?.toLowerCase().includes(lowerQuery)
+      )
+    })
+  },
+
+  getUniqueProjects: () => {
+    const { sessions } = get()
+    const projects = sessions
+      .map((s) => s.project_name)
+      .filter((p): p is string => p != null && p !== '')
+    return [...new Set(projects)].sort()
   },
 
   fetchSessionDetails: async (sessionId: string) => {
@@ -385,5 +445,111 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
   setAutoGenerateSummaries: (enabled: boolean) => {
     set({ autoGenerateSummaries: enabled })
+  },
+
+  // Delete a single session
+  deleteSession: async (sessionId: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/claude-sessions/${sessionId}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.detail || 'Failed to delete session')
+      }
+
+      // Remove from local state
+      set((state) => ({
+        sessions: state.sessions.filter((s) => s.session_id !== sessionId),
+        totalCount: state.totalCount - 1,
+        selectedSessionId: state.selectedSessionId === sessionId ? null : state.selectedSessionId,
+        selectedSession: state.selectedSessionId === sessionId ? null : state.selectedSession,
+      }))
+
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    }
+  },
+
+  // Delete all empty sessions
+  deleteEmptySessions: async () => {
+    try {
+      const res = await fetch(`${API_BASE}/claude-sessions`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.detail || 'Failed to delete empty sessions')
+      }
+
+      const data = await res.json()
+      const deletedIds: string[] = data.deleted_ids || []
+
+      // Remove deleted sessions from local state
+      set((state) => ({
+        sessions: state.sessions.filter((s) => !deletedIds.includes(s.session_id)),
+        totalCount: state.totalCount - deletedIds.length,
+      }))
+
+      return { deletedCount: data.deleted_count, deletedIds }
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return { deletedCount: 0, deletedIds: [] }
+    }
+  },
+
+  // Get count of empty sessions
+  getEmptySessionsCount: () => {
+    const { sessions } = get()
+    return sessions.filter((s) => s.message_count === 0).length
+  },
+
+  // Get count of ghost sessions (message_count > 0 but no real messages)
+  getGhostSessionsCount: () => {
+    const { sessions } = get()
+    return sessions.filter(
+      (s) => s.message_count > 0 && s.user_message_count === 0 && s.assistant_message_count === 0
+    ).length
+  },
+
+  // Check if a session is a ghost session
+  isGhostSession: (session: ClaudeSessionInfo) => {
+    return (
+      session.message_count > 0 &&
+      session.user_message_count === 0 &&
+      session.assistant_message_count === 0
+    )
+  },
+
+  // Delete all ghost sessions
+  deleteGhostSessions: async () => {
+    try {
+      const res = await fetch(`${API_BASE}/claude-sessions/ghost`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.detail || 'Failed to delete ghost sessions')
+      }
+
+      const data = await res.json()
+      const deletedIds: string[] = data.deleted_ids || []
+
+      // Remove deleted sessions from local state
+      set((state) => ({
+        sessions: state.sessions.filter((s) => !deletedIds.includes(s.session_id)),
+        totalCount: state.totalCount - deletedIds.length,
+      }))
+
+      return { deletedCount: data.deleted_count, deletedIds }
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return { deletedCount: 0, deletedIds: [] }
+    }
   },
 }))

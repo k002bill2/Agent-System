@@ -1,7 +1,8 @@
+import { useState } from 'react'
 import { cn } from '../../lib/utils'
 import { ClaudeSessionInfo, SessionStatus } from '../../types/claudeSession'
 import { useClaudeSessionsStore } from '../../stores/claudeSessions'
-import { Clock, MessageSquare, Wrench, DollarSign, GitBranch, Sparkles, Loader2 } from 'lucide-react'
+import { Clock, MessageSquare, Wrench, DollarSign, GitBranch, Sparkles, Loader2, Trash2 } from 'lucide-react'
 
 interface SessionCardProps {
   session: ClaudeSessionInfo
@@ -43,12 +44,28 @@ function formatCost(cost: number): string {
 }
 
 export function SessionCard({ session, isSelected, onClick }: SessionCardProps) {
-  const { generateSummary, generatingSummaryFor } = useClaudeSessionsStore()
+  const { generateSummary, generatingSummaryFor, deleteSession, isGhostSession } = useClaudeSessionsStore()
+  const [isDeleting, setIsDeleting] = useState(false)
   const isGenerating = generatingSummaryFor === session.session_id
+  const isEmpty = session.message_count === 0
+  const isGhost = isGhostSession(session)
+  const isDeletable = isEmpty || isGhost
 
   const handleGenerateSummary = (e: React.MouseEvent) => {
     e.stopPropagation() // Prevent card click
     generateSummary(session.session_id)
+  }
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation() // Prevent card click
+    if (!confirm('이 세션을 삭제하시겠습니까?')) return
+
+    setIsDeleting(true)
+    try {
+      await deleteSession(session.session_id)
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   return (
@@ -86,6 +103,24 @@ export function SessionCard({ session, isSelected, onClick }: SessionCardProps) 
           )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Delete button for empty/ghost sessions */}
+          {isDeletable && (
+            <button
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className={cn(
+                'p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors',
+                isDeleting && 'cursor-not-allowed opacity-50'
+              )}
+              title={isEmpty ? '빈 세션 삭제' : '유령 세션 삭제 (실제 대화 없음)'}
+            >
+              {isDeleting ? (
+                <Loader2 className="w-3.5 h-3.5 text-red-500 animate-spin" />
+              ) : (
+                <Trash2 className="w-3.5 h-3.5 text-red-500" />
+              )}
+            </button>
+          )}
           <span
             className={cn(
               'w-2 h-2 rounded-full',
