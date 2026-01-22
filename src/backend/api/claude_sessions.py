@@ -1,12 +1,15 @@
 """Claude Code external session monitoring API."""
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, HTTPException
+
+logger = logging.getLogger(__name__)
 from fastapi.responses import StreamingResponse
 
 from models.claude_session import (
@@ -402,33 +405,52 @@ async def generate_batch_summaries(
         "errors": [],
     }
 
-    for session in sessions_to_process:
-        try:
-            summary = await monitor.generate_summary(session.session_id)
-            results["total_processed"] += 1
-            if summary and summary != "요약 생성 실패" and summary != "대화 내용 없음":
-                results["success_count"] += 1
-                results["generated_summaries"].append({
-                    "session_id": session.session_id,
-                    "summary": summary,
-                })
-            else:
-                results["failed_count"] += 1
-                results["errors"].append({
-                    "session_id": session.session_id,
-                    "error": summary,
-                })
-        except Exception as e:
-            results["total_processed"] += 1
+    MAX_RETRIES = 3
+    RETRY_DELAY = 5.0  # seconds
+    BETWEEN_REQUESTS_DELAY = 2.0  # seconds
+
+    for idx, session in enumerate(sessions_to_process):
+        # Log progress every 10 sessions
+        if idx > 0 and idx % 10 == 0:
+            logger.info(f"Batch summary progress: {idx}/{len(sessions_to_process)} processed")
+
+        summary = None
+        last_error = None
+
+        # Retry loop for transient failures
+        for attempt in range(MAX_RETRIES):
+            try:
+                summary = await monitor.generate_summary(session.session_id)
+                if summary and summary != "요약 생성 실패":
+                    break  # Success, exit retry loop
+                # If failed, wait before retry
+                if attempt < MAX_RETRIES - 1:
+                    logger.warning(f"Retry {attempt + 1}/{MAX_RETRIES} for session {session.session_id}")
+                    await asyncio.sleep(RETRY_DELAY)
+            except Exception as e:
+                last_error = str(e)
+                if attempt < MAX_RETRIES - 1:
+                    logger.warning(f"Retry {attempt + 1}/{MAX_RETRIES} for session {session.session_id}: {e}")
+                    await asyncio.sleep(RETRY_DELAY)
+
+        results["total_processed"] += 1
+        if summary and summary != "요약 생성 실패" and summary != "대화 내용 없음":
+            results["success_count"] += 1
+            results["generated_summaries"].append({
+                "session_id": session.session_id,
+                "summary": summary,
+            })
+        else:
             results["failed_count"] += 1
             results["errors"].append({
                 "session_id": session.session_id,
-                "error": str(e),
+                "error": last_error or summary or "Unknown error",
             })
 
-        # Small delay to avoid overwhelming Ollama
-        await asyncio.sleep(0.1)
+        # Longer delay between requests to avoid overwhelming Ollama
+        await asyncio.sleep(BETWEEN_REQUESTS_DELAY)
 
+    logger.info(f"Batch summary complete: {results['success_count']}/{results['total_processed']} succeeded")
     return results
 
 

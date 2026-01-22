@@ -850,7 +850,7 @@ class ClaudeSessionMonitor:
             ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
             ollama_model = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.post(
                     f"{ollama_base_url}/api/generate",
                     json={
