@@ -46,6 +46,10 @@ export interface ClaudeSessionInfo {
   file_path: string
   file_size: number
   summary?: string  // AI-generated conversation summary
+
+  // External session tracking
+  source_user: string  // Username who owns this session
+  source_path: string  // Base path where session was found
 }
 
 export interface ClaudeSessionDetail extends ClaudeSessionInfo {
@@ -55,8 +59,12 @@ export interface ClaudeSessionDetail extends ClaudeSessionInfo {
 
 export interface ClaudeSessionResponse {
   sessions: ClaudeSessionInfo[]
-  total_count: number
+  total_count: number  // Total count before filtering
+  filtered_count: number  // Count after filtering (for pagination)
   active_count: number
+  has_more: boolean  // Whether more sessions are available
+  offset: number  // Current offset
+  limit: number  // Page size
 }
 
 export interface TranscriptEntry {

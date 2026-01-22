@@ -27,28 +27,68 @@ Agent System/
 │   │   │   ├── specialists/  # 전문 에이전트 (UI, Backend, Test)
 │   │   │   └── lead_orchestrator.py
 │   │   ├── orchestrator/ # 오케스트레이션 로직
+│   │   │   ├── engine.py     # 메인 실행 엔진
+│   │   │   ├── graph.py      # LangGraph 그래프 구성
+│   │   │   ├── nodes.py      # 6가지 노드 구현
+│   │   │   ├── parallel_executor.py  # 병렬 실행
+│   │   │   └── tools.py      # MCP 도구 실행자
 │   │   ├── services/     # 서비스 레이어
-│   │   │   ├── agent_registry.py   # 에이전트 등록소
-│   │   │   ├── mcp_manager.py      # MCP 서버 관리
-│   │   │   └── feedback_service.py # RLHF 피드백 서비스
+│   │   │   ├── agent_registry.py      # 에이전트 등록소
+│   │   │   ├── auth_service.py        # OAuth/JWT 인증
+│   │   │   ├── mcp_manager.py         # MCP 서버 관리
+│   │   │   ├── feedback_service.py    # RLHF 피드백 서비스
+│   │   │   ├── claude_session_monitor.py  # Claude Code 세션 모니터링
+│   │   │   ├── session_service.py     # 세션 생명주기 관리
+│   │   │   ├── task_service.py        # 태스크 CRUD + 재시도
+│   │   │   ├── rag_service.py         # Vector DB + RAG
+│   │   │   └── sandbox_manager.py     # Docker 격리 실행
 │   │   ├── api/          # FastAPI 라우터
-│   │   │   ├── agents.py # Agent/MCP API
-│   │   │   └── feedback.py # RLHF Feedback API
+│   │   │   ├── auth.py           # OAuth 인증 API
+│   │   │   ├── agents.py         # Agent/MCP API
+│   │   │   ├── feedback.py       # RLHF Feedback API
+│   │   │   ├── claude_sessions.py  # Claude Sessions API
+│   │   │   ├── rag.py            # RAG API
+│   │   │   └── routes.py         # 세션/태스크/프로젝트 API
+│   │   ├── db/           # 데이터베이스 계층
+│   │   │   ├── database.py   # 비동기 SQLAlchemy
+│   │   │   ├── models.py     # ORM 모델
+│   │   │   └── repository.py # 데이터 접근
 │   │   └── models/       # 데이터 모델
 │   └── dashboard/        # React 대시보드
 │       ├── src/
+│       │   ├── pages/
+│       │   │   ├── DashboardPage.tsx     # 메인 대시보드
+│       │   │   ├── AgentsPage.tsx        # 에이전트 레지스트리
+│       │   │   ├── ClaudeSessionsPage.tsx  # Claude Code 세션 모니터링
+│       │   │   ├── LoginPage.tsx         # OAuth 로그인
+│       │   │   └── AuthCallbackPage.tsx  # OAuth 콜백
 │       │   ├── components/
-│       │   │   ├── AgentCard.tsx      # 에이전트 카드
+│       │   │   ├── AgentCard.tsx         # 에이전트 카드
 │       │   │   ├── AgentStatsPanel.tsx
-│       │   │   ├── TaskAnalyzer.tsx   # 태스크 분석 UI
-│       │   │   └── feedback/          # RLHF 피드백 컴포넌트
-│       │   │       ├── FeedbackButton.tsx
-│       │   │       ├── FeedbackModal.tsx
-│       │   │       ├── FeedbackHistoryPanel.tsx
-│       │   │       └── DatasetPanel.tsx
-│       │   ├── stores/
-│       │   │   ├── agents.ts          # Agent Registry 스토어
-│       │   │   └── feedback.ts        # RLHF Feedback 스토어
+│       │   │   ├── TaskAnalyzer.tsx      # 태스크 분석 UI
+│       │   │   ├── DiffViewer.tsx        # 파일 변경 비교
+│       │   │   ├── feedback/             # RLHF 피드백 컴포넌트
+│       │   │   │   ├── FeedbackButton.tsx
+│       │   │   │   ├── FeedbackModal.tsx
+│       │   │   │   ├── FeedbackHistoryPanel.tsx
+│       │   │   │   └── DatasetPanel.tsx
+│       │   │   ├── claude-sessions/      # Claude Sessions 컴포넌트
+│       │   │   │   ├── SessionList.tsx
+│       │   │   │   ├── SessionCard.tsx
+│       │   │   │   ├── SessionDetails.tsx
+│       │   │   │   └── TranscriptViewer.tsx
+│       │   │   └── mcp/                  # MCP 관리 컴포넌트
+│       │   │       ├── MCPManagerTab.tsx
+│       │   │       ├── MCPServerCard.tsx
+│       │   │       └── MCPToolCaller.tsx
+│       │   ├── stores/                   # Zustand 스토어 (12개)
+│       │   │   ├── orchestration.ts      # 세션/태스크 관리
+│       │   │   ├── agents.ts             # Agent Registry
+│       │   │   ├── feedback.ts           # RLHF Feedback
+│       │   │   ├── claudeSessions.ts     # Claude Sessions
+│       │   │   ├── mcp.ts                # MCP 서버 관리
+│       │   │   ├── auth.ts               # 인증 상태
+│       │   │   └── diff.ts               # 파일 변경 비교
 │       │   └── hooks/
 │       └── package.json
 │
@@ -68,12 +108,35 @@ Agent System/
 
 ## Tech Stack
 
-| 레이어 | 기술 | 설명 |
-|--------|------|------|
-| Backend | LangGraph + FastAPI | 에이전트 오케스트레이션 엔진 |
-| Frontend | React + Tailwind + Zustand | 대시보드 UI |
-| Database | PostgreSQL | 태스크 이력 |
-| Cache | Redis | 메시지 큐 |
+### Backend
+
+| 기술 | 버전 | 용도 |
+|------|------|------|
+| LangGraph | 0.2.0+ | 에이전트 오케스트레이션 |
+| FastAPI | 0.115+ | REST/WebSocket API |
+| SQLAlchemy | 2.0+ | 비동기 ORM |
+| PostgreSQL | 15+ | 영구 저장소 |
+| Redis | 7+ | 캐시/메시지 큐 |
+| ChromaDB | 0.4+ | Vector DB (RAG) |
+| PyJWT | 2.8+ | JWT 인증 |
+
+### Frontend
+
+| 기술 | 버전 | 용도 |
+|------|------|------|
+| React | 18.3.1 | UI 프레임워크 |
+| Zustand | 5.0.0 | 상태 관리 |
+| Tailwind CSS | 3.4.16 | 스타일링 |
+| Vite | 6.0+ | 빌드 도구 |
+| TypeScript | 5.6+ | 타입 안정성 |
+
+### LLM Provider
+
+| Provider | 모델 | 설명 |
+|----------|------|------|
+| Google | gemini-2.0-flash-exp | 기본 프로바이더 |
+| Anthropic | claude-sonnet-4-20250514 | Claude API |
+| Ollama | qwen2.5:7b | 로컬 실행 |
 
 ## Quick Start
 
@@ -110,7 +173,7 @@ npm run dev
 |------|------|
 | `OrchestratorNode` | 상태 분석, 다음 액션 결정, 의존성 기반 태스크 스케줄링 |
 | `PlannerNode` | **LLM 기반** 태스크 분해, 서브태스크 생성, **RAG 컨텍스트 조회** |
-| `ExecutorNode` | 태스크 실행, **HITL 승인 체크**, 도구 호출 |
+| `ExecutorNode` | 태스크 실행, **HITL 승인 체크**, **MCP 도구 자동 통합** |
 | `ParallelExecutorNode` | **병렬 태스크 실행** (최대 3개 동시), asyncio.gather 사용 |
 | `ReviewerNode` | 품질 검증, 결과 집계 |
 | `SelfCorrectionNode` | **에러 분석**, 재시도 전략 생성, 최대 3회 자동 재시도 |
@@ -500,6 +563,74 @@ result = await mcp_manager.call_tool(call)
 | `FeedbackHistoryPanel` | 피드백 히스토리 목록 |
 | `DatasetPanel` | 데이터셋 통계 및 내보내기 |
 
+#### 14. OAuth 인증 시스템
+
+Google/GitHub OAuth를 통한 사용자 인증과 JWT 기반 세션 관리를 지원합니다.
+
+```python
+# services/auth_service.py
+class AuthService:
+    async def create_oauth_url(self, provider: str) -> str
+    async def handle_callback(self, provider: str, code: str) -> TokenResponse
+    async def refresh_token(self, refresh_token: str) -> TokenResponse
+    async def get_current_user(self, token: str) -> UserInfo
+```
+
+**지원 프로바이더**:
+- Google OAuth 2.0
+- GitHub OAuth
+
+**토큰 설정**:
+- Access Token: 15분 유효
+- Refresh Token: 7일 유효
+- 쿠키 기반 세션 저장소
+
+**API Endpoints**:
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/auth/google` | Google OAuth 리다이렉트 URL |
+| POST | `/api/auth/google/callback` | Google OAuth 콜백 처리 |
+| GET | `/api/auth/github` | GitHub OAuth 리다이렉트 URL |
+| POST | `/api/auth/github/callback` | GitHub OAuth 콜백 처리 |
+| POST | `/api/auth/refresh` | Access Token 갱신 |
+| GET | `/api/auth/me` | 현재 사용자 정보 |
+| POST | `/api/auth/logout` | 로그아웃 (쿠키 삭제) |
+
+**Dashboard 페이지**:
+| 페이지 | 설명 |
+|--------|------|
+| `LoginPage` | OAuth 로그인 UI |
+| `AuthCallbackPage` | OAuth 콜백 처리 |
+
+#### 15. Task Lifecycle 관리
+
+태스크 재시도, 취소, 소프트 삭제 기능을 지원합니다.
+
+```python
+# services/task_service.py
+class TaskService:
+    async def retry_task(self, session_id: str, task_id: str) -> TaskNode
+    async def cancel_task(self, session_id: str, task_id: str) -> TaskNode
+    async def soft_delete_task(self, session_id: str, task_id: str) -> bool
+```
+
+**Task Retry**:
+- 상태: `failed`/`cancelled` → `pending`
+- `retry_count` 자동 증가
+- 에러 메시지 초기화
+
+**API Endpoints**:
+| Method | Path | 설명 |
+|--------|------|------|
+| POST | `/api/sessions/{id}/tasks/{tid}/retry` | 태스크 재시도 |
+| POST | `/api/sessions/{id}/tasks/{tid}/cancel` | 태스크 취소 |
+| DELETE | `/api/sessions/{id}/tasks/{tid}` | 태스크 소프트 삭제 |
+| GET | `/api/sessions/{id}/tasks/{tid}/deletion-info` | 삭제 영향도 조회 |
+
+**Session Lifecycle**:
+- 세션 TTL 자동 갱신 (마지막 활동 기준)
+- 유휴 세션 정리 작업
+
 ## Claude Code Commands
 
 ### 검증 및 품질
@@ -601,6 +732,21 @@ USE_DATABASE=false  # true로 설정하면 DB 영구 저장 활성화
 
 # Redis
 REDIS_URL=redis://localhost:6379/0
+
+# OAuth 인증
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GITHUB_CLIENT_ID=your_github_client_id
+GITHUB_CLIENT_SECRET=your_github_client_secret
+
+# JWT 설정
+SESSION_SECRET_KEY=your_secret_key_for_jwt
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=15
+REFRESH_TOKEN_EXPIRE_DAYS=7
+
+# Frontend URL (OAuth 콜백용)
+FRONTEND_URL=http://localhost:5173
 ```
 
 ## Testing

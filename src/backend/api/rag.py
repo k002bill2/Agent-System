@@ -1,5 +1,7 @@
 """RAG (Retrieval Augmented Generation) API routes."""
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 
@@ -99,9 +101,8 @@ async def index_project(
 
         # Update project registry to mark as indexed
         if project_id in PROJECTS_REGISTRY:
-            # The project model doesn't have vector_store_initialized yet,
-            # but we track it here
-            pass
+            PROJECTS_REGISTRY[project_id].vector_store_initialized = True
+            PROJECTS_REGISTRY[project_id].indexed_at = datetime.now(timezone.utc).isoformat()
 
         return IndexResponse(
             project_id=result.project_id,
@@ -210,6 +211,10 @@ async def delete_project_index(project_id: str) -> dict:
 
         if success:
             _indexing_status.pop(project_id, None)
+            # Reset project registry status
+            if project_id in PROJECTS_REGISTRY:
+                PROJECTS_REGISTRY[project_id].vector_store_initialized = False
+                PROJECTS_REGISTRY[project_id].indexed_at = None
             return {"message": f"Index deleted for project '{project_id}'"}
         else:
             return {"message": f"No index found for project '{project_id}'"}

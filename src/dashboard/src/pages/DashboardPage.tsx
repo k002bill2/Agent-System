@@ -35,20 +35,6 @@ export function DashboardPage() {
 
   return (
     <div className="flex-1 p-6 overflow-y-auto">
-      {/* Session Info */}
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Dashboard</h2>
-        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-          <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-gray-400'}`} />
-          <span>{connected ? 'Connected' : 'Disconnected'}</span>
-          {sessionId && (
-            <>
-              <span className="mx-2">|</span>
-              <span>Session: {sessionId.slice(0, 8)}...</span>
-            </>
-          )}
-        </div>
-      </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

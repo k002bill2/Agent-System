@@ -81,6 +81,10 @@ class ClaudeSessionInfo(BaseModel):
     # AI-generated summary
     summary: str | None = Field(default=None, description="AI-generated conversation summary")
 
+    # Source user tracking (for external sessions)
+    source_user: str = Field(default="", description="Username who owns this session (extracted from path)")
+    source_path: str = Field(default="", description="Base path where this session was found")
+
 
 class ClaudeSessionDetail(ClaudeSessionInfo):
     """Detailed session information with recent messages."""
@@ -99,8 +103,12 @@ class ClaudeSessionResponse(BaseModel):
     """API response for session list."""
 
     sessions: list[ClaudeSessionInfo]
-    total_count: int
+    total_count: int  # Total count before filtering
+    filtered_count: int  # Count after filtering (for pagination)
     active_count: int
+    has_more: bool  # Whether more sessions are available
+    offset: int  # Current offset
+    limit: int  # Page size
 
 
 class ClaudeSessionSaveRequest(BaseModel):

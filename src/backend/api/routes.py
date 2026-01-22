@@ -21,6 +21,7 @@ from models.project import (
     unregister_project,
     get_projects_dir,
     update_project,
+    normalize_path,
 )
 from models.monitoring import (
     CheckType,
@@ -461,17 +462,25 @@ async def get_task_tree(
 @router.get("/projects", response_model=list[ProjectResponse])
 async def get_projects():
     """List all registered projects."""
+    from services.rag_service import get_vector_store
+
     projects = list_projects()
-    return [
-        ProjectResponse(
+    store = get_vector_store()
+
+    result = []
+    for p in projects:
+        # ChromaDB에서 실제 인덱스 상태 조회
+        stats = store.get_collection_stats(p.id)
+        result.append(ProjectResponse(
             id=p.id,
             name=p.name,
             path=p.path,
             description=p.description,
             has_claude_md=p.claude_md is not None,
-        )
-        for p in projects
-    ]
+            vector_store_initialized=stats.get("indexed", False),
+            indexed_at=p.indexed_at,
+        ))
+    return result
 
 
 @router.get("/projects/templates")
@@ -490,11 +499,13 @@ async def link_project(request: ProjectLinkRequest):
     """
     from pathlib import Path
 
-    source_path = Path(request.source_path)
+    # Normalize path to remove shell escape characters (e.g., "Mobile\ Documents" -> "Mobile Documents")
+    normalized_path = normalize_path(request.source_path)
+    source_path = Path(normalized_path)
 
     # Validate source path exists
     if not source_path.exists():
-        raise HTTPException(status_code=400, detail=f"Source path does not exist: {request.source_path}")
+        raise HTTPException(status_code=400, detail=f"Source path does not exist: {normalized_path}")
 
     if not source_path.is_dir():
         raise HTTPException(status_code=400, detail=f"Source path is not a directory: {request.source_path}")
@@ -604,11 +615,14 @@ async def create_project(request: ProjectCreate):
     """Register a new project."""
     from pathlib import Path
 
-    # Validate path exists
-    if not Path(request.path).exists():
-        raise HTTPException(status_code=400, detail=f"Path does not exist: {request.path}")
+    # Normalize path to remove shell escape characters
+    normalized_path = normalize_path(request.path)
 
-    project = register_project(request.id, request.path)
+    # Validate path exists
+    if not Path(normalized_path).exists():
+        raise HTTPException(status_code=400, detail=f"Path does not exist: {normalized_path}")
+
+    project = register_project(request.id, normalized_path)
 
     return ProjectResponse(
         id=project.id,

@@ -17,8 +17,15 @@ interface ClaudeSessionsState {
   // Session list
   sessions: ClaudeSessionInfo[]
   totalCount: number
+  filteredCount: number  // Count after filtering (for pagination)
   activeCount: number
   isLoading: boolean
+
+  // Pagination state
+  offset: number
+  hasMore: boolean
+  pageSize: number
+  isLoadingMore: boolean
 
   // Selected session details
   selectedSessionId: string | null
@@ -38,7 +45,12 @@ interface ClaudeSessionsState {
 
   // Filtering
   projectFilter: string | null
+  sourceUserFilter: string | null
   searchQuery: string
+
+  // Source users
+  sourceUsers: string[]
+  currentUser: string
 
   // Auto-refresh
   autoRefresh: boolean
@@ -48,13 +60,19 @@ interface ClaudeSessionsState {
   error: string | null
 
   // Actions
-  fetchSessions: (status?: SessionStatus) => Promise<void>
+  fetchSessions: (status?: SessionStatus, reset?: boolean) => Promise<void>
+  loadMoreSessions: (status?: SessionStatus) => Promise<void>
+  refreshSessions: (status?: SessionStatus) => Promise<void>
+  fetchSourceUsers: () => Promise<void>
   setSortBy: (field: SortField) => void
   setSortOrder: (order: SortOrder) => void
   setProjectFilter: (project: string | null) => void
+  setSourceUserFilter: (user: string | null) => void
   setSearchQuery: (query: string) => void
   getFilteredSessions: () => ClaudeSessionInfo[]
   getUniqueProjects: () => string[]
+  getUniqueSourceUsers: () => string[]
+  isExternalSession: (session: ClaudeSessionInfo) => boolean
   fetchSessionDetails: (sessionId: string) => Promise<void>
   fetchTranscript: (sessionId: string, offset?: number, limit?: number, append?: boolean) => Promise<void>
   clearTranscript: () => void
@@ -78,6 +96,15 @@ interface ClaudeSessionsState {
   generatingSummaryFor: string | null
   autoGenerateSummaries: boolean
 
+  // Batch summary generation state
+  isBatchGenerating: boolean
+  batchProgress: { total: number; processed: number; success: number; failed: number }
+  pendingSummaryCount: number
+
+  // Batch summary actions
+  fetchPendingSummaryCount: () => Promise<void>
+  generateBatchSummaries: (limit?: number) => Promise<void>
+
   // SSE connection
   eventSource: EventSource | null
   startStreaming: (sessionId: string) => void
@@ -88,8 +115,15 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   // Initial state
   sessions: [],
   totalCount: 0,
+  filteredCount: 0,
   activeCount: 0,
   isLoading: false,
+
+  // Pagination initial state
+  offset: 0,
+  hasMore: false,
+  pageSize: 30,
+  isLoadingMore: false,
 
   selectedSessionId: null,
   selectedSession: null,
@@ -108,7 +142,12 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
   // Filtering initial state
   projectFilter: null,
+  sourceUserFilter: null,
   searchQuery: '',
+
+  // Source users initial state
+  sourceUsers: [],
+  currentUser: '',
 
   autoRefresh: true,
   refreshInterval: 5,
@@ -118,14 +157,26 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   generatingSummaryFor: null,
   autoGenerateSummaries: true,  // Auto-generate summaries by default
 
+  // Batch summary initial state
+  isBatchGenerating: false,
+  batchProgress: { total: 0, processed: 0, success: 0, failed: 0 },
+  pendingSummaryCount: 0,
+
   eventSource: null,
 
   // Actions
-  fetchSessions: async (status?: SessionStatus) => {
-    const { sortBy, sortOrder, projectFilter, autoGenerateSummaries } = get()
-    set({ isLoading: true, error: null })
+  fetchSessions: async (status?: SessionStatus, reset: boolean = true) => {
+    const { sortBy, sortOrder, projectFilter, sourceUserFilter, pageSize, autoGenerateSummaries } = get()
+
+    // If reset, start fresh
+    if (reset) {
+      set({ isLoading: true, error: null, offset: 0 })
+    } else {
+      set({ isLoading: true, error: null })
+    }
 
     try {
+      const currentOffset = reset ? 0 : get().offset
       const params = new URLSearchParams()
       if (status) {
         params.set('status', status)
@@ -133,8 +184,13 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       if (projectFilter) {
         params.set('project', projectFilter)
       }
+      if (sourceUserFilter) {
+        params.set('source_user', sourceUserFilter)
+      }
       params.set('sort_by', sortBy)
       params.set('sort_order', sortOrder)
+      params.set('offset', currentOffset.toString())
+      params.set('limit', pageSize.toString())
 
       const res = await fetch(`${API_BASE}/claude-sessions?${params.toString()}`)
       if (!res.ok) {
@@ -145,7 +201,10 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       set({
         sessions: data.sessions,
         totalCount: data.total_count,
+        filteredCount: data.filtered_count,
         activeCount: data.active_count,
+        hasMore: data.has_more,
+        offset: data.offset,
         isLoading: false,
       })
 
@@ -160,6 +219,102 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
       set({ error: errorMessage, isLoading: false })
+    }
+  },
+
+  loadMoreSessions: async (status?: SessionStatus) => {
+    const { sortBy, sortOrder, projectFilter, sourceUserFilter, pageSize, sessions, hasMore, isLoadingMore } = get()
+
+    // Don't load more if already loading or no more data
+    if (isLoadingMore || !hasMore) return
+
+    set({ isLoadingMore: true, error: null })
+
+    try {
+      const nextOffset = sessions.length  // Use current loaded count as next offset
+      const params = new URLSearchParams()
+      if (status) {
+        params.set('status', status)
+      }
+      if (projectFilter) {
+        params.set('project', projectFilter)
+      }
+      if (sourceUserFilter) {
+        params.set('source_user', sourceUserFilter)
+      }
+      params.set('sort_by', sortBy)
+      params.set('sort_order', sortOrder)
+      params.set('offset', nextOffset.toString())
+      params.set('limit', pageSize.toString())
+
+      const res = await fetch(`${API_BASE}/claude-sessions?${params.toString()}`)
+      if (!res.ok) {
+        throw new Error(`Failed to load more sessions: ${res.statusText}`)
+      }
+
+      const data: ClaudeSessionResponse = await res.json()
+      set((state) => ({
+        sessions: [...state.sessions, ...data.sessions],
+        hasMore: data.has_more,
+        offset: data.offset,
+        isLoadingMore: false,
+      }))
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage, isLoadingMore: false })
+    }
+  },
+
+  refreshSessions: async (status?: SessionStatus) => {
+    const { sortBy, sortOrder, projectFilter, sourceUserFilter, pageSize, sessions } = get()
+
+    // Soft refresh: fetch first page and merge with existing data
+    try {
+      const params = new URLSearchParams()
+      if (status) {
+        params.set('status', status)
+      }
+      if (projectFilter) {
+        params.set('project', projectFilter)
+      }
+      if (sourceUserFilter) {
+        params.set('source_user', sourceUserFilter)
+      }
+      params.set('sort_by', sortBy)
+      params.set('sort_order', sortOrder)
+      params.set('offset', '0')
+      params.set('limit', pageSize.toString())
+
+      const res = await fetch(`${API_BASE}/claude-sessions?${params.toString()}`)
+      if (!res.ok) {
+        throw new Error(`Failed to refresh sessions: ${res.statusText}`)
+      }
+
+      const data: ClaudeSessionResponse = await res.json()
+
+      // Merge strategy:
+      // 1. New sessions (not in current list) go to the top
+      // 2. Existing sessions get updated data
+      // 3. Sessions beyond the first page are kept as-is
+      const existingIds = new Set(sessions.map(s => s.session_id))
+      const newSessions = data.sessions.filter(s => !existingIds.has(s.session_id))
+      const updatedExisting = sessions.map(session => {
+        const updated = data.sessions.find(s => s.session_id === session.session_id)
+        return updated || session
+      })
+
+      // Put new sessions at the start (they're the most recent)
+      const mergedSessions = [...newSessions, ...updatedExisting]
+
+      set({
+        sessions: mergedSessions,
+        totalCount: data.total_count,
+        filteredCount: data.filtered_count,
+        activeCount: data.active_count,
+      })
+    } catch (e) {
+      // Silently fail on refresh - don't show error to user
+      console.error('Failed to refresh sessions:', e)
     }
   },
 
@@ -178,8 +333,30 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
     get().fetchSessions()
   },
 
+  setSourceUserFilter: (user: string | null) => {
+    set({ sourceUserFilter: user })
+    get().fetchSessions()
+  },
+
   setSearchQuery: (query: string) => {
     set({ searchQuery: query })
+  },
+
+  fetchSourceUsers: async () => {
+    try {
+      const res = await fetch(`${API_BASE}/claude-sessions/source-users`)
+      if (!res.ok) {
+        return
+      }
+
+      const data = await res.json()
+      set({
+        sourceUsers: data.users || [],
+        currentUser: data.current_user || '',
+      })
+    } catch {
+      // Silently ignore errors
+    }
   },
 
   getFilteredSessions: () => {
@@ -208,6 +385,19 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       .map((s) => s.project_name)
       .filter((p): p is string => p != null && p !== '')
     return [...new Set(projects)].sort()
+  },
+
+  getUniqueSourceUsers: () => {
+    const { sessions } = get()
+    const users = sessions
+      .map((s) => s.source_user)
+      .filter((u): u is string => u != null && u !== '')
+    return [...new Set(users)].sort()
+  },
+
+  isExternalSession: (session: ClaudeSessionInfo) => {
+    const { currentUser } = get()
+    return session.source_user !== '' && session.source_user !== currentUser
   },
 
   fetchSessionDetails: async (sessionId: string) => {
@@ -550,6 +740,77 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
       set({ error: errorMessage })
       return { deletedCount: 0, deletedIds: [] }
+    }
+  },
+
+  // Fetch count of sessions without summaries
+  fetchPendingSummaryCount: async () => {
+    try {
+      const res = await fetch(`${API_BASE}/claude-sessions/summaries/pending-count`)
+      if (!res.ok) return
+
+      const data = await res.json()
+      set({ pendingSummaryCount: data.pending_count })
+    } catch {
+      // Silently ignore errors
+    }
+  },
+
+  // Generate summaries for multiple sessions at once
+  generateBatchSummaries: async (limit = 50) => {
+    const { isBatchGenerating } = get()
+    if (isBatchGenerating) return
+
+    set({
+      isBatchGenerating: true,
+      batchProgress: { total: 0, processed: 0, success: 0, failed: 0 },
+      error: null,
+    })
+
+    try {
+      const params = new URLSearchParams()
+      params.set('limit', limit.toString())
+      params.set('skip_existing', 'true')
+
+      const res = await fetch(`${API_BASE}/claude-sessions/summaries/generate-batch?${params.toString()}`, {
+        method: 'POST',
+      })
+
+      if (!res.ok) {
+        throw new Error(`Failed to generate batch summaries: ${res.statusText}`)
+      }
+
+      const data = await res.json()
+
+      // Update progress
+      set({
+        batchProgress: {
+          total: data.total_processed,
+          processed: data.total_processed,
+          success: data.success_count,
+          failed: data.failed_count,
+        },
+        isBatchGenerating: false,
+        pendingSummaryCount: Math.max(0, get().pendingSummaryCount - data.success_count),
+      })
+
+      // Update sessions in list with new summaries
+      if (data.generated_summaries && data.generated_summaries.length > 0) {
+        const summaryMap = new Map<string, string>()
+        for (const item of data.generated_summaries) {
+          summaryMap.set(item.session_id, item.summary)
+        }
+
+        set((state) => ({
+          sessions: state.sessions.map((s) => {
+            const newSummary = summaryMap.get(s.session_id)
+            return newSummary ? { ...s, summary: newSummary } : s
+          }),
+        }))
+      }
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage, isBatchGenerating: false })
     }
   },
 }))

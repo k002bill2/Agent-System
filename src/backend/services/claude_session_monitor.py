@@ -103,52 +103,185 @@ _session_cache = SessionFileCache()
 class ClaudeSessionMonitor:
     """Monitor for external Claude Code sessions."""
 
-    def __init__(self, claude_projects_dir: str | None = None):
+    def __init__(
+        self,
+        claude_projects_dirs: list[str] | None = None,
+        include_external: bool = True,
+    ):
         """Initialize the monitor.
 
         Args:
-            claude_projects_dir: Path to Claude projects directory.
-                                Defaults to ~/.claude/projects/
+            claude_projects_dirs: List of paths to Claude projects directories.
+                                  Defaults to ~/.claude/projects/
+            include_external: Whether to include paths from CLAUDE_EXTERNAL_PROJECTS env var.
         """
-        if claude_projects_dir:
-            self.projects_dir = Path(claude_projects_dir)
-        else:
-            self.projects_dir = Path.home() / ".claude" / "projects"
+        self.projects_dirs: list[Path] = []
+        self._external_paths: list[str] = []  # Runtime added paths
 
-    def discover_sessions(self) -> list[ClaudeSessionInfo]:
-        """Discover all sessions in the projects directory.
+        # Default path (current user)
+        default_path = Path.home() / ".claude" / "projects"
+        if default_path.exists():
+            self.projects_dirs.append(default_path)
+
+        # Custom paths from constructor
+        if claude_projects_dirs:
+            for p in claude_projects_dirs:
+                path = Path(p)
+                if path.exists() and path not in self.projects_dirs:
+                    self.projects_dirs.append(path)
+
+        # External paths from environment variable
+        if include_external:
+            external_env = os.getenv("CLAUDE_EXTERNAL_PROJECTS", "")
+            if external_env:
+                for p in external_env.split(","):
+                    p = p.strip()
+                    if p:
+                        path = Path(p)
+                        if path.exists() and path not in self.projects_dirs:
+                            self.projects_dirs.append(path)
+                            logger.info(f"Added external projects path: {path}")
+
+        # Legacy support: single dir
+        self.projects_dir = self.projects_dirs[0] if self.projects_dirs else default_path
+
+    def add_external_path(self, path: str) -> bool:
+        """Add an external projects path at runtime.
+
+        Args:
+            path: Path to Claude projects directory
+
+        Returns:
+            True if added, False if path doesn't exist or already added
+        """
+        p = Path(path)
+        if not p.exists():
+            return False
+        if p in self.projects_dirs:
+            return False
+
+        self.projects_dirs.append(p)
+        self._external_paths.append(path)
+        logger.info(f"Added external path at runtime: {path}")
+        return True
+
+    def remove_external_path(self, path: str) -> bool:
+        """Remove an external projects path.
+
+        Args:
+            path: Path to remove
+
+        Returns:
+            True if removed, False if not found
+        """
+        p = Path(path)
+        if p not in self.projects_dirs:
+            return False
+
+        # Don't remove the default path
+        default_path = Path.home() / ".claude" / "projects"
+        if p == default_path:
+            return False
+
+        self.projects_dirs.remove(p)
+        if path in self._external_paths:
+            self._external_paths.remove(path)
+        logger.info(f"Removed external path: {path}")
+        return True
+
+    def get_external_paths(self) -> list[str]:
+        """Get list of external paths (non-default paths)."""
+        default_path = Path.home() / ".claude" / "projects"
+        return [str(p) for p in self.projects_dirs if p != default_path]
+
+    def _extract_user_from_path(self, path: Path) -> str:
+        """Extract username from a projects path.
+
+        Args:
+            path: Path like /Users/username/.claude/projects
+
+        Returns:
+            Username or empty string if not extractable
+        """
+        # Pattern: /Users/<username>/.claude/projects
+        # or /home/<username>/.claude/projects
+        parts = path.parts
+        try:
+            if "Users" in parts:
+                idx = parts.index("Users")
+                if idx + 1 < len(parts):
+                    return parts[idx + 1]
+            elif "home" in parts:
+                idx = parts.index("home")
+                if idx + 1 < len(parts):
+                    return parts[idx + 1]
+        except (ValueError, IndexError):
+            pass
+
+        return ""
+
+    def _get_current_user(self) -> str:
+        """Get current system username."""
+        return Path.home().name
+
+    def discover_sessions(self, source_user: str | None = None) -> list[ClaudeSessionInfo]:
+        """Discover all sessions in all projects directories.
 
         Scans all subdirectories for .jsonl files and returns
         session information for each.
 
         Uses file cache to avoid re-parsing unchanged files.
+
+        Args:
+            source_user: Optional filter for specific user's sessions only
+
+        Returns:
+            List of session info sorted by last activity
         """
         sessions = []
+        current_user = self._get_current_user()
 
-        if not self.projects_dir.exists():
-            return sessions
-
-        # Iterate through project directories
-        for project_dir in self.projects_dir.iterdir():
-            if not project_dir.is_dir():
+        # Iterate through all projects directories
+        for projects_dir in self.projects_dirs:
+            if not projects_dir.exists():
                 continue
 
-            # Find all .jsonl files in project directory
-            for jsonl_file in project_dir.glob("*.jsonl"):
-                try:
-                    # Check cache first
-                    cached = _session_cache.get(jsonl_file)
-                    if cached is not None:
-                        sessions.append(cached)
-                        continue
+            user = self._extract_user_from_path(projects_dir)
+            source_path = str(projects_dir)
 
-                    # Cache miss - parse file
-                    session_info = self._parse_session_file(jsonl_file, project_dir.name)
-                    if session_info:
-                        sessions.append(session_info)
-                except Exception as e:
-                    print(f"Error parsing {jsonl_file}: {e}")
+            # Skip if filtering by user and this isn't the target
+            if source_user and user != source_user:
+                continue
+
+            # Iterate through project directories
+            for project_dir in projects_dir.iterdir():
+                if not project_dir.is_dir():
                     continue
+
+                # Find all .jsonl files in project directory (including subagents)
+                for jsonl_file in project_dir.glob("**/*.jsonl"):
+                    try:
+                        # Check cache first
+                        cached = _session_cache.get(jsonl_file)
+                        if cached is not None:
+                            # Update source info from cache (may have changed)
+                            cached.source_user = user
+                            cached.source_path = source_path
+                            sessions.append(cached)
+                            continue
+
+                        # Cache miss - parse file
+                        session_info = self._parse_session_file(
+                            jsonl_file,
+                            project_dir.name,
+                            source_user=user,
+                            source_path=source_path,
+                        )
+                        if session_info:
+                            sessions.append(session_info)
+                    except Exception as e:
+                        print(f"Error parsing {jsonl_file}: {e}")
+                        continue
 
         # Sort by last activity (most recent first)
         # Normalize datetimes for comparison (strip timezone info for sorting)
@@ -161,14 +294,33 @@ class ClaudeSessionMonitor:
         sessions.sort(key=get_sort_key, reverse=True)
         return sessions
 
+    def get_unique_source_users(self) -> list[str]:
+        """Get list of unique source users from all discovered sessions.
+
+        Returns:
+            List of unique usernames
+        """
+        sessions = self.discover_sessions()
+        users = set()
+        for s in sessions:
+            if s.source_user:
+                users.add(s.source_user)
+        return sorted(users)
+
     def _parse_session_file(
-        self, file_path: Path, project_path: str
+        self,
+        file_path: Path,
+        project_path: str,
+        source_user: str = "",
+        source_path: str = "",
     ) -> ClaudeSessionInfo | None:
         """Parse a .jsonl session file and extract information.
 
         Args:
             file_path: Path to the .jsonl file
             project_path: Encoded project path (directory name)
+            source_user: Username who owns this session
+            source_path: Base path where session was found
 
         Returns:
             ClaudeSessionInfo or None if file is empty/invalid
@@ -278,8 +430,8 @@ class ClaudeSessionMonitor:
         # Calculate cost
         estimated_cost = calculate_cost(model, total_input_tokens, total_output_tokens)
 
-        # Extract human-readable project name
-        project_name = self._decode_project_path(project_path)
+        # Extract human-readable project name from cwd (preferred) or encoded path (fallback)
+        project_name = self._extract_project_name(cwd, project_path)
 
         session_info = ClaudeSessionInfo(
             session_id=session_id,
@@ -302,6 +454,8 @@ class ClaudeSessionMonitor:
             estimated_cost=estimated_cost,
             file_path=str(file_path),
             file_size=file_size,
+            source_user=source_user,
+            source_path=source_path,
         )
 
         # Store in cache for future requests
@@ -309,12 +463,40 @@ class ClaudeSessionMonitor:
 
         return session_info
 
+    def _extract_project_name(self, cwd: str, encoded_path: str) -> str:
+        """Extract human-readable project name.
+
+        Prefers cwd (original path from jsonl) over encoded path,
+        as cwd preserves spaces and special characters correctly.
+
+        Args:
+            cwd: Original working directory from session (e.g., "/Users/.../My Project")
+            encoded_path: Encoded folder name (e.g., "-Users-...-My-Project")
+
+        Returns:
+            Last directory component as project name
+        """
+        # Prefer cwd as it preserves original path with spaces/special chars
+        if cwd:
+            # Extract last directory component from cwd
+            # e.g., "/Users/user/Library/Mobile Documents/iCloud~md~obsidian/Documents/My Vault"
+            # -> "My Vault"
+            from pathlib import PurePath
+            name = PurePath(cwd).name
+            if name:
+                return name
+
+        # Fallback: decode from encoded path (lossy - spaces become dashes)
+        return self._decode_project_path(encoded_path)
+
     def _decode_project_path(self, encoded_path: str) -> str:
         """Decode project path like '-Users-younghwankang-Work-LiveMetro'.
 
+        Note: This is a lossy operation as spaces, tildes, and slashes all become dashes.
+        Prefer using cwd from session data when available.
+
         Returns the last component as the project name.
         """
-        # Replace leading dash and convert dashes back to slashes
         # e.g., "-Users-younghwankang-Work-LiveMetro" -> "LiveMetro"
         parts = encoded_path.split("-")
         # Filter out empty parts and get the last non-empty part
@@ -332,25 +514,45 @@ class ClaudeSessionMonitor:
         Returns:
             ClaudeSessionDetail with recent messages or None if not found
         """
-        # Find the session file
+        # Find the session file across all projects directories (including subagent dirs)
         session_file = None
         project_path = ""
+        source_user = ""
+        source_path = ""
 
-        for project_dir in self.projects_dir.iterdir():
-            if not project_dir.is_dir():
+        for projects_dir in self.projects_dirs:
+            if not projects_dir.exists():
                 continue
 
-            candidate = project_dir / f"{session_id}.jsonl"
-            if candidate.exists():
-                session_file = candidate
-                project_path = project_dir.name
+            for project_dir in projects_dir.iterdir():
+                if not project_dir.is_dir():
+                    continue
+
+                # Search recursively for session file (supports subagent directories)
+                for candidate in project_dir.glob(f"**/{session_id}.jsonl"):
+                    if candidate.exists():
+                        session_file = candidate
+                        project_path = project_dir.name
+                        source_user = self._extract_user_from_path(projects_dir)
+                        source_path = str(projects_dir)
+                        break
+
+                if session_file:
+                    break
+
+            if session_file:
                 break
 
         if session_file is None:
             return None
 
         # Parse basic info
-        basic_info = self._parse_session_file(session_file, project_path)
+        basic_info = self._parse_session_file(
+            session_file,
+            project_path,
+            source_user=source_user,
+            source_path=source_path,
+        )
         if basic_info is None:
             return None
 
@@ -533,14 +735,22 @@ class ClaudeSessionMonitor:
         Returns:
             List of message dicts with type and content
         """
-        # Find session file
+        # Find session file across all projects directories (including subagent dirs)
         session_file = None
-        for project_dir in self.projects_dir.iterdir():
-            if not project_dir.is_dir():
+        for projects_dir in self.projects_dirs:
+            if not projects_dir.exists():
                 continue
-            candidate = project_dir / f"{session_id}.jsonl"
-            if candidate.exists():
-                session_file = candidate
+            for project_dir in projects_dir.iterdir():
+                if not project_dir.is_dir():
+                    continue
+                # Search recursively for session file
+                for candidate in project_dir.glob(f"**/{session_id}.jsonl"):
+                    if candidate.exists():
+                        session_file = candidate
+                        break
+                if session_file:
+                    break
+            if session_file:
                 break
 
         if session_file is None:
@@ -695,22 +905,26 @@ class ClaudeSessionMonitor:
         Returns:
             True if deleted, False if not found
         """
-        # Find session file
-        for project_dir in self.projects_dir.iterdir():
-            if not project_dir.is_dir():
+        # Find session file across all projects directories (including subagent dirs)
+        for projects_dir in self.projects_dirs:
+            if not projects_dir.exists():
                 continue
-            session_file = project_dir / f"{session_id}.jsonl"
-            if session_file.exists():
-                # Delete session file
-                session_file.unlink()
-                # Also delete summary cache if exists
-                cache_path = self._get_summary_cache_path(session_id)
-                if cache_path.exists():
-                    cache_path.unlink()
-                # Invalidate cache
-                _session_cache.invalidate(session_file)
-                logger.info(f"Deleted session {session_id}")
-                return True
+            for project_dir in projects_dir.iterdir():
+                if not project_dir.is_dir():
+                    continue
+                # Search recursively for session file
+                for session_file in project_dir.glob(f"**/{session_id}.jsonl"):
+                    if session_file.exists():
+                        # Delete session file
+                        session_file.unlink()
+                        # Also delete summary cache if exists
+                        cache_path = self._get_summary_cache_path(session_id)
+                        if cache_path.exists():
+                            cache_path.unlink()
+                        # Invalidate cache
+                        _session_cache.invalidate(session_file)
+                        logger.info(f"Deleted session {session_id}")
+                        return True
         return False
 
     def delete_empty_sessions(self) -> list[str]:

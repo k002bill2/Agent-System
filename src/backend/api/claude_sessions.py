@@ -84,35 +84,45 @@ SortOrder = Literal["asc", "desc"]
 async def list_sessions(
     status: SessionStatus | None = None,
     project: str | None = None,
+    source_user: str | None = None,
     sort_by: SortField = "last_activity",
     sort_order: SortOrder = "desc",
-    limit: int = 100000,
+    offset: int = 0,
+    limit: int = 30,
 ) -> ClaudeSessionResponse:
-    """List all discovered Claude Code sessions.
+    """List all discovered Claude Code sessions with pagination.
 
     Args:
         status: Optional filter by session status
         project: Optional filter by project name
+        source_user: Optional filter by source user (who owns the session)
         sort_by: Field to sort by (last_activity, created_at, message_count, estimated_cost, project_name)
         sort_order: Sort order (asc, desc)
-        limit: Maximum number of sessions to return
+        offset: Starting offset for pagination
+        limit: Maximum number of sessions to return (default: 30)
 
     Returns:
-        List of sessions with counts
+        List of sessions with counts and pagination info
     """
     monitor = get_monitor()
-    sessions = monitor.discover_sessions()
+    all_sessions = monitor.discover_sessions(source_user=source_user)
+
+    # Count total before any filtering
+    total_count = len(all_sessions)
 
     # Filter by status if specified
     if status:
-        sessions = [s for s in sessions if s.status == status]
+        all_sessions = [s for s in all_sessions if s.status == status]
 
     # Filter by project if specified
     if project:
-        sessions = [s for s in sessions if s.project_name == project]
+        all_sessions = [s for s in all_sessions if s.project_name == project]
+
+    # Count after filtering (for pagination)
+    filtered_count = len(all_sessions)
 
     # Count active sessions (before sorting/limiting)
-    active_count = sum(1 for s in sessions if s.status == SessionStatus.ACTIVE)
+    active_count = sum(1 for s in all_sessions if s.status == SessionStatus.ACTIVE)
 
     # Sort sessions - use timestamp for datetime comparison to avoid timezone issues
     def get_timestamp(dt: datetime | None) -> float:
@@ -122,35 +132,148 @@ async def list_sessions(
 
     reverse = sort_order == "desc"
     if sort_by == "last_activity":
-        sessions.sort(key=lambda s: get_timestamp(s.last_activity), reverse=reverse)
+        all_sessions.sort(key=lambda s: get_timestamp(s.last_activity), reverse=reverse)
     elif sort_by == "created_at":
-        sessions.sort(key=lambda s: get_timestamp(s.created_at), reverse=reverse)
+        all_sessions.sort(key=lambda s: get_timestamp(s.created_at), reverse=reverse)
     elif sort_by == "message_count":
-        sessions.sort(key=lambda s: s.message_count or 0, reverse=reverse)
+        all_sessions.sort(key=lambda s: s.message_count or 0, reverse=reverse)
     elif sort_by == "estimated_cost":
-        sessions.sort(key=lambda s: s.estimated_cost or 0.0, reverse=reverse)
+        all_sessions.sort(key=lambda s: s.estimated_cost or 0.0, reverse=reverse)
     elif sort_by == "project_name":
-        sessions.sort(key=lambda s: s.project_name or "", reverse=reverse)
+        all_sessions.sort(key=lambda s: s.project_name or "", reverse=reverse)
 
-    # Apply limit
-    sessions = sessions[:limit]
+    # Apply pagination (offset + limit)
+    paginated_sessions = all_sessions[offset:offset + limit]
+
+    # Check if more sessions are available
+    has_more = offset + len(paginated_sessions) < filtered_count
 
     # Add cached summaries to sessions
-    for session in sessions:
+    for session in paginated_sessions:
         cached_summary = monitor.get_cached_summary(session.session_id)
         if cached_summary:
             session.summary = cached_summary
 
     return ClaudeSessionResponse(
-        sessions=sessions,
-        total_count=len(sessions),
+        sessions=paginated_sessions,
+        total_count=total_count,
+        filtered_count=filtered_count,
         active_count=active_count,
+        has_more=has_more,
+        offset=offset,
+        limit=limit,
     )
 
 
 # ========================================
 # Static routes (must come before /{session_id})
 # ========================================
+
+from pydantic import BaseModel
+
+
+class ExternalPathRequest(BaseModel):
+    """Request to add external path."""
+
+    path: str
+
+
+class ExternalPathResponse(BaseModel):
+    """Response for external path operations."""
+
+    success: bool
+    message: str
+    paths: list[str]
+
+
+@router.get("/external-paths", response_model=ExternalPathResponse)
+async def list_external_paths() -> ExternalPathResponse:
+    """List all external (non-default) projects paths.
+
+    Returns:
+        List of external paths currently configured
+    """
+    monitor = get_monitor()
+    paths = monitor.get_external_paths()
+
+    return ExternalPathResponse(
+        success=True,
+        message=f"Found {len(paths)} external path(s)",
+        paths=paths,
+    )
+
+
+@router.post("/external-paths", response_model=ExternalPathResponse)
+async def add_external_path(request: ExternalPathRequest) -> ExternalPathResponse:
+    """Add an external projects path at runtime.
+
+    Args:
+        request: Path to add
+
+    Returns:
+        Updated list of external paths
+    """
+    monitor = get_monitor()
+
+    if monitor.add_external_path(request.path):
+        return ExternalPathResponse(
+            success=True,
+            message=f"Added external path: {request.path}",
+            paths=monitor.get_external_paths(),
+        )
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Path does not exist or is already added: {request.path}",
+        )
+
+
+@router.delete("/external-paths/{path_encoded}")
+async def remove_external_path(path_encoded: str) -> ExternalPathResponse:
+    """Remove an external projects path.
+
+    Note: Path should be URL-encoded (/ -> %2F)
+
+    Args:
+        path_encoded: URL-encoded path to remove
+
+    Returns:
+        Updated list of external paths
+    """
+    import urllib.parse
+
+    monitor = get_monitor()
+    path = urllib.parse.unquote(path_encoded)
+
+    if monitor.remove_external_path(path):
+        return ExternalPathResponse(
+            success=True,
+            message=f"Removed external path: {path}",
+            paths=monitor.get_external_paths(),
+        )
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Path not found or is the default path: {path}",
+        )
+
+
+@router.get("/source-users")
+async def list_source_users() -> dict:
+    """List all unique source users from discovered sessions.
+
+    Returns:
+        List of unique usernames and current user
+    """
+    monitor = get_monitor()
+    users = monitor.get_unique_source_users()
+    current_user = monitor._get_current_user()
+
+    return {
+        "users": users,
+        "current_user": current_user,
+    }
+
 
 @router.get("/empty/list")
 async def list_empty_sessions() -> dict:
@@ -201,6 +324,112 @@ async def delete_ghost_sessions() -> dict:
         "deleted_count": len(deleted_ids),
         "deleted_ids": deleted_ids,
     }
+
+
+@router.get("/summaries/pending-count")
+async def get_pending_summary_count() -> dict:
+    """Get count of sessions without summaries.
+
+    Returns:
+        Count of sessions that need summary generation
+    """
+    monitor = get_monitor()
+    all_sessions = monitor.discover_sessions()
+
+    pending_count = 0
+    for session in all_sessions:
+        # Skip empty and ghost sessions
+        if session.message_count == 0:
+            continue
+        if session.user_message_count == 0 and session.assistant_message_count == 0:
+            continue
+        # Check if summary exists
+        cached = monitor.get_cached_summary(session.session_id)
+        if not cached:
+            pending_count += 1
+
+    return {
+        "pending_count": pending_count,
+        "total_sessions": len(all_sessions),
+    }
+
+
+@router.post("/summaries/generate-batch")
+async def generate_batch_summaries(
+    limit: int = 50,
+    skip_existing: bool = True,
+) -> dict:
+    """Generate summaries for multiple sessions without summaries.
+
+    Processes sessions in order of last activity (most recent first).
+    Uses Ollama for cost-efficient batch processing.
+
+    Args:
+        limit: Maximum number of sessions to process (default: 50)
+        skip_existing: Skip sessions that already have cached summaries (default: True)
+
+    Returns:
+        Processing results with success/failure counts
+    """
+    import asyncio
+
+    monitor = get_monitor()
+    all_sessions = monitor.discover_sessions()
+
+    # Filter sessions without summaries
+    sessions_to_process = []
+    for session in all_sessions:
+        if skip_existing:
+            cached = monitor.get_cached_summary(session.session_id)
+            if cached:
+                continue
+        # Skip empty and ghost sessions
+        if session.message_count == 0:
+            continue
+        if session.user_message_count == 0 and session.assistant_message_count == 0:
+            continue
+        sessions_to_process.append(session)
+        if len(sessions_to_process) >= limit:
+            break
+
+    # Process sessions
+    results = {
+        "total_processed": 0,
+        "success_count": 0,
+        "failed_count": 0,
+        "skipped_count": len(all_sessions) - len(sessions_to_process),
+        "generated_summaries": [],
+        "errors": [],
+    }
+
+    for session in sessions_to_process:
+        try:
+            summary = await monitor.generate_summary(session.session_id)
+            results["total_processed"] += 1
+            if summary and summary != "요약 생성 실패" and summary != "대화 내용 없음":
+                results["success_count"] += 1
+                results["generated_summaries"].append({
+                    "session_id": session.session_id,
+                    "summary": summary,
+                })
+            else:
+                results["failed_count"] += 1
+                results["errors"].append({
+                    "session_id": session.session_id,
+                    "error": summary,
+                })
+        except Exception as e:
+            results["total_processed"] += 1
+            results["failed_count"] += 1
+            results["errors"].append({
+                "session_id": session.session_id,
+                "error": str(e),
+            })
+
+        # Small delay to avoid overwhelming Ollama
+        await asyncio.sleep(0.1)
+
+    return results
 
 
 # ========================================
@@ -367,14 +596,22 @@ async def get_session_transcript(
 
     monitor = get_monitor()
 
-    # Find session file
+    # Find session file across all projects directories (including subagent dirs)
     session_file = None
-    for project_dir in monitor.projects_dir.iterdir():
-        if not project_dir.is_dir():
+    for projects_dir in monitor.projects_dirs:
+        if not projects_dir.exists():
             continue
-        candidate = project_dir / f"{session_id}.jsonl"
-        if candidate.exists():
-            session_file = candidate
+        for project_dir in projects_dir.iterdir():
+            if not project_dir.is_dir():
+                continue
+            # Search recursively for session file
+            for candidate in project_dir.glob(f"**/{session_id}.jsonl"):
+                if candidate.exists():
+                    session_file = candidate
+                    break
+            if session_file:
+                break
+        if session_file:
             break
 
     if session_file is None:

@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useClaudeSessionsStore, SortField } from '../../stores/claudeSessions'
 import { SessionCard } from './SessionCard'
-import { RefreshCw, Circle, CircleDot, ArrowUpDown, ArrowUp, ArrowDown, Trash2, Search, FolderOpen, X, Check } from 'lucide-react'
+import { RefreshCw, Circle, CircleDot, ArrowUpDown, ArrowUp, ArrowDown, Trash2, Search, FolderOpen, X, Check, Users, Loader2, Sparkles } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { SessionStatus } from '../../types/claudeSession'
 
@@ -20,22 +20,31 @@ interface SessionListProps {
 export function SessionList({ statusFilter }: SessionListProps) {
   const {
     sessions,
-    totalCount,
+    filteredCount,
     activeCount,
     isLoading,
+    hasMore,
+    isLoadingMore,
     selectedSessionId,
     autoRefresh,
     refreshInterval,
     sortBy,
     sortOrder,
     projectFilter,
+    sourceUserFilter,
+    sourceUsers,
+    currentUser,
     searchQuery,
     fetchSessions,
+    loadMoreSessions,
+    refreshSessions,
+    fetchSourceUsers,
     selectSession,
     setAutoRefresh,
     setSortBy,
     setSortOrder,
     setProjectFilter,
+    setSourceUserFilter,
     setSearchQuery,
     getFilteredSessions,
     getUniqueProjects,
@@ -43,14 +52,22 @@ export function SessionList({ statusFilter }: SessionListProps) {
     deleteGhostSessions,
     getEmptySessionsCount,
     getGhostSessionsCount,
+    // Batch summary
+    isBatchGenerating,
+    batchProgress,
+    pendingSummaryCount,
+    fetchPendingSummaryCount,
+    generateBatchSummaries,
   } = useClaudeSessionsStore()
 
   const [showSortMenu, setShowSortMenu] = useState(false)
   const [showProjectMenu, setShowProjectMenu] = useState(false)
+  const [showUserMenu, setShowUserMenu] = useState(false)
   const [isDeletingEmpty, setIsDeletingEmpty] = useState(false)
   const [isDeletingGhost, setIsDeletingGhost] = useState(false)
   const sortMenuRef = useRef<HTMLDivElement>(null)
   const projectMenuRef = useRef<HTMLDivElement>(null)
+  const userMenuRef = useRef<HTMLDivElement>(null)
   const emptyCount = getEmptySessionsCount()
   const ghostCount = getGhostSessionsCount()
   const deletableCount = emptyCount + ghostCount
@@ -58,11 +75,44 @@ export function SessionList({ statusFilter }: SessionListProps) {
   const filteredSessions = getFilteredSessions()
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const loadMoreRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   // Initial fetch
   useEffect(() => {
-    fetchSessions(statusFilter)
-  }, [fetchSessions, statusFilter])
+    fetchSessions(statusFilter, true)
+    fetchSourceUsers()
+    fetchPendingSummaryCount()
+  }, [fetchSessions, fetchSourceUsers, fetchPendingSummaryCount, statusFilter])
+
+  // Infinite scroll with IntersectionObserver
+  const handleLoadMore = useCallback(() => {
+    if (!isLoadingMore && hasMore) {
+      loadMoreSessions(statusFilter)
+    }
+  }, [isLoadingMore, hasMore, loadMoreSessions, statusFilter])
+
+  useEffect(() => {
+    const currentRef = loadMoreRef.current
+    const scrollContainer = scrollContainerRef.current
+    if (!currentRef || !scrollContainer || !hasMore || isLoadingMore) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          handleLoadMore()
+        }
+      },
+      {
+        root: scrollContainer,  // Use scroll container as root
+        threshold: 0.1,
+        rootMargin: '100px'
+      }
+    )
+
+    observer.observe(currentRef)
+    return () => observer.disconnect()
+  }, [hasMore, isLoadingMore, handleLoadMore])
 
   // Close sort menu on outside click
   useEffect(() => {
@@ -92,6 +142,20 @@ export function SessionList({ statusFilter }: SessionListProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showProjectMenu])
 
+  // Close user menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false)
+      }
+    }
+
+    if (showUserMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showUserMenu])
+
   const handleSortFieldChange = (field: SortField) => {
     if (field === sortBy) {
       // Toggle order if same field
@@ -104,11 +168,11 @@ export function SessionList({ statusFilter }: SessionListProps) {
 
   const currentSortLabel = SORT_OPTIONS.find(o => o.value === sortBy)?.label || '정렬'
 
-  // Auto-refresh polling
+  // Auto-refresh polling (uses soft refresh to preserve loaded sessions)
   useEffect(() => {
     if (autoRefresh) {
       intervalRef.current = setInterval(() => {
-        fetchSessions(statusFilter)
+        refreshSessions(statusFilter)
       }, refreshInterval * 1000)
     }
 
@@ -117,10 +181,10 @@ export function SessionList({ statusFilter }: SessionListProps) {
         clearInterval(intervalRef.current)
       }
     }
-  }, [autoRefresh, refreshInterval, fetchSessions, statusFilter])
+  }, [autoRefresh, refreshInterval, refreshSessions, statusFilter])
 
   const handleRefresh = () => {
-    fetchSessions(statusFilter)
+    fetchSessions(statusFilter, true)  // Full refresh resets to first page
   }
 
   const handleDeleteDeletable = async () => {
@@ -167,11 +231,38 @@ export function SessionList({ statusFilter }: SessionListProps) {
             Sessions
           </h2>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            {activeCount} active / {totalCount} total
+            {activeCount} active / {sessions.length} loaded / {filteredCount} total
           </p>
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Batch generate summaries button */}
+          {pendingSummaryCount > 0 && (
+            <button
+              onClick={() => generateBatchSummaries(50)}
+              disabled={isBatchGenerating}
+              className={cn(
+                'p-2 rounded-lg transition-colors flex items-center gap-1',
+                'bg-amber-100 text-amber-600 hover:bg-amber-200',
+                'dark:bg-amber-900/20 dark:text-amber-400 dark:hover:bg-amber-900/40',
+                'disabled:opacity-50'
+              )}
+              title={isBatchGenerating
+                ? `요약 생성 중: ${batchProgress.processed}/${batchProgress.total}`
+                : `미요약 세션 ${pendingSummaryCount}개 일괄 요약 생성`
+              }
+            >
+              {isBatchGenerating ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
+              <span className="text-xs font-medium">
+                {isBatchGenerating ? `${batchProgress.processed}/${batchProgress.total}` : pendingSummaryCount}
+              </span>
+            </button>
+          )}
+
           {/* Delete empty/ghost sessions button */}
           {deletableCount > 0 && (
             <button
@@ -188,6 +279,70 @@ export function SessionList({ statusFilter }: SessionListProps) {
               <Trash2 className={cn('w-4 h-4', (isDeletingEmpty || isDeletingGhost) && 'animate-pulse')} />
               <span className="text-xs font-medium">{deletableCount}</span>
             </button>
+          )}
+
+          {/* Source user filter dropdown */}
+          {sourceUsers.length > 1 && (
+            <div ref={userMenuRef} className="relative">
+              <button
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className={cn(
+                  'p-2 rounded-lg transition-colors',
+                  sourceUserFilter
+                    ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
+                )}
+                title={sourceUserFilter ? `사용자: ${sourceUserFilter}` : '사용자 필터'}
+              >
+                <Users className="w-4 h-4" />
+              </button>
+
+              {showUserMenu && (
+                <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50 max-h-60 overflow-y-auto">
+                  <button
+                    onClick={() => {
+                      setSourceUserFilter(null)
+                      setShowUserMenu(false)
+                    }}
+                    className={cn(
+                      'w-full flex items-center justify-between px-3 py-2 text-sm',
+                      'hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors',
+                      !sourceUserFilter
+                        ? 'text-purple-600 dark:text-purple-400 font-medium'
+                        : 'text-gray-700 dark:text-gray-300'
+                    )}
+                  >
+                    <span>전체 사용자</span>
+                    {!sourceUserFilter && <Check className="w-4 h-4" />}
+                  </button>
+                  <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
+                  {sourceUsers.map((user) => (
+                    <button
+                      key={user}
+                      onClick={() => {
+                        setSourceUserFilter(user)
+                        setShowUserMenu(false)
+                      }}
+                      className={cn(
+                        'w-full flex items-center justify-between px-3 py-2 text-sm',
+                        'hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors',
+                        sourceUserFilter === user
+                          ? 'text-purple-600 dark:text-purple-400 font-medium'
+                          : 'text-gray-700 dark:text-gray-300'
+                      )}
+                    >
+                      <span className="truncate flex items-center gap-1">
+                        {user}
+                        {user === currentUser && (
+                          <span className="text-xs text-gray-400">(나)</span>
+                        )}
+                      </span>
+                      {sourceUserFilter === user && <Check className="w-4 h-4 flex-shrink-0 ml-2" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
           {/* Project filter dropdown */}
@@ -358,7 +513,7 @@ export function SessionList({ statusFilter }: SessionListProps) {
       </div>
 
       {/* Session List */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-3 space-y-2">
         {isLoading && sessions.length === 0 ? (
           // Loading skeleton
           <div className="space-y-2">
@@ -390,14 +545,49 @@ export function SessionList({ statusFilter }: SessionListProps) {
           </div>
         ) : (
           // Session cards
-          filteredSessions.map((session) => (
-            <SessionCard
-              key={session.session_id}
-              session={session}
-              isSelected={selectedSessionId === session.session_id}
-              onClick={() => selectSession(session.session_id)}
-            />
-          ))
+          <>
+            {filteredSessions.map((session) => (
+              <SessionCard
+                key={session.session_id}
+                session={session}
+                isSelected={selectedSessionId === session.session_id}
+                onClick={() => selectSession(session.session_id)}
+              />
+            ))}
+
+            {/* Infinite scroll trigger */}
+            {hasMore && (
+              <div
+                ref={loadMoreRef}
+                className="flex items-center justify-center py-4"
+              >
+                {isLoadingMore ? (
+                  <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-sm">Loading more...</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleLoadMore}
+                    className={cn(
+                      'px-4 py-2 text-sm rounded-lg transition-colors',
+                      'bg-gray-100 text-gray-600 hover:bg-gray-200',
+                      'dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
+                    )}
+                  >
+                    Load More ({filteredCount - sessions.length} remaining)
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* End of list indicator */}
+            {!hasMore && sessions.length > 0 && (
+              <div className="text-center py-3 text-xs text-gray-400 dark:text-gray-500">
+                {sessions.length} sessions loaded
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

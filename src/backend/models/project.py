@@ -1,7 +1,32 @@
 """Project model for context-aware orchestration."""
 
+import re
 from pathlib import Path
 from pydantic import BaseModel, Field
+
+
+def normalize_path(path: str) -> str:
+    """Normalize filesystem path by removing shell escape characters.
+
+    When users copy paths from terminal, they may include shell escape characters
+    like backslashes before spaces or special characters:
+    - "Mobile\\ Documents" -> "Mobile Documents"
+    - "iCloud\\~md\\~obsidian" -> "iCloud~md~obsidian"
+
+    Args:
+        path: Path string potentially containing shell escapes
+
+    Returns:
+        Normalized path without escape characters
+    """
+    if not path:
+        return path
+
+    # Remove backslash escapes (\ followed by space, ~, or other chars)
+    # Pattern: backslash followed by a character that would be escaped in shell
+    normalized = re.sub(r'\\(.)', r'\1', path)
+
+    return normalized
 
 
 class Project(BaseModel):
@@ -98,6 +123,8 @@ PROJECTS_REGISTRY: dict[str, Project] = {}
 
 def register_project(project_id: str, project_path: str) -> Project:
     """Register a project in the registry."""
+    # Normalize path to remove shell escape characters
+    project_path = normalize_path(project_path)
     project = Project.from_path(project_id, project_path)
     PROJECTS_REGISTRY[project_id] = project
     return project
@@ -147,32 +174,36 @@ def update_project(
         project.description = description
 
     # 경로 변경 처리
-    if path is not None and path != project.path:
-        new_path = Path(path)
-        if not new_path.exists():
-            raise ValueError(f"Path does not exist: {path}")
+    if path is not None:
+        # Normalize path to remove shell escape characters (e.g., "Mobile\ Documents" -> "Mobile Documents")
+        path = normalize_path(path)
 
-        # projects/ 디렉토리의 심볼릭 링크 업데이트
-        projects_dir = get_projects_dir()
-        symlink_path = projects_dir / project_id
+        if path != project.path:
+            new_path = Path(path)
+            if not new_path.exists():
+                raise ValueError(f"Path does not exist: {path}")
 
-        if symlink_path.is_symlink():
-            # 기존 심볼릭 링크 제거 후 새로 생성
-            symlink_path.unlink()
-            os.symlink(str(new_path.resolve()), str(symlink_path))
-        elif symlink_path.exists():
-            # 심볼릭 링크가 아닌 실제 디렉토리인 경우 (드문 케이스)
-            # 경로만 업데이트하고 파일시스템은 수정하지 않음
-            pass
+            # projects/ 디렉토리의 심볼릭 링크 업데이트
+            projects_dir = get_projects_dir()
+            symlink_path = projects_dir / project_id
 
-        project.path = str(new_path.resolve())
+            if symlink_path.is_symlink():
+                # 기존 심볼릭 링크 제거 후 새로 생성
+                symlink_path.unlink()
+                os.symlink(str(new_path.resolve()), str(symlink_path))
+            elif symlink_path.exists():
+                # 심볼릭 링크가 아닌 실제 디렉토리인 경우 (드문 케이스)
+                # 경로만 업데이트하고 파일시스템은 수정하지 않음
+                pass
 
-        # CLAUDE.md 다시 로드
-        claude_md_path = new_path / "CLAUDE.md"
-        if claude_md_path.exists():
-            project.claude_md = claude_md_path.read_text(encoding="utf-8")
-        else:
-            project.claude_md = None
+            project.path = str(new_path.resolve())
+
+            # CLAUDE.md 다시 로드
+            claude_md_path = new_path / "CLAUDE.md"
+            if claude_md_path.exists():
+                project.claude_md = claude_md_path.read_text(encoding="utf-8")
+            else:
+                project.claude_md = None
 
     return project
 

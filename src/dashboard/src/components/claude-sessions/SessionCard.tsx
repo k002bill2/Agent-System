@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { cn } from '../../lib/utils'
 import { ClaudeSessionInfo, SessionStatus } from '../../types/claudeSession'
 import { useClaudeSessionsStore } from '../../stores/claudeSessions'
-import { Clock, MessageSquare, Wrench, DollarSign, GitBranch, Sparkles, Loader2, Trash2 } from 'lucide-react'
+import { Clock, MessageSquare, Wrench, DollarSign, GitBranch, Sparkles, Loader2, Trash2, User } from 'lucide-react'
 
 interface SessionCardProps {
   session: ClaudeSessionInfo
@@ -44,12 +44,13 @@ function formatCost(cost: number): string {
 }
 
 export function SessionCard({ session, isSelected, onClick }: SessionCardProps) {
-  const { generateSummary, generatingSummaryFor, deleteSession, isGhostSession } = useClaudeSessionsStore()
+  const { generateSummary, generatingSummaryFor, deleteSession, isGhostSession, isExternalSession } = useClaudeSessionsStore()
   const [isDeleting, setIsDeleting] = useState(false)
   const isGenerating = generatingSummaryFor === session.session_id
   const isEmpty = session.message_count === 0
   const isGhost = isGhostSession(session)
   const isDeletable = isEmpty || isGhost
+  const isExternal = isExternalSession(session)
 
   const handleGenerateSummary = (e: React.MouseEvent) => {
     e.stopPropagation() // Prevent card click
@@ -135,11 +136,22 @@ export function SessionCard({ session, isSelected, onClick }: SessionCardProps) 
       </div>
 
       {/* Project Name & Slug */}
-      <div className="text-sm text-gray-600 dark:text-gray-300 mb-3 truncate">
-        {session.project_name || session.project_path}
-        {session.summary && session.slug && (
-          <span className="text-gray-400 dark:text-gray-500 ml-2">
-            · {session.slug}
+      <div className="text-sm text-gray-600 dark:text-gray-300 mb-3 truncate flex items-center gap-2">
+        <span className="truncate">
+          {session.project_name || session.project_path}
+          {session.summary && session.slug && (
+            <span className="text-gray-400 dark:text-gray-500 ml-2">
+              · {session.slug}
+            </span>
+          )}
+        </span>
+        {isExternal && session.source_user && (
+          <span
+            className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
+            title={`External session from ${session.source_user}`}
+          >
+            <User className="w-3 h-3" />
+            {session.source_user}
           </span>
         )}
       </div>
