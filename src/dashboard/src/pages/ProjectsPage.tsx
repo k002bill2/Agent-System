@@ -12,11 +12,15 @@ import {
   Database,
   ExternalLink,
   Loader2,
+  FileCode,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useProjectsStore, Project } from '../stores/projects'
+import { useNavigationStore } from '../stores/navigation'
+import { useProjectConfigsStore } from '../stores/projectConfigs'
 import { ProjectFormModal } from '../components/ProjectFormModal'
 import { ProjectsGridSkeleton } from '../components/skeletons'
+import { ProjectClaudeConfigPanel } from '../components/projects'
 
 export function ProjectsPage() {
   const {
@@ -24,6 +28,7 @@ export function ProjectsPage() {
     isLoading,
     error,
     searchQuery,
+    selectedProjectId,
     fetchProjects,
     fetchTemplates,
     setSearchQuery,
@@ -33,15 +38,35 @@ export function ProjectsPage() {
     deleteProject,
     indexProject,
     filteredProjects,
+    selectProject,
+    getSelectedProject,
   } = useProjectsStore()
+
+  const { setView } = useNavigationStore()
+  const { selectProject: selectConfigProject } = useProjectConfigsStore()
 
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [indexingId, setIndexingId] = useState<string | null>(null)
+
+  const selectedProject = getSelectedProject()
 
   useEffect(() => {
     fetchProjects()
     fetchTemplates()
   }, [fetchProjects, fetchTemplates])
+
+  // Handle navigation to Project Configs page
+  useEffect(() => {
+    const handleNavigate = (e: CustomEvent<{ projectId: string }>) => {
+      selectConfigProject(e.detail.projectId)
+      setView('project-configs')
+    }
+
+    window.addEventListener('navigate-to-project-configs', handleNavigate as EventListener)
+    return () => {
+      window.removeEventListener('navigate-to-project-configs', handleNavigate as EventListener)
+    }
+  }, [selectConfigProject, setView])
 
   const handleDelete = async (project: Project) => {
     if (confirm(`Are you sure you want to remove "${project.name}"? This will only remove the symlink, not the source files.`)) {
@@ -60,7 +85,9 @@ export function ProjectsPage() {
   const displayedProjects = filteredProjects()
 
   return (
-    <div className="flex-1 overflow-auto p-6">
+    <div className="flex-1 flex overflow-hidden">
+      {/* Main Content */}
+      <div className="flex-1 overflow-auto p-6">
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
@@ -124,11 +151,22 @@ export function ProjectsPage() {
 
       {/* Projects Grid */}
       {displayedProjects.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className={cn(
+          'grid gap-4',
+          selectedProjectId
+            ? 'grid-cols-1 md:grid-cols-2'
+            : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+        )}>
           {displayedProjects.map((project) => (
             <div
               key={project.id}
-              className="relative bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow"
+              onClick={() => selectProject(project.id === selectedProjectId ? null : project.id)}
+              className={cn(
+                'relative bg-white dark:bg-gray-800 rounded-lg border p-4 hover:shadow-md transition-all cursor-pointer',
+                selectedProjectId === project.id
+                  ? 'border-primary-500 ring-2 ring-primary-200 dark:ring-primary-800'
+                  : 'border-gray-200 dark:border-gray-700'
+              )}
             >
               {/* Menu Button */}
               <div className="absolute top-3 right-3">
@@ -242,6 +280,21 @@ export function ProjectsPage() {
                     Indexing...
                   </span>
                 )}
+
+                {/* Claude Settings Button */}
+                {project.has_claude_md && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      selectProject(project.id)
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors"
+                    title="Claude 설정 보기"
+                  >
+                    <FileCode className="w-3 h-3" />
+                    Claude
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -259,6 +312,15 @@ export function ProjectsPage() {
 
       {/* Modal */}
       <ProjectFormModal />
+      </div>
+
+      {/* Claude Config Panel */}
+      {selectedProject && (
+        <ProjectClaudeConfigPanel
+          project={selectedProject}
+          onClose={() => selectProject(null)}
+        />
+      )}
     </div>
   )
 }

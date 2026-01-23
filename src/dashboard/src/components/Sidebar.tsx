@@ -8,6 +8,7 @@ import {
   FolderKanban,
   Monitor,
   Code2,
+  FolderCog,
   LogOut,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -23,6 +24,7 @@ const navigation: { name: string; icon: typeof LayoutDashboard; view: ViewType }
   { name: 'Activity', icon: Activity, view: 'activity' },
   { name: 'Monitor', icon: Monitor, view: 'monitor' },
   { name: 'Claude Sessions', icon: Code2, view: 'claude-sessions' },
+  { name: 'Project Configs', icon: FolderCog, view: 'project-configs' },
 ]
 
 export function Sidebar() {

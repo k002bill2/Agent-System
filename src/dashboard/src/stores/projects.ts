@@ -50,6 +50,9 @@ interface ProjectsState {
   // Search/Filter
   searchQuery: string
 
+  // Selected project for details panel
+  selectedProjectId: string | null
+
   // Actions - Data
   fetchProjects: () => Promise<void>
   fetchTemplates: () => Promise<void>
@@ -68,8 +71,12 @@ interface ProjectsState {
   // Actions - Search
   setSearchQuery: (query: string) => void
 
+  // Actions - Selection
+  selectProject: (id: string | null) => void
+
   // Computed
   filteredProjects: () => Project[]
+  getSelectedProject: () => Project | null
 }
 
 export const useProjectsStore = create<ProjectsState>((set, get) => ({
@@ -81,6 +88,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   modalMode: null,
   editingProject: null,
   searchQuery: '',
+  selectedProjectId: null,
 
   // Fetch all projects
   fetchProjects: async () => {
@@ -228,6 +236,9 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   // Search
   setSearchQuery: (query) => set({ searchQuery: query }),
 
+  // Selection
+  selectProject: (id) => set({ selectedProjectId: id }),
+
   // Computed: filtered projects
   filteredProjects: () => {
     const { projects, searchQuery } = get()
@@ -241,5 +252,12 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
         p.description.toLowerCase().includes(query) ||
         p.path.toLowerCase().includes(query)
     )
+  },
+
+  // Computed: get selected project
+  getSelectedProject: () => {
+    const { projects, selectedProjectId } = get()
+    if (!selectedProjectId) return null
+    return projects.find((p) => p.id === selectedProjectId) || null
   },
 }))

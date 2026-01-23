@@ -43,6 +43,9 @@ from api.feedback import router as feedback_router
 # OAuth authentication router
 from api.auth import router as auth_router
 
+# Project configuration monitoring router
+from api.project_configs import router as project_configs_router
+
 # Check if database mode is enabled
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 
@@ -127,6 +130,9 @@ def create_app(
 
     # OAuth authentication router
     app.include_router(auth_router, prefix="/api")
+
+    # Project configuration monitoring router
+    app.include_router(project_configs_router, prefix="/api")
 
     return app
 

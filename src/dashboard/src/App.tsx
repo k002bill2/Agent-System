@@ -14,6 +14,7 @@ import { ActivityPage } from './pages/ActivityPage'
 import { MonitorPage } from './pages/MonitorPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ClaudeSessionsPage } from './pages/ClaudeSessionsPage'
+import { ProjectConfigsPage } from './pages/ProjectConfigsPage'
 import { LoginPage } from './pages/LoginPage'
 import { AuthCallbackPage } from './pages/AuthCallbackPage'
 import {
@@ -38,6 +39,7 @@ const viewTitles: Record<string, string> = {
   activity: 'Activity',
   monitor: 'Monitor',
   'claude-sessions': 'Claude Sessions',
+  'project-configs': 'Project Configs',
   settings: 'Settings',
 }
 
@@ -201,6 +203,8 @@ export default function App() {
         return <MonitorPage />
       case 'claude-sessions':
         return <ClaudeSessionsPage />
+      case 'project-configs':
+        return <ProjectConfigsPage />
       case 'settings':
         return <SettingsPage />
       default:
@@ -224,6 +228,8 @@ export default function App() {
         return <MonitorSkeleton />
       case 'claude-sessions':
         return <ClaudeSessionsSkeleton />
+      case 'project-configs':
+        return <MonitorSkeleton />
       case 'settings':
         return <SettingsSkeleton />
       default:
