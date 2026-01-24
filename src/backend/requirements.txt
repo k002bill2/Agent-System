@@ -1,16 +1,20 @@
-# Lightweight requirements for Railway deployment
-# Excludes heavy ML dependencies (chromadb, sentence-transformers)
+# Requirements for Railway deployment
+# Excludes: chromadb, sentence-transformers (heavy ML models ~6GB)
 
-# Core LangChain (without heavy embeddings)
+# Core LangChain
 langgraph>=0.2.0
 langchain>=0.3.0
-langchain-anthropic>=0.3.0
+langchain-core>=0.3.0
 langchain-google-genai>=2.0.0
 
 # API Framework
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 websockets>=14.0
+
+# Database (lightweight - for session management)
+sqlalchemy>=2.0.0
+greenlet>=3.0.0
 
 # Utilities
 pydantic>=2.10.0
@@ -19,9 +23,8 @@ python-dotenv>=1.0.0
 httpx>=0.28.0
 pyjwt>=2.8.0
 
-# Monitoring (lightweight)
+# Monitoring
 structlog>=24.4.0
 
-# Note: RAG features (chromadb/sentence-transformers) disabled for size
-# Note: Database features (sqlalchemy/asyncpg) disabled
-# Note: Redis disabled
+# Note: RAG disabled (no chromadb/sentence-transformers)
+# Note: PostgreSQL driver (asyncpg) disabled - use SQLite in-memory

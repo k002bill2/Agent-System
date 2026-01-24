@@ -11,40 +11,49 @@ from fastapi import FastAPI
 load_dotenv(Path(__file__).parent.parent / ".env")
 from fastapi.middleware.cors import CORSMiddleware
 
+# Check deployment mode - Railway has limited dependencies
+RAILWAY_MODE = os.getenv("RAILWAY", "false").lower() == "true"
+
+# Core router (always available)
 from api.routes import router
-from api.websocket import websocket_router
-from api.deps import set_engine, clear_engine
-from orchestrator import OrchestrationEngine
-from models.project import init_projects
 
-# Optional RAG router - gracefully handle missing chromadb dependencies
+# Optional imports - gracefully handle missing dependencies
+def safe_import(module_path: str, router_name: str = "router"):
+    """Safely import a router, returning None if dependencies are missing."""
+    try:
+        module = __import__(module_path, fromlist=[router_name])
+        return getattr(module, router_name)
+    except (ImportError, ModuleNotFoundError) as e:
+        print(f"⚠️  {module_path} disabled: {e}")
+        return None
+
+# Import routers with fallback
+websocket_router = safe_import("api.websocket", "websocket_router")
+mcp_router = safe_import("api.mcp", "router")
+usage_router = safe_import("api.usage", "router")
+claude_sessions_router = safe_import("api.claude_sessions", "router")
+agents_router = safe_import("api.agents", "router")
+feedback_router = safe_import("api.feedback", "router")
+auth_router = safe_import("api.auth", "router")
+project_configs_router = safe_import("api.project_configs", "router")
+rag_router = safe_import("api.rag", "router")
+
+# Optional orchestrator
 try:
-    from api.rag import router as rag_router
-    RAG_ENABLED = True
-except ImportError:
-    RAG_ENABLED = False
-    rag_router = None
+    from api.deps import set_engine, clear_engine
+    from orchestrator import OrchestrationEngine
+    ORCHESTRATOR_ENABLED = True
+except ImportError as e:
+    print(f"⚠️  Orchestrator disabled: {e}")
+    ORCHESTRATOR_ENABLED = False
 
-# MCP router for Warp terminal integration
-from api.mcp import router as mcp_router
-
-# Usage router for Claude Code stats
-from api.usage import router as usage_router
-
-# Claude sessions router for external session monitoring
-from api.claude_sessions import router as claude_sessions_router
-
-# Agent registry, orchestrator, and MCP manager router
-from api.agents import router as agents_router
-
-# RLHF feedback router
-from api.feedback import router as feedback_router
-
-# OAuth authentication router
-from api.auth import router as auth_router
-
-# Project configuration monitoring router
-from api.project_configs import router as project_configs_router
+# Optional project init
+try:
+    from models.project import init_projects
+    PROJECTS_ENABLED = True
+except ImportError as e:
+    print(f"⚠️  Projects disabled: {e}")
+    PROJECTS_ENABLED = False
 
 # Check if database mode is enabled
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
@@ -54,28 +63,37 @@ USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
-    # Initialize database tables only if database mode is enabled
     if USE_DATABASE:
-        from db.database import init_db, close_db
-        await init_db()
-        print("✅ Database initialized (PostgreSQL)")
+        try:
+            from db.database import init_db
+            await init_db()
+            print("✅ Database initialized (PostgreSQL)")
+        except ImportError:
+            print("⚠️  Database module not available")
     else:
         print("📝 Running in memory mode (USE_DATABASE=false)")
 
     # Initialize projects from projects/ directory
-    backend_dir = Path(__file__).parent.parent
-    project_root = backend_dir.parent.parent
-    init_projects(str(project_root))
+    if PROJECTS_ENABLED:
+        backend_dir = Path(__file__).parent.parent
+        project_root = backend_dir.parent.parent
+        init_projects(str(project_root))
 
-    set_engine(OrchestrationEngine())
+    if ORCHESTRATOR_ENABLED:
+        set_engine(OrchestrationEngine())
+
     yield
 
     # Shutdown
-    clear_engine()
+    if ORCHESTRATOR_ENABLED:
+        clear_engine()
     if USE_DATABASE:
-        from db.database import close_db
-        await close_db()
-        print("Database connection closed")
+        try:
+            from db.database import close_db
+            await close_db()
+            print("Database connection closed")
+        except ImportError:
+            pass
 
 
 def create_app(
@@ -92,7 +110,6 @@ def create_app(
     )
 
     # Configure CORS
-    # Default origins for local development
     cors_origins = [
         "http://localhost:3000",
         "http://localhost:5173",
@@ -107,7 +124,7 @@ def create_app(
     if frontend_url:
         cors_origins.append(frontend_url)
 
-    # Add Vercel preview URLs pattern
+    # Add extra origins from environment
     extra_origins = os.getenv("CORS_ORIGINS", "")
     if extra_origins:
         cors_origins.extend([o.strip() for o in extra_origins.split(",") if o.strip()])
@@ -120,32 +137,33 @@ def create_app(
         allow_headers=["*"],
     )
 
-    # Include routers
+    # Health check endpoint (always available)
+    @app.get("/health")
+    async def health_check():
+        return {"status": "healthy", "railway_mode": RAILWAY_MODE}
+
+    # Include core router
     app.include_router(router, prefix="/api")
-    if RAG_ENABLED and rag_router:
+
+    # Include optional routers
+    if websocket_router:
+        app.include_router(websocket_router)
+    if mcp_router:
+        app.include_router(mcp_router)
+    if usage_router:
+        app.include_router(usage_router, prefix="/api")
+    if claude_sessions_router:
+        app.include_router(claude_sessions_router, prefix="/api")
+    if agents_router:
+        app.include_router(agents_router, prefix="/api")
+    if feedback_router:
+        app.include_router(feedback_router, prefix="/api")
+    if auth_router:
+        app.include_router(auth_router, prefix="/api")
+    if project_configs_router:
+        app.include_router(project_configs_router, prefix="/api")
+    if rag_router:
         app.include_router(rag_router, prefix="/api")
-    app.include_router(websocket_router)
-
-    # MCP router (no prefix - direct /mcp path)
-    app.include_router(mcp_router)
-
-    # Usage router for Claude Code stats
-    app.include_router(usage_router, prefix="/api")
-
-    # Claude sessions router for external session monitoring
-    app.include_router(claude_sessions_router, prefix="/api")
-
-    # Agent registry, orchestrator, and MCP manager router
-    app.include_router(agents_router, prefix="/api")
-
-    # RLHF feedback router
-    app.include_router(feedback_router, prefix="/api")
-
-    # OAuth authentication router
-    app.include_router(auth_router, prefix="/api")
-
-    # Project configuration monitoring router
-    app.include_router(project_configs_router, prefix="/api")
 
     return app
 
