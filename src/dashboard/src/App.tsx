@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { ChatInput } from './components/ChatInput'
 import { ApprovalBanner } from './components/ApprovalModal'
@@ -65,6 +65,32 @@ export default function App() {
   // Track if we've initialized connection
   const hasInitialized = useRef(false)
 
+  // OAuth configuration state
+  const [oauthEnabled, setOauthEnabled] = useState<boolean | null>(null)
+
+  // Check if OAuth is configured on mount
+  useEffect(() => {
+    const checkOAuthStatus = async () => {
+      try {
+        const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
+        const response = await fetch(`${API_BASE_URL}/auth/status`)
+        if (response.ok) {
+          const data = await response.json()
+          setOauthEnabled(data.oauth_enabled)
+          console.log('[App] OAuth status:', data)
+        } else {
+          // If endpoint doesn't exist, assume OAuth is not configured
+          setOauthEnabled(false)
+        }
+      } catch {
+        // If request fails, assume OAuth is not configured
+        console.log('[App] OAuth status check failed, assuming disabled')
+        setOauthEnabled(false)
+      }
+    }
+    checkOAuthStatus()
+  }, [])
+
   // Handle OAuth callback URL detection on initial load
   useEffect(() => {
     const path = window.location.pathname
@@ -79,6 +105,7 @@ export default function App() {
   const { accessToken, refreshToken } = useAuthStore()
 
   // Redirect to login if not authenticated (after hydration)
+  // Skip login if OAuth is not configured
   useEffect(() => {
     // Skip redirect check for auth callback views (they handle their own flow)
     // Check both currentView state AND URL path to handle initial load race condition
@@ -89,10 +116,16 @@ export default function App() {
     if (isAuthCallbackPath || isAuthCallbackView) {
       return
     }
+
+    // Skip login redirect if OAuth is not configured
+    if (oauthEnabled === false) {
+      return
+    }
+
     if (authHydrated && !accessToken && !refreshToken && !isPublicView(currentView)) {
       setView('login')
     }
-  }, [authHydrated, accessToken, refreshToken, currentView, setView])
+  }, [authHydrated, accessToken, refreshToken, currentView, setView, oauthEnabled])
 
   // Fetch current user on mount if authenticated but no user data
   useEffect(() => {
@@ -101,14 +134,15 @@ export default function App() {
     }
   }, [authHydrated, accessToken, refreshToken, user, fetchCurrentUser])
 
-  // Check if authenticated
-  const isLoggedIn = !!(accessToken || refreshToken)
+  // Check if authenticated (or if OAuth is disabled, skip auth check)
+  const isLoggedIn = oauthEnabled === false || !!(accessToken || refreshToken)
 
   // Debug logging
   console.log('[App] Auth state:', {
     authHydrated,
     currentView,
     isLoggedIn,
+    oauthEnabled,
     hasAccessToken: !!accessToken,
     hasRefreshToken: !!refreshToken,
     hasUser: !!user
@@ -153,8 +187,8 @@ export default function App() {
     }
   }, [orchestrationHydrated, authHydrated, isLoggedIn, sessionId, connected, connectionStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Show loading while hydrating
-  if (!authHydrated) {
+  // Show loading while hydrating or checking OAuth status
+  if (!authHydrated || oauthEnabled === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="text-center">

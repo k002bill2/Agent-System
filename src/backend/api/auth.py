@@ -56,6 +56,34 @@ class AuthResponse(BaseModel):
 
 
 # ─────────────────────────────────────────────────────────────
+# Auth Status (for checking if OAuth is configured)
+# ─────────────────────────────────────────────────────────────
+
+
+class AuthStatusResponse(BaseModel):
+    """Auth configuration status."""
+
+    oauth_enabled: bool
+    google_enabled: bool
+    github_enabled: bool
+
+
+@router.get("/status", response_model=AuthStatusResponse)
+async def get_auth_status():
+    """Check if OAuth is configured. Used by frontend to skip login if not configured."""
+    settings = get_settings()
+
+    google_enabled = bool(settings.google_client_id and settings.google_client_secret)
+    github_enabled = bool(settings.github_client_id and settings.github_client_secret)
+
+    return AuthStatusResponse(
+        oauth_enabled=google_enabled or github_enabled,
+        google_enabled=google_enabled,
+        github_enabled=github_enabled,
+    )
+
+
+# ─────────────────────────────────────────────────────────────
 # Google OAuth Endpoints
 # ─────────────────────────────────────────────────────────────
 
