@@ -791,7 +791,6 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
           failed: data.failed_count,
         },
         isBatchGenerating: false,
-        pendingSummaryCount: Math.max(0, get().pendingSummaryCount - data.success_count),
       })
 
       // Update sessions in list with new summaries
@@ -808,9 +807,14 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
           }),
         }))
       }
+
+      // Re-fetch pending count from server to get accurate count
+      await get().fetchPendingSummaryCount()
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
       set({ error: errorMessage, isBatchGenerating: false })
+      // Also re-fetch on error to sync state
+      await get().fetchPendingSummaryCount()
     }
   },
 }))

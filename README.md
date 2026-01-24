@@ -9,23 +9,93 @@ LangGraph 기반 멀티 에이전트 오케스트레이션 서비스입니다.
 - 🔄 **자동 태스크 분해**: 복잡한 작업을 서브태스크로 분해
 - 📝 **완전한 추적성**: 모든 에이전트 활동 및 태스크 이력 저장
 
-## Quick Start
+## 🚀 Quick Start (Docker)
+
+**권장 방법** - Docker만 있으면 한 줄로 실행:
+
+```bash
+# 1. 저장소 클론
+git clone https://github.com/your-username/agent-system.git
+cd agent-system
+
+# 2. 환경변수 설정
+cp .env.example .env
+# .env 파일 편집하여 API 키 설정
+
+# 3. 실행 (미리 빌드된 이미지 사용, 빌드 불필요)
+docker compose up -d
+
+# 4. 접속
+open http://localhost:5173
+```
+
+### 필수 환경변수
+
+```bash
+# LLM 프로바이더 선택 (하나만 필요)
+LLM_PROVIDER=google          # google, anthropic, ollama 중 선택
+GOOGLE_API_KEY=your_key      # Google Gemini
+# 또는
+ANTHROPIC_API_KEY=your_key   # Claude
+# 또는
+# Ollama는 API 키 불필요 (로컬 실행)
+```
+
+### 서비스 URLs
+
+| 서비스 | URL |
+|--------|-----|
+| Dashboard | http://localhost:5173 |
+| Backend API | http://localhost:8000 |
+| PostgreSQL | localhost:5432 |
+| Redis | localhost:6379 |
+
+### Docker 명령어
+
+```bash
+# 상태 확인
+docker compose ps
+
+# 로그 보기
+docker compose logs -f backend
+
+# 중지
+docker compose down
+
+# 데이터 포함 완전 삭제
+docker compose down -v
+```
+
+### 시스템 요구사항
+
+| 항목 | 최소 요구 |
+|------|-----------|
+| Docker | 24.0+ |
+| Docker Compose | 2.20+ |
+| RAM | 4GB |
+| 디스크 | 10GB |
+
+---
+
+## 🛠️ Development Setup (로컬 개발)
+
+Docker 없이 개발 환경을 직접 구성하려면:
 
 ### Prerequisites
 
 - Python 3.11+
 - Node.js 20+
-- Docker & Docker Compose
-- Anthropic API Key
+- Docker & Docker Compose (PostgreSQL, Redis용)
+- LLM API Key (Google, Anthropic, 또는 Ollama)
 
 ### 1. 환경 설정
 
 ```bash
 cp .env.example .env
-# .env 파일에 ANTHROPIC_API_KEY 입력
+# .env 파일에 API 키 입력
 ```
 
-### 2. 인프라 실행
+### 2. 인프라 실행 (DB, Redis)
 
 ```bash
 cd infra/scripts

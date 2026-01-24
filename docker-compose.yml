@@ -1,0 +1,138 @@
+# Agent Orchestration Service - Docker Compose (Production/Self-hosted)
+# Usage: docker compose up -d
+# Dashboard: http://localhost:5173
+# API: http://localhost:8000
+
+services:
+  # React Dashboard (Nginx)
+  dashboard:
+    image: 002bill/aos-dashboard:latest
+    # build:
+    #   context: ./src/dashboard
+    #   dockerfile: Dockerfile.prod
+    container_name: aos-dashboard
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - aos-network
+    restart: unless-stopped
+
+  # FastAPI Backend
+  backend:
+    image: 002bill/aos-backend:latest
+    # build:
+    #   context: ./src/backend
+    #   dockerfile: Dockerfile.full
+    container_name: aos-backend
+    ports:
+      - "8000:8000"
+    environment:
+      # Database
+      - DATABASE_URL=postgresql+asyncpg://aos:aos@postgres:5432/aos
+      - USE_DATABASE=true
+      # Redis
+      - REDIS_URL=redis://redis:6379/0
+      # LLM Provider (set in .env)
+      - LLM_PROVIDER=${LLM_PROVIDER:-google}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      # OAuth (optional)
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
+      # JWT
+      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY:-aos-secret-key-change-in-production}
+      - FRONTEND_URL=http://localhost:5173
+      # Claude Code paths (inside container)
+      - CLAUDE_HOME=/home/aos/.claude
+      - CLAUDE_PROJECTS_PATH=/home/aos/.claude/projects
+    volumes:
+      # Claude Code directory (sessions, stats, settings)
+      - ${HOME}/.claude:/home/aos/.claude:ro
+      # ChromaDB persistence
+      - chromadb_data:/app/data/chromadb
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - aos-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: aos-postgres
+    environment:
+      POSTGRES_USER: aos
+      POSTGRES_PASSWORD: aos
+      POSTGRES_DB: aos
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Note: SQLAlchemy auto-creates tables on startup
+      # - ./infra/docker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aos -d aos"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aos-network
+    restart: unless-stopped
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: aos-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aos-network
+    restart: unless-stopped
+
+  # Sandbox (for isolated code execution)
+  # Built as separate image, containers created dynamically
+  sandbox:
+    build:
+      context: ./infra/docker
+      dockerfile: Dockerfile.sandbox
+    image: aos-sandbox:latest
+    container_name: aos-sandbox-builder
+    profiles:
+      - build-only
+    # Note: This service only builds the image
+    # Actual sandbox containers are created by sandbox_manager.py
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  chromadb_data:
+    driver: local
+
+networks:
+  aos-network:
+    driver: bridge

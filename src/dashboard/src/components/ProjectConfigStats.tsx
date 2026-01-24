@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
-import { Server, Bot, Sparkles, Webhook, FolderCode } from 'lucide-react'
-import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts'
+import { Server, Bot, Sparkles, Webhook } from 'lucide-react'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts'
 import { useProjectConfigsStore } from '../stores/projectConfigs'
 
 const COLORS = {
@@ -29,18 +29,10 @@ export function ProjectConfigStats() {
     { mcp: 0, agents: 0, skills: 0, hooks: 0 }
   )
 
-  // Data for pie chart
-  const pieData = [
-    { name: 'MCP Servers', value: totals.mcp, color: COLORS.mcp },
-    { name: 'Agents', value: totals.agents, color: COLORS.agents },
-    { name: 'Skills', value: totals.skills, color: COLORS.skills },
-    { name: 'Hooks', value: totals.hooks, color: COLORS.hooks },
-  ].filter(d => d.value > 0)
-
   // Data for bar chart (per project)
   const barData = projects.map(project => ({
-    name: project.project_name.length > 12
-      ? project.project_name.slice(0, 12) + '...'
+    name: project.project_name.length > 20
+      ? project.project_name.slice(0, 20) + '...'
       : project.project_name,
     fullName: project.project_name,
     mcp: project.mcp_server_count,
@@ -48,8 +40,6 @@ export function ProjectConfigStats() {
     skills: project.skill_count,
     hooks: project.hook_count,
   }))
-
-  const totalCount = pieData.reduce((sum, d) => sum + d.value, 0)
 
   if (isLoading) {
     return (
@@ -62,12 +52,6 @@ export function ProjectConfigStats() {
 
   return (
     <div className="mt-6">
-      {/* Section Header */}
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-        <FolderCode className="w-5 h-5" />
-        Project Configurations
-      </h2>
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Stats Summary Cards */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
@@ -82,66 +66,6 @@ export function ProjectConfigStats() {
             <StatItem icon={Webhook} label="Hooks" count={totals.hooks} color="text-orange-600" bgColor="bg-orange-100 dark:bg-orange-900/30" />
           </div>
 
-          {/* Donut Chart with Side Labels */}
-          {totalCount > 0 ? (
-            <div className="flex items-center gap-6">
-              {/* Donut Chart - Left */}
-              <div className="w-36 h-36 flex-shrink-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={35}
-                      outerRadius={55}
-                      paddingAngle={2}
-                      dataKey="value"
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: 'rgba(17, 24, 39, 0.9)',
-                        border: 'none',
-                        borderRadius: '8px',
-                        color: 'white',
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* Labels - Right */}
-              <div className="flex-1 space-y-2">
-                {pieData.map((item) => (
-                  <div key={item.name} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: item.color }}
-                      />
-                      <span className="text-sm text-gray-700 dark:text-gray-300">{item.name}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                        {item.value}
-                      </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        ({((item.value / totalCount) * 100).toFixed(0)}%)
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="h-36 flex items-center justify-center text-gray-500 dark:text-gray-400">
-              No configuration data available
-            </div>
-          )}
         </div>
 
         {/* Per-Project Bar Chart */}
@@ -151,21 +75,21 @@ export function ProjectConfigStats() {
           </h3>
 
           {barData.length > 0 ? (
-            <div className="h-64">
+            <div className="h-48 w-full rounded-2xl">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={barData} layout="vertical" margin={{ left: 10, right: 10 }}>
+                <BarChart data={barData} layout="vertical" margin={{ left: 20, right: 20 }}>
                   <XAxis type="number" tick={{ fontSize: 12 }} />
                   <YAxis
                     type="category"
                     dataKey="name"
                     tick={{ fontSize: 11 }}
-                    width={80}
+                    width={120}
                   />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: 'rgba(17, 24, 39, 0.9)',
                       border: 'none',
-                      borderRadius: '8px',
+                      borderRadius: '12px',
                       color: 'white',
                     }}
                     formatter={(value) => [value, '']}
