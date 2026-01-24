@@ -2,9 +2,10 @@ import { useOrchestrationStore } from '../stores/orchestration'
 import { Activity, CheckCircle, Clock, AlertCircle, Users, Zap } from 'lucide-react'
 import { CostMonitor } from '../components/CostMonitor'
 import { ClaudeUsageDashboard } from '../components/usage/ClaudeUsageDashboard'
+import { ProjectConfigStats } from '../components/ProjectConfigStats'
 
 export function DashboardPage() {
-  const { sessionId, connected, tasks, agents, messages } = useOrchestrationStore()
+  const { tasks, agents, messages } = useOrchestrationStore()
 
   // Filter out deleted tasks for statistics
   const activeTasks = Object.values(tasks).filter((t) => !t.isDeleted)
@@ -92,37 +93,42 @@ export function DashboardPage() {
       </div>
 
       {/* Agent Stats, Cost Monitor, Claude Usage & Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
-        {/* Agent Status */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <Users className="w-5 h-5" />
-            Agent Status
-          </h3>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Total Agents</span>
-              <span className="font-medium text-gray-900 dark:text-white">{agentStats.total}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Active</span>
-              <span className="font-medium text-green-600 dark:text-green-400">{agentStats.active}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Idle</span>
-              <span className="font-medium text-gray-500 dark:text-gray-400">{agentStats.idle}</span>
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6 items-stretch">
+        {/* Column 1: Agent Status + Cost Monitor (stacked) */}
+        <div className="space-y-6">
+          {/* Agent Status */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <Users className="w-5 h-5" />
+              Agent Status
+            </h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Total Agents</span>
+                <span className="font-medium text-gray-900 dark:text-white">{agentStats.total}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Active</span>
+                <span className="font-medium text-green-600 dark:text-green-400">{agentStats.active}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Idle</span>
+                <span className="font-medium text-gray-500 dark:text-gray-400">{agentStats.idle}</span>
+              </div>
             </div>
           </div>
+
+          {/* Cost Monitor */}
+          <CostMonitor />
         </div>
 
-        {/* Cost Monitor */}
-        <CostMonitor />
+        {/* Column 2-3: Claude Code Usage (spans 2 columns) */}
+        <div className="xl:col-span-2 h-full">
+          <ClaudeUsageDashboard />
+        </div>
 
-        {/* Claude Code Usage */}
-        <ClaudeUsageDashboard />
-
-        {/* Recent Activity */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        {/* Column 4: Recent Activity */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 h-full">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
             <Zap className="w-5 h-5" />
             Recent Activity
@@ -144,6 +150,9 @@ export function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Project Configuration Stats */}
+      <ProjectConfigStats />
     </div>
   )
 }

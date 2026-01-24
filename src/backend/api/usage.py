@@ -22,6 +22,90 @@ STATS_CACHE_PATH = Path.home() / ".claude" / "stats-cache.json"
 # Anthropic OAuth Usage API
 ANTHROPIC_USAGE_API = "https://api.anthropic.com/api/oauth/usage"
 
+# Cache for Anthropic API response (in-memory with file backup)
+USAGE_CACHE_PATH = Path.home() / ".claude" / "aos-usage-cache.json"
+_usage_cache: dict[str, Any] = {
+    "data": None,
+    "timestamp": None,
+    "expires_at": None,
+}
+CACHE_TTL_SECONDS = 300  # 5 minutes - cache is valid for this long
+CACHE_STALE_SECONDS = 3600  # 1 hour - stale cache can still be used as fallback
+
+
+def _load_usage_cache() -> dict[str, Any] | None:
+    """Load usage cache from file."""
+    global _usage_cache
+
+    # Try memory cache first
+    if _usage_cache["data"] is not None:
+        return _usage_cache
+
+    # Try file cache
+    if USAGE_CACHE_PATH.exists():
+        try:
+            with open(USAGE_CACHE_PATH, "r") as f:
+                _usage_cache = json.load(f)
+                return _usage_cache
+        except (json.JSONDecodeError, IOError):
+            pass
+    return None
+
+
+def _save_usage_cache(data: dict[str, Any]) -> None:
+    """Save usage data to cache."""
+    global _usage_cache
+    now = datetime.now(timezone.utc).isoformat()
+    _usage_cache = {
+        "data": data,
+        "timestamp": now,
+        "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=CACHE_TTL_SECONDS)).isoformat(),
+    }
+    # Save to file for persistence across restarts
+    try:
+        with open(USAGE_CACHE_PATH, "w") as f:
+            json.dump(_usage_cache, f)
+    except IOError:
+        pass
+
+
+def _is_cache_valid() -> bool:
+    """Check if cache is still valid (not expired)."""
+    cache = _load_usage_cache()
+    if not cache or not cache.get("expires_at"):
+        return False
+    try:
+        expires_at = datetime.fromisoformat(cache["expires_at"].replace("Z", "+00:00"))
+        return datetime.now(timezone.utc) < expires_at
+    except (ValueError, TypeError):
+        return False
+
+
+def _is_cache_usable() -> bool:
+    """Check if cache can be used as fallback (within stale period)."""
+    cache = _load_usage_cache()
+    if not cache or not cache.get("timestamp"):
+        return False
+    try:
+        timestamp = datetime.fromisoformat(cache["timestamp"].replace("Z", "+00:00"))
+        age = (datetime.now(timezone.utc) - timestamp).total_seconds()
+        return age < CACHE_STALE_SECONDS
+    except (ValueError, TypeError):
+        return False
+
+
+def _get_cache_age_minutes() -> int | None:
+    """Get cache age in minutes."""
+    cache = _load_usage_cache()
+    if not cache or not cache.get("timestamp"):
+        return None
+    try:
+        timestamp = datetime.fromisoformat(cache["timestamp"].replace("Z", "+00:00"))
+        age = (datetime.now(timezone.utc) - timestamp).total_seconds()
+        return int(age / 60)
+    except (ValueError, TypeError):
+        return None
+
 
 class DailyActivity(BaseModel):
     """Daily activity data."""
@@ -78,6 +162,8 @@ class UsageResponse(BaseModel):
     # OAuth status
     oauthAvailable: bool = False
     oauthError: str | None = None
+    isCached: bool = False  # True if using cached data
+    cacheAgeMinutes: int | None = None  # How old the cached data is
 
     # Computed stats (from local cache)
     weeklyTotalTokens: int = 0
@@ -270,46 +356,64 @@ async def get_usage() -> UsageResponse:
         for model, data in model_usage.items()
     }
 
-    # Fetch real plan limits from Anthropic OAuth API
+    # Fetch real plan limits from Anthropic OAuth API (with caching)
     plan_limits: list[PlanLimitInfo] = []
     oauth_available = False
     oauth_error: str | None = None
+    is_cached = False
+    cache_age_minutes: int | None = None
+
+    def parse_usage_data(usage_data: dict[str, Any]) -> list[PlanLimitInfo]:
+        """Parse Anthropic API response into plan limits."""
+        limits = []
+        limit_mapping = {
+            "five_hour": ("fiveHour", "Current session"),
+            "seven_day": ("sevenDay", "All models"),
+            "seven_day_sonnet": ("sevenDaySonnet", "Sonnet only"),
+            "seven_day_opus": ("sevenDayOpus", "Opus only"),
+        }
+
+        for api_key, (name, display_name) in limit_mapping.items():
+            if api_key in usage_data:
+                limit_data = usage_data[api_key]
+                if limit_data is None:
+                    continue
+
+                resets_at = limit_data.get("resets_at")
+                hours, minutes = parse_reset_time(resets_at)
+
+                limits.append(PlanLimitInfo(
+                    name=name,
+                    displayName=display_name,
+                    utilization=limit_data.get("utilization", 0),
+                    resetsAt=resets_at,
+                    resetsInHours=hours,
+                    resetsInMinutes=minutes,
+                ))
+        return limits
 
     token = get_oauth_token()
     if token:
+        # Try to fetch fresh data from Anthropic API
         usage_data = await fetch_usage_from_anthropic(token)
+
         if usage_data:
+            # Success - save to cache and use fresh data
             oauth_available = True
-
-            # Map API response to plan limits
-            # API returns: five_hour, seven_day, seven_day_opus, seven_day_sonnet
-            limit_mapping = {
-                "five_hour": ("fiveHour", "Current session"),
-                "seven_day": ("sevenDay", "All models"),
-                "seven_day_sonnet": ("sevenDaySonnet", "Sonnet only"),
-                "seven_day_opus": ("sevenDayOpus", "Opus only"),
-            }
-
-            for api_key, (name, display_name) in limit_mapping.items():
-                if api_key in usage_data:
-                    limit_data = usage_data[api_key]
-                    # Skip if limit_data is None (not applicable for this user)
-                    if limit_data is None:
-                        continue
-
-                    resets_at = limit_data.get("resets_at")
-                    hours, minutes = parse_reset_time(resets_at)
-
-                    plan_limits.append(PlanLimitInfo(
-                        name=name,
-                        displayName=display_name,
-                        utilization=limit_data.get("utilization", 0),
-                        resetsAt=resets_at,
-                        resetsInHours=hours,
-                        resetsInMinutes=minutes,
-                    ))
+            plan_limits = parse_usage_data(usage_data)
+            _save_usage_cache(usage_data)
         else:
-            oauth_error = "Failed to fetch from Anthropic API"
+            # API failed - try to use cached data as fallback
+            if _is_cache_usable():
+                cache = _load_usage_cache()
+                if cache and cache.get("data"):
+                    oauth_available = True
+                    is_cached = True
+                    cache_age_minutes = _get_cache_age_minutes()
+                    plan_limits = parse_usage_data(cache["data"])
+                    oauth_error = f"Using cached data ({cache_age_minutes}m ago)"
+            else:
+                oauth_error = "Failed to fetch from Anthropic API"
     else:
         if sys.platform != "darwin":
             oauth_error = "OAuth only available on macOS"
@@ -327,6 +431,8 @@ async def get_usage() -> UsageResponse:
         planLimits=plan_limits,
         oauthAvailable=oauth_available,
         oauthError=oauth_error,
+        isCached=is_cached,
+        cacheAgeMinutes=cache_age_minutes,
         weeklyTotalTokens=weekly_total,
         weeklySonnetTokens=weekly_sonnet,
         weeklyOpusTokens=weekly_opus,

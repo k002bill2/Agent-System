@@ -23,6 +23,13 @@ class MCPServerType(str, Enum):
     COMMAND = "command"
 
 
+class MCPServerSource(str, Enum):
+    """Source of MCP server configuration."""
+
+    USER = "user"  # From ~/.claude.json
+    PROJECT = "project"  # From .claude/mcp.json
+
+
 class ProjectInfo(BaseModel):
     """Project information discovered from filesystem."""
 
@@ -37,6 +44,7 @@ class ProjectInfo(BaseModel):
     skill_count: int = Field(default=0, description="Number of skills")
     agent_count: int = Field(default=0, description="Number of agents")
     mcp_server_count: int = Field(default=0, description="Number of MCP servers")
+    hook_count: int = Field(default=0, description="Number of hooks")
     last_modified: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -90,7 +98,7 @@ class AgentConfig(BaseModel):
 
 
 class MCPServerConfig(BaseModel):
-    """MCP server configuration from mcp.json."""
+    """MCP server configuration from mcp.json or ~/.claude.json."""
 
     server_id: str = Field(..., description="Server identifier (key in mcpServers)")
     project_id: str = Field(..., description="Parent project ID")
@@ -103,6 +111,12 @@ class MCPServerConfig(BaseModel):
     # Derived fields
     server_type: MCPServerType = Field(default=MCPServerType.COMMAND)
     package_name: str = Field(default="", description="NPM/Python package name")
+
+    # Source of configuration
+    source: MCPServerSource = Field(
+        default=MCPServerSource.PROJECT,
+        description="Source: 'user' (~/.claude.json) or 'project' (.claude/mcp.json)",
+    )
 
 
 class HookConfig(BaseModel):
@@ -124,6 +138,9 @@ class ProjectConfigSummary(BaseModel):
     skills: list[SkillConfig] = Field(default_factory=list)
     agents: list[AgentConfig] = Field(default_factory=list)
     mcp_servers: list[MCPServerConfig] = Field(default_factory=list)
+    user_mcp_servers: list[MCPServerConfig] = Field(
+        default_factory=list, description="User-level MCP servers from ~/.claude.json"
+    )
     hooks: list[HookConfig] = Field(default_factory=list)
 
 
@@ -166,3 +183,76 @@ class SkillContentResponse(BaseModel):
     skill: SkillConfig
     content: str = Field(..., description="Full SKILL.md content")
     references: list[str] = Field(default_factory=list, description="Reference file paths")
+
+
+class AgentContentResponse(BaseModel):
+    """Response for agent content."""
+
+    agent: AgentConfig
+    content: str = Field(..., description="Full agent.md content")
+
+
+# ========================================
+# CRUD Request Models
+# ========================================
+
+
+class MCPServerUpdateRequest(BaseModel):
+    """Request to update MCP server configuration."""
+
+    command: str | None = Field(default=None, description="Command to run")
+    args: list[str] | None = Field(default=None, description="Command arguments")
+    env: dict[str, str] | None = Field(default=None, description="Environment variables")
+    disabled: bool | None = Field(default=None, description="Whether server is disabled")
+    note: str | None = Field(default=None, description="Note about the server")
+
+
+class MCPServerCreateRequest(BaseModel):
+    """Request to create a new MCP server."""
+
+    server_id: str = Field(..., description="Server identifier (key in mcpServers)")
+    command: str = Field(default="npx", description="Command to run")
+    args: list[str] = Field(default_factory=list, description="Command arguments")
+    env: dict[str, str] = Field(default_factory=dict, description="Environment variables")
+    disabled: bool = Field(default=False, description="Whether server is disabled")
+    note: str = Field(default="", description="Note about the server")
+
+
+class SkillUpdateRequest(BaseModel):
+    """Request to update skill content."""
+
+    content: str = Field(..., description="Full SKILL.md content")
+
+
+class SkillCreateRequest(BaseModel):
+    """Request to create a new skill."""
+
+    skill_id: str = Field(..., description="Skill identifier (directory name)")
+    content: str = Field(..., description="SKILL.md content")
+
+
+class AgentUpdateRequest(BaseModel):
+    """Request to update agent content."""
+
+    content: str = Field(..., description="Full agent.md content")
+
+
+class AgentCreateRequest(BaseModel):
+    """Request to create a new agent."""
+
+    agent_id: str = Field(..., description="Agent identifier (filename without .md)")
+    content: str = Field(..., description="Agent .md content")
+    is_shared: bool = Field(default=False, description="Whether to create in shared/ directory")
+
+
+class HookEntryRequest(BaseModel):
+    """Request to add a hook entry."""
+
+    matcher: str = Field(default="*", description="Tool/event matcher pattern")
+    hooks: list[dict[str, str]] = Field(..., description="List of hook definitions")
+
+
+class HooksUpdateRequest(BaseModel):
+    """Request to update entire hooks.json."""
+
+    hooks: dict[str, list[dict]] = Field(..., description="Complete hooks configuration")

@@ -91,7 +91,7 @@ export function Sidebar() {
   )
 }
 
-function UserAvatar({ user }: { user: { name: string; email: string; avatar_url?: string } }) {
+function UserAvatar({ user }: { user: { name: string | null; email: string; avatar_url?: string | null } }) {
   const [imageError, setImageError] = useState(false)
   const { logout } = useAuthStore()
   const { setView } = useNavigationStore()
@@ -105,7 +105,7 @@ function UserAvatar({ user }: { user: { name: string; email: string; avatar_url?
 
   return (
     <div className="flex items-center gap-3 px-3 py-2 border-t border-gray-200 dark:border-gray-700 mt-2 pt-3">
-      {!showFallback ? (
+      {!showFallback && user.avatar_url ? (
         <img
           src={user.avatar_url}
           alt={user.name || user.email}

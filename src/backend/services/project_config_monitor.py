@@ -18,6 +18,7 @@ from models.project_config import (
     ConfigChangeType,
     HookConfig,
     MCPServerConfig,
+    MCPServerSource,
     MCPServerType,
     ProjectConfigSummary,
     ProjectInfo,
@@ -49,7 +50,7 @@ class ProjectConfigMonitor:
 
         # Add current directory if it has .claude/
         if include_current:
-            cwd = Path.cwd()
+            cwd = Path.cwd().resolve()  # Resolve symlinks
             claude_dir = cwd / ".claude"
             if claude_dir.exists():
                 self._project_paths.append(cwd)
@@ -57,7 +58,7 @@ class ProjectConfigMonitor:
         # Add provided paths
         if project_paths:
             for p in project_paths:
-                path = Path(p)
+                path = Path(p).resolve()  # Resolve symlinks
                 if path.exists() and (path / ".claude").exists():
                     if path not in self._project_paths:
                         self._project_paths.append(path)
@@ -68,7 +69,7 @@ class ProjectConfigMonitor:
             for p in env_paths.split(","):
                 p = p.strip()
                 if p:
-                    path = Path(p)
+                    path = Path(p).resolve()  # Resolve symlinks
                     if path.exists() and (path / ".claude").exists():
                         if path not in self._project_paths:
                             self._project_paths.append(path)
@@ -83,7 +84,7 @@ class ProjectConfigMonitor:
         Returns:
             True if added, False if invalid or already exists
         """
-        p = Path(path)
+        p = Path(path).resolve()  # Resolve symlinks for consistency
         if not p.exists():
             logger.warning(f"Path does not exist: {path}")
             return False
@@ -95,8 +96,8 @@ class ProjectConfigMonitor:
             return False
 
         self._project_paths.append(p)
-        self._external_paths.append(path)
-        logger.info(f"Added external project: {path}")
+        self._external_paths.append(str(p))  # Store resolved path
+        logger.info(f"Added external project: {p}")
         return True
 
     def remove_external_project(self, path: str) -> bool:
@@ -108,19 +109,20 @@ class ProjectConfigMonitor:
         Returns:
             True if removed, False if not found
         """
-        p = Path(path)
+        p = Path(path).resolve()  # Resolve symlinks for consistency
         if p not in self._project_paths:
             return False
 
         self._project_paths.remove(p)
-        if path in self._external_paths:
-            self._external_paths.remove(path)
+        resolved_path = str(p)
+        if resolved_path in self._external_paths:
+            self._external_paths.remove(resolved_path)
 
         # Clear cache for this project
         project_id = self._encode_path(p)
         self._cache.pop(project_id, None)
 
-        logger.info(f"Removed external project: {path}")
+        logger.info(f"Removed external project: {p}")
         return True
 
     def get_external_paths(self) -> list[str]:
@@ -215,6 +217,24 @@ class ProjectConfigMonitor:
             except (json.JSONDecodeError, OSError):
                 pass
 
+        # Count hooks
+        hook_count = 0
+        if hooks_file.exists():
+            try:
+                with open(hooks_file, "r", encoding="utf-8") as f:
+                    hooks_data = json.load(f)
+                    # Handle both formats: { "hooks": { ... } } or direct { "event": [...] }
+                    if "hooks" in hooks_data and isinstance(hooks_data["hooks"], dict):
+                        hooks_data = hooks_data["hooks"]
+                    # Count all hook entries across all events
+                    for event_hooks in hooks_data.values():
+                        if isinstance(event_hooks, list):
+                            for entry in event_hooks:
+                                if isinstance(entry, dict) and "hooks" in entry:
+                                    hook_count += len(entry["hooks"])
+            except (json.JSONDecodeError, OSError):
+                pass
+
         # Get last modified time from most recently modified config file
         last_modified = datetime.utcnow()
         for check_path in [skills_dir, agents_dir, mcp_file, hooks_file]:
@@ -238,6 +258,7 @@ class ProjectConfigMonitor:
             skill_count=skill_count,
             agent_count=agent_count,
             mcp_server_count=mcp_server_count,
+            hook_count=hook_count,
             last_modified=last_modified,
         )
 
@@ -532,6 +553,78 @@ class ProjectConfigMonitor:
                     note=note,
                     server_type=server_type,
                     package_name=package_name,
+                    source=MCPServerSource.PROJECT,
+                )
+            )
+
+        # Sort: enabled first, then alphabetically
+        servers.sort(key=lambda s: (s.disabled, s.server_id.lower()))
+        return servers
+
+    def get_user_mcp_config(self, project_id: str = "") -> list[MCPServerConfig]:
+        """Get user-level MCP server configuration from ~/.claude.json.
+
+        Args:
+            project_id: Optional project ID for context (used in returned configs)
+
+        Returns:
+            List of MCPServerConfig from user-level settings
+        """
+        user_claude_file = Path.home() / ".claude.json"
+        if not user_claude_file.exists():
+            return []
+
+        try:
+            with open(user_claude_file, "r", encoding="utf-8") as f:
+                user_data = json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error(f"Error reading user Claude config: {e}")
+            return []
+
+        servers = []
+        mcp_servers = user_data.get("mcpServers", {})
+
+        for server_id, config in mcp_servers.items():
+            if not isinstance(config, dict):
+                continue
+
+            command = config.get("command", "")
+            args = config.get("args", [])
+            env = config.get("env", {})
+            disabled = config.get("disabled", False)
+            note = config.get("_note", "")
+
+            # Determine server type
+            if command == "npx":
+                server_type = MCPServerType.NPX
+                package_name = ""
+                for arg in args:
+                    if not arg.startswith("-"):
+                        package_name = arg
+                        break
+            elif command == "uvx":
+                server_type = MCPServerType.UVX
+                package_name = ""
+                for arg in args:
+                    if not arg.startswith("-") and arg != "--from":
+                        package_name = arg
+                        break
+            else:
+                server_type = MCPServerType.COMMAND
+                package_name = command
+
+            servers.append(
+                MCPServerConfig(
+                    server_id=server_id,
+                    project_id=project_id,
+                    command=command,
+                    args=args if isinstance(args, list) else [],
+                    env=env if isinstance(env, dict) else {},
+                    disabled=disabled,
+                    note=note,
+                    server_type=server_type,
+                    package_name=package_name,
+                    source=MCPServerSource.USER,
                 )
             )
 
@@ -609,6 +702,622 @@ class ProjectConfigMonitor:
 
         except (json.JSONDecodeError, OSError) as e:
             logger.error(f"Error updating MCP config: {e}")
+            return False
+
+    def update_mcp_server(
+        self,
+        project_id: str,
+        server_id: str,
+        command: str | None = None,
+        args: list[str] | None = None,
+        env: dict[str, str] | None = None,
+        disabled: bool | None = None,
+        note: str | None = None,
+    ) -> MCPServerConfig | None:
+        """Update an MCP server configuration.
+
+        Args:
+            project_id: Project identifier
+            server_id: Server identifier
+            command: New command (optional)
+            args: New args (optional)
+            env: New environment variables (optional)
+            disabled: New disabled state (optional)
+            note: New note (optional)
+
+        Returns:
+            Updated MCPServerConfig or None if failed
+        """
+        project_path = self._find_project_path(project_id)
+        if not project_path:
+            logger.error(f"Project not found: {project_id}")
+            return None
+
+        mcp_file = project_path / ".claude" / "mcp.json"
+        if not mcp_file.exists():
+            logger.error(f"MCP config not found: {mcp_file}")
+            return None
+
+        try:
+            with open(mcp_file, "r", encoding="utf-8") as f:
+                mcp_data = json.load(f)
+
+            mcp_servers = mcp_data.get("mcpServers", {})
+            if server_id not in mcp_servers:
+                logger.error(f"Server not found: {server_id}")
+                return None
+
+            server = mcp_servers[server_id]
+
+            # Update only provided fields
+            if command is not None:
+                server["command"] = command
+            if args is not None:
+                server["args"] = args
+            if env is not None:
+                server["env"] = env
+            if disabled is not None:
+                server["disabled"] = disabled
+            if note is not None:
+                server["_note"] = note
+
+            with open(mcp_file, "w", encoding="utf-8") as f:
+                json.dump(mcp_data, f, indent=2, ensure_ascii=False)
+                f.write("\n")
+
+            logger.info(f"Updated MCP server {server_id} in project {project_id}")
+
+            # Return updated config
+            servers = self.get_project_mcp_config(project_id)
+            return next((s for s in servers if s.server_id == server_id), None)
+
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error(f"Error updating MCP config: {e}")
+            return None
+
+    def create_mcp_server(
+        self,
+        project_id: str,
+        server_id: str,
+        command: str = "npx",
+        args: list[str] | None = None,
+        env: dict[str, str] | None = None,
+        disabled: bool = False,
+        note: str = "",
+    ) -> MCPServerConfig | None:
+        """Create a new MCP server configuration.
+
+        Args:
+            project_id: Project identifier
+            server_id: Server identifier
+            command: Command to run
+            args: Command arguments
+            env: Environment variables
+            disabled: Whether server is disabled
+            note: Note about the server
+
+        Returns:
+            Created MCPServerConfig or None if failed
+        """
+        project_path = self._find_project_path(project_id)
+        if not project_path:
+            logger.error(f"Project not found: {project_id}")
+            return None
+
+        mcp_file = project_path / ".claude" / "mcp.json"
+
+        # Create file if doesn't exist
+        if not mcp_file.exists():
+            mcp_data = {"mcpServers": {}}
+        else:
+            try:
+                with open(mcp_file, "r", encoding="utf-8") as f:
+                    mcp_data = json.load(f)
+            except (json.JSONDecodeError, OSError) as e:
+                logger.error(f"Error reading MCP config: {e}")
+                return None
+
+        mcp_servers = mcp_data.setdefault("mcpServers", {})
+
+        # Check if server already exists
+        if server_id in mcp_servers:
+            logger.error(f"Server already exists: {server_id}")
+            return None
+
+        # Create server entry
+        server_entry: dict = {
+            "command": command,
+            "args": args or [],
+        }
+        if env:
+            server_entry["env"] = env
+        if disabled:
+            server_entry["disabled"] = True
+        if note:
+            server_entry["_note"] = note
+
+        mcp_servers[server_id] = server_entry
+
+        try:
+            with open(mcp_file, "w", encoding="utf-8") as f:
+                json.dump(mcp_data, f, indent=2, ensure_ascii=False)
+                f.write("\n")
+
+            logger.info(f"Created MCP server {server_id} in project {project_id}")
+
+            # Return created config
+            servers = self.get_project_mcp_config(project_id)
+            return next((s for s in servers if s.server_id == server_id), None)
+
+        except OSError as e:
+            logger.error(f"Error writing MCP config: {e}")
+            return None
+
+    def delete_mcp_server(self, project_id: str, server_id: str) -> bool:
+        """Delete an MCP server configuration.
+
+        Args:
+            project_id: Project identifier
+            server_id: Server identifier
+
+        Returns:
+            True if deleted successfully
+        """
+        project_path = self._find_project_path(project_id)
+        if not project_path:
+            logger.error(f"Project not found: {project_id}")
+            return False
+
+        mcp_file = project_path / ".claude" / "mcp.json"
+        if not mcp_file.exists():
+            logger.error(f"MCP config not found: {mcp_file}")
+            return False
+
+        try:
+            with open(mcp_file, "r", encoding="utf-8") as f:
+                mcp_data = json.load(f)
+
+            mcp_servers = mcp_data.get("mcpServers", {})
+            if server_id not in mcp_servers:
+                logger.error(f"Server not found: {server_id}")
+                return False
+
+            del mcp_servers[server_id]
+
+            with open(mcp_file, "w", encoding="utf-8") as f:
+                json.dump(mcp_data, f, indent=2, ensure_ascii=False)
+                f.write("\n")
+
+            logger.info(f"Deleted MCP server {server_id} from project {project_id}")
+            return True
+
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error(f"Error deleting MCP server: {e}")
+            return False
+
+    # ========================================
+    # Skills CRUD
+    # ========================================
+
+    def update_skill_content(self, project_id: str, skill_id: str, content: str) -> bool:
+        """Update skill SKILL.md content.
+
+        Args:
+            project_id: Project identifier
+            skill_id: Skill identifier (directory name)
+            content: New SKILL.md content
+
+        Returns:
+            True if updated successfully
+        """
+        project_path = self._find_project_path(project_id)
+        if not project_path:
+            logger.error(f"Project not found: {project_id}")
+            return False
+
+        skill_file = project_path / ".claude" / "skills" / skill_id / "SKILL.md"
+        if not skill_file.exists():
+            logger.error(f"Skill not found: {skill_id}")
+            return False
+
+        try:
+            with open(skill_file, "w", encoding="utf-8") as f:
+                f.write(content)
+                # Ensure trailing newline
+                if not content.endswith("\n"):
+                    f.write("\n")
+
+            logger.info(f"Updated skill {skill_id} in project {project_id}")
+            return True
+
+        except OSError as e:
+            logger.error(f"Error updating skill: {e}")
+            return False
+
+    def create_skill(self, project_id: str, skill_id: str, content: str) -> SkillConfig | None:
+        """Create a new skill.
+
+        Args:
+            project_id: Project identifier
+            skill_id: Skill identifier (will be directory name)
+            content: SKILL.md content
+
+        Returns:
+            Created SkillConfig or None if failed
+        """
+        project_path = self._find_project_path(project_id)
+        if not project_path:
+            logger.error(f"Project not found: {project_id}")
+            return None
+
+        skills_dir = project_path / ".claude" / "skills"
+        skill_dir = skills_dir / skill_id
+
+        # Create skills directory if doesn't exist
+        skills_dir.mkdir(parents=True, exist_ok=True)
+
+        # Check if skill already exists
+        if skill_dir.exists():
+            logger.error(f"Skill already exists: {skill_id}")
+            return None
+
+        try:
+            # Create skill directory and SKILL.md
+            skill_dir.mkdir()
+            skill_file = skill_dir / "SKILL.md"
+
+            with open(skill_file, "w", encoding="utf-8") as f:
+                f.write(content)
+                if not content.endswith("\n"):
+                    f.write("\n")
+
+            logger.info(f"Created skill {skill_id} in project {project_id}")
+
+            # Return created config
+            return self._parse_skill(skill_file, project_id)
+
+        except OSError as e:
+            logger.error(f"Error creating skill: {e}")
+            return None
+
+    def delete_skill(self, project_id: str, skill_id: str) -> bool:
+        """Delete a skill (removes entire skill directory).
+
+        Args:
+            project_id: Project identifier
+            skill_id: Skill identifier
+
+        Returns:
+            True if deleted successfully
+        """
+        import shutil
+
+        project_path = self._find_project_path(project_id)
+        if not project_path:
+            logger.error(f"Project not found: {project_id}")
+            return False
+
+        skill_dir = project_path / ".claude" / "skills" / skill_id
+        if not skill_dir.exists():
+            logger.error(f"Skill not found: {skill_id}")
+            return False
+
+        try:
+            shutil.rmtree(skill_dir)
+            logger.info(f"Deleted skill {skill_id} from project {project_id}")
+            return True
+
+        except OSError as e:
+            logger.error(f"Error deleting skill: {e}")
+            return False
+
+    # ========================================
+    # Agents CRUD
+    # ========================================
+
+    def get_agent_content(self, project_id: str, agent_id: str) -> tuple[AgentConfig | None, str]:
+        """Get full content of an agent.
+
+        Args:
+            project_id: Project identifier
+            agent_id: Agent identifier
+
+        Returns:
+            Tuple of (AgentConfig, content) or (None, "")
+        """
+        project_path = self._find_project_path(project_id)
+        if not project_path:
+            return None, ""
+
+        agents_dir = project_path / ".claude" / "agents"
+
+        # Check regular agents first
+        agent_file = agents_dir / f"{agent_id}.md"
+        is_shared = False
+
+        if not agent_file.exists():
+            # Check shared agents
+            agent_file = agents_dir / "shared" / f"{agent_id}.md"
+            is_shared = True
+
+        if not agent_file.exists():
+            return None, ""
+
+        agent = self._parse_agent(agent_file, project_id, is_shared=is_shared)
+        if not agent:
+            return None, ""
+
+        content = agent_file.read_text(encoding="utf-8")
+        return agent, content
+
+    def update_agent_content(self, project_id: str, agent_id: str, content: str) -> bool:
+        """Update agent .md content.
+
+        Args:
+            project_id: Project identifier
+            agent_id: Agent identifier
+            content: New agent .md content
+
+        Returns:
+            True if updated successfully
+        """
+        project_path = self._find_project_path(project_id)
+        if not project_path:
+            logger.error(f"Project not found: {project_id}")
+            return False
+
+        agents_dir = project_path / ".claude" / "agents"
+
+        # Check regular agents first
+        agent_file = agents_dir / f"{agent_id}.md"
+        if not agent_file.exists():
+            # Check shared agents
+            agent_file = agents_dir / "shared" / f"{agent_id}.md"
+
+        if not agent_file.exists():
+            logger.error(f"Agent not found: {agent_id}")
+            return False
+
+        try:
+            with open(agent_file, "w", encoding="utf-8") as f:
+                f.write(content)
+                if not content.endswith("\n"):
+                    f.write("\n")
+
+            logger.info(f"Updated agent {agent_id} in project {project_id}")
+            return True
+
+        except OSError as e:
+            logger.error(f"Error updating agent: {e}")
+            return False
+
+    def create_agent(
+        self, project_id: str, agent_id: str, content: str, is_shared: bool = False
+    ) -> AgentConfig | None:
+        """Create a new agent.
+
+        Args:
+            project_id: Project identifier
+            agent_id: Agent identifier (will be filename without .md)
+            content: Agent .md content
+            is_shared: Whether to create in shared/ directory
+
+        Returns:
+            Created AgentConfig or None if failed
+        """
+        project_path = self._find_project_path(project_id)
+        if not project_path:
+            logger.error(f"Project not found: {project_id}")
+            return None
+
+        agents_dir = project_path / ".claude" / "agents"
+        agents_dir.mkdir(parents=True, exist_ok=True)
+
+        if is_shared:
+            target_dir = agents_dir / "shared"
+            target_dir.mkdir(exist_ok=True)
+            agent_file = target_dir / f"{agent_id}.md"
+        else:
+            agent_file = agents_dir / f"{agent_id}.md"
+
+        # Check if agent already exists
+        if agent_file.exists():
+            logger.error(f"Agent already exists: {agent_id}")
+            return None
+
+        try:
+            with open(agent_file, "w", encoding="utf-8") as f:
+                f.write(content)
+                if not content.endswith("\n"):
+                    f.write("\n")
+
+            logger.info(f"Created agent {agent_id} in project {project_id}")
+            return self._parse_agent(agent_file, project_id, is_shared=is_shared)
+
+        except OSError as e:
+            logger.error(f"Error creating agent: {e}")
+            return None
+
+    def delete_agent(self, project_id: str, agent_id: str) -> bool:
+        """Delete an agent.
+
+        Args:
+            project_id: Project identifier
+            agent_id: Agent identifier
+
+        Returns:
+            True if deleted successfully
+        """
+        project_path = self._find_project_path(project_id)
+        if not project_path:
+            logger.error(f"Project not found: {project_id}")
+            return False
+
+        agents_dir = project_path / ".claude" / "agents"
+
+        # Check regular agents first
+        agent_file = agents_dir / f"{agent_id}.md"
+        if not agent_file.exists():
+            # Check shared agents
+            agent_file = agents_dir / "shared" / f"{agent_id}.md"
+
+        if not agent_file.exists():
+            logger.error(f"Agent not found: {agent_id}")
+            return False
+
+        try:
+            agent_file.unlink()
+            logger.info(f"Deleted agent {agent_id} from project {project_id}")
+            return True
+
+        except OSError as e:
+            logger.error(f"Error deleting agent: {e}")
+            return False
+
+    # ========================================
+    # Hooks CRUD
+    # ========================================
+
+    def update_hooks(self, project_id: str, hooks_data: dict) -> bool:
+        """Update entire hooks.json content.
+
+        Args:
+            project_id: Project identifier
+            hooks_data: Complete hooks configuration
+
+        Returns:
+            True if updated successfully
+        """
+        project_path = self._find_project_path(project_id)
+        if not project_path:
+            logger.error(f"Project not found: {project_id}")
+            return False
+
+        hooks_file = project_path / ".claude" / "hooks.json"
+
+        try:
+            with open(hooks_file, "w", encoding="utf-8") as f:
+                json.dump(hooks_data, f, indent=2, ensure_ascii=False)
+                f.write("\n")
+
+            logger.info(f"Updated hooks in project {project_id}")
+            return True
+
+        except OSError as e:
+            logger.error(f"Error updating hooks: {e}")
+            return False
+
+    def add_hook_entry(
+        self, project_id: str, event: str, matcher: str, hooks: list[dict]
+    ) -> bool:
+        """Add a hook entry to an event.
+
+        Args:
+            project_id: Project identifier
+            event: Event name (PreToolUse, PostToolUse, etc.)
+            matcher: Matcher pattern
+            hooks: List of hook definitions
+
+        Returns:
+            True if added successfully
+        """
+        project_path = self._find_project_path(project_id)
+        if not project_path:
+            logger.error(f"Project not found: {project_id}")
+            return False
+
+        hooks_file = project_path / ".claude" / "hooks.json"
+
+        # Read existing hooks or create new
+        if hooks_file.exists():
+            try:
+                with open(hooks_file, "r", encoding="utf-8") as f:
+                    hooks_data = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                hooks_data = {"hooks": {}}
+        else:
+            hooks_data = {"hooks": {}}
+
+        # Ensure hooks wrapper exists
+        if "hooks" not in hooks_data:
+            hooks_data = {"hooks": hooks_data}
+
+        # Add entry
+        if event not in hooks_data["hooks"]:
+            hooks_data["hooks"][event] = []
+
+        hooks_data["hooks"][event].append({
+            "matcher": matcher,
+            "hooks": hooks,
+        })
+
+        try:
+            with open(hooks_file, "w", encoding="utf-8") as f:
+                json.dump(hooks_data, f, indent=2, ensure_ascii=False)
+                f.write("\n")
+
+            logger.info(f"Added hook entry for {event} in project {project_id}")
+            return True
+
+        except OSError as e:
+            logger.error(f"Error adding hook: {e}")
+            return False
+
+    def delete_hook(self, project_id: str, event: str, index: int) -> bool:
+        """Delete a hook entry by event and index.
+
+        Args:
+            project_id: Project identifier
+            event: Event name
+            index: Index of hook entry within the event
+
+        Returns:
+            True if deleted successfully
+        """
+        project_path = self._find_project_path(project_id)
+        if not project_path:
+            logger.error(f"Project not found: {project_id}")
+            return False
+
+        hooks_file = project_path / ".claude" / "hooks.json"
+        if not hooks_file.exists():
+            logger.error(f"Hooks file not found")
+            return False
+
+        try:
+            with open(hooks_file, "r", encoding="utf-8") as f:
+                hooks_data = json.load(f)
+
+            # Handle wrapped format
+            if "hooks" in hooks_data:
+                hooks_section = hooks_data["hooks"]
+            else:
+                hooks_section = hooks_data
+
+            if event not in hooks_section:
+                logger.error(f"Event not found: {event}")
+                return False
+
+            event_hooks = hooks_section[event]
+            if index < 0 or index >= len(event_hooks):
+                logger.error(f"Invalid hook index: {index}")
+                return False
+
+            del event_hooks[index]
+
+            # Remove empty event
+            if not event_hooks:
+                del hooks_section[event]
+
+            with open(hooks_file, "w", encoding="utf-8") as f:
+                json.dump(hooks_data, f, indent=2, ensure_ascii=False)
+                f.write("\n")
+
+            logger.info(f"Deleted hook {event}[{index}] from project {project_id}")
+            return True
+
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error(f"Error deleting hook: {e}")
             return False
 
     def get_project_hooks(self, project_id: str) -> list[HookConfig]:
@@ -692,6 +1401,7 @@ class ProjectConfigMonitor:
             skills=self.get_project_skills(project_id),
             agents=self.get_project_agents(project_id),
             mcp_servers=self.get_project_mcp_config(project_id),
+            user_mcp_servers=self.get_user_mcp_config(project_id),
             hooks=self.get_project_hooks(project_id),
         )
 

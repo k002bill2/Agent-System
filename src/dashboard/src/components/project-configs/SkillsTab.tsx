@@ -1,12 +1,23 @@
 import { cn } from '../../lib/utils'
-import { Sparkles, FileText, Code, FolderOpen, ChevronRight } from 'lucide-react'
+import { Sparkles, FileText, Code, FolderOpen, ChevronRight, Plus, Pencil, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useProjectConfigsStore, SkillConfig } from '../../stores/projectConfigs'
+import { SkillEditModal } from './SkillEditModal'
+import { ConfirmDeleteModal } from './ConfirmDeleteModal'
 
 export function SkillsTab() {
-  const { selectedProject, isLoadingProject, fetchSkillContent, skillContent, isLoadingContent } =
-    useProjectConfigsStore()
+  const {
+    selectedProject,
+    isLoadingProject,
+    fetchSkillContent,
+    skillContent,
+    isLoadingContent,
+    openSkillModal,
+    deleteSkill,
+    deletingSkills,
+  } = useProjectConfigsStore()
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<SkillConfig | null>(null)
 
   if (isLoadingProject) {
     return (
@@ -37,38 +48,66 @@ export function SkillsTab() {
     }
   }
 
+  const handleDelete = async () => {
+    if (!deleteTarget || !selectedProject) return
+    await deleteSkill(selectedProject.project.project_id, deleteTarget.skill_id)
+    setDeleteTarget(null)
+  }
+
   return (
-    <div className="p-6 overflow-y-auto">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-purple-500" />
-          Skills ({skills.length})
-        </h3>
+    <>
+      <div className="p-6 h-full overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-purple-500" />
+            Skills ({skills.length})
+          </h3>
+          <button
+            onClick={() => openSkillModal('create')}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700"
+          >
+            <Plus className="w-4 h-4" />
+            Create Skill
+          </button>
+        </div>
+
+        {skills.length === 0 ? (
+          <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+            <Sparkles className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <p>No skills found in this project</p>
+            <p className="text-sm mt-1">Click "Create Skill" to add one</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {skills.map((skill) => (
+              <SkillCard
+                key={skill.skill_id}
+                skill={skill}
+                isExpanded={expandedSkill === skill.skill_id}
+                isLoadingContent={isLoadingContent && expandedSkill === skill.skill_id}
+                isDeleting={deletingSkills.has(`${skill.project_id}:${skill.skill_id}`)}
+                content={expandedSkill === skill.skill_id ? skillContent : null}
+                onToggle={() => handleExpand(skill)}
+                onEdit={() => openSkillModal('edit', skill)}
+                onDelete={() => setDeleteTarget(skill)}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
-      {skills.length === 0 ? (
-        <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-          <Sparkles className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p>No skills found in this project</p>
-          <p className="text-sm mt-1">
-            Create a skill in .claude/skills/your-skill/SKILL.md
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {skills.map((skill) => (
-            <SkillCard
-              key={skill.skill_id}
-              skill={skill}
-              isExpanded={expandedSkill === skill.skill_id}
-              isLoadingContent={isLoadingContent && expandedSkill === skill.skill_id}
-              content={expandedSkill === skill.skill_id ? skillContent : null}
-              onToggle={() => handleExpand(skill)}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+      {/* Modals */}
+      <SkillEditModal />
+      <ConfirmDeleteModal
+        isOpen={deleteTarget !== null}
+        title="Delete Skill"
+        message="Are you sure you want to delete this skill? This will remove the entire skill directory and cannot be undone."
+        itemName={deleteTarget?.skill_id || ''}
+        isDeleting={deleteTarget ? deletingSkills.has(`${selectedProject?.project.project_id}:${deleteTarget.skill_id}`) : false}
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
+    </>
   )
 }
 
@@ -76,21 +115,24 @@ interface SkillCardProps {
   skill: SkillConfig
   isExpanded: boolean
   isLoadingContent: boolean
+  isDeleting: boolean
   content: string | null
   onToggle: () => void
+  onEdit: () => void
+  onDelete: () => void
 }
 
-function SkillCard({ skill, isExpanded, isLoadingContent, content, onToggle }: SkillCardProps) {
+function SkillCard({ skill, isExpanded, isLoadingContent, isDeleting, content, onToggle, onEdit, onDelete }: SkillCardProps) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-      <button
-        onClick={onToggle}
-        className="w-full p-4 text-left flex items-start gap-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-      >
-        <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+      <div className="p-4 flex items-start gap-4">
+        <button
+          onClick={onToggle}
+          className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors"
+        >
           <Sparkles className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-        </div>
-        <div className="flex-1 min-w-0">
+        </button>
+        <div className="flex-1 min-w-0 cursor-pointer" onClick={onToggle}>
           <div className="flex items-center gap-2">
             <h4 className="font-medium text-gray-900 dark:text-white">{skill.name}</h4>
             {skill.model && (
@@ -125,13 +167,39 @@ function SkillCard({ skill, isExpanded, isLoadingContent, content, onToggle }: S
             )}
           </div>
         </div>
-        <ChevronRight
-          className={cn(
-            'w-5 h-5 text-gray-400 transition-transform',
-            isExpanded && 'rotate-90'
-          )}
-        />
-      </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onEdit}
+            className="p-2 rounded-lg text-gray-400 hover:text-purple-600 hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors"
+            title="Edit skill"
+          >
+            <Pencil className="w-4 h-4" />
+          </button>
+          <button
+            onClick={onDelete}
+            disabled={isDeleting}
+            className={cn(
+              'p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors',
+              isDeleting && 'opacity-50 cursor-not-allowed'
+            )}
+            title="Delete skill"
+          >
+            {isDeleting ? (
+              <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Trash2 className="w-4 h-4" />
+            )}
+          </button>
+          <button onClick={onToggle} className="p-2">
+            <ChevronRight
+              className={cn(
+                'w-5 h-5 text-gray-400 transition-transform',
+                isExpanded && 'rotate-90'
+              )}
+            />
+          </button>
+        </div>
+      </div>
 
       {isExpanded && (
         <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">

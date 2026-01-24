@@ -68,6 +68,8 @@ export interface ClaudeUsageResponse {
   // OAuth status
   oauthAvailable: boolean
   oauthError?: string | null
+  isCached?: boolean  // True if using cached data
+  cacheAgeMinutes?: number | null  // How old the cached data is
 
   // Computed stats from local cache
   weeklyTotalTokens: number

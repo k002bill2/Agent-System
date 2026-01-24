@@ -25,10 +25,13 @@ export function OverviewTab() {
     )
   }
 
-  const { project, skills, agents, mcp_servers, hooks } = selectedProject
+  const { project, skills, agents, mcp_servers, user_mcp_servers, hooks } = selectedProject
+  const totalMCPCount = mcp_servers.length + (user_mcp_servers?.length || 0)
+  const enabledMCPCount = mcp_servers.filter((s) => !s.disabled).length +
+    (user_mcp_servers?.filter((s) => !s.disabled).length || 0)
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto">
+    <div className="p-6 h-full space-y-6 overflow-y-auto">
       {/* Project Header */}
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
         <div className="flex items-start gap-4">
@@ -69,8 +72,8 @@ export function OverviewTab() {
         <StatCard
           icon={Server}
           label="MCP Servers"
-          count={mcp_servers.length}
-          subCount={mcp_servers.filter((s) => !s.disabled).length}
+          count={totalMCPCount}
+          subCount={enabledMCPCount}
           subLabel="enabled"
           color="text-green-600 dark:text-green-400"
           bgColor="bg-green-100 dark:bg-green-900/30"

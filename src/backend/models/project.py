@@ -1,8 +1,15 @@
 """Project model for context-aware orchestration."""
 
+import json
+import logging
 import re
 from pathlib import Path
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
+
+# Metadata file name stored in project root
+AOS_METADATA_FILE = ".aos-project.json"
 
 
 def normalize_path(path: str) -> str:
@@ -57,13 +64,18 @@ class Project(BaseModel):
 
         package_json = path / "package.json"
         if package_json.exists():
-            import json
             try:
                 pkg = json.loads(package_json.read_text())
                 name = pkg.get("name", name)
                 description = pkg.get("description", "")
             except json.JSONDecodeError:
                 pass
+
+        # Load saved metadata from .aos-project.json (takes priority)
+        metadata = _load_project_metadata(path)
+        if metadata:
+            name = metadata.get("name", name)
+            description = metadata.get("description", description)
 
         return cls(
             id=project_id,
@@ -154,6 +166,30 @@ def get_projects_dir() -> Path:
     return base_path / "projects"
 
 
+def _load_project_metadata(project_path: Path) -> dict | None:
+    """Load project metadata from .aos-project.json if exists."""
+    metadata_file = project_path / AOS_METADATA_FILE
+    if metadata_file.exists():
+        try:
+            return json.loads(metadata_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Failed to load project metadata from {metadata_file}: {e}")
+    return None
+
+
+def _save_project_metadata(project_path: Path, name: str, description: str) -> bool:
+    """Save project metadata to .aos-project.json."""
+    metadata_file = project_path / AOS_METADATA_FILE
+    try:
+        metadata = {"name": name, "description": description}
+        metadata_file.write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        logger.info(f"Saved project metadata to {metadata_file}")
+        return True
+    except OSError as e:
+        logger.error(f"Failed to save project metadata to {metadata_file}: {e}")
+        return False
+
+
 def update_project(
     project_id: str,
     name: str | None = None,
@@ -162,16 +198,22 @@ def update_project(
 ) -> Project | None:
     """Update project metadata and optionally update path/symlink."""
     import os
-    import shutil
 
     project = PROJECTS_REGISTRY.get(project_id)
     if not project:
         return None
 
+    metadata_changed = False
     if name is not None:
         project.name = name
+        metadata_changed = True
     if description is not None:
         project.description = description
+        metadata_changed = True
+
+    # Save metadata to file for persistence
+    if metadata_changed:
+        _save_project_metadata(Path(project.path), project.name, project.description)
 
     # 경로 변경 처리
     if path is not None:

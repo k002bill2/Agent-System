@@ -169,7 +169,7 @@ export function ProjectsPage() {
               )}
             >
               {/* Menu Button */}
-              <div className="absolute top-3 right-3">
+              <div className="absolute top-3 right-3" onClick={(e) => e.stopPropagation()}>
                 <button
                   onClick={() => setOpenMenuId(openMenuId === project.id ? null : project.id)}
                   className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"

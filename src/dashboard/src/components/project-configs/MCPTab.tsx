@@ -1,10 +1,22 @@
+import { useState } from 'react'
 import { cn } from '../../lib/utils'
-import { Server, Power, PowerOff, Package, Terminal, Info } from 'lucide-react'
+import { Server, Power, PowerOff, Package, Terminal, Info, Plus, Pencil, Trash2, User, FolderCode } from 'lucide-react'
 import { useProjectConfigsStore, MCPServerConfig } from '../../stores/projectConfigs'
+import { MCPServerModal } from './MCPServerModal'
+import { ConfirmDeleteModal } from './ConfirmDeleteModal'
 
 export function MCPTab() {
-  const { selectedProject, isLoadingProject, toggleMCPServer, togglingServers } =
-    useProjectConfigsStore()
+  const {
+    selectedProject,
+    isLoadingProject,
+    toggleMCPServer,
+    togglingServers,
+    openMCPModal,
+    deleteMCPServer,
+    deletingMCP,
+  } = useProjectConfigsStore()
+
+  const [deleteTarget, setDeleteTarget] = useState<MCPServerConfig | null>(null)
 
   if (isLoadingProject) {
     return (
@@ -24,54 +36,137 @@ export function MCPTab() {
     )
   }
 
-  const { mcp_servers } = selectedProject
-  const enabledCount = mcp_servers.filter((s) => !s.disabled).length
+  const { mcp_servers, user_mcp_servers } = selectedProject
+  const totalCount = mcp_servers.length + (user_mcp_servers?.length || 0)
+  const enabledCount = mcp_servers.filter((s) => !s.disabled).length +
+    (user_mcp_servers?.filter((s) => !s.disabled).length || 0)
 
   const handleToggle = async (server: MCPServerConfig) => {
     await toggleMCPServer(server.project_id, server.server_id, server.disabled)
   }
 
+  const handleDelete = async () => {
+    if (!deleteTarget || !selectedProject) return
+    await deleteMCPServer(selectedProject.project.project_id, deleteTarget.server_id)
+    setDeleteTarget(null)
+  }
+
   return (
-    <div className="p-6 overflow-y-auto">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-          <Server className="w-5 h-5 text-green-500" />
-          MCP Servers ({mcp_servers.length})
-        </h3>
-        <span className="text-sm text-gray-500 dark:text-gray-400">
-          {enabledCount} enabled
-        </span>
+    <>
+      <div className="p-6 h-full overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+            <Server className="w-5 h-5 text-green-500" />
+            MCP Servers ({totalCount})
+          </h3>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              {enabledCount} enabled
+            </span>
+            <button
+              onClick={() => openMCPModal('create')}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700"
+            >
+              <Plus className="w-4 h-4" />
+              Add Server
+            </button>
+          </div>
+        </div>
+
+        {/* User MCP Servers Section */}
+        {user_mcp_servers && user_mcp_servers.length > 0 && (
+          <div className="mb-6">
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+              <User className="w-4 h-4 text-blue-500" />
+              User MCPs
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                (~/.claude.json)
+              </span>
+              <span className="text-xs px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded">
+                {user_mcp_servers.length}
+              </span>
+            </h4>
+            <div className="space-y-3">
+              {user_mcp_servers.map((server) => (
+                <MCPServerCard
+                  key={`user-${server.server_id}`}
+                  server={server}
+                  isToggling={false}
+                  isDeleting={false}
+                  isReadOnly={true}
+                  onToggle={() => {}}
+                  onEdit={() => {}}
+                  onDelete={() => {}}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Project MCP Servers Section */}
+        <div>
+          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+            <FolderCode className="w-4 h-4 text-green-500" />
+            Project MCPs
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              (.claude/mcp.json)
+            </span>
+            <span className="text-xs px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">
+              {mcp_servers.length}
+            </span>
+          </h4>
+
+          {mcp_servers.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+              <Server className="w-10 h-10 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No project MCP servers configured</p>
+              <p className="text-xs mt-1">Click "Add Server" to create one</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {mcp_servers.map((server) => (
+                <MCPServerCard
+                  key={server.server_id}
+                  server={server}
+                  isToggling={togglingServers.has(`${server.project_id}:${server.server_id}`)}
+                  isDeleting={deletingMCP.has(`${server.project_id}:${server.server_id}`)}
+                  isReadOnly={false}
+                  onToggle={() => handleToggle(server)}
+                  onEdit={() => openMCPModal('edit', server)}
+                  onDelete={() => setDeleteTarget(server)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {mcp_servers.length === 0 ? (
-        <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-          <Server className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p>No MCP servers configured</p>
-          <p className="text-sm mt-1">Add servers in .claude/mcp.json</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {mcp_servers.map((server) => (
-            <MCPServerCard
-              key={server.server_id}
-              server={server}
-              isToggling={togglingServers.has(`${server.project_id}:${server.server_id}`)}
-              onToggle={() => handleToggle(server)}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+      {/* Modals */}
+      <MCPServerModal />
+      <ConfirmDeleteModal
+        isOpen={deleteTarget !== null}
+        title="Delete MCP Server"
+        message="Are you sure you want to delete this MCP server? This action cannot be undone."
+        itemName={deleteTarget?.server_id || ''}
+        isDeleting={deleteTarget ? deletingMCP.has(`${selectedProject?.project.project_id}:${deleteTarget.server_id}`) : false}
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
+    </>
   )
 }
 
 interface MCPServerCardProps {
   server: MCPServerConfig
   isToggling: boolean
+  isDeleting: boolean
+  isReadOnly?: boolean
   onToggle: () => void
+  onEdit: () => void
+  onDelete: () => void
 }
 
-function MCPServerCard({ server, isToggling, onToggle }: MCPServerCardProps) {
+function MCPServerCard({ server, isToggling, isDeleting, isReadOnly = false, onToggle, onEdit, onDelete }: MCPServerCardProps) {
   const typeIcons: Record<string, typeof Package> = {
     npx: Package,
     uvx: Package,
@@ -79,6 +174,7 @@ function MCPServerCard({ server, isToggling, onToggle }: MCPServerCardProps) {
   }
 
   const TypeIcon = typeIcons[server.server_type] || Terminal
+  const isUserMCP = server.source === 'user'
 
   return (
     <div
@@ -86,7 +182,9 @@ function MCPServerCard({ server, isToggling, onToggle }: MCPServerCardProps) {
         'bg-white dark:bg-gray-800 rounded-lg border overflow-hidden transition-colors',
         server.disabled
           ? 'border-gray-200 dark:border-gray-700 opacity-60'
-          : 'border-green-200 dark:border-green-800'
+          : isUserMCP
+            ? 'border-blue-200 dark:border-blue-800'
+            : 'border-green-200 dark:border-green-800'
       )}
     >
       <div className="p-4 flex items-start gap-4">
@@ -95,7 +193,9 @@ function MCPServerCard({ server, isToggling, onToggle }: MCPServerCardProps) {
             'p-2 rounded-lg',
             server.disabled
               ? 'bg-gray-100 dark:bg-gray-700'
-              : 'bg-green-100 dark:bg-green-900/30'
+              : isUserMCP
+                ? 'bg-blue-100 dark:bg-blue-900/30'
+                : 'bg-green-100 dark:bg-green-900/30'
           )}
         >
           <TypeIcon
@@ -103,7 +203,9 @@ function MCPServerCard({ server, isToggling, onToggle }: MCPServerCardProps) {
               'w-5 h-5',
               server.disabled
                 ? 'text-gray-500 dark:text-gray-400'
-                : 'text-green-600 dark:text-green-400'
+                : isUserMCP
+                  ? 'text-blue-600 dark:text-blue-400'
+                  : 'text-green-600 dark:text-green-400'
             )}
           />
         </div>
@@ -116,7 +218,9 @@ function MCPServerCard({ server, isToggling, onToggle }: MCPServerCardProps) {
                 'text-xs px-1.5 py-0.5 rounded font-medium',
                 server.disabled
                   ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
-                  : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                  : isUserMCP
+                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                    : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
               )}
             >
               {server.disabled ? 'disabled' : 'enabled'}
@@ -151,26 +255,58 @@ function MCPServerCard({ server, isToggling, onToggle }: MCPServerCardProps) {
           )}
         </div>
 
-        <button
-          onClick={onToggle}
-          disabled={isToggling}
-          className={cn(
-            'p-2 rounded-lg transition-colors',
-            server.disabled
-              ? 'hover:bg-green-100 dark:hover:bg-green-900/30 text-gray-400 hover:text-green-600'
-              : 'hover:bg-red-100 dark:hover:bg-red-900/30 text-green-600 hover:text-red-600',
-            isToggling && 'opacity-50 cursor-not-allowed'
-          )}
-          title={server.disabled ? 'Enable server' : 'Disable server'}
-        >
-          {isToggling ? (
-            <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-          ) : server.disabled ? (
-            <Power className="w-5 h-5" />
-          ) : (
-            <PowerOff className="w-5 h-5" />
-          )}
-        </button>
+        {isReadOnly ? (
+          <div className="flex items-center">
+            <span className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded">
+              Read-only
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={onEdit}
+              className="p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+              title="Edit server"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onDelete}
+              disabled={isDeleting}
+              className={cn(
+                'p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors',
+                isDeleting && 'opacity-50 cursor-not-allowed'
+              )}
+              title="Delete server"
+            >
+              {isDeleting ? (
+                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
+            </button>
+            <button
+              onClick={onToggle}
+              disabled={isToggling}
+              className={cn(
+                'p-2 rounded-lg transition-colors',
+                server.disabled
+                  ? 'hover:bg-green-100 dark:hover:bg-green-900/30 text-gray-400 hover:text-green-600'
+                  : 'hover:bg-red-100 dark:hover:bg-red-900/30 text-green-600 hover:text-red-600',
+                isToggling && 'opacity-50 cursor-not-allowed'
+              )}
+              title={server.disabled ? 'Enable server' : 'Disable server'}
+            >
+              {isToggling ? (
+                <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : server.disabled ? (
+                <Power className="w-5 h-5" />
+              ) : (
+                <PowerOff className="w-5 h-5" />
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

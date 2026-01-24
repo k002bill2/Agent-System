@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react'
-import { BarChart3, RefreshCw, AlertCircle, CheckCircle2, XCircle } from 'lucide-react'
+import { BarChart3, RefreshCw, AlertCircle, CheckCircle2, XCircle, Clock } from 'lucide-react'
 import { useClaudeUsageStore } from '../../stores/claudeUsage'
 import { UsageProgressBar } from './UsageProgressBar'
 
@@ -38,7 +38,7 @@ export function ClaudeUsageDashboard() {
   // Error state
   if (error) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 h-full">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
             <BarChart3 className="w-5 h-5" />
@@ -63,7 +63,7 @@ export function ClaudeUsageDashboard() {
   // Loading state
   if (isLoading && !usage) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 h-full">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
             <BarChart3 className="w-5 h-5" />
@@ -84,7 +84,7 @@ export function ClaudeUsageDashboard() {
   // Empty state
   if (!usage) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 h-full">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
             <BarChart3 className="w-5 h-5" />
@@ -105,7 +105,7 @@ export function ClaudeUsageDashboard() {
   const opusLimit = usage.planLimits.find(l => l.name === 'sevenDayOpus')
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 h-full flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
@@ -115,10 +115,17 @@ export function ClaudeUsageDashboard() {
         <div className="flex items-center gap-2">
           {/* OAuth Status Indicator */}
           {usage.oauthAvailable ? (
-            <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400" title="Real-time data from Anthropic API">
-              <CheckCircle2 className="w-3 h-3" />
-              Live
-            </span>
+            usage.isCached ? (
+              <span className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400" title={`Cached data (${usage.cacheAgeMinutes ?? 0}m ago)`}>
+                <Clock className="w-3 h-3" />
+                Cached
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400" title="Real-time data from Anthropic API">
+                <CheckCircle2 className="w-3 h-3" />
+                Live
+              </span>
+            )
           ) : (
             <span className="flex items-center gap-1 text-xs text-yellow-600 dark:text-yellow-400" title={usage.oauthError || 'OAuth not available'}>
               <XCircle className="w-3 h-3" />
@@ -141,10 +148,18 @@ export function ClaudeUsageDashboard() {
         </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-4 flex-1 flex flex-col">
         {/* OAuth Available - Show real plan limits */}
         {usage.oauthAvailable && usage.planLimits.length > 0 ? (
           <>
+            {/* Cached data notice */}
+            {usage.isCached && (
+              <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-1.5 rounded">
+                <Clock className="w-3 h-3" />
+                <span>Using cached data ({usage.cacheAgeMinutes}m ago) - API temporarily unavailable</span>
+              </div>
+            )}
+
             {/* Current Session (5-hour limit) */}
             {sessionLimit && (
               <div className="pb-3 border-b border-gray-100 dark:border-gray-700">

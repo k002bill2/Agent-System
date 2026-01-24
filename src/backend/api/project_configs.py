@@ -14,15 +14,24 @@ from fastapi.responses import StreamingResponse
 
 from models.project_config import (
     AgentConfig,
+    AgentContentResponse,
+    AgentCreateRequest,
+    AgentUpdateRequest,
     ConfigChangeEvent,
     ExternalPathRequest,
+    HookEntryRequest,
+    HooksUpdateRequest,
     MCPServerConfig,
+    MCPServerCreateRequest,
+    MCPServerUpdateRequest,
     MCPToggleRequest,
     ProjectConfigResponse,
     ProjectConfigSummary,
     ProjectInfo,
     SkillConfig,
     SkillContentResponse,
+    SkillCreateRequest,
+    SkillUpdateRequest,
 )
 from services.project_config_monitor import get_project_config_monitor
 
@@ -267,6 +276,84 @@ async def get_skill_content(project_id: str, skill_id: str) -> SkillContentRespo
     )
 
 
+@router.post("/{project_id}/skills", response_model=SkillConfig)
+async def create_skill(project_id: str, request: SkillCreateRequest) -> SkillConfig:
+    """Create a new skill.
+
+    Args:
+        project_id: Project identifier
+        request: Skill create request
+
+    Returns:
+        Created skill configuration
+    """
+    monitor = get_project_config_monitor()
+    result = monitor.create_skill(project_id, request.skill_id, request.content)
+
+    if result is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to create skill: {request.skill_id}. Check if project exists and skill ID is unique.",
+        )
+
+    return result
+
+
+@router.put("/{project_id}/skills/{skill_id}")
+async def update_skill(project_id: str, skill_id: str, request: SkillUpdateRequest) -> dict:
+    """Update skill content.
+
+    Args:
+        project_id: Project identifier
+        skill_id: Skill identifier
+        request: Update request with new content
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    if monitor.update_skill_content(project_id, skill_id, request.content):
+        return {
+            "success": True,
+            "message": f"Updated skill: {skill_id}",
+            "project_id": project_id,
+            "skill_id": skill_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to update skill: {skill_id}. Check if project and skill exist.",
+        )
+
+
+@router.delete("/{project_id}/skills/{skill_id}")
+async def delete_skill(project_id: str, skill_id: str) -> dict:
+    """Delete a skill.
+
+    Args:
+        project_id: Project identifier
+        skill_id: Skill identifier
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    if monitor.delete_skill(project_id, skill_id):
+        return {
+            "success": True,
+            "message": f"Deleted skill: {skill_id}",
+            "project_id": project_id,
+            "skill_id": skill_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to delete skill: {skill_id}. Check if project and skill exist.",
+        )
+
+
 # ========================================
 # Agents
 # ========================================
@@ -303,6 +390,109 @@ async def list_project_agents(project_id: str) -> list[AgentConfig]:
             raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
 
     return agents
+
+
+@router.get("/{project_id}/agents/{agent_id}/content", response_model=AgentContentResponse)
+async def get_agent_content(project_id: str, agent_id: str) -> AgentContentResponse:
+    """Get full content of an agent.
+
+    Args:
+        project_id: Project identifier
+        agent_id: Agent identifier
+
+    Returns:
+        Agent configuration with full content
+    """
+    monitor = get_project_config_monitor()
+    agent, content = monitor.get_agent_content(project_id, agent_id)
+
+    if agent is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agent not found: {agent_id} in project {project_id}",
+        )
+
+    return AgentContentResponse(agent=agent, content=content)
+
+
+@router.post("/{project_id}/agents", response_model=AgentConfig)
+async def create_agent(project_id: str, request: AgentCreateRequest) -> AgentConfig:
+    """Create a new agent.
+
+    Args:
+        project_id: Project identifier
+        request: Agent create request
+
+    Returns:
+        Created agent configuration
+    """
+    monitor = get_project_config_monitor()
+    result = monitor.create_agent(
+        project_id, request.agent_id, request.content, request.is_shared
+    )
+
+    if result is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to create agent: {request.agent_id}. Check if project exists and agent ID is unique.",
+        )
+
+    return result
+
+
+@router.put("/{project_id}/agents/{agent_id}")
+async def update_agent(project_id: str, agent_id: str, request: AgentUpdateRequest) -> dict:
+    """Update agent content.
+
+    Args:
+        project_id: Project identifier
+        agent_id: Agent identifier
+        request: Update request with new content
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    if monitor.update_agent_content(project_id, agent_id, request.content):
+        return {
+            "success": True,
+            "message": f"Updated agent: {agent_id}",
+            "project_id": project_id,
+            "agent_id": agent_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to update agent: {agent_id}. Check if project and agent exist.",
+        )
+
+
+@router.delete("/{project_id}/agents/{agent_id}")
+async def delete_agent(project_id: str, agent_id: str) -> dict:
+    """Delete an agent.
+
+    Args:
+        project_id: Project identifier
+        agent_id: Agent identifier
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    if monitor.delete_agent(project_id, agent_id):
+        return {
+            "success": True,
+            "message": f"Deleted agent: {agent_id}",
+            "project_id": project_id,
+            "agent_id": agent_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to delete agent: {agent_id}. Check if project and agent exist.",
+        )
 
 
 # ========================================
@@ -428,6 +618,103 @@ async def toggle_mcp_server(
         )
 
 
+@router.put("/{project_id}/mcp/{server_id}", response_model=MCPServerConfig)
+async def update_mcp_server(
+    project_id: str, server_id: str, request: MCPServerUpdateRequest
+) -> MCPServerConfig:
+    """Update an MCP server configuration.
+
+    Args:
+        project_id: Project identifier
+        server_id: MCP server identifier
+        request: Update request with new values
+
+    Returns:
+        Updated MCP server configuration
+    """
+    monitor = get_project_config_monitor()
+
+    result = monitor.update_mcp_server(
+        project_id=project_id,
+        server_id=server_id,
+        command=request.command,
+        args=request.args,
+        env=request.env,
+        disabled=request.disabled,
+        note=request.note,
+    )
+
+    if result is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to update MCP server: {server_id}. Check if project and server exist.",
+        )
+
+    return result
+
+
+@router.post("/{project_id}/mcp", response_model=MCPServerConfig)
+async def create_mcp_server(
+    project_id: str, request: MCPServerCreateRequest
+) -> MCPServerConfig:
+    """Create a new MCP server configuration.
+
+    Args:
+        project_id: Project identifier
+        request: Create request with server details
+
+    Returns:
+        Created MCP server configuration
+    """
+    monitor = get_project_config_monitor()
+
+    result = monitor.create_mcp_server(
+        project_id=project_id,
+        server_id=request.server_id,
+        command=request.command,
+        args=request.args,
+        env=request.env,
+        disabled=request.disabled,
+        note=request.note,
+    )
+
+    if result is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to create MCP server: {request.server_id}. "
+            "Check if project exists and server ID is unique.",
+        )
+
+    return result
+
+
+@router.delete("/{project_id}/mcp/{server_id}")
+async def delete_mcp_server(project_id: str, server_id: str) -> dict:
+    """Delete an MCP server configuration.
+
+    Args:
+        project_id: Project identifier
+        server_id: MCP server identifier
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    if monitor.delete_mcp_server(project_id, server_id):
+        return {
+            "success": True,
+            "message": f"Deleted MCP server: {server_id}",
+            "project_id": project_id,
+            "server_id": server_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to delete MCP server: {server_id}. Check if project and server exist.",
+        )
+
+
 # ========================================
 # Hooks
 # ========================================
@@ -451,6 +738,89 @@ async def list_project_hooks(project_id: str) -> dict:
         "hooks": [h.model_dump() for h in hooks],
         "hook_count": len(hooks),
     }
+
+
+@router.put("/{project_id}/hooks")
+async def update_hooks(project_id: str, request: HooksUpdateRequest) -> dict:
+    """Update entire hooks.json content.
+
+    Args:
+        project_id: Project identifier
+        request: Complete hooks configuration
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    if monitor.update_hooks(project_id, {"hooks": request.hooks}):
+        return {
+            "success": True,
+            "message": "Updated hooks configuration",
+            "project_id": project_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Failed to update hooks. Check if project exists.",
+        )
+
+
+@router.post("/{project_id}/hooks/events/{event}")
+async def add_hook_entry(project_id: str, event: str, request: HookEntryRequest) -> dict:
+    """Add a hook entry to an event.
+
+    Args:
+        project_id: Project identifier
+        event: Event name (PreToolUse, PostToolUse, etc.)
+        request: Hook entry request
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    if monitor.add_hook_entry(project_id, event, request.matcher, request.hooks):
+        return {
+            "success": True,
+            "message": f"Added hook entry for event: {event}",
+            "project_id": project_id,
+            "event": event,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to add hook entry for event: {event}",
+        )
+
+
+@router.delete("/{project_id}/hooks/{event}/{index}")
+async def delete_hook(project_id: str, event: str, index: int) -> dict:
+    """Delete a hook entry by event and index.
+
+    Args:
+        project_id: Project identifier
+        event: Event name
+        index: Index of hook entry within the event
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    if monitor.delete_hook(project_id, event, index):
+        return {
+            "success": True,
+            "message": f"Deleted hook {event}[{index}]",
+            "project_id": project_id,
+            "event": event,
+            "index": index,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to delete hook {event}[{index}]. Check if project and hook exist.",
+        )
 
 
 # ========================================
