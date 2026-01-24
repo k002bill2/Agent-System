@@ -1,0 +1,50 @@
+# Ignore for Railway deployment
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.env
+.venv/
+venv/
+ENV/
+env/
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Large files
+*.bin
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.h5
+*.pkl
+*.pickle
+
+# Test files
+tests/
+testing_requirements.txt
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docs
+*.md
+!README.md
+
+# UV lock (not needed for pip install)
+uv.lock

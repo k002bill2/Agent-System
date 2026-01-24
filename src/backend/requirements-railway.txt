@@ -22,6 +22,6 @@ pyjwt>=2.8.0
 # Monitoring (lightweight)
 structlog>=24.4.0
 
-# Note: RAG features (chromadb/sentence-transformers) disabled for size
-# Note: Database features (sqlalchemy/asyncpg) disabled
+# Note: RAG features disabled (no chromadb/sentence-transformers)
+# Note: Database features disabled (no sqlalchemy/asyncpg)
 # Note: Redis disabled
