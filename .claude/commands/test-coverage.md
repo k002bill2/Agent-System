@@ -124,4 +124,4 @@ This command can be integrated into pre-commit hooks:
 
 ---
 
-*Use this command to systematically improve test coverage in LiveMetro.*
+*Use this command to systematically improve test coverage in AOS Dashboard.*

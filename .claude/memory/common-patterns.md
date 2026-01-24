@@ -1,47 +1,38 @@
-# Common Patterns - LiveMetro
+# Common Patterns - AOS Dashboard
 
-자주 사용되는 React Native/Expo 패턴 모음
+자주 사용되는 React Web/Vite/Tailwind 패턴 모음
 
 ## 1. 컴포넌트 패턴
 
 ### 기본 함수형 컴포넌트
 ```typescript
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { memo } from 'react';
+import { cn } from '@/lib/utils';
 
 interface Props {
   title: string;
   subtitle?: string;
+  className?: string;
 }
 
-export const MyComponent: React.FC<Props> = ({ title, subtitle }) => {
+export const MyComponent: React.FC<Props> = memo(({ title, subtitle, className }) => {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{title}</Text>
-      {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
-    </View>
+    <div className={cn('p-4', className)}>
+      <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">{title}</h2>
+      {subtitle && <p className="text-sm text-gray-600 dark:text-gray-400">{subtitle}</p>}
+    </div>
   );
-};
-
-const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#666',
-  },
 });
+
+MyComponent.displayName = 'MyComponent';
 ```
 
 ### 메모이제이션된 컴포넌트
 ```typescript
-export const OptimizedComponent = React.memo<Props>(({ data }) => {
+export const OptimizedComponent = memo<Props>(({ data }) => {
   // 렌더링 로직
+}, (prevProps, nextProps) => {
+  return prevProps.data === nextProps.data;
 });
 ```
 
@@ -164,7 +155,7 @@ class ApiService {
 ### Firebase 서비스
 ```typescript
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
-import { db } from '@services/firebase/config';
+import { db } from '@/services/firebase/config';
 
 export const userService = {
   async getUser(userId: string): Promise<User | null> {
@@ -187,29 +178,28 @@ export const userService = {
 };
 ```
 
-## 4. 네비게이션 패턴
+## 4. 라우팅 패턴
 
 ### 타입 정의
 ```typescript
-export type RootStackParamList = {
-  Home: undefined;
-  StationDetail: { stationId: string };
-  Settings: { section?: string };
+// React Router 타입
+export type AppRoutes = {
+  '/': undefined;
+  '/sessions/:id': { id: string };
+  '/settings': { section?: string };
 };
 ```
 
 ### 타입 안전 네비게이션
 ```typescript
-import { useNavigation } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
+import { useNavigate, useParams } from 'react-router-dom';
 
-type NavigationProp = StackNavigationProp<RootStackParamList>;
+const MyPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
 
-const MyScreen = () => {
-  const navigation = useNavigation<NavigationProp>();
-
-  const goToStation = (stationId: string) => {
-    navigation.navigate('StationDetail', { stationId });
+  const goToSession = (sessionId: string) => {
+    navigate(`/sessions/${sessionId}`);
   };
 };
 ```
@@ -231,7 +221,7 @@ class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    Sentry.captureException(error, { extra: errorInfo });
+    console.error('Error caught:', error, errorInfo);
   }
 
   render() {
@@ -245,30 +235,75 @@ class ErrorBoundary extends React.Component<Props, State> {
 
 ## 6. 스타일 패턴
 
-### 테마 컬러 사용
+### cn() 유틸리티와 조건부 클래스
 ```typescript
-import { useTheme } from '@services/theme';
+import { cn } from '@/lib/utils';
 
-const MyComponent = () => {
-  const { colors } = useTheme();
-
+const MyComponent: React.FC<{ variant?: 'primary' | 'secondary' }> = ({ variant = 'primary' }) => {
   return (
-    <View style={{ backgroundColor: colors.background }}>
-      <Text style={{ color: colors.text }}>Hello</Text>
-    </View>
+    <div className={cn(
+      'p-4 rounded-lg transition-colors',
+      variant === 'primary' && 'bg-blue-600 text-white hover:bg-blue-700',
+      variant === 'secondary' && 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+    )}>
+      Content
+    </div>
   );
 };
 ```
 
 ### 반응형 스타일
 ```typescript
-import { Dimensions } from 'react-native';
+// 모바일 우선 반응형 디자인
+<div className="
+  w-full px-4
+  md:max-w-2xl md:px-6
+  lg:max-w-4xl lg:px-8
+">
+  <h1 className="text-xl md:text-2xl lg:text-3xl font-bold">
+    Responsive Title
+  </h1>
+</div>
+```
 
-const { width } = Dimensions.get('window');
+### 다크 모드 지원
+```typescript
+<div className="
+  bg-white text-gray-900
+  dark:bg-gray-800 dark:text-gray-100
+">
+  Dark mode aware content
+</div>
+```
 
-const styles = StyleSheet.create({
-  container: {
-    padding: width > 400 ? 24 : 16,
+## 7. Zustand 스토어 패턴
+
+```typescript
+import { create } from 'zustand';
+
+interface StoreState {
+  data: DataType[];
+  loading: boolean;
+  fetchData: () => Promise<void>;
+  addItem: (item: DataType) => void;
+}
+
+export const useStore = create<StoreState>((set, get) => ({
+  data: [],
+  loading: false,
+
+  fetchData: async () => {
+    set({ loading: true });
+    try {
+      const response = await api.get('/data');
+      set({ data: response.data });
+    } finally {
+      set({ loading: false });
+    }
   },
-});
+
+  addItem: (item) => {
+    set((state) => ({ data: [...state.data, item] }));
+  },
+}));
 ```

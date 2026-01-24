@@ -1,8 +1,8 @@
 /**
- * Feedback Loop for LiveMetro
+ * Feedback Loop for AOS Dashboard
  * 에이전트 실행 메트릭 및 학습 이벤트 기록
  *
- * @version 1.0.0-LiveMetro
+ * @version 1.0.0-AOS Dashboard
  */
 
 const fs = require('fs');

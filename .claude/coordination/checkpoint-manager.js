@@ -1,8 +1,8 @@
 /**
- * Checkpoint Manager for LiveMetro
+ * Checkpoint Manager for AOS Dashboard
  * 작업 상태 저장 및 복원
  *
- * @version 1.0.0-LiveMetro
+ * @version 1.0.0-AOS Dashboard
  */
 
 const fs = require('fs');

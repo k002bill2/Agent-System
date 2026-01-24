@@ -111,7 +111,7 @@ Success Criteria:
 - [ ] Has accessibility labels
 
 ### Output Format
-**Location**: `.temp/agent_workspaces/mobile-ui/proposals/`
+**Location**: `.temp/agent_workspaces/web-ui/proposals/`
 
 **Files to create:**
 - `StationInfoCard.tsx` - Main component with styles
@@ -123,7 +123,7 @@ Success Criteria:
 - Follow patterns in `src/components/train/StationCard.tsx`
 
 ### Tools & Sources
-**Invoke skill**: `react-native-development`
+**Invoke skill**: `react-web-development`
 
 **Reference files:**
 - `src/components/train/StationCard.tsx` - Existing pattern
@@ -184,7 +184,7 @@ Success Criteria:
 
 **DO NOT:**
 - Modify files in: `src/components/`, `src/screens/`
-- Implement: UI components (mobile-ui agent handles)
+- Implement: UI components (web-ui agent handles)
 - Write: tests (test-automation agent handles)
 
 **WAIT FOR:**
@@ -231,7 +231,7 @@ Success Criteria:
 - Create: snapshot tests (prefer assertions)
 
 **WAIT FOR:**
-- `mobile-ui-specialist` to complete: StationInfoCard.tsx
+- `web-ui-specialist` to complete: StationInfoCard.tsx
 ```
 
 ---
@@ -308,7 +308,7 @@ Check the types somewhere in the codebase
 
 | Agent | Typical DO NOT |
 |-------|---------------|
-| mobile-ui | services, models, tests |
+| web-ui | services, models, tests |
 | backend-integration | components, screens, tests |
 | test-automation | implementation, services |
 | performance-optimizer | new features, tests |

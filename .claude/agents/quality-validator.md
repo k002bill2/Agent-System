@@ -80,13 +80,13 @@ Verify documentation completeness:
 - Interface/type consistency
 ```
 
-### React Native Specific
+### React Web Specific
 ```typescript
 // Verify:
-- memo() on expensive components
+- React.memo() on expensive components
 - useCallback/useMemo where appropriate
-- Accessibility labels on interactive elements
-- Platform-specific handling if needed
+- aria-label on interactive elements
+- Responsive design with Tailwind breakpoints
 ```
 
 ### Test Coverage
@@ -222,7 +222,7 @@ The Lead Orchestrator should spawn this agent:
 - src/__tests__/newComponent.test.tsx
 
 **Previous Agents**:
-- mobile-ui-specialist: UI components
+- web-ui-specialist: UI components
 - backend-integration-specialist: Services
 
 **Validation Focus**:

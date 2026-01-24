@@ -63,11 +63,12 @@ export function ProjectFormModal() {
       case 'link':
         await linkProject(id, sourcePath)
         break
-      case 'edit':
+      case 'edit': {
         // 경로가 변경되었는지 확인하고 전달
         const pathChanged = editPath !== editingProject?.path ? editPath : undefined
         await updateProject(editingProject!.id, name, description, pathChanged)
         break
+      }
     }
   }
 

@@ -1,8 +1,8 @@
 /**
- * Ethical Validator Hook for LiveMetro
+ * Ethical Validator Hook for AOS Dashboard
  * 위험 작업 사전 차단 (PreToolUse)
  *
- * @version 1.0.0-LiveMetro
+ * @version 1.0.0-AOS Dashboard
  */
 
 const fs = require('fs');

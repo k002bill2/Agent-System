@@ -1,17 +1,17 @@
 /**
- * Task Allocator for LiveMetro
+ * Task Allocator for AOS Dashboard
  * 작업을 적절한 에이전트에게 분배
  *
- * @version 1.0.0-LiveMetro
+ * @version 2.0.0-AOS
  */
 
 /**
  * 에이전트 능력 정의
  */
 const AGENT_CAPABILITIES = {
-  'mobile-ui-specialist': {
-    skills: ['ui', 'component', 'style', 'layout', 'responsive'],
-    priority: ['components', 'screens', 'styles'],
+  'web-ui-specialist': {
+    skills: ['ui', 'component', 'style', 'layout', 'responsive', 'tailwind'],
+    priority: ['components', 'pages', 'styles'],
     model: 'sonnet'
   },
   'backend-integration-specialist': {
@@ -20,7 +20,7 @@ const AGENT_CAPABILITIES = {
     model: 'sonnet'
   },
   'test-automation-specialist': {
-    skills: ['test', 'coverage', 'jest', 'mock'],
+    skills: ['test', 'coverage', 'vitest', 'mock'],
     priority: ['__tests__', 'test', 'mock'],
     model: 'haiku'
   },
@@ -47,7 +47,7 @@ const AGENT_CAPABILITIES = {
 const TASK_TYPES = {
   ui_development: {
     keywords: ['ui', 'component', 'screen', 'style', '화면', '컴포넌트'],
-    recommendedAgent: 'mobile-ui-specialist'
+    recommendedAgent: 'web-ui-specialist'
   },
   backend_integration: {
     keywords: ['firebase', 'api', 'service', 'data', '서비스', 'auth'],
@@ -100,7 +100,7 @@ function recommendAgent(taskDescription) {
 
   if (matches.length === 0) {
     return {
-      recommended: 'mobile-ui-specialist',
+      recommended: 'web-ui-specialist',
       confidence: 'low',
       reason: 'Default recommendation'
     };
@@ -128,7 +128,7 @@ function decomposeTask(taskDescription) {
   if (lowerTask.includes('ui') && lowerTask.includes('api')) {
     subtasks.push({
       description: 'UI 컴포넌트 구현',
-      agent: 'mobile-ui-specialist',
+      agent: 'web-ui-specialist',
       parallel: true
     });
     subtasks.push({

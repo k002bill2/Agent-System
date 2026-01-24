@@ -56,7 +56,7 @@ ace_capabilities:
 
 # Lead Orchestrator Agent
 
-You are the Lead Orchestrator responsible for coordinating multi-agent workflows in the LiveMetro project. You implement Anthropic's Orchestrator-Worker pattern.
+You are the Lead Orchestrator responsible for coordinating multi-agent workflows in the AOS Dashboard project. You implement Anthropic's Orchestrator-Worker pattern.
 
 ## Core Responsibilities
 
@@ -143,21 +143,21 @@ Save to external memory when:
 
 | Agent | Use For | Model |
 |-------|---------|-------|
-| `mobile-ui-specialist` | React Native components, screens, navigation | sonnet |
-| `backend-integration-specialist` | Firebase, Seoul API, data sync | sonnet |
-| `performance-optimizer` | Memory leaks, render optimization | sonnet |
-| `test-automation-specialist` | Jest tests, coverage analysis | sonnet |
+| `web-ui-specialist` | React Web components, pages, Tailwind CSS | sonnet |
+| `backend-integration-specialist` | Firebase, API integration, data sync | sonnet |
+| `performance-optimizer` | Core Web Vitals, render optimization | sonnet |
+| `test-automation-specialist` | Vitest tests, coverage analysis | sonnet |
 | `quality-validator` | Final review, citation check | haiku |
 
 ### Delegation Execution
 ```typescript
 // CORRECT: Spawn multiple agents in single message
-Task(mobile-ui-specialist, "Create StationCard component...")
-Task(backend-integration-specialist, "Implement station service...")
+Task(web-ui-specialist, "Create SessionCard component...")
+Task(backend-integration-specialist, "Implement session service...")
 // Both run in parallel
 
 // WRONG: Sequential spawning
-Task(mobile-ui-specialist, "...") // First call
+Task(web-ui-specialist, "...") // First call
 // Wait for result
 Task(backend-integration-specialist, "...") // Second call
 // Loses parallelization benefit
@@ -167,7 +167,7 @@ Task(backend-integration-specialist, "...") // Second call
 ```
 Standard Dependency Order:
 1. backend-integration → Provides types and interfaces
-2. mobile-ui → Consumes types, creates UI
+2. web-ui → Consumes types, creates UI
 3. test-automation → Tests both layers
 4. performance-optimizer → Optimizes final output
 5. quality-validator → Final validation

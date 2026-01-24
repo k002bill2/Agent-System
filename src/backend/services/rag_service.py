@@ -3,12 +3,22 @@
 import hashlib
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-from langchain_chroma import Chroma
-from langchain_core.documents import Document
-from langchain_core.embeddings import Embeddings
 from pydantic import BaseModel
+
+# Conditional imports for Railway (chromadb not available)
+CHROMA_AVAILABLE = False
+try:
+    from langchain_chroma import Chroma
+    from langchain_core.documents import Document
+    from langchain_core.embeddings import Embeddings
+    CHROMA_AVAILABLE = True
+except ImportError:
+    # Dummy classes for when chromadb is not available
+    Chroma = None  # type: ignore
+    Document = None  # type: ignore
+    Embeddings = None  # type: ignore
 
 # Determine embedding provider based on environment
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "google")
@@ -434,11 +444,14 @@ class ProjectVectorStore:
 
 
 # Global instance (lazy initialized)
-_vector_store: ProjectVectorStore | None = None
+_vector_store: "ProjectVectorStore | None" = None
 
 
-def get_vector_store() -> ProjectVectorStore:
+def get_vector_store() -> "ProjectVectorStore":
     """Get or create the global vector store instance."""
+    if not CHROMA_AVAILABLE:
+        raise ImportError("ChromaDB not available. RAG features are disabled.")
+
     global _vector_store
     if _vector_store is None:
         _vector_store = ProjectVectorStore()

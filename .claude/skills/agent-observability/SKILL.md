@@ -41,7 +41,7 @@ Enable systematic diagnosis of multi-agent workflow failures by tracking:
   "session_id": "sess_abc123",
   "task_id": "task_xyz",
   "data": {
-    "agent_type": "mobile-ui-specialist",
+    "agent_type": "web-ui-specialist",
     "model": "sonnet",
     "task_summary": "Create StationCard component",
     "complexity": "simple",
@@ -88,7 +88,7 @@ Enable systematic diagnosis of multi-agent workflow failures by tracking:
     "succeeded": 3,
     "failed": 1,
     "by_type": {
-      "mobile-ui-specialist": 1,
+      "web-ui-specialist": 1,
       "backend-integration-specialist": 1,
       "test-automation-specialist": 1,
       "quality-validator": 1
@@ -270,7 +270,7 @@ Analysis workflow:
 | Agent | Tools | Duration | Status |
 |-------|-------|----------|--------|
 | backend-integration | 15 | 4m 12s | Success |
-| mobile-ui | 18 | 5m 45s | Success |
+| web-ui | 18 | 5m 45s | Success |
 | test-automation | 12 | 2m 15s | Success |
 | quality-validator | 4 | 22s | Success |
 

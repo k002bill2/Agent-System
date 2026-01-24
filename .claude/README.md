@@ -1,6 +1,6 @@
 # Claude Code Configuration
 
-Claude Code configuration for LiveMetro React Native subway app.
+Claude Code configuration for AOS (Agent Orchestration Service) Dashboard.
 
 ## Directory Structure
 
@@ -57,8 +57,8 @@ Claude Code configuration for LiveMetro React Native subway app.
 
 | Skill | Purpose |
 |-------|---------|
-| `react-native-development` | RN 컴포넌트, 네비게이션, TypeScript |
-| `test-automation` | Jest 테스트, 커버리지 분석 |
+| `react-web-development` | React Web 컴포넌트, Tailwind CSS, TypeScript |
+| `test-automation` | Vitest 테스트, 커버리지 분석 |
 | `parallel-coordinator` | ACE 프레임워크 병렬 작업 조율 |
 
 ### 메타 스킬 (Claude Code 확장)
@@ -86,7 +86,7 @@ Claude Code configuration for LiveMetro React Native subway app.
 
 | Agent | Model | Expertise |
 |-------|-------|-----------|
-| `mobile-ui-specialist` | Sonnet | React Native UI/UX |
+| `web-ui-specialist` | Sonnet | React Web UI/UX (Tailwind CSS) |
 | `backend-integration-specialist` | Sonnet | Firebase, API 통합 |
 | `performance-optimizer` | Sonnet | 성능 최적화, 메모리 누수 |
 | `test-automation-specialist` | Sonnet | 테스트 자동화 |
@@ -142,14 +142,14 @@ Claude Code configuration for LiveMetro React Native subway app.
 
 ```bash
 # Skills activate automatically based on context
-"Create a StationCard component"  # → react-native-development
+"Create a SessionCard component"  # → react-web-development
 "Generate tests for this hook"    # → test-automation
 ```
 
 ### Using Agents
 
 ```bash
-@mobile-ui-specialist "Design the station detail screen"
+@web-ui-specialist "Design the session detail page"
 @performance-optimizer "Analyze re-render issues"
 @backend-integration-specialist "Implement data fallback"
 ```

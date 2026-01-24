@@ -1,5 +1,5 @@
 /**
- * UserPromptSubmit Hook for LiveMetro
+ * UserPromptSubmit Hook for AOS Dashboard
  * React Native/Expo 개발 환경에 맞춤화된 스킬 자동 활성화
  *
  * 사용자 프롬프트를 분석하여:
@@ -7,7 +7,7 @@
  * 2. Firebase/Seoul API 패턴 감지
  * 3. skill-rules.json 기반 스킬 활성화
  *
- * @version 1.0.0-LiveMetro
+ * @version 1.0.0-AOS Dashboard
  */
 
 const fs = require('fs');

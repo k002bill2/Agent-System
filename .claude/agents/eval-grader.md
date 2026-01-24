@@ -296,7 +296,7 @@ Receive grading request:
 
 **Task ID**: task_ui_001
 **Run ID**: run_abc123
-**Agent**: mobile-ui-specialist
+**Agent**: web-ui-specialist
 
 **Files Created**:
 - src/components/station/StationCard.tsx
@@ -427,7 +427,7 @@ grep -r ": any" src/ | wc -l
 
 | Agent Type | Rubric | Focus |
 |------------|--------|-------|
-| mobile-ui-specialist | coding-agent | 기능, 성능, 테스트 |
+| web-ui-specialist | coding-agent | 기능, 성능, 테스트 |
 | backend-integration-specialist | coding-agent | 아키텍처, 에러 처리 |
 | Explore (research) | research-agent | 근거성, 출처 품질 |
 
@@ -436,7 +436,7 @@ grep -r ": any" src/ | wc -l
 ```typescript
 function selectRubric(agentType: string, category: string): string {
   if (category === 'research') return 'research-agent';
-  if (['mobile-ui-specialist', 'backend-integration-specialist',
+  if (['web-ui-specialist', 'backend-integration-specialist',
        'performance-optimizer'].includes(agentType)) {
     return 'coding-agent';
   }

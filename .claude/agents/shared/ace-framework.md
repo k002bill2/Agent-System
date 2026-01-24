@@ -5,7 +5,7 @@ description: Shared parallel execution protocol for all specialist agents
 
 # ACE Framework - Parallel Execution Mode
 
-This document defines the shared parallel execution protocol for all specialist agents in LiveMetro.
+This document defines the shared parallel execution protocol for all specialist agents in AOS Dashboard.
 
 **Based on**: [Anthropic Multi-Agent Research System](https://www.anthropic.com/engineering/multi-agent-research-system)
 
@@ -17,7 +17,7 @@ This document defines the shared parallel execution protocol for all specialist 
 
 ### Heuristic Imperatives (발견적 명령)
 
-| 원칙 | LiveMetro 적용 | 위반시 조치 |
+| 원칙 | AOS Dashboard 적용 | 위반시 조치 |
 |------|---------------|------------|
 | **Reduce Suffering** | 데이터 손실 방지, 앱 충돌 최소화, 사용자 혼란 방지 | 즉시 중단 + 롤백 |
 | **Increase Prosperity** | 효율적 리소스 사용, 성능 최적화, 안정적 서비스 | 경고 + 개선 |
@@ -178,7 +178,7 @@ When task is complete:
 | Agent | Workspace | Dependencies |
 |-------|-----------|--------------|
 | lead-orchestrator | N/A (coordinates) | None |
-| mobile-ui-specialist | `.temp/agent_workspaces/mobile-ui/` | Depends on backend types |
+| web-ui-specialist | `.temp/agent_workspaces/web-ui/` | Depends on backend types |
 | backend-integration-specialist | `.temp/agent_workspaces/backend-integration/` | Provides types first |
 | performance-optimizer | `.temp/agent_workspaces/performance-optimizer/` | Optimizes all code |
 | test-automation-specialist | `.temp/agent_workspaces/test-automation/` | Tests all proposals |

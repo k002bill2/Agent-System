@@ -10,7 +10,7 @@
 git status --porcelain | grep '^[MARC]' && echo "ABORT: Uncommitted changes" && exit 1
 
 # 2. Verify .temp/ directory structure exists
-[ -d ".temp/agent_workspaces" ] || mkdir -p .temp/agent_workspaces/{mobile-ui,backend-integration,performance-optimizer,test-automation}/{drafts,proposals}
+[ -d ".temp/agent_workspaces" ] || mkdir -p .temp/agent_workspaces/{web-ui,backend-integration,performance-optimizer,test-automation}/{drafts,proposals}
 
 # 3. Verify no active file locks from previous execution
 rm -f .temp/coordination/locks/*.lock
@@ -150,7 +150,7 @@ find .temp/agent_workspaces/*/proposals/ -type f -name "*.ts" -o -name "*.tsx"
 
 # Output:
 # .temp/agent_workspaces/backend-integration/proposals/seoulSubwayApi.ts
-# .temp/agent_workspaces/mobile-ui/proposals/StationDetailScreen.tsx
+# .temp/agent_workspaces/web-ui/proposals/StationDetailScreen.tsx
 # .temp/agent_workspaces/test-automation/proposals/seoulSubwayApi.test.ts
 ```
 
@@ -198,7 +198,7 @@ echo "Checkpoint created: $(date +%Y%m%d_%H%M%S)" >> .temp/integration/checkpoin
 
 ### View Agent Status
 ```bash
-cat .temp/agent_workspaces/mobile-ui/metadata.json | jq '.status, .progress'
+cat .temp/agent_workspaces/web-ui/metadata.json | jq '.status, .progress'
 cat .temp/agent_workspaces/backend-integration/metadata.json | jq '.status, .workload'
 ```
 
@@ -240,17 +240,17 @@ diff .temp/integration/conflicts/file_agent-a.ts \
     },
     {
       "id": "star_icon",
-      "agent": "mobile-ui-specialist",
+      "agent": "web-ui-specialist",
       "task": "Add star icon to StationCard",
-      "skill": "react-native-development",
+      "skill": "react-web-development",
       "output": "src/components/train/StationCard.tsx",
       "dependencies": ["favorites_service"]
     },
     {
       "id": "favorites_screen",
-      "agent": "mobile-ui-specialist",
+      "agent": "web-ui-specialist",
       "task": "Create FavoritesScreen",
-      "skill": "react-native-development",
+      "skill": "react-web-development",
       "output": "src/screens/FavoritesScreen.tsx",
       "dependencies": ["favorites_service"]
     },
@@ -272,13 +272,13 @@ T0:00 - Primary: Invokes backend-integration-specialist
 T0:15 - backend-integration: Completes favoritesService.ts
         → Writes to .temp/agent_workspaces/backend-integration/proposals/
 
-T0:16 - Primary: Invokes mobile-ui-specialist + test-automation-specialist
+T0:16 - Primary: Invokes web-ui-specialist + test-automation-specialist
         → Both can proceed (backend types available)
 
-T0:26 - mobile-ui: Completes StationCard.tsx
+T0:26 - web-ui: Completes StationCard.tsx
 T0:31 - test-automation: Completes favoritesService.test.ts
-T0:32 - Primary: Invokes mobile-ui-specialist (favorites_screen)
-T0:47 - mobile-ui: Completes FavoritesScreen.tsx
+T0:32 - Primary: Invokes web-ui-specialist (favorites_screen)
+T0:47 - web-ui: Completes FavoritesScreen.tsx
 
 Feature completed in 47 minutes vs ~75 minutes sequential = 1.6x speedup
 ```
@@ -286,8 +286,8 @@ Feature completed in 47 minutes vs ~75 minutes sequential = 1.6x speedup
 ### Integration
 ```bash
 cp .temp/agent_workspaces/backend-integration/proposals/favoritesService.ts src/services/favorites/
-cp .temp/agent_workspaces/mobile-ui/proposals/StationCard.tsx src/components/train/
-cp .temp/agent_workspaces/mobile-ui/proposals/FavoritesScreen.tsx src/screens/
+cp .temp/agent_workspaces/web-ui/proposals/StationCard.tsx src/components/train/
+cp .temp/agent_workspaces/web-ui/proposals/FavoritesScreen.tsx src/screens/
 cp .temp/agent_workspaces/test-automation/proposals/favoritesService.test.ts src/services/favorites/__tests__/
 ```
 

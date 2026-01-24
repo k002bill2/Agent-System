@@ -1,14 +1,14 @@
 /**
- * Stop Event Hook for LiveMetro
- * React Native/Expo 코드 변경 후 자동 검증 + 세션 메트릭 집계
+ * Stop Event Hook for AOS Dashboard
+ * React Web 코드 변경 후 자동 검증 + 세션 메트릭 집계
  *
  * Claude의 응답이 완료된 후 실행되어:
  * 1. 코드 변경사항 분석
- * 2. React Native 패턴 검증
+ * 2. React Web 패턴 검증
  * 3. 자동 테스트 실행 (선택적)
  * 4. 세션 메트릭 집계 (Feedback Loops)
  *
- * @version 2.0.0-LiveMetro
+ * @version 2.0.0-AOS
  */
 
 const fs = require('fs');

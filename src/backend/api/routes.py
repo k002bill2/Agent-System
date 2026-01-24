@@ -462,22 +462,32 @@ async def get_task_tree(
 @router.get("/projects", response_model=list[ProjectResponse])
 async def get_projects():
     """List all registered projects."""
-    from services.rag_service import get_vector_store
-
     projects = list_projects()
-    store = get_vector_store()
+
+    # Try to get RAG stats if available
+    try:
+        from services.rag_service import get_vector_store
+        store = get_vector_store()
+        rag_available = True
+    except ImportError:
+        rag_available = False
 
     result = []
     for p in projects:
-        # ChromaDB에서 실제 인덱스 상태 조회
-        stats = store.get_collection_stats(p.id)
+        # ChromaDB에서 실제 인덱스 상태 조회 (if available)
+        if rag_available:
+            stats = store.get_collection_stats(p.id)
+            vector_initialized = stats.get("indexed", False)
+        else:
+            vector_initialized = False
+
         result.append(ProjectResponse(
             id=p.id,
             name=p.name,
             path=p.path,
             description=p.description,
             has_claude_md=p.claude_md is not None,
-            vector_store_initialized=stats.get("indexed", False),
+            vector_store_initialized=vector_initialized,
             indexed_at=p.indexed_at,
         ))
     return result

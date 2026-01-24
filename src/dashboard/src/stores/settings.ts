@@ -150,7 +150,7 @@ if (typeof window !== 'undefined') {
     try {
       const { state } = JSON.parse(stored)
       currentTheme = state?.theme || 'light'
-    } catch (e) {
+    } catch {
       // Ignore parse errors
     }
   }
@@ -167,7 +167,7 @@ if (typeof window !== 'undefined') {
         if (state?.theme === 'system') {
           applyThemeToDocument('system')
         }
-      } catch (e) {
+      } catch {
         // Ignore parse errors
       }
     }

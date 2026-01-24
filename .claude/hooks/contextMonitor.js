@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Context Monitor Hook for LiveMetro
+ * Context Monitor Hook for AOS Dashboard
  *
  * 상호작용 횟수 기반으로 /save-and-compact 실행을 권장합니다.
  * Stop 이벤트에서 호출됩니다.

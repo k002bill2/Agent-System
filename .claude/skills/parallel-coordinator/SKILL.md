@@ -1,6 +1,6 @@
 ---
 name: parallel-coordinator
-description: Coordinate parallel agent execution using ACE Framework for LiveMetro React Native development. Use when implementing features with 3+ independent subtasks (UI + API + Firebase + Tests).
+description: Coordinate parallel agent execution using ACE Framework for AOS Dashboard development. Use when implementing features with 3+ independent subtasks (UI + API + Firebase + Tests).
 type: workflow
 priority: high
 version: 2.0
@@ -71,7 +71,7 @@ See [effort-scaling.md](../../agents/shared/effort-scaling.md) for complete guid
 
 ### Tools & Sources
 {Resources to use}
-- Skills to invoke: `react-native-development`
+- Skills to invoke: `react-web-development`
 - Reference files: `src/components/ExistingComponent.tsx`
 - APIs: Seoul Metro API documentation
 
@@ -95,13 +95,13 @@ Create a reusable card component displaying station information including:
 - Tap handler for navigation
 
 ### Output Format
-- File: `.temp/agent_workspaces/mobile-ui/proposals/StationInfoCard.tsx`
+- File: `.temp/agent_workspaces/web-ui/proposals/StationInfoCard.tsx`
 - Props interface exported
 - memo() wrapper for performance
 - Accessibility labels included
 
 ### Tools & Sources
-- Invoke: `react-native-development` skill
+- Invoke: `react-web-development` skill
 - Reference: `src/components/train/StationCard.tsx` (existing pattern)
 - Types: `src/models/station.ts`
 
@@ -216,7 +216,7 @@ Define strategic context:
 
 | Agent | Strengths (>0.80) | Weaknesses (<0.50) |
 |-------|-------------------|---------------------|
-| **mobile-ui** | React Native (0.95), TypeScript (0.90), Navigation (0.90) | Native modules (0.30), Backend (0.40) |
+| **web-ui** | React (0.95), TypeScript (0.90), Tailwind CSS (0.90) | Backend (0.40), Complex animations (0.50) |
 | **backend-integration** | Firebase (0.95), Seoul API (0.90), Data sync (0.90) | UI design (0.40), Animations (0.30) |
 | **performance-optimizer** | React optimization (0.90), Memory leaks (0.85) | New features (0.50), UI (0.45) |
 | **test-automation** | Jest (0.95), RTL (0.90), Coverage (0.90) | Feature impl (0.40), UI design (0.35) |
@@ -240,12 +240,12 @@ Define strategic context:
     },
     {
       "id": "task_2",
-      "agent": "mobile-ui-specialist",
+      "agent": "web-ui-specialist",
       "task": "UI components and screens",
       "output": "src/screens/[Screen].tsx",
-      "workspace": ".temp/agent_workspaces/mobile-ui/",
+      "workspace": ".temp/agent_workspaces/web-ui/",
       "dependencies": ["task_1"],
-      "skill": "react-native-development"
+      "skill": "react-web-development"
     },
     {
       "id": "task_3",
@@ -281,7 +281,7 @@ Define strategic context:
 | Agent | Read Access | Write Access |
 |-------|-------------|--------------|
 | **Primary** | All files | src/**, .temp/** |
-| **mobile-ui** | All files | .temp/agent_workspaces/mobile-ui/** ONLY |
+| **web-ui** | All files | .temp/agent_workspaces/web-ui/** ONLY |
 | **backend-integration** | All files | .temp/agent_workspaces/backend-integration/** ONLY |
 | **performance-optimizer** | All files | .temp/agent_workspaces/performance-optimizer/** ONLY |
 | **test-automation** | All files | .temp/agent_workspaces/test-automation/** ONLY |
@@ -297,7 +297,7 @@ Define strategic context:
 
 | Task Type | Required Skill |
 |-----------|---------------|
-| React Native UI | `react-native-development` |
+| React Web UI | `react-web-development` |
 | Push notifications | `notification-system` |
 | Seoul API | `api-integration` |
 | Firebase | `firebase-integration` |
@@ -306,7 +306,7 @@ Define strategic context:
 **Tool Usage**:
 ```typescript
 // GOOD: Agent writes to own workspace
-Write(.temp/agent_workspaces/mobile-ui/proposals/StationCard.tsx)
+Write(.temp/agent_workspaces/web-ui/proposals/StationCard.tsx)
 
 // BAD: Agent writes to src/ directly (DENIED)
 Write(src/components/train/StationCard.tsx)
@@ -347,7 +347,7 @@ Read(src/components/train/ExistingComponent.tsx)
 ```
 .temp/
 ├── agent_workspaces/
-│   ├── mobile-ui/
+│   ├── web-ui/
 │   │   ├── drafts/
 │   │   ├── proposals/
 │   │   └── metadata.json
@@ -366,7 +366,7 @@ Read(src/components/train/ExistingComponent.tsx)
 ### Agent Metadata Format
 ```json
 {
-  "agent_id": "mobile-ui-specialist",
+  "agent_id": "web-ui-specialist",
   "status": "working|blocked|completed|failed",
   "progress": 0-100,
   "current_task": "description",
@@ -409,7 +409,7 @@ This skill enables:
 | Agent | Role | Model |
 |-------|------|-------|
 | `lead-orchestrator` | Coordination, effort scaling | opus |
-| `mobile-ui-specialist` | UI components, screens | sonnet |
+| `web-ui-specialist` | UI components, pages | sonnet |
 | `backend-integration-specialist` | Firebase, Seoul API | sonnet |
 | `performance-optimizer` | Memory, render optimization | sonnet |
 | `test-automation-specialist` | Jest tests, coverage | sonnet |

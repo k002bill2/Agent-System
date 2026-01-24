@@ -1,20 +1,20 @@
 {
-  "react-native-patterns": {
+  "react-web-patterns": {
     "type": "guideline",
     "enforcement": "require",
     "priority": "critical",
-    "description": "React Native/Expo 핵심 패턴 가이드",
+    "description": "React Web/Tailwind CSS 핵심 패턴 가이드",
     "promptTriggers": {
-      "keywords": ["useEffect", "component", "screen", "hook", "navigation", "컴포넌트", "화면"],
+      "keywords": ["useEffect", "component", "page", "hook", "tailwind", "컴포넌트", "페이지"],
       "intentPatterns": [
-        "(create|add|make).*?(component|screen|hook)",
+        "(create|add|make).*?(component|page|hook)",
         "(fix|debug).*?(useEffect|hook)",
-        "(생성|만들|추가).*?(컴포넌트|화면|훅)"
+        "(생성|만들|추가).*?(컴포넌트|페이지|훅)"
       ]
     },
     "fileTriggers": {
-      "pathPatterns": ["**/components/**/*.tsx", "**/screens/**/*.tsx", "**/hooks/**/*.ts"],
-      "contentPatterns": ["useEffect", "useState", "React.FC"]
+      "pathPatterns": ["**/components/**/*.tsx", "**/pages/**/*.tsx", "**/hooks/**/*.ts"],
+      "contentPatterns": ["useEffect", "useState", "React.FC", "className"]
     }
   },
 
@@ -89,21 +89,21 @@
     }
   },
 
-  "navigation-patterns": {
+  "routing-patterns": {
     "type": "guideline",
     "enforcement": "suggest",
     "priority": "high",
-    "description": "React Navigation 6.x 패턴",
+    "description": "React Router 패턴",
     "promptTriggers": {
-      "keywords": ["navigation", "navigate", "screen", "stack", "tab", "네비게이션"],
+      "keywords": ["router", "navigate", "page", "route", "link", "라우팅"],
       "intentPatterns": [
-        "(navigation|navigate).*?(screen|page)",
-        "(add|create).*?(screen|route)"
+        "(navigation|navigate).*?(page|route)",
+        "(add|create).*?(page|route)"
       ]
     },
     "fileTriggers": {
-      "pathPatterns": ["**/navigation/**"],
-      "contentPatterns": ["createStackNavigator", "createBottomTabNavigator", "useNavigation"]
+      "pathPatterns": ["**/pages/**", "**/App.tsx"],
+      "contentPatterns": ["useNavigate", "useParams", "Route", "BrowserRouter"]
     }
   },
 
@@ -167,9 +167,9 @@
     "type": "validation",
     "enforcement": "require",
     "priority": "high",
-    "description": "Jest 테스트 커버리지 (75% statements)",
+    "description": "Vitest 테스트 커버리지 (75% statements)",
     "promptTriggers": {
-      "keywords": ["test", "jest", "coverage", "테스트", "커버리지"],
+      "keywords": ["test", "vitest", "coverage", "테스트", "커버리지"],
       "intentPatterns": [
         "(write|add).*?test",
         "(run|check).*?coverage"
@@ -177,7 +177,7 @@
     },
     "fileTriggers": {
       "pathPatterns": ["**/__tests__/**", "**/*.test.ts", "**/*.test.tsx"],
-      "contentPatterns": ["describe", "it", "expect", "jest"]
+      "contentPatterns": ["describe", "it", "expect", "vi.fn"]
     },
     "thresholds": {
       "statements": 75,
@@ -190,7 +190,7 @@
     "type": "guideline",
     "enforcement": "suggest",
     "priority": "normal",
-    "description": "React Native 성능 최적화",
+    "description": "React Web 성능 최적화",
     "promptTriggers": {
       "keywords": ["performance", "optimize", "memo", "callback", "성능", "최적화"],
       "intentPatterns": [
@@ -200,7 +200,7 @@
     },
     "fileTriggers": {
       "pathPatterns": ["**/components/**"],
-      "contentPatterns": ["React.memo", "useMemo", "useCallback"]
+      "contentPatterns": ["React.memo", "useMemo", "useCallback", "React.lazy"]
     }
   },
 

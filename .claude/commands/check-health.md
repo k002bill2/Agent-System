@@ -5,7 +5,7 @@ description: Comprehensive project health check including tests, types, linting,
 
 # Project Health Check
 
-Perform a comprehensive health check of the LiveMetro project, running all quality gates and reporting any issues with actionable fixes.
+Perform a comprehensive health check of the AOS Dashboard project, running all quality gates and reporting any issues with actionable fixes.
 
 ## Steps
 
@@ -95,7 +95,7 @@ npm audit
 ## Output Format
 
 ```markdown
-# LiveMetro Project Health Check
+# AOS Dashboard Project Health Check
 *Run at: 2025-12-28 09:30:00*
 
 ## ✅ Passed Checks (4/6)

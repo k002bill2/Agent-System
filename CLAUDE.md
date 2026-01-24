@@ -436,7 +436,7 @@ class AgentRegistry:
 **기본 등록 에이전트** (7종):
 | Agent ID | 카테고리 | 설명 |
 |----------|----------|------|
-| `mobile-ui-specialist` | development | React Native UI/UX |
+| `web-ui-specialist` | development | React Web UI/UX (Tailwind CSS) |
 | `backend-integration-specialist` | development | Firebase, API 통합 |
 | `test-automation-specialist` | quality | Jest 테스트 자동화 |
 | `lead-orchestrator` | orchestration | 멀티 에이전트 조정 |
@@ -552,7 +552,7 @@ result = await mcp_manager.call_tool(call)
 
 **데이터셋 출력 형식** (JSONL):
 ```jsonl
-{"messages": [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}], "metadata": {"feedback_type": "implicit", "agent_id": "mobile-ui-specialist"}}
+{"messages": [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}], "metadata": {"feedback_type": "implicit", "agent_id": "web-ui-specialist"}}
 ```
 
 **Dashboard 컴포넌트** (Feedback 탭):
@@ -662,7 +662,7 @@ class TaskService:
 
 | Agent | Model | 전문 영역 |
 |-------|-------|-----------|
-| `mobile-ui-specialist` | Sonnet | React Native UI/UX |
+| `web-ui-specialist` | Sonnet | React Web UI/UX (Tailwind CSS) |
 | `backend-integration-specialist` | Sonnet | Firebase, API 통합 |
 | `performance-optimizer` | Sonnet | 성능 최적화 |
 | `test-automation-specialist` | Sonnet | 테스트 자동화 |
@@ -798,46 +798,59 @@ docker run --rm aos-sandbox:latest python --version  # → Python 3.11.x
 
 ---
 
-## LiveMetro (연결된 프로젝트)
+## Dashboard (React Web)
 
-**위치**: `projects/livemetro/` (심볼릭 링크 → `/Users/younghwankang/Work/LiveMetro`)
+**위치**: `src/dashboard/`
 
-**설명**: 서울 지하철 실시간 도착 정보 React Native Expo 앱
+**설명**: AOS 대시보드 - React + Vite + Tailwind CSS 기반 웹 애플리케이션
 
 ### Tech Stack
 
-| 기술 | 버전 |
-|------|------|
-| React Native | 0.72 |
-| Expo SDK | ~49 |
-| TypeScript | 5.1+ (strict) |
-| Firebase | Auth, Firestore |
-| Navigation | React Navigation 6.x |
+| 기술 | 버전 | 용도 |
+|------|------|------|
+| React | 18.3.1 | UI 프레임워크 |
+| Vite | 6.0+ | 빌드 도구 |
+| TypeScript | 5.6+ (strict) | 타입 안정성 |
+| Tailwind CSS | 3.4.16 | 스타일링 |
+| Zustand | 5.0.0 | 상태 관리 |
 
 ### Quick Start
 
 ```bash
-cd projects/livemetro
+cd src/dashboard
 npm install
-npm start
+npm run dev
 ```
 
 ### 주요 명령어
 
 | 명령어 | 설명 |
 |--------|------|
-| `npm start` | Expo 개발 서버 |
-| `npm test` | Jest 테스트 |
+| `npm run dev` | 개발 서버 (http://localhost:5173) |
+| `npm test` | Vitest 테스트 |
 | `npm run lint` | ESLint |
 | `npm run type-check` | TypeScript 검사 |
-| `npm run build:production` | 프로덕션 빌드 |
+| `npm run build` | 프로덕션 빌드 |
 
 ### 경로 별칭
 
 ```typescript
-import { Button } from '@components/Button'
-import { useAuth } from '@hooks/useAuth'
-import { MetroService } from '@services/MetroService'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/Button'
+import { useOrchestration } from '@/stores/orchestration'
 ```
 
-> 자세한 내용은 `projects/livemetro/CLAUDE.md` 참조
+### 스타일링 패턴
+
+```tsx
+// cn() 유틸리티로 조건부 클래스 결합
+import { cn } from '@/lib/utils';
+
+<div className={cn(
+  'p-4 rounded-lg',
+  isActive && 'bg-blue-100',
+  className
+)}>
+  {children}
+</div>
+```

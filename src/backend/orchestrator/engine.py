@@ -6,14 +6,18 @@ import uuid
 from typing import AsyncIterator, Any
 
 from dotenv import load_dotenv
+from config import get_settings
+
+settings = get_settings()
 
 # Load environment variables
 load_dotenv()
 
 # LLM Provider selection
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "google")  # "ollama", "anthropic", or "google"
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
-GOOGLE_MODEL = os.getenv("GOOGLE_MODEL", "gemini-2.0-flash-exp")
+# Prefer explicit env vars but fall back to Settings defaults
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", settings.llm_provider)  # "ollama", "anthropic", or "google"
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", settings.ollama_model)
+GOOGLE_MODEL = os.getenv("GOOGLE_MODEL", settings.google_model)
 
 
 def get_llm():
@@ -26,9 +30,24 @@ def get_llm():
         )
     elif LLM_PROVIDER == "google":
         from langchain_google_genai import ChatGoogleGenerativeAI
+
+        # LangChain's ChatGoogleGenerativeAI expects an `api_key` argument or
+        # GOOGLE_API_KEY / GEMINI_API_KEY in the environment.
+        api_key = (
+            os.getenv("GOOGLE_API_KEY")
+            or os.getenv("GEMINI_API_KEY")
+            or settings.google_api_key
+        )
+        if not api_key:
+            raise RuntimeError(
+                "LLM_PROVIDER=google but no API key found. "
+                "Set GOOGLE_API_KEY or GEMINI_API_KEY in the environment "
+                "or configure google_api_key in settings."
+            )
+
         return ChatGoogleGenerativeAI(
             model=GOOGLE_MODEL,
-            google_api_key=os.getenv("GOOGLE_API_KEY"),
+            api_key=api_key,
         )
     else:
         from langchain_ollama import ChatOllama

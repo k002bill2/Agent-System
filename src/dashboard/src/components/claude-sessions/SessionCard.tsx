@@ -135,23 +135,22 @@ export function SessionCard({ session, isSelected, onClick }: SessionCardProps) 
         </div>
       </div>
 
-      {/* Project Name & Slug */}
+      {/* Project Name & User */}
       <div className="text-sm text-gray-600 dark:text-gray-300 mb-3 truncate flex items-center gap-2">
         <span className="truncate">
           {session.project_name || session.project_path}
-          {session.summary && session.slug && (
+          {session.source_user && (
             <span className="text-gray-400 dark:text-gray-500 ml-2">
-              · {session.slug}
+              · {session.source_user}
             </span>
           )}
         </span>
-        {isExternal && session.source_user && (
+        {isExternal && (
           <span
             className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
-            title={`External session from ${session.source_user}`}
+            title="External session"
           >
             <User className="w-3 h-3" />
-            {session.source_user}
           </span>
         )}
       </div>

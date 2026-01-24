@@ -1,8 +1,8 @@
 /**
- * Parallel Coordinator Hook for LiveMetro
+ * Parallel Coordinator Hook for AOS Dashboard
  * 병렬 에이전트 작업 조정
  *
- * @version 1.0.0-LiveMetro
+ * @version 1.0.0-AOS Dashboard
  */
 
 const fs = require('fs');

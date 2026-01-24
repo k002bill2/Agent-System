@@ -104,11 +104,11 @@ Multi-agent systems use ~15x more tokens than single-agent.
 
 | Domain | Primary Agent | Support |
 |--------|---------------|---------|
-| UI work | mobile-ui | - |
+| UI work | web-ui | - |
 | API/Firebase | backend-integration | - |
 | Performance | performance-optimizer | - |
 | Tests | test-automation | - |
-| Full feature | backend + mobile-ui | test-automation |
+| Full feature | backend + web-ui | test-automation |
 | Optimization | performance | test-automation |
 
 ### By Dependency Order
@@ -117,7 +117,7 @@ Multi-agent systems use ~15x more tokens than single-agent.
 1. backend-integration-specialist
    └── Provides types and interfaces
 
-2. mobile-ui-specialist
+2. web-ui-specialist
    └── Consumes types, creates UI
 
 3. test-automation-specialist

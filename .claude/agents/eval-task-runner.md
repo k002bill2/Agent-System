@@ -60,7 +60,7 @@ graders:
   - type: llm
 max_attempts: 3
 timeout_minutes: 15
-expected_agent: mobile-ui-specialist
+expected_agent: web-ui-specialist
 ```
 
 ### 2. Execute Evaluation Runs
@@ -89,7 +89,7 @@ Integrate with agent-observability:
   "session_id": "eval_sess_{task_id}_{run_id}",
   "events": [
     {"event": "eval_started", "task_id": "task_ui_001", "run": 1},
-    {"event": "agent_spawned", "agent": "mobile-ui-specialist"},
+    {"event": "agent_spawned", "agent": "web-ui-specialist"},
     {"event": "tool_called", "tool": "read", "duration_ms": 45},
     // ... more events
     {"event": "eval_completed", "outcome": {...}}
@@ -127,7 +127,7 @@ where:
 
 ### Run 1/3
 1. Load task definition
-2. Spawn mobile-ui-specialist with:
+2. Spawn web-ui-specialist with:
    - Input description
    - Requirements
    - Reference files
@@ -243,7 +243,7 @@ where:
     {
       "run_id": "run_001",
       "timestamp": "2025-01-10T12:00:00Z",
-      "agent": "mobile-ui-specialist",
+      "agent": "web-ui-specialist",
       "duration_seconds": 512,
       "transcript_path": ".temp/traces/sessions/eval_sess_001/",
       "outcome": {
@@ -433,7 +433,7 @@ function checkSaturation(results: TaskResult[]): SaturationCheck[] {
 ### 실행 방법
 
 ```bash
-/run-eval --pairwise --agents="mobile-ui-specialist,mobile-ui-specialist-v2"
+/run-eval --pairwise --agents="web-ui-specialist,web-ui-specialist-v2"
 /run-eval --pairwise --models="sonnet,opus" --task=task_ui_001
 ```
 
@@ -443,13 +443,13 @@ function checkSaturation(results: TaskResult[]): SaturationCheck[] {
 {
   "comparison": {
     "baseline": {
-      "agent": "mobile-ui-specialist",
+      "agent": "web-ui-specialist",
       "model": "sonnet",
       "pass_at_1": 0.80,
       "avg_score": 0.82
     },
     "challenger": {
-      "agent": "mobile-ui-specialist-v2",
+      "agent": "web-ui-specialist-v2",
       "model": "sonnet",
       "pass_at_1": 0.90,
       "avg_score": 0.88

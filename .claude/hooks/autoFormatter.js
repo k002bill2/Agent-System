@@ -1,8 +1,8 @@
 /**
- * Auto Formatter Hook for LiveMetro
+ * Auto Formatter Hook for AOS Dashboard
  * PostToolUse에서 자동 코드 포매팅 및 린팅
  *
- * @version 1.0.0-LiveMetro
+ * @version 1.0.0-AOS Dashboard
  */
 
 const fs = require('fs');

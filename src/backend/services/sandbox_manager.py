@@ -3,14 +3,25 @@
 import asyncio
 import os
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
+
+# Conditional import for Railway/environments without Docker
+DOCKER_AVAILABLE = False
+docker = None  # type: ignore
+DockerException = Exception
+ContainerError = Exception
+ImageNotFound = Exception
 
 try:
-    import docker
+    import docker as _docker
     from docker.errors import DockerException, ContainerError, ImageNotFound
+    docker = _docker
     DOCKER_AVAILABLE = True
 except ImportError:
-    DOCKER_AVAILABLE = False
+    pass
+
+if TYPE_CHECKING:
+    from docker import DockerClient
 
 logger = logging.getLogger(__name__)
 
@@ -85,11 +96,11 @@ class SandboxManager:
         self.memory_limit = memory_limit
         self.cpu_limit = cpu_limit
         self.timeout = timeout
-        self._client: Optional[docker.DockerClient] = None
+        self._client: Optional["DockerClient"] = None
         self._available: Optional[bool] = None
 
     @property
-    def client(self) -> Optional[docker.DockerClient]:
+    def client(self) -> Optional["DockerClient"]:
         """Lazy initialization of Docker client."""
         if self._client is None and DOCKER_AVAILABLE:
             try:

@@ -117,7 +117,7 @@ Enable long-running multi-agent tasks to persist context beyond token limits, su
   "state": {
     "completed_subtasks": ["task_1", "task_2"],
     "pending_subtasks": ["task_3", "task_4"],
-    "active_agents": ["mobile-ui-specialist"],
+    "active_agents": ["web-ui-specialist"],
     "blocked_agents": [],
     "findings_count": 3
   },
@@ -273,7 +273,7 @@ Rough estimates for planning:
    └── .temp/memory/findings/exploration_*.md
 
 3. After spawning UI + Backend agents
-   └── .temp/memory/findings/mobile-ui_*.md
+   └── .temp/memory/findings/web-ui_*.md
    └── .temp/memory/findings/backend-integration_*.md
 
 4. Merge and checkpoint

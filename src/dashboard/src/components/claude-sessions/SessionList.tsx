@@ -33,7 +33,6 @@ export function SessionList({ statusFilter }: SessionListProps) {
     projectFilter,
     sourceUserFilter,
     sourceUsers,
-    currentUser,
     searchQuery,
     fetchSessions,
     loadMoreSessions,
@@ -331,12 +330,7 @@ export function SessionList({ statusFilter }: SessionListProps) {
                           : 'text-gray-700 dark:text-gray-300'
                       )}
                     >
-                      <span className="truncate flex items-center gap-1">
-                        {user}
-                        {user === currentUser && (
-                          <span className="text-xs text-gray-400">(나)</span>
-                        )}
-                      </span>
+                      <span className="truncate">{user}</span>
                       {sourceUserFilter === user && <Check className="w-4 h-4 flex-shrink-0 ml-2" />}
                     </button>
                   ))}

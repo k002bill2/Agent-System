@@ -1,8 +1,8 @@
 /**
- * File Lock Manager for LiveMetro
+ * File Lock Manager for AOS Dashboard
  * 다중 에이전트 환경에서 파일 충돌 방지
  *
- * @version 1.0.0-LiveMetro
+ * @version 1.0.0-AOS Dashboard
  */
 
 const fs = require('fs');
