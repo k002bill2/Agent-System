@@ -15,8 +15,8 @@ LangGraph 기반 멀티 에이전트 오케스트레이션 서비스입니다.
 
 ```bash
 # 1. 저장소 클론
-git clone https://github.com/your-username/agent-system.git
-cd agent-system
+git clone https://github.com/k002bill2/Agent-Orchestrator.git
+cd Agent-Orchestrator
 
 # 2. 환경변수 설정
 cp .env.example .env
