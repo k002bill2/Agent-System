@@ -138,3 +138,43 @@ async def get_current_user():
 @app.post("/api/auth/logout")
 async def logout():
     return {"message": "Logged out"}
+
+
+@app.get("/api/auth/google")
+async def google_auth():
+    """Google OAuth - not available in Railway mode."""
+    raise HTTPException(status_code=503, detail="OAuth not available in Railway minimal mode")
+
+
+@app.post("/api/auth/google/callback")
+async def google_callback():
+    """Google OAuth callback - stub."""
+    return {
+        "access_token": "railway-stub-token",
+        "token_type": "bearer",
+        "user": {
+            "id": "railway-user",
+            "email": "user@railway.app",
+            "name": "Railway User",
+        }
+    }
+
+
+@app.get("/api/auth/github")
+async def github_auth():
+    """GitHub OAuth - not available in Railway mode."""
+    raise HTTPException(status_code=503, detail="OAuth not available in Railway minimal mode")
+
+
+@app.post("/api/auth/github/callback")
+async def github_callback():
+    """GitHub OAuth callback - stub."""
+    return {
+        "access_token": "railway-stub-token",
+        "token_type": "bearer",
+        "user": {
+            "id": "railway-user",
+            "email": "user@railway.app",
+            "name": "Railway User",
+        }
+    }
