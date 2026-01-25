@@ -1,0 +1,12 @@
+{
+  "name": "Agent-System",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AOS Monitor placeholder",
+  "scripts": {
+    "test": "echo '✓ No tests configured' && exit 0",
+    "lint": "echo '✓ No lint configured' && exit 0",
+    "type-check": "echo '✓ No type-check configured' && exit 0",
+    "build": "echo '✓ No build configured' && exit 0"
+  }
+}

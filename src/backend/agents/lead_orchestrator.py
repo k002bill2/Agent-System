@@ -12,7 +12,6 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage
 from pydantic import BaseModel, Field
 
@@ -190,7 +189,7 @@ class LeadOrchestratorAgent(BaseAgent):
             name="LeadOrchestrator",
             description="Multi-agent workflow coordinator that decomposes complex tasks and delegates to specialized agents",
             system_prompt=LEAD_ORCHESTRATOR_SYSTEM_PROMPT,
-            model_name="claude-sonnet-4-20250514",
+            model_name="gemini-2.0-flash-exp",
             temperature=0.3,  # 결정적 분석을 위해 낮은 temperature
             max_tokens=4096,
         )

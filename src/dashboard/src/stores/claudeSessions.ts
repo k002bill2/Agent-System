@@ -782,7 +782,8 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
       const data = await res.json()
 
-      // Update progress
+      // Update progress and immediately reduce pendingSummaryCount
+      const currentPendingCount = get().pendingSummaryCount
       set({
         batchProgress: {
           total: data.total_processed,
@@ -791,6 +792,8 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
           failed: data.failed_count,
         },
         isBatchGenerating: false,
+        // Immediately update pendingSummaryCount to reflect completed summaries
+        pendingSummaryCount: Math.max(0, currentPendingCount - data.success_count),
       })
 
       // Update sessions in list with new summaries

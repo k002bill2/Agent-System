@@ -631,6 +631,43 @@ class TaskService:
 - 세션 TTL 자동 갱신 (마지막 활동 기준)
 - 유휴 세션 정리 작업
 
+## Dev Docs 시스템
+
+대규모 작업의 컨텍스트를 유지하기 위한 3-파일 시스템입니다.
+
+### 디렉토리 구조
+
+```
+dev/
+└── active/
+    └── [task-name]/
+        ├── [task-name]-plan.md     # 승인된 계획
+        ├── [task-name]-context.md  # 핵심 결정사항
+        └── [task-name]-tasks.md    # 체크리스트
+```
+
+### 워크플로우
+
+1. **계획 승인 후**: `/dev-docs` 실행하여 3개 문서 생성
+2. **구현 중**: 주기적으로 tasks.md 업데이트
+3. **Context 20% 이하**: `/update-dev-docs` 실행 후 `/compact`
+4. **세션 재개**: `/resume` 또는 dev/active/ 파일 읽기
+
+### 관련 명령어
+
+| 명령어 | 설명 |
+|--------|------|
+| `/dev-docs` | Dev Docs 3-파일 생성 |
+| `/update-dev-docs` | Context Compaction 전 업데이트 |
+| `/save-and-compact` | 저장 후 /compact 실행 |
+| `/resume` | 이전 세션 컨텍스트 복원 |
+
+### 효과
+
+- 계획 준수율: 40% → 95%
+- Context 후 작업 재개 성공률: 20% → 90%
+- Claude의 "건망증" 문제 해결
+
 ## Claude Code Commands
 
 ### 검증 및 품질

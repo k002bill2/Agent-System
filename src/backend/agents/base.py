@@ -1,9 +1,10 @@
 """Base agent class for all specialized agents."""
 
 from abc import ABC, abstractmethod
+import os
 from typing import Any
 
-from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from pydantic import BaseModel, Field
 
@@ -14,7 +15,7 @@ class AgentConfig(BaseModel):
     name: str
     description: str
     system_prompt: str
-    model_name: str = "claude-sonnet-4-20250514"
+    model_name: str = "gemini-2.0-flash-exp"
     temperature: float = 0.7
     max_tokens: int = 4096
     tools: list[str] = Field(default_factory=list)
@@ -43,10 +44,11 @@ class BaseAgent(ABC):
 
     def __init__(self, config: AgentConfig):
         self.config = config
-        self.llm = ChatAnthropic(
+        self.llm = ChatGoogleGenerativeAI(
             model=config.model_name,
             temperature=config.temperature,
-            max_tokens=config.max_tokens,
+            max_output_tokens=config.max_tokens,
+            google_api_key=os.getenv("GOOGLE_API_KEY"),
         )
 
     @property

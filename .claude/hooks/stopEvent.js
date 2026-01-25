@@ -40,7 +40,14 @@ async function onStopEvent(context) {
     );
 
     if (tsFiles.length > 0) {
-      displayTestReminder(tsFiles);
+      displayTestReminder(tsFiles, 'typescript');
+    }
+
+    // 4. Python 테스트 알림 (PY 파일 변경 시)
+    const pyFiles = editedFiles.filter(f => f.endsWith('.py'));
+
+    if (pyFiles.length > 0) {
+      displayTestReminder(pyFiles, 'python');
     }
 
   } catch (error) {
@@ -199,6 +206,11 @@ async function analyzeFile(filePath, reminders) {
       checkTypeScriptPatterns(content, filePath, reminders);
     }
 
+    // Python 파일 패턴 검사
+    if (ext === '.py') {
+      checkPythonPatterns(content, filePath, reminders);
+    }
+
   } catch (error) {
     console.error(`[StopEvent] Error analyzing ${filePath}:`, error.message);
   }
@@ -251,6 +263,54 @@ function checkTypeScriptPatterns(content, filePath, reminders) {
 }
 
 /**
+ * Python 파일 패턴 검사 (FastAPI + LangGraph)
+ */
+function checkPythonPatterns(content, filePath, reminders) {
+  // async def 체크 (await 없이 async 사용)
+  const asyncDefMatch = content.match(/async\s+def\s+\w+/g) || [];
+  if (asyncDefMatch.length > 0) {
+    // 각 async 함수에 await가 있는지 간단 체크
+    if (!/await\s+/.test(content)) {
+      reminders.add('async def에 await가 없습니다. 동기 함수로 변경하거나 await 추가하세요.');
+    }
+  }
+
+  // 타입 힌트 체크
+  if (/def\s+\w+\([^)]*\)\s*:/.test(content) && !/def\s+\w+\([^)]*\)\s*->\s*/.test(content)) {
+    reminders.add('함수에 반환 타입 힌트가 없습니다.');
+  }
+
+  // bare except 체크
+  if (/except\s*:/.test(content)) {
+    reminders.add('bare except 대신 구체적인 예외 타입을 사용하세요.');
+  }
+
+  // print 문 체크
+  if (/print\s*\(/.test(content)) {
+    reminders.add('print 문이 있습니다. logging 모듈 사용을 권장합니다.');
+  }
+
+  // TODO/FIXME 체크
+  if (/#\s*(TODO|FIXME|HACK)/i.test(content)) {
+    reminders.add('TODO/FIXME 주석이 있습니다. 해결이 필요합니다.');
+  }
+
+  // LangGraph 관련 체크
+  if (/class\s+\w+Node|BaseNode/.test(content)) {
+    if (!/async\s+def\s+run/.test(content)) {
+      reminders.add('LangGraph Node에 async def run() 메서드가 없습니다.');
+    }
+  }
+
+  // FastAPI 관련 체크
+  if (/@(app|router)\.(get|post|put|delete|patch)/.test(content)) {
+    if (!/response_model\s*=/.test(content) && !/return.*Response/.test(content)) {
+      reminders.add('FastAPI 엔드포인트에 response_model이 정의되지 않았습니다.');
+    }
+  }
+}
+
+/**
  * 파일 카테고리화
  */
 function categorizeFile(filePath, categories) {
@@ -262,10 +322,12 @@ function categorizeFile(filePath, categories) {
     categories.hooks.push(filePath);
   } else if (lowerPath.includes('/services/')) {
     categories.services.push(filePath);
-  } else if (lowerPath.includes('/screens/')) {
+  } else if (lowerPath.includes('/screens/') || lowerPath.includes('/pages/')) {
     categories.screens.push(filePath);
-  } else if (lowerPath.includes('/navigation/')) {
+  } else if (lowerPath.includes('/navigation/') || lowerPath.includes('/api/')) {
     categories.navigation.push(filePath);
+  } else if (lowerPath.includes('/orchestrator/') || lowerPath.includes('/agents/')) {
+    categories.other.push(filePath);
   } else {
     categories.other.push(filePath);
   }
@@ -274,19 +336,34 @@ function categorizeFile(filePath, categories) {
 /**
  * 테스트 알림 표시
  */
-function displayTestReminder(tsFiles) {
+function displayTestReminder(files, language = 'typescript') {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('🧪 TEST REMINDER');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-  console.log(`${tsFiles.length} TypeScript file(s) modified.\n`);
-  console.log('**Recommended Actions:**');
-  console.log('• npm test -- --coverage (테스트 실행)');
-  console.log('• npm run type-check (타입 검사)');
-  console.log('• /verify-app (전체 검증)');
-  console.log('\n**Coverage Thresholds:**');
-  console.log('• Statements: 75%');
-  console.log('• Functions: 70%');
-  console.log('• Branches: 60%');
+
+  if (language === 'typescript') {
+    console.log(`${files.length} TypeScript file(s) modified.\n`);
+    console.log('**Recommended Actions:**');
+    console.log('• npm test -- --coverage (테스트 실행)');
+    console.log('• npm run type-check (타입 검사)');
+    console.log('• npm run lint (린트 검사)');
+    console.log('• /verify-app (전체 검증)');
+    console.log('\n**Coverage Thresholds:**');
+    console.log('• Statements: 75%');
+    console.log('• Functions: 70%');
+    console.log('• Branches: 60%');
+  } else if (language === 'python') {
+    console.log(`${files.length} Python file(s) modified.\n`);
+    console.log('**Recommended Actions:**');
+    console.log('• pytest tests/backend --cov (테스트 + 커버리지)');
+    console.log('• mypy src/backend (타입 검사)');
+    console.log('• ruff check src/backend (린트 검사)');
+    console.log('• /verify-app (전체 검증)');
+    console.log('\n**Coverage Thresholds:**');
+    console.log('• Statements: 70%');
+    console.log('• Functions: 65%');
+  }
+
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 }
 

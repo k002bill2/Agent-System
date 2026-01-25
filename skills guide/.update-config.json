@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Skills Guide Update Configuration",
+  "description": "자동 업데이트 시스템 설정",
+
+  "updateSettings": {
+    "intervalDays": 30,
+    "autoCommit": true,
+    "generateReport": true,
+    "notifyOnDeprecation": true
+  },
+
+  "deprecationThresholds": {
+    "critical": 12,
+    "warning": 6,
+    "info": 3
+  },
+
+  "excludePatterns": [
+    "LIVEMETRO_UPDATE_REPORT.md",
+    ".last-update.json",
+    ".update-config.json"
+  ],
+
+  "versionPatterns": {
+    "react-native": "React Native ([\\d.]+)",
+    "react": "React ([\\d.]+)",
+    "typescript": "TypeScript ([\\d.]+)",
+    "expo": "Expo ~?([\\d.]+)",
+    "firebase": "Firebase \\^?([\\d.]+)"
+  },
+
+  "customChecks": [
+    {
+      "name": "React Native",
+      "minVersion": "0.70.0",
+      "reason": "Expo 49 호환성"
+    },
+    {
+      "name": "TypeScript",
+      "minVersion": "5.0.0",
+      "reason": "최신 타입 기능 사용"
+    },
+    {
+      "name": "Firebase",
+      "minVersion": "10.0.0",
+      "reason": "모듈러 SDK 필요"
+    }
+  ],
+
+  "alternatives": {
+    "moment": {
+      "reason": "더 이상 활발히 유지보수되지 않음",
+      "alternatives": ["date-fns", "dayjs", "luxon"],
+      "recommended": "date-fns"
+    },
+    "react-native-maps": {
+      "reason": "유지보수 문제",
+      "alternatives": ["react-native-mapbox-gl"],
+      "recommended": "react-native-mapbox-gl"
+    }
+  },
+
+  "ignoredPackages": [
+    "@types/*",
+    "expo-*"
+  ],
+
+  "priorityFiles": [
+    "Claude Code 완벽 가이드북 2025.md",
+    "Quick Reference.md",
+    "README.md",
+    "프로젝트별 템플릿.md"
+  ],
+
+  "autoUpdate": {
+    "enabled": true,
+    "cron": "0 9 1,15 * *",
+    "timezone": "Asia/Seoul",
+    "branch": "main"
+  }
+}
