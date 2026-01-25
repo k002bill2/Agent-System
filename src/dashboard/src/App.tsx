@@ -16,6 +16,7 @@ import { SettingsPage } from './pages/SettingsPage'
 import { ClaudeSessionsPage } from './pages/ClaudeSessionsPage'
 import { ProjectConfigsPage } from './pages/ProjectConfigsPage'
 import { LoginPage } from './pages/LoginPage'
+import { RegisterPage } from './pages/RegisterPage'
 import { AuthCallbackPage } from './pages/AuthCallbackPage'
 import {
   SidebarSkeleton,
@@ -65,30 +66,40 @@ export default function App() {
   // Track if we've initialized connection
   const hasInitialized = useRef(false)
 
-  // OAuth configuration state
-  const [oauthEnabled, setOauthEnabled] = useState<boolean | null>(null)
+  // Auth configuration state
+  const [authStatus, setAuthStatus] = useState<{
+    oauth_enabled: boolean
+    google_enabled: boolean
+    github_enabled: boolean
+    email_enabled: boolean
+  } | null>(null)
 
-  // Check if OAuth is configured on mount
+  // Derived values
+  const oauthEnabled = authStatus?.oauth_enabled ?? null
+  // Email auth is always available (frontend form + backend endpoints exist)
+  const emailEnabled = authStatus?.email_enabled ?? true
+  const anyAuthAvailable = oauthEnabled === true || emailEnabled
+
+  // Check auth configuration on mount
   useEffect(() => {
-    const checkOAuthStatus = async () => {
+    const checkAuthStatus = async () => {
       try {
         const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
         const response = await fetch(`${API_BASE_URL}/auth/status`)
         if (response.ok) {
           const data = await response.json()
-          setOauthEnabled(data.oauth_enabled)
-          console.log('[App] OAuth status:', data)
+          setAuthStatus(data)
+          console.log('[App] Auth status:', data)
         } else {
-          // If endpoint doesn't exist, assume OAuth is not configured
-          setOauthEnabled(false)
+          // If endpoint doesn't exist, assume no auth configured
+          setAuthStatus({ oauth_enabled: false, google_enabled: false, github_enabled: false, email_enabled: true })
         }
       } catch {
-        // If request fails, assume OAuth is not configured
-        console.log('[App] OAuth status check failed, assuming disabled')
-        setOauthEnabled(false)
+        console.log('[App] Auth status check failed, assuming email-only')
+        setAuthStatus({ oauth_enabled: false, google_enabled: false, github_enabled: false, email_enabled: true })
       }
     }
-    checkOAuthStatus()
+    checkAuthStatus()
   }, [])
 
   // Handle OAuth callback URL detection on initial load
@@ -117,15 +128,15 @@ export default function App() {
       return
     }
 
-    // Skip login redirect if OAuth is not configured
-    if (oauthEnabled === false) {
+    // Skip login redirect if no auth method is configured
+    if (!anyAuthAvailable) {
       return
     }
 
     if (authHydrated && !accessToken && !refreshToken && !isPublicView(currentView)) {
       setView('login')
     }
-  }, [authHydrated, accessToken, refreshToken, currentView, setView, oauthEnabled])
+  }, [authHydrated, accessToken, refreshToken, currentView, setView, anyAuthAvailable])
 
   // Fetch current user on mount if authenticated but no user data
   useEffect(() => {
@@ -134,8 +145,8 @@ export default function App() {
     }
   }, [authHydrated, accessToken, refreshToken, user, fetchCurrentUser])
 
-  // Check if authenticated (or if OAuth is disabled, skip auth check)
-  const isLoggedIn = oauthEnabled === false || !!(accessToken || refreshToken)
+  // Check if authenticated (or if no auth method available, skip auth check)
+  const isLoggedIn = !anyAuthAvailable || !!(accessToken || refreshToken)
 
   // Debug logging
   console.log('[App] Auth state:', {
@@ -143,6 +154,8 @@ export default function App() {
     currentView,
     isLoggedIn,
     oauthEnabled,
+    emailEnabled,
+    anyAuthAvailable,
     hasAccessToken: !!accessToken,
     hasRefreshToken: !!refreshToken,
     hasUser: !!user
@@ -187,8 +200,8 @@ export default function App() {
     }
   }, [orchestrationHydrated, authHydrated, isLoggedIn, sessionId, connected, connectionStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Show loading while hydrating or checking OAuth status
-  if (!authHydrated || oauthEnabled === null) {
+  // Show loading while hydrating or checking auth status
+  if (!authHydrated || authStatus === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="text-center">
@@ -199,9 +212,15 @@ export default function App() {
     )
   }
 
-  // Handle public views (login, OAuth callbacks)
-  if (currentView === 'login') {
-    return <LoginPage />
+  // Handle public views (login, register, OAuth callbacks)
+  // If no auth method is available, skip login/register and go to dashboard
+  if (currentView === 'login' || currentView === 'register') {
+    if (!anyAuthAvailable) {
+      // No auth available, redirect to dashboard
+      setView('dashboard')
+      return null
+    }
+    return currentView === 'login' ? <LoginPage /> : <RegisterPage />
   }
 
   if (currentView === 'auth-callback-google') {

@@ -1,4 +1,4 @@
-"""OAuth authentication API routes."""
+"""OAuth and email/password authentication API routes."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
@@ -66,6 +66,7 @@ class AuthStatusResponse(BaseModel):
     oauth_enabled: bool
     google_enabled: bool
     github_enabled: bool
+    email_enabled: bool
 
 
 @router.get("/status", response_model=AuthStatusResponse)
@@ -80,6 +81,7 @@ async def get_auth_status():
         oauth_enabled=google_enabled or github_enabled,
         google_enabled=google_enabled,
         github_enabled=github_enabled,
+        email_enabled=True,  # Email/password auth is always available
     )
 
 
@@ -201,6 +203,107 @@ async def github_callback(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to authenticate with GitHub: {str(e)}",
         )
+
+
+# ─────────────────────────────────────────────────────────────
+# Email/Password Authentication Endpoints
+# ─────────────────────────────────────────────────────────────
+
+
+class RegisterRequest(BaseModel):
+    """Email/password registration request."""
+
+    email: str
+    password: str
+    name: str | None = None
+
+
+class LoginRequest(BaseModel):
+    """Email/password login request."""
+
+    email: str
+    password: str
+
+
+@router.post("/register", response_model=AuthResponse)
+async def register(
+    request: RegisterRequest,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Register a new user with email and password."""
+    if len(request.password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="비밀번호는 6자 이상이어야 합니다",
+        )
+
+    auth_service = AuthService(db)
+
+    try:
+        user = await auth_service.register_user(
+            email=request.email,
+            password=request.password,
+            name=request.name,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+    tokens = auth_service.create_token_pair(user.id)
+
+    return AuthResponse(
+        access_token=tokens.access_token,
+        refresh_token=tokens.refresh_token,
+        token_type=tokens.token_type,
+        expires_in=tokens.expires_in,
+        user=UserResponse(
+            id=user.id,
+            email=user.email,
+            name=user.name,
+            avatar_url=user.avatar_url,
+            oauth_provider=user.oauth_provider or "email",
+            is_admin=user.is_admin,
+        ),
+    )
+
+
+@router.post("/login", response_model=AuthResponse)
+async def login(
+    request: LoginRequest,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Login with email and password."""
+    auth_service = AuthService(db)
+
+    try:
+        user = await auth_service.login_user(
+            email=request.email,
+            password=request.password,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+        )
+
+    tokens = auth_service.create_token_pair(user.id)
+
+    return AuthResponse(
+        access_token=tokens.access_token,
+        refresh_token=tokens.refresh_token,
+        token_type=tokens.token_type,
+        expires_in=tokens.expires_in,
+        user=UserResponse(
+            id=user.id,
+            email=user.email,
+            name=user.name,
+            avatar_url=user.avatar_url,
+            oauth_provider=user.oauth_provider or "email",
+            is_admin=user.is_admin,
+        ),
+    )
 
 
 # ─────────────────────────────────────────────────────────────

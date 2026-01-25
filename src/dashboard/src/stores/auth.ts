@@ -25,7 +25,7 @@ export interface User {
   email: string
   name: string | null
   avatar_url: string | null
-  oauth_provider: 'google' | 'github'
+  oauth_provider: 'google' | 'github' | 'email'
   is_admin: boolean
 }
 
@@ -320,6 +320,69 @@ export async function exchangeOAuthCode(
   if (!response.ok) {
     const error = await response.json()
     throw new Error(error.detail || 'Failed to authenticate')
+  }
+
+  const data = await response.json()
+  return {
+    user: data.user,
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    expiresIn: data.expires_in,
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Email/Password Authentication
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Register a new user with email/password
+ */
+export async function registerWithEmail(
+  email: string,
+  password: string,
+  name?: string
+): Promise<{ user: User; accessToken: string; refreshToken: string; expiresIn: number }> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email, password, name }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || '회원가입에 실패했습니다')
+  }
+
+  const data = await response.json()
+  return {
+    user: data.user,
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    expiresIn: data.expires_in,
+  }
+}
+
+/**
+ * Login with email/password
+ */
+export async function loginWithEmail(
+  email: string,
+  password: string
+): Promise<{ user: User; accessToken: string; refreshToken: string; expiresIn: number }> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email, password }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || '로그인에 실패했습니다')
   }
 
   const data = await response.json()

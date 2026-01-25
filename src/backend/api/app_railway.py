@@ -1,5 +1,6 @@
 """Railway FastAPI app with OAuth support (no LLM/DB dependencies)."""
 
+import hashlib
 import os
 import secrets
 from datetime import datetime, timedelta
@@ -10,7 +11,7 @@ import jwt
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 # ─────────────────────────────────────────────────────────────
 # Configuration
@@ -55,6 +56,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ─────────────────────────────────────────────────────────────
+# Password Hashing (using hashlib since bcrypt may not be available)
+# ─────────────────────────────────────────────────────────────
+
+
+def hash_password(password: str) -> str:
+    """Hash password using SHA-256 with salt."""
+    salt = secrets.token_hex(16)
+    password_hash = hashlib.sha256((password + salt).encode()).hexdigest()
+    return f"{salt}:{password_hash}"
+
+
+def verify_password(password: str, hashed: str) -> bool:
+    """Verify password against hash."""
+    try:
+        salt, password_hash = hashed.split(":")
+        return hashlib.sha256((password + salt).encode()).hexdigest() == password_hash
+    except ValueError:
+        return False
 
 
 # ─────────────────────────────────────────────────────────────
@@ -124,6 +146,24 @@ async def root():
 @app.get("/api/health")
 async def api_health():
     return {"status": "healthy", "mode": "railway"}
+
+
+# ─────────────────────────────────────────────────────────────
+# Auth Status
+# ─────────────────────────────────────────────────────────────
+
+
+@app.get("/api/auth/status")
+async def get_auth_status():
+    """Check auth configuration status."""
+    google_enabled = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
+    github_enabled = bool(GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET)
+    return {
+        "oauth_enabled": google_enabled or github_enabled,
+        "google_enabled": google_enabled,
+        "github_enabled": github_enabled,
+        "email_enabled": True,
+    }
 
 
 # ─────────────────────────────────────────────────────────────
@@ -365,6 +405,92 @@ async def refresh_token(request: Request):
 @app.post("/api/auth/logout")
 async def logout():
     return {"message": "Logged out"}
+
+
+# ─────────────────────────────────────────────────────────────
+# Email/Password Authentication
+# ─────────────────────────────────────────────────────────────
+
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+    name: str | None = None
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+@app.post("/api/auth/register")
+async def register(request: RegisterRequest):
+    """Register a new user with email/password."""
+    # Check if email already exists
+    for user in users_store.values():
+        if user.get("email") == request.email and user.get("oauth_provider") == "email":
+            raise HTTPException(status_code=400, detail="이미 등록된 이메일입니다")
+
+    # Create user
+    user_id = f"email_{secrets.token_hex(8)}"
+    password_hash = hash_password(request.password)
+
+    user = {
+        "id": user_id,
+        "email": request.email,
+        "name": request.name or request.email.split("@")[0],
+        "avatar_url": "",
+        "oauth_provider": "email",
+        "is_admin": False,
+        "password_hash": password_hash,
+    }
+    users_store[user_id] = user
+
+    # Create JWT token
+    jwt_token = create_access_token(user_id, user["email"])
+
+    # Return user without password_hash
+    user_response = {k: v for k, v in user.items() if k != "password_hash"}
+
+    return {
+        "access_token": jwt_token,
+        "refresh_token": jwt_token,
+        "token_type": "bearer",
+        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        "user": user_response,
+    }
+
+
+@app.post("/api/auth/login")
+async def login(request: LoginRequest):
+    """Login with email/password."""
+    # Find user by email
+    user = None
+    for u in users_store.values():
+        if u.get("email") == request.email and u.get("oauth_provider") == "email":
+            user = u
+            break
+
+    if not user:
+        raise HTTPException(status_code=401, detail="이메일 또는 비밀번호가 올바르지 않습니다")
+
+    # Verify password
+    if not verify_password(request.password, user.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="이메일 또는 비밀번호가 올바르지 않습니다")
+
+    # Create JWT token
+    jwt_token = create_access_token(user["id"], user["email"])
+
+    # Return user without password_hash
+    user_response = {k: v for k, v in user.items() if k != "password_hash"}
+
+    return {
+        "access_token": jwt_token,
+        "refresh_token": jwt_token,
+        "token_type": "bearer",
+        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        "user": user_response,
+    }
 
 
 # ─────────────────────────────────────────────────────────────

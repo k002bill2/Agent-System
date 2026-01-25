@@ -222,7 +222,7 @@ class DatasetEntryModel(Base):
 
 
 class UserModel(Base):
-    """User model for OAuth authentication."""
+    """User model for OAuth and email/password authentication."""
 
     __tablename__ = "users"
 
@@ -231,9 +231,12 @@ class UserModel(Base):
     name = Column(String(255), nullable=True)
     avatar_url = Column(String(500), nullable=True)
 
-    # OAuth provider info
-    oauth_provider = Column(String(50), nullable=False)  # google | github
-    oauth_provider_id = Column(String(255), nullable=False)
+    # Password (for email/password auth; null for OAuth-only users)
+    password_hash = Column(String(255), nullable=True)
+
+    # OAuth provider info (nullable for email/password users)
+    oauth_provider = Column(String(50), nullable=True)  # google | github | email
+    oauth_provider_id = Column(String(255), nullable=True)
 
     # Status flags
     is_active = Column(Boolean, default=True)

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 
 export type ViewType =
   | 'login'
+  | 'register'
   | 'auth-callback-google'
   | 'auth-callback-github'
   | 'dashboard'
@@ -15,7 +16,7 @@ export type ViewType =
   | 'settings'
 
 // Views that don't require authentication
-export const PUBLIC_VIEWS: ViewType[] = ['login', 'auth-callback-google', 'auth-callback-github']
+export const PUBLIC_VIEWS: ViewType[] = ['login', 'register', 'auth-callback-google', 'auth-callback-github']
 
 // Check if a view is public (doesn't require auth)
 export function isPublicView(view: ViewType): boolean {
