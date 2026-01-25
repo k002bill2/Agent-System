@@ -23,14 +23,13 @@ if [ -f "$PID_DIR/dashboard.pid" ]; then
     if kill -0 "$PID" 2>/dev/null; then
         echo -e "${GREEN}Stopping Dashboard (PID: $PID)...${NC}"
         kill "$PID" 2>/dev/null || true
-        # Also kill any node processes started by npm
-        pkill -f "vite.*5173" 2>/dev/null || true
     fi
     rm -f "$PID_DIR/dashboard.pid"
 else
     echo -e "${YELLOW}Dashboard PID file not found${NC}"
-    pkill -f "vite.*5173" 2>/dev/null || true
 fi
+# Always kill remaining vite processes (child processes may survive)
+pkill -f "vite.*5173" 2>/dev/null || true
 
 # Stop Backend
 if [ -f "$PID_DIR/backend.pid" ]; then
@@ -38,13 +37,18 @@ if [ -f "$PID_DIR/backend.pid" ]; then
     if kill -0 "$PID" 2>/dev/null; then
         echo -e "${GREEN}Stopping Backend (PID: $PID)...${NC}"
         kill "$PID" 2>/dev/null || true
-        # Also kill any uvicorn processes
-        pkill -f "uvicorn.*8000" 2>/dev/null || true
     fi
     rm -f "$PID_DIR/backend.pid"
 else
     echo -e "${YELLOW}Backend PID file not found${NC}"
-    pkill -f "uvicorn.*8000" 2>/dev/null || true
+fi
+# Always kill remaining uvicorn processes (workers may survive parent kill)
+pkill -f "uvicorn.*8000" 2>/dev/null || true
+sleep 1
+# Force kill if still running
+if pgrep -f "uvicorn.*8000" > /dev/null 2>&1; then
+    echo -e "${YELLOW}Force killing remaining backend processes...${NC}"
+    pkill -9 -f "uvicorn.*8000" 2>/dev/null || true
 fi
 
 # Stop Infrastructure

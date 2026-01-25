@@ -163,6 +163,7 @@ interface ProjectConfigsState {
   toggleMCPServer: (projectId: string, serverId: string, enabled: boolean) => Promise<void>
   addExternalPath: (path: string) => Promise<boolean>
   removeExternalPath: (path: string) => Promise<boolean>
+  removeProject: (projectId: string) => Promise<boolean>
   startStreaming: () => void
   stopStreaming: () => void
   setActiveTab: (tab: TabType) => void
@@ -447,6 +448,27 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
       if (!res.ok) {
         const data = await res.json()
         throw new Error(data.detail || 'Failed to remove path')
+      }
+
+      // Refresh projects list
+      await get().fetchProjects()
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    }
+  },
+
+  removeProject: async (projectId: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/project-configs/${projectId}/remove`, {
+        method: 'DELETE',
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.detail || 'Failed to remove project')
       }
 
       // Refresh projects list

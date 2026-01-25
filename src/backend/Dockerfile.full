@@ -23,7 +23,7 @@ COPY . .
 RUN touch README.md && uv pip install --system -e .
 
 # Create data directories
-RUN mkdir -p /app/data/chromadb
+RUN mkdir -p /app/data/chromadb /app/data/summaries
 
 # Non-root user for security
 RUN useradd -m -u 1000 aos && \

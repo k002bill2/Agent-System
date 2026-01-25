@@ -1,9 +1,13 @@
 """REST API routes."""
 
+import os
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import json
+
+# Docker mode: skip host filesystem validations
+IS_DOCKER = bool(os.getenv("CLAUDE_HOME"))
 
 from models.task import Task, TaskCreate, TaskTree
 from models.agent_state import AgentState, TaskStatus
@@ -513,31 +517,32 @@ async def link_project(request: ProjectLinkRequest):
     normalized_path = normalize_path(request.source_path)
     source_path = Path(normalized_path)
 
-    # Validate source path exists
-    if not source_path.exists():
-        raise HTTPException(status_code=400, detail=f"Source path does not exist: {normalized_path}")
-
-    if not source_path.is_dir():
-        raise HTTPException(status_code=400, detail=f"Source path is not a directory: {request.source_path}")
+    # Validate source path exists (skip in Docker - host paths not accessible)
+    if not IS_DOCKER:
+        if not source_path.exists():
+            raise HTTPException(status_code=400, detail=f"Source path does not exist: {normalized_path}")
+        if not source_path.is_dir():
+            raise HTTPException(status_code=400, detail=f"Source path is not a directory: {request.source_path}")
 
     # Check if project ID already exists
     if get_project(request.id):
         raise HTTPException(status_code=400, detail=f"Project ID '{request.id}' already exists")
 
-    # Create symlink in projects/ directory
-    projects_dir = get_projects_dir()
-    projects_dir.mkdir(parents=True, exist_ok=True)
+    # Create symlink in projects/ directory (skip in Docker)
+    if not IS_DOCKER:
+        projects_dir = get_projects_dir()
+        projects_dir.mkdir(parents=True, exist_ok=True)
 
-    symlink_path = projects_dir / request.id
+        symlink_path = projects_dir / request.id
 
-    if symlink_path.exists():
-        raise HTTPException(status_code=400, detail=f"Path already exists: {symlink_path}")
+        if symlink_path.exists():
+            raise HTTPException(status_code=400, detail=f"Path already exists: {symlink_path}")
 
-    # Create symbolic link
-    symlink_path.symlink_to(source_path.resolve())
+        # Create symbolic link
+        symlink_path.symlink_to(source_path.resolve())
 
     # Register the project
-    project = register_project(request.id, str(source_path.resolve()))
+    project = register_project(request.id, str(normalized_path))
 
     return ProjectResponse(
         id=project.id,
@@ -628,8 +633,8 @@ async def create_project(request: ProjectCreate):
     # Normalize path to remove shell escape characters
     normalized_path = normalize_path(request.path)
 
-    # Validate path exists
-    if not Path(normalized_path).exists():
+    # Validate path exists (skip in Docker - host paths not accessible)
+    if not IS_DOCKER and not Path(normalized_path).exists():
         raise HTTPException(status_code=400, detail=f"Path does not exist: {normalized_path}")
 
     project = register_project(request.id, normalized_path)
@@ -664,38 +669,66 @@ async def update_project_endpoint(project_id: str, request: ProjectUpdate):
     )
 
 
+@router.get("/projects/{project_id}/deletion-preview")
+async def get_deletion_preview(project_id: str):
+    """
+    Get preview of what will be deleted when removing a project.
+
+    Returns counts of:
+    - Sessions, tasks, messages (DB records)
+    - RAG index chunks
+    - Symlink status
+
+    IMPORTANT: Source files are NEVER deleted.
+    """
+    from services.project_cleanup_service import get_cleanup_service
+
+    service = get_cleanup_service()
+    preview = await service.get_deletion_preview(project_id)
+
+    if not preview:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    return preview.model_dump()
+
+
 @router.delete("/projects/{project_id}")
 async def delete_project(project_id: str):
     """
-    Delete a project.
+    Delete a project with cascade cleanup.
 
     This removes:
-    - The symlink in projects/ directory (if exists)
+    - All DB records (sessions, tasks, messages, approvals, feedbacks)
+    - The RAG vector index
+    - Health cache
+    - Config monitor cache
+    - The symlink in projects/ directory
     - The project from registry
-    - The RAG vector index (if exists)
 
     IMPORTANT: Source files are NEVER deleted, only the symlink.
     """
-    from pathlib import Path
+    from services.project_cleanup_service import get_cleanup_service
 
     project = get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Remove symlink if exists in projects/ directory
-    projects_dir = get_projects_dir()
-    symlink_path = projects_dir / project_id
+    service = get_cleanup_service()
+    summary = await service.cascade_delete(project_id)
 
-    if symlink_path.is_symlink():
-        symlink_path.unlink()
+    if not summary.success:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "Project deletion failed",
+                "errors": summary.errors,
+            }
+        )
 
-    # TODO: Remove RAG vector index when RAG service is available
-    # await rag_service.delete_index(project_id)
-
-    # Remove from registry
-    unregister_project(project_id)
-
-    return {"message": f"Project '{project_id}' removed successfully"}
+    return {
+        "message": f"Project '{project_id}' removed successfully",
+        "cleanup_summary": summary.model_dump(),
+    }
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1165,6 +1198,7 @@ class WarpOpenRequest(BaseModel):
     command: str | None = Field(None, description="Optional command to execute")
     title: str | None = Field(None, description="Optional tab title")
     new_window: bool = Field(True, description="Open in new window (default) or new tab")
+    use_claude_cli: bool = Field(False, description="Wrap command with claude --dangerously-skip-permissions")
 
 
 class WarpOpenResponse(BaseModel):
@@ -1174,6 +1208,7 @@ class WarpOpenResponse(BaseModel):
     message: str | None = None
     error: str | None = None
     uri: str | None = None
+    open_via_frontend: bool = False
 
 
 @router.post("/warp/open", response_model=WarpOpenResponse)
@@ -1181,10 +1216,11 @@ async def open_in_warp(request: WarpOpenRequest):
     """
     Open a project in Warp terminal.
 
-    If a command is provided, it will be executed in the project directory
-    using Warp's Launch Configuration feature.
+    If use_claude_cli is True, the command (or interactive mode) will be wrapped
+    with `claude --dangerously-skip-permissions`.
 
-    Without a command, Warp will simply open a new window/tab at the project path.
+    If a command is provided without use_claude_cli, it will be executed directly.
+    Without any command, Warp will simply open a new window/tab at the project path.
     """
     # Get project
     project = get_project(request.project_id)
@@ -1200,12 +1236,23 @@ async def open_in_warp(request: WarpOpenRequest):
             error="Warp terminal is not installed. Please install from https://warp.dev",
         )
 
+    # Build the actual command
+    if request.use_claude_cli:
+        # Two-phase: start Claude interactively, then inject task via expect
+        actual_command = warp.build_claude_command(
+            task=request.command,  # None → interactive mode, string → expect inject
+        )
+        tab_title = request.title or "Claude CLI"
+    else:
+        actual_command = request.command
+        tab_title = request.title
+
     # Open Warp with or without command
-    if request.command:
+    if actual_command:
         result = warp.open_with_command(
             path=project.path,
-            command=request.command,
-            title=request.title,
+            command=actual_command,
+            title=tab_title,
             new_window=request.new_window,
         )
     else:
@@ -1219,6 +1266,7 @@ async def open_in_warp(request: WarpOpenRequest):
         message=result.get("message"),
         error=result.get("error"),
         uri=result.get("uri"),
+        open_via_frontend=result.get("open_via_frontend", False),
     )
 
 
@@ -1231,6 +1279,7 @@ async def warp_status():
     return {
         "installed": installed,
         "message": "Warp is installed" if installed else "Warp is not installed",
+        "docker_mode": IS_DOCKER,
     }
 
 

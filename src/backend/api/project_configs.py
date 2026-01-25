@@ -7,6 +7,7 @@ Provides endpoints to monitor and control Claude Code project configurations
 import asyncio
 import json
 import logging
+import os
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, HTTPException
@@ -87,7 +88,8 @@ async def list_monitored_paths() -> dict:
 async def add_external_path(request: ExternalPathRequest) -> dict:
     """Add an external project path at runtime.
 
-    The path must contain a .claude/ directory.
+    The path does not need to contain a .claude/ directory.
+    Projects without .claude/ will show empty configuration.
 
     Args:
         request: Path to add
@@ -106,7 +108,7 @@ async def add_external_path(request: ExternalPathRequest) -> dict:
     else:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid path or already added: {request.path}. Path must have .claude/ directory.",
+            detail=f"Invalid path or already added: {request.path}. Path must exist and be a directory.",
         )
 
 
@@ -140,6 +142,82 @@ async def remove_external_path(path_encoded: str) -> dict:
         )
 
 
+@router.delete("/{project_id}/remove")
+async def remove_project_from_monitoring(project_id: str) -> dict:
+    """Remove any project from monitoring (auto-discovered or external).
+
+    This removes the project from the monitoring list but does NOT delete
+    any source files.
+
+    Args:
+        project_id: Project identifier (encoded path)
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    # Get the project info first
+    summary = monitor.get_project_summary(project_id)
+    if summary is None:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+
+    path = summary.project.project_path
+
+    if monitor.remove_project(path):
+        return {
+            "success": True,
+            "message": f"Removed project from monitoring: {path}",
+            "project_id": project_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to remove project: {project_id}",
+        )
+
+
+# ========================================
+# Real-time Streaming
+# ========================================
+
+
+@router.get("/stream")
+async def stream_config_changes():
+    """Stream real-time configuration changes via SSE.
+
+    Watches all monitored projects for changes to:
+    - mcp.json
+    - hooks.json
+    - skills/*/SKILL.md
+    - agents/*.md
+
+    Returns:
+        Server-Sent Events stream with ConfigChangeEvent
+    """
+    monitor = get_project_config_monitor()
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        """Generate SSE events for config changes."""
+        # Send initial connection confirmation
+        yield 'event: connected\ndata: {"message": "Connected to config stream"}\n\n'
+
+        # Watch for changes
+        async for change in monitor.watch_configs(interval_seconds=2.0):
+            event_data = change.model_dump_json()
+            yield f"event: config_change\ndata: {event_data}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 # ========================================
 # Project Summary
 # ========================================
@@ -150,6 +228,7 @@ async def get_project_by_path(path: str) -> ProjectConfigSummary:
     """Get project configuration by filesystem path.
 
     Resolves symlinks to find the actual project path.
+    Returns empty configuration if .claude/ directory doesn't exist.
 
     Args:
         path: Filesystem path to project (can be symlink)
@@ -160,29 +239,28 @@ async def get_project_by_path(path: str) -> ProjectConfigSummary:
     from pathlib import Path as PathLib
 
     monitor = get_project_config_monitor()
+    is_docker = bool(os.getenv("CLAUDE_HOME"))
 
-    # Resolve symlinks to get actual path
-    try:
-        resolved_path = PathLib(path).resolve()
-    except (OSError, RuntimeError) as e:
-        raise HTTPException(status_code=400, detail=f"Invalid path: {e}")
+    # In Docker, host paths aren't accessible - don't resolve or validate
+    if is_docker:
+        resolved_path = PathLib(path)
+    else:
+        try:
+            resolved_path = PathLib(path).resolve()
+        except (OSError, RuntimeError) as e:
+            raise HTTPException(status_code=400, detail=f"Invalid path: {e}")
 
-    # Check if .claude directory exists
-    claude_dir = resolved_path / ".claude"
-    if not claude_dir.exists():
-        raise HTTPException(
-            status_code=404,
-            detail=f"No .claude directory found at {resolved_path}",
-        )
+        if not resolved_path.exists():
+            raise HTTPException(status_code=404, detail=f"Path does not exist: {resolved_path}")
 
-    # Generate project_id from resolved path
+    # Generate project_id from path
     project_id = str(resolved_path).replace("/", "-").replace("\\", "-")
 
     # Try to get summary
     summary = monitor.get_project_summary(project_id)
 
     if summary is None:
-        # Project not in monitor's list, try to add it temporarily
+        # Project not in monitor's list, try to add it
         monitor.add_external_project(str(resolved_path))
         summary = monitor.get_project_summary(project_id)
 
@@ -821,44 +899,3 @@ async def delete_hook(project_id: str, event: str, index: int) -> dict:
             status_code=400,
             detail=f"Failed to delete hook {event}[{index}]. Check if project and hook exist.",
         )
-
-
-# ========================================
-# Real-time Streaming
-# ========================================
-
-
-@router.get("/stream")
-async def stream_config_changes():
-    """Stream real-time configuration changes via SSE.
-
-    Watches all monitored projects for changes to:
-    - mcp.json
-    - hooks.json
-    - skills/*/SKILL.md
-    - agents/*.md
-
-    Returns:
-        Server-Sent Events stream with ConfigChangeEvent
-    """
-    monitor = get_project_config_monitor()
-
-    async def event_generator() -> AsyncGenerator[str, None]:
-        """Generate SSE events for config changes."""
-        # Send initial connection confirmation
-        yield 'event: connected\ndata: {"message": "Connected to config stream"}\n\n'
-
-        # Watch for changes
-        async for change in monitor.watch_configs(interval_seconds=2.0):
-            event_data = change.model_dump_json()
-            yield f"event: config_change\ndata: {event_data}\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )

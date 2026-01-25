@@ -715,12 +715,25 @@ class ClaudeSessionMonitor:
     def _get_summary_cache_path(self, session_id: str) -> Path:
         """Get cache file path for session summary.
 
+        Uses SUMMARY_CACHE_DIR env var if set, otherwise falls back to
+        ~/.claude/session_summaries/. In Docker, ~/.claude is read-only,
+        so we use /app/data/summaries instead.
+
         Args:
             session_id: Session UUID
 
         Returns:
             Path to the summary cache file
         """
+        cache_dir = os.getenv("SUMMARY_CACHE_DIR", "")
+        if cache_dir:
+            return Path(cache_dir) / f"{session_id}.txt"
+
+        # In Docker (CLAUDE_HOME is set), use /app/data/summaries to avoid read-only mount
+        claude_home = os.getenv("CLAUDE_HOME", "")
+        if claude_home:
+            return Path("/app/data/summaries") / f"{session_id}.txt"
+
         return Path.home() / ".claude" / "session_summaries" / f"{session_id}.txt"
 
     def _get_first_messages(

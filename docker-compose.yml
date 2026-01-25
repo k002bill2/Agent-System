@@ -7,9 +7,9 @@ services:
   # React Dashboard (Nginx)
   dashboard:
     image: 002bill/aos-dashboard:latest
-    # build:
-    #   context: ./src/dashboard
-    #   dockerfile: Dockerfile.prod
+    build:
+      context: ./src/dashboard
+      dockerfile: Dockerfile.prod
     container_name: aos-dashboard
     ports:
       - "5173:80"
@@ -23,9 +23,9 @@ services:
   # FastAPI Backend
   backend:
     image: 002bill/aos-backend:latest
-    # build:
-    #   context: ./src/backend
-    #   dockerfile: Dockerfile.full
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile.full
     container_name: aos-backend
     ports:
       - "8000:8000"
@@ -39,7 +39,8 @@ services:
       - LLM_PROVIDER=${LLM_PROVIDER:-google}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      # Docker에서는 항상 host.docker.internal 사용 (.env의 localhost 무시)
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
       # OAuth (optional)
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
@@ -54,8 +55,12 @@ services:
     volumes:
       # Claude Code directory (sessions, stats, settings)
       - ${HOME}/.claude:/home/aos/.claude:ro
+      # Warp launch configurations (host ↔ container sync)
+      - ${HOME}/.warp/launch_configurations:/home/aos/.warp/launch_configurations
       # ChromaDB persistence
       - chromadb_data:/app/data/chromadb
+      # Summary cache (writable)
+      - summary_cache:/app/data/summaries
     depends_on:
       postgres:
         condition: service_healthy
@@ -131,6 +136,8 @@ volumes:
   redis_data:
     driver: local
   chromadb_data:
+    driver: local
+  summary_cache:
     driver: local
 
 networks:

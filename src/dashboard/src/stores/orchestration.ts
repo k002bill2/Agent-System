@@ -160,7 +160,7 @@ interface OrchestrationState {
   approveOperation: (approvalId: string, note?: string) => Promise<void>
   denyOperation: (approvalId: string, note?: string) => Promise<void>
   clearSession: () => void
-  openInWarp: (command?: string) => Promise<{ success: boolean; error?: string }>
+  openInWarp: (command?: string) => Promise<{ success: boolean; error?: string; sessionMonitorHint?: string }>
   checkWarpStatus: () => Promise<void>
   _hasHydrated: boolean
   setHasHydrated: (state: boolean) => void
@@ -230,6 +230,12 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       if (res.ok) {
         const projects = await res.json()
         set({ projects })
+
+        // Auto-select first project if none selected
+        const { selectedProjectId } = get()
+        if (!selectedProjectId && projects.length > 0) {
+          set({ selectedProjectId: projects[0].id })
+        }
       }
     } catch (e) {
       console.error('Failed to fetch projects:', e)
@@ -733,7 +739,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
     }
   },
 
-  // Open project in Warp terminal
+  // Open project in Warp terminal with Claude CLI
   openInWarp: async (command?: string) => {
     const { selectedProjectId } = get()
     if (!selectedProjectId) {
@@ -749,6 +755,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
         body: JSON.stringify({
           project_id: selectedProjectId,
           command: command || undefined,
+          use_claude_cli: true,
         }),
       })
 
@@ -756,7 +763,16 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       set({ warpLoading: false })
 
       if (data.success) {
-        return { success: true }
+        // Docker mode: backend can't open Warp, frontend opens the URI
+        if (data.open_via_frontend && data.uri) {
+          window.location.href = data.uri
+        }
+        // Non-Docker: backend already opened Warp via subprocess
+
+        return {
+          success: true,
+          sessionMonitorHint: 'Claude Sessions 탭에서 진행 상황을 확인하세요.',
+        }
       } else {
         return { success: false, error: data.error || 'Failed to open Warp' }
       }

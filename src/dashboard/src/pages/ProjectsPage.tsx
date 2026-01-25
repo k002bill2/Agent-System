@@ -20,7 +20,7 @@ import { useNavigationStore } from '../stores/navigation'
 import { useProjectConfigsStore } from '../stores/projectConfigs'
 import { ProjectFormModal } from '../components/ProjectFormModal'
 import { ProjectsGridSkeleton } from '../components/skeletons'
-import { ProjectClaudeConfigPanel } from '../components/projects'
+import { ProjectClaudeConfigPanel, DeleteProjectModal } from '../components/projects'
 
 export function ProjectsPage() {
   const {
@@ -40,6 +40,7 @@ export function ProjectsPage() {
     filteredProjects,
     selectProject,
     getSelectedProject,
+    fetchDeletionPreview,
   } = useProjectsStore()
 
   const { setView } = useNavigationStore()
@@ -47,6 +48,7 @@ export function ProjectsPage() {
 
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [indexingId, setIndexingId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null)
 
   const selectedProject = getSelectedProject()
 
@@ -68,11 +70,16 @@ export function ProjectsPage() {
     }
   }, [selectConfigProject, setView])
 
-  const handleDelete = async (project: Project) => {
-    if (confirm(`Are you sure you want to remove "${project.name}"? This will only remove the symlink, not the source files.`)) {
-      await deleteProject(project.id)
-    }
+  const handleDelete = (project: Project) => {
+    setDeleteTarget(project)
     setOpenMenuId(null)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (deleteTarget) {
+      await deleteProject(deleteTarget.id)
+      setDeleteTarget(null)
+    }
   }
 
   const handleReindex = async (project: Project) => {
@@ -319,6 +326,16 @@ export function ProjectsPage() {
         <ProjectClaudeConfigPanel
           project={selectedProject}
           onClose={() => selectProject(null)}
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <DeleteProjectModal
+          project={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={handleConfirmDelete}
+          fetchPreview={fetchDeletionPreview}
         />
       )}
     </div>
