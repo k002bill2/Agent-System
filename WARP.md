@@ -11,7 +11,7 @@ High level:
 - **Dashboard** (`src/dashboard`): Vite + React + TypeScript UI for monitoring sessions, tasks, agents, approvals, diffs, and usage.
 - **Infra** (`infra`): Docker Compose and scripts for local Postgres/Redis and optional full stack.
 - **AI tool config** (`.claude`, `CLAUDE.md`): Claude Code rules, sub-agents, slash commands, and MCP servers; AGS uses these concepts via its own backend (`services/warp_service.py`, MCP APIs, RAG).
-- **Projects** (`projects/`): Additional apps wired into AGS (e.g. LiveMetro via symlink, `projects/ppt-maker`).
+- **Projects** (`projects/`): Additional apps wired into AGS via symlinks (e.g. `projects/ppt-maker`, `projects/image-maker`).
 
 When in doubt, prefer the commands and architecture described here and in `README.md` / `CLAUDE.md` over guessing.
 
@@ -149,19 +149,12 @@ A Docker-based sandbox is used for isolated execution of risky commands (see `se
 
 ### 5. Connected Projects
 
-- **LiveMetro (React Native, via symlink)**
-  - Location: `projects/livemetro` (symlink into an external repo, see `CLAUDE.md`).
-  - Core commands (run inside `projects/livemetro`):
-    ```bash
-    npm install
-    npm start          # Expo dev server
-    npm test           # Jest tests
-    npm run lint       # ESLint
-    npm run type-check # TypeScript
-    ```
+프로젝트 심볼릭 링크를 통해 여러 외부 프로젝트를 연결할 수 있습니다:
 
-- **PPT Maker** (`projects/ppt-maker`)
-  - Currently has a stub `README.md` and `CLAUDE.md`; implementation details and commands are expected to be filled in as the project evolves.
+- **image-maker** (`projects/image-maker`) - 이미지 생성 프로젝트
+- **ppt-maker** (`projects/ppt-maker`) - PPT 생성 프로젝트
+- **youtube-maker** (`projects/youtube-maker`) - YouTube 콘텐츠 프로젝트
+- **obsidian** (`projects/obsidian`) - Obsidian vault 연결
 
 ## Architecture and Structure
 

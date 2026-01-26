@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { cn } from '../lib/utils'
 import { useOrchestrationStore, Task, TaskStatus } from '../stores/orchestration'
 import {
@@ -7,11 +8,15 @@ import {
   XCircle,
   ChevronRight,
   Loader2,
+  Pause,
+  Play,
 } from 'lucide-react'
+import { FeedbackButton } from './feedback/FeedbackButton'
 
 const statusConfig: Record<TaskStatus, { icon: typeof Circle; color: string; label: string }> = {
   pending: { icon: Circle, color: 'text-gray-400', label: 'Pending' },
   in_progress: { icon: Loader2, color: 'text-blue-500', label: 'In Progress' },
+  paused: { icon: Pause, color: 'text-yellow-500', label: 'Paused' },
   completed: { icon: CheckCircle2, color: 'text-green-500', label: 'Completed' },
   failed: { icon: XCircle, color: 'text-red-500', label: 'Failed' },
   cancelled: { icon: XCircle, color: 'text-gray-500', label: 'Cancelled' },
@@ -21,19 +26,50 @@ interface TaskNodeProps {
   task: Task
   depth: number
   allTasks: Record<string, Task>
+  sessionId: string | null
 }
 
-function TaskNode({ task, depth, allTasks }: TaskNodeProps) {
+function TaskNode({ task, depth, allTasks, sessionId }: TaskNodeProps) {
+  const { pauseTask, resumeTask } = useOrchestrationStore()
+  const [actionLoading, setActionLoading] = useState(false)
   const config = statusConfig[task.status]
   const Icon = config.icon
   const hasChildren = task.children.length > 0
+  const showFeedback = task.status === 'completed' && sessionId
+
+  // Can pause if pending or in_progress
+  const canPause = ['pending', 'in_progress'].includes(task.status)
+  // Can resume if paused
+  const canResume = task.status === 'paused'
+
+  // result를 문자열로 변환
+  const getResultOutput = (): string => {
+    if (!task.result) return task.description
+    if (typeof task.result === 'string') return task.result
+    return JSON.stringify(task.result)
+  }
+
+  const handlePause = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setActionLoading(true)
+    await pauseTask(task.id)
+    setActionLoading(false)
+  }
+
+  const handleResume = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setActionLoading(true)
+    await resumeTask(task.id)
+    setActionLoading(false)
+  }
 
   return (
     <div>
       <div
         className={cn(
-          'flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg cursor-pointer transition-colors',
-          depth > 0 && 'ml-6'
+          'flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg cursor-pointer transition-colors group',
+          depth > 0 && 'ml-6',
+          task.status === 'paused' && 'bg-yellow-50 dark:bg-yellow-900/10'
         )}
         style={{ paddingLeft: `${depth * 16 + 12}px` }}
       >
@@ -53,7 +89,57 @@ function TaskNode({ task, depth, allTasks }: TaskNodeProps) {
         <span className="text-xs text-gray-500 dark:text-gray-400">
           {config.label}
         </span>
+
+        {/* Pause/Resume buttons */}
+        {canPause && (
+          <button
+            onClick={handlePause}
+            disabled={actionLoading}
+            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-yellow-100 dark:hover:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 transition-opacity"
+            title="Pause task"
+          >
+            {actionLoading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Pause className="w-3.5 h-3.5" />
+            )}
+          </button>
+        )}
+        {canResume && (
+          <button
+            onClick={handleResume}
+            disabled={actionLoading}
+            className="p-1 rounded hover:bg-green-100 dark:hover:bg-green-900/30 text-green-600 dark:text-green-400 transition-opacity"
+            title="Resume task"
+          >
+            {actionLoading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Play className="w-3.5 h-3.5" />
+            )}
+          </button>
+        )}
+
+        {/* Feedback Button for completed tasks */}
+        {showFeedback && (
+          <FeedbackButton
+            sessionId={sessionId}
+            taskId={task.id}
+            output={getResultOutput()}
+            size="sm"
+          />
+        )}
       </div>
+
+      {/* Pause reason tooltip */}
+      {task.pauseReason && (
+        <div
+          className="ml-6 text-xs text-yellow-600 dark:text-yellow-400 px-3 py-1"
+          style={{ paddingLeft: `${depth * 16 + 36}px` }}
+        >
+          Paused: {task.pauseReason}
+        </div>
+      )}
 
       {/* Render children */}
       {hasChildren &&
@@ -66,6 +152,7 @@ function TaskNode({ task, depth, allTasks }: TaskNodeProps) {
               task={childTask}
               depth={depth + 1}
               allTasks={allTasks}
+              sessionId={sessionId}
             />
           )
         })}
@@ -74,7 +161,7 @@ function TaskNode({ task, depth, allTasks }: TaskNodeProps) {
 }
 
 export function TaskPanel() {
-  const { tasks, rootTaskId, isProcessing } = useOrchestrationStore()
+  const { tasks, rootTaskId, isProcessing, sessionId } = useOrchestrationStore()
   // Filter out deleted tasks
   const taskList = Object.values(tasks).filter((t) => !t.isDeleted)
   const rootTask = rootTaskId && tasks[rootTaskId] && !tasks[rootTaskId].isDeleted
@@ -107,16 +194,16 @@ export function TaskPanel() {
             </p>
           </div>
         ) : rootTask ? (
-          <TaskNode task={rootTask} depth={0} allTasks={tasks} />
+          <TaskNode task={rootTask} depth={0} allTasks={tasks} sessionId={sessionId} />
         ) : (
           taskList.map((task) => (
-            <TaskNode key={task.id} task={task} depth={0} allTasks={tasks} />
+            <TaskNode key={task.id} task={task} depth={0} allTasks={tasks} sessionId={sessionId} />
           ))
         )}
       </div>
 
       {/* Stats */}
-      <div className="h-12 border-t border-gray-200 dark:border-gray-700 flex items-center justify-around text-xs text-gray-500 dark:text-gray-400">
+      <div className="h-14 border-t border-gray-200 dark:border-gray-700 flex flex-wrap items-center justify-around gap-1 px-2 text-xs text-gray-500 dark:text-gray-400">
         <div className="flex items-center gap-1">
           <span className="w-2 h-2 rounded-full bg-gray-400" />
           {taskList.filter((t) => t.status === 'pending').length} Pending
@@ -124,6 +211,10 @@ export function TaskPanel() {
         <div className="flex items-center gap-1">
           <span className="w-2 h-2 rounded-full bg-blue-500" />
           {taskList.filter((t) => t.status === 'in_progress').length} Active
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-yellow-500" />
+          {taskList.filter((t) => t.status === 'paused').length} Paused
         </div>
         <div className="flex items-center gap-1">
           <span className="w-2 h-2 rounded-full bg-green-500" />

@@ -13,6 +13,7 @@ class TaskStatus(str, Enum):
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     WAITING = "waiting"
+    PAUSED = "paused"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -62,6 +63,10 @@ class TaskNode(BaseModel):
     retry_count: int = 0
     max_retries: int = 3
     error_history: list[str] = Field(default_factory=list)
+
+    # Pause/Resume fields
+    paused_at: datetime | None = None
+    pause_reason: str | None = None
 
     # Soft delete fields
     is_deleted: bool = False

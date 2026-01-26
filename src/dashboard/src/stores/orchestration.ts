@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import { notificationService } from '../services/notificationService'
 
 // Types
-export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled'
+export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'paused'
 
 // Connection status for auto-reconnect
 export type ConnectionStatus =
@@ -50,6 +50,9 @@ export interface Task {
   error?: string
   createdAt: string
   updatedAt: string
+  // Pause/Resume fields
+  pausedAt: string | null
+  pauseReason: string | null
   // Soft delete fields
   isDeleted: boolean
   deletedAt: string | null
@@ -227,6 +230,9 @@ interface OrchestrationState {
   setShowDeletedTasks: (show: boolean) => void
   // Task retry action
   retryTask: (taskId: string) => Promise<{ success: boolean; error?: string; retryCount?: number }>
+  // Task pause/resume actions
+  pauseTask: (taskId: string, reason?: string) => Promise<{ success: boolean; error?: string }>
+  resumeTask: (taskId: string) => Promise<{ success: boolean; error?: string }>
 }
 
 export const useOrchestrationStore = create<OrchestrationState>()(
@@ -995,6 +1001,90 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       return { success: false, error: 'Failed to connect to server' }
     }
   },
+
+  // Pause a task
+  pauseTask: async (taskId: string, reason?: string) => {
+    const { sessionId } = get()
+    if (!sessionId) {
+      return { success: false, error: 'No active session' }
+    }
+
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/tasks/${taskId}/pause`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        return {
+          success: false,
+          error: error.detail || 'Failed to pause task',
+        }
+      }
+
+      const data = await res.json()
+
+      // Update local state
+      set((state) => ({
+        tasks: {
+          ...state.tasks,
+          [taskId]: {
+            ...state.tasks[taskId],
+            status: 'paused' as TaskStatus,
+            pausedAt: data.paused_at,
+            pauseReason: reason || null,
+          },
+        },
+      }))
+
+      return { success: true }
+    } catch (e) {
+      console.error('Failed to pause task:', e)
+      return { success: false, error: 'Failed to connect to server' }
+    }
+  },
+
+  // Resume a paused task
+  resumeTask: async (taskId: string) => {
+    const { sessionId } = get()
+    if (!sessionId) {
+      return { success: false, error: 'No active session' }
+    }
+
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/tasks/${taskId}/resume`, {
+        method: 'POST',
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        return {
+          success: false,
+          error: error.detail || 'Failed to resume task',
+        }
+      }
+
+      // Update local state
+      set((state) => ({
+        tasks: {
+          ...state.tasks,
+          [taskId]: {
+            ...state.tasks[taskId],
+            status: 'pending' as TaskStatus,
+            pausedAt: null,
+            pauseReason: null,
+          },
+        },
+      }))
+
+      return { success: true }
+    } catch (e) {
+      console.error('Failed to resume task:', e)
+      return { success: false, error: 'Failed to connect to server' }
+    }
+  },
 }),
     {
       name: 'orchestration-storage',
@@ -1033,6 +1123,9 @@ function transformTask(raw: Record<string, unknown>): Task {
     error: raw.error as string | undefined,
     createdAt: (raw.created_at ?? raw.createdAt ?? new Date().toISOString()) as string,
     updatedAt: (raw.updated_at ?? raw.updatedAt ?? new Date().toISOString()) as string,
+    // Pause/Resume fields
+    pausedAt: (raw.paused_at ?? raw.pausedAt ?? null) as string | null,
+    pauseReason: (raw.pause_reason ?? raw.pauseReason ?? null) as string | null,
     // Soft delete fields
     isDeleted: (raw.is_deleted ?? raw.isDeleted ?? false) as boolean,
     deletedAt: (raw.deleted_at ?? raw.deletedAt ?? null) as string | null,

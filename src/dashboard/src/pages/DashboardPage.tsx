@@ -5,6 +5,7 @@ import { Activity, CheckCircle, Clock, AlertCircle, Users, Terminal } from 'luci
 import { CostMonitor } from '../components/CostMonitor'
 import { ClaudeUsageDashboard } from '../components/usage/ClaudeUsageDashboard'
 import { ProjectConfigStats } from '../components/ProjectConfigStats'
+import { ProcessMonitorWidget } from '../components/ProcessMonitorWidget'
 
 export function DashboardPage() {
   const { tasks, agents } = useOrchestrationStore()
@@ -103,7 +104,7 @@ export function DashboardPage() {
 
       {/* Agent Stats, Cost Monitor, Claude Usage & Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6 items-stretch">
-        {/* Column 1: Agent Status + Cost Monitor (stacked) */}
+        {/* Column 1: Agent Status + Process Monitor + Cost Monitor (stacked) */}
         <div className="space-y-6">
           {/* Agent Status */}
           <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
@@ -126,6 +127,9 @@ export function DashboardPage() {
               </div>
             </div>
           </div>
+
+          {/* Process Monitor */}
+          <ProcessMonitorWidget />
 
           {/* Cost Monitor */}
           <CostMonitor />

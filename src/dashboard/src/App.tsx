@@ -19,6 +19,10 @@ import { ProjectConfigsPage } from './pages/ProjectConfigsPage'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { AuthCallbackPage } from './pages/AuthCallbackPage'
+import { AuditPage } from './pages/AuditPage'
+import { NotificationsPage } from './pages/NotificationsPage'
+import { AnalyticsPage } from './pages/AnalyticsPage'
+import { PlaygroundPage } from './pages/PlaygroundPage'
 import {
   SidebarSkeleton,
   DashboardSkeleton,
@@ -42,6 +46,10 @@ const viewTitles: Record<string, string> = {
   monitor: 'Monitor',
   'claude-sessions': 'Claude Sessions',
   'project-configs': 'Project Configs',
+  audit: 'Audit Trail',
+  notifications: 'Notifications',
+  analytics: 'Analytics',
+  playground: 'Agent Playground',
   settings: 'Settings',
 }
 
@@ -259,6 +267,14 @@ export default function App() {
         return <ClaudeSessionsPage />
       case 'project-configs':
         return <ProjectConfigsPage />
+      case 'audit':
+        return <AuditPage />
+      case 'notifications':
+        return <NotificationsPage />
+      case 'analytics':
+        return <AnalyticsPage />
+      case 'playground':
+        return <PlaygroundPage />
       case 'settings':
         return <SettingsPage />
       default:
@@ -283,6 +299,14 @@ export default function App() {
       case 'claude-sessions':
         return <ClaudeSessionsSkeleton />
       case 'project-configs':
+        return <MonitorSkeleton />
+      case 'audit':
+        return <MonitorSkeleton />
+      case 'notifications':
+        return <SettingsSkeleton />
+      case 'analytics':
+        return <MonitorSkeleton />
+      case 'playground':
         return <MonitorSkeleton />
       case 'settings':
         return <SettingsSkeleton />

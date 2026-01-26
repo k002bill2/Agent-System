@@ -1,3 +1,8 @@
+---
+name: parallel-agents-protocol
+description: Parallel Agents Safety Protocol with ACE Framework for AOS Dashboard multi-agent execution
+---
+
 # Parallel Agents Safety Protocol v3.1.0
 ## ACE Framework Integration - AOS Dashboard Project
 

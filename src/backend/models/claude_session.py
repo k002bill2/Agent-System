@@ -53,7 +53,7 @@ class ClaudeSessionInfo(BaseModel):
     slug: str = Field(..., description="Human-readable slug like 'federated-booping-frog'")
     status: SessionStatus = Field(default=SessionStatus.UNKNOWN, description="Session status")
     model: str = Field(default="unknown", description="Model name like 'claude-opus-4-5-20251101'")
-    project_path: str = Field(..., description="Encoded project path like '-Users-younghwankang-Work-LiveMetro'")
+    project_path: str = Field(..., description="Encoded project path like '-Users-username-Work-MyProject'")
     project_name: str = Field(default="", description="Human-readable project name")
     git_branch: str = Field(default="", description="Current git branch")
     cwd: str = Field(default="", description="Current working directory")

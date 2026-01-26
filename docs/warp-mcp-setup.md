@@ -68,10 +68,10 @@ Warp에서 MCP 서버 상태가 "Connected"로 표시되는지 확인합니다.
 ### Warp Agent Mode에서:
 
 ```
-> LiveMetro 프로젝트 타입체크 실행해줘
+> ppt-maker 프로젝트 타입체크 실행해줘
 
 [AGS ags_run_check 도구 호출]
-→ project_id: "livemetro"
+→ project_id: "ppt-maker"
 → check_type: "typecheck"
 
 결과:
@@ -144,12 +144,12 @@ curl http://localhost:8000/api/warp/status
 # 프로젝트에서 Warp 열기
 curl -X POST http://localhost:8000/api/warp/open \
   -H "Content-Type: application/json" \
-  -d '{"project_id": "livemetro"}'
+  -d '{"project_id": "ppt-maker"}'
 
 # 명령어와 함께 열기
 curl -X POST http://localhost:8000/api/warp/open \
   -H "Content-Type: application/json" \
-  -d '{"project_id": "livemetro", "command": "npm run type-check"}'
+  -d '{"project_id": "ppt-maker", "command": "npm run type-check"}'
 ```
 
 ### 기술 구현

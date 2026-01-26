@@ -12,6 +12,16 @@ IS_DOCKER = bool(os.getenv("CLAUDE_HOME"))
 from models.task import Task, TaskCreate, TaskTree
 from models.agent_state import AgentState, TaskStatus
 from models.hitl import ApprovalStatus, ApprovalResponse
+from models.context_usage import ContextUsage, get_context_limit
+from models.permissions import (
+    AgentPermission,
+    SessionPermissions,
+    SessionPermissionsResponse,
+    UpdatePermissionsRequest,
+    PermissionInfo,
+    get_permission_info,
+    PERMISSION_DESCRIPTIONS,
+)
 from models.project import (
     Project,
     ProjectCreate,
@@ -418,6 +428,79 @@ async def retry_task(
         "new_status": "pending",
         "retry_count": result.retry_count,
         "message": "Task queued for retry",
+    }
+
+
+class PauseTaskRequest(BaseModel):
+    """Request body for pausing a task."""
+
+    reason: str | None = Field(None, description="Optional reason for pausing")
+
+
+@router.post("/sessions/{session_id}/tasks/{task_id}/pause")
+async def pause_task(
+    session_id: str,
+    task_id: str,
+    request: PauseTaskRequest | None = None,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """
+    Pause a task that is pending or in progress.
+
+    Paused tasks are skipped by the orchestrator and can be resumed later.
+    """
+    from services.task_service import TaskService
+
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    tasks = state.get("tasks", {})
+    reason = request.reason if request else None
+    result = TaskService.pause_task(task_id, tasks, reason)
+
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.error)
+
+    return {
+        "success": True,
+        "task_id": result.task_id,
+        "previous_status": result.previous_status,
+        "new_status": "paused",
+        "paused_at": result.paused_at.isoformat() if result.paused_at else None,
+        "message": "Task paused successfully",
+    }
+
+
+@router.post("/sessions/{session_id}/tasks/{task_id}/resume")
+async def resume_task(
+    session_id: str,
+    task_id: str,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """
+    Resume a paused task.
+
+    Sets the task back to pending so the orchestrator will pick it up.
+    """
+    from services.task_service import TaskService
+
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    tasks = state.get("tasks", {})
+    result = TaskService.resume_task(task_id, tasks)
+
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.error)
+
+    return {
+        "success": True,
+        "task_id": result.task_id,
+        "previous_status": result.previous_status,
+        "new_status": result.resumed_to,
+        "message": "Task resumed successfully",
     }
 
 
@@ -1298,4 +1381,269 @@ async def warp_cleanup(max_age_hours: int = 24):
         "success": True,
         "removed_count": removed,
         "message": f"Removed {removed} old launch configuration(s)",
+    }
+
+
+# ─────────────────────────────────────────────────────────────
+# Context Window Meter API
+# ─────────────────────────────────────────────────────────────
+
+
+def _estimate_tokens(text: str) -> int:
+    """Estimate token count from text (~4 characters per token)."""
+    if not text:
+        return 0
+    return len(text) // 4
+
+
+def _calculate_session_context_usage(
+    state: dict,
+    provider: str = "unknown",
+    model: str = "unknown",
+) -> ContextUsage:
+    """Calculate context usage from session state."""
+    max_tokens = get_context_limit(provider, model)
+
+    # Estimate tokens for different components
+    system_tokens = 1000  # Base system prompt estimate
+    message_tokens = 0
+    task_tokens = 0
+    rag_tokens = 0
+
+    # Messages
+    messages = state.get("messages", [])
+    for msg in messages:
+        if isinstance(msg, dict):
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                message_tokens += _estimate_tokens(content)
+        elif hasattr(msg, "content"):
+            message_tokens += _estimate_tokens(str(msg.content))
+
+    # Tasks
+    tasks = state.get("tasks", {})
+    for task in tasks.values():
+        if hasattr(task, "title"):
+            task_tokens += _estimate_tokens(task.title)
+            task_tokens += _estimate_tokens(task.description)
+            if task.result:
+                task_tokens += _estimate_tokens(str(task.result))
+            if task.error:
+                task_tokens += _estimate_tokens(task.error)
+        elif isinstance(task, dict):
+            task_tokens += _estimate_tokens(task.get("title", ""))
+            task_tokens += _estimate_tokens(task.get("description", ""))
+            if task.get("result"):
+                task_tokens += _estimate_tokens(str(task["result"]))
+            if task.get("error"):
+                task_tokens += _estimate_tokens(task["error"])
+
+    # RAG context
+    context = state.get("context", {})
+    rag_context = context.get("rag_context", "")
+    if rag_context:
+        rag_tokens = _estimate_tokens(str(rag_context))
+
+    current_tokens = system_tokens + message_tokens + task_tokens + rag_tokens
+
+    return ContextUsage.calculate(
+        current_tokens=current_tokens,
+        max_tokens=max_tokens,
+        provider=provider,
+        model=model,
+        system_tokens=system_tokens,
+        message_tokens=message_tokens,
+        task_tokens=task_tokens,
+        rag_tokens=rag_tokens,
+    )
+
+
+@router.get("/sessions/{session_id}/context-usage", response_model=ContextUsage)
+async def get_context_usage(
+    session_id: str,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """
+    Get context window usage for a session.
+
+    Returns:
+    - current_tokens: Current tokens in context
+    - max_tokens: Maximum context window size
+    - percentage: Usage percentage (0-100)
+    - level: Warning level (normal, warning, critical)
+    - Breakdown by component (system, messages, tasks, RAG)
+    """
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Get provider/model from environment
+    provider = os.getenv("LLM_PROVIDER", "google")
+
+    if provider == "google":
+        model = os.getenv("GOOGLE_MODEL", "gemini-2.0-flash-exp")
+    elif provider == "anthropic":
+        model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+    elif provider == "openai":
+        model = os.getenv("OPENAI_MODEL", "gpt-4o")
+    elif provider == "ollama":
+        model = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+    else:
+        model = "unknown"
+
+    return _calculate_session_context_usage(state, provider, model)
+
+
+# ─────────────────────────────────────────────────────────────
+# Permission Toggles API
+# ─────────────────────────────────────────────────────────────
+
+# In-memory storage for session permissions
+_session_permissions: dict[str, SessionPermissions] = {}
+
+
+def _get_session_permissions(session_id: str) -> SessionPermissions:
+    """Get or create session permissions."""
+    if session_id not in _session_permissions:
+        _session_permissions[session_id] = SessionPermissions()
+    return _session_permissions[session_id]
+
+
+@router.get("/sessions/{session_id}/permissions", response_model=SessionPermissionsResponse)
+async def get_session_permissions(
+    session_id: str,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """
+    Get current permission settings for a session.
+
+    Returns all available permissions with their enabled/disabled state.
+    """
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    perms = _get_session_permissions(session_id)
+
+    # Build permission info list
+    permission_infos = []
+    for perm in AgentPermission:
+        enabled = perm in perms.enabled_permissions
+        permission_infos.append(get_permission_info(perm, enabled))
+
+    return SessionPermissionsResponse(
+        session_id=session_id,
+        permissions=permission_infos,
+        disabled_agents=list(perms.disabled_agents),
+        agent_overrides={
+            agent_id: list(perms_set)
+            for agent_id, perms_set in perms.permission_overrides.items()
+        },
+    )
+
+
+@router.put("/sessions/{session_id}/permissions", response_model=SessionPermissionsResponse)
+async def update_session_permissions(
+    session_id: str,
+    request: UpdatePermissionsRequest,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """
+    Update permission settings for a session.
+
+    Allows enabling/disabling specific permissions and agents.
+    """
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    perms = _get_session_permissions(session_id)
+
+    # Update enabled permissions
+    if request.enabled_permissions is not None:
+        perms.enabled_permissions = set(request.enabled_permissions)
+
+    # Update disabled agents
+    if request.disabled_agents is not None:
+        perms.disabled_agents = set(request.disabled_agents)
+
+    # Update agent overrides
+    if request.agent_overrides is not None:
+        perms.permission_overrides = {
+            agent_id: set(perms_list)
+            for agent_id, perms_list in request.agent_overrides.items()
+        }
+
+    # Build response
+    permission_infos = []
+    for perm in AgentPermission:
+        enabled = perm in perms.enabled_permissions
+        permission_infos.append(get_permission_info(perm, enabled))
+
+    return SessionPermissionsResponse(
+        session_id=session_id,
+        permissions=permission_infos,
+        disabled_agents=list(perms.disabled_agents),
+        agent_overrides={
+            agent_id: list(perms_set)
+            for agent_id, perms_set in perms.permission_overrides.items()
+        },
+    )
+
+
+@router.post("/sessions/{session_id}/permissions/toggle/{permission}")
+async def toggle_permission(
+    session_id: str,
+    permission: AgentPermission,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """
+    Toggle a specific permission on/off.
+    """
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    perms = _get_session_permissions(session_id)
+
+    if permission in perms.enabled_permissions:
+        perms.disable_permission(permission)
+        enabled = False
+    else:
+        perms.enable_permission(permission)
+        enabled = True
+
+    return {
+        "success": True,
+        "permission": permission.value,
+        "enabled": enabled,
+    }
+
+
+@router.post("/sessions/{session_id}/permissions/agents/{agent_id}/toggle")
+async def toggle_agent(
+    session_id: str,
+    agent_id: str,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """
+    Enable/disable a specific agent.
+    """
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    perms = _get_session_permissions(session_id)
+
+    if agent_id in perms.disabled_agents:
+        perms.enable_agent(agent_id)
+        enabled = True
+    else:
+        perms.disable_agent(agent_id)
+        enabled = False
+
+    return {
+        "success": True,
+        "agent_id": agent_id,
+        "enabled": enabled,
     }

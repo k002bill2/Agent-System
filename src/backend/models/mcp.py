@@ -102,7 +102,7 @@ class MCPInitializeResult(BaseModel):
 class CreateTaskArgs(BaseModel):
     """Arguments for ags_create_task tool."""
 
-    project_id: str = Field(description="Project identifier (e.g., 'livemetro')")
+    project_id: str = Field(description="Project identifier (e.g., 'ppt-maker')")
     task: str = Field(description="Task description to execute")
     agent_type: str | None = Field(
         default=None,

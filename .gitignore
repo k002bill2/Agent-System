@@ -38,4 +38,5 @@ logs/
 *.swp
 
 # Projects (symlinks - managed separately)
-projects/livemetro
+projects/*
+!projects/.gitkeep

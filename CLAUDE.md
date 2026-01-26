@@ -18,8 +18,11 @@ Agent System/
 │   ├── hooks/            # 자동화 훅 스크립트
 │   └── hooks.json        # 훅 설정
 │
-├── projects/             # 연결된 프로젝트
-│   └── livemetro/        # → LiveMetro (심볼릭 링크)
+├── projects/             # 연결된 프로젝트 (심볼릭 링크)
+│   ├── image-maker/      # → image-maker
+│   ├── ppt-maker/        # → ppt-maker
+│   ├── youtube-maker/    # → youtube-maker
+│   └── obsidian/         # → Obsidian vault
 │
 ├── src/                  # 시스템 소스코드
 │   ├── backend/          # Python (LangGraph + FastAPI)
@@ -41,14 +44,28 @@ Agent System/
 │   │   │   ├── session_service.py     # 세션 생명주기 관리
 │   │   │   ├── task_service.py        # 태스크 CRUD + 재시도
 │   │   │   ├── rag_service.py         # Vector DB + RAG
-│   │   │   └── sandbox_manager.py     # Docker 격리 실행
+│   │   │   ├── sandbox_manager.py     # Docker 격리 실행
+│   │   │   ├── playground_service.py  # Playground 세션/실행
+│   │   │   ├── llm_router_service.py  # LLM 자동 전환
+│   │   │   ├── version_service.py     # 설정 버전 관리
+│   │   │   ├── organization_service.py # 멀티테넌트 조직
+│   │   │   ├── analytics_service.py   # 분석 메트릭
+│   │   │   ├── audit_service.py       # 감사 로그
+│   │   │   └── notification_service.py # 알림 서비스
 │   │   ├── api/          # FastAPI 라우터
 │   │   │   ├── auth.py           # OAuth 인증 API
 │   │   │   ├── agents.py         # Agent/MCP API
 │   │   │   ├── feedback.py       # RLHF Feedback API
 │   │   │   ├── claude_sessions.py  # Claude Sessions API
 │   │   │   ├── rag.py            # RAG API
-│   │   │   └── routes.py         # 세션/태스크/프로젝트 API
+│   │   │   ├── routes.py         # 세션/태스크/프로젝트 API
+│   │   │   ├── playground.py     # Playground API
+│   │   │   ├── llm_router.py     # LLM Router API
+│   │   │   ├── config_versions.py # 버전 관리 API
+│   │   │   ├── organizations.py  # 조직 관리 API
+│   │   │   ├── analytics.py      # 분석 API
+│   │   │   ├── audit.py          # 감사 API
+│   │   │   └── notifications.py  # 알림 API
 │   │   ├── db/           # 데이터베이스 계층
 │   │   │   ├── database.py   # 비동기 SQLAlchemy
 │   │   │   ├── models.py     # ORM 모델
@@ -61,7 +78,12 @@ Agent System/
 │       │   │   ├── AgentsPage.tsx        # 에이전트 레지스트리
 │       │   │   ├── ClaudeSessionsPage.tsx  # Claude Code 세션 모니터링
 │       │   │   ├── LoginPage.tsx         # OAuth 로그인
-│       │   │   └── AuthCallbackPage.tsx  # OAuth 콜백
+│       │   │   ├── AuthCallbackPage.tsx  # OAuth 콜백
+│       │   │   ├── AuditPage.tsx         # 감사 로그
+│       │   │   ├── NotificationsPage.tsx # 알림 설정
+│       │   │   ├── AnalyticsPage.tsx     # 분석 대시보드
+│       │   │   ├── PlaygroundPage.tsx    # 에이전트 테스트 환경
+│       │   │   └── SettingsPage.tsx      # 설정 (LLM Router 포함)
 │       │   ├── components/
 │       │   │   ├── AgentCard.tsx         # 에이전트 카드
 │       │   │   ├── AgentStatsPanel.tsx
@@ -77,11 +99,19 @@ Agent System/
 │       │   │   │   ├── SessionCard.tsx
 │       │   │   │   ├── SessionDetails.tsx
 │       │   │   │   └── TranscriptViewer.tsx
-│       │   │   └── mcp/                  # MCP 관리 컴포넌트
-│       │   │       ├── MCPManagerTab.tsx
-│       │   │       ├── MCPServerCard.tsx
-│       │   │       └── MCPToolCaller.tsx
-│       │   ├── stores/                   # Zustand 스토어 (12개)
+│       │   │   ├── mcp/                  # MCP 관리 컴포넌트
+│       │   │   │   ├── MCPManagerTab.tsx
+│       │   │   │   ├── MCPServerCard.tsx
+│       │   │   │   └── MCPToolCaller.tsx
+│       │   │   ├── audit/                # 감사 로그 컴포넌트
+│       │   │   │   └── AuditLogTable.tsx
+│       │   │   ├── notifications/        # 알림 설정 컴포넌트
+│       │   │   │   └── NotificationRuleEditor.tsx
+│       │   │   ├── llm-router/           # LLM 라우터 컴포넌트
+│       │   │   │   └── LLMRouterSettings.tsx
+│       │   │   └── version-control/      # 버전 관리 컴포넌트
+│       │   │       └── VersionHistory.tsx
+│       │   ├── stores/                   # Zustand 스토어
 │       │   │   ├── orchestration.ts      # 세션/태스크 관리
 │       │   │   ├── agents.ts             # Agent Registry
 │       │   │   ├── feedback.ts           # RLHF Feedback
@@ -250,6 +280,156 @@ class AgentState(TypedDict):
 | POST | `/api/feedback/process-pending` | 대기 중 자동 처리 |
 | GET | `/api/feedback/dataset/stats` | 데이터셋 통계 |
 | GET | `/api/feedback/dataset/export` | 데이터셋 내보내기 (JSONL/CSV) |
+
+#### Task Pause/Resume Endpoints
+
+| Method | Path | 설명 |
+|--------|------|------|
+| POST | `/api/sessions/{id}/tasks/{tid}/pause` | 태스크 일시정지 |
+| POST | `/api/sessions/{id}/tasks/{tid}/resume` | 태스크 재개 |
+| GET | `/api/sessions/{id}/context-usage` | Context Window 사용량 조회 |
+
+#### Permissions Endpoints
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/sessions/{id}/permissions` | 세션 권한 설정 조회 |
+| PUT | `/api/sessions/{id}/permissions` | 세션 권한 업데이트 |
+| POST | `/api/sessions/{id}/permissions/{permission}/toggle` | 권한 토글 |
+| POST | `/api/sessions/{id}/agents/{agent_id}/toggle` | 에이전트 활성화 토글 |
+
+#### Audit Trail Endpoints
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/audit` | 감사 로그 조회 (필터/페이지네이션) |
+| GET | `/api/audit/export` | 감사 로그 내보내기 (JSON/CSV) |
+| GET | `/api/audit/sessions/{session_id}/trail` | 세션별 감사 추적 |
+
+**쿼리 파라미터** (`GET /api/audit`):
+- `session_id`: 세션 필터
+- `user_id`: 사용자 필터
+- `action`: 액션 타입 필터
+- `resource_type`: 리소스 타입 필터
+- `status`: 성공/실패 필터
+- `start_date`, `end_date`: 날짜 범위
+
+#### Notifications Endpoints
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/notifications/rules` | 알림 규칙 목록 |
+| POST | `/api/notifications/rules` | 알림 규칙 생성 |
+| PUT | `/api/notifications/rules/{id}` | 알림 규칙 수정 |
+| DELETE | `/api/notifications/rules/{id}` | 알림 규칙 삭제 |
+| POST | `/api/notifications/rules/{id}/toggle` | 규칙 활성화 토글 |
+| GET | `/api/notifications/channels` | 알림 채널 목록 |
+| PUT | `/api/notifications/channels/{channel}` | 채널 설정 업데이트 |
+| POST | `/api/notifications/channels/{channel}/test` | 채널 테스트 |
+| POST | `/api/notifications/send` | 수동 알림 발송 |
+| GET | `/api/notifications/history` | 알림 히스토리 |
+
+**알림 채널**: `slack`, `discord`, `email`, `webhook`
+
+**이벤트 타입**: `task_completed`, `task_failed`, `approval_required`, `session_started`, `session_ended`, `cost_threshold`, `error_occurred`, `agent_blocked`
+
+#### Analytics Endpoints
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/analytics/overview` | 개요 메트릭 |
+| GET | `/api/analytics/trends` | 시간별 트렌드 데이터 |
+| GET | `/api/analytics/agents` | 에이전트 성능 메트릭 |
+| GET | `/api/analytics/costs` | 비용 분석 |
+| GET | `/api/analytics/activity` | 활동 히트맵 |
+| GET | `/api/analytics/errors` | 에러 분석 |
+| GET | `/api/analytics/dashboard` | 전체 대시보드 데이터 |
+
+**쿼리 파라미터** (모든 endpoints):
+- `time_range`: `1h` | `24h` | `7d` | `30d` | `all` (기본: `7d`)
+
+#### Playground Endpoints
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/playground/sessions` | 플레이그라운드 세션 목록 |
+| POST | `/api/playground/sessions` | 세션 생성 |
+| GET | `/api/playground/sessions/{id}` | 세션 상세 조회 |
+| DELETE | `/api/playground/sessions/{id}` | 세션 삭제 |
+| PATCH | `/api/playground/sessions/{id}/settings` | 세션 설정 업데이트 |
+| POST | `/api/playground/sessions/{id}/execute` | 프롬프트 실행 |
+| POST | `/api/playground/sessions/{id}/execute/stream` | 스트리밍 실행 |
+| GET | `/api/playground/sessions/{id}/history` | 실행 히스토리 |
+| POST | `/api/playground/sessions/{id}/clear` | 히스토리 초기화 |
+| GET | `/api/playground/tools` | 사용 가능한 도구 목록 |
+| POST | `/api/playground/tools/test` | 도구 테스트 |
+| POST | `/api/playground/compare` | 에이전트 비교 (2-5개) |
+| GET | `/api/playground/models` | 사용 가능한 모델 목록 |
+
+#### LLM Router Endpoints (Auto-Switch)
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/llm-router/providers` | LLM 프로바이더 목록 |
+| POST | `/api/llm-router/providers` | 프로바이더 등록 |
+| GET | `/api/llm-router/providers/{id}` | 프로바이더 상세 |
+| PATCH | `/api/llm-router/providers/{id}` | 프로바이더 업데이트 |
+| DELETE | `/api/llm-router/providers/{id}` | 프로바이더 삭제 |
+| POST | `/api/llm-router/providers/{id}/toggle` | 활성화 토글 |
+| GET | `/api/llm-router/health` | 전체 헬스체크 |
+| GET | `/api/llm-router/health/{id}` | 프로바이더별 헬스체크 |
+| GET | `/api/llm-router/select` | 최적 프로바이더 선택 |
+| POST | `/api/llm-router/record` | 요청 결과 기록 |
+| GET | `/api/llm-router/config` | 라우터 설정 조회 |
+| PATCH | `/api/llm-router/config` | 라우터 설정 업데이트 |
+| GET | `/api/llm-router/state` | 라우터 상태 |
+| GET | `/api/llm-router/stats` | 라우팅 통계 |
+| POST | `/api/llm-router/initialize` | 환경변수에서 초기화 |
+
+**라우팅 전략**: `priority`, `round_robin`, `least_cost`, `least_latency`, `fallback_chain`
+
+#### Config Versions Endpoints (버전 관리)
+
+| Method | Path | 설명 |
+|--------|------|------|
+| POST | `/api/config-versions` | 버전 생성 |
+| GET | `/api/config-versions` | 버전 목록 (필터 지원) |
+| GET | `/api/config-versions/stats` | 버전 통계 |
+| GET | `/api/config-versions/{id}` | 버전 상세 |
+| PATCH | `/api/config-versions/{id}/label` | 레이블 수정 |
+| POST | `/api/config-versions/{id}/archive` | 버전 아카이브 |
+| DELETE | `/api/config-versions/{id}` | 드래프트 삭제 |
+| GET | `/api/config-versions/history/{type}/{id}` | 설정별 버전 히스토리 |
+| GET | `/api/config-versions/latest/{type}/{id}` | 최신 버전 조회 |
+| GET | `/api/config-versions/by-number/{type}/{id}/{version}` | 버전 번호로 조회 |
+| GET | `/api/config-versions/compare/{a}/{b}` | 버전 비교 (diff) |
+| POST | `/api/config-versions/rollback` | 롤백 실행 |
+
+**설정 타입**: `agent`, `session`, `project`, `workflow`, `permission`, `notification_rule`, `llm_router`
+
+#### Organizations Endpoints (Multi-tenant)
+
+| Method | Path | 설명 |
+|--------|------|------|
+| POST | `/api/organizations` | 조직 생성 |
+| GET | `/api/organizations` | 조직 목록 |
+| GET | `/api/organizations/{id}` | 조직 상세 |
+| GET | `/api/organizations/slug/{slug}` | 슬러그로 조회 |
+| PATCH | `/api/organizations/{id}` | 조직 업데이트 |
+| DELETE | `/api/organizations/{id}` | 조직 삭제 |
+| POST | `/api/organizations/{id}/upgrade` | 플랜 업그레이드 |
+| GET | `/api/organizations/{id}/members` | 멤버 목록 |
+| POST | `/api/organizations/{id}/members/invite` | 멤버 초대 |
+| POST | `/api/organizations/invitations/accept` | 초대 수락 |
+| PATCH | `/api/organizations/{id}/members/{mid}/role` | 역할 변경 |
+| DELETE | `/api/organizations/{id}/members/{mid}` | 멤버 제거 |
+| GET | `/api/organizations/user/{uid}/organizations` | 사용자 조직 목록 |
+| GET | `/api/organizations/{id}/context/{uid}` | 테넌트 컨텍스트 |
+| GET | `/api/organizations/{id}/stats` | 조직 통계 |
+| POST | `/api/organizations/{id}/usage/track` | 토큰 사용량 기록 |
+
+**플랜**: `free`, `starter`, `professional`, `enterprise`
+**역할**: `owner`, `admin`, `member`, `viewer`
 
 ### 핵심 기능
 
@@ -631,6 +811,215 @@ class TaskService:
 - 세션 TTL 자동 갱신 (마지막 활동 기준)
 - 유휴 세션 정리 작업
 
+#### 16. Context Window Meter
+
+Context 사용량을 실시간 모니터링합니다.
+
+```python
+# models/context_usage.py
+class ContextUsage(BaseModel):
+    current_tokens: int
+    max_tokens: int
+    percentage: float      # 0-100
+    warning_level: str     # normal, warning, critical
+    breakdown: TokenBreakdown
+```
+
+**Provider별 한도**:
+- Claude: 200K tokens
+- Gemini: 1M tokens
+- GPT-4: 128K tokens
+
+**Dashboard 컴포넌트**: `ContextWindowMeter.tsx` - 원형 게이지 (green→yellow→red)
+
+#### 17. Pause/Resume
+
+태스크 실행을 일시정지하고 재개할 수 있습니다.
+
+```python
+# models/agent_state.py
+class TaskStatus(str, Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    PAUSED = "paused"      # NEW
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+class TaskNode(BaseModel):
+    paused_at: datetime | None = None
+    pause_reason: str | None = None
+```
+
+**Dashboard**: TaskPanel에 Pause/Resume 버튼 추가
+
+#### 18. Permission Toggles
+
+세션 단위로 에이전트 권한을 세밀하게 제어합니다.
+
+```python
+# models/permissions.py
+class AgentPermission(str, Enum):
+    EXECUTE_BASH = "execute_bash"
+    WRITE_FILE = "write_file"
+    DELETE_FILE = "delete_file"
+    NETWORK_ACCESS = "network_access"
+    MCP_TOOL_CALL = "mcp_tool_call"
+    # ...
+```
+
+**Dashboard 컴포넌트**: `PermissionTogglePanel.tsx` - 권한별 토글 스위치 (위험도 표시)
+
+#### 19. Audit Trail
+
+모든 시스템 액션을 기록하고 추적합니다.
+
+```python
+# services/audit_service.py
+class AuditAction(str, Enum):
+    TASK_CREATED = "task_created"
+    TASK_COMPLETED = "task_completed"
+    TASK_FAILED = "task_failed"
+    APPROVAL_GRANTED = "approval_granted"
+    TOOL_EXECUTED = "tool_executed"
+    # ...
+```
+
+**Dashboard 페이지**: `AuditPage.tsx` - 필터링, 페이지네이션, JSON 상세 뷰
+
+#### 20. Smart Notifications
+
+다중 채널로 이벤트 기반 알림을 전송합니다.
+
+```python
+# services/notification_service.py
+class NotificationChannel(str, Enum):
+    SLACK = "slack"
+    DISCORD = "discord"
+    EMAIL = "email"
+    WEBHOOK = "webhook"
+```
+
+**기능**:
+- 규칙 기반 알림 (이벤트 타입, 조건, 우선순위)
+- 채널별 Rate Limiting
+- 템플릿 기반 메시지 포맷
+
+**Dashboard 페이지**: `NotificationsPage.tsx` - 규칙/채널 설정 UI
+
+#### 21. Analytics Dashboard
+
+메트릭, 트렌드, 성능 데이터를 시각화합니다.
+
+```python
+# services/analytics_service.py
+class AnalyticsService:
+    def get_overview() -> OverviewMetrics
+    def get_trends(time_range) -> MultiTrendData
+    def get_agent_performance(time_range) -> AgentPerformanceList
+    def get_cost_analytics(time_range) -> CostAnalytics
+    def get_activity_heatmap(time_range) -> ActivityHeatmap
+```
+
+**Dashboard 페이지**: `AnalyticsPage.tsx` - Recharts 기반 차트 (라인, 바, 파이, 히트맵)
+
+#### 22. Agent Playground
+
+에이전트를 대화형으로 테스트하는 환경입니다.
+
+```python
+# services/playground_service.py
+class PlaygroundService:
+    @staticmethod
+    def create_session(data: PlaygroundSessionCreate) -> PlaygroundSession
+    @staticmethod
+    async def execute(session_id: str, request: PlaygroundExecuteRequest) -> PlaygroundExecution
+    @staticmethod
+    async def execute_stream(session_id: str, request: PlaygroundExecuteRequest) -> AsyncIterator[str]
+    @staticmethod
+    async def compare(request: PlaygroundCompareRequest) -> PlaygroundCompareResult
+```
+
+**기능**:
+- 세션 기반 대화 (히스토리 유지)
+- 모델/온도/도구 설정 가능
+- 스트리밍 응답 지원
+- 에이전트 비교 (2-5개 동시 실행)
+
+**Dashboard 페이지**: `PlaygroundPage.tsx` - 채팅 인터페이스, 세션 관리, 설정 패널
+
+#### 23. LLM Auto-Switch
+
+여러 LLM 프로바이더 간 자동 전환 및 Failover를 지원합니다.
+
+```python
+# services/llm_router_service.py
+class LLMRouterService:
+    @staticmethod
+    def create_provider(data: LLMProviderConfigCreate) -> LLMProviderConfig
+    @staticmethod
+    async def check_provider_health(provider_id: str) -> LLMHealthCheck
+    @staticmethod
+    def select_provider(strategy: LLMRoutingStrategy) -> LLMRoutingDecision
+```
+
+**라우팅 전략**:
+- `priority`: 우선순위 기반 (기본)
+- `round_robin`: 순차 분배
+- `least_cost`: 비용 최소화
+- `least_latency`: 지연 최소화
+- `fallback_chain`: 장애 시 순차 시도
+
+**Dashboard 컴포넌트**: `LLMRouterSettings.tsx` (Settings 페이지) - 프로바이더 관리, 헬스체크, 통계
+
+#### 24. Version Control (Config Versioning)
+
+설정 변경사항을 버전 관리하고 롤백을 지원합니다.
+
+```python
+# services/version_service.py
+class VersionService:
+    @staticmethod
+    def create_version(data: ConfigVersionCreate) -> ConfigVersion
+    @staticmethod
+    def get_history(config_type: ConfigType, config_id: str) -> ConfigVersionHistory
+    @staticmethod
+    def compare_versions(version_id_a: str, version_id_b: str) -> ConfigVersionCompare
+    @staticmethod
+    def rollback(request: RollbackRequest) -> RollbackResult
+```
+
+**버전 상태**: `draft`, `active`, `archived`, `rolled_back`
+
+**Dashboard 컴포넌트**: `VersionHistory.tsx` - 버전 타임라인, diff 비교, 롤백 기능
+
+#### 25. Multi-tenant (Organizations)
+
+조직 기반 멀티테넌트 격리를 지원합니다.
+
+```python
+# services/organization_service.py
+class OrganizationService:
+    @staticmethod
+    def create_organization(data, owner_user_id, owner_email) -> Organization
+    @staticmethod
+    def invite_member(org_id, request, invited_by) -> OrganizationInvitation
+    @staticmethod
+    def get_tenant_context(org_id, user_id) -> TenantContext
+    @staticmethod
+    def track_token_usage(org_id, tokens) -> bool
+```
+
+**플랜별 제한**:
+| 플랜 | 멤버 | 프로젝트 | 일일 세션 | 월간 토큰 |
+|------|------|---------|----------|----------|
+| Free | 5 | 3 | 100 | 100K |
+| Starter | 10 | 10 | 500 | 500K |
+| Professional | 50 | 50 | 2,000 | 2M |
+| Enterprise | ∞ | ∞ | ∞ | ∞ |
+
+**멤버 역할**: `owner`, `admin`, `member`, `viewer`
+
 ## Dev Docs 시스템
 
 대규모 작업의 컨텍스트를 유지하기 위한 3-파일 시스템입니다.
@@ -891,3 +1280,40 @@ import { cn } from '@/lib/utils';
   {children}
 </div>
 ```
+
+### 주요 페이지
+
+| 페이지 | 설명 |
+|--------|------|
+| `DashboardPage` | 메인 대시보드 (세션 상태, 태스크 요약) |
+| `ProjectsPage` | 프로젝트 목록 및 관리 |
+| `TasksPage` | 태스크 트리 뷰, 상세 정보 |
+| `AgentsPage` | 에이전트 레지스트리, MCP, RLHF |
+| `ActivityPage` | 실시간 활동 로그 |
+| `MonitorPage` | 시스템 모니터링 |
+| `ClaudeSessionsPage` | Claude Code 세션 모니터링 |
+| `AuditPage` | 감사 로그 뷰어 |
+| `NotificationsPage` | 알림 규칙/채널 설정 |
+| `AnalyticsPage` | 분석 대시보드 (차트, 트렌드) |
+| `SettingsPage` | 시스템 설정 |
+
+### 주요 컴포넌트
+
+| 컴포넌트 | 위치 | 설명 |
+|----------|------|------|
+| `ContextWindowMeter` | `components/usage/` | Context 창 사용량 게이지 |
+| `PermissionTogglePanel` | `components/permissions/` | 권한 토글 패널 |
+| `AuditLogTable` | `components/audit/` | 감사 로그 테이블 |
+| `NotificationRuleEditor` | `components/notifications/` | 알림 규칙 에디터 |
+| `TaskPanel` | `components/` | 태스크 카드 (Pause/Resume 지원) |
+| `DiffViewer` | `components/` | 파일 변경 비교 뷰 |
+
+### 추가 Zustand Stores
+
+| Store | 설명 |
+|-------|------|
+| `permissions.ts` | 세션 권한 상태 관리 |
+| `claudeUsage.ts` | Context Window 사용량 |
+| `claudeSessions.ts` | Claude 세션 모니터링 |
+| `feedback.ts` | RLHF 피드백 |
+| `agents.ts` | 에이전트 레지스트리 |

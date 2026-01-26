@@ -16,6 +16,7 @@ import {
   AlertCircle,
   Circle,
   XCircle,
+  Pause,
   Filter,
   SplitSquareVertical,
   Trash2,
@@ -28,6 +29,7 @@ const statusFilters: { label: string; value: TaskStatus | 'all' | 'deleted' }[] 
   { label: 'All', value: 'all' },
   { label: 'Pending', value: 'pending' },
   { label: 'In Progress', value: 'in_progress' },
+  { label: 'Paused', value: 'paused' },
   { label: 'Completed', value: 'completed' },
   { label: 'Failed', value: 'failed' },
   { label: 'Deleted', value: 'deleted' },
@@ -39,6 +41,7 @@ const statusIcons: Record<TaskStatus, typeof CheckCircle> = {
   completed: CheckCircle,
   failed: AlertCircle,
   cancelled: XCircle,
+  paused: Pause,
 }
 
 const statusColors: Record<TaskStatus, string> = {
@@ -47,6 +50,7 @@ const statusColors: Record<TaskStatus, string> = {
   completed: 'text-green-500',
   failed: 'text-red-500',
   cancelled: 'text-gray-500',
+  paused: 'text-yellow-500',
 }
 
 function TaskNode({

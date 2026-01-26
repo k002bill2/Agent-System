@@ -42,7 +42,7 @@ class MCPService:
                     "properties": {
                         "project_id": {
                             "type": "string",
-                            "description": "Project identifier (e.g., 'livemetro')"
+                            "description": "Project identifier (e.g., 'ppt-maker')"
                         },
                         "task": {
                             "type": "string",

@@ -494,14 +494,14 @@ class ClaudeSessionMonitor:
         return self._decode_project_path(encoded_path)
 
     def _decode_project_path(self, encoded_path: str) -> str:
-        """Decode project path like '-Users-younghwankang-Work-LiveMetro'.
+        """Decode project path like '-Users-username-Work-MyProject'.
 
         Note: This is a lossy operation as spaces, tildes, and slashes all become dashes.
         Prefer using cwd from session data when available.
 
         Returns the last component as the project name.
         """
-        # e.g., "-Users-younghwankang-Work-LiveMetro" -> "LiveMetro"
+        # e.g., "-Users-username-Work-MyProject" -> "MyProject"
         parts = encoded_path.split("-")
         # Filter out empty parts and get the last non-empty part
         non_empty_parts = [p for p in parts if p]
@@ -1394,6 +1394,236 @@ class ClaudeSessionMonitor:
                 ))
 
         return events, current_size
+
+
+# ========================================
+# Process Management
+# ========================================
+
+
+@dataclass
+class ClaudeProcess:
+    """Represents a running Claude Code process."""
+
+    pid: int
+    version: str
+    terminal: str  # e.g., "s022", "??" for background
+    state: str  # e.g., "S+", "S", "R+"
+    started: str  # Human-readable start time
+    cpu_time: str  # Accumulated CPU time
+    memory_mb: float  # Memory usage in MB
+    is_foreground: bool  # True if active in terminal (S+, R+)
+    is_current: bool  # True if this is the current session
+    command: str  # Full command line
+
+
+@dataclass
+class ProcessCleanupResult:
+    """Result of process cleanup operation."""
+
+    killed: list[int]  # PIDs that were killed
+    failed: list[tuple[int, str]]  # PIDs that failed with error message
+    protected: list[int]  # PIDs that were skipped (foreground sessions)
+
+
+def list_claude_processes() -> list[ClaudeProcess]:
+    """List all running Claude Code processes.
+
+    Uses `ps aux` to find Claude processes and parses the output
+    to extract process information.
+
+    Returns:
+        List of ClaudeProcess objects sorted by CPU time (descending)
+    """
+    import subprocess
+    import os
+
+    try:
+        # Run ps command to get Claude processes
+        result = subprocess.run(
+            ["ps", "aux"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        if result.returncode != 0:
+            logger.error(f"ps command failed: {result.stderr}")
+            return []
+
+        processes = []
+        current_pid = os.getpid()
+        parent_pid = os.getppid()
+
+        for line in result.stdout.strip().split("\n")[1:]:  # Skip header
+            # Skip non-Claude processes
+            if "claude" not in line.lower():
+                continue
+
+            # Skip helper processes (ShipIt, MCP, etc.)
+            if "ShipIt" in line or "--claude-in-chrome-mcp" in line:
+                continue
+
+            # Parse ps output: USER PID %CPU %MEM VSZ RSS TTY STAT START TIME COMMAND
+            parts = line.split(None, 10)
+            if len(parts) < 11:
+                continue
+
+            try:
+                pid = int(parts[1])
+                mem_percent = float(parts[3])
+                terminal = parts[6]
+                state = parts[7]
+                started = parts[8]
+                cpu_time = parts[9]
+                command = parts[10]
+
+                # Skip if not a main Claude process
+                if "claude" not in command or "/claude" not in command:
+                    continue
+
+                # Estimate memory in MB (RSS is in KB on macOS)
+                try:
+                    rss_kb = int(parts[5])
+                    memory_mb = rss_kb / 1024
+                except (ValueError, IndexError):
+                    memory_mb = 0.0
+
+                # Extract version from command or path
+                version = "unknown"
+                if "/versions/" in command:
+                    # e.g., /Users/.../.local/share/claude/versions/2.1.19
+                    import re
+                    match = re.search(r"/versions/(\d+\.\d+\.\d+)", command)
+                    if match:
+                        version = match.group(1)
+
+                # Determine if foreground (S+, R+ indicate foreground in terminal)
+                is_foreground = state.endswith("+")
+
+                # Check if this is the current process or its parent
+                is_current = pid == current_pid or pid == parent_pid
+
+                processes.append(ClaudeProcess(
+                    pid=pid,
+                    version=version,
+                    terminal=terminal,
+                    state=state,
+                    started=started,
+                    cpu_time=cpu_time,
+                    memory_mb=round(memory_mb, 1),
+                    is_foreground=is_foreground,
+                    is_current=is_current,
+                    command=command[:200],  # Truncate long commands
+                ))
+            except (ValueError, IndexError) as e:
+                logger.debug(f"Failed to parse process line: {e}")
+                continue
+
+        # Sort by CPU time (parse MM:SS.ss format)
+        def parse_cpu_time(cpu_str: str) -> float:
+            """Parse CPU time string like '23:35.63' to seconds."""
+            try:
+                if ":" in cpu_str:
+                    parts = cpu_str.split(":")
+                    minutes = int(parts[0])
+                    seconds = float(parts[1])
+                    return minutes * 60 + seconds
+                return float(cpu_str)
+            except (ValueError, IndexError):
+                return 0.0
+
+        processes.sort(key=lambda p: parse_cpu_time(p.cpu_time), reverse=True)
+        return processes
+
+    except subprocess.TimeoutExpired:
+        logger.error("ps command timed out")
+        return []
+    except Exception as e:
+        logger.error(f"Error listing processes: {e}")
+        return []
+
+
+def kill_process(pid: int, force: bool = False) -> tuple[bool, str]:
+    """Kill a specific Claude Code process.
+
+    Args:
+        pid: Process ID to kill
+        force: If True, use SIGKILL instead of SIGTERM
+
+    Returns:
+        Tuple of (success, message)
+    """
+    import os
+    import signal
+
+    try:
+        # Safety check: don't kill current process
+        if pid == os.getpid() or pid == os.getppid():
+            return False, "Cannot kill current session"
+
+        # Send signal
+        sig = signal.SIGKILL if force else signal.SIGTERM
+        os.kill(pid, sig)
+
+        logger.info(f"Killed process {pid} with signal {sig.name}")
+        return True, f"Process {pid} terminated"
+
+    except ProcessLookupError:
+        return False, f"Process {pid} not found"
+    except PermissionError:
+        return False, f"Permission denied to kill process {pid}"
+    except Exception as e:
+        return False, f"Error killing process {pid}: {e}"
+
+
+def cleanup_stale_processes(
+    protect_foreground: bool = True,
+    protect_current: bool = True,
+) -> ProcessCleanupResult:
+    """Kill all stale (background) Claude Code processes.
+
+    Args:
+        protect_foreground: Don't kill processes in foreground terminals
+        protect_current: Don't kill the current process
+
+    Returns:
+        ProcessCleanupResult with killed/failed/protected PIDs
+    """
+    processes = list_claude_processes()
+
+    killed = []
+    failed = []
+    protected = []
+
+    for proc in processes:
+        # Skip current session
+        if protect_current and proc.is_current:
+            protected.append(proc.pid)
+            continue
+
+        # Skip foreground processes (active in terminal)
+        if protect_foreground and proc.is_foreground:
+            protected.append(proc.pid)
+            continue
+
+        # Kill this process
+        success, message = kill_process(proc.pid)
+        if success:
+            killed.append(proc.pid)
+        else:
+            failed.append((proc.pid, message))
+
+    logger.info(
+        f"Process cleanup: killed={len(killed)}, "
+        f"failed={len(failed)}, protected={len(protected)}"
+    )
+
+    return ProcessCleanupResult(
+        killed=killed,
+        failed=failed,
+        protected=protected,
+    )
 
 
 # Global monitor instance

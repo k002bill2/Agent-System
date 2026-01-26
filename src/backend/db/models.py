@@ -249,3 +249,45 @@ class UserModel(Base):
     __table_args__ = (
         Index("ix_users_provider_id", "oauth_provider", "oauth_provider_id"),
     )
+
+
+class AuditLogModel(Base):
+    """Audit log model for tracking all system actions."""
+
+    __tablename__ = "audit_logs"
+
+    id = Column(String(36), primary_key=True)
+    session_id = Column(String(36), ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    # Action details
+    action = Column(String(100), nullable=False, index=True)  # e.g., TASK_CREATED, TOOL_EXECUTED, APPROVAL_GRANTED
+    resource_type = Column(String(50), nullable=False, index=True)  # session, task, approval, agent, etc.
+    resource_id = Column(String(36), nullable=True, index=True)
+
+    # Change tracking
+    old_value = Column(JSONB, nullable=True)  # Previous state
+    new_value = Column(JSONB, nullable=True)  # New state
+    changes = Column(JSONB, nullable=True)  # Diff of changes
+
+    # Context
+    agent_id = Column(String(100), nullable=True, index=True)
+    ip_address = Column(String(45), nullable=True)  # IPv6 compatible
+    user_agent = Column(String(500), nullable=True)
+
+    # Additional metadata
+    metadata_json = Column(JSONB, nullable=True, default=dict)
+
+    # Result
+    status = Column(String(20), default="success", index=True)  # success, failed, denied
+    error_message = Column(Text, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index("ix_audit_session_action", "session_id", "action"),
+        Index("ix_audit_user_action", "user_id", "action"),
+        Index("ix_audit_resource", "resource_type", "resource_id"),
+        Index("ix_audit_created_action", "created_at", "action"),
+    )

@@ -159,8 +159,8 @@ ls -lt .claude/backups/ 2>/dev/null || echo "No backups found"
 
 | Backup Name                          | Date       | Files | Size  |
 |--------------------------------------|------------|-------|-------|
-| 20260111_143022_livemetro           | 2026-01-11 | 87    | 240KB |
-| 20260110_091545_livemetro_pre-update | 2026-01-10 | 85    | 235KB |
+| 20260111_143022_aos                 | 2026-01-11 | 87    | 240KB |
+| 20260110_091545_aos_pre-update       | 2026-01-10 | 85    | 235KB |
 
 Total: 2 backups
 ```
@@ -380,9 +380,9 @@ Options:
 Examples:
   /config-backup backup pre-refactor
   /config-backup list
-  /config-backup verify 20260111_143022_livemetro
-  /config-backup diff 20260111_143022_livemetro
-  /config-backup restore 20260111_143022_livemetro --dry-run
+  /config-backup verify 20260111_143022_aos
+  /config-backup diff 20260111_143022_aos
+  /config-backup restore 20260111_143022_aos --dry-run
 
 Storage: .claude/backups/
 ```

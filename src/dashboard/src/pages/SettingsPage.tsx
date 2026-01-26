@@ -15,6 +15,7 @@ import {
   Bell,
   Volume2,
 } from 'lucide-react'
+import { LLMRouterSettings } from '../components/llm-router'
 
 export function SettingsPage() {
   const {
@@ -206,6 +207,9 @@ export function SettingsPage() {
             </div>
           </div>
         </div>
+
+        {/* LLM Auto-Switch */}
+        <LLMRouterSettings />
 
         {/* Notifications */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">

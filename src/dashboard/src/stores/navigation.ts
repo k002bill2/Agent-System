@@ -13,6 +13,10 @@ export type ViewType =
   | 'monitor'
   | 'claude-sessions'
   | 'project-configs'
+  | 'audit'
+  | 'notifications'
+  | 'analytics'
+  | 'playground'
   | 'settings'
 
 // Views that don't require authentication

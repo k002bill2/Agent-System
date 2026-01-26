@@ -41,6 +41,26 @@ class TaskRetryResult(BaseModel):
     error: str | None = None
 
 
+class TaskPauseResult(BaseModel):
+    """Result of task pause operation."""
+
+    success: bool
+    task_id: str
+    previous_status: str | None = None
+    paused_at: datetime | None = None
+    error: str | None = None
+
+
+class TaskResumeResult(BaseModel):
+    """Result of task resume operation."""
+
+    success: bool
+    task_id: str
+    previous_status: str | None = None
+    resumed_to: str | None = None
+    error: str | None = None
+
+
 class TaskService:
     """Service for managing task operations."""
 
@@ -305,4 +325,105 @@ class TaskService:
             task_id=task_id,
             previous_status=previous_status,
             retry_count=task.retry_count,
+        )
+
+    @staticmethod
+    def pause_task(
+        task_id: str,
+        tasks: dict[str, TaskNode],
+        reason: str | None = None,
+    ) -> TaskPauseResult:
+        """
+        Pause a task that is in progress or pending.
+
+        Paused tasks are skipped by the orchestrator and can be resumed later.
+        """
+        task = tasks.get(task_id)
+        if not task:
+            return TaskPauseResult(
+                success=False,
+                task_id=task_id,
+                error=f"Task '{task_id}' not found",
+            )
+
+        if task.is_deleted:
+            return TaskPauseResult(
+                success=False,
+                task_id=task_id,
+                error="Cannot pause a deleted task",
+            )
+
+        # Only allow pause for pending or in_progress tasks
+        pausable_statuses = {TaskStatus.PENDING, TaskStatus.IN_PROGRESS}
+        if task.status not in pausable_statuses:
+            return TaskPauseResult(
+                success=False,
+                task_id=task_id,
+                previous_status=task.status.value,
+                error=f"Task cannot be paused (current status: {task.status.value}). Only pending or in_progress tasks can be paused.",
+            )
+
+        previous_status = task.status.value
+        now = datetime.utcnow()
+
+        # Pause the task
+        task.status = TaskStatus.PAUSED
+        task.paused_at = now
+        task.pause_reason = reason
+        task.updated_at = now
+
+        return TaskPauseResult(
+            success=True,
+            task_id=task_id,
+            previous_status=previous_status,
+            paused_at=now,
+        )
+
+    @staticmethod
+    def resume_task(
+        task_id: str,
+        tasks: dict[str, TaskNode],
+    ) -> TaskResumeResult:
+        """
+        Resume a paused task.
+
+        Sets the task back to pending so the orchestrator will pick it up.
+        """
+        task = tasks.get(task_id)
+        if not task:
+            return TaskResumeResult(
+                success=False,
+                task_id=task_id,
+                error=f"Task '{task_id}' not found",
+            )
+
+        if task.is_deleted:
+            return TaskResumeResult(
+                success=False,
+                task_id=task_id,
+                error="Cannot resume a deleted task",
+            )
+
+        # Only allow resume for paused tasks
+        if task.status != TaskStatus.PAUSED:
+            return TaskResumeResult(
+                success=False,
+                task_id=task_id,
+                previous_status=task.status.value,
+                error=f"Task is not paused (current status: {task.status.value}). Only paused tasks can be resumed.",
+            )
+
+        previous_status = task.status.value
+
+        # Resume the task
+        task.status = TaskStatus.PENDING
+        task.paused_at = None
+        task.pause_reason = None
+        task.updated_at = datetime.utcnow()
+
+        return TaskResumeResult(
+            success=True,
+            task_id=task_id,
+            previous_status=previous_status,
+            resumed_to="pending",
         )
