@@ -50,9 +50,10 @@ class ProjectConfigMonitor:
         self._is_docker = bool(os.getenv("CLAUDE_HOME"))
 
         # Add current directory (even without .claude/)
+        # Skip if cwd is src/backend (the backend runtime directory)
         if include_current:
             cwd = Path.cwd().resolve()
-            if cwd.exists():
+            if cwd.exists() and cwd.name != "backend":
                 self._project_paths.append(cwd)
 
         # Add provided paths (even without .claude/)

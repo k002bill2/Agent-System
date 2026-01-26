@@ -7,6 +7,14 @@ from pydantic import BaseModel, Field
 
 # Cost per 1K tokens for different models (USD)
 COST_PER_1K_TOKENS: dict[str, dict[str, float]] = {
+    # Google Gemini models (pricing per 1M tokens, converted to per 1K)
+    # Gemini 2.0 Flash: $0.10/1M input, $0.40/1M output (up to 128K context)
+    "gemini-2.0-flash-exp": {"input": 0.0001, "output": 0.0004},
+    "gemini-2.0-flash": {"input": 0.0001, "output": 0.0004},
+    # Gemini 1.5 Pro: $1.25/1M input, $5.00/1M output (up to 128K)
+    "gemini-1.5-pro": {"input": 0.00125, "output": 0.005},
+    # Gemini 1.5 Flash: $0.075/1M input, $0.30/1M output (up to 128K)
+    "gemini-1.5-flash": {"input": 0.000075, "output": 0.0003},
     # Anthropic models
     "claude-sonnet-4-20250514": {"input": 0.003, "output": 0.015},
     "claude-3-5-sonnet-20241022": {"input": 0.003, "output": 0.015},

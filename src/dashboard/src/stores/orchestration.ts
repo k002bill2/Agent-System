@@ -90,6 +90,55 @@ export interface TokenUsage {
   call_count: number
 }
 
+// Provider identification
+export type LLMProvider = 'google' | 'anthropic' | 'ollama' | 'openai' | 'unknown'
+
+export interface ProviderUsage {
+  provider: LLMProvider
+  displayName: string
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+  costUsd: number
+  callCount: number
+}
+
+// Provider display configuration
+export const PROVIDER_CONFIG: Record<LLMProvider, { displayName: string; color: string; icon: string }> = {
+  google: { displayName: 'Google Gemini', color: 'blue', icon: '🔵' },
+  anthropic: { displayName: 'Anthropic Claude', color: 'orange', icon: '🟠' },
+  ollama: { displayName: 'Ollama (Local)', color: 'green', icon: '🟢' },
+  openai: { displayName: 'OpenAI GPT', color: 'purple', icon: '🟣' },
+  unknown: { displayName: 'Unknown', color: 'gray', icon: '⚪' },
+}
+
+// Helper function to identify provider from model name
+export function identifyProvider(model: string): LLMProvider {
+  const modelLower = model.toLowerCase()
+
+  // Anthropic models
+  if (modelLower.includes('claude')) return 'anthropic'
+
+  // Google models
+  if (modelLower.includes('gemini')) return 'google'
+
+  // OpenAI models
+  if (modelLower.includes('gpt')) return 'openai'
+
+  // Ollama/Local models (common patterns)
+  if (
+    modelLower.includes('qwen') ||
+    modelLower.includes('llama') ||
+    modelLower.includes('mistral') ||
+    modelLower.includes('codellama') ||
+    modelLower.includes(':')  // Ollama uses format like "model:tag"
+  ) {
+    return 'ollama'
+  }
+
+  return 'unknown'
+}
+
 export interface SessionInfo {
   session_id: string
   created_at: string
@@ -139,6 +188,7 @@ interface OrchestrationState {
 
   // Token/Cost tracking
   tokenUsage: Record<string, TokenUsage>
+  providerUsage: Record<LLMProvider, ProviderUsage>
   totalCost: number
 
   // Warp integration
@@ -210,6 +260,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
 
   // Token/Cost tracking - initial state
   tokenUsage: {},
+  providerUsage: {} as Record<LLMProvider, ProviderUsage>,
   totalCost: 0,
 
   // Warp integration - initial state
@@ -414,6 +465,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
           pendingApprovals: {},
           waitingForApproval: false,
           tokenUsage: {},
+          providerUsage: {} as Record<LLMProvider, ProviderUsage>,
           totalCost: 0,
           messages: [],
           reconnectAttempt: 0,
@@ -582,6 +634,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       pendingApprovals: {},
       waitingForApproval: false,
       tokenUsage: {},
+      providerUsage: {} as Record<LLMProvider, ProviderUsage>,
       totalCost: 0,
       sessionInfo: null,
     })
@@ -957,6 +1010,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
         messages: state.messages,
         pendingApprovals: state.pendingApprovals,
         tokenUsage: state.tokenUsage,
+        providerUsage: state.providerUsage,
         totalCost: state.totalCost,
       }),
       onRehydrateStorage: () => (state) => {
@@ -1196,6 +1250,13 @@ function handleMessage(
     case 'token_update':
       set((state) => {
         const agentName = payload.agent_name as string
+        const model = payload.model as string || ''
+        const inputTokens = payload.input_tokens as number
+        const outputTokens = payload.output_tokens as number
+        const totalTokens = payload.total_tokens as number
+        const costUsd = payload.cost_usd as number
+
+        // Update agent-level usage
         const currentUsage = state.tokenUsage[agentName] || {
           total_input_tokens: 0,
           total_output_tokens: 0,
@@ -1204,15 +1265,38 @@ function handleMessage(
           call_count: 0,
         }
 
+        // Update provider-level usage
+        const provider = identifyProvider(model)
+        const currentProviderUsage = state.providerUsage[provider] || {
+          provider,
+          displayName: PROVIDER_CONFIG[provider].displayName,
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          costUsd: 0,
+          callCount: 0,
+        }
+
         return {
           tokenUsage: {
             ...state.tokenUsage,
             [agentName]: {
-              total_input_tokens: currentUsage.total_input_tokens + (payload.input_tokens as number),
-              total_output_tokens: currentUsage.total_output_tokens + (payload.output_tokens as number),
-              total_tokens: currentUsage.total_tokens + (payload.total_tokens as number),
-              total_cost_usd: currentUsage.total_cost_usd + (payload.cost_usd as number),
+              total_input_tokens: currentUsage.total_input_tokens + inputTokens,
+              total_output_tokens: currentUsage.total_output_tokens + outputTokens,
+              total_tokens: currentUsage.total_tokens + totalTokens,
+              total_cost_usd: currentUsage.total_cost_usd + costUsd,
               call_count: currentUsage.call_count + 1,
+            },
+          },
+          providerUsage: {
+            ...state.providerUsage,
+            [provider]: {
+              ...currentProviderUsage,
+              inputTokens: currentProviderUsage.inputTokens + inputTokens,
+              outputTokens: currentProviderUsage.outputTokens + outputTokens,
+              totalTokens: currentProviderUsage.totalTokens + totalTokens,
+              costUsd: currentProviderUsage.costUsd + costUsd,
+              callCount: currentProviderUsage.callCount + 1,
             },
           },
           totalCost: payload.session_total_cost_usd as number,

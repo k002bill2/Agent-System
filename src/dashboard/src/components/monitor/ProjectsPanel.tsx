@@ -15,7 +15,7 @@ export function ProjectsPanel() {
   const [showFilter, setShowFilter] = useState(false)
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700">
+    <div className="h-full flex flex-col bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 w-[250px] min-w-[250px] max-w-[250px]">
       {/* Header */}
       <div className="px-3 py-3 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-2">

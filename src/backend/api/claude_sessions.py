@@ -19,6 +19,8 @@ from models.claude_session import (
     ClaudeSessionSaveRequest,
     ClaudeSessionSaveResponse,
     SessionStatus,
+    ActivityResponse,
+    TasksResponse,
 )
 from services.claude_session_monitor import get_monitor
 
@@ -783,3 +785,153 @@ async def delete_empty_sessions() -> dict:
         "deleted_count": len(deleted_ids),
         "deleted_ids": deleted_ids,
     }
+
+
+# ========================================
+# Activity/Tasks Endpoints for Dashboard Integration
+# ========================================
+
+
+@router.get("/{session_id}/activity", response_model=ActivityResponse)
+async def get_session_activity(
+    session_id: str,
+    offset: int = 0,
+    limit: int = 100,
+) -> ActivityResponse:
+    """Get activity events for a session.
+
+    Extracts user messages, assistant messages, tool uses, and tool results
+    as activity events for Dashboard display.
+
+    Args:
+        session_id: Session UUID
+        offset: Starting offset for pagination
+        limit: Maximum events to return (default: 100)
+
+    Returns:
+        List of activity events with pagination info
+    """
+    monitor = get_monitor()
+    events, total_count = monitor.get_session_activity(
+        session_id,
+        offset=offset,
+        limit=limit,
+    )
+
+    if total_count == 0:
+        # Check if session exists
+        details = monitor.get_session_details(session_id)
+        if details is None:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    return ActivityResponse(
+        session_id=session_id,
+        events=events,
+        total_count=total_count,
+        offset=offset,
+        limit=limit,
+        has_more=offset + len(events) < total_count,
+    )
+
+
+@router.get("/{session_id}/activity/stream")
+async def stream_session_activity(session_id: str):
+    """Stream real-time activity events via SSE.
+
+    Monitors session file for changes and pushes new activity events
+    to connected clients.
+
+    Args:
+        session_id: Session UUID
+
+    Returns:
+        Server-Sent Events stream with activity events
+    """
+    import json
+
+    monitor = get_monitor()
+
+    # Verify session exists
+    details = monitor.get_session_details(session_id)
+    if details is None:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        """Generate SSE events for new activity."""
+        # Get initial file size
+        last_size = details.file_size
+
+        # Send initial batch of recent activity
+        initial_events, _ = monitor.get_session_activity(
+            session_id,
+            offset=0,
+            limit=50,
+        )
+        if initial_events:
+            yield f"event: activity_batch\ndata: {json.dumps([e.model_dump(mode='json') for e in initial_events])}\n\n"
+
+        # Poll for new activity (every 500ms)
+        while True:
+            await asyncio.sleep(0.5)
+
+            try:
+                new_events, current_size = monitor.get_new_activity_since_size(
+                    session_id,
+                    last_size,
+                )
+
+                if new_events:
+                    for event in new_events:
+                        yield f"event: activity\ndata: {event.model_dump_json()}\n\n"
+
+                last_size = current_size
+
+                # Check if session is completed
+                session_details = monitor.get_session_details(session_id)
+                if session_details and session_details.status == SessionStatus.COMPLETED:
+                    yield f"event: session_completed\ndata: {json.dumps({'session_id': session_id})}\n\n"
+                    break
+
+            except Exception as e:
+                yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+                break
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/{session_id}/tasks", response_model=TasksResponse)
+async def get_session_tasks(session_id: str) -> TasksResponse:
+    """Get tasks extracted from TaskCreate/TaskUpdate tool calls.
+
+    Parses session transcript for task-related tool calls and returns
+    the reconstructed task tree structure.
+
+    Args:
+        session_id: Session UUID
+
+    Returns:
+        Tasks dictionary and root task IDs
+    """
+    monitor = get_monitor()
+    tasks, root_task_ids = monitor.get_session_tasks(session_id)
+
+    if not tasks:
+        # Check if session exists
+        details = monitor.get_session_details(session_id)
+        if details is None:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    return TasksResponse(
+        session_id=session_id,
+        tasks=tasks,
+        root_task_ids=root_task_ids,
+        total_count=len(tasks),
+    )

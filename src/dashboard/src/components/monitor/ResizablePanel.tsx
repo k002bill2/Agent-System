@@ -18,7 +18,11 @@ export function ResizablePanel({
   maxWidth = 1200, // Increased from 800px
   className,
 }: ResizablePanelProps) {
+  // If min === max, use fixed width (no resize, ignore localStorage)
+  const isFixed = minWidth === maxWidth
+
   const [width, setWidth] = useState(() => {
+    if (isFixed) return minWidth
     const saved = localStorage.getItem(STORAGE_KEY)
     return saved ? parseInt(saved, 10) : defaultWidth
   })
@@ -73,35 +77,37 @@ export function ResizablePanel({
       className={cn('relative flex', className)}
       style={{ width: `${width}px` }}
     >
-      {/* Resize Handle */}
-      <div
-        className={cn(
-          'absolute left-0 top-0 bottom-0 w-1 cursor-col-resize z-10',
-          'hover:bg-primary-400 dark:hover:bg-primary-600',
-          'transition-colors duration-150',
-          isResizing && 'bg-primary-500'
-        )}
-        onMouseDown={startResizing}
-      >
-        {/* Visual indicator on hover/drag */}
+      {/* Resize Handle - hidden when fixed */}
+      {!isFixed && (
         <div
           className={cn(
-            'absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2',
-            'w-3 h-8 rounded-full',
-            'bg-gray-300 dark:bg-gray-600',
-            'opacity-0 hover:opacity-100',
-            'transition-opacity duration-150',
-            'flex items-center justify-center',
-            isResizing && 'opacity-100 bg-primary-500'
+            'absolute left-0 top-0 bottom-0 w-1 cursor-col-resize z-10',
+            'hover:bg-primary-400 dark:hover:bg-primary-600',
+            'transition-colors duration-150',
+            isResizing && 'bg-primary-500'
           )}
+          onMouseDown={startResizing}
         >
-          <div className="flex flex-col gap-0.5">
-            <div className="w-0.5 h-0.5 rounded-full bg-white" />
-            <div className="w-0.5 h-0.5 rounded-full bg-white" />
-            <div className="w-0.5 h-0.5 rounded-full bg-white" />
+          {/* Visual indicator on hover/drag */}
+          <div
+            className={cn(
+              'absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2',
+              'w-3 h-8 rounded-full',
+              'bg-gray-300 dark:bg-gray-600',
+              'opacity-0 hover:opacity-100',
+              'transition-opacity duration-150',
+              'flex items-center justify-center',
+              isResizing && 'opacity-100 bg-primary-500'
+            )}
+          >
+            <div className="flex flex-col gap-0.5">
+              <div className="w-0.5 h-0.5 rounded-full bg-white" />
+              <div className="w-0.5 h-0.5 rounded-full bg-white" />
+              <div className="w-0.5 h-0.5 rounded-full bg-white" />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Panel Content */}
       <div className="flex-1 overflow-hidden border-l border-gray-200 dark:border-gray-700">

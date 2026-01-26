@@ -51,7 +51,7 @@ export function MonitorPage() {
         </div>
 
         {/* Projects Panel - Always show when no project selected */}
-        <ResizablePanel defaultWidth={259} minWidth={259} maxWidth={259}>
+        <ResizablePanel defaultWidth={250} minWidth={250} maxWidth={250}>
           <ProjectsPanel />
         </ResizablePanel>
       </div>
@@ -183,7 +183,7 @@ export function MonitorPage() {
 
       {/* Projects Panel */}
       {showProjects && (
-        <ResizablePanel defaultWidth={259} minWidth={259} maxWidth={259}>
+        <ResizablePanel defaultWidth={250} minWidth={250} maxWidth={250}>
           <ProjectsPanel />
         </ResizablePanel>
       )}

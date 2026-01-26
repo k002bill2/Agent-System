@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Agentation } from 'agentation'
 import { Sidebar } from './components/Sidebar'
 import { ChatInput } from './components/ChatInput'
 import { ApprovalBanner } from './components/ApprovalModal'
@@ -292,6 +293,9 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Agentation toolbar - development only */}
+      {import.meta.env.DEV && <Agentation />}
+
       {/* Sidebar */}
       {isInitialLoading ? <SidebarSkeleton /> : <Sidebar />}
 

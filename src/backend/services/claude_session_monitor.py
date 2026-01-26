@@ -24,6 +24,10 @@ from models.claude_session import (
     MessageType,
     TokenUsage,
     calculate_cost,
+    ActivityEvent,
+    ActivityEventType,
+    ClaudeCodeTask,
+    ClaudeCodeTaskStatus,
 )
 
 
@@ -1012,6 +1016,384 @@ class ClaudeSessionMonitor:
             and session.user_message_count == 0
             and session.assistant_message_count == 0
         )
+
+    def _find_session_file(self, session_id: str) -> Path | None:
+        """Find session file by ID across all projects directories.
+
+        Args:
+            session_id: Session UUID
+
+        Returns:
+            Path to session file or None if not found
+        """
+        for projects_dir in self.projects_dirs:
+            if not projects_dir.exists():
+                continue
+            for project_dir in projects_dir.iterdir():
+                if not project_dir.is_dir():
+                    continue
+                for candidate in project_dir.glob(f"**/{session_id}.jsonl"):
+                    if candidate.exists():
+                        return candidate
+        return None
+
+    def get_session_activity(
+        self,
+        session_id: str,
+        offset: int = 0,
+        limit: int = 100,
+        since: datetime | None = None,
+    ) -> tuple[list[ActivityEvent], int]:
+        """Get activity events from a session.
+
+        Extracts user messages, assistant messages, tool uses, and tool results
+        as activity events for Dashboard display.
+
+        Args:
+            session_id: Session UUID
+            offset: Starting offset for pagination
+            limit: Maximum events to return
+            since: Only return events after this timestamp
+
+        Returns:
+            Tuple of (events list, total count)
+        """
+        session_file = self._find_session_file(session_id)
+        if session_file is None:
+            return [], 0
+
+        events: list[ActivityEvent] = []
+        total_count = 0
+
+        with open(session_file, "r", encoding="utf-8") as f:
+            for line_num, line in enumerate(f):
+                line = line.strip()
+                if not line:
+                    continue
+
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                # Extract timestamp
+                timestamp_str = entry.get("timestamp", "")
+                try:
+                    timestamp = datetime.fromisoformat(
+                        timestamp_str.replace("Z", "+00:00")
+                    )
+                except ValueError:
+                    timestamp = datetime.utcnow()
+
+                # Filter by since timestamp
+                if since is not None:
+                    since_naive = since.replace(tzinfo=None) if since.tzinfo else since
+                    ts_naive = timestamp.replace(tzinfo=None) if timestamp.tzinfo else timestamp
+                    if ts_naive <= since_naive:
+                        continue
+
+                msg_type = entry.get("type", "")
+                event_id = f"{session_id}_{line_num}"
+
+                if msg_type == "user":
+                    total_count += 1
+                    if total_count > offset and len(events) < limit:
+                        message_data = entry.get("message", {})
+                        content = message_data.get("content", "")
+                        if isinstance(content, list) and len(content) > 0:
+                            first_item = content[0]
+                            if isinstance(first_item, dict):
+                                content = first_item.get("text", "")
+                            else:
+                                content = str(first_item)
+
+                        events.append(ActivityEvent(
+                            id=event_id,
+                            type=ActivityEventType.USER,
+                            timestamp=timestamp,
+                            content=content[:1000] if content else None,
+                            session_id=session_id,
+                        ))
+
+                elif msg_type == "assistant":
+                    message_data = entry.get("message", {})
+                    content_list = message_data.get("content", [])
+
+                    if isinstance(content_list, list):
+                        for item in content_list:
+                            if isinstance(item, dict):
+                                item_type = item.get("type", "")
+
+                                if item_type == "text":
+                                    total_count += 1
+                                    if total_count > offset and len(events) < limit:
+                                        events.append(ActivityEvent(
+                                            id=f"{event_id}_text",
+                                            type=ActivityEventType.ASSISTANT,
+                                            timestamp=timestamp,
+                                            content=item.get("text", "")[:1000],
+                                            session_id=session_id,
+                                        ))
+
+                                elif item_type == "tool_use":
+                                    total_count += 1
+                                    if total_count > offset and len(events) < limit:
+                                        events.append(ActivityEvent(
+                                            id=f"{event_id}_{item.get('id', 'tool')}",
+                                            type=ActivityEventType.TOOL_USE,
+                                            timestamp=timestamp,
+                                            tool_name=item.get("name"),
+                                            tool_input=item.get("input"),
+                                            session_id=session_id,
+                                        ))
+
+                elif msg_type == "result":
+                    total_count += 1
+                    if total_count > offset and len(events) < limit:
+                        result_data = entry.get("result", {})
+                        tool_result = str(result_data)[:500] if result_data else None
+
+                        events.append(ActivityEvent(
+                            id=event_id,
+                            type=ActivityEventType.TOOL_RESULT,
+                            timestamp=timestamp,
+                            tool_result=tool_result,
+                            session_id=session_id,
+                        ))
+
+        return events, total_count
+
+    def get_session_tasks(self, session_id: str) -> tuple[dict[str, ClaudeCodeTask], list[str]]:
+        """Extract tasks from TaskCreate/TaskUpdate/TaskList tool calls.
+
+        Parses session transcript for task-related tool calls and reconstructs
+        the task tree structure.
+
+        Args:
+            session_id: Session UUID
+
+        Returns:
+            Tuple of (tasks dict by ID, root task IDs list)
+        """
+        session_file = self._find_session_file(session_id)
+        if session_file is None:
+            return {}, []
+
+        tasks: dict[str, ClaudeCodeTask] = {}
+        task_counter = 0
+
+        with open(session_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                # Extract timestamp
+                timestamp_str = entry.get("timestamp", "")
+                try:
+                    timestamp = datetime.fromisoformat(
+                        timestamp_str.replace("Z", "+00:00")
+                    )
+                except ValueError:
+                    timestamp = datetime.utcnow()
+
+                msg_type = entry.get("type", "")
+
+                if msg_type == "assistant":
+                    message_data = entry.get("message", {})
+                    content_list = message_data.get("content", [])
+
+                    if isinstance(content_list, list):
+                        for item in content_list:
+                            if not isinstance(item, dict) or item.get("type") != "tool_use":
+                                continue
+
+                            tool_name = item.get("name", "")
+                            tool_input = item.get("input", {})
+
+                            if tool_name == "TaskCreate":
+                                task_counter += 1
+                                task_id = str(task_counter)
+                                subject = tool_input.get("subject", "Untitled Task")
+                                description = tool_input.get("description")
+                                active_form = tool_input.get("activeForm")
+
+                                tasks[task_id] = ClaudeCodeTask(
+                                    id=task_id,
+                                    title=subject,
+                                    description=description,
+                                    status=ClaudeCodeTaskStatus.PENDING,
+                                    created_at=timestamp,
+                                    updated_at=timestamp,
+                                    active_form=active_form,
+                                )
+
+                            elif tool_name == "TaskUpdate":
+                                task_id = tool_input.get("taskId", "")
+                                if task_id in tasks:
+                                    task = tasks[task_id]
+
+                                    # Update status
+                                    new_status = tool_input.get("status")
+                                    if new_status:
+                                        try:
+                                            task.status = ClaudeCodeTaskStatus(new_status)
+                                        except ValueError:
+                                            pass
+
+                                    # Update subject
+                                    new_subject = tool_input.get("subject")
+                                    if new_subject:
+                                        task.title = new_subject
+
+                                    # Update description
+                                    new_description = tool_input.get("description")
+                                    if new_description:
+                                        task.description = new_description
+
+                                    # Update active form
+                                    new_active_form = tool_input.get("activeForm")
+                                    if new_active_form:
+                                        task.active_form = new_active_form
+
+                                    # Handle parent relationships
+                                    blocked_by = tool_input.get("addBlockedBy", [])
+                                    if blocked_by and len(blocked_by) > 0:
+                                        task.parent_id = blocked_by[0]
+                                        # Add to parent's children
+                                        parent_id = blocked_by[0]
+                                        if parent_id in tasks:
+                                            if task_id not in tasks[parent_id].children:
+                                                tasks[parent_id].children.append(task_id)
+
+                                    task.updated_at = timestamp
+
+        # Identify root tasks (no parent)
+        root_task_ids = [
+            tid for tid, task in tasks.items()
+            if task.parent_id is None
+        ]
+
+        return tasks, root_task_ids
+
+    def get_new_activity_since_size(
+        self,
+        session_id: str,
+        last_size: int,
+    ) -> tuple[list[ActivityEvent], int]:
+        """Get new activity events since last file size.
+
+        Used for SSE streaming - only reads new content appended to file.
+
+        Args:
+            session_id: Session UUID
+            last_size: Last known file size in bytes
+
+        Returns:
+            Tuple of (new events, current file size)
+        """
+        session_file = self._find_session_file(session_id)
+        if session_file is None:
+            return [], 0
+
+        current_size = session_file.stat().st_size
+        if current_size <= last_size:
+            return [], current_size
+
+        events: list[ActivityEvent] = []
+
+        # Read only new content
+        with open(session_file, "r", encoding="utf-8") as f:
+            f.seek(last_size)
+            new_content = f.read()
+
+        # Process new lines
+        for line_num, line in enumerate(new_content.strip().split("\n")):
+            line = line.strip()
+            if not line:
+                continue
+
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            # Extract timestamp
+            timestamp_str = entry.get("timestamp", "")
+            try:
+                timestamp = datetime.fromisoformat(
+                    timestamp_str.replace("Z", "+00:00")
+                )
+            except ValueError:
+                timestamp = datetime.utcnow()
+
+            msg_type = entry.get("type", "")
+            event_id = f"{session_id}_{last_size}_{line_num}"
+
+            if msg_type == "user":
+                message_data = entry.get("message", {})
+                content = message_data.get("content", "")
+                if isinstance(content, list) and len(content) > 0:
+                    first_item = content[0]
+                    if isinstance(first_item, dict):
+                        content = first_item.get("text", "")
+                    else:
+                        content = str(first_item)
+
+                events.append(ActivityEvent(
+                    id=event_id,
+                    type=ActivityEventType.USER,
+                    timestamp=timestamp,
+                    content=content[:1000] if content else None,
+                    session_id=session_id,
+                ))
+
+            elif msg_type == "assistant":
+                message_data = entry.get("message", {})
+                content_list = message_data.get("content", [])
+
+                if isinstance(content_list, list):
+                    for item in content_list:
+                        if isinstance(item, dict):
+                            item_type = item.get("type", "")
+
+                            if item_type == "text":
+                                events.append(ActivityEvent(
+                                    id=f"{event_id}_text",
+                                    type=ActivityEventType.ASSISTANT,
+                                    timestamp=timestamp,
+                                    content=item.get("text", "")[:1000],
+                                    session_id=session_id,
+                                ))
+
+                            elif item_type == "tool_use":
+                                events.append(ActivityEvent(
+                                    id=f"{event_id}_{item.get('id', 'tool')}",
+                                    type=ActivityEventType.TOOL_USE,
+                                    timestamp=timestamp,
+                                    tool_name=item.get("name"),
+                                    tool_input=item.get("input"),
+                                    session_id=session_id,
+                                ))
+
+            elif msg_type == "result":
+                result_data = entry.get("result", {})
+                tool_result = str(result_data)[:500] if result_data else None
+
+                events.append(ActivityEvent(
+                    id=event_id,
+                    type=ActivityEventType.TOOL_RESULT,
+                    timestamp=timestamp,
+                    tool_result=tool_result,
+                    session_id=session_id,
+                ))
+
+        return events, current_size
 
 
 # Global monitor instance
