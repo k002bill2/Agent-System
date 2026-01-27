@@ -120,6 +120,140 @@ def calculate_cost(
     return round(input_cost + output_cost, 6)
 
 
+# ─────────────────────────────────────────────────────────────
+# Cost Allocation Models (Enterprise)
+# ─────────────────────────────────────────────────────────────
+
+
+class BudgetPeriod(str):
+    """Budget period types."""
+
+    MONTHLY = "monthly"
+    QUARTERLY = "quarterly"
+    YEARLY = "yearly"
+
+
+class CostCenter(BaseModel):
+    """Cost center for department/team billing."""
+
+    id: str = Field(default_factory=lambda: str(__import__("uuid").uuid4()))
+    organization_id: str
+    name: str
+    code: str  # Accounting code (e.g., "DEPT-001", "PROJ-ALPHA")
+    description: str | None = None
+
+    # Budget settings
+    budget_usd: float | None = None
+    budget_period: str = "monthly"
+    alert_threshold_percent: float = 80.0
+
+    # Metadata
+    tags: dict[str, str] = Field(default_factory=dict)
+    owner_id: str | None = None
+    parent_id: str | None = None  # For hierarchical cost centers
+
+    # Status
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class CostAllocation(BaseModel):
+    """Cost allocation record linking sessions to cost centers."""
+
+    id: str = Field(default_factory=lambda: str(__import__("uuid").uuid4()))
+    session_id: str
+    project_id: str | None = None
+    cost_center_id: str | None = None
+    user_id: str | None = None
+
+    # Cost breakdown
+    total_cost_usd: float = 0.0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    model_costs: dict[str, float] = Field(default_factory=dict)
+
+    # Allocation metadata
+    allocation_tags: dict[str, str] = Field(default_factory=dict)
+    allocation_percent: float = 100.0  # For split allocations
+
+    # Timestamps
+    period_start: datetime | None = None
+    period_end: datetime | None = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class CostReport(BaseModel):
+    """Cost report for a period."""
+
+    period: str
+    start_date: datetime
+    end_date: datetime
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # Totals
+    total_cost_usd: float = 0.0
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    total_sessions: int = 0
+
+    # Breakdowns
+    by_cost_center: dict[str, float] = Field(default_factory=dict)
+    by_project: dict[str, float] = Field(default_factory=dict)
+    by_user: dict[str, float] = Field(default_factory=dict)
+    by_model: dict[str, float] = Field(default_factory=dict)
+    by_day: dict[str, float] = Field(default_factory=dict)
+
+    # Budget status
+    budget_utilization: dict[str, dict] = Field(default_factory=dict)  # cost_center_id -> {budget, spent, percent}
+
+
+class CostForecast(BaseModel):
+    """Cost forecast based on historical data."""
+
+    forecast_date: datetime
+    period: str  # monthly, quarterly
+    projected_cost_usd: float = 0.0
+    confidence_interval: tuple[float, float] = (0.0, 0.0)
+
+    # Trend
+    trend_percent: float = 0.0  # +/- percent vs previous period
+    average_daily_cost: float = 0.0
+
+    # By category
+    by_cost_center: dict[str, float] = Field(default_factory=dict)
+    by_model: dict[str, float] = Field(default_factory=dict)
+
+
+class ChargebackExport(BaseModel):
+    """Chargeback export data for billing integration."""
+
+    export_id: str = Field(default_factory=lambda: str(__import__("uuid").uuid4()))
+    period_start: datetime
+    period_end: datetime
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    format: str = "csv"  # csv, json, xlsx
+
+    # Summary
+    total_amount_usd: float = 0.0
+    line_items: list[dict] = Field(default_factory=list)
+
+
+class BudgetAlert(BaseModel):
+    """Budget alert notification."""
+
+    id: str = Field(default_factory=lambda: str(__import__("uuid").uuid4()))
+    cost_center_id: str
+    cost_center_name: str
+    alert_type: str  # warning, critical, exceeded
+    threshold_percent: float
+    current_percent: float
+    budget_usd: float
+    spent_usd: float
+    message: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 def extract_token_usage(response: Any, model: str = "") -> TokenUsage | None:
     """
     Extract token usage from an LLM response.

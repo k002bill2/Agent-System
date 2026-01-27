@@ -1,185 +1,227 @@
 /**
  * Claude Code Tasks component
  *
- * Displays tasks extracted from TaskCreate/TaskUpdate tool calls
- * in a Claude Code session.
+ * Displays Claude Code sessions on the left, with session details
+ * and activity log on the right (split vertically).
  */
 
-import { useState } from 'react'
 import { useClaudeCodeActivityStore } from '../stores/claudeCodeActivity'
+import { useClaudeSessionsStore } from '../stores/claudeSessions'
 import { ClaudeCodeSessionSelector } from './ClaudeCodeSessionSelector'
+import { VerticalSplitPanel } from './VerticalSplitPanel'
 import { cn } from '../lib/utils'
 import {
-  ChevronRight,
-  ChevronDown,
+  User,
+  Bot,
+  Wrench,
   CheckCircle,
-  Clock,
-  AlertCircle,
-  Circle,
+  AlertTriangle,
   Loader2,
   Info,
-  ListTodo,
+  Terminal,
+  Clock,
+  MessageSquare,
+  DollarSign,
 } from 'lucide-react'
-import type { ClaudeCodeTask, ClaudeCodeTaskStatus } from '../types/claudeCodeActivity'
+import type { ActivityEvent, ActivityEventType } from '../types/claudeCodeActivity'
 
-const statusIcons: Record<ClaudeCodeTaskStatus, typeof CheckCircle> = {
-  pending: Circle,
-  in_progress: Clock,
-  completed: CheckCircle,
-  failed: AlertCircle,
+// Activity event icons and colors
+const typeIcons: Record<ActivityEventType, typeof User> = {
+  user: User,
+  assistant: Bot,
+  tool_use: Wrench,
+  tool_result: CheckCircle,
+  error: AlertTriangle,
 }
 
-const statusColors: Record<ClaudeCodeTaskStatus, string> = {
-  pending: 'text-gray-400',
-  in_progress: 'text-blue-500',
-  completed: 'text-green-500',
-  failed: 'text-red-500',
+const typeColors: Record<ActivityEventType, string> = {
+  user: 'text-blue-500 bg-blue-100 dark:bg-blue-900/30',
+  assistant: 'text-purple-500 bg-purple-100 dark:bg-purple-900/30',
+  tool_use: 'text-green-500 bg-green-100 dark:bg-green-900/30',
+  tool_result: 'text-teal-500 bg-teal-100 dark:bg-teal-900/30',
+  error: 'text-red-500 bg-red-100 dark:bg-red-900/30',
 }
 
-interface TaskNodeProps {
-  task: ClaudeCodeTask
-  tasks: Record<string, ClaudeCodeTask>
-  level?: number
-  selectedTaskId: string | null
-  onSelect: (id: string) => void
-}
+// Activity event item component
+function ActivityEventItem({ event }: { event: ActivityEvent }) {
+  const Icon = typeIcons[event.type] || Info
+  const colorClass = typeColors[event.type] || typeColors.assistant
 
-function TaskNode({
-  task,
-  tasks,
-  level = 0,
-  selectedTaskId,
-  onSelect,
-}: TaskNodeProps) {
-  const [expanded, setExpanded] = useState(true)
-  const hasChildren = task.children.length > 0
-  const isInProgress = task.status === 'in_progress'
-  const StatusIcon = isInProgress ? Loader2 : statusIcons[task.status]
+  const formatContent = () => {
+    if (event.type === 'tool_use') {
+      return (
+        <div className="space-y-1">
+          <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
+            {event.tool_name}
+          </span>
+          {event.tool_input && (
+            <pre className="text-xs text-gray-600 dark:text-gray-400 overflow-x-auto max-h-20 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-2 rounded">
+              {JSON.stringify(event.tool_input, null, 2)}
+            </pre>
+          )}
+        </div>
+      )
+    }
+
+    if (event.type === 'tool_result') {
+      return (
+        <pre className="text-xs text-gray-600 dark:text-gray-400 overflow-x-auto max-h-20 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-2 rounded">
+          {event.tool_result || 'No result'}
+        </pre>
+      )
+    }
+
+    return (
+      <p className="text-sm text-gray-900 dark:text-white whitespace-pre-wrap break-words line-clamp-3">
+        {event.content || 'No content'}
+      </p>
+    )
+  }
 
   return (
-    <div>
-      <div
-        className={cn(
-          'flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors',
-          selectedTaskId === task.id
-            ? 'bg-primary-50 dark:bg-primary-900/20'
-            : 'hover:bg-gray-100 dark:hover:bg-gray-700'
-        )}
-        style={{ paddingLeft: `${level * 16 + 12}px` }}
-        onClick={() => onSelect(task.id)}
-      >
-        {hasChildren ? (
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              setExpanded(!expanded)
-            }}
-            className="p-0.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded"
-          >
-            {expanded ? (
-              <ChevronDown className="w-4 h-4 text-gray-500" />
-            ) : (
-              <ChevronRight className="w-4 h-4 text-gray-500" />
-            )}
-          </button>
-        ) : (
-          <div className="w-5" />
-        )}
-        <StatusIcon
-          className={cn(
-            'w-4 h-4',
-            statusColors[task.status],
-            isInProgress && 'animate-spin'
-          )}
-        />
-        <span className="flex-1 text-sm text-gray-900 dark:text-white truncate">
-          {task.title}
-        </span>
+    <div className="flex items-start gap-2 p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+      <div className={cn('w-6 h-6 rounded flex items-center justify-center shrink-0', colorClass)}>
+        <Icon className="w-3 h-3" />
       </div>
-      {hasChildren && expanded && (
-        <div>
-          {task.children.map((childId) => {
-            const childTask = tasks[childId]
-            if (!childTask) return null
-            return (
-              <TaskNode
-                key={childId}
-                task={childTask}
-                tasks={tasks}
-                level={level + 1}
-                selectedTaskId={selectedTaskId}
-                onSelect={onSelect}
-              />
-            )
-          })}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+            {event.type.replace('_', ' ')}
+          </span>
+          <span className="text-xs text-gray-400 dark:text-gray-500">
+            {new Date(event.timestamp).toLocaleTimeString()}
+          </span>
         </div>
-      )}
+        {formatContent()}
+      </div>
     </div>
   )
 }
 
-function TaskDetailPanel({ task }: { task: ClaudeCodeTask }) {
-  const StatusIcon = task.status === 'in_progress' ? Loader2 : statusIcons[task.status]
+// Session detail panel (top section)
+function SessionDetailPanel() {
+  const { activeSessionId } = useClaudeCodeActivityStore()
+  const { sessions } = useClaudeSessionsStore()
+
+  const selectedSession = sessions.find((s) => s.session_id === activeSessionId)
+
+  if (!selectedSession) {
+    return (
+      <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
+        <Info className="w-5 h-5 mr-2" />
+        Select a session to view details
+      </div>
+    )
+  }
 
   return (
-    <div className="p-6 space-y-4">
-      <div>
-        <label className="text-sm font-medium text-gray-500 dark:text-gray-400">
-          Status
-        </label>
-        <div className="flex items-center gap-2 mt-1">
-          <StatusIcon
-            className={cn(
-              'w-4 h-4',
-              statusColors[task.status],
-              task.status === 'in_progress' && 'animate-spin'
-            )}
-          />
-          <span className="text-gray-900 dark:text-white capitalize">
-            {task.status.replace('_', ' ')}
+    <div className="p-4 space-y-4">
+      {/* Session Header */}
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-lg bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
+          <Terminal className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-gray-900 dark:text-white truncate">
+            {selectedSession.project_name || 'Unknown Project'}
+          </h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400 font-mono truncate">
+            {selectedSession.slug || selectedSession.session_id}
+          </p>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+          </span>
+          <span className="text-xs text-green-600 dark:text-green-400 capitalize">
+            {selectedSession.status}
           </span>
         </div>
       </div>
 
-      {task.active_form && (
+      {/* Summary */}
+      {selectedSession.summary && (
         <div>
-          <label className="text-sm font-medium text-gray-500 dark:text-gray-400">
-            Active Form
+          <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+            Summary
           </label>
-          <p className="mt-1 text-sm text-blue-600 dark:text-blue-400 flex items-center gap-2">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            {task.active_form}
+          <p className="mt-1 text-sm text-gray-900 dark:text-white">
+            {selectedSession.summary}
           </p>
         </div>
       )}
 
-      <div>
-        <label className="text-sm font-medium text-gray-500 dark:text-gray-400">
-          Description
-        </label>
-        <p className="mt-1 text-gray-900 dark:text-white whitespace-pre-wrap text-sm">
-          {task.description || 'No description'}
-        </p>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-4 gap-3">
+        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2 text-center">
+          <Clock className="w-4 h-4 mx-auto text-gray-400 mb-1" />
+          <p className="text-xs text-gray-500 dark:text-gray-400">Last Activity</p>
+          <p className="text-sm font-medium text-gray-900 dark:text-white">
+            {new Date(selectedSession.last_activity).toLocaleTimeString()}
+          </p>
+        </div>
+        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2 text-center">
+          <MessageSquare className="w-4 h-4 mx-auto text-blue-400 mb-1" />
+          <p className="text-xs text-gray-500 dark:text-gray-400">Messages</p>
+          <p className="text-sm font-medium text-gray-900 dark:text-white">
+            {selectedSession.message_count}
+          </p>
+        </div>
+        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2 text-center">
+          <Wrench className="w-4 h-4 mx-auto text-green-400 mb-1" />
+          <p className="text-xs text-gray-500 dark:text-gray-400">Tool Calls</p>
+          <p className="text-sm font-medium text-gray-900 dark:text-white">
+            {selectedSession.tool_call_count}
+          </p>
+        </div>
+        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2 text-center">
+          <DollarSign className="w-4 h-4 mx-auto text-amber-400 mb-1" />
+          <p className="text-xs text-gray-500 dark:text-gray-400">Cost</p>
+          <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
+            ${selectedSession.estimated_cost.toFixed(3)}
+          </p>
+        </div>
       </div>
+    </div>
+  )
+}
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="text-sm font-medium text-gray-500 dark:text-gray-400">
-            Created
-          </label>
-          <p className="mt-1 text-xs text-gray-900 dark:text-white">
-            {new Date(task.created_at).toLocaleString()}
-          </p>
-        </div>
-        <div>
-          <label className="text-sm font-medium text-gray-500 dark:text-gray-400">
-            Updated
-          </label>
-          <p className="mt-1 text-xs text-gray-900 dark:text-white">
-            {new Date(task.updated_at).toLocaleString()}
-          </p>
-        </div>
+// Activity log panel (bottom section)
+function ActivityLogPanel() {
+  const { activeSessionId, activities, isLoadingActivity } = useClaudeCodeActivityStore()
+
+  if (!activeSessionId) {
+    return (
+      <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
+        <Info className="w-5 h-5 mr-2" />
+        Select a session to view activity
       </div>
+    )
+  }
+
+  if (isLoadingActivity) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+      </div>
+    )
+  }
+
+  if (activities.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
+        <Info className="w-8 h-8 mb-2 opacity-50" />
+        <p className="text-sm">No activity in this session</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-3 space-y-2 overflow-y-auto h-full">
+      {activities.map((event) => (
+        <ActivityEventItem key={event.id} event={event} />
+      ))}
     </div>
   )
 }
@@ -187,29 +229,15 @@ function TaskDetailPanel({ task }: { task: ClaudeCodeTask }) {
 export function ClaudeCodeTasks() {
   const {
     activeSessionId,
-    tasks,
-    rootTaskIds,
-    isLoadingTasks,
     error,
     setActiveSession,
     clearError,
   } = useClaudeCodeActivityStore()
 
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
-  const selectedTask = selectedTaskId ? tasks[selectedTaskId] : null
-
   return (
     <div className="flex-1 flex overflow-hidden">
-      {/* Left Panel - Task Tree */}
-      <div className="w-1/2 border-r border-gray-200 dark:border-gray-700 flex flex-col">
-        {/* Session Selector */}
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-          <ClaudeCodeSessionSelector
-            selectedSessionId={activeSessionId}
-            onSelect={setActiveSession}
-          />
-        </div>
-
+      {/* Left Panel - Session List */}
+      <div className="w-1/3 border-r border-gray-200 dark:border-gray-700 flex flex-col">
         {/* Error Display */}
         {error && (
           <div className="px-4 py-2 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800">
@@ -225,59 +253,30 @@ export function ClaudeCodeTasks() {
           </div>
         )}
 
-        {/* Task Tree */}
-        <div className="flex-1 overflow-y-auto p-2">
-          {!activeSessionId ? (
-            <div className="flex flex-col items-center justify-center py-12 text-gray-500 dark:text-gray-400">
-              <ListTodo className="w-12 h-12 mb-4 opacity-50" />
-              <p>Select a Claude Code session</p>
-              <p className="text-sm mt-1">Tasks will appear here</p>
-            </div>
-          ) : isLoadingTasks ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
-            </div>
-          ) : rootTaskIds.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-gray-500 dark:text-gray-400">
-              <ListTodo className="w-12 h-12 mb-4 opacity-50" />
-              <p>No tasks in this session</p>
-              <p className="text-sm mt-1">Tasks created with TaskCreate will appear here</p>
-            </div>
-          ) : (
-            rootTaskIds.map((taskId) => {
-              const task = tasks[taskId]
-              if (!task) return null
-              return (
-                <TaskNode
-                  key={taskId}
-                  task={task}
-                  tasks={tasks}
-                  selectedTaskId={selectedTaskId}
-                  onSelect={setSelectedTaskId}
-                />
-              )
-            })
-          )}
+        {/* Session Selector */}
+        <div className="p-4 flex-1 overflow-y-auto">
+          <ClaudeCodeSessionSelector
+            selectedSessionId={activeSessionId}
+            onSelect={setActiveSession}
+          />
         </div>
       </div>
 
-      {/* Right Panel - Task Details */}
-      <div className="w-1/2 flex flex-col overflow-hidden">
-        {selectedTask ? (
-          <>
-            <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-              <h3 className="text-base font-semibold text-gray-900 dark:text-white truncate">
-                {selectedTask.title}
-              </h3>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              <TaskDetailPanel task={selectedTask} />
-            </div>
-          </>
+      {/* Right Panel - Session Details (top) + Activity Log (bottom) */}
+      <div className="w-2/3 flex flex-col overflow-hidden">
+        {activeSessionId ? (
+          <VerticalSplitPanel
+            storageKey="claude-tasks-split-height"
+            defaultTopHeight={35}
+            minTopHeight={20}
+            maxTopHeight={60}
+            topContent={<SessionDetailPanel />}
+            bottomContent={<ActivityLogPanel />}
+          />
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-500 dark:text-gray-400">
             <Info className="w-5 h-5 mr-2" />
-            Select a task to view details
+            Select a session to view details
           </div>
         )}
       </div>

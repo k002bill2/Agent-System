@@ -86,7 +86,7 @@ Your role is to:
 ## Available Specialized Agents
 
 ### Development Agents
-- **mobile-ui-specialist**: React Native UI/UX expert. Components, layouts, navigation, styling.
+- **web-ui-specialist**: Web UI/UX expert. Components, layouts, navigation, styling.
 - **backend-integration-specialist**: Firebase and API integration. Auth, Firestore, data sync.
 - **test-automation-specialist**: Testing expert. Jest, React Native Testing Library, coverage.
 - **performance-optimizer**: Performance optimization. Rendering, memory, bundle size.

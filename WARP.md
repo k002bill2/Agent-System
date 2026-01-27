@@ -4,14 +4,14 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
 
 ## Overview
 
-This repo contains the **Agent Orchestration System (AGS)**, a LangGraph-based multi-agent orchestration backend with a React dashboard, plus configuration and helpers for AI tools (Claude Code, MCP) and connected projects under `projects/`.
+This repo contains the **Agent Orchestration System (AOS)**, a LangGraph-based multi-agent orchestration backend with a React dashboard, plus configuration and helpers for AI tools (Claude Code, MCP) and connected projects under `projects/`.
 
 High level:
 - **Backend** (`src/backend`): FastAPI + LangGraph orchestrator, RAG, sandboxed tool execution, optional PostgreSQL persistence, Redis.
 - **Dashboard** (`src/dashboard`): Vite + React + TypeScript UI for monitoring sessions, tasks, agents, approvals, diffs, and usage.
 - **Infra** (`infra`): Docker Compose and scripts for local Postgres/Redis and optional full stack.
-- **AI tool config** (`.claude`, `CLAUDE.md`): Claude Code rules, sub-agents, slash commands, and MCP servers; AGS uses these concepts via its own backend (`services/warp_service.py`, MCP APIs, RAG).
-- **Projects** (`projects/`): Additional apps wired into AGS via symlinks (e.g. `projects/ppt-maker`, `projects/image-maker`).
+- **AI tool config** (`.claude`, `CLAUDE.md`): Claude Code rules, sub-agents, slash commands, and MCP servers; AOS uses these concepts via its own backend (`services/warp_service.py`, MCP APIs, RAG).
+- **Projects** (`projects/`): Additional apps wired into AOS via symlinks (e.g. `projects/ppt-maker`, `projects/image-maker`).
 
 When in doubt, prefer the commands and architecture described here and in `README.md` / `CLAUDE.md` over guessing.
 
@@ -142,15 +142,16 @@ A Docker-based sandbox is used for isolated execution of risky commands (see `se
   ./infra/scripts/build-sandbox.sh
 
   # Example sanity checks (from CLAUDE.md)
-  docker run --rm ags-sandbox:latest whoami
-  docker run --rm ags-sandbox:latest pwd
-  docker run --rm ags-sandbox:latest python --version
+  docker run --rm aos-sandbox:latest whoami
+  docker run --rm aos-sandbox:latest pwd
+  docker run --rm aos-sandbox:latest python --version
   ```
 
 ### 5. Connected Projects
 
 프로젝트 심볼릭 링크를 통해 여러 외부 프로젝트를 연결할 수 있습니다:
 
+- **aos** (`projects/aos`) - Agent Orchestration Service (self-reference)
 - **image-maker** (`projects/image-maker`) - 이미지 생성 프로젝트
 - **ppt-maker** (`projects/ppt-maker`) - PPT 생성 프로젝트
 - **youtube-maker** (`projects/youtube-maker`) - YouTube 콘텐츠 프로젝트
@@ -198,7 +199,7 @@ Key packages:
 - `services/`
   - `session_service.py` – High-level session lifecycle operations: creating sessions, updating state, fetching status.
   - `rag_service.py` – Vector DB integration (Chroma) for project indexing and semantic search (`ProjectVectorStore`).
-  - `project_runner.py`, `project_template_service.py` – Running and templating projects within AGS.
+  - `project_runner.py`, `project_template_service.py` – Running and templating projects within AOS.
   - `sandbox_manager.py` – Docker-based sandbox for executing risky commands with network isolation, resource limits, and non-root users.
   - `mcp_service.py`, `warp_service.py` – Bridges to MCP servers and Warp/Claude-style tooling.
 
@@ -283,7 +284,7 @@ Key areas (see `tsconfig.json` and `vite.config.ts` for configuration):
 
 ### 5. Claude / MCP / Warp-Specific Notes
 
-This repo is designed to be used with Claude Code and MCP, and AGS itself exposes APIs and services that align with those tools.
+This repo is designed to be used with Claude Code and MCP, and AOS itself exposes APIs and services that align with those tools.
 
 Important pieces from `CLAUDE.md` and `.claude/README.md`:
 

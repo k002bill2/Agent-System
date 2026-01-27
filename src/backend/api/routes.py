@@ -1369,7 +1369,7 @@ async def warp_status():
 @router.post("/warp/cleanup")
 async def warp_cleanup(max_age_hours: int = 24):
     """
-    Clean up old AGS launch configurations.
+    Clean up old AOS launch configurations.
 
     Args:
         max_age_hours: Remove configs older than this many hours (default: 24)

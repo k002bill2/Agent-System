@@ -54,7 +54,7 @@ class TestAgentRegistry:
         assert len(agents) >= 7  # 기본 에이전트 7개
 
         # 특정 에이전트 존재 확인
-        assert self.registry.get("mobile-ui-specialist") is not None
+        assert self.registry.get("web-ui-specialist") is not None
         assert self.registry.get("backend-integration-specialist") is not None
         assert self.registry.get("test-automation-specialist") is not None
         assert self.registry.get("lead-orchestrator") is not None
@@ -81,9 +81,9 @@ class TestAgentRegistry:
         # UI 관련 검색
         results = self.registry.find_by_capability("create a new React Native component")
         assert len(results) > 0
-        # mobile-ui-specialist가 상위에 있어야 함
+        # web-ui-specialist가 상위에 있어야 함
         agent_ids = [r[0].id for r in results]
-        assert "mobile-ui-specialist" in agent_ids
+        assert "web-ui-specialist" in agent_ids
 
         # 테스트 관련 검색
         results = self.registry.find_by_capability("write unit tests with Jest")
@@ -99,7 +99,7 @@ class TestAgentRegistry:
 
     def test_mark_task_started(self):
         """태스크 시작 처리."""
-        agent_id = "mobile-ui-specialist"
+        agent_id = "web-ui-specialist"
         task_id = "task-1"
 
         # 태스크 시작
@@ -112,7 +112,7 @@ class TestAgentRegistry:
 
     def test_mark_task_completed(self):
         """태스크 완료 처리."""
-        agent_id = "mobile-ui-specialist"
+        agent_id = "web-ui-specialist"
         task_id = "task-2"
 
         # 같은 레지스트리 사용
@@ -133,7 +133,7 @@ class TestAgentRegistry:
 
     def test_update_status(self):
         """에이전트 상태 업데이트."""
-        agent_id = "mobile-ui-specialist"
+        agent_id = "web-ui-specialist"
 
         # 상태 변경
         result = self.registry.update_status(agent_id, AgentStatus.UNAVAILABLE)

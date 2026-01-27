@@ -7,6 +7,12 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from models.audit import (
+    ComplianceAuditEntry,
+    DataClassification,
+    RetentionPolicy,
+)
+
 
 class AuditAction(str, Enum):
     """Audit action types."""
@@ -88,6 +94,14 @@ class AuditLogEntry(BaseModel):
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
+    # Compliance fields (optional for backward compatibility)
+    data_classification: DataClassification | None = None
+    change_reason: str | None = None
+    compliance_flags: list[str] = Field(default_factory=list)
+    previous_hash: str | None = None
+    hash: str | None = None
+    retention_policy: RetentionPolicy | None = None
+
 
 class AuditLogFilter(BaseModel):
     """Filter for querying audit logs."""
@@ -120,6 +134,19 @@ _audit_logs: list[AuditLogEntry] = []
 class AuditService:
     """Service for managing audit logs."""
 
+    _integrity_service = None
+
+    @classmethod
+    def _get_integrity_service(cls):
+        """Lazy load integrity service."""
+        if cls._integrity_service is None:
+            try:
+                from services.audit_integrity import get_audit_integrity_service
+                cls._integrity_service = get_audit_integrity_service()
+            except ImportError:
+                pass
+        return cls._integrity_service
+
     @staticmethod
     def log(
         action: AuditAction,
@@ -135,6 +162,9 @@ class AuditService:
         metadata: dict | None = None,
         status: str = "success",
         error_message: str | None = None,
+        data_classification: DataClassification | None = None,
+        change_reason: str | None = None,
+        compliance_flags: list[str] | None = None,
     ) -> AuditLogEntry:
         """
         Log an audit event.
@@ -161,7 +191,38 @@ class AuditService:
             metadata=metadata or {},
             status=status,
             error_message=error_message,
+            data_classification=data_classification or DataClassification.INTERNAL,
+            change_reason=change_reason,
+            compliance_flags=compliance_flags or [],
         )
+
+        # Add to integrity chain if service available
+        integrity = AuditService._get_integrity_service()
+        if integrity:
+            compliance_entry = ComplianceAuditEntry(
+                id=entry.id,
+                session_id=entry.session_id,
+                user_id=entry.user_id,
+                action=entry.action.value,
+                resource_type=entry.resource_type.value,
+                resource_id=entry.resource_id,
+                old_value=entry.old_value,
+                new_value=entry.new_value,
+                changes=entry.changes,
+                agent_id=entry.agent_id,
+                ip_address=entry.ip_address,
+                user_agent=entry.user_agent,
+                metadata=entry.metadata,
+                status=entry.status,
+                error_message=entry.error_message,
+                data_classification=entry.data_classification or DataClassification.INTERNAL,
+                change_reason=entry.change_reason,
+                compliance_flags=entry.compliance_flags,
+                created_at=entry.created_at,
+            )
+            compliance_entry = integrity.add_entry(compliance_entry)
+            entry.previous_hash = compliance_entry.previous_hash
+            entry.hash = compliance_entry.hash
 
         _audit_logs.append(entry)
         return entry

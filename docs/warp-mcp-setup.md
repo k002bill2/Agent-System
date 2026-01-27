@@ -1,12 +1,12 @@
-# Warp Terminal - AGS MCP Integration
+# Warp Terminal - AOS MCP Integration
 
-AGS(Agent Orchestration System)를 MCP 서버로 노출하여 Warp 터미널의 Agent Mode에서 사용하는 방법입니다.
+AOS(Agent Orchestration System)를 MCP 서버로 노출하여 Warp 터미널의 Agent Mode에서 사용하는 방법입니다.
 
 ## 아키텍처
 
 ```
 ┌─────────────────┐     MCP Protocol      ┌─────────────────┐
-│  Warp Terminal  │ ◄──────────────────► │   AGS Backend   │
+│  Warp Terminal  │ ◄──────────────────► │   AOS Backend   │
 │  (MCP Client)   │     SSE/HTTP          │  (MCP Server)   │
 └─────────────────┘                       └─────────────────┘
                                                    │
@@ -19,7 +19,7 @@ AGS(Agent Orchestration System)를 MCP 서버로 노출하여 Warp 터미널의 
 
 ## 사전 요구사항
 
-1. **AGS Backend 실행**
+1. **AOS Backend 실행**
    ```bash
    cd src/backend
    source .venv/bin/activate
@@ -42,7 +42,7 @@ Warp 설정에서 MCP Servers를 추가합니다:
 ```json
 {
   "mcpServers": {
-    "ags": {
+    "aos": {
       "url": "http://localhost:8000/mcp/sse"
     }
   }
@@ -57,11 +57,11 @@ Warp에서 MCP 서버 상태가 "Connected"로 표시되는지 확인합니다.
 
 | 도구 | 설명 |
 |------|------|
-| `ags_create_task` | AGS에서 새 태스크 생성 |
-| `ags_get_status` | 세션/태스크 상태 조회 |
-| `ags_list_agents` | 사용 가능한 에이전트 목록 |
-| `ags_run_check` | 프로젝트 검증 (typecheck, lint, test, build) |
-| `ags_list_projects` | 등록된 프로젝트 목록 |
+| `aos_create_task` | AOS에서 새 태스크 생성 |
+| `aos_get_status` | 세션/태스크 상태 조회 |
+| `aos_list_agents` | 사용 가능한 에이전트 목록 |
+| `aos_run_check` | 프로젝트 검증 (typecheck, lint, test, build) |
+| `aos_list_projects` | 등록된 프로젝트 목록 |
 
 ## 사용 예시
 
@@ -70,7 +70,7 @@ Warp에서 MCP 서버 상태가 "Connected"로 표시되는지 확인합니다.
 ```
 > ppt-maker 프로젝트 타입체크 실행해줘
 
-[AGS ags_run_check 도구 호출]
+[AOS aos_run_check 도구 호출]
 → project_id: "ppt-maker"
 → check_type: "typecheck"
 
@@ -80,12 +80,12 @@ Overall: ✅ All passed
 ```
 
 ```
-> AGS에서 사용 가능한 에이전트 보여줘
+> AOS에서 사용 가능한 에이전트 보여줘
 
-[AGS ags_list_agents 도구 호출]
+[AOS aos_list_agents 도구 호출]
 
 결과:
-- mobile-ui-specialist: React Native UI/UX
+- web-ui-specialist: Web UI/UX
 - backend-integration-specialist: Firebase, API
 - performance-optimizer: 성능 최적화
 - lead-orchestrator: 멀티 에이전트 조정
@@ -103,7 +103,7 @@ Overall: ✅ All passed
 ## 문제 해결
 
 ### 연결 실패
-1. AGS Backend가 실행 중인지 확인
+1. AOS Backend가 실행 중인지 확인
 2. 포트 8000이 사용 가능한지 확인
 3. `/mcp/health` 엔드포인트 테스트
 
@@ -115,7 +115,7 @@ Overall: ✅ All passed
 
 ## Dashboard → Warp 연동
 
-AGS 대시보드에서 직접 Warp 터미널을 열 수 있는 기능입니다.
+AOS 대시보드에서 직접 Warp 터미널을 열 수 있는 기능입니다.
 
 ### 기능
 

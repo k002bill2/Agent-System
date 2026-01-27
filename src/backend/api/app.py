@@ -79,6 +79,10 @@ else:
     llm_router = safe_import("api.llm_router", "router")
     config_versions_router = safe_import("api.config_versions", "router")
     organizations_router = safe_import("api.organizations", "router")
+    rate_limits_router = safe_import("api.rate_limits", "router")
+    cost_allocation_router = safe_import("api.cost_allocation", "router")
+    health_router = safe_import("api.health", "router")
+    git_router = safe_import("api.git", "router")
 
     # Optional orchestrator
     try:
@@ -229,6 +233,32 @@ else:
             app.include_router(config_versions_router, prefix="/api")
         if organizations_router:
             app.include_router(organizations_router, prefix="/api")
+        if rate_limits_router:
+            app.include_router(rate_limits_router, prefix="/api")
+        if cost_allocation_router:
+            app.include_router(cost_allocation_router, prefix="/api")
+        if health_router:
+            app.include_router(health_router)
+        if git_router:
+            app.include_router(git_router, prefix="/api")
+
+        # Add Rate Limiting Middleware
+        rate_limit_enabled = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
+        if rate_limit_enabled:
+            try:
+                from middleware.rate_limit import RateLimitMiddleware
+                from services.rate_limit_service import get_rate_limit_service
+
+                rate_limit_service = get_rate_limit_service()
+                app.add_middleware(
+                    RateLimitMiddleware,
+                    rate_limit_service=rate_limit_service,
+                    default_tier=os.getenv("RATE_LIMIT_DEFAULT_TIER", "free"),
+                    enabled=True,
+                )
+                print("✅ Rate limiting middleware enabled")
+            except ImportError as e:
+                print(f"⚠️  Rate limiting disabled: {e}")
 
         return app
 

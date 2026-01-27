@@ -335,7 +335,8 @@ function AOSTasks() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-2">
+          {/* Task list with max height and scroll */}
+          <div className="flex-1 overflow-y-auto p-2 max-h-[calc(100vh-200px)]">
             {filteredRootTasks.length === 0 ? (
               <div className="p-4 text-center text-gray-500 dark:text-gray-400">
                 {filter === 'deleted' ? 'No deleted tasks' : 'No tasks found'}

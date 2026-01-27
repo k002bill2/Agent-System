@@ -124,8 +124,8 @@ function AOSActivity() {
         </button>
       </div>
 
-      {/* Message List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2">
+      {/* Message List - with max height and scroll */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-2 max-h-[calc(100vh-200px)]">
         {filteredMessages.length === 0 ? (
           <div className="text-center py-12 text-gray-500 dark:text-gray-400">
             <Info className="w-12 h-12 mx-auto mb-4 opacity-50" />

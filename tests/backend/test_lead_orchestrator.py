@@ -42,7 +42,7 @@ class TestLeadOrchestratorAgent:
     {
       "title": "Create Button",
       "description": "Create a simple button component",
-      "assigned_agent_id": "mobile-ui-specialist",
+      "assigned_agent_id": "web-ui-specialist",
       "dependencies": [],
       "effort_level": "quick",
       "priority": 10
@@ -78,7 +78,7 @@ class TestLeadOrchestratorAgent:
     {
       "title": "Create UI Components",
       "description": "Build login form UI",
-      "assigned_agent_id": "mobile-ui-specialist",
+      "assigned_agent_id": "web-ui-specialist",
       "dependencies": [],
       "effort_level": "medium",
       "priority": 10

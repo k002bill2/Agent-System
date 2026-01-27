@@ -101,53 +101,58 @@ export function ClaudeCodeActivity() {
   } = useClaudeCodeActivityStore()
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Session Selector */}
-      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-        <ClaudeCodeSessionSelector
-          selectedSessionId={activeSessionId}
-          onSelect={setActiveSession}
-        />
+    <div className="flex-1 flex overflow-hidden">
+      {/* Left Panel - Session Selector */}
+      <div className="w-1/3 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+        <div className="p-4 flex-1 overflow-y-auto">
+          <ClaudeCodeSessionSelector
+            selectedSessionId={activeSessionId}
+            onSelect={setActiveSession}
+          />
+        </div>
       </div>
 
-      {/* Error Display */}
-      {error && (
-        <div className="px-4 py-2 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-red-600 dark:text-red-400">{error}</span>
-            <button
-              onClick={clearError}
-              className="text-xs text-red-500 hover:text-red-700 dark:hover:text-red-300"
-            >
-              Dismiss
-            </button>
+      {/* Right Panel - Activity Log */}
+      <div className="w-2/3 flex flex-col overflow-hidden">
+        {/* Error Display */}
+        {error && (
+          <div className="px-4 py-2 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-red-600 dark:text-red-400">{error}</span>
+              <button
+                onClick={clearError}
+                className="text-xs text-red-500 hover:text-red-700 dark:hover:text-red-300"
+              >
+                Dismiss
+              </button>
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* Activity List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2">
-        {!activeSessionId ? (
-          <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-            <Info className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>Select a Claude Code session</p>
-            <p className="text-sm mt-1">Activity events will appear here</p>
-          </div>
-        ) : isLoadingActivity ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
-          </div>
-        ) : activities.length === 0 ? (
-          <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-            <Info className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>No activity in this session</p>
-            <p className="text-sm mt-1">Events will appear as the session progresses</p>
-          </div>
-        ) : (
-          activities.map((event) => (
-            <ActivityEventItem key={event.id} event={event} />
-          ))
         )}
+
+        {/* Activity List */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {!activeSessionId ? (
+            <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
+              <Info className="w-12 h-12 mb-4 opacity-50" />
+              <p>Select a Claude Code session</p>
+              <p className="text-sm mt-1">Activity events will appear here</p>
+            </div>
+          ) : isLoadingActivity ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+            </div>
+          ) : activities.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
+              <Info className="w-12 h-12 mb-4 opacity-50" />
+              <p>No activity in this session</p>
+              <p className="text-sm mt-1">Events will appear as the session progresses</p>
+            </div>
+          ) : (
+            activities.map((event) => (
+              <ActivityEventItem key={event.id} event={event} />
+            ))
+          )}
+        </div>
       </div>
     </div>
   )

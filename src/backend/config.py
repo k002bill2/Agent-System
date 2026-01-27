@@ -60,6 +60,27 @@ class Settings(BaseSettings):
     # Frontend URL for OAuth redirects
     frontend_url: str = "http://localhost:5173"
 
+    # Rate Limiting
+    rate_limit_enabled: bool = True
+    rate_limit_default_tier: str = "free"
+
+    # Audit
+    audit_hash_chain_enabled: bool = True
+    audit_retention_days: int = 2555  # 7 years for compliance
+
+    # Cost Allocation
+    cost_tracking_enabled: bool = True
+
+    # SSO/SAML
+    saml_sp_entity_id: str = ""
+    saml_sp_acs_url: str = ""
+    saml_idp_metadata_url: str = ""
+    oidc_issuer_url: str = ""
+
+    # Password Hashing
+    password_hash_algorithm: str = "bcrypt"
+    bcrypt_rounds: int = 12
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

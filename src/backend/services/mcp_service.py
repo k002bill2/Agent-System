@@ -264,9 +264,9 @@ To track progress, use aos_get_status with session_id: {session_id}"""
         agents = {
             "development": [
                 {
-                    "name": "mobile-ui-specialist",
+                    "name": "web-ui-specialist",
                     "model": "sonnet",
-                    "description": "React Native UI/UX expert"
+                    "description": "Web UI/UX expert"
                 },
                 {
                     "name": "backend-integration-specialist",
