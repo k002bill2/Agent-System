@@ -80,6 +80,11 @@ if [ -f "$PID_DIR/backend.pid" ]; then
     fi
 fi
 
+# Load specific environment variables from .env
+export GITHUB_TOKEN=$(grep "^GITHUB_TOKEN=" "$PROJECT_ROOT/.env" | cut -d'=' -f2-)
+export GOOGLE_API_KEY=$(grep "^GOOGLE_API_KEY=" "$PROJECT_ROOT/.env" | cut -d'=' -f2-)
+export ANTHROPIC_API_KEY=$(grep "^ANTHROPIC_API_KEY=" "$PROJECT_ROOT/.env" | cut -d'=' -f2-)
+
 # Start backend in background
 USE_DATABASE=true nohup uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload > "$PROJECT_ROOT/logs/backend.log" 2>&1 &
 BACKEND_PID=$!
