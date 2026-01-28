@@ -17,12 +17,12 @@ from models.monitoring import (
 
 
 # Allowed npm commands (whitelist for security)
+# Commands are run from the project root with npm scripts defined in package.json
 ALLOWED_COMMANDS: dict[CheckType, list[str]] = {
-    CheckType.TEST: ["npm", "test", "--", "--passWithNoTests", "--watchAll=false", "--reporters=default"],
+    CheckType.TEST: ["npm", "test"],
     CheckType.LINT: ["npm", "run", "lint"],
     CheckType.TYPECHECK: ["npm", "run", "type-check"],
-    # Use expo export for local build validation (not EAS cloud build)
-    CheckType.BUILD: ["npx", "expo", "export", "--platform", "all", "--output-dir", "/tmp/expo-build-check"],
+    CheckType.BUILD: ["npm", "run", "build"],
 }
 
 

@@ -4,6 +4,8 @@ import { cn } from '../lib/utils'
 import {
   useOrganizationsStore,
   OrganizationTab,
+  OrganizationCreate,
+  CreateOrganizationRequest,
 } from '../stores/organizations'
 import { useAuthStore } from '../stores/auth'
 import {
@@ -366,7 +368,17 @@ export function OrganizationsPage() {
           isLoading={isLoading}
           onSubmit={async (data) => {
             if (modalMode === 'create') {
-              return createOrganization(data as Parameters<typeof createOrganization>[0])
+              // Include owner info from current user
+              if (!user?.id || !user?.email) {
+                return false
+              }
+              const request: CreateOrganizationRequest = {
+                organization: data as OrganizationCreate,
+                owner_user_id: user.id,
+                owner_email: user.email,
+                owner_name: user.name || undefined,
+              }
+              return createOrganization(request)
             } else if (currentOrganization) {
               return updateOrganization(
                 currentOrganization.id,

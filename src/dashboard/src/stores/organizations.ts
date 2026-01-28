@@ -76,6 +76,13 @@ export interface OrganizationCreate {
   plan?: OrganizationPlan
 }
 
+export interface CreateOrganizationRequest {
+  organization: OrganizationCreate
+  owner_user_id: string
+  owner_email: string
+  owner_name?: string
+}
+
 export interface OrganizationUpdate {
   name?: string
   description?: string
@@ -118,7 +125,7 @@ interface OrganizationsState {
   // Organization CRUD
   fetchOrganizations: () => Promise<void>
   fetchOrganization: (orgId: string) => Promise<void>
-  createOrganization: (data: OrganizationCreate) => Promise<boolean>
+  createOrganization: (data: CreateOrganizationRequest) => Promise<boolean>
   updateOrganization: (orgId: string, data: OrganizationUpdate) => Promise<boolean>
   deleteOrganization: (orgId: string) => Promise<boolean>
 
