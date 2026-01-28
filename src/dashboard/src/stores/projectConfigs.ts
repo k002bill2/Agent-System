@@ -510,7 +510,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     })
 
     eventSource.addEventListener('connected', () => {
-      console.log('Connected to config stream')
+      // Connected to config stream
     })
 
     eventSource.addEventListener('error', () => {

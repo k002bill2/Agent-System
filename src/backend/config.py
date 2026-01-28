@@ -81,6 +81,10 @@ class Settings(BaseSettings):
     password_hash_algorithm: str = "bcrypt"
     bcrypt_rounds: int = 12
 
+    # Session TTL
+    session_ttl_days: int = 7
+    session_inactive_hours: int = 24
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

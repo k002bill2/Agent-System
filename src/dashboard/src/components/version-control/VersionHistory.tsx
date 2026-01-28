@@ -128,7 +128,7 @@ export function VersionHistory({ configType, configId, className }: VersionHisto
 
   useEffect(() => {
     loadHistory()
-  }, [configType, configId])
+  }, [configType, configId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadHistory = async () => {
     try {
@@ -357,8 +357,7 @@ export function VersionHistory({ configType, configId, className }: VersionHisto
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        // Open data viewer (could be modal or new panel)
-                        console.log('View data:', version.data)
+                        // TODO: Open data viewer (could be modal or new panel)
                       }}
                       className="flex items-center gap-1.5 px-2 py-1 text-xs bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                     >

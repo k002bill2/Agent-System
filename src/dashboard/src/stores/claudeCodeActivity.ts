@@ -212,7 +212,7 @@ export const useClaudeCodeActivityStore = create<ClaudeCodeActivityState>((set, 
 
     eventSource.addEventListener('session_completed', () => {
       // Session completed, but keep the data
-      console.log('Claude Code session completed')
+      // Claude Code session completed
     })
 
     eventSource.addEventListener('error', (event) => {

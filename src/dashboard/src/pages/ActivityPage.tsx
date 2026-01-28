@@ -62,7 +62,7 @@ function AOSActivity() {
   })
 
   const clearMessages = () => {
-    console.log('Clear messages')
+    // Clear messages - TODO: implement
   }
 
   return (

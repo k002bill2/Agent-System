@@ -24,6 +24,7 @@ import { GitPage } from './pages/GitPage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import { PlaygroundPage } from './pages/PlaygroundPage'
+import { OrganizationsPage } from './pages/OrganizationsPage'
 import {
   SidebarSkeleton,
   DashboardSkeleton,
@@ -48,6 +49,7 @@ const viewTitles: Record<string, string> = {
   'claude-sessions': 'Claude Sessions',
   'project-configs': 'Project Configs',
   git: 'Git Management',
+  organizations: 'Organizations',
   audit: 'Audit Trail',
   notifications: 'Notifications',
   analytics: 'Analytics',
@@ -100,13 +102,13 @@ export default function App() {
         if (response.ok) {
           const data = await response.json()
           setAuthStatus(data)
-          console.log('[App] Auth status:', data)
+          // Auth status loaded
         } else {
           // If endpoint doesn't exist, assume no auth configured
           setAuthStatus({ oauth_enabled: false, google_enabled: false, github_enabled: false, email_enabled: true })
         }
       } catch {
-        console.log('[App] Auth status check failed, assuming email-only')
+        // Auth status check failed, assuming email-only
         setAuthStatus({ oauth_enabled: false, google_enabled: false, github_enabled: false, email_enabled: true })
       }
     }
@@ -159,18 +161,6 @@ export default function App() {
   // Check if authenticated (or if no auth method available, skip auth check)
   const isLoggedIn = !anyAuthAvailable || !!(accessToken || refreshToken)
 
-  // Debug logging
-  console.log('[App] Auth state:', {
-    authHydrated,
-    currentView,
-    isLoggedIn,
-    oauthEnabled,
-    emailEnabled,
-    anyAuthAvailable,
-    hasAccessToken: !!accessToken,
-    hasRefreshToken: !!refreshToken,
-    hasUser: !!user
-  })
 
   // Auto-reconnect on page load if session exists (only for authenticated users)
   useEffect(() => {
@@ -206,7 +196,7 @@ export default function App() {
       connectionStatus === 'disconnected' // Only when fully disconnected, not during connecting/reconnecting
 
     if (shouldCreateNewSession) {
-      console.log('[App] Session lost after reconnect, creating new session')
+      // Session lost after reconnect, creating new session
       connect()
     }
   }, [orchestrationHydrated, authHydrated, isLoggedIn, sessionId, connected, connectionStatus]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -271,6 +261,8 @@ export default function App() {
         return <ProjectConfigsPage />
       case 'git':
         return <GitPage />
+      case 'organizations':
+        return <OrganizationsPage />
       case 'audit':
         return <AuditPage />
       case 'notifications':
@@ -305,6 +297,8 @@ export default function App() {
       case 'project-configs':
         return <MonitorSkeleton />
       case 'git':
+        return <MonitorSkeleton />
+      case 'organizations':
         return <MonitorSkeleton />
       case 'audit':
         return <MonitorSkeleton />

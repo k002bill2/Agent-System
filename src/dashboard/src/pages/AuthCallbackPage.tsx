@@ -40,7 +40,7 @@ export function AuthCallbackPage({ provider }: AuthCallbackPageProps) {
       if (!code) {
         // If no code and status is still loading, it might be a redirect after success
         // Don't show error, just redirect to dashboard
-        console.log('[Auth] No code found, redirecting to dashboard')
+        // No code found, redirecting to dashboard
         setView('dashboard')
         return
       }
@@ -48,23 +48,23 @@ export function AuthCallbackPage({ provider }: AuthCallbackPageProps) {
       try {
         // Get the current redirect URI (where we are now)
         const redirectUri = `${window.location.origin}/auth/callback/${provider}`
-        console.log('[Auth] Exchanging code for tokens...', { redirectUri })
+        // Exchanging code for tokens
 
         // Exchange code for tokens
         const result = await exchangeOAuthCode(provider, code, redirectUri)
-        console.log('[Auth] Token exchange success:', { user: result.user.email, expiresIn: result.expiresIn })
+        // Token exchange success
 
         // Store tokens and user
         setTokens(result.accessToken, result.refreshToken, result.expiresIn)
         setUser(result.user)
-        console.log('[Auth] Tokens stored, navigating to dashboard...')
+        // Tokens stored, navigating to dashboard
 
         setStatus('success')
 
         // Clean up URL and redirect to dashboard after a short delay
         window.history.replaceState({}, '', '/')
         setTimeout(() => {
-          console.log('[Auth] Setting view to dashboard')
+          // Setting view to dashboard
           setView('dashboard')
         }, 1500)
       } catch (err) {

@@ -85,7 +85,7 @@ const migrateSettings = () => {
   const oldData = localStorage.getItem(OLD_KEY)
   if (oldData && !localStorage.getItem(NEW_KEY)) {
     localStorage.setItem(NEW_KEY, oldData)
-    console.log('✅ Settings migrated from AGS to AOS')
+    // Settings migrated from AGS to AOS
   }
 }
 

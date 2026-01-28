@@ -42,6 +42,16 @@ from models.git import (
     # Permission helpers
     can_merge_to_branch,
     DEFAULT_PROTECTED_BRANCHES,
+    # Git Repository models
+    GitRepository,
+    GitRepositoryCreate,
+    GitRepositoryUpdate,
+    GitRepositoryListResponse,
+    register_git_repository,
+    get_git_repository,
+    list_git_repositories,
+    update_git_repository,
+    delete_git_repository,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,6 +63,11 @@ router = APIRouter(prefix="/git", tags=["git"])
 # Dependencies
 # =============================================================================
 
+def get_effective_git_path(project) -> str:
+    """Get the effective Git path for a project."""
+    return project.git_path or project.path
+
+
 def get_git_service_for_project(project_id: str):
     """Get GitService for a project."""
     from services.git_service import get_git_service, GitServiceError
@@ -61,7 +76,8 @@ def get_git_service_for_project(project_id: str):
     if not project:
         raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
 
-    service = get_git_service(project.path)
+    git_path = get_effective_git_path(project)
+    service = get_git_service(git_path)
     if not service:
         raise HTTPException(
             status_code=400,
@@ -79,7 +95,8 @@ def get_merge_service_for_project(project_id: str):
     if not project:
         raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
 
-    service = get_merge_service(project.path)
+    git_path = get_effective_git_path(project)
+    service = get_merge_service(git_path)
     if not service:
         raise HTTPException(
             status_code=400,
@@ -97,7 +114,8 @@ def get_mr_service_for_project(project_id: str):
     if not project:
         raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
 
-    merge_service = get_merge_service(project.path)
+    git_path = get_effective_git_path(project)
+    merge_service = get_merge_service(git_path)
     return MergeRequestService(project_id, merge_service)
 
 
@@ -113,6 +131,98 @@ def get_github_service():
         )
 
     return service
+
+
+# =============================================================================
+# Project Git Status Endpoints
+# =============================================================================
+
+from pydantic import BaseModel
+
+
+class GitStatusResponse(BaseModel):
+    """Git status response for a project."""
+    project_id: str
+    git_enabled: bool
+    git_path: str | None
+    effective_git_path: str
+    is_valid_repo: bool
+    current_branch: str | None = None
+    error: str | None = None
+
+
+class GitPathUpdateRequest(BaseModel):
+    """Request to update git path for a project."""
+    git_path: str | None = None  # None to use project path
+
+
+@router.get("/projects/{project_id}/status", response_model=GitStatusResponse)
+async def get_project_git_status(project_id: str):
+    """Get Git status for a project."""
+    from services.git_service import get_git_service
+
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
+
+    effective_path = get_effective_git_path(project)
+    service = get_git_service(effective_path)
+
+    return GitStatusResponse(
+        project_id=project_id,
+        git_enabled=project.git_enabled,
+        git_path=project.git_path,
+        effective_git_path=effective_path,
+        is_valid_repo=service is not None,
+        current_branch=service.current_branch if service else None,
+    )
+
+
+@router.put("/projects/{project_id}/git-path", response_model=GitStatusResponse)
+async def update_project_git_path(
+    project_id: str,
+    request: GitPathUpdateRequest,
+):
+    """Update Git path for a project."""
+    from pathlib import Path
+    from models.project import update_project, normalize_path
+    from services.git_service import get_git_service
+
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
+
+    # Normalize and validate git_path
+    git_path = request.git_path
+    if git_path:
+        git_path = normalize_path(git_path)
+        if not Path(git_path).exists():
+            raise HTTPException(status_code=400, detail=f"Path does not exist: {git_path}")
+        if not Path(git_path).is_dir():
+            raise HTTPException(status_code=400, detail=f"Path is not a directory: {git_path}")
+
+    # Update project
+    try:
+        updated_project = update_project(project_id, git_path=git_path)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if not updated_project:
+        raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
+
+    # Get git service for the new path
+    effective_path = get_effective_git_path(updated_project)
+    service = get_git_service(effective_path)
+
+    return GitStatusResponse(
+        project_id=project_id,
+        git_enabled=updated_project.git_enabled,
+        git_path=updated_project.git_path,
+        effective_git_path=effective_path,
+        is_valid_repo=service is not None,
+        current_branch=service.current_branch if service else None,
+        error=None if service else "Path is not a valid Git repository",
+    )
 
 
 # =============================================================================
@@ -723,3 +833,88 @@ async def list_github_branches(
         return {"branches": branches, "total": len(branches)}
     except GitHubServiceError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# =============================================================================
+# Git Repository Registry Endpoints
+# =============================================================================
+
+@router.get("/repositories", response_model=GitRepositoryListResponse)
+async def list_repositories():
+    """List all registered Git repositories."""
+    repos = list_git_repositories()
+    return GitRepositoryListResponse(repositories=repos, total=len(repos))
+
+
+@router.post("/repositories", response_model=GitRepository)
+async def create_repository(request: GitRepositoryCreate):
+    """Register a new Git repository."""
+    from pathlib import Path
+    from models.project import normalize_path
+
+    # Normalize path
+    path = normalize_path(request.path)
+
+    # Validate path exists
+    if not Path(path).exists():
+        raise HTTPException(status_code=400, detail=f"Path does not exist: {path}")
+    if not Path(path).is_dir():
+        raise HTTPException(status_code=400, detail=f"Path is not a directory: {path}")
+
+    repo = register_git_repository(
+        name=request.name,
+        path=path,
+        description=request.description,
+    )
+
+    if not repo.is_valid:
+        # Still register but warn
+        logger.warning(f"Registered path '{path}' is not a valid Git repository")
+
+    return repo
+
+
+@router.get("/repositories/{repo_id}", response_model=GitRepository)
+async def get_repository(repo_id: str):
+    """Get a Git repository by ID."""
+    repo = get_git_repository(repo_id)
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    return repo
+
+
+@router.put("/repositories/{repo_id}", response_model=GitRepository)
+async def update_repository(repo_id: str, request: GitRepositoryUpdate):
+    """Update a Git repository."""
+    from pathlib import Path
+    from models.project import normalize_path
+
+    # Validate path if provided
+    path = request.path
+    if path:
+        path = normalize_path(path)
+        if not Path(path).exists():
+            raise HTTPException(status_code=400, detail=f"Path does not exist: {path}")
+        if not Path(path).is_dir():
+            raise HTTPException(status_code=400, detail=f"Path is not a directory: {path}")
+
+    repo = update_git_repository(
+        repo_id=repo_id,
+        name=request.name,
+        description=request.description,
+        path=path,
+    )
+
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+
+    return repo
+
+
+@router.delete("/repositories/{repo_id}")
+async def remove_repository(repo_id: str):
+    """Delete a Git repository from registry."""
+    success = delete_git_repository(repo_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    return {"success": True, "message": "Repository removed"}

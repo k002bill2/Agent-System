@@ -118,6 +118,27 @@ export interface GitHubPRReview {
 
 export type GitTab = 'branches' | 'merge-requests' | 'pull-requests' | 'history'
 
+export interface GitRepository {
+  id: string
+  name: string
+  path: string
+  description: string
+  is_valid: boolean
+  default_branch: string | null
+  remote_url: string | null
+  created_at: string
+}
+
+export interface GitStatus {
+  project_id: string
+  git_enabled: boolean
+  git_path: string | null
+  effective_git_path: string
+  is_valid_repo: boolean
+  current_branch: string | null
+  error: string | null
+}
+
 // =============================================================================
 // State Interface
 // =============================================================================
@@ -128,6 +149,9 @@ interface GitState {
   selectedProjectId: string | null
   isLoading: boolean
   error: string | null
+
+  // Git Status (for project configuration)
+  gitStatus: GitStatus | null
 
   // Branch Data
   branches: GitBranch[]
@@ -150,11 +174,24 @@ interface GitState {
   // GitHub Config
   githubRepo: string | null // "owner/repo" format
 
+  // Registered Git Repositories
+  repositories: GitRepository[]
+
   // Actions - UI
   setActiveTab: (tab: GitTab) => void
   setSelectedProject: (projectId: string | null) => void
   setGitHubRepo: (repo: string | null) => void
   clearError: () => void
+
+  // Actions - Git Status
+  fetchGitStatus: (projectId: string) => Promise<GitStatus | null>
+  updateGitPath: (projectId: string, gitPath: string | null) => Promise<boolean>
+
+  // Actions - Git Repositories
+  fetchRepositories: () => Promise<void>
+  createRepository: (name: string, path: string, description?: string) => Promise<GitRepository | null>
+  updateRepository: (repoId: string, updates: { name?: string; path?: string; description?: string }) => Promise<boolean>
+  deleteRepository: (repoId: string) => Promise<boolean>
 
   // Actions - Branches
   fetchBranches: (projectId: string) => Promise<void>
@@ -166,7 +203,7 @@ interface GitState {
 
   // Actions - Merge Preview
   previewMerge: (projectId: string, source: string, target: string) => Promise<MergePreview | null>
-  executeMerge: (projectId: string, source: string, target: string, message?: string) => Promise<boolean>
+  executeMerge: (projectId: string, source: string, target: string, message?: string, userRole?: string) => Promise<boolean>
   clearMergePreview: () => void
 
   // Actions - Merge Requests
@@ -222,6 +259,8 @@ export const useGitStore = create<GitState>((set, get) => ({
   isLoading: false,
   error: null,
 
+  gitStatus: null,
+
   branches: [],
   currentBranch: '',
   protectedBranches: ['main', 'master'],
@@ -238,11 +277,130 @@ export const useGitStore = create<GitState>((set, get) => ({
 
   githubRepo: null,
 
+  repositories: [],
+
   // UI Actions
   setActiveTab: (tab) => set({ activeTab: tab }),
-  setSelectedProject: (projectId) => set({ selectedProjectId: projectId }),
+  setSelectedProject: (projectId) => set({ selectedProjectId: projectId, gitStatus: null }),
   setGitHubRepo: (repo) => set({ githubRepo: repo }),
   clearError: () => set({ error: null }),
+
+  // Git Status Actions
+  fetchGitStatus: async (projectId) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/status`)
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch git status'))
+      }
+      const status = await response.json()
+      set({ gitStatus: status, isLoading: false })
+      return status
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return null
+    }
+  },
+
+  updateGitPath: async (projectId, gitPath) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/git-path`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ git_path: gitPath }),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to update git path'))
+      }
+      const status = await response.json()
+      set({ gitStatus: status, isLoading: false })
+      return status.is_valid_repo
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return false
+    }
+  },
+
+  // Git Repository Actions
+  fetchRepositories: async () => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/git/repositories`)
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch repositories'))
+      }
+      const data = await response.json()
+      set({ repositories: data.repositories, isLoading: false })
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+    }
+  },
+
+  createRepository: async (name, path, description = '') => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/git/repositories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, path, description }),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to create repository'))
+      }
+      const repo = await response.json()
+      await get().fetchRepositories()
+      set({ isLoading: false })
+      return repo
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return null
+    }
+  },
+
+  updateRepository: async (repoId, updates) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/git/repositories/${repoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to update repository'))
+      }
+      await get().fetchRepositories()
+      set({ isLoading: false })
+      return true
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return false
+    }
+  },
+
+  deleteRepository: async (repoId) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/git/repositories/${repoId}`, {
+        method: 'DELETE',
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to delete repository'))
+      }
+      await get().fetchRepositories()
+      set({ isLoading: false })
+      return true
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return false
+    }
+  },
 
   // Branch Actions
   fetchBranches: async (projectId) => {
@@ -351,10 +509,11 @@ export const useGitStore = create<GitState>((set, get) => ({
     }
   },
 
-  executeMerge: async (projectId, source, target, message) => {
+  executeMerge: async (projectId, source, target, message, userRole = 'member') => {
     set({ isLoading: true, error: null })
     try {
-      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/merge`, {
+      const params = new URLSearchParams({ user_role: userRole })
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/merge?${params}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

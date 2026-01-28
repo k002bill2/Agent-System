@@ -212,7 +212,7 @@ Success Criteria:
 - `StationInfoCard.test.tsx` - Test suite
 
 **Code Requirements:**
-- Use React Native Testing Library
+- Use React Testing Library
 - Mock navigation if needed
 - Test edge cases (missing data, long text)
 
@@ -221,7 +221,7 @@ Success Criteria:
 
 **Reference files:**
 - `src/components/train/__tests__/StationCard.test.tsx` - Test pattern
-- Mobile-ui proposals: `StationInfoCard.tsx` - Component to test
+- Web-ui proposals: `StationInfoCard.tsx` - Component to test
 
 ### Task Boundaries
 

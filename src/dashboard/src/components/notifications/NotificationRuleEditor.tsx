@@ -183,7 +183,7 @@ export function NotificationRuleEditor({ className }: NotificationRuleEditorProp
   const [error, setError] = useState<string | null>(null)
   const [showNewRule, setShowNewRule] = useState(false)
   const [expandedChannel, setExpandedChannel] = useState<NotificationChannel | null>(null)
-  const [testResults, setTestResults] = useState<Record<NotificationChannel, string>>({} as any)
+  const [testResults, setTestResults] = useState<Record<NotificationChannel, string>>({} as Record<NotificationChannel, string>)
 
   // New rule form state
   const [newRule, setNewRule] = useState({

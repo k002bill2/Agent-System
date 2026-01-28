@@ -13,6 +13,7 @@ import { cn } from '../lib/utils'
 import { useGitStore, GitTab } from '../stores/git'
 import { useProjectsStore } from '../stores/projects'
 import { useAuthStore } from '../stores/auth'
+import { useOrganizationsStore, MemberRole } from '../stores/organizations'
 import {
   BranchList,
   MergeRequestList,
@@ -20,6 +21,7 @@ import {
   PullRequestList,
   PRReviewPanel,
   CommitHistory,
+  GitSetup,
 } from '../components/git'
 
 const tabs: { id: GitTab; label: string; icon: typeof GitBranch }[] = [
@@ -38,6 +40,10 @@ export function GitPage() {
     isLoading,
     error,
     clearError,
+    // Git Status
+    gitStatus,
+    fetchGitStatus,
+    updateGitPath,
     // Branches
     branches,
     currentBranch,
@@ -79,15 +85,39 @@ export function GitPage() {
 
   const { projects, fetchProjects, selectedProjectId: globalSelectedProjectId } = useProjectsStore()
   const { user } = useAuthStore()
+  const {
+    currentOrganization,
+    fetchUserMemberships,
+    getCurrentUserRole,
+  } = useOrganizationsStore()
 
   const [showMergePreview, setShowMergePreview] = useState(false)
   const [mergeSource, setMergeSource] = useState<string | null>(null)
   const [showCreateMR, setShowCreateMR] = useState(false)
   const [showPRReview, setShowPRReview] = useState(false)
+  const [userRole, setUserRole] = useState<MemberRole>('viewer')
 
   // Current user info
   const currentUserId = user?.id || 'anonymous'
-  const userRole: 'owner' | 'admin' | 'member' | 'viewer' = 'admin' // TODO: Get from organization membership
+
+  // Fetch user memberships and determine role from organization
+  useEffect(() => {
+    if (user?.id) {
+      fetchUserMemberships(user.id)
+    }
+  }, [user?.id, fetchUserMemberships])
+
+  // Update userRole when organization or user changes
+  useEffect(() => {
+    if (user?.id && currentOrganization) {
+      const role = getCurrentUserRole(currentOrganization.id, user.id)
+      setUserRole(role || 'viewer')
+    } else {
+      // If no organization context, default to 'admin' to allow all git operations
+      // This supports personal projects without organization setup
+      setUserRole('admin')
+    }
+  }, [user?.id, currentOrganization, getCurrentUserRole])
 
   // Initialize
   useEffect(() => {
@@ -101,14 +131,21 @@ export function GitPage() {
     }
   }, [selectedProjectId, projects, globalSelectedProjectId, setSelectedProject])
 
-  // Load data when project changes
+  // Fetch git status when project changes
   useEffect(() => {
     if (selectedProjectId) {
+      fetchGitStatus(selectedProjectId)
+    }
+  }, [selectedProjectId, fetchGitStatus])
+
+  // Load data when project changes and git is enabled
+  useEffect(() => {
+    if (selectedProjectId && gitStatus?.is_valid_repo) {
       fetchBranches(selectedProjectId)
       fetchMergeRequests(selectedProjectId)
       fetchCommits(selectedProjectId)
     }
-  }, [selectedProjectId, fetchBranches, fetchMergeRequests, fetchCommits])
+  }, [selectedProjectId, gitStatus?.is_valid_repo, fetchBranches, fetchMergeRequests, fetchCommits])
 
   // Handle merge click from branch list
   const handleMergeClick = async (source: string) => {
@@ -121,7 +158,7 @@ export function GitPage() {
   // Handle merge execution
   const handleMerge = async (message?: string) => {
     if (!selectedProjectId || !mergeSource) return false
-    return executeMerge(selectedProjectId, mergeSource, 'main', message)
+    return executeMerge(selectedProjectId, mergeSource, 'main', message, userRole)
   }
 
   // Handle create MR from merge preview
@@ -179,7 +216,7 @@ export function GitPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={handleFetch}
-            disabled={isLoading || !selectedProjectId}
+            disabled={isLoading || !selectedProjectId || !gitStatus?.is_valid_repo}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
             title="Fetch from remote"
           >
@@ -188,7 +225,7 @@ export function GitPage() {
           </button>
           <button
             onClick={handlePull}
-            disabled={isLoading || !selectedProjectId}
+            disabled={isLoading || !selectedProjectId || !gitStatus?.is_valid_repo}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
             title="Pull from remote"
           >
@@ -197,7 +234,7 @@ export function GitPage() {
           </button>
           <button
             onClick={handlePush}
-            disabled={isLoading || !selectedProjectId}
+            disabled={isLoading || !selectedProjectId || !gitStatus?.is_valid_repo}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
             title="Push to remote"
           >
@@ -221,26 +258,28 @@ export function GitPage() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="px-6 pt-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-        <div className="flex gap-1">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                'flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors',
-                activeTab === tab.id
-                  ? 'border-primary-500 text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/10'
-                  : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
-              )}
-            >
-              <tab.icon className="w-4 h-4" />
-              {tab.label}
-            </button>
-          ))}
+      {/* Tabs - only show when git is enabled */}
+      {gitStatus?.is_valid_repo && (
+        <div className="px-6 pt-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+          <div className="flex gap-1">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors',
+                  activeTab === tab.id
+                    ? 'border-primary-500 text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/10'
+                    : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
+                )}
+              >
+                <tab.icon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
@@ -249,6 +288,16 @@ export function GitPage() {
             <GitBranch className="w-12 h-12 mx-auto mb-4 opacity-50" />
             <p>프로젝트를 선택하세요</p>
           </div>
+        ) : !gitStatus?.is_valid_repo ? (
+          /* Show Git Setup when git is not configured */
+          <GitSetup
+            projectId={selectedProjectId}
+            projectName={selectedProject?.name || selectedProjectId}
+            projectPath={selectedProject?.path || ''}
+            gitStatus={gitStatus}
+            isLoading={isLoading}
+            onUpdateGitPath={(gitPath) => updateGitPath(selectedProjectId, gitPath)}
+          />
         ) : (
           <>
             {activeTab === 'branches' && (

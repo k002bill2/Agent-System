@@ -46,6 +46,9 @@ class Project(BaseModel):
     claude_md: str | None = None
     vector_store_initialized: bool = False
     indexed_at: str | None = None  # ISO timestamp of last indexing
+    git_path: str | None = None  # Separate Git repository path (if different from project path)
+    git_enabled: bool = False  # Whether Git is configured for this project
+    sort_order: int = 0  # Display order (lower numbers first)
 
     @classmethod
     def from_path(cls, project_id: str, project_path: str) -> "Project":
@@ -61,6 +64,7 @@ class Project(BaseModel):
         # Try to get name from package.json or use folder name
         name = path.name
         description = ""
+        git_path = None
 
         package_json = path / "package.json"
         if package_json.exists():
@@ -73,9 +77,16 @@ class Project(BaseModel):
 
         # Load saved metadata from .aos-project.json (takes priority)
         metadata = _load_project_metadata(path)
+        sort_order = 0
         if metadata:
             name = metadata.get("name", name)
             description = metadata.get("description", description)
+            git_path = metadata.get("git_path")
+            sort_order = metadata.get("sort_order", 0)
+
+        # Determine effective Git path and check if it's a valid repo
+        effective_git_path = git_path or str(path.resolve())
+        git_enabled = _check_git_repository(effective_git_path)
 
         return cls(
             id=project_id,
@@ -83,6 +94,9 @@ class Project(BaseModel):
             path=str(path.resolve()),
             description=description,
             claude_md=claude_md,
+            git_path=git_path,
+            git_enabled=git_enabled,
+            sort_order=sort_order,
         )
 
 
@@ -103,6 +117,9 @@ class ProjectResponse(BaseModel):
     has_claude_md: bool
     vector_store_initialized: bool = False
     indexed_at: str | None = None
+    git_path: str | None = None
+    git_enabled: bool = False
+    sort_order: int = 0
 
 
 class ProjectUpdate(BaseModel):
@@ -111,6 +128,7 @@ class ProjectUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     path: str | None = None  # 프로젝트 경로 수정
+    git_path: str | None = None  # Git 저장소 경로 설정
 
 
 class ProjectLinkRequest(BaseModel):
@@ -148,8 +166,9 @@ def get_project(project_id: str) -> Project | None:
 
 
 def list_projects() -> list[Project]:
-    """List all registered projects."""
-    return list(PROJECTS_REGISTRY.values())
+    """List all registered projects, sorted by sort_order."""
+    projects = list(PROJECTS_REGISTRY.values())
+    return sorted(projects, key=lambda p: (p.sort_order, p.name.lower()))
 
 
 def unregister_project(project_id: str) -> bool:
@@ -177,11 +196,25 @@ def _load_project_metadata(project_path: Path) -> dict | None:
     return None
 
 
-def _save_project_metadata(project_path: Path, name: str, description: str) -> bool:
+def _save_project_metadata(
+    project_path: Path,
+    name: str,
+    description: str,
+    git_path: str | None = None,
+    sort_order: int | None = None
+) -> bool:
     """Save project metadata to .aos-project.json."""
     metadata_file = project_path / AOS_METADATA_FILE
     try:
+        # Load existing metadata first to preserve other fields
+        existing = _load_project_metadata(project_path) or {}
         metadata = {"name": name, "description": description}
+        if git_path:
+            metadata["git_path"] = git_path
+        if sort_order is not None:
+            metadata["sort_order"] = sort_order
+        elif "sort_order" in existing:
+            metadata["sort_order"] = existing["sort_order"]
         metadata_file.write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         logger.info(f"Saved project metadata to {metadata_file}")
         return True
@@ -190,11 +223,18 @@ def _save_project_metadata(project_path: Path, name: str, description: str) -> b
         return False
 
 
+def _check_git_repository(path: str) -> bool:
+    """Check if a path is a valid Git repository."""
+    git_dir = Path(path) / ".git"
+    return git_dir.exists() and git_dir.is_dir()
+
+
 def update_project(
     project_id: str,
     name: str | None = None,
     description: str | None = None,
-    path: str | None = None
+    path: str | None = None,
+    git_path: str | None = None,
 ) -> Project | None:
     """Update project metadata and optionally update path/symlink."""
     import os
@@ -210,10 +250,25 @@ def update_project(
     if description is not None:
         project.description = description
         metadata_changed = True
+    if git_path is not None:
+        # Normalize and validate git_path
+        git_path = normalize_path(git_path)
+        if git_path and not Path(git_path).exists():
+            raise ValueError(f"Git path does not exist: {git_path}")
+        project.git_path = git_path if git_path else None
+        # Update git_enabled based on new path
+        effective_git_path = project.git_path or project.path
+        project.git_enabled = _check_git_repository(effective_git_path)
+        metadata_changed = True
 
     # Save metadata to file for persistence
     if metadata_changed:
-        _save_project_metadata(Path(project.path), project.name, project.description)
+        _save_project_metadata(
+            Path(project.path),
+            project.name,
+            project.description,
+            project.git_path
+        )
 
     # 경로 변경 처리
     if path is not None:
@@ -248,6 +303,46 @@ def update_project(
                 project.claude_md = None
 
     return project
+
+
+def update_project_sort_order(project_id: str, sort_order: int) -> Project | None:
+    """Update a project's sort order."""
+    project = PROJECTS_REGISTRY.get(project_id)
+    if not project:
+        return None
+
+    project.sort_order = sort_order
+
+    # Save to metadata file
+    _save_project_metadata(
+        Path(project.path),
+        project.name,
+        project.description,
+        project.git_path,
+        sort_order
+    )
+
+    return project
+
+
+def reorder_projects(project_ids: list[str]) -> list[Project]:
+    """
+    Reorder all projects based on the provided list of IDs.
+
+    Args:
+        project_ids: List of project IDs in the desired order
+
+    Returns:
+        List of updated projects in the new order
+    """
+    updated_projects = []
+
+    for index, project_id in enumerate(project_ids):
+        project = update_project_sort_order(project_id, index)
+        if project:
+            updated_projects.append(project)
+
+    return updated_projects
 
 
 # Auto-register projects from projects/ directory

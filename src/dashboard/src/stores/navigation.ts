@@ -14,6 +14,7 @@ export type ViewType =
   | 'claude-sessions'
   | 'project-configs'
   | 'git'
+  | 'organizations'
   | 'audit'
   | 'notifications'
   | 'analytics'

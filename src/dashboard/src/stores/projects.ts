@@ -26,6 +26,9 @@ export interface Project {
   has_claude_md: boolean
   vector_store_initialized: boolean
   indexed_at: string | null
+  git_path: string | null
+  git_enabled: boolean
+  sort_order: number
 }
 
 export interface DeletionPreview {
@@ -78,6 +81,7 @@ interface ProjectsState {
   deleteProject: (id: string) => Promise<boolean>
   indexProject: (id: string) => Promise<boolean>
   fetchDeletionPreview: (id: string) => Promise<DeletionPreview | null>
+  reorderProjects: (projectIds: string[]) => Promise<boolean>
 
   // Actions - Modal
   openCreateModal: () => void
@@ -262,6 +266,28 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
     } catch (error) {
       set({ error: (error as Error).message })
       return null
+    }
+  },
+
+  // Reorder projects
+  reorderProjects: async (projectIds) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/projects/reorder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_ids: projectIds }),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to reorder projects'))
+      }
+      const reorderedProjects = await response.json()
+      set({ projects: reorderedProjects, isLoading: false })
+      return true
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return false
     }
   },
 

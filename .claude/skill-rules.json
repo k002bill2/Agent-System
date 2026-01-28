@@ -71,24 +71,6 @@
     "reminder": "API 폴링 간격은 최소 30초를 유지하세요"
   },
 
-  "expo-notifications": {
-    "type": "domain",
-    "enforcement": "suggest",
-    "priority": "high",
-    "description": "Expo Push Notifications 패턴",
-    "promptTriggers": {
-      "keywords": ["notification", "push", "알림", "푸시"],
-      "intentPatterns": [
-        "(notification|알림).*?(send|schedule|push)",
-        "expo.*?notification"
-      ]
-    },
-    "fileTriggers": {
-      "pathPatterns": ["**/services/notification/**"],
-      "contentPatterns": ["Notifications", "scheduleNotification", "ExpoPushToken"]
-    }
-  },
-
   "routing-patterns": {
     "type": "guideline",
     "enforcement": "suggest",

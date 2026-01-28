@@ -69,6 +69,7 @@ import { cn } from '@/lib/utils';
 | `AnalyticsPage` | `/analytics` | 분석 대시보드 |
 | `PlaygroundPage` | `/playground` | 에이전트 테스트 환경 |
 | `GitPage` | `/git` | Git 브랜치/머지 관리 |
+| `OrganizationsPage` | `/organizations` | 조직 관리 (멤버, 역할, 통계) |
 | `SettingsPage` | `/settings` | 시스템 설정 |
 
 ---
@@ -139,6 +140,17 @@ import { cn } from '@/lib/utils';
 | `PullRequestList` | GitHub PR 목록 + 리뷰 패널 |
 | `CommitHistory` | 커밋 타임라인 (확장 가능한 상세) |
 
+### Organization Components
+
+| 컴포넌트 | 설명 |
+|----------|------|
+| `OrganizationCard` | 조직 카드 (이름, 플랜, 멤버 수) |
+| `OrganizationFormModal` | 조직 생성/수정 모달 |
+| `MemberList` | 멤버 목록 컨테이너 |
+| `MemberCard` | 멤버 카드 (역할 변경, 제거) |
+| `InviteMemberModal` | 멤버 초대 모달 |
+| `OrganizationStats` | 조직 통계 패널 |
+
 ### Other Components
 
 | 컴포넌트 | 설명 |
@@ -172,6 +184,7 @@ import { cn } from '@/lib/utils';
 | `useMonitoring` | `monitoring.ts` | 시스템 모니터링 |
 | `useSettings` | `settings.ts` | 설정 상태 |
 | `useGit` | `git.ts` | Git 브랜치/머지 관리 |
+| `useOrganizations` | `organizations.ts` | 조직/멤버 관리 |
 
 ### Store Pattern
 
@@ -228,7 +241,8 @@ src/dashboard/
 │   │   ├── notifications/  # 알림 설정
 │   │   ├── llm-router/     # LLM 라우터
 │   │   ├── version-control/# 버전 관리
-│   │   └── git/            # Git 관리
+│   │   ├── git/            # Git 관리
+│   │   └── organizations/  # 조직 관리
 │   ├── stores/             # Zustand 스토어
 │   ├── hooks/              # 커스텀 훅
 │   ├── lib/                # 유틸리티

@@ -11,19 +11,17 @@
 - [ ] Firebase 프로덕션 프로젝트 연결
 - [ ] API 키 프로덕션 키 사용
 
-## app.json 확인
+## vite.config.ts 확인
 - [ ] 버전 번호 업데이트
-- [ ] 빌드 번호 증가
-- [ ] 번들 ID 확인
-- [ ] 권한 설정 확인
+- [ ] 빌드 설정 확인
+- [ ] 환경 변수 확인
 
-## EAS 빌드
-- [ ] `eas.json` 프로파일 확인
+## Vite 빌드
 - [ ] 프로덕션 프로파일 선택
-- [ ] iOS/Android 모두 빌드
+- [ ] 빌드 출력 확인
 
 ## 배포 후 확인
-- [ ] 앱 설치 및 실행
+- [ ] 앱 접속 및 실행
 - [ ] 로그인 플로우 테스트
 - [ ] 핵심 기능 동작 확인
 - [ ] Sentry 에러 모니터링
@@ -36,11 +34,11 @@
 ## 명령어
 ```bash
 # Preview 빌드
-eas build --profile preview --platform all
+npm run build:preview
 
 # Production 빌드
-eas build --profile production --platform all
+npm run build:production
 
-# 제출
-eas submit --platform all
+# 빌드 미리보기
+npm run preview
 ```

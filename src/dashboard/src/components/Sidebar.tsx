@@ -15,6 +15,7 @@ import {
   BarChart3,
   FlaskConical,
   GitBranch,
+  Building2,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useOrchestrationStore } from '../stores/orchestration'
@@ -31,6 +32,7 @@ const navigation: { name: string; icon: typeof LayoutDashboard; view: ViewType }
   { name: 'Claude Sessions', icon: Code2, view: 'claude-sessions' },
   { name: 'Project Configs', icon: FolderCog, view: 'project-configs' },
   { name: 'Git', icon: GitBranch, view: 'git' },
+  { name: 'Organizations', icon: Building2, view: 'organizations' },
   { name: 'Audit Trail', icon: FileText, view: 'audit' },
   { name: 'Notifications', icon: Bell, view: 'notifications' },
   { name: 'Analytics', icon: BarChart3, view: 'analytics' },

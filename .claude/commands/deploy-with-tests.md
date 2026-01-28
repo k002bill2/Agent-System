@@ -1,10 +1,10 @@
 ---
-description: 테스트 검증 후 EAS 빌드/배포 실행
+description: 테스트 검증 후 빌드/배포 실행
 ---
 
 # Deploy with Tests
 
-테스트와 타입 체크를 통과한 후에만 EAS 빌드를 실행합니다.
+테스트와 타입 체크를 통과한 후에만 프로덕션 빌드를 실행합니다.
 
 ## 실행 단계
 
@@ -19,8 +19,8 @@ npm run type-check
 # 2. ESLint 검사
 npm run lint
 
-# 3. Jest 테스트 (커버리지 포함)
-npm test -- --coverage --passWithNoTests
+# 3. Vitest 테스트 (커버리지 포함)
+npm test -- --coverage
 ```
 
 ### 2. 커버리지 확인
@@ -36,22 +36,22 @@ npm test -- --coverage --passWithNoTests
 
 사용자에게 빌드 프로파일 확인:
 - `development`: 개발용 빌드
-- `preview`: 테스트용 빌드 (TestFlight/Internal Testing)
+- `preview`: 테스트용 빌드
 - `production`: 프로덕션 빌드
 
-### 4. EAS 빌드 실행
+### 4. Vite 빌드 실행
 
 ```bash
 # Preview 빌드 예시
-eas build --profile preview --platform all
+npm run build:preview
 
 # Production 빌드 예시 (주의 필요)
-eas build --profile production --platform all
+npm run build:production
 ```
 
-### 5. 빌드 상태 모니터링
+### 5. 빌드 상태 확인
 
-빌드 URL 제공 및 상태 확인 방법 안내.
+빌드 완료 후 dist/ 디렉토리 확인 및 배포 준비 상태 점검.
 
 ## 출력 형식
 
@@ -72,9 +72,9 @@ eas build --profile production --platform all
    Functions: 72.1% (✅ ≥70%)
    Branches: 65.3% (✅ ≥60%)
 
-[4/4] EAS Build
+[4/4] Vite Build
 🔄 Building with profile: preview
-📱 Build URL: https://expo.dev/accounts/.../builds/...
+📦 Build output: dist/
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```

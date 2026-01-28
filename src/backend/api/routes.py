@@ -36,6 +36,7 @@ from models.project import (
     get_projects_dir,
     update_project,
     normalize_path,
+    reorder_projects,
 )
 from models.monitoring import (
     CheckType,
@@ -546,9 +547,14 @@ async def get_task_tree(
 # ─────────────────────────────────────────────────────────────
 
 
+class ProjectReorderRequest(BaseModel):
+    """Request to reorder projects."""
+    project_ids: list[str] = Field(..., description="List of project IDs in desired order")
+
+
 @router.get("/projects", response_model=list[ProjectResponse])
 async def get_projects():
-    """List all registered projects."""
+    """List all registered projects, sorted by sort_order."""
     projects = list_projects()
 
     # Try to get RAG stats if available
@@ -576,7 +582,54 @@ async def get_projects():
             has_claude_md=p.claude_md is not None,
             vector_store_initialized=vector_initialized,
             indexed_at=p.indexed_at,
+            sort_order=p.sort_order,
         ))
+    return result
+
+
+@router.post("/projects/reorder", response_model=list[ProjectResponse])
+async def reorder_projects_endpoint(request: ProjectReorderRequest):
+    """
+    Reorder projects by providing a list of project IDs in the desired order.
+
+    This updates the sort_order field for each project and persists it
+    to the .aos-project.json metadata file.
+    """
+    # Validate all project IDs exist
+    for project_id in request.project_ids:
+        if not get_project(project_id):
+            raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
+
+    # Reorder projects
+    updated = reorder_projects(request.project_ids)
+
+    # Try to get RAG stats if available
+    try:
+        from services.rag_service import get_vector_store
+        store = get_vector_store()
+        rag_available = True
+    except ImportError:
+        rag_available = False
+
+    result = []
+    for p in updated:
+        if rag_available:
+            stats = store.get_collection_stats(p.id)
+            vector_initialized = stats.get("indexed", False)
+        else:
+            vector_initialized = False
+
+        result.append(ProjectResponse(
+            id=p.id,
+            name=p.name,
+            path=p.path,
+            description=p.description,
+            has_claude_md=p.claude_md is not None,
+            vector_store_initialized=vector_initialized,
+            indexed_at=p.indexed_at,
+            sort_order=p.sort_order,
+        ))
+
     return result
 
 

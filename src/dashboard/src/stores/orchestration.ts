@@ -345,20 +345,20 @@ export const useOrchestrationStore = create<OrchestrationState>()(
         reconnectAttempt: 0,
         heartbeatTimer,
       })
-      console.log('[WS] Connected with heartbeat')
+      // WS Connected with heartbeat
     }
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
-        console.log('[WS] Received message:', data)
+        // WS message received
         handleMessage(data, set, get)
       } catch (e) {
         console.error('[WS] Failed to parse message:', e, event.data)
       }
     }
 
-    ws.onclose = (event) => {
+    ws.onclose = (_event) => {
       const { isIntentionalDisconnect, reconnectAttempt, heartbeatTimer } = get()
 
       // Clear heartbeat timer
@@ -373,7 +373,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
         heartbeatTimer: null,
       })
 
-      console.log('[WS] Disconnected:', { code: event.code, reason: event.reason })
+      // WS disconnected
 
       // Auto-reconnect if not intentional and within max attempts
       if (!isIntentionalDisconnect && reconnectAttempt < RECONNECT_CONFIG.maxAttempts) {
@@ -385,7 +385,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
           reconnectAttempt: nextAttempt,
         })
 
-        console.log(`[WS] Reconnecting in ${Math.round(delay / 1000)}s (attempt ${nextAttempt}/${RECONNECT_CONFIG.maxAttempts})`)
+        // WS reconnecting
 
         notificationService.notify('재연결 시도 중...', {
           body: `${nextAttempt}/${RECONNECT_CONFIG.maxAttempts} (${Math.round(delay / 1000)}초 후)`,
@@ -460,7 +460,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
 
       if (!syncRes.ok) {
         // Session expired or not found - clear local state
-        console.log('[Session] Session expired or not found, clearing local state')
+        // Session expired or not found, clearing local state
         set({
           sessionId: null,
           sessionProjectId: null,
@@ -484,10 +484,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
 
       // Sync server state to local
       const syncData = await syncRes.json()
-      console.log('[Session] Synced from server:', {
-        taskCount: Object.keys(syncData.tasks || {}).length,
-        ttl: syncData.session_info?.ttl_remaining_hours?.toFixed(1),
-      })
+      // Session synced from server
 
       // Transform and merge tasks from server
       const serverTasks: Record<string, Task> = {}
@@ -539,20 +536,20 @@ export const useOrchestrationStore = create<OrchestrationState>()(
         reconnectAttempt: 0,
         heartbeatTimer,
       })
-      console.log('[WS] Reconnected to session:', sessionId)
+      // WS reconnected to session
     }
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
-        console.log('[WS] Received message:', data)
+        // WS message received
         handleMessage(data, set, get)
       } catch (e) {
         console.error('[WS] Failed to parse message:', e, event.data)
       }
     }
 
-    ws.onclose = (event) => {
+    ws.onclose = (_event) => {
       const { isIntentionalDisconnect, reconnectAttempt, heartbeatTimer } = get()
 
       // Clear heartbeat timer
@@ -567,7 +564,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
         heartbeatTimer: null,
       })
 
-      console.log('[WS] Disconnected:', { code: event.code, reason: event.reason })
+      // WS disconnected
 
       // Auto-reconnect if not intentional and within max attempts
       if (!isIntentionalDisconnect && reconnectAttempt < RECONNECT_CONFIG.maxAttempts) {
@@ -579,7 +576,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
           reconnectAttempt: nextAttempt,
         })
 
-        console.log(`[WS] Reconnecting in ${Math.round(delay / 1000)}s (attempt ${nextAttempt}/${RECONNECT_CONFIG.maxAttempts})`)
+        // WS reconnecting
 
         notificationService.notify('재연결 시도 중...', {
           body: `${nextAttempt}/${RECONNECT_CONFIG.maxAttempts} (${Math.round(delay / 1000)}초 후)`,
@@ -657,7 +654,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       })
 
       if (!res.ok) {
-        console.log('[Session] Refresh failed, session may be expired')
+        // Session refresh failed, may be expired
         return false
       }
 
@@ -666,7 +663,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       if (infoRes.ok) {
         const sessionInfo = await infoRes.json()
         set({ sessionInfo })
-        console.log(`[Session] Refreshed, TTL: ${sessionInfo.ttl_remaining_hours.toFixed(1)} hours`)
+        // Session refreshed
       }
 
       return true
@@ -691,7 +688,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       timestamp: new Date().toISOString(),
     }
 
-    console.log('[WS] Sending message:', message)
+    // WS sending message
     ws.send(JSON.stringify(message))
     set({ isProcessing: true })
 
