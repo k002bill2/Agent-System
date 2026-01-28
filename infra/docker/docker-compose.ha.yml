@@ -1,0 +1,281 @@
+version: "3.8"
+
+# ═══════════════════════════════════════════════════════════════
+# AOS High Availability Configuration
+# ═══════════════════════════════════════════════════════════════
+#
+# Architecture:
+# - PostgreSQL: 1 Primary + 2 Replicas with pgpool-II
+# - Redis: 1 Master + 1 Replica with 3 Sentinels
+# - Backend: 2+ instances behind load balancer
+#
+# Usage:
+#   docker-compose -f docker-compose.ha.yml up -d
+#
+# ═══════════════════════════════════════════════════════════════
+
+services:
+  # ─────────────────────────────────────────────────────────────
+  # PostgreSQL Primary
+  # ─────────────────────────────────────────────────────────────
+  postgres-primary:
+    image: postgres:16-alpine
+    container_name: aos-postgres-primary
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: agent_orchestrator
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - postgres-primary-data:/var/lib/postgresql/data
+      - ./postgres/primary.conf:/etc/postgresql/postgresql.conf:ro
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf -c hba_file=/etc/postgresql/pg_hba.conf
+    ports:
+      - "5433:5432"
+    networks:
+      - aos-ha-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────
+  # PostgreSQL Replica 1
+  # ─────────────────────────────────────────────────────────────
+  postgres-replica1:
+    image: postgres:16-alpine
+    container_name: aos-postgres-replica1
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: agent_orchestrator
+      PGUSER: postgres
+    volumes:
+      - postgres-replica1-data:/var/lib/postgresql/data
+      - ./postgres/replica.conf:/etc/postgresql/postgresql.conf:ro
+    command: >
+      bash -c "
+        # Wait for primary to be ready
+        until pg_isready -h postgres-primary -U postgres; do sleep 2; done;
+
+        # If data directory is empty, create replica from primary
+        if [ ! -f /var/lib/postgresql/data/PG_VERSION ]; then
+          rm -rf /var/lib/postgresql/data/*
+          pg_basebackup -h postgres-primary -U postgres -D /var/lib/postgresql/data -R -P -X stream
+        fi
+
+        postgres -c config_file=/etc/postgresql/postgresql.conf
+      "
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    networks:
+      - aos-ha-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────
+  # PostgreSQL Replica 2
+  # ─────────────────────────────────────────────────────────────
+  postgres-replica2:
+    image: postgres:16-alpine
+    container_name: aos-postgres-replica2
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: agent_orchestrator
+      PGUSER: postgres
+    volumes:
+      - postgres-replica2-data:/var/lib/postgresql/data
+      - ./postgres/replica.conf:/etc/postgresql/postgresql.conf:ro
+    command: >
+      bash -c "
+        until pg_isready -h postgres-primary -U postgres; do sleep 2; done;
+
+        if [ ! -f /var/lib/postgresql/data/PG_VERSION ]; then
+          rm -rf /var/lib/postgresql/data/*
+          pg_basebackup -h postgres-primary -U postgres -D /var/lib/postgresql/data -R -P -X stream
+        fi
+
+        postgres -c config_file=/etc/postgresql/postgresql.conf
+      "
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    networks:
+      - aos-ha-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────
+  # PgPool-II (Connection Pooling & Load Balancing)
+  # ─────────────────────────────────────────────────────────────
+  pgpool:
+    image: bitnami/pgpool:4
+    container_name: aos-pgpool
+    environment:
+      PGPOOL_BACKEND_NODES: "0:postgres-primary:5432,1:postgres-replica1:5432,2:postgres-replica2:5432"
+      PGPOOL_SR_CHECK_USER: postgres
+      PGPOOL_SR_CHECK_PASSWORD: postgres
+      PGPOOL_POSTGRES_USERNAME: postgres
+      PGPOOL_POSTGRES_PASSWORD: postgres
+      PGPOOL_ADMIN_USERNAME: admin
+      PGPOOL_ADMIN_PASSWORD: adminpassword
+      PGPOOL_ENABLE_LOAD_BALANCING: "yes"
+      PGPOOL_ENABLE_STATEMENT_LOAD_BALANCING: "yes"
+      PGPOOL_NUM_INIT_CHILDREN: 32
+      PGPOOL_MAX_POOL: 4
+    ports:
+      - "5432:5432"
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    networks:
+      - aos-ha-network
+    healthcheck:
+      test: ["CMD", "/opt/bitnami/scripts/pgpool/healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────
+  # Redis Master
+  # ─────────────────────────────────────────────────────────────
+  redis-master:
+    image: redis:7-alpine
+    container_name: aos-redis-master
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-master-data:/data
+    networks:
+      - aos-ha-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────
+  # Redis Replica
+  # ─────────────────────────────────────────────────────────────
+  redis-replica:
+    image: redis:7-alpine
+    container_name: aos-redis-replica
+    command: redis-server --appendonly yes --replicaof redis-master 6379 --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-replica-data:/data
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    networks:
+      - aos-ha-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────
+  # Redis Sentinel 1
+  # ─────────────────────────────────────────────────────────────
+  redis-sentinel1:
+    image: redis:7-alpine
+    container_name: aos-redis-sentinel1
+    command: >
+      sh -c "
+        cat > /tmp/sentinel.conf << 'EOF'
+        port 26379
+        sentinel monitor aos-master redis-master 6379 2
+        sentinel down-after-milliseconds aos-master 5000
+        sentinel failover-timeout aos-master 60000
+        sentinel parallel-syncs aos-master 1
+        EOF
+        redis-sentinel /tmp/sentinel.conf
+      "
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    networks:
+      - aos-ha-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "26379", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────
+  # Redis Sentinel 2
+  # ─────────────────────────────────────────────────────────────
+  redis-sentinel2:
+    image: redis:7-alpine
+    container_name: aos-redis-sentinel2
+    command: >
+      sh -c "
+        cat > /tmp/sentinel.conf << 'EOF'
+        port 26379
+        sentinel monitor aos-master redis-master 6379 2
+        sentinel down-after-milliseconds aos-master 5000
+        sentinel failover-timeout aos-master 60000
+        sentinel parallel-syncs aos-master 1
+        EOF
+        redis-sentinel /tmp/sentinel.conf
+      "
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    networks:
+      - aos-ha-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "26379", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────
+  # Redis Sentinel 3
+  # ─────────────────────────────────────────────────────────────
+  redis-sentinel3:
+    image: redis:7-alpine
+    container_name: aos-redis-sentinel3
+    command: >
+      sh -c "
+        cat > /tmp/sentinel.conf << 'EOF'
+        port 26379
+        sentinel monitor aos-master redis-master 6379 2
+        sentinel down-after-milliseconds aos-master 5000
+        sentinel failover-timeout aos-master 60000
+        sentinel parallel-syncs aos-master 1
+        EOF
+        redis-sentinel /tmp/sentinel.conf
+      "
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    networks:
+      - aos-ha-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "26379", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  aos-ha-network:
+    driver: bridge
+
+volumes:
+  postgres-primary-data:
+  postgres-replica1-data:
+  postgres-replica2-data:
+  redis-master-data:
+  redis-replica-data:

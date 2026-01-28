@@ -113,9 +113,9 @@ class AgentMetadata(BaseModel):
 DEFAULT_AGENTS: list[AgentMetadata] = [
     # 개발 전문가
     AgentMetadata(
-        id="mobile-ui-specialist",
-        name="Mobile UI Specialist",
-        description="React Native UI/UX 전문가. 컴포넌트 설계, 반응형 레이아웃, UX 최적화.",
+        id="web-ui-specialist",
+        name="Web UI Specialist",
+        description="Web UI/UX 전문가. 컴포넌트 설계, 반응형 레이아웃, UX 최적화.",
         category=AgentCategory.DEVELOPMENT,
         capabilities=[
             AgentCapability(

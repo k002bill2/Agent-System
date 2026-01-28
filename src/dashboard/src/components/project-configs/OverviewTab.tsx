@@ -1,8 +1,11 @@
-import { FolderCode, Sparkles, Bot, Server, Webhook, Clock } from 'lucide-react'
+import { useState } from 'react'
+import { FolderCode, Sparkles, Bot, Server, Webhook, Clock, Trash2, Loader2 } from 'lucide-react'
 import { useProjectConfigsStore } from '../../stores/projectConfigs'
 
 export function OverviewTab() {
-  const { selectedProject, isLoadingProject } = useProjectConfigsStore()
+  const { selectedProject, isLoadingProject, removeProject, selectProject } = useProjectConfigsStore()
+  const [isRemoving, setIsRemoving] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
 
   if (isLoadingProject) {
     return (
@@ -50,6 +53,19 @@ export function OverviewTab() {
               Last modified: {new Date(project.last_modified).toLocaleString()}
             </div>
           </div>
+          {/* Remove Button */}
+          <button
+            onClick={() => setShowConfirm(true)}
+            disabled={isRemoving}
+            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
+            title="Remove from list"
+          >
+            {isRemoving ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Trash2 className="w-5 h-5" />
+            )}
+          </button>
         </div>
       </div>
 
@@ -152,6 +168,46 @@ export function OverviewTab() {
           </div>
         </div>
       </div>
+
+      {/* Remove Confirmation Modal */}
+      {showConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowConfirm(false)} />
+          <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              Remove Project from List?
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              This will remove <span className="font-medium text-gray-700 dark:text-gray-300">{project.project_name}</span> from the monitoring list.
+            </p>
+            <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg mb-4">
+              <p className="text-sm text-green-700 dark:text-green-400">
+                Your source files will NOT be deleted.
+              </p>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowConfirm(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  setIsRemoving(true)
+                  setShowConfirm(false)
+                  await removeProject(project.project_id)
+                  selectProject(null)
+                  setIsRemoving(false)
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

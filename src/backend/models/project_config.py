@@ -158,7 +158,7 @@ class ConfigChangeEvent(BaseModel):
 class ExternalPathRequest(BaseModel):
     """Request to add external project path."""
 
-    path: str = Field(..., description="Path to project root (must have .claude/)")
+    path: str = Field(..., description="Path to project root (does not require .claude/)")
 
 
 class MCPToggleRequest(BaseModel):

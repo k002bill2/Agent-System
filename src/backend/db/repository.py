@@ -153,6 +153,103 @@ class SessionRepository:
         )
         return list(result.scalars().all())
 
+    async def delete_by_project(self, project_id: str) -> int:
+        """Delete all sessions for a project.
+
+        Due to CASCADE relationships, this also deletes:
+        - tasks (cascade)
+        - messages (cascade)
+        - approvals (cascade via session_id)
+        - feedbacks (cascade via session_id)
+        - dataset_entries (cascade via feedback_id)
+
+        Args:
+            project_id: Project identifier
+
+        Returns:
+            Number of sessions deleted
+        """
+        result = await self.db.execute(
+            delete(SessionModel).where(SessionModel.project_id == project_id)
+        )
+        return result.rowcount
+
+    async def count_related_by_project(self, project_id: str) -> dict[str, int]:
+        """Count all related records for a project.
+
+        Args:
+            project_id: Project identifier
+
+        Returns:
+            Dict with counts for each table
+        """
+        from sqlalchemy import func
+
+        counts = {}
+
+        # Count sessions
+        result = await self.db.execute(
+            select(func.count()).where(SessionModel.project_id == project_id)
+        )
+        counts["sessions"] = result.scalar() or 0
+
+        if counts["sessions"] == 0:
+            return counts
+
+        # Get session IDs for this project
+        session_result = await self.db.execute(
+            select(SessionModel.id).where(SessionModel.project_id == project_id)
+        )
+        session_ids = [row[0] for row in session_result.fetchall()]
+
+        if not session_ids:
+            return counts
+
+        # Count tasks
+        result = await self.db.execute(
+            select(func.count()).where(TaskModel.session_id.in_(session_ids))
+        )
+        counts["tasks"] = result.scalar() or 0
+
+        # Count messages
+        result = await self.db.execute(
+            select(func.count()).where(MessageModel.session_id.in_(session_ids))
+        )
+        counts["messages"] = result.scalar() or 0
+
+        # Count approvals
+        result = await self.db.execute(
+            select(func.count()).where(ApprovalModel.session_id.in_(session_ids))
+        )
+        counts["approvals"] = result.scalar() or 0
+
+        # Count feedbacks
+        try:
+            from db.models import FeedbackModel, DatasetEntryModel
+
+            result = await self.db.execute(
+                select(func.count()).where(FeedbackModel.session_id.in_(session_ids))
+            )
+            counts["feedbacks"] = result.scalar() or 0
+
+            # Get feedback IDs for dataset entries count
+            if counts["feedbacks"] > 0:
+                feedback_result = await self.db.execute(
+                    select(FeedbackModel.id).where(FeedbackModel.session_id.in_(session_ids))
+                )
+                feedback_ids = [row[0] for row in feedback_result.fetchall()]
+
+                if feedback_ids:
+                    result = await self.db.execute(
+                        select(func.count()).where(DatasetEntryModel.feedback_id.in_(feedback_ids))
+                    )
+                    counts["dataset_entries"] = result.scalar() or 0
+        except Exception:
+            # FeedbackModel/DatasetEntryModel may not be imported
+            pass
+
+        return counts
+
 
 class TaskRepository:
     """Repository for task operations."""

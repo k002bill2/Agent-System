@@ -23,6 +23,7 @@ import {
   AlertCircle,
   Circle,
   XCircle,
+  Pause,
   Code,
   Layers,
   TestTube,
@@ -41,6 +42,7 @@ const statusIcons: Record<TaskStatus, typeof CheckCircle> = {
   completed: CheckCircle,
   failed: AlertCircle,
   cancelled: XCircle,
+  paused: Pause,
 }
 
 const statusColors: Record<TaskStatus, string> = {
@@ -49,6 +51,7 @@ const statusColors: Record<TaskStatus, string> = {
   completed: 'text-green-500',
   failed: 'text-red-500',
   cancelled: 'text-gray-500',
+  paused: 'text-yellow-500',
 }
 
 const statusBgColors: Record<TaskStatus, string> = {
@@ -57,6 +60,7 @@ const statusBgColors: Record<TaskStatus, string> = {
   completed: 'bg-green-100 dark:bg-green-900/30',
   failed: 'bg-red-100 dark:bg-red-900/30',
   cancelled: 'bg-gray-100 dark:bg-gray-700',
+  paused: 'bg-yellow-100 dark:bg-yellow-900/30',
 }
 
 // Category filter options

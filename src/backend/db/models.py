@@ -222,7 +222,7 @@ class DatasetEntryModel(Base):
 
 
 class UserModel(Base):
-    """User model for OAuth authentication."""
+    """User model for OAuth and email/password authentication."""
 
     __tablename__ = "users"
 
@@ -231,9 +231,12 @@ class UserModel(Base):
     name = Column(String(255), nullable=True)
     avatar_url = Column(String(500), nullable=True)
 
-    # OAuth provider info
-    oauth_provider = Column(String(50), nullable=False)  # google | github
-    oauth_provider_id = Column(String(255), nullable=False)
+    # Password (for email/password auth; null for OAuth-only users)
+    password_hash = Column(String(255), nullable=True)
+
+    # OAuth provider info (nullable for email/password users)
+    oauth_provider = Column(String(50), nullable=True)  # google | github | email
+    oauth_provider_id = Column(String(255), nullable=True)
 
     # Status flags
     is_active = Column(Boolean, default=True)
@@ -245,4 +248,178 @@ class UserModel(Base):
 
     __table_args__ = (
         Index("ix_users_provider_id", "oauth_provider", "oauth_provider_id"),
+    )
+
+
+class AuditLogModel(Base):
+    """Audit log model for tracking all system actions."""
+
+    __tablename__ = "audit_logs"
+
+    id = Column(String(36), primary_key=True)
+    session_id = Column(String(36), ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    # Action details
+    action = Column(String(100), nullable=False, index=True)  # e.g., TASK_CREATED, TOOL_EXECUTED, APPROVAL_GRANTED
+    resource_type = Column(String(50), nullable=False, index=True)  # session, task, approval, agent, etc.
+    resource_id = Column(String(36), nullable=True, index=True)
+
+    # Change tracking
+    old_value = Column(JSONB, nullable=True)  # Previous state
+    new_value = Column(JSONB, nullable=True)  # New state
+    changes = Column(JSONB, nullable=True)  # Diff of changes
+
+    # Context
+    agent_id = Column(String(100), nullable=True, index=True)
+    ip_address = Column(String(45), nullable=True)  # IPv6 compatible
+    user_agent = Column(String(500), nullable=True)
+
+    # Additional metadata
+    metadata_json = Column(JSONB, nullable=True, default=dict)
+
+    # Result
+    status = Column(String(20), default="success", index=True)  # success, failed, denied
+    error_message = Column(Text, nullable=True)
+
+    # Compliance fields (Enterprise)
+    data_classification = Column(String(20), default="internal")  # public, internal, confidential, restricted
+    change_reason = Column(Text, nullable=True)
+    compliance_flags = Column(JSONB, default=list)  # PCI, HIPAA, GDPR, etc.
+
+    # Hash chain for integrity (Enterprise)
+    previous_hash = Column(String(64), nullable=True)
+    hash = Column(String(64), nullable=True)
+    signature = Column(Text, nullable=True)
+
+    # Retention (Enterprise)
+    retention_days = Column(Integer, default=2555)  # 7 years
+    retention_policy = Column(String(20), default="standard")
+    expires_at = Column(DateTime, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index("ix_audit_session_action", "session_id", "action"),
+        Index("ix_audit_user_action", "user_id", "action"),
+        Index("ix_audit_resource", "resource_type", "resource_id"),
+        Index("ix_audit_created_action", "created_at", "action"),
+        Index("ix_audit_classification", "data_classification"),
+        Index("ix_audit_expires", "expires_at"),
+    )
+
+
+class CostCenterModel(Base):
+    """Cost center model for enterprise billing."""
+
+    __tablename__ = "cost_centers"
+
+    id = Column(String(36), primary_key=True)
+    organization_id = Column(String(36), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    code = Column(String(50), nullable=False, unique=True)
+    description = Column(Text, nullable=True)
+
+    # Budget settings
+    budget_usd = Column(Float, nullable=True)
+    budget_period = Column(String(20), default="monthly")  # monthly, quarterly, yearly
+    alert_threshold_percent = Column(Float, default=80.0)
+
+    # Metadata
+    tags = Column(JSONB, default=dict)
+    owner_id = Column(String(36), nullable=True)
+    parent_id = Column(String(36), ForeignKey("cost_centers.id", ondelete="SET NULL"), nullable=True)
+
+    # Status
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_cost_centers_org", "organization_id"),
+        Index("ix_cost_centers_active", "is_active"),
+    )
+
+
+class CostAllocationModel(Base):
+    """Cost allocation model for session cost tracking."""
+
+    __tablename__ = "cost_allocations"
+
+    id = Column(String(36), primary_key=True)
+    session_id = Column(String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(String(36), nullable=True, index=True)
+    cost_center_id = Column(String(36), ForeignKey("cost_centers.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    # Cost breakdown
+    total_cost_usd = Column(Float, default=0.0)
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    model_costs = Column(JSONB, default=dict)
+
+    # Allocation metadata
+    allocation_tags = Column(JSONB, default=dict)
+    allocation_percent = Column(Float, default=100.0)
+
+    # Timestamps
+    period_start = Column(DateTime, nullable=True)
+    period_end = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index("ix_cost_allocations_center", "cost_center_id", "created_at"),
+        Index("ix_cost_allocations_project", "project_id", "created_at"),
+        Index("ix_cost_allocations_user", "user_id", "created_at"),
+    )
+
+
+class TokenBlacklistModel(Base):
+    """Token blacklist model for JWT revocation."""
+
+    __tablename__ = "token_blacklist"
+
+    id = Column(String(36), primary_key=True)
+    jti = Column(String(36), nullable=False, unique=True, index=True)  # JWT ID
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    token_type = Column(String(20), nullable=False)  # access, refresh
+    expires_at = Column(DateTime, nullable=False, index=True)
+    revoked_at = Column(DateTime, default=datetime.utcnow)
+    reason = Column(String(100), nullable=True)  # logout, password_change, admin_revoke
+
+    __table_args__ = (
+        Index("ix_token_blacklist_expires", "expires_at"),
+    )
+
+
+class SAMLConfigModel(Base):
+    """SAML IdP configuration model."""
+
+    __tablename__ = "saml_configs"
+
+    id = Column(String(36), primary_key=True)
+    organization_id = Column(String(36), nullable=False, unique=True, index=True)
+    name = Column(String(255), nullable=False)
+
+    # IdP settings
+    idp_entity_id = Column(String(500), nullable=False)
+    idp_sso_url = Column(String(500), nullable=False)
+    idp_slo_url = Column(String(500), nullable=True)
+    idp_certificate = Column(Text, nullable=False)
+
+    # SP settings (overrides)
+    sp_entity_id = Column(String(500), nullable=True)
+    sp_acs_url = Column(String(500), nullable=True)
+
+    # Attribute mapping
+    attribute_mapping = Column(JSONB, default=dict)  # {email: "mail", name: "displayName"}
+
+    # Status
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_saml_configs_active", "is_active"),
     )

@@ -44,8 +44,8 @@ export function ProjectClaudeConfigPanel({ project, onClose }: ProjectClaudeConf
         const encodedPath = encodeURIComponent(project.path)
         const res = await fetch(`/api/project-configs/by-path?path=${encodedPath}`)
         if (res.status === 404) {
-          // Project doesn't have .claude directory
-          setError('이 프로젝트에 .claude 디렉토리가 없습니다.')
+          // Path doesn't exist
+          setError('프로젝트 경로를 찾을 수 없습니다.')
           setIsLoading(false)
           return
         }

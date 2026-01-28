@@ -1,4 +1,4 @@
-# AGS (Agent Orchestration System) Context
+# AOS (Agent Orchestration System) Context
 
 **Last Updated**: 2026-01-17 (Session End)
 **Status**: Active Development
@@ -99,6 +99,6 @@ DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/agent_orchest
 
 ## References
 
-- PRD: `/docs/prd/ags-prd.md`
-- TRD: `/docs/trd/ags-trd.md`
+- PRD: `/docs/prd/aos-prd.md`
+- TRD: `/docs/trd/aos-trd.md`
 - Plan: `~/.claude/plans/zesty-napping-parrot.md`

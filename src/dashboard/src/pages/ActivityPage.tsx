@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { useOrchestrationStore } from '../stores/orchestration'
 import { useNavigationStore } from '../stores/navigation'
+import { useClaudeCodeActivityStore } from '../stores/claudeCodeActivity'
 import { cn } from '../lib/utils'
 import { ProjectFilter, ProjectBadge } from '../components/ProjectFilter'
+import { DataSourceToggle } from '../components/DataSourceToggle'
+import { ClaudeCodeActivity } from '../components/ClaudeCodeActivity'
 import {
   Filter,
   User,
@@ -39,7 +42,7 @@ const typeColors: Record<string, string> = {
   error: 'text-red-500 bg-red-100 dark:bg-red-900/30',
 }
 
-export function ActivityPage() {
+function AOSActivity() {
   const { messages, agents, sessionProjectId } = useOrchestrationStore()
   const { projectFilter } = useNavigationStore()
   const [typeFilter, setTypeFilter] = useState<string>('all')
@@ -47,7 +50,7 @@ export function ActivityPage() {
 
   const agentList = Object.values(agents)
 
-  // 프로젝트 필터 적용 (현재는 단일 세션이므로 sessionProjectId로 필터)
+  // Filter by project (single session, so use sessionProjectId)
   const projectFilteredMessages = projectFilter
     ? (sessionProjectId === projectFilter ? messages : [])
     : messages
@@ -59,8 +62,7 @@ export function ActivityPage() {
   })
 
   const clearMessages = () => {
-    // Note: This would need to be implemented in the store
-    console.log('Clear messages')
+    // Clear messages - TODO: implement
   }
 
   return (
@@ -122,8 +124,8 @@ export function ActivityPage() {
         </button>
       </div>
 
-      {/* Message List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2">
+      {/* Message List - with max height and scroll */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-2 max-h-[calc(100vh-200px)]">
         {filteredMessages.length === 0 ? (
           <div className="text-center py-12 text-gray-500 dark:text-gray-400">
             <Info className="w-12 h-12 mx-auto mb-4 opacity-50" />
@@ -151,19 +153,19 @@ export function ActivityPage() {
                     </span>
                     {agent && (
                       <>
-                        <span className="text-gray-300 dark:text-gray-600">•</span>
+                        <span className="text-gray-300 dark:text-gray-600">|</span>
                         <span className="text-xs text-gray-500 dark:text-gray-400">
                           {agent.name}
                         </span>
                       </>
                     )}
-                    <span className="text-gray-300 dark:text-gray-600">•</span>
+                    <span className="text-gray-300 dark:text-gray-600">|</span>
                     <span className="text-xs text-gray-400 dark:text-gray-500">
                       {new Date(msg.timestamp).toLocaleTimeString()}
                     </span>
                     {!projectFilter && sessionProjectId && (
                       <>
-                        <span className="text-gray-300 dark:text-gray-600">•</span>
+                        <span className="text-gray-300 dark:text-gray-600">|</span>
                         <ProjectBadge projectId={sessionProjectId} />
                       </>
                     )}
@@ -177,6 +179,29 @@ export function ActivityPage() {
           })
         )}
       </div>
+    </div>
+  )
+}
+
+export function ActivityPage() {
+  const { dataSource, setDataSource } = useClaudeCodeActivityStore()
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Data Source Toggle Header */}
+      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+        <DataSourceToggle
+          value={dataSource}
+          onChange={setDataSource}
+        />
+      </div>
+
+      {/* Content based on data source */}
+      {dataSource === 'aos' ? (
+        <AOSActivity />
+      ) : (
+        <ClaudeCodeActivity />
+      )}
     </div>
   )
 }

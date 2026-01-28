@@ -14,9 +14,8 @@ ace_capabilities:
       error_handling_and_retry: 0.90
     weaknesses:
       ui_component_design: 0.35
-      react_native_styling: 0.40
-      mobile_ux_patterns: 0.40
-      native_modules: 0.35
+      react_styling: 0.40
+      web_ux_patterns: 0.40
       performance_profiling: 0.50
   layer_5_coordination:
     max_concurrent_operations: 3

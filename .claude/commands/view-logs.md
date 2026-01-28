@@ -1,39 +1,39 @@
 ---
-description: Metro 번들러 또는 Expo 로그 분석
+description: Vite 개발 서버 또는 테스트 로그 분석
 ---
 
 # View Logs
 
-Metro 번들러 로그, Expo 로그, 또는 앱 로그를 분석합니다.
+Vite 개발 서버 로그, 빌드 로그, 또는 앱 로그를 분석합니다.
 
 ## 실행 단계
 
 ### 1. 로그 타입 확인
 
 사용자에게 분석할 로그 타입 확인:
-- **metro**: Metro 번들러 로그
-- **expo**: Expo CLI 로그
+- **vite**: Vite 개발 서버 로그
+- **build**: 빌드 로그
 - **crash**: 크래시 리포트 (Sentry)
-- **test**: Jest 테스트 로그
+- **test**: Vitest 테스트 로그
 
 ### 2. 로그 수집
 
-#### Metro 로그
+#### Vite 로그
 ```bash
-# 최근 Metro 로그 확인
-cat ~/.expo/metro-*.log 2>/dev/null | tail -100
+# Vite 개발 서버 로그 확인
+npm run dev 2>&1 | tail -100
 ```
 
-#### Expo 로그
+#### 빌드 로그
 ```bash
-# Expo dev server 로그
-npx expo start --log
+# 빌드 로그
+npm run build 2>&1 | tail -100
 ```
 
 #### 테스트 로그
 ```bash
-# Jest 상세 로그
-npm test -- --verbose 2>&1 | tail -200
+# Vitest 상세 로그
+npm test -- --reporter=verbose 2>&1 | tail -200
 ```
 
 ### 3. 에러 패턴 분석

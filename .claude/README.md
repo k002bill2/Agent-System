@@ -34,7 +34,7 @@ Claude Code configuration for AOS (Agent Orchestration Service) Dashboard.
 | Command | Purpose |
 |---------|---------|
 | `/commit-push-pr` | 커밋 → 푸시 → PR 자동화 |
-| `/deploy-with-tests` | 테스트 검증 후 EAS 빌드/배포 |
+| `/deploy-with-tests` | 테스트 검증 후 Vite 빌드/배포 |
 
 ### 세션 관리
 
@@ -48,7 +48,7 @@ Claude Code configuration for AOS (Agent Orchestration Service) Dashboard.
 
 | Command | Purpose |
 |---------|---------|
-| `/view-logs` | Metro/Expo 로그 분석 |
+| `/view-logs` | Vite/테스트 로그 분석 |
 | `/run-eval` | AI 에이전트 평가 태스크 실행 |
 
 ## Skills

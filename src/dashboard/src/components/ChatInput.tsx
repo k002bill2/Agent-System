@@ -3,9 +3,16 @@ import { cn } from '../lib/utils'
 import { useOrchestrationStore } from '../stores/orchestration'
 import { Send, StopCircle, Loader2, ChevronDown, FolderGit2, Terminal } from 'lucide-react'
 
+interface WarpToast {
+  show: boolean
+  message: string
+  type: 'success' | 'error'
+}
+
 export function ChatInput() {
   const [input, setInput] = useState('')
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const [warpToast, setWarpToast] = useState<WarpToast | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -39,6 +46,14 @@ export function ChatInput() {
     fetchProjects()
     checkWarpStatus()
   }, [fetchProjects, checkWarpStatus])
+
+  // Auto-dismiss warp toast
+  useEffect(() => {
+    if (warpToast?.show) {
+      const timer = setTimeout(() => setWarpToast(null), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [warpToast])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -77,15 +92,24 @@ export function ChatInput() {
 
   const handleWarpOpen = async () => {
     if (!selectedProjectId) return
-    // input 값이 있으면 command로 전달
-    const result = await openInWarp(input.trim() || undefined)
+    // input이 있으면 one-shot 모드 (-p "task"), 없으면 interactive 모드
+    const task = input.trim() || undefined
+    const result = await openInWarp(task)
     if (!result.success && result.error) {
       console.error('Failed to open Warp:', result.error)
-      // TODO: Show toast notification
+      setWarpToast({ show: true, message: `Warp 실행 실패: ${result.error}`, type: 'error' })
     }
-    // 성공 시 input 초기화
-    if (result.success && input.trim()) {
-      setInput('')
+    if (result.success) {
+      // 성공 시 input 초기화
+      if (task) setInput('')
+      // 세션 모니터링 안내 토스트
+      setWarpToast({
+        show: true,
+        message: task
+          ? 'Claude CLI 시작 후 태스크가 자동 전송됩니다. Claude Sessions에서 진행 상황을 확인하세요.'
+          : 'Claude CLI 인터랙티브 모드가 Warp에서 실행됩니다.',
+        type: 'success',
+      })
     }
   }
 
@@ -247,7 +271,9 @@ export function ChatInput() {
                     ? 'Select a project first'
                     : warpLoading
                     ? 'Opening Warp...'
-                    : 'Open in Warp terminal'
+                    : input.trim()
+                    ? 'Run with Claude CLI in Warp'
+                    : 'Open Claude CLI (interactive) in Warp'
                 }
                 className={cn(
                   'flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
@@ -308,6 +334,27 @@ export function ChatInput() {
             {connected ? '● Connected' : '○ Disconnected'}
           </span>
         </div>
+
+        {/* Warp Toast Notification */}
+        {warpToast?.show && (
+          <div
+            className={cn(
+              'mt-2 px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-all',
+              warpToast.type === 'success'
+                ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800'
+                : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
+            )}
+          >
+            <span>{warpToast.message}</span>
+            <button
+              type="button"
+              onClick={() => setWarpToast(null)}
+              className="ml-2 text-current opacity-50 hover:opacity-100"
+            >
+              ✕
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

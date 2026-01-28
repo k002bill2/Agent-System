@@ -224,7 +224,7 @@ export function migrateLocalStorageToCookie(
     // 마이그레이션 완료 플래그 설정
     localStorage.setItem(MIGRATION_FLAG_KEY, 'true')
 
-    console.log(`[Auth] Migrated auth data from localStorage to cookie`)
+    // Auth data migrated from localStorage to cookie
     return true
   } catch (error) {
     console.error('[Auth] Migration failed:', error)

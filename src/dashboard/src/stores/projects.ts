@@ -26,6 +26,25 @@ export interface Project {
   has_claude_md: boolean
   vector_store_initialized: boolean
   indexed_at: string | null
+  git_path: string | null
+  git_enabled: boolean
+  sort_order: number
+}
+
+export interface DeletionPreview {
+  project_id: string
+  project_name: string
+  project_path: string
+  sessions_count: number
+  tasks_count: number
+  messages_count: number
+  approvals_count: number
+  feedbacks_count: number
+  dataset_entries_count: number
+  has_rag_index: boolean
+  rag_chunks_count: number
+  has_symlink: boolean
+  source_files_preserved: boolean
 }
 
 export interface ProjectTemplate {
@@ -61,6 +80,8 @@ interface ProjectsState {
   updateProject: (id: string, name?: string, description?: string, path?: string) => Promise<boolean>
   deleteProject: (id: string) => Promise<boolean>
   indexProject: (id: string) => Promise<boolean>
+  fetchDeletionPreview: (id: string) => Promise<DeletionPreview | null>
+  reorderProjects: (projectIds: string[]) => Promise<boolean>
 
   // Actions - Modal
   openCreateModal: () => void
@@ -100,6 +121,12 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
       }
       const projects = await response.json()
       set({ projects, isLoading: false })
+
+      // Auto-select first project if none selected
+      const { selectedProjectId } = get()
+      if (!selectedProjectId && projects.length > 0) {
+        set({ selectedProjectId: projects[0].id })
+      }
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })
     }
@@ -220,6 +247,43 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
       }
       await get().fetchProjects()
       set({ isLoading: false })
+      return true
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return false
+    }
+  },
+
+  // Fetch deletion preview
+  fetchDeletionPreview: async (id) => {
+    try {
+      const response = await fetch(`${API_BASE}/api/projects/${id}/deletion-preview`)
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch deletion preview'))
+      }
+      return await response.json()
+    } catch (error) {
+      set({ error: (error as Error).message })
+      return null
+    }
+  },
+
+  // Reorder projects
+  reorderProjects: async (projectIds) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/projects/reorder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_ids: projectIds }),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to reorder projects'))
+      }
+      const reorderedProjects = await response.json()
+      set({ projects: reorderedProjects, isLoading: false })
       return true
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })

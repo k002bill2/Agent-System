@@ -71,24 +71,6 @@
     "reminder": "API 폴링 간격은 최소 30초를 유지하세요"
   },
 
-  "expo-notifications": {
-    "type": "domain",
-    "enforcement": "suggest",
-    "priority": "high",
-    "description": "Expo Push Notifications 패턴",
-    "promptTriggers": {
-      "keywords": ["notification", "push", "알림", "푸시"],
-      "intentPatterns": [
-        "(notification|알림).*?(send|schedule|push)",
-        "expo.*?notification"
-      ]
-    },
-    "fileTriggers": {
-      "pathPatterns": ["**/services/notification/**"],
-      "contentPatterns": ["Notifications", "scheduleNotification", "ExpoPushToken"]
-    }
-  },
-
   "routing-patterns": {
     "type": "guideline",
     "enforcement": "suggest",
@@ -246,5 +228,152 @@
         "(coordinate|조정).*?(agent|에이전트)"
       ]
     }
+  },
+
+  "backend-development": {
+    "type": "domain",
+    "enforcement": "require",
+    "priority": "high",
+    "description": "AOS Backend 개발 (FastAPI + LangGraph)",
+    "promptTriggers": {
+      "keywords": ["api", "endpoint", "fastapi", "langgraph", "agent", "service", "백엔드", "orchestrator"],
+      "intentPatterns": [
+        "(create|add|implement).*?(api|endpoint|service)",
+        "(langgraph|orchestrat).*?(node|graph|agent)",
+        "(backend|서버).*?(개발|구현)"
+      ]
+    },
+    "fileTriggers": {
+      "pathPatterns": ["src/backend/**/*.py"],
+      "contentPatterns": ["FastAPI", "LangGraph", "BaseNode", "AgentState"]
+    },
+    "reminder": "비동기 패턴 사용, 타입 힌트 필수, pytest 테스트 작성"
+  },
+
+  "langgraph-patterns": {
+    "type": "guideline",
+    "enforcement": "require",
+    "priority": "critical",
+    "description": "LangGraph 오케스트레이션 패턴",
+    "promptTriggers": {
+      "keywords": ["langgraph", "node", "graph", "state", "orchestrator", "오케스트레이션"],
+      "intentPatterns": [
+        "(create|add).*?(node|graph)",
+        "(implement|구현).*?(orchestrat|오케스트레이션)"
+      ]
+    },
+    "fileTriggers": {
+      "pathPatterns": ["src/backend/orchestrator/**/*.py", "src/backend/agents/**/*.py"],
+      "contentPatterns": ["StateGraph", "add_node", "add_edge", "AgentState"]
+    },
+    "reminder": "AgentState TypedDict 준수, 노드 함수 async 필수, 에러 핸들링 철저히"
+  },
+
+  "python-async-patterns": {
+    "type": "guardrail",
+    "enforcement": "require",
+    "priority": "critical",
+    "description": "Python 비동기 패턴 가이드",
+    "promptTriggers": {
+      "keywords": ["async", "await", "asyncio", "비동기", "concurrent"],
+      "intentPatterns": [
+        "(async|비동기).*?(function|함수)",
+        "asyncio.*?(gather|create_task)"
+      ]
+    },
+    "fileTriggers": {
+      "pathPatterns": ["src/backend/**/*.py"],
+      "contentPatterns": ["async def", "await", "asyncio"]
+    },
+    "reminder": "async def에는 반드시 await 포함, 동기 함수 혼용 금지, try-except로 에러 처리"
+  },
+
+  "mcp-integration": {
+    "type": "domain",
+    "enforcement": "require",
+    "priority": "high",
+    "description": "MCP (Model Context Protocol) 통합",
+    "promptTriggers": {
+      "keywords": ["mcp", "tool", "server", "protocol"],
+      "intentPatterns": [
+        "(mcp|model context).*?(server|tool)",
+        "(add|create).*?(mcp|tool)"
+      ]
+    },
+    "fileTriggers": {
+      "pathPatterns": ["src/backend/services/mcp_manager.py", "**/*.mcp.json"],
+      "contentPatterns": ["MCPManager", "MCPToolCall", "call_tool"]
+    }
+  },
+
+  "hitl-approval": {
+    "type": "guardrail",
+    "enforcement": "require",
+    "priority": "critical",
+    "description": "Human-in-the-Loop 승인 시스템",
+    "promptTriggers": {
+      "keywords": ["hitl", "approval", "승인", "human-in-the-loop", "dangerous", "위험"],
+      "intentPatterns": [
+        "(hitl|human.in.the.loop).*?(approval|check)",
+        "(dangerous|risky).*?(operation|action)"
+      ]
+    },
+    "fileTriggers": {
+      "pathPatterns": ["src/backend/models/hitl.py", "src/backend/orchestrator/nodes.py"],
+      "contentPatterns": ["TOOL_RISK_CONFIG", "requires_approval", "pending_approvals"]
+    },
+    "reminder": "HIGH 리스크 도구는 반드시 승인 필요, approval_id 추적 필수"
+  },
+
+  "zustand-store-patterns": {
+    "type": "guideline",
+    "enforcement": "require",
+    "priority": "high",
+    "description": "Zustand 상태 관리 패턴",
+    "promptTriggers": {
+      "keywords": ["zustand", "store", "상태 관리", "state management"],
+      "intentPatterns": [
+        "(create|add).*?(store|zustand)",
+        "(state|상태).*?(management|관리)"
+      ]
+    },
+    "fileTriggers": {
+      "pathPatterns": ["src/dashboard/src/stores/**/*.ts"],
+      "contentPatterns": ["create<", "useStore", "set(", "get()"]
+    },
+    "reminder": "immer 미들웨어 권장, 액션과 상태 분리, 셀렉터 사용으로 리렌더링 최적화"
+  },
+
+  "rag-vector-db": {
+    "type": "domain",
+    "enforcement": "suggest",
+    "priority": "normal",
+    "description": "RAG + Vector DB 통합",
+    "promptTriggers": {
+      "keywords": ["rag", "vector", "chromadb", "embedding", "semantic search"],
+      "intentPatterns": [
+        "(rag|vector).*?(search|query)",
+        "(semantic|의미론적).*?(search|검색)"
+      ]
+    },
+    "fileTriggers": {
+      "pathPatterns": ["src/backend/services/rag_service.py"],
+      "contentPatterns": ["ChromaDB", "embedding", "query", "index_project"]
+    }
+  },
+
+  "dev-docs-workflow": {
+    "type": "workflow",
+    "enforcement": "suggest",
+    "priority": "high",
+    "description": "Dev Docs 3-파일 시스템 워크플로우",
+    "promptTriggers": {
+      "keywords": ["dev docs", "plan", "context", "대규모 작업", "큰 작업"],
+      "intentPatterns": [
+        "(create|make).*?(dev docs|plan)",
+        "(large|big|대규모).*?(task|작업|feature)"
+      ]
+    },
+    "reminder": "대규모 작업 전 /dev-docs 실행 권장, context 20% 이하시 /update-dev-docs"
   }
 }

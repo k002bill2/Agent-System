@@ -10,7 +10,7 @@ interface ProjectFilterProps {
 
 export function ProjectFilter({ className }: ProjectFilterProps) {
   const { projectFilter, setProjectFilter } = useNavigationStore()
-  const { projects, fetchProjects, sessionProjectId } = useOrchestrationStore()
+  const { projects, fetchProjects } = useOrchestrationStore()
 
   useEffect(() => {
     if (projects.length === 0) {
@@ -18,12 +18,8 @@ export function ProjectFilter({ className }: ProjectFilterProps) {
     }
   }, [projects.length, fetchProjects])
 
-  // sessionProjectId가 있는 프로젝트만 필터 옵션으로 표시
-  // 현재는 세션이 하나이므로 해당 프로젝트만 표시되지만,
-  // 추후 여러 세션이 있을 경우 확장 가능
-  const availableProjects = sessionProjectId
-    ? projects.filter((p) => p.id === sessionProjectId)
-    : projects
+  // 모든 프로젝트를 필터 옵션으로 표시
+  const availableProjects = projects
 
   const selectedProject = projects.find((p) => p.id === projectFilter)
 

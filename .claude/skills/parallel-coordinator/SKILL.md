@@ -199,7 +199,7 @@ Define strategic context:
 {
   "user_goal": "[Problem we're solving]",
   "success_criteria": [
-    "iOS and Android functionality",
+    "Web app functionality",
     "TypeScript strict compliance",
     "Test coverage >75%",
     "Performance: <300ms response"

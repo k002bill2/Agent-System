@@ -168,7 +168,7 @@ curl http://localhost:8000/api/feedback/stats
     "processed": 120
   },
   "by_agent": {
-    "mobile-ui-specialist": 60,
+    "web-ui-specialist": 60,
     "backend-integration-specialist": 50,
     "test-automation-specialist": 40
   },
@@ -202,7 +202,7 @@ curl "http://localhost:8000/api/feedback/dataset/export" > dataset.jsonl
 curl "http://localhost:8000/api/feedback/dataset/export?format=csv" > dataset.csv
 
 # 옵션 적용
-curl "http://localhost:8000/api/feedback/dataset/export?format=jsonl&include_negative=true&include_implicit=true&agent_filter=mobile-ui-specialist"
+curl "http://localhost:8000/api/feedback/dataset/export?format=jsonl&include_negative=true&include_implicit=true&agent_filter=web-ui-specialist"
 ```
 
 **내보내기 옵션:**
@@ -223,7 +223,7 @@ curl "http://localhost:8000/api/feedback/dataset/export?format=jsonl&include_neg
 ### JSONL (OpenAI Fine-tuning 호환)
 
 ```jsonl
-{"messages": [{"role": "system", "content": "You are an expert AI assistant..."}, {"role": "user", "content": "Task: task-abc123"}, {"role": "assistant", "content": "Generated code..."}], "metadata": {"feedback_type": "explicit_positive", "agent_id": "mobile-ui-specialist"}}
+{"messages": [{"role": "system", "content": "You are an expert AI assistant..."}, {"role": "user", "content": "Task: task-abc123"}, {"role": "assistant", "content": "Generated code..."}], "metadata": {"feedback_type": "explicit_positive", "agent_id": "web-ui-specialist"}}
 {"messages": [{"role": "system", "content": "You are an expert AI assistant..."}, {"role": "user", "content": "Task: task-def456"}, {"role": "assistant", "content": "Corrected code..."}], "metadata": {"feedback_type": "implicit", "agent_id": "backend-integration-specialist"}}
 ```
 
@@ -231,7 +231,7 @@ curl "http://localhost:8000/api/feedback/dataset/export?format=jsonl&include_neg
 
 ```csv
 id,feedback_id,system_prompt,user_input,assistant_output,is_positive,agent_id,feedback_type
-entry-001,fb-abc,You are an expert...,Task: task-abc123,Generated code...,true,mobile-ui-specialist,explicit_positive
+entry-001,fb-abc,You are an expert...,Task: task-abc123,Generated code...,true,web-ui-specialist,explicit_positive
 entry-002,fb-def,You are an expert...,Task: task-def456,Corrected code...,true,backend-integration-specialist,implicit
 ```
 

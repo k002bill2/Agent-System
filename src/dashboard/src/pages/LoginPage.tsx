@@ -1,14 +1,62 @@
-import { getGoogleAuthUrl, getGitHubAuthUrl } from '../stores/auth'
+import { useState, useEffect } from 'react'
+import { getGoogleAuthUrl, getGitHubAuthUrl, loginWithEmail, useAuthStore } from '../stores/auth'
+import { useNavigationStore } from '../stores/navigation'
 
 export function LoginPage() {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [authStatus, setAuthStatus] = useState<{
+    oauth_enabled: boolean
+    google_enabled: boolean
+    github_enabled: boolean
+    email_enabled: boolean
+  } | null>(null)
+
+  const { setTokens, setUser } = useAuthStore()
+  const { setView } = useNavigationStore()
+
+  // Fetch auth status to determine which login methods to show
+  useEffect(() => {
+    const fetchAuthStatus = async () => {
+      try {
+        const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
+        const response = await fetch(`${API_BASE_URL}/auth/status`)
+        if (response.ok) {
+          setAuthStatus(await response.json())
+        }
+      } catch {
+        // Default: show email only
+        setAuthStatus({ oauth_enabled: false, google_enabled: false, github_enabled: false, email_enabled: true })
+      }
+    }
+    fetchAuthStatus()
+  }, [])
+
   const handleGoogleLogin = () => {
-    // Redirect to Google OAuth
     window.location.href = getGoogleAuthUrl()
   }
 
   const handleGitHubLogin = () => {
-    // Redirect to GitHub OAuth
     window.location.href = getGitHubAuthUrl()
+  }
+
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setIsLoading(true)
+
+    try {
+      const { user, accessToken, refreshToken, expiresIn } = await loginWithEmail(email, password)
+      setTokens(accessToken, refreshToken, expiresIn)
+      setUser(user)
+      setView('dashboard')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '로그인에 실패했습니다')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -33,42 +81,104 @@ export function LoginPage() {
             로그인
           </h2>
 
-          <div className="space-y-4">
-            {/* Google Login Button */}
-            <button
-              onClick={handleGoogleLogin}
-              className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
-            >
-              <GoogleIcon className="w-5 h-5" />
-              Google로 계속하기
-            </button>
+          {/* Email/Password Form */}
+          <form onSubmit={handleEmailLogin} className="space-y-4">
+            {error && (
+              <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
+                {error}
+              </div>
+            )}
 
-            {/* GitHub Login Button */}
-            <button
-              onClick={handleGitHubLogin}
-              className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-gray-900 dark:bg-gray-700 rounded-lg text-white hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors font-medium"
-            >
-              <GitHubIcon className="w-5 h-5" />
-              GitHub로 계속하기
-            </button>
-          </div>
-
-          {/* Divider */}
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200 dark:border-gray-700" />
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                이메일
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
+                placeholder="email@example.com"
+              />
             </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white dark:bg-gray-800 text-gray-500">
-                또는
-              </span>
-            </div>
-          </div>
 
-          {/* Info Text */}
-          <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
-            계정이 없으면 자동으로 생성됩니다
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                비밀번호
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
+                placeholder="••••••••"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full py-3 px-4 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? '로그인 중...' : '로그인'}
+            </button>
+          </form>
+
+          {/* Register Link */}
+          <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
+            계정이 없으신가요?{' '}
+            <button
+              onClick={() => setView('register')}
+              className="text-primary-600 hover:text-primary-500 font-medium"
+            >
+              회원가입
+            </button>
           </p>
+
+          {/* OAuth Section - only show when OAuth is enabled */}
+          {authStatus?.oauth_enabled && (
+            <>
+              {/* Divider */}
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200 dark:border-gray-700" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-white dark:bg-gray-800 text-gray-500">
+                    또는
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {/* Google Login Button */}
+                {authStatus?.google_enabled && (
+                  <button
+                    onClick={handleGoogleLogin}
+                    className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
+                  >
+                    <GoogleIcon className="w-5 h-5" />
+                    Google로 계속하기
+                  </button>
+                )}
+
+                {/* GitHub Login Button */}
+                {authStatus?.github_enabled && (
+                  <button
+                    onClick={handleGitHubLogin}
+                    className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-gray-900 dark:bg-gray-700 rounded-lg text-white hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors font-medium"
+                  >
+                    <GitHubIcon className="w-5 h-5" />
+                    GitHub로 계속하기
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Footer */}

@@ -20,7 +20,7 @@ class TestToolDefinitions:
     def test_tool_definitions_basic_structure(self, mcp_service: MCPService) -> None:
         tools = mcp_service.get_tool_definitions()
 
-        # We expect at least the core AGS tools to be present
+        # We expect at least the core AOS tools to be present
         tool_names = {t.name for t in tools}
         assert {
             "aos_create_task",

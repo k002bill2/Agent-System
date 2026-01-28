@@ -77,7 +77,7 @@ class MCPNotification(BaseModel):
 class MCPServerInfo(BaseModel):
     """MCP server information."""
 
-    name: str = "ags"
+    name: str = "aos"
     version: str = "0.1.0"
 
 
@@ -98,26 +98,26 @@ class MCPInitializeResult(BaseModel):
     capabilities: MCPCapabilities = Field(default_factory=MCPCapabilities)
 
 
-# AGS-specific tool argument schemas
+# AOS-specific tool argument schemas
 class CreateTaskArgs(BaseModel):
-    """Arguments for ags_create_task tool."""
+    """Arguments for aos_create_task tool."""
 
-    project_id: str = Field(description="Project identifier (e.g., 'livemetro')")
+    project_id: str = Field(description="Project identifier (e.g., 'ppt-maker')")
     task: str = Field(description="Task description to execute")
     agent_type: str | None = Field(
         default=None,
-        description="Specific agent type to use (e.g., 'mobile-ui-specialist')"
+        description="Specific agent type to use (e.g., 'web-ui-specialist')"
     )
 
 
 class GetStatusArgs(BaseModel):
-    """Arguments for ags_get_status tool."""
+    """Arguments for aos_get_status tool."""
 
     session_id: str = Field(description="Session ID to check status")
 
 
 class RunCheckArgs(BaseModel):
-    """Arguments for ags_run_check tool."""
+    """Arguments for aos_run_check tool."""
 
     project_id: str = Field(description="Project identifier")
     check_type: Literal["typecheck", "lint", "test", "build", "all"] = Field(
@@ -127,7 +127,7 @@ class RunCheckArgs(BaseModel):
 
 
 class ListAgentsArgs(BaseModel):
-    """Arguments for ags_list_agents tool."""
+    """Arguments for aos_list_agents tool."""
 
     category: str | None = Field(
         default=None,

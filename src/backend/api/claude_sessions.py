@@ -19,8 +19,17 @@ from models.claude_session import (
     ClaudeSessionSaveRequest,
     ClaudeSessionSaveResponse,
     SessionStatus,
+    ActivityResponse,
+    TasksResponse,
 )
-from services.claude_session_monitor import get_monitor
+from services.claude_session_monitor import (
+    get_monitor,
+    list_claude_processes,
+    kill_process,
+    cleanup_stale_processes,
+    ClaudeProcess,
+    ProcessCleanupResult,
+)
 
 router = APIRouter(prefix="/claude-sessions", tags=["claude-sessions"])
 
@@ -327,6 +336,148 @@ async def delete_ghost_sessions() -> dict:
         "deleted_count": len(deleted_ids),
         "deleted_ids": deleted_ids,
     }
+
+
+# ========================================
+# Process Management Endpoints
+# ========================================
+
+
+class ProcessInfo(BaseModel):
+    """Process information for API response."""
+
+    pid: int
+    version: str
+    terminal: str
+    state: str
+    started: str
+    cpu_time: str
+    memory_mb: float
+    is_foreground: bool
+    is_current: bool
+    command: str
+
+
+class ProcessListResponse(BaseModel):
+    """Response for process list."""
+
+    processes: list[ProcessInfo]
+    total_count: int
+    foreground_count: int
+    background_count: int
+
+
+class ProcessKillRequest(BaseModel):
+    """Request to kill processes."""
+
+    pids: list[int]
+    force: bool = False
+
+
+class ProcessKillResponse(BaseModel):
+    """Response for process kill operation."""
+
+    success: bool
+    killed: list[int]
+    failed: list[dict]
+    protected: list[int]
+    message: str
+
+
+@router.get("/processes", response_model=ProcessListResponse)
+async def list_processes() -> ProcessListResponse:
+    """List all running Claude Code processes.
+
+    Returns:
+        List of processes with metadata
+    """
+    processes = list_claude_processes()
+
+    foreground_count = sum(1 for p in processes if p.is_foreground)
+    background_count = len(processes) - foreground_count
+
+    return ProcessListResponse(
+        processes=[
+            ProcessInfo(
+                pid=p.pid,
+                version=p.version,
+                terminal=p.terminal,
+                state=p.state,
+                started=p.started,
+                cpu_time=p.cpu_time,
+                memory_mb=p.memory_mb,
+                is_foreground=p.is_foreground,
+                is_current=p.is_current,
+                command=p.command,
+            )
+            for p in processes
+        ],
+        total_count=len(processes),
+        foreground_count=foreground_count,
+        background_count=background_count,
+    )
+
+
+@router.post("/processes/kill", response_model=ProcessKillResponse)
+async def kill_processes(request: ProcessKillRequest) -> ProcessKillResponse:
+    """Kill specific Claude Code processes.
+
+    Args:
+        request: List of PIDs to kill
+
+    Returns:
+        Result with killed/failed/protected PIDs
+    """
+    killed = []
+    failed = []
+    protected = []
+
+    import os
+    current_pid = os.getpid()
+    parent_pid = os.getppid()
+
+    for pid in request.pids:
+        # Protect current session
+        if pid == current_pid or pid == parent_pid:
+            protected.append(pid)
+            continue
+
+        success, message = kill_process(pid, force=request.force)
+        if success:
+            killed.append(pid)
+        else:
+            failed.append({"pid": pid, "error": message})
+
+    return ProcessKillResponse(
+        success=len(killed) > 0 or len(failed) == 0,
+        killed=killed,
+        failed=failed,
+        protected=protected,
+        message=f"Killed {len(killed)} process(es), {len(failed)} failed, {len(protected)} protected",
+    )
+
+
+@router.post("/processes/cleanup-stale", response_model=ProcessKillResponse)
+async def cleanup_stale() -> ProcessKillResponse:
+    """Kill all stale (background) Claude Code processes.
+
+    Protects foreground terminal sessions and current process.
+
+    Returns:
+        Result with killed/failed/protected PIDs
+    """
+    result = cleanup_stale_processes(
+        protect_foreground=True,
+        protect_current=True,
+    )
+
+    return ProcessKillResponse(
+        success=len(result.killed) > 0 or len(result.failed) == 0,
+        killed=result.killed,
+        failed=[{"pid": pid, "error": msg} for pid, msg in result.failed],
+        protected=result.protected,
+        message=f"Cleaned up {len(result.killed)} stale process(es)",
+    )
 
 
 @router.get("/summaries/pending-count")
@@ -783,3 +934,153 @@ async def delete_empty_sessions() -> dict:
         "deleted_count": len(deleted_ids),
         "deleted_ids": deleted_ids,
     }
+
+
+# ========================================
+# Activity/Tasks Endpoints for Dashboard Integration
+# ========================================
+
+
+@router.get("/{session_id}/activity", response_model=ActivityResponse)
+async def get_session_activity(
+    session_id: str,
+    offset: int = 0,
+    limit: int = 100,
+) -> ActivityResponse:
+    """Get activity events for a session.
+
+    Extracts user messages, assistant messages, tool uses, and tool results
+    as activity events for Dashboard display.
+
+    Args:
+        session_id: Session UUID
+        offset: Starting offset for pagination
+        limit: Maximum events to return (default: 100)
+
+    Returns:
+        List of activity events with pagination info
+    """
+    monitor = get_monitor()
+    events, total_count = monitor.get_session_activity(
+        session_id,
+        offset=offset,
+        limit=limit,
+    )
+
+    if total_count == 0:
+        # Check if session exists
+        details = monitor.get_session_details(session_id)
+        if details is None:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    return ActivityResponse(
+        session_id=session_id,
+        events=events,
+        total_count=total_count,
+        offset=offset,
+        limit=limit,
+        has_more=offset + len(events) < total_count,
+    )
+
+
+@router.get("/{session_id}/activity/stream")
+async def stream_session_activity(session_id: str):
+    """Stream real-time activity events via SSE.
+
+    Monitors session file for changes and pushes new activity events
+    to connected clients.
+
+    Args:
+        session_id: Session UUID
+
+    Returns:
+        Server-Sent Events stream with activity events
+    """
+    import json
+
+    monitor = get_monitor()
+
+    # Verify session exists
+    details = monitor.get_session_details(session_id)
+    if details is None:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        """Generate SSE events for new activity."""
+        # Get initial file size
+        last_size = details.file_size
+
+        # Send initial batch of recent activity
+        initial_events, _ = monitor.get_session_activity(
+            session_id,
+            offset=0,
+            limit=50,
+        )
+        if initial_events:
+            yield f"event: activity_batch\ndata: {json.dumps([e.model_dump(mode='json') for e in initial_events])}\n\n"
+
+        # Poll for new activity (every 500ms)
+        while True:
+            await asyncio.sleep(0.5)
+
+            try:
+                new_events, current_size = monitor.get_new_activity_since_size(
+                    session_id,
+                    last_size,
+                )
+
+                if new_events:
+                    for event in new_events:
+                        yield f"event: activity\ndata: {event.model_dump_json()}\n\n"
+
+                last_size = current_size
+
+                # Check if session is completed
+                session_details = monitor.get_session_details(session_id)
+                if session_details and session_details.status == SessionStatus.COMPLETED:
+                    yield f"event: session_completed\ndata: {json.dumps({'session_id': session_id})}\n\n"
+                    break
+
+            except Exception as e:
+                yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+                break
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/{session_id}/tasks", response_model=TasksResponse)
+async def get_session_tasks(session_id: str) -> TasksResponse:
+    """Get tasks extracted from TaskCreate/TaskUpdate tool calls.
+
+    Parses session transcript for task-related tool calls and returns
+    the reconstructed task tree structure.
+
+    Args:
+        session_id: Session UUID
+
+    Returns:
+        Tasks dictionary and root task IDs
+    """
+    monitor = get_monitor()
+    tasks, root_task_ids = monitor.get_session_tasks(session_id)
+
+    if not tasks:
+        # Check if session exists
+        details = monitor.get_session_details(session_id)
+        if details is None:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    return TasksResponse(
+        session_id=session_id,
+        tasks=tasks,
+        root_task_ids=root_task_ids,
+        total_count=len(tasks),
+    )

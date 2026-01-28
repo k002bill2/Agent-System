@@ -168,12 +168,12 @@ Read: Reads a file from the filesystem.
 
 **Before:**
 ```
-You are a mobile UI specialist...
+You are a web UI specialist...
 ```
 
 **After:**
 ```
-You are a mobile UI specialist...
+You are a web UI specialist...
 
 CRITICAL REMINDERS:
 - Always add accessibilityLabel to interactive elements

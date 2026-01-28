@@ -1,4 +1,4 @@
-# Agent Orchestration System (AGS) 사용자 가이드
+# Agent Orchestration System (AOS) 사용자 가이드
 
 ## 목차
 
@@ -14,7 +14,7 @@
 
 ## 개요
 
-Agent Orchestration System (AGS)은 **LangGraph 기반 멀티 에이전트 오케스트레이션 시스템**입니다. 복잡한 작업을 여러 전문 에이전트가 협력하여 처리합니다.
+Agent Orchestration System (AOS)은 **LangGraph 기반 멀티 에이전트 오케스트레이션 시스템**입니다. 복잡한 작업을 여러 전문 에이전트가 협력하여 처리합니다.
 
 ### 핵심 개념
 

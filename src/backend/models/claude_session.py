@@ -53,7 +53,7 @@ class ClaudeSessionInfo(BaseModel):
     slug: str = Field(..., description="Human-readable slug like 'federated-booping-frog'")
     status: SessionStatus = Field(default=SessionStatus.UNKNOWN, description="Session status")
     model: str = Field(default="unknown", description="Model name like 'claude-opus-4-5-20251101'")
-    project_path: str = Field(..., description="Encoded project path like '-Users-younghwankang-Work-LiveMetro'")
+    project_path: str = Field(..., description="Encoded project path like '-Users-username-Work-MyProject'")
     project_name: str = Field(default="", description="Human-readable project name")
     git_branch: str = Field(default="", description="Current git branch")
     cwd: str = Field(default="", description="Current working directory")
@@ -124,6 +124,80 @@ class ClaudeSessionSaveResponse(BaseModel):
     success: bool
     message: str
     saved_at: datetime | None = None
+
+
+# ========================================
+# Activity/Tasks Models for Dashboard Integration
+# ========================================
+
+
+class ActivityEventType(str, Enum):
+    """Activity event type enum."""
+
+    USER = "user"
+    ASSISTANT = "assistant"
+    TOOL_USE = "tool_use"
+    TOOL_RESULT = "tool_result"
+    ERROR = "error"
+
+
+class ActivityEvent(BaseModel):
+    """Activity event extracted from Claude Code session."""
+
+    id: str = Field(..., description="Unique event ID")
+    type: ActivityEventType = Field(..., description="Event type")
+    timestamp: datetime = Field(..., description="Event timestamp")
+    content: str | None = Field(default=None, description="Text content")
+    tool_name: str | None = Field(default=None, description="Tool name (for tool_use/tool_result)")
+    tool_input: dict | None = Field(default=None, description="Tool input parameters")
+    tool_result: str | None = Field(default=None, description="Tool result (for tool_result)")
+    session_id: str = Field(..., description="Parent session ID")
+
+
+class ClaudeCodeTaskStatus(str, Enum):
+    """Task status enum."""
+
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class ClaudeCodeTask(BaseModel):
+    """Task extracted from Claude Code TaskCreate/TaskUpdate tool calls."""
+
+    id: str = Field(..., description="Task ID")
+    title: str = Field(..., description="Task title/subject")
+    description: str | None = Field(default=None, description="Task description")
+    status: ClaudeCodeTaskStatus = Field(
+        default=ClaudeCodeTaskStatus.PENDING,
+        description="Task status"
+    )
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    parent_id: str | None = Field(default=None, description="Parent task ID")
+    children: list[str] = Field(default_factory=list, description="Child task IDs")
+    active_form: str | None = Field(default=None, description="Active form text for spinner")
+
+
+class ActivityResponse(BaseModel):
+    """Response for activity list endpoint."""
+
+    session_id: str
+    events: list[ActivityEvent]
+    total_count: int
+    offset: int
+    limit: int
+    has_more: bool
+
+
+class TasksResponse(BaseModel):
+    """Response for tasks endpoint."""
+
+    session_id: str
+    tasks: dict[str, ClaudeCodeTask]
+    root_task_ids: list[str]
+    total_count: int
 
 
 # Cost per 1K tokens for different models

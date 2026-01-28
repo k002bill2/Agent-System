@@ -47,19 +47,20 @@ class ProjectConfigMonitor:
         self._external_paths: list[str] = []
         self._cache: dict[str, ProjectConfigSummary] = {}
         self._file_mtimes: dict[str, float] = {}
+        self._is_docker = bool(os.getenv("CLAUDE_HOME"))
 
-        # Add current directory if it has .claude/
+        # Add current directory (even without .claude/)
+        # Skip if cwd is src/backend (the backend runtime directory)
         if include_current:
-            cwd = Path.cwd().resolve()  # Resolve symlinks
-            claude_dir = cwd / ".claude"
-            if claude_dir.exists():
+            cwd = Path.cwd().resolve()
+            if cwd.exists() and cwd.name != "backend":
                 self._project_paths.append(cwd)
 
-        # Add provided paths
+        # Add provided paths (even without .claude/)
         if project_paths:
             for p in project_paths:
-                path = Path(p).resolve()  # Resolve symlinks
-                if path.exists() and (path / ".claude").exists():
+                path = Path(p) if self._is_docker else Path(p).resolve()
+                if self._is_docker or (path.exists() and path.is_dir()):
                     if path not in self._project_paths:
                         self._project_paths.append(path)
 
@@ -69,8 +70,8 @@ class ProjectConfigMonitor:
             for p in env_paths.split(","):
                 p = p.strip()
                 if p:
-                    path = Path(p).resolve()  # Resolve symlinks
-                    if path.exists() and (path / ".claude").exists():
+                    path = Path(p) if self._is_docker else Path(p).resolve()
+                    if self._is_docker or (path.exists() and path.is_dir()):
                         if path not in self._project_paths:
                             self._project_paths.append(path)
                             logger.info(f"Added project path from env: {path}")
@@ -79,21 +80,27 @@ class ProjectConfigMonitor:
         """Add an external project path at runtime.
 
         Args:
-            path: Path to project root (must have .claude/ directory)
+            path: Path to project root (does not require .claude/ directory)
 
         Returns:
             True if added, False if invalid or already exists
         """
-        p = Path(path).resolve()  # Resolve symlinks for consistency
-        if not p.exists():
-            logger.warning(f"Path does not exist: {path}")
-            return False
-        if not (p / ".claude").exists():
-            logger.warning(f"Path has no .claude directory: {path}")
-            return False
+        p = Path(path) if self._is_docker else Path(path).resolve()
+
+        # In Docker, host paths aren't accessible - skip validation
+        if not self._is_docker:
+            if not p.exists():
+                logger.warning(f"Path does not exist: {path}")
+                return False
+            if not p.is_dir():
+                logger.warning(f"Path is not a directory: {path}")
+                return False
         if p in self._project_paths:
             logger.info(f"Path already monitored: {path}")
             return False
+
+        if not (p / ".claude").exists():
+            logger.info(f"Path has no .claude directory (will show empty config): {path}")
 
         self._project_paths.append(p)
         self._external_paths.append(str(p))  # Store resolved path
@@ -123,6 +130,42 @@ class ProjectConfigMonitor:
         self._cache.pop(project_id, None)
 
         logger.info(f"Removed external project: {p}")
+        return True
+
+    def remove_project(self, path: str) -> bool:
+        """Remove any project from monitoring (auto-discovered or external).
+
+        Args:
+            path: Path to remove
+
+        Returns:
+            True if removed, False if not found
+        """
+        # Try both original path and resolved path
+        p = Path(path)
+        resolved_p = p.resolve() if p.exists() else p
+
+        # Check both forms
+        target = None
+        for pp in self._project_paths:
+            if pp == p or pp == resolved_p or str(pp) == path:
+                target = pp
+                break
+
+        if target is None:
+            logger.warning(f"Project not found in monitored paths: {path}")
+            return False
+
+        self._project_paths.remove(target)
+        resolved_path = str(target)
+        if resolved_path in self._external_paths:
+            self._external_paths.remove(resolved_path)
+
+        # Clear cache for this project
+        project_id = self._encode_path(target)
+        self._cache.pop(project_id, None)
+
+        logger.info(f"Removed project from monitoring: {target}")
         return True
 
     def get_external_paths(self) -> list[str]:
@@ -175,14 +218,36 @@ class ProjectConfigMonitor:
             project_path: Path to project root
 
         Returns:
-            ProjectInfo or None if no .claude/ found
+            ProjectInfo (returns basic info even without .claude/)
         """
-        claude_dir = project_path / ".claude"
-        if not claude_dir.exists():
+        # In Docker, host paths aren't accessible - skip exists check
+        if not self._is_docker and not project_path.exists():
             return None
+
+        claude_dir = project_path / ".claude"
+        has_claude_dir = claude_dir.exists()
 
         project_id = self._encode_path(project_path)
         project_name = project_path.name
+
+        # If no .claude directory (or in Docker with inaccessible host paths),
+        # return basic project info with zero counts
+        if not has_claude_dir:
+            return ProjectInfo(
+                project_id=project_id,
+                project_name=project_name,
+                project_path=str(project_path),
+                claude_dir=str(claude_dir),
+                has_skills=False,
+                has_agents=False,
+                has_mcp=False,
+                has_hooks=False,
+                skill_count=0,
+                agent_count=0,
+                mcp_server_count=0,
+                hook_count=0,
+                last_modified=datetime.utcnow(),
+            )
 
         # Count resources
         skills_dir = claude_dir / "skills"
@@ -1656,8 +1721,31 @@ _monitor: ProjectConfigMonitor | None = None
 
 
 def get_project_config_monitor() -> ProjectConfigMonitor:
-    """Get or create the global monitor instance."""
+    """Get or create the global monitor instance.
+
+    Auto-discovers projects from:
+    - Current working directory
+    - Parent Agent-System directory (../..)
+    - Symlinked projects in ../../projects/
+    - CLAUDE_PROJECT_PATHS environment variable
+    """
     global _monitor
     if _monitor is None:
-        _monitor = ProjectConfigMonitor()
+        extra_paths: list[str] = []
+
+        # Add parent Agent-System root (has .claude/ with skills, agents, etc.)
+        agent_system_root = Path.cwd().resolve().parent.parent
+        if (agent_system_root / ".claude").exists():
+            extra_paths.append(str(agent_system_root))
+
+        # Discover symlinked projects in projects/ directory
+        projects_dir = agent_system_root / "projects"
+        if projects_dir.exists() and projects_dir.is_dir():
+            for entry in projects_dir.iterdir():
+                if entry.is_dir():
+                    resolved = entry.resolve()
+                    if resolved.exists():
+                        extra_paths.append(str(resolved))
+
+        _monitor = ProjectConfigMonitor(project_paths=extra_paths)
     return _monitor

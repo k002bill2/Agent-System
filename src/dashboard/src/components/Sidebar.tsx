@@ -10,6 +10,12 @@ import {
   Code2,
   FolderCog,
   LogOut,
+  FileText,
+  Bell,
+  BarChart3,
+  FlaskConical,
+  GitBranch,
+  Building2,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useOrchestrationStore } from '../stores/orchestration'
@@ -25,6 +31,12 @@ const navigation: { name: string; icon: typeof LayoutDashboard; view: ViewType }
   { name: 'Monitor', icon: Monitor, view: 'monitor' },
   { name: 'Claude Sessions', icon: Code2, view: 'claude-sessions' },
   { name: 'Project Configs', icon: FolderCog, view: 'project-configs' },
+  { name: 'Git', icon: GitBranch, view: 'git' },
+  { name: 'Organizations', icon: Building2, view: 'organizations' },
+  { name: 'Audit Trail', icon: FileText, view: 'audit' },
+  { name: 'Notifications', icon: Bell, view: 'notifications' },
+  { name: 'Analytics', icon: BarChart3, view: 'analytics' },
+  { name: 'Playground', icon: FlaskConical, view: 'playground' },
 ]
 
 export function Sidebar() {
@@ -84,10 +96,34 @@ export function Sidebar() {
           Settings
         </button>
 
-        {/* User Info */}
-        {user && <UserAvatar user={user} />}
+        {/* User Info + Logout */}
+        {user ? (
+          <UserAvatar user={user} />
+        ) : (
+          <LogoutButton />
+        )}
       </div>
     </aside>
+  )
+}
+
+function LogoutButton() {
+  const { logout } = useAuthStore()
+  const { setView } = useNavigationStore()
+
+  const handleLogout = () => {
+    logout()
+    setView('login')
+  }
+
+  return (
+    <button
+      onClick={handleLogout}
+      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-red-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-red-400 dark:hover:bg-gray-700 transition-colors"
+    >
+      <LogOut className="w-5 h-5" />
+      로그아웃
+    </button>
   )
 }
 

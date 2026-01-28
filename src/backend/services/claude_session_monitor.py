@@ -24,6 +24,10 @@ from models.claude_session import (
     MessageType,
     TokenUsage,
     calculate_cost,
+    ActivityEvent,
+    ActivityEventType,
+    ClaudeCodeTask,
+    ClaudeCodeTaskStatus,
 )
 
 
@@ -490,14 +494,14 @@ class ClaudeSessionMonitor:
         return self._decode_project_path(encoded_path)
 
     def _decode_project_path(self, encoded_path: str) -> str:
-        """Decode project path like '-Users-younghwankang-Work-LiveMetro'.
+        """Decode project path like '-Users-username-Work-MyProject'.
 
         Note: This is a lossy operation as spaces, tildes, and slashes all become dashes.
         Prefer using cwd from session data when available.
 
         Returns the last component as the project name.
         """
-        # e.g., "-Users-younghwankang-Work-LiveMetro" -> "LiveMetro"
+        # e.g., "-Users-username-Work-MyProject" -> "MyProject"
         parts = encoded_path.split("-")
         # Filter out empty parts and get the last non-empty part
         non_empty_parts = [p for p in parts if p]
@@ -715,12 +719,25 @@ class ClaudeSessionMonitor:
     def _get_summary_cache_path(self, session_id: str) -> Path:
         """Get cache file path for session summary.
 
+        Uses SUMMARY_CACHE_DIR env var if set, otherwise falls back to
+        ~/.claude/session_summaries/. In Docker, ~/.claude is read-only,
+        so we use /app/data/summaries instead.
+
         Args:
             session_id: Session UUID
 
         Returns:
             Path to the summary cache file
         """
+        cache_dir = os.getenv("SUMMARY_CACHE_DIR", "")
+        if cache_dir:
+            return Path(cache_dir) / f"{session_id}.txt"
+
+        # In Docker (CLAUDE_HOME is set), use /app/data/summaries to avoid read-only mount
+        claude_home = os.getenv("CLAUDE_HOME", "")
+        if claude_home:
+            return Path("/app/data/summaries") / f"{session_id}.txt"
+
         return Path.home() / ".claude" / "session_summaries" / f"{session_id}.txt"
 
     def _get_first_messages(
@@ -999,6 +1016,614 @@ class ClaudeSessionMonitor:
             and session.user_message_count == 0
             and session.assistant_message_count == 0
         )
+
+    def _find_session_file(self, session_id: str) -> Path | None:
+        """Find session file by ID across all projects directories.
+
+        Args:
+            session_id: Session UUID
+
+        Returns:
+            Path to session file or None if not found
+        """
+        for projects_dir in self.projects_dirs:
+            if not projects_dir.exists():
+                continue
+            for project_dir in projects_dir.iterdir():
+                if not project_dir.is_dir():
+                    continue
+                for candidate in project_dir.glob(f"**/{session_id}.jsonl"):
+                    if candidate.exists():
+                        return candidate
+        return None
+
+    def get_session_activity(
+        self,
+        session_id: str,
+        offset: int = 0,
+        limit: int = 100,
+        since: datetime | None = None,
+    ) -> tuple[list[ActivityEvent], int]:
+        """Get activity events from a session.
+
+        Extracts user messages, assistant messages, tool uses, and tool results
+        as activity events for Dashboard display.
+
+        Args:
+            session_id: Session UUID
+            offset: Starting offset for pagination
+            limit: Maximum events to return
+            since: Only return events after this timestamp
+
+        Returns:
+            Tuple of (events list, total count)
+        """
+        session_file = self._find_session_file(session_id)
+        if session_file is None:
+            return [], 0
+
+        events: list[ActivityEvent] = []
+        total_count = 0
+
+        with open(session_file, "r", encoding="utf-8") as f:
+            for line_num, line in enumerate(f):
+                line = line.strip()
+                if not line:
+                    continue
+
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                # Extract timestamp
+                timestamp_str = entry.get("timestamp", "")
+                try:
+                    timestamp = datetime.fromisoformat(
+                        timestamp_str.replace("Z", "+00:00")
+                    )
+                except ValueError:
+                    timestamp = datetime.utcnow()
+
+                # Filter by since timestamp
+                if since is not None:
+                    since_naive = since.replace(tzinfo=None) if since.tzinfo else since
+                    ts_naive = timestamp.replace(tzinfo=None) if timestamp.tzinfo else timestamp
+                    if ts_naive <= since_naive:
+                        continue
+
+                msg_type = entry.get("type", "")
+                event_id = f"{session_id}_{line_num}"
+
+                if msg_type == "user":
+                    total_count += 1
+                    if total_count > offset and len(events) < limit:
+                        message_data = entry.get("message", {})
+                        content = message_data.get("content", "")
+                        if isinstance(content, list) and len(content) > 0:
+                            first_item = content[0]
+                            if isinstance(first_item, dict):
+                                content = first_item.get("text", "")
+                            else:
+                                content = str(first_item)
+
+                        events.append(ActivityEvent(
+                            id=event_id,
+                            type=ActivityEventType.USER,
+                            timestamp=timestamp,
+                            content=content[:1000] if content else None,
+                            session_id=session_id,
+                        ))
+
+                elif msg_type == "assistant":
+                    message_data = entry.get("message", {})
+                    content_list = message_data.get("content", [])
+
+                    if isinstance(content_list, list):
+                        for item in content_list:
+                            if isinstance(item, dict):
+                                item_type = item.get("type", "")
+
+                                if item_type == "text":
+                                    total_count += 1
+                                    if total_count > offset and len(events) < limit:
+                                        events.append(ActivityEvent(
+                                            id=f"{event_id}_text",
+                                            type=ActivityEventType.ASSISTANT,
+                                            timestamp=timestamp,
+                                            content=item.get("text", "")[:1000],
+                                            session_id=session_id,
+                                        ))
+
+                                elif item_type == "tool_use":
+                                    total_count += 1
+                                    if total_count > offset and len(events) < limit:
+                                        events.append(ActivityEvent(
+                                            id=f"{event_id}_{item.get('id', 'tool')}",
+                                            type=ActivityEventType.TOOL_USE,
+                                            timestamp=timestamp,
+                                            tool_name=item.get("name"),
+                                            tool_input=item.get("input"),
+                                            session_id=session_id,
+                                        ))
+
+                elif msg_type == "result":
+                    total_count += 1
+                    if total_count > offset and len(events) < limit:
+                        result_data = entry.get("result", {})
+                        tool_result = str(result_data)[:500] if result_data else None
+
+                        events.append(ActivityEvent(
+                            id=event_id,
+                            type=ActivityEventType.TOOL_RESULT,
+                            timestamp=timestamp,
+                            tool_result=tool_result,
+                            session_id=session_id,
+                        ))
+
+        return events, total_count
+
+    def get_session_tasks(self, session_id: str) -> tuple[dict[str, ClaudeCodeTask], list[str]]:
+        """Extract tasks from TaskCreate/TaskUpdate/TaskList tool calls.
+
+        Parses session transcript for task-related tool calls and reconstructs
+        the task tree structure.
+
+        Args:
+            session_id: Session UUID
+
+        Returns:
+            Tuple of (tasks dict by ID, root task IDs list)
+        """
+        session_file = self._find_session_file(session_id)
+        if session_file is None:
+            return {}, []
+
+        tasks: dict[str, ClaudeCodeTask] = {}
+        task_counter = 0
+
+        with open(session_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                # Extract timestamp
+                timestamp_str = entry.get("timestamp", "")
+                try:
+                    timestamp = datetime.fromisoformat(
+                        timestamp_str.replace("Z", "+00:00")
+                    )
+                except ValueError:
+                    timestamp = datetime.utcnow()
+
+                msg_type = entry.get("type", "")
+
+                if msg_type == "assistant":
+                    message_data = entry.get("message", {})
+                    content_list = message_data.get("content", [])
+
+                    if isinstance(content_list, list):
+                        for item in content_list:
+                            if not isinstance(item, dict) or item.get("type") != "tool_use":
+                                continue
+
+                            tool_name = item.get("name", "")
+                            tool_input = item.get("input", {})
+
+                            if tool_name == "TaskCreate":
+                                task_counter += 1
+                                task_id = str(task_counter)
+                                subject = tool_input.get("subject", "Untitled Task")
+                                description = tool_input.get("description")
+                                active_form = tool_input.get("activeForm")
+
+                                tasks[task_id] = ClaudeCodeTask(
+                                    id=task_id,
+                                    title=subject,
+                                    description=description,
+                                    status=ClaudeCodeTaskStatus.PENDING,
+                                    created_at=timestamp,
+                                    updated_at=timestamp,
+                                    active_form=active_form,
+                                )
+
+                            elif tool_name == "TaskUpdate":
+                                task_id = tool_input.get("taskId", "")
+                                if task_id in tasks:
+                                    task = tasks[task_id]
+
+                                    # Update status
+                                    new_status = tool_input.get("status")
+                                    if new_status:
+                                        try:
+                                            task.status = ClaudeCodeTaskStatus(new_status)
+                                        except ValueError:
+                                            pass
+
+                                    # Update subject
+                                    new_subject = tool_input.get("subject")
+                                    if new_subject:
+                                        task.title = new_subject
+
+                                    # Update description
+                                    new_description = tool_input.get("description")
+                                    if new_description:
+                                        task.description = new_description
+
+                                    # Update active form
+                                    new_active_form = tool_input.get("activeForm")
+                                    if new_active_form:
+                                        task.active_form = new_active_form
+
+                                    # Handle parent relationships
+                                    blocked_by = tool_input.get("addBlockedBy", [])
+                                    if blocked_by and len(blocked_by) > 0:
+                                        task.parent_id = blocked_by[0]
+                                        # Add to parent's children
+                                        parent_id = blocked_by[0]
+                                        if parent_id in tasks:
+                                            if task_id not in tasks[parent_id].children:
+                                                tasks[parent_id].children.append(task_id)
+
+                                    task.updated_at = timestamp
+
+        # Identify root tasks (no parent)
+        root_task_ids = [
+            tid for tid, task in tasks.items()
+            if task.parent_id is None
+        ]
+
+        return tasks, root_task_ids
+
+    def get_new_activity_since_size(
+        self,
+        session_id: str,
+        last_size: int,
+    ) -> tuple[list[ActivityEvent], int]:
+        """Get new activity events since last file size.
+
+        Used for SSE streaming - only reads new content appended to file.
+
+        Args:
+            session_id: Session UUID
+            last_size: Last known file size in bytes
+
+        Returns:
+            Tuple of (new events, current file size)
+        """
+        session_file = self._find_session_file(session_id)
+        if session_file is None:
+            return [], 0
+
+        current_size = session_file.stat().st_size
+        if current_size <= last_size:
+            return [], current_size
+
+        events: list[ActivityEvent] = []
+
+        # Read only new content
+        with open(session_file, "r", encoding="utf-8") as f:
+            f.seek(last_size)
+            new_content = f.read()
+
+        # Process new lines
+        for line_num, line in enumerate(new_content.strip().split("\n")):
+            line = line.strip()
+            if not line:
+                continue
+
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            # Extract timestamp
+            timestamp_str = entry.get("timestamp", "")
+            try:
+                timestamp = datetime.fromisoformat(
+                    timestamp_str.replace("Z", "+00:00")
+                )
+            except ValueError:
+                timestamp = datetime.utcnow()
+
+            msg_type = entry.get("type", "")
+            event_id = f"{session_id}_{last_size}_{line_num}"
+
+            if msg_type == "user":
+                message_data = entry.get("message", {})
+                content = message_data.get("content", "")
+                if isinstance(content, list) and len(content) > 0:
+                    first_item = content[0]
+                    if isinstance(first_item, dict):
+                        content = first_item.get("text", "")
+                    else:
+                        content = str(first_item)
+
+                events.append(ActivityEvent(
+                    id=event_id,
+                    type=ActivityEventType.USER,
+                    timestamp=timestamp,
+                    content=content[:1000] if content else None,
+                    session_id=session_id,
+                ))
+
+            elif msg_type == "assistant":
+                message_data = entry.get("message", {})
+                content_list = message_data.get("content", [])
+
+                if isinstance(content_list, list):
+                    for item in content_list:
+                        if isinstance(item, dict):
+                            item_type = item.get("type", "")
+
+                            if item_type == "text":
+                                events.append(ActivityEvent(
+                                    id=f"{event_id}_text",
+                                    type=ActivityEventType.ASSISTANT,
+                                    timestamp=timestamp,
+                                    content=item.get("text", "")[:1000],
+                                    session_id=session_id,
+                                ))
+
+                            elif item_type == "tool_use":
+                                events.append(ActivityEvent(
+                                    id=f"{event_id}_{item.get('id', 'tool')}",
+                                    type=ActivityEventType.TOOL_USE,
+                                    timestamp=timestamp,
+                                    tool_name=item.get("name"),
+                                    tool_input=item.get("input"),
+                                    session_id=session_id,
+                                ))
+
+            elif msg_type == "result":
+                result_data = entry.get("result", {})
+                tool_result = str(result_data)[:500] if result_data else None
+
+                events.append(ActivityEvent(
+                    id=event_id,
+                    type=ActivityEventType.TOOL_RESULT,
+                    timestamp=timestamp,
+                    tool_result=tool_result,
+                    session_id=session_id,
+                ))
+
+        return events, current_size
+
+
+# ========================================
+# Process Management
+# ========================================
+
+
+@dataclass
+class ClaudeProcess:
+    """Represents a running Claude Code process."""
+
+    pid: int
+    version: str
+    terminal: str  # e.g., "s022", "??" for background
+    state: str  # e.g., "S+", "S", "R+"
+    started: str  # Human-readable start time
+    cpu_time: str  # Accumulated CPU time
+    memory_mb: float  # Memory usage in MB
+    is_foreground: bool  # True if active in terminal (S+, R+)
+    is_current: bool  # True if this is the current session
+    command: str  # Full command line
+
+
+@dataclass
+class ProcessCleanupResult:
+    """Result of process cleanup operation."""
+
+    killed: list[int]  # PIDs that were killed
+    failed: list[tuple[int, str]]  # PIDs that failed with error message
+    protected: list[int]  # PIDs that were skipped (foreground sessions)
+
+
+def list_claude_processes() -> list[ClaudeProcess]:
+    """List all running Claude Code processes.
+
+    Uses `ps aux` to find Claude processes and parses the output
+    to extract process information.
+
+    Returns:
+        List of ClaudeProcess objects sorted by CPU time (descending)
+    """
+    import subprocess
+    import os
+
+    try:
+        # Run ps command to get Claude processes
+        result = subprocess.run(
+            ["ps", "aux"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        if result.returncode != 0:
+            logger.error(f"ps command failed: {result.stderr}")
+            return []
+
+        processes = []
+        current_pid = os.getpid()
+        parent_pid = os.getppid()
+
+        for line in result.stdout.strip().split("\n")[1:]:  # Skip header
+            # Skip non-Claude processes
+            if "claude" not in line.lower():
+                continue
+
+            # Skip helper processes (ShipIt, MCP, etc.)
+            if "ShipIt" in line or "--claude-in-chrome-mcp" in line:
+                continue
+
+            # Parse ps output: USER PID %CPU %MEM VSZ RSS TTY STAT START TIME COMMAND
+            parts = line.split(None, 10)
+            if len(parts) < 11:
+                continue
+
+            try:
+                pid = int(parts[1])
+                mem_percent = float(parts[3])
+                terminal = parts[6]
+                state = parts[7]
+                started = parts[8]
+                cpu_time = parts[9]
+                command = parts[10]
+
+                # Skip if not a main Claude process
+                if "claude" not in command or "/claude" not in command:
+                    continue
+
+                # Estimate memory in MB (RSS is in KB on macOS)
+                try:
+                    rss_kb = int(parts[5])
+                    memory_mb = rss_kb / 1024
+                except (ValueError, IndexError):
+                    memory_mb = 0.0
+
+                # Extract version from command or path
+                version = "unknown"
+                if "/versions/" in command:
+                    # e.g., /Users/.../.local/share/claude/versions/2.1.19
+                    import re
+                    match = re.search(r"/versions/(\d+\.\d+\.\d+)", command)
+                    if match:
+                        version = match.group(1)
+
+                # Determine if foreground (S+, R+ indicate foreground in terminal)
+                is_foreground = state.endswith("+")
+
+                # Check if this is the current process or its parent
+                is_current = pid == current_pid or pid == parent_pid
+
+                processes.append(ClaudeProcess(
+                    pid=pid,
+                    version=version,
+                    terminal=terminal,
+                    state=state,
+                    started=started,
+                    cpu_time=cpu_time,
+                    memory_mb=round(memory_mb, 1),
+                    is_foreground=is_foreground,
+                    is_current=is_current,
+                    command=command[:200],  # Truncate long commands
+                ))
+            except (ValueError, IndexError) as e:
+                logger.debug(f"Failed to parse process line: {e}")
+                continue
+
+        # Sort by CPU time (parse MM:SS.ss format)
+        def parse_cpu_time(cpu_str: str) -> float:
+            """Parse CPU time string like '23:35.63' to seconds."""
+            try:
+                if ":" in cpu_str:
+                    parts = cpu_str.split(":")
+                    minutes = int(parts[0])
+                    seconds = float(parts[1])
+                    return minutes * 60 + seconds
+                return float(cpu_str)
+            except (ValueError, IndexError):
+                return 0.0
+
+        processes.sort(key=lambda p: parse_cpu_time(p.cpu_time), reverse=True)
+        return processes
+
+    except subprocess.TimeoutExpired:
+        logger.error("ps command timed out")
+        return []
+    except Exception as e:
+        logger.error(f"Error listing processes: {e}")
+        return []
+
+
+def kill_process(pid: int, force: bool = False) -> tuple[bool, str]:
+    """Kill a specific Claude Code process.
+
+    Args:
+        pid: Process ID to kill
+        force: If True, use SIGKILL instead of SIGTERM
+
+    Returns:
+        Tuple of (success, message)
+    """
+    import os
+    import signal
+
+    try:
+        # Safety check: don't kill current process
+        if pid == os.getpid() or pid == os.getppid():
+            return False, "Cannot kill current session"
+
+        # Send signal
+        sig = signal.SIGKILL if force else signal.SIGTERM
+        os.kill(pid, sig)
+
+        logger.info(f"Killed process {pid} with signal {sig.name}")
+        return True, f"Process {pid} terminated"
+
+    except ProcessLookupError:
+        return False, f"Process {pid} not found"
+    except PermissionError:
+        return False, f"Permission denied to kill process {pid}"
+    except Exception as e:
+        return False, f"Error killing process {pid}: {e}"
+
+
+def cleanup_stale_processes(
+    protect_foreground: bool = True,
+    protect_current: bool = True,
+) -> ProcessCleanupResult:
+    """Kill all stale (background) Claude Code processes.
+
+    Args:
+        protect_foreground: Don't kill processes in foreground terminals
+        protect_current: Don't kill the current process
+
+    Returns:
+        ProcessCleanupResult with killed/failed/protected PIDs
+    """
+    processes = list_claude_processes()
+
+    killed = []
+    failed = []
+    protected = []
+
+    for proc in processes:
+        # Skip current session
+        if protect_current and proc.is_current:
+            protected.append(proc.pid)
+            continue
+
+        # Skip foreground processes (active in terminal)
+        if protect_foreground and proc.is_foreground:
+            protected.append(proc.pid)
+            continue
+
+        # Kill this process
+        success, message = kill_process(proc.pid)
+        if success:
+            killed.append(proc.pid)
+        else:
+            failed.append((proc.pid, message))
+
+    logger.info(
+        f"Process cleanup: killed={len(killed)}, "
+        f"failed={len(failed)}, protected={len(protected)}"
+    )
+
+    return ProcessCleanupResult(
+        killed=killed,
+        failed=failed,
+        protected=protected,
+    )
 
 
 # Global monitor instance

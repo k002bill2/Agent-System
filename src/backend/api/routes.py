@@ -1,13 +1,27 @@
 """REST API routes."""
 
+import os
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import json
 
+# Docker mode: skip host filesystem validations
+IS_DOCKER = bool(os.getenv("CLAUDE_HOME"))
+
 from models.task import Task, TaskCreate, TaskTree
 from models.agent_state import AgentState, TaskStatus
 from models.hitl import ApprovalStatus, ApprovalResponse
+from models.context_usage import ContextUsage, get_context_limit
+from models.permissions import (
+    AgentPermission,
+    SessionPermissions,
+    SessionPermissionsResponse,
+    UpdatePermissionsRequest,
+    PermissionInfo,
+    get_permission_info,
+    PERMISSION_DESCRIPTIONS,
+)
 from models.project import (
     Project,
     ProjectCreate,
@@ -22,6 +36,7 @@ from models.project import (
     get_projects_dir,
     update_project,
     normalize_path,
+    reorder_projects,
 )
 from models.monitoring import (
     CheckType,
@@ -417,6 +432,79 @@ async def retry_task(
     }
 
 
+class PauseTaskRequest(BaseModel):
+    """Request body for pausing a task."""
+
+    reason: str | None = Field(None, description="Optional reason for pausing")
+
+
+@router.post("/sessions/{session_id}/tasks/{task_id}/pause")
+async def pause_task(
+    session_id: str,
+    task_id: str,
+    request: PauseTaskRequest | None = None,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """
+    Pause a task that is pending or in progress.
+
+    Paused tasks are skipped by the orchestrator and can be resumed later.
+    """
+    from services.task_service import TaskService
+
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    tasks = state.get("tasks", {})
+    reason = request.reason if request else None
+    result = TaskService.pause_task(task_id, tasks, reason)
+
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.error)
+
+    return {
+        "success": True,
+        "task_id": result.task_id,
+        "previous_status": result.previous_status,
+        "new_status": "paused",
+        "paused_at": result.paused_at.isoformat() if result.paused_at else None,
+        "message": "Task paused successfully",
+    }
+
+
+@router.post("/sessions/{session_id}/tasks/{task_id}/resume")
+async def resume_task(
+    session_id: str,
+    task_id: str,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """
+    Resume a paused task.
+
+    Sets the task back to pending so the orchestrator will pick it up.
+    """
+    from services.task_service import TaskService
+
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    tasks = state.get("tasks", {})
+    result = TaskService.resume_task(task_id, tasks)
+
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.error)
+
+    return {
+        "success": True,
+        "task_id": result.task_id,
+        "previous_status": result.previous_status,
+        "new_status": result.resumed_to,
+        "message": "Task resumed successfully",
+    }
+
+
 @router.get("/sessions/{session_id}/tree", response_model=TaskTree | None)
 async def get_task_tree(
     session_id: str,
@@ -459,9 +547,14 @@ async def get_task_tree(
 # ─────────────────────────────────────────────────────────────
 
 
+class ProjectReorderRequest(BaseModel):
+    """Request to reorder projects."""
+    project_ids: list[str] = Field(..., description="List of project IDs in desired order")
+
+
 @router.get("/projects", response_model=list[ProjectResponse])
 async def get_projects():
-    """List all registered projects."""
+    """List all registered projects, sorted by sort_order."""
     projects = list_projects()
 
     # Try to get RAG stats if available
@@ -489,7 +582,54 @@ async def get_projects():
             has_claude_md=p.claude_md is not None,
             vector_store_initialized=vector_initialized,
             indexed_at=p.indexed_at,
+            sort_order=p.sort_order,
         ))
+    return result
+
+
+@router.post("/projects/reorder", response_model=list[ProjectResponse])
+async def reorder_projects_endpoint(request: ProjectReorderRequest):
+    """
+    Reorder projects by providing a list of project IDs in the desired order.
+
+    This updates the sort_order field for each project and persists it
+    to the .aos-project.json metadata file.
+    """
+    # Validate all project IDs exist
+    for project_id in request.project_ids:
+        if not get_project(project_id):
+            raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
+
+    # Reorder projects
+    updated = reorder_projects(request.project_ids)
+
+    # Try to get RAG stats if available
+    try:
+        from services.rag_service import get_vector_store
+        store = get_vector_store()
+        rag_available = True
+    except ImportError:
+        rag_available = False
+
+    result = []
+    for p in updated:
+        if rag_available:
+            stats = store.get_collection_stats(p.id)
+            vector_initialized = stats.get("indexed", False)
+        else:
+            vector_initialized = False
+
+        result.append(ProjectResponse(
+            id=p.id,
+            name=p.name,
+            path=p.path,
+            description=p.description,
+            has_claude_md=p.claude_md is not None,
+            vector_store_initialized=vector_initialized,
+            indexed_at=p.indexed_at,
+            sort_order=p.sort_order,
+        ))
+
     return result
 
 
@@ -513,31 +653,32 @@ async def link_project(request: ProjectLinkRequest):
     normalized_path = normalize_path(request.source_path)
     source_path = Path(normalized_path)
 
-    # Validate source path exists
-    if not source_path.exists():
-        raise HTTPException(status_code=400, detail=f"Source path does not exist: {normalized_path}")
-
-    if not source_path.is_dir():
-        raise HTTPException(status_code=400, detail=f"Source path is not a directory: {request.source_path}")
+    # Validate source path exists (skip in Docker - host paths not accessible)
+    if not IS_DOCKER:
+        if not source_path.exists():
+            raise HTTPException(status_code=400, detail=f"Source path does not exist: {normalized_path}")
+        if not source_path.is_dir():
+            raise HTTPException(status_code=400, detail=f"Source path is not a directory: {request.source_path}")
 
     # Check if project ID already exists
     if get_project(request.id):
         raise HTTPException(status_code=400, detail=f"Project ID '{request.id}' already exists")
 
-    # Create symlink in projects/ directory
-    projects_dir = get_projects_dir()
-    projects_dir.mkdir(parents=True, exist_ok=True)
+    # Create symlink in projects/ directory (skip in Docker)
+    if not IS_DOCKER:
+        projects_dir = get_projects_dir()
+        projects_dir.mkdir(parents=True, exist_ok=True)
 
-    symlink_path = projects_dir / request.id
+        symlink_path = projects_dir / request.id
 
-    if symlink_path.exists():
-        raise HTTPException(status_code=400, detail=f"Path already exists: {symlink_path}")
+        if symlink_path.exists():
+            raise HTTPException(status_code=400, detail=f"Path already exists: {symlink_path}")
 
-    # Create symbolic link
-    symlink_path.symlink_to(source_path.resolve())
+        # Create symbolic link
+        symlink_path.symlink_to(source_path.resolve())
 
     # Register the project
-    project = register_project(request.id, str(source_path.resolve()))
+    project = register_project(request.id, str(normalized_path))
 
     return ProjectResponse(
         id=project.id,
@@ -628,8 +769,8 @@ async def create_project(request: ProjectCreate):
     # Normalize path to remove shell escape characters
     normalized_path = normalize_path(request.path)
 
-    # Validate path exists
-    if not Path(normalized_path).exists():
+    # Validate path exists (skip in Docker - host paths not accessible)
+    if not IS_DOCKER and not Path(normalized_path).exists():
         raise HTTPException(status_code=400, detail=f"Path does not exist: {normalized_path}")
 
     project = register_project(request.id, normalized_path)
@@ -664,38 +805,66 @@ async def update_project_endpoint(project_id: str, request: ProjectUpdate):
     )
 
 
+@router.get("/projects/{project_id}/deletion-preview")
+async def get_deletion_preview(project_id: str):
+    """
+    Get preview of what will be deleted when removing a project.
+
+    Returns counts of:
+    - Sessions, tasks, messages (DB records)
+    - RAG index chunks
+    - Symlink status
+
+    IMPORTANT: Source files are NEVER deleted.
+    """
+    from services.project_cleanup_service import get_cleanup_service
+
+    service = get_cleanup_service()
+    preview = await service.get_deletion_preview(project_id)
+
+    if not preview:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    return preview.model_dump()
+
+
 @router.delete("/projects/{project_id}")
 async def delete_project(project_id: str):
     """
-    Delete a project.
+    Delete a project with cascade cleanup.
 
     This removes:
-    - The symlink in projects/ directory (if exists)
+    - All DB records (sessions, tasks, messages, approvals, feedbacks)
+    - The RAG vector index
+    - Health cache
+    - Config monitor cache
+    - The symlink in projects/ directory
     - The project from registry
-    - The RAG vector index (if exists)
 
     IMPORTANT: Source files are NEVER deleted, only the symlink.
     """
-    from pathlib import Path
+    from services.project_cleanup_service import get_cleanup_service
 
     project = get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Remove symlink if exists in projects/ directory
-    projects_dir = get_projects_dir()
-    symlink_path = projects_dir / project_id
+    service = get_cleanup_service()
+    summary = await service.cascade_delete(project_id)
 
-    if symlink_path.is_symlink():
-        symlink_path.unlink()
+    if not summary.success:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "Project deletion failed",
+                "errors": summary.errors,
+            }
+        )
 
-    # TODO: Remove RAG vector index when RAG service is available
-    # await rag_service.delete_index(project_id)
-
-    # Remove from registry
-    unregister_project(project_id)
-
-    return {"message": f"Project '{project_id}' removed successfully"}
+    return {
+        "message": f"Project '{project_id}' removed successfully",
+        "cleanup_summary": summary.model_dump(),
+    }
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1165,6 +1334,7 @@ class WarpOpenRequest(BaseModel):
     command: str | None = Field(None, description="Optional command to execute")
     title: str | None = Field(None, description="Optional tab title")
     new_window: bool = Field(True, description="Open in new window (default) or new tab")
+    use_claude_cli: bool = Field(False, description="Wrap command with claude --dangerously-skip-permissions")
 
 
 class WarpOpenResponse(BaseModel):
@@ -1174,6 +1344,7 @@ class WarpOpenResponse(BaseModel):
     message: str | None = None
     error: str | None = None
     uri: str | None = None
+    open_via_frontend: bool = False
 
 
 @router.post("/warp/open", response_model=WarpOpenResponse)
@@ -1181,10 +1352,11 @@ async def open_in_warp(request: WarpOpenRequest):
     """
     Open a project in Warp terminal.
 
-    If a command is provided, it will be executed in the project directory
-    using Warp's Launch Configuration feature.
+    If use_claude_cli is True, the command (or interactive mode) will be wrapped
+    with `claude --dangerously-skip-permissions`.
 
-    Without a command, Warp will simply open a new window/tab at the project path.
+    If a command is provided without use_claude_cli, it will be executed directly.
+    Without any command, Warp will simply open a new window/tab at the project path.
     """
     # Get project
     project = get_project(request.project_id)
@@ -1200,12 +1372,23 @@ async def open_in_warp(request: WarpOpenRequest):
             error="Warp terminal is not installed. Please install from https://warp.dev",
         )
 
+    # Build the actual command
+    if request.use_claude_cli:
+        # Two-phase: start Claude interactively, then inject task via expect
+        actual_command = warp.build_claude_command(
+            task=request.command,  # None → interactive mode, string → expect inject
+        )
+        tab_title = request.title or "Claude CLI"
+    else:
+        actual_command = request.command
+        tab_title = request.title
+
     # Open Warp with or without command
-    if request.command:
+    if actual_command:
         result = warp.open_with_command(
             path=project.path,
-            command=request.command,
-            title=request.title,
+            command=actual_command,
+            title=tab_title,
             new_window=request.new_window,
         )
     else:
@@ -1219,6 +1402,7 @@ async def open_in_warp(request: WarpOpenRequest):
         message=result.get("message"),
         error=result.get("error"),
         uri=result.get("uri"),
+        open_via_frontend=result.get("open_via_frontend", False),
     )
 
 
@@ -1231,13 +1415,14 @@ async def warp_status():
     return {
         "installed": installed,
         "message": "Warp is installed" if installed else "Warp is not installed",
+        "docker_mode": IS_DOCKER,
     }
 
 
 @router.post("/warp/cleanup")
 async def warp_cleanup(max_age_hours: int = 24):
     """
-    Clean up old AGS launch configurations.
+    Clean up old AOS launch configurations.
 
     Args:
         max_age_hours: Remove configs older than this many hours (default: 24)
@@ -1249,4 +1434,269 @@ async def warp_cleanup(max_age_hours: int = 24):
         "success": True,
         "removed_count": removed,
         "message": f"Removed {removed} old launch configuration(s)",
+    }
+
+
+# ─────────────────────────────────────────────────────────────
+# Context Window Meter API
+# ─────────────────────────────────────────────────────────────
+
+
+def _estimate_tokens(text: str) -> int:
+    """Estimate token count from text (~4 characters per token)."""
+    if not text:
+        return 0
+    return len(text) // 4
+
+
+def _calculate_session_context_usage(
+    state: dict,
+    provider: str = "unknown",
+    model: str = "unknown",
+) -> ContextUsage:
+    """Calculate context usage from session state."""
+    max_tokens = get_context_limit(provider, model)
+
+    # Estimate tokens for different components
+    system_tokens = 1000  # Base system prompt estimate
+    message_tokens = 0
+    task_tokens = 0
+    rag_tokens = 0
+
+    # Messages
+    messages = state.get("messages", [])
+    for msg in messages:
+        if isinstance(msg, dict):
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                message_tokens += _estimate_tokens(content)
+        elif hasattr(msg, "content"):
+            message_tokens += _estimate_tokens(str(msg.content))
+
+    # Tasks
+    tasks = state.get("tasks", {})
+    for task in tasks.values():
+        if hasattr(task, "title"):
+            task_tokens += _estimate_tokens(task.title)
+            task_tokens += _estimate_tokens(task.description)
+            if task.result:
+                task_tokens += _estimate_tokens(str(task.result))
+            if task.error:
+                task_tokens += _estimate_tokens(task.error)
+        elif isinstance(task, dict):
+            task_tokens += _estimate_tokens(task.get("title", ""))
+            task_tokens += _estimate_tokens(task.get("description", ""))
+            if task.get("result"):
+                task_tokens += _estimate_tokens(str(task["result"]))
+            if task.get("error"):
+                task_tokens += _estimate_tokens(task["error"])
+
+    # RAG context
+    context = state.get("context", {})
+    rag_context = context.get("rag_context", "")
+    if rag_context:
+        rag_tokens = _estimate_tokens(str(rag_context))
+
+    current_tokens = system_tokens + message_tokens + task_tokens + rag_tokens
+
+    return ContextUsage.calculate(
+        current_tokens=current_tokens,
+        max_tokens=max_tokens,
+        provider=provider,
+        model=model,
+        system_tokens=system_tokens,
+        message_tokens=message_tokens,
+        task_tokens=task_tokens,
+        rag_tokens=rag_tokens,
+    )
+
+
+@router.get("/sessions/{session_id}/context-usage", response_model=ContextUsage)
+async def get_context_usage(
+    session_id: str,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """
+    Get context window usage for a session.
+
+    Returns:
+    - current_tokens: Current tokens in context
+    - max_tokens: Maximum context window size
+    - percentage: Usage percentage (0-100)
+    - level: Warning level (normal, warning, critical)
+    - Breakdown by component (system, messages, tasks, RAG)
+    """
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Get provider/model from environment
+    provider = os.getenv("LLM_PROVIDER", "google")
+
+    if provider == "google":
+        model = os.getenv("GOOGLE_MODEL", "gemini-2.0-flash-exp")
+    elif provider == "anthropic":
+        model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+    elif provider == "openai":
+        model = os.getenv("OPENAI_MODEL", "gpt-4o")
+    elif provider == "ollama":
+        model = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+    else:
+        model = "unknown"
+
+    return _calculate_session_context_usage(state, provider, model)
+
+
+# ─────────────────────────────────────────────────────────────
+# Permission Toggles API
+# ─────────────────────────────────────────────────────────────
+
+# In-memory storage for session permissions
+_session_permissions: dict[str, SessionPermissions] = {}
+
+
+def _get_session_permissions(session_id: str) -> SessionPermissions:
+    """Get or create session permissions."""
+    if session_id not in _session_permissions:
+        _session_permissions[session_id] = SessionPermissions()
+    return _session_permissions[session_id]
+
+
+@router.get("/sessions/{session_id}/permissions", response_model=SessionPermissionsResponse)
+async def get_session_permissions(
+    session_id: str,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """
+    Get current permission settings for a session.
+
+    Returns all available permissions with their enabled/disabled state.
+    """
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    perms = _get_session_permissions(session_id)
+
+    # Build permission info list
+    permission_infos = []
+    for perm in AgentPermission:
+        enabled = perm in perms.enabled_permissions
+        permission_infos.append(get_permission_info(perm, enabled))
+
+    return SessionPermissionsResponse(
+        session_id=session_id,
+        permissions=permission_infos,
+        disabled_agents=list(perms.disabled_agents),
+        agent_overrides={
+            agent_id: list(perms_set)
+            for agent_id, perms_set in perms.permission_overrides.items()
+        },
+    )
+
+
+@router.put("/sessions/{session_id}/permissions", response_model=SessionPermissionsResponse)
+async def update_session_permissions(
+    session_id: str,
+    request: UpdatePermissionsRequest,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """
+    Update permission settings for a session.
+
+    Allows enabling/disabling specific permissions and agents.
+    """
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    perms = _get_session_permissions(session_id)
+
+    # Update enabled permissions
+    if request.enabled_permissions is not None:
+        perms.enabled_permissions = set(request.enabled_permissions)
+
+    # Update disabled agents
+    if request.disabled_agents is not None:
+        perms.disabled_agents = set(request.disabled_agents)
+
+    # Update agent overrides
+    if request.agent_overrides is not None:
+        perms.permission_overrides = {
+            agent_id: set(perms_list)
+            for agent_id, perms_list in request.agent_overrides.items()
+        }
+
+    # Build response
+    permission_infos = []
+    for perm in AgentPermission:
+        enabled = perm in perms.enabled_permissions
+        permission_infos.append(get_permission_info(perm, enabled))
+
+    return SessionPermissionsResponse(
+        session_id=session_id,
+        permissions=permission_infos,
+        disabled_agents=list(perms.disabled_agents),
+        agent_overrides={
+            agent_id: list(perms_set)
+            for agent_id, perms_set in perms.permission_overrides.items()
+        },
+    )
+
+
+@router.post("/sessions/{session_id}/permissions/toggle/{permission}")
+async def toggle_permission(
+    session_id: str,
+    permission: AgentPermission,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """
+    Toggle a specific permission on/off.
+    """
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    perms = _get_session_permissions(session_id)
+
+    if permission in perms.enabled_permissions:
+        perms.disable_permission(permission)
+        enabled = False
+    else:
+        perms.enable_permission(permission)
+        enabled = True
+
+    return {
+        "success": True,
+        "permission": permission.value,
+        "enabled": enabled,
+    }
+
+
+@router.post("/sessions/{session_id}/permissions/agents/{agent_id}/toggle")
+async def toggle_agent(
+    session_id: str,
+    agent_id: str,
+    engine: OrchestrationEngine = Depends(get_engine),
+):
+    """
+    Enable/disable a specific agent.
+    """
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    perms = _get_session_permissions(session_id)
+
+    if agent_id in perms.disabled_agents:
+        perms.enable_agent(agent_id)
+        enabled = True
+    else:
+        perms.disable_agent(agent_id)
+        enabled = False
+
+    return {
+        "success": True,
+        "agent_id": agent_id,
+        "enabled": enabled,
     }

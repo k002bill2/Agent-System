@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import { notificationService } from '../services/notificationService'
 
 // Types
-export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled'
+export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'paused'
 
 // Connection status for auto-reconnect
 export type ConnectionStatus =
@@ -50,6 +50,9 @@ export interface Task {
   error?: string
   createdAt: string
   updatedAt: string
+  // Pause/Resume fields
+  pausedAt: string | null
+  pauseReason: string | null
   // Soft delete fields
   isDeleted: boolean
   deletedAt: string | null
@@ -88,6 +91,55 @@ export interface TokenUsage {
   total_tokens: number
   total_cost_usd: number
   call_count: number
+}
+
+// Provider identification
+export type LLMProvider = 'google' | 'anthropic' | 'ollama' | 'openai' | 'unknown'
+
+export interface ProviderUsage {
+  provider: LLMProvider
+  displayName: string
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+  costUsd: number
+  callCount: number
+}
+
+// Provider display configuration
+export const PROVIDER_CONFIG: Record<LLMProvider, { displayName: string; color: string; icon: string }> = {
+  google: { displayName: 'Google Gemini', color: 'blue', icon: '🔵' },
+  anthropic: { displayName: 'Anthropic Claude', color: 'orange', icon: '🟠' },
+  ollama: { displayName: 'Ollama (Local)', color: 'green', icon: '🟢' },
+  openai: { displayName: 'OpenAI GPT', color: 'purple', icon: '🟣' },
+  unknown: { displayName: 'Unknown', color: 'gray', icon: '⚪' },
+}
+
+// Helper function to identify provider from model name
+export function identifyProvider(model: string): LLMProvider {
+  const modelLower = model.toLowerCase()
+
+  // Anthropic models
+  if (modelLower.includes('claude')) return 'anthropic'
+
+  // Google models
+  if (modelLower.includes('gemini')) return 'google'
+
+  // OpenAI models
+  if (modelLower.includes('gpt')) return 'openai'
+
+  // Ollama/Local models (common patterns)
+  if (
+    modelLower.includes('qwen') ||
+    modelLower.includes('llama') ||
+    modelLower.includes('mistral') ||
+    modelLower.includes('codellama') ||
+    modelLower.includes(':')  // Ollama uses format like "model:tag"
+  ) {
+    return 'ollama'
+  }
+
+  return 'unknown'
 }
 
 export interface SessionInfo {
@@ -139,6 +191,7 @@ interface OrchestrationState {
 
   // Token/Cost tracking
   tokenUsage: Record<string, TokenUsage>
+  providerUsage: Record<LLMProvider, ProviderUsage>
   totalCost: number
 
   // Warp integration
@@ -160,7 +213,7 @@ interface OrchestrationState {
   approveOperation: (approvalId: string, note?: string) => Promise<void>
   denyOperation: (approvalId: string, note?: string) => Promise<void>
   clearSession: () => void
-  openInWarp: (command?: string) => Promise<{ success: boolean; error?: string }>
+  openInWarp: (command?: string) => Promise<{ success: boolean; error?: string; sessionMonitorHint?: string }>
   checkWarpStatus: () => Promise<void>
   _hasHydrated: boolean
   setHasHydrated: (state: boolean) => void
@@ -177,6 +230,9 @@ interface OrchestrationState {
   setShowDeletedTasks: (show: boolean) => void
   // Task retry action
   retryTask: (taskId: string) => Promise<{ success: boolean; error?: string; retryCount?: number }>
+  // Task pause/resume actions
+  pauseTask: (taskId: string, reason?: string) => Promise<{ success: boolean; error?: string }>
+  resumeTask: (taskId: string) => Promise<{ success: boolean; error?: string }>
 }
 
 export const useOrchestrationStore = create<OrchestrationState>()(
@@ -210,6 +266,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
 
   // Token/Cost tracking - initial state
   tokenUsage: {},
+  providerUsage: {} as Record<LLMProvider, ProviderUsage>,
   totalCost: 0,
 
   // Warp integration - initial state
@@ -230,6 +287,12 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       if (res.ok) {
         const projects = await res.json()
         set({ projects })
+
+        // Auto-select first project if none selected
+        const { selectedProjectId } = get()
+        if (!selectedProjectId && projects.length > 0) {
+          set({ selectedProjectId: projects[0].id })
+        }
       }
     } catch (e) {
       console.error('Failed to fetch projects:', e)
@@ -282,20 +345,20 @@ export const useOrchestrationStore = create<OrchestrationState>()(
         reconnectAttempt: 0,
         heartbeatTimer,
       })
-      console.log('[WS] Connected with heartbeat')
+      // WS Connected with heartbeat
     }
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
-        console.log('[WS] Received message:', data)
+        // WS message received
         handleMessage(data, set, get)
       } catch (e) {
         console.error('[WS] Failed to parse message:', e, event.data)
       }
     }
 
-    ws.onclose = (event) => {
+    ws.onclose = (_event) => {
       const { isIntentionalDisconnect, reconnectAttempt, heartbeatTimer } = get()
 
       // Clear heartbeat timer
@@ -310,7 +373,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
         heartbeatTimer: null,
       })
 
-      console.log('[WS] Disconnected:', { code: event.code, reason: event.reason })
+      // WS disconnected
 
       // Auto-reconnect if not intentional and within max attempts
       if (!isIntentionalDisconnect && reconnectAttempt < RECONNECT_CONFIG.maxAttempts) {
@@ -322,7 +385,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
           reconnectAttempt: nextAttempt,
         })
 
-        console.log(`[WS] Reconnecting in ${Math.round(delay / 1000)}s (attempt ${nextAttempt}/${RECONNECT_CONFIG.maxAttempts})`)
+        // WS reconnecting
 
         notificationService.notify('재연결 시도 중...', {
           body: `${nextAttempt}/${RECONNECT_CONFIG.maxAttempts} (${Math.round(delay / 1000)}초 후)`,
@@ -397,7 +460,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
 
       if (!syncRes.ok) {
         // Session expired or not found - clear local state
-        console.log('[Session] Session expired or not found, clearing local state')
+        // Session expired or not found, clearing local state
         set({
           sessionId: null,
           sessionProjectId: null,
@@ -408,6 +471,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
           pendingApprovals: {},
           waitingForApproval: false,
           tokenUsage: {},
+          providerUsage: {} as Record<LLMProvider, ProviderUsage>,
           totalCost: 0,
           messages: [],
           reconnectAttempt: 0,
@@ -420,10 +484,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
 
       // Sync server state to local
       const syncData = await syncRes.json()
-      console.log('[Session] Synced from server:', {
-        taskCount: Object.keys(syncData.tasks || {}).length,
-        ttl: syncData.session_info?.ttl_remaining_hours?.toFixed(1),
-      })
+      // Session synced from server
 
       // Transform and merge tasks from server
       const serverTasks: Record<string, Task> = {}
@@ -475,20 +536,20 @@ export const useOrchestrationStore = create<OrchestrationState>()(
         reconnectAttempt: 0,
         heartbeatTimer,
       })
-      console.log('[WS] Reconnected to session:', sessionId)
+      // WS reconnected to session
     }
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
-        console.log('[WS] Received message:', data)
+        // WS message received
         handleMessage(data, set, get)
       } catch (e) {
         console.error('[WS] Failed to parse message:', e, event.data)
       }
     }
 
-    ws.onclose = (event) => {
+    ws.onclose = (_event) => {
       const { isIntentionalDisconnect, reconnectAttempt, heartbeatTimer } = get()
 
       // Clear heartbeat timer
@@ -503,7 +564,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
         heartbeatTimer: null,
       })
 
-      console.log('[WS] Disconnected:', { code: event.code, reason: event.reason })
+      // WS disconnected
 
       // Auto-reconnect if not intentional and within max attempts
       if (!isIntentionalDisconnect && reconnectAttempt < RECONNECT_CONFIG.maxAttempts) {
@@ -515,7 +576,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
           reconnectAttempt: nextAttempt,
         })
 
-        console.log(`[WS] Reconnecting in ${Math.round(delay / 1000)}s (attempt ${nextAttempt}/${RECONNECT_CONFIG.maxAttempts})`)
+        // WS reconnecting
 
         notificationService.notify('재연결 시도 중...', {
           body: `${nextAttempt}/${RECONNECT_CONFIG.maxAttempts} (${Math.round(delay / 1000)}초 후)`,
@@ -576,6 +637,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       pendingApprovals: {},
       waitingForApproval: false,
       tokenUsage: {},
+      providerUsage: {} as Record<LLMProvider, ProviderUsage>,
       totalCost: 0,
       sessionInfo: null,
     })
@@ -592,7 +654,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       })
 
       if (!res.ok) {
-        console.log('[Session] Refresh failed, session may be expired')
+        // Session refresh failed, may be expired
         return false
       }
 
@@ -601,7 +663,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       if (infoRes.ok) {
         const sessionInfo = await infoRes.json()
         set({ sessionInfo })
-        console.log(`[Session] Refreshed, TTL: ${sessionInfo.ttl_remaining_hours.toFixed(1)} hours`)
+        // Session refreshed
       }
 
       return true
@@ -626,7 +688,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       timestamp: new Date().toISOString(),
     }
 
-    console.log('[WS] Sending message:', message)
+    // WS sending message
     ws.send(JSON.stringify(message))
     set({ isProcessing: true })
 
@@ -733,7 +795,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
     }
   },
 
-  // Open project in Warp terminal
+  // Open project in Warp terminal with Claude CLI
   openInWarp: async (command?: string) => {
     const { selectedProjectId } = get()
     if (!selectedProjectId) {
@@ -749,6 +811,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
         body: JSON.stringify({
           project_id: selectedProjectId,
           command: command || undefined,
+          use_claude_cli: true,
         }),
       })
 
@@ -756,7 +819,16 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       set({ warpLoading: false })
 
       if (data.success) {
-        return { success: true }
+        // Docker mode: backend can't open Warp, frontend opens the URI
+        if (data.open_via_frontend && data.uri) {
+          window.location.href = data.uri
+        }
+        // Non-Docker: backend already opened Warp via subprocess
+
+        return {
+          success: true,
+          sessionMonitorHint: 'Claude Sessions 탭에서 진행 상황을 확인하세요.',
+        }
       } else {
         return { success: false, error: data.error || 'Failed to open Warp' }
       }
@@ -926,6 +998,90 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       return { success: false, error: 'Failed to connect to server' }
     }
   },
+
+  // Pause a task
+  pauseTask: async (taskId: string, reason?: string) => {
+    const { sessionId } = get()
+    if (!sessionId) {
+      return { success: false, error: 'No active session' }
+    }
+
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/tasks/${taskId}/pause`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        return {
+          success: false,
+          error: error.detail || 'Failed to pause task',
+        }
+      }
+
+      const data = await res.json()
+
+      // Update local state
+      set((state) => ({
+        tasks: {
+          ...state.tasks,
+          [taskId]: {
+            ...state.tasks[taskId],
+            status: 'paused' as TaskStatus,
+            pausedAt: data.paused_at,
+            pauseReason: reason || null,
+          },
+        },
+      }))
+
+      return { success: true }
+    } catch (e) {
+      console.error('Failed to pause task:', e)
+      return { success: false, error: 'Failed to connect to server' }
+    }
+  },
+
+  // Resume a paused task
+  resumeTask: async (taskId: string) => {
+    const { sessionId } = get()
+    if (!sessionId) {
+      return { success: false, error: 'No active session' }
+    }
+
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/tasks/${taskId}/resume`, {
+        method: 'POST',
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        return {
+          success: false,
+          error: error.detail || 'Failed to resume task',
+        }
+      }
+
+      // Update local state
+      set((state) => ({
+        tasks: {
+          ...state.tasks,
+          [taskId]: {
+            ...state.tasks[taskId],
+            status: 'pending' as TaskStatus,
+            pausedAt: null,
+            pauseReason: null,
+          },
+        },
+      }))
+
+      return { success: true }
+    } catch (e) {
+      console.error('Failed to resume task:', e)
+      return { success: false, error: 'Failed to connect to server' }
+    }
+  },
 }),
     {
       name: 'orchestration-storage',
@@ -941,6 +1097,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
         messages: state.messages,
         pendingApprovals: state.pendingApprovals,
         tokenUsage: state.tokenUsage,
+        providerUsage: state.providerUsage,
         totalCost: state.totalCost,
       }),
       onRehydrateStorage: () => (state) => {
@@ -963,6 +1120,9 @@ function transformTask(raw: Record<string, unknown>): Task {
     error: raw.error as string | undefined,
     createdAt: (raw.created_at ?? raw.createdAt ?? new Date().toISOString()) as string,
     updatedAt: (raw.updated_at ?? raw.updatedAt ?? new Date().toISOString()) as string,
+    // Pause/Resume fields
+    pausedAt: (raw.paused_at ?? raw.pausedAt ?? null) as string | null,
+    pauseReason: (raw.pause_reason ?? raw.pauseReason ?? null) as string | null,
     // Soft delete fields
     isDeleted: (raw.is_deleted ?? raw.isDeleted ?? false) as boolean,
     deletedAt: (raw.deleted_at ?? raw.deletedAt ?? null) as string | null,
@@ -1180,6 +1340,13 @@ function handleMessage(
     case 'token_update':
       set((state) => {
         const agentName = payload.agent_name as string
+        const model = payload.model as string || ''
+        const inputTokens = payload.input_tokens as number
+        const outputTokens = payload.output_tokens as number
+        const totalTokens = payload.total_tokens as number
+        const costUsd = payload.cost_usd as number
+
+        // Update agent-level usage
         const currentUsage = state.tokenUsage[agentName] || {
           total_input_tokens: 0,
           total_output_tokens: 0,
@@ -1188,15 +1355,38 @@ function handleMessage(
           call_count: 0,
         }
 
+        // Update provider-level usage
+        const provider = identifyProvider(model)
+        const currentProviderUsage = state.providerUsage[provider] || {
+          provider,
+          displayName: PROVIDER_CONFIG[provider].displayName,
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          costUsd: 0,
+          callCount: 0,
+        }
+
         return {
           tokenUsage: {
             ...state.tokenUsage,
             [agentName]: {
-              total_input_tokens: currentUsage.total_input_tokens + (payload.input_tokens as number),
-              total_output_tokens: currentUsage.total_output_tokens + (payload.output_tokens as number),
-              total_tokens: currentUsage.total_tokens + (payload.total_tokens as number),
-              total_cost_usd: currentUsage.total_cost_usd + (payload.cost_usd as number),
+              total_input_tokens: currentUsage.total_input_tokens + inputTokens,
+              total_output_tokens: currentUsage.total_output_tokens + outputTokens,
+              total_tokens: currentUsage.total_tokens + totalTokens,
+              total_cost_usd: currentUsage.total_cost_usd + costUsd,
               call_count: currentUsage.call_count + 1,
+            },
+          },
+          providerUsage: {
+            ...state.providerUsage,
+            [provider]: {
+              ...currentProviderUsage,
+              inputTokens: currentProviderUsage.inputTokens + inputTokens,
+              outputTokens: currentProviderUsage.outputTokens + outputTokens,
+              totalTokens: currentProviderUsage.totalTokens + totalTokens,
+              costUsd: currentProviderUsage.costUsd + costUsd,
+              callCount: currentProviderUsage.callCount + 1,
             },
           },
           totalCost: payload.session_total_cost_usd as number,

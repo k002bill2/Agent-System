@@ -37,7 +37,7 @@ Create comprehensive unit and integration tests for AOS Dashboard components, ho
 ### 1. Analyze the Code
 - Read the component/hook/service implementation
 - Identify all functions, props, and edge cases
-- Note external dependencies (Firebase, API, Expo modules)
+- Note external dependencies (Firebase, API)
 
 ### 2. Identify Test Scenarios
 **Happy Path**:

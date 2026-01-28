@@ -1,5 +1,7 @@
-"""Authentication service for OAuth and JWT token management."""
+"""Authentication service for OAuth, email/password, and JWT token management."""
 
+import hashlib
+import secrets
 import uuid
 from datetime import datetime, timedelta
 from typing import Any
@@ -320,3 +322,81 @@ class AuthService:
         stmt = select(UserModel).where(UserModel.id == user_id)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
+
+    # ─────────────────────────────────────────────────────────────
+    # Password Hashing (hashlib-based, no external dependencies)
+    # ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def hash_password(password: str) -> str:
+        """Hash password using SHA-256 with random salt."""
+        salt = secrets.token_hex(16)
+        password_hash = hashlib.sha256((password + salt).encode()).hexdigest()
+        return f"{salt}:{password_hash}"
+
+    @staticmethod
+    def verify_password(password: str, hashed: str) -> bool:
+        """Verify password against stored hash."""
+        try:
+            salt, password_hash = hashed.split(":")
+            return hashlib.sha256((password + salt).encode()).hexdigest() == password_hash
+        except ValueError:
+            return False
+
+    # ─────────────────────────────────────────────────────────────
+    # Email/Password Authentication
+    # ─────────────────────────────────────────────────────────────
+
+    async def register_user(self, email: str, password: str, name: str | None = None) -> UserModel:
+        """Register a new user with email and password."""
+        if not self.db:
+            raise RuntimeError("Database session required for user management")
+
+        # Check if email already exists
+        stmt = select(UserModel).where(UserModel.email == email)
+        result = await self.db.execute(stmt)
+        existing_user = result.scalar_one_or_none()
+
+        if existing_user:
+            raise ValueError("이미 등록된 이메일입니다")
+
+        # Create new user
+        new_user = UserModel(
+            id=str(uuid.uuid4()),
+            email=email,
+            name=name or email.split("@")[0],
+            password_hash=self.hash_password(password),
+            oauth_provider="email",
+            oauth_provider_id=f"email_{email}",
+            is_active=True,
+            is_admin=False,
+            created_at=datetime.utcnow(),
+            last_login_at=datetime.utcnow(),
+        )
+        self.db.add(new_user)
+        await self.db.commit()
+        await self.db.refresh(new_user)
+        return new_user
+
+    async def login_user(self, email: str, password: str) -> UserModel:
+        """Authenticate user with email and password."""
+        if not self.db:
+            raise RuntimeError("Database session required for user management")
+
+        stmt = select(UserModel).where(UserModel.email == email)
+        result = await self.db.execute(stmt)
+        user = result.scalar_one_or_none()
+
+        if not user or not user.password_hash:
+            raise ValueError("이메일 또는 비밀번호가 올바르지 않습니다")
+
+        if not self.verify_password(password, user.password_hash):
+            raise ValueError("이메일 또는 비밀번호가 올바르지 않습니다")
+
+        if not user.is_active:
+            raise ValueError("비활성화된 계정입니다")
+
+        # Update last login
+        user.last_login_at = datetime.utcnow()
+        await self.db.commit()
+        return user
