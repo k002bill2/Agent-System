@@ -240,7 +240,25 @@ export function PullRequestList({
 
   const handleSetRepo = () => {
     if (repoInput.trim()) {
-      onSetRepo(repoInput.trim())
+      // Parse GitHub URL to owner/repo format
+      let repo = repoInput.trim()
+
+      // Handle SSH format: git@github.com:owner/repo.git
+      const sshMatch = repo.match(/git@github\.com:([^/]+\/[^/]+?)(?:\.git)?$/)
+      if (sshMatch) {
+        repo = sshMatch[1]
+      }
+
+      // Handle HTTPS format: https://github.com/owner/repo
+      const httpsMatch = repo.match(/https?:\/\/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:\/)?$/)
+      if (httpsMatch) {
+        repo = httpsMatch[1]
+      }
+
+      // Remove .git suffix if present
+      repo = repo.replace(/\.git$/, '')
+
+      onSetRepo(repo)
       setShowConfig(false)
       onRefresh('open')
     }

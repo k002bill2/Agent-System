@@ -1,9 +1,14 @@
 """Analytics service for dashboard metrics."""
 
+import os
 import random
 from datetime import datetime, timedelta
 from typing import Any
 
+from sqlalchemy import select, func, and_, case
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from db.models import SessionModel, TaskModel, SessionActivityModel, AuditLogModel
 from models.analytics import (
     TimeRange,
     MetricType,
@@ -389,4 +394,422 @@ class AnalyticsService:
             costs=AnalyticsService.get_cost_analytics(time_range),
             activity=AnalyticsService.get_activity_heatmap(time_range),
             errors=AnalyticsService.get_error_analytics(time_range),
+        )
+
+    # ─────────────────────────────────────────────────────────────
+    # Async Database Methods (USE_DATABASE=true)
+    # ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    async def get_overview_async(db: AsyncSession) -> OverviewMetrics:
+        """Get high-level overview metrics from database."""
+        now = datetime.utcnow()
+
+        # Count sessions
+        total_sessions_result = await db.execute(
+            select(func.count(SessionModel.id))
+        )
+        total_sessions = total_sessions_result.scalar() or 0
+
+        active_sessions_result = await db.execute(
+            select(func.count(SessionModel.id)).where(
+                SessionModel.status == "active"
+            )
+        )
+        active_sessions = active_sessions_result.scalar() or 0
+
+        # Count tasks
+        total_tasks_result = await db.execute(
+            select(func.count(TaskModel.id))
+        )
+        total_tasks = total_tasks_result.scalar() or 0
+
+        completed_tasks_result = await db.execute(
+            select(func.count(TaskModel.id)).where(
+                TaskModel.status == "completed"
+            )
+        )
+        completed_tasks = completed_tasks_result.scalar() or 0
+
+        failed_tasks_result = await db.execute(
+            select(func.count(TaskModel.id)).where(
+                TaskModel.status == "failed"
+            )
+        )
+        failed_tasks = failed_tasks_result.scalar() or 0
+
+        pending_tasks_result = await db.execute(
+            select(func.count(TaskModel.id)).where(
+                TaskModel.status.in_(["pending", "in_progress", "waiting"])
+            )
+        )
+        pending_tasks = pending_tasks_result.scalar() or 0
+
+        # Calculate success rate
+        success_rate = 0.0
+        if completed_tasks + failed_tasks > 0:
+            success_rate = round((completed_tasks / (completed_tasks + failed_tasks)) * 100, 1)
+
+        # Token and cost totals from sessions
+        token_result = await db.execute(
+            select(
+                func.coalesce(func.sum(SessionModel.total_tokens), 0),
+                func.coalesce(func.sum(SessionModel.total_cost_usd), 0)
+            )
+        )
+        row = token_result.one()
+        total_tokens = int(row[0]) if row[0] else 0
+        total_cost = float(row[1]) if row[1] else 0.0
+
+        # Average task duration (from completed tasks)
+        duration_result = await db.execute(
+            select(func.avg(TaskModel.duration_ms)).where(
+                and_(
+                    TaskModel.status == "completed",
+                    TaskModel.duration_ms.isnot(None)
+                )
+            )
+        )
+        avg_duration = duration_result.scalar() or 0
+
+        # HITL approvals from audit logs
+        approvals_pending_result = await db.execute(
+            select(func.count(AuditLogModel.id)).where(
+                and_(
+                    AuditLogModel.action == "approval_request",
+                    AuditLogModel.created_at >= now - timedelta(days=7)
+                )
+            )
+        )
+        approvals_pending = approvals_pending_result.scalar() or 0
+
+        approvals_granted_result = await db.execute(
+            select(func.count(AuditLogModel.id)).where(
+                and_(
+                    AuditLogModel.action == "approval_granted",
+                    AuditLogModel.created_at >= now - timedelta(days=7)
+                )
+            )
+        )
+        approvals_granted = approvals_granted_result.scalar() or 0
+
+        approvals_denied_result = await db.execute(
+            select(func.count(AuditLogModel.id)).where(
+                and_(
+                    AuditLogModel.action == "approval_denied",
+                    AuditLogModel.created_at >= now - timedelta(days=7)
+                )
+            )
+        )
+        approvals_denied = approvals_denied_result.scalar() or 0
+
+        return OverviewMetrics(
+            total_sessions=total_sessions,
+            active_sessions=active_sessions,
+            total_tasks=total_tasks,
+            completed_tasks=completed_tasks,
+            failed_tasks=failed_tasks,
+            pending_tasks=pending_tasks,
+            success_rate=success_rate,
+            total_tokens=total_tokens,
+            total_cost=round(total_cost, 2),
+            avg_task_duration_ms=int(avg_duration),
+            approvals_pending=approvals_pending,
+            approvals_granted=approvals_granted,
+            approvals_denied=approvals_denied,
+        )
+
+    @staticmethod
+    async def get_trends_async(
+        db: AsyncSession,
+        time_range: TimeRange = TimeRange.WEEK,
+    ) -> MultiTrendData:
+        """Get trend data over time from database."""
+        delta = _get_time_delta(time_range)
+        interval = _get_interval(time_range)
+        now = datetime.utcnow()
+        start = now - delta
+
+        # Get all tasks in the time range
+        task_result = await db.execute(
+            select(TaskModel).where(
+                TaskModel.created_at >= start
+            ).order_by(TaskModel.created_at)
+        )
+        tasks = task_result.scalars().all()
+
+        # Get all sessions in the time range
+        session_result = await db.execute(
+            select(SessionModel).where(
+                SessionModel.created_at >= start
+            )
+        )
+        sessions = session_result.scalars().all()
+
+        # Build time buckets
+        tasks_data = []
+        success_rate_data = []
+        costs_data = []
+        tokens_data = []
+
+        current = start
+        while current <= now:
+            bucket_end = current + interval
+
+            # Count tasks in this bucket
+            bucket_tasks = [t for t in tasks if current <= t.created_at < bucket_end]
+            bucket_completed = len([t for t in bucket_tasks if t.status == "completed"])
+            bucket_failed = len([t for t in bucket_tasks if t.status == "failed"])
+
+            # Calculate success rate for bucket
+            bucket_success_rate = 0.0
+            if bucket_completed + bucket_failed > 0:
+                bucket_success_rate = round((bucket_completed / (bucket_completed + bucket_failed)) * 100, 1)
+
+            # Sum costs and tokens from sessions updated in this bucket
+            bucket_sessions = [s for s in sessions if current <= s.updated_at < bucket_end]
+            bucket_cost = sum(s.total_cost_usd or 0 for s in bucket_sessions)
+            bucket_tokens = sum(s.total_tokens or 0 for s in bucket_sessions)
+
+            label = current.strftime("%Y-%m-%d %H:%M")
+            tasks_data.append(TrendDataPoint(
+                timestamp=current,
+                value=len(bucket_tasks),
+                label=label,
+            ))
+            success_rate_data.append(TrendDataPoint(
+                timestamp=current,
+                value=bucket_success_rate,
+                label=label,
+            ))
+            costs_data.append(TrendDataPoint(
+                timestamp=current,
+                value=round(bucket_cost, 3),
+                label=label,
+            ))
+            tokens_data.append(TrendDataPoint(
+                timestamp=current,
+                value=bucket_tokens,
+                label=label,
+            ))
+
+            current += interval
+
+        return MultiTrendData(
+            time_range=time_range,
+            tasks=tasks_data,
+            success_rate=success_rate_data,
+            costs=costs_data,
+            tokens=tokens_data,
+        )
+
+    @staticmethod
+    async def get_agent_performance_async(
+        db: AsyncSession,
+        time_range: TimeRange = TimeRange.WEEK,
+    ) -> AgentPerformanceList:
+        """Get performance metrics for all agents from database."""
+        delta = _get_time_delta(time_range)
+        start = datetime.utcnow() - delta
+
+        # Get tasks grouped by agent
+        result = await db.execute(
+            select(
+                TaskModel.agent_id,
+                func.count(TaskModel.id).label("total"),
+                func.sum(case((TaskModel.status == "completed", 1), else_=0)).label("completed"),
+                func.sum(case((TaskModel.status == "failed", 1), else_=0)).label("failed"),
+                func.avg(TaskModel.duration_ms).label("avg_duration"),
+                func.sum(TaskModel.tokens_used).label("total_tokens"),
+                func.sum(TaskModel.cost).label("total_cost"),
+            ).where(
+                and_(
+                    TaskModel.created_at >= start,
+                    TaskModel.agent_id.isnot(None)
+                )
+            ).group_by(TaskModel.agent_id)
+        )
+
+        agents = []
+        for row in result.fetchall():
+            agent_id = row[0]
+            total = row[1] or 0
+            completed = row[2] or 0
+            failed = row[3] or 0
+            avg_duration = row[4] or 0
+            total_tokens = row[5] or 0
+            total_cost = row[6] or 0
+
+            success_rate = 0.0
+            if completed + failed > 0:
+                success_rate = round((completed / (completed + failed)) * 100, 1)
+
+            agents.append(AgentPerformance(
+                agent_id=agent_id,
+                agent_name=agent_id.replace("-", " ").title(),
+                category="general",
+                total_tasks=total,
+                completed_tasks=completed,
+                failed_tasks=failed,
+                success_rate=success_rate,
+                avg_duration_ms=int(avg_duration),
+                total_tokens=int(total_tokens),
+                total_cost=float(total_cost),
+            ))
+
+        # Sort by total tasks descending
+        agents.sort(key=lambda a: a.total_tasks, reverse=True)
+
+        return AgentPerformanceList(agents=agents, time_range=time_range)
+
+    @staticmethod
+    async def get_activity_heatmap_async(
+        db: AsyncSession,
+        time_range: TimeRange = TimeRange.WEEK,
+    ) -> ActivityHeatmap:
+        """Get activity heatmap data from database."""
+        delta = _get_time_delta(time_range)
+        start = datetime.utcnow() - delta
+
+        # Get activities grouped by day of week and hour
+        result = await db.execute(
+            select(SessionActivityModel).where(
+                SessionActivityModel.created_at >= start
+            )
+        )
+        activities = result.scalars().all()
+
+        # Build heatmap
+        heatmap = {}
+        for day in range(7):
+            for hour in range(24):
+                heatmap[(day, hour)] = 0
+
+        for activity in activities:
+            day = activity.created_at.weekday()  # 0=Monday, 6=Sunday
+            hour = activity.created_at.hour
+            # Convert to Sunday=0 format
+            day = (day + 1) % 7
+            heatmap[(day, hour)] += 1
+
+        cells = []
+        max_value = 0
+        for (day, hour), value in heatmap.items():
+            max_value = max(max_value, value)
+            cells.append(HeatmapCell(day=day, hour=hour, value=value))
+
+        return ActivityHeatmap(
+            cells=cells,
+            max_value=max_value,
+            time_range=time_range,
+        )
+
+    @staticmethod
+    async def get_error_analytics_async(
+        db: AsyncSession,
+        time_range: TimeRange = TimeRange.WEEK,
+    ) -> ErrorAnalytics:
+        """Get error analytics breakdown from database."""
+        delta = _get_time_delta(time_range)
+        start = datetime.utcnow() - delta
+
+        # Get failed tasks
+        result = await db.execute(
+            select(TaskModel).where(
+                and_(
+                    TaskModel.status == "failed",
+                    TaskModel.created_at >= start
+                )
+            )
+        )
+        failed_tasks = result.scalars().all()
+
+        total_errors = len(failed_tasks)
+
+        # Get total tasks for error rate
+        total_result = await db.execute(
+            select(func.count(TaskModel.id)).where(
+                TaskModel.created_at >= start
+            )
+        )
+        total_tasks = total_result.scalar() or 0
+
+        error_rate = 0.0
+        if total_tasks > 0:
+            error_rate = round((total_errors / total_tasks) * 100, 1)
+
+        # Group by error type
+        error_types = {}
+        agent_errors = {}
+        for task in failed_tasks:
+            error_type = task.error_type or "unknown"
+            if error_type not in error_types:
+                error_types[error_type] = {
+                    "count": 0,
+                    "last_occurred": task.updated_at,
+                    "sample_message": task.error_message or "No error message",
+                }
+            error_types[error_type]["count"] += 1
+            if task.updated_at > error_types[error_type]["last_occurred"]:
+                error_types[error_type]["last_occurred"] = task.updated_at
+                error_types[error_type]["sample_message"] = task.error_message or "No error message"
+
+            # Count by agent
+            agent_id = task.agent_id or "unknown"
+            agent_errors[agent_id] = agent_errors.get(agent_id, 0) + 1
+
+        by_type = []
+        for error_type, data in error_types.items():
+            percentage = (data["count"] / total_errors * 100) if total_errors > 0 else 0
+            by_type.append(ErrorBreakdown(
+                error_type=error_type,
+                count=data["count"],
+                percentage=round(percentage, 1),
+                last_occurred=data["last_occurred"],
+                sample_message=data["sample_message"],
+            ))
+        by_type.sort(key=lambda x: x.count, reverse=True)
+
+        by_agent = []
+        for agent_id, count in agent_errors.items():
+            percentage = (count / total_errors * 100) if total_errors > 0 else 0
+            by_agent.append(CostBreakdown(
+                category="agent",
+                value=agent_id,
+                cost=0,
+                tokens=0,
+                percentage=round(percentage, 1),
+            ))
+        by_agent.sort(key=lambda x: x.percentage, reverse=True)
+
+        return ErrorAnalytics(
+            time_range=time_range,
+            total_errors=total_errors,
+            error_rate=error_rate,
+            by_type=by_type,
+            by_agent=by_agent,
+        )
+
+    @staticmethod
+    async def get_dashboard_async(
+        db: AsyncSession,
+        time_range: TimeRange = TimeRange.WEEK,
+    ) -> AnalyticsDashboard:
+        """Get complete analytics dashboard data from database."""
+        overview = await AnalyticsService.get_overview_async(db)
+        trends = await AnalyticsService.get_trends_async(db, time_range)
+        agents = await AnalyticsService.get_agent_performance_async(db, time_range)
+        activity = await AnalyticsService.get_activity_heatmap_async(db, time_range)
+        errors = await AnalyticsService.get_error_analytics_async(db, time_range)
+
+        # Cost analytics requires more complex queries, use mock for now
+        costs = AnalyticsService.get_cost_analytics(time_range)
+
+        return AnalyticsDashboard(
+            overview=overview,
+            trends=trends,
+            agents=agents,
+            costs=costs,
+            activity=activity,
+            errors=errors,
         )

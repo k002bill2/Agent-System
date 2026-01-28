@@ -24,6 +24,12 @@ from models.git import (
     PullResult,
     PushResult,
     DEFAULT_PROTECTED_BRANCHES,
+    # New models for status/add/commit
+    FileStatusType,
+    GitStatusFile,
+    GitWorkingStatus,
+    AddResult,
+    CommitCreateResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -385,6 +391,185 @@ class GitService:
             return files
         except Exception as e:
             raise GitServiceError(f"Failed to get commit files: {e}")
+
+    # =========================================================================
+    # Working Directory Operations (status, add, commit)
+    # =========================================================================
+
+    def status(self) -> GitWorkingStatus:
+        """Get working directory status.
+
+        Returns:
+            Working directory status with staged/unstaged/untracked files
+        """
+        staged_files: list[GitStatusFile] = []
+        unstaged_files: list[GitStatusFile] = []
+        untracked_files: list[GitStatusFile] = []
+
+        # Get staged files (index vs HEAD)
+        try:
+            diff_staged = self.repo.index.diff("HEAD")
+            for d in diff_staged:
+                status = FileStatusType.MODIFIED
+                if d.new_file:
+                    status = FileStatusType.ADDED
+                elif d.deleted_file:
+                    status = FileStatusType.DELETED
+                elif d.renamed_file:
+                    status = FileStatusType.RENAMED
+
+                staged_files.append(GitStatusFile(
+                    path=d.b_path or d.a_path,
+                    status=status,
+                    staged=True,
+                    old_path=d.a_path if d.renamed_file else None,
+                ))
+        except Exception as e:
+            # Empty repo or other error
+            logger.debug(f"Error getting staged files: {e}")
+
+        # Get unstaged files (working tree vs index)
+        try:
+            diff_unstaged = self.repo.index.diff(None)
+            for d in diff_unstaged:
+                status = FileStatusType.MODIFIED
+                if d.deleted_file:
+                    status = FileStatusType.DELETED
+
+                unstaged_files.append(GitStatusFile(
+                    path=d.b_path or d.a_path,
+                    status=status,
+                    staged=False,
+                ))
+        except Exception as e:
+            logger.debug(f"Error getting unstaged files: {e}")
+
+        # Get untracked files
+        try:
+            for path in self.repo.untracked_files:
+                untracked_files.append(GitStatusFile(
+                    path=path,
+                    status=FileStatusType.UNTRACKED,
+                    staged=False,
+                ))
+        except Exception as e:
+            logger.debug(f"Error getting untracked files: {e}")
+
+        total = len(staged_files) + len(unstaged_files) + len(untracked_files)
+        is_clean = total == 0
+
+        return GitWorkingStatus(
+            branch=self.current_branch,
+            is_clean=is_clean,
+            staged_files=staged_files,
+            unstaged_files=unstaged_files,
+            untracked_files=untracked_files,
+            total_changes=total,
+        )
+
+    def add(
+        self,
+        paths: list[str] | None = None,
+        all: bool = False
+    ) -> AddResult:
+        """Stage files for commit.
+
+        Args:
+            paths: List of file paths to stage. None or empty means current directory.
+            all: If True, stage all changes including deletions (git add -A)
+
+        Returns:
+            Result of add operation
+        """
+        try:
+            staged_files: list[str] = []
+
+            if all:
+                # git add -A (all changes including deletions)
+                self.repo.git.add(A=True)
+                # Get list of staged files
+                status = self.status()
+                staged_files = [f.path for f in status.staged_files]
+            elif paths and len(paths) > 0:
+                # Add specific paths
+                for path in paths:
+                    self.repo.index.add([path])
+                    staged_files.append(path)
+            else:
+                # git add . (current directory)
+                self.repo.git.add(".")
+                status = self.status()
+                staged_files = [f.path for f in status.staged_files]
+
+            return AddResult(
+                success=True,
+                staged_files=staged_files,
+                message=f"Staged {len(staged_files)} file(s)",
+            )
+        except GitCommandError as e:
+            return AddResult(
+                success=False,
+                message=f"Failed to stage files: {e}",
+            )
+        except Exception as e:
+            return AddResult(
+                success=False,
+                message=f"Error staging files: {e}",
+            )
+
+    def commit(
+        self,
+        message: str,
+        author_name: str | None = None,
+        author_email: str | None = None
+    ) -> CommitCreateResult:
+        """Create a commit with staged changes.
+
+        Args:
+            message: Commit message
+            author_name: Author name (optional, uses git config if not provided)
+            author_email: Author email (optional, uses git config if not provided)
+
+        Returns:
+            Result of commit operation
+        """
+        # Check if there are staged changes
+        status = self.status()
+        if len(status.staged_files) == 0:
+            return CommitCreateResult(
+                success=False,
+                message="No staged changes to commit. Use 'add' first.",
+            )
+
+        try:
+            # Build author string if provided
+            author = None
+            if author_name and author_email:
+                from git import Actor
+                author = Actor(author_name, author_email)
+
+            # Create commit
+            if author:
+                commit = self.repo.index.commit(message, author=author)
+            else:
+                commit = self.repo.index.commit(message)
+
+            return CommitCreateResult(
+                success=True,
+                commit_sha=commit.hexsha,
+                message=f"Created commit {commit.hexsha[:7]}",
+                files_committed=len(status.staged_files),
+            )
+        except GitCommandError as e:
+            return CommitCreateResult(
+                success=False,
+                message=f"Failed to create commit: {e}",
+            )
+        except Exception as e:
+            return CommitCreateResult(
+                success=False,
+                message=f"Error creating commit: {e}",
+            )
 
     # =========================================================================
     # Remote Operations

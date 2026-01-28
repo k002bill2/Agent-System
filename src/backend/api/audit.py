@@ -1,9 +1,12 @@
 """Audit trail API routes."""
 
+import os
 from datetime import datetime, timedelta
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Response, Depends
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from db.database import get_db
 from services.audit_service import (
     AuditService,
     AuditLogEntry,
@@ -11,6 +14,7 @@ from services.audit_service import (
     AuditLogResponse,
     AuditAction,
     ResourceType,
+    USE_DATABASE,
 )
 from models.audit import (
     DataClassification,
@@ -51,6 +55,7 @@ async def get_audit_logs(
     end_date: datetime | None = Query(None),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Query audit logs with filters.
@@ -94,6 +99,8 @@ async def get_audit_logs(
         offset=offset,
     )
 
+    if USE_DATABASE:
+        return await AuditService.query_async(db, filter)
     return AuditService.query(filter)
 
 
@@ -177,22 +184,28 @@ async def export_audit_logs(
 
 
 @router.get("/{log_id}", response_model=AuditLogEntry)
-async def get_audit_log(log_id: str):
+async def get_audit_log(log_id: str, db: AsyncSession = Depends(get_db)):
     """Get a specific audit log entry by ID."""
-    log = AuditService.get_by_id(log_id)
+    if USE_DATABASE:
+        log = await AuditService.get_by_id_async(db, log_id)
+    else:
+        log = AuditService.get_by_id(log_id)
     if not log:
         raise HTTPException(status_code=404, detail="Audit log not found")
     return log
 
 
 @router.get("/sessions/{session_id}/trail")
-async def get_session_audit_trail(session_id: str):
+async def get_session_audit_trail(session_id: str, db: AsyncSession = Depends(get_db)):
     """
     Get the complete audit trail for a specific session.
 
     Returns all audit logs related to the session in chronological order.
     """
-    logs = AuditService.get_session_audit_trail(session_id)
+    if USE_DATABASE:
+        logs = await AuditService.get_session_audit_trail_async(db, session_id)
+    else:
+        logs = AuditService.get_session_audit_trail(session_id)
     return {
         "session_id": session_id,
         "logs": logs,
@@ -201,13 +214,16 @@ async def get_session_audit_trail(session_id: str):
 
 
 @router.post("/cleanup")
-async def cleanup_old_logs(days: int = Query(30, ge=1, le=365)):
+async def cleanup_old_logs(days: int = Query(30, ge=1, le=365), db: AsyncSession = Depends(get_db)):
     """
     Clean up audit logs older than specified days.
 
     This is an admin operation that removes old logs to manage storage.
     """
-    removed = AuditService.cleanup_old_logs(days)
+    if USE_DATABASE:
+        removed = await AuditService.cleanup_old_logs_async(db, days)
+    else:
+        removed = AuditService.cleanup_old_logs(days)
     return {
         "success": True,
         "removed_count": removed,

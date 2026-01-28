@@ -16,6 +16,12 @@ from models.git import (
     GitCommit,
     CommitFile,
     CommitListResponse,
+    # Working directory models (NEW)
+    GitWorkingStatus,
+    AddRequest,
+    AddResult,
+    CommitCreateRequest,
+    CommitCreateResult,
     # Merge models
     MergePreview,
     MergeResult,
@@ -223,6 +229,59 @@ async def update_project_git_path(
         current_branch=service.current_branch if service else None,
         error=None if service else "Path is not a valid Git repository",
     )
+
+
+# =============================================================================
+# Working Directory Endpoints (status, add, commit)
+# =============================================================================
+
+@router.get("/projects/{project_id}/working-status", response_model=GitWorkingStatus)
+async def get_working_status(project_id: str):
+    """Get working directory status (staged, unstaged, untracked files)."""
+    git_service = get_git_service_for_project(project_id)
+    return git_service.status()
+
+
+@router.post("/projects/{project_id}/add", response_model=AddResult)
+async def stage_files(
+    project_id: str,
+    request: AddRequest,
+):
+    """Stage files for commit (git add).
+
+    - Empty paths with all=False: stages current directory (git add .)
+    - all=True: stages all changes including deletions (git add -A)
+    - Specific paths: stages only those files
+    """
+    git_service = get_git_service_for_project(project_id)
+    result = git_service.add(paths=request.paths, all=request.all)
+
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.message)
+
+    return result
+
+
+@router.post("/projects/{project_id}/commit", response_model=CommitCreateResult)
+async def create_commit(
+    project_id: str,
+    request: CommitCreateRequest,
+):
+    """Create a commit with staged changes.
+
+    Requires files to be staged first using the add endpoint.
+    """
+    git_service = get_git_service_for_project(project_id)
+    result = git_service.commit(
+        message=request.message,
+        author_name=request.author_name,
+        author_email=request.author_email,
+    )
+
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.message)
+
+    return result
 
 
 # =============================================================================

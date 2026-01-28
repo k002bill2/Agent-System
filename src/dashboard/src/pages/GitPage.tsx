@@ -8,6 +8,7 @@ import {
   Download,
   Upload,
   AlertCircle,
+  FileEdit,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useGitStore, GitTab } from '../stores/git'
@@ -22,9 +23,11 @@ import {
   PRReviewPanel,
   CommitHistory,
   GitSetup,
+  WorkingDirectory,
 } from '../components/git'
 
 const tabs: { id: GitTab; label: string; icon: typeof GitBranch }[] = [
+  { id: 'changes', label: 'Changes', icon: FileEdit },
   { id: 'branches', label: 'Branches', icon: GitBranch },
   { id: 'merge-requests', label: 'Merge Requests', icon: GitMerge },
   { id: 'pull-requests', label: 'Pull Requests', icon: GitPullRequest },
@@ -81,6 +84,11 @@ export function GitPage() {
     fetchRemote,
     pullRemote,
     pushRemote,
+    // Working Directory
+    workingStatus,
+    fetchWorkingStatus,
+    stageFiles,
+    commitChanges,
   } = useGitStore()
 
   const { projects, fetchProjects, selectedProjectId: globalSelectedProjectId } = useProjectsStore()
@@ -144,8 +152,9 @@ export function GitPage() {
       fetchBranches(selectedProjectId)
       fetchMergeRequests(selectedProjectId)
       fetchCommits(selectedProjectId)
+      fetchWorkingStatus(selectedProjectId)
     }
-  }, [selectedProjectId, gitStatus?.is_valid_repo, fetchBranches, fetchMergeRequests, fetchCommits])
+  }, [selectedProjectId, gitStatus?.is_valid_repo, fetchBranches, fetchMergeRequests, fetchCommits, fetchWorkingStatus])
 
   // Handle merge click from branch list
   const handleMergeClick = async (source: string) => {
@@ -300,6 +309,17 @@ export function GitPage() {
           />
         ) : (
           <>
+            {activeTab === 'changes' && (
+              <WorkingDirectory
+                workingStatus={workingStatus}
+                isLoading={isLoading}
+                onRefresh={() => fetchWorkingStatus(selectedProjectId)}
+                onStageFiles={(paths) => stageFiles(selectedProjectId, paths)}
+                onStageAll={() => stageFiles(selectedProjectId, [], true)}
+                onCommit={(message) => commitChanges(selectedProjectId, message)}
+              />
+            )}
+
             {activeTab === 'branches' && (
               <BranchList
                 branches={branches}

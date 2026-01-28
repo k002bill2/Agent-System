@@ -5,6 +5,8 @@ import os
 from datetime import datetime
 from typing import Any
 
+from config import get_settings
+
 try:
     from github import Github, GithubException, Auth
     from github.PullRequest import PullRequest
@@ -51,7 +53,8 @@ class GitHubService:
                 "PyGithub is not installed. Run: pip install PyGithub"
             )
 
-        self.token = token or os.getenv("GITHUB_TOKEN")
+        settings = get_settings()
+        self.token = token or settings.github_token or os.getenv("GITHUB_TOKEN")
         if not self.token:
             raise GitHubServiceError(
                 "GitHub token not provided. Set GITHUB_TOKEN environment variable."

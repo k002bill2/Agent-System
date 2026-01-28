@@ -67,8 +67,16 @@ class TaskModel(Base):
 
     # Execution details
     assigned_agent = Column(String(100), nullable=True)
+    agent_id = Column(String(100), nullable=True, index=True)  # For analytics
     result_json = Column(JSONB, nullable=True)
     error = Column(Text, nullable=True)
+    error_type = Column(String(50), nullable=True)  # timeout, api_error, validation_error, etc.
+    error_message = Column(Text, nullable=True)
+
+    # Performance metrics
+    duration_ms = Column(Integer, nullable=True)
+    tokens_used = Column(Integer, default=0)
+    cost = Column(Float, default=0.0)
 
     # Retry tracking
     retry_count = Column(Integer, default=0)
@@ -90,6 +98,7 @@ class TaskModel(Base):
     __table_args__ = (
         Index("ix_tasks_session_status", "session_id", "status"),
         Index("ix_tasks_session_parent", "session_id", "parent_id"),
+        Index("ix_tasks_agent", "agent_id"),
     )
 
 
@@ -422,4 +431,209 @@ class SAMLConfigModel(Base):
 
     __table_args__ = (
         Index("ix_saml_configs_active", "is_active"),
+    )
+
+
+# ─────────────────────────────────────────────────────────────
+# Organization Models
+# ─────────────────────────────────────────────────────────────
+
+
+class OrganizationModel(Base):
+    """Organization model for multi-tenant support."""
+
+    __tablename__ = "organizations"
+
+    id = Column(String(36), primary_key=True)
+    name = Column(String(255), nullable=False)
+    slug = Column(String(100), nullable=False, unique=True, index=True)
+    description = Column(Text, nullable=True)
+    status = Column(String(20), default="active", index=True)  # active, suspended, pending, deleted
+    plan = Column(String(20), default="free")  # free, starter, professional, enterprise
+
+    # Contact info
+    contact_email = Column(String(255), nullable=True)
+    contact_name = Column(String(255), nullable=True)
+
+    # Branding
+    logo_url = Column(String(500), nullable=True)
+    primary_color = Column(String(20), nullable=True)
+
+    # Limits based on plan
+    max_members = Column(Integer, default=5)
+    max_projects = Column(Integer, default=3)
+    max_sessions_per_day = Column(Integer, default=100)
+    max_tokens_per_month = Column(Integer, default=100000)
+
+    # Usage tracking
+    current_members = Column(Integer, default=0)
+    current_projects = Column(Integer, default=0)
+    tokens_used_this_month = Column(Integer, default=0)
+
+    # Metadata
+    settings = Column(JSONB, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class OrganizationMemberModel(Base):
+    """Organization member model."""
+
+    __tablename__ = "organization_members"
+
+    id = Column(String(36), primary_key=True)
+    organization_id = Column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    email = Column(String(255), nullable=False)
+    name = Column(String(255), nullable=True)
+    role = Column(String(20), default="member")  # owner, admin, member, viewer
+
+    # Permissions override
+    permissions = Column(JSONB, default=list)
+
+    # Status
+    is_active = Column(Boolean, default=True)
+    invited_by = Column(String(36), nullable=True)
+    invited_at = Column(DateTime, nullable=True)
+    joined_at = Column(DateTime, nullable=True)
+    last_active_at = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_org_member_org_user", "organization_id", "user_id", unique=True),
+    )
+
+
+class OrganizationInvitationModel(Base):
+    """Organization invitation model."""
+
+    __tablename__ = "organization_invitations"
+
+    id = Column(String(36), primary_key=True)
+    organization_id = Column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    email = Column(String(255), nullable=False)
+    role = Column(String(20), default="member")
+    invited_by = Column(String(36), nullable=False)
+    token = Column(String(36), nullable=False, unique=True)
+    message = Column(Text, nullable=True)
+    expires_at = Column(DateTime, nullable=False)
+    accepted = Column(Boolean, default=False)
+    accepted_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_invitation_token", "token"),
+        Index("ix_invitation_email", "email"),
+    )
+
+
+# ─────────────────────────────────────────────────────────────
+# Notification Models
+# ─────────────────────────────────────────────────────────────
+
+
+class NotificationRuleModel(Base):
+    """Notification rule model."""
+
+    __tablename__ = "notification_rules"
+
+    id = Column(String(36), primary_key=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, default="")
+    enabled = Column(Boolean, default=True)
+
+    # Trigger
+    event_type = Column(String(50), nullable=False, index=True)
+    conditions = Column(JSONB, default=list)
+
+    # Channels
+    channels = Column(JSONB, default=list)  # List of channel names
+
+    # Customization
+    priority = Column(String(20), default="medium")
+    message_template = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class NotificationHistoryModel(Base):
+    """Notification history model."""
+
+    __tablename__ = "notification_history"
+
+    id = Column(String(36), primary_key=True)
+    rule_id = Column(String(36), ForeignKey("notification_rules.id", ondelete="SET NULL"), nullable=True)
+    event_type = Column(String(50), nullable=False, index=True)
+    priority = Column(String(20), default="medium")
+
+    # Content
+    title = Column(String(500), nullable=False)
+    body = Column(Text, nullable=False)
+    data = Column(JSONB, default=dict)
+
+    # Delivery
+    channels = Column(JSONB, default=list)
+    sent_at = Column(DateTime, nullable=True)
+    delivery_status = Column(JSONB, default=dict)  # channel -> status
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_notification_history_sent", "sent_at"),
+    )
+
+
+class ChannelConfigModel(Base):
+    """Channel configuration model."""
+
+    __tablename__ = "channel_configs"
+
+    id = Column(String(36), primary_key=True)
+    channel = Column(String(20), nullable=False, unique=True)  # slack, discord, email, webhook
+    enabled = Column(Boolean, default=True)
+
+    # Channel-specific settings (encrypted in production)
+    webhook_url = Column(String(500), nullable=True)
+    api_key = Column(String(500), nullable=True)
+    bot_token = Column(String(500), nullable=True)
+    email_address = Column(String(255), nullable=True)
+
+    # Rate limiting
+    rate_limit_per_hour = Column(Integer, default=60)
+    last_sent = Column(DateTime, nullable=True)
+    sent_this_hour = Column(Integer, default=0)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ─────────────────────────────────────────────────────────────
+# Session Activity Models
+# ─────────────────────────────────────────────────────────────
+
+
+class SessionActivityModel(Base):
+    """Session activity model for tracking user/agent activities."""
+
+    __tablename__ = "session_activities"
+
+    id = Column(String(36), primary_key=True)
+    session_id = Column(String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Activity details
+    activity_type = Column(String(50), nullable=False, index=True)  # message, tool_use, task_update, etc.
+    actor_type = Column(String(20), default="user")  # user, agent, system
+    actor_id = Column(String(100), nullable=True)  # user_id or agent_id
+
+    # Activity data
+    data = Column(JSONB, default=dict)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index("ix_session_activity_session", "session_id", "created_at"),
+        Index("ix_session_activity_type", "activity_type", "created_at"),
     )

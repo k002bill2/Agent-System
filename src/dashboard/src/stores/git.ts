@@ -116,7 +116,39 @@ export interface GitHubPRReview {
   commit_id: string | null
 }
 
-export type GitTab = 'branches' | 'merge-requests' | 'pull-requests' | 'history'
+export type GitTab = 'changes' | 'branches' | 'merge-requests' | 'pull-requests' | 'history'
+
+// Working Directory Types
+export type FileStatusType = 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | 'staged'
+
+export interface GitStatusFile {
+  path: string
+  status: FileStatusType
+  staged: boolean
+  old_path: string | null
+}
+
+export interface GitWorkingStatus {
+  branch: string
+  is_clean: boolean
+  staged_files: GitStatusFile[]
+  unstaged_files: GitStatusFile[]
+  untracked_files: GitStatusFile[]
+  total_changes: number
+}
+
+export interface AddResult {
+  success: boolean
+  staged_files: string[]
+  message: string
+}
+
+export interface CommitCreateResult {
+  success: boolean
+  commit_sha: string | null
+  message: string
+  files_committed: number
+}
 
 export interface GitRepository {
   id: string
@@ -153,6 +185,9 @@ interface GitState {
   // Git Status (for project configuration)
   gitStatus: GitStatus | null
 
+  // Working Directory Status
+  workingStatus: GitWorkingStatus | null
+
   // Branch Data
   branches: GitBranch[]
   currentBranch: string
@@ -186,6 +221,11 @@ interface GitState {
   // Actions - Git Status
   fetchGitStatus: (projectId: string) => Promise<GitStatus | null>
   updateGitPath: (projectId: string, gitPath: string | null) => Promise<boolean>
+
+  // Actions - Working Directory
+  fetchWorkingStatus: (projectId: string) => Promise<GitWorkingStatus | null>
+  stageFiles: (projectId: string, paths?: string[], all?: boolean) => Promise<boolean>
+  commitChanges: (projectId: string, message: string, authorName?: string, authorEmail?: string) => Promise<boolean>
 
   // Actions - Git Repositories
   fetchRepositories: () => Promise<void>
@@ -254,12 +294,13 @@ function extractErrorMessage(detail: unknown, fallback: string): string {
 
 export const useGitStore = create<GitState>((set, get) => ({
   // Initial State
-  activeTab: 'branches',
+  activeTab: 'changes',
   selectedProjectId: null,
   isLoading: false,
   error: null,
 
   gitStatus: null,
+  workingStatus: null,
 
   branches: [],
   currentBranch: '',
@@ -318,6 +359,71 @@ export const useGitStore = create<GitState>((set, get) => ({
       const status = await response.json()
       set({ gitStatus: status, isLoading: false })
       return status.is_valid_repo
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return false
+    }
+  },
+
+  // Working Directory Actions
+  fetchWorkingStatus: async (projectId) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/working-status`)
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch working status'))
+      }
+      const status = await response.json()
+      set({ workingStatus: status, isLoading: false })
+      return status
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return null
+    }
+  },
+
+  stageFiles: async (projectId, paths = [], all = false) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paths, all }),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to stage files'))
+      }
+      await get().fetchWorkingStatus(projectId)
+      set({ isLoading: false })
+      return true
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return false
+    }
+  },
+
+  commitChanges: async (projectId, message, authorName, authorEmail) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/commit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          author_name: authorName,
+          author_email: authorEmail,
+        }),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to create commit'))
+      }
+      await get().fetchWorkingStatus(projectId)
+      await get().fetchCommits(projectId)
+      set({ isLoading: false })
+      return true
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })
       return false

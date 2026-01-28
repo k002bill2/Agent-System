@@ -1,17 +1,22 @@
 """Audit trail service for logging all system actions."""
 
+import os
 import uuid
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
+from sqlalchemy import select, func, and_, desc
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.audit import (
     ComplianceAuditEntry,
     DataClassification,
     RetentionPolicy,
 )
+
+USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 
 
 class AuditAction(str, Enum):
@@ -127,7 +132,7 @@ class AuditLogResponse(BaseModel):
     offset: int
 
 
-# In-memory storage for development (will be replaced with DB)
+# In-memory storage for development fallback
 _audit_logs: list[AuditLogEntry] = []
 
 
@@ -135,6 +140,10 @@ class AuditService:
     """Service for managing audit logs."""
 
     _integrity_service = None
+    _db_session: AsyncSession | None = None
+
+    def __init__(self, use_database: bool = USE_DATABASE):
+        self.use_database = use_database
 
     @classmethod
     def _get_integrity_service(cls):
@@ -146,6 +155,30 @@ class AuditService:
             except ImportError:
                 pass
         return cls._integrity_service
+
+    @staticmethod
+    def _calculate_changes(old: dict, new: dict) -> dict:
+        """Calculate the difference between old and new values."""
+        changes = {}
+
+        # Added keys
+        for key in set(new.keys()) - set(old.keys()):
+            changes[key] = {"action": "added", "new": new[key]}
+
+        # Removed keys
+        for key in set(old.keys()) - set(new.keys()):
+            changes[key] = {"action": "removed", "old": old[key]}
+
+        # Modified keys
+        for key in set(old.keys()) & set(new.keys()):
+            if old[key] != new[key]:
+                changes[key] = {
+                    "action": "modified",
+                    "old": old[key],
+                    "new": new[key],
+                }
+
+        return changes
 
     @staticmethod
     def log(
@@ -167,9 +200,8 @@ class AuditService:
         compliance_flags: list[str] | None = None,
     ) -> AuditLogEntry:
         """
-        Log an audit event.
-
-        This is the main entry point for creating audit logs.
+        Log an audit event (sync version for in-memory).
+        For database persistence, use log_async.
         """
         # Calculate changes if both old and new values are provided
         changes = None
@@ -228,32 +260,88 @@ class AuditService:
         return entry
 
     @staticmethod
-    def _calculate_changes(old: dict, new: dict) -> dict:
-        """Calculate the difference between old and new values."""
-        changes = {}
+    async def log_async(
+        db: AsyncSession,
+        action: AuditAction,
+        resource_type: ResourceType,
+        resource_id: str | None = None,
+        session_id: str | None = None,
+        user_id: str | None = None,
+        agent_id: str | None = None,
+        old_value: dict | None = None,
+        new_value: dict | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+        metadata: dict | None = None,
+        status: str = "success",
+        error_message: str | None = None,
+        data_classification: DataClassification | None = None,
+        change_reason: str | None = None,
+        compliance_flags: list[str] | None = None,
+    ) -> AuditLogEntry:
+        """Log an audit event to the database."""
+        from db.models import AuditLogModel
 
-        # Added keys
-        for key in set(new.keys()) - set(old.keys()):
-            changes[key] = {"action": "added", "new": new[key]}
+        # Calculate changes if both old and new values are provided
+        changes = None
+        if old_value and new_value:
+            changes = AuditService._calculate_changes(old_value, new_value)
 
-        # Removed keys
-        for key in set(old.keys()) - set(new.keys()):
-            changes[key] = {"action": "removed", "old": old[key]}
+        entry_id = str(uuid.uuid4())
+        now = datetime.utcnow()
 
-        # Modified keys
-        for key in set(old.keys()) & set(new.keys()):
-            if old[key] != new[key]:
-                changes[key] = {
-                    "action": "modified",
-                    "old": old[key],
-                    "new": new[key],
-                }
+        # Create DB model
+        db_entry = AuditLogModel(
+            id=entry_id,
+            session_id=session_id,
+            user_id=user_id,
+            action=action.value,
+            resource_type=resource_type.value,
+            resource_id=resource_id,
+            old_value=old_value,
+            new_value=new_value,
+            changes=changes,
+            agent_id=agent_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            metadata_json=metadata or {},
+            status=status,
+            error_message=error_message,
+            data_classification=(data_classification or DataClassification.INTERNAL).value,
+            change_reason=change_reason,
+            compliance_flags=compliance_flags or [],
+            created_at=now,
+        )
 
-        return changes
+        db.add(db_entry)
+        await db.commit()
+
+        # Return Pydantic model
+        return AuditLogEntry(
+            id=entry_id,
+            session_id=session_id,
+            user_id=user_id,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            old_value=old_value,
+            new_value=new_value,
+            changes=changes,
+            agent_id=agent_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            metadata=metadata or {},
+            status=status,
+            error_message=error_message,
+            data_classification=data_classification or DataClassification.INTERNAL,
+            change_reason=change_reason,
+            compliance_flags=compliance_flags or [],
+            created_at=now,
+        )
 
     @staticmethod
     def query(filter: AuditLogFilter) -> AuditLogResponse:
-        """Query audit logs with filters."""
+        """Query audit logs with filters (in-memory)."""
         results = _audit_logs.copy()
 
         # Apply filters
@@ -297,16 +385,131 @@ class AuditService:
         )
 
     @staticmethod
+    async def query_async(db: AsyncSession, filter: AuditLogFilter) -> AuditLogResponse:
+        """Query audit logs with filters from database."""
+        from db.models import AuditLogModel
+
+        # Build query
+        conditions = []
+
+        if filter.session_id:
+            conditions.append(AuditLogModel.session_id == filter.session_id)
+
+        if filter.user_id:
+            conditions.append(AuditLogModel.user_id == filter.user_id)
+
+        if filter.action:
+            conditions.append(AuditLogModel.action == filter.action.value)
+
+        if filter.resource_type:
+            conditions.append(AuditLogModel.resource_type == filter.resource_type.value)
+
+        if filter.resource_id:
+            conditions.append(AuditLogModel.resource_id == filter.resource_id)
+
+        if filter.status:
+            conditions.append(AuditLogModel.status == filter.status)
+
+        if filter.start_date:
+            conditions.append(AuditLogModel.created_at >= filter.start_date)
+
+        if filter.end_date:
+            conditions.append(AuditLogModel.created_at <= filter.end_date)
+
+        # Count total
+        count_stmt = select(func.count()).select_from(AuditLogModel)
+        if conditions:
+            count_stmt = count_stmt.where(and_(*conditions))
+        total_result = await db.execute(count_stmt)
+        total = total_result.scalar() or 0
+
+        # Get paginated results
+        query = select(AuditLogModel)
+        if conditions:
+            query = query.where(and_(*conditions))
+        query = query.order_by(desc(AuditLogModel.created_at))
+        query = query.offset(filter.offset).limit(filter.limit)
+
+        result = await db.execute(query)
+        rows = result.scalars().all()
+
+        # Convert to Pydantic models
+        logs = []
+        for row in rows:
+            logs.append(AuditLogEntry(
+                id=row.id,
+                session_id=row.session_id,
+                user_id=row.user_id,
+                action=AuditAction(row.action),
+                resource_type=ResourceType(row.resource_type),
+                resource_id=row.resource_id,
+                old_value=row.old_value,
+                new_value=row.new_value,
+                changes=row.changes,
+                agent_id=row.agent_id,
+                ip_address=row.ip_address,
+                user_agent=row.user_agent,
+                metadata=row.metadata_json or {},
+                status=row.status,
+                error_message=row.error_message,
+                data_classification=DataClassification(row.data_classification) if row.data_classification else None,
+                change_reason=row.change_reason,
+                compliance_flags=row.compliance_flags or [],
+                previous_hash=row.previous_hash,
+                hash=row.hash,
+                created_at=row.created_at,
+            ))
+
+        return AuditLogResponse(
+            logs=logs,
+            total=total,
+            limit=filter.limit,
+            offset=filter.offset,
+        )
+
+    @staticmethod
     def get_by_id(log_id: str) -> AuditLogEntry | None:
-        """Get a specific audit log entry by ID."""
+        """Get a specific audit log entry by ID (in-memory)."""
         for log in _audit_logs:
             if log.id == log_id:
                 return log
         return None
 
     @staticmethod
+    async def get_by_id_async(db: AsyncSession, log_id: str) -> AuditLogEntry | None:
+        """Get a specific audit log entry by ID from database."""
+        from db.models import AuditLogModel
+
+        result = await db.execute(
+            select(AuditLogModel).where(AuditLogModel.id == log_id)
+        )
+        row = result.scalar_one_or_none()
+
+        if not row:
+            return None
+
+        return AuditLogEntry(
+            id=row.id,
+            session_id=row.session_id,
+            user_id=row.user_id,
+            action=AuditAction(row.action),
+            resource_type=ResourceType(row.resource_type),
+            resource_id=row.resource_id,
+            old_value=row.old_value,
+            new_value=row.new_value,
+            changes=row.changes,
+            agent_id=row.agent_id,
+            ip_address=row.ip_address,
+            user_agent=row.user_agent,
+            metadata=row.metadata_json or {},
+            status=row.status,
+            error_message=row.error_message,
+            created_at=row.created_at,
+        )
+
+    @staticmethod
     def get_session_audit_trail(session_id: str) -> list[AuditLogEntry]:
-        """Get all audit logs for a specific session."""
+        """Get all audit logs for a specific session (in-memory)."""
         return sorted(
             [log for log in _audit_logs if log.session_id == session_id],
             key=lambda x: x.created_at,
@@ -314,13 +517,32 @@ class AuditService:
         )
 
     @staticmethod
+    async def get_session_audit_trail_async(db: AsyncSession, session_id: str) -> list[AuditLogEntry]:
+        """Get all audit logs for a specific session from database."""
+        filter = AuditLogFilter(session_id=session_id, limit=1000)
+        response = await AuditService.query_async(db, filter)
+        return response.logs
+
+    @staticmethod
     def cleanup_old_logs(days: int = 30) -> int:
-        """Remove audit logs older than specified days."""
+        """Remove audit logs older than specified days (in-memory)."""
         global _audit_logs
         cutoff = datetime.utcnow() - timedelta(days=days)
         original_count = len(_audit_logs)
         _audit_logs = [log for log in _audit_logs if log.created_at >= cutoff]
         return original_count - len(_audit_logs)
+
+    @staticmethod
+    async def cleanup_old_logs_async(db: AsyncSession, days: int = 30) -> int:
+        """Remove audit logs older than specified days from database."""
+        from db.models import AuditLogModel
+        from sqlalchemy import delete
+
+        cutoff = datetime.utcnow() - timedelta(days=days)
+        stmt = delete(AuditLogModel).where(AuditLogModel.created_at < cutoff)
+        result = await db.execute(stmt)
+        await db.commit()
+        return result.rowcount
 
     @staticmethod
     def export_logs(

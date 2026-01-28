@@ -160,13 +160,51 @@ container = client.containers.run(
 
 **빌드**: `./infra/scripts/build-sandbox.sh`
 
-## Database Schema
+## Database
 
-주요 테이블:
-- `sessions`: 세션 정보
-- `tasks`: 태스크 트리
-- `users`: 사용자 (OAuth + Email)
-- `organizations`: 멀티테넌트 조직
-- `audit_logs`: 감사 로그
-- `feedback`: RLHF 피드백
-- `config_versions`: 설정 버전 관리
+### 데이터베이스 스택
+
+| DB | 용도 | 설명 |
+|----|------|------|
+| **PostgreSQL** | 메인 DB | 관계형 데이터 (사용자, 세션, 태스크 등) |
+| **Redis** | 캐시/세션 | 실시간 상태, 세션 스토어 |
+| **ChromaDB** | 벡터 DB | RAG용 임베딩 검색 |
+
+> ⚠️ **Firebase가 아닙니다!** PostgreSQL은 오픈소스 DB로 가입이 필요 없습니다.
+
+### 실행 방법
+
+```bash
+# Docker로 로컬 실행 (PostgreSQL, Redis, ChromaDB 모두 포함)
+cd infra/scripts && ./dev.sh
+```
+
+### 환경 변수
+
+```bash
+# PostgreSQL 연결
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/agent_orchestrator
+
+# DB 사용 여부 (false면 DB 없이 개발 가능)
+USE_DATABASE=false
+```
+
+### 프로덕션 배포 옵션
+
+로컬 Docker 외에 관리형 PostgreSQL 사용 가능:
+- **Railway** - 간편한 배포
+- **Supabase** - PostgreSQL + 인증 통합
+- **AWS RDS** - 엔터프라이즈급
+- **Neon** - 서버리스 PostgreSQL
+
+### Schema (주요 테이블)
+
+| 테이블 | 용도 |
+|--------|------|
+| `sessions` | 세션 정보 |
+| `tasks` | 태스크 트리 |
+| `users` | 사용자 (OAuth + Email) |
+| `organizations` | 멀티테넌트 조직 |
+| `audit_logs` | 감사 로그 |
+| `feedback` | RLHF 피드백 |
+| `config_versions` | 설정 버전 관리 |

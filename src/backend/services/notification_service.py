@@ -1,12 +1,14 @@
 """Notification service for sending alerts across multiple channels."""
 
-import asyncio
-import json
+import os
+import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from typing import Any
 
 import httpx
+from sqlalchemy import select, func, desc
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.notification import (
     NotificationChannel,
@@ -17,8 +19,11 @@ from models.notification import (
     NotificationRuleCreate,
     NotificationRuleUpdate,
     ChannelConfig,
+    NotificationCondition,
     format_notification,
 )
+
+USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 
 
 class NotificationAdapter(ABC):
@@ -129,7 +134,6 @@ class EmailAdapter(NotificationAdapter):
             return False, "Email address not configured"
 
         # TODO: Implement actual email sending (e.g., via SendGrid, SES)
-        print(f"[EMAIL] Would send to {config.email_address}: {message.title}")
         return True, None
 
 
@@ -174,7 +178,7 @@ ADAPTERS: dict[NotificationChannel, NotificationAdapter] = {
 }
 
 
-# In-memory storage
+# In-memory storage (fallback when USE_DATABASE=false)
 _rules: dict[str, NotificationRule] = {}
 _channel_configs: dict[NotificationChannel, ChannelConfig] = {}
 _notification_history: list[NotificationMessage] = []
@@ -183,19 +187,26 @@ _notification_history: list[NotificationMessage] = []
 class NotificationService:
     """Service for managing and sending notifications."""
 
+    def __init__(self, use_database: bool = USE_DATABASE):
+        self.use_database = use_database
+
+    # ─────────────────────────────────────────────────────────────
+    # Rule CRUD - In-memory (sync)
+    # ─────────────────────────────────────────────────────────────
+
     @staticmethod
     def get_rules() -> list[NotificationRule]:
-        """Get all notification rules."""
+        """Get all notification rules (in-memory)."""
         return list(_rules.values())
 
     @staticmethod
     def get_rule(rule_id: str) -> NotificationRule | None:
-        """Get a specific rule by ID."""
+        """Get a specific rule by ID (in-memory)."""
         return _rules.get(rule_id)
 
     @staticmethod
     def create_rule(data: NotificationRuleCreate) -> NotificationRule:
-        """Create a new notification rule."""
+        """Create a new notification rule (in-memory)."""
         rule = NotificationRule(
             name=data.name,
             description=data.description,
@@ -210,7 +221,7 @@ class NotificationService:
 
     @staticmethod
     def update_rule(rule_id: str, data: NotificationRuleUpdate) -> NotificationRule | None:
-        """Update an existing rule."""
+        """Update an existing rule (in-memory)."""
         rule = _rules.get(rule_id)
         if not rule:
             return None
@@ -237,23 +248,250 @@ class NotificationService:
 
     @staticmethod
     def delete_rule(rule_id: str) -> bool:
-        """Delete a rule."""
+        """Delete a rule (in-memory)."""
         if rule_id in _rules:
             del _rules[rule_id]
             return True
         return False
 
+    # ─────────────────────────────────────────────────────────────
+    # Rule CRUD - Database (async)
+    # ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    async def get_rules_async(db: AsyncSession) -> list[NotificationRule]:
+        """Get all notification rules from database."""
+        from db.models import NotificationRuleModel
+
+        result = await db.execute(select(NotificationRuleModel))
+        rows = result.scalars().all()
+
+        return [
+            NotificationRule(
+                id=row.id,
+                name=row.name,
+                description=row.description or "",
+                enabled=row.enabled,
+                event_type=NotificationEventType(row.event_type),
+                conditions=[NotificationCondition(**c) for c in (row.conditions or [])],
+                channels=[NotificationChannel(ch) for ch in (row.channels or [])],
+                priority=NotificationPriority(row.priority),
+                message_template=row.message_template,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+            for row in rows
+        ]
+
+    @staticmethod
+    async def get_rule_async(db: AsyncSession, rule_id: str) -> NotificationRule | None:
+        """Get a specific rule by ID from database."""
+        from db.models import NotificationRuleModel
+
+        result = await db.execute(
+            select(NotificationRuleModel).where(NotificationRuleModel.id == rule_id)
+        )
+        row = result.scalar_one_or_none()
+
+        if not row:
+            return None
+
+        return NotificationRule(
+            id=row.id,
+            name=row.name,
+            description=row.description or "",
+            enabled=row.enabled,
+            event_type=NotificationEventType(row.event_type),
+            conditions=[NotificationCondition(**c) for c in (row.conditions or [])],
+            channels=[NotificationChannel(ch) for ch in (row.channels or [])],
+            priority=NotificationPriority(row.priority),
+            message_template=row.message_template,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    @staticmethod
+    async def create_rule_async(db: AsyncSession, data: NotificationRuleCreate) -> NotificationRule:
+        """Create a new notification rule in database."""
+        from db.models import NotificationRuleModel
+
+        rule_id = str(uuid.uuid4())
+        now = datetime.utcnow()
+
+        db_rule = NotificationRuleModel(
+            id=rule_id,
+            name=data.name,
+            description=data.description,
+            enabled=True,
+            event_type=data.event_type.value,
+            conditions=[c.model_dump() for c in data.conditions],
+            channels=[ch.value for ch in data.channels],
+            priority=data.priority.value,
+            message_template=data.message_template,
+            created_at=now,
+            updated_at=now,
+        )
+
+        db.add(db_rule)
+        await db.commit()
+
+        return NotificationRule(
+            id=rule_id,
+            name=data.name,
+            description=data.description,
+            enabled=True,
+            event_type=data.event_type,
+            conditions=data.conditions,
+            channels=data.channels,
+            priority=data.priority,
+            message_template=data.message_template,
+            created_at=now,
+            updated_at=now,
+        )
+
+    @staticmethod
+    async def update_rule_async(
+        db: AsyncSession, rule_id: str, data: NotificationRuleUpdate
+    ) -> NotificationRule | None:
+        """Update an existing rule in database."""
+        from db.models import NotificationRuleModel
+
+        result = await db.execute(
+            select(NotificationRuleModel).where(NotificationRuleModel.id == rule_id)
+        )
+        row = result.scalar_one_or_none()
+
+        if not row:
+            return None
+
+        if data.name is not None:
+            row.name = data.name
+        if data.description is not None:
+            row.description = data.description
+        if data.enabled is not None:
+            row.enabled = data.enabled
+        if data.event_type is not None:
+            row.event_type = data.event_type.value
+        if data.conditions is not None:
+            row.conditions = [c.model_dump() for c in data.conditions]
+        if data.channels is not None:
+            row.channels = [ch.value for ch in data.channels]
+        if data.priority is not None:
+            row.priority = data.priority.value
+        if data.message_template is not None:
+            row.message_template = data.message_template
+
+        row.updated_at = datetime.utcnow()
+        await db.commit()
+
+        return await NotificationService.get_rule_async(db, rule_id)
+
+    @staticmethod
+    async def delete_rule_async(db: AsyncSession, rule_id: str) -> bool:
+        """Delete a rule from database."""
+        from db.models import NotificationRuleModel
+        from sqlalchemy import delete
+
+        result = await db.execute(
+            delete(NotificationRuleModel).where(NotificationRuleModel.id == rule_id)
+        )
+        await db.commit()
+        return result.rowcount > 0
+
+    # ─────────────────────────────────────────────────────────────
+    # Channel Config
+    # ─────────────────────────────────────────────────────────────
+
     @staticmethod
     def get_channel_config(channel: NotificationChannel) -> ChannelConfig:
-        """Get or create channel configuration."""
+        """Get or create channel configuration (in-memory)."""
         if channel not in _channel_configs:
             _channel_configs[channel] = ChannelConfig(channel=channel)
         return _channel_configs[channel]
 
     @staticmethod
     def set_channel_config(channel: NotificationChannel, config: ChannelConfig) -> None:
-        """Set channel configuration."""
+        """Set channel configuration (in-memory)."""
         _channel_configs[channel] = config
+
+    @staticmethod
+    async def get_channel_config_async(
+        db: AsyncSession, channel: NotificationChannel
+    ) -> ChannelConfig:
+        """Get or create channel configuration from database."""
+        from db.models import ChannelConfigModel
+
+        result = await db.execute(
+            select(ChannelConfigModel).where(ChannelConfigModel.channel == channel.value)
+        )
+        row = result.scalar_one_or_none()
+
+        if not row:
+            # Create default config
+            config_id = str(uuid.uuid4())
+            row = ChannelConfigModel(
+                id=config_id,
+                channel=channel.value,
+                enabled=True,
+            )
+            db.add(row)
+            await db.commit()
+
+        return ChannelConfig(
+            channel=channel,
+            enabled=row.enabled,
+            webhook_url=row.webhook_url,
+            api_key=row.api_key,
+            bot_token=row.bot_token,
+            email_address=row.email_address,
+            rate_limit_per_hour=row.rate_limit_per_hour,
+            last_sent=row.last_sent,
+            sent_this_hour=row.sent_this_hour,
+        )
+
+    @staticmethod
+    async def set_channel_config_async(
+        db: AsyncSession, channel: NotificationChannel, config: ChannelConfig
+    ) -> None:
+        """Set channel configuration in database."""
+        from db.models import ChannelConfigModel
+
+        result = await db.execute(
+            select(ChannelConfigModel).where(ChannelConfigModel.channel == channel.value)
+        )
+        row = result.scalar_one_or_none()
+
+        if row:
+            row.enabled = config.enabled
+            row.webhook_url = config.webhook_url
+            row.api_key = config.api_key
+            row.bot_token = config.bot_token
+            row.email_address = config.email_address
+            row.rate_limit_per_hour = config.rate_limit_per_hour
+            row.last_sent = config.last_sent
+            row.sent_this_hour = config.sent_this_hour
+            row.updated_at = datetime.utcnow()
+        else:
+            config_id = str(uuid.uuid4())
+            row = ChannelConfigModel(
+                id=config_id,
+                channel=channel.value,
+                enabled=config.enabled,
+                webhook_url=config.webhook_url,
+                api_key=config.api_key,
+                bot_token=config.bot_token,
+                email_address=config.email_address,
+                rate_limit_per_hour=config.rate_limit_per_hour,
+                last_sent=config.last_sent,
+                sent_this_hour=config.sent_this_hour,
+            )
+            db.add(row)
+
+        await db.commit()
+
+    # ─────────────────────────────────────────────────────────────
+    # Notification Sending
+    # ─────────────────────────────────────────────────────────────
 
     @staticmethod
     def _check_rate_limit(config: ChannelConfig) -> bool:
@@ -298,15 +536,7 @@ class NotificationService:
         title: str | None = None,
         force_channels: list[NotificationChannel] | None = None,
     ) -> NotificationMessage:
-        """
-        Send a notification based on rules or forced channels.
-
-        Args:
-            event_type: The type of event
-            data: Event data for template formatting
-            title: Optional custom title
-            force_channels: If specified, send to these channels ignoring rules
-        """
+        """Send a notification based on rules or forced channels (in-memory rules)."""
         # Find matching rules
         matching_rules = [
             rule
@@ -381,6 +611,121 @@ class NotificationService:
         return message
 
     @staticmethod
+    async def send_notification_async(
+        db: AsyncSession,
+        event_type: NotificationEventType,
+        data: dict[str, Any],
+        title: str | None = None,
+        force_channels: list[NotificationChannel] | None = None,
+    ) -> NotificationMessage:
+        """Send a notification based on rules from database."""
+        from db.models import NotificationRuleModel, NotificationHistoryModel
+
+        # Find matching rules from database
+        result = await db.execute(
+            select(NotificationRuleModel).where(
+                NotificationRuleModel.enabled == True,
+                NotificationRuleModel.event_type == event_type.value,
+            )
+        )
+        db_rules = result.scalars().all()
+
+        matching_rules = []
+        for row in db_rules:
+            rule = NotificationRule(
+                id=row.id,
+                name=row.name,
+                event_type=NotificationEventType(row.event_type),
+                conditions=[NotificationCondition(**c) for c in (row.conditions or [])],
+                channels=[NotificationChannel(ch) for ch in (row.channels or [])],
+                priority=NotificationPriority(row.priority),
+                message_template=row.message_template,
+            )
+            if NotificationService._check_conditions(rule, data):
+                matching_rules.append(rule)
+
+        # Determine channels and priority
+        if force_channels:
+            channels = force_channels
+            priority = NotificationPriority.MEDIUM
+            template = None
+            rule_id = None
+        elif matching_rules:
+            matching_rules.sort(key=lambda r: list(NotificationPriority).index(r.priority), reverse=True)
+            top_rule = matching_rules[0]
+            channels = list(set(ch for rule in matching_rules for ch in rule.channels))
+            priority = top_rule.priority
+            template = top_rule.message_template
+            rule_id = top_rule.id
+        else:
+            return NotificationMessage(
+                event_type=event_type,
+                title=title or str(event_type.value),
+                body="",
+                channels=[],
+                data=data,
+            )
+
+        # Format message
+        body = format_notification(event_type, data, template)
+
+        message = NotificationMessage(
+            event_type=event_type,
+            priority=priority,
+            title=title or event_type.value.replace("_", " ").title(),
+            body=body,
+            channels=channels,
+            data=data,
+            rule_id=rule_id,
+        )
+
+        # Send to each channel
+        for channel in channels:
+            config = await NotificationService.get_channel_config_async(db, channel)
+
+            if not config.enabled:
+                message.delivery_status[channel.value] = "disabled"
+                continue
+
+            if not NotificationService._check_rate_limit(config):
+                message.delivery_status[channel.value] = "rate_limited"
+                continue
+
+            adapter = ADAPTERS.get(channel)
+            if not adapter:
+                message.delivery_status[channel.value] = "no_adapter"
+                continue
+
+            success, error = await adapter.send(message, config)
+            if success:
+                message.delivery_status[channel.value] = "sent"
+                config.sent_this_hour += 1
+                config.last_sent = datetime.utcnow()
+                await NotificationService.set_channel_config_async(db, channel, config)
+            else:
+                message.delivery_status[channel.value] = f"failed: {error}"
+
+        message.sent_at = datetime.utcnow()
+
+        # Save to history
+        history_entry = NotificationHistoryModel(
+            id=message.id,
+            rule_id=rule_id,
+            event_type=event_type.value,
+            priority=priority.value,
+            title=message.title,
+            body=message.body,
+            data=message.data,
+            channels=[ch.value for ch in channels],
+            sent_at=message.sent_at,
+            delivery_status=message.delivery_status,
+        )
+        db.add(history_entry)
+        await db.commit()
+
+        return message
+
+    @staticmethod
     async def test_channel(
         channel: NotificationChannel,
     ) -> tuple[bool, str | None]:
@@ -407,8 +752,36 @@ class NotificationService:
 
     @staticmethod
     def get_history(limit: int = 100) -> list[NotificationMessage]:
-        """Get notification history."""
+        """Get notification history (in-memory)."""
         return _notification_history[-limit:]
+
+    @staticmethod
+    async def get_history_async(db: AsyncSession, limit: int = 100) -> list[NotificationMessage]:
+        """Get notification history from database."""
+        from db.models import NotificationHistoryModel
+
+        result = await db.execute(
+            select(NotificationHistoryModel)
+            .order_by(desc(NotificationHistoryModel.created_at))
+            .limit(limit)
+        )
+        rows = result.scalars().all()
+
+        return [
+            NotificationMessage(
+                id=row.id,
+                rule_id=row.rule_id,
+                event_type=NotificationEventType(row.event_type),
+                priority=NotificationPriority(row.priority),
+                title=row.title,
+                body=row.body,
+                data=row.data or {},
+                channels=[NotificationChannel(ch) for ch in (row.channels or [])],
+                sent_at=row.sent_at,
+                delivery_status=row.delivery_status or {},
+            )
+            for row in rows
+        ]
 
 
 # Convenience functions

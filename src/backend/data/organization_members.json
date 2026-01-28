@@ -1,0 +1,32 @@
+{
+  "e605ef75-0f7f-4ba5-863d-7bb6a4c70f15": {
+    "id": "e605ef75-0f7f-4ba5-863d-7bb6a4c70f15",
+    "organization_id": "c8f03856-9318-4ae5-b62a-58cfddc2fff1",
+    "user_id": "0f223ea8-bbd9-4e72-a380-5673551f483e",
+    "email": "k002bill2@gmail.com",
+    "name": "younghwnakang",
+    "role": "owner",
+    "permissions": [],
+    "is_active": true,
+    "invited_by": null,
+    "invited_at": null,
+    "joined_at": "2026-01-28 02:03:43.017069",
+    "last_active_at": null,
+    "created_at": "2026-01-28 02:03:43.017273"
+  },
+  "0f5da168-9dbc-4163-a457-737dd2acb515": {
+    "id": "0f5da168-9dbc-4163-a457-737dd2acb515",
+    "organization_id": "7e816f3e-24f8-43e2-8be6-7f29d3271da4",
+    "user_id": "0f223ea8-bbd9-4e72-a380-5673551f483e",
+    "email": "k002bill2@gmail.com",
+    "name": "younghwnakang",
+    "role": "owner",
+    "permissions": [],
+    "is_active": true,
+    "invited_by": null,
+    "invited_at": null,
+    "joined_at": "2026-01-28 02:04:15.759793",
+    "last_active_at": null,
+    "created_at": "2026-01-28 02:04:15.759880"
+  }
+}

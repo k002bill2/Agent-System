@@ -225,6 +225,62 @@ class MergeExecuteRequest(BaseModel):
 # Remote Operations Models
 # =============================================================================
 
+class FileStatusType(str, Enum):
+    """Type of file status in working directory."""
+    MODIFIED = "modified"
+    ADDED = "added"
+    DELETED = "deleted"
+    RENAMED = "renamed"
+    UNTRACKED = "untracked"
+    STAGED = "staged"
+
+
+class GitStatusFile(BaseModel):
+    """File status in working directory."""
+    path: str
+    status: FileStatusType
+    staged: bool = False  # Whether file is staged
+    old_path: str | None = None  # For renamed files
+
+
+class GitWorkingStatus(BaseModel):
+    """Git working directory status."""
+    branch: str
+    is_clean: bool
+    staged_files: list[GitStatusFile] = []
+    unstaged_files: list[GitStatusFile] = []
+    untracked_files: list[GitStatusFile] = []
+    total_changes: int = 0
+
+
+class AddRequest(BaseModel):
+    """Request to stage files."""
+    paths: list[str] = Field(default=[], description="File paths to stage. Empty list means all ('.')")
+    all: bool = Field(default=False, description="Stage all changes (git add -A)")
+
+
+class AddResult(BaseModel):
+    """Result of git add operation."""
+    success: bool
+    staged_files: list[str] = []
+    message: str = ""
+
+
+class CommitCreateRequest(BaseModel):
+    """Request to create a commit."""
+    message: str = Field(..., min_length=1, description="Commit message")
+    author_name: str | None = None
+    author_email: str | None = None
+
+
+class CommitCreateResult(BaseModel):
+    """Result of git commit operation."""
+    success: bool
+    commit_sha: str | None = None
+    message: str = ""
+    files_committed: int = 0
+
+
 class FetchResult(BaseModel):
     """Result of git fetch operation."""
     success: bool

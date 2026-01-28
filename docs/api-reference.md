@@ -286,12 +286,44 @@ AOS Backend API 엔드포인트 문서입니다.
 
 ## Git
 
+### Working Directory (NEW)
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/git/projects/{id}/working-status` | 작업 디렉토리 상태 (staged/unstaged/untracked) |
+| POST | `/api/git/projects/{id}/add` | 파일 스테이징 (git add) |
+| POST | `/api/git/projects/{id}/commit` | 커밋 생성 (git commit) |
+
+**Add 요청 본문**:
+```json
+{
+  "paths": ["file1.txt", "src/"],  // 특정 파일/폴더
+  "all": false                      // true면 git add -A
+}
+```
+
+**Commit 요청 본문**:
+```json
+{
+  "message": "feat: Add new feature",
+  "author_name": "John Doe",       // 선택
+  "author_email": "john@example.com" // 선택
+}
+```
+
+### Branches & Commits
+
 | Method | Path | 설명 |
 |--------|------|------|
 | GET | `/api/git/projects/{id}/branches` | 브랜치 목록 조회 |
 | POST | `/api/git/projects/{id}/branches` | 브랜치 생성 |
 | DELETE | `/api/git/projects/{id}/branches/{name}` | 브랜치 삭제 |
 | GET | `/api/git/projects/{id}/commits` | 커밋 히스토리 |
+
+### Remote Operations
+
+| Method | Path | 설명 |
+|--------|------|------|
 | POST | `/api/git/projects/{id}/fetch` | 리모트 fetch |
 | POST | `/api/git/projects/{id}/pull` | 리모트 pull |
 | POST | `/api/git/projects/{id}/push` | 리모트 push |

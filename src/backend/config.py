@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     # GitHub OAuth
     github_client_id: str = ""
     github_client_secret: str = ""
+    github_token: str = ""  # Personal Access Token for GitHub API
 
     # Frontend URL for OAuth redirects
     frontend_url: str = "http://localhost:5173"

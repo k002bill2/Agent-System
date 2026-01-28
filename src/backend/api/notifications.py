@@ -1,8 +1,10 @@
 """Notification API routes."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from db.database import get_db
 from models.notification import (
     NotificationChannel,
     NotificationEventType,
@@ -12,7 +14,7 @@ from models.notification import (
     NotificationMessage,
     ChannelConfig,
 )
-from services.notification_service import NotificationService
+from services.notification_service import NotificationService, USE_DATABASE
 
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -24,52 +26,76 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
 @router.get("/rules", response_model=list[NotificationRule])
-async def list_rules():
+async def list_rules(db: AsyncSession = Depends(get_db)):
     """Get all notification rules."""
+    if USE_DATABASE:
+        return await NotificationService.get_rules_async(db)
     return NotificationService.get_rules()
 
 
 @router.get("/rules/{rule_id}", response_model=NotificationRule)
-async def get_rule(rule_id: str):
+async def get_rule(rule_id: str, db: AsyncSession = Depends(get_db)):
     """Get a specific notification rule."""
-    rule = NotificationService.get_rule(rule_id)
+    if USE_DATABASE:
+        rule = await NotificationService.get_rule_async(db, rule_id)
+    else:
+        rule = NotificationService.get_rule(rule_id)
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
     return rule
 
 
 @router.post("/rules", response_model=NotificationRule)
-async def create_rule(data: NotificationRuleCreate):
+async def create_rule(data: NotificationRuleCreate, db: AsyncSession = Depends(get_db)):
     """Create a new notification rule."""
+    if USE_DATABASE:
+        return await NotificationService.create_rule_async(db, data)
     return NotificationService.create_rule(data)
 
 
 @router.put("/rules/{rule_id}", response_model=NotificationRule)
-async def update_rule(rule_id: str, data: NotificationRuleUpdate):
+async def update_rule(rule_id: str, data: NotificationRuleUpdate, db: AsyncSession = Depends(get_db)):
     """Update an existing notification rule."""
-    rule = NotificationService.update_rule(rule_id, data)
+    if USE_DATABASE:
+        rule = await NotificationService.update_rule_async(db, rule_id, data)
+    else:
+        rule = NotificationService.update_rule(rule_id, data)
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
     return rule
 
 
 @router.delete("/rules/{rule_id}")
-async def delete_rule(rule_id: str):
+async def delete_rule(rule_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a notification rule."""
-    if not NotificationService.delete_rule(rule_id):
+    if USE_DATABASE:
+        success = await NotificationService.delete_rule_async(db, rule_id)
+    else:
+        success = NotificationService.delete_rule(rule_id)
+    if not success:
         raise HTTPException(status_code=404, detail="Rule not found")
     return {"success": True, "message": "Rule deleted"}
 
 
 @router.post("/rules/{rule_id}/toggle")
-async def toggle_rule(rule_id: str):
+async def toggle_rule(rule_id: str, db: AsyncSession = Depends(get_db)):
     """Toggle a rule's enabled status."""
-    rule = NotificationService.get_rule(rule_id)
+    if USE_DATABASE:
+        rule = await NotificationService.get_rule_async(db, rule_id)
+    else:
+        rule = NotificationService.get_rule(rule_id)
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
 
-    rule.enabled = not rule.enabled
-    return {"success": True, "enabled": rule.enabled}
+    # Toggle and save
+    if USE_DATABASE:
+        from models.notification import NotificationRuleUpdate
+        await NotificationService.update_rule_async(
+            db, rule_id, NotificationRuleUpdate(enabled=not rule.enabled)
+        )
+    else:
+        rule.enabled = not rule.enabled
+    return {"success": True, "enabled": not rule.enabled}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -168,21 +194,33 @@ class SendNotificationRequest(BaseModel):
 
 
 @router.post("/send", response_model=NotificationMessage)
-async def send_notification(request: SendNotificationRequest):
+async def send_notification(request: SendNotificationRequest, db: AsyncSession = Depends(get_db)):
     """Manually send a notification."""
-    message = await NotificationService.send_notification(
-        event_type=request.event_type,
-        data=request.data,
-        title=request.title,
-        force_channels=request.channels,
-    )
+    if USE_DATABASE:
+        message = await NotificationService.send_notification_async(
+            db=db,
+            event_type=request.event_type,
+            data=request.data,
+            title=request.title,
+            force_channels=request.channels,
+        )
+    else:
+        message = await NotificationService.send_notification(
+            event_type=request.event_type,
+            data=request.data,
+            title=request.title,
+            force_channels=request.channels,
+        )
     return message
 
 
 @router.get("/history")
-async def get_notification_history(limit: int = 100):
+async def get_notification_history(limit: int = 100, db: AsyncSession = Depends(get_db)):
     """Get notification history."""
-    history = NotificationService.get_history(limit)
+    if USE_DATABASE:
+        history = await NotificationService.get_history_async(db, limit)
+    else:
+        history = NotificationService.get_history(limit)
     return {
         "notifications": history,
         "total": len(history),
