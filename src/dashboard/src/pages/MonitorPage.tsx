@@ -15,6 +15,7 @@ export function MonitorPage() {
     fetchProjectHealth,
     runAllChecks,
     clearError,
+    clearLogs,
   } = useMonitoringStore()
 
   const [showContext, setShowContext] = useState(true)
@@ -26,12 +27,13 @@ export function MonitorPage() {
     fetchProjects()
   }, [fetchProjects])
 
-  // Fetch health when project changes
+  // Fetch health when project changes and clear previous logs
   useEffect(() => {
     if (selectedProjectId) {
+      clearLogs() // 프로젝트 전환 시 이전 로그 클리어
       fetchProjectHealth(selectedProjectId)
     }
-  }, [selectedProjectId, fetchProjectHealth])
+  }, [selectedProjectId, fetchProjectHealth, clearLogs])
 
   // No project selected - show projects panel for selection
   if (!selectedProjectId || !selectedProject) {
