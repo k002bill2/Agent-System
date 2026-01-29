@@ -208,3 +208,35 @@ USE_DATABASE=false
 | `audit_logs` | 감사 로그 |
 | `feedback` | RLHF 피드백 |
 | `config_versions` | 설정 버전 관리 |
+
+### Database Migration (Alembic)
+
+스키마 변경 관리를 위한 Alembic 설정:
+
+```
+src/backend/
+├── alembic.ini              # 마이그레이션 설정
+└── alembic/
+    ├── env.py               # 환경 설정 (SQLAlchemy 연동)
+    ├── script.py.mako       # 마이그레이션 템플릿
+    └── versions/            # 마이그레이션 스크립트
+```
+
+**주요 명령어**:
+
+```bash
+# 새 마이그레이션 생성 (모델 변경 감지)
+alembic revision --autogenerate -m "Add new table"
+
+# 최신 버전으로 업그레이드
+alembic upgrade head
+
+# 한 단계 롤백
+alembic downgrade -1
+
+# 현재 버전 확인
+alembic current
+
+# 마이그레이션 히스토리
+alembic history
+```
