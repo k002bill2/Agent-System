@@ -60,9 +60,9 @@ interface SettingsState {
 }
 
 const defaultModels: Record<LLMProvider, string[]> = {
-  anthropic: ['claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku'],
-  openai: ['gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-  local: ['llama-3', 'mistral', 'codellama'],
+  anthropic: ['claude-opus-4-5-20250514', 'claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022'],
+  openai: ['gpt-4o', 'gpt-4o-mini', 'o1', 'o1-mini'],
+  local: ['qwen2.5:7b', 'llama3.2:latest', 'mistral:latest', 'deepseek-r1:8b'],
 }
 
 export const getModelsForProvider = (provider: LLMProvider) => defaultModels[provider]
@@ -99,7 +99,7 @@ export const useSettingsStore = create<SettingsState>()(
     (set) => ({
       // Default values
       llmProvider: 'anthropic',
-      model: 'claude-3-sonnet',
+      model: 'claude-sonnet-4-20250514',
       apiKey: '',
       backendUrl: 'http://localhost:8000',
       theme: 'light',

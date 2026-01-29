@@ -9,40 +9,78 @@ from langchain_core.tools import tool as langchain_tool
 import json
 
 
-# Model configurations
+# Model configurations (2025-01 Updated)
 MODEL_CONFIGS = {
-    # Anthropic
+    # Anthropic - Claude 4 series
+    "claude-opus-4-5-20250514": {
+        "provider": "anthropic",
+        "model": "claude-opus-4-5-20250514",
+        "context_window": 200000,
+        "pricing": {"input": 0.015, "output": 0.075},
+    },
     "claude-sonnet-4-20250514": {
         "provider": "anthropic",
         "model": "claude-sonnet-4-20250514",
         "context_window": 200000,
         "pricing": {"input": 0.003, "output": 0.015},
     },
-    "claude-opus-4-20250514": {
+    # Anthropic - Claude 3.5 series
+    "claude-3-5-sonnet-20241022": {
         "provider": "anthropic",
-        "model": "claude-opus-4-20250514",
+        "model": "claude-3-5-sonnet-20241022",
         "context_window": 200000,
-        "pricing": {"input": 0.015, "output": 0.075},
+        "pricing": {"input": 0.003, "output": 0.015},
     },
-    # Google
+    "claude-3-5-haiku-20241022": {
+        "provider": "anthropic",
+        "model": "claude-3-5-haiku-20241022",
+        "context_window": 200000,
+        "pricing": {"input": 0.0008, "output": 0.004},
+    },
+    # Google - Gemini 2.0 series
     "gemini-2.0-flash": {
         "provider": "google",
         "model": "gemini-2.0-flash",
         "context_window": 1000000,
         "pricing": {"input": 0.00025, "output": 0.001},
     },
-    # OpenAI
+    "gemini-2.0-flash-exp": {
+        "provider": "google",
+        "model": "gemini-2.0-flash-exp",
+        "context_window": 1000000,
+        "pricing": {"input": 0.0, "output": 0.0},  # Free during preview
+    },
+    "gemini-1.5-pro": {
+        "provider": "google",
+        "model": "gemini-1.5-pro",
+        "context_window": 2000000,
+        "pricing": {"input": 0.00125, "output": 0.005},
+    },
+    # OpenAI - GPT-4o series
     "gpt-4o": {
         "provider": "openai",
         "model": "gpt-4o",
         "context_window": 128000,
-        "pricing": {"input": 0.005, "output": 0.015},
+        "pricing": {"input": 0.0025, "output": 0.01},
     },
     "gpt-4o-mini": {
         "provider": "openai",
         "model": "gpt-4o-mini",
         "context_window": 128000,
         "pricing": {"input": 0.00015, "output": 0.0006},
+    },
+    # OpenAI - o1 reasoning series
+    "o1": {
+        "provider": "openai",
+        "model": "o1",
+        "context_window": 200000,
+        "pricing": {"input": 0.015, "output": 0.06},
+    },
+    "o1-mini": {
+        "provider": "openai",
+        "model": "o1-mini",
+        "context_window": 128000,
+        "pricing": {"input": 0.003, "output": 0.012},
     },
 }
 
