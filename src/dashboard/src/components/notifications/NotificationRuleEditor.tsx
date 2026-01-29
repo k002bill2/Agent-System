@@ -155,7 +155,16 @@ async function toggleRule(ruleId: string): Promise<{ enabled: boolean }> {
 
 async function updateChannel(
   channel: NotificationChannel,
-  data: { enabled?: boolean; webhook_url?: string; email_address?: string }
+  data: {
+    enabled?: boolean
+    webhook_url?: string
+    email_address?: string
+    smtp_host?: string
+    smtp_port?: number
+    smtp_username?: string
+    smtp_password?: string
+    smtp_use_tls?: boolean
+  }
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/notifications/channels/${channel}`, {
     method: 'PUT',
@@ -592,13 +601,26 @@ interface ChannelConfigFormProps {
 function ChannelConfigForm({ channel, onTest, testResult }: ChannelConfigFormProps) {
   const [webhookUrl, setWebhookUrl] = useState('')
   const [emailAddress, setEmailAddress] = useState('')
+  // SMTP settings
+  const [smtpHost, setSmtpHost] = useState('smtp.gmail.com')
+  const [smtpPort, setSmtpPort] = useState(587)
+  const [smtpUsername, setSmtpUsername] = useState('')
+  const [smtpPassword, setSmtpPassword] = useState('')
+  const [smtpUseTls, setSmtpUseTls] = useState(true)
   const [saving, setSaving] = useState(false)
 
   const handleSave = async () => {
     setSaving(true)
     try {
       if (channel === 'email') {
-        await updateChannel(channel, { email_address: emailAddress })
+        await updateChannel(channel, {
+          email_address: emailAddress,
+          smtp_host: smtpHost,
+          smtp_port: smtpPort,
+          smtp_username: smtpUsername,
+          smtp_password: smtpPassword,
+          smtp_use_tls: smtpUseTls,
+        })
       } else {
         await updateChannel(channel, { webhook_url: webhookUrl })
       }
@@ -649,20 +671,92 @@ function ChannelConfigForm({ channel, onTest, testResult }: ChannelConfigFormPro
         )
       case 'email':
         return (
-          <div>
-            <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-              Email Address
-            </label>
-            <input
-              type="email"
-              value={emailAddress}
-              onChange={(e) => setEmailAddress(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-              placeholder="alerts@example.com"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Email notifications require SMTP configuration
-            </p>
+          <div className="space-y-4">
+            {/* Recipient Email */}
+            <div>
+              <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                Recipient Email Address
+              </label>
+              <input
+                type="email"
+                value={emailAddress}
+                onChange={(e) => setEmailAddress(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                placeholder="alerts@example.com"
+              />
+            </div>
+
+            {/* SMTP Settings */}
+            <div className="border-t border-gray-200 dark:border-gray-600 pt-4">
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                SMTP Settings (Gmail)
+              </h4>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                    SMTP Host
+                  </label>
+                  <input
+                    type="text"
+                    value={smtpHost}
+                    onChange={(e) => setSmtpHost(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                    placeholder="smtp.gmail.com"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                    Port
+                  </label>
+                  <input
+                    type="number"
+                    value={smtpPort}
+                    onChange={(e) => setSmtpPort(parseInt(e.target.value) || 587)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                    placeholder="587"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                    Username (Gmail address)
+                  </label>
+                  <input
+                    type="email"
+                    value={smtpUsername}
+                    onChange={(e) => setSmtpUsername(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                    placeholder="your-email@gmail.com"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                    App Password
+                  </label>
+                  <input
+                    type="password"
+                    value={smtpPassword}
+                    onChange={(e) => setSmtpPassword(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                    placeholder="••••••••••••••••"
+                  />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="smtp-tls"
+                  checked={smtpUseTls}
+                  onChange={(e) => setSmtpUseTls(e.target.checked)}
+                  className="rounded border-gray-300 dark:border-gray-600"
+                />
+                <label htmlFor="smtp-tls" className="text-sm text-gray-600 dark:text-gray-400">
+                  Use TLS (recommended)
+                </label>
+              </div>
+              <p className="text-xs text-gray-500 mt-3">
+                💡 Gmail requires an <strong>App Password</strong>. Go to Google Account → Security → 2-Step Verification → App passwords
+              </p>
+            </div>
           </div>
         )
       case 'webhook':
@@ -696,15 +790,18 @@ function ChannelConfigForm({ channel, onTest, testResult }: ChannelConfigFormPro
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 text-sm"
         >
           <Save className="w-4 h-4" />
-          {saving ? 'Saving...' : 'Save'}
+          {saving ? 'Saving...' : '1. Save'}
         </button>
         <button
           onClick={onTest}
           className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-sm"
         >
           <TestTube className="w-4 h-4" />
-          Test
+          2. Test
         </button>
+        <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
+          💡 Save 먼저, 그 다음 Test
+        </span>
         {testResult && (
           <span
             className={cn(

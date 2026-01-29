@@ -1,0 +1,44 @@
+{
+  "task_id": "task_refactor_001",
+  "task_name": "Zustand Store 리팩토링",
+  "evaluated_at": "2025-01-28T00:00:00Z",
+  "k": 1,
+  "runs": [
+    {
+      "run_id": "run_001",
+      "timestamp": "2025-01-28T00:00:00Z",
+      "agent": "web-ui-specialist",
+      "duration_seconds": 0,
+      "outcome": {
+        "status": "ALREADY_DONE",
+        "reason": "Stores already separated into 17 domain-specific files",
+        "existing_stores": [
+          "agents.ts", "auth.ts", "claudeCodeActivity.ts", "claudeSessions.ts",
+          "claudeUsage.ts", "diff.ts", "feedback.ts", "git.ts", "mcp.ts",
+          "monitoring.ts", "navigation.ts", "orchestration.ts", "organizations.ts",
+          "permissions.ts", "projectConfigs.ts", "projects.ts", "settings.ts"
+        ]
+      },
+      "grades": {
+        "code_checks": {"passed": 5, "failed": 0, "score": 1.0},
+        "llm_evaluation": {
+          "score": 0.95,
+          "rubric": "ui_component",
+          "feedback": "Excellent store separation. Each domain has its own dedicated store with clear responsibilities."
+        },
+        "final_score": 0.97,
+        "grade": "A+"
+      },
+      "passed": true
+    }
+  ],
+  "metrics": {
+    "pass_at_1": 1.0,
+    "pass_at_k": 1.0,
+    "pass_power_k": 1.0,
+    "avg_score": 0.97,
+    "avg_duration_seconds": 0,
+    "success_rate": 1.0
+  },
+  "summary": "Task already completed. Stores are well-separated into domain-specific modules."
+}

@@ -72,6 +72,14 @@ from orchestrator.nodes import OrchestratorNode, PlannerNode, ExecutorNode, Revi
 from orchestrator.parallel_executor import ParallelExecutorNode
 from tools import ALL_TOOLS
 from services.session_service import SessionService, get_session_service
+from services.audit_service import (
+    AuditService,
+    AuditAction,
+    ResourceType,
+    audit_task_created,
+    audit_task_status_change,
+    audit_tool_executed,
+)
 
 
 class OrchestrationEngine:
@@ -151,6 +159,19 @@ class OrchestrationEngine:
         if state:
             self._sessions[session_id] = state
 
+        # Audit log: Session created
+        AuditService.log(
+            action=AuditAction.SESSION_CREATED,
+            resource_type=ResourceType.SESSION,
+            resource_id=session_id,
+            session_id=session_id,
+            user_id=user_id,
+            new_value={
+                "max_iterations": max_iterations,
+                "project_id": project.id if project else None,
+            },
+        )
+
         return session_id
 
     async def get_session(self, session_id: str) -> AgentState | None:
@@ -173,6 +194,15 @@ class OrchestrationEngine:
         # Also remove from memory cache
         if session_id in self._sessions:
             del self._sessions[session_id]
+
+        # Audit log: Session deleted
+        if result:
+            AuditService.log(
+                action=AuditAction.SESSION_DELETED,
+                resource_type=ResourceType.SESSION,
+                resource_id=session_id,
+                session_id=session_id,
+            )
 
         return result
 

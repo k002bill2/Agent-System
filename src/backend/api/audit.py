@@ -104,6 +104,80 @@ async def get_audit_logs(
     return AuditService.query(filter)
 
 
+@router.get("/stats")
+async def get_audit_stats(
+    session_id: str | None = Query(None),
+    start_date: datetime | None = Query(None),
+    end_date: datetime | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get audit statistics summary.
+
+    Returns counts for:
+    - Total actions
+    - Tool executions
+    - Approvals (HITL decisions)
+    - Errors (failed operations)
+    - Breakdown by action type and status
+    """
+    # Get all logs for stats calculation
+    filter = AuditLogFilter(
+        session_id=session_id,
+        start_date=start_date,
+        end_date=end_date,
+        limit=10000,  # Get enough for accurate stats
+        offset=0,
+    )
+
+    if USE_DATABASE:
+        response = await AuditService.query_async(db, filter)
+    else:
+        response = AuditService.query(filter)
+
+    logs = response.logs
+
+    # Calculate stats
+    total_actions = response.total
+    tool_executions = sum(1 for l in logs if "tool" in l.action.value.lower())
+    approvals = sum(1 for l in logs if "approval" in l.action.value.lower())
+    errors = sum(1 for l in logs if l.status == "failed")
+
+    # Group by action type
+    actions_by_type: dict[str, int] = {}
+    for log in logs:
+        action = log.action.value
+        actions_by_type[action] = actions_by_type.get(action, 0) + 1
+
+    # Group by status
+    actions_by_status: dict[str, int] = {}
+    for log in logs:
+        status = log.status
+        actions_by_status[status] = actions_by_status.get(status, 0) + 1
+
+    # Recent trend (last 7 days)
+    from collections import defaultdict
+    trend: dict[str, int] = defaultdict(int)
+    for log in logs:
+        date_str = log.created_at.strftime("%Y-%m-%d")
+        trend[date_str] += 1
+
+    recent_trend = [
+        {"date": date, "count": count}
+        for date, count in sorted(trend.items())[-7:]
+    ]
+
+    return {
+        "total_actions": total_actions,
+        "tool_executions": tool_executions,
+        "approvals": approvals,
+        "errors": errors,
+        "actions_by_type": actions_by_type,
+        "actions_by_status": actions_by_status,
+        "recent_trend": recent_trend,
+    }
+
+
 @router.get("/actions")
 async def get_audit_actions():
     """Get list of available audit actions."""
@@ -181,18 +255,6 @@ async def export_audit_logs(
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-
-
-@router.get("/{log_id}", response_model=AuditLogEntry)
-async def get_audit_log(log_id: str, db: AsyncSession = Depends(get_db)):
-    """Get a specific audit log entry by ID."""
-    if USE_DATABASE:
-        log = await AuditService.get_by_id_async(db, log_id)
-    else:
-        log = AuditService.get_by_id(log_id)
-    if not log:
-        raise HTTPException(status_code=404, detail="Audit log not found")
-    return log
 
 
 @router.get("/sessions/{session_id}/trail")
@@ -354,6 +416,92 @@ async def get_data_classifications():
     }
 
 
+@router.post("/seed")
+async def seed_sample_data(db: AsyncSession = Depends(get_db)):
+    """
+    Seed sample audit data for testing.
+    Creates various audit log entries to demonstrate the UI.
+    """
+    import random
+    from datetime import datetime, timedelta
+
+    sample_entries = []
+
+    # Use None for IDs to avoid FK constraints in DB mode
+    session_id = None if USE_DATABASE else "demo-session-001"
+    user_id = None if USE_DATABASE else "demo-user"
+
+    # Generate sample entries over the past week
+    now = datetime.utcnow()
+
+    sample_actions = [
+        (AuditAction.SESSION_CREATED, ResourceType.SESSION, "success"),
+        (AuditAction.TASK_CREATED, ResourceType.TASK, "success"),
+        (AuditAction.TASK_UPDATED, ResourceType.TASK, "success"),
+        (AuditAction.TOOL_EXECUTED, ResourceType.TOOL, "success"),
+        (AuditAction.TOOL_EXECUTED, ResourceType.TOOL, "success"),
+        (AuditAction.TOOL_EXECUTED, ResourceType.TOOL, "failed"),
+        (AuditAction.APPROVAL_REQUESTED, ResourceType.APPROVAL, "success"),
+        (AuditAction.APPROVAL_GRANTED, ResourceType.APPROVAL, "success"),
+        (AuditAction.TASK_COMPLETED, ResourceType.TASK, "success"),
+        (AuditAction.AGENT_ASSIGNED, ResourceType.AGENT, "success"),
+        (AuditAction.AGENT_COMPLETED, ResourceType.AGENT, "success"),
+    ]
+
+    tool_names = ["bash_execute", "file_read", "file_write", "code_search", "web_fetch"]
+    agent_names = ["orchestrator", "planner", "executor", "reviewer", "backend_agent"]
+
+    for i in range(30):
+        action, resource_type, status = random.choice(sample_actions)
+        days_ago = random.randint(0, 6)
+        hours_ago = random.randint(0, 23)
+
+        if USE_DATABASE:
+            # Use async version for database
+            entry = await AuditService.log_async(
+                db=db,
+                action=action,
+                resource_type=resource_type,
+                resource_id=f"resource-{i:04d}",
+                session_id=session_id,
+                user_id=user_id,
+                agent_id=random.choice(agent_names) if "AGENT" in action.value or "TOOL" in action.value else None,
+                new_value={
+                    "tool_name": random.choice(tool_names) if "TOOL" in action.value else None,
+                    "task_title": f"Sample task {i}" if "TASK" in action.value else None,
+                },
+                status=status,
+                error_message="Tool execution timeout" if status == "failed" else None,
+            )
+        else:
+            # Use sync version for in-memory
+            entry = AuditService.log(
+                action=action,
+                resource_type=resource_type,
+                resource_id=f"resource-{i:04d}",
+                session_id=session_id,
+                user_id=user_id,
+                agent_id=random.choice(agent_names) if "AGENT" in action.value or "TOOL" in action.value else None,
+                new_value={
+                    "tool_name": random.choice(tool_names) if "TOOL" in action.value else None,
+                    "task_title": f"Sample task {i}" if "TASK" in action.value else None,
+                },
+                status=status,
+                error_message="Tool execution timeout" if status == "failed" else None,
+            )
+
+            # Adjust created_at for realistic distribution (only for in-memory)
+            entry.created_at = now - timedelta(days=days_ago, hours=hours_ago, minutes=random.randint(0, 59))
+
+        sample_entries.append(entry)
+
+    return {
+        "success": True,
+        "message": f"Created {len(sample_entries)} sample audit entries",
+        "session_id": session_id,
+    }
+
+
 @router.get("/retention-policies")
 async def get_retention_policies():
     """Get list of available retention policies."""
@@ -369,3 +517,20 @@ async def get_retention_policies():
             for rp in RetentionPolicy
         ]
     }
+
+
+# ─────────────────────────────────────────────────────────────
+# Single log entry by ID (MUST be at the end to avoid matching other routes)
+# ─────────────────────────────────────────────────────────────
+
+
+@router.get("/{log_id}", response_model=AuditLogEntry)
+async def get_audit_log(log_id: str, db: AsyncSession = Depends(get_db)):
+    """Get a specific audit log entry by ID."""
+    if USE_DATABASE:
+        log = await AuditService.get_by_id_async(db, log_id)
+    else:
+        log = AuditService.get_by_id(log_id)
+    if not log:
+        raise HTTPException(status_code=404, detail="Audit log not found")
+    return log

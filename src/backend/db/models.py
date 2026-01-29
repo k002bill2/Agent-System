@@ -600,6 +600,13 @@ class ChannelConfigModel(Base):
     bot_token = Column(String(500), nullable=True)
     email_address = Column(String(255), nullable=True)
 
+    # SMTP settings for email
+    smtp_host = Column(String(255), nullable=True)
+    smtp_port = Column(Integer, default=587)
+    smtp_username = Column(String(255), nullable=True)
+    smtp_password = Column(String(500), nullable=True)  # App password (encrypted in production)
+    smtp_use_tls = Column(Boolean, default=True)
+
     # Rate limiting
     rate_limit_per_hour = Column(Integer, default=60)
     last_sent = Column(DateTime, nullable=True)

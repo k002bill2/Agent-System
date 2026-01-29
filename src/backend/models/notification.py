@@ -51,6 +51,13 @@ class ChannelConfig(BaseModel):
     bot_token: str | None = None
     email_address: str | None = None
 
+    # SMTP settings for email
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None  # App password for Gmail
+    smtp_use_tls: bool = True
+
     # Rate limiting
     rate_limit_per_hour: int = 60
     last_sent: datetime | None = None

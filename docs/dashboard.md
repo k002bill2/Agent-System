@@ -151,6 +151,12 @@ import { cn } from '@/lib/utils';
 | `InviteMemberModal` | 멤버 초대 모달 |
 | `OrganizationStats` | 조직 통계 패널 |
 
+### RAG Components
+
+| 컴포넌트 | 설명 |
+|----------|------|
+| `RAGQueryPanel` | RAG 의미론적 검색 패널 (쿼리, 결과, 통계, 인덱스 관리) |
+
 ### Other Components
 
 | 컴포넌트 | 설명 |
@@ -242,7 +248,8 @@ src/dashboard/
 │   │   ├── llm-router/     # LLM 라우터
 │   │   ├── version-control/# 버전 관리
 │   │   ├── git/            # Git 관리
-│   │   └── organizations/  # 조직 관리
+│   │   ├── organizations/  # 조직 관리
+│   │   └── rag/            # RAG 검색
 │   ├── stores/             # Zustand 스토어
 │   ├── hooks/              # 커스텀 훅
 │   ├── lib/                # 유틸리티

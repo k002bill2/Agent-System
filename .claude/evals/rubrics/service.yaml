@@ -1,0 +1,114 @@
+# Service/API Evaluation Rubric
+# Backend 서비스 및 API 평가 기준
+
+rubric_id: service
+version: "1.0"
+description: Backend 서비스 및 API 품질 평가 루브릭
+
+# 코드 검사 (자동화 가능)
+code_checks:
+  file_existence:
+    weight: 10
+    description: 필수 파일 존재 여부
+    checks:
+      - type: file_exists
+        pattern: "{expected_files}"
+
+  test_existence:
+    weight: 10
+    description: 테스트 파일 존재 여부
+    checks:
+      - type: file_exists
+        pattern: "*_test.py"
+
+  type_hints:
+    weight: 10
+    description: 타입 힌트 사용
+    checks:
+      - type: pattern_present
+        pattern: "def.*->.*:"
+        message: "함수 반환 타입 필요"
+      - type: pattern_present
+        pattern: "async def.*->.*:"
+        message: "비동기 함수 반환 타입 필요"
+
+  error_handling:
+    weight: 10
+    description: 에러 처리
+    checks:
+      - type: pattern_present
+        pattern: "try:|except|raise"
+        message: "적절한 에러 처리 필요"
+
+# LLM 평가 기준
+llm_grading:
+  dimensions:
+    api_design:
+      weight: 25
+      description: API 설계
+      criteria:
+        5: RESTful 원칙 준수, 명확한 엔드포인트, 적절한 HTTP 메서드
+        4: 좋은 API 설계, 사소한 개선 여지
+        3: 기능적으로 동작하는 API
+        2: API 설계 원칙 일부 위반
+        1: API 설계 원칙 심각하게 위반
+
+    error_handling:
+      weight: 25
+      description: 에러 처리 품질
+      criteria:
+        5: 포괄적인 에러 처리, 명확한 에러 메시지, 적절한 HTTP 상태 코드
+        4: 좋은 에러 처리, 사소한 개선 여지
+        3: 기본적인 에러 처리
+        2: 에러 처리 부족
+        1: 에러 처리 거의 없음
+
+    data_validation:
+      weight: 20
+      description: 데이터 검증
+      criteria:
+        5: Pydantic 모델 활용, 완벽한 입력 검증
+        4: 좋은 데이터 검증
+        3: 기본적인 검증
+        2: 검증 부족
+        1: 검증 거의 없음
+
+    performance:
+      weight: 15
+      description: 성능 고려
+      criteria:
+        5: 비동기 처리, 캐싱, 쿼리 최적화
+        4: 성능 잘 고려됨
+        3: 기본적인 성능 고려
+        2: 성능 문제 존재
+        1: 심각한 성능 문제
+
+    security:
+      weight: 15
+      description: 보안 고려
+      criteria:
+        5: 인증/인가, SQL 인젝션 방지, 입력 sanitization
+        4: 보안 잘 고려됨
+        3: 기본적인 보안 고려
+        2: 보안 취약점 존재
+        1: 심각한 보안 문제
+
+# 점수 계산
+scoring:
+  code_checks_total: 40
+  llm_grading_total: 60
+  passing_threshold: 0.7
+
+# 피드백 템플릿
+feedback_template: |
+  ## 코드 검사 결과 ({code_score}%)
+  {code_feedback}
+
+  ## LLM 평가 결과 ({llm_score}%)
+  {llm_feedback}
+
+  ## 총점: {total_score}%
+  ## 결과: {result}
+
+  ## 개선 제안
+  {suggestions}

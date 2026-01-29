@@ -1,0 +1,58 @@
+# Task: 무한 리렌더링 버그 수정
+id: task_bug_001
+name: "useEffect 무한 리렌더링 버그 수정"
+category: bug_fix
+difficulty: easy
+
+description: |
+  Dashboard의 특정 컴포넌트에서 useEffect 의존성 배열 문제로
+  무한 리렌더링이 발생하는 버그를 수정합니다.
+
+  버그 재현:
+  1. 대시보드 페이지 접속
+  2. 콘솔에서 지속적인 API 호출 확인
+  3. 메모리 사용량 급증
+
+acceptance_criteria:
+  - 무한 리렌더링 중단
+  - 기존 기능 유지
+  - 회귀 테스트 추가
+  - 근본 원인 설명
+
+input:
+  prompt: |
+    Dashboard 컴포넌트에서 무한 리렌더링 버그가 발생합니다.
+
+    증상:
+    - useEffect가 무한 반복 실행
+    - API가 지속적으로 호출됨
+    - 브라우저 성능 저하
+
+    원인을 분석하고 수정해주세요.
+    회귀 테스트도 추가해주세요.
+  context_files:
+    - src/dashboard/src/pages/Dashboard.tsx
+  dependencies: []
+
+expected_output:
+  files:
+    - src/dashboard/src/pages/Dashboard.tsx
+  patterns:
+    - "useEffect"
+    - "useCallback|useMemo"
+  forbidden_patterns:
+    - "// eslint-disable"
+
+evaluation:
+  timeout_minutes: 15
+  rubric: bug_fix.yaml
+  weights:
+    code_checks: 50
+    llm_grading: 50
+  passing_score: 0.75
+
+metadata:
+  created_at: 2025-01-28
+  author: system
+  tags: [bug, react, hooks, performance]
+  recommended_agent: performance-optimizer

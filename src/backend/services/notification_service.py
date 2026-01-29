@@ -1,11 +1,15 @@
 """Notification service for sending alerts across multiple channels."""
 
 import os
+import ssl
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from typing import Any
 
+import aiosmtplib
 import httpx
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -125,7 +129,7 @@ class DiscordAdapter(NotificationAdapter):
 
 
 class EmailAdapter(NotificationAdapter):
-    """Email notification adapter (placeholder)."""
+    """Email notification adapter using SMTP."""
 
     async def send(
         self, message: NotificationMessage, config: ChannelConfig
@@ -133,8 +137,66 @@ class EmailAdapter(NotificationAdapter):
         if not config.email_address:
             return False, "Email address not configured"
 
-        # TODO: Implement actual email sending (e.g., via SendGrid, SES)
-        return True, None
+        if not config.smtp_host or not config.smtp_username or not config.smtp_password:
+            return False, "SMTP settings not configured"
+
+        # Build email message
+        email_msg = MIMEMultipart("alternative")
+        email_msg["Subject"] = f"[AOS] {message.title}"
+        email_msg["From"] = config.smtp_username
+        email_msg["To"] = config.email_address
+
+        # Priority header
+        priority_map = {
+            NotificationPriority.LOW: "5",
+            NotificationPriority.MEDIUM: "3",
+            NotificationPriority.HIGH: "2",
+            NotificationPriority.URGENT: "1",
+        }
+        email_msg["X-Priority"] = priority_map.get(message.priority, "3")
+
+        # Plain text and HTML versions
+        text_content = f"{message.title}\n\n{message.body}"
+        html_content = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; padding: 20px;">
+            <h2 style="color: #333;">{message.title}</h2>
+            <p style="color: #666; line-height: 1.6;">{message.body}</p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+            <p style="color: #999; font-size: 12px;">
+                Sent by Agent Orchestration Service
+            </p>
+        </body>
+        </html>
+        """
+
+        email_msg.attach(MIMEText(text_content, "plain"))
+        email_msg.attach(MIMEText(html_content, "html"))
+
+        try:
+            # Create SSL context for TLS
+            if config.smtp_use_tls:
+                tls_context = ssl.create_default_context()
+            else:
+                tls_context = None
+
+            # Send email via SMTP
+            await aiosmtplib.send(
+                email_msg,
+                hostname=config.smtp_host,
+                port=config.smtp_port,
+                username=config.smtp_username,
+                password=config.smtp_password,
+                start_tls=config.smtp_use_tls,
+                tls_context=tls_context,
+            )
+            return True, None
+        except aiosmtplib.SMTPAuthenticationError:
+            return False, "SMTP authentication failed. Check username/app password"
+        except aiosmtplib.SMTPConnectError:
+            return False, f"Cannot connect to SMTP server {config.smtp_host}:{config.smtp_port}"
+        except Exception as e:
+            return False, f"Email send failed: {str(e)}"
 
 
 class WebhookAdapter(NotificationAdapter):
@@ -444,6 +506,11 @@ class NotificationService:
             api_key=row.api_key,
             bot_token=row.bot_token,
             email_address=row.email_address,
+            smtp_host=row.smtp_host,
+            smtp_port=row.smtp_port or 587,
+            smtp_username=row.smtp_username,
+            smtp_password=row.smtp_password,
+            smtp_use_tls=row.smtp_use_tls if row.smtp_use_tls is not None else True,
             rate_limit_per_hour=row.rate_limit_per_hour,
             last_sent=row.last_sent,
             sent_this_hour=row.sent_this_hour,
@@ -467,6 +534,11 @@ class NotificationService:
             row.api_key = config.api_key
             row.bot_token = config.bot_token
             row.email_address = config.email_address
+            row.smtp_host = config.smtp_host
+            row.smtp_port = config.smtp_port
+            row.smtp_username = config.smtp_username
+            row.smtp_password = config.smtp_password
+            row.smtp_use_tls = config.smtp_use_tls
             row.rate_limit_per_hour = config.rate_limit_per_hour
             row.last_sent = config.last_sent
             row.sent_this_hour = config.sent_this_hour
@@ -481,6 +553,11 @@ class NotificationService:
                 api_key=config.api_key,
                 bot_token=config.bot_token,
                 email_address=config.email_address,
+                smtp_host=config.smtp_host,
+                smtp_port=config.smtp_port,
+                smtp_username=config.smtp_username,
+                smtp_password=config.smtp_password,
+                smtp_use_tls=config.smtp_use_tls,
                 rate_limit_per_hour=config.rate_limit_per_hour,
                 last_sent=config.last_sent,
                 sent_this_hour=config.sent_this_hour,

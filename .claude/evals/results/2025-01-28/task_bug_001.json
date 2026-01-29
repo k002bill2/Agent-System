@@ -1,0 +1,66 @@
+{
+  "task_id": "task_bug_001",
+  "task_name": "useEffect 무한 리렌더링 버그 수정",
+  "evaluated_at": "2025-01-28T07:25:00Z",
+  "k": 1,
+  "runs": [
+    {
+      "run_id": "run_001",
+      "timestamp": "2025-01-28T07:25:00Z",
+      "agent": "performance-optimizer",
+      "duration_seconds": 180,
+      "outcome": {
+        "status": "COMPLETED",
+        "files_modified": [
+          "src/dashboard/src/pages/Dashboard.tsx"
+        ],
+        "bugs_fixed": [
+          "useEffect 의존성 배열에서 stats 순환 참조 제거",
+          "filter 객체를 원시값(filterStatus, filterSearch)으로 분리",
+          "useMemo로 stats 계산 최적화",
+          "useMemo로 filteredStations 캐싱",
+          "useCallback으로 handleFilterChange 메모이제이션"
+        ],
+        "root_cause": "stats가 useEffect 의존성에 포함되어 stats 업데이트 → 리렌더링 → useEffect 재실행 → 무한 루프 발생",
+        "test_cases": 0
+      },
+      "grades": {
+        "code_checks": {
+          "passed": 4,
+          "failed": 1,
+          "score": 0.80,
+          "details": [
+            {"check": "infinite_loop_fixed", "passed": true},
+            {"check": "useCallback_applied", "passed": true},
+            {"check": "useMemo_applied", "passed": true},
+            {"check": "no_eslint_disable", "passed": true},
+            {"check": "regression_test_added", "passed": false, "note": "테스트 파일 미생성"}
+          ]
+        },
+        "llm_evaluation": {
+          "score": 0.88,
+          "rubric": "bug_fix",
+          "dimensions": {
+            "root_cause_analysis": 5,
+            "fix_correctness": 5,
+            "side_effects": 5,
+            "documentation": 4,
+            "regression_prevention": 3
+          }
+        },
+        "final_score": 0.84,
+        "grade": "B+"
+      },
+      "passed": true
+    }
+  ],
+  "metrics": {
+    "pass_at_1": 1.0,
+    "pass_at_k": 1.0,
+    "pass_power_k": 1.0,
+    "avg_score": 0.84,
+    "avg_duration_seconds": 180,
+    "success_rate": 1.0
+  },
+  "summary": "useEffect 무한 리렌더링 버그 성공적으로 수정. useMemo/useCallback 적용하여 순환 참조 제거. 회귀 테스트는 미추가."
+}

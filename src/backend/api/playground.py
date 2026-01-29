@@ -14,6 +14,7 @@ from models.playground import (
     PlaygroundCompareResult,
 )
 from services.playground_service import PlaygroundService
+from services.llm_service import LLMService
 
 
 router = APIRouter(prefix="/playground", tags=["playground"])
@@ -176,35 +177,5 @@ async def compare_agents(request: PlaygroundCompareRequest):
 @router.get("/models")
 async def list_available_models():
     """List available models for playground."""
-    return {
-        "models": [
-            {
-                "id": "claude-sonnet-4-20250514",
-                "name": "Claude Sonnet 4",
-                "provider": "anthropic",
-                "context_window": 200000,
-                "pricing": {"input": 0.003, "output": 0.015},
-            },
-            {
-                "id": "claude-opus-4-20250514",
-                "name": "Claude Opus 4",
-                "provider": "anthropic",
-                "context_window": 200000,
-                "pricing": {"input": 0.015, "output": 0.075},
-            },
-            {
-                "id": "gemini-2.0-flash-exp",
-                "name": "Gemini 2.0 Flash",
-                "provider": "google",
-                "context_window": 1000000,
-                "pricing": {"input": 0.00025, "output": 0.001},
-            },
-            {
-                "id": "gpt-4o",
-                "name": "GPT-4o",
-                "provider": "openai",
-                "context_window": 128000,
-                "pricing": {"input": 0.005, "output": 0.015},
-            },
-        ]
-    }
+    models = LLMService.get_available_models()
+    return {"models": models}

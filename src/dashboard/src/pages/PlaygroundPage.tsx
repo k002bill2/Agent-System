@@ -34,6 +34,8 @@ interface PlaygroundMessage {
   timestamp: string
   tokens?: number
   latency_ms?: number
+  tool_calls?: Array<{ name: string; arguments: Record<string, unknown> }>
+  tool_results?: Array<{ tool: string; result: unknown }>
 }
 
 interface PlaygroundSession {
@@ -67,6 +69,7 @@ interface Model {
   provider: string
   context_window: number
   pricing: { input: number; output: number }
+  available: boolean
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -85,11 +88,11 @@ async function fetchSessions(): Promise<PlaygroundSession[]> {
   return res.json()
 }
 
-async function createSession(name: string): Promise<PlaygroundSession> {
+async function createSession(name: string, model?: string): Promise<PlaygroundSession> {
   const res = await fetch(`${API_BASE}/playground/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, ...(model && { model }) }),
   })
   if (!res.ok) throw new Error('Failed to create session')
   return res.json()
@@ -204,7 +207,10 @@ export function PlaygroundPage() {
 
   const handleCreateSession = async () => {
     try {
-      const session = await createSession(`Session ${sessions.length + 1}`)
+      // Use first available model
+      const availableModels = models.filter(m => m.available)
+      const defaultModel = availableModels.length > 0 ? availableModels[0].id : undefined
+      const session = await createSession(`Session ${sessions.length + 1}`, defaultModel)
       setSessions((prev) => [session, ...prev])
       setCurrentSession(session)
     } catch (e) {
@@ -441,12 +447,15 @@ export function PlaygroundPage() {
                       onChange={(e) => handleUpdateSettings({ model: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     >
-                      {models.map((m) => (
+                      {models.filter(m => m.available).map((m) => (
                         <option key={m.id} value={m.id}>
                           {m.name} ({m.provider})
                         </option>
                       ))}
                     </select>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {models.filter(m => m.available).length} of {models.length} models available
+                    </p>
                   </div>
 
                   {/* Temperature */}
@@ -556,6 +565,34 @@ interface MessageBubbleProps {
 
 function MessageBubble({ message, onCopy, copied }: MessageBubbleProps) {
   const isUser = message.role === 'user'
+  const isTool = message.role === 'tool'
+
+  // Tool call message - special styling
+  if (isTool) {
+    return (
+      <div className="flex gap-3 justify-center">
+        <div className="max-w-[90%] rounded-lg px-4 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+            <Wrench className="w-4 h-4" />
+            <span className="text-sm font-medium">Tool Call</span>
+          </div>
+          <div className="mt-1 text-sm text-amber-600 dark:text-amber-300 font-mono">
+            {message.content}
+          </div>
+          {message.tool_results && message.tool_results.length > 0 && (
+            <details className="mt-2">
+              <summary className="text-xs text-amber-500 cursor-pointer hover:text-amber-600">
+                View Result
+              </summary>
+              <pre className="mt-1 text-xs bg-amber-100 dark:bg-amber-900/30 p-2 rounded overflow-x-auto max-h-32">
+                {JSON.stringify(message.tool_results[0]?.result, null, 2)?.slice(0, 500)}
+              </pre>
+            </details>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={cn('flex gap-3', isUser && 'flex-row-reverse')}>
@@ -585,13 +622,13 @@ function MessageBubble({ message, onCopy, copied }: MessageBubbleProps) {
         {!isUser && (
           <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
             <div className="flex items-center gap-3 text-xs text-gray-500">
-              {message.tokens && (
+              {message.tokens !== undefined && message.tokens > 0 && (
                 <span className="flex items-center gap-1">
                   <Zap className="w-3 h-3" />
                   {message.tokens}
                 </span>
               )}
-              {message.latency_ms && (
+              {message.latency_ms !== undefined && message.latency_ms > 0 && (
                 <span className="flex items-center gap-1">
                   <Clock className="w-3 h-3" />
                   {message.latency_ms}ms

@@ -1,0 +1,2 @@
+# 평가 결과 저장 디렉토리
+# 구조: results/{date}/task_{id}.json

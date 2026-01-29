@@ -111,6 +111,12 @@ class ChannelConfigRequest(BaseModel):
     api_key: str | None = None
     bot_token: str | None = None
     email_address: str | None = None
+    # SMTP settings for email
+    smtp_host: str | None = None
+    smtp_port: int | None = None
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_use_tls: bool | None = None
     rate_limit_per_hour: int | None = None
 
 
@@ -120,10 +126,17 @@ async def list_channels():
     channels = []
     for channel in NotificationChannel:
         config = NotificationService.get_channel_config(channel)
+        # Email requires SMTP settings, others require webhook/API key
+        if channel == NotificationChannel.EMAIL:
+            is_configured = bool(
+                config.email_address and config.smtp_host and config.smtp_username and config.smtp_password
+            )
+        else:
+            is_configured = bool(config.webhook_url or config.api_key)
         channels.append({
             "channel": channel.value,
             "enabled": config.enabled,
-            "configured": bool(config.webhook_url or config.api_key or config.email_address),
+            "configured": is_configured,
             "rate_limit_per_hour": config.rate_limit_per_hour,
             "sent_this_hour": config.sent_this_hour,
         })
@@ -140,6 +153,12 @@ async def get_channel_config(channel: NotificationChannel):
         "webhook_url": "***" if config.webhook_url else None,  # Mask sensitive data
         "api_key": "***" if config.api_key else None,
         "email_address": config.email_address,
+        # SMTP settings (password masked)
+        "smtp_host": config.smtp_host,
+        "smtp_port": config.smtp_port,
+        "smtp_username": config.smtp_username,
+        "smtp_password": "***" if config.smtp_password else None,
+        "smtp_use_tls": config.smtp_use_tls,
         "rate_limit_per_hour": config.rate_limit_per_hour,
         "sent_this_hour": config.sent_this_hour,
     }
@@ -160,6 +179,17 @@ async def update_channel_config(channel: NotificationChannel, data: ChannelConfi
         config.bot_token = data.bot_token
     if data.email_address is not None:
         config.email_address = data.email_address
+    # SMTP settings
+    if data.smtp_host is not None:
+        config.smtp_host = data.smtp_host
+    if data.smtp_port is not None:
+        config.smtp_port = data.smtp_port
+    if data.smtp_username is not None:
+        config.smtp_username = data.smtp_username
+    if data.smtp_password is not None:
+        config.smtp_password = data.smtp_password
+    if data.smtp_use_tls is not None:
+        config.smtp_use_tls = data.smtp_use_tls
     if data.rate_limit_per_hour is not None:
         config.rate_limit_per_hour = data.rate_limit_per_hour
 

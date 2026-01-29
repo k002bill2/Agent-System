@@ -1,0 +1,67 @@
+# Task: Store 로직 리팩토링
+id: task_refactor_001
+name: "Zustand Store 리팩토링"
+category: refactor
+difficulty: hard
+
+description: |
+  비대해진 Zustand 스토어를 관심사별로 분리하고
+  코드 품질을 개선합니다.
+
+  현재 문제:
+  - 하나의 스토어에 모든 상태가 집중
+  - 액션과 상태가 혼재
+  - 테스트 어려움
+
+acceptance_criteria:
+  - 도메인별 스토어 분리 (auth, agent, task 등)
+  - 슬라이스 패턴 적용
+  - 기존 기능 유지
+  - 테스트 커버리지 유지/향상
+  - 마이그레이션 가이드 제공
+
+input:
+  prompt: |
+    현재 단일 스토어를 도메인별로 분리해주세요.
+
+    분리 기준:
+    - authStore: 인증 상태
+    - agentStore: 에이전트 관련
+    - taskStore: 태스크 관련
+    - uiStore: UI 상태 (모달, 토스트 등)
+
+    요구사항:
+    - Zustand 슬라이스 패턴 사용
+    - 기존 컴포넌트 호환성 유지
+    - 타입 안전성 보장
+  context_files:
+    - src/dashboard/src/stores/index.ts
+  dependencies: []
+
+expected_output:
+  files:
+    - src/dashboard/src/stores/authStore.ts
+    - src/dashboard/src/stores/agentStore.ts
+    - src/dashboard/src/stores/taskStore.ts
+    - src/dashboard/src/stores/uiStore.ts
+    - src/dashboard/src/stores/index.ts
+  patterns:
+    - "create<"
+    - "export.*use.*Store"
+    - "interface.*State"
+  forbidden_patterns:
+    - ": any"
+
+evaluation:
+  timeout_minutes: 30
+  rubric: ui_component.yaml  # 프론트엔드 루브릭 사용
+  weights:
+    code_checks: 30
+    llm_grading: 70
+  passing_score: 0.7
+
+metadata:
+  created_at: 2025-01-28
+  author: system
+  tags: [refactor, zustand, state-management]
+  recommended_agent: web-ui-specialist

@@ -72,7 +72,7 @@ class PlaygroundSession(BaseModel):
 
     # Current settings
     agent_id: str | None = None
-    model: str = "claude-sonnet-4-20250514"
+    model: str = "gemini-2.0-flash"
     temperature: float = 0.7
     max_tokens: int = 4096
     system_prompt: str | None = None
@@ -101,7 +101,7 @@ class PlaygroundSessionCreate(BaseModel):
     name: str = "Untitled Session"
     description: str = ""
     agent_id: str | None = None
-    model: str = "claude-sonnet-4-20250514"
+    model: str = "gemini-2.0-flash"
     system_prompt: str | None = None
 
 

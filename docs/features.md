@@ -83,6 +83,12 @@ class ProjectVectorStore:
 - 쿼리 응답 시간 < 200ms
 - 자동 파일 우선순위 (CLAUDE.md > README > 코드)
 
+**Dashboard UI**:
+- `RAGQueryPanel`: Projects 페이지에서 RAG 검색 버튼 클릭 시 사이드패널 표시
+- 자연어로 코드베이스 검색 (예: "인증 로직", "에러 처리 패턴")
+- 결과 수 조절 (3~20개), 우선순위 필터링 (High/Normal)
+- 인덱스 상태 확인, 재인덱싱, 인덱스 삭제 기능
+
 ---
 
 ## 7. Diff 뷰어

@@ -162,13 +162,24 @@ AOS Backend API 엔드포인트 문서입니다.
 | Method | Path | 설명 |
 |--------|------|------|
 | GET | `/api/audit` | 감사 로그 조회 |
+| GET | `/api/audit/stats` | 감사 통계 (요약 카드용) |
+| GET | `/api/audit/{log_id}` | 단일 로그 조회 |
 | GET | `/api/audit/export` | 감사 로그 내보내기 (JSON/CSV) |
 | GET | `/api/audit/sessions/{session_id}/trail` | 세션별 감사 추적 |
+| GET | `/api/audit/actions` | 가능한 액션 타입 목록 |
+| GET | `/api/audit/resource-types` | 가능한 리소스 타입 목록 |
+| POST | `/api/audit/cleanup` | 오래된 로그 정리 |
+| POST | `/api/audit/seed` | 테스트용 샘플 데이터 생성 |
 
-**쿼리 파라미터**:
+**쿼리 파라미터** (`GET /api/audit`):
 - `session_id`, `user_id`: 필터
 - `action`, `resource_type`, `status`: 타입 필터
 - `start_date`, `end_date`: 날짜 범위
+- `limit`, `offset`: 페이지네이션
+
+**액션 타입**: `session_created`, `task_created`, `task_completed`, `task_failed`, `tool_executed`, `approval_granted`, `approval_denied` 등
+
+**리소스 타입**: `session`, `task`, `approval`, `agent`, `user`, `permission`, `tool`
 
 ---
 

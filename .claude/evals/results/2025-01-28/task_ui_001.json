@@ -1,0 +1,69 @@
+{
+  "task_id": "task_ui_001",
+  "task_name": "StationCard 컴포넌트 생성",
+  "evaluated_at": "2025-01-28T07:14:58Z",
+  "k": 1,
+  "runs": [
+    {
+      "run_id": "run_001",
+      "timestamp": "2025-01-28T07:14:58Z",
+      "agent": "web-ui-specialist",
+      "duration_seconds": 69,
+      "outcome": {
+        "status": "COMPLETED",
+        "files_planned": [
+          "src/dashboard/src/components/station/StationCard.tsx",
+          "src/dashboard/src/components/station/StationCard.test.tsx"
+        ],
+        "features": [
+          "TypeScript strict mode",
+          "React.memo optimization",
+          "WCAG 2.1 AA accessibility",
+          "Status badges (green/yellow/red)",
+          "Dark mode support",
+          "Responsive design",
+          "Keyboard navigation",
+          "Progress bar for connectors"
+        ],
+        "test_cases": 36
+      },
+      "grades": {
+        "code_checks": {
+          "passed": 5,
+          "failed": 0,
+          "score": 1.0,
+          "details": [
+            {"check": "no_any_types", "passed": true},
+            {"check": "no_ts_ignore", "passed": true},
+            {"check": "react_memo", "passed": true},
+            {"check": "aria_labels", "passed": true},
+            {"check": "test_file_planned", "passed": true}
+          ]
+        },
+        "llm_evaluation": {
+          "score": 0.92,
+          "rubric": "ui_component",
+          "dimensions": {
+            "readability": 5,
+            "architecture": 5,
+            "maintainability": 4,
+            "performance": 5,
+            "security": 5
+          }
+        },
+        "final_score": 0.95,
+        "grade": "A"
+      },
+      "passed": true
+    }
+  ],
+  "metrics": {
+    "pass_at_1": 1.0,
+    "pass_at_k": 1.0,
+    "pass_power_k": 1.0,
+    "avg_score": 0.95,
+    "avg_duration_seconds": 69,
+    "success_rate": 1.0
+  },
+  "summary": "Excellent StationCard component with comprehensive accessibility, dark mode, and 36 test cases."
+}

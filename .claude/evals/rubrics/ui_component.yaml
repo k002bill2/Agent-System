@@ -1,0 +1,117 @@
+# UI Component Evaluation Rubric
+# React/TypeScript UI 컴포넌트 평가 기준
+
+rubric_id: ui_component
+version: "1.0"
+description: React UI 컴포넌트 품질 평가 루브릭
+
+# 코드 검사 (자동화 가능)
+code_checks:
+  file_existence:
+    weight: 10
+    description: 필수 파일 존재 여부
+    checks:
+      - type: file_exists
+        pattern: "{expected_files}"
+
+  test_existence:
+    weight: 10
+    description: 테스트 파일 존재 여부
+    checks:
+      - type: file_exists
+        pattern: "*.test.tsx"
+
+  typescript_quality:
+    weight: 10
+    description: TypeScript 품질
+    checks:
+      - type: pattern_absent
+        pattern: ": any"
+        message: "any 타입 사용 금지"
+      - type: pattern_absent
+        pattern: "@ts-ignore"
+        message: "ts-ignore 사용 금지"
+      - type: pattern_present
+        pattern: "interface.*Props"
+        message: "Props 인터페이스 정의 필요"
+
+  accessibility:
+    weight: 10
+    description: 접근성 준수
+    checks:
+      - type: pattern_present
+        pattern: "aria-|role=|alt="
+        message: "접근성 속성 필요"
+
+# LLM 평가 기준
+llm_grading:
+  dimensions:
+    readability:
+      weight: 20
+      description: 코드 가독성
+      criteria:
+        5: 명확한 네이밍, 적절한 주석, 일관된 포맷팅
+        4: 대부분 가독성 좋음, 사소한 개선 여지
+        3: 보통 수준의 가독성
+        2: 가독성 문제 다수
+        1: 가독성 매우 낮음
+
+    architecture:
+      weight: 25
+      description: 컴포넌트 아키텍처
+      criteria:
+        5: 완벽한 관심사 분리, 재사용 가능한 설계
+        4: 좋은 구조, 사소한 개선 여지
+        3: 기능은 동작하나 구조 개선 필요
+        2: 구조적 문제 다수
+        1: 아키텍처 원칙 위반
+
+    maintainability:
+      weight: 20
+      description: 유지보수성
+      criteria:
+        5: 확장 용이, 테스트 용이, 문서화 완비
+        4: 유지보수 용이, 사소한 개선 여지
+        3: 보통 수준의 유지보수성
+        2: 유지보수 어려움
+        1: 유지보수 매우 어려움
+
+    performance:
+      weight: 20
+      description: 성능 최적화
+      criteria:
+        5: 최적의 렌더링, memo/useMemo/useCallback 적절히 사용
+        4: 성능 좋음, 사소한 최적화 여지
+        3: 기본적인 성능 고려
+        2: 불필요한 리렌더링 발생
+        1: 심각한 성능 문제
+
+    security:
+      weight: 15
+      description: 보안 고려
+      criteria:
+        5: XSS 방지, 입력 검증, 안전한 데이터 처리
+        4: 보안 잘 고려됨
+        3: 기본적인 보안 고려
+        2: 보안 취약점 존재
+        1: 심각한 보안 문제
+
+# 점수 계산
+scoring:
+  code_checks_total: 40  # 40%
+  llm_grading_total: 60  # 60%
+  passing_threshold: 0.7  # 70% 이상 PASS
+
+# 피드백 템플릿
+feedback_template: |
+  ## 코드 검사 결과 ({code_score}%)
+  {code_feedback}
+
+  ## LLM 평가 결과 ({llm_score}%)
+  {llm_feedback}
+
+  ## 총점: {total_score}%
+  ## 결과: {result}
+
+  ## 개선 제안
+  {suggestions}

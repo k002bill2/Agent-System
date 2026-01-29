@@ -1,0 +1,67 @@
+# Task: Station 서비스 API 엔드포인트
+id: task_service_001
+name: "Station CRUD API 엔드포인트"
+category: service
+difficulty: medium
+
+description: |
+  충전소(Station) 관리를 위한 CRUD API 엔드포인트를 구현합니다.
+  GET /stations, GET /stations/{id}, POST /stations,
+  PUT /stations/{id}, DELETE /stations/{id} 엔드포인트가 필요합니다.
+
+acceptance_criteria:
+  - FastAPI 라우터로 구현
+  - Pydantic 모델로 입력/출력 검증
+  - 적절한 HTTP 상태 코드 반환
+  - 에러 핸들링 포함
+  - 비동기 처리 (async/await)
+  - 테스트 파일 포함
+
+input:
+  prompt: |
+    충전소(Station) 관리를 위한 CRUD API를 구현해주세요.
+
+    엔드포인트:
+    - GET /api/v1/stations - 목록 조회 (페이지네이션)
+    - GET /api/v1/stations/{id} - 단일 조회
+    - POST /api/v1/stations - 생성
+    - PUT /api/v1/stations/{id} - 수정
+    - DELETE /api/v1/stations/{id} - 삭제
+
+    요구사항:
+    - FastAPI 라우터 사용
+    - Pydantic 모델로 검증
+    - 적절한 에러 처리 (404, 400, 500)
+    - 비동기 처리
+  context_files:
+    - src/backend/models/station.py
+    - src/backend/api/routes.py
+  dependencies: []
+
+expected_output:
+  files:
+    - src/backend/api/v1/stations.py
+    - tests/backend/api/test_stations.py
+  patterns:
+    - "@router.get"
+    - "@router.post"
+    - "async def"
+    - "-> .*:"
+    - "HTTPException"
+  forbidden_patterns:
+    - "pass  # TODO"
+    - "# type: ignore"
+
+evaluation:
+  timeout_minutes: 20
+  rubric: service.yaml
+  weights:
+    code_checks: 40
+    llm_grading: 60
+  passing_score: 0.7
+
+metadata:
+  created_at: 2025-01-28
+  author: system
+  tags: [api, fastapi, crud, station]
+  recommended_agent: backend-integration-specialist

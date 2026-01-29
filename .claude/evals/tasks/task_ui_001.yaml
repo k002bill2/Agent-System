@@ -1,0 +1,62 @@
+# Task: StationCard 컴포넌트 생성
+id: task_ui_001
+name: "StationCard 컴포넌트 생성"
+category: ui_component
+difficulty: medium
+
+description: |
+  충전소 정보를 표시하는 StationCard 컴포넌트를 생성합니다.
+  카드에는 충전소 이름, 상태 배지, 가용 커넥터 수, 주소가 표시되어야 합니다.
+  클릭 시 상세 페이지로 이동하는 기능을 포함해야 합니다.
+
+acceptance_criteria:
+  - TypeScript로 작성
+  - Tailwind CSS 스타일링
+  - 상태별 색상 배지 (available: 녹색, busy: 노랑, offline: 빨강)
+  - 반응형 디자인 (모바일/데스크톱)
+  - 접근성 레이블 포함 (aria-label, role)
+  - 테스트 파일 포함
+
+input:
+  prompt: |
+    충전소 정보를 표시하는 StationCard 컴포넌트를 생성해주세요.
+
+    요구사항:
+    - 충전소 이름, 상태, 가용 커넥터 수, 주소 표시
+    - 상태별 색상 배지 (available/busy/offline)
+    - 클릭 시 onSelect 콜백 호출
+    - Tailwind CSS 사용
+    - 접근성 고려
+
+    Station 타입은 src/dashboard/src/types/에서 참조하세요.
+  context_files:
+    - src/dashboard/src/types/index.ts
+  dependencies: []
+
+expected_output:
+  files:
+    - src/dashboard/src/components/station/StationCard.tsx
+    - src/dashboard/src/components/station/StationCard.test.tsx
+  patterns:
+    - "interface.*Props"
+    - "export.*StationCard"
+    - "aria-label"
+    - "onClick|onSelect"
+  forbidden_patterns:
+    - ": any"
+    - "// @ts-ignore"
+    - "// @ts-nocheck"
+
+evaluation:
+  timeout_minutes: 15
+  rubric: ui_component.yaml
+  weights:
+    code_checks: 40
+    llm_grading: 60
+  passing_score: 0.7
+
+metadata:
+  created_at: 2025-01-28
+  author: system
+  tags: [react, component, ui, station]
+  recommended_agent: web-ui-specialist

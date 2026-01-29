@@ -14,6 +14,7 @@ import {
   Loader2,
   FileCode,
   GripVertical,
+  Sparkles,
 } from 'lucide-react'
 import {
   DndContext,
@@ -39,6 +40,7 @@ import { useProjectConfigsStore } from '../stores/projectConfigs'
 import { ProjectFormModal } from '../components/ProjectFormModal'
 import { ProjectsGridSkeleton } from '../components/skeletons'
 import { ProjectClaudeConfigPanel, DeleteProjectModal } from '../components/projects'
+import { RAGQueryPanel } from '../components/rag'
 
 // Sortable Project Card Component
 interface SortableProjectCardProps {
@@ -52,6 +54,7 @@ interface SortableProjectCardProps {
   onEdit: () => void
   onReindex: () => void
   onDelete: () => void
+  onRAGSearch: () => void
 }
 
 function SortableProjectCard({
@@ -65,6 +68,7 @@ function SortableProjectCard({
   onEdit,
   onReindex,
   onDelete,
+  onRAGSearch,
 }: SortableProjectCardProps) {
   const {
     attributes,
@@ -204,18 +208,27 @@ function SortableProjectCard({
           CLAUDE.md
         </span>
 
-        {/* RAG Status */}
-        <span
+        {/* RAG Status - Clickable to open RAG Search */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onRAGSearch()
+          }}
           className={cn(
-            'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium',
+            'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors',
             project.vector_store_initialized
-              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-              : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50'
+              : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
           )}
+          title={project.vector_store_initialized ? 'RAG 검색 열기' : '인덱싱 후 검색 가능'}
         >
-          <Database className="w-3 h-3" />
-          {project.vector_store_initialized ? 'RAG Ready' : 'Not Indexed'}
-        </span>
+          {project.vector_store_initialized ? (
+            <Sparkles className="w-3 h-3" />
+          ) : (
+            <Database className="w-3 h-3" />
+          )}
+          {project.vector_store_initialized ? 'RAG 검색' : 'Not Indexed'}
+        </button>
 
         {/* Indexing indicator */}
         {indexingId === project.id && (
@@ -272,6 +285,7 @@ export function ProjectsPage() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [indexingId, setIndexingId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null)
+  const [ragSearchProject, setRagSearchProject] = useState<Project | null>(null)
 
   const selectedProject = getSelectedProject()
 
@@ -441,6 +455,7 @@ export function ProjectsPage() {
                   onEdit={() => openEditModal(project)}
                   onReindex={() => handleReindex(project)}
                   onDelete={() => handleDelete(project)}
+                  onRAGSearch={() => setRagSearchProject(project)}
                 />
               ))}
             </div>
@@ -462,11 +477,22 @@ export function ProjectsPage() {
       </div>
 
       {/* Claude Config Panel */}
-      {selectedProject && (
+      {selectedProject && !ragSearchProject && (
         <ProjectClaudeConfigPanel
           project={selectedProject}
           onClose={() => selectProject(null)}
         />
+      )}
+
+      {/* RAG Search Panel */}
+      {ragSearchProject && (
+        <div className="w-[500px] bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 flex flex-col h-full p-4">
+          <RAGQueryPanel
+            projectId={ragSearchProject.id}
+            projectName={ragSearchProject.name}
+            onClose={() => setRagSearchProject(null)}
+          />
+        </div>
       )}
 
       {/* Delete Confirmation Modal */}

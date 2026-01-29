@@ -1,6 +1,7 @@
 """Playground service for agent testing environment."""
 
 import asyncio
+import os
 import time
 from datetime import datetime
 from typing import Any, AsyncIterator
@@ -16,6 +17,7 @@ from models.playground import (
     PlaygroundCompareRequest,
     PlaygroundCompareResult,
 )
+from services.llm_service import LLMService, LLMResponse, MODEL_CONFIGS
 
 
 # In-memory storage
@@ -176,49 +178,90 @@ class PlaygroundService:
         execution.messages.append(user_msg)
         session.messages.append(user_msg)
 
-        start_time = time.time()
-
         try:
-            # Simulate LLM execution
-            # In production, this would call the actual LLM
-            await asyncio.sleep(0.5)  # Simulate latency
+            # Build conversation history for context
+            conversation_context = None
+            if len(session.messages) > 1:
+                # Include recent conversation history
+                history = []
+                for msg in session.messages[-10:-1]:  # Last 10 messages excluding current
+                    history.append(f"{msg.role}: {msg.content}")
+                if history:
+                    conversation_context = {"conversation_history": "\n".join(history)}
+                    if request.context:
+                        conversation_context.update(request.context)
 
-            # Generate mock response
-            response_content = _generate_mock_response(
-                request.prompt,
-                session.agent_id,
-                execution.tools_enabled,
-            )
+            # Check if tools are enabled
+            enabled_tools = execution.tools_enabled or []
 
-            # Calculate mock tokens
-            input_tokens = len(request.prompt.split()) * 2
-            output_tokens = len(response_content.split()) * 2
-            total_tokens = input_tokens + output_tokens
+            if enabled_tools:
+                # Use tool-enabled LLM invocation
+                llm_response: LLMResponse = await LLMService.invoke_with_tools(
+                    prompt=request.prompt,
+                    tools=enabled_tools,
+                    model_id=session.model,
+                    system_prompt=session.system_prompt,
+                    temperature=execution.temperature,
+                    max_tokens=execution.max_tokens,
+                    context=conversation_context or request.context or None,
+                )
 
-            latency_ms = int((time.time() - start_time) * 1000)
+                # Add tool call messages if any
+                for i, (tool_call, tool_result) in enumerate(
+                    zip(llm_response.tool_calls, llm_response.tool_results)
+                ):
+                    # Tool call message
+                    tool_msg = PlaygroundMessage(
+                        role="tool",
+                        content=f"Called {tool_call['name']}({tool_call['arguments']})",
+                        tool_calls=[tool_call],
+                        tool_results=[tool_result],
+                    )
+                    execution.messages.append(tool_msg)
+                    session.messages.append(tool_msg)
+            else:
+                # Regular LLM invocation without tools
+                llm_response: LLMResponse = await LLMService.invoke(
+                    prompt=request.prompt,
+                    model_id=session.model,
+                    system_prompt=session.system_prompt,
+                    temperature=execution.temperature,
+                    max_tokens=execution.max_tokens,
+                    context=conversation_context or request.context or None,
+                )
 
             # Add assistant message
             assistant_msg = PlaygroundMessage(
                 role="assistant",
-                content=response_content,
-                tokens=output_tokens,
-                latency_ms=latency_ms,
+                content=llm_response.content,
+                tokens=llm_response.output_tokens,
+                latency_ms=llm_response.latency_ms,
             )
             execution.messages.append(assistant_msg)
             session.messages.append(assistant_msg)
 
             # Update execution metrics
-            execution.result = response_content
+            execution.result = llm_response.content
             execution.status = PlaygroundExecutionStatus.COMPLETED
-            execution.input_tokens = input_tokens
-            execution.output_tokens = output_tokens
-            execution.total_tokens = total_tokens
-            execution.total_latency_ms = latency_ms
-            execution.cost = _calculate_cost(input_tokens, output_tokens, session.model)
+            execution.input_tokens = llm_response.input_tokens
+            execution.output_tokens = llm_response.output_tokens
+            execution.total_tokens = llm_response.total_tokens
+            execution.total_latency_ms = llm_response.latency_ms
+            execution.cost = llm_response.cost
 
         except Exception as e:
             execution.status = PlaygroundExecutionStatus.FAILED
             execution.error = str(e)
+
+            # Add error message
+            error_msg = PlaygroundMessage(
+                role="assistant",
+                content=f"[Error] {str(e)}",
+                tokens=0,
+                latency_ms=0,
+            )
+            execution.messages.append(error_msg)
+            session.messages.append(error_msg)
 
         execution.completed_at = datetime.utcnow()
 
@@ -241,18 +284,50 @@ class PlaygroundService:
         if not session:
             raise ValueError(f"Session {session_id} not found")
 
-        # Generate mock streaming response
-        response = _generate_mock_response(
-            request.prompt,
-            session.agent_id,
-            request.tools or session.enabled_tools,
+        # Add user message to session
+        user_msg = PlaygroundMessage(
+            role="user",
+            content=request.prompt,
         )
+        session.messages.append(user_msg)
 
-        # Stream word by word
-        words = response.split()
-        for i, word in enumerate(words):
-            yield word + (" " if i < len(words) - 1 else "")
-            await asyncio.sleep(0.05)  # Simulate streaming delay
+        # Build conversation context
+        conversation_context = None
+        if len(session.messages) > 1:
+            history = []
+            for msg in session.messages[-10:-1]:
+                history.append(f"{msg.role}: {msg.content}")
+            if history:
+                conversation_context = {"conversation_history": "\n".join(history)}
+                if request.context:
+                    conversation_context.update(request.context)
+
+        # Stream from LLM
+        full_response = ""
+        try:
+            async for chunk in LLMService.stream(
+                prompt=request.prompt,
+                model_id=session.model,
+                system_prompt=session.system_prompt,
+                temperature=request.temperature or session.temperature,
+                max_tokens=request.max_tokens or session.max_tokens,
+                context=conversation_context or request.context or None,
+            ):
+                full_response += chunk
+                yield chunk
+
+            # Add assistant message after streaming completes
+            assistant_msg = PlaygroundMessage(
+                role="assistant",
+                content=full_response,
+                tokens=len(full_response.split()) * 2,  # Estimate
+            )
+            session.messages.append(assistant_msg)
+            session.total_executions += 1
+            session.updated_at = datetime.utcnow()
+
+        except Exception as e:
+            yield f"\n\n[Error: {str(e)}]"
 
     # ─────────────────────────────────────────────────────────────
     # Tool Testing

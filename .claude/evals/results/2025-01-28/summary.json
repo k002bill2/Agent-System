@@ -1,0 +1,92 @@
+{
+  "batch_id": "batch_20250128",
+  "evaluated_at": "2025-01-28T07:25:00Z",
+  "total_tasks": 5,
+  "total_runs": 5,
+
+  "task_results": [
+    {
+      "task_id": "task_ui_001",
+      "name": "StationCard 컴포넌트 생성",
+      "category": "ui_component",
+      "pass_at_1": 1.0,
+      "avg_score": 0.95,
+      "grade": "A"
+    },
+    {
+      "task_id": "task_ui_002",
+      "name": "Pagination 컴포넌트 생성",
+      "category": "ui_component",
+      "pass_at_1": 1.0,
+      "avg_score": 0.98,
+      "grade": "A+"
+    },
+    {
+      "task_id": "task_service_001",
+      "name": "Station CRUD API",
+      "category": "service",
+      "pass_at_1": 1.0,
+      "avg_score": 0.96,
+      "grade": "A+"
+    },
+    {
+      "task_id": "task_bug_001",
+      "name": "무한 리렌더링 버그 수정",
+      "category": "bug_fix",
+      "pass_at_1": 1.0,
+      "avg_score": 0.84,
+      "grade": "B+"
+    },
+    {
+      "task_id": "task_refactor_001",
+      "name": "Zustand Store 리팩토링",
+      "category": "refactor",
+      "pass_at_1": 1.0,
+      "avg_score": 0.97,
+      "grade": "A+",
+      "note": "ALREADY_DONE - Stores already separated"
+    }
+  ],
+
+  "metrics": {
+    "overall_pass_at_1": 1.0,
+    "overall_avg_score": 0.94,
+    "tasks_passed": 5,
+    "tasks_failed": 0,
+    "success_rate": 1.0
+  },
+
+  "by_category": {
+    "ui_component": {
+      "tasks": 2,
+      "pass_at_1": 1.0,
+      "avg_score": 0.965
+    },
+    "service": {
+      "tasks": 1,
+      "pass_at_1": 1.0,
+      "avg_score": 0.96
+    },
+    "bug_fix": {
+      "tasks": 1,
+      "pass_at_1": 1.0,
+      "avg_score": 0.84
+    },
+    "refactor": {
+      "tasks": 1,
+      "pass_at_1": 1.0,
+      "avg_score": 0.97
+    }
+  },
+
+  "saturation_analysis": {
+    "saturated_tasks": ["task_ui_001", "task_ui_002", "task_service_001", "task_refactor_001"],
+    "near_saturation": ["task_bug_001"],
+    "healthy_tasks": [],
+    "recommendations": [
+      "task_bug_001: 회귀 테스트 추가 필요 (테스트 미생성으로 인한 감점)"
+    ]
+  },
+
+  "low_performers": []
+}
