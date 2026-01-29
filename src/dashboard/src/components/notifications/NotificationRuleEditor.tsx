@@ -374,6 +374,11 @@ export function NotificationRuleEditor({ className }: NotificationRuleEditorProp
                     <ChannelConfigForm
                       channel={ch.channel}
                       onTest={() => handleTestChannel(ch.channel)}
+                      onSaveSuccess={async () => {
+                        // 저장 성공 시 채널 목록 다시 로드하여 상태 반영
+                        const channelsData = await fetchChannels()
+                        setChannels(channelsData)
+                      }}
                       testResult={testResult}
                     />
                   </div>
@@ -595,10 +600,11 @@ export function NotificationRuleEditor({ className }: NotificationRuleEditorProp
 interface ChannelConfigFormProps {
   channel: NotificationChannel
   onTest: () => void
+  onSaveSuccess: () => void
   testResult?: string
 }
 
-function ChannelConfigForm({ channel, onTest, testResult }: ChannelConfigFormProps) {
+function ChannelConfigForm({ channel, onTest, onSaveSuccess, testResult }: ChannelConfigFormProps) {
   const [webhookUrl, setWebhookUrl] = useState('')
   const [emailAddress, setEmailAddress] = useState('')
   // SMTP settings
@@ -624,6 +630,8 @@ function ChannelConfigForm({ channel, onTest, testResult }: ChannelConfigFormPro
       } else {
         await updateChannel(channel, { webhook_url: webhookUrl })
       }
+      // 저장 성공 시 부모 컴포넌트에 알림 → 채널 상태 다시 로드
+      onSaveSuccess()
     } catch (e) {
       console.error(e)
     } finally {
