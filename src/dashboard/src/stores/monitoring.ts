@@ -126,7 +126,8 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
       const payload: CheckStartedPayload = JSON.parse(event.data)
       const { projectHealth } = get()
 
-      if (projectHealth) {
+      // 현재 선택된 프로젝트와 이벤트의 프로젝트가 같을 때만 UI 업데이트
+      if (projectHealth && projectHealth.project_id === projectId) {
         set({
           projectHealth: {
             ...projectHealth,
@@ -183,8 +184,8 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
       const newRunning = new Set(currentRunning)
       newRunning.delete(checkType)
 
-      // Update health
-      if (projectHealth) {
+      // 현재 선택된 프로젝트와 이벤트의 프로젝트가 같을 때만 UI 업데이트
+      if (projectHealth && projectHealth.project_id === payload.project_id) {
         set({
           runningChecks: newRunning,
           projectHealth: {
@@ -271,7 +272,8 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
       const newRunning = new Set(currentRunning)
       newRunning.add(checkType)
 
-      if (projectHealth) {
+      // 현재 선택된 프로젝트와 이벤트의 프로젝트가 같을 때만 UI 업데이트
+      if (projectHealth && projectHealth.project_id === projectId) {
         set({
           runningChecks: newRunning,
           projectHealth: {
@@ -332,7 +334,8 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
       const newRunning = new Set(currentRunning)
       newRunning.delete(checkType)
 
-      if (projectHealth) {
+      // 현재 선택된 프로젝트와 이벤트의 프로젝트가 같을 때만 UI 업데이트
+      if (projectHealth && projectHealth.project_id === payload.project_id) {
         set({
           runningChecks: newRunning,
           projectHealth: {
@@ -356,6 +359,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
         set({ runningChecks: newRunning })
       }
 
+      // 로그는 항상 추가 (프로젝트 전환 시에도 진행 상황 확인 가능)
       set((state) => ({
         checkLogs: {
           ...state.checkLogs,
