@@ -43,10 +43,11 @@ services:
       context: ../../src/backend
       dockerfile: ../../infra/docker/Dockerfile.backend
     container_name: aos-backend
+    env_file:
+      - ../../.env
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/agent_orchestrator
       - REDIS_URL=redis://redis:6379/0
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - DEBUG=true
     ports:
       - "8000:8000"
