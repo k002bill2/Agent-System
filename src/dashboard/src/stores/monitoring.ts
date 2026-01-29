@@ -8,23 +8,24 @@ import {
   CheckCompletedPayload,
 } from '../types/monitoring'
 
-interface LogLine {
+export interface LogLine {
   timestamp: string
   text: string
   isStderr: boolean
+  projectId: string
 }
 
 interface MonitoringState {
-  // Project health data
-  projectHealth: ProjectHealth | null
+  // Project health data (per project)
+  projectHealthMap: Record<string, ProjectHealth>
   isLoadingHealth: boolean
 
   // Project context data
   projectContext: ProjectContext | null
   isLoadingContext: boolean
 
-  // Running checks
-  runningChecks: Set<CheckType>
+  // Running checks (per project)
+  runningChecksMap: Record<string, Set<CheckType>>
 
   // Logs per check type
   checkLogs: Record<CheckType, LogLine[]>
@@ -39,6 +40,8 @@ interface MonitoringState {
   error: string | null
 
   // Actions
+  getProjectHealth: (projectId: string) => ProjectHealth | null
+  getRunningChecks: (projectId: string) => Set<CheckType>
   fetchProjectHealth: (projectId: string) => Promise<void>
   fetchProjectContext: (projectId: string) => Promise<void>
   runCheck: (projectId: string, checkType: CheckType) => void
@@ -52,11 +55,11 @@ interface MonitoringState {
 const API_BASE = 'http://localhost:8000/api'
 
 export const useMonitoringStore = create<MonitoringState>((set, get) => ({
-  projectHealth: null,
+  projectHealthMap: {},
   isLoadingHealth: false,
   projectContext: null,
   isLoadingContext: false,
-  runningChecks: new Set(),
+  runningChecksMap: {},
   checkLogs: {
     test: [],
     lint: [],
@@ -66,6 +69,14 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
   activeLogView: 'all',
   activeContextTab: 'claude-md',
   error: null,
+
+  getProjectHealth: (projectId: string) => {
+    return get().projectHealthMap[projectId] || null
+  },
+
+  getRunningChecks: (projectId: string) => {
+    return get().runningChecksMap[projectId] || new Set()
+  },
 
   fetchProjectHealth: async (projectId: string) => {
     set({ isLoadingHealth: true, error: null })
@@ -77,7 +88,13 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
       }
 
       const data = await res.json()
-      set({ projectHealth: data, isLoadingHealth: false })
+      set((state) => ({
+        projectHealthMap: {
+          ...state.projectHealthMap,
+          [projectId]: data,
+        },
+        isLoadingHealth: false,
+      }))
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
       set({ error: errorMessage, isLoadingHealth: false })
@@ -102,20 +119,23 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
   },
 
   runCheck: (projectId: string, checkType: CheckType) => {
-    const { runningChecks, checkLogs } = get()
+    const { runningChecksMap } = get()
+    const runningChecks = runningChecksMap[projectId] || new Set()
 
     // Don't start if already running
     if (runningChecks.has(checkType)) {
       return
     }
 
-    // Mark as running and clear logs
+    // Mark as running
     const newRunning = new Set(runningChecks)
     newRunning.add(checkType)
-    set({
-      runningChecks: newRunning,
-      checkLogs: { ...checkLogs, [checkType]: [] },
-    })
+    set((state) => ({
+      runningChecksMap: {
+        ...state.runningChecksMap,
+        [projectId]: newRunning,
+      },
+    }))
 
     // Start SSE connection
     const eventSource = new EventSource(
@@ -124,25 +144,32 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
 
     eventSource.addEventListener('check_started', (event) => {
       const payload: CheckStartedPayload = JSON.parse(event.data)
-      const { projectHealth } = get()
+      const { projectHealthMap } = get()
+      const projectHealth = projectHealthMap[projectId]
 
-      // 현재 선택된 프로젝트와 이벤트의 프로젝트가 같을 때만 UI 업데이트
-      if (projectHealth && projectHealth.project_id === projectId) {
-        set({
-          projectHealth: {
-            ...projectHealth,
-            checks: {
-              ...projectHealth.checks,
-              [checkType]: {
-                ...projectHealth.checks[checkType],
-                status: 'running',
+      // 이 SSE 연결의 프로젝트와 이벤트의 프로젝트가 같을 때만 처리
+      if (payload.project_id !== projectId) return
+
+      // Health 업데이트
+      if (projectHealth) {
+        set((state) => ({
+          projectHealthMap: {
+            ...state.projectHealthMap,
+            [projectId]: {
+              ...projectHealth,
+              checks: {
+                ...projectHealth.checks,
+                [checkType]: {
+                  ...projectHealth.checks[checkType],
+                  status: 'running',
+                },
               },
             },
           },
-        })
+        }))
       }
 
-      // Add log entry
+      // 로그 추가
       set((state) => ({
         checkLogs: {
           ...state.checkLogs,
@@ -152,6 +179,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
               timestamp: payload.started_at,
               text: `>>> Starting ${checkType}...`,
               isStderr: false,
+              projectId,
             },
           ],
         },
@@ -160,6 +188,9 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
 
     eventSource.addEventListener('check_progress', (event) => {
       const payload: CheckProgressPayload = JSON.parse(event.data)
+
+      // 이 SSE 연결의 프로젝트와 이벤트의 프로젝트가 같을 때만 로그 추가
+      if (payload.project_id !== projectId) return
 
       set((state) => ({
         checkLogs: {
@@ -170,6 +201,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
               timestamp: new Date().toISOString(),
               text: payload.output,
               isStderr: payload.is_stderr,
+              projectId,
             },
           ],
         },
@@ -178,38 +210,52 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
 
     eventSource.addEventListener('check_completed', (event) => {
       const payload: CheckCompletedPayload = JSON.parse(event.data)
-      const { runningChecks: currentRunning, projectHealth } = get()
+      const { runningChecksMap: currentRunningMap, projectHealthMap } = get()
+      const currentRunning = currentRunningMap[projectId] || new Set()
+      const projectHealth = projectHealthMap[projectId]
 
       // Remove from running set
       const newRunning = new Set(currentRunning)
       newRunning.delete(checkType)
+      set((state) => ({
+        runningChecksMap: {
+          ...state.runningChecksMap,
+          [projectId]: newRunning,
+        },
+      }))
 
-      // 현재 선택된 프로젝트와 이벤트의 프로젝트가 같을 때만 UI 업데이트
-      if (projectHealth && projectHealth.project_id === payload.project_id) {
-        set({
-          runningChecks: newRunning,
-          projectHealth: {
-            ...projectHealth,
-            checks: {
-              ...projectHealth.checks,
-              [checkType]: {
-                project_id: payload.project_id,
-                check_type: payload.check_type,
-                status: payload.status,
-                exit_code: payload.exit_code,
-                duration_ms: payload.duration_ms,
-                stdout: payload.stdout,
-                stderr: payload.stderr,
-              },
-            },
-            last_updated: new Date().toISOString(),
-          },
-        })
-      } else {
-        set({ runningChecks: newRunning })
+      // 이 SSE 연결의 프로젝트와 이벤트의 프로젝트가 같을 때만 처리
+      if (payload.project_id !== projectId) {
+        eventSource.close()
+        return
       }
 
-      // Add completion log
+      // Health 업데이트
+      if (projectHealth) {
+        set((state) => ({
+          projectHealthMap: {
+            ...state.projectHealthMap,
+            [projectId]: {
+              ...projectHealth,
+              checks: {
+                ...projectHealth.checks,
+                [checkType]: {
+                  project_id: payload.project_id,
+                  check_type: payload.check_type,
+                  status: payload.status,
+                  exit_code: payload.exit_code,
+                  duration_ms: payload.duration_ms,
+                  stdout: payload.stdout,
+                  stderr: payload.stderr,
+                },
+              },
+              last_updated: new Date().toISOString(),
+            },
+          },
+        }))
+      }
+
+      // 로그 추가
       set((state) => ({
         checkLogs: {
           ...state.checkLogs,
@@ -219,6 +265,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
               timestamp: new Date().toISOString(),
               text: `>>> ${checkType} completed with exit code ${payload.exit_code} (${payload.duration_ms}ms)`,
               isStderr: payload.status === 'failure',
+              projectId,
             },
           ],
         },
@@ -229,34 +276,32 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
 
     eventSource.addEventListener('error', (event) => {
       console.error('SSE error:', event)
-      const { runningChecks: currentRunning } = get()
+      const { runningChecksMap: currentRunningMap } = get()
+      const currentRunning = currentRunningMap[projectId] || new Set()
 
       // Remove from running set
       const newRunning = new Set(currentRunning)
       newRunning.delete(checkType)
-      set({ runningChecks: newRunning, error: `Check ${checkType} failed` })
+      set((state) => ({
+        runningChecksMap: {
+          ...state.runningChecksMap,
+          [projectId]: newRunning,
+        },
+        error: `Check ${checkType} failed`,
+      }))
 
       eventSource.close()
     })
   },
 
   runAllChecks: (projectId: string) => {
-    const { runningChecks } = get()
+    const { runningChecksMap } = get()
+    const runningChecks = runningChecksMap[projectId] || new Set()
 
-    // Don't start if any check is running
+    // Don't start if any check is running for this project
     if (runningChecks.size > 0) {
       return
     }
-
-    // Clear all logs
-    set({
-      checkLogs: {
-        test: [],
-        lint: [],
-        typecheck: [],
-        build: [],
-      },
-    })
 
     // Start SSE connection for all checks
     const eventSource = new EventSource(
@@ -266,31 +311,48 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
     eventSource.addEventListener('check_started', (event) => {
       const payload: CheckStartedPayload = JSON.parse(event.data)
       const checkType = payload.check_type
-      const { projectHealth, runningChecks: currentRunning } = get()
+      const { projectHealthMap, runningChecksMap: currentRunningMap } = get()
+      const projectHealth = projectHealthMap[projectId]
+      const currentRunning = currentRunningMap[projectId] || new Set()
+
+      // 이 SSE 연결의 프로젝트와 이벤트의 프로젝트가 같을 때만 처리
+      if (payload.project_id !== projectId) return
 
       // Add to running set
       const newRunning = new Set(currentRunning)
       newRunning.add(checkType)
 
-      // 현재 선택된 프로젝트와 이벤트의 프로젝트가 같을 때만 UI 업데이트
-      if (projectHealth && projectHealth.project_id === projectId) {
-        set({
-          runningChecks: newRunning,
-          projectHealth: {
-            ...projectHealth,
-            checks: {
-              ...projectHealth.checks,
-              [checkType]: {
-                ...projectHealth.checks[checkType],
-                status: 'running',
+      // Health 업데이트
+      if (projectHealth) {
+        set((state) => ({
+          runningChecksMap: {
+            ...state.runningChecksMap,
+            [projectId]: newRunning,
+          },
+          projectHealthMap: {
+            ...state.projectHealthMap,
+            [projectId]: {
+              ...projectHealth,
+              checks: {
+                ...projectHealth.checks,
+                [checkType]: {
+                  ...projectHealth.checks[checkType],
+                  status: 'running',
+                },
               },
             },
           },
-        })
+        }))
       } else {
-        set({ runningChecks: newRunning })
+        set((state) => ({
+          runningChecksMap: {
+            ...state.runningChecksMap,
+            [projectId]: newRunning,
+          },
+        }))
       }
 
+      // 로그 추가
       set((state) => ({
         checkLogs: {
           ...state.checkLogs,
@@ -300,6 +362,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
               timestamp: payload.started_at,
               text: `>>> Starting ${checkType}...`,
               isStderr: false,
+              projectId,
             },
           ],
         },
@@ -310,6 +373,9 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
       const payload: CheckProgressPayload = JSON.parse(event.data)
       const checkType = payload.check_type
 
+      // 이 SSE 연결의 프로젝트와 이벤트의 프로젝트가 같을 때만 로그 추가
+      if (payload.project_id !== projectId) return
+
       set((state) => ({
         checkLogs: {
           ...state.checkLogs,
@@ -319,6 +385,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
               timestamp: new Date().toISOString(),
               text: payload.output,
               isStderr: payload.is_stderr,
+              projectId,
             },
           ],
         },
@@ -328,38 +395,49 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
     eventSource.addEventListener('check_completed', (event) => {
       const payload: CheckCompletedPayload = JSON.parse(event.data)
       const checkType = payload.check_type
-      const { runningChecks: currentRunning, projectHealth } = get()
+      const { runningChecksMap: currentRunningMap, projectHealthMap } = get()
+      const currentRunning = currentRunningMap[projectId] || new Set()
+      const projectHealth = projectHealthMap[projectId]
 
       // Remove from running set
       const newRunning = new Set(currentRunning)
       newRunning.delete(checkType)
+      set((state) => ({
+        runningChecksMap: {
+          ...state.runningChecksMap,
+          [projectId]: newRunning,
+        },
+      }))
 
-      // 현재 선택된 프로젝트와 이벤트의 프로젝트가 같을 때만 UI 업데이트
-      if (projectHealth && projectHealth.project_id === payload.project_id) {
-        set({
-          runningChecks: newRunning,
-          projectHealth: {
-            ...projectHealth,
-            checks: {
-              ...projectHealth.checks,
-              [checkType]: {
-                project_id: payload.project_id,
-                check_type: payload.check_type,
-                status: payload.status,
-                exit_code: payload.exit_code,
-                duration_ms: payload.duration_ms,
-                stdout: payload.stdout,
-                stderr: payload.stderr,
+      // 이 SSE 연결의 프로젝트와 이벤트의 프로젝트가 같을 때만 처리
+      if (payload.project_id !== projectId) return
+
+      // Health 업데이트
+      if (projectHealth) {
+        set((state) => ({
+          projectHealthMap: {
+            ...state.projectHealthMap,
+            [projectId]: {
+              ...projectHealth,
+              checks: {
+                ...projectHealth.checks,
+                [checkType]: {
+                  project_id: payload.project_id,
+                  check_type: payload.check_type,
+                  status: payload.status,
+                  exit_code: payload.exit_code,
+                  duration_ms: payload.duration_ms,
+                  stdout: payload.stdout,
+                  stderr: payload.stderr,
+                },
               },
+              last_updated: new Date().toISOString(),
             },
-            last_updated: new Date().toISOString(),
           },
-        })
-      } else {
-        set({ runningChecks: newRunning })
+        }))
       }
 
-      // 로그는 항상 추가 (프로젝트 전환 시에도 진행 상황 확인 가능)
+      // 로그 추가
       set((state) => ({
         checkLogs: {
           ...state.checkLogs,
@@ -369,6 +447,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
               timestamp: new Date().toISOString(),
               text: `>>> ${checkType} completed with exit code ${payload.exit_code} (${payload.duration_ms}ms)`,
               isStderr: payload.status === 'failure',
+              projectId,
             },
           ],
         },
@@ -382,7 +461,13 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
 
     eventSource.addEventListener('error', (event) => {
       console.error('SSE error:', event)
-      set({ runningChecks: new Set(), error: 'Failed to run checks' })
+      set((state) => ({
+        runningChecksMap: {
+          ...state.runningChecksMap,
+          [projectId]: new Set(),
+        },
+        error: 'Failed to run checks',
+      }))
       eventSource.close()
     })
   },

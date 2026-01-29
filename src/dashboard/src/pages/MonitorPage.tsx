@@ -8,32 +8,34 @@ import { useOrchestrationStore } from '../stores/orchestration'
 export function MonitorPage() {
   const { selectedProjectId, projects, fetchProjects } = useOrchestrationStore()
   const {
-    projectHealth,
+    getProjectHealth,
+    getRunningChecks,
     isLoadingHealth,
-    runningChecks,
     error,
     fetchProjectHealth,
     runAllChecks,
     clearError,
-    clearLogs,
   } = useMonitoringStore()
 
   const [showContext, setShowContext] = useState(true)
   const [showProjects, setShowProjects] = useState(true)
   const selectedProject = projects.find((p) => p.id === selectedProjectId)
 
+  // 현재 선택된 프로젝트의 health와 runningChecks
+  const projectHealth = selectedProjectId ? getProjectHealth(selectedProjectId) : null
+  const runningChecks = selectedProjectId ? getRunningChecks(selectedProjectId) : new Set()
+
   // Fetch projects on mount
   useEffect(() => {
     fetchProjects()
   }, [fetchProjects])
 
-  // Fetch health when project changes and clear previous logs
+  // Fetch health when project changes
   useEffect(() => {
     if (selectedProjectId) {
-      clearLogs() // 프로젝트 전환 시 이전 로그 클리어
       fetchProjectHealth(selectedProjectId)
     }
-  }, [selectedProjectId, fetchProjectHealth, clearLogs])
+  }, [selectedProjectId, fetchProjectHealth])
 
   // No project selected - show projects panel for selection
   if (!selectedProjectId || !selectedProject) {

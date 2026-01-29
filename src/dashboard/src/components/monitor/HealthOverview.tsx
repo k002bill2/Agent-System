@@ -8,7 +8,8 @@ interface HealthOverviewProps {
 }
 
 export function HealthOverview({ health, projectId }: HealthOverviewProps) {
-  const { runningChecks, runCheck, activeLogView, setActiveLogView } = useMonitoringStore()
+  const { getRunningChecks, runCheck, activeLogView, setActiveLogView } = useMonitoringStore()
+  const runningChecks = getRunningChecks(projectId)
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">

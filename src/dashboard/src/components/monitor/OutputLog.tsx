@@ -5,25 +5,29 @@ import { ALL_CHECK_TYPES, CHECK_TYPE_LABELS } from '../../types/monitoring'
 import { useMonitoringStore } from '../../stores/monitoring'
 
 interface OutputLogProps {
-  projectId?: string
+  projectId: string
 }
 
-export function OutputLog(_props: OutputLogProps) {
+export function OutputLog({ projectId }: OutputLogProps) {
   const { checkLogs, activeLogView, setActiveLogView, clearLogs } = useMonitoringStore()
   const logContainerRef = useRef<HTMLDivElement>(null)
 
-  // Get logs based on active view
+  // Get logs based on active view, filtered by current project
   const getDisplayLogs = () => {
     if (activeLogView === 'all') {
-      // Combine all logs and sort by timestamp
+      // Combine all logs, filter by projectId, and sort by timestamp
       const allLogs = ALL_CHECK_TYPES.flatMap((ct) =>
-        checkLogs[ct].map((log) => ({ ...log, checkType: ct }))
+        checkLogs[ct]
+          .filter((log) => log.projectId === projectId)
+          .map((log) => ({ ...log, checkType: ct }))
       )
       return allLogs.sort(
         (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
       )
     }
-    return checkLogs[activeLogView].map((log) => ({ ...log, checkType: activeLogView }))
+    return checkLogs[activeLogView]
+      .filter((log) => log.projectId === projectId)
+      .map((log) => ({ ...log, checkType: activeLogView }))
   }
 
   const displayLogs = getDisplayLogs()
