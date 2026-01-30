@@ -90,18 +90,18 @@ export function ProcessMonitorWidget() {
 
       <div className="space-y-3">
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-2 text-center">
-          <div className="p-2 bg-gray-50 dark:bg-gray-700/50 rounded">
-            <p className="text-xl font-bold text-gray-900 dark:text-white">{totalCount}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Total</p>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700/50 rounded">
+            <span className="text-sm text-gray-600 dark:text-gray-400">Total</span>
+            <span className="text-lg font-bold text-gray-900 dark:text-white">{totalCount}</span>
           </div>
-          <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded">
-            <p className="text-xl font-bold text-green-600 dark:text-green-400">{foregroundCount}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Active</p>
+          <div className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-900/20 rounded">
+            <span className="text-sm text-gray-600 dark:text-gray-400">Active</span>
+            <span className="text-lg font-bold text-green-600 dark:text-green-400">{foregroundCount}</span>
           </div>
-          <div className="p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded">
-            <p className="text-xl font-bold text-yellow-600 dark:text-yellow-400">{backgroundCount}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Stale</p>
+          <div className="flex items-center justify-between p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded">
+            <span className="text-sm text-gray-600 dark:text-gray-400">Stale</span>
+            <span className="text-lg font-bold text-yellow-600 dark:text-yellow-400">{backgroundCount}</span>
           </div>
         </div>
 
