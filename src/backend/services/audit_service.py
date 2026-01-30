@@ -1,5 +1,6 @@
 """Audit trail service for logging all system actions."""
 
+import asyncio
 import os
 import uuid
 from datetime import datetime, timedelta
@@ -257,7 +258,55 @@ class AuditService:
             entry.hash = compliance_entry.hash
 
         _audit_logs.append(entry)
+
+        # Background DB 저장 (USE_DATABASE=true일 때)
+        if USE_DATABASE:
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(AuditService._save_entry_to_db(entry))
+            except RuntimeError:
+                # No running event loop, skip background save
+                pass
+
         return entry
+
+    @staticmethod
+    async def _save_entry_to_db(entry: "AuditLogEntry") -> None:
+        """Background task to save audit entry to database."""
+        try:
+            from db.database import async_session_factory
+            from db.models import AuditLogModel
+
+            async with async_session_factory() as db:
+                db_entry = AuditLogModel(
+                    id=entry.id,
+                    session_id=entry.session_id,
+                    user_id=entry.user_id,
+                    action=entry.action.value,
+                    resource_type=entry.resource_type.value,
+                    resource_id=entry.resource_id,
+                    old_value=entry.old_value,
+                    new_value=entry.new_value,
+                    changes=entry.changes,
+                    agent_id=entry.agent_id,
+                    ip_address=entry.ip_address,
+                    user_agent=entry.user_agent,
+                    metadata_json=entry.metadata or {},
+                    status=entry.status,
+                    error_message=entry.error_message,
+                    data_classification=(entry.data_classification or DataClassification.INTERNAL).value,
+                    change_reason=entry.change_reason,
+                    compliance_flags=entry.compliance_flags or [],
+                    created_at=entry.created_at,
+                    previous_hash=entry.previous_hash,
+                    hash=entry.hash,
+                )
+                db.add(db_entry)
+                await db.commit()
+        except Exception as e:
+            # Log error but don't fail - audit is best-effort
+            import logging
+            logging.getLogger(__name__).warning(f"Failed to save audit entry to DB: {e}")
 
     @staticmethod
     async def log_async(

@@ -252,7 +252,7 @@ class AnalyticsService:
             ),
             CostBreakdown(
                 category="model",
-                value="gemini-2.0-flash-exp",
+                value="gemini-2.0-flash",
                 cost=4.25,
                 tokens=300000,
                 percentage=22.7,
@@ -802,8 +802,8 @@ class AnalyticsService:
         activity = await AnalyticsService.get_activity_heatmap_async(db, time_range)
         errors = await AnalyticsService.get_error_analytics_async(db, time_range)
 
-        # Cost analytics requires more complex queries, use mock for now
-        costs = AnalyticsService.get_cost_analytics(time_range)
+        # Cost analytics from database
+        costs = await AnalyticsService.get_cost_analytics_async(db, time_range)
 
         return AnalyticsDashboard(
             overview=overview,
@@ -812,4 +812,93 @@ class AnalyticsService:
             costs=costs,
             activity=activity,
             errors=errors,
+        )
+
+    @staticmethod
+    async def get_cost_analytics_async(
+        db: AsyncSession,
+        time_range: TimeRange = TimeRange.WEEK,
+    ) -> CostAnalytics:
+        """Get cost analytics breakdown from database."""
+        delta = _get_time_delta(time_range)
+        start = datetime.utcnow() - delta
+
+        # Get sessions with cost data
+        session_result = await db.execute(
+            select(SessionModel).where(
+                and_(
+                    SessionModel.created_at >= start,
+                    SessionModel.total_cost_usd > 0
+                )
+            )
+        )
+        sessions = session_result.scalars().all()
+
+        total_cost = sum(s.total_cost_usd or 0 for s in sessions)
+        total_tokens = sum(s.total_tokens or 0 for s in sessions)
+
+        # Get tasks for agent breakdown
+        task_result = await db.execute(
+            select(
+                TaskModel.agent_id,
+                func.sum(TaskModel.cost).label("total_cost"),
+                func.sum(TaskModel.tokens_used).label("total_tokens"),
+            ).where(
+                and_(
+                    TaskModel.created_at >= start,
+                    TaskModel.agent_id.isnot(None)
+                )
+            ).group_by(TaskModel.agent_id)
+        )
+
+        by_agent = []
+        for row in task_result.fetchall():
+            agent_id = row[0]
+            agent_cost = float(row[1] or 0)
+            agent_tokens = int(row[2] or 0)
+            percentage = (agent_cost / total_cost * 100) if total_cost > 0 else 0
+
+            by_agent.append(CostBreakdown(
+                category="agent",
+                value=agent_id,
+                cost=round(agent_cost, 4),
+                tokens=agent_tokens,
+                percentage=round(percentage, 1),
+            ))
+
+        by_agent.sort(key=lambda x: x.cost, reverse=True)
+
+        # Model breakdown from session metadata (simplified)
+        by_model = [
+            CostBreakdown(
+                category="model",
+                value="default",
+                cost=total_cost,
+                tokens=total_tokens,
+                percentage=100.0,
+            )
+        ]
+
+        # Project monthly cost
+        days_in_range = delta.days or 1
+        daily_cost = total_cost / days_in_range
+        projected_monthly = daily_cost * 30
+
+        # Average cost per task
+        total_tasks_result = await db.execute(
+            select(func.count(TaskModel.id)).where(
+                TaskModel.created_at >= start
+            )
+        )
+        total_tasks = total_tasks_result.scalar() or 1
+        avg_cost_per_task = total_cost / total_tasks if total_tasks > 0 else 0
+
+        return CostAnalytics(
+            time_range=time_range,
+            total_cost=round(total_cost, 2),
+            total_tokens=total_tokens,
+            avg_cost_per_task=round(avg_cost_per_task, 4),
+            by_agent=by_agent,
+            by_model=by_model,
+            projected_monthly=round(projected_monthly, 2),
         )

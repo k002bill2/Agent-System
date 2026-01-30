@@ -56,9 +56,11 @@ async def get_agent_performance(
 @router.get("/costs", response_model=CostAnalytics)
 async def get_cost_analytics(
     time_range: TimeRange = Query(default=TimeRange.WEEK, description="Time range for data"),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get cost analytics breakdown."""
-    # Cost analytics still uses mock data for now
+    if USE_DATABASE:
+        return await AnalyticsService.get_cost_analytics_async(db, time_range)
     return AnalyticsService.get_cost_analytics(time_range)
 
 

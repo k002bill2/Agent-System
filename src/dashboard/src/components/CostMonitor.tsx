@@ -1,59 +1,9 @@
-import { useState } from 'react'
 import {
   useOrchestrationStore,
   ProviderUsage,
   LLMProvider,
   PROVIDER_CONFIG,
 } from '../stores/orchestration'
-
-// Demo data for UI preview (only shown when no real data exists)
-const DEMO_PROVIDER_USAGE: Record<LLMProvider, ProviderUsage> = {
-  google: {
-    provider: 'google',
-    displayName: 'Google Gemini',
-    inputTokens: 32150,
-    outputTokens: 13050,
-    totalTokens: 45200,
-    costUsd: 0.0012,
-    callCount: 5,
-  },
-  anthropic: {
-    provider: 'anthropic',
-    displayName: 'Anthropic Claude',
-    inputTokens: 58000,
-    outputTokens: 22100,
-    totalTokens: 80100,
-    costUsd: 0.0222,
-    callCount: 12,
-  },
-  ollama: {
-    provider: 'ollama',
-    displayName: 'Ollama (Local)',
-    inputTokens: 0,
-    outputTokens: 0,
-    totalTokens: 0,
-    costUsd: 0,
-    callCount: 0,
-  },
-  openai: {
-    provider: 'openai',
-    displayName: 'OpenAI GPT',
-    inputTokens: 0,
-    outputTokens: 0,
-    totalTokens: 0,
-    costUsd: 0,
-    callCount: 0,
-  },
-  unknown: {
-    provider: 'unknown',
-    displayName: 'Unknown',
-    inputTokens: 0,
-    outputTokens: 0,
-    totalTokens: 0,
-    costUsd: 0,
-    callCount: 0,
-  },
-}
 
 
 function formatCost(cost: number): string {
@@ -146,20 +96,9 @@ function ProviderCard({ usage }: ProviderCardProps) {
 
 export function CostMonitor() {
   const { providerUsage, totalCost } = useOrchestrationStore()
-  const [showDemo, setShowDemo] = useState(false)
 
-  // Use demo data when toggled or when no real data exists
-  const hasRealData = Object.keys(providerUsage).length > 0
-  const useDemo = showDemo || (!hasRealData && import.meta.env.DEV)
-
-  const effectiveProviderUsage = useDemo
-    ? Object.fromEntries(
-        Object.entries(DEMO_PROVIDER_USAGE).filter(([, v]) => v.totalTokens > 0)
-      ) as Record<LLMProvider, ProviderUsage>
-    : providerUsage
-  const effectiveTotalCost = useDemo ? 0.0234 : totalCost
-
-  const providers = Object.entries(effectiveProviderUsage) as [LLMProvider, ProviderUsage][]
+  // 실제 데이터만 표시 (데모 데이터 없음)
+  const providers = Object.entries(providerUsage) as [LLMProvider, ProviderUsage][]
   const totalTokens = providers.reduce((sum, [, usage]) => sum + usage.totalTokens, 0)
 
   // Sort providers by total tokens (descending)
@@ -168,22 +107,9 @@ export function CostMonitor() {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-          <span>LLM Provider Usage</span>
-          {useDemo && (
-            <span className="text-xs px-1.5 py-0.5 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded">
-              Demo
-            </span>
-          )}
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+          LLM Provider Usage
         </h3>
-        {import.meta.env.DEV && (
-          <button
-            onClick={() => setShowDemo(!showDemo)}
-            className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-          >
-            {showDemo ? 'Hide Demo' : 'Show Demo'}
-          </button>
-        )}
       </div>
 
       {/* Total Summary */}
@@ -198,7 +124,7 @@ export function CostMonitor() {
         </div>
         <div>
           <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-            {formatCost(effectiveTotalCost)}
+            {formatCost(totalCost)}
           </div>
           <div className="text-xs text-gray-500 dark:text-gray-400">
             Total Cost
@@ -207,18 +133,22 @@ export function CostMonitor() {
       </div>
 
       {/* Provider Cards */}
-      {sortedProviders.length > 0 ? (
-        <div className="mb-4">
-          <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-3">
-            By Provider
-          </h4>
+      <div className="mb-4">
+        <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-3">
+          By Provider
+        </h4>
+        {sortedProviders.length > 0 ? (
           <div className="grid grid-cols-2 gap-3">
             {sortedProviders.map(([provider, usage]) => (
               <ProviderCard key={provider} usage={usage} />
             ))}
           </div>
-        </div>
-      ) : null}
+        ) : (
+          <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
+            No provider usage data yet
+          </div>
+        )}
+      </div>
 
     </div>
   )

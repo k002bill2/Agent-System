@@ -131,7 +131,7 @@ interface OrganizationsState {
 
   // Members
   fetchMembers: (orgId: string) => Promise<void>
-  inviteMember: (orgId: string, data: InviteMemberRequest) => Promise<boolean>
+  inviteMember: (orgId: string, data: InviteMemberRequest, invitedBy?: string) => Promise<boolean>
   updateMemberRole: (orgId: string, memberId: string, role: MemberRole) => Promise<boolean>
   removeMember: (orgId: string, memberId: string) => Promise<boolean>
 
@@ -342,10 +342,15 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
     }
   },
 
-  inviteMember: async (orgId, data) => {
+  inviteMember: async (orgId, data, invitedBy?: string) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await authFetch(`${API_BASE_URL}/api/organizations/${orgId}/members/invite`, {
+      // invited_by는 필수 쿼리 파라미터
+      const url = new URL(`${API_BASE_URL}/api/organizations/${orgId}/members/invite`)
+      if (invitedBy) {
+        url.searchParams.set('invited_by', invitedBy)
+      }
+      const response = await authFetch(url.toString(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),

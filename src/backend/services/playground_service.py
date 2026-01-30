@@ -1,9 +1,11 @@
 """Playground service for agent testing environment."""
 
 import asyncio
+import json
 import os
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Any, AsyncIterator
 
 from models.playground import (
@@ -20,8 +22,102 @@ from models.playground import (
 from services.llm_service import LLMService, LLMResponse, MODEL_CONFIGS
 
 
-# In-memory storage
+# Persistent storage file path
+STORAGE_DIR = Path(__file__).parent.parent / "data"
+SESSIONS_FILE = STORAGE_DIR / "playground_sessions.json"
+
+# In-memory cache
 _sessions: dict[str, PlaygroundSession] = {}
+_initialized = False
+
+# Default system prompt for playground
+DEFAULT_SYSTEM_PROMPT = """당신은 도움이 되는 AI 어시스턴트입니다.
+항상 한국어로 답변해주세요. 명확하고 친절하게 응답하며, 필요한 경우 단계별로 설명해주세요."""
+
+
+def _ensure_storage_dir():
+    """Ensure storage directory exists."""
+    STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _load_sessions():
+    """Load sessions from persistent storage."""
+    global _sessions, _initialized
+    if _initialized:
+        return
+
+    _ensure_storage_dir()
+
+    if SESSIONS_FILE.exists():
+        try:
+            with open(SESSIONS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                for session_data in data:
+                    # Convert datetime strings back to datetime objects
+                    if "created_at" in session_data and isinstance(session_data["created_at"], str):
+                        session_data["created_at"] = datetime.fromisoformat(session_data["created_at"])
+                    if "updated_at" in session_data and isinstance(session_data["updated_at"], str):
+                        session_data["updated_at"] = datetime.fromisoformat(session_data["updated_at"])
+
+                    # Convert messages
+                    if "messages" in session_data:
+                        for msg in session_data["messages"]:
+                            if "timestamp" in msg and isinstance(msg["timestamp"], str):
+                                msg["timestamp"] = datetime.fromisoformat(msg["timestamp"])
+
+                    # Convert executions
+                    if "executions" in session_data:
+                        for exec_data in session_data["executions"]:
+                            for dt_field in ["created_at", "started_at", "completed_at"]:
+                                if dt_field in exec_data and isinstance(exec_data[dt_field], str):
+                                    exec_data[dt_field] = datetime.fromisoformat(exec_data[dt_field])
+                            if "messages" in exec_data:
+                                for msg in exec_data["messages"]:
+                                    if "timestamp" in msg and isinstance(msg["timestamp"], str):
+                                        msg["timestamp"] = datetime.fromisoformat(msg["timestamp"])
+
+                    session = PlaygroundSession(**session_data)
+                    _sessions[session.id] = session
+        except Exception as e:
+            print(f"Warning: Failed to load playground sessions: {e}")
+
+    _initialized = True
+
+
+def _save_sessions():
+    """Save sessions to persistent storage."""
+    _ensure_storage_dir()
+
+    try:
+        data = []
+        for session in _sessions.values():
+            session_dict = session.model_dump()
+            # Convert datetime objects to ISO strings for JSON serialization
+            if session_dict.get("created_at"):
+                session_dict["created_at"] = session_dict["created_at"].isoformat()
+            if session_dict.get("updated_at"):
+                session_dict["updated_at"] = session_dict["updated_at"].isoformat()
+
+            # Convert messages
+            for msg in session_dict.get("messages", []):
+                if msg.get("timestamp"):
+                    msg["timestamp"] = msg["timestamp"].isoformat()
+
+            # Convert executions
+            for exec_data in session_dict.get("executions", []):
+                for dt_field in ["created_at", "started_at", "completed_at"]:
+                    if exec_data.get(dt_field):
+                        exec_data[dt_field] = exec_data[dt_field].isoformat()
+                for msg in exec_data.get("messages", []):
+                    if msg.get("timestamp"):
+                        msg["timestamp"] = msg["timestamp"].isoformat()
+
+            data.append(session_dict)
+
+        with open(SESSIONS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Warning: Failed to save playground sessions: {e}")
 
 
 # Mock tools for playground
@@ -79,25 +175,30 @@ class PlaygroundService:
     @staticmethod
     def create_session(data: PlaygroundSessionCreate) -> PlaygroundSession:
         """Create a new playground session."""
+        _load_sessions()  # Ensure sessions are loaded
+
         session = PlaygroundSession(
             name=data.name,
             description=data.description,
             agent_id=data.agent_id,
             model=data.model,
-            system_prompt=data.system_prompt,
+            system_prompt=data.system_prompt or DEFAULT_SYSTEM_PROMPT,
             available_tools=list(PLAYGROUND_TOOLS.keys()),
         )
         _sessions[session.id] = session
+        _save_sessions()  # Persist to file
         return session
 
     @staticmethod
     def get_session(session_id: str) -> PlaygroundSession | None:
         """Get a playground session by ID."""
+        _load_sessions()  # Ensure sessions are loaded
         return _sessions.get(session_id)
 
     @staticmethod
     def list_sessions() -> list[PlaygroundSession]:
         """List all playground sessions."""
+        _load_sessions()  # Ensure sessions are loaded
         return sorted(
             _sessions.values(),
             key=lambda s: s.updated_at,
@@ -107,8 +208,10 @@ class PlaygroundService:
     @staticmethod
     def delete_session(session_id: str) -> bool:
         """Delete a playground session."""
+        _load_sessions()  # Ensure sessions are loaded
         if session_id in _sessions:
             del _sessions[session_id]
+            _save_sessions()  # Persist to file
             return True
         return False
 
@@ -121,12 +224,16 @@ class PlaygroundService:
         max_tokens: int | None = None,
         system_prompt: str | None = None,
         enabled_tools: list[str] | None = None,
+        name: str | None = None,
     ) -> PlaygroundSession | None:
         """Update session settings."""
+        _load_sessions()  # Ensure sessions are loaded
         session = _sessions.get(session_id)
         if not session:
             return None
 
+        if name is not None:
+            session.name = name
         if agent_id is not None:
             session.agent_id = agent_id
         if model is not None:
@@ -141,6 +248,7 @@ class PlaygroundService:
             session.enabled_tools = enabled_tools
 
         session.updated_at = datetime.utcnow()
+        _save_sessions()  # Persist to file
         return session
 
     # ─────────────────────────────────────────────────────────────
@@ -153,6 +261,7 @@ class PlaygroundService:
         request: PlaygroundExecuteRequest,
     ) -> PlaygroundExecution:
         """Execute a prompt in the playground."""
+        _load_sessions()  # Ensure sessions are loaded
         session = _sessions.get(session_id)
         if not session:
             raise ValueError(f"Session {session_id} not found")
@@ -271,6 +380,7 @@ class PlaygroundService:
         session.total_tokens += execution.total_tokens
         session.total_cost += execution.cost
         session.updated_at = datetime.utcnow()
+        _save_sessions()  # Persist to file
 
         return execution
 
@@ -280,6 +390,7 @@ class PlaygroundService:
         request: PlaygroundExecuteRequest,
     ) -> AsyncIterator[str]:
         """Execute with streaming response."""
+        _load_sessions()  # Ensure sessions are loaded
         session = _sessions.get(session_id)
         if not session:
             raise ValueError(f"Session {session_id} not found")
@@ -325,6 +436,7 @@ class PlaygroundService:
             session.messages.append(assistant_msg)
             session.total_executions += 1
             session.updated_at = datetime.utcnow()
+            _save_sessions()  # Persist to file
 
         except Exception as e:
             yield f"\n\n[Error: {str(e)}]"
@@ -415,6 +527,7 @@ class PlaygroundService:
     @staticmethod
     def clear_session_history(session_id: str) -> bool:
         """Clear conversation history for a session."""
+        _load_sessions()  # Ensure sessions are loaded
         session = _sessions.get(session_id)
         if not session:
             return False
@@ -422,6 +535,7 @@ class PlaygroundService:
         session.messages = []
         session.executions = []
         session.updated_at = datetime.utcnow()
+        _save_sessions()  # Persist to file
         return True
 
     @staticmethod
@@ -430,6 +544,7 @@ class PlaygroundService:
         limit: int = 50,
     ) -> list[PlaygroundExecution]:
         """Get execution history for a session."""
+        _load_sessions()  # Ensure sessions are loaded
         session = _sessions.get(session_id)
         if not session:
             return []
@@ -535,7 +650,7 @@ def _calculate_cost(input_tokens: int, output_tokens: int, model: str) -> float:
     pricing = {
         "claude-sonnet-4-20250514": {"input": 0.003, "output": 0.015},
         "claude-opus-4-20250514": {"input": 0.015, "output": 0.075},
-        "gemini-2.0-flash-exp": {"input": 0.00025, "output": 0.001},
+        "gemini-2.0-flash": {"input": 0.00025, "output": 0.001},
         "gpt-4o": {"input": 0.005, "output": 0.015},
     }
 

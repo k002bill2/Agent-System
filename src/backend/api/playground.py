@@ -57,6 +57,7 @@ async def delete_session(session_id: str):
 class SessionSettingsUpdate(BaseModel):
     """Request to update session settings."""
 
+    name: str | None = None
     agent_id: str | None = None
     model: str | None = None
     temperature: float | None = None
@@ -70,6 +71,7 @@ async def update_session_settings(session_id: str, data: SessionSettingsUpdate):
     """Update session settings."""
     session = PlaygroundService.update_session_settings(
         session_id,
+        name=data.name,
         agent_id=data.agent_id,
         model=data.model,
         temperature=data.temperature,

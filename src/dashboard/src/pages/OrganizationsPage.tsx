@@ -396,7 +396,7 @@ export function OrganizationsPage() {
         <InviteMemberModal
           organizationName={currentOrganization.name}
           isLoading={isLoading}
-          onSubmit={(data) => inviteMember(currentOrganization.id, data)}
+          onSubmit={(data) => inviteMember(currentOrganization.id, data, user?.id)}
           onClose={() => setModalMode(null)}
         />
       )}

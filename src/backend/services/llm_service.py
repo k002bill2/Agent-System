@@ -44,9 +44,9 @@ MODEL_CONFIGS = {
         "context_window": 1000000,
         "pricing": {"input": 0.00025, "output": 0.001},
     },
-    "gemini-2.0-flash-exp": {
+    "gemini-2.0-flash": {
         "provider": "google",
-        "model": "gemini-2.0-flash-exp",
+        "model": "gemini-2.0-flash",
         "context_window": 1000000,
         "pricing": {"input": 0.0, "output": 0.0},  # Free during preview
     },
@@ -193,7 +193,7 @@ class LLMService:
     async def invoke(
         cls,
         prompt: str,
-        model_id: str = "gemini-2.0-flash-exp",
+        model_id: str = "gemini-2.0-flash",
         system_prompt: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
@@ -204,7 +204,7 @@ class LLMService:
 
         Args:
             prompt: The user's prompt
-            model_id: Model identifier (e.g., "gemini-2.0-flash-exp", "claude-sonnet-4-20250514")
+            model_id: Model identifier (e.g., "gemini-2.0-flash", "claude-sonnet-4-20250514")
             system_prompt: Optional system prompt
             temperature: Sampling temperature
             max_tokens: Maximum output tokens
@@ -277,7 +277,7 @@ class LLMService:
     async def stream(
         cls,
         prompt: str,
-        model_id: str = "gemini-2.0-flash-exp",
+        model_id: str = "gemini-2.0-flash",
         system_prompt: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,

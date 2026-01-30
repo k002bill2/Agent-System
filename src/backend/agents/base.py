@@ -15,7 +15,7 @@ class AgentConfig(BaseModel):
     name: str
     description: str
     system_prompt: str
-    model_name: str = "gemini-2.0-flash-exp"
+    model_name: str = "gemini-2.0-flash"
     temperature: float = 0.7
     max_tokens: int = 4096
     tools: list[str] = Field(default_factory=list)

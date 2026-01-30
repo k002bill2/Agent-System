@@ -4,7 +4,7 @@ import { useClaudeSessionsStore } from '../stores/claudeSessions'
 import { Activity, CheckCircle, Clock, AlertCircle, Users, Terminal } from 'lucide-react'
 import { CostMonitor } from '../components/CostMonitor'
 import { ClaudeUsageDashboard } from '../components/usage/ClaudeUsageDashboard'
-import { ProjectConfigStats } from '../components/ProjectConfigStats'
+import { ConfigStatsCard, ConfigChartCard } from '../components/ProjectConfigStats'
 import { ProcessMonitorWidget } from '../components/ProcessMonitorWidget'
 
 export function DashboardPage() {
@@ -103,7 +103,7 @@ export function DashboardPage() {
       </div>
 
       {/* Agent Stats, Cost Monitor, Claude Usage & Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6 items-stretch">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6 items-start">
         {/* Column 1: Agent Status + Process Monitor + Cost Monitor (stacked) */}
         <div className="space-y-6">
           {/* Agent Status */}
@@ -135,9 +135,11 @@ export function DashboardPage() {
           <CostMonitor />
         </div>
 
-        {/* Column 2-3: Claude Code Usage (spans 2 columns) */}
-        <div className="xl:col-span-2 h-full">
+        {/* Column 2-3: Claude Code Usage + Config Stats (spans 2 columns) */}
+        <div className="xl:col-span-2 space-y-4">
           <ClaudeUsageDashboard />
+          <ConfigStatsCard />
+          <ConfigChartCard />
         </div>
 
         {/* Column 4: Recent Claude Code Sessions */}
@@ -190,9 +192,6 @@ export function DashboardPage() {
           )}
         </div>
       </div>
-
-      {/* Project Configuration Stats */}
-      <ProjectConfigStats />
     </div>
   )
 }

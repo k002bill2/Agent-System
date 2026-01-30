@@ -61,12 +61,23 @@ interface NotificationRule {
   updated_at: string
 }
 
+interface ChannelConfigSummary {
+  webhook_url?: string
+  email_address?: string
+  smtp_host?: string
+  smtp_port?: number
+  smtp_username?: string
+  smtp_use_tls?: boolean
+  smtp_password_set?: boolean
+}
+
 interface ChannelStatus {
   channel: NotificationChannel
   enabled: boolean
   configured: boolean
   rate_limit_per_hour: number
   sent_this_hour: number
+  config_summary?: ChannelConfigSummary
 }
 
 interface NotificationRuleEditorProps {
@@ -321,18 +332,29 @@ export function NotificationRuleEditor({ className }: NotificationRuleEditorProp
                   className="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50"
                   onClick={() => setExpandedChannel(isExpanded ? null : ch.channel)}
                 >
-                  <div className="flex items-center gap-3">
-                    <Icon className={cn('w-5 h-5', CHANNEL_COLORS[ch.channel])} />
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <Icon className={cn('w-5 h-5 flex-shrink-0', CHANNEL_COLORS[ch.channel])} />
                     <span className="font-medium text-gray-900 dark:text-white capitalize">
                       {ch.channel}
                     </span>
                     {ch.configured ? (
-                      <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 rounded">
+                      <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 rounded flex-shrink-0">
                         Configured
                       </span>
                     ) : (
-                      <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300 rounded">
+                      <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300 rounded flex-shrink-0">
                         Not Configured
+                      </span>
+                    )}
+                    {/* Config Summary - 접힌 상태에서 표시 */}
+                    {!isExpanded && ch.configured && ch.config_summary && (
+                      <span className="text-xs text-gray-500 dark:text-gray-400 truncate ml-2">
+                        {ch.channel === 'email' && ch.config_summary.email_address && (
+                          <span>→ {ch.config_summary.email_address}</span>
+                        )}
+                        {ch.channel !== 'email' && ch.config_summary.webhook_url && (
+                          <span>→ {ch.config_summary.webhook_url}</span>
+                        )}
                       </span>
                     )}
                   </div>
@@ -373,6 +395,7 @@ export function NotificationRuleEditor({ className }: NotificationRuleEditorProp
                   <div className="px-4 pb-4 bg-gray-50 dark:bg-gray-700/30">
                     <ChannelConfigForm
                       channel={ch.channel}
+                      configSummary={ch.config_summary}
                       onTest={() => handleTestChannel(ch.channel)}
                       onSaveSuccess={async () => {
                         // 저장 성공 시 채널 목록 다시 로드하여 상태 반영
@@ -599,12 +622,13 @@ export function NotificationRuleEditor({ className }: NotificationRuleEditorProp
 
 interface ChannelConfigFormProps {
   channel: NotificationChannel
+  configSummary?: ChannelConfigSummary
   onTest: () => void
   onSaveSuccess: () => void
   testResult?: string
 }
 
-function ChannelConfigForm({ channel, onTest, onSaveSuccess, testResult }: ChannelConfigFormProps) {
+function ChannelConfigForm({ channel, configSummary, onTest, onSaveSuccess, testResult }: ChannelConfigFormProps) {
   const [webhookUrl, setWebhookUrl] = useState('')
   const [emailAddress, setEmailAddress] = useState('')
   // SMTP settings
@@ -614,6 +638,18 @@ function ChannelConfigForm({ channel, onTest, onSaveSuccess, testResult }: Chann
   const [smtpPassword, setSmtpPassword] = useState('')
   const [smtpUseTls, setSmtpUseTls] = useState(true)
   const [saving, setSaving] = useState(false)
+
+  // 저장된 설정값 로드
+  useEffect(() => {
+    if (configSummary) {
+      if (configSummary.email_address) setEmailAddress(configSummary.email_address)
+      if (configSummary.smtp_host) setSmtpHost(configSummary.smtp_host)
+      if (configSummary.smtp_port) setSmtpPort(configSummary.smtp_port)
+      if (configSummary.smtp_username) setSmtpUsername(configSummary.smtp_username)
+      if (configSummary.smtp_use_tls !== undefined) setSmtpUseTls(configSummary.smtp_use_tls)
+      // webhook_url은 마스킹되어 있으므로 placeholder로 표시 (실제 값은 수정 시 새로 입력)
+    }
+  }, [configSummary])
 
   const handleSave = async () => {
     setSaving(true)
@@ -652,8 +688,13 @@ function ChannelConfigForm({ channel, onTest, onSaveSuccess, testResult }: Chann
               value={webhookUrl}
               onChange={(e) => setWebhookUrl(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-              placeholder="https://hooks.slack.com/services/..."
+              placeholder={configSummary?.webhook_url || "https://hooks.slack.com/services/..."}
             />
+            {configSummary?.webhook_url && !webhookUrl && (
+              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                ✓ 저장됨: {configSummary.webhook_url} (수정하려면 새 URL 입력)
+              </p>
+            )}
             <p className="text-xs text-gray-500 mt-1">
               Create an incoming webhook in Slack workspace settings
             </p>
@@ -670,8 +711,13 @@ function ChannelConfigForm({ channel, onTest, onSaveSuccess, testResult }: Chann
               value={webhookUrl}
               onChange={(e) => setWebhookUrl(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-              placeholder="https://discord.com/api/webhooks/..."
+              placeholder={configSummary?.webhook_url || "https://discord.com/api/webhooks/..."}
             />
+            {configSummary?.webhook_url && !webhookUrl && (
+              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                ✓ 저장됨: {configSummary.webhook_url} (수정하려면 새 URL 입력)
+              </p>
+            )}
             <p className="text-xs text-gray-500 mt-1">
               Create a webhook in Discord channel settings
             </p>
@@ -745,8 +791,13 @@ function ChannelConfigForm({ channel, onTest, onSaveSuccess, testResult }: Chann
                     value={smtpPassword}
                     onChange={(e) => setSmtpPassword(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-                    placeholder="••••••••••••••••"
+                    placeholder={configSummary?.smtp_password_set ? "••••••••(저장됨)" : "••••••••••••••••"}
                   />
+                  {configSummary?.smtp_password_set && !smtpPassword && (
+                    <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                      ✓ 비밀번호 저장됨 (변경하려면 새 비밀번호 입력)
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="mt-3 flex items-center gap-2">
@@ -778,8 +829,13 @@ function ChannelConfigForm({ channel, onTest, onSaveSuccess, testResult }: Chann
               value={webhookUrl}
               onChange={(e) => setWebhookUrl(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-              placeholder="https://your-server.com/webhook"
+              placeholder={configSummary?.webhook_url || "https://your-server.com/webhook"}
             />
+            {configSummary?.webhook_url && !webhookUrl && (
+              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                ✓ 저장됨: {configSummary.webhook_url} (수정하려면 새 URL 입력)
+              </p>
+            )}
             <p className="text-xs text-gray-500 mt-1">
               Your endpoint will receive JSON payloads via POST
             </p>

@@ -429,7 +429,7 @@ class LLMRouterService:
             LLMRouterService.create_provider(
                 LLMProviderConfigCreate(
                     provider=LLMProvider.GOOGLE,
-                    model=os.getenv("GOOGLE_MODEL", "gemini-2.0-flash-exp"),
+                    model=os.getenv("GOOGLE_MODEL", "gemini-2.0-flash"),
                     api_key=google_key,
                     priority=90,
                     cost_per_1k_input=0.00025,

@@ -10,14 +10,14 @@ const COLORS = {
   hooks: '#F97316',    // orange
 }
 
-export function ProjectConfigStats() {
+// Total Configuration Items 카드 (별도 컴포넌트)
+export function ConfigStatsCard() {
   const { projects, fetchProjects, isLoading } = useProjectConfigsStore()
 
   useEffect(() => {
     fetchProjects()
   }, [fetchProjects])
 
-  // Calculate total stats across all projects
   const totals = projects.reduce(
     (acc, project) => {
       acc.mcp += project.mcp_server_count
@@ -29,10 +29,41 @@ export function ProjectConfigStats() {
     { mcp: 0, agents: 0, skills: 0, hooks: 0 }
   )
 
-  // Data for bar chart (per project)
+  if (isLoading) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 animate-pulse">
+        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" />
+        <div className="grid grid-cols-2 gap-3">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-12 bg-gray-200 dark:bg-gray-700 rounded" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+        Total Configuration Items
+      </h3>
+      <div className="grid grid-cols-2 gap-3">
+        <StatItem icon={Server} label="MCP Servers" count={totals.mcp} color="text-green-600" bgColor="bg-green-100 dark:bg-green-900/30" />
+        <StatItem icon={Bot} label="Agents" count={totals.agents} color="text-blue-600" bgColor="bg-blue-100 dark:bg-blue-900/30" />
+        <StatItem icon={Sparkles} label="Skills" count={totals.skills} color="text-purple-600" bgColor="bg-purple-100 dark:bg-purple-900/30" />
+        <StatItem icon={Webhook} label="Hooks" count={totals.hooks} color="text-orange-600" bgColor="bg-orange-100 dark:bg-orange-900/30" />
+      </div>
+    </div>
+  )
+}
+
+// Configuration by Project 차트 카드 (별도 컴포넌트)
+export function ConfigChartCard() {
+  const { projects, isLoading } = useProjectConfigsStore()
+
   const barData = projects.map(project => ({
-    name: project.project_name.length > 20
-      ? project.project_name.slice(0, 20) + '...'
+    name: project.project_name.length > 15
+      ? project.project_name.slice(0, 15) + '...'
       : project.project_name,
     fullName: project.project_name,
     mcp: project.mcp_server_count,
@@ -43,81 +74,64 @@ export function ProjectConfigStats() {
 
   if (isLoading) {
     return (
-      <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 h-72 animate-pulse" />
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 h-72 animate-pulse" />
-      </div>
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 h-56 animate-pulse" />
     )
   }
 
   return (
-    <div className="mt-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Stats Summary Cards */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-            Total Configuration Items
-          </h3>
+    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+        Configuration by Project ({projects.length} projects)
+      </h3>
 
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <StatItem icon={Server} label="MCP Servers" count={totals.mcp} color="text-green-600" bgColor="bg-green-100 dark:bg-green-900/30" />
-            <StatItem icon={Bot} label="Agents" count={totals.agents} color="text-blue-600" bgColor="bg-blue-100 dark:bg-blue-900/30" />
-            <StatItem icon={Sparkles} label="Skills" count={totals.skills} color="text-purple-600" bgColor="bg-purple-100 dark:bg-purple-900/30" />
-            <StatItem icon={Webhook} label="Hooks" count={totals.hooks} color="text-orange-600" bgColor="bg-orange-100 dark:bg-orange-900/30" />
-          </div>
-
+      {barData.length > 0 ? (
+        <div className="h-40 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={barData} layout="vertical" margin={{ left: 0, right: 10 }}>
+              <XAxis type="number" tick={{ fontSize: 10 }} />
+              <YAxis
+                type="category"
+                dataKey="name"
+                tick={{ fontSize: 10 }}
+                width={90}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: 'white',
+                  fontSize: 12,
+                }}
+                formatter={(value) => [value, '']}
+                labelFormatter={(_, payload) => {
+                  const item = payload?.[0]?.payload
+                  return item?.fullName || ''
+                }}
+              />
+              <Legend
+                wrapperStyle={{ fontSize: 10 }}
+                formatter={(value) => value.charAt(0).toUpperCase() + value.slice(1)}
+              />
+              <Bar dataKey="mcp" stackId="a" fill={COLORS.mcp} name="mcp" />
+              <Bar dataKey="agents" stackId="a" fill={COLORS.agents} name="agents" />
+              <Bar dataKey="skills" stackId="a" fill={COLORS.skills} name="skills" />
+              <Bar dataKey="hooks" stackId="a" fill={COLORS.hooks} name="hooks" />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
-
-        {/* Per-Project Bar Chart */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-            Configuration by Project ({projects.length} projects)
-          </h3>
-
-          {barData.length > 0 ? (
-            <div className="h-48 w-full rounded-2xl">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={barData} layout="vertical" margin={{ left: 20, right: 20 }}>
-                  <XAxis type="number" tick={{ fontSize: 12 }} />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    tick={{ fontSize: 11 }}
-                    width={120}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'rgba(17, 24, 39, 0.9)',
-                      border: 'none',
-                      borderRadius: '12px',
-                      color: 'white',
-                    }}
-                    formatter={(value) => [value, '']}
-                    labelFormatter={(_, payload) => {
-                      const item = payload?.[0]?.payload
-                      return item?.fullName || ''
-                    }}
-                  />
-                  <Legend
-                    wrapperStyle={{ fontSize: 12 }}
-                    formatter={(value) => value.charAt(0).toUpperCase() + value.slice(1)}
-                  />
-                  <Bar dataKey="mcp" stackId="a" fill={COLORS.mcp} name="mcp" />
-                  <Bar dataKey="agents" stackId="a" fill={COLORS.agents} name="agents" />
-                  <Bar dataKey="skills" stackId="a" fill={COLORS.skills} name="skills" />
-                  <Bar dataKey="hooks" stackId="a" fill={COLORS.hooks} name="hooks" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-64 flex items-center justify-center text-gray-500 dark:text-gray-400">
-              No projects registered
-            </div>
-          )}
+      ) : (
+        <div className="h-40 flex items-center justify-center text-gray-500 dark:text-gray-400 text-sm">
+          No projects registered
         </div>
-      </div>
+      )}
     </div>
   )
+}
+
+// 하위 호환성을 위한 기존 컴포넌트 (사용 안 함)
+export function ProjectConfigStats() {
+  return null
 }
 
 interface StatItemProps {

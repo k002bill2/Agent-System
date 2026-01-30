@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # LLM Provider Settings
     llm_provider: str = "google"
-    google_model: str = "gemini-2.0-flash-exp"
+    google_model: str = "gemini-2.0-flash"
     anthropic_model: str = "claude-sonnet-4-20250514"
     ollama_model: str = "qwen2.5:7b"
     ollama_base_url: str = "http://localhost:11434"

@@ -1,12 +1,15 @@
 """Cost allocation API routes."""
 
+import os
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query, Depends, Response
 from pydantic import BaseModel
 import json
 import csv
 from io import StringIO
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from db.database import get_db
 from models.cost import (
     CostCenter,
     CostReport,
@@ -21,6 +24,8 @@ from services.cost_allocation_service import (
 
 
 router = APIRouter(prefix="/cost", tags=["cost-allocation"])
+
+USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 
 
 def get_service() -> CostAllocationService:
@@ -66,8 +71,11 @@ async def list_cost_centers(
     organization_id: str | None = Query(None),
     is_active: bool | None = Query(None),
     service: CostAllocationService = Depends(get_service),
+    db: AsyncSession = Depends(get_db),
 ):
     """List all cost centers with optional filters."""
+    if USE_DATABASE:
+        return await service.list_cost_centers_async(db, organization_id, is_active)
     return service.list_cost_centers(organization_id, is_active)
 
 
@@ -75,8 +83,23 @@ async def list_cost_centers(
 async def create_cost_center(
     request: CreateCostCenterRequest,
     service: CostAllocationService = Depends(get_service),
+    db: AsyncSession = Depends(get_db),
 ):
     """Create a new cost center."""
+    if USE_DATABASE:
+        return await service.create_cost_center_async(
+            db=db,
+            organization_id=request.organization_id,
+            name=request.name,
+            code=request.code,
+            description=request.description,
+            budget_usd=request.budget_usd,
+            budget_period=request.budget_period,
+            alert_threshold_percent=request.alert_threshold_percent,
+            tags=request.tags,
+            owner_id=request.owner_id,
+            parent_id=request.parent_id,
+        )
     return service.create_cost_center(
         organization_id=request.organization_id,
         name=request.name,
@@ -95,9 +118,13 @@ async def create_cost_center(
 async def get_cost_center(
     cost_center_id: str,
     service: CostAllocationService = Depends(get_service),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get a cost center by ID."""
-    cc = service.get_cost_center(cost_center_id)
+    if USE_DATABASE:
+        cc = await service.get_cost_center_async(db, cost_center_id)
+    else:
+        cc = service.get_cost_center(cost_center_id)
     if not cc:
         raise HTTPException(status_code=404, detail="Cost center not found")
     return cc
@@ -141,6 +168,7 @@ async def get_cost_report(
     end_date: datetime | None = Query(None),
     organization_id: str | None = Query(None),
     service: CostAllocationService = Depends(get_service),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Generate a cost report for the specified period.
@@ -154,6 +182,14 @@ async def get_cost_report(
 
     Plus budget utilization status.
     """
+    if USE_DATABASE:
+        return await service.generate_report_async(
+            db=db,
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+            organization_id=organization_id,
+        )
     return service.generate_report(
         period=period,
         start_date=start_date,
@@ -280,9 +316,17 @@ async def get_budget_alerts(
 @router.get("/summary")
 async def get_cost_summary(
     service: CostAllocationService = Depends(get_service),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get a quick summary of cost allocation status."""
-    report = service.generate_report(period="monthly")
+    if USE_DATABASE:
+        report = await service.generate_report_async(db, period="monthly")
+        cost_centers = await service.list_cost_centers_async(db)
+        active_cost_centers = await service.list_cost_centers_async(db, is_active=True)
+    else:
+        report = service.generate_report(period="monthly")
+        cost_centers = service.list_cost_centers()
+        active_cost_centers = service.list_cost_centers(is_active=True)
 
     # Count alerts by type
     alerts = service.get_alerts()
@@ -299,8 +343,8 @@ async def get_cost_summary(
             "total_output_tokens": report.total_output_tokens,
         },
         "cost_centers": {
-            "total": len(service.list_cost_centers()),
-            "active": len(service.list_cost_centers(is_active=True)),
+            "total": len(cost_centers),
+            "active": len(active_cost_centers),
         },
         "budget_alerts": alert_counts,
         "top_models": dict(sorted(report.by_model.items(), key=lambda x: x[1], reverse=True)[:5]),

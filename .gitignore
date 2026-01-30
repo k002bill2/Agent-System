@@ -27,6 +27,9 @@ Thumbs.db
 logs/
 *.log
 
+# Backend data (playground sessions, etc.)
+src/backend/data/
+
 # Runtime
 .pids/
 
@@ -40,3 +43,4 @@ logs/
 # Projects (symlinks - managed separately)
 projects/*
 !projects/.gitkeep
+src/dashboard/coverage/

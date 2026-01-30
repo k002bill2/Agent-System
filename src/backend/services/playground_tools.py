@@ -282,12 +282,60 @@ class PlaygroundTools:
 
             # Check file size
             size = os.path.getsize(path)
-            if size > 1024 * 1024:  # 1MB limit
+            max_size = 10 * 1024 * 1024  # 10MB limit
+            if size > max_size:
                 return {
                     "success": False,
-                    "error": f"File too large: {size} bytes (max 1MB)",
+                    "error": f"File too large: {size} bytes (max 10MB)",
                 }
 
+            # Handle PDF files
+            if path_lower.endswith(".pdf"):
+                try:
+                    import pypdf
+                    reader = pypdf.PdfReader(path)
+                    content = ""
+                    for i, page in enumerate(reader.pages):
+                        text = page.extract_text()
+                        if text:
+                            content += f"--- Page {i + 1} ---\n{text}\n\n"
+                    if not content.strip():
+                        return {
+                            "success": True,
+                            "path": path,
+                            "content": "[PDF contains no extractable text - may be scanned/image-based]",
+                            "size": size,
+                            "pages": len(reader.pages),
+                        }
+                    return {
+                        "success": True,
+                        "path": path,
+                        "content": content,
+                        "size": size,
+                        "pages": len(reader.pages),
+                    }
+                except ImportError:
+                    return {
+                        "success": False,
+                        "error": "PDF reading requires pypdf library. Install with: pip install pypdf",
+                    }
+                except Exception as e:
+                    return {
+                        "success": False,
+                        "error": f"Error reading PDF: {str(e)}",
+                    }
+
+            # Handle binary files
+            binary_extensions = [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp",
+                                 ".mp3", ".mp4", ".wav", ".avi", ".mov", ".zip", ".tar",
+                                 ".gz", ".rar", ".7z", ".exe", ".dll", ".so", ".dylib"]
+            if any(path_lower.endswith(ext) for ext in binary_extensions):
+                return {
+                    "success": False,
+                    "error": f"Cannot read binary file: {os.path.basename(path)}. Only text and PDF files are supported.",
+                }
+
+            # Read text file
             with open(path, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read()
 

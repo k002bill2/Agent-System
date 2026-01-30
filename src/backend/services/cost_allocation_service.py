@@ -1,8 +1,12 @@
 """Cost allocation service for enterprise billing."""
 
+import os
 import uuid
 from datetime import datetime, timedelta
 from typing import Any
+
+from sqlalchemy import select, func, and_
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.cost import (
     CostCenter,
@@ -13,6 +17,15 @@ from models.cost import (
     BudgetAlert,
     SessionTokenUsage,
 )
+
+USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
+
+# Conditional DB model imports
+try:
+    from db.models import CostCenterModel, CostAllocationModel
+    _DB_AVAILABLE = True
+except ImportError:
+    _DB_AVAILABLE = False
 
 
 class CostAllocationService:
@@ -27,8 +40,9 @@ class CostAllocationService:
     - Cost forecasting
     """
 
-    def __init__(self):
+    def __init__(self, use_database: bool | None = None):
         """Initialize cost allocation service."""
+        self.use_database = use_database if use_database is not None else USE_DATABASE
         self._cost_centers: dict[str, CostCenter] = {}
         self._allocations: list[CostAllocation] = []
         self._alerts: list[BudgetAlert] = []
@@ -470,6 +484,304 @@ class CostAllocationService:
             results = [a for a in results if a.created_at >= since]
 
         return sorted(results, key=lambda x: x.created_at, reverse=True)
+
+
+    # ─────────────────────────────────────────────────────────────
+    # Async Database Methods (USE_DATABASE=true)
+    # ─────────────────────────────────────────────────────────────
+
+    async def create_cost_center_async(
+        self,
+        db: AsyncSession,
+        organization_id: str,
+        name: str,
+        code: str,
+        budget_usd: float | None = None,
+        budget_period: str = "monthly",
+        alert_threshold_percent: float = 80.0,
+        description: str | None = None,
+        tags: dict | None = None,
+        owner_id: str | None = None,
+        parent_id: str | None = None,
+    ) -> CostCenter:
+        """Create a new cost center in database."""
+        cc_id = str(uuid.uuid4())
+
+        db_model = CostCenterModel(
+            id=cc_id,
+            organization_id=organization_id,
+            name=name,
+            code=code,
+            description=description,
+            budget_usd=budget_usd,
+            budget_period=budget_period,
+            alert_threshold_percent=alert_threshold_percent,
+            tags=tags or {},
+            owner_id=owner_id,
+            parent_id=parent_id,
+        )
+        db.add(db_model)
+        await db.commit()
+        await db.refresh(db_model)
+
+        return CostCenter(
+            id=db_model.id,
+            organization_id=db_model.organization_id,
+            name=db_model.name,
+            code=db_model.code,
+            description=db_model.description,
+            budget_usd=db_model.budget_usd,
+            budget_period=db_model.budget_period,
+            alert_threshold_percent=db_model.alert_threshold_percent,
+            tags=db_model.tags or {},
+            owner_id=db_model.owner_id,
+            parent_id=db_model.parent_id,
+            is_active=db_model.is_active,
+            created_at=db_model.created_at,
+            updated_at=db_model.updated_at,
+        )
+
+    async def get_cost_center_async(
+        self,
+        db: AsyncSession,
+        cost_center_id: str,
+    ) -> CostCenter | None:
+        """Get a cost center by ID from database."""
+        result = await db.execute(
+            select(CostCenterModel).where(CostCenterModel.id == cost_center_id)
+        )
+        db_model = result.scalar_one_or_none()
+
+        if not db_model:
+            return None
+
+        return CostCenter(
+            id=db_model.id,
+            organization_id=db_model.organization_id,
+            name=db_model.name,
+            code=db_model.code,
+            description=db_model.description,
+            budget_usd=db_model.budget_usd,
+            budget_period=db_model.budget_period,
+            alert_threshold_percent=db_model.alert_threshold_percent,
+            tags=db_model.tags or {},
+            owner_id=db_model.owner_id,
+            parent_id=db_model.parent_id,
+            is_active=db_model.is_active,
+            created_at=db_model.created_at,
+            updated_at=db_model.updated_at,
+        )
+
+    async def list_cost_centers_async(
+        self,
+        db: AsyncSession,
+        organization_id: str | None = None,
+        is_active: bool | None = None,
+    ) -> list[CostCenter]:
+        """List cost centers with optional filters from database."""
+        query = select(CostCenterModel)
+
+        if organization_id:
+            query = query.where(CostCenterModel.organization_id == organization_id)
+        if is_active is not None:
+            query = query.where(CostCenterModel.is_active == is_active)
+
+        result = await db.execute(query)
+        db_models = result.scalars().all()
+
+        return [
+            CostCenter(
+                id=m.id,
+                organization_id=m.organization_id,
+                name=m.name,
+                code=m.code,
+                description=m.description,
+                budget_usd=m.budget_usd,
+                budget_period=m.budget_period,
+                alert_threshold_percent=m.alert_threshold_percent,
+                tags=m.tags or {},
+                owner_id=m.owner_id,
+                parent_id=m.parent_id,
+                is_active=m.is_active,
+                created_at=m.created_at,
+                updated_at=m.updated_at,
+            )
+            for m in db_models
+        ]
+
+    async def allocate_session_cost_async(
+        self,
+        db: AsyncSession,
+        session_id: str,
+        session_usage: SessionTokenUsage,
+        cost_center_id: str | None = None,
+        project_id: str | None = None,
+        user_id: str | None = None,
+        tags: dict | None = None,
+    ) -> CostAllocation:
+        """Allocate session cost to a cost center in database."""
+        # Build model cost breakdown
+        model_costs: dict[str, float] = {}
+        for agent_name, agent_usage in session_usage.agents.items():
+            for usage in agent_usage.history:
+                model = usage.model or "unknown"
+                model_costs[model] = model_costs.get(model, 0) + usage.cost_usd
+
+        alloc_id = str(uuid.uuid4())
+
+        db_model = CostAllocationModel(
+            id=alloc_id,
+            session_id=session_id,
+            project_id=project_id,
+            cost_center_id=cost_center_id,
+            user_id=user_id,
+            total_cost_usd=session_usage.total_cost_usd,
+            input_tokens=session_usage.total_input_tokens,
+            output_tokens=session_usage.total_output_tokens,
+            model_costs=model_costs,
+            allocation_tags=tags or {},
+        )
+        db.add(db_model)
+        await db.commit()
+        await db.refresh(db_model)
+
+        return CostAllocation(
+            id=db_model.id,
+            session_id=db_model.session_id,
+            project_id=db_model.project_id,
+            cost_center_id=db_model.cost_center_id,
+            user_id=db_model.user_id,
+            total_cost_usd=db_model.total_cost_usd,
+            input_tokens=db_model.input_tokens,
+            output_tokens=db_model.output_tokens,
+            model_costs=db_model.model_costs or {},
+            allocation_tags=db_model.allocation_tags or {},
+            created_at=db_model.created_at,
+        )
+
+    async def get_allocations_async(
+        self,
+        db: AsyncSession,
+        cost_center_id: str | None = None,
+        project_id: str | None = None,
+        user_id: str | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> list[CostAllocation]:
+        """Get cost allocations with filters from database."""
+        query = select(CostAllocationModel)
+
+        conditions = []
+        if cost_center_id:
+            conditions.append(CostAllocationModel.cost_center_id == cost_center_id)
+        if project_id:
+            conditions.append(CostAllocationModel.project_id == project_id)
+        if user_id:
+            conditions.append(CostAllocationModel.user_id == user_id)
+        if start_date:
+            conditions.append(CostAllocationModel.created_at >= start_date)
+        if end_date:
+            conditions.append(CostAllocationModel.created_at <= end_date)
+
+        if conditions:
+            query = query.where(and_(*conditions))
+
+        result = await db.execute(query)
+        db_models = result.scalars().all()
+
+        return [
+            CostAllocation(
+                id=m.id,
+                session_id=m.session_id,
+                project_id=m.project_id,
+                cost_center_id=m.cost_center_id,
+                user_id=m.user_id,
+                total_cost_usd=m.total_cost_usd,
+                input_tokens=m.input_tokens,
+                output_tokens=m.output_tokens,
+                model_costs=m.model_costs or {},
+                allocation_tags=m.allocation_tags or {},
+                created_at=m.created_at,
+            )
+            for m in db_models
+        ]
+
+    async def generate_report_async(
+        self,
+        db: AsyncSession,
+        period: str = "monthly",
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+        organization_id: str | None = None,
+    ) -> CostReport:
+        """Generate a cost report for the specified period from database."""
+        # Default to current month
+        if not end_date:
+            end_date = datetime.utcnow()
+        if not start_date:
+            if period == "monthly":
+                start_date = end_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            elif period == "quarterly":
+                quarter_start_month = ((end_date.month - 1) // 3) * 3 + 1
+                start_date = end_date.replace(month=quarter_start_month, day=1, hour=0, minute=0, second=0, microsecond=0)
+            else:
+                start_date = end_date - timedelta(days=30)
+
+        # Get allocations
+        allocations = await self.get_allocations_async(db, start_date=start_date, end_date=end_date)
+
+        # Calculate totals
+        total_cost = sum(a.total_cost_usd for a in allocations)
+        total_input = sum(a.input_tokens for a in allocations)
+        total_output = sum(a.output_tokens for a in allocations)
+        total_sessions = len(set(a.session_id for a in allocations))
+
+        # Group by dimensions
+        by_cost_center: dict[str, float] = {}
+        by_project: dict[str, float] = {}
+        by_user: dict[str, float] = {}
+        by_model: dict[str, float] = {}
+        by_day: dict[str, float] = {}
+
+        for a in allocations:
+            if a.cost_center_id:
+                by_cost_center[a.cost_center_id] = by_cost_center.get(a.cost_center_id, 0) + a.total_cost_usd
+            if a.project_id:
+                by_project[a.project_id] = by_project.get(a.project_id, 0) + a.total_cost_usd
+            if a.user_id:
+                by_user[a.user_id] = by_user.get(a.user_id, 0) + a.total_cost_usd
+            for model, cost in a.model_costs.items():
+                by_model[model] = by_model.get(model, 0) + cost
+            day_key = a.created_at.strftime("%Y-%m-%d")
+            by_day[day_key] = by_day.get(day_key, 0) + a.total_cost_usd
+
+        # Budget utilization
+        budget_utilization: dict[str, dict] = {}
+        for cc_id, spent in by_cost_center.items():
+            cc = await self.get_cost_center_async(db, cc_id)
+            if cc and cc.budget_usd:
+                budget_utilization[cc_id] = {
+                    "name": cc.name,
+                    "budget": cc.budget_usd,
+                    "spent": spent,
+                    "percent": round((spent / cc.budget_usd) * 100, 2),
+                }
+
+        return CostReport(
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+            total_cost_usd=round(total_cost, 6),
+            total_input_tokens=total_input,
+            total_output_tokens=total_output,
+            total_sessions=total_sessions,
+            by_cost_center=by_cost_center,
+            by_project=by_project,
+            by_user=by_user,
+            by_model=by_model,
+            by_day=by_day,
+            budget_utilization=budget_utilization,
+        )
 
 
 # Global singleton
