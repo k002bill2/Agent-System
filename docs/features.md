@@ -156,6 +156,7 @@ class ClaudeSessionMonitor:
 - 파일 캐싱 (mtime + size 기반)
 - 실시간 SSE 스트리밍
 - Tool Use 입력값 추적
+- 프로세스 정리 (고아 프로세스 제거)
 
 ---
 
@@ -234,6 +235,8 @@ class AuditAction(str, Enum):
     TOOL_EXECUTED = "tool_executed"
 ```
 
+**무결성 검증**: 로그 변조 감지 기능
+
 ---
 
 ## 16. Smart Notifications
@@ -246,6 +249,7 @@ class AuditAction(str, Enum):
 - 규칙 기반 알림 (이벤트 타입, 조건, 우선순위)
 - 채널별 Rate Limiting
 - 템플릿 기반 메시지 포맷
+- 조직 초대 이메일 발송
 
 ---
 
@@ -331,24 +335,54 @@ class VersionService:
 
 **멤버 역할**: `owner`, `admin`, `member`, `viewer`
 
+**기능**:
+- 멤버 초대 (이메일 발송)
+- 역할 변경
+- 조직 통계
+- 토큰 사용량 추적
+
 ---
 
 ## 22. Project Config Management
 
-Claude Code 프로젝트의 스킬, 에이전트, 명령어를 웹 UI에서 관리:
+Claude Code 프로젝트의 스킬, 에이전트, MCP, Hook을 웹 UI에서 관리:
 
 ```python
 class ProjectConfigMonitor:
     def scan_projects(self) -> list[ProjectConfig]
     def get_project_skills(self, project_id: str) -> list[SkillConfig]
     def get_project_agents(self, project_id: str) -> list[AgentConfig]
-    def get_project_commands(self, project_id: str) -> list[CommandConfig]
+    def get_project_mcp_servers(self, project_id: str) -> list[MCPServerConfig]
+    def get_project_hooks(self, project_id: str) -> list[HookConfig]
 ```
 
 **기능**:
 - `.claude/` 디렉토리 스캔으로 자동 발견
 - YAML Frontmatter 파싱
 - 웹 UI에서 CRUD 작업
+- 프로젝트 간 설정 복사
+
+### Skills 관리
+- 스킬 생성/수정/삭제
+- 트리거 조건 설정
+- 프롬프트 내용 편집
+
+### Agents 관리
+- 에이전트 생성/수정/삭제
+- 시스템 프롬프트 편집
+- 도구 구성 설정
+
+### MCP 관리
+- MCP 서버 추가/수정/삭제
+- 서버 시작/중지
+- 도구 목록 조회
+- 도구 직접 호출 테스트
+
+### Hooks 관리
+- Hook 생성/수정/삭제
+- 이벤트 타입 선택 (PreToolUse, PostToolUse, Notification, Stop)
+- 매처 패턴 설정
+- 타임아웃 설정
 
 ---
 
@@ -384,25 +418,34 @@ class MergeService:
     def merge_branch(source: str, target: str, message: str) -> MergeResult
 ```
 
-### 주요 기능
+### Working Directory
 
-**브랜치 관리**:
+작업 디렉토리 변경 사항 관리:
+- Staged/Unstaged/Untracked 파일 표시
+- 파일 스테이징 (git add)
+- 커밋 생성 (git commit)
+
+### 브랜치 관리
+
 - 로컬/리모트 브랜치 목록 조회
 - 브랜치 생성/삭제
 - Ahead/Behind 커밋 수 계산
 - 보호 브랜치 (main, master) 설정
 
-**충돌 감지**:
+### 충돌 감지
+
 - `git merge-tree` 기반 드라이런
 - 충돌 파일 목록 및 상세 정보
 - 3-way diff 지원
 
-**Merge Request (내부 MR)**:
+### Merge Request (내부 MR)
+
 - 팀 내부 머지 요청 생성
 - 승인/거부 워크플로우
 - MR 상태: `open`, `merged`, `closed`, `draft`
 
-**GitHub 통합**:
+### GitHub 통합
+
 - Pull Request 목록 조회
 - PR 머지 (`merge`, `squash`, `rebase`)
 - PR 리뷰 생성/조회
@@ -417,3 +460,162 @@ class MergeService:
 | viewer | ✓ | - | - | - |
 
 **보호 브랜치**: `main`, `master` 브랜치는 `merge_main` 권한 필요
+
+---
+
+## 25. Project Monitoring
+
+프로젝트 헬스 체크 자동화:
+
+```python
+class ProjectRunner:
+    async def run_check(self, project_path: str, check_type: CheckType) -> CheckResult
+```
+
+**체크 타입**:
+- `test`: npm test 실행
+- `lint`: ESLint 검사
+- `build`: 프로덕션 빌드
+- `type_check`: TypeScript 타입 검사
+
+**Dashboard UI**:
+- 프로젝트별 헬스 상태 표시
+- 실시간 출력 로그
+- 체크 실행/중지
+- 결과 히스토리
+
+---
+
+## 26. Rate Limiting
+
+API 속도 제한 및 할당량 관리:
+
+```python
+class RateLimitService:
+    def check_limit(user_id: str, endpoint: str) -> bool
+    def record_request(user_id: str, endpoint: str) -> None
+    def get_usage(user_id: str) -> RateLimitUsage
+```
+
+**제한 타입**:
+- 분당 요청 수
+- 일일 요청 수
+- 동시 세션 수
+
+---
+
+## 27. Cost Allocation
+
+LLM 비용 추적 및 할당:
+
+```python
+class CostAllocationService:
+    def track_usage(session_id: str, model: str, tokens: int) -> None
+    def get_session_cost(session_id: str) -> CostSummary
+    def get_organization_cost(org_id: str, period: str) -> CostReport
+```
+
+**Dashboard UI**:
+- 세션별 비용 표시
+- 에이전트별 비용 분석
+- 일간/주간/월간 추이
+- 비용 예측
+
+---
+
+## 28. Process Cleanup
+
+고아 프로세스 및 리소스 정리:
+
+```python
+class ProjectCleanupService:
+    def cleanup_orphan_processes(project_id: str) -> CleanupResult
+    def cleanup_temp_files(project_path: str) -> CleanupResult
+```
+
+**Dashboard UI**:
+- 실행 중인 프로세스 목록
+- 프로세스 종료
+- 일괄 정리
+
+---
+
+## 29. Project Templates
+
+프로젝트 템플릿 관리:
+
+```python
+class ProjectTemplateService:
+    def list_templates() -> list[ProjectTemplate]
+    def create_from_template(template_id: str, project_name: str) -> Project
+    def export_as_template(project_id: str) -> ProjectTemplate
+```
+
+**기능**:
+- 템플릿 목록 조회
+- 템플릿에서 프로젝트 생성
+- 프로젝트를 템플릿으로 내보내기
+
+---
+
+## 30. MCP Tool Integration
+
+Model Context Protocol 도구 통합:
+
+```python
+class MCPService:
+    async def start_server(server_config: MCPServerConfig) -> MCPServer
+    async def stop_server(server_id: str) -> bool
+    async def call_tool(server_id: str, tool_name: str, args: dict) -> ToolResult
+    def list_tools(server_id: str) -> list[MCPTool]
+```
+
+**지원 서버**:
+- `filesystem`: 파일 시스템 접근
+- `github`: GitHub API 통합
+- `playwright`: 브라우저 자동화
+- `sqlite`: 데이터베이스 접근
+- 커스텀 MCP 서버
+
+**Dashboard UI**:
+- MCP 서버 목록
+- 서버 상태 표시
+- 도구 목록 조회
+- 도구 직접 호출 테스트
+- 통계 패널
+
+---
+
+## 31. Health Check
+
+시스템 건강도 체크:
+
+```python
+class HealthService:
+    def check_all() -> HealthStatus
+    def check_database() -> ComponentHealth
+    def check_redis() -> ComponentHealth
+    def check_llm_providers() -> dict[str, ComponentHealth]
+```
+
+**체크 항목**:
+- 데이터베이스 연결
+- Redis 연결
+- LLM 프로바이더 상태
+- MCP 서버 상태
+
+---
+
+## 32. Warp Mode
+
+고속 실행 모드:
+
+```python
+class WarpService:
+    async def execute_fast(task: str) -> WarpResult
+```
+
+**특징**:
+- 캐시 활용
+- 병렬 처리 최적화
+- 간단한 작업 우선 처리

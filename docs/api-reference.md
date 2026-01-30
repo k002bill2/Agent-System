@@ -50,7 +50,25 @@ AOS Backend API 엔드포인트 문서입니다.
 | POST | `/api/agents/orchestrate/analyze` | 태스크 분석 |
 | GET | `/api/agents/mcp/servers` | MCP 서버 목록 |
 | POST | `/api/agents/mcp/servers/{id}/start` | MCP 서버 시작 |
+| POST | `/api/agents/mcp/servers/{id}/stop` | MCP 서버 중지 |
 | POST | `/api/agents/mcp/tools/call` | MCP 도구 호출 |
+
+---
+
+## MCP (Model Context Protocol)
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/mcp/servers` | MCP 서버 목록 조회 |
+| POST | `/api/mcp/servers` | MCP 서버 추가 |
+| GET | `/api/mcp/servers/{id}` | MCP 서버 상세 |
+| PUT | `/api/mcp/servers/{id}` | MCP 서버 수정 |
+| DELETE | `/api/mcp/servers/{id}` | MCP 서버 삭제 |
+| POST | `/api/mcp/servers/{id}/start` | 서버 시작 |
+| POST | `/api/mcp/servers/{id}/stop` | 서버 중지 |
+| GET | `/api/mcp/servers/{id}/tools` | 도구 목록 조회 |
+| POST | `/api/mcp/servers/{id}/tools/{tool}/call` | 도구 호출 |
+| GET | `/api/mcp/stats` | MCP 통계 |
 
 ---
 
@@ -74,6 +92,8 @@ AOS Backend API 엔드포인트 문서입니다.
 | GET | `/api/claude-sessions/{id}/stream` | 실시간 SSE 스트리밍 |
 | GET | `/api/claude-sessions/{id}/transcript` | Raw 트랜스크립트 |
 | POST | `/api/claude-sessions/{id}/save` | 세션 DB 저장 |
+| GET | `/api/claude-sessions/{id}/processes` | 세션 프로세스 목록 |
+| POST | `/api/claude-sessions/{id}/processes/cleanup` | 프로세스 정리 |
 
 **쿼리 파라미터** (`GET /api/claude-sessions`):
 - `status`: `active` | `idle` | `completed`
@@ -122,18 +142,48 @@ AOS Backend API 엔드포인트 문서입니다.
 |--------|------|------|
 | GET | `/api/project-configs` | 프로젝트 설정 목록 |
 | GET | `/api/project-configs/{project_id}` | 프로젝트 설정 상세 |
+
+### Skills
+
+| Method | Path | 설명 |
+|--------|------|------|
 | GET | `/api/project-configs/{project_id}/skills` | 스킬 목록 |
 | POST | `/api/project-configs/{project_id}/skills` | 스킬 생성 |
 | PUT | `/api/project-configs/{project_id}/skills/{skill_id}` | 스킬 수정 |
 | DELETE | `/api/project-configs/{project_id}/skills/{skill_id}` | 스킬 삭제 |
+| POST | `/api/project-configs/{project_id}/skills/copy` | 스킬 복사 (다른 프로젝트에서) |
+
+### Agents
+
+| Method | Path | 설명 |
+|--------|------|------|
 | GET | `/api/project-configs/{project_id}/agents` | 에이전트 목록 |
 | POST | `/api/project-configs/{project_id}/agents` | 에이전트 생성 |
 | PUT | `/api/project-configs/{project_id}/agents/{agent_id}` | 에이전트 수정 |
 | DELETE | `/api/project-configs/{project_id}/agents/{agent_id}` | 에이전트 삭제 |
-| GET | `/api/project-configs/{project_id}/commands` | 명령어 목록 |
-| POST | `/api/project-configs/{project_id}/commands` | 명령어 생성 |
-| PUT | `/api/project-configs/{project_id}/commands/{command_id}` | 명령어 수정 |
-| DELETE | `/api/project-configs/{project_id}/commands/{command_id}` | 명령어 삭제 |
+| POST | `/api/project-configs/{project_id}/agents/copy` | 에이전트 복사 |
+
+### MCP Servers
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/project-configs/{project_id}/mcp` | MCP 서버 목록 |
+| POST | `/api/project-configs/{project_id}/mcp` | MCP 서버 추가 |
+| PUT | `/api/project-configs/{project_id}/mcp/{server_id}` | MCP 서버 수정 |
+| DELETE | `/api/project-configs/{project_id}/mcp/{server_id}` | MCP 서버 삭제 |
+| POST | `/api/project-configs/{project_id}/mcp/copy` | MCP 서버 복사 |
+
+### Hooks
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/project-configs/{project_id}/hooks` | Hook 목록 |
+| POST | `/api/project-configs/{project_id}/hooks` | Hook 생성 |
+| PUT | `/api/project-configs/{project_id}/hooks/{hook_id}` | Hook 수정 |
+| DELETE | `/api/project-configs/{project_id}/hooks/{hook_id}` | Hook 삭제 |
+| POST | `/api/project-configs/{project_id}/hooks/copy` | Hook 복사 |
+
+**Hook 이벤트 타입**: `PreToolUse`, `PostToolUse`, `Notification`, `Stop`
 
 ---
 
@@ -170,6 +220,7 @@ AOS Backend API 엔드포인트 문서입니다.
 | GET | `/api/audit/resource-types` | 가능한 리소스 타입 목록 |
 | POST | `/api/audit/cleanup` | 오래된 로그 정리 |
 | POST | `/api/audit/seed` | 테스트용 샘플 데이터 생성 |
+| POST | `/api/audit/verify-integrity` | 무결성 검증 |
 
 **쿼리 파라미터** (`GET /api/audit`):
 - `session_id`, `user_id`: 필터
@@ -297,7 +348,7 @@ AOS Backend API 엔드포인트 문서입니다.
 
 ## Git
 
-### Working Directory (NEW)
+### Working Directory
 
 | Method | Path | 설명 |
 |--------|------|------|
@@ -308,8 +359,8 @@ AOS Backend API 엔드포인트 문서입니다.
 **Add 요청 본문**:
 ```json
 {
-  "paths": ["file1.txt", "src/"],  // 특정 파일/폴더
-  "all": false                      // true면 git add -A
+  "paths": ["file1.txt", "src/"],
+  "all": false
 }
 ```
 
@@ -317,8 +368,8 @@ AOS Backend API 엔드포인트 문서입니다.
 ```json
 {
   "message": "feat: Add new feature",
-  "author_name": "John Doe",       // 선택
-  "author_email": "john@example.com" // 선택
+  "author_name": "John Doe",
+  "author_email": "john@example.com"
 }
 ```
 
@@ -338,22 +389,116 @@ AOS Backend API 엔드포인트 문서입니다.
 | POST | `/api/git/projects/{id}/fetch` | 리모트 fetch |
 | POST | `/api/git/projects/{id}/pull` | 리모트 pull |
 | POST | `/api/git/projects/{id}/push` | 리모트 push |
+
+### Merge
+
+| Method | Path | 설명 |
+|--------|------|------|
 | POST | `/api/git/projects/{id}/merge/preview` | 머지 미리보기 (충돌 체크) |
 | POST | `/api/git/projects/{id}/merge` | 머지 실행 |
+
+### Merge Requests (내부 MR)
+
+| Method | Path | 설명 |
+|--------|------|------|
 | GET | `/api/git/projects/{id}/merge-requests` | MR 목록 |
 | POST | `/api/git/projects/{id}/merge-requests` | MR 생성 |
 | GET | `/api/git/projects/{id}/merge-requests/{mr_id}` | MR 상세 |
 | POST | `/api/git/projects/{id}/merge-requests/{mr_id}/approve` | MR 승인 |
 | POST | `/api/git/projects/{id}/merge-requests/{mr_id}/merge` | MR 머지 |
 | POST | `/api/git/projects/{id}/merge-requests/{mr_id}/close` | MR 닫기 |
+
+**MR 상태**: `open`, `merged`, `closed`, `draft`
+
+**충돌 상태**: `unknown`, `no_conflicts`, `has_conflicts`
+
+### GitHub Integration
+
+| Method | Path | 설명 |
+|--------|------|------|
 | GET | `/api/git/github/{repo}/pulls` | GitHub PR 목록 |
 | GET | `/api/git/github/{repo}/pulls/{number}` | GitHub PR 상세 |
 | POST | `/api/git/github/{repo}/pulls/{number}/merge` | GitHub PR 머지 |
 | GET | `/api/git/github/{repo}/pulls/{number}/reviews` | GitHub PR 리뷰 목록 |
 | POST | `/api/git/github/{repo}/pulls/{number}/reviews` | GitHub PR 리뷰 생성 |
 
-**MR 상태**: `open`, `merged`, `closed`, `draft`
-
-**충돌 상태**: `unknown`, `no_conflicts`, `has_conflicts`
-
 **GitHub 머지 방식**: `merge`, `squash`, `rebase`
+
+---
+
+## Rate Limits
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/rate-limits/status` | 현재 사용자 제한 상태 |
+| GET | `/api/rate-limits/config` | 제한 설정 조회 |
+| PATCH | `/api/rate-limits/config` | 제한 설정 수정 |
+
+---
+
+## Cost Allocation
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/cost-allocation/summary` | 비용 요약 |
+| GET | `/api/cost-allocation/by-session/{id}` | 세션별 비용 |
+| GET | `/api/cost-allocation/by-organization/{id}` | 조직별 비용 |
+| GET | `/api/cost-allocation/trends` | 비용 트렌드 |
+| POST | `/api/cost-allocation/track` | 사용량 기록 |
+
+---
+
+## Health
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/health` | 기본 헬스체크 |
+| GET | `/api/health/detailed` | 상세 헬스체크 |
+| GET | `/api/health/components` | 컴포넌트별 상태 |
+
+---
+
+## Project Monitoring
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/monitor/projects` | 프로젝트 목록 |
+| POST | `/api/monitor/projects/{id}/check` | 헬스 체크 실행 |
+| GET | `/api/monitor/projects/{id}/status` | 체크 상태 조회 |
+| POST | `/api/monitor/projects/{id}/check/stop` | 체크 중지 |
+| GET | `/api/monitor/projects/{id}/history` | 체크 히스토리 |
+| GET | `/api/monitor/projects/{id}/stream` | 실시간 출력 스트림 (SSE) |
+
+**체크 타입**: `test`, `lint`, `build`, `type_check`
+
+---
+
+## WebSocket Events
+
+### 클라이언트 → 서버
+
+| 타입 | 설명 |
+|------|------|
+| `task_create` | 태스크 생성 |
+| `user_message` | 사용자 메시지 |
+| `task_cancel` | 태스크 취소 |
+| `approval_response` | 승인/거부 응답 |
+| `ping` | 연결 확인 |
+
+### 서버 → 클라이언트
+
+| 타입 | 설명 |
+|------|------|
+| `task_started` | 태스크 시작됨 |
+| `task_progress` | 태스크 진행 상황 |
+| `task_completed` | 태스크 완료 |
+| `task_failed` | 태스크 실패 |
+| `agent_thinking` | 에이전트 사고 중 |
+| `agent_action` | 에이전트 액션 |
+| `state_update` | 상태 업데이트 |
+| `approval_required` | 승인 필요 |
+| `approval_granted` | 승인됨 |
+| `approval_denied` | 거부됨 |
+| `token_update` | 토큰 사용량 업데이트 |
+| `error` | 에러 발생 |
+| `pong` | 연결 확인 응답 |

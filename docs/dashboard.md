@@ -54,23 +54,23 @@ import { cn } from '@/lib/utils';
 | 페이지 | 경로 | 설명 |
 |--------|------|------|
 | `DashboardPage` | `/` | 메인 대시보드 (세션 상태, 태스크 요약) |
-| `ProjectsPage` | `/projects` | 프로젝트 목록 및 관리 |
-| `ProjectConfigsPage` | `/project-configs` | 프로젝트 설정 관리 |
+| `ProjectsPage` | `/projects` | 프로젝트 목록 및 관리, RAG 검색 |
+| `ProjectConfigsPage` | `/project-configs` | 프로젝트 설정 관리 (Skills, Agents, MCP, Hooks) |
 | `TasksPage` | `/tasks` | 태스크 트리 뷰, 상세 정보 |
 | `AgentsPage` | `/agents` | 에이전트 레지스트리, MCP, RLHF |
 | `ActivityPage` | `/activity` | 실시간 활동 로그 |
-| `MonitorPage` | `/monitor` | 시스템 모니터링 |
+| `MonitorPage` | `/monitor` | 프로젝트 헬스 체크 모니터링 |
 | `ClaudeSessionsPage` | `/claude-sessions` | Claude Code 세션 모니터링 |
+| `GitPage` | `/git` | Git 브랜치/머지/PR 관리 |
+| `AnalyticsPage` | `/analytics` | 사용 통계 및 분석 대시보드 |
+| `AuditPage` | `/audit` | 감사 로그 뷰어 |
+| `NotificationsPage` | `/notifications` | 알림 규칙/채널 설정 |
+| `PlaygroundPage` | `/playground` | 에이전트 테스트 환경 |
+| `OrganizationsPage` | `/organizations` | 조직 관리 (멤버, 역할, 통계) |
+| `SettingsPage` | `/settings` | 시스템 설정 |
 | `LoginPage` | `/login` | OAuth/Email 로그인 |
 | `RegisterPage` | `/register` | 이메일/비밀번호 회원가입 |
 | `AuthCallbackPage` | `/auth/callback` | OAuth 콜백 처리 |
-| `AuditPage` | `/audit` | 감사 로그 뷰어 |
-| `NotificationsPage` | `/notifications` | 알림 규칙/채널 설정 |
-| `AnalyticsPage` | `/analytics` | 분석 대시보드 |
-| `PlaygroundPage` | `/playground` | 에이전트 테스트 환경 |
-| `GitPage` | `/git` | Git 브랜치/머지 관리 |
-| `OrganizationsPage` | `/organizations` | 조직 관리 (멤버, 역할, 통계) |
-| `SettingsPage` | `/settings` | 시스템 설정 |
 
 ---
 
@@ -80,11 +80,15 @@ import { cn } from '@/lib/utils';
 
 | 컴포넌트 | 설명 |
 |----------|------|
+| `Sidebar` | 메인 네비게이션 사이드바 |
 | `TaskPanel` | 태스크 카드 (상태, 진행률, 액션) |
+| `ChatInput` | 메시지 입력 인터페이스 |
+| `ApprovalModal` | HITL 승인/거부 모달 |
 | `DiffViewer` | 파일 변경 비교 뷰 (Split/Unified) |
 | `AgentCard` | 에이전트 카드 (능력, 상태, 통계) |
 | `AgentStatsPanel` | 레지스트리 통계 패널 |
 | `TaskAnalyzer` | 태스크 분석 UI |
+| `DataSourceToggle` | 데이터 소스 선택 토글 |
 
 ### Claude Code Components
 
@@ -102,6 +106,7 @@ import { cn } from '@/lib/utils';
 | `SessionCard` | 세션 카드 (상태, 토큰, 비용) |
 | `SessionDetails` | 상세 정보 + Recent Activity |
 | `TranscriptViewer` | Raw 트랜스크립트 (JSON Tree) |
+| `ProcessCleanupPanel` | 프로세스 정리 패널 |
 
 ### Project Config Components
 
@@ -109,9 +114,16 @@ import { cn } from '@/lib/utils';
 |----------|------|
 | `ProjectConfigStats` | 프로젝트 통계 |
 | `ProjectList` | 프로젝트 목록 |
+| `OverviewTab` | 설정 개요 탭 |
+| `SkillsTab` | 스킬 목록 탭 |
 | `SkillEditModal` | 스킬 편집 모달 |
+| `AgentsTab` | 에이전트 목록 탭 |
 | `AgentEditModal` | 에이전트 편집 모달 |
-| `CommandEditModal` | 명령어 편집 모달 |
+| `MCPTab` | MCP 서버 목록 탭 |
+| `MCPServerModal` | MCP 서버 편집 모달 |
+| `HooksTab` | Hook 목록 탭 |
+| `HookEditModal` | Hook 편집 모달 |
+| `CopyToProjectModal` | 프로젝트 간 복사 모달 |
 
 ### Feedback Components
 
@@ -128,17 +140,20 @@ import { cn } from '@/lib/utils';
 |----------|------|
 | `MCPManagerTab` | MCP 서버 관리 탭 |
 | `MCPServerCard` | MCP 서버 카드 |
+| `MCPStatsPanel` | MCP 통계 패널 |
 | `MCPToolCaller` | MCP 도구 호출 UI |
 
 ### Git Components
 
 | 컴포넌트 | 설명 |
 |----------|------|
+| `GitSetup` | Git 초기 설정 안내 |
+| `WorkingDirectory` | 작업 디렉토리 (staged/unstaged/untracked) |
 | `BranchList` | 브랜치 목록 (local/remote 필터, ahead/behind) |
+| `CommitHistory` | 커밋 타임라인 (확장 가능한 상세) |
 | `MergeRequestCard` | 내부 MR 카드 (승인/머지/닫기) |
 | `MergePreviewPanel` | 머지 미리보기 모달 (충돌 정보) |
 | `PullRequestList` | GitHub PR 목록 + 리뷰 패널 |
-| `CommitHistory` | 커밋 타임라인 (확장 가능한 상세) |
 
 ### Organization Components
 
@@ -146,10 +161,21 @@ import { cn } from '@/lib/utils';
 |----------|------|
 | `OrganizationCard` | 조직 카드 (이름, 플랜, 멤버 수) |
 | `OrganizationFormModal` | 조직 생성/수정 모달 |
+| `OrganizationStats` | 조직 통계 패널 |
 | `MemberList` | 멤버 목록 컨테이너 |
 | `MemberCard` | 멤버 카드 (역할 변경, 제거) |
 | `InviteMemberModal` | 멤버 초대 모달 |
-| `OrganizationStats` | 조직 통계 패널 |
+
+### Monitor Components
+
+| 컴포넌트 | 설명 |
+|----------|------|
+| `HealthOverview` | 헬스 상태 개요 |
+| `ProjectsPanel` | 프로젝트 체크 패널 |
+| `CheckCard` | 체크 결과 카드 |
+| `ContextPanel` | 컨텍스트 정보 패널 |
+| `OutputLog` | 실시간 출력 로그 |
+| `ResizablePanel` | 리사이즈 가능 패널 |
 
 ### RAG Components
 
@@ -157,16 +183,58 @@ import { cn } from '@/lib/utils';
 |----------|------|
 | `RAGQueryPanel` | RAG 의미론적 검색 패널 (쿼리, 결과, 통계, 인덱스 관리) |
 
-### Other Components
+### Audit Components
+
+| 컴포넌트 | 설명 |
+|----------|------|
+| `AuditLogTable` | 감사 로그 테이블 |
+| `AuditFilters` | 감사 로그 필터 |
+| `AuditExport` | 감사 로그 내보내기 |
+
+### Notification Components
+
+| 컴포넌트 | 설명 |
+|----------|------|
+| `NotificationRuleEditor` | 알림 규칙 에디터 |
+| `NotificationHistory` | 알림 히스토리 |
+| `ChannelSettings` | 채널 설정 |
+
+### LLM Router Components
+
+| 컴포넌트 | 설명 |
+|----------|------|
+| `LLMRouterSettings` | LLM 라우터 설정 |
+| `ProviderCard` | 프로바이더 카드 |
+| `RoutingStats` | 라우팅 통계 |
+
+### Version Control Components
+
+| 컴포넌트 | 설명 |
+|----------|------|
+| `VersionHistory` | 버전 타임라인 |
+| `VersionCompare` | 버전 비교 (diff) |
+| `RollbackModal` | 롤백 모달 |
+
+### Usage & Cost Components
 
 | 컴포넌트 | 설명 |
 |----------|------|
 | `ContextWindowMeter` | Context 창 사용량 게이지 |
+| `CostMonitor` | 비용 모니터링 패널 |
+| `UsageProgressBar` | 사용량 진행바 |
+| `ClaudeUsageDashboard` | Claude 사용량 대시보드 |
+
+### Permission Components
+
+| 컴포넌트 | 설명 |
+|----------|------|
 | `PermissionTogglePanel` | 권한 토글 패널 |
-| `AuditLogTable` | 감사 로그 테이블 |
-| `NotificationRuleEditor` | 알림 규칙 에디터 |
-| `LLMRouterSettings` | LLM 라우터 설정 |
-| `VersionHistory` | 버전 타임라인 |
+
+### Process Monitor Components
+
+| 컴포넌트 | 설명 |
+|----------|------|
+| `ProcessMonitorWidget` | 프로세스 모니터 위젯 |
 
 ---
 
@@ -174,8 +242,11 @@ import { cn } from '@/lib/utils';
 
 | Store | 파일 | 설명 |
 |-------|------|------|
-| `useOrchestration` | `orchestration.ts` | 세션/태스크 관리 |
+| `useOrchestration` | `orchestration.ts` | 세션/태스크 관리, WebSocket 연결 |
+| `useProjects` | `projects.ts` | 프로젝트 목록 및 상태 |
+| `useProjectConfigs` | `projectConfigs.ts` | 프로젝트 설정 (Skills, Agents, MCP, Hooks) |
 | `useAgents` | `agents.ts` | 에이전트 레지스트리 |
+| `useTasks` | `tasks.ts` | 태스크 관리 |
 | `useFeedback` | `feedback.ts` | RLHF 피드백 |
 | `useClaudeSessions` | `claudeSessions.ts` | Claude 세션 모니터링 |
 | `useClaudeCodeActivity` | `claudeCodeActivity.ts` | Claude Code 실시간 활동 |
@@ -184,13 +255,12 @@ import { cn } from '@/lib/utils';
 | `useAuth` | `auth.ts` | 인증 상태 |
 | `useDiff` | `diff.ts` | 파일 변경 비교 |
 | `usePermissions` | `permissions.ts` | 세션 권한 상태 |
-| `useProjects` | `projects.ts` | 프로젝트 상태 |
-| `useProjectConfigs` | `projectConfigs.ts` | 프로젝트 설정 상태 |
 | `useNavigation` | `navigation.ts` | 네비게이션 상태 |
-| `useMonitoring` | `monitoring.ts` | 시스템 모니터링 |
+| `useMonitoring` | `monitoring.ts` | 프로젝트 모니터링 |
 | `useSettings` | `settings.ts` | 설정 상태 |
 | `useGit` | `git.ts` | Git 브랜치/머지 관리 |
 | `useOrganizations` | `organizations.ts` | 조직/멤버 관리 |
+| `useAudit` | `audit.ts` | 감사 로그 |
 
 ### Store Pattern
 
@@ -236,27 +306,180 @@ export const useStore = create<State>((set, get) => ({
 ```
 src/dashboard/
 ├── src/
-│   ├── pages/              # 페이지 컴포넌트
+│   ├── pages/                  # 페이지 컴포넌트 (18개)
+│   │   ├── DashboardPage.tsx
+│   │   ├── ProjectsPage.tsx
+│   │   ├── ProjectConfigsPage.tsx
+│   │   ├── TasksPage.tsx
+│   │   ├── AgentsPage.tsx
+│   │   ├── ActivityPage.tsx
+│   │   ├── MonitorPage.tsx
+│   │   ├── ClaudeSessionsPage.tsx
+│   │   ├── GitPage.tsx
+│   │   ├── AnalyticsPage.tsx
+│   │   ├── AuditPage.tsx
+│   │   ├── NotificationsPage.tsx
+│   │   ├── PlaygroundPage.tsx
+│   │   ├── OrganizationsPage.tsx
+│   │   ├── SettingsPage.tsx
+│   │   ├── LoginPage.tsx
+│   │   ├── RegisterPage.tsx
+│   │   └── AuthCallbackPage.tsx
 │   ├── components/
-│   │   ├── ui/             # 공통 UI 컴포넌트
-│   │   ├── feedback/       # RLHF 피드백
-│   │   ├── claude-sessions/# Claude Sessions
-│   │   ├── project-configs/# 프로젝트 설정
-│   │   ├── mcp/            # MCP 관리
-│   │   ├── audit/          # 감사 로그
-│   │   ├── notifications/  # 알림 설정
-│   │   ├── llm-router/     # LLM 라우터
-│   │   ├── version-control/# 버전 관리
-│   │   ├── git/            # Git 관리
-│   │   ├── organizations/  # 조직 관리
-│   │   └── rag/            # RAG 검색
-│   ├── stores/             # Zustand 스토어
-│   ├── hooks/              # 커스텀 훅
-│   ├── lib/                # 유틸리티
-│   └── types/              # TypeScript 타입
+│   │   ├── ui/                 # 공통 UI 컴포넌트
+│   │   ├── feedback/           # RLHF 피드백
+│   │   ├── claude-sessions/    # Claude Sessions
+│   │   ├── project-configs/    # 프로젝트 설정
+│   │   │   ├── ProjectList.tsx
+│   │   │   ├── OverviewTab.tsx
+│   │   │   ├── SkillsTab.tsx
+│   │   │   ├── SkillEditModal.tsx
+│   │   │   ├── AgentsTab.tsx
+│   │   │   ├── AgentEditModal.tsx
+│   │   │   ├── MCPTab.tsx
+│   │   │   ├── MCPServerModal.tsx
+│   │   │   ├── HooksTab.tsx
+│   │   │   ├── HookEditModal.tsx
+│   │   │   └── CopyToProjectModal.tsx
+│   │   ├── mcp/                # MCP 관리
+│   │   ├── audit/              # 감사 로그
+│   │   ├── notifications/      # 알림 설정
+│   │   ├── llm-router/         # LLM 라우터
+│   │   ├── version-control/    # 버전 관리
+│   │   ├── git/                # Git 관리
+│   │   │   ├── GitSetup.tsx
+│   │   │   ├── WorkingDirectory.tsx
+│   │   │   ├── BranchList.tsx
+│   │   │   ├── CommitHistory.tsx
+│   │   │   ├── MergeRequestCard.tsx
+│   │   │   ├── MergePreviewPanel.tsx
+│   │   │   └── PullRequestList.tsx
+│   │   ├── organizations/      # 조직 관리
+│   │   │   ├── OrganizationCard.tsx
+│   │   │   ├── OrganizationFormModal.tsx
+│   │   │   ├── OrganizationStats.tsx
+│   │   │   ├── MemberList.tsx
+│   │   │   ├── MemberCard.tsx
+│   │   │   └── InviteMemberModal.tsx
+│   │   ├── monitor/            # 프로젝트 모니터링
+│   │   │   ├── HealthOverview.tsx
+│   │   │   ├── ProjectsPanel.tsx
+│   │   │   ├── CheckCard.tsx
+│   │   │   ├── ContextPanel.tsx
+│   │   │   ├── OutputLog.tsx
+│   │   │   └── ResizablePanel.tsx
+│   │   └── rag/                # RAG 검색
+│   │       └── RAGQueryPanel.tsx
+│   ├── stores/                 # Zustand 스토어 (19개)
+│   │   ├── orchestration.ts
+│   │   ├── projects.ts
+│   │   ├── projectConfigs.ts
+│   │   ├── agents.ts
+│   │   ├── tasks.ts
+│   │   ├── feedback.ts
+│   │   ├── claudeSessions.ts
+│   │   ├── claudeCodeActivity.ts
+│   │   ├── claudeUsage.ts
+│   │   ├── mcp.ts
+│   │   ├── auth.ts
+│   │   ├── diff.ts
+│   │   ├── permissions.ts
+│   │   ├── navigation.ts
+│   │   ├── monitoring.ts
+│   │   ├── settings.ts
+│   │   ├── git.ts
+│   │   ├── organizations.ts
+│   │   └── audit.ts
+│   ├── hooks/                  # 커스텀 훅
+│   ├── lib/                    # 유틸리티
+│   │   ├── utils.ts            # cn() 등 헬퍼 함수
+│   │   └── api.ts              # API 클라이언트
+│   └── types/                  # TypeScript 타입
 ├── public/
 ├── index.html
 ├── vite.config.ts
 ├── tailwind.config.js
+├── tsconfig.json
 └── package.json
+```
+
+---
+
+## Key Features
+
+### 1. 실시간 WebSocket 통신
+
+`useOrchestration` 스토어에서 WebSocket 연결을 관리합니다.
+
+```typescript
+// 연결 상태 확인
+const { isConnected } = useOrchestration()
+
+// 태스크 생성
+const { submitTask } = useOrchestration()
+await submitTask({ title: 'My Task', description: '...' })
+
+// 상태 업데이트 구독
+useEffect(() => {
+  // WebSocket 메시지가 자동으로 스토어 업데이트
+}, [])
+```
+
+### 2. 인증 및 OAuth
+
+`useAuth` 스토어에서 인증 상태를 관리합니다.
+
+```typescript
+const { user, isAuthenticated, login, logout } = useAuth()
+
+// OAuth 로그인
+await login('google')
+await login('github')
+
+// 이메일 로그인
+await loginWithEmail(email, password)
+```
+
+### 3. 프로젝트 설정 관리
+
+`useProjectConfigs` 스토어에서 Skills, Agents, MCP, Hooks를 관리합니다.
+
+```typescript
+const {
+  skills, agents, mcpServers, hooks,
+  createSkill, updateAgent, deleteMCPServer, createHook
+} = useProjectConfigs()
+```
+
+### 4. Git 통합
+
+`useGit` 스토어에서 Git 작업을 관리합니다.
+
+```typescript
+const {
+  branches, commits, mergeRequests,
+  createBranch, stageFiles, commit, createMergeRequest
+} = useGit()
+```
+
+### 5. 조직 관리
+
+`useOrganizations` 스토어에서 멀티테넌트 조직을 관리합니다.
+
+```typescript
+const {
+  organizations, currentOrg, members,
+  createOrganization, inviteMember, changeMemberRole
+} = useOrganizations()
+```
+
+### 6. 프로젝트 모니터링
+
+`useMonitoring` 스토어에서 헬스 체크를 관리합니다.
+
+```typescript
+const {
+  checkResults, isRunning,
+  runCheck, stopCheck
+} = useMonitoring()
 ```
