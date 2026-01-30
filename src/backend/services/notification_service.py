@@ -1,5 +1,6 @@
 """Notification service for sending alerts across multiple channels."""
 
+import json
 import os
 import ssl
 import uuid
@@ -7,6 +8,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from pathlib import Path
 from typing import Any
 
 import aiosmtplib
@@ -28,6 +30,61 @@ from models.notification import (
 )
 
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
+
+# Data directory for persistent storage
+DATA_DIR = Path(__file__).parent.parent / "data"
+CHANNEL_CONFIGS_FILE = DATA_DIR / "notification_channel_configs.json"
+
+
+def _load_channel_configs() -> dict[NotificationChannel, ChannelConfig]:
+    """Load channel configs from JSON file."""
+    if not CHANNEL_CONFIGS_FILE.exists():
+        return {}
+    try:
+        with open(CHANNEL_CONFIGS_FILE) as f:
+            data = json.load(f)
+        configs = {}
+        for channel_str, config_data in data.items():
+            channel = NotificationChannel(channel_str)
+            configs[channel] = ChannelConfig(
+                channel=channel,
+                enabled=config_data.get("enabled", True),
+                webhook_url=config_data.get("webhook_url"),
+                api_key=config_data.get("api_key"),
+                bot_token=config_data.get("bot_token"),
+                email_address=config_data.get("email_address"),
+                smtp_host=config_data.get("smtp_host"),
+                smtp_port=config_data.get("smtp_port", 587),
+                smtp_username=config_data.get("smtp_username"),
+                smtp_password=config_data.get("smtp_password"),
+                smtp_use_tls=config_data.get("smtp_use_tls", True),
+                rate_limit_per_hour=config_data.get("rate_limit_per_hour", 60),
+            )
+        return configs
+    except Exception:
+        return {}
+
+
+def _save_channel_configs(configs: dict[NotificationChannel, ChannelConfig]) -> None:
+    """Save channel configs to JSON file."""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    data = {}
+    for channel, config in configs.items():
+        data[channel.value] = {
+            "enabled": config.enabled,
+            "webhook_url": config.webhook_url,
+            "api_key": config.api_key,
+            "bot_token": config.bot_token,
+            "email_address": config.email_address,
+            "smtp_host": config.smtp_host,
+            "smtp_port": config.smtp_port,
+            "smtp_username": config.smtp_username,
+            "smtp_password": config.smtp_password,
+            "smtp_use_tls": config.smtp_use_tls,
+            "rate_limit_per_hour": config.rate_limit_per_hour,
+        }
+    with open(CHANNEL_CONFIGS_FILE, "w") as f:
+        json.dump(data, f, indent=2)
 
 
 class NotificationAdapter(ABC):
@@ -242,7 +299,7 @@ ADAPTERS: dict[NotificationChannel, NotificationAdapter] = {
 
 # In-memory storage (fallback when USE_DATABASE=false)
 _rules: dict[str, NotificationRule] = {}
-_channel_configs: dict[NotificationChannel, ChannelConfig] = {}
+_channel_configs: dict[NotificationChannel, ChannelConfig] = _load_channel_configs()
 _notification_history: list[NotificationMessage] = []
 
 
@@ -466,15 +523,19 @@ class NotificationService:
 
     @staticmethod
     def get_channel_config(channel: NotificationChannel) -> ChannelConfig:
-        """Get or create channel configuration (in-memory)."""
+        """Get or create channel configuration (in-memory + file)."""
+        global _channel_configs
+        # Always reload from file to get latest config
+        _channel_configs = _load_channel_configs()
         if channel not in _channel_configs:
             _channel_configs[channel] = ChannelConfig(channel=channel)
         return _channel_configs[channel]
 
     @staticmethod
     def set_channel_config(channel: NotificationChannel, config: ChannelConfig) -> None:
-        """Set channel configuration (in-memory)."""
+        """Set channel configuration (in-memory + file)."""
         _channel_configs[channel] = config
+        _save_channel_configs(_channel_configs)
 
     @staticmethod
     async def get_channel_config_async(
@@ -805,9 +866,13 @@ class NotificationService:
     @staticmethod
     async def test_channel(
         channel: NotificationChannel,
+        db: AsyncSession | None = None,
     ) -> tuple[bool, str | None]:
         """Test a notification channel with a test message."""
-        config = NotificationService.get_channel_config(channel)
+        if db and USE_DATABASE:
+            config = await NotificationService.get_channel_config_async(db, channel)
+        else:
+            config = NotificationService.get_channel_config(channel)
 
         if not config.enabled:
             return False, "Channel is disabled"
@@ -831,6 +896,13 @@ class NotificationService:
     def get_history(limit: int = 100) -> list[NotificationMessage]:
         """Get notification history (in-memory)."""
         return _notification_history[-limit:]
+
+    @staticmethod
+    def clear_history() -> int:
+        """Clear notification history (in-memory)."""
+        count = len(_notification_history)
+        _notification_history.clear()
+        return count
 
     @staticmethod
     async def get_history_async(db: AsyncSession, limit: int = 100) -> list[NotificationMessage]:
@@ -859,6 +931,16 @@ class NotificationService:
             )
             for row in rows
         ]
+
+    @staticmethod
+    async def clear_history_async(db: AsyncSession) -> int:
+        """Clear notification history from database."""
+        from db.models import NotificationHistoryModel
+        from sqlalchemy import delete
+
+        result = await db.execute(delete(NotificationHistoryModel))
+        await db.commit()
+        return result.rowcount
 
 
 # Convenience functions

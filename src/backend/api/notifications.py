@@ -121,11 +121,14 @@ class ChannelConfigRequest(BaseModel):
 
 
 @router.get("/channels")
-async def list_channels():
+async def list_channels(db: AsyncSession = Depends(get_db)):
     """Get all notification channels and their status."""
     channels = []
     for channel in NotificationChannel:
-        config = NotificationService.get_channel_config(channel)
+        if USE_DATABASE:
+            config = await NotificationService.get_channel_config_async(db, channel)
+        else:
+            config = NotificationService.get_channel_config(channel)
         # Email requires SMTP settings, others require webhook/API key
         if channel == NotificationChannel.EMAIL:
             is_configured = bool(
@@ -133,20 +136,49 @@ async def list_channels():
             )
         else:
             is_configured = bool(config.webhook_url or config.api_key)
+
+        # Build config summary for display
+        config_summary = {}
+        if channel == NotificationChannel.EMAIL:
+            if config.email_address:
+                config_summary["email_address"] = config.email_address
+            if config.smtp_host:
+                config_summary["smtp_host"] = config.smtp_host
+            if config.smtp_port:
+                config_summary["smtp_port"] = config.smtp_port
+            if config.smtp_username:
+                config_summary["smtp_username"] = config.smtp_username
+            config_summary["smtp_use_tls"] = config.smtp_use_tls
+            # 비밀번호가 설정되어 있는지 여부
+            config_summary["smtp_password_set"] = bool(config.smtp_password)
+        else:
+            if config.webhook_url:
+                # Mask webhook URL but show domain
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(config.webhook_url)
+                    config_summary["webhook_url"] = f"{parsed.scheme}://{parsed.netloc}/..."
+                except Exception:
+                    config_summary["webhook_url"] = "configured"
+
         channels.append({
             "channel": channel.value,
             "enabled": config.enabled,
             "configured": is_configured,
             "rate_limit_per_hour": config.rate_limit_per_hour,
             "sent_this_hour": config.sent_this_hour,
+            "config_summary": config_summary,
         })
     return {"channels": channels}
 
 
 @router.get("/channels/{channel}")
-async def get_channel_config(channel: NotificationChannel):
+async def get_channel_config(channel: NotificationChannel, db: AsyncSession = Depends(get_db)):
     """Get configuration for a specific channel."""
-    config = NotificationService.get_channel_config(channel)
+    if USE_DATABASE:
+        config = await NotificationService.get_channel_config_async(db, channel)
+    else:
+        config = NotificationService.get_channel_config(channel)
     return {
         "channel": channel.value,
         "enabled": config.enabled,
@@ -165,9 +197,12 @@ async def get_channel_config(channel: NotificationChannel):
 
 
 @router.put("/channels/{channel}")
-async def update_channel_config(channel: NotificationChannel, data: ChannelConfigRequest):
+async def update_channel_config(channel: NotificationChannel, data: ChannelConfigRequest, db: AsyncSession = Depends(get_db)):
     """Update configuration for a notification channel."""
-    config = NotificationService.get_channel_config(channel)
+    if USE_DATABASE:
+        config = await NotificationService.get_channel_config_async(db, channel)
+    else:
+        config = NotificationService.get_channel_config(channel)
 
     if data.enabled is not None:
         config.enabled = data.enabled
@@ -193,15 +228,21 @@ async def update_channel_config(channel: NotificationChannel, data: ChannelConfi
     if data.rate_limit_per_hour is not None:
         config.rate_limit_per_hour = data.rate_limit_per_hour
 
-    NotificationService.set_channel_config(channel, config)
+    if USE_DATABASE:
+        await NotificationService.set_channel_config_async(db, channel, config)
+    else:
+        NotificationService.set_channel_config(channel, config)
 
     return {"success": True, "message": f"Channel {channel.value} updated"}
 
 
 @router.post("/channels/{channel}/test")
-async def test_channel(channel: NotificationChannel):
+async def test_channel(channel: NotificationChannel, db: AsyncSession = Depends(get_db)):
     """Test a notification channel by sending a test message."""
-    success, error = await NotificationService.test_channel(channel)
+    if USE_DATABASE:
+        success, error = await NotificationService.test_channel(channel, db)
+    else:
+        success, error = await NotificationService.test_channel(channel)
 
     if success:
         return {"success": True, "message": f"Test notification sent to {channel.value}"}
@@ -255,6 +296,16 @@ async def get_notification_history(limit: int = 100, db: AsyncSession = Depends(
         "notifications": history,
         "total": len(history),
     }
+
+
+@router.delete("/history")
+async def clear_notification_history(db: AsyncSession = Depends(get_db)):
+    """Clear all notification history."""
+    if USE_DATABASE:
+        count = await NotificationService.clear_history_async(db)
+    else:
+        count = NotificationService.clear_history()
+    return {"success": True, "deleted": count}
 
 
 # ─────────────────────────────────────────────────────────────

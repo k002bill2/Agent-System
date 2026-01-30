@@ -429,6 +429,30 @@ class OrganizationService:
         return member
 
     @staticmethod
+    def get_pending_invitations(org_id: str) -> list[OrganizationInvitation]:
+        """Get all pending invitations for an organization."""
+        return [
+            inv for inv in _invitations.values()
+            if inv.organization_id == org_id
+            and not inv.accepted
+            and inv.expires_at > datetime.utcnow()
+        ]
+
+    @staticmethod
+    def cancel_invitation(org_id: str, invitation_id: str) -> None:
+        """Cancel a pending invitation."""
+        invitation = _invitations.get(invitation_id)
+        if not invitation:
+            raise ValueError("Invitation not found")
+        if invitation.organization_id != org_id:
+            raise ValueError("Invitation does not belong to this organization")
+        if invitation.accepted:
+            raise ValueError("Invitation already accepted")
+
+        del _invitations[invitation_id]
+        _save_invitations(_invitations)
+
+    @staticmethod
     def update_member_role(member_id: str, new_role: MemberRole) -> OrganizationMember | None:
         """Update a member's role."""
         member = _members.get(member_id)

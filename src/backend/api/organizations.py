@@ -17,6 +17,9 @@ from models.organization import (
     TenantContext,
 )
 from services.organization_service import OrganizationService
+from services.notification_service import NotificationService
+from models.notification import NotificationChannel, ChannelConfig, NotificationMessage, NotificationPriority, NotificationEventType
+from config import get_settings
 
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -127,11 +130,101 @@ async def list_members(org_id: str):
     return OrganizationService.get_members(org_id)
 
 
-@router.post("/{org_id}/members/invite", response_model=OrganizationInvitation)
+async def send_invitation_email(
+    org_name: str,
+    invitation: OrganizationInvitation,
+) -> tuple[bool, str | None]:
+    """Send invitation email to the invited user."""
+    from services.notification_service import EmailAdapter, ADAPTERS
+
+    config = NotificationService.get_channel_config(NotificationChannel.EMAIL)
+
+    if not config.enabled:
+        return False, "Email channel is disabled"
+
+    if not config.smtp_host or not config.smtp_username or not config.smtp_password:
+        return False, "SMTP not configured"
+
+    # Create config with recipient email
+    recipient_config = ChannelConfig(
+        channel=NotificationChannel.EMAIL,
+        enabled=True,
+        email_address=invitation.email,  # Send to invited user
+        smtp_host=config.smtp_host,
+        smtp_port=config.smtp_port,
+        smtp_username=config.smtp_username,
+        smtp_password=config.smtp_password,
+        smtp_use_tls=config.smtp_use_tls,
+    )
+
+    settings = get_settings()
+    accept_url = f"{settings.frontend_url}/invitations/accept?token={invitation.token}"
+
+    message = NotificationMessage(
+        event_type=NotificationEventType.SESSION_STARTED,  # Reuse existing type
+        priority=NotificationPriority.MEDIUM,
+        title=f"You're invited to join {org_name}",
+        body=f"""You have been invited to join the organization "{org_name}" on Agent Orchestration Service.
+
+Role: {invitation.role.value.title()}
+{f'Message: {invitation.message}' if invitation.message else ''}
+
+Click the link below to accept the invitation:
+{accept_url}
+
+This invitation expires in 7 days.""",
+        channels=[NotificationChannel.EMAIL],
+        data={},
+    )
+
+    adapter = ADAPTERS.get(NotificationChannel.EMAIL)
+    if not adapter:
+        return False, "Email adapter not found"
+
+    return await adapter.send(message, recipient_config)
+
+
+class InvitationResponse(BaseModel):
+    """Response for invitation with email status."""
+    invitation: OrganizationInvitation
+    email_sent: bool
+    email_error: str | None = None
+
+
+@router.post("/{org_id}/members/invite", response_model=InvitationResponse)
 async def invite_member(org_id: str, data: InviteMemberRequest, invited_by: str):
     """Invite a new member to the organization."""
     try:
-        return OrganizationService.invite_member(org_id, data, invited_by)
+        invitation = OrganizationService.invite_member(org_id, data, invited_by)
+
+        # Get organization name for email
+        org = OrganizationService.get_organization(org_id)
+        org_name = org.name if org else "Organization"
+
+        # Send invitation email
+        success, error = await send_invitation_email(org_name, invitation)
+
+        return InvitationResponse(
+            invitation=invitation,
+            email_sent=success,
+            email_error=error,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{org_id}/invitations")
+async def list_invitations(org_id: str):
+    """List pending invitations for an organization."""
+    return OrganizationService.get_pending_invitations(org_id)
+
+
+@router.delete("/{org_id}/invitations/{invitation_id}")
+async def cancel_invitation(org_id: str, invitation_id: str):
+    """Cancel a pending invitation."""
+    try:
+        OrganizationService.cancel_invitation(org_id, invitation_id)
+        return {"success": True, "message": "Invitation cancelled"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
