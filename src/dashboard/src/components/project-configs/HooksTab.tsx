@@ -1,14 +1,16 @@
 import { useState } from 'react'
-import { Webhook, Zap, Filter, Code, Plus, Trash2 } from 'lucide-react'
+import { Webhook, Zap, Filter, Code, Plus, Trash2, Copy } from 'lucide-react'
 import { useProjectConfigsStore, HookConfig } from '../../stores/projectConfigs'
 import { HookEditModal } from './HookEditModal'
 import { ConfirmDeleteModal } from './ConfirmDeleteModal'
+import { CopyToProjectModal, CopyItemType } from './CopyToProjectModal'
 
 export function HooksTab() {
-  const { selectedProject, isLoadingProject, addHookEntry, deleteHook } = useProjectConfigsStore()
+  const { selectedProject, isLoadingProject, addHookEntry, deleteHook, copyHook } = useProjectConfigsStore()
   const [showAddModal, setShowAddModal] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ event: string; index: number; command: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [copyTarget, setCopyTarget] = useState<{ event: string; index: number; command: string } | null>(null)
 
   if (isLoadingProject) {
     return (
@@ -56,6 +58,15 @@ export function HooksTab() {
     await deleteHook(selectedProject.project.project_id, deleteTarget.event, deleteTarget.index)
     setDeleting(false)
     setDeleteTarget(null)
+  }
+
+  const handleCopy = async (targetProjectId: string) => {
+    if (!copyTarget || !selectedProject) return false
+    const success = await copyHook(selectedProject.project.project_id, copyTarget.event, copyTarget.index, targetProjectId)
+    if (success) {
+      setCopyTarget(null)
+    }
+    return success
   }
 
   return (
@@ -119,6 +130,13 @@ export function HooksTab() {
                           )}
                         </div>
                         <button
+                          onClick={() => setCopyTarget({ event, index: eventIndex, command: hook.command })}
+                          className="p-2 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
+                          title="Copy to another project"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => setDeleteTarget({ event, index: eventIndex, command: hook.command })}
                           className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
                           title="Delete hook"
@@ -149,6 +167,17 @@ export function HooksTab() {
         isDeleting={deleting}
         onConfirm={handleDeleteHook}
         onCancel={() => setDeleteTarget(null)}
+      />
+      <CopyToProjectModal
+        isOpen={copyTarget !== null}
+        items={copyTarget && selectedProject ? [{
+          type: 'hook' as CopyItemType,
+          id: `${copyTarget.event}_${copyTarget.index}`,
+          name: copyTarget.command || `${copyTarget.event} hook`,
+          sourceProjectId: selectedProject.project.project_id,
+        }] : []}
+        onClose={() => setCopyTarget(null)}
+        onCopy={handleCopy}
       />
     </>
   )

@@ -208,6 +208,12 @@ interface ProjectConfigsState {
   // Hooks CRUD actions
   addHookEntry: (projectId: string, event: string, matcher: string, hooks: { type: string; command: string }[]) => Promise<boolean>
   deleteHook: (projectId: string, event: string, index: number) => Promise<boolean>
+
+  // Copy actions
+  copySkill: (sourceProjectId: string, skillId: string, targetProjectId: string) => Promise<boolean>
+  copyAgent: (sourceProjectId: string, agentId: string, targetProjectId: string) => Promise<boolean>
+  copyMCPServer: (sourceProjectId: string, serverId: string, targetProjectId: string) => Promise<boolean>
+  copyHook: (sourceProjectId: string, event: string, index: number, targetProjectId: string) => Promise<boolean>
 }
 
 export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => ({
@@ -914,6 +920,108 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
       }
 
       await get().fetchProjectSummary(projectId)
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    }
+  },
+
+  // Copy actions
+  copySkill: async (sourceProjectId, skillId, targetProjectId) => {
+    set({ error: null })
+
+    try {
+      const res = await fetch(`${API_BASE}/project-configs/${sourceProjectId}/skills/${skillId}/copy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skill_id: skillId, target_project_id: targetProjectId }),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.detail || 'Failed to copy skill')
+      }
+
+      // Refresh both projects
+      await get().fetchProjects()
+      await get().fetchProjectSummary(targetProjectId)
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    }
+  },
+
+  copyAgent: async (sourceProjectId, agentId, targetProjectId) => {
+    set({ error: null })
+
+    try {
+      const res = await fetch(`${API_BASE}/project-configs/${sourceProjectId}/agents/${agentId}/copy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent_id: agentId, target_project_id: targetProjectId }),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.detail || 'Failed to copy agent')
+      }
+
+      await get().fetchProjects()
+      await get().fetchProjectSummary(targetProjectId)
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    }
+  },
+
+  copyMCPServer: async (sourceProjectId, serverId, targetProjectId) => {
+    set({ error: null })
+
+    try {
+      const res = await fetch(`${API_BASE}/project-configs/${sourceProjectId}/mcp/${serverId}/copy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ server_id: serverId, target_project_id: targetProjectId }),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.detail || 'Failed to copy MCP server')
+      }
+
+      await get().fetchProjects()
+      await get().fetchProjectSummary(targetProjectId)
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    }
+  },
+
+  copyHook: async (sourceProjectId, event, index, targetProjectId) => {
+    set({ error: null })
+
+    try {
+      const res = await fetch(`${API_BASE}/project-configs/${sourceProjectId}/hooks/${event}/${index}/copy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event, index, target_project_id: targetProjectId }),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.detail || 'Failed to copy hook')
+      }
+
+      await get().fetchProjects()
+      await get().fetchProjectSummary(targetProjectId)
       return true
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'

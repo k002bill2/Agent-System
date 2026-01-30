@@ -19,6 +19,10 @@ from models.project_config import (
     AgentCreateRequest,
     AgentUpdateRequest,
     ConfigChangeEvent,
+    CopyAgentRequest,
+    CopyHookRequest,
+    CopyMCPRequest,
+    CopySkillRequest,
     ExternalPathRequest,
     HookEntryRequest,
     HooksUpdateRequest,
@@ -898,4 +902,135 @@ async def delete_hook(project_id: str, event: str, index: int) -> dict:
         raise HTTPException(
             status_code=400,
             detail=f"Failed to delete hook {event}[{index}]. Check if project and hook exist.",
+        )
+
+
+# ========================================
+# Copy Operations
+# ========================================
+
+
+@router.post("/{project_id}/skills/{skill_id}/copy")
+async def copy_skill(project_id: str, skill_id: str, request: CopySkillRequest) -> dict:
+    """Copy a skill to another project.
+
+    Args:
+        project_id: Source project identifier
+        skill_id: Skill identifier to copy
+        request: Copy request with target project
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    result = monitor.copy_skill(project_id, skill_id, request.target_project_id)
+
+    if result:
+        return {
+            "success": True,
+            "message": f"Copied skill '{skill_id}' to project '{request.target_project_id}'",
+            "source_project_id": project_id,
+            "target_project_id": request.target_project_id,
+            "skill_id": skill_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to copy skill '{skill_id}'. Check if source and target projects exist.",
+        )
+
+
+@router.post("/{project_id}/agents/{agent_id}/copy")
+async def copy_agent(project_id: str, agent_id: str, request: CopyAgentRequest) -> dict:
+    """Copy an agent to another project.
+
+    Args:
+        project_id: Source project identifier
+        agent_id: Agent identifier to copy
+        request: Copy request with target project
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    result = monitor.copy_agent(project_id, agent_id, request.target_project_id)
+
+    if result:
+        return {
+            "success": True,
+            "message": f"Copied agent '{agent_id}' to project '{request.target_project_id}'",
+            "source_project_id": project_id,
+            "target_project_id": request.target_project_id,
+            "agent_id": agent_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to copy agent '{agent_id}'. Check if source and target projects exist.",
+        )
+
+
+@router.post("/{project_id}/mcp/{server_id}/copy")
+async def copy_mcp_server(project_id: str, server_id: str, request: CopyMCPRequest) -> dict:
+    """Copy an MCP server to another project.
+
+    Args:
+        project_id: Source project identifier
+        server_id: MCP server identifier to copy
+        request: Copy request with target project
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    result = monitor.copy_mcp_server(project_id, server_id, request.target_project_id)
+
+    if result:
+        return {
+            "success": True,
+            "message": f"Copied MCP server '{server_id}' to project '{request.target_project_id}'",
+            "source_project_id": project_id,
+            "target_project_id": request.target_project_id,
+            "server_id": server_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to copy MCP server '{server_id}'. Check if source and target projects exist.",
+        )
+
+
+@router.post("/{project_id}/hooks/{event}/{index}/copy")
+async def copy_hook(project_id: str, event: str, index: int, request: CopyHookRequest) -> dict:
+    """Copy a hook to another project.
+
+    Args:
+        project_id: Source project identifier
+        event: Hook event name
+        index: Hook entry index
+        request: Copy request with target project
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    result = monitor.copy_hook(project_id, event, index, request.target_project_id)
+
+    if result:
+        return {
+            "success": True,
+            "message": f"Copied hook '{event}[{index}]' to project '{request.target_project_id}'",
+            "source_project_id": project_id,
+            "target_project_id": request.target_project_id,
+            "event": event,
+            "index": index,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to copy hook '{event}[{index}]'. Check if source and target projects exist.",
         )

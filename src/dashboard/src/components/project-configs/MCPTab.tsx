@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { cn } from '../../lib/utils'
-import { Server, Power, PowerOff, Package, Terminal, Info, Plus, Pencil, Trash2, User, FolderCode } from 'lucide-react'
+import { Server, Power, PowerOff, Package, Terminal, Info, Plus, Pencil, Trash2, User, FolderCode, Copy } from 'lucide-react'
 import { useProjectConfigsStore, MCPServerConfig } from '../../stores/projectConfigs'
 import { MCPServerModal } from './MCPServerModal'
 import { ConfirmDeleteModal } from './ConfirmDeleteModal'
+import { CopyToProjectModal, CopyItemType } from './CopyToProjectModal'
 
 export function MCPTab() {
   const {
@@ -14,9 +15,11 @@ export function MCPTab() {
     openMCPModal,
     deleteMCPServer,
     deletingMCP,
+    copyMCPServer,
   } = useProjectConfigsStore()
 
   const [deleteTarget, setDeleteTarget] = useState<MCPServerConfig | null>(null)
+  const [copyTarget, setCopyTarget] = useState<MCPServerConfig | null>(null)
 
   if (isLoadingProject) {
     return (
@@ -49,6 +52,15 @@ export function MCPTab() {
     if (!deleteTarget || !selectedProject) return
     await deleteMCPServer(selectedProject.project.project_id, deleteTarget.server_id)
     setDeleteTarget(null)
+  }
+
+  const handleCopy = async (targetProjectId: string) => {
+    if (!copyTarget || !selectedProject) return false
+    const success = await copyMCPServer(selectedProject.project.project_id, copyTarget.server_id, targetProjectId)
+    if (success) {
+      setCopyTarget(null)
+    }
+    return success
   }
 
   return (
@@ -134,6 +146,7 @@ export function MCPTab() {
                   onToggle={() => handleToggle(server)}
                   onEdit={() => openMCPModal('edit', server)}
                   onDelete={() => setDeleteTarget(server)}
+                  onCopy={() => setCopyTarget(server)}
                 />
               ))}
             </div>
@@ -152,6 +165,17 @@ export function MCPTab() {
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+      <CopyToProjectModal
+        isOpen={copyTarget !== null}
+        items={copyTarget ? [{
+          type: 'mcp' as CopyItemType,
+          id: copyTarget.server_id,
+          name: copyTarget.server_id,
+          sourceProjectId: copyTarget.project_id,
+        }] : []}
+        onClose={() => setCopyTarget(null)}
+        onCopy={handleCopy}
+      />
     </>
   )
 }
@@ -164,9 +188,10 @@ interface MCPServerCardProps {
   onToggle: () => void
   onEdit: () => void
   onDelete: () => void
+  onCopy?: () => void
 }
 
-function MCPServerCard({ server, isToggling, isDeleting, isReadOnly = false, onToggle, onEdit, onDelete }: MCPServerCardProps) {
+function MCPServerCard({ server, isToggling, isDeleting, isReadOnly = false, onToggle, onEdit, onDelete, onCopy }: MCPServerCardProps) {
   const typeIcons: Record<string, typeof Package> = {
     npx: Package,
     uvx: Package,
@@ -263,6 +288,15 @@ function MCPServerCard({ server, isToggling, isDeleting, isReadOnly = false, onT
           </div>
         ) : (
           <div className="flex items-center gap-1">
+            {onCopy && (
+              <button
+                onClick={onCopy}
+                className="p-2 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
+                title="Copy to another project"
+              >
+                <Copy className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={onEdit}
               className="p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"

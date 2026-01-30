@@ -1,9 +1,10 @@
 import { cn } from '../../lib/utils'
-import { Bot, Code, Shield, ChevronDown, ChevronUp, Plus, Pencil, Trash2 } from 'lucide-react'
+import { Bot, Code, Shield, ChevronDown, ChevronUp, Plus, Pencil, Trash2, Copy } from 'lucide-react'
 import { useState } from 'react'
 import { useProjectConfigsStore, AgentConfig } from '../../stores/projectConfigs'
 import { AgentEditModal } from './AgentEditModal'
 import { ConfirmDeleteModal } from './ConfirmDeleteModal'
+import { CopyToProjectModal, CopyItemType } from './CopyToProjectModal'
 
 export function AgentsTab() {
   const {
@@ -12,9 +13,11 @@ export function AgentsTab() {
     openAgentModal,
     deleteAgent,
     deletingAgents,
+    copyAgent,
   } = useProjectConfigsStore()
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AgentConfig | null>(null)
+  const [copyTarget, setCopyTarget] = useState<AgentConfig | null>(null)
 
   if (isLoadingProject) {
     return (
@@ -44,6 +47,15 @@ export function AgentsTab() {
     if (!deleteTarget || !selectedProject) return
     await deleteAgent(selectedProject.project.project_id, deleteTarget.agent_id)
     setDeleteTarget(null)
+  }
+
+  const handleCopy = async (targetProjectId: string) => {
+    if (!copyTarget || !selectedProject) return false
+    const success = await copyAgent(selectedProject.project.project_id, copyTarget.agent_id, targetProjectId)
+    if (success) {
+      setCopyTarget(null)
+    }
+    return success
   }
 
   return (
@@ -89,6 +101,7 @@ export function AgentsTab() {
                       }
                       onEdit={() => openAgentModal('edit', agent)}
                       onDelete={() => setDeleteTarget(agent)}
+                      onCopy={() => setCopyTarget(agent)}
                     />
                   ))}
                 </div>
@@ -114,6 +127,7 @@ export function AgentsTab() {
                       }
                       onEdit={() => openAgentModal('edit', agent)}
                       onDelete={() => setDeleteTarget(agent)}
+                      onCopy={() => setCopyTarget(agent)}
                     />
                   ))}
                 </div>
@@ -134,6 +148,17 @@ export function AgentsTab() {
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+      <CopyToProjectModal
+        isOpen={copyTarget !== null}
+        items={copyTarget ? [{
+          type: 'agent' as CopyItemType,
+          id: copyTarget.agent_id,
+          name: copyTarget.name,
+          sourceProjectId: copyTarget.project_id,
+        }] : []}
+        onClose={() => setCopyTarget(null)}
+        onCopy={handleCopy}
+      />
     </>
   )
 }
@@ -145,9 +170,10 @@ interface AgentCardProps {
   onToggle: () => void
   onEdit: () => void
   onDelete: () => void
+  onCopy: () => void
 }
 
-function AgentCard({ agent, isExpanded, isDeleting, onToggle, onEdit, onDelete }: AgentCardProps) {
+function AgentCard({ agent, isExpanded, isDeleting, onToggle, onEdit, onDelete, onCopy }: AgentCardProps) {
   const modelColors: Record<string, string> = {
     opus: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
     sonnet: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
@@ -212,6 +238,13 @@ function AgentCard({ agent, isExpanded, isDeleting, onToggle, onEdit, onDelete }
           )}
         </div>
         <div className="flex items-center gap-1">
+          <button
+            onClick={onCopy}
+            className="p-2 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
+            title="Copy to another project"
+          >
+            <Copy className="w-4 h-4" />
+          </button>
           <button
             onClick={onEdit}
             className="p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"

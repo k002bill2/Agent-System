@@ -256,3 +256,37 @@ class HooksUpdateRequest(BaseModel):
     """Request to update entire hooks.json."""
 
     hooks: dict[str, list[dict]] = Field(..., description="Complete hooks configuration")
+
+
+# ========================================
+# Copy Request Models
+# ========================================
+
+
+class CopySkillRequest(BaseModel):
+    """Request to copy skill to another project."""
+
+    skill_id: str = Field(..., description="Skill identifier to copy")
+    target_project_id: str = Field(..., description="Target project ID")
+
+
+class CopyAgentRequest(BaseModel):
+    """Request to copy agent to another project."""
+
+    agent_id: str = Field(..., description="Agent identifier to copy")
+    target_project_id: str = Field(..., description="Target project ID")
+
+
+class CopyMCPRequest(BaseModel):
+    """Request to copy MCP server to another project."""
+
+    server_id: str = Field(..., description="MCP server identifier to copy")
+    target_project_id: str = Field(..., description="Target project ID")
+
+
+class CopyHookRequest(BaseModel):
+    """Request to copy hook to another project."""
+
+    event: str = Field(..., description="Hook event name")
+    index: int = Field(..., description="Hook entry index")
+    target_project_id: str = Field(..., description="Target project ID")

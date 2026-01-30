@@ -1,9 +1,10 @@
 import { cn } from '../../lib/utils'
-import { Sparkles, FileText, Code, FolderOpen, ChevronRight, Plus, Pencil, Trash2 } from 'lucide-react'
+import { Sparkles, FileText, Code, FolderOpen, ChevronRight, Plus, Pencil, Trash2, Copy } from 'lucide-react'
 import { useState } from 'react'
 import { useProjectConfigsStore, SkillConfig } from '../../stores/projectConfigs'
 import { SkillEditModal } from './SkillEditModal'
 import { ConfirmDeleteModal } from './ConfirmDeleteModal'
+import { CopyToProjectModal, CopyItemType } from './CopyToProjectModal'
 
 export function SkillsTab() {
   const {
@@ -15,9 +16,11 @@ export function SkillsTab() {
     openSkillModal,
     deleteSkill,
     deletingSkills,
+    copySkill,
   } = useProjectConfigsStore()
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<SkillConfig | null>(null)
+  const [copyTarget, setCopyTarget] = useState<SkillConfig | null>(null)
 
   if (isLoadingProject) {
     return (
@@ -52,6 +55,15 @@ export function SkillsTab() {
     if (!deleteTarget || !selectedProject) return
     await deleteSkill(selectedProject.project.project_id, deleteTarget.skill_id)
     setDeleteTarget(null)
+  }
+
+  const handleCopy = async (targetProjectId: string) => {
+    if (!copyTarget || !selectedProject) return false
+    const success = await copySkill(selectedProject.project.project_id, copyTarget.skill_id, targetProjectId)
+    if (success) {
+      setCopyTarget(null)
+    }
+    return success
   }
 
   return (
@@ -90,6 +102,7 @@ export function SkillsTab() {
                 onToggle={() => handleExpand(skill)}
                 onEdit={() => openSkillModal('edit', skill)}
                 onDelete={() => setDeleteTarget(skill)}
+                onCopy={() => setCopyTarget(skill)}
               />
             ))}
           </div>
@@ -107,6 +120,17 @@ export function SkillsTab() {
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+      <CopyToProjectModal
+        isOpen={copyTarget !== null}
+        items={copyTarget ? [{
+          type: 'skill' as CopyItemType,
+          id: copyTarget.skill_id,
+          name: copyTarget.name,
+          sourceProjectId: copyTarget.project_id,
+        }] : []}
+        onClose={() => setCopyTarget(null)}
+        onCopy={handleCopy}
+      />
     </>
   )
 }
@@ -120,9 +144,10 @@ interface SkillCardProps {
   onToggle: () => void
   onEdit: () => void
   onDelete: () => void
+  onCopy: () => void
 }
 
-function SkillCard({ skill, isExpanded, isLoadingContent, isDeleting, content, onToggle, onEdit, onDelete }: SkillCardProps) {
+function SkillCard({ skill, isExpanded, isLoadingContent, isDeleting, content, onToggle, onEdit, onDelete, onCopy }: SkillCardProps) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
       <div className="p-4 flex items-start gap-4">
@@ -168,6 +193,13 @@ function SkillCard({ skill, isExpanded, isLoadingContent, isDeleting, content, o
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <button
+            onClick={onCopy}
+            className="p-2 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
+            title="Copy to another project"
+          >
+            <Copy className="w-4 h-4" />
+          </button>
           <button
             onClick={onEdit}
             className="p-2 rounded-lg text-gray-400 hover:text-purple-600 hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors"

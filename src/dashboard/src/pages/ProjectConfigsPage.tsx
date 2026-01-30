@@ -114,6 +114,11 @@ export function ProjectConfigsPage() {
                       {selectedProject.mcp_servers.length}
                     </span>
                   ) : null}
+                  {tab.id === 'hooks' && selectedProject?.hooks?.length ? (
+                    <span className="ml-1 text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
+                      {selectedProject.hooks.length}
+                    </span>
+                  ) : null}
                 </button>
               ))}
             </div>

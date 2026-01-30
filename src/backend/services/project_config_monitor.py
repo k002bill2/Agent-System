@@ -1444,6 +1444,258 @@ class ProjectConfigMonitor:
 
         return hooks
 
+    # ========================================
+    # Copy Operations
+    # ========================================
+
+    def copy_skill(self, source_project_id: str, skill_id: str, target_project_id: str) -> bool:
+        """Copy a skill to another project.
+
+        Args:
+            source_project_id: Source project identifier
+            skill_id: Skill identifier to copy
+            target_project_id: Target project identifier
+
+        Returns:
+            True if copied successfully
+        """
+        import shutil
+
+        source_path = self._find_project_path(source_project_id)
+        target_path = self._find_project_path(target_project_id)
+
+        if not source_path or not target_path:
+            logger.error(f"Source or target project not found")
+            return False
+
+        source_skill_dir = source_path / ".claude" / "skills" / skill_id
+        if not source_skill_dir.exists():
+            logger.error(f"Source skill not found: {skill_id}")
+            return False
+
+        target_skills_dir = target_path / ".claude" / "skills"
+        target_skill_dir = target_skills_dir / skill_id
+
+        # Create skills directory if doesn't exist
+        target_skills_dir.mkdir(parents=True, exist_ok=True)
+
+        # Check if skill already exists in target
+        if target_skill_dir.exists():
+            # Append a suffix to avoid collision
+            suffix = 1
+            while (target_skills_dir / f"{skill_id}-{suffix}").exists():
+                suffix += 1
+            target_skill_dir = target_skills_dir / f"{skill_id}-{suffix}"
+
+        try:
+            shutil.copytree(source_skill_dir, target_skill_dir)
+            logger.info(f"Copied skill {skill_id} from {source_project_id} to {target_project_id}")
+            return True
+        except OSError as e:
+            logger.error(f"Error copying skill: {e}")
+            return False
+
+    def copy_agent(self, source_project_id: str, agent_id: str, target_project_id: str) -> bool:
+        """Copy an agent to another project.
+
+        Args:
+            source_project_id: Source project identifier
+            agent_id: Agent identifier to copy
+            target_project_id: Target project identifier
+
+        Returns:
+            True if copied successfully
+        """
+        import shutil
+
+        source_path = self._find_project_path(source_project_id)
+        target_path = self._find_project_path(target_project_id)
+
+        if not source_path or not target_path:
+            logger.error(f"Source or target project not found")
+            return False
+
+        source_agents_dir = source_path / ".claude" / "agents"
+
+        # Find source agent file (could be in root or shared/)
+        source_file = source_agents_dir / f"{agent_id}.md"
+        is_shared = False
+        if not source_file.exists():
+            source_file = source_agents_dir / "shared" / f"{agent_id}.md"
+            is_shared = True
+
+        if not source_file.exists():
+            logger.error(f"Source agent not found: {agent_id}")
+            return False
+
+        target_agents_dir = target_path / ".claude" / "agents"
+        if is_shared:
+            target_dir = target_agents_dir / "shared"
+        else:
+            target_dir = target_agents_dir
+
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_file = target_dir / f"{agent_id}.md"
+
+        # Check if agent already exists in target
+        if target_file.exists():
+            # Append a suffix to avoid collision
+            suffix = 1
+            while (target_dir / f"{agent_id}-{suffix}.md").exists():
+                suffix += 1
+            target_file = target_dir / f"{agent_id}-{suffix}.md"
+
+        try:
+            shutil.copy2(source_file, target_file)
+            logger.info(f"Copied agent {agent_id} from {source_project_id} to {target_project_id}")
+            return True
+        except OSError as e:
+            logger.error(f"Error copying agent: {e}")
+            return False
+
+    def copy_mcp_server(self, source_project_id: str, server_id: str, target_project_id: str) -> bool:
+        """Copy an MCP server to another project.
+
+        Args:
+            source_project_id: Source project identifier
+            server_id: MCP server identifier to copy
+            target_project_id: Target project identifier
+
+        Returns:
+            True if copied successfully
+        """
+        source_path = self._find_project_path(source_project_id)
+        target_path = self._find_project_path(target_project_id)
+
+        if not source_path or not target_path:
+            logger.error(f"Source or target project not found")
+            return False
+
+        source_mcp_file = source_path / ".claude" / "mcp.json"
+        if not source_mcp_file.exists():
+            logger.error(f"Source MCP config not found")
+            return False
+
+        try:
+            with open(source_mcp_file, "r", encoding="utf-8") as f:
+                source_data = json.load(f)
+
+            source_servers = source_data.get("mcpServers", {})
+            if server_id not in source_servers:
+                logger.error(f"Source MCP server not found: {server_id}")
+                return False
+
+            server_config = source_servers[server_id]
+
+            # Read or create target mcp.json
+            target_mcp_file = target_path / ".claude" / "mcp.json"
+            target_mcp_file.parent.mkdir(parents=True, exist_ok=True)
+
+            if target_mcp_file.exists():
+                with open(target_mcp_file, "r", encoding="utf-8") as f:
+                    target_data = json.load(f)
+            else:
+                target_data = {"mcpServers": {}}
+
+            target_servers = target_data.setdefault("mcpServers", {})
+
+            # Handle name collision
+            final_server_id = server_id
+            if server_id in target_servers:
+                suffix = 1
+                while f"{server_id}-{suffix}" in target_servers:
+                    suffix += 1
+                final_server_id = f"{server_id}-{suffix}"
+
+            target_servers[final_server_id] = server_config
+
+            with open(target_mcp_file, "w", encoding="utf-8") as f:
+                json.dump(target_data, f, indent=2, ensure_ascii=False)
+                f.write("\n")
+
+            logger.info(f"Copied MCP server {server_id} from {source_project_id} to {target_project_id}")
+            return True
+
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error(f"Error copying MCP server: {e}")
+            return False
+
+    def copy_hook(self, source_project_id: str, event: str, index: int, target_project_id: str) -> bool:
+        """Copy a hook to another project.
+
+        Args:
+            source_project_id: Source project identifier
+            event: Hook event name
+            index: Hook entry index
+            target_project_id: Target project identifier
+
+        Returns:
+            True if copied successfully
+        """
+        source_path = self._find_project_path(source_project_id)
+        target_path = self._find_project_path(target_project_id)
+
+        if not source_path or not target_path:
+            logger.error(f"Source or target project not found")
+            return False
+
+        source_hooks_file = source_path / ".claude" / "hooks.json"
+        if not source_hooks_file.exists():
+            logger.error(f"Source hooks config not found")
+            return False
+
+        try:
+            with open(source_hooks_file, "r", encoding="utf-8") as f:
+                source_data = json.load(f)
+
+            # Handle wrapped format
+            if "hooks" in source_data:
+                source_hooks = source_data["hooks"]
+            else:
+                source_hooks = source_data
+
+            if event not in source_hooks:
+                logger.error(f"Source event not found: {event}")
+                return False
+
+            event_hooks = source_hooks[event]
+            if index < 0 or index >= len(event_hooks):
+                logger.error(f"Invalid hook index: {index}")
+                return False
+
+            hook_entry = event_hooks[index]
+
+            # Read or create target hooks.json
+            target_hooks_file = target_path / ".claude" / "hooks.json"
+            target_hooks_file.parent.mkdir(parents=True, exist_ok=True)
+
+            if target_hooks_file.exists():
+                with open(target_hooks_file, "r", encoding="utf-8") as f:
+                    target_data = json.load(f)
+            else:
+                target_data = {"hooks": {}}
+
+            # Ensure hooks wrapper
+            if "hooks" not in target_data:
+                target_data = {"hooks": target_data}
+
+            target_hooks = target_data["hooks"]
+            if event not in target_hooks:
+                target_hooks[event] = []
+
+            target_hooks[event].append(hook_entry)
+
+            with open(target_hooks_file, "w", encoding="utf-8") as f:
+                json.dump(target_data, f, indent=2, ensure_ascii=False)
+                f.write("\n")
+
+            logger.info(f"Copied hook {event}[{index}] from {source_project_id} to {target_project_id}")
+            return True
+
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error(f"Error copying hook: {e}")
+            return False
+
     def get_project_summary(self, project_id: str) -> ProjectConfigSummary | None:
         """Get full configuration summary for a project.
 
