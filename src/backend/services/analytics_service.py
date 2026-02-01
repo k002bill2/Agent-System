@@ -401,48 +401,68 @@ class AnalyticsService:
     # ─────────────────────────────────────────────────────────────
 
     @staticmethod
-    async def get_overview_async(db: AsyncSession) -> OverviewMetrics:
+    async def get_overview_async(
+        db: AsyncSession,
+        project_id: str | None = None,
+    ) -> OverviewMetrics:
         """Get high-level overview metrics from database."""
         now = datetime.utcnow()
 
+        # Build base session filter
+        session_filter = []
+        if project_id:
+            session_filter.append(SessionModel.project_id == project_id)
+
         # Count sessions
-        total_sessions_result = await db.execute(
-            select(func.count(SessionModel.id))
-        )
+        session_query = select(func.count(SessionModel.id))
+        if session_filter:
+            session_query = session_query.where(and_(*session_filter))
+        total_sessions_result = await db.execute(session_query)
         total_sessions = total_sessions_result.scalar() or 0
 
-        active_sessions_result = await db.execute(
-            select(func.count(SessionModel.id)).where(
-                SessionModel.status == "active"
-            )
+        active_session_query = select(func.count(SessionModel.id)).where(
+            SessionModel.status == "active"
         )
+        if project_id:
+            active_session_query = active_session_query.where(SessionModel.project_id == project_id)
+        active_sessions_result = await db.execute(active_session_query)
         active_sessions = active_sessions_result.scalar() or 0
 
+        # Build task query with project filter via session join
+        task_base_query = select(func.count(TaskModel.id))
+        if project_id:
+            task_base_query = task_base_query.join(
+                SessionModel, TaskModel.session_id == SessionModel.id
+            ).where(SessionModel.project_id == project_id)
+
         # Count tasks
-        total_tasks_result = await db.execute(
-            select(func.count(TaskModel.id))
-        )
+        total_tasks_result = await db.execute(task_base_query)
         total_tasks = total_tasks_result.scalar() or 0
 
-        completed_tasks_result = await db.execute(
-            select(func.count(TaskModel.id)).where(
-                TaskModel.status == "completed"
-            )
-        )
+        completed_query = select(func.count(TaskModel.id)).where(TaskModel.status == "completed")
+        if project_id:
+            completed_query = completed_query.join(
+                SessionModel, TaskModel.session_id == SessionModel.id
+            ).where(SessionModel.project_id == project_id)
+        completed_tasks_result = await db.execute(completed_query)
         completed_tasks = completed_tasks_result.scalar() or 0
 
-        failed_tasks_result = await db.execute(
-            select(func.count(TaskModel.id)).where(
-                TaskModel.status == "failed"
-            )
-        )
+        failed_query = select(func.count(TaskModel.id)).where(TaskModel.status == "failed")
+        if project_id:
+            failed_query = failed_query.join(
+                SessionModel, TaskModel.session_id == SessionModel.id
+            ).where(SessionModel.project_id == project_id)
+        failed_tasks_result = await db.execute(failed_query)
         failed_tasks = failed_tasks_result.scalar() or 0
 
-        pending_tasks_result = await db.execute(
-            select(func.count(TaskModel.id)).where(
-                TaskModel.status.in_(["pending", "in_progress", "waiting"])
-            )
+        pending_query = select(func.count(TaskModel.id)).where(
+            TaskModel.status.in_(["pending", "in_progress", "waiting"])
         )
+        if project_id:
+            pending_query = pending_query.join(
+                SessionModel, TaskModel.session_id == SessionModel.id
+            ).where(SessionModel.project_id == project_id)
+        pending_tasks_result = await db.execute(pending_query)
         pending_tasks = pending_tasks_result.scalar() or 0
 
         # Calculate success rate
@@ -451,56 +471,51 @@ class AnalyticsService:
             success_rate = round((completed_tasks / (completed_tasks + failed_tasks)) * 100, 1)
 
         # Token and cost totals from sessions
-        token_result = await db.execute(
-            select(
-                func.coalesce(func.sum(SessionModel.total_tokens), 0),
-                func.coalesce(func.sum(SessionModel.total_cost_usd), 0)
-            )
+        token_query = select(
+            func.coalesce(func.sum(SessionModel.total_tokens), 0),
+            func.coalesce(func.sum(SessionModel.total_cost_usd), 0)
         )
+        if project_id:
+            token_query = token_query.where(SessionModel.project_id == project_id)
+        token_result = await db.execute(token_query)
         row = token_result.one()
         total_tokens = int(row[0]) if row[0] else 0
         total_cost = float(row[1]) if row[1] else 0.0
 
         # Average task duration (from completed tasks)
-        duration_result = await db.execute(
-            select(func.avg(TaskModel.duration_ms)).where(
-                and_(
-                    TaskModel.status == "completed",
-                    TaskModel.duration_ms.isnot(None)
-                )
+        duration_query = select(func.avg(TaskModel.duration_ms)).where(
+            and_(
+                TaskModel.status == "completed",
+                TaskModel.duration_ms.isnot(None)
             )
         )
+        if project_id:
+            duration_query = duration_query.join(
+                SessionModel, TaskModel.session_id == SessionModel.id
+            ).where(SessionModel.project_id == project_id)
+        duration_result = await db.execute(duration_query)
         avg_duration = duration_result.scalar() or 0
 
-        # HITL approvals from audit logs
-        approvals_pending_result = await db.execute(
-            select(func.count(AuditLogModel.id)).where(
-                and_(
-                    AuditLogModel.action == "approval_request",
-                    AuditLogModel.created_at >= now - timedelta(days=7)
-                )
+        # HITL approvals from audit logs (join with session for project filter)
+        audit_base_filter = [AuditLogModel.created_at >= now - timedelta(days=7)]
+
+        def build_audit_query(action: str):
+            query = select(func.count(AuditLogModel.id)).where(
+                and_(AuditLogModel.action == action, *audit_base_filter)
             )
-        )
+            if project_id:
+                query = query.join(
+                    SessionModel, AuditLogModel.session_id == SessionModel.id
+                ).where(SessionModel.project_id == project_id)
+            return query
+
+        approvals_pending_result = await db.execute(build_audit_query("approval_request"))
         approvals_pending = approvals_pending_result.scalar() or 0
 
-        approvals_granted_result = await db.execute(
-            select(func.count(AuditLogModel.id)).where(
-                and_(
-                    AuditLogModel.action == "approval_granted",
-                    AuditLogModel.created_at >= now - timedelta(days=7)
-                )
-            )
-        )
+        approvals_granted_result = await db.execute(build_audit_query("approval_granted"))
         approvals_granted = approvals_granted_result.scalar() or 0
 
-        approvals_denied_result = await db.execute(
-            select(func.count(AuditLogModel.id)).where(
-                and_(
-                    AuditLogModel.action == "approval_denied",
-                    AuditLogModel.created_at >= now - timedelta(days=7)
-                )
-            )
-        )
+        approvals_denied_result = await db.execute(build_audit_query("approval_denied"))
         approvals_denied = approvals_denied_result.scalar() or 0
 
         return OverviewMetrics(
@@ -523,6 +538,7 @@ class AnalyticsService:
     async def get_trends_async(
         db: AsyncSession,
         time_range: TimeRange = TimeRange.WEEK,
+        project_id: str | None = None,
     ) -> MultiTrendData:
         """Get trend data over time from database."""
         delta = _get_time_delta(time_range)
@@ -530,20 +546,21 @@ class AnalyticsService:
         now = datetime.utcnow()
         start = now - delta
 
-        # Get all tasks in the time range
-        task_result = await db.execute(
-            select(TaskModel).where(
-                TaskModel.created_at >= start
-            ).order_by(TaskModel.created_at)
-        )
+        # Get all tasks in the time range (with project filter via session join)
+        task_query = select(TaskModel).where(TaskModel.created_at >= start)
+        if project_id:
+            task_query = task_query.join(
+                SessionModel, TaskModel.session_id == SessionModel.id
+            ).where(SessionModel.project_id == project_id)
+        task_query = task_query.order_by(TaskModel.created_at)
+        task_result = await db.execute(task_query)
         tasks = task_result.scalars().all()
 
         # Get all sessions in the time range
-        session_result = await db.execute(
-            select(SessionModel).where(
-                SessionModel.created_at >= start
-            )
-        )
+        session_query = select(SessionModel).where(SessionModel.created_at >= start)
+        if project_id:
+            session_query = session_query.where(SessionModel.project_id == project_id)
+        session_result = await db.execute(session_query)
         sessions = session_result.scalars().all()
 
         # Build time buckets
@@ -607,28 +624,37 @@ class AnalyticsService:
     async def get_agent_performance_async(
         db: AsyncSession,
         time_range: TimeRange = TimeRange.WEEK,
+        project_id: str | None = None,
     ) -> AgentPerformanceList:
         """Get performance metrics for all agents from database."""
         delta = _get_time_delta(time_range)
         start = datetime.utcnow() - delta
 
-        # Get tasks grouped by agent
-        result = await db.execute(
-            select(
-                TaskModel.agent_id,
-                func.count(TaskModel.id).label("total"),
-                func.sum(case((TaskModel.status == "completed", 1), else_=0)).label("completed"),
-                func.sum(case((TaskModel.status == "failed", 1), else_=0)).label("failed"),
-                func.avg(TaskModel.duration_ms).label("avg_duration"),
-                func.sum(TaskModel.tokens_used).label("total_tokens"),
-                func.sum(TaskModel.cost).label("total_cost"),
-            ).where(
-                and_(
-                    TaskModel.created_at >= start,
-                    TaskModel.agent_id.isnot(None)
-                )
-            ).group_by(TaskModel.agent_id)
+        # Build query with optional project filter
+        base_filters = [
+            TaskModel.created_at >= start,
+            TaskModel.agent_id.isnot(None)
+        ]
+
+        query = select(
+            TaskModel.agent_id,
+            func.count(TaskModel.id).label("total"),
+            func.sum(case((TaskModel.status == "completed", 1), else_=0)).label("completed"),
+            func.sum(case((TaskModel.status == "failed", 1), else_=0)).label("failed"),
+            func.avg(TaskModel.duration_ms).label("avg_duration"),
+            func.sum(TaskModel.tokens_used).label("total_tokens"),
+            func.sum(TaskModel.cost).label("total_cost"),
         )
+
+        if project_id:
+            query = query.join(
+                SessionModel, TaskModel.session_id == SessionModel.id
+            ).where(and_(*base_filters, SessionModel.project_id == project_id))
+        else:
+            query = query.where(and_(*base_filters))
+
+        query = query.group_by(TaskModel.agent_id)
+        result = await db.execute(query)
 
         agents = []
         for row in result.fetchall():
@@ -666,17 +692,21 @@ class AnalyticsService:
     async def get_activity_heatmap_async(
         db: AsyncSession,
         time_range: TimeRange = TimeRange.WEEK,
+        project_id: str | None = None,
     ) -> ActivityHeatmap:
         """Get activity heatmap data from database."""
         delta = _get_time_delta(time_range)
         start = datetime.utcnow() - delta
 
-        # Get activities grouped by day of week and hour
-        result = await db.execute(
-            select(SessionActivityModel).where(
-                SessionActivityModel.created_at >= start
-            )
+        # Get activities grouped by day of week and hour (with project filter via session)
+        activity_query = select(SessionActivityModel).where(
+            SessionActivityModel.created_at >= start
         )
+        if project_id:
+            activity_query = activity_query.join(
+                SessionModel, SessionActivityModel.session_id == SessionModel.id
+            ).where(SessionModel.project_id == project_id)
+        result = await db.execute(activity_query)
         activities = result.scalars().all()
 
         # Build heatmap
@@ -708,30 +738,37 @@ class AnalyticsService:
     async def get_error_analytics_async(
         db: AsyncSession,
         time_range: TimeRange = TimeRange.WEEK,
+        project_id: str | None = None,
     ) -> ErrorAnalytics:
         """Get error analytics breakdown from database."""
         delta = _get_time_delta(time_range)
         start = datetime.utcnow() - delta
 
-        # Get failed tasks
-        result = await db.execute(
-            select(TaskModel).where(
-                and_(
-                    TaskModel.status == "failed",
-                    TaskModel.created_at >= start
-                )
+        # Get failed tasks (with project filter via session)
+        failed_query = select(TaskModel).where(
+            and_(
+                TaskModel.status == "failed",
+                TaskModel.created_at >= start
             )
         )
+        if project_id:
+            failed_query = failed_query.join(
+                SessionModel, TaskModel.session_id == SessionModel.id
+            ).where(SessionModel.project_id == project_id)
+        result = await db.execute(failed_query)
         failed_tasks = result.scalars().all()
 
         total_errors = len(failed_tasks)
 
         # Get total tasks for error rate
-        total_result = await db.execute(
-            select(func.count(TaskModel.id)).where(
-                TaskModel.created_at >= start
-            )
+        total_query = select(func.count(TaskModel.id)).where(
+            TaskModel.created_at >= start
         )
+        if project_id:
+            total_query = total_query.join(
+                SessionModel, TaskModel.session_id == SessionModel.id
+            ).where(SessionModel.project_id == project_id)
+        total_result = await db.execute(total_query)
         total_tasks = total_result.scalar() or 0
 
         error_rate = 0.0
@@ -794,16 +831,17 @@ class AnalyticsService:
     async def get_dashboard_async(
         db: AsyncSession,
         time_range: TimeRange = TimeRange.WEEK,
+        project_id: str | None = None,
     ) -> AnalyticsDashboard:
         """Get complete analytics dashboard data from database."""
-        overview = await AnalyticsService.get_overview_async(db)
-        trends = await AnalyticsService.get_trends_async(db, time_range)
-        agents = await AnalyticsService.get_agent_performance_async(db, time_range)
-        activity = await AnalyticsService.get_activity_heatmap_async(db, time_range)
-        errors = await AnalyticsService.get_error_analytics_async(db, time_range)
+        overview = await AnalyticsService.get_overview_async(db, project_id=project_id)
+        trends = await AnalyticsService.get_trends_async(db, time_range, project_id=project_id)
+        agents = await AnalyticsService.get_agent_performance_async(db, time_range, project_id=project_id)
+        activity = await AnalyticsService.get_activity_heatmap_async(db, time_range, project_id=project_id)
+        errors = await AnalyticsService.get_error_analytics_async(db, time_range, project_id=project_id)
 
         # Cost analytics from database
-        costs = await AnalyticsService.get_cost_analytics_async(db, time_range)
+        costs = await AnalyticsService.get_cost_analytics_async(db, time_range, project_id=project_id)
 
         return AnalyticsDashboard(
             overview=overview,
@@ -818,19 +856,22 @@ class AnalyticsService:
     async def get_cost_analytics_async(
         db: AsyncSession,
         time_range: TimeRange = TimeRange.WEEK,
+        project_id: str | None = None,
     ) -> CostAnalytics:
         """Get cost analytics breakdown from database."""
         delta = _get_time_delta(time_range)
         start = datetime.utcnow() - delta
 
         # Get sessions with cost data
+        session_filters = [
+            SessionModel.created_at >= start,
+            SessionModel.total_cost_usd > 0
+        ]
+        if project_id:
+            session_filters.append(SessionModel.project_id == project_id)
+
         session_result = await db.execute(
-            select(SessionModel).where(
-                and_(
-                    SessionModel.created_at >= start,
-                    SessionModel.total_cost_usd > 0
-                )
-            )
+            select(SessionModel).where(and_(*session_filters))
         )
         sessions = session_result.scalars().all()
 
@@ -838,18 +879,23 @@ class AnalyticsService:
         total_tokens = sum(s.total_tokens or 0 for s in sessions)
 
         # Get tasks for agent breakdown
-        task_result = await db.execute(
-            select(
-                TaskModel.agent_id,
-                func.sum(TaskModel.cost).label("total_cost"),
-                func.sum(TaskModel.tokens_used).label("total_tokens"),
-            ).where(
-                and_(
-                    TaskModel.created_at >= start,
-                    TaskModel.agent_id.isnot(None)
-                )
-            ).group_by(TaskModel.agent_id)
+        task_filters = [
+            TaskModel.created_at >= start,
+            TaskModel.agent_id.isnot(None)
+        ]
+        task_query = select(
+            TaskModel.agent_id,
+            func.sum(TaskModel.cost).label("total_cost"),
+            func.sum(TaskModel.tokens_used).label("total_tokens"),
         )
+        if project_id:
+            task_query = task_query.join(
+                SessionModel, TaskModel.session_id == SessionModel.id
+            ).where(and_(*task_filters, SessionModel.project_id == project_id))
+        else:
+            task_query = task_query.where(and_(*task_filters))
+        task_query = task_query.group_by(TaskModel.agent_id)
+        task_result = await db.execute(task_query)
 
         by_agent = []
         for row in task_result.fetchall():
@@ -885,11 +931,14 @@ class AnalyticsService:
         projected_monthly = daily_cost * 30
 
         # Average cost per task
-        total_tasks_result = await db.execute(
-            select(func.count(TaskModel.id)).where(
-                TaskModel.created_at >= start
-            )
+        total_tasks_query = select(func.count(TaskModel.id)).where(
+            TaskModel.created_at >= start
         )
+        if project_id:
+            total_tasks_query = total_tasks_query.join(
+                SessionModel, TaskModel.session_id == SessionModel.id
+            ).where(SessionModel.project_id == project_id)
+        total_tasks_result = await db.execute(total_tasks_query)
         total_tasks = total_tasks_result.scalar() or 1
         avg_cost_per_task = total_cost / total_tasks if total_tasks > 0 else 0
 

@@ -51,7 +51,15 @@ export function LoginPage() {
       const { user, accessToken, refreshToken, expiresIn } = await loginWithEmail(email, password)
       setTokens(accessToken, refreshToken, expiresIn)
       setUser(user)
-      setView('dashboard')
+
+      // Check for redirect URL (e.g., from invitation)
+      const redirectUrl = sessionStorage.getItem('redirectAfterLogin')
+      if (redirectUrl) {
+        sessionStorage.removeItem('redirectAfterLogin')
+        window.location.href = redirectUrl
+      } else {
+        setView('dashboard')
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '로그인에 실패했습니다')
     } finally {

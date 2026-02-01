@@ -30,8 +30,10 @@ import {
   Calendar,
   Users,
   AlertTriangle,
+  FolderOpen,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
+import { useProjectsStore } from '../stores/projects'
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -124,7 +126,7 @@ interface AnalyticsDashboard {
 // Constants
 // ─────────────────────────────────────────────────────────────
 
-const API_BASE = 'http://localhost:8000/api'
+const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
 const TIME_RANGES: { label: string; value: TimeRange }[] = [
   { label: '1 Hour', value: '1h' },
@@ -150,8 +152,10 @@ const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 // API
 // ─────────────────────────────────────────────────────────────
 
-async function fetchDashboard(timeRange: TimeRange): Promise<AnalyticsDashboard> {
-  const res = await fetch(`${API_BASE}/analytics/dashboard?time_range=${timeRange}`)
+async function fetchDashboard(timeRange: TimeRange, projectId?: string): Promise<AnalyticsDashboard> {
+  const params = new URLSearchParams({ time_range: timeRange })
+  if (projectId) params.append('project_id', projectId)
+  const res = await fetch(`${API_BASE}/analytics/dashboard?${params}`)
   if (!res.ok) throw new Error('Failed to fetch analytics')
   return res.json()
 }
@@ -162,18 +166,27 @@ async function fetchDashboard(timeRange: TimeRange): Promise<AnalyticsDashboard>
 
 export function AnalyticsPage() {
   const [timeRange, setTimeRange] = useState<TimeRange>('7d')
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('')
   const [data, setData] = useState<AnalyticsDashboard | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Get projects from store
+  const { projects, fetchProjects } = useProjectsStore()
+
+  // Fetch projects on mount
+  useEffect(() => {
+    fetchProjects()
+  }, [fetchProjects])
+
   useEffect(() => {
     loadData()
-  }, [timeRange]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [timeRange, selectedProjectId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadData = async () => {
     try {
       setLoading(true)
-      const result = await fetchDashboard(timeRange)
+      const result = await fetchDashboard(timeRange, selectedProjectId || undefined)
       setData(result)
       setError(null)
     } catch (e) {
@@ -224,20 +237,41 @@ export function AnalyticsPage() {
           </p>
         </div>
 
-        {/* Time Range Selector */}
-        <div className="flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-gray-400" />
-          <select
-            value={timeRange}
-            onChange={(e) => setTimeRange(e.target.value as TimeRange)}
-            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-          >
-            {TIME_RANGES.map((tr) => (
-              <option key={tr.value} value={tr.value}>
-                {tr.label}
-              </option>
-            ))}
-          </select>
+        {/* Filters */}
+        <div className="flex items-center gap-4">
+          {/* Project Selector */}
+          <div className="flex items-center gap-2">
+            <FolderOpen className="w-4 h-4 text-gray-400" />
+            <select
+              value={selectedProjectId}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm min-w-[160px]"
+            >
+              <option value="">전체 프로젝트</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Time Range Selector */}
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-gray-400" />
+            <select
+              value={timeRange}
+              onChange={(e) => setTimeRange(e.target.value as TimeRange)}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+            >
+              {TIME_RANGES.map((tr) => (
+                <option key={tr.value} value={tr.value}>
+                  {tr.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <button
             onClick={loadData}
             className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
