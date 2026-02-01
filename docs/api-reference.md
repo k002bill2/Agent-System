@@ -355,6 +355,7 @@ AOS Backend API 엔드포인트 문서입니다.
 | GET | `/api/git/projects/{id}/working-status` | 작업 디렉토리 상태 (staged/unstaged/untracked) |
 | POST | `/api/git/projects/{id}/add` | 파일 스테이징 (git add) |
 | POST | `/api/git/projects/{id}/commit` | 커밋 생성 (git commit) |
+| POST | `/api/git/projects/{id}/draft-commits` | LLM 기반 커밋 초안 생성 |
 
 **Add 요청 본문**:
 ```json
@@ -370,6 +371,29 @@ AOS Backend API 엔드포인트 문서입니다.
   "message": "feat: Add new feature",
   "author_name": "John Doe",
   "author_email": "john@example.com"
+}
+```
+
+**Draft Commits 요청 본문**:
+```json
+{
+  "staged_only": false
+}
+```
+
+**Draft Commits 응답**:
+```json
+{
+  "drafts": [
+    {
+      "message": "feat(auth): add OAuth login support",
+      "files": ["src/auth/oauth.py", "src/auth/config.py"],
+      "type": "feat",
+      "scope": "auth"
+    }
+  ],
+  "total_files": 5,
+  "token_usage": 1234
 }
 ```
 

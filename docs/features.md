@@ -425,6 +425,14 @@ class MergeService:
 - 파일 스테이징 (git add)
 - 커밋 생성 (git commit)
 
+### LLM 기반 Draft Commits
+
+AI가 Git 변경사항을 분석하여 논리적인 커밋 그룹을 제안:
+- 관련 파일 자동 그룹화 (같은 기능/모듈)
+- Conventional Commits 형식 메시지 생성
+- 커밋 타입/스코프 자동 추론 (feat, fix, docs 등)
+- 패턴 기반 그룹화와 LLM 기반 그룹화 전환 가능
+
 ### 브랜치 관리
 
 - 로컬/리모트 브랜치 목록 조회

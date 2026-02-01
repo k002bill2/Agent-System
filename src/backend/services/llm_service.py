@@ -37,24 +37,31 @@ MODEL_CONFIGS = {
         "context_window": 200000,
         "pricing": {"input": 0.0008, "output": 0.004},
     },
-    # Google - Gemini 2.0 series
-    "gemini-2.0-flash": {
+    # Google - Gemini 3 series (2026-01 Latest)
+    "gemini-3-flash-preview": {
         "provider": "google",
-        "model": "gemini-2.0-flash",
+        "model": "gemini-3-flash-preview",
         "context_window": 1000000,
-        "pricing": {"input": 0.00025, "output": 0.001},
+        "pricing": {"input": 0.0, "output": 0.0},  # Free tier available
     },
-    "gemini-2.0-flash": {
+    "gemini-3-pro-preview": {
         "provider": "google",
-        "model": "gemini-2.0-flash",
+        "model": "gemini-3-pro-preview",
         "context_window": 1000000,
-        "pricing": {"input": 0.0, "output": 0.0},  # Free during preview
+        "pricing": {"input": 0.002, "output": 0.012},
     },
-    "gemini-1.5-pro": {
+    # Google - Gemini 2.5 series
+    "gemini-2.5-pro-preview-05-06": {
         "provider": "google",
-        "model": "gemini-1.5-pro",
-        "context_window": 2000000,
+        "model": "gemini-2.5-pro-preview-05-06",
+        "context_window": 1000000,
         "pricing": {"input": 0.00125, "output": 0.005},
+    },
+    "gemini-2.5-flash-preview-05-20": {
+        "provider": "google",
+        "model": "gemini-2.5-flash-preview-05-20",
+        "context_window": 1000000,
+        "pricing": {"input": 0.00015, "output": 0.0006},
     },
     # OpenAI - GPT-4o series
     "gpt-4o": {
@@ -193,7 +200,7 @@ class LLMService:
     async def invoke(
         cls,
         prompt: str,
-        model_id: str = "gemini-2.0-flash",
+        model_id: str = "gemini-3-flash-preview",
         system_prompt: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
@@ -204,7 +211,7 @@ class LLMService:
 
         Args:
             prompt: The user's prompt
-            model_id: Model identifier (e.g., "gemini-2.0-flash", "claude-sonnet-4-20250514")
+            model_id: Model identifier (e.g., "gemini-3-flash-preview", "claude-sonnet-4-20250514")
             system_prompt: Optional system prompt
             temperature: Sampling temperature
             max_tokens: Maximum output tokens
@@ -277,7 +284,7 @@ class LLMService:
     async def stream(
         cls,
         prompt: str,
-        model_id: str = "gemini-2.0-flash",
+        model_id: str = "gemini-3-flash-preview",
         system_prompt: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
@@ -344,7 +351,7 @@ class LLMService:
         """Get the default model based on available API keys."""
         # Priority: Google > Anthropic > OpenAI
         if os.getenv("GOOGLE_API_KEY"):
-            return "gemini-2.0-flash"
+            return "gemini-3-flash-preview"
         elif os.getenv("ANTHROPIC_API_KEY"):
             return "claude-sonnet-4-20250514"
         elif os.getenv("OPENAI_API_KEY"):
@@ -357,7 +364,7 @@ class LLMService:
         cls,
         prompt: str,
         tools: list[str],
-        model_id: str = "gemini-2.0-flash",
+        model_id: str = "gemini-3-flash-preview",
         system_prompt: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,

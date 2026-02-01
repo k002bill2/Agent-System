@@ -572,6 +572,102 @@ class GitService:
             )
 
     # =========================================================================
+    # Diff Operations
+    # =========================================================================
+
+    def get_working_diff(self, staged_only: bool = False) -> str:
+        """Get diff content for working directory changes.
+
+        Args:
+            staged_only: If True, only get diff for staged files. Otherwise get all changes.
+
+        Returns:
+            Unified diff string for all changes
+        """
+        try:
+            diff_parts: list[str] = []
+
+            if staged_only:
+                # Get staged changes only (index vs HEAD)
+                staged_diff = self.repo.git.diff("--staged", "--unified=3")
+                if staged_diff:
+                    diff_parts.append(staged_diff)
+            else:
+                # Get staged changes
+                staged_diff = self.repo.git.diff("--staged", "--unified=3")
+                if staged_diff:
+                    diff_parts.append("# Staged changes:\n" + staged_diff)
+
+                # Get unstaged changes (working tree vs index)
+                unstaged_diff = self.repo.git.diff("--unified=3")
+                if unstaged_diff:
+                    diff_parts.append("# Unstaged changes:\n" + unstaged_diff)
+
+                # Get untracked files content
+                for path in self.repo.untracked_files:
+                    try:
+                        file_path = self.project_path / path
+                        if file_path.exists() and file_path.is_file():
+                            # Read first 500 lines max to avoid huge files
+                            content = file_path.read_text(errors='ignore')
+                            lines = content.split('\n')[:500]
+                            diff_parts.append(f"# New file: {path}\n" + '\n'.join(f"+{line}" for line in lines))
+                    except Exception:
+                        diff_parts.append(f"# New file: {path} (binary or unreadable)")
+
+            return '\n\n'.join(diff_parts)
+        except GitCommandError as e:
+            raise GitServiceError(f"Failed to get diff: {e}")
+
+    def get_changed_files_list(self, staged_only: bool = False) -> list[str]:
+        """Get list of all changed file paths.
+
+        Args:
+            staged_only: If True, only return staged files.
+
+        Returns:
+            List of file paths
+        """
+        files: list[str] = []
+
+        try:
+            if staged_only:
+                # Staged files only
+                diff_staged = self.repo.index.diff("HEAD")
+                for d in diff_staged:
+                    files.append(d.b_path or d.a_path)
+            else:
+                # All changes
+                # Staged
+                try:
+                    diff_staged = self.repo.index.diff("HEAD")
+                    for d in diff_staged:
+                        path = d.b_path or d.a_path
+                        if path not in files:
+                            files.append(path)
+                except Exception:
+                    pass
+
+                # Unstaged
+                try:
+                    diff_unstaged = self.repo.index.diff(None)
+                    for d in diff_unstaged:
+                        path = d.b_path or d.a_path
+                        if path not in files:
+                            files.append(path)
+                except Exception:
+                    pass
+
+                # Untracked
+                for path in self.repo.untracked_files:
+                    if path not in files:
+                        files.append(path)
+
+            return files
+        except Exception as e:
+            raise GitServiceError(f"Failed to get changed files: {e}")
+
+    # =========================================================================
     # Remote Operations
     # =========================================================================
 

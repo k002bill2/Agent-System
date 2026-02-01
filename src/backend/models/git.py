@@ -434,6 +434,30 @@ def can_merge_to_branch(role: str, branch: str, protected_branches: list[str] | 
 
 
 # =============================================================================
+# Draft Commits Models (LLM-based commit suggestion)
+# =============================================================================
+
+class DraftCommit(BaseModel):
+    """LLM-generated commit suggestion."""
+    message: str = Field(..., description="Conventional commit message")
+    files: list[str] = Field(..., description="Files included in this commit")
+    type: str = Field(..., description="Commit type: feat, fix, docs, refactor, test, chore, style")
+    scope: str | None = Field(None, description="Commit scope (optional)")
+
+
+class DraftCommitsRequest(BaseModel):
+    """Request to generate draft commits."""
+    staged_only: bool = Field(default=False, description="Only analyze staged files")
+
+
+class DraftCommitsResponse(BaseModel):
+    """Response containing LLM-generated draft commits."""
+    drafts: list[DraftCommit]
+    total_files: int
+    token_usage: int | None = None
+
+
+# =============================================================================
 # API Response Models
 # =============================================================================
 

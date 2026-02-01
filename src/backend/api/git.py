@@ -22,6 +22,10 @@ from models.git import (
     AddResult,
     CommitCreateRequest,
     CommitCreateResult,
+    # Draft commits models (LLM-based)
+    DraftCommit,
+    DraftCommitsRequest,
+    DraftCommitsResponse,
     # Merge models
     MergePreview,
     MergeResult,
@@ -282,6 +286,171 @@ async def create_commit(
         raise HTTPException(status_code=400, detail=result.message)
 
     return result
+
+
+# =============================================================================
+# Draft Commits Endpoints (LLM-based)
+# =============================================================================
+
+DRAFT_COMMITS_SYSTEM_PROMPT = """Git 커밋 메시지 생성기입니다. 주어진 diff를 분석하여:
+1. 관련된 변경사항을 논리적인 커밋 단위로 그룹화
+2. 각 그룹에 대해 Conventional Commits 형식의 한글 메시지 생성
+
+규칙:
+- 각 커밋은 원자적이어야 함 (하나의 논리적 변경)
+- 타입: feat, fix, docs, refactor, test, chore, style 사용
+- 해당되는 경우 scope 포함 (예: auth, api, components)
+- 메시지는 간결하게 (제목 72자 이내)
+- 관련 파일끼리 그룹화 (같은 기능, 같은 모듈)
+- 커밋 메시지는 반드시 한글로 작성
+
+응답은 반드시 아래 JSON 형식만 사용:
+{
+  "drafts": [
+    {"message": "feat(auth): OAuth 로그인 기능 추가", "files": ["src/auth/oauth.py", "src/auth/config.py"], "type": "feat", "scope": "auth"},
+    {"message": "docs: README에 새 기능 문서 추가", "files": ["README.md"], "type": "docs", "scope": null}
+  ]
+}
+
+중요:
+- diff의 모든 파일을 빠짐없이 정확히 하나의 커밋 그룹에 포함
+- 어떤 파일도 건너뛰지 않음
+- scope가 해당되지 않으면 null 사용
+- 메시지는 설명적이면서도 간결하게"""
+
+
+@router.post("/projects/{project_id}/draft-commits", response_model=DraftCommitsResponse)
+async def generate_draft_commits(
+    project_id: str,
+    request: DraftCommitsRequest,
+):
+    """Generate LLM-based draft commits from git diff.
+
+    Analyzes the current working directory changes and suggests
+    logical commit groupings with conventional commit messages.
+    """
+    import json
+    from services.llm_service import LLMService
+
+    git_service = get_git_service_for_project(project_id)
+
+    # Get diff content
+    try:
+        diff_content = git_service.get_working_diff(staged_only=request.staged_only)
+        changed_files = git_service.get_changed_files_list(staged_only=request.staged_only)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to get diff: {str(e)}")
+
+    if not diff_content or not changed_files:
+        return DraftCommitsResponse(
+            drafts=[],
+            total_files=0,
+            token_usage=None,
+        )
+
+    # Truncate diff if too long (to avoid token limits)
+    max_diff_chars = 50000
+    if len(diff_content) > max_diff_chars:
+        diff_content = diff_content[:max_diff_chars] + "\n\n... (diff truncated)"
+
+    # Build prompt with file list
+    file_list = "\n".join(f"- {f}" for f in changed_files)
+    user_prompt = f"""Files changed:
+{file_list}
+
+Diff:
+{diff_content}"""
+
+    try:
+        # Call LLM with higher max_tokens to avoid truncation
+        response = await LLMService.invoke(
+            prompt=user_prompt,
+            system_prompt=DRAFT_COMMITS_SYSTEM_PROMPT,
+            temperature=0.3,
+            max_tokens=4096,
+        )
+
+        # Parse JSON response - handle both string and list content
+        raw_content = response.content
+        if isinstance(raw_content, list):
+            # Some LLM providers return list of content blocks
+            content = "".join(
+                block.get("text", str(block)) if isinstance(block, dict) else str(block)
+                for block in raw_content
+            )
+        else:
+            content = str(raw_content)
+
+        content = content.strip()
+        # Handle markdown code blocks (```json ... ``` or ``` ... ```)
+        if content.startswith("```"):
+            lines = content.split("\n")
+            # Remove first line (```json or ```) and last line (```)
+            start_idx = 1
+            end_idx = len(lines)
+            if lines[-1].strip() == "```":
+                end_idx = -1
+            content = "\n".join(lines[start_idx:end_idx]).strip()
+
+        result = json.loads(content)
+        drafts = [
+            DraftCommit(
+                message=d["message"],
+                files=d["files"],
+                type=d["type"],
+                scope=d.get("scope"),
+            )
+            for d in result.get("drafts", [])
+        ]
+
+        return DraftCommitsResponse(
+            drafts=drafts,
+            total_files=len(changed_files),
+            token_usage=response.total_tokens,
+        )
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse LLM response: {e}, content: {content[:500] if content else 'empty'}")
+        # Try to recover truncated JSON by attempting partial parsing
+        try:
+            # If JSON was truncated, try to find and fix common issues
+            if '"drafts":' in content:
+                # Try to extract partial valid JSON
+                import re
+                # Find all complete draft entries
+                draft_pattern = r'\{"message":\s*"([^"]+)",\s*"files":\s*\[([^\]]*)\],\s*"type":\s*"([^"]+)",\s*"scope":\s*(null|"[^"]*")\}'
+                matches = re.findall(draft_pattern, content)
+                if matches:
+                    drafts = []
+                    for match in matches:
+                        files_str = match[1]
+                        files = [f.strip().strip('"') for f in files_str.split(',') if f.strip()]
+                        drafts.append(DraftCommit(
+                            message=match[0],
+                            files=files,
+                            type=match[2],
+                            scope=None if match[3] == 'null' else match[3].strip('"'),
+                        ))
+                    if drafts:
+                        logger.warning(f"Recovered {len(drafts)} draft commits from partial JSON")
+                        return DraftCommitsResponse(
+                            drafts=drafts,
+                            total_files=len(changed_files),
+                            token_usage=response.total_tokens,
+                        )
+        except Exception as recovery_error:
+            logger.error(f"JSON recovery failed: {recovery_error}")
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to parse LLM response as JSON: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"LLM invocation failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"LLM invocation failed: {str(e)}"
+        )
 
 
 # =============================================================================
