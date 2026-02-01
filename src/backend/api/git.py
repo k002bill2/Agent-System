@@ -379,6 +379,16 @@ Diff:
             content = str(raw_content)
 
         content = content.strip()
+
+        # Check for server error responses before JSON parsing
+        error_indicators = ["Internal Server Error", "Bad Gateway", "Service Unavailable", "Gateway Timeout"]
+        for indicator in error_indicators:
+            if indicator in content:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"LLM 서비스 일시적 오류: {indicator}. 잠시 후 다시 시도해주세요.",
+                )
+
         # Handle markdown code blocks (```json ... ``` or ``` ... ```)
         if content.startswith("```"):
             lines = content.split("\n")
@@ -388,6 +398,13 @@ Diff:
             if lines[-1].strip() == "```":
                 end_idx = -1
             content = "\n".join(lines[start_idx:end_idx]).strip()
+
+        # Validate JSON structure before parsing
+        if not content.startswith("{") and not content.startswith("["):
+            raise HTTPException(
+                status_code=502,
+                detail=f"LLM 응답이 유효한 JSON 형식이 아닙니다: {content[:100]}...",
+            )
 
         result = json.loads(content)
         drafts = [
