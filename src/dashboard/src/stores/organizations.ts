@@ -141,6 +141,9 @@ interface OrganizationsState {
 
   // Stats
   fetchStats: (orgId: string) => Promise<void>
+
+  // Invitation
+  acceptInvitation: (token: string, userId: string, userName?: string) => Promise<{ success: boolean; member?: OrganizationMember; error?: string }>
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -510,6 +513,50 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
       set({ stats: data })
     } catch (error) {
       console.error('Failed to fetch organization stats:', error)
+    }
+  },
+
+  // ─────────────────────────────────────────────────────────────
+  // Invitation
+  // ─────────────────────────────────────────────────────────────
+
+  acceptInvitation: async (token, userId, userName) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await authFetch(`${API_BASE_URL}/api/organizations/invitations/accept`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          user_id: userId,
+          user_name: userName,
+        }),
+      })
+      if (!response.ok) {
+        const errorData = await response.json()
+        let errorMessage = 'Failed to accept invitation'
+        if (Array.isArray(errorData.detail)) {
+          errorMessage = errorData.detail
+            .map((err: { loc?: string[]; msg?: string }) =>
+              err.msg || JSON.stringify(err)
+            )
+            .join(', ')
+        } else if (typeof errorData.detail === 'string') {
+          errorMessage = errorData.detail
+        }
+        set({ isLoading: false, error: errorMessage })
+        return { success: false, error: errorMessage }
+      }
+      const member = await response.json()
+      set({ isLoading: false })
+      return { success: true, member }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to accept invitation'
+      set({
+        error: errorMessage,
+        isLoading: false,
+      })
+      return { success: false, error: errorMessage }
     }
   },
 }))

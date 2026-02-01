@@ -24,6 +24,7 @@ import { NotificationsPage } from './pages/NotificationsPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import { PlaygroundPage } from './pages/PlaygroundPage'
 import { OrganizationsPage } from './pages/OrganizationsPage'
+import { InvitationAcceptPage } from './pages/InvitationAcceptPage'
 import {
   SidebarSkeleton,
   DashboardSkeleton,
@@ -114,13 +115,15 @@ export default function App() {
     checkAuthStatus()
   }, [])
 
-  // Handle OAuth callback URL detection on initial load
+  // Handle special URL paths on initial load
   useEffect(() => {
     const path = window.location.pathname
     if (path === '/auth/callback/google') {
       setView('auth-callback-google')
     } else if (path === '/auth/callback/github') {
       setView('auth-callback-github')
+    } else if (path === '/invitations/accept') {
+      setView('invitation-accept')
     }
   }, [setView])
 
@@ -130,13 +133,15 @@ export default function App() {
   // Redirect to login if not authenticated (after hydration)
   // Skip login if OAuth is not configured
   useEffect(() => {
-    // Skip redirect check for auth callback views (they handle their own flow)
+    // Skip redirect check for special views (they handle their own flow)
     // Check both currentView state AND URL path to handle initial load race condition
     const path = window.location.pathname
     const isAuthCallbackPath = path === '/auth/callback/google' || path === '/auth/callback/github'
     const isAuthCallbackView = currentView === 'auth-callback-google' || currentView === 'auth-callback-github'
+    const isInvitationPath = path === '/invitations/accept'
+    const isInvitationView = currentView === 'invitation-accept'
 
-    if (isAuthCallbackPath || isAuthCallbackView) {
+    if (isAuthCallbackPath || isAuthCallbackView || isInvitationPath || isInvitationView) {
       return
     }
 
@@ -229,6 +234,10 @@ export default function App() {
 
   if (currentView === 'auth-callback-github') {
     return <AuthCallbackPage provider="github" />
+  }
+
+  if (currentView === 'invitation-accept') {
+    return <InvitationAcceptPage />
   }
 
   // Redirect to login if not authenticated

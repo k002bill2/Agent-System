@@ -28,5 +28,50 @@
     "joined_at": "2026-01-28 02:04:15.759793",
     "last_active_at": null,
     "created_at": "2026-01-28 02:04:15.759880"
+  },
+  "d5df435f-b172-4c22-8fe8-14a04d2aab96": {
+    "id": "d5df435f-b172-4c22-8fe8-14a04d2aab96",
+    "organization_id": "4b11a826-e7ff-47e1-8590-c2d203b9001c",
+    "user_id": "0f223ea8-bbd9-4e72-a380-5673551f483e",
+    "email": "k002bill2@gmail.com",
+    "name": "younghwnakang",
+    "role": "owner",
+    "permissions": [],
+    "is_active": true,
+    "invited_by": null,
+    "invited_at": null,
+    "joined_at": "2026-01-30 12:18:59.469341",
+    "last_active_at": null,
+    "created_at": "2026-01-30 12:18:59.469628"
+  },
+  "4dc23de9-b6df-4140-921d-0b68b8c1bbe5": {
+    "id": "4dc23de9-b6df-4140-921d-0b68b8c1bbe5",
+    "organization_id": "78e1565b-aa56-4691-a85a-f7156fb496bf",
+    "user_id": "0f223ea8-bbd9-4e72-a380-5673551f483e",
+    "email": "k002bill2@gmail.com",
+    "name": "younghwnakang",
+    "role": "owner",
+    "permissions": [],
+    "is_active": true,
+    "invited_by": null,
+    "invited_at": null,
+    "joined_at": "2026-01-30 12:19:40.190606",
+    "last_active_at": null,
+    "created_at": "2026-01-30 12:19:40.191474"
+  },
+  "881632b2-9084-4d77-ba39-20a6872ef974": {
+    "id": "881632b2-9084-4d77-ba39-20a6872ef974",
+    "organization_id": "c8f03856-9318-4ae5-b62a-58cfddc2fff1",
+    "user_id": "d77ff86c-0b8d-47af-b9e3-95663c43e1a0",
+    "email": "k003bill@gmail.com",
+    "name": "강영환",
+    "role": "viewer",
+    "permissions": [],
+    "is_active": true,
+    "invited_by": "0f223ea8-bbd9-4e72-a380-5673551f483e",
+    "invited_at": "2026-01-30 13:32:11.069035",
+    "joined_at": "2026-01-30 13:45:29.348851",
+    "last_active_at": null,
+    "created_at": "2026-01-30 13:45:29.349176"
   }
 }
