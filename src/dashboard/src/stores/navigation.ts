@@ -5,6 +5,7 @@ export type ViewType =
   | 'register'
   | 'auth-callback-google'
   | 'auth-callback-github'
+  | 'invitation-accept'
   | 'dashboard'
   | 'projects'
   | 'tasks'
@@ -22,7 +23,7 @@ export type ViewType =
   | 'settings'
 
 // Views that don't require authentication
-export const PUBLIC_VIEWS: ViewType[] = ['login', 'register', 'auth-callback-google', 'auth-callback-github']
+export const PUBLIC_VIEWS: ViewType[] = ['login', 'register', 'auth-callback-google', 'auth-callback-github', 'invitation-accept']
 
 // Check if a view is public (doesn't require auth)
 export function isPublicView(view: ViewType): boolean {

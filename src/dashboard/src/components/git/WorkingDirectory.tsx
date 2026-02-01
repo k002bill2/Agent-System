@@ -8,9 +8,15 @@ import {
   Plus,
   RefreshCw,
   Send,
+  List,
+  FolderTree,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { GitWorkingStatus, GitStatusFile, FileStatusType } from '../../stores/git'
+import { groupFilesByPattern } from '../../utils/gitGrouping'
+import { FileGroupCard } from './FileGroup'
+
+type ViewMode = 'list' | 'grouped'
 
 interface WorkingDirectoryProps {
   workingStatus: GitWorkingStatus | null
@@ -115,6 +121,7 @@ export function WorkingDirectory({
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
   const [commitMessage, setCommitMessage] = useState('')
   const [isCommitting, setIsCommitting] = useState(false)
+  const [viewMode, setViewMode] = useState<ViewMode>('list')
 
   const handleSelectFile = (path: string) => {
     setSelectedFiles((prev) => {
@@ -157,6 +164,13 @@ export function WorkingDirectory({
 
   const { staged_files, unstaged_files, untracked_files, is_clean } = workingStatus
   const allUnstagedFiles = [...unstaged_files, ...untracked_files]
+  const allFiles = [...staged_files, ...unstaged_files, ...untracked_files]
+  const fileGroups = groupFilesByPattern(allFiles)
+
+  // Handler for committing a specific group
+  const handleCommitGroup = async (message: string, _paths: string[]): Promise<boolean> => {
+    return onCommit(message)
+  }
 
   return (
     <div className="space-y-6">
@@ -172,14 +186,47 @@ export function WorkingDirectory({
               : `${workingStatus.total_changes} file(s) changed`}
           </p>
         </div>
-        <button
-          onClick={onRefresh}
-          disabled={isLoading}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {/* View Mode Toggle */}
+          {!is_clean && (
+            <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
+              <button
+                onClick={() => setViewMode('list')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
+                  viewMode === 'list'
+                    ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                )}
+                title="List view"
+              >
+                <List className="w-3.5 h-3.5" />
+                List
+              </button>
+              <button
+                onClick={() => setViewMode('grouped')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
+                  viewMode === 'grouped'
+                    ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                )}
+                title="Grouped view with suggested commits"
+              >
+                <FolderTree className="w-3.5 h-3.5" />
+                Grouped
+              </button>
+            </div>
+          )}
+          <button
+            onClick={onRefresh}
+            disabled={isLoading}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {is_clean ? (
@@ -189,7 +236,23 @@ export function WorkingDirectory({
             Working directory is clean
           </p>
         </div>
+      ) : viewMode === 'grouped' ? (
+        /* Grouped View */
+        <div className="space-y-4">
+          {fileGroups.map((group) => (
+            <FileGroupCard
+              key={group.name}
+              group={group}
+              selectedFiles={selectedFiles}
+              onSelectFile={handleSelectFile}
+              onStageFiles={onStageFiles}
+              onCommitGroup={handleCommitGroup}
+              isLoading={isLoading}
+            />
+          ))}
+        </div>
       ) : (
+        /* List View */
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Staged Changes */}
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">

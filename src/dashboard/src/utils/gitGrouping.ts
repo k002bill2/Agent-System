@@ -1,0 +1,213 @@
+import { GitStatusFile, FileStatusType } from '../stores/git'
+
+// =============================================================================
+// Types
+// =============================================================================
+
+export interface GroupRule {
+  pattern: RegExp
+  group: string
+  type: string
+  scope: string
+}
+
+export interface FileGroup {
+  name: string
+  type: string
+  scope: string
+  files: GitStatusFile[]
+  suggestedCommit: string
+}
+
+// =============================================================================
+// Group Rules (based on .claude/commands/draft-commits.md)
+// =============================================================================
+
+export const GROUP_RULES: GroupRule[] = [
+  { pattern: /^\.claude\/hooks\//, group: 'Claude Hooks', type: 'chore', scope: 'hooks' },
+  { pattern: /^\.claude\/skills\//, group: 'Claude Skills', type: 'docs', scope: 'skills' },
+  { pattern: /^\.claude\/commands\//, group: 'Claude Commands', type: 'docs', scope: 'commands' },
+  { pattern: /^\.claude\/agents\//, group: 'Claude Agents', type: 'docs', scope: 'agents' },
+  { pattern: /^\.claude\/.*\.json$/, group: 'Claude Config', type: 'chore', scope: 'config' },
+  { pattern: /^src\/backend\/api\//, group: 'Backend API', type: 'feat', scope: 'api' },
+  { pattern: /^src\/backend\/services\//, group: 'Backend Services', type: 'feat', scope: 'services' },
+  { pattern: /^src\/backend\/agents\//, group: 'Backend Agents', type: 'feat', scope: 'agents' },
+  { pattern: /^src\/backend\/models\//, group: 'Backend Models', type: 'feat', scope: 'models' },
+  { pattern: /^src\/backend\/db\//, group: 'Backend Database', type: 'feat', scope: 'db' },
+  { pattern: /^src\/dashboard\/src\/pages\//, group: 'Dashboard Pages', type: 'feat', scope: 'pages' },
+  { pattern: /^src\/dashboard\/src\/components\//, group: 'Dashboard Components', type: 'feat', scope: 'components' },
+  { pattern: /^src\/dashboard\/src\/stores\//, group: 'Dashboard Stores', type: 'feat', scope: 'stores' },
+  { pattern: /^src\/dashboard\/src\/hooks\//, group: 'Dashboard Hooks', type: 'feat', scope: 'hooks' },
+  { pattern: /^src\/dashboard\/src\/utils\//, group: 'Dashboard Utils', type: 'feat', scope: 'utils' },
+  { pattern: /^tests\//, group: 'Tests', type: 'test', scope: '' },
+  { pattern: /^docs\//, group: 'Documentation', type: 'docs', scope: '' },
+  { pattern: /^infra\//, group: 'Infrastructure', type: 'chore', scope: 'infra' },
+]
+
+// =============================================================================
+// Utility Functions
+// =============================================================================
+
+/**
+ * Find the matching group rule for a file path
+ */
+function findGroupRule(path: string): GroupRule | null {
+  for (const rule of GROUP_RULES) {
+    if (rule.pattern.test(path)) {
+      return rule
+    }
+  }
+  return null
+}
+
+/**
+ * Determine the commit type based on file statuses
+ */
+function determineCommitType(files: GitStatusFile[], defaultType: string): string {
+  const hasNew = files.some(f => f.status === 'added' || f.status === 'untracked')
+  const hasDeleted = files.some(f => f.status === 'deleted')
+  const hasModified = files.some(f => f.status === 'modified')
+
+  // If all files are new, it's likely a new feature
+  if (hasNew && !hasDeleted && !hasModified) {
+    return defaultType === 'docs' ? 'docs' : 'feat'
+  }
+
+  // If only deletions, might be cleanup/refactor
+  if (hasDeleted && !hasNew && !hasModified) {
+    return 'refactor'
+  }
+
+  return defaultType
+}
+
+/**
+ * Generate a descriptive commit message based on file changes
+ */
+function generateDescription(files: GitStatusFile[], groupName: string): string {
+  const statusCounts: Partial<Record<FileStatusType, number>> = {}
+
+  for (const file of files) {
+    statusCounts[file.status] = (statusCounts[file.status] || 0) + 1
+  }
+
+  const parts: string[] = []
+
+  if (statusCounts.added || statusCounts.untracked) {
+    const count = (statusCounts.added || 0) + (statusCounts.untracked || 0)
+    parts.push(`add ${count} new file${count > 1 ? 's' : ''}`)
+  }
+
+  if (statusCounts.modified) {
+    parts.push(`update ${statusCounts.modified} file${statusCounts.modified > 1 ? 's' : ''}`)
+  }
+
+  if (statusCounts.deleted) {
+    parts.push(`remove ${statusCounts.deleted} file${statusCounts.deleted > 1 ? 's' : ''}`)
+  }
+
+  if (statusCounts.renamed) {
+    parts.push(`rename ${statusCounts.renamed} file${statusCounts.renamed > 1 ? 's' : ''}`)
+  }
+
+  if (parts.length === 0) {
+    return `update ${groupName.toLowerCase()}`
+  }
+
+  return parts.join(', ')
+}
+
+/**
+ * Generate a conventional commit message for a group
+ */
+export function generateCommitMessage(
+  type: string,
+  scope: string,
+  files: GitStatusFile[],
+  groupName: string
+): string {
+  const actualType = determineCommitType(files, type)
+  const description = generateDescription(files, groupName)
+
+  if (scope) {
+    return `${actualType}(${scope}): ${description}`
+  }
+  return `${actualType}: ${description}`
+}
+
+/**
+ * Group files by their path patterns
+ */
+export function groupFilesByPattern(files: GitStatusFile[]): FileGroup[] {
+  const groupMap = new Map<string, FileGroup>()
+  const ungroupedFiles: GitStatusFile[] = []
+
+  for (const file of files) {
+    const rule = findGroupRule(file.path)
+
+    if (rule) {
+      const existing = groupMap.get(rule.group)
+      if (existing) {
+        existing.files.push(file)
+      } else {
+        groupMap.set(rule.group, {
+          name: rule.group,
+          type: rule.type,
+          scope: rule.scope,
+          files: [file],
+          suggestedCommit: '', // Will be generated later
+        })
+      }
+    } else {
+      ungroupedFiles.push(file)
+    }
+  }
+
+  // Generate commit messages for each group
+  const groups: FileGroup[] = []
+
+  for (const group of groupMap.values()) {
+    group.suggestedCommit = generateCommitMessage(
+      group.type,
+      group.scope,
+      group.files,
+      group.name
+    )
+    groups.push(group)
+  }
+
+  // Add ungrouped files as a separate group if any exist
+  if (ungroupedFiles.length > 0) {
+    groups.push({
+      name: 'Other Changes',
+      type: 'chore',
+      scope: '',
+      files: ungroupedFiles,
+      suggestedCommit: generateCommitMessage('chore', '', ungroupedFiles, 'Other'),
+    })
+  }
+
+  // Sort groups by name for consistent ordering
+  groups.sort((a, b) => a.name.localeCompare(b.name))
+
+  return groups
+}
+
+/**
+ * Get status statistics for a group
+ */
+export function getGroupStats(files: GitStatusFile[]): {
+  modified: number
+  added: number
+  deleted: number
+  renamed: number
+  untracked: number
+} {
+  return {
+    modified: files.filter(f => f.status === 'modified').length,
+    added: files.filter(f => f.status === 'added').length,
+    deleted: files.filter(f => f.status === 'deleted').length,
+    renamed: files.filter(f => f.status === 'renamed').length,
+    untracked: files.filter(f => f.status === 'untracked').length,
+  }
+}
