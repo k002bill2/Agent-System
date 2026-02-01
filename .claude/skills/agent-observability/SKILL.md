@@ -3,6 +3,16 @@ name: agent-observability
 description: Production tracing and metrics for multi-agent workflows. Track agent decisions, tool calls, and performance without monitoring conversation content.
 type: infrastructure
 priority: medium
+triggers:
+  keywords:
+    - trace
+    - metrics
+    - observability
+    - monitoring
+    - performance
+  patterns:
+    - "(trace|track).*?(agent|workflow)"
+    - "(monitor|observe).*?(performance|decision)"
 ---
 
 # Agent Observability

@@ -3,6 +3,16 @@ name: agent-improvement
 description: Self-improvement loop for multi-agent workflows. Diagnose failures, improve tool descriptions, and learn from success/failure patterns.
 type: meta
 priority: low
+triggers:
+  keywords:
+    - improvement
+    - failure
+    - diagnose
+    - optimize
+    - benchmark
+  patterns:
+    - "(improve|optimize).*?(agent|workflow)"
+    - "(diagnose|analyze).*?(failure|error)"
 ---
 
 # Agent Self-Improvement

@@ -6,6 +6,9 @@
  * Stop 이벤트에서 호출됩니다.
  *
  * @version 2.0.0
+ *
+ * @hook-config
+ * {"event": "Stop", "matcher": "", "command": "node .claude/hooks/contextMonitor.js 2>/dev/null || true"}
  */
 
 const fs = require('fs');

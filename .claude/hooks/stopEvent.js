@@ -9,6 +9,9 @@
  * 4. 세션 메트릭 집계 (Feedback Loops)
  *
  * @version 2.0.0-AOS
+ *
+ * @hook-config
+ * {"event": "Stop", "matcher": "", "command": "node .claude/hooks/stopEvent.js 2>/dev/null || true"}
  */
 
 const fs = require('fs');

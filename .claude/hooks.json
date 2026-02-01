@@ -62,6 +62,15 @@
             "command": "jq -r '.tool_input.file_path' | { read f; [[ \"$f\" == *.ts || \"$f\" == *.tsx ]] && npx prettier --write \"$f\" 2>/dev/null; exit 0; }"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/autoFormatter.js 2>/dev/null || true"
+          }
+        ]
       }
     ],
     "Stop": [

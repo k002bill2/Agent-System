@@ -1,0 +1,96 @@
+{
+  "_generated": "2026-01-30T15:44:21.071Z",
+  "_description": "Auto-generated agent registry. Do not edit manually.",
+  "agents": {
+    "backend-integration-specialist": {
+      "file": ".claude/agents/backend-integration-specialist.md",
+      "description": "Backend integration specialist for AOS Dashboard. Expert in Firebase, REST APIs, and data synchronization strategies.",
+      "tools": "edit, create, read, grep, bash",
+      "model": "sonnet",
+      "triggers": null
+    },
+    "background-verifier": {
+      "file": ".claude/agents/background-verifier.md",
+      "description": "백그라운드 종합 검증 에이전트. 타입체크, 린트, 테스트, 빌드를 자동으로 수행하고 결과를 리포트합니다.",
+      "tools": {
+        "tools": [
+          "Bash",
+          "Read",
+          "Grep"
+        ]
+      },
+      "model": "haiku",
+      "triggers": null
+    },
+    "brand-logo-finder": {
+      "file": ".claude/agents/brand-logo-finder.md",
+      "description": "Finds brand logos using Brandfetch. Use when user asks for a brand's logo, brand assets, or brand identity information.",
+      "tools": "WebFetch, WebSearch",
+      "model": "haiku",
+      "triggers": null
+    },
+    "code-simplifier": {
+      "file": ".claude/agents/code-simplifier.md",
+      "description": "코드 복잡도 분석 및 단순화 전문가. 긴 함수, 중복 코드, 복잡한 조건문을 식별하고 리팩토링합니다.",
+      "tools": {
+        "tools": [
+          "Read",
+          "Grep",
+          "Glob",
+          "Edit"
+        ]
+      },
+      "model": "haiku",
+      "triggers": null
+    },
+    "eval-grader": {
+      "file": ".claude/agents/eval-grader.md",
+      "description": "AI agent evaluation grader. Performs code-based checks and LLM-powered deep analysis using rubrics.",
+      "tools": "read, grep, glob, bash",
+      "model": "sonnet",
+      "triggers": null
+    },
+    "eval-task-runner": {
+      "file": ".claude/agents/eval-task-runner.md",
+      "description": "Evaluation task orchestrator. Loads task definitions, executes evaluation runs, records transcripts, and calculates pass@k metrics.",
+      "tools": "read, grep, glob, bash, task",
+      "model": "sonnet",
+      "triggers": null
+    },
+    "lead-orchestrator": {
+      "file": ".claude/agents/lead-orchestrator.md",
+      "description": "Orchestrator agent that coordinates multi-agent workflows. Implements Anthropic's Orchestrator-Worker pattern for parallel execution and effort scaling.",
+      "tools": "read, grep, glob, task, bash",
+      "model": "opus",
+      "triggers": null
+    },
+    "performance-optimizer": {
+      "file": ".claude/agents/performance-optimizer.md",
+      "description": "React Web performance optimization specialist for AOS Dashboard. Expert in identifying and fixing performance bottlenecks, memory leaks, and bundle size issues.",
+      "tools": "edit, read, grep, bash",
+      "model": "haiku",
+      "triggers": null
+    },
+    "quality-validator": {
+      "file": ".claude/agents/quality-validator.md",
+      "description": "Final validation agent for multi-agent workflows. Reviews code quality, verifies citations/references, ensures compliance with project standards.",
+      "tools": "read, grep, glob, bash",
+      "model": "haiku",
+      "triggers": null
+    },
+    "test-automation-specialist": {
+      "file": ".claude/agents/test-automation-specialist.md",
+      "description": "Test automation specialist for AOS Dashboard. Expert in Vitest, React Testing Library, coverage analysis, and writing comprehensive test suites. Use PROACTIVELY after writing or modifying code to ensure test coverage >75%.",
+      "tools": "edit, create, read, grep, bash",
+      "model": "haiku",
+      "triggers": null
+    },
+    "web-ui-specialist": {
+      "file": ".claude/agents/web-ui-specialist.md",
+      "description": "React Web UI/UX specialist for AOS Dashboard. Expert in web component design, responsive layouts with Tailwind CSS, and user experience optimization.",
+      "tools": "edit, create, read, grep",
+      "model": "sonnet",
+      "triggers": null
+    }
+  }
+}

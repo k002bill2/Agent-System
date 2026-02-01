@@ -1,6 +1,18 @@
 ---
 name: slash-command-creator
 description: Guide for creating Claude Code slash commands. Use when the user wants to create a new slash command, update an existing slash command, or asks about slash command syntax, frontmatter options, or best practices.
+type: meta
+priority: normal
+triggers:
+  keywords:
+    - command
+    - slash command
+    - /command
+  patterns:
+    - "(create|make|add).*?command"
+    - "(new|custom).*?slash"
+  files:
+    - ".claude/commands/**"
 ---
 
 # Slash Command Creator

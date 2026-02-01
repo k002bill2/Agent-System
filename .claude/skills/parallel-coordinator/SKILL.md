@@ -5,6 +5,17 @@ type: workflow
 priority: high
 version: 2.0
 based_on: Anthropic Multi-Agent Research System (https://www.anthropic.com/engineering/multi-agent-research-system)
+triggers:
+  keywords:
+    - parallel
+    - concurrent
+    - multi-agent
+    - coordinate
+    - ACE
+  patterns:
+    - "(parallel|concurrent).*?(agent|task|execution)"
+    - "(coordinate|orchestrate).*?(agent|worker)"
+    - "multi.?agent"
 ---
 
 # Parallel Agent Coordinator

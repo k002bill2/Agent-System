@@ -6,6 +6,9 @@
  * ACE Framework Layer 1 준수:
  * - Increase Understanding: 모든 에이전트 활동 투명하게 기록
  * - Transparency: 감사 추적 가능한 로그 생성
+ *
+ * @hook-config
+ * {"event": "PostToolUse", "matcher": "Task", "command": "node .claude/hooks/agentTracer.js 2>/dev/null || true"}
  */
 
 const fs = require('fs');

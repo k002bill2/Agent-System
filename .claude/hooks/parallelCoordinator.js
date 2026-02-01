@@ -3,6 +3,12 @@
  * 병렬 에이전트 작업 조정
  *
  * @version 1.0.0-AOS Dashboard
+ *
+ * @hook-config
+ * {"event": "PreToolUse", "matcher": "Task", "command": "node .claude/hooks/parallelCoordinator.js pre 2>/dev/null || true"}
+ *
+ * @hook-config
+ * {"event": "PostToolUse", "matcher": "Task", "command": "node .claude/hooks/parallelCoordinator.js post 2>/dev/null || true"}
  */
 
 const fs = require('fs');

@@ -1,6 +1,19 @@
 ---
 name: subagent-creator
 description: Create specialized Claude Code sub-agents with custom system prompts and tool configurations. Use when users ask to create a new sub-agent, custom agent, specialized assistant, or want to configure task-specific AI workflows for Claude Code.
+type: meta
+priority: normal
+triggers:
+  keywords:
+    - agent
+    - subagent
+    - sub-agent
+    - specialist
+  patterns:
+    - "(create|make|add).*?(agent|subagent)"
+    - "(new|custom).*?agent"
+  files:
+    - ".claude/agents/**"
 ---
 
 # Sub-agent Creator

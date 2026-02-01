@@ -8,6 +8,9 @@
  * 3. skill-rules.json 기반 스킬 활성화
  *
  * @version 2.0.0-AOS Dashboard
+ *
+ * @hook-config
+ * {"event": "UserPromptSubmit", "matcher": "", "command": "node .claude/hooks/userPromptSubmit.js 2>/dev/null || true"}
  */
 
 const fs = require('fs');

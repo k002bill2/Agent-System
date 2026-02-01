@@ -1,6 +1,24 @@
 ---
 name: test-automation
 description: Generate comprehensive Vitest tests for React Web components, hooks, and stores. Use when writing tests, improving coverage, or test-driven development.
+type: skill
+enforcement: suggest
+priority: high
+triggers:
+  keywords:
+    - test
+    - vitest
+    - coverage
+    - tdd
+    - testing library
+  patterns:
+    - "(write|add|create).*?test"
+    - "(run|check).*?coverage"
+    - "test.*?(component|hook|store)"
+  files:
+    - "**/__tests__/**"
+    - "**/*.test.ts"
+    - "**/*.test.tsx"
 ---
 
 # Test Automation Skill
