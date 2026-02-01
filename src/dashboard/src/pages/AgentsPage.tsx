@@ -4,10 +4,11 @@
  * Agent Registry의 등록된 에이전트, 통계, 태스크 분석 UI를 표시합니다.
  */
 
-import { useEffect, useState } from 'react'
-import { useOrchestrationStore, TaskStatus } from '../stores/orchestration'
+import { useEffect, useState, useMemo } from 'react'
+import { useOrchestrationStore, TaskStatus, Project } from '../stores/orchestration'
 import { useAgentsStore, AgentCategory } from '../stores/agents'
 import { useNavigationStore } from '../stores/navigation'
+import { useProjectConfigsStore } from '../stores/projectConfigs'
 import { cn } from '../lib/utils'
 import { ProjectFilter, ProjectBadge } from '../components/ProjectFilter'
 import { AgentCard } from '../components/AgentCard'
@@ -16,6 +17,7 @@ import { TaskAnalyzer } from '../components/TaskAnalyzer'
 import { MCPManagerTab } from '../components/mcp/MCPManagerTab'
 import { FeedbackHistoryPanel, DatasetPanel } from '../components/feedback'
 import { useFeedbackStore } from '../stores/feedback'
+import { ProjectAgentCard } from '../components/ProjectAgentCard'
 import {
   Bot,
   CheckCircle,
@@ -94,6 +96,13 @@ export function AgentsPage() {
     clearError,
   } = useAgentsStore()
 
+  // Project Configs store (for project-specific agents)
+  const {
+    allAgents: projectAgents,
+    fetchAllAgents,
+    isLoadingAll: isLoadingProjectAgents,
+  } = useProjectConfigsStore()
+
   // Feedback store (for count)
   const { feedbacks, fetchFeedbacks } = useFeedbackStore()
 
@@ -105,7 +114,25 @@ export function AgentsPage() {
     fetchAgents()
     fetchStats()
     fetchFeedbacks()
-  }, [fetchAgents, fetchStats, fetchFeedbacks])
+    fetchAllAgents()
+  }, [fetchAgents, fetchStats, fetchFeedbacks, fetchAllAgents])
+
+  // Get selected project info from orchestration store
+  const { projects } = useOrchestrationStore()
+  const selectedProject = useMemo(() =>
+    projects.find(p => p.id === projectFilter),
+    [projects, projectFilter]
+  )
+
+  // Filter project agents by selected project path
+  // Note: project-configs uses path-based IDs like "-Users-younghwankang-Work-Agent-System"
+  // while orchestration uses custom IDs like "agent-orchestration"
+  const filteredProjectAgents = useMemo(() => {
+    if (!projectFilter || !selectedProject) return []
+    // Convert path to project-configs ID format (replace / with -)
+    const configProjectId = selectedProject.path.replace(/\//g, '-')
+    return projectAgents.filter((agent) => agent.project_id === configProjectId)
+  }, [projectAgents, projectFilter, selectedProject])
 
   // Orchestration agents
   const agentList = Object.values(orchestrationAgents)
@@ -118,12 +145,17 @@ export function AgentsPage() {
   const handleRefresh = () => {
     fetchAgents(categoryFilter || undefined)
     fetchStats()
+    fetchAllAgents()
   }
+
+  // Determine which agents to show based on project filter
+  const isProjectFiltered = !!projectFilter
+  const displayAgentCount = isProjectFiltered ? filteredProjectAgents.length : registryAgents.length
 
   const pendingFeedbackCount = feedbacks.filter((f) => f.status === 'pending').length
 
   const tabs = [
-    { id: 'registry' as const, label: 'Agent Registry', icon: Bot, count: registryAgents.length },
+    { id: 'registry' as const, label: 'Agent Registry', icon: Bot, count: displayAgentCount },
     { id: 'analyzer' as const, label: 'Task Analyzer', icon: Sparkles },
     { id: 'active' as const, label: 'Active Agents', icon: Clock, count: filteredOrchestrationAgents.length },
     { id: 'mcp' as const, label: 'MCP Manager', icon: Server },
@@ -190,33 +222,44 @@ export function AgentsPage() {
       {/* Tab Content */}
       {activeTab === 'registry' && (
         <div className="space-y-6">
-          {/* Stats Panel */}
-          <AgentStatsPanel stats={stats} isLoading={isLoading} />
+          {/* Stats Panel - only show for global view */}
+          {!isProjectFiltered && <AgentStatsPanel stats={stats} isLoading={isLoading} />}
 
-          {/* Category Filter */}
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-            <div className="flex gap-1">
-              {categoryOptions.map((option) => (
-                <button
-                  key={option.value ?? 'all'}
-                  onClick={() => setCategoryFilter(option.value)}
-                  className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
-                    categoryFilter === option.value
-                      ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-                  )}
-                >
-                  <option.icon className="w-3.5 h-3.5" />
-                  {option.label}
-                </button>
-              ))}
+          {/* Project Filter Info */}
+          {isProjectFiltered && (
+            <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg p-4">
+              <p className="text-sm text-primary-700 dark:text-primary-300">
+                프로젝트별 에이전트 설정을 표시합니다. 전체 에이전트를 보려면 "All Projects"를 선택하세요.
+              </p>
             </div>
-          </div>
+          )}
+
+          {/* Category Filter - only show for global view */}
+          {!isProjectFiltered && (
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+              <div className="flex gap-1">
+                {categoryOptions.map((option) => (
+                  <button
+                    key={option.value ?? 'all'}
+                    onClick={() => setCategoryFilter(option.value)}
+                    className={cn(
+                      'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
+                      categoryFilter === option.value
+                        ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    )}
+                  >
+                    <option.icon className="w-3.5 h-3.5" />
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Agent Grid */}
-          {isLoading ? (
+          {(isLoading || isLoadingProjectAgents) ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {[...Array(6)].map((_, i) => (
                 <div key={i} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 animate-pulse">
@@ -236,6 +279,26 @@ export function AgentsPage() {
                 </div>
               ))}
             </div>
+          ) : isProjectFiltered ? (
+            // Project-specific agents view
+            filteredProjectAgents.length === 0 ? (
+              <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                <Bot className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>이 프로젝트에 등록된 에이전트가 없습니다</p>
+                <p className="text-sm mt-1">
+                  Project Configs에서 에이전트를 추가할 수 있습니다
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredProjectAgents.map((agent) => (
+                  <ProjectAgentCard
+                    key={agent.agent_id}
+                    agent={agent}
+                  />
+                ))}
+              </div>
+            )
           ) : registryAgents.length === 0 ? (
             <div className="text-center py-12 text-gray-500 dark:text-gray-400">
               <Bot className="w-12 h-12 mx-auto mb-4 opacity-50" />
@@ -261,7 +324,12 @@ export function AgentsPage() {
         </div>
       )}
 
-      {activeTab === 'analyzer' && <TaskAnalyzer />}
+      {activeTab === 'analyzer' && (
+        <TaskAnalyzer
+          projectFilter={projectFilter}
+          selectedProject={selectedProject}
+        />
+      )}
 
       {activeTab === 'active' && (
         <div>
@@ -343,12 +411,20 @@ export function AgentsPage() {
         </div>
       )}
 
-      {activeTab === 'mcp' && <MCPManagerTab />}
+      {activeTab === 'mcp' && (
+        <MCPManagerTab
+          projectFilter={projectFilter}
+          selectedProject={selectedProject}
+        />
+      )}
 
       {activeTab === 'feedback' && (
         <div className="space-y-6">
           {/* Sub-tabs for History and Dataset */}
-          <FeedbackTabContent />
+          <FeedbackTabContent
+            projectFilter={projectFilter}
+            selectedProject={selectedProject}
+          />
         </div>
       )}
     </div>
@@ -359,11 +435,25 @@ export function AgentsPage() {
 // Feedback Tab Content (with sub-tabs)
 // ============================================================================
 
-function FeedbackTabContent() {
+interface FeedbackTabContentProps {
+  projectFilter: string | null
+  selectedProject: Project | undefined
+}
+
+function FeedbackTabContent({ projectFilter, selectedProject }: FeedbackTabContentProps) {
   const [subTab, setSubTab] = useState<'history' | 'dataset'>('history')
 
   return (
     <div className="space-y-4">
+      {/* Project Filter Info */}
+      {projectFilter && selectedProject && (
+        <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg p-4">
+          <p className="text-sm text-primary-700 dark:text-primary-300">
+            프로젝트 "{selectedProject.name}"의 피드백을 표시합니다.
+          </p>
+        </div>
+      )}
+
       {/* Sub-tabs */}
       <div className="flex gap-2">
         <button

@@ -7,10 +7,12 @@
 import { useEffect, useMemo } from 'react'
 import { cn } from '../../lib/utils'
 import { useMCPStore, MCPServerStatus } from '../../stores/mcp'
+import { useProjectConfigsStore } from '../../stores/projectConfigs'
+import { Project } from '../../stores/orchestration'
 import { MCPStatsPanel } from './MCPStatsPanel'
 import { MCPServerCard } from './MCPServerCard'
 import { MCPToolCaller } from './MCPToolCaller'
-import { Server, Filter, RefreshCw, AlertCircle } from 'lucide-react'
+import { Server, Filter, RefreshCw, AlertCircle, Folder } from 'lucide-react'
 
 // 상태 필터 옵션
 const statusFilterOptions: { value: MCPServerStatus | null; label: string }[] = [
@@ -20,7 +22,12 @@ const statusFilterOptions: { value: MCPServerStatus | null; label: string }[] = 
   { value: 'error', label: 'Error' },
 ]
 
-export function MCPManagerTab() {
+interface MCPManagerTabProps {
+  projectFilter: string | null
+  selectedProject: Project | undefined
+}
+
+export function MCPManagerTab({ projectFilter, selectedProject }: MCPManagerTabProps) {
   const {
     servers,
     stats,
@@ -39,11 +46,25 @@ export function MCPManagerTab() {
     clearError,
   } = useMCPStore()
 
+  // Project configs store for project-specific MCP servers
+  const {
+    selectedProject: projectConfigSummary,
+    fetchProjectSummary,
+  } = useProjectConfigsStore()
+
   // 초기 데이터 로드
   useEffect(() => {
     fetchServers()
     fetchStats()
   }, [fetchServers, fetchStats])
+
+  // Load project-specific MCP servers when project filter changes
+  useEffect(() => {
+    if (selectedProject) {
+      const configProjectId = selectedProject.path.replace(/\//g, '-')
+      fetchProjectSummary(configProjectId)
+    }
+  }, [selectedProject, fetchProjectSummary])
 
   // 실행 중인 서버의 도구 목록 로드
   useEffect(() => {
@@ -54,11 +75,33 @@ export function MCPManagerTab() {
     })
   }, [servers, fetchServerTools])
 
-  // 필터링된 서버 목록
+  // Get project-specific MCP server IDs
+  const projectMCPServerIds = useMemo(() => {
+    if (!projectFilter || !projectConfigSummary) return new Set<string>()
+    const ids = new Set<string>()
+    projectConfigSummary.mcp_servers?.forEach(s => ids.add(s.server_id))
+    projectConfigSummary.user_mcp_servers?.forEach(s => ids.add(s.server_id))
+    return ids
+  }, [projectFilter, projectConfigSummary])
+
+  // 필터링된 서버 목록 (상태 필터 + 프로젝트 필터)
   const filteredServers = useMemo(() => {
-    if (!statusFilter) return servers
-    return servers.filter((server) => server.status === statusFilter)
-  }, [servers, statusFilter])
+    let result = servers
+
+    // Apply project filter
+    if (projectFilter && projectMCPServerIds.size > 0) {
+      result = result.filter(server => projectMCPServerIds.has(server.id))
+    }
+
+    // Apply status filter
+    if (statusFilter) {
+      result = result.filter(server => server.status === statusFilter)
+    }
+
+    return result
+  }, [servers, statusFilter, projectFilter, projectMCPServerIds])
+
+  const isProjectFiltered = !!projectFilter
 
   const handleRefresh = async () => {
     await Promise.all([fetchServers(), fetchStats()])
@@ -78,8 +121,20 @@ export function MCPManagerTab() {
 
   return (
     <div className="space-y-6">
-      {/* Stats Panel */}
-      <MCPStatsPanel stats={stats} isLoading={isLoading} />
+      {/* Project Filter Info */}
+      {isProjectFiltered && selectedProject && (
+        <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg p-4">
+          <div className="flex items-center gap-2">
+            <Folder className="w-4 h-4 text-primary-600 dark:text-primary-400" />
+            <p className="text-sm text-primary-700 dark:text-primary-300">
+              프로젝트 "{selectedProject.name}"의 MCP 서버를 표시합니다. 전체 서버를 보려면 "All Projects"를 선택하세요.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Stats Panel - only show for global view */}
+      {!isProjectFiltered && <MCPStatsPanel stats={stats} isLoading={isLoading} />}
 
       {/* Error Banner */}
       {error && (

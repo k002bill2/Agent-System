@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import { cn } from '../lib/utils'
 import { useAgentsStore } from '../stores/agents'
+import { Project } from '../stores/orchestration'
 import {
   Sparkles,
   Loader2,
@@ -17,6 +18,7 @@ import {
   AlertCircle,
   Clock,
   ArrowRight,
+  Folder,
 } from 'lucide-react'
 
 // 노력 수준 색상
@@ -33,13 +35,20 @@ const strategyIcons: Record<string, typeof GitBranch> = {
   mixed: GitBranch,
 }
 
-export function TaskAnalyzer() {
+interface TaskAnalyzerProps {
+  projectFilter: string | null
+  selectedProject: Project | undefined
+}
+
+export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerProps) {
   const { analyzeTask, lastAnalysis, isLoading, error, clearError } = useAgentsStore()
   const [taskInput, setTaskInput] = useState('')
 
   const handleAnalyze = async () => {
     if (!taskInput.trim()) return
-    await analyzeTask(taskInput.trim())
+    // Include project context in analysis
+    const context = selectedProject ? { project_id: projectFilter, project_name: selectedProject.name, project_path: selectedProject.path } : undefined
+    await analyzeTask(taskInput.trim(), context)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -53,12 +62,22 @@ export function TaskAnalyzer() {
     <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
       {/* Header */}
       <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-purple-500" />
-          Task Analyzer
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-purple-500" />
+            Task Analyzer
+          </h3>
+          {selectedProject && (
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 text-xs rounded-full">
+              <Folder className="w-3 h-3" />
+              {selectedProject.name}
+            </span>
+          )}
+        </div>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Analyze complex tasks and see how Lead Orchestrator would decompose them
+          {selectedProject
+            ? `"${selectedProject.name}" 프로젝트 컨텍스트에서 태스크를 분석합니다`
+            : 'Analyze complex tasks and see how Lead Orchestrator would decompose them'}
         </p>
       </div>
 
