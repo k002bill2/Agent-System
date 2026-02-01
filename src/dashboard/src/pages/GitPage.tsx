@@ -89,6 +89,11 @@ export function GitPage() {
     fetchWorkingStatus,
     stageFiles,
     commitChanges,
+    // Draft Commits (LLM-based)
+    draftCommits,
+    isGeneratingDrafts,
+    generateDraftCommits,
+    clearDraftCommits,
   } = useGitStore()
 
   const { projects, fetchProjects, selectedProjectId: globalSelectedProjectId } = useProjectsStore()
@@ -317,6 +322,11 @@ export function GitPage() {
                 onStageFiles={(paths) => stageFiles(selectedProjectId, paths)}
                 onStageAll={() => stageFiles(selectedProjectId, [], true)}
                 onCommit={(message) => commitChanges(selectedProjectId, message)}
+                // LLM Draft Commits
+                draftCommits={draftCommits}
+                isGeneratingDrafts={isGeneratingDrafts}
+                onGenerateDrafts={() => generateDraftCommits(selectedProjectId)}
+                onClearDrafts={clearDraftCommits}
               />
             )}
 

@@ -10,10 +10,12 @@ import {
   Send,
   List,
   FolderTree,
+  Sparkles,
+  Loader2,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
-import { GitWorkingStatus, GitStatusFile, FileStatusType } from '../../stores/git'
-import { groupFilesByPattern } from '../../utils/gitGrouping'
+import { GitWorkingStatus, GitStatusFile, FileStatusType, DraftCommit } from '../../stores/git'
+import { groupFilesByPattern, draftCommitsToFileGroups, FileGroup } from '../../utils/gitGrouping'
 import { FileGroupCard } from './FileGroup'
 
 type ViewMode = 'list' | 'grouped'
@@ -25,6 +27,11 @@ interface WorkingDirectoryProps {
   onStageFiles: (paths: string[]) => Promise<boolean>
   onStageAll: () => Promise<boolean>
   onCommit: (message: string) => Promise<boolean>
+  // LLM Draft Commits
+  draftCommits: DraftCommit[]
+  isGeneratingDrafts: boolean
+  onGenerateDrafts: () => Promise<DraftCommit[]>
+  onClearDrafts: () => void
 }
 
 const statusIcons: Record<FileStatusType, typeof FileEdit> = {
@@ -117,6 +124,10 @@ export function WorkingDirectory({
   onStageFiles,
   onStageAll,
   onCommit,
+  draftCommits,
+  isGeneratingDrafts,
+  onGenerateDrafts,
+  onClearDrafts,
 }: WorkingDirectoryProps) {
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
   const [commitMessage, setCommitMessage] = useState('')
@@ -165,7 +176,11 @@ export function WorkingDirectory({
   const { staged_files, unstaged_files, untracked_files, is_clean } = workingStatus
   const allUnstagedFiles = [...unstaged_files, ...untracked_files]
   const allFiles = [...staged_files, ...unstaged_files, ...untracked_files]
-  const fileGroups = groupFilesByPattern(allFiles)
+
+  // Use LLM-generated groups if available, otherwise fall back to pattern-based grouping
+  const fileGroups: FileGroup[] = draftCommits.length > 0
+    ? draftCommitsToFileGroups(draftCommits, allFiles)
+    : groupFilesByPattern(allFiles)
 
   // Handler for committing a specific group
   const handleCommitGroup = async (message: string, _paths: string[]): Promise<boolean> => {
@@ -239,6 +254,57 @@ export function WorkingDirectory({
       ) : viewMode === 'grouped' ? (
         /* Grouped View */
         <div className="space-y-4">
+          {/* AI Generate Button */}
+          <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border border-purple-200 dark:border-purple-800 rounded-xl">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+              <div>
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white">
+                  {draftCommits.length > 0 ? 'AI-Generated Commits' : 'Smart Commit Suggestions'}
+                </h4>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {draftCommits.length > 0
+                    ? `${draftCommits.length} commit group${draftCommits.length !== 1 ? 's' : ''} suggested`
+                    : 'Let AI analyze your changes and suggest logical commit groupings'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {draftCommits.length > 0 && (
+                <button
+                  onClick={onClearDrafts}
+                  className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                >
+                  Reset to Pattern
+                </button>
+              )}
+              <button
+                onClick={onGenerateDrafts}
+                disabled={isGeneratingDrafts || allFiles.length === 0}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all',
+                  isGeneratingDrafts
+                    ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 cursor-wait'
+                    : 'bg-purple-600 hover:bg-purple-700 text-white shadow-sm hover:shadow-md',
+                  'disabled:opacity-50 disabled:cursor-not-allowed'
+                )}
+              >
+                {isGeneratingDrafts ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    {draftCommits.length > 0 ? 'Regenerate' : 'Generate with AI'}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* File Groups */}
           {fileGroups.map((group) => (
             <FileGroupCard
               key={group.name}

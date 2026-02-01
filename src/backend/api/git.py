@@ -292,31 +292,21 @@ async def create_commit(
 # Draft Commits Endpoints (LLM-based)
 # =============================================================================
 
-DRAFT_COMMITS_SYSTEM_PROMPT = """Git 커밋 메시지 생성기입니다. 주어진 diff를 분석하여:
-1. 관련된 변경사항을 논리적인 커밋 단위로 그룹화
-2. 각 그룹에 대해 Conventional Commits 형식의 한글 메시지 생성
+DRAFT_COMMITS_SYSTEM_PROMPT = """Git 커밋 메시지 생성기. diff를 분석하여 Conventional Commits 형식의 한글 메시지를 생성합니다.
 
 규칙:
-- 각 커밋은 원자적이어야 함 (하나의 논리적 변경)
-- 타입: feat, fix, docs, refactor, test, chore, style 사용
-- 해당되는 경우 scope 포함 (예: auth, api, components)
-- 메시지는 간결하게 (제목 72자 이내)
-- 관련 파일끼리 그룹화 (같은 기능, 같은 모듈)
-- 커밋 메시지는 반드시 한글로 작성
+- 타입: feat, fix, docs, refactor, test, chore, style
+- scope 포함 (예: auth, api, components)
+- 메시지 본문은 반드시 한글로 작성
+- 관련 파일끼리 그룹화
 
-응답은 반드시 아래 JSON 형식만 사용:
-{
-  "drafts": [
-    {"message": "feat(auth): OAuth 로그인 기능 추가", "files": ["src/auth/oauth.py", "src/auth/config.py"], "type": "feat", "scope": "auth"},
-    {"message": "docs: README에 새 기능 문서 추가", "files": ["README.md"], "type": "docs", "scope": null}
-  ]
-}
+CRITICAL: 반드시 유효한 JSON만 응답. 마크다운이나 설명 없이 JSON만:
+{"drafts":[{"message":"feat(auth): OAuth 로그인 기능 추가","files":["src/auth/oauth.py"],"type":"feat","scope":"auth"},{"message":"docs: README 문서 업데이트","files":["README.md"],"type":"docs","scope":null}]}
 
-중요:
-- diff의 모든 파일을 빠짐없이 정확히 하나의 커밋 그룹에 포함
-- 어떤 파일도 건너뛰지 않음
-- scope가 해당되지 않으면 null 사용
-- 메시지는 설명적이면서도 간결하게"""
+필수사항:
+- diff의 모든 파일을 빠짐없이 포함
+- scope가 없으면 null
+- 메시지는 "타입(scope): 한글 설명" 형식 (예: "feat(api): API 엔드포인트 추가", "fix(ui): 버튼 스타일 수정")"""
 
 
 @router.post("/projects/{project_id}/draft-commits", response_model=DraftCommitsResponse)

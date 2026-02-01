@@ -171,6 +171,20 @@ export interface GitStatus {
   error: string | null
 }
 
+// Draft Commits (LLM-based)
+export interface DraftCommit {
+  message: string
+  files: string[]
+  type: string
+  scope: string | null
+}
+
+export interface DraftCommitsResponse {
+  drafts: DraftCommit[]
+  total_files: number
+  token_usage: number | null
+}
+
 // =============================================================================
 // State Interface
 // =============================================================================
@@ -212,6 +226,10 @@ interface GitState {
   // Registered Git Repositories
   repositories: GitRepository[]
 
+  // Draft Commits (LLM-based)
+  draftCommits: DraftCommit[]
+  isGeneratingDrafts: boolean
+
   // Actions - UI
   setActiveTab: (tab: GitTab) => void
   setSelectedProject: (projectId: string | null) => void
@@ -226,6 +244,10 @@ interface GitState {
   fetchWorkingStatus: (projectId: string) => Promise<GitWorkingStatus | null>
   stageFiles: (projectId: string, paths?: string[], all?: boolean) => Promise<boolean>
   commitChanges: (projectId: string, message: string, authorName?: string, authorEmail?: string) => Promise<boolean>
+
+  // Actions - Draft Commits (LLM-based)
+  generateDraftCommits: (projectId: string, stagedOnly?: boolean) => Promise<DraftCommit[]>
+  clearDraftCommits: () => void
 
   // Actions - Git Repositories
   fetchRepositories: () => Promise<void>
@@ -319,6 +341,10 @@ export const useGitStore = create<GitState>((set, get) => ({
   githubRepo: null,
 
   repositories: [],
+
+  // Draft Commits
+  draftCommits: [],
+  isGeneratingDrafts: false,
 
   // UI Actions
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -422,13 +448,38 @@ export const useGitStore = create<GitState>((set, get) => ({
       }
       await get().fetchWorkingStatus(projectId)
       await get().fetchCommits(projectId)
-      set({ isLoading: false })
+      // Clear draft commits after successful commit
+      set({ isLoading: false, draftCommits: [] })
       return true
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })
       return false
     }
   },
+
+  // Draft Commits Actions (LLM-based)
+  generateDraftCommits: async (projectId, stagedOnly = false) => {
+    set({ isGeneratingDrafts: true, error: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/draft-commits`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staged_only: stagedOnly }),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to generate draft commits'))
+      }
+      const data: DraftCommitsResponse = await response.json()
+      set({ draftCommits: data.drafts, isGeneratingDrafts: false })
+      return data.drafts
+    } catch (error) {
+      set({ error: (error as Error).message, isGeneratingDrafts: false })
+      return []
+    }
+  },
+
+  clearDraftCommits: () => set({ draftCommits: [] }),
 
   // Git Repository Actions
   fetchRepositories: async () => {
