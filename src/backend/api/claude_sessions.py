@@ -287,6 +287,21 @@ async def list_source_users() -> dict:
     }
 
 
+@router.get("/projects")
+async def list_projects() -> dict:
+    """List all unique project names from discovered sessions.
+
+    Returns:
+        List of unique project names
+    """
+    monitor = get_monitor()
+    projects = monitor.get_unique_projects()
+
+    return {
+        "projects": projects,
+    }
+
+
 @router.get("/empty/list")
 async def list_empty_sessions() -> dict:
     """List all sessions with 0 messages.

@@ -20,6 +20,8 @@ import {
   Copy,
   Check,
   Loader2,
+  FolderOpen,
+  X,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 
@@ -42,6 +44,8 @@ interface PlaygroundSession {
   id: string
   name: string
   description: string
+  project_id: string | null
+  working_directory: string | null
   agent_id: string | null
   model: string
   temperature: number
@@ -72,6 +76,14 @@ interface Model {
   available: boolean
 }
 
+interface Project {
+  id: string
+  name: string
+  path: string
+  description: string
+  has_claude_md: boolean
+}
+
 // ─────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────
@@ -88,11 +100,27 @@ async function fetchSessions(): Promise<PlaygroundSession[]> {
   return res.json()
 }
 
-async function createSession(name: string, model?: string): Promise<PlaygroundSession> {
+async function fetchProjects(): Promise<Project[]> {
+  const res = await fetch(`${API_BASE}/projects`)
+  if (!res.ok) throw new Error('Failed to fetch projects')
+  return res.json()
+}
+
+async function createSession(
+  name: string,
+  model?: string,
+  projectId?: string,
+  workingDirectory?: string
+): Promise<PlaygroundSession> {
   const res = await fetch(`${API_BASE}/playground/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, ...(model && { model }) }),
+    body: JSON.stringify({
+      name,
+      ...(model && { model }),
+      ...(projectId && { project_id: projectId }),
+      ...(workingDirectory && { working_directory: workingDirectory }),
+    }),
   })
   if (!res.ok) throw new Error('Failed to create session')
   return res.json()
@@ -168,11 +196,18 @@ export function PlaygroundPage() {
   const [currentSession, setCurrentSession] = useState<PlaygroundSession | null>(null)
   const [tools, setTools] = useState<PlaygroundTool[]>([])
   const [models, setModels] = useState<Model[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [executing, setExecuting] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [showSettings, setShowSettings] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  // New Session Dialog state
+  const [showNewSessionDialog, setShowNewSessionDialog] = useState(false)
+  const [newSessionName, setNewSessionName] = useState('')
+  const [newSessionProjectId, setNewSessionProjectId] = useState<string | null>(null)
+  const [newSessionModel, setNewSessionModel] = useState<string | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -187,14 +222,16 @@ export function PlaygroundPage() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [sessionsData, toolsData, modelsData] = await Promise.all([
+      const [sessionsData, toolsData, modelsData, projectsData] = await Promise.all([
         fetchSessions(),
         fetchTools(),
         fetchModels(),
+        fetchProjects(),
       ])
       setSessions(sessionsData)
       setTools(toolsData)
       setModels(modelsData)
+      setProjects(projectsData)
       if (sessionsData.length > 0) {
         setCurrentSession(sessionsData[0])
       }
@@ -205,14 +242,26 @@ export function PlaygroundPage() {
     }
   }
 
+  const handleOpenNewSessionDialog = () => {
+    const availableModels = models.filter(m => m.available)
+    setNewSessionName(`Session ${sessions.length + 1}`)
+    setNewSessionProjectId(null)
+    setNewSessionModel(availableModels.length > 0 ? availableModels[0].id : null)
+    setShowNewSessionDialog(true)
+  }
+
   const handleCreateSession = async () => {
     try {
-      // Use first available model
-      const availableModels = models.filter(m => m.available)
-      const defaultModel = availableModels.length > 0 ? availableModels[0].id : undefined
-      const session = await createSession(`Session ${sessions.length + 1}`, defaultModel)
+      const selectedProject = projects.find(p => p.id === newSessionProjectId)
+      const session = await createSession(
+        newSessionName || `Session ${sessions.length + 1}`,
+        newSessionModel || undefined,
+        newSessionProjectId || undefined,
+        selectedProject?.path || undefined
+      )
       setSessions((prev) => [session, ...prev])
       setCurrentSession(session)
+      setShowNewSessionDialog(false)
     } catch (e) {
       console.error(e)
     }
@@ -290,7 +339,7 @@ export function PlaygroundPage() {
       <div className="w-64 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col">
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           <button
-            onClick={handleCreateSession}
+            onClick={handleOpenNewSessionDialog}
             className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             <Plus className="w-4 h-4" />
@@ -323,6 +372,14 @@ export function PlaygroundPage() {
                   <Trash2 className="w-3 h-3" />
                 </button>
               </div>
+              {session.project_id && (
+                <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 mt-1">
+                  <FolderOpen className="w-3 h-3" />
+                  <span className="truncate">
+                    {projects.find(p => p.id === session.project_id)?.name || session.project_id}
+                  </span>
+                </div>
+              )}
               <div className="text-xs text-gray-500 mt-1">
                 {session.total_executions} executions • ${session.total_cost.toFixed(4)}
               </div>
@@ -346,6 +403,12 @@ export function PlaygroundPage() {
               <h2 className="font-semibold text-gray-900 dark:text-white">
                 {currentSession.name}
               </h2>
+              {currentSession.project_id && (
+                <div className="flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded">
+                  <FolderOpen className="w-3 h-3" />
+                  {projects.find(p => p.id === currentSession.project_id)?.name || currentSession.project_id}
+                </div>
+              )}
               <div className="flex items-center gap-2 text-sm text-gray-500">
                 <Zap className="w-4 h-4" />
                 {currentSession.total_tokens.toLocaleString()} tokens
@@ -546,6 +609,99 @@ export function PlaygroundPage() {
             <Terminal className="w-16 h-16 mx-auto mb-4 opacity-30" />
             <p className="text-lg">No session selected</p>
             <p className="text-sm">Create a new session to get started</p>
+          </div>
+        </div>
+      )}
+
+      {/* New Session Dialog */}
+      {showNewSessionDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                New Session
+              </h3>
+              <button
+                onClick={() => setShowNewSessionDialog(false)}
+                className="p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* Session Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Session Name
+                </label>
+                <input
+                  type="text"
+                  value={newSessionName}
+                  onChange={(e) => setNewSessionName(e.target.value)}
+                  placeholder="Enter session name..."
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Project Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <FolderOpen className="w-4 h-4 inline mr-1" />
+                  Project (Optional)
+                </label>
+                <select
+                  value={newSessionProjectId || ''}
+                  onChange={(e) => setNewSessionProjectId(e.target.value || null)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">No Project</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+                {newSessionProjectId && (
+                  <p className="mt-1 text-xs text-gray-500 truncate">
+                    {projects.find(p => p.id === newSessionProjectId)?.path}
+                  </p>
+                )}
+              </div>
+
+              {/* Model Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Model
+                </label>
+                <select
+                  value={newSessionModel || ''}
+                  onChange={(e) => setNewSessionModel(e.target.value || null)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {models.filter(m => m.available).map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name} ({model.provider})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 p-4 border-t border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => setShowNewSessionDialog(false)}
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateSession}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Create Session
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -26,6 +26,16 @@ from models.hitl import (
 )
 from models.cost import TokenUsage, extract_token_usage, calculate_cost
 
+# Audit logging
+from services.audit_service import (
+    AuditService,
+    AuditAction,
+    ResourceType,
+    audit_task_created,
+    audit_task_status_change,
+    audit_tool_executed,
+)
+
 # Optional RAG service - gracefully handle missing dependencies
 try:
     from services.rag_service import get_project_context
@@ -440,6 +450,21 @@ class PlannerNode(BaseNode):
 
         root_task.children = subtask_ids
 
+        # Audit: Log task creation for all tasks
+        session_id = state.get("session_id", "")
+        audit_task_created(
+            session_id=session_id,
+            task_id=root_task_id,
+            task_data={"title": root_task.title, "description": task_description},
+        )
+        for subtask_id in subtask_ids:
+            subtask = tasks[subtask_id]
+            audit_task_created(
+                session_id=session_id,
+                task_id=subtask_id,
+                task_data={"title": subtask.title, "description": subtask.description, "parent_id": root_task_id},
+            )
+
         return {
             "tasks": tasks,
             "root_task_id": root_task_id,
@@ -648,6 +673,16 @@ After completing all necessary tool calls, provide a final summary."""
             capabilities=["read_file", "write_file", "execute_bash", "list_directory"],
         )
 
+        # Audit: Log agent assignment
+        AuditService.log(
+            action=AuditAction.AGENT_ASSIGNED,
+            resource_type=ResourceType.AGENT,
+            resource_id=agent_id,
+            session_id=session_id,
+            agent_id=agent_id,
+            metadata={"task_id": current_task_id, "role": AgentRole.EXECUTOR.value},
+        )
+
         try:
             # Build message history for this execution
             messages = [
@@ -722,6 +757,20 @@ After completing all necessary tool calls, provide a final summary."""
 
                             pending_approvals[approval_id] = approval_request
 
+                            # Audit: Log approval requested
+                            AuditService.log(
+                                action=AuditAction.APPROVAL_REQUESTED,
+                                resource_type=ResourceType.APPROVAL,
+                                resource_id=approval_id,
+                                session_id=session_id,
+                                agent_id=agent_id,
+                                metadata={
+                                    "task_id": current_task_id,
+                                    "tool_name": tool_name,
+                                    "risk_level": approval_request["risk_level"],
+                                },
+                            )
+
                             return {
                                 "tasks": {current_task_id: task},
                                 "pending_approvals": pending_approvals,
@@ -749,6 +798,16 @@ After completing all necessary tool calls, provide a final summary."""
                         "result": result[:500] if len(result) > 500 else result,
                     })
 
+                    # Audit: Log tool execution
+                    audit_tool_executed(
+                        session_id=session_id,
+                        tool_name=tool_name,
+                        tool_args=tool_args,
+                        result=result,
+                        agent_id=agent_id,
+                        task_id=current_task_id,
+                    )
+
                     # Add tool result to messages
                     messages.append(ToolMessage(
                         content=result,
@@ -768,10 +827,29 @@ After completing all necessary tool calls, provide a final summary."""
             task.pending_approval_id = None
             task.updated_at = datetime.utcnow()
 
+            # Audit: Log task completion
+            audit_task_status_change(
+                session_id=session_id,
+                task_id=current_task_id,
+                old_status=TaskStatus.IN_PROGRESS.value,
+                new_status=TaskStatus.COMPLETED.value,
+                agent_id=agent_id,
+            )
+
             # Update agent status to completed
             if agent_id in agents:
                 agents[agent_id].status = TaskStatus.COMPLETED
                 agents[agent_id].current_task = None
+
+                # Audit: Log agent completion
+                AuditService.log(
+                    action=AuditAction.AGENT_COMPLETED,
+                    resource_type=ResourceType.AGENT,
+                    resource_id=agent_id,
+                    session_id=session_id,
+                    agent_id=agent_id,
+                    metadata={"task_id": current_task_id},
+                )
 
             result = {
                 "tasks": {current_task_id: task},
@@ -790,6 +868,15 @@ After completing all necessary tool calls, provide a final summary."""
             task.status = TaskStatus.FAILED
             task.error = str(e)
             task.updated_at = datetime.utcnow()
+
+            # Audit: Log task failure
+            audit_task_status_change(
+                session_id=session_id,
+                task_id=current_task_id,
+                old_status=TaskStatus.IN_PROGRESS.value,
+                new_status=TaskStatus.FAILED.value,
+                agent_id=agent_id,
+            )
 
             # Update agent status to failed
             if agent_id in agents:

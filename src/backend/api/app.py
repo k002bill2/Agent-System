@@ -1,14 +1,35 @@
 """FastAPI application factory."""
 
 import os
+import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 # Load .env file from backend directory
 load_dotenv(Path(__file__).parent.parent / ".env")
+
+# Initialize structured logging (optional - graceful fallback)
+try:
+    from services.logging_service import setup_logging, get_logger, request_id_var
+
+    setup_logging()
+    logger = get_logger("aos.app")
+    LOGGING_ENABLED = True
+except ImportError:
+    logger = None
+    LOGGING_ENABLED = False
+
+# Initialize alerting service (optional)
+try:
+    from services.alerting_service import get_alerting_service
+
+    ALERTING_ENABLED = True
+except ImportError:
+    ALERTING_ENABLED = False
 
 # Check deployment mode - Railway has limited dependencies
 RAILWAY_MODE = os.getenv("RAILWAY", "false").lower() == "true"
@@ -108,15 +129,27 @@ else:
     async def lifespan(app: FastAPI):
         """Application lifespan manager."""
         # Startup
+        if LOGGING_ENABLED and logger:
+            logger.info("application_starting", env=os.getenv("ENV", "development"))
+
         if USE_DATABASE:
             try:
                 from db.database import init_db
                 await init_db()
-                print("✅ Database initialized (PostgreSQL)")
+                if logger:
+                    logger.info("database_initialized", type="postgresql")
+                else:
+                    print("✅ Database initialized (PostgreSQL)")
             except ImportError:
-                print("⚠️  Database module not available")
+                if logger:
+                    logger.warning("database_module_not_available")
+                else:
+                    print("⚠️  Database module not available")
         else:
-            print("📝 Running in memory mode (USE_DATABASE=false)")
+            if logger:
+                logger.info("running_in_memory_mode")
+            else:
+                print("📝 Running in memory mode (USE_DATABASE=false)")
 
         # Initialize projects from projects/ directory
         if PROJECTS_ENABLED:
@@ -127,16 +160,42 @@ else:
         if ORCHESTRATOR_ENABLED:
             set_engine(OrchestrationEngine())
 
+        # Send startup notification
+        if ALERTING_ENABLED:
+            try:
+                alerting = get_alerting_service()
+                await alerting.on_startup()
+            except Exception as e:
+                if logger:
+                    logger.warning("startup_notification_failed", error=str(e))
+
+        if logger:
+            logger.info("application_started")
+
         yield
 
         # Shutdown
+        if logger:
+            logger.info("application_shutting_down")
+
+        # Send shutdown notification
+        if ALERTING_ENABLED:
+            try:
+                alerting = get_alerting_service()
+                await alerting.on_shutdown()
+            except Exception:
+                pass
+
         if ORCHESTRATOR_ENABLED:
             clear_engine()
         if USE_DATABASE:
             try:
                 from db.database import close_db
                 await close_db()
-                print("Database connection closed")
+                if logger:
+                    logger.info("database_connection_closed")
+                else:
+                    print("Database connection closed")
             except ImportError:
                 pass
 
@@ -180,6 +239,52 @@ else:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+
+        # Request logging middleware
+        if LOGGING_ENABLED:
+
+            class RequestLoggingMiddleware(BaseHTTPMiddleware):
+                """Middleware to log all HTTP requests with timing."""
+
+                async def dispatch(self, request: Request, call_next):
+                    import time
+
+                    # Generate request ID
+                    req_id = request.headers.get("X-Request-ID", str(uuid.uuid4())[:8])
+                    request_id_var.set(req_id)
+
+                    start_time = time.perf_counter()
+
+                    # Skip logging for health checks to reduce noise
+                    is_health_check = request.url.path.startswith("/health")
+
+                    if not is_health_check and logger:
+                        logger.info(
+                            "request_started",
+                            method=request.method,
+                            path=request.url.path,
+                            client=request.client.host if request.client else "unknown",
+                        )
+
+                    response = await call_next(request)
+
+                    duration_ms = (time.perf_counter() - start_time) * 1000
+
+                    if not is_health_check and logger:
+                        logger.info(
+                            "request_completed",
+                            method=request.method,
+                            path=request.url.path,
+                            status_code=response.status_code,
+                            duration_ms=round(duration_ms, 2),
+                        )
+
+                    # Add request ID to response headers
+                    response.headers["X-Request-ID"] = req_id
+
+                    return response
+
+            app.add_middleware(RequestLoggingMiddleware)
 
         # Health check endpoint (always available)
         @app.get("/health")

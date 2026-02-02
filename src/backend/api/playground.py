@@ -64,6 +64,8 @@ class SessionSettingsUpdate(BaseModel):
     max_tokens: int | None = None
     system_prompt: str | None = None
     enabled_tools: list[str] | None = None
+    project_id: str | None = None
+    working_directory: str | None = None
 
 
 @router.patch("/sessions/{session_id}/settings", response_model=PlaygroundSession)
@@ -78,6 +80,8 @@ async def update_session_settings(session_id: str, data: SessionSettingsUpdate):
         max_tokens=data.max_tokens,
         system_prompt=data.system_prompt,
         enabled_tools=data.enabled_tools,
+        project_id=data.project_id,
+        working_directory=data.working_directory,
     )
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")

@@ -38,6 +38,7 @@ export function SessionList({ statusFilter }: SessionListProps) {
     loadMoreSessions,
     refreshSessions,
     fetchSourceUsers,
+    fetchProjects,
     selectSession,
     setAutoRefresh,
     setSortBy,
@@ -81,8 +82,9 @@ export function SessionList({ statusFilter }: SessionListProps) {
   useEffect(() => {
     fetchSessions(statusFilter, true)
     fetchSourceUsers()
+    fetchProjects()
     fetchPendingSummaryCount()
-  }, [fetchSessions, fetchSourceUsers, fetchPendingSummaryCount, statusFilter])
+  }, [fetchSessions, fetchSourceUsers, fetchProjects, fetchPendingSummaryCount, statusFilter])
 
   // Infinite scroll with IntersectionObserver
   const handleLoadMore = useCallback(() => {

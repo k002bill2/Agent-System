@@ -1,0 +1,89 @@
+# Render Blueprint (Alternative to Railway)
+# https://render.com/docs/blueprint-spec
+
+services:
+  # ─────────────────────────────────────────────────────────────
+  # Backend Service
+  # ─────────────────────────────────────────────────────────────
+  - type: web
+    name: aos-backend
+    runtime: docker
+    dockerfilePath: ./src/backend/Dockerfile.full
+    dockerContext: ./src/backend
+    region: oregon
+    plan: starter
+    healthCheckPath: /health/ready
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: aos-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: aos-redis
+          property: connectionString
+      - key: USE_DATABASE
+        value: "true"
+      - key: SESSION_SECRET_KEY
+        generateValue: true
+      - key: LLM_PROVIDER
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: FRONTEND_URL
+        fromService:
+          type: web
+          name: aos-dashboard
+          property: url
+      - key: CORS_ORIGINS
+        fromService:
+          type: web
+          name: aos-dashboard
+          property: url
+    autoDeploy: true
+    branch: main
+
+  # ─────────────────────────────────────────────────────────────
+  # Dashboard Service
+  # ─────────────────────────────────────────────────────────────
+  - type: web
+    name: aos-dashboard
+    runtime: docker
+    dockerfilePath: ./src/dashboard/Dockerfile.prod
+    dockerContext: ./src/dashboard
+    region: oregon
+    plan: starter
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: aos-backend
+          property: url
+    autoDeploy: true
+    branch: main
+
+# ─────────────────────────────────────────────────────────────
+# Databases
+# ─────────────────────────────────────────────────────────────
+databases:
+  - name: aos-db
+    databaseName: aos
+    user: aos
+    region: oregon
+    plan: starter
+    postgresMajorVersion: "16"
+    ipAllowList: []
+
+# ─────────────────────────────────────────────────────────────
+# Redis
+# ─────────────────────────────────────────────────────────────
+services:
+  - type: redis
+    name: aos-redis
+    region: oregon
+    plan: starter
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []

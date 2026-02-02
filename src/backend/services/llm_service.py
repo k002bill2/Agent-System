@@ -369,7 +369,8 @@ class LLMService:
         temperature: float = 0.7,
         max_tokens: int = 4096,
         context: dict[str, Any] | None = None,
-        max_tool_iterations: int = 5,
+        max_tool_iterations: int = 15,
+        working_directory: str | None = None,
     ) -> LLMResponse:
         """
         Invoke an LLM with tool support.
@@ -386,6 +387,7 @@ class LLMService:
             max_tokens: Maximum output tokens
             context: Optional context dict
             max_tool_iterations: Max number of tool call rounds
+            working_directory: Working directory for file/code tools
 
         Returns:
             LLMResponse with content, tool calls, and metrics
@@ -488,7 +490,7 @@ class LLMService:
 
                     # Execute the tool
                     try:
-                        result = await execute_tool(tool_name, tool_args)
+                        result = await execute_tool(tool_name, tool_args, working_directory=working_directory)
                         result_str = json.dumps(result, ensure_ascii=False, indent=2)
                     except Exception as e:
                         result = {"success": False, "error": str(e)}

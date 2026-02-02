@@ -311,6 +311,19 @@ class ClaudeSessionMonitor:
                 users.add(s.source_user)
         return sorted(users)
 
+    def get_unique_projects(self) -> list[str]:
+        """Get list of unique project names from all discovered sessions.
+
+        Returns:
+            List of unique project names
+        """
+        sessions = self.discover_sessions()
+        projects = set()
+        for s in sessions:
+            if s.project_name:
+                projects.add(s.project_name)
+        return sorted(projects)
+
     def _parse_session_file(
         self,
         file_path: Path,

@@ -2,6 +2,9 @@
 
 LangGraph 기반 멀티 에이전트 오케스트레이션 서비스입니다.
 
+[![CI](https://github.com/k002bill2/Agent-Orchestrator/actions/workflows/ci.yml/badge.svg)](https://github.com/k002bill2/Agent-Orchestrator/actions/workflows/ci.yml)
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template)
+
 ## Features
 
 - 🤖 **LangGraph 기반 에이전트 오케스트레이션**: Orchestrator → Planner → Executor → Reviewer 그래프
@@ -221,6 +224,22 @@ mypy .
 cd src/dashboard
 npx tsc --noEmit
 ```
+
+## Deployment
+
+프로덕션 배포는 Railway 또는 Render를 권장합니다:
+
+### Railway (권장)
+
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template)
+
+### Render
+
+1. [Render Dashboard](https://dashboard.render.com)에서 "New Blueprint" 선택
+2. 이 저장소 연결
+3. `render.yaml`이 자동으로 감지되어 배포됨
+
+자세한 배포 가이드는 [docs/deployment.md](docs/deployment.md)를 참조하세요.
 
 ## License
 

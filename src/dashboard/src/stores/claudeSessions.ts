@@ -52,6 +52,9 @@ interface ClaudeSessionsState {
   sourceUsers: string[]
   currentUser: string
 
+  // All projects (from API)
+  allProjects: string[]
+
   // Auto-refresh
   autoRefresh: boolean
   refreshInterval: number // in seconds
@@ -64,6 +67,7 @@ interface ClaudeSessionsState {
   loadMoreSessions: (status?: SessionStatus) => Promise<void>
   refreshSessions: (status?: SessionStatus) => Promise<void>
   fetchSourceUsers: () => Promise<void>
+  fetchProjects: () => Promise<void>
   setSortBy: (field: SortField) => void
   setSortOrder: (order: SortOrder) => void
   setProjectFilter: (project: string | null) => void
@@ -148,6 +152,9 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   // Source users initial state
   sourceUsers: [],
   currentUser: '',
+
+  // All projects initial state
+  allProjects: [],
 
   autoRefresh: true,
   refreshInterval: 5,
@@ -359,6 +366,22 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
     }
   },
 
+  fetchProjects: async () => {
+    try {
+      const res = await fetch(`${API_BASE}/claude-sessions/projects`)
+      if (!res.ok) {
+        return
+      }
+
+      const data = await res.json()
+      set({
+        allProjects: data.projects || [],
+      })
+    } catch {
+      // Silently ignore errors
+    }
+  },
+
   getFilteredSessions: () => {
     const { sessions, searchQuery } = get()
     if (!searchQuery.trim()) {
@@ -380,7 +403,12 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   },
 
   getUniqueProjects: () => {
-    const { sessions } = get()
+    const { allProjects, sessions } = get()
+    // Return from API if available (includes all sessions)
+    if (allProjects.length > 0) {
+      return allProjects
+    }
+    // Fallback to loaded sessions only
     const projects = sessions
       .map((s) => s.project_name)
       .filter((p): p is string => p != null && p !== '')

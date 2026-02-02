@@ -70,6 +70,10 @@ class PlaygroundSession(BaseModel):
     name: str = "Untitled Session"
     description: str = ""
 
+    # Project context
+    project_id: str | None = None  # Optional project ID
+    working_directory: str | None = None  # Working directory for code execution and file ops
+
     # Current settings
     agent_id: str | None = None
     model: str = "gemini-2.0-flash"
@@ -100,6 +104,8 @@ class PlaygroundSessionCreate(BaseModel):
 
     name: str = "Untitled Session"
     description: str = ""
+    project_id: str | None = None  # Optional project ID
+    working_directory: str | None = None  # Working directory for tools
     agent_id: str | None = None
     model: str = "gemini-2.0-flash"
     system_prompt: str | None = None
@@ -122,6 +128,7 @@ class PlaygroundToolTest(BaseModel):
     tool_name: str
     arguments: dict[str, Any] = Field(default_factory=dict)
     mock_response: bool = False
+    working_directory: str | None = None  # Working directory for file/code tools
 
 
 class PlaygroundCompareRequest(BaseModel):

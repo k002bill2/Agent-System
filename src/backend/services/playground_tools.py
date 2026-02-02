@@ -115,6 +115,7 @@ class PlaygroundTools:
         language: str,
         code: str,
         timeout: int = 30,
+        working_directory: str | None = None,
     ) -> dict[str, Any]:
         """
         Execute code in a sandboxed environment.
@@ -125,6 +126,7 @@ class PlaygroundTools:
             language: Programming language
             code: Code to execute
             timeout: Execution timeout in seconds
+            working_directory: Directory to execute code in
 
         Returns:
             Execution result with output and status
@@ -185,12 +187,16 @@ class PlaygroundTools:
                 # Execute with timeout
                 start_time = datetime.now()
 
+                # Use working_directory if provided
+                cwd = working_directory if working_directory and os.path.isdir(working_directory) else None
+
                 process = await asyncio.create_subprocess_exec(
                     interpreter,
                     temp_path,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+                    cwd=cwd,
                 )
 
                 try:
@@ -235,19 +241,22 @@ class PlaygroundTools:
             }
 
     @staticmethod
-    async def file_read(path: str) -> dict[str, Any]:
+    async def file_read(path: str, working_directory: str | None = None) -> dict[str, Any]:
         """
         Read a file from the workspace.
 
         Args:
             path: File path to read
+            working_directory: Base directory for relative paths
 
         Returns:
             File content or error
         """
         try:
-            # Security: only allow reading from certain directories
+            # Resolve relative paths using working_directory
             path = os.path.expanduser(path)
+            if not os.path.isabs(path) and working_directory:
+                path = os.path.join(working_directory, path)
 
             # Block sensitive paths
             blocked_patterns = [
@@ -358,19 +367,23 @@ class PlaygroundTools:
             }
 
     @staticmethod
-    async def file_write(path: str, content: str) -> dict[str, Any]:
+    async def file_write(path: str, content: str, working_directory: str | None = None) -> dict[str, Any]:
         """
         Write content to a file.
 
         Args:
             path: File path to write
             content: Content to write
+            working_directory: Base directory for relative paths
 
         Returns:
             Success status
         """
         try:
+            # Resolve relative paths using working_directory
             path = os.path.expanduser(path)
+            if not os.path.isabs(path) and working_directory:
+                path = os.path.join(working_directory, path)
 
             # Security: block writing to sensitive locations
             blocked_patterns = [
@@ -617,13 +630,18 @@ TOOL_DEFINITIONS = [
 ]
 
 
-async def execute_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+async def execute_tool(
+    tool_name: str,
+    arguments: dict[str, Any],
+    working_directory: str | None = None,
+) -> dict[str, Any]:
     """
     Execute a playground tool by name.
 
     Args:
         tool_name: Name of the tool to execute
         arguments: Tool arguments
+        working_directory: Working directory for file/code operations
 
     Returns:
         Tool execution result
@@ -640,15 +658,18 @@ async def execute_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, A
             language=arguments.get("language", "python"),
             code=arguments.get("code", ""),
             timeout=arguments.get("timeout", 30),
+            working_directory=working_directory,
         )
     elif tool_name == "file_read":
         return await tools.file_read(
             path=arguments.get("path", ""),
+            working_directory=working_directory,
         )
     elif tool_name == "file_write":
         return await tools.file_write(
             path=arguments.get("path", ""),
             content=arguments.get("content", ""),
+            working_directory=working_directory,
         )
     elif tool_name == "api_call":
         return await tools.api_call(

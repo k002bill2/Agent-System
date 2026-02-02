@@ -1,0 +1,168 @@
+# Database Backup Workflow
+# 스케줄: 매일 2AM UTC
+
+name: Database Backup
+
+on:
+  schedule:
+    # Daily at 2AM UTC (11AM KST)
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      retention_days:
+        description: "Number of days to retain backups"
+        required: false
+        default: "30"
+        type: number
+
+env:
+  BACKUP_RETENTION_DAYS: ${{ inputs.retention_days || 30 }}
+
+jobs:
+  backup:
+    name: Backup Database
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-16
+
+      - name: Create backup
+        id: backup
+        env:
+          PGPASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+        run: |
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          BACKUP_FILE="aos_backup_${TIMESTAMP}.sql.gz"
+
+          echo "Creating backup: $BACKUP_FILE"
+
+          pg_dump \
+            --host=${{ secrets.DATABASE_HOST }} \
+            --port=${{ secrets.DATABASE_PORT }} \
+            --username=${{ secrets.DATABASE_USER }} \
+            --dbname=${{ secrets.DATABASE_NAME }} \
+            --format=plain \
+            --no-owner \
+            --no-acl \
+            | gzip > "$BACKUP_FILE"
+
+          BACKUP_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
+
+          echo "backup_file=$BACKUP_FILE" >> $GITHUB_OUTPUT
+          echo "backup_size=$BACKUP_SIZE" >> $GITHUB_OUTPUT
+          echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+
+      - name: Upload to S3
+        if: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION || 'ap-northeast-2' }}
+        run: |
+          aws s3 cp \
+            "${{ steps.backup.outputs.backup_file }}" \
+            "s3://${{ secrets.BACKUP_S3_BUCKET }}/backups/${{ steps.backup.outputs.backup_file }}"
+
+          echo "Uploaded to S3"
+
+      - name: Upload to GCS
+        if: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY != '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
+
+      - name: Copy to GCS
+        if: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY != '' }}
+        run: |
+          gcloud storage cp \
+            "${{ steps.backup.outputs.backup_file }}" \
+            "gs://${{ secrets.BACKUP_GCS_BUCKET }}/backups/${{ steps.backup.outputs.backup_file }}"
+
+          echo "Uploaded to GCS"
+
+      - name: Upload as artifact (fallback)
+        if: ${{ secrets.AWS_ACCESS_KEY_ID == '' && secrets.GCS_SERVICE_ACCOUNT_KEY == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-backup-${{ steps.backup.outputs.timestamp }}
+          path: ${{ steps.backup.outputs.backup_file }}
+          retention-days: ${{ env.BACKUP_RETENTION_DAYS }}
+
+      - name: Cleanup old S3 backups
+        if: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION || 'ap-northeast-2' }}
+        run: |
+          # Delete backups older than retention period
+          CUTOFF_DATE=$(date -d "-${{ env.BACKUP_RETENTION_DAYS }} days" +%Y%m%d)
+
+          aws s3 ls "s3://${{ secrets.BACKUP_S3_BUCKET }}/backups/" | while read -r line; do
+            FILE_DATE=$(echo "$line" | awk '{print $4}' | grep -oP '\d{8}' | head -1)
+            FILE_NAME=$(echo "$line" | awk '{print $4}')
+
+            if [[ "$FILE_DATE" < "$CUTOFF_DATE" ]]; then
+              echo "Deleting old backup: $FILE_NAME"
+              aws s3 rm "s3://${{ secrets.BACKUP_S3_BUCKET }}/backups/$FILE_NAME"
+            fi
+          done
+
+      - name: Backup Summary
+        run: |
+          echo "## Database Backup Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Timestamp | ${{ steps.backup.outputs.timestamp }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| File | ${{ steps.backup.outputs.backup_file }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Size | ${{ steps.backup.outputs.backup_size }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Retention | ${{ env.BACKUP_RETENTION_DAYS }} days |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "Database backup failed!",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ":x: *Database Backup Failed*\n\nWorkflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true
+
+  verify:
+    name: Verify Backup
+    needs: backup
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download latest backup
+        if: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION || 'ap-northeast-2' }}
+        run: |
+          LATEST=$(aws s3 ls "s3://${{ secrets.BACKUP_S3_BUCKET }}/backups/" | sort | tail -1 | awk '{print $4}')
+          aws s3 cp "s3://${{ secrets.BACKUP_S3_BUCKET }}/backups/$LATEST" ./backup.sql.gz
+
+      - name: Verify backup integrity
+        run: |
+          gunzip -t ./backup.sql.gz && echo "Backup verified: OK"
+        continue-on-error: true

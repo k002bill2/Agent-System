@@ -180,6 +180,8 @@ class PlaygroundService:
         session = PlaygroundSession(
             name=data.name,
             description=data.description,
+            project_id=data.project_id,
+            working_directory=data.working_directory,
             agent_id=data.agent_id,
             model=data.model,
             system_prompt=data.system_prompt or DEFAULT_SYSTEM_PROMPT,
@@ -225,6 +227,8 @@ class PlaygroundService:
         system_prompt: str | None = None,
         enabled_tools: list[str] | None = None,
         name: str | None = None,
+        project_id: str | None = None,
+        working_directory: str | None = None,
     ) -> PlaygroundSession | None:
         """Update session settings."""
         _load_sessions()  # Ensure sessions are loaded
@@ -246,6 +250,10 @@ class PlaygroundService:
             session.system_prompt = system_prompt
         if enabled_tools is not None:
             session.enabled_tools = enabled_tools
+        if project_id is not None:
+            session.project_id = project_id
+        if working_directory is not None:
+            session.working_directory = working_directory
 
         session.updated_at = datetime.utcnow()
         _save_sessions()  # Persist to file
@@ -313,6 +321,7 @@ class PlaygroundService:
                     temperature=execution.temperature,
                     max_tokens=execution.max_tokens,
                     context=conversation_context or request.context or None,
+                    working_directory=session.working_directory,
                 )
 
                 # Add tool call messages if any
@@ -340,9 +349,20 @@ class PlaygroundService:
                 )
 
             # Add assistant message
+            # Handle content that might be a list (e.g., [{'type': 'text', 'text': '...'}])
+            content = llm_response.content
+            if isinstance(content, list):
+                # Extract text from list format
+                content = " ".join(
+                    item.get("text", str(item)) if isinstance(item, dict) else str(item)
+                    for item in content
+                )
+            elif not isinstance(content, str):
+                content = str(content)
+
             assistant_msg = PlaygroundMessage(
                 role="assistant",
-                content=llm_response.content,
+                content=content,
                 tokens=llm_response.output_tokens,
                 latency_ms=llm_response.latency_ms,
             )
@@ -350,7 +370,7 @@ class PlaygroundService:
             session.messages.append(assistant_msg)
 
             # Update execution metrics
-            execution.result = llm_response.content
+            execution.result = content
             execution.status = PlaygroundExecutionStatus.COMPLETED
             execution.input_tokens = llm_response.input_tokens
             execution.output_tokens = llm_response.output_tokens
@@ -448,6 +468,8 @@ class PlaygroundService:
     @staticmethod
     async def test_tool(request: PlaygroundToolTest) -> dict[str, Any]:
         """Test a specific tool with given arguments."""
+        from services.playground_tools import execute_tool
+
         tool = PLAYGROUND_TOOLS.get(request.tool_name)
         if not tool:
             return {
@@ -465,14 +487,29 @@ class PlaygroundService:
                 "mock": True,
             }
 
-        # In production, this would actually execute the tool
-        return {
-            "success": True,
-            "tool": request.tool_name,
-            "arguments": request.arguments,
-            "result": f"Tool '{request.tool_name}' would be executed with args: {request.arguments}",
-            "mock": False,
-        }
+        # Actually execute the tool
+        try:
+            result = await execute_tool(
+                request.tool_name,
+                request.arguments,
+                working_directory=request.working_directory,
+            )
+            return {
+                "success": result.get("success", False),
+                "tool": request.tool_name,
+                "arguments": request.arguments,
+                "result": result,
+                "working_directory": request.working_directory,
+                "mock": False,
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "tool": request.tool_name,
+                "arguments": request.arguments,
+                "error": str(e),
+                "mock": False,
+            }
 
     @staticmethod
     def get_available_tools() -> list[dict[str, Any]]:

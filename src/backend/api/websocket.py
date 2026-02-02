@@ -19,6 +19,7 @@ from models.message import (
 )
 from models.hitl import ApprovalStatus
 from api.deps import get_engine
+from services.audit_service import AuditService, AuditAction, ResourceType
 
 # Heartbeat configuration
 WS_HEARTBEAT_INTERVAL = int(os.getenv("WS_HEARTBEAT_INTERVAL", "20"))
@@ -183,6 +184,19 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                                 approval["resolver_note"] = payload.note
                                 state["waiting_for_approval"] = False
 
+                                # Audit: Log approval granted
+                                AuditService.log(
+                                    action=AuditAction.APPROVAL_GRANTED,
+                                    resource_type=ResourceType.APPROVAL,
+                                    resource_id=payload.approval_id,
+                                    session_id=session_id,
+                                    metadata={
+                                        "task_id": approval["task_id"],
+                                        "tool_name": approval.get("tool_name"),
+                                        "note": payload.note,
+                                    },
+                                )
+
                                 # Send confirmation
                                 await manager.send_message(
                                     session_id,
@@ -205,6 +219,19 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                                 approval["status"] = ApprovalStatus.DENIED.value
                                 approval["resolver_note"] = payload.note or "Denied by user"
                                 state["waiting_for_approval"] = False
+
+                                # Audit: Log approval denied
+                                AuditService.log(
+                                    action=AuditAction.APPROVAL_DENIED,
+                                    resource_type=ResourceType.APPROVAL,
+                                    resource_id=payload.approval_id,
+                                    session_id=session_id,
+                                    metadata={
+                                        "task_id": approval["task_id"],
+                                        "tool_name": approval.get("tool_name"),
+                                        "note": approval["resolver_note"],
+                                    },
+                                )
 
                                 # Update task status
                                 task_id = approval["task_id"]

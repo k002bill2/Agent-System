@@ -1,0 +1,217 @@
+# Production Deployment (Manual)
+# 트리거: 수동 실행 또는 릴리스 태그
+
+name: Deploy Production
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag to deploy (e.g., v1.0.0)"
+        required: true
+        type: string
+      skip_tests:
+        description: "Skip pre-deployment tests"
+        required: false
+        default: false
+        type: boolean
+
+env:
+  RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # 사전 검증
+  # ─────────────────────────────────────────────────────────────
+  verify:
+    name: Pre-deployment Verification
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_tests }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version || github.ref }}
+
+      - name: Verify tag exists
+        run: |
+          TAG="${{ inputs.version || github.ref_name }}"
+          if ! git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG not found"
+            exit 1
+          fi
+          echo "Deploying tag: $TAG"
+
+      - name: Verify Docker images exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ inputs.version || github.ref_name }}"
+          BACKEND_IMAGE="ghcr.io/${{ github.repository_owner }}/aos-backend:$TAG"
+          DASHBOARD_IMAGE="ghcr.io/${{ github.repository_owner }}/aos-dashboard:$TAG"
+
+          echo "Checking images..."
+          docker pull "$BACKEND_IMAGE" || exit 1
+          docker pull "$DASHBOARD_IMAGE" || exit 1
+          echo "Images verified!"
+
+  # ─────────────────────────────────────────────────────────────
+  # 프로덕션 배포
+  # ─────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [verify]
+    if: always() && (needs.verify.result == 'success' || inputs.skip_tests)
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version || github.ref }}
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Create deployment record
+        id: record
+        run: |
+          echo "version=${{ inputs.version || github.ref_name }}" >> $GITHUB_OUTPUT
+          echo "timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_OUTPUT
+          echo "deployer=${{ github.actor }}" >> $GITHUB_OUTPUT
+
+      - name: Deploy Backend
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          railway link ${{ env.RAILWAY_PROJECT_ID }}
+          railway up --service backend --environment production --detach
+
+      - name: Deploy Dashboard
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          railway up --service dashboard --environment production --detach
+
+      - name: Wait for deployment
+        run: sleep 90
+
+      - name: Health Check
+        id: health
+        run: |
+          BACKEND_URL="${{ secrets.PRODUCTION_BACKEND_URL }}"
+          MAX_RETRIES=15
+          RETRY_DELAY=20
+
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Health check attempt $i/$MAX_RETRIES..."
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_URL/health/ready" || echo "000")
+
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "Health check passed!"
+              exit 0
+            fi
+
+            echo "Status: $HTTP_CODE, retrying in ${RETRY_DELAY}s..."
+            sleep $RETRY_DELAY
+          done
+
+          echo "Health check failed after $MAX_RETRIES attempts"
+          exit 1
+
+      - name: Get deployment URL
+        id: deploy
+        run: |
+          echo "url=${{ secrets.PRODUCTION_DASHBOARD_URL }}" >> $GITHUB_OUTPUT
+
+      - name: Deployment Summary
+        run: |
+          echo "## Production Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ steps.record.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Deployed by | ${{ steps.record.outputs.deployer }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Timestamp | ${{ steps.record.outputs.timestamp }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### URLs" >> $GITHUB_STEP_SUMMARY
+          echo "- Backend: ${{ secrets.PRODUCTION_BACKEND_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Dashboard: ${{ secrets.PRODUCTION_DASHBOARD_URL }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify success
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "Production deployment successful for ${{ github.repository }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ":white_check_mark: *Production Deployment Successful*\n\nVersion: `${{ steps.record.outputs.version }}`\nDeployed by: ${{ steps.record.outputs.deployer }}\nDashboard: ${{ secrets.PRODUCTION_DASHBOARD_URL }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true
+
+      - name: Notify on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "Production deployment failed for ${{ github.repository }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ":x: *Production Deployment Failed*\n\nVersion: `${{ steps.record.outputs.version }}`\nDeployed by: ${{ steps.record.outputs.deployer }}\nWorkflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true
+
+  # ─────────────────────────────────────────────────────────────
+  # 롤백 (실패 시)
+  # ─────────────────────────────────────────────────────────────
+  rollback:
+    name: Rollback on Failure
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: failure()
+
+    steps:
+      - name: Get previous version
+        id: prev
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get the previous release tag
+          PREV_TAG=$(gh release list --repo ${{ github.repository }} --limit 2 --json tagName --jq '.[1].tagName')
+          echo "previous_version=$PREV_TAG" >> $GITHUB_OUTPUT
+          echo "Previous version: $PREV_TAG"
+
+      - name: Manual rollback required
+        run: |
+          echo "## Rollback Required" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Deployment failed. Manual intervention may be required." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Previous version: \`${{ steps.prev.outputs.previous_version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To rollback, run:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "gh workflow run deploy-production.yml -f version=${{ steps.prev.outputs.previous_version }} -f skip_tests=true" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
