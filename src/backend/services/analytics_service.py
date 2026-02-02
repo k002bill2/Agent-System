@@ -25,7 +25,10 @@ from models.analytics import (
     ErrorBreakdown,
     ErrorAnalytics,
     AnalyticsDashboard,
+    ProjectTrendSeries,
+    MultiProjectTrendsResponse,
 )
+from models.project import get_project
 
 
 def _get_time_delta(time_range: TimeRange) -> timedelta:
@@ -950,4 +953,157 @@ class AnalyticsService:
             by_agent=by_agent,
             by_model=by_model,
             projected_monthly=round(projected_monthly, 2),
+        )
+
+    # ─────────────────────────────────────────────────────────────
+    # Multi-Project Comparison
+    # ─────────────────────────────────────────────────────────────
+
+    # Color palette for multi-project chart lines
+    MULTI_PROJECT_COLORS = [
+        "#8884d8",  # Purple
+        "#82ca9d",  # Green
+        "#ffc658",  # Yellow
+        "#ff7300",  # Orange
+        "#00C49F",  # Teal
+    ]
+
+    @staticmethod
+    def get_multi_project_trends(
+        project_ids: list[str],
+        metric: str,
+        time_range: TimeRange = TimeRange.WEEK,
+    ) -> MultiProjectTrendsResponse:
+        """Get trend data for multiple projects (mock data)."""
+        delta = _get_time_delta(time_range)
+        interval = _get_interval(time_range)
+        now = datetime.utcnow()
+        start = now - delta
+
+        series = []
+        for idx, project_id in enumerate(project_ids):
+            # Get project name from registry
+            project = get_project(project_id)
+            project_name = project.name if project else project_id
+
+            # Generate mock data points
+            data_points = []
+            current = start
+            while current <= now:
+                # Simulate different base values per project
+                base_multiplier = 1.0 + (idx * 0.3)
+
+                if metric == "tasks":
+                    value = random.randint(5, 20) * base_multiplier
+                elif metric == "tokens":
+                    value = random.randint(10000, 50000) * base_multiplier
+                elif metric == "cost":
+                    value = round(random.uniform(0.5, 2.0) * base_multiplier, 3)
+                elif metric == "success_rate":
+                    value = round(random.uniform(85, 99), 1)
+                else:
+                    value = random.randint(1, 10) * base_multiplier
+
+                data_points.append(TrendDataPoint(
+                    timestamp=current,
+                    value=value,
+                    label=current.strftime("%Y-%m-%d %H:%M"),
+                ))
+                current += interval
+
+            series.append(ProjectTrendSeries(
+                project_id=project_id,
+                project_name=project_name,
+                color=AnalyticsService.MULTI_PROJECT_COLORS[idx % len(AnalyticsService.MULTI_PROJECT_COLORS)],
+                data=data_points,
+            ))
+
+        return MultiProjectTrendsResponse(
+            metric=metric,
+            period=time_range,
+            series=series,
+        )
+
+    @staticmethod
+    async def get_multi_project_trends_async(
+        db: AsyncSession,
+        project_ids: list[str],
+        metric: str,
+        time_range: TimeRange = TimeRange.WEEK,
+    ) -> MultiProjectTrendsResponse:
+        """Get trend data for multiple projects from database."""
+        delta = _get_time_delta(time_range)
+        interval = _get_interval(time_range)
+        now = datetime.utcnow()
+        start = now - delta
+
+        series = []
+        for idx, project_id in enumerate(project_ids):
+            # Get project name from registry
+            project = get_project(project_id)
+            project_name = project.name if project else project_id
+
+            # Get sessions and tasks for this project
+            session_query = select(SessionModel).where(
+                and_(
+                    SessionModel.project_id == project_id,
+                    SessionModel.created_at >= start
+                )
+            )
+            session_result = await db.execute(session_query)
+            sessions = session_result.scalars().all()
+
+            task_query = select(TaskModel).join(
+                SessionModel, TaskModel.session_id == SessionModel.id
+            ).where(
+                and_(
+                    SessionModel.project_id == project_id,
+                    TaskModel.created_at >= start
+                )
+            ).order_by(TaskModel.created_at)
+            task_result = await db.execute(task_query)
+            tasks = task_result.scalars().all()
+
+            # Build time buckets
+            data_points = []
+            current = start
+            while current <= now:
+                bucket_end = current + interval
+
+                # Calculate metric value for this bucket
+                if metric == "tasks":
+                    bucket_tasks = [t for t in tasks if current <= t.created_at < bucket_end]
+                    value = len(bucket_tasks)
+                elif metric == "tokens":
+                    bucket_sessions = [s for s in sessions if current <= s.updated_at < bucket_end]
+                    value = sum(s.total_tokens or 0 for s in bucket_sessions)
+                elif metric == "cost":
+                    bucket_sessions = [s for s in sessions if current <= s.updated_at < bucket_end]
+                    value = round(sum(s.total_cost_usd or 0 for s in bucket_sessions), 3)
+                elif metric == "success_rate":
+                    bucket_tasks = [t for t in tasks if current <= t.created_at < bucket_end]
+                    completed = len([t for t in bucket_tasks if t.status == "completed"])
+                    failed = len([t for t in bucket_tasks if t.status == "failed"])
+                    value = round((completed / (completed + failed)) * 100, 1) if (completed + failed) > 0 else 0
+                else:
+                    value = 0
+
+                data_points.append(TrendDataPoint(
+                    timestamp=current,
+                    value=value,
+                    label=current.strftime("%Y-%m-%d %H:%M"),
+                ))
+                current += interval
+
+            series.append(ProjectTrendSeries(
+                project_id=project_id,
+                project_name=project_name,
+                color=AnalyticsService.MULTI_PROJECT_COLORS[idx % len(AnalyticsService.MULTI_PROJECT_COLORS)],
+                data=data_points,
+            ))
+
+        return MultiProjectTrendsResponse(
+            metric=metric,
+            period=time_range,
+            series=series,
         )

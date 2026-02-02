@@ -202,8 +202,14 @@ AOS Backend API 엔드포인트 문서입니다.
 | GET | `/api/analytics/activity` | 활동 히트맵 |
 | GET | `/api/analytics/errors` | 에러 분석 |
 | GET | `/api/analytics/dashboard` | 전체 대시보드 데이터 |
+| GET | `/api/analytics/trends/compare` | 멀티 프로젝트 트렌드 비교 |
 
 **쿼리 파라미터**: `time_range`: `1h` | `24h` | `7d` | `30d` | `all` (기본: `7d`)
+
+**멀티 프로젝트 비교** (`GET /api/analytics/trends/compare`):
+- `project_ids`: 비교할 프로젝트 ID 목록 (최대 5개, 필수)
+- `metric`: `tasks` | `tokens` | `cost` | `success_rate` (기본: `tasks`)
+- `time_range`: 시간 범위
 
 ---
 

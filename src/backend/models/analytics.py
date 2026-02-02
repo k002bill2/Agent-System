@@ -85,6 +85,28 @@ class MultiTrendData(BaseModel):
 
 
 # ─────────────────────────────────────────────────────────────
+# Multi-Project Comparison
+# ─────────────────────────────────────────────────────────────
+
+
+class ProjectTrendSeries(BaseModel):
+    """단일 프로젝트의 트렌드 시리즈 데이터."""
+
+    project_id: str
+    project_name: str
+    color: str  # 차트 라인 색상 (예: "#8884d8")
+    data: list[TrendDataPoint]
+
+
+class MultiProjectTrendsResponse(BaseModel):
+    """여러 프로젝트 비교를 위한 트렌드 응답."""
+
+    metric: str  # "tasks", "tokens", "cost", "success_rate"
+    period: TimeRange
+    series: list[ProjectTrendSeries]
+
+
+# ─────────────────────────────────────────────────────────────
 # Agent Performance
 # ─────────────────────────────────────────────────────────────
 

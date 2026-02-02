@@ -31,9 +31,11 @@ import {
   Users,
   AlertTriangle,
   FolderOpen,
+  GitCompare,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
-import { useProjectsStore } from '../stores/projects'
+import { useProjectsStore, Project } from '../stores/projects'
+import { ProjectMultiSelect } from '../components/analytics/ProjectMultiSelect'
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -122,6 +124,22 @@ interface AnalyticsDashboard {
   activity: ActivityHeatmap
 }
 
+// Multi-Project Comparison Types
+interface ProjectTrendSeries {
+  project_id: string
+  project_name: string
+  color: string
+  data: TrendDataPoint[]
+}
+
+interface MultiProjectTrendsResponse {
+  metric: string
+  period: TimeRange
+  series: ProjectTrendSeries[]
+}
+
+type CompareMetric = 'tasks' | 'tokens' | 'cost' | 'success_rate'
+
 // ─────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────
@@ -160,6 +178,18 @@ async function fetchDashboard(timeRange: TimeRange, projectId?: string): Promise
   return res.json()
 }
 
+async function fetchMultiProjectTrends(
+  projectIds: string[],
+  metric: CompareMetric,
+  timeRange: TimeRange
+): Promise<MultiProjectTrendsResponse> {
+  const params = new URLSearchParams({ metric, time_range: timeRange })
+  projectIds.forEach((id) => params.append('project_ids', id))
+  const res = await fetch(`${API_BASE}/analytics/trends/compare?${params}`)
+  if (!res.ok) throw new Error('Failed to fetch multi-project trends')
+  return res.json()
+}
+
 // ─────────────────────────────────────────────────────────────
 // Component
 // ─────────────────────────────────────────────────────────────
@@ -170,6 +200,12 @@ export function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsDashboard | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Multi-project comparison state
+  const [compareProjectIds, setCompareProjectIds] = useState<string[]>([])
+  const [compareMetric, setCompareMetric] = useState<CompareMetric>('tasks')
+  const [compareData, setCompareData] = useState<MultiProjectTrendsResponse | null>(null)
+  const [compareLoading, setCompareLoading] = useState(false)
 
   // Get projects from store
   const { projects, fetchProjects } = useProjectsStore()
@@ -183,6 +219,15 @@ export function AnalyticsPage() {
     loadData()
   }, [timeRange, selectedProjectId]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Load multi-project comparison data when selection changes
+  useEffect(() => {
+    if (compareProjectIds.length >= 2) {
+      loadCompareData()
+    } else {
+      setCompareData(null)
+    }
+  }, [compareProjectIds, compareMetric, timeRange]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const loadData = async () => {
     try {
       setLoading(true)
@@ -193,6 +238,20 @@ export function AnalyticsPage() {
       setError((e as Error).message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadCompareData = async () => {
+    if (compareProjectIds.length < 2) return
+    try {
+      setCompareLoading(true)
+      const result = await fetchMultiProjectTrends(compareProjectIds, compareMetric, timeRange)
+      setCompareData(result)
+    } catch (e) {
+      console.error('Failed to load compare data:', e)
+      setCompareData(null)
+    } finally {
+      setCompareLoading(false)
     }
   }
 
@@ -427,6 +486,97 @@ export function AnalyticsPage() {
         </ChartCard>
       </div>
 
+      {/* Multi-Project Comparison Section */}
+      <ChartCard title="프로젝트 비교" icon={GitCompare} className="mb-6">
+        <div className="space-y-4">
+          {/* Controls */}
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                프로젝트 선택 (2-5개)
+              </label>
+              <ProjectMultiSelect
+                projects={projects.map((p: Project) => ({ id: p.id, name: p.name }))}
+                selectedIds={compareProjectIds}
+                onChange={setCompareProjectIds}
+                maxSelections={5}
+                placeholder="비교할 프로젝트 선택..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                메트릭
+              </label>
+              <select
+                value={compareMetric}
+                onChange={(e) => setCompareMetric(e.target.value as CompareMetric)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm min-w-[140px]"
+              >
+                <option value="tasks">Tasks</option>
+                <option value="tokens">Tokens</option>
+                <option value="cost">Cost</option>
+                <option value="success_rate">Success Rate</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Chart or Placeholder */}
+          {compareProjectIds.length < 2 ? (
+            <div className="h-[250px] flex items-center justify-center text-gray-500 dark:text-gray-400">
+              <div className="text-center">
+                <GitCompare className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p>2개 이상의 프로젝트를 선택하면 비교 차트가 표시됩니다</p>
+              </div>
+            </div>
+          ) : compareLoading ? (
+            <div className="h-[250px] flex items-center justify-center">
+              <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+            </div>
+          ) : compareData ? (
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={transformMultiSeriesData(compareData)}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 12 }}
+                  className="text-gray-500"
+                />
+                <YAxis
+                  tick={{ fontSize: 12 }}
+                  className="text-gray-500"
+                  domain={compareMetric === 'success_rate' ? [0, 100] : ['auto', 'auto']}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'var(--tooltip-bg, #fff)',
+                    borderColor: 'var(--tooltip-border, #e5e7eb)',
+                  }}
+                  formatter={(value) => {
+                    const numValue = Number(value)
+                    if (compareMetric === 'cost') return [`$${numValue.toFixed(3)}`, '']
+                    if (compareMetric === 'success_rate') return [`${numValue.toFixed(1)}%`, '']
+                    if (compareMetric === 'tokens') return [formatNumber(numValue), '']
+                    return [numValue, '']
+                  }}
+                />
+                <Legend />
+                {compareData.series.map((series) => (
+                  <Line
+                    key={series.project_id}
+                    type="monotone"
+                    dataKey={series.project_id}
+                    name={series.project_name}
+                    stroke={series.color}
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          ) : null}
+        </div>
+      </ChartCard>
+
       {/* Activity Heatmap */}
       <ChartCard title="Activity Heatmap" icon={Calendar} className="mb-6">
         <ActivityHeatmapChart data={data.activity} />
@@ -646,6 +796,30 @@ function formatTrendData(data: TrendDataPoint[]): { label: string; value: number
     }),
     value: d.value,
   }))
+}
+
+/**
+ * Transform multi-project series data for Recharts
+ * Converts from series-based to date-based format
+ */
+function transformMultiSeriesData(
+  response: MultiProjectTrendsResponse
+): Record<string, string | number>[] {
+  const dateMap = new Map<string, Record<string, string | number>>()
+
+  response.series.forEach((series) => {
+    series.data.forEach((point) => {
+      const dateKey = new Date(point.timestamp).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      })
+      const existing = dateMap.get(dateKey) || { date: dateKey }
+      existing[series.project_id] = point.value
+      dateMap.set(dateKey, existing)
+    })
+  })
+
+  return Array.from(dateMap.values())
 }
 
 export default AnalyticsPage

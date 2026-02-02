@@ -183,6 +183,12 @@ import { cn } from '@/lib/utils';
 |----------|------|
 | `RAGQueryPanel` | RAG 의미론적 검색 패널 (쿼리, 결과, 통계, 인덱스 관리) |
 
+### Analytics Components
+
+| 컴포넌트 | 설명 |
+|----------|------|
+| `ProjectMultiSelect` | 멀티 프로젝트 선택 (최대 5개, 색상 표시) |
+
 ### Audit Components
 
 | 컴포넌트 | 설명 |
@@ -368,8 +374,10 @@ src/dashboard/
 │   │   │   ├── ContextPanel.tsx
 │   │   │   ├── OutputLog.tsx
 │   │   │   └── ResizablePanel.tsx
-│   │   └── rag/                # RAG 검색
-│   │       └── RAGQueryPanel.tsx
+│   │   ├── rag/                # RAG 검색
+│   │   │   └── RAGQueryPanel.tsx
+│   │   └── analytics/          # Analytics
+│   │       └── ProjectMultiSelect.tsx
 │   ├── stores/                 # Zustand 스토어 (19개)
 │   │   ├── orchestration.ts
 │   │   ├── projects.ts
