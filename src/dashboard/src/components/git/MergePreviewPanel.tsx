@@ -8,9 +8,16 @@ import {
   Minus,
   X,
   GitCommit,
+  Wrench,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
-import type { MergePreview } from '../../stores/git'
+import type {
+  MergePreview,
+  ConflictFile,
+  MergeStatus,
+  ResolutionStrategy,
+} from '../../stores/git'
+import { ConflictResolverPanel } from './ConflictResolverPanel'
 
 interface MergePreviewPanelProps {
   preview: MergePreview | null
@@ -19,6 +26,18 @@ interface MergePreviewPanelProps {
   onClose: () => void
   onCreateMR?: (title: string, description: string) => Promise<boolean>
   canMerge: boolean
+  // Conflict resolution props
+  conflictFiles?: ConflictFile[]
+  mergeStatus?: MergeStatus | null
+  isResolvingConflict?: boolean
+  onFetchConflicts?: () => Promise<void>
+  onResolveConflict?: (
+    filePath: string,
+    strategy: ResolutionStrategy,
+    customContent?: string
+  ) => Promise<boolean>
+  onAbortMerge?: () => Promise<boolean>
+  onCompleteMerge?: (message?: string) => Promise<boolean>
 }
 
 export function MergePreviewPanel({
@@ -28,6 +47,14 @@ export function MergePreviewPanel({
   onClose,
   onCreateMR,
   canMerge,
+  // Conflict resolution props
+  conflictFiles = [],
+  mergeStatus = null,
+  isResolvingConflict = false,
+  onFetchConflicts,
+  onResolveConflict,
+  onAbortMerge,
+  onCompleteMerge,
 }: MergePreviewPanelProps) {
   const [mergeMessage, setMergeMessage] = useState('')
   const [merging, setMerging] = useState(false)
@@ -35,6 +62,7 @@ export function MergePreviewPanel({
   const [mrTitle, setMrTitle] = useState('')
   const [mrDescription, setMrDescription] = useState('')
   const [creatingMR, setCreatingMR] = useState(false)
+  const [showConflictResolver, setShowConflictResolver] = useState(false)
 
   if (!preview) return null
 
@@ -58,6 +86,32 @@ export function MergePreviewPanel({
   }
 
   const hasConflicts = preview.conflict_status === 'has_conflicts'
+  const canResolveConflicts =
+    hasConflicts && onFetchConflicts && onResolveConflict && onAbortMerge && onCompleteMerge
+
+  const handleOpenConflictResolver = async () => {
+    if (onFetchConflicts) {
+      await onFetchConflicts()
+    }
+    setShowConflictResolver(true)
+  }
+
+  // Show conflict resolver panel if open
+  if (showConflictResolver && canResolveConflicts) {
+    return (
+      <ConflictResolverPanel
+        conflictFiles={conflictFiles}
+        mergeStatus={mergeStatus}
+        sourceBranch={preview.source_branch}
+        targetBranch={preview.target_branch}
+        isResolving={isResolvingConflict}
+        onResolve={onResolveConflict}
+        onAbort={onAbortMerge}
+        onComplete={onCompleteMerge}
+        onClose={() => setShowConflictResolver(false)}
+      />
+    )
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -148,9 +202,20 @@ export function MergePreviewPanel({
           {/* Conflict Files */}
           {hasConflicts && preview.conflicting_files.length > 0 && (
             <div>
-              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Conflicting Files ({preview.conflicting_files.length})
-              </h4>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Conflicting Files ({preview.conflicting_files.length})
+                </h4>
+                {canResolveConflicts && (
+                  <button
+                    onClick={handleOpenConflictResolver}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors"
+                  >
+                    <Wrench className="w-4 h-4" />
+                    충돌 해결
+                  </button>
+                )}
+              </div>
               <div className="space-y-1 max-h-40 overflow-y-auto">
                 {preview.conflicting_files.map((file) => (
                   <div

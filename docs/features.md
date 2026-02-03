@@ -446,6 +446,29 @@ AI가 Git 변경사항을 분석하여 논리적인 커밋 그룹을 제안:
 - 충돌 파일 목록 및 상세 정보
 - 3-way diff 지원
 
+### 충돌 해결
+
+PR/MR 머지 시 발생하는 충돌을 대시보드에서 직접 해결:
+
+```python
+class MergeService:
+    def resolve_conflict(request: ConflictResolutionRequest) -> ConflictResolutionResult
+    def abort_merge() -> MergeAbortResult
+    def complete_merge(message: str) -> MergeResult
+```
+
+**해결 전략**:
+- `ours`: Target 브랜치 버전 유지 (머지 대상)
+- `theirs`: Source 브랜치 버전 유지 (머지 소스)
+- `custom`: 사용자가 직접 해결된 내용 입력
+
+**Dashboard UI**:
+- 충돌 파일 목록 사이드바
+- 3열 가로 배치 3-way diff (Base, Ours, Theirs)
+- 해결 전략 선택 라디오 버튼
+- Custom 모드 시 텍스트 에디터 제공
+- 파일별 개별 해결 후 전체 머지 완료
+
 ### Merge Request (내부 MR)
 
 - 팀 내부 머지 요청 생성

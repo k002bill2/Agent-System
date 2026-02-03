@@ -35,6 +35,13 @@ class ConflictType(str, Enum):
     RENAMED_MODIFIED = "renamed_modified"
 
 
+class ResolutionStrategy(str, Enum):
+    """Strategy for resolving merge conflicts."""
+    OURS = "ours"        # Keep target branch version
+    THEIRS = "theirs"    # Keep source branch version
+    CUSTOM = "custom"    # User provides resolved content
+
+
 class GitPermission(str, Enum):
     """Git-related permissions."""
     READ = "read"
@@ -211,6 +218,31 @@ class MergeResult(BaseModel):
     message: str
     source_branch: str
     target_branch: str
+
+
+class ConflictResolutionRequest(BaseModel):
+    """Request to resolve a single file conflict."""
+    file_path: str = Field(..., description="Path to the conflicting file")
+    strategy: ResolutionStrategy = Field(..., description="Resolution strategy")
+    resolved_content: str | None = Field(
+        None, description="Resolved content (required when strategy is CUSTOM)"
+    )
+    source_branch: str = Field(..., description="Source branch name")
+    target_branch: str = Field(..., description="Target branch name")
+
+
+class ConflictResolutionResult(BaseModel):
+    """Result of conflict resolution for a single file."""
+    success: bool
+    file_path: str
+    message: str
+    resolved_content: str | None = None
+
+
+class MergeAbortResult(BaseModel):
+    """Result of merge abort operation."""
+    success: bool
+    message: str
 
 
 class MergeExecuteRequest(BaseModel):

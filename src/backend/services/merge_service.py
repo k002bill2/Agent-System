@@ -26,6 +26,10 @@ from models.git import (
     DEFAULT_PROTECTED_BRANCHES,
     MergeRequest,
     MergeRequestStatus,
+    ResolutionStrategy,
+    ConflictResolutionRequest,
+    ConflictResolutionResult,
+    MergeAbortResult,
 )
 from services.git_service import GitService, GitServiceError
 
@@ -421,17 +425,300 @@ class MergeService:
                 target_branch=target_branch,
             )
 
-    def abort_merge(self) -> bool:
+    def abort_merge(self) -> MergeAbortResult:
         """Abort ongoing merge.
 
         Returns:
-            True if aborted successfully
+            MergeAbortResult with outcome
         """
         try:
+            if not self._is_merge_in_progress():
+                return MergeAbortResult(
+                    success=False,
+                    message="No merge in progress to abort"
+                )
             self.repo.git.merge('--abort')
+            return MergeAbortResult(
+                success=True,
+                message="Merge aborted successfully"
+            )
+        except GitCommandError as e:
+            return MergeAbortResult(
+                success=False,
+                message=f"Failed to abort merge: {e}"
+            )
+
+    # =========================================================================
+    # Conflict Resolution
+    # =========================================================================
+
+    def _is_merge_in_progress(self) -> bool:
+        """Check if a merge is currently in progress.
+
+        Returns:
+            True if merge is in progress
+        """
+        merge_head_path = Path(self.project_path) / ".git" / "MERGE_HEAD"
+        return merge_head_path.exists()
+
+    def _start_merge_for_resolution(
+        self,
+        source_branch: str,
+        target_branch: str
+    ) -> bool:
+        """Start a merge operation for conflict resolution.
+
+        Args:
+            source_branch: Source branch
+            target_branch: Target branch
+
+        Returns:
+            True if merge started (with conflicts) or already in progress
+        """
+        if self._is_merge_in_progress():
             return True
-        except GitCommandError:
+
+        try:
+            # Checkout target branch first
+            current_branch = self.git_service.current_branch
+            if current_branch != target_branch:
+                self.repo.heads[target_branch].checkout()
+
+            # Start merge with --no-commit to allow conflict resolution
+            try:
+                self.repo.git.merge(source_branch, '--no-commit', '--no-ff')
+            except GitCommandError:
+                # Merge with conflicts - this is expected
+                pass
+
+            return self._is_merge_in_progress() or True
+        except Exception as e:
+            logger.error(f"Failed to start merge for resolution: {e}")
             return False
+
+    def _write_resolved_file(self, file_path: str, content: str) -> bool:
+        """Write resolved content to a file.
+
+        Args:
+            file_path: Path to the file (relative to repo root)
+            content: Resolved content
+
+        Returns:
+            True if successful
+        """
+        try:
+            full_path = Path(self.project_path) / file_path
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            full_path.write_text(content, encoding='utf-8')
+            return True
+        except Exception as e:
+            logger.error(f"Failed to write resolved file {file_path}: {e}")
+            return False
+
+    def _stage_resolved_file(self, file_path: str) -> bool:
+        """Stage a resolved file.
+
+        Args:
+            file_path: Path to the file (relative to repo root)
+
+        Returns:
+            True if successful
+        """
+        try:
+            self.repo.index.add([file_path])
+            return True
+        except Exception as e:
+            logger.error(f"Failed to stage resolved file {file_path}: {e}")
+            return False
+
+    def resolve_conflict(
+        self,
+        request: ConflictResolutionRequest
+    ) -> ConflictResolutionResult:
+        """Resolve a single file conflict.
+
+        Args:
+            request: Conflict resolution request
+
+        Returns:
+            ConflictResolutionResult with outcome
+        """
+        file_path = request.file_path
+        strategy = request.strategy
+        source_branch = request.source_branch
+        target_branch = request.target_branch
+
+        try:
+            # Validate branches exist
+            if source_branch not in [b.name for b in self.repo.branches]:
+                return ConflictResolutionResult(
+                    success=False,
+                    file_path=file_path,
+                    message=f"Source branch '{source_branch}' not found"
+                )
+            if target_branch not in [b.name for b in self.repo.branches]:
+                return ConflictResolutionResult(
+                    success=False,
+                    file_path=file_path,
+                    message=f"Target branch '{target_branch}' not found"
+                )
+
+            # Start merge if not already in progress
+            if not self._is_merge_in_progress():
+                if not self._start_merge_for_resolution(source_branch, target_branch):
+                    return ConflictResolutionResult(
+                        success=False,
+                        file_path=file_path,
+                        message="Failed to start merge operation"
+                    )
+
+            # Determine resolved content based on strategy
+            resolved_content: str = ""
+
+            if strategy == ResolutionStrategy.CUSTOM:
+                if request.resolved_content is None:
+                    return ConflictResolutionResult(
+                        success=False,
+                        file_path=file_path,
+                        message="resolved_content is required when strategy is CUSTOM"
+                    )
+                resolved_content = request.resolved_content
+
+            elif strategy == ResolutionStrategy.OURS:
+                # Get content from target branch (ours)
+                target_commit = self.repo.branches[target_branch].commit
+                resolved_content = self._get_file_content(target_commit, file_path)
+
+            elif strategy == ResolutionStrategy.THEIRS:
+                # Get content from source branch (theirs)
+                source_commit = self.repo.branches[source_branch].commit
+                resolved_content = self._get_file_content(source_commit, file_path)
+
+            # Write resolved content
+            if not self._write_resolved_file(file_path, resolved_content):
+                return ConflictResolutionResult(
+                    success=False,
+                    file_path=file_path,
+                    message="Failed to write resolved content"
+                )
+
+            # Stage the resolved file
+            if not self._stage_resolved_file(file_path):
+                return ConflictResolutionResult(
+                    success=False,
+                    file_path=file_path,
+                    message="Failed to stage resolved file"
+                )
+
+            return ConflictResolutionResult(
+                success=True,
+                file_path=file_path,
+                message=f"Conflict resolved using '{strategy.value}' strategy",
+                resolved_content=resolved_content
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to resolve conflict for {file_path}: {e}")
+            return ConflictResolutionResult(
+                success=False,
+                file_path=file_path,
+                message=f"Failed to resolve conflict: {str(e)}"
+            )
+
+    def get_merge_status(self) -> dict:
+        """Get current merge status.
+
+        Returns:
+            Dict with merge status information
+        """
+        in_progress = self._is_merge_in_progress()
+
+        # Get unmerged files if merge in progress
+        unmerged_files: list[str] = []
+        if in_progress:
+            try:
+                # Use git ls-files to find unmerged files
+                result = subprocess.run(
+                    ['git', 'ls-files', '-u', '--full-name'],
+                    cwd=self.project_path,
+                    capture_output=True,
+                    text=True,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    # Extract unique file paths
+                    files = set()
+                    for line in result.stdout.strip().split('\n'):
+                        if line:
+                            parts = line.split('\t')
+                            if len(parts) >= 2:
+                                files.add(parts[1])
+                    unmerged_files = list(files)
+            except Exception as e:
+                logger.warning(f"Failed to get unmerged files: {e}")
+
+        return {
+            "merge_in_progress": in_progress,
+            "unmerged_files": unmerged_files,
+            "can_commit": in_progress and len(unmerged_files) == 0,
+        }
+
+    def complete_merge(self, message: str | None = None) -> MergeResult:
+        """Complete the ongoing merge by creating a merge commit.
+
+        Args:
+            message: Optional commit message
+
+        Returns:
+            MergeResult with outcome
+        """
+        if not self._is_merge_in_progress():
+            return MergeResult(
+                success=False,
+                message="No merge in progress to complete",
+                source_branch="",
+                target_branch="",
+            )
+
+        status = self.get_merge_status()
+        if not status["can_commit"]:
+            return MergeResult(
+                success=False,
+                message=f"Cannot complete merge: {len(status['unmerged_files'])} unresolved conflicts",
+                source_branch="",
+                target_branch="",
+            )
+
+        try:
+            # Commit the merge
+            if message:
+                self.repo.index.commit(message)
+            else:
+                # Use default merge message
+                merge_msg_path = Path(self.project_path) / ".git" / "MERGE_MSG"
+                if merge_msg_path.exists():
+                    message = merge_msg_path.read_text(encoding='utf-8').strip()
+                else:
+                    message = "Merge commit"
+                self.repo.index.commit(message)
+
+            merge_commit_sha = self.repo.head.commit.hexsha
+
+            return MergeResult(
+                success=True,
+                merge_commit_sha=merge_commit_sha,
+                message="Merge completed successfully",
+                source_branch="",  # Info not available after merge
+                target_branch=self.git_service.current_branch,
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to complete merge: {e}")
+            return MergeResult(
+                success=False,
+                message=f"Failed to complete merge: {str(e)}",
+                source_branch="",
+                target_branch="",
+            )
 
 
 # =============================================================================

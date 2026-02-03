@@ -32,6 +32,10 @@ from models.git import (
     MergeExecuteRequest,
     ConflictFile,
     ThreeWayDiff,
+    # Conflict resolution models
+    ConflictResolutionRequest,
+    ConflictResolutionResult,
+    MergeAbortResult,
     # Merge Request models
     MergeRequest,
     MergeRequestCreate,
@@ -737,6 +741,77 @@ async def execute_merge(
         return result
     except MergeServiceError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/projects/{project_id}/merge/resolve", response_model=ConflictResolutionResult)
+async def resolve_conflict(
+    project_id: str,
+    request: ConflictResolutionRequest,
+):
+    """Resolve a single file conflict.
+
+    Use this endpoint to resolve conflicts one file at a time during a merge.
+    Supported strategies:
+    - ours: Keep target branch version
+    - theirs: Keep source branch version
+    - custom: Provide resolved content manually
+    """
+    merge_service = get_merge_service_for_project(project_id)
+
+    result = merge_service.resolve_conflict(request)
+
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.message)
+
+    return result
+
+
+@router.post("/projects/{project_id}/merge/abort", response_model=MergeAbortResult)
+async def abort_merge(project_id: str):
+    """Abort an ongoing merge operation.
+
+    Use this endpoint to cancel a merge that has conflicts.
+    All changes will be reverted to the pre-merge state.
+    """
+    merge_service = get_merge_service_for_project(project_id)
+
+    result = merge_service.abort_merge()
+
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.message)
+
+    return result
+
+
+@router.get("/projects/{project_id}/merge/status")
+async def get_merge_status(project_id: str):
+    """Get current merge status.
+
+    Returns information about whether a merge is in progress,
+    which files still have unresolved conflicts, and whether
+    the merge can be completed.
+    """
+    merge_service = get_merge_service_for_project(project_id)
+    return merge_service.get_merge_status()
+
+
+@router.post("/projects/{project_id}/merge/complete", response_model=MergeResult)
+async def complete_merge(
+    project_id: str,
+    message: str | None = Query(None, description="Commit message for the merge"),
+):
+    """Complete an ongoing merge after all conflicts are resolved.
+
+    Use this endpoint after resolving all conflicts to create the merge commit.
+    """
+    merge_service = get_merge_service_for_project(project_id)
+
+    result = merge_service.complete_merge(message)
+
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.message)
+
+    return result
 
 
 # =============================================================================

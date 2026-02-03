@@ -426,6 +426,37 @@ AOS Backend API 엔드포인트 문서입니다.
 |--------|------|------|
 | POST | `/api/git/projects/{id}/merge/preview` | 머지 미리보기 (충돌 체크) |
 | POST | `/api/git/projects/{id}/merge` | 머지 실행 |
+| GET | `/api/git/projects/{id}/merge/conflicts` | 충돌 파일 상세 조회 |
+| GET | `/api/git/projects/{id}/merge/status` | 진행 중인 머지 상태 |
+| POST | `/api/git/projects/{id}/merge/resolve` | 단일 파일 충돌 해결 |
+| POST | `/api/git/projects/{id}/merge/abort` | 진행 중 머지 취소 |
+| POST | `/api/git/projects/{id}/merge/complete` | 모든 충돌 해결 후 머지 완료 |
+
+**충돌 해결 요청 본문** (`POST /merge/resolve`):
+```json
+{
+  "file_path": "src/example.py",
+  "strategy": "ours",
+  "resolved_content": null,
+  "source_branch": "feature/new-feature",
+  "target_branch": "main"
+}
+```
+
+**해결 전략**:
+- `ours`: Target 브랜치(머지 대상) 버전 유지
+- `theirs`: Source 브랜치(머지 소스) 버전 유지
+- `custom`: 사용자가 직접 `resolved_content`에 해결된 내용 제공
+
+**충돌 해결 응답**:
+```json
+{
+  "success": true,
+  "file_path": "src/example.py",
+  "message": "Conflict resolved using 'ours' strategy",
+  "resolved_content": "..."
+}
+```
 
 ### Merge Requests (내부 MR)
 

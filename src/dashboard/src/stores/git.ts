@@ -78,6 +78,30 @@ export interface ConflictFile {
   base_content: string
 }
 
+// Conflict Resolution Types
+export type ResolutionStrategy = 'ours' | 'theirs' | 'custom'
+
+export interface ConflictResolutionRequest {
+  file_path: string
+  strategy: ResolutionStrategy
+  resolved_content?: string
+  source_branch: string
+  target_branch: string
+}
+
+export interface ConflictResolutionResult {
+  success: boolean
+  file_path: string
+  message: string
+  resolved_content?: string
+}
+
+export interface MergeStatus {
+  merge_in_progress: boolean
+  unmerged_files: string[]
+  can_commit: boolean
+}
+
 export interface GitHubPullRequest {
   number: number
   title: string
@@ -215,6 +239,11 @@ interface GitState {
   selectedMergeRequest: MergeRequest | null
   mergePreview: MergePreview | null
 
+  // Conflict Resolution Data
+  conflictFiles: ConflictFile[]
+  mergeStatus: MergeStatus | null
+  isResolvingConflict: boolean
+
   // GitHub PR Data
   pullRequests: GitHubPullRequest[]
   selectedPullRequest: GitHubPullRequest | null
@@ -267,6 +296,14 @@ interface GitState {
   previewMerge: (projectId: string, source: string, target: string) => Promise<MergePreview | null>
   executeMerge: (projectId: string, source: string, target: string, message?: string, userRole?: string) => Promise<boolean>
   clearMergePreview: () => void
+
+  // Actions - Conflict Resolution
+  fetchConflictFiles: (projectId: string, source: string, target: string) => Promise<ConflictFile[]>
+  fetchMergeStatus: (projectId: string) => Promise<MergeStatus | null>
+  resolveConflict: (projectId: string, request: ConflictResolutionRequest) => Promise<boolean>
+  abortMerge: (projectId: string) => Promise<boolean>
+  completeMerge: (projectId: string, message?: string) => Promise<boolean>
+  clearConflictState: () => void
 
   // Actions - Merge Requests
   fetchMergeRequests: (projectId: string, status?: MergeRequestStatus) => Promise<void>
@@ -333,6 +370,11 @@ export const useGitStore = create<GitState>((set, get) => ({
   mergeRequests: [],
   selectedMergeRequest: null,
   mergePreview: null,
+
+  // Conflict Resolution
+  conflictFiles: [],
+  mergeStatus: null,
+  isResolvingConflict: false,
 
   pullRequests: [],
   selectedPullRequest: null,
@@ -693,6 +735,131 @@ export const useGitStore = create<GitState>((set, get) => ({
   },
 
   clearMergePreview: () => set({ mergePreview: null }),
+
+  // Conflict Resolution Actions
+  fetchConflictFiles: async (projectId, source, target) => {
+    set({ isLoading: true, error: null })
+    try {
+      const params = new URLSearchParams({
+        source_branch: source,
+        target_branch: target,
+      })
+      const response = await fetch(
+        `${API_BASE}/api/git/projects/${projectId}/merge/conflicts?${params}`
+      )
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch conflict files'))
+      }
+      const files: ConflictFile[] = await response.json()
+      set({ conflictFiles: files, isLoading: false })
+      return files
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return []
+    }
+  },
+
+  fetchMergeStatus: async (projectId) => {
+    try {
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/merge/status`)
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch merge status'))
+      }
+      const status: MergeStatus = await response.json()
+      set({ mergeStatus: status })
+      return status
+    } catch (error) {
+      set({ error: (error as Error).message })
+      return null
+    }
+  },
+
+  resolveConflict: async (projectId, request) => {
+    set({ isResolvingConflict: true, error: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/merge/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to resolve conflict'))
+      }
+      // Refresh merge status after resolving
+      await get().fetchMergeStatus(projectId)
+      // Update conflict files list - remove resolved file
+      const currentFiles = get().conflictFiles
+      set({
+        conflictFiles: currentFiles.filter(f => f.path !== request.file_path),
+        isResolvingConflict: false,
+      })
+      return true
+    } catch (error) {
+      set({ error: (error as Error).message, isResolvingConflict: false })
+      return false
+    }
+  },
+
+  abortMerge: async (projectId) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/merge/abort`, {
+        method: 'POST',
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to abort merge'))
+      }
+      set({
+        isLoading: false,
+        conflictFiles: [],
+        mergeStatus: null,
+        mergePreview: null,
+      })
+      return true
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return false
+    }
+  },
+
+  completeMerge: async (projectId, message) => {
+    set({ isLoading: true, error: null })
+    try {
+      const params = new URLSearchParams()
+      if (message) params.set('message', message)
+
+      const response = await fetch(
+        `${API_BASE}/api/git/projects/${projectId}/merge/complete?${params}`,
+        { method: 'POST' }
+      )
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to complete merge'))
+      }
+      // Refresh branches after merge completion
+      await get().fetchBranches(projectId)
+      set({
+        isLoading: false,
+        conflictFiles: [],
+        mergeStatus: null,
+        mergePreview: null,
+      })
+      return true
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return false
+    }
+  },
+
+  clearConflictState: () => set({
+    conflictFiles: [],
+    mergeStatus: null,
+    isResolvingConflict: false,
+  }),
 
   // Merge Request Actions
   fetchMergeRequests: async (projectId, status) => {
