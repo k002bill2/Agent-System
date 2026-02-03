@@ -41,8 +41,8 @@ export function DashboardPage() {
     { total: 0, active: 0, idle: 0 }
   )
 
-  // Get recent Claude Code sessions (top 5 by last activity)
-  const recentSessions = sessions.slice(0, 5)
+  // Get recent Claude Code sessions (top 10 by last activity)
+  const recentSessions = sessions.slice(0, 10)
 
   return (
     <div className="flex-1 p-6 overflow-y-auto">

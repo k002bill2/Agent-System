@@ -2,6 +2,12 @@
 
 ## 30초 시작하기
 
+### 0. 인프라 실행 (선택사항)
+```bash
+# PostgreSQL, Redis, ChromaDB 실행 (DB 사용 시)
+cd infra/scripts && ./dev.sh
+```
+
 ### 1. Backend 실행
 ```bash
 cd src/backend
@@ -35,6 +41,29 @@ http://localhost:5173
 
 ---
 
+## 환경 변수 설정
+
+```bash
+# .env 파일 생성 (src/backend/)
+# LLM Provider 선택 (google, anthropic, ollama)
+LLM_PROVIDER=google
+
+# Google Gemini 사용 시
+GOOGLE_API_KEY=your-google-api-key
+
+# Anthropic Claude 사용 시
+ANTHROPIC_API_KEY=your-anthropic-api-key
+
+# 로컬 Ollama 사용 시
+OLLAMA_BASE_URL=http://localhost:11434
+
+# 데이터베이스 (선택사항)
+USE_DATABASE=false
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/agent_orchestrator
+```
+
+---
+
 ## 예시 명령어
 
 ```
@@ -53,7 +82,8 @@ http://localhost:5173
 ## 문제 발생 시
 
 1. **연결 안됨**: Backend 서버 실행 확인
-2. **API 에러**: `.env` 파일의 `ANTHROPIC_API_KEY` 확인
+2. **API 에러**: `.env` 파일의 LLM API 키 확인 (GOOGLE_API_KEY 또는 ANTHROPIC_API_KEY)
 3. **UI 에러**: `npm install` 후 재시작
+4. **DB 에러**: `USE_DATABASE=false`로 설정하거나 `./infra/scripts/dev.sh` 실행
 
 자세한 내용은 [USER_GUIDE.md](./USER_GUIDE.md) 참조

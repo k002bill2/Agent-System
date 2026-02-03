@@ -71,6 +71,7 @@ import { cn } from '@/lib/utils';
 | `LoginPage` | `/login` | OAuth/Email 로그인 |
 | `RegisterPage` | `/register` | 이메일/비밀번호 회원가입 |
 | `AuthCallbackPage` | `/auth/callback` | OAuth 콜백 처리 |
+| `InvitationAcceptPage` | `/invitations/accept` | 조직 초대 수락 페이지 |
 
 ---
 
@@ -312,7 +313,7 @@ export const useStore = create<State>((set, get) => ({
 ```
 src/dashboard/
 ├── src/
-│   ├── pages/                  # 페이지 컴포넌트 (18개)
+│   ├── pages/                  # 페이지 컴포넌트 (19개)
 │   │   ├── DashboardPage.tsx
 │   │   ├── ProjectsPage.tsx
 │   │   ├── ProjectConfigsPage.tsx
@@ -330,7 +331,8 @@ src/dashboard/
 │   │   ├── SettingsPage.tsx
 │   │   ├── LoginPage.tsx
 │   │   ├── RegisterPage.tsx
-│   │   └── AuthCallbackPage.tsx
+│   │   ├── AuthCallbackPage.tsx
+│   │   └── InvitationAcceptPage.tsx
 │   ├── components/
 │   │   ├── ui/                 # 공통 UI 컴포넌트
 │   │   ├── feedback/           # RLHF 피드백
@@ -378,7 +380,7 @@ src/dashboard/
 │   │   │   └── RAGQueryPanel.tsx
 │   │   └── analytics/          # Analytics
 │   │       └── ProjectMultiSelect.tsx
-│   ├── stores/                 # Zustand 스토어 (19개)
+│   ├── stores/                 # Zustand 스토어 (21개)
 │   │   ├── orchestration.ts
 │   │   ├── projects.ts
 │   │   ├── projectConfigs.ts
