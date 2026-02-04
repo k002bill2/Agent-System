@@ -104,6 +104,7 @@ else:
     cost_allocation_router = safe_import("api.cost_allocation", "router")
     health_router = safe_import("api.health", "router")
     git_router = safe_import("api.git", "router")
+    llm_models_router = safe_import("api.llm", "router")
 
     # Optional orchestrator
     try:
@@ -346,6 +347,8 @@ else:
             app.include_router(health_router)
         if git_router:
             app.include_router(git_router, prefix="/api")
+        if llm_models_router:
+            app.include_router(llm_models_router, prefix="/api")
 
         # Add Rate Limiting Middleware
         rate_limit_enabled = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"

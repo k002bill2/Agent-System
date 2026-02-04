@@ -19,7 +19,9 @@ from models.playground import (
     PlaygroundCompareRequest,
     PlaygroundCompareResult,
 )
-from services.llm_service import LLMService, LLMResponse, MODEL_CONFIGS
+from services.llm_service import LLMService, LLMResponse
+from models.cost import estimate_tokens, calculate_cost
+from models.llm_models import LLMModelRegistry
 
 
 # Persistent storage file path
@@ -433,10 +435,12 @@ class PlaygroundService:
                 if request.context:
                     conversation_context.update(request.context)
 
-        # Stream from LLM
+        # Stream from LLM with token tracking
         full_response = ""
+        token_info = None
+
         try:
-            async for chunk in LLMService.stream(
+            async for chunk, info in LLMService.stream_with_tokens(
                 prompt=request.prompt,
                 model_id=session.model,
                 system_prompt=session.system_prompt,
@@ -444,17 +448,35 @@ class PlaygroundService:
                 max_tokens=request.max_tokens or session.max_tokens,
                 context=conversation_context or request.context or None,
             ):
-                full_response += chunk
-                yield chunk
+                if info:
+                    # Final chunk with token info
+                    token_info = info
+                elif chunk:
+                    full_response += chunk
+                    yield chunk
+
+            # Calculate token usage - use actual values if available, else estimate
+            if token_info:
+                input_tokens = token_info.get("input_tokens", 0)
+                output_tokens = token_info.get("output_tokens", 0)
+            else:
+                # Fallback: 추정값 사용
+                input_tokens = estimate_tokens(request.prompt, session.model)
+                output_tokens = estimate_tokens(full_response, session.model)
+
+            total_tokens = input_tokens + output_tokens
+            cost = calculate_cost(input_tokens, output_tokens, session.model)
 
             # Add assistant message after streaming completes
             assistant_msg = PlaygroundMessage(
                 role="assistant",
                 content=full_response,
-                tokens=len(full_response.split()) * 2,  # Estimate
+                tokens=output_tokens,
             )
             session.messages.append(assistant_msg)
             session.total_executions += 1
+            session.total_tokens += total_tokens
+            session.total_cost += cost
             session.updated_at = datetime.utcnow()
             _save_sessions()  # Persist to file
 
@@ -681,19 +703,4 @@ def _generate_mock_tool_result(tool_name: str, arguments: dict[str, Any]) -> Any
     return {"result": "Mock result"}
 
 
-def _calculate_cost(input_tokens: int, output_tokens: int, model: str) -> float:
-    """Calculate cost based on model pricing."""
-    # Pricing per 1K tokens
-    pricing = {
-        "claude-sonnet-4-20250514": {"input": 0.003, "output": 0.015},
-        "claude-opus-4-20250514": {"input": 0.015, "output": 0.075},
-        "gemini-2.0-flash": {"input": 0.00025, "output": 0.001},
-        "gpt-4o": {"input": 0.005, "output": 0.015},
-    }
-
-    rates = pricing.get(model, {"input": 0.001, "output": 0.002})
-
-    input_cost = (input_tokens / 1000) * rates["input"]
-    output_cost = (output_tokens / 1000) * rates["output"]
-
-    return round(input_cost + output_cost, 6)
+# Note: _calculate_cost removed - use models.cost.calculate_cost instead

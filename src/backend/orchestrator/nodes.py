@@ -24,7 +24,7 @@ from models.hitl import (
     assess_operation_risk,
     is_approval_required,
 )
-from models.cost import TokenUsage, extract_token_usage, calculate_cost
+from models.cost import TokenUsage, extract_token_usage, calculate_cost, estimate_tokens
 
 # Audit logging
 from services.audit_service import (
@@ -80,15 +80,38 @@ class BaseNode(ABC):
         response: Any,
         state: AgentState,
         agent_name: str | None = None,
+        model: str | None = None,
     ) -> dict[str, Any]:
         """
         Extract token usage from LLM response and update state.
 
         Returns dict with token_usage updates for state.
         """
-        usage = extract_token_usage(response)
+        usage = extract_token_usage(response, model or "")
+
         if not usage:
-            return {}
+            # Fallback: 추정값 사용
+            content = getattr(response, "content", "")
+            if isinstance(content, list):
+                # 리스트 형태의 content 처리
+                content = " ".join(
+                    item.get("text", str(item)) if isinstance(item, dict) else str(item)
+                    for item in content
+                )
+            elif not isinstance(content, str):
+                content = str(content) if content else ""
+
+            if content:
+                estimated_output = estimate_tokens(content, model or "")
+                usage = TokenUsage(
+                    input_tokens=0,  # 입력은 정확한 추정 불가
+                    output_tokens=estimated_output,
+                    total_tokens=estimated_output,
+                    model=model or "",
+                    cost_usd=0.0,  # 입력 토큰 없으므로 비용 0
+                )
+            else:
+                return {}
 
         agent = agent_name or self.node_name
 

@@ -69,7 +69,7 @@ interface PlaygroundTool {
 
 interface Model {
   id: string
-  name: string
+  display_name: string
   provider: string
   context_window: number
   pricing: { input: number; output: number }
@@ -512,7 +512,7 @@ export function PlaygroundPage() {
                     >
                       {models.filter(m => m.available).map((m) => (
                         <option key={m.id} value={m.id}>
-                          {m.name} ({m.provider})
+                          {m.display_name} ({m.provider})
                         </option>
                       ))}
                     </select>
@@ -681,7 +681,7 @@ export function PlaygroundPage() {
                 >
                   {models.filter(m => m.available).map((model) => (
                     <option key={model.id} value={model.id}>
-                      {model.name} ({model.provider})
+                      {model.display_name} ({model.provider})
                     </option>
                   ))}
                 </select>

@@ -8,88 +8,10 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, Tool
 from langchain_core.tools import tool as langchain_tool
 import json
 
+from models.llm_models import LLMModelRegistry, LLMProvider, get_model_configs
 
-# Model configurations (2025-01 Updated)
-MODEL_CONFIGS = {
-    # Anthropic - Claude 4 series
-    "claude-opus-4-5-20250514": {
-        "provider": "anthropic",
-        "model": "claude-opus-4-5-20250514",
-        "context_window": 200000,
-        "pricing": {"input": 0.015, "output": 0.075},
-    },
-    "claude-sonnet-4-20250514": {
-        "provider": "anthropic",
-        "model": "claude-sonnet-4-20250514",
-        "context_window": 200000,
-        "pricing": {"input": 0.003, "output": 0.015},
-    },
-    # Anthropic - Claude 3.5 series
-    "claude-3-5-sonnet-20241022": {
-        "provider": "anthropic",
-        "model": "claude-3-5-sonnet-20241022",
-        "context_window": 200000,
-        "pricing": {"input": 0.003, "output": 0.015},
-    },
-    "claude-3-5-haiku-20241022": {
-        "provider": "anthropic",
-        "model": "claude-3-5-haiku-20241022",
-        "context_window": 200000,
-        "pricing": {"input": 0.0008, "output": 0.004},
-    },
-    # Google - Gemini 3 series (2026-01 Latest)
-    "gemini-3-flash-preview": {
-        "provider": "google",
-        "model": "gemini-3-flash-preview",
-        "context_window": 1000000,
-        "pricing": {"input": 0.0, "output": 0.0},  # Free tier available
-    },
-    "gemini-3-pro-preview": {
-        "provider": "google",
-        "model": "gemini-3-pro-preview",
-        "context_window": 1000000,
-        "pricing": {"input": 0.002, "output": 0.012},
-    },
-    # Google - Gemini 2.5 series
-    "gemini-2.5-pro-preview-05-06": {
-        "provider": "google",
-        "model": "gemini-2.5-pro-preview-05-06",
-        "context_window": 1000000,
-        "pricing": {"input": 0.00125, "output": 0.005},
-    },
-    "gemini-2.5-flash-preview-05-20": {
-        "provider": "google",
-        "model": "gemini-2.5-flash-preview-05-20",
-        "context_window": 1000000,
-        "pricing": {"input": 0.00015, "output": 0.0006},
-    },
-    # OpenAI - GPT-4o series
-    "gpt-4o": {
-        "provider": "openai",
-        "model": "gpt-4o",
-        "context_window": 128000,
-        "pricing": {"input": 0.0025, "output": 0.01},
-    },
-    "gpt-4o-mini": {
-        "provider": "openai",
-        "model": "gpt-4o-mini",
-        "context_window": 128000,
-        "pricing": {"input": 0.00015, "output": 0.0006},
-    },
-    # OpenAI - o1 reasoning series
-    "o1": {
-        "provider": "openai",
-        "model": "o1",
-        "context_window": 200000,
-        "pricing": {"input": 0.015, "output": 0.06},
-    },
-    "o1-mini": {
-        "provider": "openai",
-        "model": "o1-mini",
-        "context_window": 128000,
-        "pricing": {"input": 0.003, "output": 0.012},
-    },
-}
+# Use central registry for model configurations
+MODEL_CONFIGS = get_model_configs()
 
 
 class LLMResponse:
@@ -119,8 +41,7 @@ class LLMResponse:
     @property
     def cost(self) -> float:
         """Calculate cost based on model pricing."""
-        config = MODEL_CONFIGS.get(self.model, {})
-        pricing = config.get("pricing", {"input": 0.001, "output": 0.002})
+        pricing = LLMModelRegistry.get_pricing(self.model)
         input_cost = (self.input_tokens / 1000) * pricing["input"]
         output_cost = (self.output_tokens / 1000) * pricing["output"]
         return round(input_cost + output_cost, 6)
@@ -320,44 +241,104 @@ class LLMService:
             yield f"\n\n[Error: {str(e)}]"
 
     @classmethod
+    async def stream_with_tokens(
+        cls,
+        prompt: str,
+        model_id: str = "gemini-3-flash-preview",
+        system_prompt: str | None = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        context: dict[str, Any] | None = None,
+    ) -> AsyncIterator[tuple[str, dict | None]]:
+        """
+        Stream response from LLM with token information.
+
+        Uses astream_events() to capture token usage at the end.
+
+        Yields:
+            Tuple of (chunk_text, token_info).
+            token_info is None for intermediate chunks, and contains
+            token usage data in the final yield.
+        """
+        try:
+            llm = cls._get_llm(model_id, temperature, max_tokens)
+
+            # Build messages
+            messages = []
+            if system_prompt:
+                messages.append(SystemMessage(content=system_prompt))
+
+            if context:
+                context_str = "\n".join(f"- {k}: {v}" for k, v in context.items())
+                full_prompt = f"Context:\n{context_str}\n\nUser: {prompt}"
+            else:
+                full_prompt = prompt
+
+            messages.append(HumanMessage(content=full_prompt))
+
+            token_info = None
+
+            # Use astream_events for token tracking
+            async for event in llm.astream_events(messages, version="v2"):
+                event_type = event.get("event", "")
+
+                if event_type == "on_chat_model_stream":
+                    # Streaming chunk
+                    chunk = event.get("data", {}).get("chunk")
+                    if chunk and hasattr(chunk, "content") and chunk.content:
+                        yield chunk.content, None
+
+                elif event_type == "on_chat_model_end":
+                    # Final event with token info
+                    output = event.get("data", {}).get("output")
+                    if output:
+                        # Extract token info from usage_metadata or response_metadata
+                        if hasattr(output, "usage_metadata") and output.usage_metadata:
+                            usage = output.usage_metadata
+                            if isinstance(usage, dict):
+                                token_info = {
+                                    "input_tokens": usage.get("input_tokens", 0),
+                                    "output_tokens": usage.get("output_tokens", 0),
+                                    "model": model_id,
+                                }
+                            else:
+                                token_info = {
+                                    "input_tokens": getattr(usage, "input_tokens", 0),
+                                    "output_tokens": getattr(usage, "output_tokens", 0),
+                                    "model": model_id,
+                                }
+                        elif hasattr(output, "response_metadata"):
+                            metadata = output.response_metadata
+                            usage = metadata.get("usage", {})
+                            if usage:
+                                token_info = {
+                                    "input_tokens": usage.get("input_tokens", 0),
+                                    "output_tokens": usage.get("output_tokens", 0),
+                                    "model": model_id,
+                                }
+
+            # Yield final token info
+            if token_info:
+                yield "", token_info
+
+        except Exception as e:
+            yield f"\n\n[Error: {str(e)}]", None
+
+    @classmethod
     def get_available_models(cls) -> list[dict[str, Any]]:
-        """Get list of available models."""
-        models = []
-        for model_id, config in MODEL_CONFIGS.items():
-            # Check if provider API key is available
-            provider = config["provider"]
-            has_key = False
+        """Get list of available models.
 
-            if provider == "google":
-                has_key = bool(os.getenv("GOOGLE_API_KEY"))
-            elif provider == "anthropic":
-                has_key = bool(os.getenv("ANTHROPIC_API_KEY"))
-            elif provider == "openai":
-                has_key = bool(os.getenv("OPENAI_API_KEY"))
-
-            models.append({
-                "id": model_id,
-                "name": model_id.replace("-", " ").title(),
-                "provider": provider,
-                "context_window": config["context_window"],
-                "pricing": config["pricing"],
-                "available": has_key,
-            })
-
-        return models
+        Uses the central LLMModelRegistry.
+        """
+        return LLMModelRegistry.get_available_models()
 
     @classmethod
     def get_default_model(cls) -> str:
-        """Get the default model based on available API keys."""
-        # Priority: Google > Anthropic > OpenAI
-        if os.getenv("GOOGLE_API_KEY"):
-            return "gemini-3-flash-preview"
-        elif os.getenv("ANTHROPIC_API_KEY"):
-            return "claude-sonnet-4-20250514"
-        elif os.getenv("OPENAI_API_KEY"):
-            return "gpt-4o"
-        else:
-            raise ValueError("No LLM API key configured")
+        """Get the default model based on available API keys.
+
+        Uses the central LLMModelRegistry.
+        """
+        return LLMModelRegistry.get_default()
 
     @classmethod
     async def invoke_with_tools(

@@ -281,6 +281,44 @@ AOS Backend API 엔드포인트 문서입니다.
 
 ---
 
+## LLM Models (Central Registry)
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/llm/models` | 전체 모델 목록 |
+| GET | `/api/llm/models?provider=xxx` | Provider별 필터링 |
+| GET | `/api/llm/models?available_only=true` | 사용 가능한 모델만 |
+| GET | `/api/llm/models/default` | 기본 모델 조회 |
+| GET | `/api/llm/models/{model_id}` | 특정 모델 상세 |
+| GET | `/api/llm/providers` | 지원 프로바이더 목록 |
+
+**응답 형식** (GET /api/llm/models):
+```json
+{
+  "models": [
+    {
+      "id": "claude-sonnet-4-20250514",
+      "display_name": "Claude Sonnet 4",
+      "provider": "anthropic",
+      "context_window": 200000,
+      "pricing": {"input": 0.003, "output": 0.015},
+      "available": true,
+      "is_default": true,
+      "supports_tools": true,
+      "supports_vision": true
+    }
+  ],
+  "total": 14
+}
+```
+
+**프로바이더**: `anthropic`, `google`, `openai`, `ollama`
+
+> **Note**: 이 API는 중앙 레지스트리(`models/llm_models.py`)에서 모델 정보를 제공합니다.
+> 새 모델 추가 시 해당 파일만 수정하면 전체 시스템에 반영됩니다.
+
+---
+
 ## LLM Router
 
 | Method | Path | 설명 |

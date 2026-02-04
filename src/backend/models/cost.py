@@ -4,35 +4,42 @@ from datetime import datetime
 from typing import Any
 from pydantic import BaseModel, Field
 
+from models.llm_models import LLMModelRegistry
 
-# Cost per 1K tokens for different models (USD)
-COST_PER_1K_TOKENS: dict[str, dict[str, float]] = {
-    # Google Gemini models (pricing per 1M tokens, converted to per 1K)
-    # Gemini 2.0 Flash: $0.10/1M input, $0.40/1M output (up to 128K context)
-    "gemini-2.0-flash": {"input": 0.0001, "output": 0.0004},
-    "gemini-2.0-flash": {"input": 0.0001, "output": 0.0004},
-    # Gemini 1.5 Pro: $1.25/1M input, $5.00/1M output (up to 128K)
-    "gemini-1.5-pro": {"input": 0.00125, "output": 0.005},
-    # Gemini 1.5 Flash: $0.075/1M input, $0.30/1M output (up to 128K)
-    "gemini-1.5-flash": {"input": 0.000075, "output": 0.0003},
-    # Anthropic models
-    "claude-sonnet-4-20250514": {"input": 0.003, "output": 0.015},
-    "claude-3-5-sonnet-20241022": {"input": 0.003, "output": 0.015},
-    "claude-3-opus-20240229": {"input": 0.015, "output": 0.075},
-    "claude-3-haiku-20240307": {"input": 0.00025, "output": 0.00125},
-    # OpenAI models
-    "gpt-4-turbo": {"input": 0.01, "output": 0.03},
-    "gpt-4": {"input": 0.03, "output": 0.06},
-    "gpt-3.5-turbo": {"input": 0.0005, "output": 0.0015},
-    # Ollama/Local models (free)
-    "qwen2.5:7b": {"input": 0.0, "output": 0.0},
-    "llama3:8b": {"input": 0.0, "output": 0.0},
-    "mistral:7b": {"input": 0.0, "output": 0.0},
-    "codellama:7b": {"input": 0.0, "output": 0.0},
-}
 
 # Default cost for unknown models
 DEFAULT_COST = {"input": 0.001, "output": 0.002}
+
+
+def estimate_tokens(text: str, model: str = "") -> int:
+    """
+    텍스트의 토큰 수 추정 (fallback용).
+
+    평균적으로:
+    - 영어: 1 token ≈ 4 characters
+    - 한국어: 1 token ≈ 2 characters
+
+    Args:
+        text: 토큰 수를 추정할 텍스트
+        model: 모델명 (현재 미사용, 향후 모델별 토크나이저 지원용)
+
+    Returns:
+        추정된 토큰 수
+    """
+    if not text:
+        return 0
+
+    # 문자 수 기반 추정 (단어 수보다 정확)
+    char_count = len(text)
+
+    # 한국어 비율 감지 (한글 유니코드 범위: AC00-D7A3)
+    korean_chars = sum(1 for c in text if '\uac00' <= c <= '\ud7a3')
+    korean_ratio = korean_chars / char_count if char_count > 0 else 0
+
+    # 가중 평균: 영어 4자/토큰, 한국어 2자/토큰
+    chars_per_token = 4 * (1 - korean_ratio) + 2 * korean_ratio
+
+    return max(1, int(char_count / chars_per_token))
 
 
 class TokenUsage(BaseModel):
@@ -92,20 +99,11 @@ class SessionTokenUsage(BaseModel):
 
 
 def get_model_cost(model: str) -> dict[str, float]:
-    """Get cost per 1K tokens for a model."""
-    # Normalize model name
-    model_lower = model.lower()
+    """Get cost per 1K tokens for a model.
 
-    # Try exact match first
-    if model in COST_PER_1K_TOKENS:
-        return COST_PER_1K_TOKENS[model]
-
-    # Try partial match
-    for known_model, cost in COST_PER_1K_TOKENS.items():
-        if known_model.lower() in model_lower or model_lower in known_model.lower():
-            return cost
-
-    return DEFAULT_COST
+    Uses the central LLMModelRegistry as the source of truth.
+    """
+    return LLMModelRegistry.get_pricing(model)
 
 
 def calculate_cost(
@@ -259,33 +257,50 @@ def extract_token_usage(response: Any, model: str = "") -> TokenUsage | None:
     Extract token usage from an LLM response.
 
     Supports various LLM providers:
+    - Google Gemini (response.usage_metadata)
     - Anthropic (response_metadata.usage)
     - OpenAI (response_metadata.token_usage)
     - LangChain (response.response_metadata)
     """
     try:
-        # Try to get response_metadata
-        metadata = getattr(response, "response_metadata", {})
+        input_tokens = 0
+        output_tokens = 0
+        model_name = model
 
-        if not metadata:
-            return None
-
-        # Anthropic format
-        usage = metadata.get("usage", {})
-        if usage:
-            input_tokens = usage.get("input_tokens", 0)
-            output_tokens = usage.get("output_tokens", 0)
+        # 1. usage_metadata 확인 (Google Gemini, 최신 LangChain)
+        if hasattr(response, "usage_metadata") and response.usage_metadata:
+            usage = response.usage_metadata
+            if isinstance(usage, dict):
+                input_tokens = usage.get("input_tokens", 0)
+                output_tokens = usage.get("output_tokens", 0)
+            else:
+                # Pydantic model인 경우
+                input_tokens = getattr(usage, "input_tokens", 0)
+                output_tokens = getattr(usage, "output_tokens", 0)
         else:
-            # OpenAI format
-            token_usage = metadata.get("token_usage", {})
-            input_tokens = token_usage.get("prompt_tokens", 0)
-            output_tokens = token_usage.get("completion_tokens", 0)
+            # 2. response_metadata 확인 (Anthropic, OpenAI)
+            metadata = getattr(response, "response_metadata", {})
+            if not metadata:
+                return None
+
+            # 모델명 추출
+            model_name = metadata.get("model", model) or model
+
+            # Anthropic format
+            usage = metadata.get("usage", {})
+            if usage:
+                input_tokens = usage.get("input_tokens", 0)
+                output_tokens = usage.get("output_tokens", 0)
+            else:
+                # OpenAI format
+                token_usage = metadata.get("token_usage", {})
+                input_tokens = token_usage.get("prompt_tokens", 0)
+                output_tokens = token_usage.get("completion_tokens", 0)
 
         if input_tokens == 0 and output_tokens == 0:
             return None
 
         total_tokens = input_tokens + output_tokens
-        model_name = metadata.get("model", model) or model
         cost = calculate_cost(input_tokens, output_tokens, model_name)
 
         return TokenUsage(

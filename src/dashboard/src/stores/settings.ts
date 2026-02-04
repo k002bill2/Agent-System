@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 export type Theme = 'light' | 'dark' | 'system'
-export type LLMProvider = 'anthropic' | 'openai' | 'local'
+export type LLMProvider = 'anthropic' | 'openai' | 'google' | 'local'
 
 export interface NotificationSettings {
   // 채널
@@ -17,6 +17,22 @@ export interface NotificationSettings {
 
   // 사운드
   soundVolume: number              // 0-100 (기본: 50)
+}
+
+// LLM Model from API
+export interface LLMModel {
+  id: string
+  display_name: string
+  provider: string
+  context_window: number
+  pricing: {
+    input: number
+    output: number
+  }
+  available: boolean
+  is_default: boolean
+  supports_tools: boolean
+  supports_vision: boolean
 }
 
 // Apply theme to document - defined early for use in store and initialization
@@ -47,6 +63,11 @@ interface SettingsState {
   // Notifications
   notifications: NotificationSettings
 
+  // LLM Models from API
+  availableModels: LLMModel[]
+  modelsLoading: boolean
+  modelsError: string | null
+
   // Actions
   setLLMProvider: (provider: LLMProvider) => void
   setModel: (model: string) => void
@@ -57,15 +78,22 @@ interface SettingsState {
     key: K,
     value: NotificationSettings[K]
   ) => void
+  fetchModels: () => Promise<void>
+  getModelsForProvider: (provider: LLMProvider) => LLMModel[]
 }
 
-const defaultModels: Record<LLMProvider, string[]> = {
-  anthropic: ['claude-opus-4-5-20250514', 'claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022'],
+// Fallback models when API is unavailable
+const fallbackModels: Record<LLMProvider, string[]> = {
+  anthropic: ['claude-opus-4-5-20250514', 'claude-sonnet-4-20250514'],
+  google: ['gemini-3-flash-preview', 'gemini-3-pro-preview', 'gemini-2.5-pro-preview-05-06'],
   openai: ['gpt-4o', 'gpt-4o-mini', 'o1', 'o1-mini'],
-  local: ['qwen2.5:7b', 'llama3.2:latest', 'mistral:latest', 'deepseek-r1:8b'],
+  local: ['qwen2.5:7b', 'llama3:8b', 'mistral:7b', 'codellama:7b'],
 }
 
-export const getModelsForProvider = (provider: LLMProvider) => defaultModels[provider]
+// Legacy function for backward compatibility
+export const getModelsForProvider = (provider: LLMProvider): string[] => {
+  return fallbackModels[provider] || []
+}
 
 const defaultNotifications: NotificationSettings = {
   browserNotifications: true,
@@ -96,28 +124,40 @@ if (typeof window !== 'undefined') {
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       // Default values
-      llmProvider: 'anthropic',
-      model: 'claude-sonnet-4-20250514',
+      llmProvider: 'google',
+      model: 'gemini-3-flash-preview',
       apiKey: '',
       backendUrl: 'http://localhost:8000',
       theme: 'light',
       notifications: defaultNotifications,
 
+      // LLM Models state
+      availableModels: [],
+      modelsLoading: false,
+      modelsError: null,
+
       // Actions
-      setLLMProvider: (provider) =>
+      setLLMProvider: (provider) => {
+        const state = get()
+        const providerModels = state.getModelsForProvider(provider)
+        const defaultModel = providerModels.find(m => m.is_default) || providerModels[0]
         set({
           llmProvider: provider,
-          model: defaultModels[provider][0],
-        }),
+          model: defaultModel?.id || fallbackModels[provider]?.[0] || '',
+        })
+      },
+
       setModel: (model) => set({ model }),
       setApiKey: (apiKey) => set({ apiKey }),
       setBackendUrl: (backendUrl) => set({ backendUrl }),
+
       setTheme: (theme) => {
         applyThemeToDocument(theme)
         set({ theme })
       },
+
       setNotificationSetting: (key, value) =>
         set((state) => ({
           notifications: {
@@ -125,6 +165,38 @@ export const useSettingsStore = create<SettingsState>()(
             [key]: value,
           },
         })),
+
+      fetchModels: async () => {
+        const state = get()
+        set({ modelsLoading: true, modelsError: null })
+
+        try {
+          const response = await fetch(`${state.backendUrl}/api/llm/models`)
+
+          if (!response.ok) {
+            throw new Error(`Failed to fetch models: ${response.status}`)
+          }
+
+          const data = await response.json()
+          set({
+            availableModels: data.models || [],
+            modelsLoading: false,
+          })
+        } catch (error) {
+          console.warn('Failed to fetch LLM models from API, using fallback:', error)
+          set({
+            modelsLoading: false,
+            modelsError: error instanceof Error ? error.message : 'Failed to fetch models',
+          })
+        }
+      },
+
+      getModelsForProvider: (provider) => {
+        const state = get()
+        // Map 'local' to 'ollama' for API compatibility
+        const apiProvider = provider === 'local' ? 'ollama' : provider
+        return state.availableModels.filter(m => m.provider === apiProvider)
+      },
     }),
     {
       name: 'agent-orchestration-service-settings',
@@ -135,6 +207,7 @@ export const useSettingsStore = create<SettingsState>()(
         theme: state.theme,
         notifications: state.notifications,
         // Note: apiKey is intentionally NOT persisted for security
+        // Note: availableModels are fetched fresh, not persisted
       }),
     }
   )

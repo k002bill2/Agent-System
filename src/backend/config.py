@@ -1,8 +1,12 @@
 """Application configuration."""
 
 from functools import lru_cache
+from typing import TYPE_CHECKING
 
 from pydantic_settings import BaseSettings
+
+if TYPE_CHECKING:
+    from models.llm_models import LLMProvider
 
 
 class Settings(BaseSettings):
@@ -14,10 +18,12 @@ class Settings(BaseSettings):
     google_api_key: str = ""
 
     # LLM Provider Settings
+    # Note: These are environment variable overrides.
+    # Default values come from models.llm_models.LLMModelRegistry
     llm_provider: str = "google"
-    google_model: str = "gemini-2.0-flash"
-    anthropic_model: str = "claude-sonnet-4-20250514"
-    ollama_model: str = "qwen2.5:7b"
+    google_model: str = ""  # If empty, uses LLMModelRegistry.get_default(GOOGLE)
+    anthropic_model: str = ""  # If empty, uses LLMModelRegistry.get_default(ANTHROPIC)
+    ollama_model: str = ""  # If empty, uses LLMModelRegistry.get_default(OLLAMA)
     ollama_base_url: str = "http://localhost:11434"
 
     # Database
@@ -35,7 +41,7 @@ class Settings(BaseSettings):
 
     # Orchestration
     max_iterations: int = 100
-    default_model: str = "claude-sonnet-4-20250514"
+    default_model: str = ""  # If empty, uses LLMModelRegistry.get_default()
 
     # CORS
     cors_origins: list[str] = [
@@ -95,3 +101,48 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Get cached settings instance."""
     return Settings()
+
+
+def get_model_for_provider(provider: str) -> str:
+    """Get model for a provider, with Registry fallback.
+
+    Uses environment variable if set, otherwise falls back to LLMModelRegistry.
+
+    Args:
+        provider: Provider name ('google', 'anthropic', 'openai', 'ollama')
+
+    Returns:
+        Model ID string
+    """
+    from models.llm_models import LLMModelRegistry, LLMProvider
+
+    settings = get_settings()
+
+    # Check environment variable override first
+    if provider == "google" and settings.google_model:
+        return settings.google_model
+    elif provider == "anthropic" and settings.anthropic_model:
+        return settings.anthropic_model
+    elif provider == "ollama" and settings.ollama_model:
+        return settings.ollama_model
+
+    # Fallback to Registry default
+    try:
+        return LLMModelRegistry.get_default(LLMProvider(provider))
+    except ValueError:
+        return LLMModelRegistry.get_default()
+
+
+def get_default_model() -> str:
+    """Get the default model, with Registry fallback.
+
+    Uses DEFAULT_MODEL env var if set, otherwise falls back to LLMModelRegistry.
+    """
+    from models.llm_models import LLMModelRegistry
+
+    settings = get_settings()
+
+    if settings.default_model:
+        return settings.default_model
+
+    return LLMModelRegistry.get_default()

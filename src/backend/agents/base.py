@@ -8,6 +8,12 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from pydantic import BaseModel, Field
 
+from models.llm_models import LLMModelRegistry, LLMProvider
+
+
+# Default model from registry
+_DEFAULT_AGENT_MODEL = LLMModelRegistry.get_default(LLMProvider.GOOGLE)
+
 
 class AgentConfig(BaseModel):
     """Configuration for an agent."""
@@ -15,7 +21,7 @@ class AgentConfig(BaseModel):
     name: str
     description: str
     system_prompt: str
-    model_name: str = "gemini-2.0-flash"
+    model_name: str = _DEFAULT_AGENT_MODEL
     temperature: float = 0.7
     max_tokens: int = 4096
     tools: list[str] = Field(default_factory=list)
@@ -91,7 +97,20 @@ class BaseAgent(ABC):
             messages.append(HumanMessage(content=task))
 
         response = await self.llm.ainvoke(messages)
-        return response.content
+        content = response.content
+
+        # Handle list-type responses from newer Gemini models
+        if isinstance(content, list):
+            # Extract text from list of content blocks
+            text_parts = []
+            for item in content:
+                if isinstance(item, dict) and "text" in item:
+                    text_parts.append(item["text"])
+                elif isinstance(item, str):
+                    text_parts.append(item)
+            return "".join(text_parts)
+
+        return content
 
     def _format_error(self, error: Exception) -> AgentResult:
         """Format an error result."""

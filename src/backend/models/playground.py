@@ -7,6 +7,14 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from models.llm_models import LLMModelRegistry, LLMProvider
+
+
+# Get default model from central registry
+def _get_default_model() -> str:
+    """Get default model for playground."""
+    return LLMModelRegistry.get_default(LLMProvider.GOOGLE)
+
 
 class PlaygroundExecutionStatus(str, Enum):
     """Status of a playground execution."""
@@ -76,7 +84,7 @@ class PlaygroundSession(BaseModel):
 
     # Current settings
     agent_id: str | None = None
-    model: str = "gemini-2.0-flash"
+    model: str = Field(default_factory=_get_default_model)
     temperature: float = 0.7
     max_tokens: int = 4096
     system_prompt: str | None = None
@@ -107,7 +115,7 @@ class PlaygroundSessionCreate(BaseModel):
     project_id: str | None = None  # Optional project ID
     working_directory: str | None = None  # Working directory for tools
     agent_id: str | None = None
-    model: str = "gemini-2.0-flash"
+    model: str = Field(default_factory=_get_default_model)
     system_prompt: str | None = None
 
 
