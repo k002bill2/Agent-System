@@ -29,6 +29,15 @@ from services.mcp_manager import (
     MCPBatchToolCall,
     MCPBatchToolResult,
 )
+from services.task_analysis_service import (
+    get_task_analysis_service,
+)
+from models.task_analysis import (
+    TaskAnalysisEntry,
+    TaskAnalysisListResponse,
+    TaskAnalysisSaveRequest,
+    TaskAnalysisQueryParams,
+)
 
 
 router = APIRouter(prefix="/agents", tags=["agents"])
@@ -81,6 +90,32 @@ class TaskAnalysisResponse(BaseModel):
     analysis: dict[str, Any] | None = None
     error: str | None = None
     execution_time_ms: int = 0
+    analysis_id: str | None = None  # 저장된 분석 ID
+
+
+class TaskAnalysisHistoryResponse(BaseModel):
+    """태스크 분석 히스토리 응답."""
+
+    id: str
+    project_id: str | None = None
+    task_input: str
+    success: bool
+    analysis: dict[str, Any] | None = None
+    error: str | None = None
+    execution_time_ms: int = 0
+    complexity_score: int | None = None
+    effort_level: str | None = None
+    subtask_count: int | None = None
+    strategy: str | None = None
+    created_at: str
+
+
+class TaskAnalysisHistoryListResponse(BaseModel):
+    """태스크 분석 히스토리 목록 응답."""
+
+    items: list[TaskAnalysisHistoryResponse]
+    total: int
+    has_more: bool
 
 
 class AgentSearchRequest(BaseModel):
@@ -314,8 +349,11 @@ async def analyze_task(request: TaskAnalysisRequest):
     2. 서브태스크 분해
     3. 에이전트 할당
     4. 실행 전략 결정
+
+    분석 결과는 히스토리에 자동 저장됩니다.
     """
     orchestrator = get_lead_orchestrator()
+    analysis_service = get_task_analysis_service()
 
     try:
         result = await orchestrator.execute(
@@ -323,23 +361,143 @@ async def analyze_task(request: TaskAnalysisRequest):
             context=request.context,
         )
 
+        # Extract project_id from context
+        project_id = None
+        if request.context:
+            project_id = request.context.get("project_id")
+
+        # Save analysis to history
+        save_request = TaskAnalysisSaveRequest(
+            task_input=request.task,
+            context=request.context,
+            project_id=project_id,
+            success=result.success,
+            analysis=result.output if result.success else None,
+            error=result.error if not result.success else None,
+            execution_time_ms=result.execution_time_ms,
+        )
+        saved_entry = await analysis_service.save_analysis(save_request)
+
         if result.success:
             return TaskAnalysisResponse(
                 success=True,
                 analysis=result.output,
                 execution_time_ms=result.execution_time_ms,
+                analysis_id=saved_entry.id,
             )
         else:
             return TaskAnalysisResponse(
                 success=False,
                 error=result.error,
                 execution_time_ms=result.execution_time_ms,
+                analysis_id=saved_entry.id,
             )
     except Exception as e:
-        return TaskAnalysisResponse(
-            success=False,
-            error=str(e),
-        )
+        # Save failed analysis too
+        try:
+            save_request = TaskAnalysisSaveRequest(
+                task_input=request.task,
+                context=request.context,
+                project_id=request.context.get("project_id") if request.context else None,
+                success=False,
+                error=str(e),
+                execution_time_ms=0,
+            )
+            saved_entry = await analysis_service.save_analysis(save_request)
+            return TaskAnalysisResponse(
+                success=False,
+                error=str(e),
+                analysis_id=saved_entry.id,
+            )
+        except:
+            return TaskAnalysisResponse(
+                success=False,
+                error=str(e),
+            )
+
+
+@router.get("/orchestrate/analyses", response_model=TaskAnalysisHistoryListResponse)
+async def get_analysis_history(
+    project_id: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+):
+    """
+    태스크 분석 히스토리 조회.
+
+    Args:
+        project_id: 프로젝트 ID로 필터링 (선택)
+        limit: 조회할 항목 수 (기본: 20, 최대: 100)
+        offset: 오프셋 (페이지네이션)
+    """
+    analysis_service = get_task_analysis_service()
+
+    params = TaskAnalysisQueryParams(
+        project_id=project_id,
+        limit=min(limit, 100),
+        offset=offset,
+    )
+
+    result = await analysis_service.get_analyses(params)
+
+    return TaskAnalysisHistoryListResponse(
+        items=[
+            TaskAnalysisHistoryResponse(
+                id=item.id,
+                project_id=item.project_id,
+                task_input=item.task_input,
+                success=item.success,
+                analysis=item.analysis,
+                error=item.error,
+                execution_time_ms=item.execution_time_ms,
+                complexity_score=item.complexity_score,
+                effort_level=item.effort_level,
+                subtask_count=item.subtask_count,
+                strategy=item.strategy,
+                created_at=item.created_at.isoformat(),
+            )
+            for item in result.items
+        ],
+        total=result.total,
+        has_more=result.has_more,
+    )
+
+
+@router.get("/orchestrate/analyses/{analysis_id}")
+async def get_analysis(analysis_id: str):
+    """단일 태스크 분석 조회."""
+    analysis_service = get_task_analysis_service()
+    entry = await analysis_service.get_analysis(analysis_id)
+
+    if not entry:
+        raise HTTPException(status_code=404, detail=f"Analysis not found: {analysis_id}")
+
+    return TaskAnalysisHistoryResponse(
+        id=entry.id,
+        project_id=entry.project_id,
+        task_input=entry.task_input,
+        success=entry.success,
+        analysis=entry.analysis,
+        error=entry.error,
+        execution_time_ms=entry.execution_time_ms,
+        complexity_score=entry.complexity_score,
+        effort_level=entry.effort_level,
+        subtask_count=entry.subtask_count,
+        strategy=entry.strategy,
+        created_at=entry.created_at.isoformat(),
+    )
+
+
+@router.delete("/orchestrate/analyses/{analysis_id}")
+async def delete_analysis(analysis_id: str):
+    """태스크 분석 삭제."""
+    analysis_service = get_task_analysis_service()
+    success = await analysis_service.delete_analysis(analysis_id)
+
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Analysis not found: {analysis_id}")
+
+    return {"message": f"Analysis {analysis_id} deleted", "success": True}
 
 
 @router.get("/orchestrate/strategies")

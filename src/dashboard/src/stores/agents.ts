@@ -73,6 +73,23 @@ export interface TaskAnalysisResult {
   }
   error?: string
   execution_time_ms: number
+  analysis_id?: string
+}
+
+// History types
+export interface TaskAnalysisHistory {
+  id: string
+  project_id: string | null
+  task_input: string
+  success: boolean
+  analysis: TaskAnalysisResult['analysis'] | null
+  error: string | null
+  execution_time_ms: number
+  complexity_score: number | null
+  effort_level: string | null
+  subtask_count: number | null
+  strategy: string | null
+  created_at: string
 }
 
 interface AgentsState {
@@ -81,6 +98,14 @@ interface AgentsState {
   stats: AgentRegistryStats | null
   searchResults: AgentSearchResult[]
   lastAnalysis: TaskAnalysisResult | null
+
+  // History Data
+  analysisHistory: TaskAnalysisHistory[]
+  historyLoading: boolean
+  historyTotal: number
+  historyHasMore: boolean
+  historyProjectFilter: string | null
+  selectedHistoryId: string | null
 
   // UI State
   isLoading: boolean
@@ -96,6 +121,12 @@ interface AgentsState {
   setSelectedAgent: (agentId: string | null) => void
   setCategoryFilter: (category: AgentCategory | null) => void
   clearError: () => void
+
+  // History Actions
+  fetchAnalysisHistory: (projectId?: string | null, reset?: boolean) => Promise<void>
+  loadMoreHistory: () => Promise<void>
+  deleteAnalysis: (id: string) => Promise<boolean>
+  selectHistoryItem: (item: TaskAnalysisHistory | null) => void
 }
 
 const API_BASE = 'http://localhost:8000/api'
@@ -106,6 +137,16 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
   stats: null,
   searchResults: [],
   lastAnalysis: null,
+
+  // History state
+  analysisHistory: [],
+  historyLoading: false,
+  historyTotal: 0,
+  historyHasMore: false,
+  historyProjectFilter: null,
+  selectedHistoryId: null,
+
+  // UI state
   isLoading: false,
   error: null,
   selectedAgentId: null,
@@ -205,6 +246,11 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
 
       const result: TaskAnalysisResult = await response.json()
       set({ lastAnalysis: result, isLoading: false })
+
+      // Refresh history after successful analysis
+      const projectId = context?.project_id as string | undefined
+      get().fetchAnalysisHistory(projectId, true)
+
       return result
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Failed to analyze task'
@@ -229,5 +275,127 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
 
   clearError: () => {
     set({ error: null })
+  },
+
+  // History Actions
+  fetchAnalysisHistory: async (projectId?: string | null, reset: boolean = false) => {
+    const state = get()
+
+    // If reset or project filter changed, clear existing history
+    if (reset || projectId !== state.historyProjectFilter) {
+      set({
+        analysisHistory: [],
+        historyTotal: 0,
+        historyHasMore: false,
+        historyProjectFilter: projectId ?? null,
+      })
+    }
+
+    set({ historyLoading: true })
+
+    try {
+      const params = new URLSearchParams()
+      if (projectId) {
+        params.append('project_id', projectId)
+      }
+      params.append('limit', '20')
+      params.append('offset', '0')
+
+      const response = await fetch(`${API_BASE}/agents/orchestrate/analyses?${params.toString()}`)
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch analysis history: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      set({
+        analysisHistory: data.items,
+        historyTotal: data.total,
+        historyHasMore: data.has_more,
+        historyLoading: false,
+      })
+    } catch (error) {
+      console.error('Failed to fetch analysis history:', error)
+      set({ historyLoading: false })
+    }
+  },
+
+  loadMoreHistory: async () => {
+    const state = get()
+    if (state.historyLoading || !state.historyHasMore) return
+
+    set({ historyLoading: true })
+
+    try {
+      const params = new URLSearchParams()
+      if (state.historyProjectFilter) {
+        params.append('project_id', state.historyProjectFilter)
+      }
+      params.append('limit', '20')
+      params.append('offset', String(state.analysisHistory.length))
+
+      const response = await fetch(`${API_BASE}/agents/orchestrate/analyses?${params.toString()}`)
+
+      if (!response.ok) {
+        throw new Error(`Failed to load more history: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      set({
+        analysisHistory: [...state.analysisHistory, ...data.items],
+        historyTotal: data.total,
+        historyHasMore: data.has_more,
+        historyLoading: false,
+      })
+    } catch (error) {
+      console.error('Failed to load more history:', error)
+      set({ historyLoading: false })
+    }
+  },
+
+  deleteAnalysis: async (id: string) => {
+    try {
+      const response = await fetch(`${API_BASE}/agents/orchestrate/analyses/${id}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to delete analysis: ${response.statusText}`)
+      }
+
+      // Remove from local state and clear selection if deleted item was selected
+      set((state) => ({
+        analysisHistory: state.analysisHistory.filter((item) => item.id !== id),
+        historyTotal: state.historyTotal - 1,
+        selectedHistoryId: state.selectedHistoryId === id ? null : state.selectedHistoryId,
+        lastAnalysis: state.selectedHistoryId === id ? null : state.lastAnalysis,
+      }))
+
+      return true
+    } catch (error) {
+      console.error('Failed to delete analysis:', error)
+      return false
+    }
+  },
+
+  selectHistoryItem: (item: TaskAnalysisHistory | null) => {
+    if (!item) {
+      set({ selectedHistoryId: null, lastAnalysis: null })
+      return
+    }
+
+    // Convert history item to TaskAnalysisResult format
+    const result: TaskAnalysisResult = {
+      success: item.success,
+      analysis: item.analysis ?? undefined,
+      error: item.error ?? undefined,
+      execution_time_ms: item.execution_time_ms,
+      analysis_id: item.id,
+    }
+
+    set({
+      selectedHistoryId: item.id,
+      lastAnalysis: result,
+    })
   },
 }))

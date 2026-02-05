@@ -20,8 +20,11 @@ import {
   ChevronUp,
   AlertCircle,
   Settings,
+  FolderKanban,
+  Pencil,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useOrchestrationStore } from '@/stores/orchestration'
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -55,6 +58,7 @@ interface NotificationRule {
   event_type: NotificationEventType
   conditions: NotificationCondition[]
   channels: NotificationChannel[]
+  project_ids: string[]
   priority: NotificationPriority
   message_template: string | null
   created_at: string
@@ -149,6 +153,16 @@ async function createRule(rule: Partial<NotificationRule>): Promise<Notification
   return res.json()
 }
 
+async function updateRule(ruleId: string, data: Partial<NotificationRule>): Promise<NotificationRule> {
+  const res = await fetch(`${API_BASE}/notifications/rules/${ruleId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) throw new Error('Failed to update rule')
+  return res.json()
+}
+
 async function deleteRule(ruleId: string): Promise<void> {
   const res = await fetch(`${API_BASE}/notifications/rules/${ruleId}`, {
     method: 'DELETE',
@@ -211,11 +225,26 @@ export function NotificationRuleEditor({ className }: NotificationRuleEditorProp
     description: '',
     event_type: 'task_completed' as NotificationEventType,
     channels: [] as NotificationChannel[],
+    project_ids: [] as string[],
     priority: 'medium' as NotificationPriority,
   })
 
+  // Edit rule state
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null)
+  const [editRule, setEditRule] = useState({
+    name: '',
+    description: '',
+    event_type: 'task_completed' as NotificationEventType,
+    channels: [] as NotificationChannel[],
+    project_ids: [] as string[],
+    priority: 'medium' as NotificationPriority,
+  })
+
+  const { projects, fetchProjects } = useOrchestrationStore()
+
   useEffect(() => {
     loadData()
+    fetchProjects()
   }, [])
 
   const loadData = async () => {
@@ -247,6 +276,7 @@ export function NotificationRuleEditor({ className }: NotificationRuleEditorProp
         description: '',
         event_type: 'task_completed',
         channels: [],
+        project_ids: [],
         priority: 'medium',
       })
     } catch (e) {
@@ -269,6 +299,35 @@ export function NotificationRuleEditor({ className }: NotificationRuleEditorProp
       setRules((prev) =>
         prev.map((r) => (r.id === ruleId ? { ...r, enabled: result.enabled } : r))
       )
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  const handleStartEdit = (rule: NotificationRule) => {
+    setEditingRuleId(rule.id)
+    setEditRule({
+      name: rule.name,
+      description: rule.description,
+      event_type: rule.event_type,
+      channels: [...rule.channels],
+      project_ids: [...(rule.project_ids || [])],
+      priority: rule.priority,
+    })
+    setShowNewRule(false)
+  }
+
+  const handleCancelEdit = () => {
+    setEditingRuleId(null)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingRuleId || !editRule.name || editRule.channels.length === 0) return
+
+    try {
+      const updated = await updateRule(editingRuleId, editRule)
+      setRules((prev) => prev.map((r) => (r.id === editingRuleId ? updated : r)))
+      setEditingRuleId(null)
     } catch (e) {
       setError((e as Error).message)
     }
@@ -525,6 +584,58 @@ export function NotificationRuleEditor({ className }: NotificationRuleEditorProp
                 placeholder="Optional description"
               />
             </div>
+
+            {/* Target Projects */}
+            <div className="mt-4">
+              <label className="block text-sm text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1.5">
+                <FolderKanban className="w-4 h-4" />
+                Target Projects
+              </label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newRule.project_ids.length === 0}
+                    onChange={() => setNewRule({ ...newRule, project_ids: [] })}
+                    className="rounded border-gray-300 dark:border-gray-600 text-blue-600"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    All Projects (default)
+                  </span>
+                </label>
+                {projects.length > 0 && (
+                  <div className="ml-2 border-l-2 border-gray-200 dark:border-gray-600 pl-3 space-y-1.5">
+                    {projects.map((project) => {
+                      const isSelected = newRule.project_ids.includes(project.id)
+                      return (
+                        <label key={project.id} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {
+                              const updated = isSelected
+                                ? newRule.project_ids.filter((id) => id !== project.id)
+                                : [...newRule.project_ids, project.id]
+                              setNewRule({ ...newRule, project_ids: updated })
+                            }}
+                            className="rounded border-gray-300 dark:border-gray-600 text-blue-600"
+                          />
+                          <span className="text-sm text-gray-700 dark:text-gray-300">
+                            {project.name || project.id}
+                          </span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+                {projects.length === 0 && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 ml-6">
+                    No projects available. Rules will apply to all projects.
+                  </p>
+                )}
+              </div>
+            </div>
+
             <div className="mt-4 flex justify-end gap-2">
               <button
                 onClick={() => setShowNewRule(false)}
@@ -553,62 +664,232 @@ export function NotificationRuleEditor({ className }: NotificationRuleEditorProp
               <p className="text-sm">Create a rule to receive alerts for specific events</p>
             </div>
           ) : (
-            rules.map((rule) => (
-              <div
-                key={rule.id}
-                className={cn(
-                  'p-4 flex items-center justify-between',
-                  !rule.enabled && 'opacity-60'
-                )}
-              >
-                <div className="flex-1">
-                  <div className="flex items-center gap-3">
-                    <span className="font-medium text-gray-900 dark:text-white">
-                      {rule.name}
-                    </span>
-                    <span className={cn('px-2 py-0.5 text-xs rounded', PRIORITY_COLORS[rule.priority])}>
-                      {rule.priority}
-                    </span>
-                    <span className="px-2 py-0.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded">
-                      {EVENT_LABELS[rule.event_type]}
-                    </span>
+            rules.map((rule) =>
+              editingRuleId === rule.id ? (
+                /* Inline Edit Form */
+                <div key={rule.id} className="p-4 border-b border-gray-200 dark:border-gray-700 bg-amber-50 dark:bg-amber-900/10">
+                  <h3 className="font-medium text-gray-900 dark:text-white mb-4">Edit Rule</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Rule Name</label>
+                      <input
+                        type="text"
+                        value={editRule.name}
+                        onChange={(e) => setEditRule({ ...editRule, name: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Event Type</label>
+                      <select
+                        value={editRule.event_type}
+                        onChange={(e) => setEditRule({ ...editRule, event_type: e.target.value as NotificationEventType })}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      >
+                        {Object.entries(EVENT_LABELS).map(([value, label]) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Priority</label>
+                      <select
+                        value={editRule.priority}
+                        onChange={(e) => setEditRule({ ...editRule, priority: e.target.value as NotificationPriority })}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      >
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="urgent">Urgent</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Channels</label>
+                      <div className="flex gap-2">
+                        {(['slack', 'discord', 'email', 'webhook'] as NotificationChannel[]).map((ch) => {
+                          const Icon = CHANNEL_ICONS[ch]
+                          const isSelected = editRule.channels.includes(ch)
+                          return (
+                            <button
+                              key={ch}
+                              onClick={() =>
+                                setEditRule({
+                                  ...editRule,
+                                  channels: isSelected
+                                    ? editRule.channels.filter((c) => c !== ch)
+                                    : [...editRule.channels, ch],
+                                })
+                              }
+                              className={cn(
+                                'p-2 rounded-lg border transition-colors',
+                                isSelected
+                                  ? 'border-blue-500 bg-blue-100 dark:bg-blue-900'
+                                  : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
+                              )}
+                            >
+                              <Icon className={cn('w-5 h-5', CHANNEL_COLORS[ch])} />
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
                   </div>
-                  {rule.description && (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                      {rule.description}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-2 mt-2">
-                    {rule.channels.map((ch) => {
-                      const Icon = CHANNEL_ICONS[ch]
-                      return <Icon key={ch} className={cn('w-4 h-4', CHANNEL_COLORS[ch])} />
-                    })}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleToggleRule(rule.id)}
-                    className={cn(
-                      'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                      rule.enabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                        rule.enabled ? 'translate-x-6' : 'translate-x-1'
-                      )}
+                  <div className="mt-4">
+                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Description</label>
+                    <input
+                      type="text"
+                      value={editRule.description}
+                      onChange={(e) => setEditRule({ ...editRule, description: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      placeholder="Optional description"
                     />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteRule(rule.id)}
-                    className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  </div>
+
+                  {/* Target Projects */}
+                  <div className="mt-4">
+                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1.5">
+                      <FolderKanban className="w-4 h-4" />
+                      Target Projects
+                    </label>
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editRule.project_ids.length === 0}
+                          onChange={() => setEditRule({ ...editRule, project_ids: [] })}
+                          className="rounded border-gray-300 dark:border-gray-600 text-blue-600"
+                        />
+                        <span className="text-sm text-gray-700 dark:text-gray-300">All Projects (default)</span>
+                      </label>
+                      {projects.length > 0 && (
+                        <div className="ml-2 border-l-2 border-gray-200 dark:border-gray-600 pl-3 space-y-1.5">
+                          {projects.map((project) => {
+                            const isSelected = editRule.project_ids.includes(project.id)
+                            return (
+                              <label key={project.id} className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => {
+                                    const updated = isSelected
+                                      ? editRule.project_ids.filter((id) => id !== project.id)
+                                      : [...editRule.project_ids, project.id]
+                                    setEditRule({ ...editRule, project_ids: updated })
+                                  }}
+                                  className="rounded border-gray-300 dark:border-gray-600 text-blue-600"
+                                />
+                                <span className="text-sm text-gray-700 dark:text-gray-300">
+                                  {project.name || project.id}
+                                </span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex justify-end gap-2">
+                    <button
+                      onClick={handleCancelEdit}
+                      className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveEdit}
+                      disabled={!editRule.name || editRule.channels.length === 0}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      <Save className="w-4 h-4" />
+                      Save Changes
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))
+              ) : (
+                /* Normal Rule Display */
+                <div
+                  key={rule.id}
+                  className={cn(
+                    'p-4 flex items-center justify-between',
+                    !rule.enabled && 'opacity-60'
+                  )}
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                      <span className="font-medium text-gray-900 dark:text-white">
+                        {rule.name}
+                      </span>
+                      <span className={cn('px-2 py-0.5 text-xs rounded', PRIORITY_COLORS[rule.priority])}>
+                        {rule.priority}
+                      </span>
+                      <span className="px-2 py-0.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded">
+                        {EVENT_LABELS[rule.event_type]}
+                      </span>
+                    </div>
+                    {rule.description && (
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        {rule.description}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      {rule.channels.map((ch) => {
+                        const Icon = CHANNEL_ICONS[ch]
+                        return <Icon key={ch} className={cn('w-4 h-4', CHANNEL_COLORS[ch])} />
+                      })}
+                      <span className="text-gray-300 dark:text-gray-600">|</span>
+                      {(!rule.project_ids || rule.project_ids.length === 0) ? (
+                        <span className="px-1.5 py-0.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded">
+                          All Projects
+                        </span>
+                      ) : (
+                        rule.project_ids.map((pid) => {
+                          const project = projects.find((p) => p.id === pid)
+                          return (
+                            <span
+                              key={pid}
+                              className="px-1.5 py-0.5 text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded"
+                            >
+                              {project?.name || pid}
+                            </span>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleStartEdit(rule)}
+                      className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                      title="Edit rule"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleToggleRule(rule.id)}
+                      className={cn(
+                        'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                        rule.enabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                          rule.enabled ? 'translate-x-6' : 'translate-x-1'
+                        )}
+                      />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteRule(rule.id)}
+                      className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )
+            )
           )}
         </div>
       </div>

@@ -332,6 +332,7 @@ class NotificationService:
             event_type=data.event_type,
             conditions=data.conditions,
             channels=data.channels,
+            project_ids=data.project_ids,
             priority=data.priority,
             message_template=data.message_template,
         )
@@ -357,6 +358,8 @@ class NotificationService:
             rule.conditions = data.conditions
         if data.channels is not None:
             rule.channels = data.channels
+        if data.project_ids is not None:
+            rule.project_ids = data.project_ids
         if data.priority is not None:
             rule.priority = data.priority
         if data.message_template is not None:
@@ -394,6 +397,7 @@ class NotificationService:
                 event_type=NotificationEventType(row.event_type),
                 conditions=[NotificationCondition(**c) for c in (row.conditions or [])],
                 channels=[NotificationChannel(ch) for ch in (row.channels or [])],
+                project_ids=row.project_ids or [],
                 priority=NotificationPriority(row.priority),
                 message_template=row.message_template,
                 created_at=row.created_at,
@@ -423,6 +427,7 @@ class NotificationService:
             event_type=NotificationEventType(row.event_type),
             conditions=[NotificationCondition(**c) for c in (row.conditions or [])],
             channels=[NotificationChannel(ch) for ch in (row.channels or [])],
+            project_ids=row.project_ids or [],
             priority=NotificationPriority(row.priority),
             message_template=row.message_template,
             created_at=row.created_at,
@@ -445,6 +450,7 @@ class NotificationService:
             event_type=data.event_type.value,
             conditions=[c.model_dump() for c in data.conditions],
             channels=[ch.value for ch in data.channels],
+            project_ids=data.project_ids,
             priority=data.priority.value,
             message_template=data.message_template,
             created_at=now,
@@ -462,6 +468,7 @@ class NotificationService:
             event_type=data.event_type,
             conditions=data.conditions,
             channels=data.channels,
+            project_ids=data.project_ids,
             priority=data.priority,
             message_template=data.message_template,
             created_at=now,
@@ -495,6 +502,8 @@ class NotificationService:
             row.conditions = [c.model_dump() for c in data.conditions]
         if data.channels is not None:
             row.channels = [ch.value for ch in data.channels]
+        if data.project_ids is not None:
+            row.project_ids = data.project_ids
         if data.priority is not None:
             row.priority = data.priority.value
         if data.message_template is not None:
@@ -668,11 +677,21 @@ class NotificationService:
         return True
 
     @staticmethod
+    def _check_project_filter(rule: NotificationRule, project_id: str | None) -> bool:
+        """Check project filter. Empty project_ids = all projects allowed."""
+        if not rule.project_ids:
+            return True  # Empty list = all projects
+        if not project_id:
+            return True  # Events without project_id always pass
+        return project_id in rule.project_ids
+
+    @staticmethod
     async def send_notification(
         event_type: NotificationEventType,
         data: dict[str, Any],
         title: str | None = None,
         force_channels: list[NotificationChannel] | None = None,
+        project_id: str | None = None,
     ) -> NotificationMessage:
         """Send a notification based on rules or forced channels (in-memory rules)."""
         # Find matching rules
@@ -682,6 +701,7 @@ class NotificationService:
             if rule.enabled
             and rule.event_type == event_type
             and NotificationService._check_conditions(rule, data)
+            and NotificationService._check_project_filter(rule, project_id)
         ]
 
         # Determine channels and priority
@@ -755,6 +775,7 @@ class NotificationService:
         data: dict[str, Any],
         title: str | None = None,
         force_channels: list[NotificationChannel] | None = None,
+        project_id: str | None = None,
     ) -> NotificationMessage:
         """Send a notification based on rules from database."""
         from db.models import NotificationRuleModel, NotificationHistoryModel
@@ -776,10 +797,12 @@ class NotificationService:
                 event_type=NotificationEventType(row.event_type),
                 conditions=[NotificationCondition(**c) for c in (row.conditions or [])],
                 channels=[NotificationChannel(ch) for ch in (row.channels or [])],
+                project_ids=row.project_ids or [],
                 priority=NotificationPriority(row.priority),
                 message_template=row.message_template,
             )
-            if NotificationService._check_conditions(rule, data):
+            if NotificationService._check_conditions(rule, data) and \
+               NotificationService._check_project_filter(rule, project_id):
                 matching_rules.append(rule)
 
         # Determine channels and priority

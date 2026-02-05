@@ -23,6 +23,7 @@ engine = create_async_engine(
     pool_pre_ping=True,
     pool_size=10,
     max_overflow=20,
+    connect_args={"statement_cache_size": 0},
 )
 
 # Async session factory
@@ -57,6 +58,9 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 async def init_db() -> None:
     """Initialize database - create all tables."""
+    # Import models to register them with Base.metadata before create_all
+    import db.models  # noqa: F401
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

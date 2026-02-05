@@ -407,11 +407,18 @@ class LLMRouterService:
     # ─────────────────────────────────────────────────────────────
 
     @staticmethod
+    def _has_provider(provider_type: LLMProvider) -> bool:
+        """Check if a provider type already exists."""
+        return any(p.provider == provider_type for p in _providers.values())
+
+    @staticmethod
     def initialize_default_providers() -> None:
-        """Initialize default providers from environment variables."""
+        """Initialize default providers from environment variables.
+        Skips providers that already exist to prevent duplicates.
+        """
         # Anthropic
         anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-        if anthropic_key:
+        if anthropic_key and not LLMRouterService._has_provider(LLMProvider.ANTHROPIC):
             LLMRouterService.create_provider(
                 LLMProviderConfigCreate(
                     provider=LLMProvider.ANTHROPIC,
@@ -425,7 +432,7 @@ class LLMRouterService:
 
         # Google
         google_key = os.getenv("GOOGLE_API_KEY")
-        if google_key:
+        if google_key and not LLMRouterService._has_provider(LLMProvider.GOOGLE):
             LLMRouterService.create_provider(
                 LLMProviderConfigCreate(
                     provider=LLMProvider.GOOGLE,
@@ -439,7 +446,7 @@ class LLMRouterService:
 
         # OpenAI
         openai_key = os.getenv("OPENAI_API_KEY")
-        if openai_key:
+        if openai_key and not LLMRouterService._has_provider(LLMProvider.OPENAI):
             LLMRouterService.create_provider(
                 LLMProviderConfigCreate(
                     provider=LLMProvider.OPENAI,
@@ -453,7 +460,7 @@ class LLMRouterService:
 
         # Ollama (local)
         ollama_url = os.getenv("OLLAMA_BASE_URL")
-        if ollama_url:
+        if ollama_url and not LLMRouterService._has_provider(LLMProvider.OLLAMA):
             LLMRouterService.create_provider(
                 LLMProviderConfigCreate(
                     provider=LLMProvider.OLLAMA,

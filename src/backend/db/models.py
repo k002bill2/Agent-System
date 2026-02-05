@@ -550,6 +550,9 @@ class NotificationRuleModel(Base):
     # Channels
     channels = Column(JSONB, default=list)  # List of channel names
 
+    # Project filter
+    project_ids = Column(JSONB, default=list)  # Empty list = all projects
+
     # Customization
     priority = Column(String(20), default="medium")
     message_template = Column(Text, nullable=True)
@@ -619,6 +622,40 @@ class ChannelConfigModel(Base):
 # ─────────────────────────────────────────────────────────────
 # Session Activity Models
 # ─────────────────────────────────────────────────────────────
+
+
+class TaskAnalysisModel(Base):
+    """Task analysis model for storing task analysis history."""
+
+    __tablename__ = "task_analyses"
+
+    id = Column(String(36), primary_key=True)
+    project_id = Column(String(36), nullable=True, index=True)
+    user_id = Column(String(36), nullable=True, index=True)
+
+    # Task input
+    task_input = Column(Text, nullable=False)
+    context_json = Column(JSONB, nullable=True, default=dict)
+
+    # Analysis result
+    success = Column(Boolean, nullable=False)
+    analysis_json = Column(JSONB, nullable=True)
+    error = Column(Text, nullable=True)
+
+    # Summary fields for quick filtering
+    execution_time_ms = Column(Integer, default=0)
+    complexity_score = Column(Integer, nullable=True)
+    effort_level = Column(String(20), nullable=True)  # quick, medium, thorough
+    subtask_count = Column(Integer, nullable=True)
+    strategy = Column(String(20), nullable=True)  # sequential, parallel, mixed
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index("ix_task_analyses_project_created", "project_id", "created_at"),
+        Index("ix_task_analyses_user_created", "user_id", "created_at"),
+    )
 
 
 class SessionActivityModel(Base):

@@ -87,6 +87,9 @@ class NotificationRule(BaseModel):
     # Channels
     channels: list[NotificationChannel]
 
+    # Project filter
+    project_ids: list[str] = Field(default_factory=list)  # Empty list = all projects
+
     # Customization
     priority: NotificationPriority = NotificationPriority.MEDIUM
     message_template: str | None = None  # Custom message template
@@ -123,6 +126,7 @@ class NotificationRuleCreate(BaseModel):
     event_type: NotificationEventType
     conditions: list[NotificationCondition] = []
     channels: list[NotificationChannel]
+    project_ids: list[str] = []
     priority: NotificationPriority = NotificationPriority.MEDIUM
     message_template: str | None = None
 
@@ -136,6 +140,7 @@ class NotificationRuleUpdate(BaseModel):
     event_type: NotificationEventType | None = None
     conditions: list[NotificationCondition] | None = None
     channels: list[NotificationChannel] | None = None
+    project_ids: list[str] | None = None
     priority: NotificationPriority | None = None
     message_template: str | None = None
 
