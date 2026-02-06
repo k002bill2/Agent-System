@@ -102,6 +102,7 @@ interface ClaudeSessionsState {
 
   // Batch summary generation state
   isBatchGenerating: boolean
+  batchJustCompleted: boolean
   batchProgress: { total: number; processed: number; success: number; failed: number }
   pendingSummaryCount: number
 
@@ -166,6 +167,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
   // Batch summary initial state
   isBatchGenerating: false,
+  batchJustCompleted: false,
   batchProgress: { total: 0, processed: 0, success: 0, failed: 0 },
   pendingSummaryCount: 0,
 
@@ -177,9 +179,9 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
     // If reset, start fresh
     if (reset) {
-      set({ isLoading: true, error: null, offset: 0 })
+      set({ isLoading: true, error: null, offset: 0, batchJustCompleted: false })
     } else {
-      set({ isLoading: true, error: null })
+      set({ isLoading: true, error: null, batchJustCompleted: false })
     }
 
     try {
@@ -274,6 +276,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
   refreshSessions: async (status?: SessionStatus) => {
     const { sortBy, sortOrder, projectFilter, sourceUserFilter, pageSize, sessions } = get()
+    set({ batchJustCompleted: false })
 
     // Soft refresh: fetch first page and merge with existing data
     try {
@@ -820,6 +823,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
           failed: data.failed_count,
         },
         isBatchGenerating: false,
+        batchJustCompleted: true,
         // Immediately update pendingSummaryCount to reflect completed summaries
         pendingSummaryCount: Math.max(0, currentPendingCount - data.success_count),
       })
@@ -838,9 +842,6 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
           }),
         }))
       }
-
-      // Re-fetch pending count from server to get accurate count
-      await get().fetchPendingSummaryCount()
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
       set({ error: errorMessage, isBatchGenerating: false })

@@ -150,7 +150,7 @@ export function AgentsPage() {
 
   // Determine which agents to show based on project filter
   const isProjectFiltered = !!projectFilter
-  const displayAgentCount = isProjectFiltered ? filteredProjectAgents.length : registryAgents.length
+  const displayAgentCount = isProjectFiltered ? filteredProjectAgents.length : registryAgents.length + projectAgents.length
 
   const pendingFeedbackCount = feedbacks.filter((f) => f.status === 'pending').length
 
@@ -310,15 +310,39 @@ export function AgentsPage() {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {registryAgents.map((agent) => (
-                <AgentCard
-                  key={agent.id}
-                  agent={agent}
-                  isSelected={selectedAgentId === agent.id}
-                  onClick={() => setSelectedAgent(selectedAgentId === agent.id ? null : agent.id)}
-                />
-              ))}
+            <div className="space-y-6">
+              {/* Global Registry Agents */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {registryAgents.map((agent) => (
+                  <AgentCard
+                    key={agent.id}
+                    agent={agent}
+                    isSelected={selectedAgentId === agent.id}
+                    onClick={() => setSelectedAgent(selectedAgentId === agent.id ? null : agent.id)}
+                  />
+                ))}
+              </div>
+
+              {/* Project Agents Section */}
+              {projectAgents.length > 0 && (
+                <>
+                  <div className="flex items-center gap-2 pt-2">
+                    <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                      Project Agents ({projectAgents.length})
+                    </span>
+                    <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {projectAgents.map((agent) => (
+                      <ProjectAgentCard
+                        key={`${agent.project_id}-${agent.agent_id}`}
+                        agent={agent}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

@@ -37,6 +37,7 @@ class PlaygroundMessage(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     tokens: int = 0
     latency_ms: int = 0
+    rag_sources: list[dict] | None = None
 
 
 class PlaygroundExecution(BaseModel):
@@ -89,6 +90,9 @@ class PlaygroundSession(BaseModel):
     max_tokens: int = 4096
     system_prompt: str | None = None
 
+    # RAG
+    rag_enabled: bool = False
+
     # Tools
     available_tools: list[str] = Field(default_factory=list)
     enabled_tools: list[str] = Field(default_factory=list)
@@ -117,6 +121,7 @@ class PlaygroundSessionCreate(BaseModel):
     agent_id: str | None = None
     model: str = Field(default_factory=_get_default_model)
     system_prompt: str | None = None
+    rag_enabled: bool = False
 
 
 class PlaygroundExecuteRequest(BaseModel):

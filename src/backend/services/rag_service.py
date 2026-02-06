@@ -165,6 +165,7 @@ class ProjectVectorStore:
                 collection_name=collection_name,
                 embedding_function=self.embeddings,
                 persist_directory=self.persist_directory,
+                collection_metadata={"hnsw:space": "cosine"},
             )
 
         return self._collections[collection_name]
@@ -357,11 +358,14 @@ class ProjectVectorStore:
                 for doc in documents
             ]
 
-            collection.add_texts(
-                texts=texts,
-                metadatas=metadatas,
-                ids=ids,
-            )
+            # ChromaDB max batch size is 5461; split into chunks
+            batch_size = 5000
+            for i in range(0, len(texts), batch_size):
+                collection.add_texts(
+                    texts=texts[i : i + batch_size],
+                    metadatas=metadatas[i : i + batch_size],
+                    ids=ids[i : i + batch_size],
+                )
 
         return IndexingResult(
             project_id=project_id,
@@ -404,13 +408,15 @@ class ProjectVectorStore:
         )
 
         documents = []
-        for doc, score in results:
+        for doc, distance in results:
+            # Cosine distance → similarity (1 - distance), clamped to [0, 1]
+            similarity = max(0.0, min(1.0, 1.0 - float(distance)))
             documents.append({
                 "content": doc.page_content,
                 "source": doc.metadata.get("source", "unknown"),
                 "chunk_index": doc.metadata.get("chunk_index", 0),
                 "priority": doc.metadata.get("priority", "normal"),
-                "score": float(score),
+                "score": similarity,
             })
 
         return QueryResult(
@@ -489,3 +495,30 @@ async def get_project_context(project_id: str, query: str, k: int = 5) -> str:
         context_parts.append(f"[{source}]\n{content}")
 
     return "\n\n---\n\n".join(context_parts)
+
+
+async def get_project_context_with_sources(
+    project_id: str, query: str, k: int = 5
+) -> tuple[str, list[dict]]:
+    """
+    Get relevant project context with structured source information.
+
+    Returns:
+        tuple of (formatted context string, list of source document dicts)
+        Each source dict: {content, source, chunk_index, priority, score}
+    """
+    store = get_vector_store()
+    result = await store.query(project_id, query, k=k)
+
+    if not result.documents:
+        return "", []
+
+    # Format context from documents
+    context_parts = []
+    for doc in result.documents:
+        source = doc["source"]
+        content = doc["content"]
+        context_parts.append(f"[{source}]\n{content}")
+
+    formatted = "\n\n---\n\n".join(context_parts)
+    return formatted, result.documents

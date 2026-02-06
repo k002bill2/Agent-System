@@ -22,12 +22,24 @@ import {
   Loader2,
   FolderOpen,
   X,
+  Database,
+  ChevronDown,
+  ChevronUp,
+  FileText,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 
 // ─────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────
+
+interface RAGSource {
+  content: string
+  source: string
+  chunk_index?: number
+  priority?: string
+  score?: number
+}
 
 interface PlaygroundMessage {
   id: string
@@ -38,6 +50,7 @@ interface PlaygroundMessage {
   latency_ms?: number
   tool_calls?: Array<{ name: string; arguments: Record<string, unknown> }>
   tool_results?: Array<{ tool: string; result: unknown }>
+  rag_sources?: RAGSource[]
 }
 
 interface PlaygroundSession {
@@ -51,6 +64,7 @@ interface PlaygroundSession {
   temperature: number
   max_tokens: number
   system_prompt: string | null
+  rag_enabled: boolean
   available_tools: string[]
   enabled_tools: string[]
   messages: PlaygroundMessage[]
@@ -82,6 +96,8 @@ interface Project {
   path: string
   description: string
   has_claude_md: boolean
+  vector_store_initialized?: boolean
+  indexed_at?: string | null
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -155,6 +171,7 @@ async function updateSettings(
     max_tokens: number
     system_prompt: string
     enabled_tools: string[]
+    rag_enabled: boolean
   }>
 ): Promise<PlaygroundSession> {
   const res = await fetch(`${API_BASE}/playground/sessions/${sessionId}/settings`, {
@@ -568,6 +585,50 @@ export function PlaygroundPage() {
                     />
                   </div>
 
+                  {/* RAG Context */}
+                  <div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={currentSession.rag_enabled}
+                        disabled={!currentSession.project_id}
+                        onChange={(e) => handleUpdateSettings({ rag_enabled: e.target.checked })}
+                        className="rounded border-gray-300 dark:border-gray-600"
+                      />
+                      <Database className="w-4 h-4 text-gray-700 dark:text-gray-300" />
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        RAG Context
+                      </span>
+                    </label>
+                    {!currentSession.project_id && (
+                      <p className="text-xs text-gray-400 mt-1 ml-6">
+                        프로젝트를 선택해야 RAG를 사용할 수 있습니다
+                      </p>
+                    )}
+                    {currentSession.project_id && (() => {
+                      const proj = projects.find(p => p.id === currentSession.project_id)
+                      if (!proj) return null
+                      return proj.vector_store_initialized ? (
+                        <div className="mt-1.5 ml-6 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                          <span className="text-xs text-green-600 dark:text-green-400">인덱스 활성화</span>
+                          {proj.indexed_at && (
+                            <span className="text-[10px] text-gray-400 ml-1">
+                              {new Date(proj.indexed_at).toLocaleDateString('ko-KR')}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="mt-1.5 ml-6 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                          <span className="text-xs text-amber-600 dark:text-amber-400">
+                            인덱싱 필요 — 프로젝트 설정에서 인덱싱을 실행하세요
+                          </span>
+                        </div>
+                      )
+                    })()}
+                  </div>
+
                   {/* Tools */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
@@ -722,6 +783,7 @@ interface MessageBubbleProps {
 function MessageBubble({ message, onCopy, copied }: MessageBubbleProps) {
   const isUser = message.role === 'user'
   const isTool = message.role === 'tool'
+  const [showSources, setShowSources] = useState(false)
 
   // Tool call message - special styling
   if (isTool) {
@@ -775,6 +837,50 @@ function MessageBubble({ message, onCopy, copied }: MessageBubbleProps) {
         )}
       >
         <div className="whitespace-pre-wrap text-sm">{message.content}</div>
+        {/* RAG Sources collapsible section */}
+        {!isUser && message.rag_sources && message.rag_sources.length > 0 && (
+          <div className="mt-2">
+            <button
+              onClick={() => setShowSources(!showSources)}
+              className="flex items-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+            >
+              <Database className="w-3 h-3" />
+              <span>참조된 문서 ({message.rag_sources.length})</span>
+              {showSources ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+            {showSources && (
+              <div className="mt-2 space-y-2">
+                {message.rag_sources.map((src, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-md border border-gray-200 dark:border-gray-600 bg-white/50 dark:bg-gray-800/50 p-2"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <FileText className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+                      <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">
+                        {src.source}
+                      </span>
+                      {src.priority && src.priority !== 'normal' && (
+                        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                          {src.priority}
+                        </span>
+                      )}
+                      {src.score !== undefined && (
+                        <span className="text-[10px] text-gray-400 ml-auto flex-shrink-0">
+                          {Math.round(src.score * 100)}%
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-3">
+                      {src.content.slice(0, 300)}
+                      {src.content.length > 300 && '...'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {!isUser && (
           <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
             <div className="flex items-center gap-3 text-xs text-gray-500">

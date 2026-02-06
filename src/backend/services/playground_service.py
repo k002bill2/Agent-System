@@ -231,6 +231,7 @@ class PlaygroundService:
         name: str | None = None,
         project_id: str | None = None,
         working_directory: str | None = None,
+        rag_enabled: bool | None = None,
     ) -> PlaygroundSession | None:
         """Update session settings."""
         _load_sessions()  # Ensure sessions are loaded
@@ -256,6 +257,8 @@ class PlaygroundService:
             session.project_id = project_id
         if working_directory is not None:
             session.working_directory = working_directory
+        if rag_enabled is not None:
+            session.rag_enabled = rag_enabled
 
         session.updated_at = datetime.utcnow()
         _save_sessions()  # Persist to file
@@ -309,6 +312,24 @@ class PlaygroundService:
                     conversation_context = {"conversation_history": "\n".join(history)}
                     if request.context:
                         conversation_context.update(request.context)
+
+            # Inject RAG context if enabled
+            rag_sources = None
+            if session.rag_enabled and session.project_id:
+                try:
+                    from services.rag_service import get_project_context_with_sources
+
+                    rag_context, rag_sources = await get_project_context_with_sources(
+                        project_id=session.project_id,
+                        query=request.prompt,
+                        k=5,
+                    )
+                    if rag_context:
+                        if conversation_context is None:
+                            conversation_context = request.context.copy() if request.context else {}
+                        conversation_context["project_context"] = rag_context
+                except Exception as e:
+                    print(f"Warning: RAG context retrieval failed: {e}")
 
             # Check if tools are enabled
             enabled_tools = execution.tools_enabled or []
@@ -367,6 +388,7 @@ class PlaygroundService:
                 content=content,
                 tokens=llm_response.output_tokens,
                 latency_ms=llm_response.latency_ms,
+                rag_sources=rag_sources,
             )
             execution.messages.append(assistant_msg)
             session.messages.append(assistant_msg)
@@ -435,6 +457,24 @@ class PlaygroundService:
                 if request.context:
                     conversation_context.update(request.context)
 
+        # Inject RAG context if enabled
+        rag_sources = None
+        if session.rag_enabled and session.project_id:
+            try:
+                from services.rag_service import get_project_context_with_sources
+
+                rag_context, rag_sources = await get_project_context_with_sources(
+                    project_id=session.project_id,
+                    query=request.prompt,
+                    k=5,
+                )
+                if rag_context:
+                    if conversation_context is None:
+                        conversation_context = request.context.copy() if request.context else {}
+                    conversation_context["project_context"] = rag_context
+            except Exception as e:
+                print(f"Warning: RAG context retrieval failed: {e}")
+
         # Stream from LLM with token tracking
         full_response = ""
         token_info = None
@@ -472,6 +512,7 @@ class PlaygroundService:
                 role="assistant",
                 content=full_response,
                 tokens=output_tokens,
+                rag_sources=rag_sources,
             )
             session.messages.append(assistant_msg)
             session.total_executions += 1
@@ -479,6 +520,12 @@ class PlaygroundService:
             session.total_cost += cost
             session.updated_at = datetime.utcnow()
             _save_sessions()  # Persist to file
+
+            # Send RAG sources as final metadata event
+            if rag_sources:
+                import json
+
+                yield f"\n\n__RAG_SOURCES__{json.dumps(rag_sources)}"
 
         except Exception as e:
             yield f"\n\n[Error: {str(e)}]"

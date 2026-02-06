@@ -4,6 +4,7 @@ Fetches real usage data from Anthropic OAuth API using macOS Keychain credential
 """
 
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
@@ -16,14 +17,20 @@ from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/usage", tags=["Usage"])
 
-# Claude Code stats cache file path
-STATS_CACHE_PATH = Path.home() / ".claude" / "stats-cache.json"
+# Claude Code stats cache file path (configurable via env)
+STATS_CACHE_PATH = Path(os.getenv(
+    "CLAUDE_STATS_CACHE_PATH",
+    str(Path.home() / ".claude" / "stats-cache.json"),
+))
 
 # Anthropic OAuth Usage API
 ANTHROPIC_USAGE_API = "https://api.anthropic.com/api/oauth/usage"
 
 # Cache for Anthropic API response (in-memory with file backup)
-USAGE_CACHE_PATH = Path.home() / ".claude" / "aos-usage-cache.json"
+USAGE_CACHE_PATH = Path(os.getenv(
+    "CLAUDE_USAGE_CACHE_PATH",
+    str(Path.home() / ".claude" / "aos-usage-cache.json"),
+))
 _usage_cache: dict[str, Any] = {
     "data": None,
     "timestamp": None,
@@ -186,10 +193,18 @@ def load_stats_cache() -> dict[str, Any] | None:
 
 def get_oauth_token() -> str | None:
     """
-    Extract OAuth access token from macOS Keychain.
+    Extract OAuth access token.
 
-    Note: Only works on macOS.
+    Priority:
+    1. CLAUDE_OAUTH_TOKEN env var (for deployment / non-macOS)
+    2. macOS Keychain (local development)
     """
+    # 1. Environment variable (works on any platform)
+    env_token = os.getenv("CLAUDE_OAUTH_TOKEN")
+    if env_token:
+        return env_token
+
+    # 2. macOS Keychain fallback (local dev only)
     if sys.platform != "darwin":
         return None
 
@@ -415,8 +430,10 @@ async def get_usage() -> UsageResponse:
             else:
                 oauth_error = "Failed to fetch from Anthropic API"
     else:
-        if sys.platform != "darwin":
-            oauth_error = "OAuth only available on macOS"
+        if os.getenv("CLAUDE_OAUTH_TOKEN"):
+            oauth_error = "OAuth token from env var is invalid"
+        elif sys.platform != "darwin":
+            oauth_error = "Set CLAUDE_OAUTH_TOKEN env var for non-macOS"
         else:
             oauth_error = "OAuth token not found in Keychain"
 
