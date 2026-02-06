@@ -67,6 +67,42 @@ export interface OrganizationStats {
   api_calls_today: number
 }
 
+export interface QuotaCheckResult {
+  allowed: boolean
+  current: number
+  limit: number
+  message: string
+}
+
+export interface QuotaStatus {
+  organization_id: string
+  plan: string
+  members: QuotaCheckResult
+  projects: QuotaCheckResult
+  sessions: QuotaCheckResult
+  tokens: QuotaCheckResult
+}
+
+export interface MemberUsageSummary {
+  user_id: string
+  email: string
+  name: string | null
+  role: MemberRole
+  tokens_used_today: number
+  tokens_used_this_month: number
+  sessions_today: number
+  sessions_this_month: number
+  last_active_at: string | null
+  percentage_of_org: number
+}
+
+export interface MemberUsageResponse {
+  organization_id: string
+  period: string
+  total_tokens: number
+  members: MemberUsageSummary[]
+}
+
 export interface OrganizationCreate {
   name: string
   slug: string
@@ -110,6 +146,8 @@ interface OrganizationsState {
   currentOrganization: Organization | null
   members: OrganizationMember[]
   stats: OrganizationStats | null
+  quotaStatus: QuotaStatus | null
+  memberUsage: MemberUsageResponse | null
   userMemberships: OrganizationMember[]
   isLoading: boolean
   error: string | null
@@ -139,8 +177,10 @@ interface OrganizationsState {
   fetchUserMemberships: (userId: string) => Promise<void>
   getCurrentUserRole: (orgId: string, userId: string) => MemberRole | null
 
-  // Stats
+  // Stats & Quota
   fetchStats: (orgId: string) => Promise<void>
+  fetchQuotaStatus: (orgId: string) => Promise<void>
+  fetchMemberUsage: (orgId: string, period?: string) => Promise<void>
 
   // Invitation
   acceptInvitation: (token: string, userId: string, userName?: string) => Promise<{ success: boolean; member?: OrganizationMember; error?: string }>
@@ -156,6 +196,8 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
   currentOrganization: null,
   members: [],
   stats: null,
+  quotaStatus: null,
+  memberUsage: null,
   userMemberships: [],
   isLoading: false,
   error: null,
@@ -513,6 +555,34 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
       set({ stats: data })
     } catch (error) {
       console.error('Failed to fetch organization stats:', error)
+    }
+  },
+
+  fetchQuotaStatus: async (orgId) => {
+    try {
+      const response = await authFetch(`${API_BASE_URL}/api/organizations/${orgId}/quota`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch quota status')
+      }
+      const data = await response.json()
+      set({ quotaStatus: data })
+    } catch (error) {
+      console.error('Failed to fetch quota status:', error)
+    }
+  },
+
+  fetchMemberUsage: async (orgId, period = 'month') => {
+    try {
+      const response = await authFetch(
+        `${API_BASE_URL}/api/organizations/${orgId}/members/usage?period=${period}`
+      )
+      if (!response.ok) {
+        throw new Error('Failed to fetch member usage')
+      }
+      const data = await response.json()
+      set({ memberUsage: data })
+    } catch (error) {
+      console.error('Failed to fetch member usage:', error)
     }
   },
 

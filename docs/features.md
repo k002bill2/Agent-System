@@ -140,7 +140,29 @@ interface DiffEntry {
 
 ---
 
-## 10. Claude Sessions 모니터링
+## 10. Claude Code Plan Usage Monitoring
+
+Claude Code의 Plan Usage Limits를 실시간 모니터링:
+
+```python
+# 환경 변수로 설정 가능 (배포 시 필수)
+CLAUDE_OAUTH_TOKEN=...           # Anthropic OAuth 토큰 (non-macOS 필수)
+CLAUDE_STATS_CACHE_PATH=...      # stats-cache.json 경로
+CLAUDE_USAGE_CACHE_PATH=...      # API 응답 캐시 경로
+```
+
+**기능**:
+- Current Session / Weekly Limits 실시간 표시
+- Sonnet/Opus 모델별 사용량 분리
+- 로컬 토큰 통계 (stats-cache.json 기반)
+- OAuth 토큰: 환경 변수 > macOS Keychain 순 우선순위
+- API 실패 시 캐시 fallback (최대 1시간)
+
+**Dashboard UI**: `ClaudeUsageDashboard` 컴포넌트 (DashboardPage 사이드바)
+
+---
+
+## 11. Claude Sessions 모니터링
 
 외부에서 실행 중인 Claude Code 세션을 실시간 모니터링:
 
@@ -160,7 +182,7 @@ class ClaudeSessionMonitor:
 
 ---
 
-## 11. 인증 시스템
+## 12. 인증 시스템
 
 Google/GitHub OAuth + 이메일/비밀번호 인증 지원:
 
@@ -178,7 +200,7 @@ class AuthService:
 
 ---
 
-## 12. Task Lifecycle
+## 13. Task Lifecycle
 
 태스크 재시도, 취소, 소프트 삭제:
 
@@ -191,7 +213,7 @@ class TaskService:
 
 ---
 
-## 13. Pause/Resume
+## 14. Pause/Resume
 
 태스크 실행 일시정지 및 재개:
 
@@ -207,7 +229,7 @@ class TaskStatus(str, Enum):
 
 ---
 
-## 14. Permission Toggles
+## 15. Permission Toggles
 
 세션 단위 에이전트 권한 제어:
 
@@ -222,7 +244,7 @@ class AgentPermission(str, Enum):
 
 ---
 
-## 15. Audit Trail
+## 16. Audit Trail
 
 모든 시스템 액션 기록 및 추적:
 
@@ -239,7 +261,7 @@ class AuditAction(str, Enum):
 
 ---
 
-## 16. Smart Notifications
+## 17. Smart Notifications
 
 다중 채널 이벤트 기반 알림:
 
@@ -253,7 +275,7 @@ class AuditAction(str, Enum):
 
 ---
 
-## 17. Analytics Dashboard
+## 18. Analytics Dashboard
 
 메트릭, 트렌드, 성능 데이터 시각화:
 
@@ -267,7 +289,7 @@ class AnalyticsService:
 
 ---
 
-## 18. Agent Playground
+## 19. Agent Playground
 
 에이전트 대화형 테스트 환경:
 
@@ -289,7 +311,7 @@ class PlaygroundService:
 
 ---
 
-## 19. LLM Auto-Switch
+## 20. LLM Auto-Switch
 
 여러 LLM 프로바이더 간 자동 전환 및 Failover:
 
@@ -302,7 +324,7 @@ class PlaygroundService:
 
 ---
 
-## 20. Version Control
+## 21. Version Control
 
 설정 변경사항 버전 관리 및 롤백:
 
@@ -320,7 +342,7 @@ class VersionService:
 
 ---
 
-## 21. Multi-tenant (Organizations)
+## 22. Multi-tenant (Organizations)
 
 조직 기반 멀티테넌트 격리:
 
@@ -340,10 +362,17 @@ class VersionService:
 - 역할 변경
 - 조직 통계
 - 토큰 사용량 추적
+- **QuotaService 중앙 집중식 제한 enforcement** (멤버/프로젝트/세션/토큰)
+- 세션/프로젝트에 `organization_id` 연동
+- `GET /organizations/{id}/quota` API로 quota 현황 조회
+- `QuotaStatusPanel` 대시보드 컴포넌트 (progress bar 기반)
+- **멤버별 사용량 추적**: `MemberUsageRecord`로 개인별 토큰/세션 사용 기록
+- `GET /organizations/{id}/members/usage?period=day|week|month` API
+- `MemberUsagePanel` 컴포넌트 (기간별 필터, 사용량 비율 시각화)
 
 ---
 
-## 22. Project Config Management
+## 23. Project Config Management
 
 Claude Code 프로젝트의 스킬, 에이전트, MCP, Hook을 웹 UI에서 관리:
 
@@ -386,7 +415,7 @@ class ProjectConfigMonitor:
 
 ---
 
-## 23. RLHF Feedback
+## 24. RLHF Feedback
 
 에이전트 실행 결과에 대한 사용자 피드백 수집:
 
@@ -402,7 +431,7 @@ class ProjectConfigMonitor:
 
 ---
 
-## 24. Git Team Collaboration
+## 25. Git Team Collaboration
 
 팀 협업을 위한 Git 기반 브랜치 관리 및 머지 시스템:
 
@@ -494,7 +523,7 @@ class MergeService:
 
 ---
 
-## 25. Project Monitoring
+## 26. Project Monitoring
 
 프로젝트 헬스 체크 자동화:
 
@@ -517,7 +546,7 @@ class ProjectRunner:
 
 ---
 
-## 26. Rate Limiting
+## 27. Rate Limiting
 
 API 속도 제한 및 할당량 관리:
 
@@ -535,7 +564,7 @@ class RateLimitService:
 
 ---
 
-## 27. Cost Allocation
+## 28. Cost Allocation
 
 LLM 비용 추적 및 할당:
 
@@ -554,7 +583,7 @@ class CostAllocationService:
 
 ---
 
-## 28. Process Cleanup
+## 29. Process Cleanup
 
 고아 프로세스 및 리소스 정리:
 
@@ -571,7 +600,7 @@ class ProjectCleanupService:
 
 ---
 
-## 29. Project Templates
+## 30. Project Templates
 
 프로젝트 템플릿 관리:
 
@@ -589,7 +618,7 @@ class ProjectTemplateService:
 
 ---
 
-## 30. MCP Tool Integration
+## 31. MCP Tool Integration
 
 Model Context Protocol 도구 통합:
 
@@ -617,7 +646,7 @@ class MCPService:
 
 ---
 
-## 31. Health Check
+## 32. Health Check
 
 시스템 건강도 체크:
 
@@ -637,7 +666,7 @@ class HealthService:
 
 ---
 
-## 32. Warp Mode
+## 33. Warp Mode
 
 고속 실행 모드:
 

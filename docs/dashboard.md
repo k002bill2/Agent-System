@@ -57,7 +57,7 @@ import { cn } from '@/lib/utils';
 | `ProjectsPage` | `/projects` | 프로젝트 목록 및 관리, RAG 검색 |
 | `ProjectConfigsPage` | `/project-configs` | 프로젝트 설정 관리 (Skills, Agents, MCP, Hooks) |
 | `TasksPage` | `/tasks` | 태스크 트리 뷰, 상세 정보 |
-| `AgentsPage` | `/agents` | 에이전트 레지스트리, MCP, RLHF |
+| `AgentsPage` | `/agents` | 에이전트 레지스트리 (글로벌+프로젝트 통합), MCP, RLHF |
 | `ActivityPage` | `/activity` | 실시간 활동 로그 |
 | `MonitorPage` | `/monitor` | 프로젝트 헬스 체크 모니터링 |
 | `ClaudeSessionsPage` | `/claude-sessions` | Claude Code 세션 모니터링 |
@@ -86,7 +86,8 @@ import { cn } from '@/lib/utils';
 | `ChatInput` | 메시지 입력 인터페이스 |
 | `ApprovalModal` | HITL 승인/거부 모달 |
 | `DiffViewer` | 파일 변경 비교 뷰 (Split/Unified) |
-| `AgentCard` | 에이전트 카드 (능력, 상태, 통계) |
+| `AgentCard` | 글로벌 레지스트리 에이전트 카드 (능력, 상태, 통계) |
+| `ProjectAgentCard` | 프로젝트별 에이전트 카드 |
 | `AgentStatsPanel` | 레지스트리 통계 패널 |
 | `TaskAnalyzer` | 태스크 분석 UI |
 | `DataSourceToggle` | 데이터 소스 선택 토글 |
@@ -163,6 +164,8 @@ import { cn } from '@/lib/utils';
 | `OrganizationCard` | 조직 카드 (이름, 플랜, 멤버 수) |
 | `OrganizationFormModal` | 조직 생성/수정 모달 |
 | `OrganizationStats` | 조직 통계 패널 |
+| `QuotaStatusPanel` | Quota 사용량 패널 (멤버/프로젝트/세션/토큰 progress bar) |
+| `MemberUsagePanel` | 멤버별 사용량 분석 패널 (토큰/세션 per-member, 기간 선택) |
 | `MemberList` | 멤버 목록 컨테이너 |
 | `MemberCard` | 멤버 카드 (역할 변경, 제거) |
 | `InviteMemberModal` | 멤버 초대 모달 |
@@ -368,7 +371,9 @@ src/dashboard/
 │   │   │   ├── OrganizationStats.tsx
 │   │   │   ├── MemberList.tsx
 │   │   │   ├── MemberCard.tsx
-│   │   │   └── InviteMemberModal.tsx
+│   │   │   ├── InviteMemberModal.tsx
+│   │   │   ├── QuotaStatusPanel.tsx
+│   │   │   └── MemberUsagePanel.tsx
 │   │   ├── monitor/            # 프로젝트 모니터링
 │   │   │   ├── HealthOverview.tsx
 │   │   │   ├── ProjectsPanel.tsx

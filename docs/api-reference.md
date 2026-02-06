@@ -191,10 +191,21 @@ AOS Backend API 엔드포인트 문서입니다.
 
 | Method | Path | 설명 |
 |--------|------|------|
+| GET | `/api/usage` | Claude Code 사용량 (Plan Limits + 토큰 통계) |
+| GET | `/api/usage/raw` | Raw stats-cache.json 데이터 |
+| GET | `/api/usage/oauth-test` | OAuth 토큰 진단 |
 | GET | `/api/usage/summary` | 사용량 요약 |
 | GET | `/api/usage/by-session/{session_id}` | 세션별 사용량 |
 | GET | `/api/usage/by-agent/{agent_id}` | 에이전트별 사용량 |
 | GET | `/api/usage/trends` | 사용량 트렌드 |
+
+**`GET /api/usage` 응답**:
+- `planLimits`: Anthropic OAuth API 실시간 Plan Limits (session, weekly, model별)
+- `weeklyTotalTokens`, `weeklySonnetTokens`, `weeklyOpusTokens`: 로컬 stats-cache 기반 주간 토큰
+- `oauthAvailable`: OAuth 토큰 사용 가능 여부
+- `isCached`: 캐시 데이터 사용 여부
+
+**환경 변수**: `CLAUDE_OAUTH_TOKEN`, `CLAUDE_STATS_CACHE_PATH`, `CLAUDE_USAGE_CACHE_PATH` ([배포 가이드](./deployment.md#claude-code-usage-환경-변수) 참조)
 | GET | `/api/analytics/overview` | 개요 메트릭 |
 | GET | `/api/analytics/trends` | 시간별 트렌드 |
 | GET | `/api/analytics/agents` | 에이전트 성능 메트릭 |
@@ -382,7 +393,9 @@ AOS Backend API 엔드포인트 문서입니다.
 | GET | `/api/organizations/user/{uid}/organizations` | 사용자 조직 목록 |
 | GET | `/api/organizations/{id}/context/{uid}` | 테넌트 컨텍스트 |
 | GET | `/api/organizations/{id}/stats` | 조직 통계 |
-| POST | `/api/organizations/{id}/usage/track` | 토큰 사용량 기록 |
+| POST | `/api/organizations/{id}/usage/track` | 토큰 사용량 기록 (user_id, session_id, model 옵션) |
+| GET | `/api/organizations/{id}/quota` | Quota 현황 조회 (멤버/프로젝트/세션/토큰) |
+| GET | `/api/organizations/{id}/members/usage?period=month` | 멤버별 사용량 분석 (day/week/month) |
 
 **플랜**: `free`, `starter`, `professional`, `enterprise`
 

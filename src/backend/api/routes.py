@@ -60,6 +60,7 @@ class SessionCreate(BaseModel):
     """Session creation request."""
 
     project_id: str | None = Field(None, description="Optional project context")
+    organization_id: str | None = Field(None, description="Optional organization context for quota enforcement")
 
 
 class SessionResponse(BaseModel):
@@ -67,6 +68,7 @@ class SessionResponse(BaseModel):
 
     session_id: str
     project_id: str | None = None
+    organization_id: str | None = None
     message: str = "Session created successfully"
 
 
@@ -101,6 +103,7 @@ async def create_session(
 ):
     """Create a new orchestration session with optional project context."""
     project_id = request.project_id if request else None
+    organization_id = request.organization_id if request else None
 
     # Validate project if specified
     project = None
@@ -109,8 +112,21 @@ async def create_session(
         if not project:
             raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
 
-    session_id = await engine.create_session(project=project)
-    return SessionResponse(session_id=session_id, project_id=project_id)
+    # Create session with quota enforcement
+    try:
+        session_id = await engine.create_session(
+            project=project,
+            organization_id=organization_id,
+        )
+    except ValueError as e:
+        # Quota exceeded
+        raise HTTPException(status_code=429, detail=str(e))
+
+    return SessionResponse(
+        session_id=session_id,
+        project_id=project_id,
+        organization_id=organization_id,
+    )
 
 
 @router.get("/sessions/{session_id}", response_model=StateResponse)

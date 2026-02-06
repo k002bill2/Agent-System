@@ -28,6 +28,7 @@ class SessionModel(Base):
     id = Column(String(36), primary_key=True)
     user_id = Column(String(255), nullable=True, index=True)
     project_id = Column(String(36), nullable=True, index=True)
+    organization_id = Column(String(36), nullable=True, index=True)
 
     # Session state stored as JSON
     state_json = Column(JSONB, nullable=False, default=dict)
@@ -48,6 +49,7 @@ class SessionModel(Base):
     __table_args__ = (
         Index("ix_sessions_user_project", "user_id", "project_id"),
         Index("ix_sessions_status_created", "status", "created_at"),
+        Index("ix_sessions_org_status", "organization_id", "status"),
     )
 
 

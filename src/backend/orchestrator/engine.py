@@ -144,6 +144,7 @@ class OrchestrationEngine:
         max_iterations: int = 100,
         project: Project | None = None,
         session_id: str | None = None,
+        organization_id: str | None = None,
     ) -> str:
         """Create a new orchestration session with optional project context."""
         # Create session via service (handles both memory and DB)
@@ -152,6 +153,7 @@ class OrchestrationEngine:
             max_iterations=max_iterations,
             project=project,
             session_id=session_id,
+            organization_id=organization_id,
         )
 
         # Also cache the state in memory for fast access
@@ -169,6 +171,7 @@ class OrchestrationEngine:
             new_value={
                 "max_iterations": max_iterations,
                 "project_id": project.id if project else None,
+                "organization_id": organization_id,
             },
         )
 

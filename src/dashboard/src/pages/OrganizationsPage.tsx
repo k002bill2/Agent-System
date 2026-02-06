@@ -14,6 +14,8 @@ import {
   MemberList,
   InviteMemberModal,
   OrganizationStats,
+  QuotaStatusPanel,
+  MemberUsagePanel,
 } from '../components/organizations'
 
 const tabs: { id: OrganizationTab; label: string; icon: typeof Info }[] = [
@@ -263,6 +265,10 @@ export function OrganizationsPage() {
                     stats={stats}
                     isLoading={isLoading}
                   />
+
+                  <QuotaStatusPanel organizationId={currentOrganization.id} />
+
+                  <MemberUsagePanel organizationId={currentOrganization.id} />
                 </div>
               )}
 

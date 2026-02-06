@@ -53,6 +53,7 @@ class SessionRepository:
         session_id: str,
         user_id: str | None = None,
         project_id: str | None = None,
+        organization_id: str | None = None,
         initial_state: dict[str, Any] | None = None,
     ) -> SessionModel:
         """Create a new session."""
@@ -60,6 +61,7 @@ class SessionRepository:
             id=session_id,
             user_id=user_id,
             project_id=project_id,
+            organization_id=organization_id,
             state_json=initial_state or {},
             status="active",
         )
@@ -127,18 +129,31 @@ class SessionRepository:
     async def list_by_user(
         self,
         user_id: str,
+        organization_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[SessionModel]:
-        """List sessions for a user."""
-        result = await self.db.execute(
-            select(SessionModel)
-            .where(SessionModel.user_id == user_id)
-            .order_by(SessionModel.created_at.desc())
-            .limit(limit)
-            .offset(offset)
-        )
+        """List sessions for a user, optionally filtered by organization."""
+        query = select(SessionModel).where(SessionModel.user_id == user_id)
+        if organization_id:
+            query = query.where(SessionModel.organization_id == organization_id)
+        query = query.order_by(SessionModel.created_at.desc()).limit(limit).offset(offset)
+        result = await self.db.execute(query)
         return list(result.scalars().all())
+
+    async def count_by_org_today(self, organization_id: str) -> int:
+        """Count sessions created today for an organization."""
+        from sqlalchemy import func
+        from datetime import datetime, timedelta
+
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        result = await self.db.execute(
+            select(func.count()).where(
+                SessionModel.organization_id == organization_id,
+                SessionModel.created_at >= today_start,
+            )
+        )
+        return result.scalar() or 0
 
     async def list_active(
         self,

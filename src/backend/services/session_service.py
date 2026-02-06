@@ -91,8 +91,27 @@ class SessionService:
         project: Project | None = None,
         session_id: str | None = None,
         ttl_days: int | None = None,
+        organization_id: str | None = None,
     ) -> str:
-        """Create a new orchestration session."""
+        """Create a new orchestration session.
+
+        Args:
+            organization_id: If provided, quota is checked before creation.
+                Raises ValueError if session quota is exceeded.
+        """
+        # Quota check if organization_id is provided
+        if organization_id:
+            from services.quota_service import QuotaService
+            from services.organization_service import OrganizationService
+
+            org = OrganizationService.get_organization(organization_id)
+            if org:
+                # Count today's sessions for this org
+                sessions_today = self._count_org_sessions_today(organization_id)
+                check = QuotaService.check_session_quota(org, sessions_today)
+                if not check.allowed:
+                    raise ValueError(check.message)
+
         session_id = session_id or str(uuid.uuid4())
         now = datetime.utcnow()
         ttl = ttl_days or SESSION_TTL_DAYS
@@ -100,6 +119,7 @@ class SessionService:
         state = create_initial_state(
             session_id=session_id,
             user_id=user_id,
+            organization_id=organization_id,
             max_iterations=max_iterations,
         )
 
@@ -133,6 +153,7 @@ class SessionService:
                     session_id=session_id,
                     user_id=user_id,
                     project_id=project.id if project else None,
+                    organization_id=organization_id,
                     initial_state=state,
                 )
                 await db.commit()
@@ -295,6 +316,22 @@ class SessionService:
                             pass  # Invalid metadata, skip
 
         return cleaned
+
+    def _count_org_sessions_today(self, organization_id: str) -> int:
+        """Count sessions created today for an organization (in-memory mode)."""
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        count = 0
+        for state in self._memory_sessions.values():
+            if state.get("organization_id") == organization_id:
+                metadata = state.get("_metadata")
+                if metadata:
+                    try:
+                        created = datetime.fromisoformat(metadata["created_at"])
+                        if created >= today_start:
+                            count += 1
+                    except (KeyError, ValueError):
+                        pass
+        return count
 
     async def list_sessions(
         self,
