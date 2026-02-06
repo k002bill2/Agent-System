@@ -860,13 +860,6 @@ export function NotificationRuleEditor({ className }: NotificationRuleEditorProp
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => handleStartEdit(rule)}
-                      className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
-                      title="Edit rule"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button
                       onClick={() => handleToggleRule(rule.id)}
                       className={cn(
                         'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
@@ -879,6 +872,13 @@ export function NotificationRuleEditor({ className }: NotificationRuleEditorProp
                           rule.enabled ? 'translate-x-6' : 'translate-x-1'
                         )}
                       />
+                    </button>
+                    <button
+                      onClick={() => handleStartEdit(rule)}
+                      className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                      title="Edit rule"
+                    >
+                      <Pencil className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleDeleteRule(rule.id)}
