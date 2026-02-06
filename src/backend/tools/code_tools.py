@@ -1,9 +1,8 @@
 """Code analysis and development tools."""
 
+import json
 import os
 import subprocess
-import json
-from typing import Optional
 
 from langchain_core.tools import tool
 
@@ -11,7 +10,7 @@ from langchain_core.tools import tool
 @tool
 def run_tests(
     path: str = ".",
-    pattern: Optional[str] = None,
+    pattern: str | None = None,
     framework: str = "auto",
 ) -> str:
     """

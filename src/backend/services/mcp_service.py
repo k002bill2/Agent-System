@@ -2,24 +2,18 @@
 
 import json
 import uuid
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 from models.mcp import (
+    MCPInitializeResult,
     MCPRequest,
     MCPResponse,
-    MCPNotification,
     MCPToolDefinition,
     MCPToolResult,
-    MCPInitializeResult,
-    MCPServerInfo,
-    MCPCapabilities,
-    CreateTaskArgs,
-    GetStatusArgs,
-    RunCheckArgs,
-    ListAgentsArgs,
 )
-from models.project import list_projects, get_project, PROJECTS_REGISTRY
-from models.monitoring import CheckType, CheckStatus
+from models.monitoring import CheckType
+from models.project import PROJECTS_REGISTRY, get_project, list_projects
 from services.project_runner import get_runner
 
 

@@ -2,10 +2,10 @@
 
 from datetime import datetime
 from typing import Any
+
 from pydantic import BaseModel, Field
 
 from models.llm_models import LLMModelRegistry
-
 
 # Default cost for unknown models
 DEFAULT_COST = {"input": 0.001, "output": 0.002}

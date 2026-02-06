@@ -1,14 +1,14 @@
 """LLM Service for unified access to multiple LLM providers."""
 
+import json
 import os
 import time
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
-from langchain_core.tools import tool as langchain_tool
-import json
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
-from models.llm_models import LLMModelRegistry, LLMProvider, get_model_configs
+from models.llm_models import LLMModelRegistry, get_model_configs
 
 # Use central registry for model configurations
 MODEL_CONFIGS = get_model_configs()
@@ -373,7 +373,7 @@ class LLMService:
         Returns:
             LLMResponse with content, tool calls, and metrics
         """
-        from services.playground_tools import execute_tool, TOOL_DEFINITIONS
+        from services.playground_tools import TOOL_DEFINITIONS, execute_tool
 
         config = MODEL_CONFIGS.get(model_id, {})
         provider = config.get("provider", "unknown")
@@ -422,7 +422,7 @@ class LLMService:
             messages.append(HumanMessage(content=full_prompt))
 
             # Iterate until we get a final response or hit max iterations
-            for iteration in range(max_tool_iterations):
+            for _iteration in range(max_tool_iterations):
                 # Invoke LLM
                 response = await llm_with_tools.ainvoke(messages)
 

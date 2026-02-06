@@ -8,23 +8,22 @@ from pathlib import Path
 from typing import Any
 
 from models.organization import (
+    PLAN_LIMITS,
+    InviteMemberRequest,
+    MemberRole,
+    MemberUsageRecord,
+    MemberUsageResponse,
+    MemberUsageSummary,
     Organization,
     OrganizationCreate,
-    OrganizationUpdate,
-    OrganizationStatus,
-    OrganizationPlan,
-    OrganizationMember,
-    MemberRole,
-    InviteMemberRequest,
     OrganizationInvitation,
+    OrganizationMember,
+    OrganizationPlan,
     OrganizationStats,
+    OrganizationStatus,
+    OrganizationUpdate,
     TenantContext,
-    MemberUsageRecord,
-    MemberUsageSummary,
-    MemberUsageResponse,
-    PLAN_LIMITS,
 )
-
 
 # ─────────────────────────────────────────────────────────────
 # Database Toggle
@@ -34,12 +33,13 @@ USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 
 # Conditional DB imports (only when USE_DATABASE=true)
 try:
-    from sqlalchemy import select, and_, func
+    from sqlalchemy import and_, select
     from sqlalchemy.ext.asyncio import AsyncSession
+
     from db.models import (
-        OrganizationModel,
-        OrganizationMemberModel,
         OrganizationInvitationModel,
+        OrganizationMemberModel,
+        OrganizationModel,
     )
     _DB_AVAILABLE = True
 except ImportError:
@@ -71,9 +71,9 @@ def _load_json(file_path: Path) -> dict:
     """Load JSON from file, return empty dict if not exists."""
     if file_path.exists():
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 return json.load(f)
-        except (json.JSONDecodeError, IOError):
+        except (OSError, json.JSONDecodeError):
             return {}
     return {}
 
@@ -654,15 +654,8 @@ class OrganizationService:
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-        # Filter records for this org within the period
-        org_records = [
-            r for r in _member_usage.values()
-            if r.organization_id == org_id and r.timestamp >= cutoff
-        ]
-
         # Get members of this org
         members = OrganizationService.get_members(org_id)
-        member_map = {m.user_id: m for m in members}
 
         # Aggregate by user_id
         user_tokens: dict[str, int] = {}
@@ -964,7 +957,7 @@ class OrganizationService:
             select(OrganizationMemberModel).where(
                 and_(
                     OrganizationMemberModel.organization_id == org_id,
-                    OrganizationMemberModel.is_active == True,
+                    OrganizationMemberModel.is_active == True,  # noqa: E712
                 )
             )
         )
@@ -983,7 +976,7 @@ class OrganizationService:
                 and_(
                     OrganizationMemberModel.organization_id == org_id,
                     OrganizationMemberModel.user_id == user_id,
-                    OrganizationMemberModel.is_active == True,
+                    OrganizationMemberModel.is_active == True,  # noqa: E712
                 )
             )
         )
@@ -1000,8 +993,8 @@ class OrganizationService:
         invited_by: str,
     ) -> OrganizationInvitation:
         """Create an invitation for a new member (async DB version)."""
-        import uuid
         import secrets
+        import uuid
 
         # Check org exists
         org_result = await db.execute(
@@ -1024,7 +1017,7 @@ class OrganizationService:
                 and_(
                     OrganizationMemberModel.organization_id == org_id,
                     OrganizationMemberModel.email == request.email,
-                    OrganizationMemberModel.is_active == True,
+                    OrganizationMemberModel.is_active == True,  # noqa: E712
                 )
             )
         )
@@ -1037,7 +1030,7 @@ class OrganizationService:
                 and_(
                     OrganizationInvitationModel.organization_id == org_id,
                     OrganizationInvitationModel.email == request.email,
-                    OrganizationInvitationModel.accepted == False,
+                    OrganizationInvitationModel.accepted == False,  # noqa: E712
                     OrganizationInvitationModel.expires_at > datetime.utcnow(),
                 )
             )
@@ -1079,7 +1072,7 @@ class OrganizationService:
             select(OrganizationInvitationModel).where(
                 and_(
                     OrganizationInvitationModel.token == token,
-                    OrganizationInvitationModel.accepted == False,
+                    OrganizationInvitationModel.accepted == False,  # noqa: E712
                 )
             )
         )
@@ -1136,7 +1129,7 @@ class OrganizationService:
             select(OrganizationMemberModel.organization_id).where(
                 and_(
                     OrganizationMemberModel.user_id == user_id,
-                    OrganizationMemberModel.is_active == True,
+                    OrganizationMemberModel.is_active == True,  # noqa: E712
                 )
             )
         )
@@ -1162,7 +1155,7 @@ class OrganizationService:
             select(OrganizationMemberModel).where(
                 and_(
                     OrganizationMemberModel.user_id == user_id,
-                    OrganizationMemberModel.is_active == True,
+                    OrganizationMemberModel.is_active == True,  # noqa: E712
                 )
             )
         )

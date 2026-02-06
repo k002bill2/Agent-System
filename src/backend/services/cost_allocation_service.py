@@ -3,18 +3,17 @@
 import os
 import uuid
 from datetime import datetime, timedelta
-from typing import Any
 
-from sqlalchemy import select, func, and_
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.cost import (
-    CostCenter,
-    CostAllocation,
-    CostReport,
-    CostForecast,
-    ChargebackExport,
     BudgetAlert,
+    ChargebackExport,
+    CostAllocation,
+    CostCenter,
+    CostForecast,
+    CostReport,
     SessionTokenUsage,
 )
 
@@ -22,7 +21,7 @@ USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 
 # Conditional DB model imports
 try:
-    from db.models import CostCenterModel, CostAllocationModel
+    from db.models import CostAllocationModel, CostCenterModel
     _DB_AVAILABLE = True
 except ImportError:
     _DB_AVAILABLE = False
@@ -150,7 +149,7 @@ class CostAllocationService:
         """Allocate session cost to a cost center."""
         # Build model cost breakdown
         model_costs: dict[str, float] = {}
-        for agent_name, agent_usage in session_usage.agents.items():
+        for _agent_name, agent_usage in session_usage.agents.items():
             for usage in agent_usage.history:
                 model = usage.model or "unknown"
                 model_costs[model] = model_costs.get(model, 0) + usage.cost_usd
@@ -622,7 +621,7 @@ class CostAllocationService:
         """Allocate session cost to a cost center in database."""
         # Build model cost breakdown
         model_costs: dict[str, float] = {}
-        for agent_name, agent_usage in session_usage.agents.items():
+        for _agent_name, agent_usage in session_usage.agents.items():
             for usage in agent_usage.history:
                 model = usage.model or "unknown"
                 model_costs[model] = model_costs.get(model, 0) + usage.cost_usd

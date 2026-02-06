@@ -4,10 +4,10 @@
 Lead Orchestrator가 적절한 에이전트를 선택할 때 사용합니다.
 """
 
-from dataclasses import dataclass, field
+from collections.abc import Callable
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, TypeVar
+from typing import Any
 
 from pydantic import BaseModel, Field
 

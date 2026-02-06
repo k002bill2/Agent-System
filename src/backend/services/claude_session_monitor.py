@@ -9,25 +9,25 @@ import logging
 import os
 
 logger = logging.getLogger(__name__)
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import AsyncIterator
 
 import httpx
 
 from models.claude_session import (
-    ClaudeSessionInfo,
-    ClaudeSessionDetail,
-    SessionMessage,
-    SessionStatus,
-    MessageType,
-    TokenUsage,
-    calculate_cost,
     ActivityEvent,
     ActivityEventType,
     ClaudeCodeTask,
     ClaudeCodeTaskStatus,
+    ClaudeSessionDetail,
+    ClaudeSessionInfo,
+    MessageType,
+    SessionMessage,
+    SessionStatus,
+    TokenUsage,
+    calculate_cost,
 )
 
 
@@ -243,7 +243,6 @@ class ClaudeSessionMonitor:
             List of session info sorted by last activity
         """
         sessions = []
-        current_user = self._get_current_user()
 
         # Iterate through all projects directories
         for projects_dir in self.projects_dirs:
@@ -365,9 +364,8 @@ class ClaudeSessionMonitor:
         version = ""
         created_at = None
         last_activity = None
-        last_message_type = None
 
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -407,10 +405,8 @@ class ClaudeSessionMonitor:
                 msg_type = entry.get("type", "")
                 if msg_type == "user":
                     user_message_count += 1
-                    last_message_type = "user"
                 elif msg_type == "assistant":
                     assistant_message_count += 1
-                    last_message_type = "assistant"
 
                     # Extract model and usage from assistant messages
                     message_data = entry.get("message", {})
@@ -577,7 +573,7 @@ class ClaudeSessionMonitor:
         recent_messages = []
         current_task = None
 
-        with open(session_file, "r", encoding="utf-8") as f:
+        with open(session_file, encoding="utf-8") as f:
             lines = f.readlines()
 
         # Parse last 50 lines for recent messages
@@ -787,7 +783,7 @@ class ClaudeSessionMonitor:
             return []
 
         messages = []
-        with open(session_file, "r", encoding="utf-8") as f:
+        with open(session_file, encoding="utf-8") as f:
             for line in f:
                 if len(messages) >= limit:
                     break
@@ -1078,7 +1074,7 @@ class ClaudeSessionMonitor:
         events: list[ActivityEvent] = []
         total_count = 0
 
-        with open(session_file, "r", encoding="utf-8") as f:
+        with open(session_file, encoding="utf-8") as f:
             for line_num, line in enumerate(f):
                 line = line.strip()
                 if not line:
@@ -1195,7 +1191,7 @@ class ClaudeSessionMonitor:
         tasks: dict[str, ClaudeCodeTask] = {}
         task_counter = 0
 
-        with open(session_file, "r", encoding="utf-8") as f:
+        with open(session_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -1321,7 +1317,7 @@ class ClaudeSessionMonitor:
         events: list[ActivityEvent] = []
 
         # Read only new content
-        with open(session_file, "r", encoding="utf-8") as f:
+        with open(session_file, encoding="utf-8") as f:
             f.seek(last_size)
             new_content = f.read()
 
@@ -1448,8 +1444,8 @@ def list_claude_processes() -> list[ClaudeProcess]:
     Returns:
         List of ClaudeProcess objects sorted by CPU time (descending)
     """
-    import subprocess
     import os
+    import subprocess
 
     try:
         # Run ps command to get Claude processes
@@ -1484,7 +1480,7 @@ def list_claude_processes() -> list[ClaudeProcess]:
 
             try:
                 pid = int(parts[1])
-                mem_percent = float(parts[3])
+                _mem_percent = float(parts[3])
                 terminal = parts[6]
                 state = parts[7]
                 started = parts[8]

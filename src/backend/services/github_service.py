@@ -2,13 +2,12 @@
 
 import logging
 import os
-from datetime import datetime
 from typing import Any
 
 from config import get_settings
 
 try:
-    from github import Github, GithubException, Auth
+    from github import Auth, Github, GithubException
     from github.PullRequest import PullRequest
     from github.Repository import Repository
     GITHUB_AVAILABLE = True
@@ -21,9 +20,9 @@ except ImportError:
     Repository = None
 
 from models.git import (
-    GitHubPullRequest,
-    GitHubPRReview,
     GitHubMergeResult,
+    GitHubPRReview,
+    GitHubPullRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,7 +65,7 @@ class GitHubService:
             auth = Auth.Token(self.token)
             self.github = Github(auth=auth)
             # Verify authentication
-            self.github.get_user().login
+            _ = self.github.get_user().login
         except GithubException as e:
             raise GitHubServiceError(f"GitHub authentication failed: {e}")
 

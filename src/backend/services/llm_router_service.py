@@ -4,22 +4,20 @@ import asyncio
 import os
 import time
 from datetime import datetime, timedelta
-from typing import Any
 
 from models.llm_router import (
+    LLMHealthCheck,
     LLMProvider,
     LLMProviderConfig,
     LLMProviderConfigCreate,
     LLMProviderConfigUpdate,
     LLMProviderStatus,
-    LLMHealthCheck,
-    LLMRoutingStrategy,
     LLMRouterConfig,
     LLMRouterState,
     LLMRoutingDecision,
     LLMRoutingStats,
+    LLMRoutingStrategy,
 )
-
 
 # In-memory storage
 _providers: dict[str, LLMProviderConfig] = {}

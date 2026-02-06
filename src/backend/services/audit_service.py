@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, and_, desc
+from sqlalchemy import and_, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.audit import (
@@ -584,8 +584,9 @@ class AuditService:
     @staticmethod
     async def cleanup_old_logs_async(db: AsyncSession, days: int = 30) -> int:
         """Remove audit logs older than specified days from database."""
-        from db.models import AuditLogModel
         from sqlalchemy import delete
+
+        from db.models import AuditLogModel
 
         cutoff = datetime.utcnow() - timedelta(days=days)
         stmt = delete(AuditLogModel).where(AuditLogModel.created_at < cutoff)
@@ -599,8 +600,8 @@ class AuditService:
         format: str = "json",
     ) -> str:
         """Export audit logs in specified format."""
-        import json
         import csv
+        import json
         from io import StringIO
 
         response = AuditService.query(filter)

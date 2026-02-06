@@ -1,12 +1,12 @@
 """MCP (Model Context Protocol) router for Warp terminal integration."""
 
 import json
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, Request, Response, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 
-from models.mcp import MCPRequest, MCPResponse
+from models.mcp import MCPRequest
 from services.mcp_service import get_mcp_service
 
 router = APIRouter(prefix="/mcp", tags=["MCP"])

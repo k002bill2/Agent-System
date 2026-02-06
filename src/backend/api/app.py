@@ -14,7 +14,7 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 
 # Initialize structured logging (optional - graceful fallback)
 try:
-    from services.logging_service import setup_logging, get_logger, request_id_var
+    from services.logging_service import get_logger, request_id_var, setup_logging
 
     setup_logging()
     logger = get_logger("aos.app")
@@ -108,7 +108,7 @@ else:
 
     # Optional orchestrator
     try:
-        from api.deps import set_engine, clear_engine
+        from api.deps import clear_engine, set_engine
         from orchestrator import OrchestrationEngine
         ORCHESTRATOR_ENABLED = True
     except ImportError as e:

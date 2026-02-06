@@ -5,26 +5,24 @@ RLHF Feedback API Router
 """
 
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 
 from models.feedback import (
-    FeedbackType,
-    FeedbackStatus,
-    FeedbackSubmit,
-    FeedbackResponse,
-    FeedbackEntry,
-    FeedbackQueryParams,
-    FeedbackStats,
+    BatchProcessResult,
     DatasetExportOptions,
     DatasetStats,
+    FeedbackEntry,
+    FeedbackQueryParams,
+    FeedbackResponse,
+    FeedbackStats,
+    FeedbackStatus,
+    FeedbackSubmit,
+    FeedbackType,
     ProcessFeedbackRequest,
-    BatchProcessResult,
 )
 from services.feedback_service import get_feedback_service
-
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 
@@ -37,7 +35,7 @@ router = APIRouter(prefix="/feedback", tags=["feedback"])
 @router.post("", response_model=FeedbackResponse)
 async def submit_feedback(
     feedback: FeedbackSubmit,
-    agent_id: Optional[str] = None,
+    agent_id: str | None = None,
 ) -> FeedbackResponse:
     """피드백 제출
 
@@ -54,12 +52,12 @@ async def submit_feedback(
 
 @router.get("", response_model=list[FeedbackEntry])
 async def list_feedbacks(
-    session_id: Optional[str] = None,
-    feedback_type: Optional[FeedbackType] = None,
-    status: Optional[FeedbackStatus] = None,
-    agent_id: Optional[str] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    session_id: str | None = None,
+    feedback_type: FeedbackType | None = None,
+    status: FeedbackStatus | None = None,
+    agent_id: str | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> list[FeedbackEntry]:
@@ -83,8 +81,8 @@ async def list_feedbacks(
 
 @router.get("/stats", response_model=FeedbackStats)
 async def get_feedback_stats(
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
 ) -> FeedbackStats:
     """피드백 통계 조회
 
@@ -166,9 +164,9 @@ async def export_dataset(
     format: str = Query("jsonl", regex="^(jsonl|csv)$"),
     include_negative: bool = True,
     include_implicit: bool = True,
-    agent_filter: Optional[str] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    agent_filter: str | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
 ) -> PlainTextResponse:
     """데이터셋 내보내기
 

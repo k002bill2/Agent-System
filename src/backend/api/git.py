@@ -1,72 +1,71 @@
 """Git API endpoints for team collaboration management."""
 
 import logging
-from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query
 
-from models.project import get_project
 from models.git import (
-    # Branch models
-    GitBranch,
+    DEFAULT_PROTECTED_BRANCHES,
+    AddRequest,
+    AddResult,
     BranchCreateRequest,
     BranchDiff,
     BranchListResponse,
-    # Commit models
-    GitCommit,
-    CommitFile,
-    CommitListResponse,
-    # Working directory models (NEW)
-    GitWorkingStatus,
-    AddRequest,
-    AddResult,
     CommitCreateRequest,
     CommitCreateResult,
+    CommitFile,
+    CommitListResponse,
+    ConflictFile,
+    # Conflict resolution models
+    ConflictResolutionRequest,
+    ConflictResolutionResult,
     # Draft commits models (LLM-based)
     DraftCommit,
     DraftCommitsRequest,
     DraftCommitsResponse,
-    # Merge models
-    MergePreview,
-    MergeResult,
-    MergeExecuteRequest,
-    ConflictFile,
-    ThreeWayDiff,
-    # Conflict resolution models
-    ConflictResolutionRequest,
-    ConflictResolutionResult,
-    MergeAbortResult,
-    # Merge Request models
-    MergeRequest,
-    MergeRequestCreate,
-    MergeRequestUpdate,
-    MergeRequestStatus,
-    MergeRequestListResponse,
-    # GitHub models
-    GitHubPullRequest,
-    GitHubPRReview,
-    GitHubPRReviewCreate,
+    # Remote operation models
+    FetchResult,
+    # Branch models
+    GitBranch,
+    # Commit models
+    GitCommit,
     GitHubMergeRequest,
     GitHubMergeResult,
     GitHubPRListResponse,
-    # Remote operation models
-    FetchResult,
-    PullResult,
-    PushResult,
-    # Permission helpers
-    can_merge_to_branch,
-    DEFAULT_PROTECTED_BRANCHES,
+    GitHubPRReview,
+    GitHubPRReviewCreate,
+    # GitHub models
+    GitHubPullRequest,
     # Git Repository models
     GitRepository,
     GitRepositoryCreate,
-    GitRepositoryUpdate,
     GitRepositoryListResponse,
-    register_git_repository,
+    GitRepositoryUpdate,
+    # Working directory models (NEW)
+    GitWorkingStatus,
+    MergeAbortResult,
+    MergeExecuteRequest,
+    # Merge models
+    MergePreview,
+    # Merge Request models
+    MergeRequest,
+    MergeRequestCreate,
+    MergeRequestListResponse,
+    MergeRequestStatus,
+    MergeRequestUpdate,
+    MergeResult,
+    PullResult,
+    PushResult,
+    ThreeWayDiff,
+    # Permission helpers
+    can_merge_to_branch,
+    delete_git_repository,
     get_git_repository,
     list_git_repositories,
+    register_git_repository,
     update_git_repository,
-    delete_git_repository,
 )
+from models.project import get_project
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +83,7 @@ def get_effective_git_path(project) -> str:
 
 def get_git_service_for_project(project_id: str):
     """Get GitService for a project."""
-    from services.git_service import get_git_service, GitServiceError
+    from services.git_service import get_git_service
 
     project = get_project(project_id)
     if not project:
@@ -199,7 +198,8 @@ async def update_project_git_path(
 ):
     """Update Git path for a project."""
     from pathlib import Path
-    from models.project import update_project, normalize_path
+
+    from models.project import normalize_path, update_project
     from services.git_service import get_git_service
 
     project = get_project(project_id)
@@ -331,6 +331,7 @@ async def generate_draft_commits(
     logical commit groupings with conventional commit messages.
     """
     import json
+
     from services.llm_service import LLMService
 
     git_service = get_git_service_for_project(project_id)
@@ -437,9 +438,6 @@ Diff:
 
                 # Method 1: Try to fix truncated JSON by closing brackets
                 fixed_content = content
-                # Count open/close brackets
-                open_braces = fixed_content.count('{') - fixed_content.count('}')
-                open_brackets = fixed_content.count('[') - fixed_content.count(']')
 
                 # If we're inside a string, find and truncate at the last complete entry
                 if '"message":' in fixed_content:
@@ -1209,6 +1207,7 @@ async def list_repositories():
 async def create_repository(request: GitRepositoryCreate):
     """Register a new Git repository."""
     from pathlib import Path
+
     from models.project import normalize_path
 
     # Normalize path
@@ -1246,6 +1245,7 @@ async def get_repository(repo_id: str):
 async def update_repository(repo_id: str, request: GitRepositoryUpdate):
     """Update a Git repository."""
     from pathlib import Path
+
     from models.project import normalize_path
 
     # Validate path if provided

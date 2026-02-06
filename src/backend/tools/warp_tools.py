@@ -1,10 +1,9 @@
 """Warp Terminal agent integration tools."""
 
 import asyncio
-import subprocess
-import os
 import json
-from typing import Optional
+import os
+import subprocess
 
 from langchain_core.tools import tool
 
@@ -20,8 +19,8 @@ def _check_warp_installed() -> bool:
 @tool
 def warp_agent_run(
     prompt: str,
-    cwd: Optional[str] = None,
-    model: Optional[str] = None,
+    cwd: str | None = None,
+    model: str | None = None,
     timeout: int = 300,
 ) -> str:
     """
@@ -127,7 +126,7 @@ def warp_list_models() -> str:
 def warp_agent_with_mcp(
     prompt: str,
     mcp_config: dict,
-    cwd: Optional[str] = None,
+    cwd: str | None = None,
     timeout: int = 300,
 ) -> str:
     """
@@ -186,7 +185,7 @@ def warp_agent_with_mcp(
 
         max_length = 50000
         if len(output) > max_length:
-            output = output[:max_length] + f"\n... (truncated)"
+            output = output[:max_length] + "\n... (truncated)"
 
         return output if output else "(no output)"
 
@@ -198,8 +197,8 @@ def warp_agent_with_mcp(
 
 async def warp_agent_run_async(
     prompt: str,
-    cwd: Optional[str] = None,
-    model: Optional[str] = None,
+    cwd: str | None = None,
+    model: str | None = None,
     timeout: int = 300,
 ) -> str:
     """
@@ -241,7 +240,7 @@ async def warp_agent_run_async(
                 process.communicate(),
                 timeout=timeout,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             process.kill()
             return f"Error: Warp agent timed out after {timeout} seconds"
 
@@ -260,7 +259,7 @@ async def warp_agent_run_async(
 
         max_length = 50000
         if len(output) > max_length:
-            output = output[:max_length] + f"\n... (truncated)"
+            output = output[:max_length] + "\n... (truncated)"
 
         return output if output else "(no output)"
 

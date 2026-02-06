@@ -7,11 +7,10 @@
 import asyncio
 import json
 import subprocess
-from dataclasses import dataclass, field
+from collections.abc import Callable
 from datetime import datetime
 from enum import Enum
-from pathlib import Path
-from typing import Any, AsyncIterator, Callable
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -370,7 +369,7 @@ class MCPManager:
                 return json.loads(response_str.strip())
             return None
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return None
         except Exception:
             return None

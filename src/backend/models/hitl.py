@@ -1,9 +1,10 @@
 """Human-in-the-Loop (HITL) approval system models."""
 
 import re
-from enum import Enum
-from typing import Any, Literal
 from datetime import datetime
+from enum import Enum
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 

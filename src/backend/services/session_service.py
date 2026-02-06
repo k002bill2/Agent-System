@@ -8,13 +8,10 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from db.repository import SessionRepository, TaskRepository, MessageRepository, ApprovalRepository
 from db.database import async_session_factory
+from db.repository import ApprovalRepository, MessageRepository, SessionRepository, TaskRepository
 from models.agent_state import AgentState, create_initial_state
 from models.project import Project
-
 
 # Environment variable to control storage mode
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
@@ -101,8 +98,8 @@ class SessionService:
         """
         # Quota check if organization_id is provided
         if organization_id:
-            from services.quota_service import QuotaService
             from services.organization_service import OrganizationService
+            from services.quota_service import QuotaService
 
             org = OrganizationService.get_organization(organization_id)
             if org:

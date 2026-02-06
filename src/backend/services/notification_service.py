@@ -13,19 +13,19 @@ from typing import Any
 
 import aiosmtplib
 import httpx
-from sqlalchemy import select, func, desc
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.notification import (
+    ChannelConfig,
     NotificationChannel,
+    NotificationCondition,
     NotificationEventType,
-    NotificationPriority,
     NotificationMessage,
+    NotificationPriority,
     NotificationRule,
     NotificationRuleCreate,
     NotificationRuleUpdate,
-    ChannelConfig,
-    NotificationCondition,
     format_notification,
 )
 
@@ -517,8 +517,9 @@ class NotificationService:
     @staticmethod
     async def delete_rule_async(db: AsyncSession, rule_id: str) -> bool:
         """Delete a rule from database."""
-        from db.models import NotificationRuleModel
         from sqlalchemy import delete
+
+        from db.models import NotificationRuleModel
 
         result = await db.execute(
             delete(NotificationRuleModel).where(NotificationRuleModel.id == rule_id)
@@ -778,12 +779,12 @@ class NotificationService:
         project_id: str | None = None,
     ) -> NotificationMessage:
         """Send a notification based on rules from database."""
-        from db.models import NotificationRuleModel, NotificationHistoryModel
+        from db.models import NotificationHistoryModel, NotificationRuleModel
 
         # Find matching rules from database
         result = await db.execute(
             select(NotificationRuleModel).where(
-                NotificationRuleModel.enabled == True,
+                NotificationRuleModel.enabled == True,  # noqa: E712
                 NotificationRuleModel.event_type == event_type.value,
             )
         )
@@ -958,8 +959,9 @@ class NotificationService:
     @staticmethod
     async def clear_history_async(db: AsyncSession) -> int:
         """Clear notification history from database."""
-        from db.models import NotificationHistoryModel
         from sqlalchemy import delete
+
+        from db.models import NotificationHistoryModel
 
         result = await db.execute(delete(NotificationHistoryModel))
         await db.commit()

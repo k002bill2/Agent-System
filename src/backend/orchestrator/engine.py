@@ -1,11 +1,11 @@
 """Orchestration engine for running the agent graph."""
 
-import asyncio
 import os
 import uuid
-from typing import AsyncIterator, Any
+from collections.abc import AsyncIterator
 
 from dotenv import load_dotenv
+
 from config import get_settings
 
 settings = get_settings()
@@ -56,30 +56,32 @@ def get_llm():
             base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
         )
 
-from models.agent_state import AgentState, create_initial_state
+from models.agent_state import AgentState
 from models.message import (
+    AgentThinkingPayload,
+    ApprovalRequiredPayload,
     Message,
     MessageType,
-    TaskProgressPayload,
-    AgentThinkingPayload,
     StateUpdatePayload,
-    ApprovalRequiredPayload,
     TokenUpdatePayload,
 )
 from models.project import Project
-from orchestrator.graph import create_orchestrator_graph, compile_graph
-from orchestrator.nodes import OrchestratorNode, PlannerNode, ExecutorNode, ReviewerNode, SelfCorrectionNode
-from orchestrator.parallel_executor import ParallelExecutorNode
-from tools import ALL_TOOLS
-from services.session_service import SessionService, get_session_service
-from services.audit_service import (
-    AuditService,
-    AuditAction,
-    ResourceType,
-    audit_task_created,
-    audit_task_status_change,
-    audit_tool_executed,
+from orchestrator.graph import compile_graph, create_orchestrator_graph
+from orchestrator.nodes import (
+    ExecutorNode,
+    OrchestratorNode,
+    PlannerNode,
+    ReviewerNode,
+    SelfCorrectionNode,
 )
+from orchestrator.parallel_executor import ParallelExecutorNode
+from services.audit_service import (
+    AuditAction,
+    AuditService,
+    ResourceType,
+)
+from services.session_service import SessionService, get_session_service
+from tools import ALL_TOOLS
 
 
 class OrchestrationEngine:

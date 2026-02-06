@@ -3,7 +3,7 @@
 import hashlib
 import os
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import Any
 
 from pydantic import BaseModel
 

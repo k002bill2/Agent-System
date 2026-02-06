@@ -10,8 +10,6 @@ Handles cleanup of all project-related data:
 """
 
 import logging
-from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel
 
@@ -101,7 +99,7 @@ class ProjectCleanupService:
 
         # Check RAG index
         try:
-            from services.rag_service import get_vector_store, CHROMA_AVAILABLE
+            from services.rag_service import CHROMA_AVAILABLE, get_vector_store
 
             if CHROMA_AVAILABLE:
                 store = get_vector_store()
@@ -159,7 +157,7 @@ class ProjectCleanupService:
 
         # 2. Delete RAG index
         try:
-            from services.rag_service import get_vector_store, CHROMA_AVAILABLE
+            from services.rag_service import CHROMA_AVAILABLE, get_vector_store
 
             if CHROMA_AVAILABLE:
                 store = get_vector_store()

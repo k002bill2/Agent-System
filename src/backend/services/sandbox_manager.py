@@ -1,9 +1,8 @@
 """Docker sandbox manager for secure command execution."""
 
-import asyncio
-import os
 import logging
-from typing import Any, Optional, TYPE_CHECKING
+import os
+from typing import TYPE_CHECKING, Any, Optional
 
 # Conditional import for Railway/environments without Docker
 DOCKER_AVAILABLE = False
@@ -14,7 +13,7 @@ ImageNotFound = Exception
 
 try:
     import docker as _docker
-    from docker.errors import DockerException, ContainerError, ImageNotFound
+    from docker.errors import ContainerError, DockerException, ImageNotFound
     docker = _docker
     DOCKER_AVAILABLE = True
 except ImportError:
@@ -40,7 +39,7 @@ class SandboxExecutionResult:
         success: bool,
         output: str,
         exit_code: int,
-        error: Optional[str] = None,
+        error: str | None = None,
         execution_time_ms: int = 0,
     ):
         self.success = success
@@ -96,8 +95,8 @@ class SandboxManager:
         self.memory_limit = memory_limit
         self.cpu_limit = cpu_limit
         self.timeout = timeout
-        self._client: Optional["DockerClient"] = None
-        self._available: Optional[bool] = None
+        self._client: DockerClient | None = None
+        self._available: bool | None = None
 
     @property
     def client(self) -> Optional["DockerClient"]:
@@ -147,9 +146,9 @@ class SandboxManager:
         self,
         command: str,
         task_id: str,
-        project_path: Optional[str] = None,
-        timeout: Optional[int] = None,
-        env: Optional[dict[str, str]] = None,
+        project_path: str | None = None,
+        timeout: int | None = None,
+        env: dict[str, str] | None = None,
     ) -> SandboxExecutionResult:
         """
         Execute a command in a sandboxed Docker container.
@@ -323,7 +322,7 @@ class SandboxManager:
 
 
 # Global instance (lazy initialized)
-_sandbox_manager: Optional[SandboxManager] = None
+_sandbox_manager: SandboxManager | None = None
 
 
 def get_sandbox_manager() -> SandboxManager:
@@ -337,7 +336,7 @@ def get_sandbox_manager() -> SandboxManager:
 async def execute_sandboxed(
     command: str,
     task_id: str,
-    project_path: Optional[str] = None,
+    project_path: str | None = None,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> SandboxExecutionResult:
     """

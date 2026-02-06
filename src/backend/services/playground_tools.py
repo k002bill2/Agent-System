@@ -3,9 +3,8 @@
 import asyncio
 import os
 import re
-import subprocess
-from typing import Any
 from datetime import datetime
+from typing import Any
 
 import httpx
 
@@ -168,7 +167,7 @@ class PlaygroundTools:
             if re.search(pattern, code, re.IGNORECASE):
                 return {
                     "success": False,
-                    "error": f"Potentially dangerous code pattern detected",
+                    "error": "Potentially dangerous code pattern detected",
                     "output": "",
                 }
 
@@ -204,7 +203,7 @@ class PlaygroundTools:
                         process.communicate(),
                         timeout=timeout,
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     process.kill()
                     return {
                         "success": False,
@@ -274,7 +273,7 @@ class PlaygroundTools:
                 if pattern in path_lower:
                     return {
                         "success": False,
-                        "error": f"Access to sensitive files is not allowed",
+                        "error": "Access to sensitive files is not allowed",
                     }
 
             if not os.path.exists(path):
@@ -345,7 +344,7 @@ class PlaygroundTools:
                 }
 
             # Read text file
-            with open(path, "r", encoding="utf-8", errors="replace") as f:
+            with open(path, encoding="utf-8", errors="replace") as f:
                 content = f.read()
 
             return {
@@ -401,7 +400,7 @@ class PlaygroundTools:
                 if pattern in path:
                     return {
                         "success": False,
-                        "error": f"Writing to system directories is not allowed",
+                        "error": "Writing to system directories is not allowed",
                     }
 
             # Create parent directories

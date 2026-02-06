@@ -7,7 +7,7 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -51,10 +51,10 @@ def _load_usage_cache() -> dict[str, Any] | None:
     # Try file cache
     if USAGE_CACHE_PATH.exists():
         try:
-            with open(USAGE_CACHE_PATH, "r") as f:
+            with open(USAGE_CACHE_PATH) as f:
                 _usage_cache = json.load(f)
                 return _usage_cache
-        except (json.JSONDecodeError, IOError):
+        except (OSError, json.JSONDecodeError):
             pass
     return None
 
@@ -62,17 +62,17 @@ def _load_usage_cache() -> dict[str, Any] | None:
 def _save_usage_cache(data: dict[str, Any]) -> None:
     """Save usage data to cache."""
     global _usage_cache
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     _usage_cache = {
         "data": data,
         "timestamp": now,
-        "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=CACHE_TTL_SECONDS)).isoformat(),
+        "expires_at": (datetime.now(UTC) + timedelta(seconds=CACHE_TTL_SECONDS)).isoformat(),
     }
     # Save to file for persistence across restarts
     try:
         with open(USAGE_CACHE_PATH, "w") as f:
             json.dump(_usage_cache, f)
-    except IOError:
+    except OSError:
         pass
 
 
@@ -83,7 +83,7 @@ def _is_cache_valid() -> bool:
         return False
     try:
         expires_at = datetime.fromisoformat(cache["expires_at"].replace("Z", "+00:00"))
-        return datetime.now(timezone.utc) < expires_at
+        return datetime.now(UTC) < expires_at
     except (ValueError, TypeError):
         return False
 
@@ -95,7 +95,7 @@ def _is_cache_usable() -> bool:
         return False
     try:
         timestamp = datetime.fromisoformat(cache["timestamp"].replace("Z", "+00:00"))
-        age = (datetime.now(timezone.utc) - timestamp).total_seconds()
+        age = (datetime.now(UTC) - timestamp).total_seconds()
         return age < CACHE_STALE_SECONDS
     except (ValueError, TypeError):
         return False
@@ -108,7 +108,7 @@ def _get_cache_age_minutes() -> int | None:
         return None
     try:
         timestamp = datetime.fromisoformat(cache["timestamp"].replace("Z", "+00:00"))
-        age = (datetime.now(timezone.utc) - timestamp).total_seconds()
+        age = (datetime.now(UTC) - timestamp).total_seconds()
         return int(age / 60)
     except (ValueError, TypeError):
         return None
@@ -184,9 +184,9 @@ def load_stats_cache() -> dict[str, Any] | None:
         return None
 
     try:
-        with open(STATS_CACHE_PATH, "r") as f:
+        with open(STATS_CACHE_PATH) as f:
             return json.load(f)
-    except (json.JSONDecodeError, IOError) as e:
+    except (OSError, json.JSONDecodeError) as e:
         print(f"Error reading stats cache: {e}")
         return None
 
@@ -275,7 +275,7 @@ def parse_reset_time(resets_at: str | None) -> tuple[float, float]:
     try:
         # Parse ISO timestamp (e.g., "2025-11-04T04:59:59Z")
         reset_time = datetime.fromisoformat(resets_at.replace("Z", "+00:00"))
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         delta = reset_time - now
         if delta.total_seconds() <= 0:

@@ -6,8 +6,7 @@
 import time
 from typing import Any
 
-from agents.base import BaseAgent, AgentConfig, AgentResult
-
+from agents.base import AgentConfig, AgentResult, BaseAgent
 
 MOBILE_UI_SYSTEM_PROMPT = """You are a Mobile UI Specialist Agent, an expert in React Native development with Expo and TypeScript.
 

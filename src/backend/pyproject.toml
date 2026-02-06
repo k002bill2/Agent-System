@@ -79,7 +79,18 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "B", "UP"]
-ignore = ["E501"]
+ignore = [
+    "E501",   # line-too-long (handled by formatter)
+    "B008",   # function-call-in-default-argument (FastAPI/Pydantic Field patterns)
+    "B904",   # raise-without-from-inside-except (too many to refactor at once)
+    "UP042",  # replace-str-enum (StrEnum migration deferred)
+    "N815",   # mixed-case-variable-in-class-scope (API compatibility)
+    "E402",   # module-import-not-at-top (conditional DB imports pattern)
+    "E741",   # ambiguous-variable-name (e, l in context)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"alembic/**" = ["N815", "E501"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

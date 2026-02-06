@@ -1,10 +1,11 @@
 """Config version models for version control."""
 
+import uuid
 from datetime import datetime
 from enum import Enum
 from typing import Any
+
 from pydantic import BaseModel, Field
-import uuid
 
 
 class ConfigType(str, Enum):

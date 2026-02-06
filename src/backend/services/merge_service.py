@@ -2,13 +2,12 @@
 
 import logging
 import subprocess
-import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 try:
-    from git import Repo, GitCommandError
+    from git import GitCommandError, Repo
     GIT_AVAILABLE = True
 except ImportError:
     GIT_AVAILABLE = False
@@ -16,22 +15,20 @@ except ImportError:
     GitCommandError = Exception
 
 from models.git import (
-    ConflictStatus,
-    ConflictType,
     ConflictFile,
-    ConflictMarker,
-    MergePreview,
-    MergeResult,
-    ThreeWayDiff,
-    DEFAULT_PROTECTED_BRANCHES,
-    MergeRequest,
-    MergeRequestStatus,
-    ResolutionStrategy,
     ConflictResolutionRequest,
     ConflictResolutionResult,
+    ConflictStatus,
+    ConflictType,
     MergeAbortResult,
+    MergePreview,
+    MergeRequest,
+    MergeRequestStatus,
+    MergeResult,
+    ResolutionStrategy,
+    ThreeWayDiff,
 )
-from services.git_service import GitService, GitServiceError
+from services.git_service import GitService
 
 logger = logging.getLogger(__name__)
 

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from pydantic_settings import BaseSettings
 
 if TYPE_CHECKING:
-    from models.llm_models import LLMProvider
+    pass
 
 
 class Settings(BaseSettings):

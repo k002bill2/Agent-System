@@ -1,29 +1,28 @@
 """Audit trail API routes."""
 
-import os
 from datetime import datetime, timedelta
-from fastapi import APIRouter, HTTPException, Query, Response, Depends
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import get_db
+from models.audit import (
+    ComplianceReport,
+    DataClassification,
+    IntegrityVerificationResult,
+    RetentionApplyResult,
+    RetentionPolicy,
+)
 from services.audit_service import (
-    AuditService,
+    USE_DATABASE,
+    AuditAction,
     AuditLogEntry,
     AuditLogFilter,
     AuditLogResponse,
-    AuditAction,
+    AuditService,
     ResourceType,
-    USE_DATABASE,
 )
-from models.audit import (
-    DataClassification,
-    RetentionPolicy,
-    IntegrityVerificationResult,
-    ComplianceReport,
-    RetentionApplyResult,
-)
-
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 

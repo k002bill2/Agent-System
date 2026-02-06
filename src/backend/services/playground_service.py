@@ -1,28 +1,24 @@
 """Playground service for agent testing environment."""
 
-import asyncio
 import json
-import os
-import time
+from collections.abc import AsyncIterator
 from datetime import datetime
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
+from models.cost import calculate_cost, estimate_tokens
 from models.playground import (
-    PlaygroundExecutionStatus,
-    PlaygroundMessage,
-    PlaygroundExecution,
-    PlaygroundSession,
-    PlaygroundSessionCreate,
-    PlaygroundExecuteRequest,
-    PlaygroundToolTest,
     PlaygroundCompareRequest,
     PlaygroundCompareResult,
+    PlaygroundExecuteRequest,
+    PlaygroundExecution,
+    PlaygroundExecutionStatus,
+    PlaygroundMessage,
+    PlaygroundSession,
+    PlaygroundSessionCreate,
+    PlaygroundToolTest,
 )
-from services.llm_service import LLMService, LLMResponse
-from models.cost import estimate_tokens, calculate_cost
-from models.llm_models import LLMModelRegistry
-
+from services.llm_service import LLMResponse, LLMService
 
 # Persistent storage file path
 STORAGE_DIR = Path(__file__).parent.parent / "data"
@@ -52,7 +48,7 @@ def _load_sessions():
 
     if SESSIONS_FILE.exists():
         try:
-            with open(SESSIONS_FILE, "r", encoding="utf-8") as f:
+            with open(SESSIONS_FILE, encoding="utf-8") as f:
                 data = json.load(f)
                 for session_data in data:
                     # Convert datetime strings back to datetime objects
@@ -348,8 +344,8 @@ class PlaygroundService:
                 )
 
                 # Add tool call messages if any
-                for i, (tool_call, tool_result) in enumerate(
-                    zip(llm_response.tool_calls, llm_response.tool_results)
+                for _i, (tool_call, tool_result) in enumerate(
+                    zip(llm_response.tool_calls, llm_response.tool_results, strict=False)
                 ):
                     # Tool call message
                     tool_msg = PlaygroundMessage(

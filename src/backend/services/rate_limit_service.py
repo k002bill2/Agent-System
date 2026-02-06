@@ -1,19 +1,16 @@
 """Rate limiting service using Redis sliding window algorithm."""
 
-import asyncio
 import time
 from datetime import datetime, timedelta
 from typing import Any
 
-from pydantic import BaseModel
-
 from models.rate_limit import (
-    RateLimitTier,
-    TierConfig,
     RATE_LIMIT_TIERS,
+    RateLimitOverride,
     RateLimitResult,
     RateLimitStatus,
-    RateLimitOverride,
+    RateLimitTier,
+    TierConfig,
 )
 
 

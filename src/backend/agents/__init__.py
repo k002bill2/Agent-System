@@ -1,15 +1,15 @@
 """Agent definitions for specialized tasks."""
 
-from agents.base import BaseAgent, AgentConfig, AgentResult
+from agents.base import AgentConfig, AgentResult, BaseAgent
+from agents.lead_orchestrator import LeadOrchestratorAgent, get_lead_orchestrator
 from agents.specialist import (
     CodeAnalystAgent,
     ResearcherAgent,
     WriterAgent,
 )
-from agents.lead_orchestrator import LeadOrchestratorAgent, get_lead_orchestrator
 from agents.specialists import (
-    MobileUIAgent,
     BackendIntegrationAgent,
+    MobileUIAgent,
     TestAutomationAgent,
 )
 

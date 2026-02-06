@@ -12,22 +12,21 @@ from datetime import datetime
 from typing import Any
 
 from models.feedback import (
-    FeedbackType,
-    FeedbackReason,
-    FeedbackStatus,
-    FeedbackSubmit,
-    FeedbackResponse,
-    FeedbackEntry,
-    FeedbackQueryParams,
-    FeedbackStats,
+    BatchProcessResult,
     DatasetEntry,
     DatasetExportOptions,
     DatasetStats,
+    FeedbackEntry,
+    FeedbackQueryParams,
+    FeedbackReason,
+    FeedbackResponse,
+    FeedbackStats,
+    FeedbackStatus,
+    FeedbackSubmit,
+    FeedbackType,
     ProcessFeedbackRequest,
     ProcessFeedbackResult,
-    BatchProcessResult,
 )
-
 
 # Environment variable to control storage mode
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
@@ -558,6 +557,7 @@ class FeedbackService:
     async def _get_feedback_from_db(self, feedback_id: str) -> FeedbackEntry | None:
         """DB에서 피드백 조회"""
         from sqlalchemy import select
+
         from db.database import async_session_factory
         from db.models import FeedbackModel
 
@@ -591,7 +591,8 @@ class FeedbackService:
         params: FeedbackQueryParams,
     ) -> list[FeedbackEntry]:
         """DB에서 피드백 목록 조회"""
-        from sqlalchemy import select, desc
+        from sqlalchemy import desc, select
+
         from db.database import async_session_factory
         from db.models import FeedbackModel
 
@@ -643,6 +644,7 @@ class FeedbackService:
     ) -> bool:
         """DB에서 피드백 상태 업데이트"""
         from sqlalchemy import update
+
         from db.database import async_session_factory
         from db.models import FeedbackModel
 
@@ -665,7 +667,8 @@ class FeedbackService:
         end_date: datetime | None,
     ) -> FeedbackStats:
         """DB에서 통계 조회"""
-        from sqlalchemy import select, func
+        from sqlalchemy import select
+
         from db.database import async_session_factory
         from db.models import FeedbackModel
 
@@ -740,6 +743,7 @@ class FeedbackService:
     ) -> list[DatasetEntry]:
         """DB에서 데이터셋 엔트리 조회"""
         from sqlalchemy import select
+
         from db.database import async_session_factory
         from db.models import DatasetEntryModel
 
@@ -747,7 +751,7 @@ class FeedbackService:
             query = select(DatasetEntryModel)
 
             if not options.include_negative:
-                query = query.where(DatasetEntryModel.is_positive == True)
+                query = query.where(DatasetEntryModel.is_positive == True)  # noqa: E712
 
             if options.start_date:
                 query = query.where(DatasetEntryModel.created_at >= options.start_date)
@@ -786,7 +790,8 @@ class FeedbackService:
 
     async def _get_dataset_stats_from_db(self) -> DatasetStats:
         """DB에서 데이터셋 통계 조회"""
-        from sqlalchemy import select, func
+        from sqlalchemy import select
+
         from db.database import async_session_factory
         from db.models import DatasetEntryModel
 

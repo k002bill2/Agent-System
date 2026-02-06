@@ -4,11 +4,9 @@ Provides endpoints to monitor and control Claude Code project configurations
 (skills, agents, MCP servers) across multiple projects.
 """
 
-import asyncio
-import json
 import logging
 import os
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -18,7 +16,6 @@ from models.project_config import (
     AgentContentResponse,
     AgentCreateRequest,
     AgentUpdateRequest,
-    ConfigChangeEvent,
     CopyAgentRequest,
     CopyHookRequest,
     CopyMCPRequest,
@@ -32,7 +29,6 @@ from models.project_config import (
     MCPToggleRequest,
     ProjectConfigResponse,
     ProjectConfigSummary,
-    ProjectInfo,
     SkillConfig,
     SkillContentResponse,
     SkillCreateRequest,

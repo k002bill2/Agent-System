@@ -3,24 +3,29 @@
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, EmailStr
 
+from config import get_settings
+from models.notification import (
+    ChannelConfig,
+    NotificationChannel,
+    NotificationEventType,
+    NotificationMessage,
+    NotificationPriority,
+)
 from models.organization import (
+    InviteMemberRequest,
+    MemberRole,
     Organization,
     OrganizationCreate,
-    OrganizationUpdate,
-    OrganizationStatus,
-    OrganizationPlan,
-    OrganizationMember,
-    MemberRole,
-    InviteMemberRequest,
     OrganizationInvitation,
+    OrganizationMember,
+    OrganizationPlan,
     OrganizationStats,
+    OrganizationStatus,
+    OrganizationUpdate,
     TenantContext,
 )
-from services.organization_service import OrganizationService
 from services.notification_service import NotificationService
-from models.notification import NotificationChannel, ChannelConfig, NotificationMessage, NotificationPriority, NotificationEventType
-from config import get_settings
-
+from services.organization_service import OrganizationService
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
@@ -135,7 +140,7 @@ async def send_invitation_email(
     invitation: OrganizationInvitation,
 ) -> tuple[bool, str | None]:
     """Send invitation email to the invited user."""
-    from services.notification_service import EmailAdapter, ADAPTERS
+    from services.notification_service import ADAPTERS
 
     config = NotificationService.get_channel_config(NotificationChannel.EMAIL)
 
@@ -385,7 +390,7 @@ async def get_quota_status(org_id: str):
 
     Returns current/limit for members, projects, sessions, and tokens.
     """
-    from services.quota_service import QuotaService, QuotaStatus
+    from services.quota_service import QuotaService
 
     org = OrganizationService.get_organization(org_id)
     if not org:

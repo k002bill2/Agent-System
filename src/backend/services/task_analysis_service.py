@@ -13,10 +13,9 @@ from typing import Any
 from models.task_analysis import (
     TaskAnalysisEntry,
     TaskAnalysisListResponse,
-    TaskAnalysisSaveRequest,
     TaskAnalysisQueryParams,
+    TaskAnalysisSaveRequest,
 )
-
 
 # Environment variable to control storage mode
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
@@ -53,7 +52,6 @@ class TaskAnalysisService:
 
         if request.success and request.analysis:
             analysis_data = request.analysis.get("analysis", {})
-            execution_plan = request.analysis.get("execution_plan", {})
 
             complexity_score = analysis_data.get("complexity_score")
             effort_level = analysis_data.get("effort_level")
@@ -216,7 +214,8 @@ class TaskAnalysisService:
         params: TaskAnalysisQueryParams,
     ) -> TaskAnalysisListResponse:
         """DB에서 분석 목록 조회"""
-        from sqlalchemy import select, desc, func
+        from sqlalchemy import desc, func, select
+
         from db.database import async_session_factory
         from db.models import TaskAnalysisModel
 
@@ -275,6 +274,7 @@ class TaskAnalysisService:
     async def _get_from_db(self, analysis_id: str) -> TaskAnalysisEntry | None:
         """DB에서 단일 분석 조회"""
         from sqlalchemy import select
+
         from db.database import async_session_factory
         from db.models import TaskAnalysisModel
 
@@ -307,6 +307,7 @@ class TaskAnalysisService:
     async def _delete_from_db(self, analysis_id: str) -> bool:
         """DB에서 분석 삭제"""
         from sqlalchemy import delete
+
         from db.database import async_session_factory
         from db.models import TaskAnalysisModel
 

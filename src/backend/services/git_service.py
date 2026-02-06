@@ -3,10 +3,9 @@
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 try:
-    from git import Repo, GitCommandError, InvalidGitRepositoryError
+    from git import GitCommandError, InvalidGitRepositoryError, Repo
     from git.objects.commit import Commit
     GIT_AVAILABLE = True
 except ImportError:
@@ -16,20 +15,20 @@ except ImportError:
     InvalidGitRepositoryError = Exception
 
 from models.git import (
-    GitBranch,
-    GitCommit,
+    DEFAULT_PROTECTED_BRANCHES,
+    AddResult,
     BranchDiff,
+    CommitCreateResult,
     CommitFile,
     FetchResult,
-    PullResult,
-    PushResult,
-    DEFAULT_PROTECTED_BRANCHES,
     # New models for status/add/commit
     FileStatusType,
+    GitBranch,
+    GitCommit,
     GitStatusFile,
     GitWorkingStatus,
-    AddResult,
-    CommitCreateResult,
+    PullResult,
+    PushResult,
 )
 
 logger = logging.getLogger(__name__)

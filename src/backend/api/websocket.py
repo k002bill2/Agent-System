@@ -1,25 +1,22 @@
 """WebSocket endpoint for real-time updates."""
 
 import asyncio
-import json
 import os
-from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
+from api.deps import get_engine
+from models.hitl import ApprovalStatus
 from models.message import (
+    ApprovalDeniedPayload,
+    ApprovalGrantedPayload,
+    ApprovalResponsePayload,
     Message,
     MessageType,
     TaskCreatePayload,
-    ApprovalResponsePayload,
-    ApprovalRequiredPayload,
-    ApprovalGrantedPayload,
-    ApprovalDeniedPayload,
 )
-from models.hitl import ApprovalStatus
-from api.deps import get_engine
-from services.audit_service import AuditService, AuditAction, ResourceType
+from services.audit_service import AuditAction, AuditService, ResourceType
 
 # Heartbeat configuration
 WS_HEARTBEAT_INTERVAL = int(os.getenv("WS_HEARTBEAT_INTERVAL", "20"))
@@ -51,7 +48,7 @@ class ConnectionManager:
 
     async def broadcast(self, message: Message):
         """Broadcast a message to all connections."""
-        for session_id, websocket in self.active_connections.items():
+        for _session_id, websocket in self.active_connections.items():
             await websocket.send_json(message.model_dump(mode="json"))
 
 

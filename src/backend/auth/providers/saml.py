@@ -4,7 +4,7 @@ import base64
 import uuid
 import zlib
 from datetime import datetime
-from urllib.parse import quote, urlencode
+from urllib.parse import urlencode
 from xml.etree import ElementTree as ET
 
 from auth.providers.base import AuthProvider, UserInfo

@@ -1,32 +1,28 @@
 """Analytics service for dashboard metrics."""
 
-import os
 import random
 from datetime import datetime, timedelta
-from typing import Any
 
-from sqlalchemy import select, func, and_, case
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import SessionModel, TaskModel, SessionActivityModel, AuditLogModel
+from db.models import AuditLogModel, SessionActivityModel, SessionModel, TaskModel
 from models.analytics import (
-    TimeRange,
-    MetricType,
-    OverviewMetrics,
-    TrendDataPoint,
-    TrendData,
-    MultiTrendData,
+    ActivityHeatmap,
     AgentPerformance,
     AgentPerformanceList,
-    CostBreakdown,
-    CostAnalytics,
-    HeatmapCell,
-    ActivityHeatmap,
-    ErrorBreakdown,
-    ErrorAnalytics,
     AnalyticsDashboard,
-    ProjectTrendSeries,
+    CostAnalytics,
+    CostBreakdown,
+    ErrorAnalytics,
+    ErrorBreakdown,
+    HeatmapCell,
     MultiProjectTrendsResponse,
+    MultiTrendData,
+    OverviewMetrics,
+    ProjectTrendSeries,
+    TimeRange,
+    TrendDataPoint,
 )
 from models.project import get_project
 

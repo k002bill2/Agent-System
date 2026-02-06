@@ -1,21 +1,19 @@
 """Version service for config version control."""
 
-import json
 from datetime import datetime
 from typing import Any
 
 from models.config_version import (
     ConfigType,
     ConfigVersion,
-    ConfigVersionCreate,
     ConfigVersionCompare,
+    ConfigVersionCreate,
     ConfigVersionHistory,
-    VersionStatus,
+    ConfigVersionStats,
     RollbackRequest,
     RollbackResult,
-    ConfigVersionStats,
+    VersionStatus,
 )
-
 
 # In-memory storage
 _versions: dict[str, ConfigVersion] = {}

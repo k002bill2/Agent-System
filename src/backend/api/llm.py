@@ -8,7 +8,6 @@ from pydantic import BaseModel
 
 from models.llm_models import LLMModelRegistry, LLMProvider
 
-
 router = APIRouter(prefix="/llm", tags=["llm"])
 
 

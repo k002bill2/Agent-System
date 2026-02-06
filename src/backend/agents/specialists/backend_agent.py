@@ -7,8 +7,7 @@ Firebase Auth, Firestore, Cloud Functions, REST API 연동,
 import time
 from typing import Any
 
-from agents.base import BaseAgent, AgentConfig, AgentResult
-
+from agents.base import AgentConfig, AgentResult, BaseAgent
 
 BACKEND_SYSTEM_PROMPT = """You are a Backend Integration Specialist Agent, an expert in Firebase services and API integration for React Native applications.
 
@@ -225,7 +224,7 @@ class BackendIntegrationAgent(BaseAgent):
         security_notes = []
         if "security" in result.lower():
             lines = result.split("\n")
-            for i, line in enumerate(lines):
+            for _i, line in enumerate(lines):
                 if "security" in line.lower():
                     security_notes.append(line.strip())
 

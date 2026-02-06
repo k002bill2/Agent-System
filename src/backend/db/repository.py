@@ -1,15 +1,13 @@
 """Repository pattern for database operations."""
 
-import json
 import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select, update, delete
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import SessionModel, TaskModel, MessageModel, ApprovalModel
-from models.agent_state import AgentState, TaskNode
+from db.models import ApprovalModel, MessageModel, SessionModel, TaskModel
 
 
 def serialize_value(value: Any) -> Any:
@@ -143,8 +141,9 @@ class SessionRepository:
 
     async def count_by_org_today(self, organization_id: str) -> int:
         """Count sessions created today for an organization."""
+        from datetime import datetime
+
         from sqlalchemy import func
-        from datetime import datetime, timedelta
 
         today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         result = await self.db.execute(
@@ -240,7 +239,7 @@ class SessionRepository:
 
         # Count feedbacks
         try:
-            from db.models import FeedbackModel, DatasetEntryModel
+            from db.models import DatasetEntryModel, FeedbackModel
 
             result = await self.db.execute(
                 select(func.count()).where(FeedbackModel.session_id.in_(session_ids))

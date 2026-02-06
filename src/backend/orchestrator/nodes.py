@@ -7,29 +7,26 @@ from datetime import datetime
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 
-from models.agent_state import AgentState, TaskNode, TaskStatus, AgentRole, AgentInfo
+from models.agent_state import AgentInfo, AgentRole, AgentState, TaskNode, TaskStatus
+from models.cost import TokenUsage, estimate_tokens, extract_token_usage
+from models.hitl import (
+    ApprovalStatus,
+    assess_operation_risk,
+)
 from models.task_plan import (
-    TaskPlanResult,
-    SubtaskPlan,
     PLANNER_SYSTEM_PROMPT,
     PLANNER_USER_TEMPLATE,
+    SubtaskPlan,
+    TaskPlanResult,
 )
-from models.hitl import (
-    ApprovalRequest,
-    ApprovalStatus,
-    RiskLevel,
-    assess_operation_risk,
-    is_approval_required,
-)
-from models.cost import TokenUsage, extract_token_usage, calculate_cost, estimate_tokens
 
 # Audit logging
 from services.audit_service import (
-    AuditService,
     AuditAction,
+    AuditService,
     ResourceType,
     audit_task_created,
     audit_task_status_change,
@@ -731,7 +728,7 @@ After completing all necessary tool calls, provide a final summary."""
             # Track token usage across iterations
             accumulated_token_updates: dict[str, Any] = {}
 
-            for iteration in range(max_iterations):
+            for _iteration in range(max_iterations):
                 # Get LLM response
                 if self.tools:
                     response = await self.llm_with_tools.ainvoke(messages)

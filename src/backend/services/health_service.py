@@ -102,7 +102,7 @@ class HealthService:
                 components[name] = result
                 if result.status == HealthStatus.HEALTHY:
                     healthy_count += 1
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 components[name] = ComponentHealth(
                     name=name,
                     status=HealthStatus.UNHEALTHY,
@@ -174,8 +174,9 @@ class HealthService:
             )
 
         try:
-            from db.database import async_session_factory
             from sqlalchemy import text
+
+            from db.database import async_session_factory
 
             async with async_session_factory() as session:
                 # Test connectivity

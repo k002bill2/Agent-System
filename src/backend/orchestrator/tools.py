@@ -6,18 +6,21 @@ ExecutorNode가 일반 도구처럼 사용할 수 있게 합니다.
 
 import asyncio
 import json
-from typing import Any, Optional, Type
+from typing import Any
 
+from langchain_core.callbacks.manager import (
+    AsyncCallbackManagerForToolRun,
+    CallbackManagerForToolRun,
+)
 from langchain_core.tools import BaseTool
-from langchain_core.callbacks.manager import CallbackManagerForToolRun, AsyncCallbackManagerForToolRun
 from pydantic import BaseModel, Field
 
 from services.mcp_manager import (
     MCPManager,
+    MCPServerStatus,
     MCPToolCall,
     MCPToolResult,
     MCPToolSchema,
-    MCPServerStatus,
     get_mcp_manager,
     get_mcp_manager_sync,
 )
@@ -55,7 +58,7 @@ class MCPToolWrapper(BaseTool):
     def _run(
         self,
         *args,
-        run_manager: Optional[CallbackManagerForToolRun] = None,
+        run_manager: CallbackManagerForToolRun | None = None,
         **kwargs,
     ) -> str:
         """동기 실행 (비동기로 위임)."""
@@ -65,7 +68,7 @@ class MCPToolWrapper(BaseTool):
     async def _arun(
         self,
         *args,
-        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
+        run_manager: AsyncCallbackManagerForToolRun | None = None,
         **kwargs,
     ) -> str:
         """

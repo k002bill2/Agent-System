@@ -11,15 +11,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy import text
-from db.database import engine, async_session_factory
-from db.models import (
-    OrganizationModel,
-    OrganizationMemberModel,
-    OrganizationInvitationModel,
-    UserModel,
-    Base,
-)
 
+from db.database import async_session_factory, engine
+from db.models import (
+    Base,
+    OrganizationInvitationModel,
+    OrganizationMemberModel,
+    OrganizationModel,
+    UserModel,
+)
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 ORGS_FILE = DATA_DIR / "organizations.json"
@@ -50,7 +50,7 @@ async def migrate_organizations():
         print("  No organizations.json found, skipping...")
         return 0
 
-    with open(ORGS_FILE, "r", encoding="utf-8") as f:
+    with open(ORGS_FILE, encoding="utf-8") as f:
         orgs_data = json.load(f)
 
     count = 0
@@ -100,7 +100,7 @@ async def ensure_users_exist():
     if not MEMBERS_FILE.exists():
         return 0
 
-    with open(MEMBERS_FILE, "r", encoding="utf-8") as f:
+    with open(MEMBERS_FILE, encoding="utf-8") as f:
         members_data = json.load(f)
 
     # Collect unique users
@@ -147,7 +147,7 @@ async def migrate_members():
         print("  No organization_members.json found, skipping...")
         return 0
 
-    with open(MEMBERS_FILE, "r", encoding="utf-8") as f:
+    with open(MEMBERS_FILE, encoding="utf-8") as f:
         members_data = json.load(f)
 
     count = 0
@@ -191,7 +191,7 @@ async def migrate_invitations():
         print("  No organization_invitations.json found, skipping...")
         return 0
 
-    with open(INVITATIONS_FILE, "r", encoding="utf-8") as f:
+    with open(INVITATIONS_FILE, encoding="utf-8") as f:
         invitations_data = json.load(f)
 
     count = 0
@@ -259,7 +259,7 @@ async def main():
     print()
 
     print("=" * 60)
-    print(f"  Migration complete!")
+    print("  Migration complete!")
     print(f"  Total: {org_count} orgs, {user_count} users, {member_count} members, {inv_count} invitations")
     print("=" * 60)
 

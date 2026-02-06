@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel
 
-from models.organization import Organization, PLAN_LIMITS
+from models.organization import Organization
 
 
 class QuotaCheckResult(BaseModel):

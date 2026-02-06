@@ -1,15 +1,14 @@
 """RAG (Retrieval Augmented Generation) API routes."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
-from models.project import get_project, PROJECTS_REGISTRY
+from models.project import PROJECTS_REGISTRY, get_project
 from services.rag_service import (
-    get_vector_store,
-    IndexingResult,
     QueryResult,
+    get_vector_store,
 )
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
@@ -102,7 +101,7 @@ async def index_project(
         # Update project registry to mark as indexed
         if project_id in PROJECTS_REGISTRY:
             PROJECTS_REGISTRY[project_id].vector_store_initialized = True
-            PROJECTS_REGISTRY[project_id].indexed_at = datetime.now(timezone.utc).isoformat()
+            PROJECTS_REGISTRY[project_id].indexed_at = datetime.now(UTC).isoformat()
 
         return IndexResponse(
             project_id=result.project_id,

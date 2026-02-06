@@ -5,17 +5,16 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from models.playground import (
-    PlaygroundSession,
-    PlaygroundSessionCreate,
-    PlaygroundExecution,
-    PlaygroundExecuteRequest,
-    PlaygroundToolTest,
     PlaygroundCompareRequest,
     PlaygroundCompareResult,
+    PlaygroundExecuteRequest,
+    PlaygroundExecution,
+    PlaygroundSession,
+    PlaygroundSessionCreate,
+    PlaygroundToolTest,
 )
-from services.playground_service import PlaygroundService
 from services.llm_service import LLMService
-
+from services.playground_service import PlaygroundService
 
 router = APIRouter(prefix="/playground", tags=["playground"])
 

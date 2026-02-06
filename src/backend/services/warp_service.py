@@ -14,12 +14,12 @@ Reference:
 """
 
 import os
-from pathlib import Path
 import subprocess
-import yaml
 import urllib.parse
 from datetime import datetime
+from pathlib import Path
 
+import yaml
 
 # Docker mode: CLAUDE_HOME is set in Docker environment
 IS_DOCKER = bool(os.getenv("CLAUDE_HOME"))

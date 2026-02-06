@@ -103,7 +103,7 @@ class ParallelExecutorNode(BaseNode):
         failed_count = 0
 
         for task_result in results:
-            task_id = task_result["task_id"]
+            _task_id = task_result["task_id"]
             result = task_result["result"]
 
             # Merge task updates
@@ -217,7 +217,7 @@ class ParallelExecutorNode(BaseNode):
 
         # Handle any exceptions
         processed_results = []
-        for task_id, result in zip(valid_task_ids, results):
+        for task_id, result in zip(valid_task_ids, results, strict=False):
             if isinstance(result, Exception):
                 # Create error result for failed tasks
                 task = tasks[task_id]

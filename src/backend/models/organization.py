@@ -1,10 +1,11 @@
 """Organization models for multi-tenant support."""
 
+import uuid
 from datetime import datetime
 from enum import Enum
 from typing import Any
-from pydantic import BaseModel, Field, EmailStr
-import uuid
+
+from pydantic import BaseModel, EmailStr, Field
 
 
 class OrganizationPlan(str, Enum):

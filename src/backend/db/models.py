@@ -1,18 +1,17 @@
 """SQLAlchemy models for database persistence."""
 
 from datetime import datetime
-from typing import Any
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
     String,
     Text,
-    Float,
-    Boolean,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship

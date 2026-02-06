@@ -52,7 +52,7 @@ class FrontmatterParser:
         Returns:
             Tuple of (frontmatter dict, body content)
         """
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             content = f.read()
         return cls.parse(content)
 

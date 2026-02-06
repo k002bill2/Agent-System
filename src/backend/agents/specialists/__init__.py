@@ -6,8 +6,8 @@
 - Test Automation Specialist: Jest, RTL
 """
 
-from agents.specialists.mobile_ui_agent import MobileUIAgent
 from agents.specialists.backend_agent import BackendIntegrationAgent
+from agents.specialists.mobile_ui_agent import MobileUIAgent
 from agents.specialists.test_agent import TestAutomationAgent
 
 __all__ = [

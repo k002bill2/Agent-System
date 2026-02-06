@@ -1,57 +1,53 @@
 """REST API routes."""
 
+import json
 import os
-from fastapi import APIRouter, HTTPException, Depends
+
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-import json
 
 # Docker mode: skip host filesystem validations
 IS_DOCKER = bool(os.getenv("CLAUDE_HOME"))
 
-from models.task import Task, TaskCreate, TaskTree
-from models.agent_state import AgentState, TaskStatus
-from models.hitl import ApprovalStatus, ApprovalResponse
+from api.deps import get_engine
+from models.agent_state import TaskStatus
 from models.context_usage import ContextUsage, get_context_limit
+from models.hitl import ApprovalResponse, ApprovalStatus
+from models.monitoring import (
+    CheckCompletedPayload,
+    CheckProgressPayload,
+    CheckResult,
+    CheckStartedPayload,
+    CheckStatus,
+    CheckType,
+    ProjectHealth,
+)
 from models.permissions import (
     AgentPermission,
     SessionPermissions,
     SessionPermissionsResponse,
     UpdatePermissionsRequest,
-    PermissionInfo,
     get_permission_info,
-    PERMISSION_DESCRIPTIONS,
 )
 from models.project import (
-    Project,
     ProjectCreate,
+    ProjectCreateFromTemplate,
+    ProjectLinkRequest,
     ProjectResponse,
     ProjectUpdate,
-    ProjectLinkRequest,
-    ProjectCreateFromTemplate,
-    register_project,
     get_project,
-    list_projects,
-    unregister_project,
     get_projects_dir,
-    update_project,
+    list_projects,
     normalize_path,
+    register_project,
     reorder_projects,
+    update_project,
 )
-from models.monitoring import (
-    CheckType,
-    CheckStatus,
-    CheckResult,
-    ProjectHealth,
-    CheckStartedPayload,
-    CheckProgressPayload,
-    CheckCompletedPayload,
-)
-from services.project_runner import ProjectRunner, get_runner
-from services.warp_service import get_warp_service
-from api.deps import get_engine
+from models.task import TaskCreate, TaskTree
 from orchestrator import OrchestrationEngine
-
+from services.project_runner import get_runner
+from services.warp_service import get_warp_service
 
 router = APIRouter(tags=["orchestration"])
 
@@ -716,8 +712,10 @@ async def create_project_from_template(request: ProjectCreateFromTemplate):
     - python: Python package with pyproject.toml
     - fastapi: FastAPI service
     """
-    from pathlib import Path
-    from services.project_template_service import create_project_from_template as create_from_template, get_template
+    from services.project_template_service import (
+        create_project_from_template as create_from_template,
+    )
+    from services.project_template_service import get_template
 
     # Validate template exists
     template = get_template(request.template)
@@ -1126,8 +1124,8 @@ async def get_project_context(
     - Dev docs from dev/active folder
     - Current session info (if active)
     """
-    from pathlib import Path
     from datetime import datetime
+    from pathlib import Path
 
     project = get_project(project_id)
     if not project:
@@ -1274,7 +1272,7 @@ async def approve_operation(
 
     # Resume execution
     try:
-        final_state = await engine.run(session_id, "")
+        await engine.run(session_id, "")
         return {
             "message": "Operation approved",
             "approval_id": approval_id,

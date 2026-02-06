@@ -6,8 +6,7 @@ Jest, React Native Testing Library, 커버리지 분석, TDD를 담당합니다.
 import time
 from typing import Any
 
-from agents.base import BaseAgent, AgentConfig, AgentResult
-
+from agents.base import AgentConfig, AgentResult, BaseAgent
 
 TEST_AUTOMATION_SYSTEM_PROMPT = """You are a Test Automation Specialist Agent, an expert in testing React Native applications with Jest and React Native Testing Library.
 

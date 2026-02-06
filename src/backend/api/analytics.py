@@ -1,23 +1,23 @@
 """Analytics API routes."""
 
 import os
-from fastapi import APIRouter, Query, Depends, HTTPException
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import get_db
 from models.analytics import (
-    TimeRange,
-    OverviewMetrics,
-    MultiTrendData,
-    AgentPerformanceList,
-    CostAnalytics,
     ActivityHeatmap,
-    ErrorAnalytics,
+    AgentPerformanceList,
     AnalyticsDashboard,
+    CostAnalytics,
+    ErrorAnalytics,
     MultiProjectTrendsResponse,
+    MultiTrendData,
+    OverviewMetrics,
+    TimeRange,
 )
 from services.analytics_service import AnalyticsService
-
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 

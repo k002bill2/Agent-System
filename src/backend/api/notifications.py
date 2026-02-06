@@ -1,6 +1,6 @@
 """Notification API routes."""
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,14 +8,12 @@ from db.database import get_db
 from models.notification import (
     NotificationChannel,
     NotificationEventType,
+    NotificationMessage,
     NotificationRule,
     NotificationRuleCreate,
     NotificationRuleUpdate,
-    NotificationMessage,
-    ChannelConfig,
 )
-from services.notification_service import NotificationService, USE_DATABASE
-
+from services.notification_service import USE_DATABASE, NotificationService
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 

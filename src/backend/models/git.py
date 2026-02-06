@@ -1,11 +1,10 @@
 """Git data models for team collaboration management."""
 
+import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Any
-from pydantic import BaseModel, Field
-import uuid
 
+from pydantic import BaseModel, Field
 
 # =============================================================================
 # Enums
@@ -565,6 +564,7 @@ GIT_REPOSITORIES: dict[str, GitRepository] = {}
 def register_git_repository(name: str, path: str, description: str = "") -> GitRepository:
     """Register a new Git repository."""
     from pathlib import Path
+
     from services.git_service import get_git_service
 
     # Normalize path
@@ -623,6 +623,7 @@ def update_git_repository(
 ) -> GitRepository | None:
     """Update a Git repository."""
     from pathlib import Path
+
     from services.git_service import get_git_service
 
     repo = GIT_REPOSITORIES.get(repo_id)

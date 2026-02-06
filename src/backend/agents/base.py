@@ -1,15 +1,14 @@
 """Base agent class for all specialized agents."""
 
-from abc import ABC, abstractmethod
 import os
+from abc import ABC, abstractmethod
 from typing import Any
 
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import SystemMessage, HumanMessage
 from pydantic import BaseModel, Field
 
 from models.llm_models import LLMModelRegistry, LLMProvider
-
 
 # Default model from registry
 _DEFAULT_AGENT_MODEL = LLMModelRegistry.get_default(LLMProvider.GOOGLE)
