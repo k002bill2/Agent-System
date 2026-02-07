@@ -172,7 +172,7 @@ async def send_invitation_email(
         body=f"""You have been invited to join the organization "{org_name}" on Agent Orchestration Service.
 
 Role: {invitation.role.value.title()}
-{f'Message: {invitation.message}' if invitation.message else ''}
+{f"Message: {invitation.message}" if invitation.message else ""}
 
 Click the link below to accept the invitation:
 {accept_url}
@@ -191,6 +191,7 @@ This invitation expires in 7 days.""",
 
 class InvitationResponse(BaseModel):
     """Response for invitation with email status."""
+
     invitation: OrganizationInvitation
     email_sent: bool
     email_error: str | None = None

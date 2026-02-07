@@ -58,8 +58,7 @@ async def migrate_organizations():
         for org_id, org in orgs_data.items():
             # Check if already exists
             result = await session.execute(
-                text("SELECT id FROM organizations WHERE id = :id"),
-                {"id": org_id}
+                text("SELECT id FROM organizations WHERE id = :id"), {"id": org_id}
             )
             if result.fetchone():
                 print(f"  Organization {org['name']} already exists, skipping...")
@@ -119,8 +118,7 @@ async def ensure_users_exist():
         for user_id, user_info in users_to_create.items():
             # Check if user exists
             result = await session.execute(
-                text("SELECT id FROM users WHERE id = :id"),
-                {"id": user_id}
+                text("SELECT id FROM users WHERE id = :id"), {"id": user_id}
             )
             if result.fetchone():
                 print(f"  User {user_info['email']} already exists")
@@ -155,8 +153,7 @@ async def migrate_members():
         for member_id, member in members_data.items():
             # Check if already exists
             result = await session.execute(
-                text("SELECT id FROM organization_members WHERE id = :id"),
-                {"id": member_id}
+                text("SELECT id FROM organization_members WHERE id = :id"), {"id": member_id}
             )
             if result.fetchone():
                 print(f"  Member {member['email']} already exists, skipping...")
@@ -199,8 +196,7 @@ async def migrate_invitations():
         for inv_id, inv in invitations_data.items():
             # Check if already exists
             result = await session.execute(
-                text("SELECT id FROM organization_invitations WHERE id = :id"),
-                {"id": inv_id}
+                text("SELECT id FROM organization_invitations WHERE id = :id"), {"id": inv_id}
             )
             if result.fetchone():
                 print(f"  Invitation for {inv['email']} already exists, skipping...")
@@ -260,7 +256,9 @@ async def main():
 
     print("=" * 60)
     print("  Migration complete!")
-    print(f"  Total: {org_count} orgs, {user_count} users, {member_count} members, {inv_count} invitations")
+    print(
+        f"  Total: {org_count} orgs, {user_count} users, {member_count} members, {inv_count} invitations"
+    )
     print("=" * 60)
 
 

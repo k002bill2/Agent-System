@@ -137,28 +137,34 @@ class ParallelExecutorNode(BaseNode):
                     if agent_name not in token_usage:
                         token_usage[agent_name] = usage
                     else:
-                        for key in ["total_input_tokens", "total_output_tokens", "total_tokens", "call_count"]:
-                            token_usage[agent_name][key] = (
-                                token_usage[agent_name].get(key, 0) + usage.get(key, 0)
-                            )
-                        token_usage[agent_name]["total_cost_usd"] = (
-                            token_usage[agent_name].get("total_cost_usd", 0.0) +
-                            usage.get("total_cost_usd", 0.0)
-                        )
+                        for key in [
+                            "total_input_tokens",
+                            "total_output_tokens",
+                            "total_tokens",
+                            "call_count",
+                        ]:
+                            token_usage[agent_name][key] = token_usage[agent_name].get(
+                                key, 0
+                            ) + usage.get(key, 0)
+                        token_usage[agent_name]["total_cost_usd"] = token_usage[agent_name].get(
+                            "total_cost_usd", 0.0
+                        ) + usage.get("total_cost_usd", 0.0)
 
             if "total_cost" in result:
                 total_cost += result["total_cost"] - state.get("total_cost", 0.0)
 
         # Add summary message
-        all_messages.append({
-            "id": f"batch-{datetime.utcnow().isoformat()}",
-            "role": "system",
-            "content": (
-                f"Parallel execution completed: {completed_count} succeeded, "
-                f"{failed_count} failed out of {len(results)} tasks"
-            ),
-            "timestamp": datetime.utcnow().isoformat(),
-        })
+        all_messages.append(
+            {
+                "id": f"batch-{datetime.utcnow().isoformat()}",
+                "role": "system",
+                "content": (
+                    f"Parallel execution completed: {completed_count} succeeded, "
+                    f"{failed_count} failed out of {len(results)} tasks"
+                ),
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
 
         return {
             "tasks": merged_tasks,
@@ -192,16 +198,16 @@ class ParallelExecutorNode(BaseNode):
 
         # Validate batch tasks
         valid_task_ids = [
-            tid for tid in batch_task_ids
+            tid
+            for tid in batch_task_ids
             if tid in tasks and tasks[tid].status == TaskStatus.PENDING
         ]
 
         if not valid_task_ids:
             return {
-                "messages": [self._create_message(
-                    "system",
-                    "Parallel executor: No valid tasks to execute"
-                )],
+                "messages": [
+                    self._create_message("system", "Parallel executor: No valid tasks to execute")
+                ],
             }
 
         # Create semaphore for concurrency control
@@ -209,8 +215,7 @@ class ParallelExecutorNode(BaseNode):
 
         # Execute tasks in parallel
         execution_tasks = [
-            self._execute_with_semaphore(task_id, state, semaphore)
-            for task_id in valid_task_ids
+            self._execute_with_semaphore(task_id, state, semaphore) for task_id in valid_task_ids
         ]
 
         results = await asyncio.gather(*execution_tasks, return_exceptions=True)
@@ -225,13 +230,15 @@ class ParallelExecutorNode(BaseNode):
                 task.error = str(result)
                 task.updated_at = datetime.utcnow()
 
-                processed_results.append({
-                    "task_id": task_id,
-                    "result": {
-                        "tasks": {task_id: task},
-                        "errors": [str(result)],
-                    },
-                })
+                processed_results.append(
+                    {
+                        "task_id": task_id,
+                        "result": {
+                            "tasks": {task_id: task},
+                            "errors": [str(result)],
+                        },
+                    }
+                )
             else:
                 processed_results.append(result)
 
@@ -261,8 +268,7 @@ def get_ready_tasks(state: AgentState) -> list[str]:
 
     # Get all pending tasks under root
     pending_tasks = [
-        t for t in tasks.values()
-        if t.status == TaskStatus.PENDING and t.parent_id == root_task_id
+        t for t in tasks.values() if t.status == TaskStatus.PENDING and t.parent_id == root_task_id
     ]
 
     for task in pending_tasks:

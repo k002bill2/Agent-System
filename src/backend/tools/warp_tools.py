@@ -158,10 +158,15 @@ def warp_agent_with_mcp(
 
         # Build command
         cmd = [
-            WARP_CLI, "agent", "run",
-            "-p", prompt,
-            "-C", cwd,
-            "--mcp", mcp_json,
+            WARP_CLI,
+            "agent",
+            "run",
+            "-p",
+            prompt,
+            "-C",
+            cwd,
+            "--mcp",
+            mcp_json,
         ]
 
         # Execute Warp agent with MCP

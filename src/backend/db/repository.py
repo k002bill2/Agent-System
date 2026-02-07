@@ -14,7 +14,7 @@ def serialize_value(value: Any) -> Any:
     """Recursively serialize a value, handling datetime and Pydantic models."""
     if isinstance(value, datetime):
         return value.isoformat()
-    elif hasattr(value, 'model_dump'):
+    elif hasattr(value, "model_dump"):
         # Pydantic model - serialize with mode="json" for datetime handling
         return value.model_dump(mode="json")
     elif isinstance(value, dict):
@@ -32,7 +32,11 @@ def serialize_state(state: dict[str, Any]) -> dict[str, Any]:
         if key == "tasks" and isinstance(value, dict):
             # Convert TaskNode objects to dicts
             serialized[key] = {
-                task_id: (task.model_dump(mode="json") if hasattr(task, 'model_dump') else serialize_value(task))
+                task_id: (
+                    task.model_dump(mode="json")
+                    if hasattr(task, "model_dump")
+                    else serialize_value(task)
+                )
                 for task_id, task in value.items()
             }
         else:
@@ -69,9 +73,7 @@ class SessionRepository:
 
     async def get(self, session_id: str) -> SessionModel | None:
         """Get session by ID."""
-        result = await self.db.execute(
-            select(SessionModel).where(SessionModel.id == session_id)
-        )
+        result = await self.db.execute(select(SessionModel).where(SessionModel.id == session_id))
         return result.scalar_one_or_none()
 
     async def get_state(self, session_id: str) -> dict[str, Any] | None:
@@ -119,9 +121,7 @@ class SessionRepository:
 
     async def delete(self, session_id: str) -> bool:
         """Delete session and all related data."""
-        result = await self.db.execute(
-            delete(SessionModel).where(SessionModel.id == session_id)
-        )
+        result = await self.db.execute(delete(SessionModel).where(SessionModel.id == session_id))
         return result.rowcount > 0
 
     async def list_by_user(
@@ -296,9 +296,7 @@ class TaskRepository:
 
     async def get(self, task_id: str) -> TaskModel | None:
         """Get task by ID."""
-        result = await self.db.execute(
-            select(TaskModel).where(TaskModel.id == task_id)
-        )
+        result = await self.db.execute(select(TaskModel).where(TaskModel.id == task_id))
         return result.scalar_one_or_none()
 
     async def update_status(
@@ -325,9 +323,7 @@ class TaskRepository:
             values["error"] = error
 
         db_result = await self.db.execute(
-            update(TaskModel)
-            .where(TaskModel.id == task_id)
-            .values(**values)
+            update(TaskModel).where(TaskModel.id == task_id).values(**values)
         )
         return db_result.rowcount > 0
 
@@ -444,9 +440,7 @@ class ApprovalRepository:
 
     async def get(self, approval_id: str) -> ApprovalModel | None:
         """Get approval by ID."""
-        result = await self.db.execute(
-            select(ApprovalModel).where(ApprovalModel.id == approval_id)
-        )
+        result = await self.db.execute(select(ApprovalModel).where(ApprovalModel.id == approval_id))
         return result.scalar_one_or_none()
 
     async def approve(

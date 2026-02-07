@@ -39,13 +39,13 @@ class OIDCConfig:
             return
 
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{self.issuer_url}/.well-known/openid-configuration"
-            )
+            response = await client.get(f"{self.issuer_url}/.well-known/openid-configuration")
             response.raise_for_status()
             config = response.json()
 
-            self.authorization_endpoint = self.authorization_endpoint or config.get("authorization_endpoint")
+            self.authorization_endpoint = self.authorization_endpoint or config.get(
+                "authorization_endpoint"
+            )
             self.token_endpoint = self.token_endpoint or config.get("token_endpoint")
             self.userinfo_endpoint = self.userinfo_endpoint or config.get("userinfo_endpoint")
             self.jwks_uri = self.jwks_uri or config.get("jwks_uri")

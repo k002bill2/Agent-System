@@ -15,7 +15,9 @@ load_dotenv()
 
 # LLM Provider selection
 # Prefer explicit env vars but fall back to Settings defaults
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", settings.llm_provider)  # "ollama", "anthropic", or "google"
+LLM_PROVIDER = os.getenv(
+    "LLM_PROVIDER", settings.llm_provider
+)  # "ollama", "anthropic", or "google"
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", settings.ollama_model)
 GOOGLE_MODEL = os.getenv("GOOGLE_MODEL", settings.google_model)
 
@@ -24,6 +26,7 @@ def get_llm():
     """Get LLM instance based on provider setting."""
     if LLM_PROVIDER == "anthropic":
         from langchain_anthropic import ChatAnthropic
+
         return ChatAnthropic(
             model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
             api_key=os.getenv("ANTHROPIC_API_KEY"),
@@ -34,9 +37,7 @@ def get_llm():
         # LangChain's ChatGoogleGenerativeAI expects an `api_key` argument or
         # GOOGLE_API_KEY / GEMINI_API_KEY in the environment.
         api_key = (
-            os.getenv("GOOGLE_API_KEY")
-            or os.getenv("GEMINI_API_KEY")
-            or settings.google_api_key
+            os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or settings.google_api_key
         )
         if not api_key:
             raise RuntimeError(
@@ -51,10 +52,12 @@ def get_llm():
         )
     else:
         from langchain_ollama import ChatOllama
+
         return ChatOllama(
             model=OLLAMA_MODEL,
             base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
         )
+
 
 from models.agent_state import AgentState
 from models.message import (
@@ -325,10 +328,14 @@ class OrchestrationEngine:
                 yield Message(
                     type=MessageType.STATE_UPDATE,
                     payload=StateUpdatePayload(
-                        tasks={k: v.model_dump() if hasattr(v, "model_dump") else v
-                               for k, v in state.get("tasks", {}).items()},
-                        agents={k: v.model_dump() if hasattr(v, "model_dump") else v
-                               for k, v in state.get("agents", {}).items()},
+                        tasks={
+                            k: v.model_dump() if hasattr(v, "model_dump") else v
+                            for k, v in state.get("tasks", {}).items()
+                        },
+                        agents={
+                            k: v.model_dump() if hasattr(v, "model_dump") else v
+                            for k, v in state.get("agents", {}).items()
+                        },
                         current_task_id=state.get("current_task_id"),
                         active_agent_id=state.get("active_agent_id"),
                     ).model_dump(),
@@ -380,10 +387,7 @@ class OrchestrationEngine:
         await self.session_service.update_session(session_id, state)
 
         # Update cost tracking in database
-        total_tokens = sum(
-            u.get("total_tokens", 0)
-            for u in state.get("token_usage", {}).values()
-        )
+        total_tokens = sum(u.get("total_tokens", 0) for u in state.get("token_usage", {}).values())
         await self.session_service.update_cost(
             session_id=session_id,
             total_tokens=total_tokens,
@@ -399,9 +403,7 @@ class OrchestrationEngine:
             type=MessageType.TASK_COMPLETED,
             payload={
                 "root_task_id": state.get("root_task_id"),
-                "result": state.get("tasks", {}).get(
-                    state.get("root_task_id", ""), {}
-                ),
+                "result": state.get("tasks", {}).get(state.get("root_task_id", ""), {}),
             },
             session_id=session_id,
         )

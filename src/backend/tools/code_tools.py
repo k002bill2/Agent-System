@@ -206,8 +206,9 @@ def _detect_test_framework(path: str) -> str:
         path = os.path.dirname(path)
 
     # Check for Python test frameworks
-    if os.path.exists(os.path.join(path, "pytest.ini")) or \
-       os.path.exists(os.path.join(path, "pyproject.toml")):
+    if os.path.exists(os.path.join(path, "pytest.ini")) or os.path.exists(
+        os.path.join(path, "pyproject.toml")
+    ):
         return "pytest"
 
     # Check for Node.js test frameworks
@@ -241,14 +242,17 @@ def _detect_linter(path: str) -> str:
         file_ext = None
 
     # Check for ESLint
-    if os.path.exists(os.path.join(check_path, ".eslintrc.js")) or \
-       os.path.exists(os.path.join(check_path, ".eslintrc.json")) or \
-       os.path.exists(os.path.join(check_path, "eslint.config.js")):
+    if (
+        os.path.exists(os.path.join(check_path, ".eslintrc.js"))
+        or os.path.exists(os.path.join(check_path, ".eslintrc.json"))
+        or os.path.exists(os.path.join(check_path, "eslint.config.js"))
+    ):
         return "eslint"
 
     # Check for Python linters
-    if os.path.exists(os.path.join(check_path, "ruff.toml")) or \
-       os.path.exists(os.path.join(check_path, ".ruff.toml")):
+    if os.path.exists(os.path.join(check_path, "ruff.toml")) or os.path.exists(
+        os.path.join(check_path, ".ruff.toml")
+    ):
         return "ruff"
 
     # Check pyproject.toml for linter config

@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 class FeedbackType(str, Enum):
     """피드백 유형"""
+
     IMPLICIT = "implicit"  # 사용자가 에이전트 결과를 수정
     EXPLICIT_POSITIVE = "explicit_positive"  # 결과에 만족 (👍)
     EXPLICIT_NEGATIVE = "explicit_negative"  # 결과에 불만족 (👎)
@@ -21,6 +22,7 @@ class FeedbackType(str, Enum):
 
 class FeedbackReason(str, Enum):
     """부정 피드백 사유"""
+
     INCORRECT = "incorrect"  # 결과가 틀림
     INCOMPLETE = "incomplete"  # 불완전한 결과
     OFF_TOPIC = "off_topic"  # 주제에서 벗어남
@@ -31,6 +33,7 @@ class FeedbackReason(str, Enum):
 
 class FeedbackStatus(str, Enum):
     """피드백 처리 상태"""
+
     PENDING = "pending"  # 대기 중
     PROCESSED = "processed"  # 처리됨 (데이터셋으로 변환됨)
     SKIPPED = "skipped"  # 건너뜀 (품질 부적합)
@@ -44,6 +47,7 @@ class FeedbackStatus(str, Enum):
 
 class FeedbackSubmit(BaseModel):
     """피드백 제출 요청"""
+
     session_id: str = Field(..., description="세션 ID")
     task_id: str = Field(..., description="태스크 ID")
     message_id: str | None = Field(None, description="메시지 ID (optional)")
@@ -68,6 +72,7 @@ class FeedbackSubmit(BaseModel):
 
 class FeedbackResponse(BaseModel):
     """피드백 제출 응답"""
+
     id: str = Field(..., description="피드백 ID")
     session_id: str
     task_id: str
@@ -79,6 +84,7 @@ class FeedbackResponse(BaseModel):
 
 class FeedbackEntry(BaseModel):
     """피드백 항목 (목록 조회용)"""
+
     id: str
     session_id: str
     task_id: str
@@ -96,6 +102,7 @@ class FeedbackEntry(BaseModel):
 
 class FeedbackQueryParams(BaseModel):
     """피드백 조회 파라미터"""
+
     session_id: str | None = None
     feedback_type: FeedbackType | None = None
     status: FeedbackStatus | None = None
@@ -108,6 +115,7 @@ class FeedbackQueryParams(BaseModel):
 
 class FeedbackStats(BaseModel):
     """피드백 통계"""
+
     total_count: int = 0
     by_type: dict[str, int] = Field(default_factory=dict)
     by_reason: dict[str, int] = Field(default_factory=dict)
@@ -124,6 +132,7 @@ class FeedbackStats(BaseModel):
 
 class DatasetEntry(BaseModel):
     """데이터셋 항목 (Fine-tuning용)"""
+
     id: str
     feedback_id: str
     system_prompt: str
@@ -136,6 +145,7 @@ class DatasetEntry(BaseModel):
 
 class DatasetExportOptions(BaseModel):
     """데이터셋 내보내기 옵션"""
+
     format: str = Field("jsonl", description="출력 형식 (jsonl, csv, parquet)")
     include_negative: bool = Field(True, description="부정 샘플 포함 여부")
     include_implicit: bool = Field(True, description="암묵적 피드백 포함 여부")
@@ -146,6 +156,7 @@ class DatasetExportOptions(BaseModel):
 
 class DatasetStats(BaseModel):
     """데이터셋 통계"""
+
     total_entries: int = 0
     positive_entries: int = 0
     negative_entries: int = 0
@@ -163,11 +174,13 @@ class DatasetStats(BaseModel):
 
 class ProcessFeedbackRequest(BaseModel):
     """피드백 처리 요청"""
+
     feedback_ids: list[str] = Field(..., description="처리할 피드백 ID 목록")
 
 
 class ProcessFeedbackResult(BaseModel):
     """피드백 처리 결과"""
+
     feedback_id: str
     success: bool
     dataset_entry_id: str | None = None
@@ -176,6 +189,7 @@ class ProcessFeedbackResult(BaseModel):
 
 class BatchProcessResult(BaseModel):
     """일괄 처리 결과"""
+
     total: int
     processed: int
     skipped: int

@@ -40,7 +40,7 @@ class PlaygroundTools:
                         "no_html": 1,
                         "skip_disambig": 1,
                     },
-                    headers={"User-Agent": "AOS-Playground/1.0"}
+                    headers={"User-Agent": "AOS-Playground/1.0"},
                 )
 
                 if response.status_code != 200:
@@ -55,30 +55,36 @@ class PlaygroundTools:
 
                 # Abstract (main answer)
                 if data.get("Abstract"):
-                    results.append({
-                        "title": data.get("Heading", "Summary"),
-                        "url": data.get("AbstractURL", ""),
-                        "snippet": data["Abstract"],
-                        "source": data.get("AbstractSource", ""),
-                    })
+                    results.append(
+                        {
+                            "title": data.get("Heading", "Summary"),
+                            "url": data.get("AbstractURL", ""),
+                            "snippet": data["Abstract"],
+                            "source": data.get("AbstractSource", ""),
+                        }
+                    )
 
                 # Related topics
                 for topic in data.get("RelatedTopics", [])[:max_results]:
                     if isinstance(topic, dict) and "Text" in topic:
-                        results.append({
-                            "title": topic.get("Text", "")[:100],
-                            "url": topic.get("FirstURL", ""),
-                            "snippet": topic.get("Text", ""),
-                        })
+                        results.append(
+                            {
+                                "title": topic.get("Text", "")[:100],
+                                "url": topic.get("FirstURL", ""),
+                                "snippet": topic.get("Text", ""),
+                            }
+                        )
                     elif isinstance(topic, dict) and "Topics" in topic:
                         # Nested topics
                         for subtopic in topic["Topics"][:2]:
                             if "Text" in subtopic:
-                                results.append({
-                                    "title": subtopic.get("Text", "")[:100],
-                                    "url": subtopic.get("FirstURL", ""),
-                                    "snippet": subtopic.get("Text", ""),
-                                })
+                                results.append(
+                                    {
+                                        "title": subtopic.get("Text", "")[:100],
+                                        "url": subtopic.get("FirstURL", ""),
+                                        "snippet": subtopic.get("Text", ""),
+                                    }
+                                )
 
                 # If no results from DDG, try a basic fallback message
                 if not results:
@@ -174,6 +180,7 @@ class PlaygroundTools:
         try:
             # Create temp file
             import tempfile
+
             with tempfile.NamedTemporaryFile(
                 mode="w",
                 suffix=ext,
@@ -187,7 +194,11 @@ class PlaygroundTools:
                 start_time = datetime.now()
 
                 # Use working_directory if provided
-                cwd = working_directory if working_directory and os.path.isdir(working_directory) else None
+                cwd = (
+                    working_directory
+                    if working_directory and os.path.isdir(working_directory)
+                    else None
+                )
 
                 process = await asyncio.create_subprocess_exec(
                     interpreter,
@@ -301,6 +312,7 @@ class PlaygroundTools:
             if path_lower.endswith(".pdf"):
                 try:
                     import pypdf
+
                     reader = pypdf.PdfReader(path)
                     content = ""
                     for i, page in enumerate(reader.pages):
@@ -334,9 +346,29 @@ class PlaygroundTools:
                     }
 
             # Handle binary files
-            binary_extensions = [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp",
-                                 ".mp3", ".mp4", ".wav", ".avi", ".mov", ".zip", ".tar",
-                                 ".gz", ".rar", ".7z", ".exe", ".dll", ".so", ".dylib"]
+            binary_extensions = [
+                ".png",
+                ".jpg",
+                ".jpeg",
+                ".gif",
+                ".bmp",
+                ".ico",
+                ".webp",
+                ".mp3",
+                ".mp4",
+                ".wav",
+                ".avi",
+                ".mov",
+                ".zip",
+                ".tar",
+                ".gz",
+                ".rar",
+                ".7z",
+                ".exe",
+                ".dll",
+                ".so",
+                ".dylib",
+            ]
             if any(path_lower.endswith(ext) for ext in binary_extensions):
                 return {
                     "success": False,
@@ -366,7 +398,9 @@ class PlaygroundTools:
             }
 
     @staticmethod
-    async def file_write(path: str, content: str, working_directory: str | None = None) -> dict[str, Any]:
+    async def file_write(
+        path: str, content: str, working_directory: str | None = None
+    ) -> dict[str, Any]:
         """
         Write content to a file.
 
@@ -477,6 +511,7 @@ class PlaygroundTools:
 
         try:
             from urllib.parse import urlparse
+
             parsed = urlparse(url)
             host = parsed.hostname or ""
 

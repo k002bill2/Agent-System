@@ -5,7 +5,7 @@ from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from models.agent_state import TaskStatus, TaskNode, create_initial_state
-from models.hitl import ApprovalStatus, TOOL_RISK_CONFIG
+from models.hitl import ApprovalStatus, RiskLevel, TOOL_RISK_CONFIG
 
 
 @pytest.mark.asyncio
@@ -20,14 +20,15 @@ class TestHITLConfiguration:
     async def test_high_risk_tools_defined(self):
         """Test high risk tools are properly defined."""
         high_risk_tools = [
-            tool for tool, config in TOOL_RISK_CONFIG.items()
-            if config.get("risk_level") == "HIGH"
+            tool
+            for tool, config in TOOL_RISK_CONFIG.items()
+            if config.risk_level == RiskLevel.HIGH
         ]
 
         # At least execute_bash should be high risk
         assert "execute_bash" in TOOL_RISK_CONFIG
-        assert TOOL_RISK_CONFIG["execute_bash"]["risk_level"] == "HIGH"
-        assert TOOL_RISK_CONFIG["execute_bash"]["requires_approval"] is True
+        assert TOOL_RISK_CONFIG["execute_bash"].risk_level == RiskLevel.HIGH
+        assert TOOL_RISK_CONFIG["execute_bash"].requires_approval is True
 
     async def test_approval_status_enum(self):
         """Test ApprovalStatus enum values."""
@@ -91,7 +92,9 @@ class TestHITLState:
         state["waiting_for_approval"] = True
 
         # Approve
-        state["pending_approvals"][approval_id]["status"] = ApprovalStatus.APPROVED.value
+        state["pending_approvals"][approval_id]["status"] = (
+            ApprovalStatus.APPROVED.value
+        )
         state["waiting_for_approval"] = False
         engine._sessions[session_id] = state
 
@@ -126,7 +129,10 @@ class TestHITLState:
         # Verify
         updated_state = await engine.get_session(session_id)
         assert updated_state["pending_approvals"][approval_id]["status"] == "denied"
-        assert "Too dangerous" in updated_state["pending_approvals"][approval_id]["resolver_note"]
+        assert (
+            "Too dangerous"
+            in updated_state["pending_approvals"][approval_id]["resolver_note"]
+        )
 
 
 @pytest.mark.asyncio
@@ -152,9 +158,7 @@ class TestHITLAPIIntegration:
         session_id = create_resp.json()["session_id"]
 
         # Try to approve nonexistent
-        response = await client.post(
-            f"/api/sessions/{session_id}/approve/nonexistent"
-        )
+        response = await client.post(f"/api/sessions/{session_id}/approve/nonexistent")
 
         assert response.status_code == 404
 
@@ -165,9 +169,7 @@ class TestHITLAPIIntegration:
         session_id = create_resp.json()["session_id"]
 
         # Try to deny nonexistent
-        response = await client.post(
-            f"/api/sessions/{session_id}/deny/nonexistent"
-        )
+        response = await client.post(f"/api/sessions/{session_id}/deny/nonexistent")
 
         assert response.status_code == 404
 

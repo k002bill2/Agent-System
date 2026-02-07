@@ -58,8 +58,12 @@ class TaskModel(Base):
     __tablename__ = "tasks"
 
     id = Column(String(36), primary_key=True)
-    session_id = Column(String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True)
-    parent_id = Column(String(36), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True)
+    session_id = Column(
+        String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    parent_id = Column(
+        String(36), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     # Task content
     title = Column(String(500), nullable=False)
@@ -109,7 +113,9 @@ class MessageModel(Base):
     __tablename__ = "messages"
 
     id = Column(String(36), primary_key=True)
-    session_id = Column(String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    session_id = Column(
+        String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
 
     # Message content
     role = Column(String(50), nullable=False)  # user, assistant, system
@@ -132,9 +138,7 @@ class MessageModel(Base):
     # Relationships
     session = relationship("SessionModel", back_populates="messages")
 
-    __table_args__ = (
-        Index("ix_messages_session_timestamp", "session_id", "timestamp"),
-    )
+    __table_args__ = (Index("ix_messages_session_timestamp", "session_id", "timestamp"),)
 
 
 class ApprovalModel(Base):
@@ -143,7 +147,9 @@ class ApprovalModel(Base):
     __tablename__ = "approvals"
 
     id = Column(String(36), primary_key=True)
-    session_id = Column(String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    session_id = Column(
+        String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     task_id = Column(String(36), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
 
     # Approval details
@@ -161,9 +167,7 @@ class ApprovalModel(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     resolved_at = Column(DateTime, nullable=True)
 
-    __table_args__ = (
-        Index("ix_approvals_session_status", "session_id", "status"),
-    )
+    __table_args__ = (Index("ix_approvals_session_status", "session_id", "status"),)
 
 
 class FeedbackModel(Base):
@@ -172,13 +176,21 @@ class FeedbackModel(Base):
     __tablename__ = "feedbacks"
 
     id = Column(String(36), primary_key=True)
-    session_id = Column(String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True)
-    task_id = Column(String(36), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True)
+    session_id = Column(
+        String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    task_id = Column(
+        String(36), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     message_id = Column(String(36), nullable=True)
 
     # Feedback details
-    feedback_type = Column(String(50), nullable=False, index=True)  # implicit, explicit_positive, explicit_negative
-    reason = Column(String(50), nullable=True)  # incorrect, incomplete, off_topic, style, performance, other
+    feedback_type = Column(
+        String(50), nullable=False, index=True
+    )  # implicit, explicit_positive, explicit_negative
+    reason = Column(
+        String(50), nullable=True
+    )  # incorrect, incomplete, off_topic, style, performance, other
     reason_detail = Column(Text, nullable=True)
 
     # Content
@@ -209,7 +221,9 @@ class DatasetEntryModel(Base):
     __tablename__ = "dataset_entries"
 
     id = Column(String(36), primary_key=True)
-    feedback_id = Column(String(36), ForeignKey("feedbacks.id", ondelete="CASCADE"), nullable=False, index=True)
+    feedback_id = Column(
+        String(36), ForeignKey("feedbacks.id", ondelete="CASCADE"), nullable=False, index=True
+    )
 
     # Training data format (OpenAI-compatible)
     system_prompt = Column(Text, nullable=False)
@@ -256,9 +270,7 @@ class UserModel(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     last_login_at = Column(DateTime, nullable=True)
 
-    __table_args__ = (
-        Index("ix_users_provider_id", "oauth_provider", "oauth_provider_id"),
-    )
+    __table_args__ = (Index("ix_users_provider_id", "oauth_provider", "oauth_provider_id"),)
 
 
 class AuditLogModel(Base):
@@ -267,12 +279,20 @@ class AuditLogModel(Base):
     __tablename__ = "audit_logs"
 
     id = Column(String(36), primary_key=True)
-    session_id = Column(String(36), ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True, index=True)
-    user_id = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    session_id = Column(
+        String(36), ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    user_id = Column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     # Action details
-    action = Column(String(100), nullable=False, index=True)  # e.g., TASK_CREATED, TOOL_EXECUTED, APPROVAL_GRANTED
-    resource_type = Column(String(50), nullable=False, index=True)  # session, task, approval, agent, etc.
+    action = Column(
+        String(100), nullable=False, index=True
+    )  # e.g., TASK_CREATED, TOOL_EXECUTED, APPROVAL_GRANTED
+    resource_type = Column(
+        String(50), nullable=False, index=True
+    )  # session, task, approval, agent, etc.
     resource_id = Column(String(36), nullable=True, index=True)
 
     # Change tracking
@@ -293,7 +313,9 @@ class AuditLogModel(Base):
     error_message = Column(Text, nullable=True)
 
     # Compliance fields (Enterprise)
-    data_classification = Column(String(20), default="internal")  # public, internal, confidential, restricted
+    data_classification = Column(
+        String(20), default="internal"
+    )  # public, internal, confidential, restricted
     change_reason = Column(Text, nullable=True)
     compliance_flags = Column(JSONB, default=list)  # PCI, HIPAA, GDPR, etc.
 
@@ -339,7 +361,9 @@ class CostCenterModel(Base):
     # Metadata
     tags = Column(JSONB, default=dict)
     owner_id = Column(String(36), nullable=True)
-    parent_id = Column(String(36), ForeignKey("cost_centers.id", ondelete="SET NULL"), nullable=True)
+    parent_id = Column(
+        String(36), ForeignKey("cost_centers.id", ondelete="SET NULL"), nullable=True
+    )
 
     # Status
     is_active = Column(Boolean, default=True)
@@ -358,10 +382,16 @@ class CostAllocationModel(Base):
     __tablename__ = "cost_allocations"
 
     id = Column(String(36), primary_key=True)
-    session_id = Column(String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    session_id = Column(
+        String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     project_id = Column(String(36), nullable=True, index=True)
-    cost_center_id = Column(String(36), ForeignKey("cost_centers.id", ondelete="SET NULL"), nullable=True, index=True)
-    user_id = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    cost_center_id = Column(
+        String(36), ForeignKey("cost_centers.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    user_id = Column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     # Cost breakdown
     total_cost_usd = Column(Float, default=0.0)
@@ -392,15 +422,15 @@ class TokenBlacklistModel(Base):
 
     id = Column(String(36), primary_key=True)
     jti = Column(String(36), nullable=False, unique=True, index=True)  # JWT ID
-    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    user_id = Column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     token_type = Column(String(20), nullable=False)  # access, refresh
     expires_at = Column(DateTime, nullable=False, index=True)
     revoked_at = Column(DateTime, default=datetime.utcnow)
     reason = Column(String(100), nullable=True)  # logout, password_change, admin_revoke
 
-    __table_args__ = (
-        Index("ix_token_blacklist_expires", "expires_at"),
-    )
+    __table_args__ = (Index("ix_token_blacklist_expires", "expires_at"),)
 
 
 class SAMLConfigModel(Base):
@@ -430,9 +460,7 @@ class SAMLConfigModel(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    __table_args__ = (
-        Index("ix_saml_configs_active", "is_active"),
-    )
+    __table_args__ = (Index("ix_saml_configs_active", "is_active"),)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -483,8 +511,12 @@ class OrganizationMemberModel(Base):
     __tablename__ = "organization_members"
 
     id = Column(String(36), primary_key=True)
-    organization_id = Column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
-    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    organization_id = Column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id = Column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     email = Column(String(255), nullable=False)
     name = Column(String(255), nullable=True)
     role = Column(String(20), default="member")  # owner, admin, member, viewer
@@ -501,9 +533,7 @@ class OrganizationMemberModel(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    __table_args__ = (
-        Index("ix_org_member_org_user", "organization_id", "user_id", unique=True),
-    )
+    __table_args__ = (Index("ix_org_member_org_user", "organization_id", "user_id", unique=True),)
 
 
 class OrganizationInvitationModel(Base):
@@ -512,7 +542,9 @@ class OrganizationInvitationModel(Base):
     __tablename__ = "organization_invitations"
 
     id = Column(String(36), primary_key=True)
-    organization_id = Column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    organization_id = Column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     email = Column(String(255), nullable=False)
     role = Column(String(20), default="member")
     invited_by = Column(String(36), nullable=False)
@@ -568,7 +600,9 @@ class NotificationHistoryModel(Base):
     __tablename__ = "notification_history"
 
     id = Column(String(36), primary_key=True)
-    rule_id = Column(String(36), ForeignKey("notification_rules.id", ondelete="SET NULL"), nullable=True)
+    rule_id = Column(
+        String(36), ForeignKey("notification_rules.id", ondelete="SET NULL"), nullable=True
+    )
     event_type = Column(String(50), nullable=False, index=True)
     priority = Column(String(20), default="medium")
 
@@ -584,9 +618,7 @@ class NotificationHistoryModel(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    __table_args__ = (
-        Index("ix_notification_history_sent", "sent_at"),
-    )
+    __table_args__ = (Index("ix_notification_history_sent", "sent_at"),)
 
 
 class ChannelConfigModel(Base):
@@ -665,10 +697,14 @@ class SessionActivityModel(Base):
     __tablename__ = "session_activities"
 
     id = Column(String(36), primary_key=True)
-    session_id = Column(String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    session_id = Column(
+        String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
 
     # Activity details
-    activity_type = Column(String(50), nullable=False, index=True)  # message, tool_use, task_update, etc.
+    activity_type = Column(
+        String(50), nullable=False, index=True
+    )  # message, tool_use, task_update, etc.
     actor_type = Column(String(20), default="user")  # user, agent, system
     actor_id = Column(String(100), nullable=True)  # user_id or agent_id
 

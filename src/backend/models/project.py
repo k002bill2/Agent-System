@@ -32,7 +32,7 @@ def normalize_path(path: str) -> str:
 
     # Remove backslash escapes (\ followed by space, ~, or other chars)
     # Pattern: backslash followed by a character that would be escaped in shell
-    normalized = re.sub(r'\\(.)', r'\1', path)
+    normalized = re.sub(r"\\(.)", r"\1", path)
 
     return normalized
 
@@ -151,7 +151,9 @@ class ProjectCreateFromTemplate(BaseModel):
     id: str = Field(..., description="Unique project identifier")
     name: str = Field(..., description="Project display name")
     description: str = ""
-    template: str = Field("default", description="Template name: default, react-native, python, fastapi")
+    template: str = Field(
+        "default", description="Template name: default, react-native, python, fastapi"
+    )
 
 
 # Registry of known projects
@@ -227,7 +229,9 @@ def _save_project_metadata(
             metadata["organization_id"] = organization_id
         elif "organization_id" in existing:
             metadata["organization_id"] = existing["organization_id"]
-        metadata_file.write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        metadata_file.write_text(
+            json.dumps(metadata, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
         logger.info(f"Saved project metadata to {metadata_file}")
         return True
     except OSError as e:
@@ -276,10 +280,7 @@ def update_project(
     # Save metadata to file for persistence
     if metadata_changed:
         _save_project_metadata(
-            Path(project.path),
-            project.name,
-            project.description,
-            project.git_path
+            Path(project.path), project.name, project.description, project.git_path
         )
 
     # 경로 변경 처리
@@ -327,11 +328,7 @@ def update_project_sort_order(project_id: str, sort_order: int) -> Project | Non
 
     # Save to metadata file
     _save_project_metadata(
-        Path(project.path),
-        project.name,
-        project.description,
-        project.git_path,
-        sort_order
+        Path(project.path), project.name, project.description, project.git_path, sort_order
     )
 
     return project

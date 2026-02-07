@@ -36,15 +36,19 @@ from services.audit_service import (
 # Optional RAG service - gracefully handle missing dependencies
 try:
     from services.rag_service import get_project_context
+
     RAG_AVAILABLE = True
 except ImportError:
     RAG_AVAILABLE = False
+
     def get_project_context(*args, **kwargs):
         return ""
+
 
 # Optional MCP Tool Executor - gracefully handle missing dependencies
 try:
     from orchestrator.tools import MCPToolExecutor
+
     MCP_AVAILABLE = True
 except ImportError:
     MCP_AVAILABLE = False
@@ -215,7 +219,8 @@ Respond with a JSON object containing:
 
             # Find next task to execute (respecting dependencies)
             pending_tasks = [
-                t for t in tasks.values()
+                t
+                for t in tasks.values()
                 if t.status == TaskStatus.PENDING and t.parent_id == root_task_id
             ]
 
@@ -233,7 +238,8 @@ Respond with a JSON object containing:
                     else:
                         # Check if all dependencies are completed
                         all_deps_complete = all(
-                            tasks.get(dep_id, TaskNode(id="", title="")).status == TaskStatus.COMPLETED
+                            tasks.get(dep_id, TaskNode(id="", title="")).status
+                            == TaskStatus.COMPLETED
                             for dep_id in task_deps
                         )
                         if all_deps_complete:
@@ -262,7 +268,8 @@ Respond with a JSON object containing:
                     return {
                         "next_action": None,
                         "iteration_count": iteration_count,
-                        "errors": state.get("errors", []) + ["Dependency deadlock: no tasks ready to execute"],
+                        "errors": state.get("errors", [])
+                        + ["Dependency deadlock: no tasks ready to execute"],
                     }
 
             # Check if all children are complete
@@ -349,7 +356,9 @@ class PlannerNode(BaseNode):
 
         # Fallback: Truncated system context
         if system_context:
-            truncated = system_context[:2000] + "..." if len(system_context) > 2000 else system_context
+            truncated = (
+                system_context[:2000] + "..." if len(system_context) > 2000 else system_context
+            )
             context += f"\n\nProject Instructions:\n{truncated}"
 
         return context
@@ -383,16 +392,22 @@ class PlannerNode(BaseNode):
             # Use structured output if available, otherwise parse JSON
             if hasattr(self.llm, "with_structured_output"):
                 structured_llm = self.llm.with_structured_output(TaskPlanResult)
-                plan_result: TaskPlanResult = await structured_llm.ainvoke([
-                    SystemMessage(content=PLANNER_SYSTEM_PROMPT),
-                    HumanMessage(content=user_prompt),
-                ])
+                plan_result: TaskPlanResult = await structured_llm.ainvoke(
+                    [
+                        SystemMessage(content=PLANNER_SYSTEM_PROMPT),
+                        HumanMessage(content=user_prompt),
+                    ]
+                )
             else:
                 # Fallback: Parse JSON from response
-                response = await self.llm.ainvoke([
-                    SystemMessage(content=PLANNER_SYSTEM_PROMPT + "\n\nRespond with valid JSON only."),
-                    HumanMessage(content=user_prompt),
-                ])
+                response = await self.llm.ainvoke(
+                    [
+                        SystemMessage(
+                            content=PLANNER_SYSTEM_PROMPT + "\n\nRespond with valid JSON only."
+                        ),
+                        HumanMessage(content=user_prompt),
+                    ]
+                )
 
                 # Extract JSON from response
                 content = response.content
@@ -482,7 +497,11 @@ class PlannerNode(BaseNode):
             audit_task_created(
                 session_id=session_id,
                 task_id=subtask_id,
-                task_data={"title": subtask.title, "description": subtask.description, "parent_id": root_task_id},
+                task_data={
+                    "title": subtask.title,
+                    "description": subtask.description,
+                    "parent_id": root_task_id,
+                },
             )
 
         return {
@@ -491,8 +510,7 @@ class PlannerNode(BaseNode):
             "messages": [
                 self._create_message(
                     "system",
-                    f"Created task plan: {plan_result.analysis}\n"
-                    f"Subtasks: {len(subtask_ids)}"
+                    f"Created task plan: {plan_result.analysis}\nSubtasks: {len(subtask_ids)}",
                 )
             ],
             # Store plan metadata for later use
@@ -502,8 +520,7 @@ class PlannerNode(BaseNode):
                 "subtask_count": len(subtask_ids),
                 "dependencies": {
                     subtask_ids[i]: [
-                        title_to_id.get(dep, dep)
-                        for dep in plan_result.subtasks[i].dependencies
+                        title_to_id.get(dep, dep) for dep in plan_result.subtasks[i].dependencies
                     ]
                     for i in range(len(plan_result.subtasks))
                 },
@@ -766,7 +783,10 @@ After completing all necessary tool calls, provide a final summary."""
                         approval_id = approval_request["id"]
                         existing_approval = pending_approvals.get(task.pending_approval_id)
 
-                        if existing_approval and existing_approval.get("status") == ApprovalStatus.APPROVED.value:
+                        if (
+                            existing_approval
+                            and existing_approval.get("status") == ApprovalStatus.APPROVED.value
+                        ):
                             # Already approved - proceed with execution
                             pass
                         else:
@@ -798,7 +818,7 @@ After completing all necessary tool calls, provide a final summary."""
                                 "messages": [
                                     self._create_message(
                                         "system",
-                                        f"Approval required for {tool_name}: {approval_request['risk_description']}"
+                                        f"Approval required for {tool_name}: {approval_request['risk_description']}",
                                     )
                                 ],
                                 # Store pending tool call for resume
@@ -812,11 +832,13 @@ After completing all necessary tool calls, provide a final summary."""
 
                     # Execute the tool
                     result = await self._execute_tool(tool_name, tool_args)
-                    tool_results.append({
-                        "tool": tool_name,
-                        "args": tool_args,
-                        "result": result[:500] if len(result) > 500 else result,
-                    })
+                    tool_results.append(
+                        {
+                            "tool": tool_name,
+                            "args": tool_args,
+                            "result": result[:500] if len(result) > 500 else result,
+                        }
+                    )
 
                     # Audit: Log tool execution
                     audit_tool_executed(
@@ -829,10 +851,12 @@ After completing all necessary tool calls, provide a final summary."""
                     )
 
                     # Add tool result to messages
-                    messages.append(ToolMessage(
-                        content=result,
-                        tool_call_id=tool_id,
-                    ))
+                    messages.append(
+                        ToolMessage(
+                            content=result,
+                            tool_call_id=tool_id,
+                        )
+                    )
 
             # Build final task result
             if tool_results:
@@ -1038,7 +1062,7 @@ Be specific about what changes are needed. If the error suggests the task is imp
                     self._create_message(
                         "system",
                         f"Task '{task.title}' has exceeded maximum retries ({task.max_retries}). "
-                        f"Error history: {task.error_history}"
+                        f"Error history: {task.error_history}",
                     )
                 ],
                 "tasks": {current_task_id: task},
@@ -1075,10 +1099,12 @@ Error History: {task.error_history}
                     confidence: str
 
                 structured_llm = self.llm.with_structured_output(CorrectionResult)
-                response = await structured_llm.ainvoke([
-                    SystemMessage(content=self.SYSTEM_PROMPT),
-                    HumanMessage(content=error_context),
-                ])
+                response = await structured_llm.ainvoke(
+                    [
+                        SystemMessage(content=self.SYSTEM_PROMPT),
+                        HumanMessage(content=error_context),
+                    ]
+                )
 
                 correction = {
                     "error_analysis": response.error_analysis,
@@ -1090,10 +1116,14 @@ Error History: {task.error_history}
                 }
             else:
                 # Fallback: Parse JSON from response
-                llm_response = await self.llm.ainvoke([
-                    SystemMessage(content=self.SYSTEM_PROMPT + "\n\nRespond with valid JSON only."),
-                    HumanMessage(content=error_context),
-                ])
+                llm_response = await self.llm.ainvoke(
+                    [
+                        SystemMessage(
+                            content=self.SYSTEM_PROMPT + "\n\nRespond with valid JSON only."
+                        ),
+                        HumanMessage(content=error_context),
+                    ]
+                )
 
                 content = llm_response.content
                 if isinstance(content, str):
@@ -1111,7 +1141,7 @@ Error History: {task.error_history}
             token_updates = self._extract_and_update_tokens(
                 response if hasattr(response, "response_metadata") else llm_response,
                 state,
-                "SelfCorrection"
+                "SelfCorrection",
             )
 
         except Exception as e:
@@ -1135,7 +1165,9 @@ Error History: {task.error_history}
             task.error = None
 
             # Update description with correction strategy
-            original_desc = task.description.split("\n[Correction:")[0]  # Remove previous corrections
+            original_desc = task.description.split("\n[Correction:")[
+                0
+            ]  # Remove previous corrections
             task.description = (
                 f"{original_desc}\n\n"
                 f"[Correction: Retry #{task.retry_count}]\n"
@@ -1143,7 +1175,10 @@ Error History: {task.error_history}
                 f"Root cause: {correction.get('root_cause', 'Unknown')}"
             )
 
-            if correction.get("updated_description") and correction["updated_description"] != original_desc:
+            if (
+                correction.get("updated_description")
+                and correction["updated_description"] != original_desc
+            ):
                 task.description = correction["updated_description"]
 
             task.updated_at = datetime.utcnow()
@@ -1154,7 +1189,7 @@ Error History: {task.error_history}
                     self._create_message(
                         "system",
                         f"Self-correction: Retry #{task.retry_count} for '{task.title}'. "
-                        f"Analysis: {correction.get('error_analysis', 'N/A')}"
+                        f"Analysis: {correction.get('error_analysis', 'N/A')}",
                     )
                 ],
                 "next_action": "execute",  # Signal to execute again
@@ -1173,7 +1208,7 @@ Error History: {task.error_history}
                 "messages": [
                     self._create_message(
                         "system",
-                        f"Self-correction determined task cannot be retried: {correction.get('error_analysis', 'N/A')}"
+                        f"Self-correction determined task cannot be retried: {correction.get('error_analysis', 'N/A')}",
                     )
                 ],
             }

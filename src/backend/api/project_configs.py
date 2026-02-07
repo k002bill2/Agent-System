@@ -505,9 +505,7 @@ async def create_agent(project_id: str, request: AgentCreateRequest) -> AgentCon
         Created agent configuration
     """
     monitor = get_project_config_monitor()
-    result = monitor.create_agent(
-        project_id, request.agent_id, request.content, request.is_shared
-    )
+    result = monitor.create_agent(project_id, request.agent_id, request.content, request.is_shared)
 
     if result is None:
         raise HTTPException(
@@ -661,9 +659,7 @@ async def disable_mcp_server(project_id: str, server_id: str) -> dict:
 
 
 @router.post("/{project_id}/mcp/{server_id}/toggle")
-async def toggle_mcp_server(
-    project_id: str, server_id: str, request: MCPToggleRequest
-) -> dict:
+async def toggle_mcp_server(project_id: str, server_id: str, request: MCPToggleRequest) -> dict:
     """Toggle MCP server enabled/disabled state.
 
     Args:
@@ -732,9 +728,7 @@ async def update_mcp_server(
 
 
 @router.post("/{project_id}/mcp", response_model=MCPServerConfig)
-async def create_mcp_server(
-    project_id: str, request: MCPServerCreateRequest
-) -> MCPServerConfig:
+async def create_mcp_server(project_id: str, request: MCPServerCreateRequest) -> MCPServerConfig:
     """Create a new MCP server configuration.
 
     Args:

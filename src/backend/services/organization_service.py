@@ -41,6 +41,7 @@ try:
         OrganizationMemberModel,
         OrganizationModel,
     )
+
     _DB_AVAILABLE = True
 except ImportError:
     # DB modules not available - use in-memory storage only
@@ -361,6 +362,7 @@ class OrganizationService:
 
         # Check member limit via QuotaService
         from services.quota_service import QuotaService
+
         check = QuotaService.check_member_quota(org)
         if not check.allowed:
             raise ValueError(check.message or "Organization has reached member limit")
@@ -452,7 +454,8 @@ class OrganizationService:
     def get_pending_invitations(org_id: str) -> list[OrganizationInvitation]:
         """Get all pending invitations for an organization."""
         return [
-            inv for inv in _invitations.values()
+            inv
+            for inv in _invitations.values()
             if inv.organization_id == org_id
             and not inv.accepted
             and inv.expires_at > datetime.utcnow()
@@ -484,7 +487,9 @@ class OrganizationService:
             owners = [
                 m
                 for m in _members.values()
-                if m.organization_id == member.organization_id and m.role == MemberRole.OWNER and m.is_active
+                if m.organization_id == member.organization_id
+                and m.role == MemberRole.OWNER
+                and m.is_active
             ]
             if len(owners) <= 1 and new_role != MemberRole.OWNER:
                 raise ValueError("Cannot demote the last owner")
@@ -505,7 +510,9 @@ class OrganizationService:
             owners = [
                 m
                 for m in _members.values()
-                if m.organization_id == member.organization_id and m.role == MemberRole.OWNER and m.is_active
+                if m.organization_id == member.organization_id
+                and m.role == MemberRole.OWNER
+                and m.is_active
             ]
             if len(owners) <= 1:
                 raise ValueError("Cannot remove the last owner")
@@ -600,6 +607,7 @@ class OrganizationService:
 
         # Check limit via QuotaService
         from services.quota_service import QuotaService
+
         check = QuotaService.check_token_quota(org, tokens)
         if not check.allowed:
             return False  # Would exceed limit
@@ -704,18 +712,20 @@ class OrganizationService:
             month_tokens = user_tokens_month.get(uid, 0)
             pct = (month_tokens / total_tokens * 100) if total_tokens > 0 else 0.0
 
-            summaries.append(MemberUsageSummary(
-                user_id=uid,
-                email=member.email,
-                name=member.name,
-                role=member.role,
-                tokens_used_today=user_tokens_today.get(uid, 0),
-                tokens_used_this_month=month_tokens,
-                sessions_today=len(user_sessions_today.get(uid, set())),
-                sessions_this_month=len(user_sessions.get(uid, set())),
-                last_active_at=user_last_active.get(uid),
-                percentage_of_org=round(pct, 1),
-            ))
+            summaries.append(
+                MemberUsageSummary(
+                    user_id=uid,
+                    email=member.email,
+                    name=member.name,
+                    role=member.role,
+                    tokens_used_today=user_tokens_today.get(uid, 0),
+                    tokens_used_this_month=month_tokens,
+                    sessions_today=len(user_sessions_today.get(uid, set())),
+                    sessions_this_month=len(user_sessions.get(uid, set())),
+                    last_active_at=user_last_active.get(uid),
+                    percentage_of_org=round(pct, 1),
+                )
+            )
 
         # Sort by tokens used this month (desc)
         summaries.sort(key=lambda s: s.tokens_used_this_month, reverse=True)
@@ -858,9 +868,7 @@ class OrganizationService:
     @staticmethod
     async def get_organization_async(db: AsyncSession, org_id: str) -> Organization | None:
         """Get an organization by ID (async DB version)."""
-        result = await db.execute(
-            select(OrganizationModel).where(OrganizationModel.id == org_id)
-        )
+        result = await db.execute(select(OrganizationModel).where(OrganizationModel.id == org_id))
         model = result.scalar_one_or_none()
         if not model:
             return None
@@ -869,9 +877,7 @@ class OrganizationService:
     @staticmethod
     async def get_organization_by_slug_async(db: AsyncSession, slug: str) -> Organization | None:
         """Get an organization by slug (async DB version)."""
-        result = await db.execute(
-            select(OrganizationModel).where(OrganizationModel.slug == slug)
-        )
+        result = await db.execute(select(OrganizationModel).where(OrganizationModel.slug == slug))
         model = result.scalar_one_or_none()
         if not model:
             return None
@@ -907,9 +913,7 @@ class OrganizationService:
         data: OrganizationUpdate,
     ) -> Organization | None:
         """Update an organization (async DB version)."""
-        result = await db.execute(
-            select(OrganizationModel).where(OrganizationModel.id == org_id)
-        )
+        result = await db.execute(select(OrganizationModel).where(OrganizationModel.id == org_id))
         model = result.scalar_one_or_none()
         if not model:
             return None
@@ -938,9 +942,7 @@ class OrganizationService:
     @staticmethod
     async def delete_organization_async(db: AsyncSession, org_id: str) -> bool:
         """Soft delete an organization (async DB version)."""
-        result = await db.execute(
-            select(OrganizationModel).where(OrganizationModel.id == org_id)
-        )
+        result = await db.execute(select(OrganizationModel).where(OrganizationModel.id == org_id))
         model = result.scalar_one_or_none()
         if not model:
             return False
@@ -1006,6 +1008,7 @@ class OrganizationService:
 
         # Check member limit via QuotaService
         from services.quota_service import QuotaService
+
         org_pydantic = OrganizationService._org_model_to_pydantic(org)
         check = QuotaService.check_member_quota(org_pydantic)
         if not check.allowed:
@@ -1195,15 +1198,14 @@ class OrganizationService:
         model: str | None = None,
     ) -> bool:
         """Track token usage for an organization (async DB version)."""
-        result = await db.execute(
-            select(OrganizationModel).where(OrganizationModel.id == org_id)
-        )
+        result = await db.execute(select(OrganizationModel).where(OrganizationModel.id == org_id))
         org = result.scalar_one_or_none()
         if not org:
             return False
 
         # Check limit via QuotaService
         from services.quota_service import QuotaService
+
         org_pydantic = OrganizationService._org_model_to_pydantic(org)
         check = QuotaService.check_token_quota(org_pydantic, tokens)
         if not check.allowed:

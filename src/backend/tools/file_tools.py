@@ -281,8 +281,7 @@ def search_content(pattern: str, path: str = ".", file_pattern: str | None = Non
             glob_pattern = file_pattern or "**/*"
             search_path = os.path.join(path, glob_pattern)
             files_to_search = [
-                f for f in glob_module.glob(search_path, recursive=True)
-                if os.path.isfile(f)
+                f for f in glob_module.glob(search_path, recursive=True) if os.path.isfile(f)
             ]
 
         for file_path in files_to_search:

@@ -239,7 +239,7 @@ async def list_agents(
         except ValueError:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid category: {category}. Valid: {[c.value for c in AgentCategory]}"
+                detail=f"Invalid category: {category}. Valid: {[c.value for c in AgentCategory]}",
             )
     elif available_only:
         agents = registry.get_available()
@@ -283,10 +283,7 @@ async def search_agents(request: AgentSearchRequest):
         try:
             category = AgentCategory(request.category)
         except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid category: {request.category}"
-            )
+            raise HTTPException(status_code=400, detail=f"Invalid category: {request.category}")
 
     results = registry.find_by_capability(
         query=request.query,
@@ -313,7 +310,7 @@ async def update_agent_status(agent_id: str, status: str):
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid status: {status}. Valid: {[s.value for s in AgentStatus]}"
+            detail=f"Invalid status: {status}. Valid: {[s.value for s in AgentStatus]}",
         )
 
     if not registry.update_status(agent_id, new_status):
@@ -499,7 +496,7 @@ async def get_execution_strategies():
                     "sequential": "순차 실행 - 태스크를 하나씩 순서대로 실행",
                     "parallel": "병렬 실행 - 독립적인 태스크를 동시에 실행",
                     "mixed": "혼합 실행 - 일부 병렬, 일부 순차",
-                }[s.value]
+                }[s.value],
             }
             for s in ExecutionStrategy
         ],
@@ -510,7 +507,7 @@ async def get_execution_strategies():
                     "quick": "빠른 작업 (< 5분)",
                     "medium": "중간 복잡도 (5-30분)",
                     "thorough": "복잡한 작업 (30분+)",
-                }[e.value]
+                }[e.value],
             }
             for e in EffortLevel
         ],

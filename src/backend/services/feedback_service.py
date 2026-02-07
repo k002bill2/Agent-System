@@ -220,9 +220,7 @@ class FeedbackService:
         params = FeedbackQueryParams(status=FeedbackStatus.PENDING, limit=limit)
         feedbacks = await self.get_feedbacks(params)
 
-        request = ProcessFeedbackRequest(
-            feedback_ids=[f.id for f in feedbacks]
-        )
+        request = ProcessFeedbackRequest(feedback_ids=[f.id for f in feedbacks])
         return await self.process_feedback_batch(request)
 
     # =========================================================================
@@ -402,7 +400,9 @@ class FeedbackService:
         is_positive = feedback.feedback_type == FeedbackType.EXPLICIT_POSITIVE
 
         # 출력 결정 (수정본이 있으면 수정본 사용)
-        output = feedback.corrected_output if feedback.corrected_output else feedback.original_output
+        output = (
+            feedback.corrected_output if feedback.corrected_output else feedback.original_output
+        )
 
         # 메타데이터 구성
         metadata = {
@@ -468,16 +468,18 @@ class FeedbackService:
                 if options.end_date and data["created_at"] > options.end_date:
                     continue
 
-                entries.append(DatasetEntry(
-                    id=data["id"],
-                    feedback_id=data["feedback_id"],
-                    system_prompt=data["system_prompt"],
-                    user_input=data["user_input"],
-                    assistant_output=data["assistant_output"],
-                    is_positive=data["is_positive"],
-                    metadata=metadata,
-                    created_at=data["created_at"],
-                ))
+                entries.append(
+                    DatasetEntry(
+                        id=data["id"],
+                        feedback_id=data["feedback_id"],
+                        system_prompt=data["system_prompt"],
+                        user_input=data["user_input"],
+                        assistant_output=data["assistant_output"],
+                        is_positive=data["is_positive"],
+                        metadata=metadata,
+                        created_at=data["created_at"],
+                    )
+                )
 
             return entries
 
@@ -506,23 +508,33 @@ class FeedbackService:
         writer = csv.writer(output)
 
         # 헤더
-        writer.writerow([
-            "id", "feedback_id", "system_prompt", "user_input",
-            "assistant_output", "is_positive", "agent_id", "feedback_type"
-        ])
+        writer.writerow(
+            [
+                "id",
+                "feedback_id",
+                "system_prompt",
+                "user_input",
+                "assistant_output",
+                "is_positive",
+                "agent_id",
+                "feedback_type",
+            ]
+        )
 
         # 데이터
         for entry in entries:
-            writer.writerow([
-                entry.id,
-                entry.feedback_id,
-                entry.system_prompt,
-                entry.user_input,
-                entry.assistant_output,
-                entry.is_positive,
-                entry.metadata.get("agent_id", ""),
-                entry.metadata.get("feedback_type", ""),
-            ])
+            writer.writerow(
+                [
+                    entry.id,
+                    entry.feedback_id,
+                    entry.system_prompt,
+                    entry.user_input,
+                    entry.assistant_output,
+                    entry.is_positive,
+                    entry.metadata.get("agent_id", ""),
+                    entry.metadata.get("feedback_type", ""),
+                ]
+            )
 
         return output.getvalue()
 
@@ -562,9 +574,7 @@ class FeedbackService:
         from db.models import FeedbackModel
 
         async with async_session_factory() as db:
-            result = await db.execute(
-                select(FeedbackModel).where(FeedbackModel.id == feedback_id)
-            )
+            result = await db.execute(select(FeedbackModel).where(FeedbackModel.id == feedback_id))
             model = result.scalar_one_or_none()
 
             if not model:
@@ -654,9 +664,7 @@ class FeedbackService:
                 values["processed_at"] = datetime.utcnow()
 
             result = await db.execute(
-                update(FeedbackModel)
-                .where(FeedbackModel.id == feedback_id)
-                .values(**values)
+                update(FeedbackModel).where(FeedbackModel.id == feedback_id).values(**values)
             )
             await db.commit()
             return result.rowcount > 0
@@ -775,16 +783,18 @@ class FeedbackService:
                     if metadata.get("agent_id") not in options.agent_filter:
                         continue
 
-                entries.append(DatasetEntry(
-                    id=m.id,
-                    feedback_id=m.feedback_id,
-                    system_prompt=m.system_prompt,
-                    user_input=m.user_input,
-                    assistant_output=m.assistant_output,
-                    is_positive=m.is_positive,
-                    metadata=metadata,
-                    created_at=m.created_at,
-                ))
+                entries.append(
+                    DatasetEntry(
+                        id=m.id,
+                        feedback_id=m.feedback_id,
+                        system_prompt=m.system_prompt,
+                        user_input=m.user_input,
+                        assistant_output=m.assistant_output,
+                        is_positive=m.is_positive,
+                        metadata=metadata,
+                        created_at=m.created_at,
+                    )
+                )
 
             return entries
 

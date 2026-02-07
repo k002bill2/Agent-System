@@ -18,19 +18,23 @@ from pydantic import BaseModel, Field
 router = APIRouter(prefix="/usage", tags=["Usage"])
 
 # Claude Code stats cache file path (configurable via env)
-STATS_CACHE_PATH = Path(os.getenv(
-    "CLAUDE_STATS_CACHE_PATH",
-    str(Path.home() / ".claude" / "stats-cache.json"),
-))
+STATS_CACHE_PATH = Path(
+    os.getenv(
+        "CLAUDE_STATS_CACHE_PATH",
+        str(Path.home() / ".claude" / "stats-cache.json"),
+    )
+)
 
 # Anthropic OAuth Usage API
 ANTHROPIC_USAGE_API = "https://api.anthropic.com/api/oauth/usage"
 
 # Cache for Anthropic API response (in-memory with file backup)
-USAGE_CACHE_PATH = Path(os.getenv(
-    "CLAUDE_USAGE_CACHE_PATH",
-    str(Path.home() / ".claude" / "aos-usage-cache.json"),
-))
+USAGE_CACHE_PATH = Path(
+    os.getenv(
+        "CLAUDE_USAGE_CACHE_PATH",
+        str(Path.home() / ".claude" / "aos-usage-cache.json"),
+    )
+)
 _usage_cache: dict[str, Any] = {
     "data": None,
     "timestamp": None,
@@ -116,6 +120,7 @@ def _get_cache_age_minutes() -> int | None:
 
 class DailyActivity(BaseModel):
     """Daily activity data."""
+
     date: str
     messageCount: int
     sessionCount: int
@@ -124,12 +129,14 @@ class DailyActivity(BaseModel):
 
 class DailyModelTokens(BaseModel):
     """Daily token usage by model."""
+
     date: str
     tokensByModel: dict[str, int]
 
 
 class ModelUsage(BaseModel):
     """Model usage statistics."""
+
     inputTokens: int = 0
     outputTokens: int = 0
     cacheReadInputTokens: int = 0
@@ -140,6 +147,7 @@ class ModelUsage(BaseModel):
 
 class PlanLimitInfo(BaseModel):
     """Plan limit information from Anthropic OAuth API."""
+
     name: str
     displayName: str
     utilization: float  # Percentage 0-100
@@ -150,6 +158,7 @@ class PlanLimitInfo(BaseModel):
 
 class UsageResponse(BaseModel):
     """Claude Code usage response."""
+
     # Raw stats
     lastComputedDate: str
     totalSessions: int
@@ -331,7 +340,7 @@ async def get_usage() -> UsageResponse:
     if not stats:
         raise HTTPException(
             status_code=404,
-            detail="Stats cache not found. Make sure Claude Code is installed and has been used."
+            detail="Stats cache not found. Make sure Claude Code is installed and has been used.",
         )
 
     # Get raw data from local cache
@@ -397,14 +406,16 @@ async def get_usage() -> UsageResponse:
                 resets_at = limit_data.get("resets_at")
                 hours, minutes = parse_reset_time(resets_at)
 
-                limits.append(PlanLimitInfo(
-                    name=name,
-                    displayName=display_name,
-                    utilization=limit_data.get("utilization", 0),
-                    resetsAt=resets_at,
-                    resetsInHours=hours,
-                    resetsInMinutes=minutes,
-                ))
+                limits.append(
+                    PlanLimitInfo(
+                        name=name,
+                        displayName=display_name,
+                        utilization=limit_data.get("utilization", 0),
+                        resetsAt=resets_at,
+                        resetsInHours=hours,
+                        resetsInMinutes=minutes,
+                    )
+                )
         return limits
 
     token = get_oauth_token()
@@ -466,10 +477,7 @@ async def get_raw_stats() -> dict[str, Any]:
     stats = load_stats_cache()
 
     if not stats:
-        raise HTTPException(
-            status_code=404,
-            detail="Stats cache not found."
-        )
+        raise HTTPException(status_code=404, detail="Stats cache not found.")
 
     return stats
 

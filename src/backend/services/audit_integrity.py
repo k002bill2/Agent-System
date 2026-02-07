@@ -189,10 +189,7 @@ class AuditIntegrityService:
         entries = entries or self._entries
 
         # Filter by date range
-        filtered = [
-            e for e in entries
-            if start_date <= e.created_at <= end_date
-        ]
+        filtered = [e for e in entries if start_date <= e.created_at <= end_date]
 
         # Compute statistics
         actions: dict[str, int] = {}
@@ -221,28 +218,31 @@ class AuditIntegrityService:
                 sessions.add(entry.session_id)
 
             # High risk (confidential/restricted data)
-            if entry.data_classification in (DataClassification.CONFIDENTIAL, DataClassification.RESTRICTED):
-                high_risk.append({
-                    "id": entry.id,
-                    "action": entry.action,
-                    "classification": entry.data_classification.value,
-                    "user_id": entry.user_id,
-                    "created_at": entry.created_at.isoformat(),
-                })
+            if entry.data_classification in (
+                DataClassification.CONFIDENTIAL,
+                DataClassification.RESTRICTED,
+            ):
+                high_risk.append(
+                    {
+                        "id": entry.id,
+                        "action": entry.action,
+                        "classification": entry.data_classification.value,
+                        "user_id": entry.user_id,
+                        "created_at": entry.created_at.isoformat(),
+                    }
+                )
 
         # Retention statistics
         now = datetime.utcnow()
         expiry_warning_days = 30
 
         approaching_expiry = sum(
-            1 for e in filtered
+            1
+            for e in filtered
             if e.expires_at and e.expires_at <= now + timedelta(days=expiry_warning_days)
         )
 
-        expired = sum(
-            1 for e in filtered
-            if e.expires_at and e.expires_at <= now
-        )
+        expired = sum(1 for e in filtered if e.expires_at and e.expires_at <= now)
 
         # Verify chain integrity
         chain_integrity = self.verify_chain(filtered) if filtered else None
@@ -328,10 +328,7 @@ class AuditIntegrityService:
     def get_expired_entries(self) -> list[ComplianceAuditEntry]:
         """Get all entries that have passed their retention period."""
         now = datetime.utcnow()
-        return [
-            e for e in self._entries
-            if e.expires_at and e.expires_at <= now
-        ]
+        return [e for e in self._entries if e.expires_at and e.expires_at <= now]
 
     def cleanup_expired(self, dry_run: bool = True) -> int:
         """
@@ -349,8 +346,7 @@ class AuditIntegrityService:
         if not dry_run:
             # Note: This breaks the hash chain - should archive first
             self._entries = [
-                e for e in self._entries
-                if not (e.expires_at and e.expires_at <= datetime.utcnow())
+                e for e in self._entries if not (e.expires_at and e.expires_at <= datetime.utcnow())
             ]
 
         return count

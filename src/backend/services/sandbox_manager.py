@@ -14,6 +14,7 @@ ImageNotFound = Exception
 try:
     import docker as _docker
     from docker.errors import ContainerError, DockerException, ImageNotFound
+
     docker = _docker
     DOCKER_AVAILABLE = True
 except ImportError:
@@ -186,6 +187,7 @@ class SandboxManager:
             container_env.update(env)
 
         import time
+
         start_time = time.time()
 
         try:
@@ -216,9 +218,7 @@ class SandboxManager:
                 exit_code = result.get("StatusCode", -1)
 
                 # Get logs
-                output = container.logs(stdout=True, stderr=True).decode(
-                    "utf-8", errors="replace"
-                )
+                output = container.logs(stdout=True, stderr=True).decode("utf-8", errors="replace")
 
                 execution_time_ms = int((time.time() - start_time) * 1000)
 
@@ -288,6 +288,7 @@ class SandboxManager:
             return 0
 
         import time
+
         removed = 0
         current_time = time.time()
 
@@ -301,10 +302,9 @@ class SandboxManager:
                 created_str = container.attrs.get("Created", "")
                 if created_str:
                     from datetime import datetime
+
                     # Parse Docker timestamp
-                    created = datetime.fromisoformat(
-                        created_str.replace("Z", "+00:00")
-                    ).timestamp()
+                    created = datetime.fromisoformat(created_str.replace("Z", "+00:00")).timestamp()
                     age = current_time - created
 
                     if age > max_age_seconds:

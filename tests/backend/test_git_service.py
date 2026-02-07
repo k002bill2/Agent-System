@@ -220,20 +220,13 @@ class TestMergeService:
         branch_feature = MagicMock()
         branch_feature.commit.hexsha = "feature123"
 
-        mock_git_service.repo.branches = {
-            "main": branch_main,
-            "feature": branch_feature,
-        }
-        mock_git_service.repo.branches.__contains__ = lambda self, x: x in ["main", "feature"]
-        mock_git_service.repo.branches.__iter__ = lambda self: iter(
-            [MagicMock(name="main"), MagicMock(name="feature")]
-        )
-
-        # Mock iter method to return list with name attribute
+        # Mock branches as list with name attributes (matching gitpython API)
         mock_main = MagicMock()
         mock_main.name = "main"
+        mock_main.commit.hexsha = "main123"
         mock_feature = MagicMock()
         mock_feature.name = "feature"
+        mock_feature.commit.hexsha = "feature123"
         mock_git_service.repo.branches = [mock_main, mock_feature]
 
         mock_git_service.repo.merge_base.return_value = [branch_main.commit]

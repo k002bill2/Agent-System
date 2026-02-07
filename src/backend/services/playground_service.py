@@ -53,9 +53,13 @@ def _load_sessions():
                 for session_data in data:
                     # Convert datetime strings back to datetime objects
                     if "created_at" in session_data and isinstance(session_data["created_at"], str):
-                        session_data["created_at"] = datetime.fromisoformat(session_data["created_at"])
+                        session_data["created_at"] = datetime.fromisoformat(
+                            session_data["created_at"]
+                        )
                     if "updated_at" in session_data and isinstance(session_data["updated_at"], str):
-                        session_data["updated_at"] = datetime.fromisoformat(session_data["updated_at"])
+                        session_data["updated_at"] = datetime.fromisoformat(
+                            session_data["updated_at"]
+                        )
 
                     # Convert messages
                     if "messages" in session_data:
@@ -68,7 +72,9 @@ def _load_sessions():
                         for exec_data in session_data["executions"]:
                             for dt_field in ["created_at", "started_at", "completed_at"]:
                                 if dt_field in exec_data and isinstance(exec_data[dt_field], str):
-                                    exec_data[dt_field] = datetime.fromisoformat(exec_data[dt_field])
+                                    exec_data[dt_field] = datetime.fromisoformat(
+                                        exec_data[dt_field]
+                                    )
                             if "messages" in exec_data:
                                 for msg in exec_data["messages"]:
                                     if "timestamp" in msg and isinstance(msg["timestamp"], str):
@@ -703,7 +709,7 @@ Based on the context provided, I would recommend the following approach:
 - Implement each step carefully
 - Test and validate the results
 
-Available tools for this session: {', '.join(tools) if tools else 'None'}
+Available tools for this session: {", ".join(tools) if tools else "None"}
 
 Is there anything specific you'd like me to focus on?
 

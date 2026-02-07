@@ -30,6 +30,7 @@ async def mcp_sse_endpoint(request: Request) -> StreamingResponse:
 
         # Keep connection alive with periodic pings
         import asyncio
+
         while True:
             # Check if client disconnected
             if await request.is_disconnected():
@@ -46,7 +47,7 @@ async def mcp_sse_endpoint(request: Request) -> StreamingResponse:
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",  # Disable nginx buffering
-        }
+        },
     )
 
 
@@ -69,25 +70,22 @@ async def mcp_messages_endpoint(request: Request) -> Response:
         mcp_request = MCPRequest(**body)
     except Exception as e:
         return Response(
-            content=json.dumps({
-                "jsonrpc": "2.0",
-                "id": body.get("id"),
-                "error": {
-                    "code": -32700,
-                    "message": f"Parse error: {str(e)}"
+            content=json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": body.get("id"),
+                    "error": {"code": -32700, "message": f"Parse error: {str(e)}"},
                 }
-            }),
+            ),
             media_type="application/json",
-            status_code=200
+            status_code=200,
         )
 
     # Handle request
     response = await mcp_service.handle_request(mcp_request)
 
     return Response(
-        content=response.model_dump_json(),
-        media_type="application/json",
-        status_code=200
+        content=response.model_dump_json(), media_type="application/json", status_code=200
     )
 
 
@@ -102,7 +100,7 @@ async def mcp_health() -> dict:
         "protocol": "MCP",
         "version": "2024-11-05",
         "tools_count": len(tools),
-        "tools": [t.name for t in tools]
+        "tools": [t.name for t in tools],
     }
 
 
@@ -112,6 +110,4 @@ async def list_mcp_tools() -> dict:
     mcp_service = get_mcp_service()
     tools = mcp_service.get_tool_definitions()
 
-    return {
-        "tools": [tool.model_dump() for tool in tools]
-    }
+    return {"tools": [tool.model_dump() for tool in tools]}

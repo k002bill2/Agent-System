@@ -54,7 +54,9 @@ class ClaudeSessionInfo(BaseModel):
     slug: str = Field(..., description="Human-readable slug like 'federated-booping-frog'")
     status: SessionStatus = Field(default=SessionStatus.UNKNOWN, description="Session status")
     model: str = Field(default="unknown", description="Model name like 'claude-opus-4-5-20251101'")
-    project_path: str = Field(..., description="Encoded project path like '-Users-username-Work-MyProject'")
+    project_path: str = Field(
+        ..., description="Encoded project path like '-Users-username-Work-MyProject'"
+    )
     project_name: str = Field(default="", description="Human-readable project name")
     git_branch: str = Field(default="", description="Current git branch")
     cwd: str = Field(default="", description="Current working directory")
@@ -83,7 +85,9 @@ class ClaudeSessionInfo(BaseModel):
     summary: str | None = Field(default=None, description="AI-generated conversation summary")
 
     # Source user tracking (for external sessions)
-    source_user: str = Field(default="", description="Username who owns this session (extracted from path)")
+    source_user: str = Field(
+        default="", description="Username who owns this session (extracted from path)"
+    )
     source_path: str = Field(default="", description="Base path where this session was found")
 
 
@@ -91,13 +95,9 @@ class ClaudeSessionDetail(ClaudeSessionInfo):
     """Detailed session information with recent messages."""
 
     recent_messages: list[SessionMessage] = Field(
-        default_factory=list,
-        description="Recent messages (last 20)"
+        default_factory=list, description="Recent messages (last 20)"
     )
-    current_task: str | None = Field(
-        default=None,
-        description="Current task description if active"
-    )
+    current_task: str | None = Field(default=None, description="Current task description if active")
 
 
 class ClaudeSessionResponse(BaseModel):
@@ -171,8 +171,7 @@ class ClaudeCodeTask(BaseModel):
     title: str = Field(..., description="Task title/subject")
     description: str | None = Field(default=None, description="Task description")
     status: ClaudeCodeTaskStatus = Field(
-        default=ClaudeCodeTaskStatus.PENDING,
-        description="Task status"
+        default=ClaudeCodeTaskStatus.PENDING, description="Task status"
     )
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

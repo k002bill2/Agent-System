@@ -7,6 +7,7 @@ from pathlib import Path
 try:
     from git import GitCommandError, InvalidGitRepositoryError, Repo
     from git.objects.commit import Commit
+
     GIT_AVAILABLE = True
 except ImportError:
     GIT_AVAILABLE = False
@@ -36,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 class GitServiceError(Exception):
     """Git service specific error."""
+
     pass
 
 
@@ -79,9 +81,7 @@ class GitService:
     # =========================================================================
 
     def list_branches(
-        self,
-        include_remote: bool = True,
-        base_branch: str = "main"
+        self, include_remote: bool = True, base_branch: str = "main"
     ) -> list[GitBranch]:
         """List all branches with their status.
 
@@ -122,19 +122,21 @@ class GitService:
                 except Exception:
                     pass
 
-                branches.append(GitBranch(
-                    name=branch.name,
-                    is_current=(branch.name == current),
-                    is_remote=False,
-                    is_protected=(branch.name in DEFAULT_PROTECTED_BRANCHES),
-                    commit_sha=commit.hexsha,
-                    commit_message=commit.message.strip().split('\n')[0][:100],
-                    commit_author=commit.author.name,
-                    commit_date=datetime.fromtimestamp(commit.committed_date),
-                    ahead=ahead,
-                    behind=behind,
-                    tracking_branch=tracking,
-                ))
+                branches.append(
+                    GitBranch(
+                        name=branch.name,
+                        is_current=(branch.name == current),
+                        is_remote=False,
+                        is_protected=(branch.name in DEFAULT_PROTECTED_BRANCHES),
+                        commit_sha=commit.hexsha,
+                        commit_message=commit.message.strip().split("\n")[0][:100],
+                        commit_author=commit.author.name,
+                        commit_date=datetime.fromtimestamp(commit.committed_date),
+                        ahead=ahead,
+                        behind=behind,
+                        tracking_branch=tracking,
+                    )
+                )
             except Exception as e:
                 logger.warning(f"Error processing branch {branch.name}: {e}")
 
@@ -143,10 +145,10 @@ class GitService:
             for ref in self.repo.remotes.origin.refs if self.repo.remotes else []:
                 try:
                     # Skip HEAD reference
-                    if ref.name.endswith('/HEAD'):
+                    if ref.name.endswith("/HEAD"):
                         continue
 
-                    remote_name = ref.name.replace('origin/', '')
+                    remote_name = ref.name.replace("origin/", "")
                     # Skip if already in local branches
                     if any(b.name == remote_name for b in branches):
                         continue
@@ -156,28 +158,26 @@ class GitService:
                     if base_commit:
                         ahead, behind = self._count_ahead_behind(commit, base_commit)
 
-                    branches.append(GitBranch(
-                        name=ref.name,
-                        is_current=False,
-                        is_remote=True,
-                        is_protected=(remote_name in DEFAULT_PROTECTED_BRANCHES),
-                        commit_sha=commit.hexsha,
-                        commit_message=commit.message.strip().split('\n')[0][:100],
-                        commit_author=commit.author.name,
-                        commit_date=datetime.fromtimestamp(commit.committed_date),
-                        ahead=ahead,
-                        behind=behind,
-                    ))
+                    branches.append(
+                        GitBranch(
+                            name=ref.name,
+                            is_current=False,
+                            is_remote=True,
+                            is_protected=(remote_name in DEFAULT_PROTECTED_BRANCHES),
+                            commit_sha=commit.hexsha,
+                            commit_message=commit.message.strip().split("\n")[0][:100],
+                            commit_author=commit.author.name,
+                            commit_date=datetime.fromtimestamp(commit.committed_date),
+                            ahead=ahead,
+                            behind=behind,
+                        )
+                    )
                 except Exception as e:
                     logger.warning(f"Error processing remote ref {ref}: {e}")
 
         return sorted(branches, key=lambda b: (b.is_remote, b.name))
 
-    def create_branch(
-        self,
-        name: str,
-        start_point: str = "HEAD"
-    ) -> GitBranch:
+    def create_branch(self, name: str, start_point: str = "HEAD") -> GitBranch:
         """Create a new branch.
 
         Args:
@@ -201,18 +201,14 @@ class GitService:
                 is_remote=False,
                 is_protected=False,
                 commit_sha=commit.hexsha,
-                commit_message=commit.message.strip().split('\n')[0][:100],
+                commit_message=commit.message.strip().split("\n")[0][:100],
                 commit_author=commit.author.name,
                 commit_date=datetime.fromtimestamp(commit.committed_date),
             )
         except GitCommandError as e:
             raise GitServiceError(f"Failed to create branch: {e}")
 
-    def delete_branch(
-        self,
-        name: str,
-        force: bool = False
-    ) -> bool:
+    def delete_branch(self, name: str, force: bool = False) -> bool:
         """Delete a branch.
 
         Args:
@@ -253,11 +249,7 @@ class GitService:
         except GitCommandError as e:
             raise GitServiceError(f"Failed to checkout branch: {e}")
 
-    def get_branch_diff(
-        self,
-        branch: str,
-        base: str = "main"
-    ) -> BranchDiff:
+    def get_branch_diff(self, branch: str, base: str = "main") -> BranchDiff:
         """Get diff summary between two branches.
 
         Args:
@@ -280,11 +272,11 @@ class GitService:
             for d in diff:
                 stats["files"] += 1
                 if d.diff:
-                    lines = d.diff.decode('utf-8', errors='ignore').split('\n')
+                    lines = d.diff.decode("utf-8", errors="ignore").split("\n")
                     for line in lines:
-                        if line.startswith('+') and not line.startswith('+++'):
+                        if line.startswith("+") and not line.startswith("+++"):
                             stats["insertions"] += 1
-                        elif line.startswith('-') and not line.startswith('---'):
+                        elif line.startswith("-") and not line.startswith("---"):
                             stats["deletions"] += 1
 
             return BranchDiff(
@@ -304,10 +296,7 @@ class GitService:
     # =========================================================================
 
     def get_commits(
-        self,
-        branch: str | None = None,
-        limit: int = 50,
-        skip: int = 0
+        self, branch: str | None = None, limit: int = 50, skip: int = 0
     ) -> list[GitCommit]:
         """Get commit history.
 
@@ -372,20 +361,22 @@ class GitService:
                 additions = 0
                 deletions = 0
                 if d.diff:
-                    lines = d.diff.decode('utf-8', errors='ignore').split('\n')
+                    lines = d.diff.decode("utf-8", errors="ignore").split("\n")
                     for line in lines:
-                        if line.startswith('+') and not line.startswith('+++'):
+                        if line.startswith("+") and not line.startswith("+++"):
                             additions += 1
-                        elif line.startswith('-') and not line.startswith('---'):
+                        elif line.startswith("-") and not line.startswith("---"):
                             deletions += 1
 
-                files.append(CommitFile(
-                    path=d.b_path or d.a_path,
-                    status=status,
-                    additions=additions,
-                    deletions=deletions,
-                    old_path=d.a_path if d.renamed_file else None,
-                ))
+                files.append(
+                    CommitFile(
+                        path=d.b_path or d.a_path,
+                        status=status,
+                        additions=additions,
+                        deletions=deletions,
+                        old_path=d.a_path if d.renamed_file else None,
+                    )
+                )
 
             return files
         except Exception as e:
@@ -417,12 +408,14 @@ class GitService:
                 elif d.renamed_file:
                     status = FileStatusType.RENAMED
 
-                staged_files.append(GitStatusFile(
-                    path=d.b_path or d.a_path,
-                    status=status,
-                    staged=True,
-                    old_path=d.a_path if d.renamed_file else None,
-                ))
+                staged_files.append(
+                    GitStatusFile(
+                        path=d.b_path or d.a_path,
+                        status=status,
+                        staged=True,
+                        old_path=d.a_path if d.renamed_file else None,
+                    )
+                )
         except Exception as e:
             # Empty repo or other error
             logger.debug(f"Error getting staged files: {e}")
@@ -435,22 +428,26 @@ class GitService:
                 if d.deleted_file:
                     status = FileStatusType.DELETED
 
-                unstaged_files.append(GitStatusFile(
-                    path=d.b_path or d.a_path,
-                    status=status,
-                    staged=False,
-                ))
+                unstaged_files.append(
+                    GitStatusFile(
+                        path=d.b_path or d.a_path,
+                        status=status,
+                        staged=False,
+                    )
+                )
         except Exception as e:
             logger.debug(f"Error getting unstaged files: {e}")
 
         # Get untracked files
         try:
             for path in self.repo.untracked_files:
-                untracked_files.append(GitStatusFile(
-                    path=path,
-                    status=FileStatusType.UNTRACKED,
-                    staged=False,
-                ))
+                untracked_files.append(
+                    GitStatusFile(
+                        path=path,
+                        status=FileStatusType.UNTRACKED,
+                        staged=False,
+                    )
+                )
         except Exception as e:
             logger.debug(f"Error getting untracked files: {e}")
 
@@ -466,11 +463,7 @@ class GitService:
             total_changes=total,
         )
 
-    def add(
-        self,
-        paths: list[str] | None = None,
-        all: bool = False
-    ) -> AddResult:
+    def add(self, paths: list[str] | None = None, all: bool = False) -> AddResult:
         """Stage files for commit.
 
         Args:
@@ -517,10 +510,7 @@ class GitService:
             )
 
     def commit(
-        self,
-        message: str,
-        author_name: str | None = None,
-        author_email: str | None = None
+        self, message: str, author_name: str | None = None, author_email: str | None = None
     ) -> CommitCreateResult:
         """Create a commit with staged changes.
 
@@ -545,6 +535,7 @@ class GitService:
             author = None
             if author_name and author_email:
                 from git import Actor
+
                 author = Actor(author_name, author_email)
 
             # Create commit
@@ -608,13 +599,15 @@ class GitService:
                         file_path = self.project_path / path
                         if file_path.exists() and file_path.is_file():
                             # Read first 500 lines max to avoid huge files
-                            content = file_path.read_text(errors='ignore')
-                            lines = content.split('\n')[:500]
-                            diff_parts.append(f"# New file: {path}\n" + '\n'.join(f"+{line}" for line in lines))
+                            content = file_path.read_text(errors="ignore")
+                            lines = content.split("\n")[:500]
+                            diff_parts.append(
+                                f"# New file: {path}\n" + "\n".join(f"+{line}" for line in lines)
+                            )
                     except Exception:
                         diff_parts.append(f"# New file: {path} (binary or unreadable)")
 
-            return '\n\n'.join(diff_parts)
+            return "\n\n".join(diff_parts)
         except GitCommandError as e:
             raise GitServiceError(f"Failed to get diff: {e}")
 
@@ -697,11 +690,7 @@ class GitService:
                 message=str(e),
             )
 
-    def pull(
-        self,
-        remote: str = "origin",
-        branch: str | None = None
-    ) -> PullResult:
+    def pull(self, remote: str = "origin", branch: str | None = None) -> PullResult:
         """Pull from remote.
 
         Args:
@@ -745,10 +734,7 @@ class GitService:
             )
 
     def push(
-        self,
-        remote: str = "origin",
-        branch: str | None = None,
-        set_upstream: bool = False
+        self, remote: str = "origin", branch: str | None = None, set_upstream: bool = False
     ) -> PushResult:
         """Push to remote.
 

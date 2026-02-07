@@ -97,26 +97,34 @@ class AnalyticsService:
             base_cost = random.uniform(0.5, 2.0)
             base_tokens = random.randint(10000, 50000)
 
-            tasks_data.append(TrendDataPoint(
-                timestamp=current,
-                value=base_tasks,
-                label=current.strftime("%Y-%m-%d %H:%M"),
-            ))
-            success_rate_data.append(TrendDataPoint(
-                timestamp=current,
-                value=round(base_success, 1),
-                label=current.strftime("%Y-%m-%d %H:%M"),
-            ))
-            costs_data.append(TrendDataPoint(
-                timestamp=current,
-                value=round(base_cost, 3),
-                label=current.strftime("%Y-%m-%d %H:%M"),
-            ))
-            tokens_data.append(TrendDataPoint(
-                timestamp=current,
-                value=base_tokens,
-                label=current.strftime("%Y-%m-%d %H:%M"),
-            ))
+            tasks_data.append(
+                TrendDataPoint(
+                    timestamp=current,
+                    value=base_tasks,
+                    label=current.strftime("%Y-%m-%d %H:%M"),
+                )
+            )
+            success_rate_data.append(
+                TrendDataPoint(
+                    timestamp=current,
+                    value=round(base_success, 1),
+                    label=current.strftime("%Y-%m-%d %H:%M"),
+                )
+            )
+            costs_data.append(
+                TrendDataPoint(
+                    timestamp=current,
+                    value=round(base_cost, 3),
+                    label=current.strftime("%Y-%m-%d %H:%M"),
+                )
+            )
+            tokens_data.append(
+                TrendDataPoint(
+                    timestamp=current,
+                    value=base_tokens,
+                    label=current.strftime("%Y-%m-%d %H:%M"),
+                )
+            )
 
             current += interval
 
@@ -472,7 +480,7 @@ class AnalyticsService:
         # Token and cost totals from sessions
         token_query = select(
             func.coalesce(func.sum(SessionModel.total_tokens), 0),
-            func.coalesce(func.sum(SessionModel.total_cost_usd), 0)
+            func.coalesce(func.sum(SessionModel.total_cost_usd), 0),
         )
         if project_id:
             token_query = token_query.where(SessionModel.project_id == project_id)
@@ -483,10 +491,7 @@ class AnalyticsService:
 
         # Average task duration (from completed tasks)
         duration_query = select(func.avg(TaskModel.duration_ms)).where(
-            and_(
-                TaskModel.status == "completed",
-                TaskModel.duration_ms.isnot(None)
-            )
+            and_(TaskModel.status == "completed", TaskModel.duration_ms.isnot(None))
         )
         if project_id:
             duration_query = duration_query.join(
@@ -503,9 +508,9 @@ class AnalyticsService:
                 and_(AuditLogModel.action == action, *audit_base_filter)
             )
             if project_id:
-                query = query.join(
-                    SessionModel, AuditLogModel.session_id == SessionModel.id
-                ).where(SessionModel.project_id == project_id)
+                query = query.join(SessionModel, AuditLogModel.session_id == SessionModel.id).where(
+                    SessionModel.project_id == project_id
+                )
             return query
 
         approvals_pending_result = await db.execute(build_audit_query("approval_request"))
@@ -580,7 +585,9 @@ class AnalyticsService:
             # Calculate success rate for bucket
             bucket_success_rate = 0.0
             if bucket_completed + bucket_failed > 0:
-                bucket_success_rate = round((bucket_completed / (bucket_completed + bucket_failed)) * 100, 1)
+                bucket_success_rate = round(
+                    (bucket_completed / (bucket_completed + bucket_failed)) * 100, 1
+                )
 
             # Sum costs and tokens from sessions updated in this bucket
             bucket_sessions = [s for s in sessions if current <= s.updated_at < bucket_end]
@@ -588,26 +595,34 @@ class AnalyticsService:
             bucket_tokens = sum(s.total_tokens or 0 for s in bucket_sessions)
 
             label = current.strftime("%Y-%m-%d %H:%M")
-            tasks_data.append(TrendDataPoint(
-                timestamp=current,
-                value=len(bucket_tasks),
-                label=label,
-            ))
-            success_rate_data.append(TrendDataPoint(
-                timestamp=current,
-                value=bucket_success_rate,
-                label=label,
-            ))
-            costs_data.append(TrendDataPoint(
-                timestamp=current,
-                value=round(bucket_cost, 3),
-                label=label,
-            ))
-            tokens_data.append(TrendDataPoint(
-                timestamp=current,
-                value=bucket_tokens,
-                label=label,
-            ))
+            tasks_data.append(
+                TrendDataPoint(
+                    timestamp=current,
+                    value=len(bucket_tasks),
+                    label=label,
+                )
+            )
+            success_rate_data.append(
+                TrendDataPoint(
+                    timestamp=current,
+                    value=bucket_success_rate,
+                    label=label,
+                )
+            )
+            costs_data.append(
+                TrendDataPoint(
+                    timestamp=current,
+                    value=round(bucket_cost, 3),
+                    label=label,
+                )
+            )
+            tokens_data.append(
+                TrendDataPoint(
+                    timestamp=current,
+                    value=bucket_tokens,
+                    label=label,
+                )
+            )
 
             current += interval
 
@@ -630,10 +645,7 @@ class AnalyticsService:
         start = datetime.utcnow() - delta
 
         # Build query with optional project filter
-        base_filters = [
-            TaskModel.created_at >= start,
-            TaskModel.agent_id.isnot(None)
-        ]
+        base_filters = [TaskModel.created_at >= start, TaskModel.agent_id.isnot(None)]
 
         query = select(
             TaskModel.agent_id,
@@ -646,9 +658,9 @@ class AnalyticsService:
         )
 
         if project_id:
-            query = query.join(
-                SessionModel, TaskModel.session_id == SessionModel.id
-            ).where(and_(*base_filters, SessionModel.project_id == project_id))
+            query = query.join(SessionModel, TaskModel.session_id == SessionModel.id).where(
+                and_(*base_filters, SessionModel.project_id == project_id)
+            )
         else:
             query = query.where(and_(*base_filters))
 
@@ -669,18 +681,20 @@ class AnalyticsService:
             if completed + failed > 0:
                 success_rate = round((completed / (completed + failed)) * 100, 1)
 
-            agents.append(AgentPerformance(
-                agent_id=agent_id,
-                agent_name=agent_id.replace("-", " ").title(),
-                category="general",
-                total_tasks=total,
-                completed_tasks=completed,
-                failed_tasks=failed,
-                success_rate=success_rate,
-                avg_duration_ms=int(avg_duration),
-                total_tokens=int(total_tokens),
-                total_cost=float(total_cost),
-            ))
+            agents.append(
+                AgentPerformance(
+                    agent_id=agent_id,
+                    agent_name=agent_id.replace("-", " ").title(),
+                    category="general",
+                    total_tasks=total,
+                    completed_tasks=completed,
+                    failed_tasks=failed,
+                    success_rate=success_rate,
+                    avg_duration_ms=int(avg_duration),
+                    total_tokens=int(total_tokens),
+                    total_cost=float(total_cost),
+                )
+            )
 
         # Sort by total tasks descending
         agents.sort(key=lambda a: a.total_tasks, reverse=True)
@@ -745,10 +759,7 @@ class AnalyticsService:
 
         # Get failed tasks (with project filter via session)
         failed_query = select(TaskModel).where(
-            and_(
-                TaskModel.status == "failed",
-                TaskModel.created_at >= start
-            )
+            and_(TaskModel.status == "failed", TaskModel.created_at >= start)
         )
         if project_id:
             failed_query = failed_query.join(
@@ -760,9 +771,7 @@ class AnalyticsService:
         total_errors = len(failed_tasks)
 
         # Get total tasks for error rate
-        total_query = select(func.count(TaskModel.id)).where(
-            TaskModel.created_at >= start
-        )
+        total_query = select(func.count(TaskModel.id)).where(TaskModel.created_at >= start)
         if project_id:
             total_query = total_query.join(
                 SessionModel, TaskModel.session_id == SessionModel.id
@@ -797,25 +806,29 @@ class AnalyticsService:
         by_type = []
         for error_type, data in error_types.items():
             percentage = (data["count"] / total_errors * 100) if total_errors > 0 else 0
-            by_type.append(ErrorBreakdown(
-                error_type=error_type,
-                count=data["count"],
-                percentage=round(percentage, 1),
-                last_occurred=data["last_occurred"],
-                sample_message=data["sample_message"],
-            ))
+            by_type.append(
+                ErrorBreakdown(
+                    error_type=error_type,
+                    count=data["count"],
+                    percentage=round(percentage, 1),
+                    last_occurred=data["last_occurred"],
+                    sample_message=data["sample_message"],
+                )
+            )
         by_type.sort(key=lambda x: x.count, reverse=True)
 
         by_agent = []
         for agent_id, count in agent_errors.items():
             percentage = (count / total_errors * 100) if total_errors > 0 else 0
-            by_agent.append(CostBreakdown(
-                category="agent",
-                value=agent_id,
-                cost=0,
-                tokens=0,
-                percentage=round(percentage, 1),
-            ))
+            by_agent.append(
+                CostBreakdown(
+                    category="agent",
+                    value=agent_id,
+                    cost=0,
+                    tokens=0,
+                    percentage=round(percentage, 1),
+                )
+            )
         by_agent.sort(key=lambda x: x.percentage, reverse=True)
 
         return ErrorAnalytics(
@@ -835,12 +848,20 @@ class AnalyticsService:
         """Get complete analytics dashboard data from database."""
         overview = await AnalyticsService.get_overview_async(db, project_id=project_id)
         trends = await AnalyticsService.get_trends_async(db, time_range, project_id=project_id)
-        agents = await AnalyticsService.get_agent_performance_async(db, time_range, project_id=project_id)
-        activity = await AnalyticsService.get_activity_heatmap_async(db, time_range, project_id=project_id)
-        errors = await AnalyticsService.get_error_analytics_async(db, time_range, project_id=project_id)
+        agents = await AnalyticsService.get_agent_performance_async(
+            db, time_range, project_id=project_id
+        )
+        activity = await AnalyticsService.get_activity_heatmap_async(
+            db, time_range, project_id=project_id
+        )
+        errors = await AnalyticsService.get_error_analytics_async(
+            db, time_range, project_id=project_id
+        )
 
         # Cost analytics from database
-        costs = await AnalyticsService.get_cost_analytics_async(db, time_range, project_id=project_id)
+        costs = await AnalyticsService.get_cost_analytics_async(
+            db, time_range, project_id=project_id
+        )
 
         return AnalyticsDashboard(
             overview=overview,
@@ -862,26 +883,18 @@ class AnalyticsService:
         start = datetime.utcnow() - delta
 
         # Get sessions with cost data
-        session_filters = [
-            SessionModel.created_at >= start,
-            SessionModel.total_cost_usd > 0
-        ]
+        session_filters = [SessionModel.created_at >= start, SessionModel.total_cost_usd > 0]
         if project_id:
             session_filters.append(SessionModel.project_id == project_id)
 
-        session_result = await db.execute(
-            select(SessionModel).where(and_(*session_filters))
-        )
+        session_result = await db.execute(select(SessionModel).where(and_(*session_filters)))
         sessions = session_result.scalars().all()
 
         total_cost = sum(s.total_cost_usd or 0 for s in sessions)
         total_tokens = sum(s.total_tokens or 0 for s in sessions)
 
         # Get tasks for agent breakdown
-        task_filters = [
-            TaskModel.created_at >= start,
-            TaskModel.agent_id.isnot(None)
-        ]
+        task_filters = [TaskModel.created_at >= start, TaskModel.agent_id.isnot(None)]
         task_query = select(
             TaskModel.agent_id,
             func.sum(TaskModel.cost).label("total_cost"),
@@ -903,13 +916,15 @@ class AnalyticsService:
             agent_tokens = int(row[2] or 0)
             percentage = (agent_cost / total_cost * 100) if total_cost > 0 else 0
 
-            by_agent.append(CostBreakdown(
-                category="agent",
-                value=agent_id,
-                cost=round(agent_cost, 4),
-                tokens=agent_tokens,
-                percentage=round(percentage, 1),
-            ))
+            by_agent.append(
+                CostBreakdown(
+                    category="agent",
+                    value=agent_id,
+                    cost=round(agent_cost, 4),
+                    tokens=agent_tokens,
+                    percentage=round(percentage, 1),
+                )
+            )
 
         by_agent.sort(key=lambda x: x.cost, reverse=True)
 
@@ -930,9 +945,7 @@ class AnalyticsService:
         projected_monthly = daily_cost * 30
 
         # Average cost per task
-        total_tasks_query = select(func.count(TaskModel.id)).where(
-            TaskModel.created_at >= start
-        )
+        total_tasks_query = select(func.count(TaskModel.id)).where(TaskModel.created_at >= start)
         if project_id:
             total_tasks_query = total_tasks_query.join(
                 SessionModel, TaskModel.session_id == SessionModel.id
@@ -1000,19 +1013,25 @@ class AnalyticsService:
                 else:
                     value = random.randint(1, 10) * base_multiplier
 
-                data_points.append(TrendDataPoint(
-                    timestamp=current,
-                    value=value,
-                    label=current.strftime("%Y-%m-%d %H:%M"),
-                ))
+                data_points.append(
+                    TrendDataPoint(
+                        timestamp=current,
+                        value=value,
+                        label=current.strftime("%Y-%m-%d %H:%M"),
+                    )
+                )
                 current += interval
 
-            series.append(ProjectTrendSeries(
-                project_id=project_id,
-                project_name=project_name,
-                color=AnalyticsService.MULTI_PROJECT_COLORS[idx % len(AnalyticsService.MULTI_PROJECT_COLORS)],
-                data=data_points,
-            ))
+            series.append(
+                ProjectTrendSeries(
+                    project_id=project_id,
+                    project_name=project_name,
+                    color=AnalyticsService.MULTI_PROJECT_COLORS[
+                        idx % len(AnalyticsService.MULTI_PROJECT_COLORS)
+                    ],
+                    data=data_points,
+                )
+            )
 
         return MultiProjectTrendsResponse(
             metric=metric,
@@ -1041,22 +1060,17 @@ class AnalyticsService:
 
             # Get sessions and tasks for this project
             session_query = select(SessionModel).where(
-                and_(
-                    SessionModel.project_id == project_id,
-                    SessionModel.created_at >= start
-                )
+                and_(SessionModel.project_id == project_id, SessionModel.created_at >= start)
             )
             session_result = await db.execute(session_query)
             sessions = session_result.scalars().all()
 
-            task_query = select(TaskModel).join(
-                SessionModel, TaskModel.session_id == SessionModel.id
-            ).where(
-                and_(
-                    SessionModel.project_id == project_id,
-                    TaskModel.created_at >= start
-                )
-            ).order_by(TaskModel.created_at)
+            task_query = (
+                select(TaskModel)
+                .join(SessionModel, TaskModel.session_id == SessionModel.id)
+                .where(and_(SessionModel.project_id == project_id, TaskModel.created_at >= start))
+                .order_by(TaskModel.created_at)
+            )
             task_result = await db.execute(task_query)
             tasks = task_result.scalars().all()
 
@@ -1080,23 +1094,33 @@ class AnalyticsService:
                     bucket_tasks = [t for t in tasks if current <= t.created_at < bucket_end]
                     completed = len([t for t in bucket_tasks if t.status == "completed"])
                     failed = len([t for t in bucket_tasks if t.status == "failed"])
-                    value = round((completed / (completed + failed)) * 100, 1) if (completed + failed) > 0 else 0
+                    value = (
+                        round((completed / (completed + failed)) * 100, 1)
+                        if (completed + failed) > 0
+                        else 0
+                    )
                 else:
                     value = 0
 
-                data_points.append(TrendDataPoint(
-                    timestamp=current,
-                    value=value,
-                    label=current.strftime("%Y-%m-%d %H:%M"),
-                ))
+                data_points.append(
+                    TrendDataPoint(
+                        timestamp=current,
+                        value=value,
+                        label=current.strftime("%Y-%m-%d %H:%M"),
+                    )
+                )
                 current += interval
 
-            series.append(ProjectTrendSeries(
-                project_id=project_id,
-                project_name=project_name,
-                color=AnalyticsService.MULTI_PROJECT_COLORS[idx % len(AnalyticsService.MULTI_PROJECT_COLORS)],
-                data=data_points,
-            ))
+            series.append(
+                ProjectTrendSeries(
+                    project_id=project_id,
+                    project_name=project_name,
+                    color=AnalyticsService.MULTI_PROJECT_COLORS[
+                        idx % len(AnalyticsService.MULTI_PROJECT_COLORS)
+                    ],
+                    data=data_points,
+                )
+            )
 
         return MultiProjectTrendsResponse(
             metric=metric,

@@ -653,9 +653,7 @@ class NotificationService:
         return config.sent_this_hour < config.rate_limit_per_hour
 
     @staticmethod
-    def _check_conditions(
-        rule: NotificationRule, data: dict[str, Any]
-    ) -> bool:
+    def _check_conditions(rule: NotificationRule, data: dict[str, Any]) -> bool:
         """Check if all conditions are met."""
         for condition in rule.conditions:
             value = data.get(condition.field)
@@ -712,7 +710,9 @@ class NotificationService:
             template = None
         elif matching_rules:
             # Use highest priority rule
-            matching_rules.sort(key=lambda r: list(NotificationPriority).index(r.priority), reverse=True)
+            matching_rules.sort(
+                key=lambda r: list(NotificationPriority).index(r.priority), reverse=True
+            )
             top_rule = matching_rules[0]
             channels = list(set(ch for rule in matching_rules for ch in rule.channels))
             priority = top_rule.priority
@@ -802,8 +802,9 @@ class NotificationService:
                 priority=NotificationPriority(row.priority),
                 message_template=row.message_template,
             )
-            if NotificationService._check_conditions(rule, data) and \
-               NotificationService._check_project_filter(rule, project_id):
+            if NotificationService._check_conditions(
+                rule, data
+            ) and NotificationService._check_project_filter(rule, project_id):
                 matching_rules.append(rule)
 
         # Determine channels and priority
@@ -813,7 +814,9 @@ class NotificationService:
             template = None
             rule_id = None
         elif matching_rules:
-            matching_rules.sort(key=lambda r: list(NotificationPriority).index(r.priority), reverse=True)
+            matching_rules.sort(
+                key=lambda r: list(NotificationPriority).index(r.priority), reverse=True
+            )
             top_rule = matching_rules[0]
             channels = list(set(ch for rule in matching_rules for ch in rule.channels))
             priority = top_rule.priority
@@ -977,9 +980,7 @@ async def notify_task_completed(session_id: str, task_id: str, task_title: str) 
     )
 
 
-async def notify_task_failed(
-    session_id: str, task_id: str, task_title: str, error: str
-) -> None:
+async def notify_task_failed(session_id: str, task_id: str, task_title: str, error: str) -> None:
     """Send task failed notification."""
     await NotificationService.send_notification(
         NotificationEventType.TASK_FAILED,
@@ -992,9 +993,7 @@ async def notify_task_failed(
     )
 
 
-async def notify_approval_required(
-    session_id: str, approval_id: str, tool_name: str
-) -> None:
+async def notify_approval_required(session_id: str, approval_id: str, tool_name: str) -> None:
     """Send approval required notification."""
     await NotificationService.send_notification(
         NotificationEventType.APPROVAL_REQUIRED,

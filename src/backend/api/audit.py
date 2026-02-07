@@ -81,9 +81,7 @@ async def get_audit_logs(
         try:
             resource_type_enum = ResourceType(resource_type)
         except ValueError:
-            raise HTTPException(
-                status_code=400, detail=f"Invalid resource_type: {resource_type}"
-            )
+            raise HTTPException(status_code=400, detail=f"Invalid resource_type: {resource_type}")
 
     filter = AuditLogFilter(
         session_id=session_id,
@@ -156,15 +154,13 @@ async def get_audit_stats(
 
     # Recent trend (last 7 days)
     from collections import defaultdict
+
     trend: dict[str, int] = defaultdict(int)
     for log in logs:
         date_str = log.created_at.strftime("%Y-%m-%d")
         trend[date_str] += 1
 
-    recent_trend = [
-        {"date": date, "count": count}
-        for date, count in sorted(trend.items())[-7:]
-    ]
+    recent_trend = [{"date": date, "count": count} for date, count in sorted(trend.items())[-7:]]
 
     return {
         "total_actions": total_actions,
@@ -192,10 +188,7 @@ async def get_audit_actions():
 async def get_resource_types():
     """Get list of available resource types."""
     return {
-        "resource_types": [
-            {"value": rt.value, "label": rt.value.title()}
-            for rt in ResourceType
-        ]
+        "resource_types": [{"value": rt.value, "label": rt.value.title()} for rt in ResourceType]
     }
 
 
@@ -226,9 +219,7 @@ async def export_audit_logs(
         try:
             resource_type_enum = ResourceType(resource_type)
         except ValueError:
-            raise HTTPException(
-                status_code=400, detail=f"Invalid resource_type: {resource_type}"
-            )
+            raise HTTPException(status_code=400, detail=f"Invalid resource_type: {resource_type}")
 
     filter = AuditLogFilter(
         session_id=session_id,
@@ -358,7 +349,9 @@ async def get_compliance_report(
 
 @router.post("/retention/apply", response_model=RetentionApplyResult)
 async def apply_retention_policy(
-    policy: str = Query(..., description="Retention policy: standard, extended, permanent, minimal"),
+    policy: str = Query(
+        ..., description="Retention policy: standard, extended, permanent, minimal"
+    ),
     classification: str | None = Query(None, description="Filter by data classification"),
 ):
     """
@@ -409,8 +402,7 @@ async def get_data_classifications():
     """Get list of available data classifications."""
     return {
         "classifications": [
-            {"value": dc.value, "label": dc.value.title()}
-            for dc in DataClassification
+            {"value": dc.value, "label": dc.value.title()} for dc in DataClassification
         ]
     }
 
@@ -464,7 +456,9 @@ async def seed_sample_data(db: AsyncSession = Depends(get_db)):
                 resource_id=f"resource-{i:04d}",
                 session_id=session_id,
                 user_id=user_id,
-                agent_id=random.choice(agent_names) if "AGENT" in action.value or "TOOL" in action.value else None,
+                agent_id=random.choice(agent_names)
+                if "AGENT" in action.value or "TOOL" in action.value
+                else None,
                 new_value={
                     "tool_name": random.choice(tool_names) if "TOOL" in action.value else None,
                     "task_title": f"Sample task {i}" if "TASK" in action.value else None,
@@ -480,7 +474,9 @@ async def seed_sample_data(db: AsyncSession = Depends(get_db)):
                 resource_id=f"resource-{i:04d}",
                 session_id=session_id,
                 user_id=user_id,
-                agent_id=random.choice(agent_names) if "AGENT" in action.value or "TOOL" in action.value else None,
+                agent_id=random.choice(agent_names)
+                if "AGENT" in action.value or "TOOL" in action.value
+                else None,
                 new_value={
                     "tool_name": random.choice(tool_names) if "TOOL" in action.value else None,
                     "task_title": f"Sample task {i}" if "TASK" in action.value else None,
@@ -490,7 +486,9 @@ async def seed_sample_data(db: AsyncSession = Depends(get_db)):
             )
 
             # Adjust created_at for realistic distribution (only for in-memory)
-            entry.created_at = now - timedelta(days=days_ago, hours=hours_ago, minutes=random.randint(0, 59))
+            entry.created_at = now - timedelta(
+                days=days_ago, hours=hours_ago, minutes=random.randint(0, 59)
+            )
 
         sample_entries.append(entry)
 

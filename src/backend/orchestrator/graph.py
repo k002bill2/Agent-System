@@ -27,7 +27,9 @@ async def waiting_node(state: AgentState) -> dict[str, Any]:
     }
 
 
-def route_orchestrator(state: AgentState) -> Literal["planner", "executor", "execute_batch", "reviewer", "end"]:
+def route_orchestrator(
+    state: AgentState,
+) -> Literal["planner", "executor", "execute_batch", "reviewer", "end"]:
     """Route from orchestrator to next node."""
     next_action = state.get("next_action")
 

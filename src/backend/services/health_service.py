@@ -185,9 +185,7 @@ class HealthService:
 
                 # Check replication status (PostgreSQL)
                 try:
-                    rep_result = await session.execute(
-                        text("SELECT pg_is_in_recovery()")
-                    )
+                    rep_result = await session.execute(text("SELECT pg_is_in_recovery()"))
                     is_replica = rep_result.scalar()
 
                     if is_replica:

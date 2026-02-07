@@ -264,9 +264,7 @@ class ProjectConfigMonitor:
         agent_count = 0
         if agents_dir.exists():
             agent_count = sum(
-                1
-                for f in agents_dir.glob("*.md")
-                if f.is_file() and not f.name.startswith(".")
+                1 for f in agents_dir.glob("*.md") if f.is_file() and not f.name.startswith(".")
             )
             # Exclude shared/ directory files from agent count
             shared_dir = agents_dir / "shared"
@@ -420,7 +418,9 @@ class ProjectConfigMonitor:
             modified_at=datetime.fromtimestamp(stat.st_mtime),
         )
 
-    def get_skill_content(self, project_id: str, skill_id: str) -> tuple[SkillConfig | None, str, list[str]]:
+    def get_skill_content(
+        self, project_id: str, skill_id: str
+    ) -> tuple[SkillConfig | None, str, list[str]]:
         """Get full content of a skill.
 
         Args:
@@ -543,9 +543,7 @@ class ProjectConfigMonitor:
             tools=FrontmatterParser.extract_tools(frontmatter),
             model=frontmatter.get("model"),
             role=frontmatter.get("role"),
-            ace_capabilities=FrontmatterParser.get_nested_dict(
-                frontmatter, "ace_capabilities"
-            ),
+            ace_capabilities=FrontmatterParser.get_nested_dict(frontmatter, "ace_capabilities"),
             is_shared=is_shared,
             modified_at=datetime.fromtimestamp(stat.st_mtime),
         )
@@ -721,9 +719,7 @@ class ProjectConfigMonitor:
         """
         return self._toggle_mcp_server(project_id, server_id, disabled=True)
 
-    def _toggle_mcp_server(
-        self, project_id: str, server_id: str, disabled: bool
-    ) -> bool:
+    def _toggle_mcp_server(self, project_id: str, server_id: str, disabled: bool) -> bool:
         """Toggle MCP server disabled state.
 
         Args:
@@ -1272,9 +1268,7 @@ class ProjectConfigMonitor:
             logger.error(f"Error updating hooks: {e}")
             return False
 
-    def add_hook_entry(
-        self, project_id: str, event: str, matcher: str, hooks: list[dict]
-    ) -> bool:
+    def add_hook_entry(self, project_id: str, event: str, matcher: str, hooks: list[dict]) -> bool:
         """Add a hook entry to an event.
 
         Args:
@@ -1311,10 +1305,12 @@ class ProjectConfigMonitor:
         if event not in hooks_data["hooks"]:
             hooks_data["hooks"][event] = []
 
-        hooks_data["hooks"][event].append({
-            "matcher": matcher,
-            "hooks": hooks,
-        })
+        hooks_data["hooks"][event].append(
+            {
+                "matcher": matcher,
+                "hooks": hooks,
+            }
+        )
 
         try:
             with open(hooks_file, "w", encoding="utf-8") as f:
@@ -1553,7 +1549,9 @@ class ProjectConfigMonitor:
             logger.error(f"Error copying agent: {e}")
             return False
 
-    def copy_mcp_server(self, source_project_id: str, server_id: str, target_project_id: str) -> bool:
+    def copy_mcp_server(
+        self, source_project_id: str, server_id: str, target_project_id: str
+    ) -> bool:
         """Copy an MCP server to another project.
 
         Args:
@@ -1613,14 +1611,18 @@ class ProjectConfigMonitor:
                 json.dump(target_data, f, indent=2, ensure_ascii=False)
                 f.write("\n")
 
-            logger.info(f"Copied MCP server {server_id} from {source_project_id} to {target_project_id}")
+            logger.info(
+                f"Copied MCP server {server_id} from {source_project_id} to {target_project_id}"
+            )
             return True
 
         except (json.JSONDecodeError, OSError) as e:
             logger.error(f"Error copying MCP server: {e}")
             return False
 
-    def copy_hook(self, source_project_id: str, event: str, index: int, target_project_id: str) -> bool:
+    def copy_hook(
+        self, source_project_id: str, event: str, index: int, target_project_id: str
+    ) -> bool:
         """Copy a hook to another project.
 
         Args:
@@ -1689,7 +1691,9 @@ class ProjectConfigMonitor:
                 json.dump(target_data, f, indent=2, ensure_ascii=False)
                 f.write("\n")
 
-            logger.info(f"Copied hook {event}[{index}] from {source_project_id} to {target_project_id}")
+            logger.info(
+                f"Copied hook {event}[{index}] from {source_project_id} to {target_project_id}"
+            )
             return True
 
         except (json.JSONDecodeError, OSError) as e:

@@ -196,12 +196,8 @@ class ProjectRunner:
                         batch = []
 
             # Start readers
-            stdout_task = asyncio.create_task(
-                reader(process.stdout, stdout_lines, False)
-            )
-            stderr_task = asyncio.create_task(
-                reader(process.stderr, stderr_lines, True)
-            )
+            stdout_task = asyncio.create_task(reader(process.stdout, stdout_lines, False))
+            stderr_task = asyncio.create_task(reader(process.stderr, stderr_lines, True))
 
             # Wait for readers and yield progress events
             async def yield_until_done():

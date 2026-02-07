@@ -215,10 +215,12 @@ class TestAutomationAgent(BaseAgent):
                         if first_line.strip() in ["typescript", "tsx", "ts", "javascript", "jsx"]:
                             lang = first_line.strip()
                             content = "\n".join(part.split("\n")[1:])
-                    code_blocks.append({
-                        "language": lang or "typescript",
-                        "content": content.strip(),
-                    })
+                    code_blocks.append(
+                        {
+                            "language": lang or "typescript",
+                            "content": content.strip(),
+                        }
+                    )
 
         # 테스트 케이스 수 추출
         test_count = 0

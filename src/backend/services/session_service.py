@@ -358,18 +358,19 @@ class SessionService:
         else:
             sessions = []
             for sid, state in list(self._memory_sessions.items())[:limit]:
-                sessions.append({
-                    "id": sid,
-                    "user_id": state.get("user_id"),
-                    "project_id": state.get("project", {}).get("id"),
-                    "status": "active",
-                    "created_at": state.get("created_at"),
-                    "total_tokens": sum(
-                        u.get("total_tokens", 0)
-                        for u in state.get("token_usage", {}).values()
-                    ),
-                    "total_cost_usd": state.get("total_cost", 0),
-                })
+                sessions.append(
+                    {
+                        "id": sid,
+                        "user_id": state.get("user_id"),
+                        "project_id": state.get("project", {}).get("id"),
+                        "status": "active",
+                        "created_at": state.get("created_at"),
+                        "total_tokens": sum(
+                            u.get("total_tokens", 0) for u in state.get("token_usage", {}).values()
+                        ),
+                        "total_cost_usd": state.get("total_cost", 0),
+                    }
+                )
             return sessions
 
     async def update_cost(

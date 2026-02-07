@@ -85,7 +85,9 @@ _line_count_cache = TranscriptLineCountCache()
 
 from typing import Literal
 
-SortField = Literal["last_activity", "created_at", "message_count", "estimated_cost", "project_name"]
+SortField = Literal[
+    "last_activity", "created_at", "message_count", "estimated_cost", "project_name"
+]
 SortOrder = Literal["asc", "desc"]
 
 
@@ -152,7 +154,7 @@ async def list_sessions(
         all_sessions.sort(key=lambda s: s.project_name or "", reverse=reverse)
 
     # Apply pagination (offset + limit)
-    paginated_sessions = all_sessions[offset:offset + limit]
+    paginated_sessions = all_sessions[offset : offset + limit]
 
     # Check if more sessions are available
     has_more = offset + len(paginated_sessions) < filtered_count
@@ -445,6 +447,7 @@ async def kill_processes(request: ProcessKillRequest) -> ProcessKillResponse:
     protected = []
 
     import os
+
     current_pid = os.getpid()
     parent_pid = os.getppid()
 
@@ -588,38 +591,49 @@ async def generate_batch_summaries(
                     break  # Success, exit retry loop
                 # If failed, wait before retry
                 if attempt < max_retries - 1:
-                    logger.warning(f"Retry {attempt + 1}/{max_retries} for session {session.session_id}")
+                    logger.warning(
+                        f"Retry {attempt + 1}/{max_retries} for session {session.session_id}"
+                    )
                     await asyncio.sleep(retry_delay)
             except Exception as e:
                 last_error = str(e)
                 if attempt < max_retries - 1:
-                    logger.warning(f"Retry {attempt + 1}/{max_retries} for session {session.session_id}: {e}")
+                    logger.warning(
+                        f"Retry {attempt + 1}/{max_retries} for session {session.session_id}: {e}"
+                    )
                     await asyncio.sleep(retry_delay)
 
         results["total_processed"] += 1
         if summary and summary != "요약 생성 실패" and summary != "대화 내용 없음":
             results["success_count"] += 1
-            results["generated_summaries"].append({
-                "session_id": session.session_id,
-                "summary": summary,
-            })
+            results["generated_summaries"].append(
+                {
+                    "session_id": session.session_id,
+                    "summary": summary,
+                }
+            )
         else:
             results["failed_count"] += 1
-            results["errors"].append({
-                "session_id": session.session_id,
-                "error": last_error or summary or "Unknown error",
-            })
+            results["errors"].append(
+                {
+                    "session_id": session.session_id,
+                    "error": last_error or summary or "Unknown error",
+                }
+            )
 
         # Longer delay between requests to avoid overwhelming Ollama
         await asyncio.sleep(between_requests_delay)
 
-    logger.info(f"Batch summary complete: {results['success_count']}/{results['total_processed']} succeeded")
+    logger.info(
+        f"Batch summary complete: {results['success_count']}/{results['total_processed']} succeeded"
+    )
     return results
 
 
 # ========================================
 # Dynamic routes (/{session_id})
 # ========================================
+
 
 @router.get("/{session_id}", response_model=ClaudeSessionDetail)
 async def get_session(session_id: str) -> ClaudeSessionDetail:
@@ -741,6 +755,7 @@ async def save_session(
 
     # Check if database mode is enabled
     import os
+
     use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
 
     if not use_database:

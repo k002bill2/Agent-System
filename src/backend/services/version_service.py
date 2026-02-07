@@ -49,7 +49,11 @@ class VersionService:
 
             # Calculate diff from previous
             previous_version = next(
-                (v for v in reversed(existing_versions) if v.status in (VersionStatus.ACTIVE, VersionStatus.ARCHIVED)),
+                (
+                    v
+                    for v in reversed(existing_versions)
+                    if v.status in (VersionStatus.ACTIVE, VersionStatus.ARCHIVED)
+                ),
                 None,
             )
             diff = None
@@ -234,7 +238,8 @@ class VersionService:
                 config_id=target_version.config_id,
                 data=target_version.data,
                 label=f"Rollback to v{target_version.version}",
-                description=request.reason or f"Rolled back from v{current.version} to v{target_version.version}",
+                description=request.reason
+                or f"Rolled back from v{current.version} to v{target_version.version}",
                 created_by=request.created_by,
             )
         )

@@ -168,10 +168,12 @@ class MobileUIAgent(BaseAgent):
                         if first_line.strip() in ["typescript", "tsx", "ts", "javascript", "jsx"]:
                             lang = first_line.strip()
                             content = "\n".join(part.split("\n")[1:])
-                    code_blocks.append({
-                        "language": lang or "typescript",
-                        "content": content.strip(),
-                    })
+                    code_blocks.append(
+                        {
+                            "language": lang or "typescript",
+                            "content": content.strip(),
+                        }
+                    )
 
         return {
             "type": "ui_implementation",
@@ -201,8 +203,7 @@ class MobileUIAgent(BaseAgent):
         props_str = ""
         if props:
             props_str = "\n".join(
-                f"- {p['name']}: {p['type']} - {p.get('description', '')}"
-                for p in props
+                f"- {p['name']}: {p['type']} - {p.get('description', '')}" for p in props
             )
 
         task = f"""Create a new React Native component called '{component_name}'.

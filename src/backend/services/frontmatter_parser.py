@@ -77,9 +77,7 @@ class FrontmatterParser:
         return []
 
     @classmethod
-    def get_string_field(
-        cls, frontmatter: dict[str, Any], key: str, default: str = ""
-    ) -> str:
+    def get_string_field(cls, frontmatter: dict[str, Any], key: str, default: str = "") -> str:
         """Get string field from frontmatter with default.
 
         Args:
@@ -96,9 +94,7 @@ class FrontmatterParser:
         return str(value)
 
     @classmethod
-    def get_nested_dict(
-        cls, frontmatter: dict[str, Any], key: str
-    ) -> dict[str, Any] | None:
+    def get_nested_dict(cls, frontmatter: dict[str, Any], key: str) -> dict[str, Any] | None:
         """Get nested dictionary field from frontmatter.
 
         Args:

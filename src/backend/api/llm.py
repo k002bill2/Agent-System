@@ -42,7 +42,9 @@ class DefaultModelResponse(BaseModel):
 
 @router.get("/models", response_model=ModelsListResponse)
 async def get_models(
-    provider: str | None = Query(None, description="Filter by provider (anthropic, google, openai, ollama)"),
+    provider: str | None = Query(
+        None, description="Filter by provider (anthropic, google, openai, ollama)"
+    ),
     available_only: bool = Query(False, description="Only return models with available API keys"),
 ) -> ModelsListResponse:
     """Get list of available LLM models.
@@ -68,20 +70,22 @@ async def get_models(
         if available_only and not is_available:
             continue
 
-        result.append(ModelResponse(
-            id=model.id,
-            display_name=model.display_name,
-            provider=model.provider.value,
-            context_window=model.context_window,
-            pricing={
-                "input": model.input_price,
-                "output": model.output_price,
-            },
-            available=is_available,
-            is_default=model.is_default,
-            supports_tools=model.supports_tools,
-            supports_vision=model.supports_vision,
-        ))
+        result.append(
+            ModelResponse(
+                id=model.id,
+                display_name=model.display_name,
+                provider=model.provider.value,
+                context_window=model.context_window,
+                pricing={
+                    "input": model.input_price,
+                    "output": model.output_price,
+                },
+                available=is_available,
+                is_default=model.is_default,
+                supports_tools=model.supports_tools,
+                supports_vision=model.supports_vision,
+            )
+        )
 
     return ModelsListResponse(models=result, total=len(result))
 

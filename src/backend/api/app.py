@@ -110,6 +110,7 @@ else:
     try:
         from api.deps import clear_engine, set_engine
         from orchestrator import OrchestrationEngine
+
         ORCHESTRATOR_ENABLED = True
     except ImportError as e:
         print(f"⚠️  Orchestrator disabled: {e}")
@@ -118,6 +119,7 @@ else:
     # Optional project init
     try:
         from models.project import init_projects
+
         PROJECTS_ENABLED = True
     except ImportError as e:
         print(f"⚠️  Projects disabled: {e}")
@@ -136,6 +138,7 @@ else:
         if USE_DATABASE:
             try:
                 from db.database import init_db
+
                 await init_db()
                 if logger:
                     logger.info("database_initialized", type="postgresql")
@@ -192,6 +195,7 @@ else:
         if USE_DATABASE:
             try:
                 from db.database import close_db
+
                 await close_db()
                 if logger:
                     logger.info("database_connection_closed")

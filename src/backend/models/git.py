@@ -10,8 +10,10 @@ from pydantic import BaseModel, Field
 # Enums
 # =============================================================================
 
+
 class MergeRequestStatus(str, Enum):
     """Status of a merge request."""
+
     DRAFT = "draft"
     OPEN = "open"
     MERGED = "merged"
@@ -20,6 +22,7 @@ class MergeRequestStatus(str, Enum):
 
 class ConflictStatus(str, Enum):
     """Status of merge conflict detection."""
+
     UNKNOWN = "unknown"
     NO_CONFLICTS = "no_conflicts"
     HAS_CONFLICTS = "has_conflicts"
@@ -27,6 +30,7 @@ class ConflictStatus(str, Enum):
 
 class ConflictType(str, Enum):
     """Type of file conflict."""
+
     BOTH_MODIFIED = "both_modified"
     DELETED_BY_US = "deleted_by_us"
     DELETED_BY_THEM = "deleted_by_them"
@@ -36,13 +40,15 @@ class ConflictType(str, Enum):
 
 class ResolutionStrategy(str, Enum):
     """Strategy for resolving merge conflicts."""
-    OURS = "ours"        # Keep target branch version
-    THEIRS = "theirs"    # Keep source branch version
-    CUSTOM = "custom"    # User provides resolved content
+
+    OURS = "ours"  # Keep target branch version
+    THEIRS = "theirs"  # Keep source branch version
+    CUSTOM = "custom"  # User provides resolved content
 
 
 class GitPermission(str, Enum):
     """Git-related permissions."""
+
     READ = "read"
     WRITE = "write"
     MERGE_MAIN = "merge_main"
@@ -53,8 +59,10 @@ class GitPermission(str, Enum):
 # Branch Models
 # =============================================================================
 
+
 class GitBranch(BaseModel):
     """Branch information."""
+
     name: str
     is_current: bool = False
     is_remote: bool = False
@@ -70,12 +78,14 @@ class GitBranch(BaseModel):
 
 class BranchCreateRequest(BaseModel):
     """Request to create a new branch."""
+
     name: str = Field(..., description="Branch name")
     start_point: str = Field(default="HEAD", description="Starting commit/branch")
 
 
 class BranchDiff(BaseModel):
     """Diff summary between two branches."""
+
     source_branch: str
     target_branch: str
     ahead: int  # commits source is ahead of target
@@ -89,8 +99,10 @@ class BranchDiff(BaseModel):
 # Commit Models
 # =============================================================================
 
+
 class GitCommit(BaseModel):
     """Git commit information."""
+
     sha: str
     short_sha: str
     message: str
@@ -105,6 +117,7 @@ class GitCommit(BaseModel):
 
 class CommitFile(BaseModel):
     """File changed in a commit."""
+
     path: str
     status: str  # added, modified, deleted, renamed
     additions: int = 0
@@ -116,8 +129,10 @@ class CommitFile(BaseModel):
 # Merge Request Models (Internal)
 # =============================================================================
 
+
 class MergeRequest(BaseModel):
     """Internal merge request for team collaboration."""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     project_id: str
     title: str
@@ -143,6 +158,7 @@ class MergeRequest(BaseModel):
 
 class MergeRequestCreate(BaseModel):
     """Request to create a merge request."""
+
     title: str = Field(..., min_length=1, max_length=200)
     description: str = ""
     source_branch: str
@@ -152,6 +168,7 @@ class MergeRequestCreate(BaseModel):
 
 class MergeRequestUpdate(BaseModel):
     """Request to update a merge request."""
+
     title: str | None = None
     description: str | None = None
     status: MergeRequestStatus | None = None
@@ -162,8 +179,10 @@ class MergeRequestUpdate(BaseModel):
 # Conflict Models
 # =============================================================================
 
+
 class ConflictMarker(BaseModel):
     """Location of conflict marker in a file."""
+
     start_line: int
     end_line: int
     ours_start: int
@@ -176,6 +195,7 @@ class ConflictMarker(BaseModel):
 
 class ConflictFile(BaseModel):
     """Detailed conflict information for a file."""
+
     path: str
     conflict_type: ConflictType
     markers: list[ConflictMarker] = []
@@ -186,6 +206,7 @@ class ConflictFile(BaseModel):
 
 class ThreeWayDiff(BaseModel):
     """Three-way diff for conflict resolution."""
+
     path: str
     base_content: str  # common ancestor
     ours_content: str  # target branch
@@ -197,8 +218,10 @@ class ThreeWayDiff(BaseModel):
 # Merge Preview & Result Models
 # =============================================================================
 
+
 class MergePreview(BaseModel):
     """Result of merge dry-run."""
+
     source_branch: str
     target_branch: str
     can_merge: bool
@@ -212,6 +235,7 @@ class MergePreview(BaseModel):
 
 class MergeResult(BaseModel):
     """Result of merge execution."""
+
     success: bool
     merge_commit_sha: str | None = None
     message: str
@@ -221,6 +245,7 @@ class MergeResult(BaseModel):
 
 class ConflictResolutionRequest(BaseModel):
     """Request to resolve a single file conflict."""
+
     file_path: str = Field(..., description="Path to the conflicting file")
     strategy: ResolutionStrategy = Field(..., description="Resolution strategy")
     resolved_content: str | None = Field(
@@ -232,6 +257,7 @@ class ConflictResolutionRequest(BaseModel):
 
 class ConflictResolutionResult(BaseModel):
     """Result of conflict resolution for a single file."""
+
     success: bool
     file_path: str
     message: str
@@ -240,12 +266,14 @@ class ConflictResolutionResult(BaseModel):
 
 class MergeAbortResult(BaseModel):
     """Result of merge abort operation."""
+
     success: bool
     message: str
 
 
 class MergeExecuteRequest(BaseModel):
     """Request to execute a merge."""
+
     source_branch: str
     target_branch: str = Field(default="main")
     message: str | None = None
@@ -256,8 +284,10 @@ class MergeExecuteRequest(BaseModel):
 # Remote Operations Models
 # =============================================================================
 
+
 class FileStatusType(str, Enum):
     """Type of file status in working directory."""
+
     MODIFIED = "modified"
     ADDED = "added"
     DELETED = "deleted"
@@ -268,6 +298,7 @@ class FileStatusType(str, Enum):
 
 class GitStatusFile(BaseModel):
     """File status in working directory."""
+
     path: str
     status: FileStatusType
     staged: bool = False  # Whether file is staged
@@ -276,6 +307,7 @@ class GitStatusFile(BaseModel):
 
 class GitWorkingStatus(BaseModel):
     """Git working directory status."""
+
     branch: str
     is_clean: bool
     staged_files: list[GitStatusFile] = []
@@ -286,12 +318,16 @@ class GitWorkingStatus(BaseModel):
 
 class AddRequest(BaseModel):
     """Request to stage files."""
-    paths: list[str] = Field(default=[], description="File paths to stage. Empty list means all ('.')")
+
+    paths: list[str] = Field(
+        default=[], description="File paths to stage. Empty list means all ('.')"
+    )
     all: bool = Field(default=False, description="Stage all changes (git add -A)")
 
 
 class AddResult(BaseModel):
     """Result of git add operation."""
+
     success: bool
     staged_files: list[str] = []
     message: str = ""
@@ -299,6 +335,7 @@ class AddResult(BaseModel):
 
 class CommitCreateRequest(BaseModel):
     """Request to create a commit."""
+
     message: str = Field(..., min_length=1, description="Commit message")
     author_name: str | None = None
     author_email: str | None = None
@@ -306,6 +343,7 @@ class CommitCreateRequest(BaseModel):
 
 class CommitCreateResult(BaseModel):
     """Result of git commit operation."""
+
     success: bool
     commit_sha: str | None = None
     message: str = ""
@@ -314,6 +352,7 @@ class CommitCreateResult(BaseModel):
 
 class FetchResult(BaseModel):
     """Result of git fetch operation."""
+
     success: bool
     remote: str
     branches_updated: list[str] = []
@@ -323,6 +362,7 @@ class FetchResult(BaseModel):
 
 class PullResult(BaseModel):
     """Result of git pull operation."""
+
     success: bool
     remote: str
     branch: str
@@ -333,6 +373,7 @@ class PullResult(BaseModel):
 
 class PushResult(BaseModel):
     """Result of git push operation."""
+
     success: bool
     remote: str
     branch: str
@@ -344,8 +385,10 @@ class PushResult(BaseModel):
 # GitHub PR Models
 # =============================================================================
 
+
 class GitHubPullRequest(BaseModel):
     """GitHub Pull Request information."""
+
     number: int
     title: str
     body: str = ""
@@ -382,6 +425,7 @@ class GitHubPullRequest(BaseModel):
 
 class GitHubPRReview(BaseModel):
     """GitHub Pull Request review."""
+
     id: int
     user_login: str
     user_avatar_url: str | None = None
@@ -393,25 +437,22 @@ class GitHubPRReview(BaseModel):
 
 class GitHubPRReviewCreate(BaseModel):
     """Request to create a PR review."""
+
     body: str = ""
-    event: str = Field(
-        default="COMMENT",
-        description="APPROVE, REQUEST_CHANGES, or COMMENT"
-    )
+    event: str = Field(default="COMMENT", description="APPROVE, REQUEST_CHANGES, or COMMENT")
 
 
 class GitHubMergeRequest(BaseModel):
     """Request to merge a GitHub PR."""
-    merge_method: str = Field(
-        default="merge",
-        description="merge, squash, or rebase"
-    )
+
+    merge_method: str = Field(default="merge", description="merge, squash, or rebase")
     commit_title: str | None = None
     commit_message: str | None = None
 
 
 class GitHubMergeResult(BaseModel):
     """Result of GitHub PR merge."""
+
     merged: bool
     sha: str | None = None
     message: str
@@ -453,7 +494,9 @@ def has_git_permission(role: str, permission: GitPermission) -> bool:
     return permission in permissions
 
 
-def can_merge_to_branch(role: str, branch: str, protected_branches: list[str] | None = None) -> bool:
+def can_merge_to_branch(
+    role: str, branch: str, protected_branches: list[str] | None = None
+) -> bool:
     """Check if a role can merge to a specific branch."""
     if protected_branches is None:
         protected_branches = DEFAULT_PROTECTED_BRANCHES
@@ -468,8 +511,10 @@ def can_merge_to_branch(role: str, branch: str, protected_branches: list[str] | 
 # Draft Commits Models (LLM-based commit suggestion)
 # =============================================================================
 
+
 class DraftCommit(BaseModel):
     """LLM-generated commit suggestion."""
+
     message: str = Field(..., description="Conventional commit message")
     files: list[str] = Field(..., description="Files included in this commit")
     type: str = Field(..., description="Commit type: feat, fix, docs, refactor, test, chore, style")
@@ -478,11 +523,13 @@ class DraftCommit(BaseModel):
 
 class DraftCommitsRequest(BaseModel):
     """Request to generate draft commits."""
+
     staged_only: bool = Field(default=False, description="Only analyze staged files")
 
 
 class DraftCommitsResponse(BaseModel):
     """Response containing LLM-generated draft commits."""
+
     drafts: list[DraftCommit]
     total_files: int
     token_usage: int | None = None
@@ -492,8 +539,10 @@ class DraftCommitsResponse(BaseModel):
 # API Response Models
 # =============================================================================
 
+
 class BranchListResponse(BaseModel):
     """Response for branch list endpoint."""
+
     branches: list[GitBranch]
     current_branch: str
     protected_branches: list[str]
@@ -501,6 +550,7 @@ class BranchListResponse(BaseModel):
 
 class CommitListResponse(BaseModel):
     """Response for commit list endpoint."""
+
     commits: list[GitCommit]
     branch: str
     total: int
@@ -508,12 +558,14 @@ class CommitListResponse(BaseModel):
 
 class MergeRequestListResponse(BaseModel):
     """Response for merge request list endpoint."""
+
     merge_requests: list[MergeRequest]
     total: int
 
 
 class GitHubPRListResponse(BaseModel):
     """Response for GitHub PR list endpoint."""
+
     pull_requests: list[GitHubPullRequest]
     total: int
 
@@ -522,8 +574,10 @@ class GitHubPRListResponse(BaseModel):
 # Git Repository Registry Models
 # =============================================================================
 
+
 class GitRepository(BaseModel):
     """Registered Git repository."""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = Field(..., description="Display name for the repository")
     path: str = Field(..., description="Filesystem path to the repository")
@@ -536,6 +590,7 @@ class GitRepository(BaseModel):
 
 class GitRepositoryCreate(BaseModel):
     """Request to register a Git repository."""
+
     name: str = Field(..., description="Display name for the repository")
     path: str = Field(..., description="Filesystem path to the repository")
     description: str = ""
@@ -543,6 +598,7 @@ class GitRepositoryCreate(BaseModel):
 
 class GitRepositoryUpdate(BaseModel):
     """Request to update a Git repository."""
+
     name: str | None = None
     description: str | None = None
     path: str | None = None
@@ -550,6 +606,7 @@ class GitRepositoryUpdate(BaseModel):
 
 class GitRepositoryListResponse(BaseModel):
     """Response for Git repository list endpoint."""
+
     repositories: list[GitRepository]
     total: int
 
@@ -581,11 +638,12 @@ def register_git_repository(name: str, path: str, description: str = "") -> GitR
         # Try to get remote URL
         try:
             import subprocess
+
             result = subprocess.run(
                 ["git", "remote", "get-url", "origin"],
                 cwd=normalized_path,
                 capture_output=True,
-                text=True
+                text=True,
             )
             if result.returncode == 0:
                 remote_url = result.stdout.strip()
