@@ -570,7 +570,7 @@ async def create_branch(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.delete("/projects/{project_id}/branches/{branch_name}")
+@router.delete("/projects/{project_id}/branches/{branch_name:path}")
 async def delete_branch(
     project_id: str,
     branch_name: str,
@@ -588,7 +588,7 @@ async def delete_branch(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/projects/{project_id}/branches/{branch_name}/diff", response_model=BranchDiff)
+@router.get("/projects/{project_id}/branches/{branch_name:path}/diff", response_model=BranchDiff)
 async def get_branch_diff(
     project_id: str,
     branch_name: str,
