@@ -17,8 +17,9 @@ class TestLeadOrchestratorAgent:
     """Lead Orchestrator Agent 테스트."""
 
     def setup_method(self):
-        """테스트 전 오케스트레이터 생성."""
-        self.orchestrator = LeadOrchestratorAgent()
+        """테스트 전 오케스트레이터 생성 (LLM mock)."""
+        with patch("agents.base.ChatGoogleGenerativeAI"):
+            self.orchestrator = LeadOrchestratorAgent()
 
     def test_initialization(self):
         """초기화 테스트."""
