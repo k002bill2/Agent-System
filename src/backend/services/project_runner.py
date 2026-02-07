@@ -2,19 +2,18 @@
 
 import asyncio
 import time
+from collections.abc import AsyncIterator, Callable
 from datetime import datetime
 from pathlib import Path
-from typing import AsyncIterator, Callable, Optional
 
 from models.monitoring import (
-    CheckType,
-    CheckStatus,
+    CheckCompletedPayload,
+    CheckProgressPayload,
     CheckResult,
     CheckStartedPayload,
-    CheckProgressPayload,
-    CheckCompletedPayload,
+    CheckStatus,
+    CheckType,
 )
-
 
 # Allowed npm commands (whitelist for security)
 # Commands are run from the project root with npm scripts defined in package.json
@@ -44,7 +43,7 @@ class ProjectRunner:
     async def run_check(
         self,
         check_type: CheckType,
-        on_output: Optional[Callable[[str, bool], None]] = None,
+        on_output: Callable[[str, bool], None] | None = None,
     ) -> CheckResult:
         """
         Run a single check and return the result.
@@ -157,7 +156,7 @@ class ProjectRunner:
 
             # Use a shared queue for both streams - batch lines together
             output_queue: asyncio.Queue[CheckProgressPayload | None] = asyncio.Queue()
-            BATCH_SIZE = 20  # Send every 20 lines as one event
+            batch_size = 20  # Send every 20 lines as one event
 
             async def reader(
                 stream: asyncio.StreamReader,
@@ -185,7 +184,7 @@ class ProjectRunner:
                     batch.append(decoded)
 
                     # Send batch when full
-                    if len(batch) >= BATCH_SIZE:
+                    if len(batch) >= batch_size:
                         await output_queue.put(
                             CheckProgressPayload(
                                 project_id=project_id,
@@ -197,12 +196,8 @@ class ProjectRunner:
                         batch = []
 
             # Start readers
-            stdout_task = asyncio.create_task(
-                reader(process.stdout, stdout_lines, False)
-            )
-            stderr_task = asyncio.create_task(
-                reader(process.stderr, stderr_lines, True)
-            )
+            stdout_task = asyncio.create_task(reader(process.stdout, stdout_lines, False))
+            stderr_task = asyncio.create_task(reader(process.stderr, stderr_lines, True))
 
             # Wait for readers and yield progress events
             async def yield_until_done():
@@ -221,7 +216,7 @@ class ProjectRunner:
                         item = await asyncio.wait_for(output_queue.get(), timeout=0.1)
                         if item is not None:
                             yield item
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         continue
 
             async for event in yield_until_done():

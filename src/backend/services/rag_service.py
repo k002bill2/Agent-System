@@ -3,7 +3,7 @@
 import hashlib
 import os
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -13,6 +13,7 @@ try:
     from langchain_chroma import Chroma
     from langchain_core.documents import Document
     from langchain_core.embeddings import Embeddings
+
     CHROMA_AVAILABLE = True
 except ImportError:
     # Dummy classes for when chromadb is not available
@@ -37,6 +38,7 @@ else:
 
 class IndexingResult(BaseModel):
     """Result from indexing operation."""
+
     project_id: str
     documents_indexed: int
     chunks_created: int
@@ -45,6 +47,7 @@ class IndexingResult(BaseModel):
 
 class QueryResult(BaseModel):
     """Result from a RAG query."""
+
     query: str
     documents: list[dict[str, Any]]
     total_found: int
@@ -60,21 +63,44 @@ class ProjectVectorStore:
 
     # File extensions to index
     INDEXABLE_EXTENSIONS = {
-        ".md", ".py", ".ts", ".tsx", ".js", ".jsx",
-        ".json", ".yaml", ".yml", ".toml",
-        ".txt", ".rst", ".html", ".css",
+        ".md",
+        ".py",
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".txt",
+        ".rst",
+        ".html",
+        ".css",
     }
 
     # Files to always skip
     SKIP_FILES = {
-        "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
-        ".DS_Store", "Thumbs.db",
+        "package-lock.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        ".DS_Store",
+        "Thumbs.db",
     }
 
     # Directories to skip
     SKIP_DIRS = {
-        "node_modules", ".git", ".venv", "venv", "__pycache__",
-        ".next", ".nuxt", "dist", "build", ".cache", "coverage",
+        "node_modules",
+        ".git",
+        ".venv",
+        "venv",
+        "__pycache__",
+        ".next",
+        ".nuxt",
+        "dist",
+        "build",
+        ".cache",
+        "coverage",
     }
 
     def __init__(
@@ -107,10 +133,19 @@ class ProjectVectorStore:
         model = model_name or DEFAULT_EMBEDDING_MODEL
 
         # Try HuggingFace first (most reliable, runs locally, no API key needed)
-        if EMBEDDING_PROVIDER == "huggingface" or "sentence-transformers" in model or "all-MiniLM" in model:
+        if (
+            EMBEDDING_PROVIDER == "huggingface"
+            or "sentence-transformers" in model
+            or "all-MiniLM" in model
+        ):
             try:
                 from langchain_huggingface import HuggingFaceEmbeddings
-                hf_model = model if "sentence-transformers" in model else "sentence-transformers/all-MiniLM-L6-v2"
+
+                hf_model = (
+                    model
+                    if "sentence-transformers" in model
+                    else "sentence-transformers/all-MiniLM-L6-v2"
+                )
                 print(f"[RAG] Using HuggingFace embeddings: {hf_model}")
                 return HuggingFaceEmbeddings(model_name=hf_model)
             except ImportError:
@@ -120,6 +155,7 @@ class ProjectVectorStore:
         if EMBEDDING_PROVIDER == "openai" or os.getenv("OPENAI_API_KEY"):
             try:
                 from langchain_openai import OpenAIEmbeddings
+
                 openai_model = model if "text-embedding" in model else "text-embedding-3-small"
                 print(f"[RAG] Using OpenAI embeddings: {openai_model}")
                 return OpenAIEmbeddings(model=openai_model)
@@ -131,15 +167,19 @@ class ProjectVectorStore:
         if EMBEDDING_PROVIDER == "google" and google_api_key:
             try:
                 from langchain_google_genai import GoogleGenerativeAIEmbeddings
+
                 google_model = model if "text-embedding" in model else "models/text-embedding-004"
                 print(f"[RAG] Using Google embeddings: {google_model}")
-                return GoogleGenerativeAIEmbeddings(model=google_model, google_api_key=google_api_key)
+                return GoogleGenerativeAIEmbeddings(
+                    model=google_model, google_api_key=google_api_key
+                )
             except ImportError:
                 print("[RAG] langchain-google-genai not installed, trying alternatives...")
 
         # Final fallback: try HuggingFace regardless of setting
         try:
             from langchain_huggingface import HuggingFaceEmbeddings
+
             print("[RAG] Fallback to HuggingFace embeddings")
             return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
         except ImportError:
@@ -165,6 +205,7 @@ class ProjectVectorStore:
                 collection_name=collection_name,
                 embedding_function=self.embeddings,
                 persist_directory=self.persist_directory,
+                collection_metadata={"hnsw:space": "cosine"},
             )
 
         return self._collections[collection_name]
@@ -215,21 +256,25 @@ class ProjectVectorStore:
 
         # Handle small files as single chunk
         if len(content) <= chunk_size:
-            chunks.append(Document(
-                page_content=content,
-                metadata={
-                    "source": file_path,
-                    "chunk_index": 0,
-                    "total_chunks": 1,
-                    "content_hash": content_hash,
-                },
-            ))
+            chunks.append(
+                Document(
+                    page_content=content,
+                    metadata={
+                        "source": file_path,
+                        "chunk_index": 0,
+                        "total_chunks": 1,
+                        "content_hash": content_hash,
+                    },
+                )
+            )
             return chunks
 
         # Split into overlapping chunks
         start = 0
         chunk_index = 0
-        total_chunks = (len(content) + chunk_size - chunk_overlap - 1) // (chunk_size - chunk_overlap)
+        total_chunks = (len(content) + chunk_size - chunk_overlap - 1) // (
+            chunk_size - chunk_overlap
+        )
 
         while start < len(content):
             end = start + chunk_size
@@ -242,17 +287,19 @@ class ProjectVectorStore:
 
             chunk_content = content[start:end]
 
-            chunks.append(Document(
-                page_content=chunk_content,
-                metadata={
-                    "source": file_path,
-                    "chunk_index": chunk_index,
-                    "total_chunks": total_chunks,
-                    "content_hash": content_hash,
-                    "start_char": start,
-                    "end_char": end,
-                },
-            ))
+            chunks.append(
+                Document(
+                    page_content=chunk_content,
+                    metadata={
+                        "source": file_path,
+                        "chunk_index": chunk_index,
+                        "total_chunks": total_chunks,
+                        "content_hash": content_hash,
+                        "start_char": start,
+                        "end_char": end,
+                    },
+                )
+            )
 
             chunk_index += 1
             start = end - chunk_overlap
@@ -357,11 +404,14 @@ class ProjectVectorStore:
                 for doc in documents
             ]
 
-            collection.add_texts(
-                texts=texts,
-                metadatas=metadatas,
-                ids=ids,
-            )
+            # ChromaDB max batch size is 5461; split into chunks
+            batch_size = 5000
+            for i in range(0, len(texts), batch_size):
+                collection.add_texts(
+                    texts=texts[i : i + batch_size],
+                    metadatas=metadatas[i : i + batch_size],
+                    ids=ids[i : i + batch_size],
+                )
 
         return IndexingResult(
             project_id=project_id,
@@ -404,14 +454,18 @@ class ProjectVectorStore:
         )
 
         documents = []
-        for doc, score in results:
-            documents.append({
-                "content": doc.page_content,
-                "source": doc.metadata.get("source", "unknown"),
-                "chunk_index": doc.metadata.get("chunk_index", 0),
-                "priority": doc.metadata.get("priority", "normal"),
-                "score": float(score),
-            })
+        for doc, distance in results:
+            # Cosine distance → similarity (1 - distance), clamped to [0, 1]
+            similarity = max(0.0, min(1.0, 1.0 - float(distance)))
+            documents.append(
+                {
+                    "content": doc.page_content,
+                    "source": doc.metadata.get("source", "unknown"),
+                    "chunk_index": doc.metadata.get("chunk_index", 0),
+                    "priority": doc.metadata.get("priority", "normal"),
+                    "score": similarity,
+                }
+            )
 
         return QueryResult(
             query=query,
@@ -489,3 +543,30 @@ async def get_project_context(project_id: str, query: str, k: int = 5) -> str:
         context_parts.append(f"[{source}]\n{content}")
 
     return "\n\n---\n\n".join(context_parts)
+
+
+async def get_project_context_with_sources(
+    project_id: str, query: str, k: int = 5
+) -> tuple[str, list[dict]]:
+    """
+    Get relevant project context with structured source information.
+
+    Returns:
+        tuple of (formatted context string, list of source document dicts)
+        Each source dict: {content, source, chunk_index, priority, score}
+    """
+    store = get_vector_store()
+    result = await store.query(project_id, query, k=k)
+
+    if not result.documents:
+        return "", []
+
+    # Format context from documents
+    context_parts = []
+    for doc in result.documents:
+        source = doc["source"]
+        content = doc["content"]
+        context_parts.append(f"[{source}]\n{content}")
+
+    formatted = "\n\n---\n\n".join(context_parts)
+    return formatted, result.documents

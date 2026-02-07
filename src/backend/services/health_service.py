@@ -102,7 +102,7 @@ class HealthService:
                 components[name] = result
                 if result.status == HealthStatus.HEALTHY:
                     healthy_count += 1
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 components[name] = ComponentHealth(
                     name=name,
                     status=HealthStatus.UNHEALTHY,
@@ -174,8 +174,9 @@ class HealthService:
             )
 
         try:
-            from db.database import async_session_factory
             from sqlalchemy import text
+
+            from db.database import async_session_factory
 
             async with async_session_factory() as session:
                 # Test connectivity
@@ -184,9 +185,7 @@ class HealthService:
 
                 # Check replication status (PostgreSQL)
                 try:
-                    rep_result = await session.execute(
-                        text("SELECT pg_is_in_recovery()")
-                    )
+                    rep_result = await session.execute(text("SELECT pg_is_in_recovery()"))
                     is_replica = rep_result.scalar()
 
                     if is_replica:

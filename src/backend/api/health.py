@@ -1,15 +1,14 @@
 """Health check API routes for monitoring and Kubernetes probes."""
 
-from fastapi import APIRouter, Response, Depends
+from fastapi import APIRouter, Depends, Response
 from fastapi.responses import JSONResponse
 
 from services.health_service import (
-    get_health_service,
     HealthService,
     HealthStatus,
     SystemHealth,
+    get_health_service,
 )
-
 
 router = APIRouter(tags=["health"])
 

@@ -1,22 +1,20 @@
 """Repository pattern for database operations."""
 
-import json
 import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select, update, delete
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import SessionModel, TaskModel, MessageModel, ApprovalModel
-from models.agent_state import AgentState, TaskNode
+from db.models import ApprovalModel, MessageModel, SessionModel, TaskModel
 
 
 def serialize_value(value: Any) -> Any:
     """Recursively serialize a value, handling datetime and Pydantic models."""
     if isinstance(value, datetime):
         return value.isoformat()
-    elif hasattr(value, 'model_dump'):
+    elif hasattr(value, "model_dump"):
         # Pydantic model - serialize with mode="json" for datetime handling
         return value.model_dump(mode="json")
     elif isinstance(value, dict):
@@ -34,7 +32,11 @@ def serialize_state(state: dict[str, Any]) -> dict[str, Any]:
         if key == "tasks" and isinstance(value, dict):
             # Convert TaskNode objects to dicts
             serialized[key] = {
-                task_id: (task.model_dump(mode="json") if hasattr(task, 'model_dump') else serialize_value(task))
+                task_id: (
+                    task.model_dump(mode="json")
+                    if hasattr(task, "model_dump")
+                    else serialize_value(task)
+                )
                 for task_id, task in value.items()
             }
         else:
@@ -53,6 +55,7 @@ class SessionRepository:
         session_id: str,
         user_id: str | None = None,
         project_id: str | None = None,
+        organization_id: str | None = None,
         initial_state: dict[str, Any] | None = None,
     ) -> SessionModel:
         """Create a new session."""
@@ -60,6 +63,7 @@ class SessionRepository:
             id=session_id,
             user_id=user_id,
             project_id=project_id,
+            organization_id=organization_id,
             state_json=initial_state or {},
             status="active",
         )
@@ -69,9 +73,7 @@ class SessionRepository:
 
     async def get(self, session_id: str) -> SessionModel | None:
         """Get session by ID."""
-        result = await self.db.execute(
-            select(SessionModel).where(SessionModel.id == session_id)
-        )
+        result = await self.db.execute(select(SessionModel).where(SessionModel.id == session_id))
         return result.scalar_one_or_none()
 
     async def get_state(self, session_id: str) -> dict[str, Any] | None:
@@ -119,26 +121,38 @@ class SessionRepository:
 
     async def delete(self, session_id: str) -> bool:
         """Delete session and all related data."""
-        result = await self.db.execute(
-            delete(SessionModel).where(SessionModel.id == session_id)
-        )
+        result = await self.db.execute(delete(SessionModel).where(SessionModel.id == session_id))
         return result.rowcount > 0
 
     async def list_by_user(
         self,
         user_id: str,
+        organization_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[SessionModel]:
-        """List sessions for a user."""
-        result = await self.db.execute(
-            select(SessionModel)
-            .where(SessionModel.user_id == user_id)
-            .order_by(SessionModel.created_at.desc())
-            .limit(limit)
-            .offset(offset)
-        )
+        """List sessions for a user, optionally filtered by organization."""
+        query = select(SessionModel).where(SessionModel.user_id == user_id)
+        if organization_id:
+            query = query.where(SessionModel.organization_id == organization_id)
+        query = query.order_by(SessionModel.created_at.desc()).limit(limit).offset(offset)
+        result = await self.db.execute(query)
         return list(result.scalars().all())
+
+    async def count_by_org_today(self, organization_id: str) -> int:
+        """Count sessions created today for an organization."""
+        from datetime import datetime
+
+        from sqlalchemy import func
+
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        result = await self.db.execute(
+            select(func.count()).where(
+                SessionModel.organization_id == organization_id,
+                SessionModel.created_at >= today_start,
+            )
+        )
+        return result.scalar() or 0
 
     async def list_active(
         self,
@@ -225,7 +239,7 @@ class SessionRepository:
 
         # Count feedbacks
         try:
-            from db.models import FeedbackModel, DatasetEntryModel
+            from db.models import DatasetEntryModel, FeedbackModel
 
             result = await self.db.execute(
                 select(func.count()).where(FeedbackModel.session_id.in_(session_ids))
@@ -282,9 +296,7 @@ class TaskRepository:
 
     async def get(self, task_id: str) -> TaskModel | None:
         """Get task by ID."""
-        result = await self.db.execute(
-            select(TaskModel).where(TaskModel.id == task_id)
-        )
+        result = await self.db.execute(select(TaskModel).where(TaskModel.id == task_id))
         return result.scalar_one_or_none()
 
     async def update_status(
@@ -311,9 +323,7 @@ class TaskRepository:
             values["error"] = error
 
         db_result = await self.db.execute(
-            update(TaskModel)
-            .where(TaskModel.id == task_id)
-            .values(**values)
+            update(TaskModel).where(TaskModel.id == task_id).values(**values)
         )
         return db_result.rowcount > 0
 
@@ -430,9 +440,7 @@ class ApprovalRepository:
 
     async def get(self, approval_id: str) -> ApprovalModel | None:
         """Get approval by ID."""
-        result = await self.db.execute(
-            select(ApprovalModel).where(ApprovalModel.id == approval_id)
-        )
+        result = await self.db.execute(select(ApprovalModel).where(ApprovalModel.id == approval_id))
         return result.scalar_one_or_none()
 
     async def approve(

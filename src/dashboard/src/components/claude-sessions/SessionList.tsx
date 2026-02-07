@@ -54,6 +54,7 @@ export function SessionList({ statusFilter }: SessionListProps) {
     getGhostSessionsCount,
     // Batch summary
     isBatchGenerating,
+    batchJustCompleted,
     batchProgress,
     pendingSummaryCount,
     fetchPendingSummaryCount,
@@ -237,8 +238,8 @@ export function SessionList({ statusFilter }: SessionListProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Batch generate summaries button */}
-          {pendingSummaryCount > 0 && (
+          {/* Batch generate summaries button - hide after batch completes */}
+          {pendingSummaryCount > 0 && !batchJustCompleted && (
             <button
               onClick={() => generateBatchSummaries(50)}
               disabled={isBatchGenerating}

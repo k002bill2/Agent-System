@@ -8,20 +8,22 @@ from pathlib import Path
 from typing import Any
 
 from models.organization import (
+    PLAN_LIMITS,
+    InviteMemberRequest,
+    MemberRole,
+    MemberUsageRecord,
+    MemberUsageResponse,
+    MemberUsageSummary,
     Organization,
     OrganizationCreate,
-    OrganizationUpdate,
-    OrganizationStatus,
-    OrganizationPlan,
-    OrganizationMember,
-    MemberRole,
-    InviteMemberRequest,
     OrganizationInvitation,
+    OrganizationMember,
+    OrganizationPlan,
     OrganizationStats,
+    OrganizationStatus,
+    OrganizationUpdate,
     TenantContext,
-    PLAN_LIMITS,
 )
-
 
 # ─────────────────────────────────────────────────────────────
 # Database Toggle
@@ -31,13 +33,15 @@ USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 
 # Conditional DB imports (only when USE_DATABASE=true)
 try:
-    from sqlalchemy import select, and_, func
+    from sqlalchemy import and_, select
     from sqlalchemy.ext.asyncio import AsyncSession
+
     from db.models import (
-        OrganizationModel,
-        OrganizationMemberModel,
         OrganizationInvitationModel,
+        OrganizationMemberModel,
+        OrganizationModel,
     )
+
     _DB_AVAILABLE = True
 except ImportError:
     # DB modules not available - use in-memory storage only
@@ -56,6 +60,7 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 ORGS_FILE = DATA_DIR / "organizations.json"
 MEMBERS_FILE = DATA_DIR / "organization_members.json"
 INVITATIONS_FILE = DATA_DIR / "organization_invitations.json"
+MEMBER_USAGE_FILE = DATA_DIR / "member_usage_records.json"
 
 
 def _ensure_data_dir():
@@ -67,9 +72,9 @@ def _load_json(file_path: Path) -> dict:
     """Load JSON from file, return empty dict if not exists."""
     if file_path.exists():
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 return json.load(f)
-        except (json.JSONDecodeError, IOError):
+        except (OSError, json.JSONDecodeError):
             return {}
     return {}
 
@@ -117,6 +122,18 @@ def _save_invitations(invitations: dict[str, OrganizationInvitation]):
     _save_json(INVITATIONS_FILE, raw)
 
 
+def _load_member_usage() -> dict[str, MemberUsageRecord]:
+    """Load member usage records from JSON file."""
+    raw = _load_json(MEMBER_USAGE_FILE)
+    return {k: MemberUsageRecord(**v) for k, v in raw.items()}
+
+
+def _save_member_usage(records: dict[str, MemberUsageRecord]):
+    """Save member usage records to JSON file."""
+    raw = {k: v.model_dump() for k, v in records.items()}
+    _save_json(MEMBER_USAGE_FILE, raw)
+
+
 # ─────────────────────────────────────────────────────────────
 # In-memory cache (loaded from files on startup)
 # ─────────────────────────────────────────────────────────────
@@ -124,6 +141,7 @@ def _save_invitations(invitations: dict[str, OrganizationInvitation]):
 _organizations: dict[str, Organization] = {}
 _members: dict[str, OrganizationMember] = {}
 _invitations: dict[str, OrganizationInvitation] = {}
+_member_usage: dict[str, MemberUsageRecord] = {}
 
 # Indexes
 _slug_to_id: dict[str, str] = {}
@@ -132,11 +150,12 @@ _user_orgs: dict[str, list[str]] = {}  # user_id -> list of org_ids
 
 def _init_storage():
     """Initialize storage from JSON files."""
-    global _organizations, _members, _invitations, _slug_to_id, _user_orgs
+    global _organizations, _members, _invitations, _member_usage, _slug_to_id, _user_orgs
 
     _organizations = _load_organizations()
     _members = _load_members()
     _invitations = _load_invitations()
+    _member_usage = _load_member_usage()
 
     # Rebuild indexes
     _slug_to_id = {org.slug: org.id for org in _organizations.values()}
@@ -341,9 +360,12 @@ class OrganizationService:
         if not org:
             raise ValueError("Organization not found")
 
-        # Check member limit
-        if org.max_members > 0 and org.current_members >= org.max_members:
-            raise ValueError("Organization has reached member limit")
+        # Check member limit via QuotaService
+        from services.quota_service import QuotaService
+
+        check = QuotaService.check_member_quota(org)
+        if not check.allowed:
+            raise ValueError(check.message or "Organization has reached member limit")
 
         # Check if already a member
         for m in _members.values():
@@ -432,7 +454,8 @@ class OrganizationService:
     def get_pending_invitations(org_id: str) -> list[OrganizationInvitation]:
         """Get all pending invitations for an organization."""
         return [
-            inv for inv in _invitations.values()
+            inv
+            for inv in _invitations.values()
             if inv.organization_id == org_id
             and not inv.accepted
             and inv.expires_at > datetime.utcnow()
@@ -464,7 +487,9 @@ class OrganizationService:
             owners = [
                 m
                 for m in _members.values()
-                if m.organization_id == member.organization_id and m.role == MemberRole.OWNER and m.is_active
+                if m.organization_id == member.organization_id
+                and m.role == MemberRole.OWNER
+                and m.is_active
             ]
             if len(owners) <= 1 and new_role != MemberRole.OWNER:
                 raise ValueError("Cannot demote the last owner")
@@ -485,7 +510,9 @@ class OrganizationService:
             owners = [
                 m
                 for m in _members.values()
-                if m.organization_id == member.organization_id and m.role == MemberRole.OWNER and m.is_active
+                if m.organization_id == member.organization_id
+                and m.role == MemberRole.OWNER
+                and m.is_active
             ]
             if len(owners) <= 1:
                 raise ValueError("Cannot remove the last owner")
@@ -566,19 +593,40 @@ class OrganizationService:
     # ─────────────────────────────────────────────────────────────
 
     @staticmethod
-    def track_token_usage(org_id: str, tokens: int) -> bool:
-        """Track token usage for an organization."""
+    def track_token_usage(
+        org_id: str,
+        tokens: int,
+        user_id: str | None = None,
+        session_id: str | None = None,
+        model: str | None = None,
+    ) -> bool:
+        """Track token usage for an organization (and optionally per-member)."""
         org = _organizations.get(org_id)
         if not org:
             return False
 
-        # Check limit
-        if org.max_tokens_per_month > 0:
-            if org.tokens_used_this_month + tokens > org.max_tokens_per_month:
-                return False  # Would exceed limit
+        # Check limit via QuotaService
+        from services.quota_service import QuotaService
+
+        check = QuotaService.check_token_quota(org, tokens)
+        if not check.allowed:
+            return False  # Would exceed limit
 
         org.tokens_used_this_month += tokens
         _save_organizations(_organizations)
+
+        # Record per-member usage if user_id provided
+        if user_id:
+            record = MemberUsageRecord(
+                organization_id=org_id,
+                user_id=user_id,
+                tokens=tokens,
+                session_id=session_id,
+                model=model,
+            )
+            _member_usage[record.id] = record
+            _save_member_usage(_member_usage)
+
         return True
 
     @staticmethod
@@ -587,6 +635,107 @@ class OrganizationService:
         for org in _organizations.values():
             org.tokens_used_this_month = 0
         _save_organizations(_organizations)
+
+    # ─────────────────────────────────────────────────────────────
+    # Member Usage Analytics
+    # ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def get_member_usage(
+        org_id: str,
+        period: str = "month",
+    ) -> MemberUsageResponse:
+        """Get per-member usage breakdown for an organization.
+
+        Args:
+            org_id: Organization ID
+            period: 'day', 'week', or 'month'
+        """
+        now = datetime.utcnow()
+        if period == "day":
+            cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif period == "week":
+            cutoff = now - timedelta(days=7)
+        else:  # month
+            cutoff = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        # Get members of this org
+        members = OrganizationService.get_members(org_id)
+
+        # Aggregate by user_id
+        user_tokens: dict[str, int] = {}
+        user_tokens_today: dict[str, int] = {}
+        user_tokens_month: dict[str, int] = {}
+        user_sessions: dict[str, set] = {}
+        user_sessions_today: dict[str, set] = {}
+        user_last_active: dict[str, datetime] = {}
+
+        for record in _member_usage.values():
+            if record.organization_id != org_id:
+                continue
+
+            uid = record.user_id
+
+            # Monthly tokens
+            if record.timestamp >= month_start:
+                user_tokens_month[uid] = user_tokens_month.get(uid, 0) + record.tokens
+                if record.session_id:
+                    if uid not in user_sessions:
+                        user_sessions[uid] = set()
+                    user_sessions[uid].add(record.session_id)
+
+            # Today tokens
+            if record.timestamp >= today_start:
+                user_tokens_today[uid] = user_tokens_today.get(uid, 0) + record.tokens
+                if record.session_id:
+                    if uid not in user_sessions_today:
+                        user_sessions_today[uid] = set()
+                    user_sessions_today[uid].add(record.session_id)
+
+            # Period tokens
+            if record.timestamp >= cutoff:
+                user_tokens[uid] = user_tokens.get(uid, 0) + record.tokens
+
+            # Last active
+            if uid not in user_last_active or record.timestamp > user_last_active[uid]:
+                user_last_active[uid] = record.timestamp
+
+        total_tokens = sum(user_tokens.values())
+
+        # Build member summaries
+        summaries: list[MemberUsageSummary] = []
+        for member in members:
+            uid = member.user_id
+            month_tokens = user_tokens_month.get(uid, 0)
+            pct = (month_tokens / total_tokens * 100) if total_tokens > 0 else 0.0
+
+            summaries.append(
+                MemberUsageSummary(
+                    user_id=uid,
+                    email=member.email,
+                    name=member.name,
+                    role=member.role,
+                    tokens_used_today=user_tokens_today.get(uid, 0),
+                    tokens_used_this_month=month_tokens,
+                    sessions_today=len(user_sessions_today.get(uid, set())),
+                    sessions_this_month=len(user_sessions.get(uid, set())),
+                    last_active_at=user_last_active.get(uid),
+                    percentage_of_org=round(pct, 1),
+                )
+            )
+
+        # Sort by tokens used this month (desc)
+        summaries.sort(key=lambda s: s.tokens_used_this_month, reverse=True)
+
+        return MemberUsageResponse(
+            organization_id=org_id,
+            period=period,
+            total_tokens=total_tokens,
+            members=summaries,
+        )
 
     # ─────────────────────────────────────────────────────────────
     # Async Database Methods (USE_DATABASE=true)
@@ -719,9 +868,7 @@ class OrganizationService:
     @staticmethod
     async def get_organization_async(db: AsyncSession, org_id: str) -> Organization | None:
         """Get an organization by ID (async DB version)."""
-        result = await db.execute(
-            select(OrganizationModel).where(OrganizationModel.id == org_id)
-        )
+        result = await db.execute(select(OrganizationModel).where(OrganizationModel.id == org_id))
         model = result.scalar_one_or_none()
         if not model:
             return None
@@ -730,9 +877,7 @@ class OrganizationService:
     @staticmethod
     async def get_organization_by_slug_async(db: AsyncSession, slug: str) -> Organization | None:
         """Get an organization by slug (async DB version)."""
-        result = await db.execute(
-            select(OrganizationModel).where(OrganizationModel.slug == slug)
-        )
+        result = await db.execute(select(OrganizationModel).where(OrganizationModel.slug == slug))
         model = result.scalar_one_or_none()
         if not model:
             return None
@@ -768,9 +913,7 @@ class OrganizationService:
         data: OrganizationUpdate,
     ) -> Organization | None:
         """Update an organization (async DB version)."""
-        result = await db.execute(
-            select(OrganizationModel).where(OrganizationModel.id == org_id)
-        )
+        result = await db.execute(select(OrganizationModel).where(OrganizationModel.id == org_id))
         model = result.scalar_one_or_none()
         if not model:
             return None
@@ -799,9 +942,7 @@ class OrganizationService:
     @staticmethod
     async def delete_organization_async(db: AsyncSession, org_id: str) -> bool:
         """Soft delete an organization (async DB version)."""
-        result = await db.execute(
-            select(OrganizationModel).where(OrganizationModel.id == org_id)
-        )
+        result = await db.execute(select(OrganizationModel).where(OrganizationModel.id == org_id))
         model = result.scalar_one_or_none()
         if not model:
             return False
@@ -818,7 +959,7 @@ class OrganizationService:
             select(OrganizationMemberModel).where(
                 and_(
                     OrganizationMemberModel.organization_id == org_id,
-                    OrganizationMemberModel.is_active == True,
+                    OrganizationMemberModel.is_active == True,  # noqa: E712
                 )
             )
         )
@@ -837,7 +978,7 @@ class OrganizationService:
                 and_(
                     OrganizationMemberModel.organization_id == org_id,
                     OrganizationMemberModel.user_id == user_id,
-                    OrganizationMemberModel.is_active == True,
+                    OrganizationMemberModel.is_active == True,  # noqa: E712
                 )
             )
         )
@@ -854,8 +995,8 @@ class OrganizationService:
         invited_by: str,
     ) -> OrganizationInvitation:
         """Create an invitation for a new member (async DB version)."""
-        import uuid
         import secrets
+        import uuid
 
         # Check org exists
         org_result = await db.execute(
@@ -865,9 +1006,13 @@ class OrganizationService:
         if not org:
             raise ValueError("Organization not found")
 
-        # Check member limit
-        if org.max_members > 0 and org.current_members >= org.max_members:
-            raise ValueError("Organization has reached member limit")
+        # Check member limit via QuotaService
+        from services.quota_service import QuotaService
+
+        org_pydantic = OrganizationService._org_model_to_pydantic(org)
+        check = QuotaService.check_member_quota(org_pydantic)
+        if not check.allowed:
+            raise ValueError(check.message or "Organization has reached member limit")
 
         # Check if already a member
         member_result = await db.execute(
@@ -875,7 +1020,7 @@ class OrganizationService:
                 and_(
                     OrganizationMemberModel.organization_id == org_id,
                     OrganizationMemberModel.email == request.email,
-                    OrganizationMemberModel.is_active == True,
+                    OrganizationMemberModel.is_active == True,  # noqa: E712
                 )
             )
         )
@@ -888,7 +1033,7 @@ class OrganizationService:
                 and_(
                     OrganizationInvitationModel.organization_id == org_id,
                     OrganizationInvitationModel.email == request.email,
-                    OrganizationInvitationModel.accepted == False,
+                    OrganizationInvitationModel.accepted == False,  # noqa: E712
                     OrganizationInvitationModel.expires_at > datetime.utcnow(),
                 )
             )
@@ -930,7 +1075,7 @@ class OrganizationService:
             select(OrganizationInvitationModel).where(
                 and_(
                     OrganizationInvitationModel.token == token,
-                    OrganizationInvitationModel.accepted == False,
+                    OrganizationInvitationModel.accepted == False,  # noqa: E712
                 )
             )
         )
@@ -987,7 +1132,7 @@ class OrganizationService:
             select(OrganizationMemberModel.organization_id).where(
                 and_(
                     OrganizationMemberModel.user_id == user_id,
-                    OrganizationMemberModel.is_active == True,
+                    OrganizationMemberModel.is_active == True,  # noqa: E712
                 )
             )
         )
@@ -1013,7 +1158,7 @@ class OrganizationService:
             select(OrganizationMemberModel).where(
                 and_(
                     OrganizationMemberModel.user_id == user_id,
-                    OrganizationMemberModel.is_active == True,
+                    OrganizationMemberModel.is_active == True,  # noqa: E712
                 )
             )
         )
@@ -1048,21 +1193,38 @@ class OrganizationService:
         db: AsyncSession,
         org_id: str,
         tokens: int,
+        user_id: str | None = None,
+        session_id: str | None = None,
+        model: str | None = None,
     ) -> bool:
         """Track token usage for an organization (async DB version)."""
-        result = await db.execute(
-            select(OrganizationModel).where(OrganizationModel.id == org_id)
-        )
+        result = await db.execute(select(OrganizationModel).where(OrganizationModel.id == org_id))
         org = result.scalar_one_or_none()
         if not org:
             return False
 
-        # Check limit
-        if org.max_tokens_per_month > 0:
-            if org.tokens_used_this_month + tokens > org.max_tokens_per_month:
-                return False  # Would exceed limit
+        # Check limit via QuotaService
+        from services.quota_service import QuotaService
+
+        org_pydantic = OrganizationService._org_model_to_pydantic(org)
+        check = QuotaService.check_token_quota(org_pydantic, tokens)
+        if not check.allowed:
+            return False  # Would exceed limit
 
         org.tokens_used_this_month += tokens
+
+        # Record per-member usage if user_id provided
+        if user_id:
+            record = MemberUsageRecord(
+                organization_id=org_id,
+                user_id=user_id,
+                tokens=tokens,
+                session_id=session_id,
+                model=model,
+            )
+            _member_usage[record.id] = record
+            _save_member_usage(_member_usage)
+
         await db.commit()
         return True
 

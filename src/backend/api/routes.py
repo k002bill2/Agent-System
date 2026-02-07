@@ -1,57 +1,53 @@
 """REST API routes."""
 
+import json
 import os
-from fastapi import APIRouter, HTTPException, Depends
+
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-import json
 
 # Docker mode: skip host filesystem validations
 IS_DOCKER = bool(os.getenv("CLAUDE_HOME"))
 
-from models.task import Task, TaskCreate, TaskTree
-from models.agent_state import AgentState, TaskStatus
-from models.hitl import ApprovalStatus, ApprovalResponse
+from api.deps import get_engine
+from models.agent_state import TaskStatus
 from models.context_usage import ContextUsage, get_context_limit
+from models.hitl import ApprovalResponse, ApprovalStatus
+from models.monitoring import (
+    CheckCompletedPayload,
+    CheckProgressPayload,
+    CheckResult,
+    CheckStartedPayload,
+    CheckStatus,
+    CheckType,
+    ProjectHealth,
+)
 from models.permissions import (
     AgentPermission,
     SessionPermissions,
     SessionPermissionsResponse,
     UpdatePermissionsRequest,
-    PermissionInfo,
     get_permission_info,
-    PERMISSION_DESCRIPTIONS,
 )
 from models.project import (
-    Project,
     ProjectCreate,
+    ProjectCreateFromTemplate,
+    ProjectLinkRequest,
     ProjectResponse,
     ProjectUpdate,
-    ProjectLinkRequest,
-    ProjectCreateFromTemplate,
-    register_project,
     get_project,
-    list_projects,
-    unregister_project,
     get_projects_dir,
-    update_project,
+    list_projects,
     normalize_path,
+    register_project,
     reorder_projects,
+    update_project,
 )
-from models.monitoring import (
-    CheckType,
-    CheckStatus,
-    CheckResult,
-    ProjectHealth,
-    CheckStartedPayload,
-    CheckProgressPayload,
-    CheckCompletedPayload,
-)
-from services.project_runner import ProjectRunner, get_runner
-from services.warp_service import get_warp_service
-from api.deps import get_engine
+from models.task import TaskCreate, TaskTree
 from orchestrator import OrchestrationEngine
-
+from services.project_runner import get_runner
+from services.warp_service import get_warp_service
 
 router = APIRouter(tags=["orchestration"])
 
@@ -60,6 +56,9 @@ class SessionCreate(BaseModel):
     """Session creation request."""
 
     project_id: str | None = Field(None, description="Optional project context")
+    organization_id: str | None = Field(
+        None, description="Optional organization context for quota enforcement"
+    )
 
 
 class SessionResponse(BaseModel):
@@ -67,6 +66,7 @@ class SessionResponse(BaseModel):
 
     session_id: str
     project_id: str | None = None
+    organization_id: str | None = None
     message: str = "Session created successfully"
 
 
@@ -101,6 +101,7 @@ async def create_session(
 ):
     """Create a new orchestration session with optional project context."""
     project_id = request.project_id if request else None
+    organization_id = request.organization_id if request else None
 
     # Validate project if specified
     project = None
@@ -109,8 +110,21 @@ async def create_session(
         if not project:
             raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
 
-    session_id = await engine.create_session(project=project)
-    return SessionResponse(session_id=session_id, project_id=project_id)
+    # Create session with quota enforcement
+    try:
+        session_id = await engine.create_session(
+            project=project,
+            organization_id=organization_id,
+        )
+    except ValueError as e:
+        # Quota exceeded
+        raise HTTPException(status_code=429, detail=str(e))
+
+    return SessionResponse(
+        session_id=session_id,
+        project_id=project_id,
+        organization_id=organization_id,
+    )
 
 
 @router.get("/sessions/{session_id}", response_model=StateResponse)
@@ -549,6 +563,7 @@ async def get_task_tree(
 
 class ProjectReorderRequest(BaseModel):
     """Request to reorder projects."""
+
     project_ids: list[str] = Field(..., description="List of project IDs in desired order")
 
 
@@ -560,9 +575,10 @@ async def get_projects():
     # Try to get RAG stats if available
     try:
         from services.rag_service import get_vector_store
+
         store = get_vector_store()
         rag_available = True
-    except ImportError:
+    except (ImportError, ValueError, Exception):
         rag_available = False
 
     result = []
@@ -574,16 +590,18 @@ async def get_projects():
         else:
             vector_initialized = False
 
-        result.append(ProjectResponse(
-            id=p.id,
-            name=p.name,
-            path=p.path,
-            description=p.description,
-            has_claude_md=p.claude_md is not None,
-            vector_store_initialized=vector_initialized,
-            indexed_at=p.indexed_at,
-            sort_order=p.sort_order,
-        ))
+        result.append(
+            ProjectResponse(
+                id=p.id,
+                name=p.name,
+                path=p.path,
+                description=p.description,
+                has_claude_md=p.claude_md is not None,
+                vector_store_initialized=vector_initialized,
+                indexed_at=p.indexed_at,
+                sort_order=p.sort_order,
+            )
+        )
     return result
 
 
@@ -606,6 +624,7 @@ async def reorder_projects_endpoint(request: ProjectReorderRequest):
     # Try to get RAG stats if available
     try:
         from services.rag_service import get_vector_store
+
         store = get_vector_store()
         rag_available = True
     except ImportError:
@@ -619,16 +638,18 @@ async def reorder_projects_endpoint(request: ProjectReorderRequest):
         else:
             vector_initialized = False
 
-        result.append(ProjectResponse(
-            id=p.id,
-            name=p.name,
-            path=p.path,
-            description=p.description,
-            has_claude_md=p.claude_md is not None,
-            vector_store_initialized=vector_initialized,
-            indexed_at=p.indexed_at,
-            sort_order=p.sort_order,
-        ))
+        result.append(
+            ProjectResponse(
+                id=p.id,
+                name=p.name,
+                path=p.path,
+                description=p.description,
+                has_claude_md=p.claude_md is not None,
+                vector_store_initialized=vector_initialized,
+                indexed_at=p.indexed_at,
+                sort_order=p.sort_order,
+            )
+        )
 
     return result
 
@@ -637,6 +658,7 @@ async def reorder_projects_endpoint(request: ProjectReorderRequest):
 async def list_templates():
     """List available project templates."""
     from services.project_template_service import get_templates
+
     return get_templates()
 
 
@@ -656,9 +678,13 @@ async def link_project(request: ProjectLinkRequest):
     # Validate source path exists (skip in Docker - host paths not accessible)
     if not IS_DOCKER:
         if not source_path.exists():
-            raise HTTPException(status_code=400, detail=f"Source path does not exist: {normalized_path}")
+            raise HTTPException(
+                status_code=400, detail=f"Source path does not exist: {normalized_path}"
+            )
         if not source_path.is_dir():
-            raise HTTPException(status_code=400, detail=f"Source path is not a directory: {request.source_path}")
+            raise HTTPException(
+                status_code=400, detail=f"Source path is not a directory: {request.source_path}"
+            )
 
     # Check if project ID already exists
     if get_project(request.id):
@@ -700,8 +726,10 @@ async def create_project_from_template(request: ProjectCreateFromTemplate):
     - python: Python package with pyproject.toml
     - fastapi: FastAPI service
     """
-    from pathlib import Path
-    from services.project_template_service import create_project_from_template as create_from_template, get_template
+    from services.project_template_service import (
+        create_project_from_template as create_from_template,
+    )
+    from services.project_template_service import get_template
 
     # Validate template exists
     template = get_template(request.template)
@@ -858,7 +886,7 @@ async def delete_project(project_id: str):
             detail={
                 "message": "Project deletion failed",
                 "errors": summary.errors,
-            }
+            },
         )
 
     return {
@@ -1110,8 +1138,8 @@ async def get_project_context(
     - Dev docs from dev/active folder
     - Current session info (if active)
     """
-    from pathlib import Path
     from datetime import datetime
+    from pathlib import Path
 
     project = get_project(project_id)
     if not project:
@@ -1246,8 +1274,7 @@ async def approve_operation(
     approval = pending_approvals[approval_id]
     if approval["status"] != ApprovalStatus.PENDING.value:
         raise HTTPException(
-            status_code=400,
-            detail=f"Approval already resolved: {approval['status']}"
+            status_code=400, detail=f"Approval already resolved: {approval['status']}"
         )
 
     # Update approval status
@@ -1258,7 +1285,7 @@ async def approve_operation(
 
     # Resume execution
     try:
-        final_state = await engine.run(session_id, "")
+        await engine.run(session_id, "")
         return {
             "message": "Operation approved",
             "approval_id": approval_id,
@@ -1296,8 +1323,7 @@ async def deny_operation(
     approval = pending_approvals[approval_id]
     if approval["status"] != ApprovalStatus.PENDING.value:
         raise HTTPException(
-            status_code=400,
-            detail=f"Approval already resolved: {approval['status']}"
+            status_code=400, detail=f"Approval already resolved: {approval['status']}"
         )
 
     # Update approval status
@@ -1334,7 +1360,9 @@ class WarpOpenRequest(BaseModel):
     command: str | None = Field(None, description="Optional command to execute")
     title: str | None = Field(None, description="Optional tab title")
     new_window: bool = Field(True, description="Open in new window (default) or new tab")
-    use_claude_cli: bool = Field(False, description="Wrap command with claude --dangerously-skip-permissions")
+    use_claude_cli: bool = Field(
+        False, description="Wrap command with claude --dangerously-skip-permissions"
+    )
 
 
 class WarpOpenResponse(BaseModel):
@@ -1589,8 +1617,7 @@ async def get_session_permissions(
         permissions=permission_infos,
         disabled_agents=list(perms.disabled_agents),
         agent_overrides={
-            agent_id: list(perms_set)
-            for agent_id, perms_set in perms.permission_overrides.items()
+            agent_id: list(perms_set) for agent_id, perms_set in perms.permission_overrides.items()
         },
     )
 
@@ -1623,8 +1650,7 @@ async def update_session_permissions(
     # Update agent overrides
     if request.agent_overrides is not None:
         perms.permission_overrides = {
-            agent_id: set(perms_list)
-            for agent_id, perms_list in request.agent_overrides.items()
+            agent_id: set(perms_list) for agent_id, perms_list in request.agent_overrides.items()
         }
 
     # Build response
@@ -1638,8 +1664,7 @@ async def update_session_permissions(
         permissions=permission_infos,
         disabled_agents=list(perms.disabled_agents),
         agent_overrides={
-            agent_id: list(perms_set)
-            for agent_id, perms_set in perms.permission_overrides.items()
+            agent_id: list(perms_set) for agent_id, perms_set in perms.permission_overrides.items()
         },
     )
 

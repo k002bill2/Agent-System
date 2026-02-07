@@ -9,25 +9,25 @@ import logging
 import os
 
 logger = logging.getLogger(__name__)
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import AsyncIterator
 
 import httpx
 
 from models.claude_session import (
-    ClaudeSessionInfo,
-    ClaudeSessionDetail,
-    SessionMessage,
-    SessionStatus,
-    MessageType,
-    TokenUsage,
-    calculate_cost,
     ActivityEvent,
     ActivityEventType,
     ClaudeCodeTask,
     ClaudeCodeTaskStatus,
+    ClaudeSessionDetail,
+    ClaudeSessionInfo,
+    MessageType,
+    SessionMessage,
+    SessionStatus,
+    TokenUsage,
+    calculate_cost,
 )
 
 
@@ -74,9 +74,7 @@ class SessionFileCache:
 
         return None
 
-    def set(
-        self, file_path: Path, session_info: ClaudeSessionInfo, stat: os.stat_result
-    ) -> None:
+    def set(self, file_path: Path, session_info: ClaudeSessionInfo, stat: os.stat_result) -> None:
         """Store session info in cache.
 
         Args:
@@ -243,7 +241,6 @@ class ClaudeSessionMonitor:
             List of session info sorted by last activity
         """
         sessions = []
-        current_user = self._get_current_user()
 
         # Iterate through all projects directories
         for projects_dir in self.projects_dirs:
@@ -365,9 +362,8 @@ class ClaudeSessionMonitor:
         version = ""
         created_at = None
         last_activity = None
-        last_message_type = None
 
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -394,9 +390,7 @@ class ClaudeSessionMonitor:
                 timestamp_str = entry.get("timestamp")
                 if timestamp_str:
                     try:
-                        timestamp = datetime.fromisoformat(
-                            timestamp_str.replace("Z", "+00:00")
-                        )
+                        timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
                         if created_at is None:
                             created_at = timestamp
                         last_activity = timestamp
@@ -407,10 +401,8 @@ class ClaudeSessionMonitor:
                 msg_type = entry.get("type", "")
                 if msg_type == "user":
                     user_message_count += 1
-                    last_message_type = "user"
                 elif msg_type == "assistant":
                     assistant_message_count += 1
-                    last_message_type = "assistant"
 
                     # Extract model and usage from assistant messages
                     message_data = entry.get("message", {})
@@ -435,7 +427,9 @@ class ClaudeSessionMonitor:
 
         # Determine status based on last activity and message type
         # Normalize to naive datetime for comparison
-        last_activity_naive = last_activity.replace(tzinfo=None) if last_activity.tzinfo else last_activity
+        last_activity_naive = (
+            last_activity.replace(tzinfo=None) if last_activity.tzinfo else last_activity
+        )
         time_since_activity = datetime.utcnow() - last_activity_naive
         if time_since_activity < timedelta(minutes=5):
             status = SessionStatus.ACTIVE
@@ -499,6 +493,7 @@ class ClaudeSessionMonitor:
             # e.g., "/Users/user/Library/Mobile Documents/iCloud~md~obsidian/Documents/My Vault"
             # -> "My Vault"
             from pathlib import PurePath
+
             name = PurePath(cwd).name
             if name:
                 return name
@@ -577,7 +572,7 @@ class ClaudeSessionMonitor:
         recent_messages = []
         current_task = None
 
-        with open(session_file, "r", encoding="utf-8") as f:
+        with open(session_file, encoding="utf-8") as f:
             lines = f.readlines()
 
         # Parse last 50 lines for recent messages
@@ -595,9 +590,7 @@ class ClaudeSessionMonitor:
             timestamp_str = entry.get("timestamp", "")
 
             try:
-                timestamp = datetime.fromisoformat(
-                    timestamp_str.replace("Z", "+00:00")
-                )
+                timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
             except ValueError:
                 timestamp = datetime.utcnow()
 
@@ -753,9 +746,7 @@ class ClaudeSessionMonitor:
 
         return Path.home() / ".claude" / "session_summaries" / f"{session_id}.txt"
 
-    def _get_first_messages(
-        self, session_id: str, limit: int = 5
-    ) -> list[dict]:
+    def _get_first_messages(self, session_id: str, limit: int = 5) -> list[dict]:
         """Get first N user/assistant messages from a session.
 
         Args:
@@ -787,7 +778,7 @@ class ClaudeSessionMonitor:
             return []
 
         messages = []
-        with open(session_file, "r", encoding="utf-8") as f:
+        with open(session_file, encoding="utf-8") as f:
             for line in f:
                 if len(messages) >= limit:
                     break
@@ -993,10 +984,9 @@ class ClaudeSessionMonitor:
         """
         sessions = self.discover_sessions()
         return [
-            s for s in sessions
-            if s.message_count > 0
-            and s.user_message_count == 0
-            and s.assistant_message_count == 0
+            s
+            for s in sessions
+            if s.message_count > 0 and s.user_message_count == 0 and s.assistant_message_count == 0
         ]
 
     def delete_ghost_sessions(self) -> list[str]:
@@ -1078,7 +1068,7 @@ class ClaudeSessionMonitor:
         events: list[ActivityEvent] = []
         total_count = 0
 
-        with open(session_file, "r", encoding="utf-8") as f:
+        with open(session_file, encoding="utf-8") as f:
             for line_num, line in enumerate(f):
                 line = line.strip()
                 if not line:
@@ -1092,9 +1082,7 @@ class ClaudeSessionMonitor:
                 # Extract timestamp
                 timestamp_str = entry.get("timestamp", "")
                 try:
-                    timestamp = datetime.fromisoformat(
-                        timestamp_str.replace("Z", "+00:00")
-                    )
+                    timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
                 except ValueError:
                     timestamp = datetime.utcnow()
 
@@ -1120,13 +1108,15 @@ class ClaudeSessionMonitor:
                             else:
                                 content = str(first_item)
 
-                        events.append(ActivityEvent(
-                            id=event_id,
-                            type=ActivityEventType.USER,
-                            timestamp=timestamp,
-                            content=content[:1000] if content else None,
-                            session_id=session_id,
-                        ))
+                        events.append(
+                            ActivityEvent(
+                                id=event_id,
+                                type=ActivityEventType.USER,
+                                timestamp=timestamp,
+                                content=content[:1000] if content else None,
+                                session_id=session_id,
+                            )
+                        )
 
                 elif msg_type == "assistant":
                     message_data = entry.get("message", {})
@@ -1140,25 +1130,29 @@ class ClaudeSessionMonitor:
                                 if item_type == "text":
                                     total_count += 1
                                     if total_count > offset and len(events) < limit:
-                                        events.append(ActivityEvent(
-                                            id=f"{event_id}_text",
-                                            type=ActivityEventType.ASSISTANT,
-                                            timestamp=timestamp,
-                                            content=item.get("text", "")[:1000],
-                                            session_id=session_id,
-                                        ))
+                                        events.append(
+                                            ActivityEvent(
+                                                id=f"{event_id}_text",
+                                                type=ActivityEventType.ASSISTANT,
+                                                timestamp=timestamp,
+                                                content=item.get("text", "")[:1000],
+                                                session_id=session_id,
+                                            )
+                                        )
 
                                 elif item_type == "tool_use":
                                     total_count += 1
                                     if total_count > offset and len(events) < limit:
-                                        events.append(ActivityEvent(
-                                            id=f"{event_id}_{item.get('id', 'tool')}",
-                                            type=ActivityEventType.TOOL_USE,
-                                            timestamp=timestamp,
-                                            tool_name=item.get("name"),
-                                            tool_input=item.get("input"),
-                                            session_id=session_id,
-                                        ))
+                                        events.append(
+                                            ActivityEvent(
+                                                id=f"{event_id}_{item.get('id', 'tool')}",
+                                                type=ActivityEventType.TOOL_USE,
+                                                timestamp=timestamp,
+                                                tool_name=item.get("name"),
+                                                tool_input=item.get("input"),
+                                                session_id=session_id,
+                                            )
+                                        )
 
                 elif msg_type == "result":
                     total_count += 1
@@ -1166,13 +1160,15 @@ class ClaudeSessionMonitor:
                         result_data = entry.get("result", {})
                         tool_result = str(result_data)[:500] if result_data else None
 
-                        events.append(ActivityEvent(
-                            id=event_id,
-                            type=ActivityEventType.TOOL_RESULT,
-                            timestamp=timestamp,
-                            tool_result=tool_result,
-                            session_id=session_id,
-                        ))
+                        events.append(
+                            ActivityEvent(
+                                id=event_id,
+                                type=ActivityEventType.TOOL_RESULT,
+                                timestamp=timestamp,
+                                tool_result=tool_result,
+                                session_id=session_id,
+                            )
+                        )
 
         return events, total_count
 
@@ -1195,7 +1191,7 @@ class ClaudeSessionMonitor:
         tasks: dict[str, ClaudeCodeTask] = {}
         task_counter = 0
 
-        with open(session_file, "r", encoding="utf-8") as f:
+        with open(session_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -1209,9 +1205,7 @@ class ClaudeSessionMonitor:
                 # Extract timestamp
                 timestamp_str = entry.get("timestamp", "")
                 try:
-                    timestamp = datetime.fromisoformat(
-                        timestamp_str.replace("Z", "+00:00")
-                    )
+                    timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
                 except ValueError:
                     timestamp = datetime.utcnow()
 
@@ -1287,10 +1281,7 @@ class ClaudeSessionMonitor:
                                     task.updated_at = timestamp
 
         # Identify root tasks (no parent)
-        root_task_ids = [
-            tid for tid, task in tasks.items()
-            if task.parent_id is None
-        ]
+        root_task_ids = [tid for tid, task in tasks.items() if task.parent_id is None]
 
         return tasks, root_task_ids
 
@@ -1321,7 +1312,7 @@ class ClaudeSessionMonitor:
         events: list[ActivityEvent] = []
 
         # Read only new content
-        with open(session_file, "r", encoding="utf-8") as f:
+        with open(session_file, encoding="utf-8") as f:
             f.seek(last_size)
             new_content = f.read()
 
@@ -1339,9 +1330,7 @@ class ClaudeSessionMonitor:
             # Extract timestamp
             timestamp_str = entry.get("timestamp", "")
             try:
-                timestamp = datetime.fromisoformat(
-                    timestamp_str.replace("Z", "+00:00")
-                )
+                timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
             except ValueError:
                 timestamp = datetime.utcnow()
 
@@ -1358,13 +1347,15 @@ class ClaudeSessionMonitor:
                     else:
                         content = str(first_item)
 
-                events.append(ActivityEvent(
-                    id=event_id,
-                    type=ActivityEventType.USER,
-                    timestamp=timestamp,
-                    content=content[:1000] if content else None,
-                    session_id=session_id,
-                ))
+                events.append(
+                    ActivityEvent(
+                        id=event_id,
+                        type=ActivityEventType.USER,
+                        timestamp=timestamp,
+                        content=content[:1000] if content else None,
+                        session_id=session_id,
+                    )
+                )
 
             elif msg_type == "assistant":
                 message_data = entry.get("message", {})
@@ -1376,35 +1367,41 @@ class ClaudeSessionMonitor:
                             item_type = item.get("type", "")
 
                             if item_type == "text":
-                                events.append(ActivityEvent(
-                                    id=f"{event_id}_text",
-                                    type=ActivityEventType.ASSISTANT,
-                                    timestamp=timestamp,
-                                    content=item.get("text", "")[:1000],
-                                    session_id=session_id,
-                                ))
+                                events.append(
+                                    ActivityEvent(
+                                        id=f"{event_id}_text",
+                                        type=ActivityEventType.ASSISTANT,
+                                        timestamp=timestamp,
+                                        content=item.get("text", "")[:1000],
+                                        session_id=session_id,
+                                    )
+                                )
 
                             elif item_type == "tool_use":
-                                events.append(ActivityEvent(
-                                    id=f"{event_id}_{item.get('id', 'tool')}",
-                                    type=ActivityEventType.TOOL_USE,
-                                    timestamp=timestamp,
-                                    tool_name=item.get("name"),
-                                    tool_input=item.get("input"),
-                                    session_id=session_id,
-                                ))
+                                events.append(
+                                    ActivityEvent(
+                                        id=f"{event_id}_{item.get('id', 'tool')}",
+                                        type=ActivityEventType.TOOL_USE,
+                                        timestamp=timestamp,
+                                        tool_name=item.get("name"),
+                                        tool_input=item.get("input"),
+                                        session_id=session_id,
+                                    )
+                                )
 
             elif msg_type == "result":
                 result_data = entry.get("result", {})
                 tool_result = str(result_data)[:500] if result_data else None
 
-                events.append(ActivityEvent(
-                    id=event_id,
-                    type=ActivityEventType.TOOL_RESULT,
-                    timestamp=timestamp,
-                    tool_result=tool_result,
-                    session_id=session_id,
-                ))
+                events.append(
+                    ActivityEvent(
+                        id=event_id,
+                        type=ActivityEventType.TOOL_RESULT,
+                        timestamp=timestamp,
+                        tool_result=tool_result,
+                        session_id=session_id,
+                    )
+                )
 
         return events, current_size
 
@@ -1448,8 +1445,8 @@ def list_claude_processes() -> list[ClaudeProcess]:
     Returns:
         List of ClaudeProcess objects sorted by CPU time (descending)
     """
-    import subprocess
     import os
+    import subprocess
 
     try:
         # Run ps command to get Claude processes
@@ -1484,7 +1481,7 @@ def list_claude_processes() -> list[ClaudeProcess]:
 
             try:
                 pid = int(parts[1])
-                mem_percent = float(parts[3])
+                _mem_percent = float(parts[3])
                 terminal = parts[6]
                 state = parts[7]
                 started = parts[8]
@@ -1507,6 +1504,7 @@ def list_claude_processes() -> list[ClaudeProcess]:
                 if "/versions/" in command:
                     # e.g., /Users/.../.local/share/claude/versions/2.1.19
                     import re
+
                     match = re.search(r"/versions/(\d+\.\d+\.\d+)", command)
                     if match:
                         version = match.group(1)
@@ -1517,18 +1515,20 @@ def list_claude_processes() -> list[ClaudeProcess]:
                 # Check if this is the current process or its parent
                 is_current = pid == current_pid or pid == parent_pid
 
-                processes.append(ClaudeProcess(
-                    pid=pid,
-                    version=version,
-                    terminal=terminal,
-                    state=state,
-                    started=started,
-                    cpu_time=cpu_time,
-                    memory_mb=round(memory_mb, 1),
-                    is_foreground=is_foreground,
-                    is_current=is_current,
-                    command=command[:200],  # Truncate long commands
-                ))
+                processes.append(
+                    ClaudeProcess(
+                        pid=pid,
+                        version=version,
+                        terminal=terminal,
+                        state=state,
+                        started=started,
+                        cpu_time=cpu_time,
+                        memory_mb=round(memory_mb, 1),
+                        is_foreground=is_foreground,
+                        is_current=is_current,
+                        command=command[:200],  # Truncate long commands
+                    )
+                )
             except (ValueError, IndexError) as e:
                 logger.debug(f"Failed to parse process line: {e}")
                 continue
@@ -1628,8 +1628,7 @@ def cleanup_stale_processes(
             failed.append((proc.pid, message))
 
     logger.info(
-        f"Process cleanup: killed={len(killed)}, "
-        f"failed={len(failed)}, protected={len(protected)}"
+        f"Process cleanup: killed={len(killed)}, failed={len(failed)}, protected={len(protected)}"
     )
 
     return ProcessCleanupResult(

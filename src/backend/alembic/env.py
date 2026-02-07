@@ -10,27 +10,6 @@ from alembic import context
 
 # Import models for autogenerate support
 from db.database import Base
-from db.models import (
-    SessionModel,
-    TaskModel,
-    MessageModel,
-    ApprovalModel,
-    FeedbackModel,
-    DatasetEntryModel,
-    UserModel,
-    AuditLogModel,
-    CostCenterModel,
-    CostAllocationModel,
-    TokenBlacklistModel,
-    SAMLConfigModel,
-    OrganizationModel,
-    OrganizationMemberModel,
-    OrganizationInvitationModel,
-    NotificationRuleModel,
-    NotificationHistoryModel,
-    ChannelConfigModel,
-    SessionActivityModel,
-)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

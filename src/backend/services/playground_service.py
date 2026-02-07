@@ -1,28 +1,24 @@
 """Playground service for agent testing environment."""
 
-import asyncio
 import json
-import os
-import time
+from collections.abc import AsyncIterator
 from datetime import datetime
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
+from models.cost import calculate_cost, estimate_tokens
 from models.playground import (
-    PlaygroundExecutionStatus,
-    PlaygroundMessage,
-    PlaygroundExecution,
-    PlaygroundSession,
-    PlaygroundSessionCreate,
-    PlaygroundExecuteRequest,
-    PlaygroundToolTest,
     PlaygroundCompareRequest,
     PlaygroundCompareResult,
+    PlaygroundExecuteRequest,
+    PlaygroundExecution,
+    PlaygroundExecutionStatus,
+    PlaygroundMessage,
+    PlaygroundSession,
+    PlaygroundSessionCreate,
+    PlaygroundToolTest,
 )
-from services.llm_service import LLMService, LLMResponse
-from models.cost import estimate_tokens, calculate_cost
-from models.llm_models import LLMModelRegistry
-
+from services.llm_service import LLMResponse, LLMService
 
 # Persistent storage file path
 STORAGE_DIR = Path(__file__).parent.parent / "data"
@@ -52,14 +48,18 @@ def _load_sessions():
 
     if SESSIONS_FILE.exists():
         try:
-            with open(SESSIONS_FILE, "r", encoding="utf-8") as f:
+            with open(SESSIONS_FILE, encoding="utf-8") as f:
                 data = json.load(f)
                 for session_data in data:
                     # Convert datetime strings back to datetime objects
                     if "created_at" in session_data and isinstance(session_data["created_at"], str):
-                        session_data["created_at"] = datetime.fromisoformat(session_data["created_at"])
+                        session_data["created_at"] = datetime.fromisoformat(
+                            session_data["created_at"]
+                        )
                     if "updated_at" in session_data and isinstance(session_data["updated_at"], str):
-                        session_data["updated_at"] = datetime.fromisoformat(session_data["updated_at"])
+                        session_data["updated_at"] = datetime.fromisoformat(
+                            session_data["updated_at"]
+                        )
 
                     # Convert messages
                     if "messages" in session_data:
@@ -72,7 +72,9 @@ def _load_sessions():
                         for exec_data in session_data["executions"]:
                             for dt_field in ["created_at", "started_at", "completed_at"]:
                                 if dt_field in exec_data and isinstance(exec_data[dt_field], str):
-                                    exec_data[dt_field] = datetime.fromisoformat(exec_data[dt_field])
+                                    exec_data[dt_field] = datetime.fromisoformat(
+                                        exec_data[dt_field]
+                                    )
                             if "messages" in exec_data:
                                 for msg in exec_data["messages"]:
                                     if "timestamp" in msg and isinstance(msg["timestamp"], str):
@@ -231,6 +233,7 @@ class PlaygroundService:
         name: str | None = None,
         project_id: str | None = None,
         working_directory: str | None = None,
+        rag_enabled: bool | None = None,
     ) -> PlaygroundSession | None:
         """Update session settings."""
         _load_sessions()  # Ensure sessions are loaded
@@ -256,6 +259,8 @@ class PlaygroundService:
             session.project_id = project_id
         if working_directory is not None:
             session.working_directory = working_directory
+        if rag_enabled is not None:
+            session.rag_enabled = rag_enabled
 
         session.updated_at = datetime.utcnow()
         _save_sessions()  # Persist to file
@@ -310,6 +315,24 @@ class PlaygroundService:
                     if request.context:
                         conversation_context.update(request.context)
 
+            # Inject RAG context if enabled
+            rag_sources = None
+            if session.rag_enabled and session.project_id:
+                try:
+                    from services.rag_service import get_project_context_with_sources
+
+                    rag_context, rag_sources = await get_project_context_with_sources(
+                        project_id=session.project_id,
+                        query=request.prompt,
+                        k=5,
+                    )
+                    if rag_context:
+                        if conversation_context is None:
+                            conversation_context = request.context.copy() if request.context else {}
+                        conversation_context["project_context"] = rag_context
+                except Exception as e:
+                    print(f"Warning: RAG context retrieval failed: {e}")
+
             # Check if tools are enabled
             enabled_tools = execution.tools_enabled or []
 
@@ -327,8 +350,8 @@ class PlaygroundService:
                 )
 
                 # Add tool call messages if any
-                for i, (tool_call, tool_result) in enumerate(
-                    zip(llm_response.tool_calls, llm_response.tool_results)
+                for _i, (tool_call, tool_result) in enumerate(
+                    zip(llm_response.tool_calls, llm_response.tool_results, strict=False)
                 ):
                     # Tool call message
                     tool_msg = PlaygroundMessage(
@@ -367,6 +390,7 @@ class PlaygroundService:
                 content=content,
                 tokens=llm_response.output_tokens,
                 latency_ms=llm_response.latency_ms,
+                rag_sources=rag_sources,
             )
             execution.messages.append(assistant_msg)
             session.messages.append(assistant_msg)
@@ -435,6 +459,24 @@ class PlaygroundService:
                 if request.context:
                     conversation_context.update(request.context)
 
+        # Inject RAG context if enabled
+        rag_sources = None
+        if session.rag_enabled and session.project_id:
+            try:
+                from services.rag_service import get_project_context_with_sources
+
+                rag_context, rag_sources = await get_project_context_with_sources(
+                    project_id=session.project_id,
+                    query=request.prompt,
+                    k=5,
+                )
+                if rag_context:
+                    if conversation_context is None:
+                        conversation_context = request.context.copy() if request.context else {}
+                    conversation_context["project_context"] = rag_context
+            except Exception as e:
+                print(f"Warning: RAG context retrieval failed: {e}")
+
         # Stream from LLM with token tracking
         full_response = ""
         token_info = None
@@ -472,6 +514,7 @@ class PlaygroundService:
                 role="assistant",
                 content=full_response,
                 tokens=output_tokens,
+                rag_sources=rag_sources,
             )
             session.messages.append(assistant_msg)
             session.total_executions += 1
@@ -479,6 +522,12 @@ class PlaygroundService:
             session.total_cost += cost
             session.updated_at = datetime.utcnow()
             _save_sessions()  # Persist to file
+
+            # Send RAG sources as final metadata event
+            if rag_sources:
+                import json
+
+                yield f"\n\n__RAG_SOURCES__{json.dumps(rag_sources)}"
 
         except Exception as e:
             yield f"\n\n[Error: {str(e)}]"
@@ -660,7 +709,7 @@ Based on the context provided, I would recommend the following approach:
 - Implement each step carefully
 - Test and validate the results
 
-Available tools for this session: {', '.join(tools) if tools else 'None'}
+Available tools for this session: {", ".join(tools) if tools else "None"}
 
 Is there anything specific you'd like me to focus on?
 

@@ -2,7 +2,6 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -30,12 +29,12 @@ class CheckResult(BaseModel):
 
     check_type: CheckType
     status: CheckStatus = CheckStatus.IDLE
-    exit_code: Optional[int] = None
+    exit_code: int | None = None
     stdout: str = ""
     stderr: str = ""
-    duration_ms: Optional[int] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    duration_ms: int | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
     class Config:
         use_enum_values = True

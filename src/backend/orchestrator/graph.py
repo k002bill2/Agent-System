@@ -1,11 +1,17 @@
 """LangGraph orchestration graph definition."""
 
-from typing import Literal, Any
+from typing import Any, Literal
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 
 from models.agent_state import AgentState, TaskStatus
-from orchestrator.nodes import OrchestratorNode, PlannerNode, ExecutorNode, ReviewerNode, SelfCorrectionNode
+from orchestrator.nodes import (
+    ExecutorNode,
+    OrchestratorNode,
+    PlannerNode,
+    ReviewerNode,
+    SelfCorrectionNode,
+)
 from orchestrator.parallel_executor import ParallelExecutorNode
 
 
@@ -21,7 +27,9 @@ async def waiting_node(state: AgentState) -> dict[str, Any]:
     }
 
 
-def route_orchestrator(state: AgentState) -> Literal["planner", "executor", "execute_batch", "reviewer", "end"]:
+def route_orchestrator(
+    state: AgentState,
+) -> Literal["planner", "executor", "execute_batch", "reviewer", "end"]:
     """Route from orchestrator to next node."""
     next_action = state.get("next_action")
 

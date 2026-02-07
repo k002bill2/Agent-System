@@ -305,7 +305,10 @@ async def github_callback(request: OAuthCallbackRequest):
         access_token = tokens.get("access_token")
 
         if not access_token:
-            raise HTTPException(status_code=400, detail=f"OAuth error: {tokens.get('error_description', 'Unknown error')}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"OAuth error: {tokens.get('error_description', 'Unknown error')}",
+            )
 
         # Get user info
         user_response = await client.get(
@@ -334,7 +337,13 @@ async def github_callback(request: OAuthCallbackRequest):
             if email_response.status_code == 200:
                 emails = email_response.json()
                 primary_email = next((e for e in emails if e.get("primary")), None)
-                email = primary_email["email"] if primary_email else emails[0]["email"] if emails else ""
+                email = (
+                    primary_email["email"]
+                    if primary_email
+                    else emails[0]["email"]
+                    if emails
+                    else ""
+                )
 
     # Create/update user
     user_id = f"github_{user_info['id']}"

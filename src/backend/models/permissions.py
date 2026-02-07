@@ -1,7 +1,7 @@
 """Agent permissions model for controlling tool execution."""
 
 from enum import Enum
-from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -135,9 +135,7 @@ class SessionPermissions(BaseModel):
         """Re-enable a disabled agent."""
         self.disabled_agents.discard(agent_id)
 
-    def set_agent_permissions(
-        self, agent_id: str, permissions: set[AgentPermission]
-    ) -> None:
+    def set_agent_permissions(self, agent_id: str, permissions: set[AgentPermission]) -> None:
         """Set specific permissions for an agent."""
         self.permission_overrides[agent_id] = permissions
 
@@ -173,9 +171,7 @@ class UpdatePermissionsRequest(BaseModel):
     agent_overrides: dict[str, list[AgentPermission]] | None = None
 
 
-def get_permission_info(
-    permission: AgentPermission, enabled: bool
-) -> PermissionInfo:
+def get_permission_info(permission: AgentPermission, enabled: bool) -> PermissionInfo:
     """Get permission info for API response."""
     info = PERMISSION_DESCRIPTIONS.get(
         permission,

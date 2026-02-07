@@ -8,9 +8,9 @@ import asyncio
 import json
 import logging
 import os
+from collections.abc import AsyncIterator
 from datetime import datetime
 from pathlib import Path
-from typing import AsyncIterator
 
 from models.project_config import (
     AgentConfig,
@@ -264,9 +264,7 @@ class ProjectConfigMonitor:
         agent_count = 0
         if agents_dir.exists():
             agent_count = sum(
-                1
-                for f in agents_dir.glob("*.md")
-                if f.is_file() and not f.name.startswith(".")
+                1 for f in agents_dir.glob("*.md") if f.is_file() and not f.name.startswith(".")
             )
             # Exclude shared/ directory files from agent count
             shared_dir = agents_dir / "shared"
@@ -276,7 +274,7 @@ class ProjectConfigMonitor:
         mcp_server_count = 0
         if mcp_file.exists():
             try:
-                with open(mcp_file, "r", encoding="utf-8") as f:
+                with open(mcp_file, encoding="utf-8") as f:
                     mcp_data = json.load(f)
                     mcp_server_count = len(mcp_data.get("mcpServers", {}))
             except (json.JSONDecodeError, OSError):
@@ -286,7 +284,7 @@ class ProjectConfigMonitor:
         hook_count = 0
         if hooks_file.exists():
             try:
-                with open(hooks_file, "r", encoding="utf-8") as f:
+                with open(hooks_file, encoding="utf-8") as f:
                     hooks_data = json.load(f)
                     # Handle both formats: { "hooks": { ... } } or direct { "event": [...] }
                     if "hooks" in hooks_data and isinstance(hooks_data["hooks"], dict):
@@ -420,7 +418,9 @@ class ProjectConfigMonitor:
             modified_at=datetime.fromtimestamp(stat.st_mtime),
         )
 
-    def get_skill_content(self, project_id: str, skill_id: str) -> tuple[SkillConfig | None, str, list[str]]:
+    def get_skill_content(
+        self, project_id: str, skill_id: str
+    ) -> tuple[SkillConfig | None, str, list[str]]:
         """Get full content of a skill.
 
         Args:
@@ -543,9 +543,7 @@ class ProjectConfigMonitor:
             tools=FrontmatterParser.extract_tools(frontmatter),
             model=frontmatter.get("model"),
             role=frontmatter.get("role"),
-            ace_capabilities=FrontmatterParser.get_nested_dict(
-                frontmatter, "ace_capabilities"
-            ),
+            ace_capabilities=FrontmatterParser.get_nested_dict(frontmatter, "ace_capabilities"),
             is_shared=is_shared,
             modified_at=datetime.fromtimestamp(stat.st_mtime),
         )
@@ -568,7 +566,7 @@ class ProjectConfigMonitor:
             return []
 
         try:
-            with open(mcp_file, "r", encoding="utf-8") as f:
+            with open(mcp_file, encoding="utf-8") as f:
                 mcp_data = json.load(f)
         except (json.JSONDecodeError, OSError) as e:
             logger.error(f"Error reading MCP config {mcp_file}: {e}")
@@ -640,7 +638,7 @@ class ProjectConfigMonitor:
             return []
 
         try:
-            with open(user_claude_file, "r", encoding="utf-8") as f:
+            with open(user_claude_file, encoding="utf-8") as f:
                 user_data = json.load(f)
         except (json.JSONDecodeError, OSError) as e:
             logger.error(f"Error reading user Claude config: {e}")
@@ -721,9 +719,7 @@ class ProjectConfigMonitor:
         """
         return self._toggle_mcp_server(project_id, server_id, disabled=True)
 
-    def _toggle_mcp_server(
-        self, project_id: str, server_id: str, disabled: bool
-    ) -> bool:
+    def _toggle_mcp_server(self, project_id: str, server_id: str, disabled: bool) -> bool:
         """Toggle MCP server disabled state.
 
         Args:
@@ -745,7 +741,7 @@ class ProjectConfigMonitor:
             return False
 
         try:
-            with open(mcp_file, "r", encoding="utf-8") as f:
+            with open(mcp_file, encoding="utf-8") as f:
                 mcp_data = json.load(f)
 
             mcp_servers = mcp_data.get("mcpServers", {})
@@ -804,7 +800,7 @@ class ProjectConfigMonitor:
             return None
 
         try:
-            with open(mcp_file, "r", encoding="utf-8") as f:
+            with open(mcp_file, encoding="utf-8") as f:
                 mcp_data = json.load(f)
 
             mcp_servers = mcp_data.get("mcpServers", {})
@@ -876,7 +872,7 @@ class ProjectConfigMonitor:
             mcp_data = {"mcpServers": {}}
         else:
             try:
-                with open(mcp_file, "r", encoding="utf-8") as f:
+                with open(mcp_file, encoding="utf-8") as f:
                     mcp_data = json.load(f)
             except (json.JSONDecodeError, OSError) as e:
                 logger.error(f"Error reading MCP config: {e}")
@@ -939,7 +935,7 @@ class ProjectConfigMonitor:
             return False
 
         try:
-            with open(mcp_file, "r", encoding="utf-8") as f:
+            with open(mcp_file, encoding="utf-8") as f:
                 mcp_data = json.load(f)
 
             mcp_servers = mcp_data.get("mcpServers", {})
@@ -1272,9 +1268,7 @@ class ProjectConfigMonitor:
             logger.error(f"Error updating hooks: {e}")
             return False
 
-    def add_hook_entry(
-        self, project_id: str, event: str, matcher: str, hooks: list[dict]
-    ) -> bool:
+    def add_hook_entry(self, project_id: str, event: str, matcher: str, hooks: list[dict]) -> bool:
         """Add a hook entry to an event.
 
         Args:
@@ -1296,7 +1290,7 @@ class ProjectConfigMonitor:
         # Read existing hooks or create new
         if hooks_file.exists():
             try:
-                with open(hooks_file, "r", encoding="utf-8") as f:
+                with open(hooks_file, encoding="utf-8") as f:
                     hooks_data = json.load(f)
             except (json.JSONDecodeError, OSError):
                 hooks_data = {"hooks": {}}
@@ -1311,10 +1305,12 @@ class ProjectConfigMonitor:
         if event not in hooks_data["hooks"]:
             hooks_data["hooks"][event] = []
 
-        hooks_data["hooks"][event].append({
-            "matcher": matcher,
-            "hooks": hooks,
-        })
+        hooks_data["hooks"][event].append(
+            {
+                "matcher": matcher,
+                "hooks": hooks,
+            }
+        )
 
         try:
             with open(hooks_file, "w", encoding="utf-8") as f:
@@ -1346,11 +1342,11 @@ class ProjectConfigMonitor:
 
         hooks_file = project_path / ".claude" / "hooks.json"
         if not hooks_file.exists():
-            logger.error(f"Hooks file not found")
+            logger.error("Hooks file not found")
             return False
 
         try:
-            with open(hooks_file, "r", encoding="utf-8") as f:
+            with open(hooks_file, encoding="utf-8") as f:
                 hooks_data = json.load(f)
 
             # Handle wrapped format
@@ -1403,7 +1399,7 @@ class ProjectConfigMonitor:
 
         if hooks_file.exists():
             try:
-                with open(hooks_file, "r", encoding="utf-8") as f:
+                with open(hooks_file, encoding="utf-8") as f:
                     hooks_data = json.load(f)
 
                 # Handle both formats:
@@ -1465,7 +1461,7 @@ class ProjectConfigMonitor:
         target_path = self._find_project_path(target_project_id)
 
         if not source_path or not target_path:
-            logger.error(f"Source or target project not found")
+            logger.error("Source or target project not found")
             return False
 
         source_skill_dir = source_path / ".claude" / "skills" / skill_id
@@ -1512,7 +1508,7 @@ class ProjectConfigMonitor:
         target_path = self._find_project_path(target_project_id)
 
         if not source_path or not target_path:
-            logger.error(f"Source or target project not found")
+            logger.error("Source or target project not found")
             return False
 
         source_agents_dir = source_path / ".claude" / "agents"
@@ -1553,7 +1549,9 @@ class ProjectConfigMonitor:
             logger.error(f"Error copying agent: {e}")
             return False
 
-    def copy_mcp_server(self, source_project_id: str, server_id: str, target_project_id: str) -> bool:
+    def copy_mcp_server(
+        self, source_project_id: str, server_id: str, target_project_id: str
+    ) -> bool:
         """Copy an MCP server to another project.
 
         Args:
@@ -1568,16 +1566,16 @@ class ProjectConfigMonitor:
         target_path = self._find_project_path(target_project_id)
 
         if not source_path or not target_path:
-            logger.error(f"Source or target project not found")
+            logger.error("Source or target project not found")
             return False
 
         source_mcp_file = source_path / ".claude" / "mcp.json"
         if not source_mcp_file.exists():
-            logger.error(f"Source MCP config not found")
+            logger.error("Source MCP config not found")
             return False
 
         try:
-            with open(source_mcp_file, "r", encoding="utf-8") as f:
+            with open(source_mcp_file, encoding="utf-8") as f:
                 source_data = json.load(f)
 
             source_servers = source_data.get("mcpServers", {})
@@ -1592,7 +1590,7 @@ class ProjectConfigMonitor:
             target_mcp_file.parent.mkdir(parents=True, exist_ok=True)
 
             if target_mcp_file.exists():
-                with open(target_mcp_file, "r", encoding="utf-8") as f:
+                with open(target_mcp_file, encoding="utf-8") as f:
                     target_data = json.load(f)
             else:
                 target_data = {"mcpServers": {}}
@@ -1613,14 +1611,18 @@ class ProjectConfigMonitor:
                 json.dump(target_data, f, indent=2, ensure_ascii=False)
                 f.write("\n")
 
-            logger.info(f"Copied MCP server {server_id} from {source_project_id} to {target_project_id}")
+            logger.info(
+                f"Copied MCP server {server_id} from {source_project_id} to {target_project_id}"
+            )
             return True
 
         except (json.JSONDecodeError, OSError) as e:
             logger.error(f"Error copying MCP server: {e}")
             return False
 
-    def copy_hook(self, source_project_id: str, event: str, index: int, target_project_id: str) -> bool:
+    def copy_hook(
+        self, source_project_id: str, event: str, index: int, target_project_id: str
+    ) -> bool:
         """Copy a hook to another project.
 
         Args:
@@ -1636,16 +1638,16 @@ class ProjectConfigMonitor:
         target_path = self._find_project_path(target_project_id)
 
         if not source_path or not target_path:
-            logger.error(f"Source or target project not found")
+            logger.error("Source or target project not found")
             return False
 
         source_hooks_file = source_path / ".claude" / "hooks.json"
         if not source_hooks_file.exists():
-            logger.error(f"Source hooks config not found")
+            logger.error("Source hooks config not found")
             return False
 
         try:
-            with open(source_hooks_file, "r", encoding="utf-8") as f:
+            with open(source_hooks_file, encoding="utf-8") as f:
                 source_data = json.load(f)
 
             # Handle wrapped format
@@ -1670,7 +1672,7 @@ class ProjectConfigMonitor:
             target_hooks_file.parent.mkdir(parents=True, exist_ok=True)
 
             if target_hooks_file.exists():
-                with open(target_hooks_file, "r", encoding="utf-8") as f:
+                with open(target_hooks_file, encoding="utf-8") as f:
                     target_data = json.load(f)
             else:
                 target_data = {"hooks": {}}
@@ -1689,7 +1691,9 @@ class ProjectConfigMonitor:
                 json.dump(target_data, f, indent=2, ensure_ascii=False)
                 f.write("\n")
 
-            logger.info(f"Copied hook {event}[{index}] from {source_project_id} to {target_project_id}")
+            logger.info(
+                f"Copied hook {event}[{index}] from {source_project_id} to {target_project_id}"
+            )
             return True
 
         except (json.JSONDecodeError, OSError) as e:

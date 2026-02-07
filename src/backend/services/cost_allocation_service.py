@@ -3,18 +3,17 @@
 import os
 import uuid
 from datetime import datetime, timedelta
-from typing import Any
 
-from sqlalchemy import select, func, and_
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.cost import (
-    CostCenter,
-    CostAllocation,
-    CostReport,
-    CostForecast,
-    ChargebackExport,
     BudgetAlert,
+    ChargebackExport,
+    CostAllocation,
+    CostCenter,
+    CostForecast,
+    CostReport,
     SessionTokenUsage,
 )
 
@@ -22,7 +21,8 @@ USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 
 # Conditional DB model imports
 try:
-    from db.models import CostCenterModel, CostAllocationModel
+    from db.models import CostAllocationModel, CostCenterModel
+
     _DB_AVAILABLE = True
 except ImportError:
     _DB_AVAILABLE = False
@@ -150,7 +150,7 @@ class CostAllocationService:
         """Allocate session cost to a cost center."""
         # Build model cost breakdown
         model_costs: dict[str, float] = {}
-        for agent_name, agent_usage in session_usage.agents.items():
+        for _agent_name, agent_usage in session_usage.agents.items():
             for usage in agent_usage.history:
                 model = usage.model or "unknown"
                 model_costs[model] = model_costs.get(model, 0) + usage.cost_usd
@@ -223,7 +223,9 @@ class CostAllocationService:
                 start_date = end_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             elif period == "quarterly":
                 quarter_start_month = ((end_date.month - 1) // 3) * 3 + 1
-                start_date = end_date.replace(month=quarter_start_month, day=1, hour=0, minute=0, second=0, microsecond=0)
+                start_date = end_date.replace(
+                    month=quarter_start_month, day=1, hour=0, minute=0, second=0, microsecond=0
+                )
             else:
                 start_date = end_date - timedelta(days=30)
 
@@ -246,7 +248,9 @@ class CostAllocationService:
         for a in allocations:
             # By cost center
             if a.cost_center_id:
-                by_cost_center[a.cost_center_id] = by_cost_center.get(a.cost_center_id, 0) + a.total_cost_usd
+                by_cost_center[a.cost_center_id] = (
+                    by_cost_center.get(a.cost_center_id, 0) + a.total_cost_usd
+                )
 
             # By project
             if a.project_id:
@@ -425,7 +429,9 @@ class CostAllocationService:
             start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         elif cc.budget_period == "quarterly":
             quarter_start = ((now.month - 1) // 3) * 3 + 1
-            start_date = now.replace(month=quarter_start, day=1, hour=0, minute=0, second=0, microsecond=0)
+            start_date = now.replace(
+                month=quarter_start, day=1, hour=0, minute=0, second=0, microsecond=0
+            )
         else:
             start_date = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
 
@@ -441,7 +447,9 @@ class CostAllocationService:
         # Determine alert level
         if percent >= 100:
             alert_type = "exceeded"
-            message = f"Budget exceeded: {cc.name} has used {percent:.1f}% of ${cc.budget_usd} budget"
+            message = (
+                f"Budget exceeded: {cc.name} has used {percent:.1f}% of ${cc.budget_usd} budget"
+            )
         elif percent >= 90:
             alert_type = "critical"
             message = f"Critical: {cc.name} at {percent:.1f}% of budget"
@@ -484,7 +492,6 @@ class CostAllocationService:
             results = [a for a in results if a.created_at >= since]
 
         return sorted(results, key=lambda x: x.created_at, reverse=True)
-
 
     # ─────────────────────────────────────────────────────────────
     # Async Database Methods (USE_DATABASE=true)
@@ -622,7 +629,7 @@ class CostAllocationService:
         """Allocate session cost to a cost center in database."""
         # Build model cost breakdown
         model_costs: dict[str, float] = {}
-        for agent_name, agent_usage in session_usage.agents.items():
+        for _agent_name, agent_usage in session_usage.agents.items():
             for usage in agent_usage.history:
                 model = usage.model or "unknown"
                 model_costs[model] = model_costs.get(model, 0) + usage.cost_usd
@@ -723,7 +730,9 @@ class CostAllocationService:
                 start_date = end_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             elif period == "quarterly":
                 quarter_start_month = ((end_date.month - 1) // 3) * 3 + 1
-                start_date = end_date.replace(month=quarter_start_month, day=1, hour=0, minute=0, second=0, microsecond=0)
+                start_date = end_date.replace(
+                    month=quarter_start_month, day=1, hour=0, minute=0, second=0, microsecond=0
+                )
             else:
                 start_date = end_date - timedelta(days=30)
 
@@ -745,7 +754,9 @@ class CostAllocationService:
 
         for a in allocations:
             if a.cost_center_id:
-                by_cost_center[a.cost_center_id] = by_cost_center.get(a.cost_center_id, 0) + a.total_cost_usd
+                by_cost_center[a.cost_center_id] = (
+                    by_cost_center.get(a.cost_center_id, 0) + a.total_cost_usd
+                )
             if a.project_id:
                 by_project[a.project_id] = by_project.get(a.project_id, 0) + a.total_cost_usd
             if a.user_id:

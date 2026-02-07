@@ -8,7 +8,7 @@ import os
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class LLMProvider(str, Enum):
@@ -23,14 +23,14 @@ class LLMProvider(str, Enum):
 class LLMModelConfig(BaseModel):
     """Configuration for an LLM model."""
 
-    id: str                    # "claude-sonnet-4-20250514"
-    display_name: str          # "Claude Sonnet 4"
+    id: str  # "claude-sonnet-4-20250514"
+    display_name: str  # "Claude Sonnet 4"
     provider: LLMProvider
-    context_window: int        # Max context window size
-    input_price: float         # USD per 1K tokens
-    output_price: float        # USD per 1K tokens
-    is_default: bool = False   # Default model for this provider
-    is_enabled: bool = True    # Whether model is enabled
+    context_window: int  # Max context window size
+    input_price: float  # USD per 1K tokens
+    output_price: float  # USD per 1K tokens
+    is_default: bool = False  # Default model for this provider
+    is_enabled: bool = True  # Whether model is enabled
     supports_tools: bool = True  # Tool/function calling support
     supports_vision: bool = False  # Vision/image support
 
@@ -74,8 +74,8 @@ _MODELS: list[LLMModelConfig] = [
         display_name="Gemini 3 Flash",
         provider=LLMProvider.GOOGLE,
         context_window=1000000,
-        input_price=0.0005,   # $0.50/1M tokens
-        output_price=0.003,   # $3.00/1M tokens
+        input_price=0.0005,  # $0.50/1M tokens
+        output_price=0.003,  # $3.00/1M tokens
         is_default=True,  # Default Google model
         supports_tools=True,
         supports_vision=True,
@@ -85,8 +85,8 @@ _MODELS: list[LLMModelConfig] = [
         display_name="Gemini 3 Pro",
         provider=LLMProvider.GOOGLE,
         context_window=1000000,
-        input_price=0.002,    # $2.00/1M tokens (≤200K context)
-        output_price=0.012,   # $12.00/1M tokens (≤200K context)
+        input_price=0.002,  # $2.00/1M tokens (≤200K context)
+        output_price=0.012,  # $12.00/1M tokens (≤200K context)
         is_default=False,
         supports_tools=True,
         supports_vision=True,
@@ -97,7 +97,7 @@ _MODELS: list[LLMModelConfig] = [
         provider=LLMProvider.GOOGLE,
         context_window=1000000,
         input_price=0.00125,  # $1.25/1M tokens (≤200K context)
-        output_price=0.01,    # $10.00/1M tokens (≤200K context)
+        output_price=0.01,  # $10.00/1M tokens (≤200K context)
         is_default=False,
         supports_tools=True,
         supports_vision=True,
@@ -107,7 +107,7 @@ _MODELS: list[LLMModelConfig] = [
         display_name="Gemini 2.5 Flash",
         provider=LLMProvider.GOOGLE,
         context_window=1000000,
-        input_price=0.0001,   # $0.10/1M tokens
+        input_price=0.0001,  # $0.10/1M tokens
         output_price=0.0004,  # $0.40/1M tokens
         is_default=False,
         supports_tools=True,
@@ -344,20 +344,22 @@ class LLMModelRegistry:
             if not model.is_enabled:
                 continue
 
-            result.append({
-                "id": model.id,
-                "display_name": model.display_name,
-                "provider": model.provider.value,
-                "context_window": model.context_window,
-                "pricing": {
-                    "input": model.input_price,
-                    "output": model.output_price,
-                },
-                "available": cls.is_available(model.id),
-                "is_default": model.is_default,
-                "supports_tools": model.supports_tools,
-                "supports_vision": model.supports_vision,
-            })
+            result.append(
+                {
+                    "id": model.id,
+                    "display_name": model.display_name,
+                    "provider": model.provider.value,
+                    "context_window": model.context_window,
+                    "pricing": {
+                        "input": model.input_price,
+                        "output": model.output_price,
+                    },
+                    "available": cls.is_available(model.id),
+                    "is_default": model.is_default,
+                    "supports_tools": model.supports_tools,
+                    "supports_vision": model.supports_vision,
+                }
+            )
 
         return result
 
@@ -374,14 +376,14 @@ class LLMModelRegistry:
 # Helper Functions for Backward Compatibility
 # ─────────────────────────────────────────────────────────────
 
+
 def get_cost_per_1k_tokens() -> dict[str, dict[str, float]]:
     """Get pricing dict in legacy format.
 
     For backward compatibility with existing code that uses COST_PER_1K_TOKENS.
     """
     return {
-        model.id: {"input": model.input_price, "output": model.output_price}
-        for model in _MODELS
+        model.id: {"input": model.input_price, "output": model.output_price} for model in _MODELS
     }
 
 

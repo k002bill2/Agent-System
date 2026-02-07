@@ -1,23 +1,23 @@
 """Analytics API routes."""
 
 import os
-from fastapi import APIRouter, Query, Depends, HTTPException
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import get_db
 from models.analytics import (
-    TimeRange,
-    OverviewMetrics,
-    MultiTrendData,
-    AgentPerformanceList,
-    CostAnalytics,
     ActivityHeatmap,
-    ErrorAnalytics,
+    AgentPerformanceList,
     AnalyticsDashboard,
+    CostAnalytics,
+    ErrorAnalytics,
     MultiProjectTrendsResponse,
+    MultiTrendData,
+    OverviewMetrics,
+    TimeRange,
 )
 from services.analytics_service import AnalyticsService
-
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -55,7 +55,9 @@ async def get_agent_performance(
 ):
     """Get performance metrics for all agents."""
     if USE_DATABASE:
-        return await AnalyticsService.get_agent_performance_async(db, time_range, project_id=project_id)
+        return await AnalyticsService.get_agent_performance_async(
+            db, time_range, project_id=project_id
+        )
     return AnalyticsService.get_agent_performance(time_range)
 
 
@@ -67,7 +69,9 @@ async def get_cost_analytics(
 ):
     """Get cost analytics breakdown."""
     if USE_DATABASE:
-        return await AnalyticsService.get_cost_analytics_async(db, time_range, project_id=project_id)
+        return await AnalyticsService.get_cost_analytics_async(
+            db, time_range, project_id=project_id
+        )
     return AnalyticsService.get_cost_analytics(time_range)
 
 
@@ -79,7 +83,9 @@ async def get_activity_heatmap(
 ):
     """Get activity heatmap data."""
     if USE_DATABASE:
-        return await AnalyticsService.get_activity_heatmap_async(db, time_range, project_id=project_id)
+        return await AnalyticsService.get_activity_heatmap_async(
+            db, time_range, project_id=project_id
+        )
     return AnalyticsService.get_activity_heatmap(time_range)
 
 
@@ -91,7 +97,9 @@ async def get_error_analytics(
 ):
     """Get error analytics breakdown."""
     if USE_DATABASE:
-        return await AnalyticsService.get_error_analytics_async(db, time_range, project_id=project_id)
+        return await AnalyticsService.get_error_analytics_async(
+            db, time_range, project_id=project_id
+        )
     return AnalyticsService.get_error_analytics(time_range)
 
 
@@ -111,7 +119,9 @@ async def get_dashboard(
 async def get_multi_project_trends(
     project_ids: list[str] = Query(..., description="비교할 프로젝트 ID 목록 (최대 5개)"),
     metric: str = Query("tasks", description="메트릭: tasks, tokens, cost, success_rate"),
-    time_range: TimeRange = Query(default=TimeRange.WEEK, description="기간: 1h, 24h, 7d, 30d, all"),
+    time_range: TimeRange = Query(
+        default=TimeRange.WEEK, description="기간: 1h, 24h, 7d, 30d, all"
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """여러 프로젝트의 트렌드 데이터를 비교합니다."""
@@ -125,7 +135,7 @@ async def get_multi_project_trends(
     if metric not in valid_metrics:
         raise HTTPException(
             status_code=400,
-            detail=f"유효하지 않은 메트릭입니다. 사용 가능: {', '.join(valid_metrics)}"
+            detail=f"유효하지 않은 메트릭입니다. 사용 가능: {', '.join(valid_metrics)}",
         )
 
     if USE_DATABASE:

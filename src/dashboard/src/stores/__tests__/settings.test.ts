@@ -157,6 +157,6 @@ describe('getModelsForProvider', () => {
   it('returns local models', () => {
     const models = getModelsForProvider('local')
     expect(models).toContain('qwen2.5:7b')
-    expect(models).toContain('llama3.2:latest')
+    expect(models).toContain('llama3:8b')
   })
 })

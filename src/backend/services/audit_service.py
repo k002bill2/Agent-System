@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, and_, desc
+from sqlalchemy import and_, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.audit import (
@@ -152,6 +152,7 @@ class AuditService:
         if cls._integrity_service is None:
             try:
                 from services.audit_integrity import get_audit_integrity_service
+
                 cls._integrity_service = get_audit_integrity_service()
             except ImportError:
                 pass
@@ -294,7 +295,9 @@ class AuditService:
                     metadata_json=entry.metadata or {},
                     status=entry.status,
                     error_message=entry.error_message,
-                    data_classification=(entry.data_classification or DataClassification.INTERNAL).value,
+                    data_classification=(
+                        entry.data_classification or DataClassification.INTERNAL
+                    ).value,
                     change_reason=entry.change_reason,
                     compliance_flags=entry.compliance_flags or [],
                     created_at=entry.created_at,
@@ -306,6 +309,7 @@ class AuditService:
         except Exception as e:
             # Log error but don't fail - audit is best-effort
             import logging
+
             logging.getLogger(__name__).warning(f"Failed to save audit entry to DB: {e}")
 
     @staticmethod
@@ -485,29 +489,33 @@ class AuditService:
         # Convert to Pydantic models
         logs = []
         for row in rows:
-            logs.append(AuditLogEntry(
-                id=row.id,
-                session_id=row.session_id,
-                user_id=row.user_id,
-                action=AuditAction(row.action),
-                resource_type=ResourceType(row.resource_type),
-                resource_id=row.resource_id,
-                old_value=row.old_value,
-                new_value=row.new_value,
-                changes=row.changes,
-                agent_id=row.agent_id,
-                ip_address=row.ip_address,
-                user_agent=row.user_agent,
-                metadata=row.metadata_json or {},
-                status=row.status,
-                error_message=row.error_message,
-                data_classification=DataClassification(row.data_classification) if row.data_classification else None,
-                change_reason=row.change_reason,
-                compliance_flags=row.compliance_flags or [],
-                previous_hash=row.previous_hash,
-                hash=row.hash,
-                created_at=row.created_at,
-            ))
+            logs.append(
+                AuditLogEntry(
+                    id=row.id,
+                    session_id=row.session_id,
+                    user_id=row.user_id,
+                    action=AuditAction(row.action),
+                    resource_type=ResourceType(row.resource_type),
+                    resource_id=row.resource_id,
+                    old_value=row.old_value,
+                    new_value=row.new_value,
+                    changes=row.changes,
+                    agent_id=row.agent_id,
+                    ip_address=row.ip_address,
+                    user_agent=row.user_agent,
+                    metadata=row.metadata_json or {},
+                    status=row.status,
+                    error_message=row.error_message,
+                    data_classification=DataClassification(row.data_classification)
+                    if row.data_classification
+                    else None,
+                    change_reason=row.change_reason,
+                    compliance_flags=row.compliance_flags or [],
+                    previous_hash=row.previous_hash,
+                    hash=row.hash,
+                    created_at=row.created_at,
+                )
+            )
 
         return AuditLogResponse(
             logs=logs,
@@ -529,9 +537,7 @@ class AuditService:
         """Get a specific audit log entry by ID from database."""
         from db.models import AuditLogModel
 
-        result = await db.execute(
-            select(AuditLogModel).where(AuditLogModel.id == log_id)
-        )
+        result = await db.execute(select(AuditLogModel).where(AuditLogModel.id == log_id))
         row = result.scalar_one_or_none()
 
         if not row:
@@ -566,7 +572,9 @@ class AuditService:
         )
 
     @staticmethod
-    async def get_session_audit_trail_async(db: AsyncSession, session_id: str) -> list[AuditLogEntry]:
+    async def get_session_audit_trail_async(
+        db: AsyncSession, session_id: str
+    ) -> list[AuditLogEntry]:
         """Get all audit logs for a specific session from database."""
         filter = AuditLogFilter(session_id=session_id, limit=1000)
         response = await AuditService.query_async(db, filter)
@@ -584,8 +592,9 @@ class AuditService:
     @staticmethod
     async def cleanup_old_logs_async(db: AsyncSession, days: int = 30) -> int:
         """Remove audit logs older than specified days from database."""
-        from db.models import AuditLogModel
         from sqlalchemy import delete
+
+        from db.models import AuditLogModel
 
         cutoff = datetime.utcnow() - timedelta(days=days)
         stmt = delete(AuditLogModel).where(AuditLogModel.created_at < cutoff)
@@ -599,8 +608,8 @@ class AuditService:
         format: str = "json",
     ) -> str:
         """Export audit logs in specified format."""
-        import json
         import csv
+        import json
         from io import StringIO
 
         response = AuditService.query(filter)
@@ -617,33 +626,37 @@ class AuditService:
             writer = csv.writer(output)
 
             # Header
-            writer.writerow([
-                "id",
-                "created_at",
-                "action",
-                "resource_type",
-                "resource_id",
-                "session_id",
-                "user_id",
-                "agent_id",
-                "status",
-                "error_message",
-            ])
+            writer.writerow(
+                [
+                    "id",
+                    "created_at",
+                    "action",
+                    "resource_type",
+                    "resource_id",
+                    "session_id",
+                    "user_id",
+                    "agent_id",
+                    "status",
+                    "error_message",
+                ]
+            )
 
             # Rows
             for log in response.logs:
-                writer.writerow([
-                    log.id,
-                    log.created_at.isoformat(),
-                    log.action.value,
-                    log.resource_type.value,
-                    log.resource_id or "",
-                    log.session_id or "",
-                    log.user_id or "",
-                    log.agent_id or "",
-                    log.status,
-                    log.error_message or "",
-                ])
+                writer.writerow(
+                    [
+                        log.id,
+                        log.created_at.isoformat(),
+                        log.action.value,
+                        log.resource_type.value,
+                        log.resource_id or "",
+                        log.session_id or "",
+                        log.user_id or "",
+                        log.agent_id or "",
+                        log.status,
+                        log.error_message or "",
+                    ]
+                )
 
             return output.getvalue()
 

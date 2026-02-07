@@ -94,6 +94,7 @@ class AgentState(TypedDict):
     # Session information
     session_id: str
     user_id: str | None
+    organization_id: str | None
 
     # Messages (conversation history)
     messages: Annotated[list[dict], merge_messages]
@@ -138,12 +139,14 @@ class AgentState(TypedDict):
 def create_initial_state(
     session_id: str,
     user_id: str | None = None,
+    organization_id: str | None = None,
     max_iterations: int = 100,
 ) -> AgentState:
     """Create an initial agent state."""
     return AgentState(
         session_id=session_id,
         user_id=user_id,
+        organization_id=organization_id,
         messages=[],
         tasks={},
         root_task_id=None,

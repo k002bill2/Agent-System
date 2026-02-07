@@ -308,14 +308,33 @@ export const useOrchestrationStore = create<OrchestrationState>()(
   connect: async () => {
     const { selectedProjectId } = get()
 
+    // Get current organization ID if available
+    let organizationId: string | null = null
+    try {
+      const { useOrganizationsStore } = await import('./organizations')
+      const orgStore = useOrganizationsStore.getState()
+      organizationId = orgStore.currentOrganization?.id ?? null
+    } catch {
+      // organizations store not available, continue without org_id
+    }
+
     // Create session via REST API first (with project context)
     let sessionId: string
     try {
       const res = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: selectedProjectId }),
+        body: JSON.stringify({
+          project_id: selectedProjectId,
+          organization_id: organizationId,
+        }),
       })
+      if (!res.ok) {
+        const error = await res.json()
+        console.error('Failed to create session:', error.detail || error)
+        set({ isInitialLoading: false })
+        return
+      }
       const data = await res.json()
       sessionId = data.session_id
     } catch (e) {

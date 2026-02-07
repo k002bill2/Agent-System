@@ -45,7 +45,9 @@ class GitHubAuthProvider(AuthProvider):
             tokens = token_response.json()
 
             if "error" in tokens:
-                raise ValueError(f"GitHub OAuth error: {tokens.get('error_description', tokens['error'])}")
+                raise ValueError(
+                    f"GitHub OAuth error: {tokens.get('error_description', tokens['error'])}"
+                )
 
             access_token = tokens["access_token"]
 

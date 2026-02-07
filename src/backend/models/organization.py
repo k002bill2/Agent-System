@@ -1,10 +1,11 @@
 """Organization models for multi-tenant support."""
 
+import uuid
 from datetime import datetime
 from enum import Enum
 from typing import Any
-from pydantic import BaseModel, Field, EmailStr
-import uuid
+
+from pydantic import BaseModel, EmailStr, Field
 
 
 class OrganizationPlan(str, Enum):
@@ -58,6 +59,7 @@ class Organization(BaseModel):
     current_members: int = 0
     current_projects: int = 0
     tokens_used_this_month: int = 0
+    sessions_today: int = 0
     # Metadata
     settings: dict[str, Any] = {}
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -158,6 +160,42 @@ class TenantContext(BaseModel):
     user_id: str
     user_role: MemberRole
     permissions: list[str] = []
+
+
+class MemberUsageRecord(BaseModel):
+    """Individual usage tracking record for a member."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    organization_id: str
+    user_id: str
+    tokens: int = 0
+    session_id: str | None = None
+    model: str | None = None  # LLM model used
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+class MemberUsageSummary(BaseModel):
+    """Aggregated usage summary for a single member."""
+
+    user_id: str
+    email: str
+    name: str | None = None
+    role: MemberRole = MemberRole.MEMBER
+    tokens_used_today: int = 0
+    tokens_used_this_month: int = 0
+    sessions_today: int = 0
+    sessions_this_month: int = 0
+    last_active_at: datetime | None = None
+    percentage_of_org: float = 0.0  # % of org total usage
+
+
+class MemberUsageResponse(BaseModel):
+    """Response for member usage endpoint."""
+
+    organization_id: str
+    period: str = "month"  # day, week, month
+    total_tokens: int = 0
+    members: list[MemberUsageSummary] = []
 
 
 # Plan limits configuration

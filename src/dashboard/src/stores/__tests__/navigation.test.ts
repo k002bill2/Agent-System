@@ -97,7 +97,7 @@ describe('PUBLIC_VIEWS', () => {
     expect(PUBLIC_VIEWS).toContain('register')
   })
 
-  it('has exactly 4 public views', () => {
-    expect(PUBLIC_VIEWS).toHaveLength(4)
+  it('has exactly 5 public views', () => {
+    expect(PUBLIC_VIEWS).toHaveLength(5)
   })
 })

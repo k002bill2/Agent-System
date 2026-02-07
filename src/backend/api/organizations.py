@@ -3,24 +3,29 @@
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, EmailStr
 
+from config import get_settings
+from models.notification import (
+    ChannelConfig,
+    NotificationChannel,
+    NotificationEventType,
+    NotificationMessage,
+    NotificationPriority,
+)
 from models.organization import (
+    InviteMemberRequest,
+    MemberRole,
     Organization,
     OrganizationCreate,
-    OrganizationUpdate,
-    OrganizationStatus,
-    OrganizationPlan,
-    OrganizationMember,
-    MemberRole,
-    InviteMemberRequest,
     OrganizationInvitation,
+    OrganizationMember,
+    OrganizationPlan,
     OrganizationStats,
+    OrganizationStatus,
+    OrganizationUpdate,
     TenantContext,
 )
-from services.organization_service import OrganizationService
 from services.notification_service import NotificationService
-from models.notification import NotificationChannel, ChannelConfig, NotificationMessage, NotificationPriority, NotificationEventType
-from config import get_settings
-
+from services.organization_service import OrganizationService
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
@@ -135,7 +140,7 @@ async def send_invitation_email(
     invitation: OrganizationInvitation,
 ) -> tuple[bool, str | None]:
     """Send invitation email to the invited user."""
-    from services.notification_service import EmailAdapter, ADAPTERS
+    from services.notification_service import ADAPTERS
 
     config = NotificationService.get_channel_config(NotificationChannel.EMAIL)
 
@@ -167,7 +172,7 @@ async def send_invitation_email(
         body=f"""You have been invited to join the organization "{org_name}" on Agent Orchestration Service.
 
 Role: {invitation.role.value.title()}
-{f'Message: {invitation.message}' if invitation.message else ''}
+{f"Message: {invitation.message}" if invitation.message else ""}
 
 Click the link below to accept the invitation:
 {accept_url}
@@ -186,6 +191,7 @@ This invitation expires in 7 days.""",
 
 class InvitationResponse(BaseModel):
     """Response for invitation with email status."""
+
     invitation: OrganizationInvitation
     email_sent: bool
     email_error: str | None = None
@@ -330,14 +336,69 @@ class TrackUsageRequest(BaseModel):
     """Request to track token usage."""
 
     tokens: int
+    user_id: str | None = None
+    session_id: str | None = None
+    model: str | None = None
 
 
 @router.post("/{org_id}/usage/track")
 async def track_usage(org_id: str, data: TrackUsageRequest):
-    """Track token usage for an organization."""
-    if not OrganizationService.track_token_usage(org_id, data.tokens):
+    """Track token usage for an organization (and optionally per-member)."""
+    if not OrganizationService.track_token_usage(
+        org_id,
+        data.tokens,
+        user_id=data.user_id,
+        session_id=data.session_id,
+        model=data.model,
+    ):
         raise HTTPException(
             status_code=429,
             detail="Token limit exceeded for this billing period",
         )
     return {"success": True, "tokens_tracked": data.tokens}
+
+
+# ─────────────────────────────────────────────────────────────
+# Member Usage Analytics
+# ─────────────────────────────────────────────────────────────
+
+
+@router.get("/{org_id}/members/usage")
+async def get_member_usage(
+    org_id: str,
+    period: str = Query(default="month", regex="^(day|week|month)$"),
+):
+    """Get per-member usage breakdown for an organization.
+
+    Returns token usage, session count, and percentage of org total for each member.
+    """
+    org = OrganizationService.get_organization(org_id)
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    usage = OrganizationService.get_member_usage(org_id, period=period)
+    return usage.model_dump()
+
+
+# ─────────────────────────────────────────────────────────────
+# Quota Status
+# ─────────────────────────────────────────────────────────────
+
+
+@router.get("/{org_id}/quota")
+async def get_quota_status(org_id: str):
+    """Get full quota status for an organization.
+
+    Returns current/limit for members, projects, sessions, and tokens.
+    """
+    from services.quota_service import QuotaService
+
+    org = OrganizationService.get_organization(org_id)
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    # Get today's session count
+    sessions_today = org.sessions_today
+
+    status = QuotaService.get_quota_status(org, sessions_today)
+    return status.model_dump()

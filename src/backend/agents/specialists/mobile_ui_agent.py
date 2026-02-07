@@ -6,8 +6,7 @@
 import time
 from typing import Any
 
-from agents.base import BaseAgent, AgentConfig, AgentResult
-
+from agents.base import AgentConfig, AgentResult, BaseAgent
 
 MOBILE_UI_SYSTEM_PROMPT = """You are a Mobile UI Specialist Agent, an expert in React Native development with Expo and TypeScript.
 
@@ -169,10 +168,12 @@ class MobileUIAgent(BaseAgent):
                         if first_line.strip() in ["typescript", "tsx", "ts", "javascript", "jsx"]:
                             lang = first_line.strip()
                             content = "\n".join(part.split("\n")[1:])
-                    code_blocks.append({
-                        "language": lang or "typescript",
-                        "content": content.strip(),
-                    })
+                    code_blocks.append(
+                        {
+                            "language": lang or "typescript",
+                            "content": content.strip(),
+                        }
+                    )
 
         return {
             "type": "ui_implementation",
@@ -202,8 +203,7 @@ class MobileUIAgent(BaseAgent):
         props_str = ""
         if props:
             props_str = "\n".join(
-                f"- {p['name']}: {p['type']} - {p.get('description', '')}"
-                for p in props
+                f"- {p['name']}: {p['type']} - {p.get('description', '')}" for p in props
             )
 
         task = f"""Create a new React Native component called '{component_name}'.

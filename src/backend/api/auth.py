@@ -5,7 +5,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import get_db_session, get_current_user, get_auth_service
+from api.deps import get_current_user, get_db_session
 from config import get_settings
 from db.models import UserModel
 from services.auth_service import AuthService, TokenPair

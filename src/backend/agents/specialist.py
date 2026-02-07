@@ -3,7 +3,7 @@
 import time
 from typing import Any
 
-from agents.base import BaseAgent, AgentConfig, AgentResult
+from agents.base import AgentConfig, AgentResult, BaseAgent
 
 
 class CodeAnalystAgent(BaseAgent):

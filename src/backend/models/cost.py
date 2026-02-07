@@ -2,10 +2,10 @@
 
 from datetime import datetime
 from typing import Any
+
 from pydantic import BaseModel, Field
 
 from models.llm_models import LLMModelRegistry
-
 
 # Default cost for unknown models
 DEFAULT_COST = {"input": 0.001, "output": 0.002}
@@ -33,7 +33,7 @@ def estimate_tokens(text: str, model: str = "") -> int:
     char_count = len(text)
 
     # 한국어 비율 감지 (한글 유니코드 범위: AC00-D7A3)
-    korean_chars = sum(1 for c in text if '\uac00' <= c <= '\ud7a3')
+    korean_chars = sum(1 for c in text if "\uac00" <= c <= "\ud7a3")
     korean_ratio = korean_chars / char_count if char_count > 0 else 0
 
     # 가중 평균: 영어 4자/토큰, 한국어 2자/토큰
@@ -203,7 +203,9 @@ class CostReport(BaseModel):
     by_day: dict[str, float] = Field(default_factory=dict)
 
     # Budget status
-    budget_utilization: dict[str, dict] = Field(default_factory=dict)  # cost_center_id -> {budget, spent, percent}
+    budget_utilization: dict[str, dict] = Field(
+        default_factory=dict
+    )  # cost_center_id -> {budget, spent, percent}
 
 
 class CostForecast(BaseModel):

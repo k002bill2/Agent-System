@@ -4,22 +4,20 @@ import asyncio
 import os
 import time
 from datetime import datetime, timedelta
-from typing import Any
 
 from models.llm_router import (
+    LLMHealthCheck,
     LLMProvider,
     LLMProviderConfig,
     LLMProviderConfigCreate,
     LLMProviderConfigUpdate,
     LLMProviderStatus,
-    LLMHealthCheck,
-    LLMRoutingStrategy,
     LLMRouterConfig,
     LLMRouterState,
     LLMRoutingDecision,
     LLMRoutingStats,
+    LLMRoutingStrategy,
 )
-
 
 # In-memory storage
 _providers: dict[str, LLMProviderConfig] = {}
@@ -190,9 +188,7 @@ class LLMRouterService:
         results = []
         for provider_id, provider in _providers.items():
             if provider.enabled:
-                health_check = await LLMRouterService.check_provider_health(
-                    provider_id
-                )
+                health_check = await LLMRouterService.check_provider_health(provider_id)
                 results.append(health_check)
         return results
 
@@ -249,7 +245,8 @@ class LLMRouterService:
         elif effective_strategy == LLMRoutingStrategy.LEAST_LATENCY:
             # Use latency tracker or default to priority
             latencies = {
-                p.id: sum(_latency_tracker.get(p.id, [100])) / len(_latency_tracker.get(p.id, [100]))
+                p.id: sum(_latency_tracker.get(p.id, [100]))
+                / len(_latency_tracker.get(p.id, [100]))
                 for p in healthy_providers
             }
             selected_id = min(latencies, key=latencies.get)  # type: ignore
@@ -307,9 +304,7 @@ class LLMRouterService:
                     provider.status = LLMProviderStatus.UNHEALTHY
 
         # Track provider usage
-        _stats.provider_usage[provider_id] = (
-            _stats.provider_usage.get(provider_id, 0) + 1
-        )
+        _stats.provider_usage[provider_id] = _stats.provider_usage.get(provider_id, 0) + 1
 
         # Track latency
         if latency_ms is not None:
@@ -320,9 +315,7 @@ class LLMRouterService:
             if len(_latency_tracker[provider_id]) > 100:
                 _latency_tracker[provider_id].pop(0)
             # Update average
-            all_latencies = [
-                lat for lats in _latency_tracker.values() for lat in lats
-            ]
+            all_latencies = [lat for lats in _latency_tracker.values() for lat in lats]
             if all_latencies:
                 _stats.average_latency_ms = sum(all_latencies) / len(all_latencies)
 

@@ -1,14 +1,14 @@
 """LLM Service for unified access to multiple LLM providers."""
 
+import json
 import os
 import time
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
-from langchain_core.tools import tool as langchain_tool
-import json
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
-from models.llm_models import LLMModelRegistry, LLMProvider, get_model_configs
+from models.llm_models import LLMModelRegistry, get_model_configs
 
 # Use central registry for model configurations
 MODEL_CONFIGS = get_model_configs()
@@ -373,7 +373,7 @@ class LLMService:
         Returns:
             LLMResponse with content, tool calls, and metrics
         """
-        from services.playground_tools import execute_tool, TOOL_DEFINITIONS
+        from services.playground_tools import TOOL_DEFINITIONS, execute_tool
 
         config = MODEL_CONFIGS.get(model_id, {})
         provider = config.get("provider", "unknown")
@@ -388,10 +388,7 @@ class LLMService:
             llm = cls._get_llm(model_id, temperature, max_tokens)
 
             # Filter tool definitions to only enabled tools
-            enabled_tool_defs = [
-                t for t in TOOL_DEFINITIONS
-                if t["name"] in tools
-            ]
+            enabled_tool_defs = [t for t in TOOL_DEFINITIONS if t["name"] in tools]
 
             # Bind tools to LLM if any are enabled
             if enabled_tool_defs:
@@ -405,12 +402,14 @@ class LLMService:
                 messages.append(SystemMessage(content=system_prompt))
             else:
                 # Default system prompt for tool usage
-                messages.append(SystemMessage(content=
-                    "You are a helpful AI assistant. "
-                    "You have access to tools that you can use to help answer questions. "
-                    "Use tools when they would help provide accurate and current information. "
-                    "After using tools, synthesize the results into a helpful response."
-                ))
+                messages.append(
+                    SystemMessage(
+                        content="You are a helpful AI assistant. "
+                        "You have access to tools that you can use to help answer questions. "
+                        "Use tools when they would help provide accurate and current information. "
+                        "After using tools, synthesize the results into a helpful response."
+                    )
+                )
 
             # Add context if provided
             if context:
@@ -422,7 +421,7 @@ class LLMService:
             messages.append(HumanMessage(content=full_prompt))
 
             # Iterate until we get a final response or hit max iterations
-            for iteration in range(max_tool_iterations):
+            for _iteration in range(max_tool_iterations):
                 # Invoke LLM
                 response = await llm_with_tools.ainvoke(messages)
 
@@ -464,30 +463,38 @@ class LLMService:
                     tool_id = tool_call.get("id", "")
 
                     # Record the tool call
-                    all_tool_calls.append({
-                        "name": tool_name,
-                        "arguments": tool_args,
-                    })
+                    all_tool_calls.append(
+                        {
+                            "name": tool_name,
+                            "arguments": tool_args,
+                        }
+                    )
 
                     # Execute the tool
                     try:
-                        result = await execute_tool(tool_name, tool_args, working_directory=working_directory)
+                        result = await execute_tool(
+                            tool_name, tool_args, working_directory=working_directory
+                        )
                         result_str = json.dumps(result, ensure_ascii=False, indent=2)
                     except Exception as e:
                         result = {"success": False, "error": str(e)}
                         result_str = json.dumps(result)
 
                     # Record the result
-                    all_tool_results.append({
-                        "tool": tool_name,
-                        "result": result,
-                    })
+                    all_tool_results.append(
+                        {
+                            "tool": tool_name,
+                            "result": result,
+                        }
+                    )
 
                     # Add tool result message
-                    messages.append(ToolMessage(
-                        content=result_str,
-                        tool_call_id=tool_id,
-                    ))
+                    messages.append(
+                        ToolMessage(
+                            content=result_str,
+                            tool_call_id=tool_id,
+                        )
+                    )
 
             # Max iterations reached
             latency_ms = int((time.time() - start_time) * 1000)

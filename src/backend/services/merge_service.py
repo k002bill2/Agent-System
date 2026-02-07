@@ -2,13 +2,13 @@
 
 import logging
 import subprocess
-import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 try:
-    from git import Repo, GitCommandError
+    from git import GitCommandError, Repo
+
     GIT_AVAILABLE = True
 except ImportError:
     GIT_AVAILABLE = False
@@ -16,28 +16,27 @@ except ImportError:
     GitCommandError = Exception
 
 from models.git import (
-    ConflictStatus,
-    ConflictType,
     ConflictFile,
-    ConflictMarker,
-    MergePreview,
-    MergeResult,
-    ThreeWayDiff,
-    DEFAULT_PROTECTED_BRANCHES,
-    MergeRequest,
-    MergeRequestStatus,
-    ResolutionStrategy,
     ConflictResolutionRequest,
     ConflictResolutionResult,
+    ConflictStatus,
+    ConflictType,
     MergeAbortResult,
+    MergePreview,
+    MergeRequest,
+    MergeRequestStatus,
+    MergeResult,
+    ResolutionStrategy,
+    ThreeWayDiff,
 )
-from services.git_service import GitService, GitServiceError
+from services.git_service import GitService
 
 logger = logging.getLogger(__name__)
 
 
 class MergeServiceError(Exception):
     """Merge service specific error."""
+
     pass
 
 
@@ -62,9 +61,7 @@ class MergeService:
     # =========================================================================
 
     def check_merge_conflicts(
-        self,
-        source_branch: str,
-        target_branch: str = "main"
+        self, source_branch: str, target_branch: str = "main"
     ) -> MergePreview:
         """Check if merge would have conflicts without actually merging.
 
@@ -107,9 +104,7 @@ class MergeService:
                 commits_to_merge = len(commits)
 
             # Use git merge-tree to check for conflicts
-            conflict_files = self._check_conflicts_with_merge_tree(
-                source_branch, target_branch
-            )
+            conflict_files = self._check_conflicts_with_merge_tree(source_branch, target_branch)
 
             # Get diff stats
             diff = target_commit.diff(source_commit)
@@ -119,11 +114,11 @@ class MergeService:
 
             for d in diff:
                 if d.diff:
-                    lines = d.diff.decode('utf-8', errors='ignore').split('\n')
+                    lines = d.diff.decode("utf-8", errors="ignore").split("\n")
                     for line in lines:
-                        if line.startswith('+') and not line.startswith('+++'):
+                        if line.startswith("+") and not line.startswith("+++"):
                             insertions += 1
-                        elif line.startswith('-') and not line.startswith('---'):
+                        elif line.startswith("-") and not line.startswith("---"):
                             deletions += 1
 
             has_conflicts = len(conflict_files) > 0
@@ -133,8 +128,7 @@ class MergeService:
                 target_branch=target_branch,
                 can_merge=not has_conflicts,
                 conflict_status=(
-                    ConflictStatus.HAS_CONFLICTS if has_conflicts
-                    else ConflictStatus.NO_CONFLICTS
+                    ConflictStatus.HAS_CONFLICTS if has_conflicts else ConflictStatus.NO_CONFLICTS
                 ),
                 conflicting_files=conflict_files,
                 files_changed=files_changed,
@@ -146,11 +140,7 @@ class MergeService:
         except GitCommandError as e:
             raise MergeServiceError(f"Failed to check merge conflicts: {e}")
 
-    def _check_conflicts_with_merge_tree(
-        self,
-        source_branch: str,
-        target_branch: str
-    ) -> list[str]:
+    def _check_conflicts_with_merge_tree(self, source_branch: str, target_branch: str) -> list[str]:
         """Use git merge-tree to detect conflicts.
 
         Args:
@@ -163,7 +153,7 @@ class MergeService:
         try:
             # Find merge base
             result = subprocess.run(
-                ['git', 'merge-base', target_branch, source_branch],
+                ["git", "merge-base", target_branch, source_branch],
                 cwd=self.project_path,
                 capture_output=True,
                 text=True,
@@ -175,7 +165,7 @@ class MergeService:
 
             # Use merge-tree to simulate merge
             result = subprocess.run(
-                ['git', 'merge-tree', merge_base, target_branch, source_branch],
+                ["git", "merge-tree", merge_base, target_branch, source_branch],
                 cwd=self.project_path,
                 capture_output=True,
                 text=True,
@@ -184,34 +174,34 @@ class MergeService:
             # Parse output for conflict markers
             conflict_files = []
             output = result.stdout
-            lines = output.split('\n')
+            lines = output.split("\n")
 
             for line in lines:
                 # Look for conflict markers
-                if '<<<<<<' in line or '======' in line or '>>>>>>' in line:
+                if "<<<<<<" in line or "======" in line or ">>>>>>" in line:
                     # Try to extract filename from previous lines
                     continue
-                if line.startswith('changed in both'):
+                if line.startswith("changed in both"):
                     # Format: "changed in both" followed by file info
                     parts = line.split()
                     if len(parts) > 3:
                         conflict_files.append(parts[-1])
-                elif '+<<<<<<<' in line or '+=======':
+                elif "+<<<<<<<" in line or "+=======":
                     # Git merge-tree shows conflicts with + prefix
                     pass
 
             # Alternative: look for files with merge conflict status
-            if not conflict_files and '<<<<<<' in output:
+            if not conflict_files and "<<<<<<" in output:
                 # Parse the merge-tree output more carefully
                 current_file = None
                 for line in lines:
-                    if line.startswith('+++') or line.startswith('---'):
+                    if line.startswith("+++") or line.startswith("---"):
                         # diff header
-                        if line.startswith('+++ '):
-                            current_file = line[4:].split('\t')[0]
-                            if current_file.startswith('b/'):
+                        if line.startswith("+++ "):
+                            current_file = line[4:].split("\t")[0]
+                            if current_file.startswith("b/"):
                                 current_file = current_file[2:]
-                    if '<<<<<<' in line and current_file:
+                    if "<<<<<<" in line and current_file:
                         if current_file not in conflict_files:
                             conflict_files.append(current_file)
 
@@ -221,11 +211,7 @@ class MergeService:
             logger.warning(f"merge-tree check failed: {e}")
             return []
 
-    def get_conflict_details(
-        self,
-        source_branch: str,
-        target_branch: str
-    ) -> list[ConflictFile]:
+    def get_conflict_details(self, source_branch: str, target_branch: str) -> list[ConflictFile]:
         """Get detailed conflict information for each conflicting file.
 
         Args:
@@ -265,28 +251,29 @@ class MergeService:
                 elif not their_content:
                     conflict_type = ConflictType.DELETED_BY_THEM
 
-                conflicts.append(ConflictFile(
-                    path=file_path,
-                    conflict_type=conflict_type,
-                    our_content=our_content,
-                    their_content=their_content,
-                    base_content=base_content,
-                ))
+                conflicts.append(
+                    ConflictFile(
+                        path=file_path,
+                        conflict_type=conflict_type,
+                        our_content=our_content,
+                        their_content=their_content,
+                        base_content=base_content,
+                    )
+                )
 
             except Exception as e:
                 logger.warning(f"Failed to get conflict details for {file_path}: {e}")
-                conflicts.append(ConflictFile(
-                    path=file_path,
-                    conflict_type=ConflictType.BOTH_MODIFIED,
-                ))
+                conflicts.append(
+                    ConflictFile(
+                        path=file_path,
+                        conflict_type=ConflictType.BOTH_MODIFIED,
+                    )
+                )
 
         return conflicts
 
     def get_three_way_diff(
-        self,
-        file_path: str,
-        source_branch: str,
-        target_branch: str
+        self, file_path: str, source_branch: str, target_branch: str
     ) -> ThreeWayDiff:
         """Get three-way diff for a file.
 
@@ -326,7 +313,7 @@ class MergeService:
         """
         try:
             blob = commit.tree / file_path
-            return blob.data_stream.read().decode('utf-8', errors='ignore')
+            return blob.data_stream.read().decode("utf-8", errors="ignore")
         except KeyError:
             return ""
         except Exception as e:
@@ -344,7 +331,7 @@ class MergeService:
         message: str | None = None,
         author_name: str | None = None,
         author_email: str | None = None,
-        no_ff: bool = True
+        no_ff: bool = True,
     ) -> MergeResult:
         """Execute merge operation.
 
@@ -387,12 +374,12 @@ class MergeService:
             # Build merge command
             merge_args = [source_branch]
             if no_ff:
-                merge_args.insert(0, '--no-ff')
+                merge_args.insert(0, "--no-ff")
 
             if message:
-                merge_args.extend(['-m', message])
+                merge_args.extend(["-m", message])
             else:
-                merge_args.extend(['-m', f"Merge branch '{source_branch}' into {target_branch}"])
+                merge_args.extend(["-m", f"Merge branch '{source_branch}' into {target_branch}"])
 
             # Execute merge
             self.repo.git.merge(*merge_args)
@@ -414,7 +401,7 @@ class MergeService:
         except GitCommandError as e:
             # Abort merge if failed
             try:
-                self.repo.git.merge('--abort')
+                self.repo.git.merge("--abort")
             except Exception:
                 pass
 
@@ -433,20 +420,11 @@ class MergeService:
         """
         try:
             if not self._is_merge_in_progress():
-                return MergeAbortResult(
-                    success=False,
-                    message="No merge in progress to abort"
-                )
-            self.repo.git.merge('--abort')
-            return MergeAbortResult(
-                success=True,
-                message="Merge aborted successfully"
-            )
+                return MergeAbortResult(success=False, message="No merge in progress to abort")
+            self.repo.git.merge("--abort")
+            return MergeAbortResult(success=True, message="Merge aborted successfully")
         except GitCommandError as e:
-            return MergeAbortResult(
-                success=False,
-                message=f"Failed to abort merge: {e}"
-            )
+            return MergeAbortResult(success=False, message=f"Failed to abort merge: {e}")
 
     # =========================================================================
     # Conflict Resolution
@@ -461,11 +439,7 @@ class MergeService:
         merge_head_path = Path(self.project_path) / ".git" / "MERGE_HEAD"
         return merge_head_path.exists()
 
-    def _start_merge_for_resolution(
-        self,
-        source_branch: str,
-        target_branch: str
-    ) -> bool:
+    def _start_merge_for_resolution(self, source_branch: str, target_branch: str) -> bool:
         """Start a merge operation for conflict resolution.
 
         Args:
@@ -486,7 +460,7 @@ class MergeService:
 
             # Start merge with --no-commit to allow conflict resolution
             try:
-                self.repo.git.merge(source_branch, '--no-commit', '--no-ff')
+                self.repo.git.merge(source_branch, "--no-commit", "--no-ff")
             except GitCommandError:
                 # Merge with conflicts - this is expected
                 pass
@@ -509,7 +483,7 @@ class MergeService:
         try:
             full_path = Path(self.project_path) / file_path
             full_path.parent.mkdir(parents=True, exist_ok=True)
-            full_path.write_text(content, encoding='utf-8')
+            full_path.write_text(content, encoding="utf-8")
             return True
         except Exception as e:
             logger.error(f"Failed to write resolved file {file_path}: {e}")
@@ -531,10 +505,7 @@ class MergeService:
             logger.error(f"Failed to stage resolved file {file_path}: {e}")
             return False
 
-    def resolve_conflict(
-        self,
-        request: ConflictResolutionRequest
-    ) -> ConflictResolutionResult:
+    def resolve_conflict(self, request: ConflictResolutionRequest) -> ConflictResolutionResult:
         """Resolve a single file conflict.
 
         Args:
@@ -554,13 +525,13 @@ class MergeService:
                 return ConflictResolutionResult(
                     success=False,
                     file_path=file_path,
-                    message=f"Source branch '{source_branch}' not found"
+                    message=f"Source branch '{source_branch}' not found",
                 )
             if target_branch not in [b.name for b in self.repo.branches]:
                 return ConflictResolutionResult(
                     success=False,
                     file_path=file_path,
-                    message=f"Target branch '{target_branch}' not found"
+                    message=f"Target branch '{target_branch}' not found",
                 )
 
             # Start merge if not already in progress
@@ -569,7 +540,7 @@ class MergeService:
                     return ConflictResolutionResult(
                         success=False,
                         file_path=file_path,
-                        message="Failed to start merge operation"
+                        message="Failed to start merge operation",
                     )
 
             # Determine resolved content based on strategy
@@ -580,7 +551,7 @@ class MergeService:
                     return ConflictResolutionResult(
                         success=False,
                         file_path=file_path,
-                        message="resolved_content is required when strategy is CUSTOM"
+                        message="resolved_content is required when strategy is CUSTOM",
                     )
                 resolved_content = request.resolved_content
 
@@ -597,32 +568,26 @@ class MergeService:
             # Write resolved content
             if not self._write_resolved_file(file_path, resolved_content):
                 return ConflictResolutionResult(
-                    success=False,
-                    file_path=file_path,
-                    message="Failed to write resolved content"
+                    success=False, file_path=file_path, message="Failed to write resolved content"
                 )
 
             # Stage the resolved file
             if not self._stage_resolved_file(file_path):
                 return ConflictResolutionResult(
-                    success=False,
-                    file_path=file_path,
-                    message="Failed to stage resolved file"
+                    success=False, file_path=file_path, message="Failed to stage resolved file"
                 )
 
             return ConflictResolutionResult(
                 success=True,
                 file_path=file_path,
                 message=f"Conflict resolved using '{strategy.value}' strategy",
-                resolved_content=resolved_content
+                resolved_content=resolved_content,
             )
 
         except Exception as e:
             logger.error(f"Failed to resolve conflict for {file_path}: {e}")
             return ConflictResolutionResult(
-                success=False,
-                file_path=file_path,
-                message=f"Failed to resolve conflict: {str(e)}"
+                success=False, file_path=file_path, message=f"Failed to resolve conflict: {str(e)}"
             )
 
     def get_merge_status(self) -> dict:
@@ -639,7 +604,7 @@ class MergeService:
             try:
                 # Use git ls-files to find unmerged files
                 result = subprocess.run(
-                    ['git', 'ls-files', '-u', '--full-name'],
+                    ["git", "ls-files", "-u", "--full-name"],
                     cwd=self.project_path,
                     capture_output=True,
                     text=True,
@@ -647,9 +612,9 @@ class MergeService:
                 if result.returncode == 0 and result.stdout.strip():
                     # Extract unique file paths
                     files = set()
-                    for line in result.stdout.strip().split('\n'):
+                    for line in result.stdout.strip().split("\n"):
                         if line:
-                            parts = line.split('\t')
+                            parts = line.split("\t")
                             if len(parts) >= 2:
                                 files.add(parts[1])
                     unmerged_files = list(files)
@@ -696,7 +661,7 @@ class MergeService:
                 # Use default merge message
                 merge_msg_path = Path(self.project_path) / ".git" / "MERGE_MSG"
                 if merge_msg_path.exists():
-                    message = merge_msg_path.read_text(encoding='utf-8').strip()
+                    message = merge_msg_path.read_text(encoding="utf-8").strip()
                 else:
                     message = "Merge commit"
                 self.repo.index.commit(message)
@@ -745,10 +710,7 @@ class MergeRequestService:
         if project_id not in _merge_requests:
             _merge_requests[project_id] = {}
 
-    def list_merge_requests(
-        self,
-        status: MergeRequestStatus | None = None
-    ) -> list[MergeRequest]:
+    def list_merge_requests(self, status: MergeRequestStatus | None = None) -> list[MergeRequest]:
         """List merge requests.
 
         Args:
@@ -782,7 +744,7 @@ class MergeRequestService:
         author_name: str,
         author_email: str,
         description: str = "",
-        reviewers: list[str] | None = None
+        reviewers: list[str] | None = None,
     ) -> MergeRequest:
         """Create a new merge request.
 
@@ -803,9 +765,7 @@ class MergeRequestService:
         conflict_status = ConflictStatus.UNKNOWN
         if self.merge_service:
             try:
-                preview = self.merge_service.check_merge_conflicts(
-                    source_branch, target_branch
-                )
+                preview = self.merge_service.check_merge_conflicts(source_branch, target_branch)
                 conflict_status = preview.conflict_status
             except Exception:
                 pass
@@ -832,7 +792,7 @@ class MergeRequestService:
         title: str | None = None,
         description: str | None = None,
         status: MergeRequestStatus | None = None,
-        reviewers: list[str] | None = None
+        reviewers: list[str] | None = None,
     ) -> MergeRequest | None:
         """Update a merge request.
 
@@ -862,11 +822,7 @@ class MergeRequestService:
         mr.updated_at = datetime.utcnow()
         return mr
 
-    def approve_merge_request(
-        self,
-        mr_id: str,
-        user_id: str
-    ) -> MergeRequest | None:
+    def approve_merge_request(self, mr_id: str, user_id: str) -> MergeRequest | None:
         """Approve a merge request.
 
         Args:
@@ -887,9 +843,7 @@ class MergeRequestService:
         return mr
 
     def merge_merge_request(
-        self,
-        mr_id: str,
-        merged_by: str
+        self, mr_id: str, merged_by: str
     ) -> tuple[MergeRequest | None, MergeResult | None]:
         """Merge a merge request.
 
@@ -937,11 +891,7 @@ class MergeRequestService:
         mr.updated_at = datetime.utcnow()
         return mr, result
 
-    def close_merge_request(
-        self,
-        mr_id: str,
-        closed_by: str
-    ) -> MergeRequest | None:
+    def close_merge_request(self, mr_id: str, closed_by: str) -> MergeRequest | None:
         """Close a merge request without merging.
 
         Args:
@@ -976,9 +926,7 @@ class MergeRequestService:
             return mr
 
         try:
-            preview = self.merge_service.check_merge_conflicts(
-                mr.source_branch, mr.target_branch
-            )
+            preview = self.merge_service.check_merge_conflicts(mr.source_branch, mr.target_branch)
             mr.conflict_status = preview.conflict_status
             mr.updated_at = datetime.utcnow()
         except Exception as e:

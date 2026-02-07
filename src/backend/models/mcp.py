@@ -2,6 +2,7 @@
 
 from enum import Enum
 from typing import Any, Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -105,8 +106,7 @@ class CreateTaskArgs(BaseModel):
     project_id: str = Field(description="Project identifier (e.g., 'ppt-maker')")
     task: str = Field(description="Task description to execute")
     agent_type: str | None = Field(
-        default=None,
-        description="Specific agent type to use (e.g., 'web-ui-specialist')"
+        default=None, description="Specific agent type to use (e.g., 'web-ui-specialist')"
     )
 
 
@@ -121,8 +121,7 @@ class RunCheckArgs(BaseModel):
 
     project_id: str = Field(description="Project identifier")
     check_type: Literal["typecheck", "lint", "test", "build", "all"] = Field(
-        default="all",
-        description="Type of check to run"
+        default="all", description="Type of check to run"
     )
 
 
@@ -130,6 +129,5 @@ class ListAgentsArgs(BaseModel):
     """Arguments for aos_list_agents tool."""
 
     category: str | None = Field(
-        default=None,
-        description="Filter agents by category (e.g., 'development', 'orchestration')"
+        default=None, description="Filter agents by category (e.g., 'development', 'orchestration')"
     )

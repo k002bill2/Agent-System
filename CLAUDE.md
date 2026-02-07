@@ -98,6 +98,10 @@ GITHUB_CLIENT_ID=...   # OAuth (선택)
 
 # URLs
 FRONTEND_URL=http://localhost:5173
+
+# Claude Code Usage (배포 시 설정, 로컬은 자동)
+# CLAUDE_OAUTH_TOKEN=...         # non-macOS 필수
+# CLAUDE_STATS_CACHE_PATH=...    # default: ~/.claude/stats-cache.json
 ```
 
 ## Testing

@@ -11,15 +11,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy import text
-from db.database import engine, async_session_factory
-from db.models import (
-    OrganizationModel,
-    OrganizationMemberModel,
-    OrganizationInvitationModel,
-    UserModel,
-    Base,
-)
 
+from db.database import async_session_factory, engine
+from db.models import (
+    Base,
+    OrganizationInvitationModel,
+    OrganizationMemberModel,
+    OrganizationModel,
+    UserModel,
+)
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 ORGS_FILE = DATA_DIR / "organizations.json"
@@ -50,7 +50,7 @@ async def migrate_organizations():
         print("  No organizations.json found, skipping...")
         return 0
 
-    with open(ORGS_FILE, "r", encoding="utf-8") as f:
+    with open(ORGS_FILE, encoding="utf-8") as f:
         orgs_data = json.load(f)
 
     count = 0
@@ -58,8 +58,7 @@ async def migrate_organizations():
         for org_id, org in orgs_data.items():
             # Check if already exists
             result = await session.execute(
-                text("SELECT id FROM organizations WHERE id = :id"),
-                {"id": org_id}
+                text("SELECT id FROM organizations WHERE id = :id"), {"id": org_id}
             )
             if result.fetchone():
                 print(f"  Organization {org['name']} already exists, skipping...")
@@ -100,7 +99,7 @@ async def ensure_users_exist():
     if not MEMBERS_FILE.exists():
         return 0
 
-    with open(MEMBERS_FILE, "r", encoding="utf-8") as f:
+    with open(MEMBERS_FILE, encoding="utf-8") as f:
         members_data = json.load(f)
 
     # Collect unique users
@@ -119,8 +118,7 @@ async def ensure_users_exist():
         for user_id, user_info in users_to_create.items():
             # Check if user exists
             result = await session.execute(
-                text("SELECT id FROM users WHERE id = :id"),
-                {"id": user_id}
+                text("SELECT id FROM users WHERE id = :id"), {"id": user_id}
             )
             if result.fetchone():
                 print(f"  User {user_info['email']} already exists")
@@ -147,7 +145,7 @@ async def migrate_members():
         print("  No organization_members.json found, skipping...")
         return 0
 
-    with open(MEMBERS_FILE, "r", encoding="utf-8") as f:
+    with open(MEMBERS_FILE, encoding="utf-8") as f:
         members_data = json.load(f)
 
     count = 0
@@ -155,8 +153,7 @@ async def migrate_members():
         for member_id, member in members_data.items():
             # Check if already exists
             result = await session.execute(
-                text("SELECT id FROM organization_members WHERE id = :id"),
-                {"id": member_id}
+                text("SELECT id FROM organization_members WHERE id = :id"), {"id": member_id}
             )
             if result.fetchone():
                 print(f"  Member {member['email']} already exists, skipping...")
@@ -191,7 +188,7 @@ async def migrate_invitations():
         print("  No organization_invitations.json found, skipping...")
         return 0
 
-    with open(INVITATIONS_FILE, "r", encoding="utf-8") as f:
+    with open(INVITATIONS_FILE, encoding="utf-8") as f:
         invitations_data = json.load(f)
 
     count = 0
@@ -199,8 +196,7 @@ async def migrate_invitations():
         for inv_id, inv in invitations_data.items():
             # Check if already exists
             result = await session.execute(
-                text("SELECT id FROM organization_invitations WHERE id = :id"),
-                {"id": inv_id}
+                text("SELECT id FROM organization_invitations WHERE id = :id"), {"id": inv_id}
             )
             if result.fetchone():
                 print(f"  Invitation for {inv['email']} already exists, skipping...")
@@ -259,8 +255,10 @@ async def main():
     print()
 
     print("=" * 60)
-    print(f"  Migration complete!")
-    print(f"  Total: {org_count} orgs, {user_count} users, {member_count} members, {inv_count} invitations")
+    print("  Migration complete!")
+    print(
+        f"  Total: {org_count} orgs, {user_count} users, {member_count} members, {inv_count} invitations"
+    )
     print("=" * 60)
 
 

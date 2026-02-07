@@ -4,18 +4,17 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from models.llm_router import (
+    LLMHealthCheck,
     LLMProviderConfig,
     LLMProviderConfigCreate,
     LLMProviderConfigUpdate,
-    LLMHealthCheck,
-    LLMRoutingStrategy,
     LLMRouterConfig,
     LLMRouterState,
     LLMRoutingDecision,
     LLMRoutingStats,
+    LLMRoutingStrategy,
 )
 from services.llm_router_service import LLMRouterService
-
 
 router = APIRouter(prefix="/llm-router", tags=["llm-router"])
 

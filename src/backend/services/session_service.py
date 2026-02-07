@@ -8,13 +8,10 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from db.repository import SessionRepository, TaskRepository, MessageRepository, ApprovalRepository
 from db.database import async_session_factory
+from db.repository import ApprovalRepository, MessageRepository, SessionRepository, TaskRepository
 from models.agent_state import AgentState, create_initial_state
 from models.project import Project
-
 
 # Environment variable to control storage mode
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
@@ -91,8 +88,27 @@ class SessionService:
         project: Project | None = None,
         session_id: str | None = None,
         ttl_days: int | None = None,
+        organization_id: str | None = None,
     ) -> str:
-        """Create a new orchestration session."""
+        """Create a new orchestration session.
+
+        Args:
+            organization_id: If provided, quota is checked before creation.
+                Raises ValueError if session quota is exceeded.
+        """
+        # Quota check if organization_id is provided
+        if organization_id:
+            from services.organization_service import OrganizationService
+            from services.quota_service import QuotaService
+
+            org = OrganizationService.get_organization(organization_id)
+            if org:
+                # Count today's sessions for this org
+                sessions_today = self._count_org_sessions_today(organization_id)
+                check = QuotaService.check_session_quota(org, sessions_today)
+                if not check.allowed:
+                    raise ValueError(check.message)
+
         session_id = session_id or str(uuid.uuid4())
         now = datetime.utcnow()
         ttl = ttl_days or SESSION_TTL_DAYS
@@ -100,6 +116,7 @@ class SessionService:
         state = create_initial_state(
             session_id=session_id,
             user_id=user_id,
+            organization_id=organization_id,
             max_iterations=max_iterations,
         )
 
@@ -133,6 +150,7 @@ class SessionService:
                     session_id=session_id,
                     user_id=user_id,
                     project_id=project.id if project else None,
+                    organization_id=organization_id,
                     initial_state=state,
                 )
                 await db.commit()
@@ -296,6 +314,22 @@ class SessionService:
 
         return cleaned
 
+    def _count_org_sessions_today(self, organization_id: str) -> int:
+        """Count sessions created today for an organization (in-memory mode)."""
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        count = 0
+        for state in self._memory_sessions.values():
+            if state.get("organization_id") == organization_id:
+                metadata = state.get("_metadata")
+                if metadata:
+                    try:
+                        created = datetime.fromisoformat(metadata["created_at"])
+                        if created >= today_start:
+                            count += 1
+                    except (KeyError, ValueError):
+                        pass
+        return count
+
     async def list_sessions(
         self,
         user_id: str | None = None,
@@ -324,18 +358,19 @@ class SessionService:
         else:
             sessions = []
             for sid, state in list(self._memory_sessions.items())[:limit]:
-                sessions.append({
-                    "id": sid,
-                    "user_id": state.get("user_id"),
-                    "project_id": state.get("project", {}).get("id"),
-                    "status": "active",
-                    "created_at": state.get("created_at"),
-                    "total_tokens": sum(
-                        u.get("total_tokens", 0)
-                        for u in state.get("token_usage", {}).values()
-                    ),
-                    "total_cost_usd": state.get("total_cost", 0),
-                })
+                sessions.append(
+                    {
+                        "id": sid,
+                        "user_id": state.get("user_id"),
+                        "project_id": state.get("project", {}).get("id"),
+                        "status": "active",
+                        "created_at": state.get("created_at"),
+                        "total_tokens": sum(
+                            u.get("total_tokens", 0) for u in state.get("token_usage", {}).values()
+                        ),
+                        "total_cost_usd": state.get("total_cost", 0),
+                    }
+                )
             return sessions
 
     async def update_cost(

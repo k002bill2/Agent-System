@@ -1,44 +1,32 @@
 """Agent API routes - Agent Registry, Lead Orchestrator, MCP Manager."""
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
 from typing import Any
 
-from services.agent_registry import (
-    AgentRegistry,
-    AgentMetadata,
-    AgentCategory,
-    AgentStatus,
-    AgentCapability,
-    EffortLevel,
-    get_agent_registry,
-)
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
+
 from agents.lead_orchestrator import (
-    LeadOrchestratorAgent,
-    TaskAnalysis,
-    SubtaskPlan,
     ExecutionStrategy,
     get_lead_orchestrator,
 )
+from models.task_analysis import (
+    TaskAnalysisQueryParams,
+    TaskAnalysisSaveRequest,
+)
+from services.agent_registry import (
+    AgentCategory,
+    AgentMetadata,
+    AgentStatus,
+    EffortLevel,
+    get_agent_registry,
+)
 from services.mcp_manager import (
-    MCPServerConfig,
-    MCPServerType,
-    MCPServerStatus,
-    MCPToolCall,
-    MCPToolResult,
     MCPBatchToolCall,
-    MCPBatchToolResult,
+    MCPToolCall,
 )
 from services.task_analysis_service import (
     get_task_analysis_service,
 )
-from models.task_analysis import (
-    TaskAnalysisEntry,
-    TaskAnalysisListResponse,
-    TaskAnalysisSaveRequest,
-    TaskAnalysisQueryParams,
-)
-
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -251,7 +239,7 @@ async def list_agents(
         except ValueError:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid category: {category}. Valid: {[c.value for c in AgentCategory]}"
+                detail=f"Invalid category: {category}. Valid: {[c.value for c in AgentCategory]}",
             )
     elif available_only:
         agents = registry.get_available()
@@ -295,10 +283,7 @@ async def search_agents(request: AgentSearchRequest):
         try:
             category = AgentCategory(request.category)
         except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid category: {request.category}"
-            )
+            raise HTTPException(status_code=400, detail=f"Invalid category: {request.category}")
 
     results = registry.find_by_capability(
         query=request.query,
@@ -325,7 +310,7 @@ async def update_agent_status(agent_id: str, status: str):
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid status: {status}. Valid: {[s.value for s in AgentStatus]}"
+            detail=f"Invalid status: {status}. Valid: {[s.value for s in AgentStatus]}",
         )
 
     if not registry.update_status(agent_id, new_status):
@@ -409,10 +394,10 @@ async def analyze_task(request: TaskAnalysisRequest):
                 error=str(e),
                 analysis_id=saved_entry.id,
             )
-        except:
+        except Exception:
             return TaskAnalysisResponse(
                 success=False,
-                error=str(e),
+                error="Unknown error during task analysis",
             )
 
 
@@ -511,7 +496,7 @@ async def get_execution_strategies():
                     "sequential": "순차 실행 - 태스크를 하나씩 순서대로 실행",
                     "parallel": "병렬 실행 - 독립적인 태스크를 동시에 실행",
                     "mixed": "혼합 실행 - 일부 병렬, 일부 순차",
-                }[s.value]
+                }[s.value],
             }
             for s in ExecutionStrategy
         ],
@@ -522,7 +507,7 @@ async def get_execution_strategies():
                     "quick": "빠른 작업 (< 5분)",
                     "medium": "중간 복잡도 (5-30분)",
                     "thorough": "복잡한 작업 (30분+)",
-                }[e.value]
+                }[e.value],
             }
             for e in EffortLevel
         ],

@@ -1,7 +1,6 @@
 """Rate limiting middleware for FastAPI."""
 
-import os
-from typing import Callable
+from collections.abc import Callable
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
@@ -9,7 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from models.rate_limit import RateLimitTier
-from services.rate_limit_service import get_rate_limit_service, RateLimitService
+from services.rate_limit_service import RateLimitService, get_rate_limit_service
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -152,6 +151,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         """Decode JWT token to get user info."""
         try:
             import jwt
+
             from config import get_settings
 
             settings = get_settings()

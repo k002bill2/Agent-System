@@ -1,72 +1,71 @@
 """Git API endpoints for team collaboration management."""
 
 import logging
-from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query
 
-from models.project import get_project
 from models.git import (
-    # Branch models
-    GitBranch,
+    DEFAULT_PROTECTED_BRANCHES,
+    AddRequest,
+    AddResult,
     BranchCreateRequest,
     BranchDiff,
     BranchListResponse,
-    # Commit models
-    GitCommit,
-    CommitFile,
-    CommitListResponse,
-    # Working directory models (NEW)
-    GitWorkingStatus,
-    AddRequest,
-    AddResult,
     CommitCreateRequest,
     CommitCreateResult,
+    CommitFile,
+    CommitListResponse,
+    ConflictFile,
+    # Conflict resolution models
+    ConflictResolutionRequest,
+    ConflictResolutionResult,
     # Draft commits models (LLM-based)
     DraftCommit,
     DraftCommitsRequest,
     DraftCommitsResponse,
-    # Merge models
-    MergePreview,
-    MergeResult,
-    MergeExecuteRequest,
-    ConflictFile,
-    ThreeWayDiff,
-    # Conflict resolution models
-    ConflictResolutionRequest,
-    ConflictResolutionResult,
-    MergeAbortResult,
-    # Merge Request models
-    MergeRequest,
-    MergeRequestCreate,
-    MergeRequestUpdate,
-    MergeRequestStatus,
-    MergeRequestListResponse,
-    # GitHub models
-    GitHubPullRequest,
-    GitHubPRReview,
-    GitHubPRReviewCreate,
+    # Remote operation models
+    FetchResult,
+    # Branch models
+    GitBranch,
+    # Commit models
+    GitCommit,
     GitHubMergeRequest,
     GitHubMergeResult,
     GitHubPRListResponse,
-    # Remote operation models
-    FetchResult,
-    PullResult,
-    PushResult,
-    # Permission helpers
-    can_merge_to_branch,
-    DEFAULT_PROTECTED_BRANCHES,
+    GitHubPRReview,
+    GitHubPRReviewCreate,
+    # GitHub models
+    GitHubPullRequest,
     # Git Repository models
     GitRepository,
     GitRepositoryCreate,
-    GitRepositoryUpdate,
     GitRepositoryListResponse,
-    register_git_repository,
+    GitRepositoryUpdate,
+    # Working directory models (NEW)
+    GitWorkingStatus,
+    MergeAbortResult,
+    MergeExecuteRequest,
+    # Merge models
+    MergePreview,
+    # Merge Request models
+    MergeRequest,
+    MergeRequestCreate,
+    MergeRequestListResponse,
+    MergeRequestStatus,
+    MergeRequestUpdate,
+    MergeResult,
+    PullResult,
+    PushResult,
+    ThreeWayDiff,
+    # Permission helpers
+    can_merge_to_branch,
+    delete_git_repository,
     get_git_repository,
     list_git_repositories,
+    register_git_repository,
     update_git_repository,
-    delete_git_repository,
 )
+from models.project import get_project
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +76,7 @@ router = APIRouter(prefix="/git", tags=["git"])
 # Dependencies
 # =============================================================================
 
+
 def get_effective_git_path(project) -> str:
     """Get the effective Git path for a project."""
     return project.git_path or project.path
@@ -84,7 +84,7 @@ def get_effective_git_path(project) -> str:
 
 def get_git_service_for_project(project_id: str):
     """Get GitService for a project."""
-    from services.git_service import get_git_service, GitServiceError
+    from services.git_service import get_git_service
 
     project = get_project(project_id)
     if not project:
@@ -94,8 +94,7 @@ def get_git_service_for_project(project_id: str):
     service = get_git_service(git_path)
     if not service:
         raise HTTPException(
-            status_code=400,
-            detail=f"Project '{project_id}' is not a Git repository"
+            status_code=400, detail=f"Project '{project_id}' is not a Git repository"
         )
 
     return service
@@ -113,8 +112,7 @@ def get_merge_service_for_project(project_id: str):
     service = get_merge_service(git_path)
     if not service:
         raise HTTPException(
-            status_code=400,
-            detail=f"Project '{project_id}' is not a Git repository"
+            status_code=400, detail=f"Project '{project_id}' is not a Git repository"
         )
 
     return service
@@ -141,7 +139,7 @@ def get_github_service():
     if not service:
         raise HTTPException(
             status_code=503,
-            detail="GitHub service not available. Check GITHUB_TOKEN environment variable."
+            detail="GitHub service not available. Check GITHUB_TOKEN environment variable.",
         )
 
     return service
@@ -156,6 +154,7 @@ from pydantic import BaseModel
 
 class GitStatusResponse(BaseModel):
     """Git status response for a project."""
+
     project_id: str
     git_enabled: bool
     git_path: str | None
@@ -167,6 +166,7 @@ class GitStatusResponse(BaseModel):
 
 class GitPathUpdateRequest(BaseModel):
     """Request to update git path for a project."""
+
     git_path: str | None = None  # None to use project path
 
 
@@ -199,7 +199,8 @@ async def update_project_git_path(
 ):
     """Update Git path for a project."""
     from pathlib import Path
-    from models.project import update_project, normalize_path
+
+    from models.project import normalize_path, update_project
     from services.git_service import get_git_service
 
     project = get_project(project_id)
@@ -242,6 +243,7 @@ async def update_project_git_path(
 # =============================================================================
 # Working Directory Endpoints (status, add, commit)
 # =============================================================================
+
 
 @router.get("/projects/{project_id}/working-status", response_model=GitWorkingStatus)
 async def get_working_status(project_id: str):
@@ -331,6 +333,7 @@ async def generate_draft_commits(
     logical commit groupings with conventional commit messages.
     """
     import json
+
     from services.llm_service import LLMService
 
     git_service = get_git_service_for_project(project_id)
@@ -385,7 +388,12 @@ Diff:
         content = content.strip()
 
         # Check for server error responses before JSON parsing
-        error_indicators = ["Internal Server Error", "Bad Gateway", "Service Unavailable", "Gateway Timeout"]
+        error_indicators = [
+            "Internal Server Error",
+            "Bad Gateway",
+            "Service Unavailable",
+            "Gateway Timeout",
+        ]
         for indicator in error_indicators:
             if indicator in content:
                 raise HTTPException(
@@ -428,7 +436,9 @@ Diff:
         )
 
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse LLM response: {e}, content: {content[:500] if content else 'empty'}")
+        logger.error(
+            f"Failed to parse LLM response: {e}, content: {content[:500] if content else 'empty'}"
+        )
         # Try to recover truncated JSON by attempting partial parsing
         try:
             # If JSON was truncated, try to find and fix common issues
@@ -437,22 +447,21 @@ Diff:
 
                 # Method 1: Try to fix truncated JSON by closing brackets
                 fixed_content = content
-                # Count open/close brackets
-                open_braces = fixed_content.count('{') - fixed_content.count('}')
-                open_brackets = fixed_content.count('[') - fixed_content.count(']')
 
                 # If we're inside a string, find and truncate at the last complete entry
                 if '"message":' in fixed_content:
                     # Find positions of all complete-looking draft objects
                     # Look for patterns like "}," or "}]" after "scope":
-                    complete_entries = list(re.finditer(r'"scope"\s*:\s*(null|"[^"]*")\s*\}', fixed_content))
+                    complete_entries = list(
+                        re.finditer(r'"scope"\s*:\s*(null|"[^"]*")\s*\}', fixed_content)
+                    )
                     if complete_entries:
                         last_complete = complete_entries[-1]
                         # Truncate and close properly
-                        fixed_content = fixed_content[:last_complete.end()]
+                        fixed_content = fixed_content[: last_complete.end()]
                         # Ensure proper JSON structure
-                        if not fixed_content.endswith(']}'):
-                            fixed_content += ']}'
+                        if not fixed_content.endswith("]}"):
+                            fixed_content += "]}"
                         try:
                             result = json.loads(fixed_content)
                             drafts = [
@@ -465,7 +474,9 @@ Diff:
                                 for d in result.get("drafts", [])
                             ]
                             if drafts:
-                                logger.warning(f"Recovered {len(drafts)} draft commits by fixing truncated JSON")
+                                logger.warning(
+                                    f"Recovered {len(drafts)} draft commits by fixing truncated JSON"
+                                )
                                 return DraftCommitsResponse(
                                     drafts=drafts,
                                     total_files=len(changed_files),
@@ -482,17 +493,21 @@ Diff:
                     drafts = []
                     for match in matches:
                         # Unescape the message (handle \\n -> \n)
-                        message = match[0].encode().decode('unicode_escape')
+                        message = match[0].encode().decode("unicode_escape")
                         files_str = match[1]
-                        files = [f.strip().strip('"') for f in files_str.split(',') if f.strip()]
-                        drafts.append(DraftCommit(
-                            message=message,
-                            files=files,
-                            type=match[2],
-                            scope=None if match[3] == 'null' else match[3].strip('"'),
-                        ))
+                        files = [f.strip().strip('"') for f in files_str.split(",") if f.strip()]
+                        drafts.append(
+                            DraftCommit(
+                                message=message,
+                                files=files,
+                                type=match[2],
+                                scope=None if match[3] == "null" else match[3].strip('"'),
+                            )
+                        )
                     if drafts:
-                        logger.warning(f"Recovered {len(drafts)} draft commits via regex extraction")
+                        logger.warning(
+                            f"Recovered {len(drafts)} draft commits via regex extraction"
+                        )
                         return DraftCommitsResponse(
                             drafts=drafts,
                             total_files=len(changed_files),
@@ -502,20 +517,17 @@ Diff:
             logger.error(f"JSON recovery failed: {recovery_error}")
 
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to parse LLM response as JSON: {str(e)}"
+            status_code=500, detail=f"Failed to parse LLM response as JSON: {str(e)}"
         )
     except Exception as e:
         logger.error(f"LLM invocation failed: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"LLM invocation failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"LLM invocation failed: {str(e)}")
 
 
 # =============================================================================
 # Branch Endpoints
 # =============================================================================
+
 
 @router.get("/projects/{project_id}/branches", response_model=BranchListResponse)
 async def list_branches(
@@ -598,6 +610,7 @@ async def get_branch_diff(
 # Commit Endpoints
 # =============================================================================
 
+
 @router.get("/projects/{project_id}/commits", response_model=CommitListResponse)
 async def list_commits(
     project_id: str,
@@ -655,6 +668,7 @@ async def get_commit_files(
 # =============================================================================
 # Merge Preview & Execution Endpoints
 # =============================================================================
+
 
 @router.post("/projects/{project_id}/merge/preview", response_model=MergePreview)
 async def preview_merge(
@@ -727,7 +741,7 @@ async def execute_merge(
     if not can_merge_to_branch(user_role, request.target_branch):
         raise HTTPException(
             status_code=403,
-            detail=f"Insufficient permissions to merge to '{request.target_branch}'"
+            detail=f"Insufficient permissions to merge to '{request.target_branch}'",
         )
 
     merge_service = get_merge_service_for_project(project_id)
@@ -817,6 +831,7 @@ async def complete_merge(
 # =============================================================================
 # Internal Merge Request Endpoints
 # =============================================================================
+
 
 @router.get("/projects/{project_id}/merge-requests", response_model=MergeRequestListResponse)
 async def list_merge_requests(
@@ -931,8 +946,7 @@ async def merge_merge_request(
     # Check permissions
     if not can_merge_to_branch(user_role, mr.target_branch):
         raise HTTPException(
-            status_code=403,
-            detail=f"Insufficient permissions to merge to '{mr.target_branch}'"
+            status_code=403, detail=f"Insufficient permissions to merge to '{mr.target_branch}'"
         )
 
     mr, result = mr_service.merge_merge_request(mr_id=mr_id, merged_by=user_id)
@@ -963,7 +977,9 @@ async def close_merge_request(
     return mr
 
 
-@router.post("/projects/{project_id}/merge-requests/{mr_id}/refresh-conflicts", response_model=MergeRequest)
+@router.post(
+    "/projects/{project_id}/merge-requests/{mr_id}/refresh-conflicts", response_model=MergeRequest
+)
 async def refresh_mr_conflicts(
     project_id: str,
     mr_id: str,
@@ -982,6 +998,7 @@ async def refresh_mr_conflicts(
 # =============================================================================
 # Remote Operation Endpoints
 # =============================================================================
+
 
 @router.post("/projects/{project_id}/fetch", response_model=FetchResult)
 async def fetch_remote(
@@ -1022,6 +1039,7 @@ async def push_remote(
 # =============================================================================
 # GitHub API Endpoints
 # =============================================================================
+
 
 @router.get("/github/{repo_owner}/{repo_name}/pulls", response_model=GitHubPRListResponse)
 async def list_github_prs(
@@ -1068,7 +1086,9 @@ async def get_github_pr(
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.post("/github/{repo_owner}/{repo_name}/pulls/{pr_number}/merge", response_model=GitHubMergeResult)
+@router.post(
+    "/github/{repo_owner}/{repo_name}/pulls/{pr_number}/merge", response_model=GitHubMergeResult
+)
 async def merge_github_pr(
     repo_owner: str,
     repo_name: str,
@@ -1094,7 +1114,10 @@ async def merge_github_pr(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/github/{repo_owner}/{repo_name}/pulls/{pr_number}/reviews", response_model=list[GitHubPRReview])
+@router.get(
+    "/github/{repo_owner}/{repo_name}/pulls/{pr_number}/reviews",
+    response_model=list[GitHubPRReview],
+)
 async def list_github_pr_reviews(
     repo_owner: str,
     repo_name: str,
@@ -1113,7 +1136,9 @@ async def list_github_pr_reviews(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/github/{repo_owner}/{repo_name}/pulls/{pr_number}/reviews", response_model=GitHubPRReview)
+@router.post(
+    "/github/{repo_owner}/{repo_name}/pulls/{pr_number}/reviews", response_model=GitHubPRReview
+)
 async def create_github_pr_review(
     repo_owner: str,
     repo_name: str,
@@ -1198,6 +1223,7 @@ async def list_github_branches(
 # Git Repository Registry Endpoints
 # =============================================================================
 
+
 @router.get("/repositories", response_model=GitRepositoryListResponse)
 async def list_repositories():
     """List all registered Git repositories."""
@@ -1209,6 +1235,7 @@ async def list_repositories():
 async def create_repository(request: GitRepositoryCreate):
     """Register a new Git repository."""
     from pathlib import Path
+
     from models.project import normalize_path
 
     # Normalize path
@@ -1246,6 +1273,7 @@ async def get_repository(repo_id: str):
 async def update_repository(repo_id: str, request: GitRepositoryUpdate):
     """Update a Git repository."""
     from pathlib import Path
+
     from models.project import normalize_path
 
     # Validate path if provided

@@ -1,15 +1,14 @@
 """RAG (Retrieval Augmented Generation) API routes."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
-from models.project import get_project, PROJECTS_REGISTRY
+from models.project import PROJECTS_REGISTRY, get_project
 from services.rag_service import (
-    get_vector_store,
-    IndexingResult,
     QueryResult,
+    get_vector_store,
 )
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
@@ -17,24 +16,25 @@ router = APIRouter(prefix="/rag", tags=["RAG"])
 
 class IndexRequest(BaseModel):
     """Request to index a project."""
+
     force_reindex: bool = Field(
-        default=False,
-        description="If true, clear existing index before re-indexing"
+        default=False, description="If true, clear existing index before re-indexing"
     )
 
 
 class QueryRequest(BaseModel):
     """Request to query project context."""
+
     query: str = Field(..., description="Search query")
     k: int = Field(default=5, ge=1, le=20, description="Number of results")
     filter_priority: str | None = Field(
-        default=None,
-        description="Filter by priority ('high' or 'normal')"
+        default=None, description="Filter by priority ('high' or 'normal')"
     )
 
 
 class IndexResponse(BaseModel):
     """Response from indexing operation."""
+
     project_id: str
     documents_indexed: int
     chunks_created: int
@@ -44,6 +44,7 @@ class IndexResponse(BaseModel):
 
 class StatsResponse(BaseModel):
     """Statistics for a project's vector store."""
+
     project_id: str
     collection_name: str
     document_count: int
@@ -73,15 +74,13 @@ async def index_project(
     project = get_project(project_id)
     if not project:
         raise HTTPException(
-            status_code=404,
-            detail=f"Project '{project_id}' not found. Register it first."
+            status_code=404, detail=f"Project '{project_id}' not found. Register it first."
         )
 
     # Check if already indexing
     if _indexing_status.get(project_id) == "indexing":
         raise HTTPException(
-            status_code=409,
-            detail=f"Project '{project_id}' is already being indexed"
+            status_code=409, detail=f"Project '{project_id}' is already being indexed"
         )
 
     _indexing_status[project_id] = "indexing"
@@ -102,7 +101,7 @@ async def index_project(
         # Update project registry to mark as indexed
         if project_id in PROJECTS_REGISTRY:
             PROJECTS_REGISTRY[project_id].vector_store_initialized = True
-            PROJECTS_REGISTRY[project_id].indexed_at = datetime.now(timezone.utc).isoformat()
+            PROJECTS_REGISTRY[project_id].indexed_at = datetime.now(UTC).isoformat()
 
         return IndexResponse(
             project_id=result.project_id,
@@ -114,10 +113,7 @@ async def index_project(
 
     except Exception as e:
         _indexing_status[project_id] = f"error: {str(e)}"
-        raise HTTPException(
-            status_code=500,
-            detail=f"Indexing failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Indexing failed: {str(e)}")
 
 
 @router.post("/projects/{project_id}/query", response_model=QueryResult)
@@ -133,10 +129,7 @@ async def query_project(
     # Check if project exists
     project = get_project(project_id)
     if not project:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Project '{project_id}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
 
     try:
         store = get_vector_store()
@@ -150,10 +143,7 @@ async def query_project(
         return result
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Query failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
 
 
 @router.get("/projects/{project_id}/stats", response_model=StatsResponse)
@@ -166,10 +156,7 @@ async def get_project_stats(project_id: str) -> StatsResponse:
     # Check if project exists
     project = get_project(project_id)
     if not project:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Project '{project_id}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
 
     try:
         store = get_vector_store()
@@ -184,10 +171,7 @@ async def get_project_stats(project_id: str) -> StatsResponse:
         )
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get stats: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
 
 
 @router.delete("/projects/{project_id}/index")
@@ -200,10 +184,7 @@ async def delete_project_index(project_id: str) -> dict:
     # Check if project exists
     project = get_project(project_id)
     if not project:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Project '{project_id}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
 
     try:
         store = get_vector_store()
@@ -220,10 +201,7 @@ async def delete_project_index(project_id: str) -> dict:
             return {"message": f"No index found for project '{project_id}'"}
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to delete index: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to delete index: {str(e)}")
 
 
 @router.get("/status/{project_id}")

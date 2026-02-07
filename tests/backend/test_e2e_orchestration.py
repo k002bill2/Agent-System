@@ -64,15 +64,10 @@ class TestTaskExecution:
 
     async def test_simple_task_submission(self, engine, session_id):
         """Test submitting a simple task."""
-        # Mock LLM response for faster testing
-        with patch.object(engine.llm, "ainvoke", new_callable=AsyncMock) as mock_llm:
-            mock_response = MagicMock()
-            mock_response.content = "Test task analyzed. This is a simple task."
-            mock_llm.return_value = mock_response
-
-            # Note: Full execution requires LLM, so we test state updates
-            state = await engine.get_session(session_id)
-            assert state is not None
+        # Test state retrieval without LLM invocation
+        # Full execution requires a running LLM, so we verify state management
+        state = await engine.get_session(session_id)
+        assert state is not None
 
     async def test_message_added_to_state(self, engine, session_id):
         """Test that user message is added to state."""
@@ -177,8 +172,10 @@ class TestTokenTracking:
 
     async def test_cost_model_exists(self):
         """Test cost model is defined."""
-        from models.cost import COST_PER_1K_TOKENS
+        from models.cost import get_model_cost
 
-        assert "claude-sonnet-4-20250514" in COST_PER_1K_TOKENS
-        assert "input" in COST_PER_1K_TOKENS["claude-sonnet-4-20250514"]
-        assert "output" in COST_PER_1K_TOKENS["claude-sonnet-4-20250514"]
+        cost = get_model_cost("claude-sonnet-4-20250514")
+        assert "input" in cost
+        assert "output" in cost
+        assert cost["input"] > 0
+        assert cost["output"] > 0

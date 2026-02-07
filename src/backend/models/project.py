@@ -4,6 +4,7 @@ import json
 import logging
 import re
 from pathlib import Path
+
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ def normalize_path(path: str) -> str:
 
     # Remove backslash escapes (\ followed by space, ~, or other chars)
     # Pattern: backslash followed by a character that would be escaped in shell
-    normalized = re.sub(r'\\(.)', r'\1', path)
+    normalized = re.sub(r"\\(.)", r"\1", path)
 
     return normalized
 
@@ -49,6 +50,7 @@ class Project(BaseModel):
     git_path: str | None = None  # Separate Git repository path (if different from project path)
     git_enabled: bool = False  # Whether Git is configured for this project
     sort_order: int = 0  # Display order (lower numbers first)
+    organization_id: str | None = None  # Organization this project belongs to
 
     @classmethod
     def from_path(cls, project_id: str, project_path: str) -> "Project":
@@ -78,11 +80,13 @@ class Project(BaseModel):
         # Load saved metadata from .aos-project.json (takes priority)
         metadata = _load_project_metadata(path)
         sort_order = 0
+        organization_id = None
         if metadata:
             name = metadata.get("name", name)
             description = metadata.get("description", description)
             git_path = metadata.get("git_path")
             sort_order = metadata.get("sort_order", 0)
+            organization_id = metadata.get("organization_id")
 
         # Determine effective Git path and check if it's a valid repo
         effective_git_path = git_path or str(path.resolve())
@@ -97,6 +101,7 @@ class Project(BaseModel):
             git_path=git_path,
             git_enabled=git_enabled,
             sort_order=sort_order,
+            organization_id=organization_id,
         )
 
 
@@ -105,6 +110,7 @@ class ProjectCreate(BaseModel):
 
     id: str = Field(..., description="Unique project identifier")
     path: str = Field(..., description="Filesystem path to project")
+    organization_id: str | None = Field(None, description="Organization ID")
 
 
 class ProjectResponse(BaseModel):
@@ -120,6 +126,7 @@ class ProjectResponse(BaseModel):
     git_path: str | None = None
     git_enabled: bool = False
     sort_order: int = 0
+    organization_id: str | None = None
 
 
 class ProjectUpdate(BaseModel):
@@ -144,7 +151,9 @@ class ProjectCreateFromTemplate(BaseModel):
     id: str = Field(..., description="Unique project identifier")
     name: str = Field(..., description="Project display name")
     description: str = ""
-    template: str = Field("default", description="Template name: default, react-native, python, fastapi")
+    template: str = Field(
+        "default", description="Template name: default, react-native, python, fastapi"
+    )
 
 
 # Registry of known projects
@@ -201,7 +210,8 @@ def _save_project_metadata(
     name: str,
     description: str,
     git_path: str | None = None,
-    sort_order: int | None = None
+    sort_order: int | None = None,
+    organization_id: str | None = None,
 ) -> bool:
     """Save project metadata to .aos-project.json."""
     metadata_file = project_path / AOS_METADATA_FILE
@@ -215,7 +225,13 @@ def _save_project_metadata(
             metadata["sort_order"] = sort_order
         elif "sort_order" in existing:
             metadata["sort_order"] = existing["sort_order"]
-        metadata_file.write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        if organization_id is not None:
+            metadata["organization_id"] = organization_id
+        elif "organization_id" in existing:
+            metadata["organization_id"] = existing["organization_id"]
+        metadata_file.write_text(
+            json.dumps(metadata, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
         logger.info(f"Saved project metadata to {metadata_file}")
         return True
     except OSError as e:
@@ -264,10 +280,7 @@ def update_project(
     # Save metadata to file for persistence
     if metadata_changed:
         _save_project_metadata(
-            Path(project.path),
-            project.name,
-            project.description,
-            project.git_path
+            Path(project.path), project.name, project.description, project.git_path
         )
 
     # 경로 변경 처리
@@ -315,11 +328,7 @@ def update_project_sort_order(project_id: str, sort_order: int) -> Project | Non
 
     # Save to metadata file
     _save_project_metadata(
-        Path(project.path),
-        project.name,
-        project.description,
-        project.git_path,
-        sort_order
+        Path(project.path), project.name, project.description, project.git_path, sort_order
     )
 
     return project

@@ -1,19 +1,16 @@
 """Rate limiting service using Redis sliding window algorithm."""
 
-import asyncio
 import time
 from datetime import datetime, timedelta
 from typing import Any
 
-from pydantic import BaseModel
-
 from models.rate_limit import (
-    RateLimitTier,
-    TierConfig,
     RATE_LIMIT_TIERS,
+    RateLimitOverride,
     RateLimitResult,
     RateLimitStatus,
-    RateLimitOverride,
+    RateLimitTier,
+    TierConfig,
 )
 
 
@@ -98,13 +95,9 @@ class RateLimitService:
         hour_key = f"{self._key_prefix}{identifier}:hour"
 
         if self.redis:
-            result = await self._check_redis(
-                identifier, config, minute_key, hour_key, now
-            )
+            result = await self._check_redis(identifier, config, minute_key, hour_key, now)
         else:
-            result = await self._check_memory(
-                identifier, config, minute_key, hour_key, now
-            )
+            result = await self._check_memory(identifier, config, minute_key, hour_key, now)
 
         # Calculate reset time and retry after
         if not result["allowed"]:
@@ -173,7 +166,9 @@ class RateLimitService:
 
         return {
             "allowed": allowed,
-            "minute_remaining": max(0, config.requests_per_minute - minute_count - (1 if allowed else 0)),
+            "minute_remaining": max(
+                0, config.requests_per_minute - minute_count - (1 if allowed else 0)
+            ),
             "hour_remaining": max(0, config.requests_per_hour - hour_count - (1 if allowed else 0)),
         }
 
@@ -217,7 +212,9 @@ class RateLimitService:
 
         return {
             "allowed": allowed,
-            "minute_remaining": max(0, config.requests_per_minute - minute_count - (1 if allowed else 0)),
+            "minute_remaining": max(
+                0, config.requests_per_minute - minute_count - (1 if allowed else 0)
+            ),
             "hour_remaining": max(0, config.requests_per_hour - hour_count - (1 if allowed else 0)),
         }
 
@@ -297,10 +294,7 @@ class RateLimitService:
         """List all active overrides."""
         now = datetime.utcnow()
         # Clean up expired overrides
-        expired = [
-            k for k, v in self._overrides.items()
-            if v.expires_at and v.expires_at < now
-        ]
+        expired = [k for k, v in self._overrides.items() if v.expires_at and v.expires_at < now]
         for k in expired:
             del self._overrides[k]
         return list(self._overrides.values())

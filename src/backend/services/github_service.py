@@ -2,15 +2,15 @@
 
 import logging
 import os
-from datetime import datetime
 from typing import Any
 
 from config import get_settings
 
 try:
-    from github import Github, GithubException, Auth
+    from github import Auth, Github, GithubException
     from github.PullRequest import PullRequest
     from github.Repository import Repository
+
     GITHUB_AVAILABLE = True
 except ImportError:
     GITHUB_AVAILABLE = False
@@ -21,9 +21,9 @@ except ImportError:
     Repository = None
 
 from models.git import (
-    GitHubPullRequest,
-    GitHubPRReview,
     GitHubMergeResult,
+    GitHubPRReview,
+    GitHubPullRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,17 +31,14 @@ logger = logging.getLogger(__name__)
 
 class GitHubServiceError(Exception):
     """GitHub service specific error."""
+
     pass
 
 
 class GitHubService:
     """Service for GitHub API operations using PyGithub."""
 
-    def __init__(
-        self,
-        token: str | None = None,
-        default_repo: str | None = None
-    ):
+    def __init__(self, token: str | None = None, default_repo: str | None = None):
         """Initialize GitHub service.
 
         Args:
@@ -49,9 +46,7 @@ class GitHubService:
             default_repo: Default repository in "owner/repo" format
         """
         if not GITHUB_AVAILABLE:
-            raise GitHubServiceError(
-                "PyGithub is not installed. Run: pip install PyGithub"
-            )
+            raise GitHubServiceError("PyGithub is not installed. Run: pip install PyGithub")
 
         settings = get_settings()
         self.token = token or settings.github_token or os.getenv("GITHUB_TOKEN")
@@ -66,7 +61,7 @@ class GitHubService:
             auth = Auth.Token(self.token)
             self.github = Github(auth=auth)
             # Verify authentication
-            self.github.get_user().login
+            _ = self.github.get_user().login
         except GithubException as e:
             raise GitHubServiceError(f"GitHub authentication failed: {e}")
 
@@ -100,7 +95,7 @@ class GitHubService:
         head: str | None = None,
         sort: str = "created",
         direction: str = "desc",
-        limit: int = 30
+        limit: int = 30,
     ) -> list[GitHubPullRequest]:
         """List pull requests.
 
@@ -138,11 +133,7 @@ class GitHubService:
         except GithubException as e:
             raise GitHubServiceError(f"Failed to list pull requests: {e}")
 
-    def get_pull_request(
-        self,
-        pr_number: int,
-        repo: str | None = None
-    ) -> GitHubPullRequest:
+    def get_pull_request(self, pr_number: int, repo: str | None = None) -> GitHubPullRequest:
         """Get a specific pull request.
 
         Args:
@@ -167,7 +158,7 @@ class GitHubService:
         base: str = "main",
         body: str = "",
         draft: bool = False,
-        repo: str | None = None
+        repo: str | None = None,
     ) -> GitHubPullRequest:
         """Create a new pull request.
 
@@ -203,7 +194,7 @@ class GitHubService:
         body: str | None = None,
         state: str | None = None,
         base: str | None = None,
-        repo: str | None = None
+        repo: str | None = None,
     ) -> GitHubPullRequest:
         """Update a pull request.
 
@@ -247,7 +238,7 @@ class GitHubService:
         merge_method: str = "merge",
         commit_title: str | None = None,
         commit_message: str | None = None,
-        repo: str | None = None
+        repo: str | None = None,
     ) -> GitHubMergeResult:
         """Merge a pull request.
 
@@ -292,11 +283,7 @@ class GitHubService:
                 message=f"Failed to merge: {e}",
             )
 
-    def check_pr_mergeable(
-        self,
-        pr_number: int,
-        repo: str | None = None
-    ) -> dict[str, Any]:
+    def check_pr_mergeable(self, pr_number: int, repo: str | None = None) -> dict[str, Any]:
         """Check if a PR is mergeable.
 
         Args:
@@ -323,11 +310,7 @@ class GitHubService:
     # PR Review Operations
     # =========================================================================
 
-    def list_pr_reviews(
-        self,
-        pr_number: int,
-        repo: str | None = None
-    ) -> list[GitHubPRReview]:
+    def list_pr_reviews(self, pr_number: int, repo: str | None = None) -> list[GitHubPRReview]:
         """List reviews on a pull request.
 
         Args:
@@ -345,15 +328,17 @@ class GitHubService:
 
             result: list[GitHubPRReview] = []
             for review in reviews:
-                result.append(GitHubPRReview(
-                    id=review.id,
-                    user_login=review.user.login if review.user else "unknown",
-                    user_avatar_url=review.user.avatar_url if review.user else None,
-                    state=review.state,
-                    body=review.body or "",
-                    submitted_at=review.submitted_at,
-                    commit_id=review.commit_id,
-                ))
+                result.append(
+                    GitHubPRReview(
+                        id=review.id,
+                        user_login=review.user.login if review.user else "unknown",
+                        user_avatar_url=review.user.avatar_url if review.user else None,
+                        state=review.state,
+                        body=review.body or "",
+                        submitted_at=review.submitted_at,
+                        commit_id=review.commit_id,
+                    )
+                )
 
             return result
 
@@ -361,11 +346,7 @@ class GitHubService:
             raise GitHubServiceError(f"Failed to list reviews: {e}")
 
     def create_pr_review(
-        self,
-        pr_number: int,
-        body: str = "",
-        event: str = "COMMENT",
-        repo: str | None = None
+        self, pr_number: int, body: str = "", event: str = "COMMENT", repo: str | None = None
     ) -> GitHubPRReview:
         """Create a review on a pull request.
 
@@ -401,12 +382,7 @@ class GitHubService:
     # Branch Operations
     # =========================================================================
 
-    def create_remote_branch(
-        self,
-        branch_name: str,
-        sha: str,
-        repo: str | None = None
-    ) -> bool:
+    def create_remote_branch(self, branch_name: str, sha: str, repo: str | None = None) -> bool:
         """Create a new branch on remote.
 
         Args:
@@ -426,11 +402,7 @@ class GitHubService:
         except GithubException as e:
             raise GitHubServiceError(f"Failed to create branch: {e}")
 
-    def delete_remote_branch(
-        self,
-        branch_name: str,
-        repo: str | None = None
-    ) -> bool:
+    def delete_remote_branch(self, branch_name: str, repo: str | None = None) -> bool:
         """Delete a branch on remote.
 
         Args:
@@ -450,9 +422,7 @@ class GitHubService:
             raise GitHubServiceError(f"Failed to delete branch: {e}")
 
     def get_branch_protection(
-        self,
-        branch_name: str,
-        repo: str | None = None
+        self, branch_name: str, repo: str | None = None
     ) -> dict[str, Any] | None:
         """Get branch protection rules.
 
@@ -510,9 +480,7 @@ class GitHubService:
         }
 
     def list_branches(
-        self,
-        repo: str | None = None,
-        protected: bool | None = None
+        self, repo: str | None = None, protected: bool | None = None
     ) -> list[dict[str, Any]]:
         """List repository branches.
 
@@ -533,11 +501,13 @@ class GitHubService:
                 if protected is not None and branch.protected != protected:
                     continue
 
-                result.append({
-                    "name": branch.name,
-                    "protected": branch.protected,
-                    "commit_sha": branch.commit.sha,
-                })
+                result.append(
+                    {
+                        "name": branch.name,
+                        "protected": branch.protected,
+                        "commit_sha": branch.commit.sha,
+                    }
+                )
 
             return result
 
@@ -587,8 +557,7 @@ class GitHubService:
 
 
 def get_github_service(
-    token: str | None = None,
-    default_repo: str | None = None
+    token: str | None = None, default_repo: str | None = None
 ) -> GitHubService | None:
     """Factory function to get GitHubService instance.
 

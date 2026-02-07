@@ -1,6 +1,6 @@
 """Notification API routes."""
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,14 +8,12 @@ from db.database import get_db
 from models.notification import (
     NotificationChannel,
     NotificationEventType,
+    NotificationMessage,
     NotificationRule,
     NotificationRuleCreate,
     NotificationRuleUpdate,
-    NotificationMessage,
-    ChannelConfig,
 )
-from services.notification_service import NotificationService, USE_DATABASE
-
+from services.notification_service import USE_DATABASE, NotificationService
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -54,7 +52,9 @@ async def create_rule(data: NotificationRuleCreate, db: AsyncSession = Depends(g
 
 
 @router.put("/rules/{rule_id}", response_model=NotificationRule)
-async def update_rule(rule_id: str, data: NotificationRuleUpdate, db: AsyncSession = Depends(get_db)):
+async def update_rule(
+    rule_id: str, data: NotificationRuleUpdate, db: AsyncSession = Depends(get_db)
+):
     """Update an existing notification rule."""
     if USE_DATABASE:
         rule = await NotificationService.update_rule_async(db, rule_id, data)
@@ -90,6 +90,7 @@ async def toggle_rule(rule_id: str, db: AsyncSession = Depends(get_db)):
     # Toggle and save
     if USE_DATABASE:
         from models.notification import NotificationRuleUpdate
+
         await NotificationService.update_rule_async(
             db, rule_id, NotificationRuleUpdate(enabled=not rule.enabled)
         )
@@ -132,7 +133,10 @@ async def list_channels(db: AsyncSession = Depends(get_db)):
         # Email requires SMTP settings, others require webhook/API key
         if channel == NotificationChannel.EMAIL:
             is_configured = bool(
-                config.email_address and config.smtp_host and config.smtp_username and config.smtp_password
+                config.email_address
+                and config.smtp_host
+                and config.smtp_username
+                and config.smtp_password
             )
         else:
             is_configured = bool(config.webhook_url or config.api_key)
@@ -156,19 +160,22 @@ async def list_channels(db: AsyncSession = Depends(get_db)):
                 # Mask webhook URL but show domain
                 try:
                     from urllib.parse import urlparse
+
                     parsed = urlparse(config.webhook_url)
                     config_summary["webhook_url"] = f"{parsed.scheme}://{parsed.netloc}/..."
                 except Exception:
                     config_summary["webhook_url"] = "configured"
 
-        channels.append({
-            "channel": channel.value,
-            "enabled": config.enabled,
-            "configured": is_configured,
-            "rate_limit_per_hour": config.rate_limit_per_hour,
-            "sent_this_hour": config.sent_this_hour,
-            "config_summary": config_summary,
-        })
+        channels.append(
+            {
+                "channel": channel.value,
+                "enabled": config.enabled,
+                "configured": is_configured,
+                "rate_limit_per_hour": config.rate_limit_per_hour,
+                "sent_this_hour": config.sent_this_hour,
+                "config_summary": config_summary,
+            }
+        )
     return {"channels": channels}
 
 
@@ -197,7 +204,9 @@ async def get_channel_config(channel: NotificationChannel, db: AsyncSession = De
 
 
 @router.put("/channels/{channel}")
-async def update_channel_config(channel: NotificationChannel, data: ChannelConfigRequest, db: AsyncSession = Depends(get_db)):
+async def update_channel_config(
+    channel: NotificationChannel, data: ChannelConfigRequest, db: AsyncSession = Depends(get_db)
+):
     """Update configuration for a notification channel."""
     if USE_DATABASE:
         config = await NotificationService.get_channel_config_async(db, channel)
@@ -328,9 +337,7 @@ async def list_event_types():
 async def list_priorities():
     """Get available notification priorities."""
     from models.notification import NotificationPriority
+
     return {
-        "priorities": [
-            {"value": p.value, "label": p.value.title()}
-            for p in NotificationPriority
-        ]
+        "priorities": [{"value": p.value, "label": p.value.title()} for p in NotificationPriority]
     }

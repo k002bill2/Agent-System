@@ -1,15 +1,15 @@
 """Dependency injection for API routes."""
 
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from orchestrator import OrchestrationEngine
 from db.database import async_session_factory
-from db.repository import SessionRepository, TaskRepository, MessageRepository, ApprovalRepository
 from db.models import UserModel
+from db.repository import ApprovalRepository, MessageRepository, SessionRepository, TaskRepository
+from orchestrator import OrchestrationEngine
 from services.auth_service import AuthService
 
 # Global engine instance

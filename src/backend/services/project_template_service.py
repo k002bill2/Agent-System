@@ -1,7 +1,7 @@
 """Project template service for creating new projects from templates."""
 
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass

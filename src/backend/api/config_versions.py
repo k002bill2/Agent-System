@@ -5,16 +5,15 @@ from fastapi import APIRouter, HTTPException, Query
 from models.config_version import (
     ConfigType,
     ConfigVersion,
-    ConfigVersionCreate,
     ConfigVersionCompare,
+    ConfigVersionCreate,
     ConfigVersionHistory,
-    VersionStatus,
+    ConfigVersionStats,
     RollbackRequest,
     RollbackResult,
-    ConfigVersionStats,
+    VersionStatus,
 )
 from services.version_service import VersionService
-
 
 router = APIRouter(prefix="/config-versions", tags=["config-versions"])
 

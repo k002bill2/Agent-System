@@ -7,8 +7,7 @@ Firebase Auth, Firestore, Cloud Functions, REST API 연동,
 import time
 from typing import Any
 
-from agents.base import BaseAgent, AgentConfig, AgentResult
-
+from agents.base import AgentConfig, AgentResult, BaseAgent
 
 BACKEND_SYSTEM_PROMPT = """You are a Backend Integration Specialist Agent, an expert in Firebase services and API integration for React Native applications.
 
@@ -216,16 +215,18 @@ class BackendIntegrationAgent(BaseAgent):
                         if first_line.strip() in ["typescript", "ts", "javascript", "js", "json"]:
                             lang = first_line.strip()
                             content = "\n".join(part.split("\n")[1:])
-                    code_blocks.append({
-                        "language": lang or "typescript",
-                        "content": content.strip(),
-                    })
+                    code_blocks.append(
+                        {
+                            "language": lang or "typescript",
+                            "content": content.strip(),
+                        }
+                    )
 
         # 보안 관련 내용 추출
         security_notes = []
         if "security" in result.lower():
             lines = result.split("\n")
-            for i, line in enumerate(lines):
+            for _i, line in enumerate(lines):
                 if "security" in line.lower():
                     security_notes.append(line.strip())
 
@@ -253,16 +254,13 @@ class BackendIntegrationAgent(BaseAgent):
         Returns:
             AgentResult with Firestore service code
         """
-        schema_str = "\n".join(
-            f"  {field}: {ftype};"
-            for field, ftype in document_schema.items()
-        )
+        schema_str = "\n".join(f"  {field}: {ftype};" for field, ftype in document_schema.items())
 
         task = f"""Create a Firestore service for the '{collection_name}' collection.
 
 Document Schema:
 ```typescript
-interface {collection_name.title().replace('_', '')} {{
+interface {collection_name.title().replace("_", "")} {{
 {schema_str}
 }}
 ```
@@ -331,8 +329,7 @@ Include:
             AgentResult with API client code
         """
         endpoints_str = "\n".join(
-            f"- {e['method']} {e['path']}: {e.get('description', '')}"
-            for e in endpoints
+            f"- {e['method']} {e['path']}: {e.get('description', '')}" for e in endpoints
         )
 
         task = f"""Design an API client for the following REST API:

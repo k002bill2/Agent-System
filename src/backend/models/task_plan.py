@@ -1,6 +1,7 @@
 """Task planning schemas for LLM-based task decomposition."""
 
 from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -10,33 +11,26 @@ class SubtaskPlan(BaseModel):
     title: str = Field(..., description="Short, descriptive title for the subtask")
     description: str = Field(..., description="Detailed description of what needs to be done")
     estimated_effort: Literal["low", "medium", "high"] = Field(
-        default="medium",
-        description="Estimated effort level for this subtask"
+        default="medium", description="Estimated effort level for this subtask"
     )
     dependencies: list[str] = Field(
         default_factory=list,
-        description="List of subtask titles that must be completed before this one"
+        description="List of subtask titles that must be completed before this one",
     )
     required_tools: list[str] = Field(
-        default_factory=list,
-        description="List of tools that may be needed for this subtask"
+        default_factory=list, description="List of tools that may be needed for this subtask"
     )
 
 
 class TaskPlanResult(BaseModel):
     """Result of LLM task decomposition."""
 
-    analysis: str = Field(
-        ...,
-        description="Brief analysis of the task and approach"
-    )
+    analysis: str = Field(..., description="Brief analysis of the task and approach")
     is_complex: bool = Field(
-        default=True,
-        description="Whether the task requires multiple subtasks"
+        default=True, description="Whether the task requires multiple subtasks"
     )
     subtasks: list[SubtaskPlan] = Field(
-        default_factory=list,
-        description="List of subtasks to execute"
+        default_factory=list, description="List of subtasks to execute"
     )
 
 

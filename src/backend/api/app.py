@@ -14,7 +14,7 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 
 # Initialize structured logging (optional - graceful fallback)
 try:
-    from services.logging_service import setup_logging, get_logger, request_id_var
+    from services.logging_service import get_logger, request_id_var, setup_logging
 
     setup_logging()
     logger = get_logger("aos.app")
@@ -108,8 +108,9 @@ else:
 
     # Optional orchestrator
     try:
-        from api.deps import set_engine, clear_engine
+        from api.deps import clear_engine, set_engine
         from orchestrator import OrchestrationEngine
+
         ORCHESTRATOR_ENABLED = True
     except ImportError as e:
         print(f"⚠️  Orchestrator disabled: {e}")
@@ -118,6 +119,7 @@ else:
     # Optional project init
     try:
         from models.project import init_projects
+
         PROJECTS_ENABLED = True
     except ImportError as e:
         print(f"⚠️  Projects disabled: {e}")
@@ -136,6 +138,7 @@ else:
         if USE_DATABASE:
             try:
                 from db.database import init_db
+
                 await init_db()
                 if logger:
                     logger.info("database_initialized", type="postgresql")
@@ -192,6 +195,7 @@ else:
         if USE_DATABASE:
             try:
                 from db.database import close_db
+
                 await close_db()
                 if logger:
                     logger.info("database_connection_closed")

@@ -174,6 +174,18 @@ GOOGLE_API_KEY=<your-api-key>
 | `LOG_LEVEL` | 로그 레벨 | `INFO` |
 | `ENV` | 환경 (production/staging) | `production` |
 
+### Claude Code Usage 환경 변수
+
+Plan Usage Limits 대시보드에서 사용하는 설정입니다. 로컬 개발 시에는 macOS Keychain에서 자동으로 토큰을 추출하지만, 배포 환경에서는 환경 변수로 설정해야 합니다.
+
+| 변수 | 설명 | 기본값 |
+|------|------|--------|
+| `CLAUDE_OAUTH_TOKEN` | Anthropic Usage API OAuth 토큰 | macOS Keychain 자동 추출 |
+| `CLAUDE_STATS_CACHE_PATH` | Claude Code stats-cache.json 경로 | `~/.claude/stats-cache.json` |
+| `CLAUDE_USAGE_CACHE_PATH` | Usage API 응답 캐시 경로 | `~/.claude/aos-usage-cache.json` |
+
+> **Note**: `CLAUDE_OAUTH_TOKEN`은 non-macOS 환경(Linux 서버, Docker 등)에서 필수입니다. macOS에서는 설정하지 않으면 Keychain에서 자동 추출됩니다.
+
 ### 모니터링 환경 변수
 
 | 변수 | 설명 |

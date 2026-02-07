@@ -4,10 +4,10 @@
 Lead Orchestrator가 적절한 에이전트를 선택할 때 사용합니다.
 """
 
-from dataclasses import dataclass, field
+from collections.abc import Callable
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, TypeVar
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -462,9 +462,14 @@ class AgentRegistry:
 
             # 성공률 업데이트 (이동 평균)
             alpha = 0.1
-            agent.success_rate = alpha * (1.0 if success else 0.0) + (1 - alpha) * agent.success_rate
+            agent.success_rate = (
+                alpha * (1.0 if success else 0.0) + (1 - alpha) * agent.success_rate
+            )
 
-            if agent.status == AgentStatus.BUSY and len(agent.current_tasks) < agent.max_concurrent_tasks:
+            if (
+                agent.status == AgentStatus.BUSY
+                and len(agent.current_tasks) < agent.max_concurrent_tasks
+            ):
                 agent.status = AgentStatus.AVAILABLE
             return True
         return False
@@ -477,8 +482,7 @@ class AgentRegistry:
             "available_agents": sum(1 for a in agents if a.is_available()),
             "busy_agents": sum(1 for a in agents if a.status == AgentStatus.BUSY),
             "by_category": {
-                cat.value: sum(1 for a in agents if a.category == cat)
-                for cat in AgentCategory
+                cat.value: sum(1 for a in agents if a.category == cat) for cat in AgentCategory
             },
             "total_tasks_completed": sum(a.total_tasks_completed for a in agents),
             "avg_success_rate": sum(a.success_rate for a in agents) / len(agents) if agents else 0,

@@ -1,14 +1,16 @@
 """Human-in-the-Loop (HITL) approval system models."""
 
 import re
-from enum import Enum
-from typing import Any, Literal
 from datetime import datetime
+from enum import Enum
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
 class RiskLevel(str, Enum):
     """Risk level for operations."""
+
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -17,6 +19,7 @@ class RiskLevel(str, Enum):
 
 class ApprovalStatus(str, Enum):
     """Status of an approval request."""
+
     PENDING = "pending"
     APPROVED = "approved"
     DENIED = "denied"
@@ -69,18 +72,18 @@ TOOL_RISK_CONFIG: dict[str, OperationRisk] = {
         description="Shell command execution can modify system state",
         patterns=[
             r"rm\s+(-rf?|--recursive)",  # Recursive delete
-            r"sudo\s+",                   # Sudo commands
-            r"chmod\s+",                  # Permission changes
-            r"chown\s+",                  # Ownership changes
-            r"mkfs\.",                    # Filesystem creation
-            r"dd\s+if=",                  # Disk operations
-            r">\s*/dev/",                 # Device writes
-            r"curl.*\|\s*(ba)?sh",        # Pipe to shell
-            r"wget.*\|\s*(ba)?sh",        # Pipe to shell
-            r"npm\s+publish",             # Package publish
-            r"git\s+push\s+.*--force",    # Force push
-            r"docker\s+rm",               # Docker remove
-            r"kubectl\s+delete",          # K8s delete
+            r"sudo\s+",  # Sudo commands
+            r"chmod\s+",  # Permission changes
+            r"chown\s+",  # Ownership changes
+            r"mkfs\.",  # Filesystem creation
+            r"dd\s+if=",  # Disk operations
+            r">\s*/dev/",  # Device writes
+            r"curl.*\|\s*(ba)?sh",  # Pipe to shell
+            r"wget.*\|\s*(ba)?sh",  # Pipe to shell
+            r"npm\s+publish",  # Package publish
+            r"git\s+push\s+.*--force",  # Force push
+            r"docker\s+rm",  # Docker remove
+            r"kubectl\s+delete",  # K8s delete
         ],
     ),
     "write_file": OperationRisk(
@@ -89,14 +92,14 @@ TOOL_RISK_CONFIG: dict[str, OperationRisk] = {
         requires_approval=False,  # Default: no approval needed
         description="File creation/overwrite",
         patterns=[
-            r"\.env",           # Environment files
-            r"\.ssh/",          # SSH config
-            r"/etc/",           # System config
-            r"\.bashrc",        # Shell config
-            r"\.zshrc",         # Shell config
-            r"credentials",     # Credential files
-            r"password",        # Password files
-            r"secret",          # Secret files
+            r"\.env",  # Environment files
+            r"\.ssh/",  # SSH config
+            r"/etc/",  # System config
+            r"\.bashrc",  # Shell config
+            r"\.zshrc",  # Shell config
+            r"credentials",  # Credential files
+            r"password",  # Password files
+            r"secret",  # Secret files
         ],
     ),
     "edit_file": OperationRisk(
@@ -105,9 +108,9 @@ TOOL_RISK_CONFIG: dict[str, OperationRisk] = {
         requires_approval=False,
         description="File modification",
         patterns=[
-            r"\.env",           # Environment files
-            r"\.ssh/",          # SSH config
-            r"/etc/",           # System config
+            r"\.env",  # Environment files
+            r"\.ssh/",  # SSH config
+            r"/etc/",  # System config
         ],
     ),
 }
@@ -169,7 +172,9 @@ def assess_operation_risk(
             risk_level = RiskLevel.HIGH
 
         requires_approval = True
-        risk_description = f"{risk_config.description} - Matched dangerous patterns: {matched_patterns}"
+        risk_description = (
+            f"{risk_config.description} - Matched dangerous patterns: {matched_patterns}"
+        )
 
     return risk_level, requires_approval, risk_description
 

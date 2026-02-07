@@ -14,12 +14,12 @@ Reference:
 """
 
 import os
-from pathlib import Path
 import subprocess
-import yaml
 import urllib.parse
 from datetime import datetime
+from pathlib import Path
 
+import yaml
 
 # Docker mode: CLAUDE_HOME is set in Docker environment
 IS_DOCKER = bool(os.getenv("CLAUDE_HOME"))
@@ -88,29 +88,25 @@ class WarpService:
         # Escape for expect's `send` command:
         # - backslash, double-quote, square brackets (expect special chars)
         escaped_task = (
-            task
-            .replace("\\", "\\\\")
-            .replace('"', '\\"')
-            .replace("[", "\\[")
-            .replace("$", "\\$")
+            task.replace("\\", "\\\\").replace('"', '\\"').replace("[", "\\[").replace("$", "\\$")
         )
 
         script_content = (
-            f'#!/usr/bin/expect -f\n'
-            f'set timeout {CLAUDE_STARTUP_TIMEOUT}\n'
-            f'spawn claude --dangerously-skip-permissions\n'
-            f'\n'
-            f'# Wait for Claude CLI to be fully ready\n'
-            f'expect {{\n'
+            f"#!/usr/bin/expect -f\n"
+            f"set timeout {CLAUDE_STARTUP_TIMEOUT}\n"
+            f"spawn claude --dangerously-skip-permissions\n"
+            f"\n"
+            f"# Wait for Claude CLI to be fully ready\n"
+            f"expect {{\n"
             f'    "*{CLAUDE_READY_PATTERN}*" {{\n'
-            f'        sleep {CLAUDE_POST_MATCH_DELAY}\n'
+            f"        sleep {CLAUDE_POST_MATCH_DELAY}\n"
             f'        send "{escaped_task}\\r"\n'
-            f'    }}\n'
-            f'    timeout {{\n'
+            f"    }}\n"
+            f"    timeout {{\n"
             f'        send_user "\\nClaude CLI startup timeout. Please type manually.\\n"\n'
-            f'    }}\n'
-            f'}}\n'
-            f'interact\n'
+            f"    }}\n"
+            f"}}\n"
+            f"interact\n"
         )
 
         # Ensure directory exists and write the script

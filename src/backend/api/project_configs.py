@@ -4,11 +4,9 @@ Provides endpoints to monitor and control Claude Code project configurations
 (skills, agents, MCP servers) across multiple projects.
 """
 
-import asyncio
-import json
 import logging
 import os
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -18,7 +16,6 @@ from models.project_config import (
     AgentContentResponse,
     AgentCreateRequest,
     AgentUpdateRequest,
-    ConfigChangeEvent,
     CopyAgentRequest,
     CopyHookRequest,
     CopyMCPRequest,
@@ -32,7 +29,6 @@ from models.project_config import (
     MCPToggleRequest,
     ProjectConfigResponse,
     ProjectConfigSummary,
-    ProjectInfo,
     SkillConfig,
     SkillContentResponse,
     SkillCreateRequest,
@@ -509,9 +505,7 @@ async def create_agent(project_id: str, request: AgentCreateRequest) -> AgentCon
         Created agent configuration
     """
     monitor = get_project_config_monitor()
-    result = monitor.create_agent(
-        project_id, request.agent_id, request.content, request.is_shared
-    )
+    result = monitor.create_agent(project_id, request.agent_id, request.content, request.is_shared)
 
     if result is None:
         raise HTTPException(
@@ -665,9 +659,7 @@ async def disable_mcp_server(project_id: str, server_id: str) -> dict:
 
 
 @router.post("/{project_id}/mcp/{server_id}/toggle")
-async def toggle_mcp_server(
-    project_id: str, server_id: str, request: MCPToggleRequest
-) -> dict:
+async def toggle_mcp_server(project_id: str, server_id: str, request: MCPToggleRequest) -> dict:
     """Toggle MCP server enabled/disabled state.
 
     Args:
@@ -736,9 +728,7 @@ async def update_mcp_server(
 
 
 @router.post("/{project_id}/mcp", response_model=MCPServerConfig)
-async def create_mcp_server(
-    project_id: str, request: MCPServerCreateRequest
-) -> MCPServerConfig:
+async def create_mcp_server(project_id: str, request: MCPServerCreateRequest) -> MCPServerConfig:
     """Create a new MCP server configuration.
 
     Args:

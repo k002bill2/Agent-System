@@ -9,9 +9,10 @@ import os
 import sys
 import time
 import uuid
+from collections.abc import Callable
 from contextvars import ContextVar
 from functools import wraps
-from typing import Any, Callable
+from typing import Any
 
 import structlog
 from structlog.processors import JSONRenderer, TimeStamper, add_log_level

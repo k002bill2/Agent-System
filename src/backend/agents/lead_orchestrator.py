@@ -4,7 +4,6 @@
 병렬/순차 실행을 결정하고 결과를 집계합니다.
 """
 
-import asyncio
 import json
 import time
 import uuid
@@ -12,15 +11,11 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from langchain_core.messages import SystemMessage, HumanMessage
 from pydantic import BaseModel, Field
 
-from agents.base import BaseAgent, AgentConfig, AgentResult
+from agents.base import AgentConfig, AgentResult, BaseAgent
 from models.llm_models import LLMModelRegistry, LLMProvider
 from services.agent_registry import (
-    AgentRegistry,
-    AgentMetadata,
-    AgentCategory,
     EffortLevel,
     get_agent_registry,
 )
@@ -264,9 +259,7 @@ class LeadOrchestratorAgent(BaseAgent):
         if context:
             # 사용 가능한 에이전트 목록 추가
             available_agents = self._registry.get_available()
-            agent_info = "\n".join(
-                f"- {a.id}: {a.description}" for a in available_agents
-            )
+            agent_info = "\n".join(f"- {a.id}: {a.description}" for a in available_agents)
             context_str = f"""
 ## Available Agents
 {agent_info}
@@ -306,8 +299,8 @@ Remember to respond with valid JSON only."""
             subtasks = []
             for i, st_data in enumerate(subtasks_data):
                 subtask = SubtaskPlan(
-                    id=f"st-{i+1}",
-                    title=st_data.get("title", f"Subtask {i+1}"),
+                    id=f"st-{i + 1}",
+                    title=st_data.get("title", f"Subtask {i + 1}"),
                     description=st_data.get("description", ""),
                     assigned_agent_id=st_data.get("assigned_agent_id"),
                     dependencies=st_data.get("dependencies", []),
@@ -324,9 +317,7 @@ Remember to respond with valid JSON only."""
                 complexity_score=analysis_data.get("complexity_score", 5),
                 effort_level=EffortLevel(analysis_data.get("effort_level", "medium")),
                 requires_decomposition=analysis_data.get("requires_decomposition", False),
-                execution_strategy=ExecutionStrategy(
-                    data.get("execution_strategy", "sequential")
-                ),
+                execution_strategy=ExecutionStrategy(data.get("execution_strategy", "sequential")),
                 subtasks=subtasks,
                 context_summary=analysis_data.get("context_summary", ""),
                 key_requirements=analysis_data.get("key_requirements", []),
@@ -443,9 +434,9 @@ Remember to respond with valid JSON only."""
 
         while queue:
             # 우선순위가 높은 것 먼저
-            queue.sort(key=lambda x: next(
-                (st.priority for st in subtasks if st.id == x), 0
-            ), reverse=True)
+            queue.sort(
+                key=lambda x: next((st.priority for st in subtasks if st.id == x), 0), reverse=True
+            )
 
             current = queue.pop(0)
             result.append(current)
@@ -493,7 +484,7 @@ Remember to respond with valid JSON only."""
             else:  # MIXED
                 # 최대 3개씩 병렬
                 for i in range(0, len(ready), 3):
-                    groups.append(ready[i:i+3])
+                    groups.append(ready[i : i + 3])
 
             for st_id in ready:
                 completed.add(st_id)
@@ -513,10 +504,12 @@ Remember to respond with valid JSON only."""
             if result.get("success"):
                 successful.append(st_id)
             else:
-                failed.append({
-                    "subtask_id": st_id,
-                    "error": result.get("error"),
-                })
+                failed.append(
+                    {
+                        "subtask_id": st_id,
+                        "error": result.get("error"),
+                    }
+                )
 
         return {
             "total_subtasks": len(subtask_results),

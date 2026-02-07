@@ -1,27 +1,25 @@
 """Cost allocation API routes."""
 
+import csv
 import os
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Query, Depends, Response
-from pydantic import BaseModel
-import json
-import csv
 from io import StringIO
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import get_db
 from models.cost import (
-    CostCenter,
-    CostReport,
-    CostForecast,
-    ChargebackExport,
     BudgetAlert,
+    CostCenter,
+    CostForecast,
+    CostReport,
 )
 from services.cost_allocation_service import (
-    get_cost_allocation_service,
     CostAllocationService,
+    get_cost_allocation_service,
 )
-
 
 router = APIRouter(prefix="/cost", tags=["cost-allocation"])
 
@@ -249,27 +247,31 @@ async def export_chargeback(
     writer = csv.writer(output)
 
     # Header
-    writer.writerow([
-        "cost_center_id",
-        "cost_center_code",
-        "cost_center_name",
-        "total_cost_usd",
-        "total_sessions",
-        "input_tokens",
-        "output_tokens",
-    ])
+    writer.writerow(
+        [
+            "cost_center_id",
+            "cost_center_code",
+            "cost_center_name",
+            "total_cost_usd",
+            "total_sessions",
+            "input_tokens",
+            "output_tokens",
+        ]
+    )
 
     # Data rows
     for item in export.line_items:
-        writer.writerow([
-            item["cost_center_id"],
-            item["cost_center_code"],
-            item["cost_center_name"],
-            round(item["total_cost_usd"], 4),
-            item["total_sessions"],
-            item["input_tokens"],
-            item["output_tokens"],
-        ])
+        writer.writerow(
+            [
+                item["cost_center_id"],
+                item["cost_center_code"],
+                item["cost_center_name"],
+                round(item["total_cost_usd"], 4),
+                item["total_sessions"],
+                item["input_tokens"],
+                item["output_tokens"],
+            ]
+        )
 
     content = output.getvalue()
     filename = f"chargeback_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.csv"

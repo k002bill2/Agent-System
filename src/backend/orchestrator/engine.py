@@ -1,11 +1,11 @@
 """Orchestration engine for running the agent graph."""
 
-import asyncio
 import os
 import uuid
-from typing import AsyncIterator, Any
+from collections.abc import AsyncIterator
 
 from dotenv import load_dotenv
+
 from config import get_settings
 
 settings = get_settings()
@@ -15,7 +15,9 @@ load_dotenv()
 
 # LLM Provider selection
 # Prefer explicit env vars but fall back to Settings defaults
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", settings.llm_provider)  # "ollama", "anthropic", or "google"
+LLM_PROVIDER = os.getenv(
+    "LLM_PROVIDER", settings.llm_provider
+)  # "ollama", "anthropic", or "google"
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", settings.ollama_model)
 GOOGLE_MODEL = os.getenv("GOOGLE_MODEL", settings.google_model)
 
@@ -24,6 +26,7 @@ def get_llm():
     """Get LLM instance based on provider setting."""
     if LLM_PROVIDER == "anthropic":
         from langchain_anthropic import ChatAnthropic
+
         return ChatAnthropic(
             model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
             api_key=os.getenv("ANTHROPIC_API_KEY"),
@@ -34,9 +37,7 @@ def get_llm():
         # LangChain's ChatGoogleGenerativeAI expects an `api_key` argument or
         # GOOGLE_API_KEY / GEMINI_API_KEY in the environment.
         api_key = (
-            os.getenv("GOOGLE_API_KEY")
-            or os.getenv("GEMINI_API_KEY")
-            or settings.google_api_key
+            os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or settings.google_api_key
         )
         if not api_key:
             raise RuntimeError(
@@ -51,35 +52,39 @@ def get_llm():
         )
     else:
         from langchain_ollama import ChatOllama
+
         return ChatOllama(
             model=OLLAMA_MODEL,
             base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
         )
 
-from models.agent_state import AgentState, create_initial_state
+
+from models.agent_state import AgentState
 from models.message import (
+    AgentThinkingPayload,
+    ApprovalRequiredPayload,
     Message,
     MessageType,
-    TaskProgressPayload,
-    AgentThinkingPayload,
     StateUpdatePayload,
-    ApprovalRequiredPayload,
     TokenUpdatePayload,
 )
 from models.project import Project
-from orchestrator.graph import create_orchestrator_graph, compile_graph
-from orchestrator.nodes import OrchestratorNode, PlannerNode, ExecutorNode, ReviewerNode, SelfCorrectionNode
-from orchestrator.parallel_executor import ParallelExecutorNode
-from tools import ALL_TOOLS
-from services.session_service import SessionService, get_session_service
-from services.audit_service import (
-    AuditService,
-    AuditAction,
-    ResourceType,
-    audit_task_created,
-    audit_task_status_change,
-    audit_tool_executed,
+from orchestrator.graph import compile_graph, create_orchestrator_graph
+from orchestrator.nodes import (
+    ExecutorNode,
+    OrchestratorNode,
+    PlannerNode,
+    ReviewerNode,
+    SelfCorrectionNode,
 )
+from orchestrator.parallel_executor import ParallelExecutorNode
+from services.audit_service import (
+    AuditAction,
+    AuditService,
+    ResourceType,
+)
+from services.session_service import SessionService, get_session_service
+from tools import ALL_TOOLS
 
 
 class OrchestrationEngine:
@@ -144,6 +149,7 @@ class OrchestrationEngine:
         max_iterations: int = 100,
         project: Project | None = None,
         session_id: str | None = None,
+        organization_id: str | None = None,
     ) -> str:
         """Create a new orchestration session with optional project context."""
         # Create session via service (handles both memory and DB)
@@ -152,6 +158,7 @@ class OrchestrationEngine:
             max_iterations=max_iterations,
             project=project,
             session_id=session_id,
+            organization_id=organization_id,
         )
 
         # Also cache the state in memory for fast access
@@ -169,6 +176,7 @@ class OrchestrationEngine:
             new_value={
                 "max_iterations": max_iterations,
                 "project_id": project.id if project else None,
+                "organization_id": organization_id,
             },
         )
 
@@ -320,10 +328,14 @@ class OrchestrationEngine:
                 yield Message(
                     type=MessageType.STATE_UPDATE,
                     payload=StateUpdatePayload(
-                        tasks={k: v.model_dump() if hasattr(v, "model_dump") else v
-                               for k, v in state.get("tasks", {}).items()},
-                        agents={k: v.model_dump() if hasattr(v, "model_dump") else v
-                               for k, v in state.get("agents", {}).items()},
+                        tasks={
+                            k: v.model_dump() if hasattr(v, "model_dump") else v
+                            for k, v in state.get("tasks", {}).items()
+                        },
+                        agents={
+                            k: v.model_dump() if hasattr(v, "model_dump") else v
+                            for k, v in state.get("agents", {}).items()
+                        },
                         current_task_id=state.get("current_task_id"),
                         active_agent_id=state.get("active_agent_id"),
                     ).model_dump(),
@@ -375,10 +387,7 @@ class OrchestrationEngine:
         await self.session_service.update_session(session_id, state)
 
         # Update cost tracking in database
-        total_tokens = sum(
-            u.get("total_tokens", 0)
-            for u in state.get("token_usage", {}).values()
-        )
+        total_tokens = sum(u.get("total_tokens", 0) for u in state.get("token_usage", {}).values())
         await self.session_service.update_cost(
             session_id=session_id,
             total_tokens=total_tokens,
@@ -394,9 +403,7 @@ class OrchestrationEngine:
             type=MessageType.TASK_COMPLETED,
             payload={
                 "root_task_id": state.get("root_task_id"),
-                "result": state.get("tasks", {}).get(
-                    state.get("root_task_id", ""), {}
-                ),
+                "result": state.get("tasks", {}).get(state.get("root_task_id", ""), {}),
             },
             session_id=session_id,
         )

@@ -9,7 +9,7 @@ Supports multiple notification channels:
 
 import asyncio
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -37,7 +37,7 @@ class Alert(BaseModel):
     title: str
     message: str
     source: str = "aos-backend"
-    timestamp: datetime = datetime.now(timezone.utc)
+    timestamp: datetime = datetime.now(UTC)
     metadata: dict[str, Any] = {}
 
 

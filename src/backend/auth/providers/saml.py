@@ -4,7 +4,7 @@ import base64
 import uuid
 import zlib
 from datetime import datetime
-from urllib.parse import quote, urlencode
+from urllib.parse import urlencode
 from xml.etree import ElementTree as ET
 
 from auth.providers.base import AuthProvider, UserInfo
@@ -58,8 +58,10 @@ class SAMLAuthProvider(AuthProvider):
     def _load_config(self) -> SAMLConfig:
         """Load SAML configuration from settings."""
         return SAMLConfig(
-            sp_entity_id=self.settings.saml_sp_entity_id or f"{self.settings.frontend_url}/saml/metadata",
-            sp_acs_url=self.settings.saml_sp_acs_url or f"{self.settings.frontend_url}/api/auth/saml/acs",
+            sp_entity_id=self.settings.saml_sp_entity_id
+            or f"{self.settings.frontend_url}/saml/metadata",
+            sp_acs_url=self.settings.saml_sp_acs_url
+            or f"{self.settings.frontend_url}/api/auth/saml/acs",
         )
 
     @property

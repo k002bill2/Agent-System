@@ -13,19 +13,19 @@ from typing import Any
 
 import aiosmtplib
 import httpx
-from sqlalchemy import select, func, desc
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.notification import (
+    ChannelConfig,
     NotificationChannel,
+    NotificationCondition,
     NotificationEventType,
-    NotificationPriority,
     NotificationMessage,
+    NotificationPriority,
     NotificationRule,
     NotificationRuleCreate,
     NotificationRuleUpdate,
-    ChannelConfig,
-    NotificationCondition,
     format_notification,
 )
 
@@ -517,8 +517,9 @@ class NotificationService:
     @staticmethod
     async def delete_rule_async(db: AsyncSession, rule_id: str) -> bool:
         """Delete a rule from database."""
-        from db.models import NotificationRuleModel
         from sqlalchemy import delete
+
+        from db.models import NotificationRuleModel
 
         result = await db.execute(
             delete(NotificationRuleModel).where(NotificationRuleModel.id == rule_id)
@@ -652,9 +653,7 @@ class NotificationService:
         return config.sent_this_hour < config.rate_limit_per_hour
 
     @staticmethod
-    def _check_conditions(
-        rule: NotificationRule, data: dict[str, Any]
-    ) -> bool:
+    def _check_conditions(rule: NotificationRule, data: dict[str, Any]) -> bool:
         """Check if all conditions are met."""
         for condition in rule.conditions:
             value = data.get(condition.field)
@@ -711,7 +710,9 @@ class NotificationService:
             template = None
         elif matching_rules:
             # Use highest priority rule
-            matching_rules.sort(key=lambda r: list(NotificationPriority).index(r.priority), reverse=True)
+            matching_rules.sort(
+                key=lambda r: list(NotificationPriority).index(r.priority), reverse=True
+            )
             top_rule = matching_rules[0]
             channels = list(set(ch for rule in matching_rules for ch in rule.channels))
             priority = top_rule.priority
@@ -778,12 +779,12 @@ class NotificationService:
         project_id: str | None = None,
     ) -> NotificationMessage:
         """Send a notification based on rules from database."""
-        from db.models import NotificationRuleModel, NotificationHistoryModel
+        from db.models import NotificationHistoryModel, NotificationRuleModel
 
         # Find matching rules from database
         result = await db.execute(
             select(NotificationRuleModel).where(
-                NotificationRuleModel.enabled == True,
+                NotificationRuleModel.enabled == True,  # noqa: E712
                 NotificationRuleModel.event_type == event_type.value,
             )
         )
@@ -801,8 +802,9 @@ class NotificationService:
                 priority=NotificationPriority(row.priority),
                 message_template=row.message_template,
             )
-            if NotificationService._check_conditions(rule, data) and \
-               NotificationService._check_project_filter(rule, project_id):
+            if NotificationService._check_conditions(
+                rule, data
+            ) and NotificationService._check_project_filter(rule, project_id):
                 matching_rules.append(rule)
 
         # Determine channels and priority
@@ -812,7 +814,9 @@ class NotificationService:
             template = None
             rule_id = None
         elif matching_rules:
-            matching_rules.sort(key=lambda r: list(NotificationPriority).index(r.priority), reverse=True)
+            matching_rules.sort(
+                key=lambda r: list(NotificationPriority).index(r.priority), reverse=True
+            )
             top_rule = matching_rules[0]
             channels = list(set(ch for rule in matching_rules for ch in rule.channels))
             priority = top_rule.priority
@@ -958,8 +962,9 @@ class NotificationService:
     @staticmethod
     async def clear_history_async(db: AsyncSession) -> int:
         """Clear notification history from database."""
-        from db.models import NotificationHistoryModel
         from sqlalchemy import delete
+
+        from db.models import NotificationHistoryModel
 
         result = await db.execute(delete(NotificationHistoryModel))
         await db.commit()
@@ -975,9 +980,7 @@ async def notify_task_completed(session_id: str, task_id: str, task_title: str) 
     )
 
 
-async def notify_task_failed(
-    session_id: str, task_id: str, task_title: str, error: str
-) -> None:
+async def notify_task_failed(session_id: str, task_id: str, task_title: str, error: str) -> None:
     """Send task failed notification."""
     await NotificationService.send_notification(
         NotificationEventType.TASK_FAILED,
@@ -990,9 +993,7 @@ async def notify_task_failed(
     )
 
 
-async def notify_approval_required(
-    session_id: str, approval_id: str, tool_name: str
-) -> None:
+async def notify_approval_required(session_id: str, approval_id: str, tool_name: str) -> None:
     """Send approval required notification."""
     await NotificationService.send_notification(
         NotificationEventType.APPROVAL_REQUIRED,

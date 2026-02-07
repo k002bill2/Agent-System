@@ -1,6 +1,7 @@
 """Context window usage tracking models."""
 
 from enum import Enum
+
 from pydantic import BaseModel, Field
 
 
@@ -61,9 +62,7 @@ class ContextUsage(BaseModel):
     current_tokens: int = Field(0, description="Current tokens in context")
     max_tokens: int = Field(200_000, description="Maximum context window size")
     percentage: float = Field(0.0, description="Usage percentage (0-100)")
-    level: ContextUsageLevel = Field(
-        ContextUsageLevel.NORMAL, description="Warning level"
-    )
+    level: ContextUsageLevel = Field(ContextUsageLevel.NORMAL, description="Warning level")
     provider: str = Field("unknown", description="LLM provider name")
     model: str = Field("unknown", description="Model name")
     warning_threshold: float = Field(80.0, description="Warning threshold percentage")

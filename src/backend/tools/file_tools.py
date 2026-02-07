@@ -1,11 +1,10 @@
 """File manipulation tools."""
 
+import glob as glob_module
 import json
 import os
-import glob as glob_module
 import re
-from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from langchain_core.tools import tool
 
@@ -64,7 +63,7 @@ def read_file(path: str) -> str:
     """
     try:
         path = os.path.expanduser(path)
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             content = f.read()
         return content
     except FileNotFoundError:
@@ -94,7 +93,7 @@ def write_file(path: str, content: str) -> str:
         old_content = ""
         if os.path.exists(path):
             try:
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     old_content = f.read()
             except Exception:
                 old_content = ""
@@ -136,7 +135,7 @@ def edit_file(path: str, old_string: str, new_string: str) -> str:
     """
     try:
         path = os.path.expanduser(path)
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             old_content = f.read()
 
         if old_string not in old_content:
@@ -169,7 +168,7 @@ def edit_file(path: str, old_string: str, new_string: str) -> str:
 
 
 @tool
-def list_directory(path: str = ".", pattern: Optional[str] = None) -> str:
+def list_directory(path: str = ".", pattern: str | None = None) -> str:
     """
     디렉토리의 파일 및 하위 디렉토리 목록을 반환합니다.
 
@@ -256,7 +255,7 @@ def search_files(pattern: str, path: str = ".") -> str:
 
 
 @tool
-def search_content(pattern: str, path: str = ".", file_pattern: Optional[str] = None) -> str:
+def search_content(pattern: str, path: str = ".", file_pattern: str | None = None) -> str:
     """
     파일 내용에서 정규식 패턴을 검색합니다 (grep과 유사).
 
@@ -282,8 +281,7 @@ def search_content(pattern: str, path: str = ".", file_pattern: Optional[str] = 
             glob_pattern = file_pattern or "**/*"
             search_path = os.path.join(path, glob_pattern)
             files_to_search = [
-                f for f in glob_module.glob(search_path, recursive=True)
-                if os.path.isfile(f)
+                f for f in glob_module.glob(search_path, recursive=True) if os.path.isfile(f)
             ]
 
         for file_path in files_to_search:
@@ -293,7 +291,7 @@ def search_content(pattern: str, path: str = ".", file_pattern: Optional[str] = 
 
             files_searched += 1
             try:
-                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                with open(file_path, encoding="utf-8", errors="ignore") as f:
                     for line_num, line in enumerate(f, 1):
                         if regex.search(line):
                             results.append(f"{file_path}:{line_num}: {line.rstrip()}")

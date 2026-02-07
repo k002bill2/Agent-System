@@ -2,10 +2,10 @@
 
 import asyncio
 import logging
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import AsyncGenerator
 
 from fastapi import APIRouter, HTTPException
 
@@ -13,22 +13,19 @@ logger = logging.getLogger(__name__)
 from fastapi.responses import StreamingResponse
 
 from models.claude_session import (
-    ClaudeSessionInfo,
+    ActivityResponse,
     ClaudeSessionDetail,
     ClaudeSessionResponse,
     ClaudeSessionSaveRequest,
     ClaudeSessionSaveResponse,
     SessionStatus,
-    ActivityResponse,
     TasksResponse,
 )
 from services.claude_session_monitor import (
-    get_monitor,
-    list_claude_processes,
-    kill_process,
     cleanup_stale_processes,
-    ClaudeProcess,
-    ProcessCleanupResult,
+    get_monitor,
+    kill_process,
+    list_claude_processes,
 )
 
 router = APIRouter(prefix="/claude-sessions", tags=["claude-sessions"])
@@ -88,7 +85,9 @@ _line_count_cache = TranscriptLineCountCache()
 
 from typing import Literal
 
-SortField = Literal["last_activity", "created_at", "message_count", "estimated_cost", "project_name"]
+SortField = Literal[
+    "last_activity", "created_at", "message_count", "estimated_cost", "project_name"
+]
 SortOrder = Literal["asc", "desc"]
 
 
@@ -140,7 +139,7 @@ async def list_sessions(
     def get_timestamp(dt: datetime | None) -> float:
         if dt is None:
             return 0.0
-        return dt.timestamp() if dt.tzinfo else dt.replace(tzinfo=timezone.utc).timestamp()
+        return dt.timestamp() if dt.tzinfo else dt.replace(tzinfo=UTC).timestamp()
 
     reverse = sort_order == "desc"
     if sort_by == "last_activity":
@@ -155,7 +154,7 @@ async def list_sessions(
         all_sessions.sort(key=lambda s: s.project_name or "", reverse=reverse)
 
     # Apply pagination (offset + limit)
-    paginated_sessions = all_sessions[offset:offset + limit]
+    paginated_sessions = all_sessions[offset : offset + limit]
 
     # Check if more sessions are available
     has_more = offset + len(paginated_sessions) < filtered_count
@@ -448,6 +447,7 @@ async def kill_processes(request: ProcessKillRequest) -> ProcessKillResponse:
     protected = []
 
     import os
+
     current_pid = os.getpid()
     parent_pid = os.getppid()
 
@@ -571,9 +571,9 @@ async def generate_batch_summaries(
         "errors": [],
     }
 
-    MAX_RETRIES = 3
-    RETRY_DELAY = 5.0  # seconds
-    BETWEEN_REQUESTS_DELAY = 2.0  # seconds
+    max_retries = 3
+    retry_delay = 5.0  # seconds
+    between_requests_delay = 2.0  # seconds
 
     for idx, session in enumerate(sessions_to_process):
         # Log progress every 10 sessions
@@ -584,45 +584,56 @@ async def generate_batch_summaries(
         last_error = None
 
         # Retry loop for transient failures
-        for attempt in range(MAX_RETRIES):
+        for attempt in range(max_retries):
             try:
                 summary = await monitor.generate_summary(session.session_id)
                 if summary and summary != "요약 생성 실패":
                     break  # Success, exit retry loop
                 # If failed, wait before retry
-                if attempt < MAX_RETRIES - 1:
-                    logger.warning(f"Retry {attempt + 1}/{MAX_RETRIES} for session {session.session_id}")
-                    await asyncio.sleep(RETRY_DELAY)
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        f"Retry {attempt + 1}/{max_retries} for session {session.session_id}"
+                    )
+                    await asyncio.sleep(retry_delay)
             except Exception as e:
                 last_error = str(e)
-                if attempt < MAX_RETRIES - 1:
-                    logger.warning(f"Retry {attempt + 1}/{MAX_RETRIES} for session {session.session_id}: {e}")
-                    await asyncio.sleep(RETRY_DELAY)
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        f"Retry {attempt + 1}/{max_retries} for session {session.session_id}: {e}"
+                    )
+                    await asyncio.sleep(retry_delay)
 
         results["total_processed"] += 1
         if summary and summary != "요약 생성 실패" and summary != "대화 내용 없음":
             results["success_count"] += 1
-            results["generated_summaries"].append({
-                "session_id": session.session_id,
-                "summary": summary,
-            })
+            results["generated_summaries"].append(
+                {
+                    "session_id": session.session_id,
+                    "summary": summary,
+                }
+            )
         else:
             results["failed_count"] += 1
-            results["errors"].append({
-                "session_id": session.session_id,
-                "error": last_error or summary or "Unknown error",
-            })
+            results["errors"].append(
+                {
+                    "session_id": session.session_id,
+                    "error": last_error or summary or "Unknown error",
+                }
+            )
 
         # Longer delay between requests to avoid overwhelming Ollama
-        await asyncio.sleep(BETWEEN_REQUESTS_DELAY)
+        await asyncio.sleep(between_requests_delay)
 
-    logger.info(f"Batch summary complete: {results['success_count']}/{results['total_processed']} succeeded")
+    logger.info(
+        f"Batch summary complete: {results['success_count']}/{results['total_processed']} succeeded"
+    )
     return results
 
 
 # ========================================
 # Dynamic routes (/{session_id})
 # ========================================
+
 
 @router.get("/{session_id}", response_model=ClaudeSessionDetail)
 async def get_session(session_id: str) -> ClaudeSessionDetail:
@@ -744,6 +755,7 @@ async def save_session(
 
     # Check if database mode is enabled
     import os
+
     use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
 
     if not use_database:
@@ -814,7 +826,7 @@ async def get_session_transcript(
     if cached_count is not None:
         # Use cached count - only read needed entries
         total_count = cached_count
-        with open(session_file, "r", encoding="utf-8") as f:
+        with open(session_file, encoding="utf-8") as f:
             for i, line in enumerate(f):
                 if i < offset:
                     continue
@@ -832,7 +844,7 @@ async def get_session_transcript(
                     continue
     else:
         # Cache miss - count all lines and read needed entries
-        with open(session_file, "r", encoding="utf-8") as f:
+        with open(session_file, encoding="utf-8") as f:
             for i, line in enumerate(f):
                 total_count += 1
                 if i < offset:

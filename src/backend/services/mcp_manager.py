@@ -7,11 +7,10 @@
 import asyncio
 import json
 import subprocess
-from dataclasses import dataclass, field
+from collections.abc import Callable
 from datetime import datetime
 from enum import Enum
-from pathlib import Path
-from typing import Any, AsyncIterator, Callable
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -121,7 +120,13 @@ DEFAULT_MCP_SERVERS: list[MCPServerConfig] = [
         description="파일 시스템 읽기/쓰기/검색",
         command="npx",
         args=["-y", "@modelcontextprotocol/server-filesystem", "."],
-        allowed_tools=["read_file", "read_multiple_files", "write_file", "list_directory", "search_files"],
+        allowed_tools=[
+            "read_file",
+            "read_multiple_files",
+            "write_file",
+            "list_directory",
+            "search_files",
+        ],
     ),
     MCPServerConfig(
         id="github",
@@ -132,9 +137,13 @@ DEFAULT_MCP_SERVERS: list[MCPServerConfig] = [
         args=["-y", "@modelcontextprotocol/server-github"],
         env={"GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"},
         allowed_tools=[
-            "create_issue", "list_issues", "get_issue",
-            "create_pull_request", "list_pull_requests",
-            "search_repositories", "get_file_contents",
+            "create_issue",
+            "list_issues",
+            "get_issue",
+            "create_pull_request",
+            "list_pull_requests",
+            "search_repositories",
+            "get_file_contents",
         ],
     ),
     MCPServerConfig(
@@ -145,8 +154,11 @@ DEFAULT_MCP_SERVERS: list[MCPServerConfig] = [
         command="npx",
         args=["-y", "@anthropic/mcp-server-playwright"],
         allowed_tools=[
-            "browser_navigate", "browser_click", "browser_type",
-            "browser_screenshot", "browser_evaluate",
+            "browser_navigate",
+            "browser_click",
+            "browser_type",
+            "browser_screenshot",
+            "browser_evaluate",
         ],
     ),
 ]
@@ -241,6 +253,7 @@ class MCPManager:
         try:
             # 환경 변수 준비
             import os
+
             env = os.environ.copy()
             for key, value in info.config.env.items():
                 # ${VAR} 형식 치환
@@ -370,7 +383,7 @@ class MCPManager:
                 return json.loads(response_str.strip())
             return None
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return None
         except Exception:
             return None
@@ -386,6 +399,7 @@ class MCPManager:
             도구 호출 결과
         """
         import time
+
         start_time = time.time()
 
         info = self._servers.get(call.server_id)
@@ -510,12 +524,14 @@ class MCPManager:
             )
 
         server_id, _ = result
-        return await self.call_tool(MCPToolCall(
-            server_id=server_id,
-            tool_name=tool_name,
-            arguments=arguments,
-            timeout_ms=timeout_ms,
-        ))
+        return await self.call_tool(
+            MCPToolCall(
+                server_id=server_id,
+                tool_name=tool_name,
+                arguments=arguments,
+                timeout_ms=timeout_ms,
+            )
+        )
 
     async def call_tools_batch(self, batch_call: MCPBatchToolCall) -> MCPBatchToolResult:
         """
@@ -528,6 +544,7 @@ class MCPManager:
             배치 호출 결과 (개별 결과 + 통계)
         """
         import time
+
         start_time = time.time()
 
         if not batch_call.calls:
@@ -561,11 +578,13 @@ class MCPManager:
         processed_results: list[MCPToolResult] = []
         for result in results:
             if isinstance(result, Exception):
-                processed_results.append(MCPToolResult(
-                    success=False,
-                    error=str(result),
-                    execution_time_ms=0,
-                ))
+                processed_results.append(
+                    MCPToolResult(
+                        success=False,
+                        error=str(result),
+                        execution_time_ms=0,
+                    )
+                )
             else:
                 processed_results.append(result)
 

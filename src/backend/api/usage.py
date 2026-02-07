@@ -4,9 +4,10 @@ Fetches real usage data from Anthropic OAuth API using macOS Keychain credential
 """
 
 import json
+import os
 import subprocess
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -16,14 +17,24 @@ from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/usage", tags=["Usage"])
 
-# Claude Code stats cache file path
-STATS_CACHE_PATH = Path.home() / ".claude" / "stats-cache.json"
+# Claude Code stats cache file path (configurable via env)
+STATS_CACHE_PATH = Path(
+    os.getenv(
+        "CLAUDE_STATS_CACHE_PATH",
+        str(Path.home() / ".claude" / "stats-cache.json"),
+    )
+)
 
 # Anthropic OAuth Usage API
 ANTHROPIC_USAGE_API = "https://api.anthropic.com/api/oauth/usage"
 
 # Cache for Anthropic API response (in-memory with file backup)
-USAGE_CACHE_PATH = Path.home() / ".claude" / "aos-usage-cache.json"
+USAGE_CACHE_PATH = Path(
+    os.getenv(
+        "CLAUDE_USAGE_CACHE_PATH",
+        str(Path.home() / ".claude" / "aos-usage-cache.json"),
+    )
+)
 _usage_cache: dict[str, Any] = {
     "data": None,
     "timestamp": None,
@@ -44,10 +55,10 @@ def _load_usage_cache() -> dict[str, Any] | None:
     # Try file cache
     if USAGE_CACHE_PATH.exists():
         try:
-            with open(USAGE_CACHE_PATH, "r") as f:
+            with open(USAGE_CACHE_PATH) as f:
                 _usage_cache = json.load(f)
                 return _usage_cache
-        except (json.JSONDecodeError, IOError):
+        except (OSError, json.JSONDecodeError):
             pass
     return None
 
@@ -55,17 +66,17 @@ def _load_usage_cache() -> dict[str, Any] | None:
 def _save_usage_cache(data: dict[str, Any]) -> None:
     """Save usage data to cache."""
     global _usage_cache
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     _usage_cache = {
         "data": data,
         "timestamp": now,
-        "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=CACHE_TTL_SECONDS)).isoformat(),
+        "expires_at": (datetime.now(UTC) + timedelta(seconds=CACHE_TTL_SECONDS)).isoformat(),
     }
     # Save to file for persistence across restarts
     try:
         with open(USAGE_CACHE_PATH, "w") as f:
             json.dump(_usage_cache, f)
-    except IOError:
+    except OSError:
         pass
 
 
@@ -76,7 +87,7 @@ def _is_cache_valid() -> bool:
         return False
     try:
         expires_at = datetime.fromisoformat(cache["expires_at"].replace("Z", "+00:00"))
-        return datetime.now(timezone.utc) < expires_at
+        return datetime.now(UTC) < expires_at
     except (ValueError, TypeError):
         return False
 
@@ -88,7 +99,7 @@ def _is_cache_usable() -> bool:
         return False
     try:
         timestamp = datetime.fromisoformat(cache["timestamp"].replace("Z", "+00:00"))
-        age = (datetime.now(timezone.utc) - timestamp).total_seconds()
+        age = (datetime.now(UTC) - timestamp).total_seconds()
         return age < CACHE_STALE_SECONDS
     except (ValueError, TypeError):
         return False
@@ -101,7 +112,7 @@ def _get_cache_age_minutes() -> int | None:
         return None
     try:
         timestamp = datetime.fromisoformat(cache["timestamp"].replace("Z", "+00:00"))
-        age = (datetime.now(timezone.utc) - timestamp).total_seconds()
+        age = (datetime.now(UTC) - timestamp).total_seconds()
         return int(age / 60)
     except (ValueError, TypeError):
         return None
@@ -109,6 +120,7 @@ def _get_cache_age_minutes() -> int | None:
 
 class DailyActivity(BaseModel):
     """Daily activity data."""
+
     date: str
     messageCount: int
     sessionCount: int
@@ -117,12 +129,14 @@ class DailyActivity(BaseModel):
 
 class DailyModelTokens(BaseModel):
     """Daily token usage by model."""
+
     date: str
     tokensByModel: dict[str, int]
 
 
 class ModelUsage(BaseModel):
     """Model usage statistics."""
+
     inputTokens: int = 0
     outputTokens: int = 0
     cacheReadInputTokens: int = 0
@@ -133,6 +147,7 @@ class ModelUsage(BaseModel):
 
 class PlanLimitInfo(BaseModel):
     """Plan limit information from Anthropic OAuth API."""
+
     name: str
     displayName: str
     utilization: float  # Percentage 0-100
@@ -143,6 +158,7 @@ class PlanLimitInfo(BaseModel):
 
 class UsageResponse(BaseModel):
     """Claude Code usage response."""
+
     # Raw stats
     lastComputedDate: str
     totalSessions: int
@@ -177,19 +193,27 @@ def load_stats_cache() -> dict[str, Any] | None:
         return None
 
     try:
-        with open(STATS_CACHE_PATH, "r") as f:
+        with open(STATS_CACHE_PATH) as f:
             return json.load(f)
-    except (json.JSONDecodeError, IOError) as e:
+    except (OSError, json.JSONDecodeError) as e:
         print(f"Error reading stats cache: {e}")
         return None
 
 
 def get_oauth_token() -> str | None:
     """
-    Extract OAuth access token from macOS Keychain.
+    Extract OAuth access token.
 
-    Note: Only works on macOS.
+    Priority:
+    1. CLAUDE_OAUTH_TOKEN env var (for deployment / non-macOS)
+    2. macOS Keychain (local development)
     """
+    # 1. Environment variable (works on any platform)
+    env_token = os.getenv("CLAUDE_OAUTH_TOKEN")
+    if env_token:
+        return env_token
+
+    # 2. macOS Keychain fallback (local dev only)
     if sys.platform != "darwin":
         return None
 
@@ -260,7 +284,7 @@ def parse_reset_time(resets_at: str | None) -> tuple[float, float]:
     try:
         # Parse ISO timestamp (e.g., "2025-11-04T04:59:59Z")
         reset_time = datetime.fromisoformat(resets_at.replace("Z", "+00:00"))
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         delta = reset_time - now
         if delta.total_seconds() <= 0:
@@ -316,7 +340,7 @@ async def get_usage() -> UsageResponse:
     if not stats:
         raise HTTPException(
             status_code=404,
-            detail="Stats cache not found. Make sure Claude Code is installed and has been used."
+            detail="Stats cache not found. Make sure Claude Code is installed and has been used.",
         )
 
     # Get raw data from local cache
@@ -382,14 +406,16 @@ async def get_usage() -> UsageResponse:
                 resets_at = limit_data.get("resets_at")
                 hours, minutes = parse_reset_time(resets_at)
 
-                limits.append(PlanLimitInfo(
-                    name=name,
-                    displayName=display_name,
-                    utilization=limit_data.get("utilization", 0),
-                    resetsAt=resets_at,
-                    resetsInHours=hours,
-                    resetsInMinutes=minutes,
-                ))
+                limits.append(
+                    PlanLimitInfo(
+                        name=name,
+                        displayName=display_name,
+                        utilization=limit_data.get("utilization", 0),
+                        resetsAt=resets_at,
+                        resetsInHours=hours,
+                        resetsInMinutes=minutes,
+                    )
+                )
         return limits
 
     token = get_oauth_token()
@@ -415,8 +441,10 @@ async def get_usage() -> UsageResponse:
             else:
                 oauth_error = "Failed to fetch from Anthropic API"
     else:
-        if sys.platform != "darwin":
-            oauth_error = "OAuth only available on macOS"
+        if os.getenv("CLAUDE_OAUTH_TOKEN"):
+            oauth_error = "OAuth token from env var is invalid"
+        elif sys.platform != "darwin":
+            oauth_error = "Set CLAUDE_OAUTH_TOKEN env var for non-macOS"
         else:
             oauth_error = "OAuth token not found in Keychain"
 
@@ -449,10 +477,7 @@ async def get_raw_stats() -> dict[str, Any]:
     stats = load_stats_cache()
 
     if not stats:
-        raise HTTPException(
-            status_code=404,
-            detail="Stats cache not found."
-        )
+        raise HTTPException(status_code=404, detail="Stats cache not found.")
 
     return stats
 

@@ -1,11 +1,9 @@
 """Bash/Shell execution tools."""
 
 import asyncio
-import subprocess
-import shlex
 import os
+import subprocess
 import uuid
-from typing import Optional
 
 from langchain_core.tools import tool
 
@@ -15,7 +13,7 @@ from services.sandbox_manager import execute_sandboxed, get_sandbox_manager
 @tool
 def execute_bash(
     command: str,
-    cwd: Optional[str] = None,
+    cwd: str | None = None,
     timeout: int = 120,
 ) -> str:
     """
@@ -89,7 +87,7 @@ def execute_bash(
 
 async def execute_bash_async(
     command: str,
-    cwd: Optional[str] = None,
+    cwd: str | None = None,
     timeout: int = 120,
 ) -> str:
     """
@@ -137,7 +135,7 @@ async def execute_bash_async(
                 process.communicate(),
                 timeout=timeout,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             process.kill()
             return f"Error: Command timed out after {timeout} seconds"
 
@@ -171,7 +169,7 @@ async def execute_bash_async(
 @tool
 async def execute_bash_sandboxed(
     command: str,
-    project_path: Optional[str] = None,
+    project_path: str | None = None,
     timeout: int = 120,
 ) -> str:
     """
