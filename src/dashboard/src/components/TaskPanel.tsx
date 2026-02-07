@@ -12,6 +12,7 @@ import {
   Play,
 } from 'lucide-react'
 import { FeedbackButton } from './feedback/FeedbackButton'
+import { TaskEvaluationCard } from './feedback/TaskEvaluationCard'
 
 const statusConfig: Record<TaskStatus, { icon: typeof Circle; color: string; label: string }> = {
   pending: { icon: Circle, color: 'text-gray-400', label: 'Pending' },
@@ -201,6 +202,13 @@ export function TaskPanel() {
           ))
         )}
       </div>
+
+      {/* Task Evaluation - shown when root task is completed */}
+      {rootTask && rootTask.status === 'completed' && sessionId && (
+        <div className="px-3 py-2 border-t border-gray-200 dark:border-gray-700">
+          <TaskEvaluationCard sessionId={sessionId} taskId={rootTask.id} />
+        </div>
+      )}
 
       {/* Stats */}
       <div className="h-14 border-t border-gray-200 dark:border-gray-700 flex flex-wrap items-center justify-around gap-1 px-2 text-xs text-gray-500 dark:text-gray-400">

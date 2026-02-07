@@ -32,6 +32,9 @@ import {
   AlertTriangle,
   FolderOpen,
   GitCompare,
+  ThumbsUp,
+  Star,
+  Gauge,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useProjectsStore, Project } from '../stores/projects'
@@ -140,6 +143,22 @@ interface MultiProjectTrendsResponse {
 
 type CompareMetric = 'tasks' | 'tokens' | 'cost' | 'success_rate'
 
+interface AgentEvalStats {
+  agent_id: string
+  avg_rating: number
+  accuracy_rate: number
+  speed_satisfaction_rate: number
+  total_count: number
+}
+
+interface TaskEvalStats {
+  avg_rating: number
+  accuracy_rate: number
+  speed_satisfaction_rate: number
+  total_count: number
+  by_agent: AgentEvalStats[]
+}
+
 // ─────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────
@@ -178,6 +197,12 @@ async function fetchDashboard(timeRange: TimeRange, projectId?: string): Promise
   return res.json()
 }
 
+async function fetchTaskEvalStats(): Promise<TaskEvalStats> {
+  const res = await fetch(`${API_BASE}/feedback/task-evaluation/stats`)
+  if (!res.ok) throw new Error('Failed to fetch evaluation stats')
+  return res.json()
+}
+
 async function fetchMultiProjectTrends(
   projectIds: string[],
   metric: CompareMetric,
@@ -206,6 +231,7 @@ export function AnalyticsPage() {
   const [compareMetric, setCompareMetric] = useState<CompareMetric>('tasks')
   const [compareData, setCompareData] = useState<MultiProjectTrendsResponse | null>(null)
   const [compareLoading, setCompareLoading] = useState(false)
+  const [evalStats, setEvalStats] = useState<TaskEvalStats | null>(null)
 
   // Get projects from store
   const { projects, fetchProjects } = useProjectsStore()
@@ -231,8 +257,12 @@ export function AnalyticsPage() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const result = await fetchDashboard(timeRange, selectedProjectId || undefined)
+      const [result, evalResult] = await Promise.all([
+        fetchDashboard(timeRange, selectedProjectId || undefined),
+        fetchTaskEvalStats().catch(() => null),
+      ])
       setData(result)
+      setEvalStats(evalResult)
       setError(null)
     } catch (e) {
       setError((e as Error).message)
@@ -371,6 +401,40 @@ export function AnalyticsPage() {
           subtitle={`${data.overview.active_sessions} active sessions`}
         />
       </div>
+
+      {/* User Feedback Stats */}
+      {evalStats && evalStats.total_count > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <MetricCard
+            title="평가 수"
+            value={evalStats.total_count}
+            icon={ThumbsUp}
+            color="blue"
+            subtitle="총 평가 횟수"
+          />
+          <MetricCard
+            title="평균 만족도"
+            value={`${evalStats.avg_rating.toFixed(1)} / 5`}
+            icon={Star}
+            color={evalStats.avg_rating >= 4 ? 'green' : evalStats.avg_rating >= 3 ? 'amber' : 'red'}
+            subtitle={`${(evalStats.avg_rating / 5 * 100).toFixed(0)}%`}
+          />
+          <MetricCard
+            title="정확도"
+            value={`${(evalStats.accuracy_rate * 100).toFixed(1)}%`}
+            icon={TrendingUp}
+            color={evalStats.accuracy_rate >= 0.8 ? 'green' : 'amber'}
+            subtitle="결과가 정확했다고 응답"
+          />
+          <MetricCard
+            title="속도 만족도"
+            value={`${(evalStats.speed_satisfaction_rate * 100).toFixed(1)}%`}
+            icon={Gauge}
+            color={evalStats.speed_satisfaction_rate >= 0.8 ? 'green' : 'amber'}
+            subtitle="속도가 적절했다고 응답"
+          />
+        </div>
+      )}
 
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -594,44 +658,80 @@ export function AnalyticsPage() {
                 <th className="pb-3 font-medium text-right">Avg Duration</th>
                 <th className="pb-3 font-medium text-right">Tokens</th>
                 <th className="pb-3 font-medium text-right">Cost</th>
+                <th className="pb-3 font-medium text-right">Rating</th>
+                <th className="pb-3 font-medium text-right">Accuracy</th>
+                <th className="pb-3 font-medium text-right">Evals</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {data.agents.agents.map((agent) => (
-                <tr key={agent.agent_id} className="text-gray-900 dark:text-white">
-                  <td className="py-3">
-                    <div className="font-medium">{agent.agent_name}</div>
-                    <div className="text-xs text-gray-500">{agent.category}</div>
-                  </td>
-                  <td className="py-3 text-right">
-                    <span className="text-green-600">{agent.completed_tasks}</span>
-                    {' / '}
-                    <span className="text-gray-500">{agent.total_tasks}</span>
-                  </td>
-                  <td className="py-3 text-right">
-                    <span
-                      className={cn(
-                        agent.success_rate >= 95
-                          ? 'text-green-600'
-                          : agent.success_rate >= 90
-                          ? 'text-yellow-600'
-                          : 'text-red-600'
+              {data.agents.agents.map((agent) => {
+                const agentEval = evalStats?.by_agent?.find(
+                  (a) => a.agent_id === agent.agent_id ||
+                    a.agent_id === agent.agent_name.toLowerCase().replace(/\s+/g, '-')
+                )
+                return (
+                  <tr key={agent.agent_id} className="text-gray-900 dark:text-white">
+                    <td className="py-3">
+                      <div className="font-medium">{agent.agent_name}</div>
+                      <div className="text-xs text-gray-500">{agent.category}</div>
+                    </td>
+                    <td className="py-3 text-right">
+                      <span className="text-green-600">{agent.completed_tasks}</span>
+                      {' / '}
+                      <span className="text-gray-500">{agent.total_tasks}</span>
+                    </td>
+                    <td className="py-3 text-right">
+                      <span
+                        className={cn(
+                          agent.success_rate >= 95
+                            ? 'text-green-600'
+                            : agent.success_rate >= 90
+                            ? 'text-yellow-600'
+                            : 'text-red-600'
+                        )}
+                      >
+                        {agent.success_rate.toFixed(1)}%
+                      </span>
+                    </td>
+                    <td className="py-3 text-right text-gray-500">
+                      {formatDuration(agent.avg_duration_ms)}
+                    </td>
+                    <td className="py-3 text-right text-gray-500">
+                      {formatNumber(agent.total_tokens)}
+                    </td>
+                    <td className="py-3 text-right font-medium">
+                      ${agent.total_cost.toFixed(2)}
+                    </td>
+                    <td className="py-3 text-right">
+                      {agentEval ? (
+                        <span className={cn(
+                          agentEval.avg_rating >= 4 ? 'text-green-600' :
+                          agentEval.avg_rating >= 3 ? 'text-yellow-600' : 'text-red-600'
+                        )}>
+                          {agentEval.avg_rating.toFixed(1)}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
                       )}
-                    >
-                      {agent.success_rate.toFixed(1)}%
-                    </span>
-                  </td>
-                  <td className="py-3 text-right text-gray-500">
-                    {formatDuration(agent.avg_duration_ms)}
-                  </td>
-                  <td className="py-3 text-right text-gray-500">
-                    {formatNumber(agent.total_tokens)}
-                  </td>
-                  <td className="py-3 text-right font-medium">
-                    ${agent.total_cost.toFixed(2)}
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="py-3 text-right">
+                      {agentEval ? (
+                        <span className={cn(
+                          agentEval.accuracy_rate >= 0.8 ? 'text-green-600' :
+                          agentEval.accuracy_rate >= 0.5 ? 'text-yellow-600' : 'text-red-600'
+                        )}>
+                          {(agentEval.accuracy_rate * 100).toFixed(0)}%
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="py-3 text-right text-gray-500">
+                      {agentEval ? agentEval.total_count : '-'}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

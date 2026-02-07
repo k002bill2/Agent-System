@@ -195,3 +195,67 @@ class BatchProcessResult(BaseModel):
     skipped: int
     errors: int
     results: list[ProcessFeedbackResult]
+
+
+# ============================================================================
+# Task Evaluation Models (태스크 종합 평가)
+# ============================================================================
+
+
+class TaskEvaluationSubmit(BaseModel):
+    """태스크 종합 평가 제출 요청"""
+
+    session_id: str = Field(..., description="세션 ID")
+    task_id: str = Field(..., description="태스크 ID")
+    rating: int = Field(..., ge=1, le=5, description="전체 만족도 (1~5)")
+    result_accuracy: bool = Field(..., description="요청한 내용을 정확히 수행했는가")
+    speed_satisfaction: bool = Field(..., description="응답 속도가 적절했는가")
+    comment: str | None = Field(None, description="자유 코멘트")
+    agent_id: str | None = Field(None, description="평가 대상 에이전트 ID")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "session_id": "sess-abc123",
+                "task_id": "task-xyz789",
+                "rating": 4,
+                "result_accuracy": True,
+                "speed_satisfaction": True,
+                "comment": "전반적으로 만족스러운 결과입니다.",
+                "agent_id": "web-ui-specialist",
+            }
+        }
+
+
+class TaskEvaluationResponse(BaseModel):
+    """태스크 종합 평가 응답"""
+
+    id: str = Field(..., description="평가 ID")
+    session_id: str
+    task_id: str
+    rating: int
+    result_accuracy: bool
+    speed_satisfaction: bool
+    comment: str | None = None
+    agent_id: str | None = None
+    created_at: datetime
+
+
+class AgentEvalStats(BaseModel):
+    """에이전트별 평가 통계"""
+
+    agent_id: str
+    avg_rating: float = 0.0
+    accuracy_rate: float = 0.0
+    speed_satisfaction_rate: float = 0.0
+    total_count: int = 0
+
+
+class TaskEvaluationStats(BaseModel):
+    """태스크 종합 평가 통계"""
+
+    avg_rating: float = 0.0
+    accuracy_rate: float = 0.0
+    speed_satisfaction_rate: float = 0.0
+    total_count: int = 0
+    by_agent: list[AgentEvalStats] = []

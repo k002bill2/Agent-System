@@ -21,6 +21,9 @@ from models.feedback import (
     FeedbackSubmit,
     FeedbackType,
     ProcessFeedbackRequest,
+    TaskEvaluationResponse,
+    TaskEvaluationStats,
+    TaskEvaluationSubmit,
 )
 from services.feedback_service import get_feedback_service
 
@@ -212,3 +215,45 @@ async def export_dataset(
             "Content-Disposition": f"attachment; filename={filename}",
         },
     )
+
+
+# ============================================================================
+# Task Evaluation Endpoints (태스크 종합 평가)
+# ============================================================================
+
+
+@router.post("/task-evaluation", response_model=TaskEvaluationResponse)
+async def submit_task_evaluation(
+    evaluation: TaskEvaluationSubmit,
+) -> TaskEvaluationResponse:
+    """태스크 종합 평가 제출
+
+    태스크 완료 후 전체 만족도, 정확도, 속도 등을 평가합니다.
+    """
+    service = get_feedback_service()
+    return await service.submit_task_evaluation(evaluation)
+
+
+@router.get("/task-evaluation/stats", response_model=TaskEvaluationStats)
+async def get_task_evaluation_stats() -> TaskEvaluationStats:
+    """태스크 종합 평가 통계
+
+    평균 별점, 정확도 비율, 속도 만족도 비율을 반환합니다.
+    """
+    service = get_feedback_service()
+    return await service.get_task_evaluation_stats()
+
+
+@router.get("/task-evaluation/{session_id}/{task_id}", response_model=TaskEvaluationResponse)
+async def get_task_evaluation(
+    session_id: str,
+    task_id: str,
+) -> TaskEvaluationResponse:
+    """특정 태스크 평가 조회"""
+    service = get_feedback_service()
+    evaluation = await service.get_task_evaluation(session_id, task_id)
+
+    if not evaluation:
+        raise HTTPException(status_code=404, detail="Task evaluation not found")
+
+    return evaluation

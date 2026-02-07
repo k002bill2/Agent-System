@@ -89,6 +89,28 @@ export interface DatasetExportOptions {
   end_date?: string
 }
 
+export interface TaskEvaluationSubmit {
+  session_id: string
+  task_id: string
+  rating: number
+  result_accuracy: boolean
+  speed_satisfaction: boolean
+  comment?: string
+  agent_id?: string
+}
+
+export interface TaskEvaluationResponse {
+  id: string
+  session_id: string
+  task_id: string
+  rating: number
+  result_accuracy: boolean
+  speed_satisfaction: boolean
+  comment?: string
+  agent_id?: string
+  created_at: string
+}
+
 // ============================================================================
 // Store Interface
 // ============================================================================
@@ -99,6 +121,7 @@ interface FeedbackState {
   stats: FeedbackStats | null
   datasetStats: DatasetStats | null
   selectedFeedbackId: string | null
+  taskEvaluations: Record<string, TaskEvaluationResponse>
 
   // UI State
   isLoading: boolean
@@ -112,6 +135,8 @@ interface FeedbackState {
 
   // Actions
   submitFeedback: (feedback: FeedbackSubmit, agentId?: string) => Promise<FeedbackEntry | null>
+  submitTaskEvaluation: (evaluation: TaskEvaluationSubmit) => Promise<TaskEvaluationResponse | null>
+  fetchTaskEvaluation: (sessionId: string, taskId: string) => Promise<TaskEvaluationResponse | null>
   fetchFeedbacks: (params?: FeedbackQueryParams) => Promise<void>
   fetchStats: () => Promise<void>
   fetchDatasetStats: () => Promise<void>
@@ -142,6 +167,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   stats: null,
   datasetStats: null,
   selectedFeedbackId: null,
+  taskEvaluations: {},
   isLoading: false,
   isSubmitting: false,
   error: null,
@@ -181,6 +207,61 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to submit feedback'
       set({ error: message, isSubmitting: false })
+      return null
+    }
+  },
+
+  submitTaskEvaluation: async (evaluation: TaskEvaluationSubmit) => {
+    set({ isSubmitting: true, error: null })
+
+    try {
+      const response = await fetch(`${API_BASE}/task-evaluation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(evaluation),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to submit task evaluation: ${response.statusText}`)
+      }
+
+      const result: TaskEvaluationResponse = await response.json()
+      const key = `${evaluation.session_id}:${evaluation.task_id}`
+
+      set((state) => ({
+        taskEvaluations: { ...state.taskEvaluations, [key]: result },
+        isSubmitting: false,
+      }))
+
+      return result
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to submit task evaluation'
+      set({ error: message, isSubmitting: false })
+      return null
+    }
+  },
+
+  fetchTaskEvaluation: async (sessionId: string, taskId: string) => {
+    try {
+      const response = await fetch(
+        `${API_BASE}/task-evaluation/${encodeURIComponent(sessionId)}/${encodeURIComponent(taskId)}`
+      )
+
+      if (response.status === 404) return null
+      if (!response.ok) {
+        throw new Error(`Failed to fetch task evaluation: ${response.statusText}`)
+      }
+
+      const result: TaskEvaluationResponse = await response.json()
+      const key = `${sessionId}:${taskId}`
+
+      set((state) => ({
+        taskEvaluations: { ...state.taskEvaluations, [key]: result },
+      }))
+
+      return result
+    } catch (error) {
+      console.error('Failed to fetch task evaluation:', error)
       return null
     }
   },
@@ -379,6 +460,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       stats: null,
       datasetStats: null,
       selectedFeedbackId: null,
+      taskEvaluations: {},
       isLoading: false,
       isSubmitting: false,
       error: null,

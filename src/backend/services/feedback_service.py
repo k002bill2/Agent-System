@@ -26,6 +26,9 @@ from models.feedback import (
     FeedbackType,
     ProcessFeedbackRequest,
     ProcessFeedbackResult,
+    TaskEvaluationResponse,
+    TaskEvaluationStats,
+    TaskEvaluationSubmit,
 )
 
 # Environment variable to control storage mode
@@ -48,6 +51,7 @@ class FeedbackService:
         # In-memory storage
         self._feedbacks: dict[str, dict[str, Any]] = {}
         self._dataset_entries: dict[str, dict[str, Any]] = {}
+        self._task_evaluations: dict[str, dict[str, Any]] = {}  # key: "session_id:task_id"
 
     # =========================================================================
     # Feedback CRUD
@@ -247,6 +251,112 @@ class FeedbackService:
             return await self._get_dataset_stats_from_db()
         else:
             return self._get_dataset_stats_memory()
+
+    # =========================================================================
+    # Task Evaluation (태스크 종합 평가)
+    # =========================================================================
+
+    async def submit_task_evaluation(
+        self,
+        evaluation: TaskEvaluationSubmit,
+    ) -> TaskEvaluationResponse:
+        """태스크 종합 평가 제출"""
+        eval_id = str(uuid.uuid4())
+        now = datetime.utcnow()
+        key = f"{evaluation.session_id}:{evaluation.task_id}"
+
+        eval_data = {
+            "id": eval_id,
+            "session_id": evaluation.session_id,
+            "task_id": evaluation.task_id,
+            "rating": evaluation.rating,
+            "result_accuracy": evaluation.result_accuracy,
+            "speed_satisfaction": evaluation.speed_satisfaction,
+            "comment": evaluation.comment,
+            "agent_id": evaluation.agent_id,
+            "created_at": now,
+        }
+
+        self._task_evaluations[key] = eval_data
+
+        return TaskEvaluationResponse(
+            id=eval_id,
+            session_id=evaluation.session_id,
+            task_id=evaluation.task_id,
+            rating=evaluation.rating,
+            result_accuracy=evaluation.result_accuracy,
+            speed_satisfaction=evaluation.speed_satisfaction,
+            comment=evaluation.comment,
+            agent_id=evaluation.agent_id,
+            created_at=now,
+        )
+
+    async def get_task_evaluation(
+        self,
+        session_id: str,
+        task_id: str,
+    ) -> TaskEvaluationResponse | None:
+        """세션+태스크 ID로 평가 조회"""
+        key = f"{session_id}:{task_id}"
+        data = self._task_evaluations.get(key)
+        if not data:
+            return None
+
+        return TaskEvaluationResponse(
+            id=data["id"],
+            session_id=data["session_id"],
+            task_id=data["task_id"],
+            rating=data["rating"],
+            result_accuracy=data["result_accuracy"],
+            speed_satisfaction=data["speed_satisfaction"],
+            comment=data.get("comment"),
+            agent_id=data.get("agent_id"),
+            created_at=data["created_at"],
+        )
+
+    async def get_task_evaluation_stats(self) -> TaskEvaluationStats:
+        """태스크 종합 평가 통계"""
+        from models.feedback import AgentEvalStats
+
+        evaluations = list(self._task_evaluations.values())
+        total = len(evaluations)
+
+        if total == 0:
+            return TaskEvaluationStats()
+
+        avg_rating = sum(e["rating"] for e in evaluations) / total
+        accuracy_rate = sum(1 for e in evaluations if e["result_accuracy"]) / total
+        speed_rate = sum(1 for e in evaluations if e["speed_satisfaction"]) / total
+
+        # 에이전트별 집계
+        agent_map: dict[str, list[dict]] = {}
+        for e in evaluations:
+            aid = e.get("agent_id")
+            if aid:
+                agent_map.setdefault(aid, []).append(e)
+
+        by_agent = []
+        for aid, evals in agent_map.items():
+            cnt = len(evals)
+            by_agent.append(
+                AgentEvalStats(
+                    agent_id=aid,
+                    avg_rating=round(sum(x["rating"] for x in evals) / cnt, 2),
+                    accuracy_rate=round(sum(1 for x in evals if x["result_accuracy"]) / cnt, 4),
+                    speed_satisfaction_rate=round(
+                        sum(1 for x in evals if x["speed_satisfaction"]) / cnt, 4
+                    ),
+                    total_count=cnt,
+                )
+            )
+
+        return TaskEvaluationStats(
+            avg_rating=round(avg_rating, 2),
+            accuracy_rate=round(accuracy_rate, 4),
+            speed_satisfaction_rate=round(speed_rate, 4),
+            total_count=total,
+            by_agent=by_agent,
+        )
 
     # =========================================================================
     # Private Methods - In-Memory Operations
