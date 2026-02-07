@@ -382,6 +382,46 @@ class GitService:
         except Exception as e:
             raise GitServiceError(f"Failed to get commit files: {e}")
 
+    def get_commit_diff(self, sha: str, file_path: str | None = None) -> str:
+        """Get diff for a commit, optionally filtered by file path.
+
+        Args:
+            sha: Commit SHA
+            file_path: Optional file path to filter diff
+
+        Returns:
+            Unified diff string
+        """
+        try:
+            commit = self.repo.commit(sha)
+            parent = commit.parents[0] if commit.parents else None
+            diff = parent.diff(commit, create_patch=True) if parent else commit.diff(None, create_patch=True)
+
+            result_lines: list[str] = []
+            for d in diff:
+                current_path = d.b_path or d.a_path
+                if file_path and current_path != file_path:
+                    continue
+                if d.diff:
+                    diff_text = d.diff.decode("utf-8", errors="ignore")
+                    # Add file header
+                    result_lines.append(f"diff --git a/{d.a_path or current_path} b/{current_path}")
+                    if d.new_file:
+                        result_lines.append("new file")
+                    elif d.deleted_file:
+                        result_lines.append("deleted file")
+                    elif d.renamed_file:
+                        result_lines.append(f"rename from {d.a_path}")
+                        result_lines.append(f"rename to {d.b_path}")
+                    result_lines.append(f"--- a/{d.a_path or '/dev/null'}")
+                    result_lines.append(f"+++ b/{current_path or '/dev/null'}")
+                    result_lines.append(diff_text)
+                    result_lines.append("")
+
+            return "\n".join(result_lines)
+        except Exception as e:
+            raise GitServiceError(f"Failed to get commit diff: {e}")
+
     # =========================================================================
     # Working Directory Operations (status, add, commit)
     # =========================================================================
@@ -658,6 +698,162 @@ class GitService:
             return files
         except Exception as e:
             raise GitServiceError(f"Failed to get changed files: {e}")
+
+    # =========================================================================
+    # Remote Management
+    # =========================================================================
+
+    def list_remotes(self) -> list:
+        """List all remotes.
+
+        Returns:
+            List of GitRemote objects
+        """
+        from models.git import GitRemote
+
+        try:
+            remotes = []
+            for remote in self.repo.remotes:
+                urls = list(remote.urls)
+                remotes.append(
+                    GitRemote(
+                        name=remote.name,
+                        url=urls[0] if urls else "",
+                        fetch_url=urls[0] if urls else None,
+                        push_url=remote.url if hasattr(remote, "url") else (urls[0] if urls else None),
+                    )
+                )
+            return remotes
+        except Exception as e:
+            raise GitServiceError(f"Failed to list remotes: {e}")
+
+    def get_remote(self, name: str):
+        """Get a single remote by name.
+
+        Args:
+            name: Remote name
+
+        Returns:
+            GitRemote or None
+        """
+        from models.git import GitRemote
+
+        try:
+            if name not in [r.name for r in self.repo.remotes]:
+                return None
+            remote = self.repo.remotes[name]
+            urls = list(remote.urls)
+            return GitRemote(
+                name=remote.name,
+                url=urls[0] if urls else "",
+                fetch_url=urls[0] if urls else None,
+                push_url=remote.url if hasattr(remote, "url") else (urls[0] if urls else None),
+            )
+        except Exception as e:
+            raise GitServiceError(f"Failed to get remote '{name}': {e}")
+
+    def add_remote(self, name: str, url: str):
+        """Add a new remote.
+
+        Args:
+            name: Remote name
+            url: Remote URL
+
+        Returns:
+            RemoteOperationResult
+        """
+        from models.git import RemoteOperationResult
+
+        try:
+            if name in [r.name for r in self.repo.remotes]:
+                return RemoteOperationResult(
+                    success=False, message=f"Remote '{name}' already exists"
+                )
+            self.repo.create_remote(name, url)
+            return RemoteOperationResult(
+                success=True, message=f"Remote '{name}' added with URL '{url}'"
+            )
+        except Exception as e:
+            return RemoteOperationResult(success=False, message=f"Failed to add remote: {e}")
+
+    def remove_remote(self, name: str):
+        """Remove a remote.
+
+        Args:
+            name: Remote name
+
+        Returns:
+            RemoteOperationResult
+        """
+        from models.git import RemoteOperationResult
+
+        try:
+            if name not in [r.name for r in self.repo.remotes]:
+                return RemoteOperationResult(
+                    success=False, message=f"Remote '{name}' not found"
+                )
+            self.repo.delete_remote(name)
+            return RemoteOperationResult(
+                success=True, message=f"Remote '{name}' removed"
+            )
+        except Exception as e:
+            return RemoteOperationResult(
+                success=False, message=f"Failed to remove remote: {e}"
+            )
+
+    def rename_remote(self, name: str, new_name: str):
+        """Rename a remote.
+
+        Args:
+            name: Current remote name
+            new_name: New remote name
+
+        Returns:
+            RemoteOperationResult
+        """
+        from models.git import RemoteOperationResult
+
+        try:
+            if name not in [r.name for r in self.repo.remotes]:
+                return RemoteOperationResult(
+                    success=False, message=f"Remote '{name}' not found"
+                )
+            remote = self.repo.remotes[name]
+            remote.rename(new_name)
+            return RemoteOperationResult(
+                success=True, message=f"Remote '{name}' renamed to '{new_name}'"
+            )
+        except Exception as e:
+            return RemoteOperationResult(
+                success=False, message=f"Failed to rename remote: {e}"
+            )
+
+    def set_remote_url(self, name: str, url: str):
+        """Set URL for a remote.
+
+        Args:
+            name: Remote name
+            url: New URL
+
+        Returns:
+            RemoteOperationResult
+        """
+        from models.git import RemoteOperationResult
+
+        try:
+            if name not in [r.name for r in self.repo.remotes]:
+                return RemoteOperationResult(
+                    success=False, message=f"Remote '{name}' not found"
+                )
+            remote = self.repo.remotes[name]
+            remote.set_url(url)
+            return RemoteOperationResult(
+                success=True, message=f"Remote '{name}' URL updated to '{url}'"
+            )
+        except Exception as e:
+            return RemoteOperationResult(
+                success=False, message=f"Failed to set remote URL: {e}"
+            )
 
     # =========================================================================
     # Remote Operations

@@ -9,6 +9,7 @@ import {
   Upload,
   AlertCircle,
   FileEdit,
+  Cloud,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useGitStore, GitTab } from '../stores/git'
@@ -24,6 +25,7 @@ import {
   CommitHistory,
   GitSetup,
   WorkingDirectory,
+  RemoteList,
 } from '../components/git'
 
 const tabs: { id: GitTab; label: string; icon: typeof GitBranch }[] = [
@@ -32,6 +34,7 @@ const tabs: { id: GitTab; label: string; icon: typeof GitBranch }[] = [
   { id: 'merge-requests', label: 'Merge Requests', icon: GitMerge },
   { id: 'pull-requests', label: 'Pull Requests', icon: GitPullRequest },
   { id: 'history', label: 'History', icon: History },
+  { id: 'remotes', label: 'Remotes', icon: Cloud },
 ]
 
 export function GitPage() {
@@ -57,6 +60,10 @@ export function GitPage() {
     // Commits
     commits,
     fetchCommits,
+    fetchCommitFiles,
+    fetchCommitDiff,
+    commitFiles,
+    commitDiff,
     // Merge
     mergePreview,
     previewMerge,
@@ -80,7 +87,13 @@ export function GitPage() {
     fetchPRReviews,
     mergePullRequest,
     createPRReview,
-    // Remote
+    // Remote Management
+    remotes,
+    fetchRemotes,
+    addRemote,
+    removeRemote,
+    updateRemote,
+    // Remote Operations
     fetchRemote,
     pullRemote,
     pushRemote,
@@ -158,8 +171,9 @@ export function GitPage() {
       fetchMergeRequests(selectedProjectId)
       fetchCommits(selectedProjectId)
       fetchWorkingStatus(selectedProjectId)
+      fetchRemotes(selectedProjectId)
     }
-  }, [selectedProjectId, gitStatus?.is_valid_repo, fetchBranches, fetchMergeRequests, fetchCommits, fetchWorkingStatus])
+  }, [selectedProjectId, gitStatus?.is_valid_repo, fetchBranches, fetchMergeRequests, fetchCommits, fetchWorkingStatus, fetchRemotes])
 
   // Handle merge click from branch list
   const handleMergeClick = async (source: string) => {
@@ -376,6 +390,24 @@ export function GitPage() {
                 isLoading={isLoading}
                 hasMore={commits.length >= 50}
                 onLoadMore={() => fetchCommits(selectedProjectId, undefined, commits.length + 50)}
+                onFetchFiles={(sha) => fetchCommitFiles(selectedProjectId, sha)}
+                onFetchDiff={(sha, filePath) => fetchCommitDiff(selectedProjectId, sha, filePath)}
+                commitFiles={commitFiles}
+                commitDiff={commitDiff}
+              />
+            )}
+
+            {activeTab === 'remotes' && (
+              <RemoteList
+                remotes={remotes}
+                isLoading={isLoading}
+                onAddRemote={(name, url) => addRemote(selectedProjectId, name, url)}
+                onRemoveRemote={(name) => removeRemote(selectedProjectId, name)}
+                onUpdateRemote={(name, updates) => updateRemote(selectedProjectId, name, updates)}
+                onFetch={(remote) => fetchRemote(selectedProjectId, remote)}
+                onPull={(branch, remote) => pullRemote(selectedProjectId, branch, remote)}
+                onPush={(branch, remote) => pushRemote(selectedProjectId, branch, remote)}
+                onRefresh={() => fetchRemotes(selectedProjectId)}
               />
             )}
           </>

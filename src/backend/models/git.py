@@ -350,6 +350,42 @@ class CommitCreateResult(BaseModel):
     files_committed: int = 0
 
 
+class GitRemote(BaseModel):
+    """Git remote information."""
+
+    name: str
+    url: str
+    fetch_url: str | None = None
+    push_url: str | None = None
+
+
+class RemoteListResponse(BaseModel):
+    """Response for remote list endpoint."""
+
+    remotes: list[GitRemote]
+
+
+class RemoteAddRequest(BaseModel):
+    """Request to add a new remote."""
+
+    name: str
+    url: str
+
+
+class RemoteUpdateRequest(BaseModel):
+    """Request to update a remote."""
+
+    new_name: str | None = None
+    url: str | None = None
+
+
+class RemoteOperationResult(BaseModel):
+    """Result of a remote operation."""
+
+    success: bool
+    message: str = ""
+
+
 class FetchResult(BaseModel):
     """Result of git fetch operation."""
 

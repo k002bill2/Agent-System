@@ -28,6 +28,7 @@ import {
   FileText,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
+import { TaskEvaluationCard } from '../components/feedback/TaskEvaluationCard'
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -475,9 +476,11 @@ export function PlaygroundPage() {
                       message={msg}
                       onCopy={(content) => handleCopy(content, msg.id)}
                       copied={copiedId === msg.id}
+                      sessionId={currentSession.id}
                     />
                   ))
                 )}
+
                 <div ref={messagesEndRef} />
               </div>
 
@@ -778,9 +781,10 @@ interface MessageBubbleProps {
   message: PlaygroundMessage
   onCopy: (content: string) => void
   copied: boolean
+  sessionId?: string
 }
 
-function MessageBubble({ message, onCopy, copied }: MessageBubbleProps) {
+function MessageBubble({ message, onCopy, copied, sessionId }: MessageBubbleProps) {
   const isUser = message.role === 'user'
   const isTool = message.role === 'tool'
   const [showSources, setShowSources] = useState(false)
@@ -897,16 +901,24 @@ function MessageBubble({ message, onCopy, copied }: MessageBubbleProps) {
                 </span>
               )}
             </div>
-            <button
-              onClick={() => onCopy(message.content)}
-              className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded"
-            >
-              {copied ? (
-                <Check className="w-3 h-3 text-green-500" />
-              ) : (
-                <Copy className="w-3 h-3" />
+            <div className="flex items-center gap-0.5">
+              {sessionId && (
+                <TaskEvaluationCard
+                  sessionId={sessionId}
+                  taskId={message.id}
+                />
               )}
-            </button>
+              <button
+                onClick={() => onCopy(message.content)}
+                className="p-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/5"
+              >
+                {copied ? (
+                  <Check className="w-[18px] h-[18px] text-green-500" />
+                ) : (
+                  <Copy className="w-[18px] h-[18px]" />
+                )}
+              </button>
+            </div>
           </div>
         )}
       </div>

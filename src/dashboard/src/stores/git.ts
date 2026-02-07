@@ -140,7 +140,7 @@ export interface GitHubPRReview {
   commit_id: string | null
 }
 
-export type GitTab = 'changes' | 'branches' | 'merge-requests' | 'pull-requests' | 'history'
+export type GitTab = 'changes' | 'branches' | 'merge-requests' | 'pull-requests' | 'history' | 'remotes'
 
 // Working Directory Types
 export type FileStatusType = 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | 'staged'
@@ -209,6 +209,26 @@ export interface DraftCommitsResponse {
   token_usage: number | null
 }
 
+export interface CommitFile {
+  path: string
+  status: string // added, modified, deleted, renamed
+  additions: number
+  deletions: number
+  old_path: string | null
+}
+
+export interface GitRemote {
+  name: string
+  url: string
+  fetch_url: string | null
+  push_url: string | null
+}
+
+export interface RemoteOperationResult {
+  success: boolean
+  message: string
+}
+
 // =============================================================================
 // State Interface
 // =============================================================================
@@ -259,6 +279,13 @@ interface GitState {
   draftCommits: DraftCommit[]
   isGeneratingDrafts: boolean
 
+  // Remote Management
+  remotes: GitRemote[]
+
+  // Commit Detail
+  commitFiles: Record<string, CommitFile[]>  // sha -> files
+  commitDiff: Record<string, string>  // sha -> diff or sha:path -> diff
+
   // Actions - UI
   setActiveTab: (tab: GitTab) => void
   setSelectedProject: (projectId: string | null) => void
@@ -291,6 +318,8 @@ interface GitState {
 
   // Actions - Commits
   fetchCommits: (projectId: string, branch?: string, limit?: number) => Promise<void>
+  fetchCommitFiles: (projectId: string, sha: string) => Promise<CommitFile[]>
+  fetchCommitDiff: (projectId: string, sha: string, filePath?: string) => Promise<string>
 
   // Actions - Merge Preview
   previewMerge: (projectId: string, source: string, target: string) => Promise<MergePreview | null>
@@ -325,10 +354,16 @@ interface GitState {
   mergePullRequest: (prNumber: number, method?: string) => Promise<boolean>
   createPRReview: (prNumber: number, body: string, event: string) => Promise<boolean>
 
+  // Actions - Remote Management
+  fetchRemotes: (projectId: string) => Promise<void>
+  addRemote: (projectId: string, name: string, url: string) => Promise<boolean>
+  removeRemote: (projectId: string, remoteName: string) => Promise<boolean>
+  updateRemote: (projectId: string, remoteName: string, updates: { new_name?: string; url?: string }) => Promise<boolean>
+
   // Actions - Remote Operations
-  fetchRemote: (projectId: string) => Promise<boolean>
-  pullRemote: (projectId: string, branch?: string) => Promise<boolean>
-  pushRemote: (projectId: string, branch?: string) => Promise<boolean>
+  fetchRemote: (projectId: string, remote?: string) => Promise<boolean>
+  pullRemote: (projectId: string, branch?: string, remote?: string) => Promise<boolean>
+  pushRemote: (projectId: string, branch?: string, remote?: string) => Promise<boolean>
 }
 
 // =============================================================================
@@ -387,6 +422,13 @@ export const useGitStore = create<GitState>((set, get) => ({
   // Draft Commits
   draftCommits: [],
   isGeneratingDrafts: false,
+
+  // Remote Management
+  remotes: [],
+
+  // Commit Detail
+  commitFiles: {},
+  commitDiff: {},
 
   // UI Actions
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -680,6 +722,51 @@ export const useGitStore = create<GitState>((set, get) => ({
       set({ commits: data.commits, isLoading: false })
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })
+    }
+  },
+
+  fetchCommitFiles: async (projectId, sha) => {
+    // Return cached if available
+    const cached = get().commitFiles[sha]
+    if (cached) return cached
+
+    try {
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/commits/${sha}/files`)
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch commit files'))
+      }
+      const files: CommitFile[] = await response.json()
+      set({ commitFiles: { ...get().commitFiles, [sha]: files } })
+      return files
+    } catch (error) {
+      set({ error: (error as Error).message })
+      return []
+    }
+  },
+
+  fetchCommitDiff: async (projectId, sha, filePath) => {
+    const key = filePath ? `${sha}:${filePath}` : sha
+    const cached = get().commitDiff[key]
+    if (cached) return cached
+
+    try {
+      const params = new URLSearchParams()
+      if (filePath) params.set('file_path', filePath)
+
+      const response = await fetch(
+        `${API_BASE}/api/git/projects/${projectId}/commits/${sha}/diff?${params}`
+      )
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch commit diff'))
+      }
+      const data = await response.json()
+      set({ commitDiff: { ...get().commitDiff, [key]: data.diff } })
+      return data.diff as string
+    } catch (error) {
+      set({ error: (error as Error).message })
+      return ''
     }
   },
 
@@ -1105,11 +1192,95 @@ export const useGitStore = create<GitState>((set, get) => ({
     }
   },
 
-  // Remote Operations
-  fetchRemote: async (projectId) => {
+  // Remote Management
+  fetchRemotes: async (projectId) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/fetch`, {
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/remotes`)
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch remotes'))
+      }
+      const data = await response.json()
+      set({ remotes: data.remotes, isLoading: false })
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+    }
+  },
+
+  addRemote: async (projectId, name, url) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/remotes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, url }),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to add remote'))
+      }
+      await get().fetchRemotes(projectId)
+      set({ isLoading: false })
+      return true
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return false
+    }
+  },
+
+  removeRemote: async (projectId, remoteName) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/git/projects/${projectId}/remotes/${encodeURIComponent(remoteName)}`,
+        { method: 'DELETE' }
+      )
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to remove remote'))
+      }
+      await get().fetchRemotes(projectId)
+      set({ isLoading: false })
+      return true
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return false
+    }
+  },
+
+  updateRemote: async (projectId, remoteName, updates) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/git/projects/${projectId}/remotes/${encodeURIComponent(remoteName)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+        }
+      )
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to update remote'))
+      }
+      await get().fetchRemotes(projectId)
+      set({ isLoading: false })
+      return true
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return false
+    }
+  },
+
+  // Remote Operations
+  fetchRemote: async (projectId, remote) => {
+    set({ isLoading: true, error: null })
+    try {
+      const params = new URLSearchParams()
+      if (remote) params.set('remote', remote)
+
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/fetch?${params}`, {
         method: 'POST',
       })
       if (!response.ok) {
@@ -1125,11 +1296,12 @@ export const useGitStore = create<GitState>((set, get) => ({
     }
   },
 
-  pullRemote: async (projectId, branch) => {
+  pullRemote: async (projectId, branch, remote) => {
     set({ isLoading: true, error: null })
     try {
       const params = new URLSearchParams()
       if (branch) params.set('branch', branch)
+      if (remote) params.set('remote', remote)
 
       const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/pull?${params}`, {
         method: 'POST',
@@ -1148,11 +1320,12 @@ export const useGitStore = create<GitState>((set, get) => ({
     }
   },
 
-  pushRemote: async (projectId, branch) => {
+  pushRemote: async (projectId, branch, remote) => {
     set({ isLoading: true, error: null })
     try {
       const params = new URLSearchParams()
       if (branch) params.set('branch', branch)
+      if (remote) params.set('remote', remote)
 
       const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/push?${params}`, {
         method: 'POST',
