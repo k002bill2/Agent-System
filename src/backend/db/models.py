@@ -12,6 +12,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
@@ -265,6 +266,9 @@ class UserModel(Base):
     # Status flags
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
+
+    # Role: user, manager, admin
+    role = Column(String(20), default="user")
 
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
@@ -718,3 +722,21 @@ class SessionActivityModel(Base):
         Index("ix_session_activity_session", "session_id", "created_at"),
         Index("ix_session_activity_type", "activity_type", "created_at"),
     )
+
+
+# ─────────────────────────────────────────────────────────────
+# Menu Visibility Model
+# ─────────────────────────────────────────────────────────────
+
+
+class MenuVisibilityModel(Base):
+    """Menu visibility settings per role."""
+
+    __tablename__ = "menu_visibility"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    menu_key = Column(String(50), nullable=False)  # ViewType 값 (dashboard, tasks, ...)
+    role = Column(String(20), nullable=False)  # user, manager, admin
+    visible = Column(Boolean, default=True)
+
+    __table_args__ = (UniqueConstraint("menu_key", "role", name="uq_menu_role"),)

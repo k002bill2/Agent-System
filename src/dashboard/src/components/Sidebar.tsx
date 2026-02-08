@@ -18,10 +18,11 @@ import {
   Building2,
   ShieldCheck,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useOrchestrationStore } from '../stores/orchestration'
 import { useNavigationStore, ViewType } from '../stores/navigation'
 import { useAuthStore } from '../stores/auth'
+import { useMenuVisibilityStore } from '../stores/menuVisibility'
 
 const navigation: { name: string; icon: typeof LayoutDashboard; view: ViewType }[] = [
   { name: 'Dashboard', icon: LayoutDashboard, view: 'dashboard' },
@@ -44,10 +45,34 @@ export function Sidebar() {
   const { fetchProjects } = useOrchestrationStore()
   const { currentView, setView } = useNavigationStore()
   const { user } = useAuthStore()
+  const { visibility, fetchVisibility } = useMenuVisibilityStore()
 
   useEffect(() => {
     fetchProjects()
   }, [fetchProjects])
+
+  useEffect(() => {
+    fetchVisibility()
+  }, [fetchVisibility])
+
+  const userRole = user?.role || (user?.is_admin ? 'admin' : 'user')
+
+  // 역할 기반 메뉴 필터링
+  const filteredNavigation = useMemo(() => {
+    if (userRole === 'admin') return navigation // admin은 모든 메뉴 접근 가능
+
+    return navigation.filter((item) => {
+      const menuVisibility = visibility[item.view]
+      if (!menuVisibility) return true // 설정 없으면 기본 표시
+      return menuVisibility[userRole] !== false
+    })
+  }, [visibility, userRole])
+
+  // Admin 메뉴 표시 여부
+  const showAdmin = userRole === 'admin' || (visibility['admin']?.[userRole] ?? false)
+
+  // Settings 메뉴 표시 여부
+  const showSettings = userRole === 'admin' || (visibility['settings']?.[userRole] ?? true)
 
   return (
     <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
@@ -65,7 +90,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {navigation.map((item) => (
+        {filteredNavigation.map((item) => (
           <button
             key={item.name}
             onClick={() => setView(item.view)}
@@ -84,7 +109,7 @@ export function Sidebar() {
 
       {/* Settings and User Section */}
       <div className="p-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
-        {user?.is_admin && (
+        {showAdmin && (
           <button
             onClick={() => setView('admin')}
             className={cn(
@@ -98,18 +123,20 @@ export function Sidebar() {
             Admin
           </button>
         )}
-        <button
-          onClick={() => setView('settings')}
-          className={cn(
-            'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-            currentView === 'settings'
-              ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-400'
-              : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
-          )}
-        >
-          <Settings className="w-5 h-5" />
-          Settings
-        </button>
+        {showSettings && (
+          <button
+            onClick={() => setView('settings')}
+            className={cn(
+              'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+              currentView === 'settings'
+                ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-400'
+                : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
+            )}
+          >
+            <Settings className="w-5 h-5" />
+            Settings
+          </button>
+        )}
 
         {/* User Info + Logout */}
         {user ? (

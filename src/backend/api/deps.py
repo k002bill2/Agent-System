@@ -167,7 +167,9 @@ async def get_current_admin_user(
 
     Use this for admin-only endpoints.
     """
-    if not current_user.is_admin:
+    # Support both legacy is_admin flag and new role system
+    is_admin = current_user.is_admin or getattr(current_user, "role", "user") == "admin"
+    if not is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin privileges required",

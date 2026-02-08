@@ -13,6 +13,14 @@ from services.auth_service import AuthService, TokenPair
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
+def _get_user_role(user: UserModel) -> str:
+    """Get user role with fallback from is_admin flag."""
+    role = getattr(user, "role", None)
+    if role:
+        return role
+    return "admin" if user.is_admin else "user"
+
+
 # ─────────────────────────────────────────────────────────────
 # Request/Response Models
 # ─────────────────────────────────────────────────────────────
@@ -40,6 +48,7 @@ class UserResponse(BaseModel):
     avatar_url: str | None
     oauth_provider: str
     is_admin: bool
+    role: str = "user"
 
     class Config:
         from_attributes = True
@@ -136,6 +145,7 @@ async def google_callback(
                 avatar_url=user.avatar_url,
                 oauth_provider=user.oauth_provider,
                 is_admin=user.is_admin,
+                role=_get_user_role(user),
             ),
         )
     except Exception as e:
@@ -201,6 +211,7 @@ async def github_callback(
                 avatar_url=user.avatar_url,
                 oauth_provider=user.oauth_provider,
                 is_admin=user.is_admin,
+                role=_get_user_role(user),
             ),
         )
     except Exception as e:
@@ -270,6 +281,7 @@ async def register(
             avatar_url=user.avatar_url,
             oauth_provider=user.oauth_provider or "email",
             is_admin=user.is_admin,
+            role=_get_user_role(user),
         ),
     )
 
@@ -307,6 +319,7 @@ async def login(
             avatar_url=user.avatar_url,
             oauth_provider=user.oauth_provider or "email",
             is_admin=user.is_admin,
+            role=_get_user_role(user),
         ),
     )
 
@@ -374,6 +387,7 @@ async def get_current_user_info(
         avatar_url=current_user.avatar_url,
         oauth_provider=current_user.oauth_provider,
         is_admin=current_user.is_admin,
+        role=_get_user_role(current_user),
     )
 
 

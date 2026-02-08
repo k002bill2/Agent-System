@@ -20,6 +20,8 @@ const AUTH_COOKIE_EXPIRATION_DAYS = 7 // refreshToken 수명과 동기화
 // Types
 // ─────────────────────────────────────────────────────────────
 
+export type UserRole = 'user' | 'manager' | 'admin'
+
 export interface User {
   id: string
   email: string
@@ -27,6 +29,7 @@ export interface User {
   avatar_url: string | null
   oauth_provider: 'google' | 'github' | 'email'
   is_admin: boolean
+  role: UserRole
 }
 
 interface AuthState {

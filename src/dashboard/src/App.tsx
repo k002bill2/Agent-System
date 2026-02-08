@@ -6,6 +6,7 @@ import { CostBadge } from './components/CostMonitor'
 import { useOrchestrationStore } from './stores/orchestration'
 import { useNavigationStore, isPublicView } from './stores/navigation'
 import { useAuthStore } from './stores/auth'
+import { useMenuVisibilityStore } from './stores/menuVisibility'
 import { DashboardPage } from './pages/DashboardPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { TasksPage } from './pages/TasksPage'
@@ -250,6 +251,23 @@ export default function App() {
   const renderContent = () => {
     if (isInitialLoading) {
       return renderSkeletonContent()
+    }
+
+    // 역할 기반 접근 제어
+    const { visibility } = useMenuVisibilityStore.getState()
+    const userRole = user?.role || (user?.is_admin ? 'admin' : 'user')
+    if (
+      userRole !== 'admin' &&
+      currentView !== 'dashboard' &&
+      currentView !== 'settings' &&
+      visibility[currentView]
+    ) {
+      const allowed = visibility[currentView][userRole]
+      if (allowed === false) {
+        // 권한 없는 메뉴 접근 시 Dashboard로 리다이렉트
+        setView('dashboard')
+        return <DashboardPage />
+      }
     }
 
     switch (currentView) {

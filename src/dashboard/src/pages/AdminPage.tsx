@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
   Users,
-  Shield,
   ShieldOff,
   Search,
   ChevronLeft,
@@ -10,8 +9,11 @@ import {
   UserX,
   Server,
   RefreshCw,
+  Menu,
+  Save,
+  Check,
 } from 'lucide-react'
-import { useAuthStore } from '../stores/auth'
+import { useAuthStore, type UserRole } from '../stores/auth'
 
 // ============================================================================
 // Types
@@ -25,6 +27,7 @@ interface AdminUser {
   oauth_provider: string | null
   is_active: boolean
   is_admin: boolean
+  role: UserRole
   created_at: string | null
   last_login_at: string | null
 }
@@ -41,9 +44,42 @@ interface SystemInfo {
   admin_count: number
 }
 
-type AdminTab = 'users' | 'system'
+type MenuVisibility = Record<string, Record<string, boolean>>
+
+type AdminTab = 'users' | 'menu-settings' | 'system'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
+
+const ROLE_LABELS: Record<UserRole, string> = {
+  user: '일반',
+  manager: '관리자',
+  admin: '최고관리자',
+}
+
+const ROLE_COLORS: Record<UserRole, string> = {
+  user: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
+  manager: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+  admin: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+}
+
+const MENU_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard',
+  projects: 'Projects',
+  tasks: 'Tasks',
+  agents: 'Agents',
+  activity: 'Activity',
+  monitor: 'Monitor',
+  'claude-sessions': 'Claude Sessions',
+  'project-configs': 'Project Configs',
+  git: 'Git',
+  organizations: 'Organizations',
+  audit: 'Audit Trail',
+  notifications: 'Notifications',
+  analytics: 'Analytics',
+  playground: 'Playground',
+  settings: 'Settings',
+  admin: 'Admin',
+}
 
 // ============================================================================
 // API helpers
@@ -82,7 +118,7 @@ async function fetchUsers(params: {
 
 async function updateUser(
   userId: string,
-  update: { is_active?: boolean; is_admin?: boolean; name?: string }
+  update: { is_active?: boolean; is_admin?: boolean; role?: string; name?: string }
 ): Promise<AdminUser> {
   const res = await fetch(`${API_BASE}/admin/users/${userId}`, {
     method: 'PATCH',
@@ -104,6 +140,26 @@ async function fetchSystemInfo(): Promise<SystemInfo> {
   return res.json()
 }
 
+async function fetchMenuVisibility(): Promise<MenuVisibility> {
+  const res = await fetch(`${API_BASE}/admin/menu-visibility`, {
+    headers: await getAuthHeaders(),
+  })
+  if (!res.ok) throw new Error(`Failed to fetch menu visibility: ${res.statusText}`)
+  const data = await res.json()
+  return data.visibility
+}
+
+async function saveMenuVisibility(visibility: MenuVisibility): Promise<MenuVisibility> {
+  const res = await fetch(`${API_BASE}/admin/menu-visibility`, {
+    method: 'PUT',
+    headers: await getAuthHeaders(),
+    body: JSON.stringify({ visibility }),
+  })
+  if (!res.ok) throw new Error(`Failed to save menu visibility: ${res.statusText}`)
+  const data = await res.json()
+  return data.visibility
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -112,7 +168,9 @@ export function AdminPage() {
   const { user } = useAuthStore()
   const [activeTab, setActiveTab] = useState<AdminTab>('users')
 
-  if (!user?.is_admin) {
+  const isAdmin = user?.role === 'admin' || user?.is_admin
+
+  if (!isAdmin) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
@@ -121,7 +179,7 @@ export function AdminPage() {
             접근 권한 없음
           </h2>
           <p className="text-gray-500 dark:text-gray-400">
-            관리자 권한이 필요합니다.
+            최고관리자 권한이 필요합니다.
           </p>
         </div>
       </div>
@@ -130,6 +188,7 @@ export function AdminPage() {
 
   const tabs: { id: AdminTab; label: string; icon: typeof Users }[] = [
     { id: 'users', label: 'Users', icon: Users },
+    { id: 'menu-settings', label: 'Menu Settings', icon: Menu },
     { id: 'system', label: 'System', icon: Server },
   ]
 
@@ -154,6 +213,7 @@ export function AdminPage() {
       </div>
 
       {activeTab === 'users' && <UserManagement currentUserId={user.id} />}
+      {activeTab === 'menu-settings' && <MenuSettingsPanel />}
       {activeTab === 'system' && <SystemInfoPanel />}
     </div>
   )
@@ -170,7 +230,7 @@ function UserManagement({ currentUserId }: { currentUserId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [filterActive, setFilterActive] = useState<boolean | null>(null)
-  const [filterAdmin, setFilterAdmin] = useState<boolean | null>(null)
+  const [filterRole, setFilterRole] = useState<string | null>(null)
   const [page, setPage] = useState(0)
   const limit = 20
 
@@ -181,7 +241,7 @@ function UserManagement({ currentUserId }: { currentUserId: string }) {
       const data = await fetchUsers({
         search: search || undefined,
         is_active: filterActive,
-        is_admin: filterAdmin,
+        is_admin: null,
         limit,
         offset: page * limit,
       })
@@ -196,20 +256,25 @@ function UserManagement({ currentUserId }: { currentUserId: string }) {
 
   useEffect(() => {
     load()
-  }, [page, filterActive, filterAdmin]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, filterActive, filterRole]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSearch = () => {
     setPage(0)
     load()
   }
 
-  const handleToggle = async (
-    userId: string,
-    field: 'is_active' | 'is_admin',
-    currentValue: boolean
-  ) => {
+  const handleToggleActive = async (userId: string, currentValue: boolean) => {
     try {
-      const updated = await updateUser(userId, { [field]: !currentValue })
+      const updated = await updateUser(userId, { is_active: !currentValue })
+      setUsers((prev) => prev.map((u) => (u.id === userId ? updated : u)))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Update failed')
+    }
+  }
+
+  const handleRoleChange = async (userId: string, newRole: UserRole) => {
+    try {
+      const updated = await updateUser(userId, { role: newRole })
       setUsers((prev) => prev.map((u) => (u.id === userId ? updated : u)))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Update failed')
@@ -255,17 +320,18 @@ function UserManagement({ currentUserId }: { currentUserId: string }) {
         </select>
 
         <select
-          value={filterAdmin === null ? 'all' : String(filterAdmin)}
+          value={filterRole ?? 'all'}
           onChange={(e) => {
             const v = e.target.value
-            setFilterAdmin(v === 'all' ? null : v === 'true')
+            setFilterRole(v === 'all' ? null : v)
             setPage(0)
           }}
           className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
         >
           <option value="all">All Roles</option>
-          <option value="true">Admin</option>
-          <option value="false">User</option>
+          <option value="user">일반 (User)</option>
+          <option value="manager">관리자 (Manager)</option>
+          <option value="admin">최고관리자 (Admin)</option>
         </select>
 
         <span className="text-sm text-gray-500 dark:text-gray-400">
@@ -294,7 +360,7 @@ function UserManagement({ currentUserId }: { currentUserId: string }) {
                 Status
               </th>
               <th className="text-center px-4 py-3 font-medium text-gray-500 dark:text-gray-400">
-                Admin
+                Role
               </th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">
                 Created
@@ -372,11 +438,18 @@ function UserManagement({ currentUserId }: { currentUserId: string }) {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center">
-                    {u.is_admin ? (
-                      <Shield className="w-4 h-4 text-amber-500 mx-auto" />
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
+                    <select
+                      value={u.role || (u.is_admin ? 'admin' : 'user')}
+                      onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)}
+                      disabled={u.id === currentUserId}
+                      className={`px-2 py-1 rounded text-xs font-medium border-0 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 ${
+                        ROLE_COLORS[u.role || (u.is_admin ? 'admin' : 'user')]
+                      }`}
+                    >
+                      <option value="user">일반 (User)</option>
+                      <option value="manager">관리자 (Manager)</option>
+                      <option value="admin">최고관리자 (Admin)</option>
+                    </select>
                   </td>
                   <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">
                     {u.created_at
@@ -391,7 +464,7 @@ function UserManagement({ currentUserId }: { currentUserId: string }) {
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-1">
                       <button
-                        onClick={() => handleToggle(u.id, 'is_active', u.is_active)}
+                        onClick={() => handleToggleActive(u.id, u.is_active)}
                         disabled={u.id === currentUserId}
                         className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors disabled:opacity-30"
                         title={u.is_active ? '비활성화' : '활성화'}
@@ -400,18 +473,6 @@ function UserManagement({ currentUserId }: { currentUserId: string }) {
                           <UserX className="w-4 h-4 text-red-500" />
                         ) : (
                           <UserCheck className="w-4 h-4 text-green-500" />
-                        )}
-                      </button>
-                      <button
-                        onClick={() => handleToggle(u.id, 'is_admin', u.is_admin)}
-                        disabled={u.id === currentUserId}
-                        className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors disabled:opacity-30"
-                        title={u.is_admin ? '관리자 해제' : '관리자 지정'}
-                      >
-                        {u.is_admin ? (
-                          <ShieldOff className="w-4 h-4 text-amber-500" />
-                        ) : (
-                          <Shield className="w-4 h-4 text-gray-400" />
                         )}
                       </button>
                     </div>
@@ -446,6 +507,170 @@ function UserManagement({ currentUserId }: { currentUserId: string }) {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ============================================================================
+// Menu Settings
+// ============================================================================
+
+function MenuSettingsPanel() {
+  const [visibility, setVisibility] = useState<MenuVisibility | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await fetchMenuVisibility()
+      setVisibility(data)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    load()
+  }, [])
+
+  const handleToggle = (menuKey: string, role: string) => {
+    if (!visibility) return
+    // admin은 항상 true
+    if (role === 'admin') return
+
+    setVisibility((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        [menuKey]: {
+          ...prev[menuKey],
+          [role]: !prev[menuKey]?.[role],
+        },
+      }
+    })
+    setSaved(false)
+  }
+
+  const handleSave = async () => {
+    if (!visibility) return
+    setSaving(true)
+    setError(null)
+    try {
+      const updated = await saveMenuVisibility(visibility)
+      setVisibility(updated)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return <div className="text-gray-500 py-8 text-center">Loading...</div>
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg">
+        {error}
+      </div>
+    )
+  }
+
+  if (!visibility) return null
+
+  const menuKeys = Object.keys(MENU_LABELS)
+  const roles: UserRole[] = ['user', 'manager', 'admin']
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+            메뉴 노출 설정
+          </h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            역할별 메뉴 노출을 설정합니다. 최고관리자는 항상 모든 메뉴에 접근할 수 있습니다.
+          </p>
+        </div>
+        <button
+          onClick={handleSave}
+          disabled={saving || saved}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            saved
+              ? 'bg-green-600 text-white'
+              : 'bg-primary-600 text-white hover:bg-primary-700'
+          } disabled:opacity-60`}
+        >
+          {saved ? (
+            <>
+              <Check className="w-4 h-4" />
+              저장됨
+            </>
+          ) : (
+            <>
+              <Save className="w-4 h-4" />
+              {saving ? '저장 중...' : '저장'}
+            </>
+          )}
+        </button>
+      </div>
+
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 dark:bg-gray-900/50">
+            <tr>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400 w-1/3">
+                메뉴
+              </th>
+              {roles.map((role) => (
+                <th
+                  key={role}
+                  className="text-center px-4 py-3 font-medium text-gray-500 dark:text-gray-400"
+                >
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${ROLE_COLORS[role]}`}>
+                    {ROLE_LABELS[role]}
+                  </span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+            {menuKeys.map((menuKey) => (
+              <tr key={menuKey} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
+                  {MENU_LABELS[menuKey]}
+                </td>
+                {roles.map((role) => {
+                  const isChecked = visibility[menuKey]?.[role] ?? false
+                  const isDisabled = role === 'admin' // admin은 항상 접근 가능
+                  return (
+                    <td key={role} className="px-4 py-3 text-center">
+                      <label className="inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => handleToggle(menuKey, role)}
+                          disabled={isDisabled}
+                          className="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 dark:focus:ring-primary-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                      </label>
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )
