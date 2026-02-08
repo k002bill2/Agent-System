@@ -14,6 +14,7 @@ import {
   FileText,
   LayoutList,
   Code2,
+  CheckCircle,
 } from 'lucide-react'
 import { SessionMessage, MessageType, SessionStatus, ClaudeSessionDetail } from '../../types/claudeSession'
 import { TranscriptViewer } from './TranscriptViewer'
@@ -56,6 +57,8 @@ function MessageIcon({ type }: { type: MessageType }) {
       return <Bot className="w-4 h-4 text-purple-500" />
     case 'tool_use':
       return <Wrench className="w-4 h-4 text-orange-500" />
+    case 'tool_result':
+      return <CheckCircle className="w-4 h-4 text-green-500" />
     case 'progress':
       return <Zap className="w-4 h-4 text-green-500" />
     default:

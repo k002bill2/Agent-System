@@ -596,21 +596,52 @@ class ClaudeSessionMonitor:
 
             # Map to MessageType enum
             if msg_type_str == "user":
-                msg_type = MessageType.USER
                 message_data = entry.get("message", {})
                 content = message_data.get("content", "")
+
+                # Check if this is a tool_result (Claude API sends tool results as "user" type)
                 if isinstance(content, list) and len(content) > 0:
                     first_item = content[0]
+                    if isinstance(first_item, dict) and first_item.get("type") == "tool_result":
+                        # This is a tool_result, not a real user message
+                        tool_use_id = first_item.get("tool_use_id", "")
+                        result_content = first_item.get("content", "")
+                        if isinstance(result_content, list):
+                            # Extract text from content blocks
+                            texts = [
+                                c.get("text", "")
+                                for c in result_content
+                                if isinstance(c, dict) and c.get("type") == "text"
+                            ]
+                            result_content = "\n".join(texts) if texts else ""
+                        elif not isinstance(result_content, str):
+                            result_content = str(result_content) if result_content else ""
+
+                        recent_messages.append(
+                            SessionMessage(
+                                type=MessageType.TOOL_RESULT,
+                                timestamp=timestamp,
+                                tool_id=tool_use_id,
+                                content=result_content[:500] if result_content else None,
+                            )
+                        )
+                        continue
+
+                    # Normal user message with content blocks
                     if isinstance(first_item, dict):
                         content = first_item.get("text", "")
                     else:
                         content = str(first_item)
 
+                # Skip empty user messages (system-generated, not real user input)
+                if not content or (isinstance(content, str) and not content.strip()):
+                    continue
+
                 recent_messages.append(
                     SessionMessage(
-                        type=msg_type,
+                        type=MessageType.USER,
                         timestamp=timestamp,
-                        content=content[:500] if content else None,  # Truncate long content
+                        content=content[:500] if content else None,
                     )
                 )
 
@@ -661,7 +692,8 @@ class ClaudeSessionMonitor:
                             usage=usage,
                         )
                     )
-                else:
+                elif content and content.strip():
+                    # Skip assistant messages with empty content (e.g., thinking-only blocks)
                     recent_messages.append(
                         SessionMessage(
                             type=msg_type,
@@ -1097,17 +1129,50 @@ class ClaudeSessionMonitor:
                 event_id = f"{session_id}_{line_num}"
 
                 if msg_type == "user":
+                    message_data = entry.get("message", {})
+                    content = message_data.get("content", "")
+
+                    # Check if this is a tool_result (Claude API sends tool results as "user" type)
+                    if isinstance(content, list) and len(content) > 0:
+                        first_item = content[0]
+                        if isinstance(first_item, dict) and first_item.get("type") == "tool_result":
+                            # This is a tool_result, not a real user message
+                            total_count += 1
+                            if total_count > offset and len(events) < limit:
+                                result_content = first_item.get("content", "")
+                                if isinstance(result_content, list):
+                                    texts = [
+                                        c.get("text", "")
+                                        for c in result_content
+                                        if isinstance(c, dict) and c.get("type") == "text"
+                                    ]
+                                    result_content = "\n".join(texts) if texts else ""
+                                elif not isinstance(result_content, str):
+                                    result_content = str(result_content) if result_content else ""
+
+                                events.append(
+                                    ActivityEvent(
+                                        id=event_id,
+                                        type=ActivityEventType.TOOL_RESULT,
+                                        timestamp=timestamp,
+                                        tool_result=result_content[:500] if result_content else None,
+                                        session_id=session_id,
+                                    )
+                                )
+                            continue
+
+                        # Normal user message with content blocks
+                        if isinstance(first_item, dict):
+                            content = first_item.get("text", "")
+                        else:
+                            content = str(first_item)
+
+                    # Skip empty user messages (system-generated, not real user input)
+                    if not content or (isinstance(content, str) and not content.strip()):
+                        continue
+
                     total_count += 1
                     if total_count > offset and len(events) < limit:
-                        message_data = entry.get("message", {})
-                        content = message_data.get("content", "")
-                        if isinstance(content, list) and len(content) > 0:
-                            first_item = content[0]
-                            if isinstance(first_item, dict):
-                                content = first_item.get("text", "")
-                            else:
-                                content = str(first_item)
-
                         events.append(
                             ActivityEvent(
                                 id=event_id,
@@ -1128,17 +1193,20 @@ class ClaudeSessionMonitor:
                                 item_type = item.get("type", "")
 
                                 if item_type == "text":
-                                    total_count += 1
-                                    if total_count > offset and len(events) < limit:
-                                        events.append(
-                                            ActivityEvent(
-                                                id=f"{event_id}_text",
-                                                type=ActivityEventType.ASSISTANT,
-                                                timestamp=timestamp,
-                                                content=item.get("text", "")[:1000],
-                                                session_id=session_id,
+                                    text_content = item.get("text", "")
+                                    # Skip empty text blocks (e.g., thinking-only responses)
+                                    if text_content and text_content.strip():
+                                        total_count += 1
+                                        if total_count > offset and len(events) < limit:
+                                            events.append(
+                                                ActivityEvent(
+                                                    id=f"{event_id}_text",
+                                                    type=ActivityEventType.ASSISTANT,
+                                                    timestamp=timestamp,
+                                                    content=text_content[:1000],
+                                                    session_id=session_id,
+                                                )
                                             )
-                                        )
 
                                 elif item_type == "tool_use":
                                     total_count += 1
@@ -1340,12 +1408,43 @@ class ClaudeSessionMonitor:
             if msg_type == "user":
                 message_data = entry.get("message", {})
                 content = message_data.get("content", "")
+
+                # Check if this is a tool_result (Claude API sends tool results as "user" type)
                 if isinstance(content, list) and len(content) > 0:
                     first_item = content[0]
+                    if isinstance(first_item, dict) and first_item.get("type") == "tool_result":
+                        # This is a tool_result, not a real user message
+                        result_content = first_item.get("content", "")
+                        if isinstance(result_content, list):
+                            texts = [
+                                c.get("text", "")
+                                for c in result_content
+                                if isinstance(c, dict) and c.get("type") == "text"
+                            ]
+                            result_content = "\n".join(texts) if texts else ""
+                        elif not isinstance(result_content, str):
+                            result_content = str(result_content) if result_content else ""
+
+                        events.append(
+                            ActivityEvent(
+                                id=event_id,
+                                type=ActivityEventType.TOOL_RESULT,
+                                timestamp=timestamp,
+                                tool_result=result_content[:500] if result_content else None,
+                                session_id=session_id,
+                            )
+                        )
+                        continue
+
+                    # Normal user message with content blocks
                     if isinstance(first_item, dict):
                         content = first_item.get("text", "")
                     else:
                         content = str(first_item)
+
+                # Skip empty user messages (system-generated, not real user input)
+                if not content or (isinstance(content, str) and not content.strip()):
+                    continue
 
                 events.append(
                     ActivityEvent(
@@ -1367,15 +1466,18 @@ class ClaudeSessionMonitor:
                             item_type = item.get("type", "")
 
                             if item_type == "text":
-                                events.append(
-                                    ActivityEvent(
-                                        id=f"{event_id}_text",
-                                        type=ActivityEventType.ASSISTANT,
-                                        timestamp=timestamp,
-                                        content=item.get("text", "")[:1000],
-                                        session_id=session_id,
+                                text_content = item.get("text", "")
+                                # Skip empty text blocks (e.g., thinking-only responses)
+                                if text_content and text_content.strip():
+                                    events.append(
+                                        ActivityEvent(
+                                            id=f"{event_id}_text",
+                                            type=ActivityEventType.ASSISTANT,
+                                            timestamp=timestamp,
+                                            content=text_content[:1000],
+                                            session_id=session_id,
+                                        )
                                     )
-                                )
 
                             elif item_type == "tool_use":
                                 events.append(

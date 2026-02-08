@@ -91,6 +91,16 @@ async def _run_migrations() -> None:
                 "UPDATE users SET role = 'admin' WHERE is_admin = true AND (role IS NULL OR role = 'user')"
             ))
 
+        # Migration 2: Add 'sort_order' column to menu_visibility table
+        result = await conn.execute(text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = 'menu_visibility' AND column_name = 'sort_order'"
+        ))
+        if not result.fetchone():
+            await conn.execute(text(
+                "ALTER TABLE menu_visibility ADD COLUMN sort_order INTEGER"
+            ))
+
 
 async def close_db() -> None:
     """Close database connection pool."""

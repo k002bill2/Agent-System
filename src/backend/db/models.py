@@ -738,5 +738,6 @@ class MenuVisibilityModel(Base):
     menu_key = Column(String(50), nullable=False)  # ViewType 값 (dashboard, tasks, ...)
     role = Column(String(20), nullable=False)  # user, manager, admin
     visible = Column(Boolean, default=True)
+    sort_order = Column(Integer, nullable=True)  # 메뉴 순서 (낮을수록 먼저 표시)
 
     __table_args__ = (UniqueConstraint("menu_key", "role", name="uq_menu_role"),)

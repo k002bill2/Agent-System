@@ -107,6 +107,11 @@ interface AgentsState {
   historyProjectFilter: string | null
   selectedHistoryId: string | null
 
+  // Execution State
+  executingAnalysisId: string | null
+  executionSessionId: string | null
+  executionError: string | null
+
   // UI State
   isLoading: boolean
   error: string | null
@@ -122,6 +127,11 @@ interface AgentsState {
   setCategoryFilter: (category: AgentCategory | null) => void
   clearError: () => void
 
+  // Execution Actions
+  executeAnalysis: (analysisId: string, projectId?: string | null) => Promise<string | null>
+  executeWithWarp: (analysisId: string, projectId?: string | null) => Promise<boolean>
+  clearExecution: () => void
+
   // History Actions
   fetchAnalysisHistory: (projectId?: string | null, reset?: boolean) => Promise<void>
   loadMoreHistory: () => Promise<void>
@@ -130,6 +140,69 @@ interface AgentsState {
 }
 
 const API_BASE = 'http://localhost:8000/api'
+
+/**
+ * 분석 결과를 Claude Code CLI 프롬프트로 변환.
+ * (백엔드 TmuxService.build_claude_prompt의 프론트엔드 포팅)
+ */
+function buildClaudePrompt(analysis: TaskAnalysisResult['analysis'], taskInput: string): string {
+  const lines = [
+    '# Execution Plan (from Task Analyzer)',
+    '',
+    '## Task',
+    taskInput,
+    '',
+  ]
+
+  const executionPlan = analysis?.execution_plan
+  const subtasks = executionPlan?.subtasks || {}
+  const parallelGroups = executionPlan?.parallel_groups || []
+
+  if (parallelGroups.length > 0) {
+    lines.push('## Subtasks (순서대로 실행)')
+    lines.push('')
+
+    for (let groupIdx = 0; groupIdx < parallelGroups.length; groupIdx++) {
+      const group = parallelGroups[groupIdx]
+      const isParallel = group.length > 1
+      let stepLabel = `### Step ${groupIdx + 1}`
+      if (isParallel) {
+        stepLabel += ' (Parallel)'
+      }
+      lines.push(stepLabel)
+
+      for (const taskId of group) {
+        const subtask = subtasks[taskId]
+        if (!subtask) continue
+        const title = subtask.title || taskId
+        const effort = subtask.effort || 'medium'
+        const agent = subtask.agent
+        const deps = subtask.dependencies || []
+
+        let line = `- **${taskId}**: ${title} (effort: ${effort})`
+        if (agent) {
+          line += ` [agent: ${agent}]`
+        }
+        lines.push(line)
+        if (deps.length > 0) {
+          lines.push(`  - depends on: ${deps.join(', ')}`)
+        }
+      }
+
+      lines.push('')
+    }
+  }
+
+  lines.push(
+    '## Instructions',
+    '- 위 순서대로 서브태스크를 실행하세요',
+    '- 각 서브태스크 완료 후 결과를 검증하세요',
+    '- 가능한 경우 Claude Code 에이전트와 스킬을 활용하세요',
+    '- 에러 발생 시 근본 원인을 분석하고 수정하세요',
+  )
+
+  return lines.join('\n')
+}
 
 export const useAgentsStore = create<AgentsState>((set, get) => ({
   // Initial state
@@ -145,6 +218,11 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
   historyHasMore: false,
   historyProjectFilter: null,
   selectedHistoryId: null,
+
+  // Execution state
+  executingAnalysisId: null,
+  executionSessionId: null,
+  executionError: null,
 
   // UI state
   isLoading: false,
@@ -275,6 +353,111 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
 
   clearError: () => {
     set({ error: null })
+  },
+
+  // Execution Actions
+  executeAnalysis: async (analysisId: string, projectId?: string | null) => {
+    set({ executingAnalysisId: analysisId, executionError: null })
+
+    try {
+      const response = await fetch(`${API_BASE}/agents/orchestrate/execute-analysis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          analysis_id: analysisId,
+          project_id: projectId || null,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to execute analysis: ${response.statusText}`)
+      }
+
+      const result = await response.json()
+
+      if (!result.success) {
+        set({
+          executingAnalysisId: null,
+          executionError: result.error || 'Execution failed',
+        })
+        return null
+      }
+
+      set({ executionSessionId: result.session_id })
+      return result.session_id as string
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Failed to execute analysis'
+      set({
+        executingAnalysisId: null,
+        executionError: errorMsg,
+      })
+      return null
+    }
+  },
+
+  // Execute analysis via Warp terminal with Claude CLI
+  executeWithWarp: async (analysisId: string, projectId?: string | null) => {
+    set({ executingAnalysisId: analysisId, executionError: null })
+
+    try {
+      // 1. 분석 결과 조회
+      const analysisResp = await fetch(`${API_BASE}/agents/orchestrate/analyses/${analysisId}`)
+      if (!analysisResp.ok) {
+        throw new Error(`분석 결과를 찾을 수 없습니다 (${analysisResp.status})`)
+      }
+      const analysisData = await analysisResp.json()
+
+      // 2. 분석 → 프롬프트 텍스트 변환 (프론트엔드에서 수행)
+      const prompt = buildClaudePrompt(analysisData.analysis, analysisData.task_input)
+
+      // 3. project_id로 project 찾기 (path 필요)
+      const pid = projectId || analysisData.project_id
+      if (!pid) {
+        throw new Error('프로젝트가 선택되지 않았습니다')
+      }
+
+      // 4. Warp 터미널 열기 (use_claude_cli: true로 expect 스크립트 활용)
+      const warpResp = await fetch(`${API_BASE}/warp/open`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: pid,
+          command: prompt,
+          title: `Task: ${analysisData.task_input?.substring(0, 40) || 'Analysis'}`,
+          new_window: true,
+          use_claude_cli: true,
+        }),
+      })
+
+      if (!warpResp.ok) {
+        const errData = await warpResp.json().catch(() => ({ detail: warpResp.statusText }))
+        throw new Error(errData.detail || errData.error || `Warp 실행 실패 (${warpResp.status})`)
+      }
+
+      const warpResult = await warpResp.json()
+
+      if (!warpResult.success) {
+        throw new Error(warpResult.error || 'Warp 터미널을 열 수 없습니다')
+      }
+
+      set({ executingAnalysisId: null })
+      return true
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Warp 실행에 실패했습니다'
+      set({
+        executingAnalysisId: null,
+        executionError: errorMsg,
+      })
+      return false
+    }
+  },
+
+  clearExecution: () => {
+    set({
+      executingAnalysisId: null,
+      executionSessionId: null,
+      executionError: null,
+    })
   },
 
   // History Actions

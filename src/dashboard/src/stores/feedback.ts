@@ -36,6 +36,8 @@ export interface FeedbackEntry {
   original_output: string
   corrected_output?: string
   agent_id?: string
+  project_name?: string
+  effort_level?: string
   status: FeedbackStatus
   created_at: string
   processed_at?: string
@@ -97,6 +99,9 @@ export interface TaskEvaluationSubmit {
   speed_satisfaction: boolean
   comment?: string
   agent_id?: string
+  context_summary?: string
+  project_name?: string
+  effort_level?: string
 }
 
 export interface TaskEvaluationResponse {

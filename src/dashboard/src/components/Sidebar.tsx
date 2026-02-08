@@ -23,29 +23,31 @@ import { useOrchestrationStore } from '../stores/orchestration'
 import { useNavigationStore, ViewType } from '../stores/navigation'
 import { useAuthStore } from '../stores/auth'
 import { useMenuVisibilityStore } from '../stores/menuVisibility'
+import { MENU_LABELS } from './admin/types'
 
-const navigation: { name: string; icon: typeof LayoutDashboard; view: ViewType }[] = [
-  { name: 'Dashboard', icon: LayoutDashboard, view: 'dashboard' },
-  { name: 'Projects', icon: FolderKanban, view: 'projects' },
-  { name: 'Tasks', icon: ListTodo, view: 'tasks' },
-  { name: 'Agents', icon: Users, view: 'agents' },
-  { name: 'Activity', icon: Activity, view: 'activity' },
-  { name: 'Monitor', icon: Monitor, view: 'monitor' },
-  { name: 'Claude Sessions', icon: Code2, view: 'claude-sessions' },
-  { name: 'Project Configs', icon: FolderCog, view: 'project-configs' },
-  { name: 'Git', icon: GitBranch, view: 'git' },
-  { name: 'Organizations', icon: Building2, view: 'organizations' },
-  { name: 'Audit Trail', icon: FileText, view: 'audit' },
-  { name: 'Notifications', icon: Bell, view: 'notifications' },
-  { name: 'Analytics', icon: BarChart3, view: 'analytics' },
-  { name: 'Playground', icon: FlaskConical, view: 'playground' },
+// 아이콘 매핑 (메뉴명은 MENU_LABELS에서 가져옴)
+const navigation: { icon: typeof LayoutDashboard; view: ViewType }[] = [
+  { icon: LayoutDashboard, view: 'dashboard' },
+  { icon: FolderKanban, view: 'projects' },
+  { icon: ListTodo, view: 'tasks' },
+  { icon: Users, view: 'agents' },
+  { icon: Activity, view: 'activity' },
+  { icon: Monitor, view: 'monitor' },
+  { icon: Code2, view: 'claude-sessions' },
+  { icon: FolderCog, view: 'project-configs' },
+  { icon: GitBranch, view: 'git' },
+  { icon: Building2, view: 'organizations' },
+  { icon: FileText, view: 'audit' },
+  { icon: Bell, view: 'notifications' },
+  { icon: BarChart3, view: 'analytics' },
+  { icon: FlaskConical, view: 'playground' },
 ]
 
 export function Sidebar() {
   const { fetchProjects } = useOrchestrationStore()
   const { currentView, setView } = useNavigationStore()
   const { user } = useAuthStore()
-  const { visibility, fetchVisibility } = useMenuVisibilityStore()
+  const { visibility, menuOrder, fetchVisibility } = useMenuVisibilityStore()
 
   useEffect(() => {
     fetchProjects()
@@ -57,16 +59,29 @@ export function Sidebar() {
 
   const userRole = user?.role || (user?.is_admin ? 'admin' : 'user')
 
-  // 역할 기반 메뉴 필터링
+  // 역할 기반 메뉴 필터링 + 순서 적용
   const filteredNavigation = useMemo(() => {
-    if (userRole === 'admin') return navigation // admin은 모든 메뉴 접근 가능
+    // menuOrder가 있으면 해당 순서로 정렬
+    let sorted = navigation
+    if (menuOrder.length > 0) {
+      sorted = [...navigation].sort((a, b) => {
+        const aIdx = menuOrder.indexOf(a.view)
+        const bIdx = menuOrder.indexOf(b.view)
+        // menuOrder에 없는 항목은 뒤로
+        const aOrder = aIdx === -1 ? 999 : aIdx
+        const bOrder = bIdx === -1 ? 999 : bIdx
+        return aOrder - bOrder
+      })
+    }
 
-    return navigation.filter((item) => {
+    if (userRole === 'admin') return sorted // admin은 모든 메뉴 접근 가능
+
+    return sorted.filter((item) => {
       const menuVisibility = visibility[item.view]
       if (!menuVisibility) return true // 설정 없으면 기본 표시
       return menuVisibility[userRole] !== false
     })
-  }, [visibility, userRole])
+  }, [visibility, menuOrder, userRole])
 
   // Admin 메뉴 표시 여부
   const showAdmin = userRole === 'admin' || (visibility['admin']?.[userRole] ?? false)
@@ -92,7 +107,7 @@ export function Sidebar() {
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {filteredNavigation.map((item) => (
           <button
-            key={item.name}
+            key={item.view}
             onClick={() => setView(item.view)}
             className={cn(
               'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
@@ -102,7 +117,7 @@ export function Sidebar() {
             )}
           >
             <item.icon className="w-5 h-5" />
-            {item.name}
+            {MENU_LABELS[item.view] || item.view}
           </button>
         ))}
       </nav>

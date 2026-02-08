@@ -9,11 +9,11 @@ from typing import Any
 import httpx
 import jwt
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings
-from db.models import UserModel
+from db.models import OrganizationMemberModel, UserModel
 
 
 class TokenPair(BaseModel):
@@ -291,6 +291,8 @@ class AuthService:
             if user_info.avatar_url:
                 user.avatar_url = user_info.avatar_url
             await self.db.commit()
+            # Sync user role from organization membership
+            user = await self.sync_user_role_from_org(user)
             return user
 
         # Check if email already exists (might have logged in with different provider)
@@ -309,6 +311,8 @@ class AuthService:
             if user_info.avatar_url:
                 existing_user.avatar_url = user_info.avatar_url
             await self.db.commit()
+            # Sync user role from organization membership
+            existing_user = await self.sync_user_role_from_org(existing_user)
             return existing_user
 
         # Create new user
@@ -327,6 +331,8 @@ class AuthService:
         self.db.add(new_user)
         await self.db.commit()
         await self.db.refresh(new_user)
+        # Sync user role from organization membership
+        new_user = await self.sync_user_role_from_org(new_user)
         return new_user
 
     async def get_user_by_id(self, user_id: str) -> UserModel | None:
@@ -337,6 +343,49 @@ class AuthService:
         stmt = select(UserModel).where(UserModel.id == user_id)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def sync_user_role_from_org(self, user: UserModel) -> UserModel:
+        """Organization 멤버 역할 기반으로 user role 동기화.
+
+        매핑 규칙:
+        - super_admin_emails에 포함 → 항상 admin
+        - owner/admin → role='admin', is_admin=True
+        - member/viewer (또는 미소속) → role='user', is_admin=False
+
+        여러 org에 소속된 경우, 가장 높은 역할 기준.
+        """
+        if not self.db:
+            raise RuntimeError("Database session required for role sync")
+
+        # Super admin 이메일은 항상 admin 유지
+        super_emails_str = self.settings.super_admin_emails
+        if super_emails_str:
+            super_emails = [e.strip().lower() for e in super_emails_str.split(",") if e.strip()]
+            if user.email and user.email.lower() in super_emails:
+                user.role = "admin"
+                user.is_admin = True
+                await self.db.commit()
+                return user
+
+        result = await self.db.execute(
+            select(OrganizationMemberModel.role).where(
+                and_(
+                    OrganizationMemberModel.user_id == user.id,
+                    OrganizationMemberModel.is_active == True,  # noqa: E712
+                )
+            )
+        )
+        roles = [row[0] for row in result.fetchall()]
+
+        if any(r in ("owner", "admin") for r in roles):
+            user.role = "admin"
+            user.is_admin = True
+        else:
+            user.role = "user"
+            user.is_admin = False
+
+        await self.db.commit()
+        return user
 
     # ─────────────────────────────────────────────────────────────
     # Password Hashing (hashlib-based, no external dependencies)
@@ -414,4 +463,7 @@ class AuthService:
         # Update last login
         user.last_login_at = datetime.utcnow()
         await self.db.commit()
+
+        # Sync user role from organization membership
+        user = await self.sync_user_role_from_org(user)
         return user

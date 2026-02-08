@@ -206,7 +206,7 @@ export function TaskPanel() {
       {/* Task Evaluation - shown when root task is completed */}
       {rootTask && rootTask.status === 'completed' && sessionId && (
         <div className="px-3 py-2 border-t border-gray-200 dark:border-gray-700">
-          <TaskEvaluationCard sessionId={sessionId} taskId={rootTask.id} />
+          <TaskEvaluationCard sessionId={sessionId} taskId={rootTask.id} contextSummary={rootTask.description?.slice(0, 200)} />
         </div>
       )}
 

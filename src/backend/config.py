@@ -84,6 +84,9 @@ class Settings(BaseSettings):
     saml_idp_metadata_url: str = ""
     oidc_issuer_url: str = ""
 
+    # Super Admins (comma-separated emails that always have admin role)
+    super_admin_emails: str = ""
+
     # Password Hashing
     password_hash_algorithm: str = "bcrypt"
     bcrypt_rounds: int = 12

@@ -6,12 +6,14 @@ type MenuVisibility = Record<string, Record<string, boolean>>
 
 interface MenuVisibilityState {
   visibility: MenuVisibility
+  menuOrder: string[]
   isLoaded: boolean
   fetchVisibility: () => Promise<void>
 }
 
 export const useMenuVisibilityStore = create<MenuVisibilityState>((set, get) => ({
   visibility: {},
+  menuOrder: [],
   isLoaded: false,
 
   fetchVisibility: async () => {
@@ -31,7 +33,11 @@ export const useMenuVisibilityStore = create<MenuVisibilityState>((set, get) => 
 
       if (res.ok) {
         const data = await res.json()
-        set({ visibility: data.visibility, isLoaded: true })
+        set({
+          visibility: data.visibility,
+          menuOrder: data.menu_order || [],
+          isLoaded: true,
+        })
       }
     } catch {
       // 실패 시 기본값 유지 (모든 메뉴 표시)

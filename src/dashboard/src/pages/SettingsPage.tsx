@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSettingsStore, getModelsForProvider, Theme, LLMProvider } from '../stores/settings'
 import { useOrchestrationStore } from '../stores/orchestration'
 import { notificationService } from '../services/notificationService'
@@ -14,6 +14,10 @@ import {
   RefreshCw,
   Bell,
   Volume2,
+  Terminal,
+  Loader2,
+  Shield,
+  AlertTriangle,
 } from 'lucide-react'
 import { LLMRouterSettings } from '../components/llm-router'
 
@@ -38,6 +42,114 @@ export function SettingsPage() {
   const [notificationPermission, setNotificationPermission] = useState(
     typeof Notification !== 'undefined' ? Notification.permission : 'default'
   )
+
+  // Claude Code config state
+  const [claudeConfig, setClaudeConfig] = useState<{
+    oauth_token_set: boolean
+    oauth_token_masked: string
+    token_source: string
+  } | null>(null)
+  const [claudeTokenInput, setClaudeTokenInput] = useState('')
+  const [claudeConfigLoading, setClaudeConfigLoading] = useState(false)
+  const [claudeTestResult, setClaudeTestResult] = useState<{
+    success: boolean
+    message: string
+    subscription?: string
+  } | null>(null)
+  const [claudeTestLoading, setClaudeTestLoading] = useState(false)
+  const [claudeSaveStatus, setClaudeSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+
+  const fetchClaudeConfig = useCallback(async () => {
+    try {
+      setClaudeConfigLoading(true)
+      const res = await fetch(`${backendUrl}/api/usage/claude-config`)
+      if (res.ok) {
+        const data = await res.json()
+        setClaudeConfig(data)
+      }
+    } catch {
+      // silent fail
+    } finally {
+      setClaudeConfigLoading(false)
+    }
+  }, [backendUrl])
+
+  useEffect(() => {
+    fetchClaudeConfig()
+  }, [fetchClaudeConfig])
+
+  const handleClaudeTokenSave = async () => {
+    try {
+      setClaudeSaveStatus('saving')
+      const res = await fetch(`${backendUrl}/api/usage/claude-config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oauth_token: claudeTokenInput }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setClaudeConfig(data)
+        setClaudeTokenInput('')
+        setClaudeSaveStatus('saved')
+        setClaudeTestResult(null)
+        setTimeout(() => setClaudeSaveStatus('idle'), 2000)
+      } else {
+        setClaudeSaveStatus('error')
+      }
+    } catch {
+      setClaudeSaveStatus('error')
+    }
+  }
+
+  const handleClaudeTokenClear = async () => {
+    try {
+      setClaudeSaveStatus('saving')
+      const res = await fetch(`${backendUrl}/api/usage/claude-config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oauth_token: '' }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setClaudeConfig(data)
+        setClaudeTestResult(null)
+        setClaudeSaveStatus('saved')
+        setTimeout(() => setClaudeSaveStatus('idle'), 2000)
+      }
+    } catch {
+      setClaudeSaveStatus('error')
+    }
+  }
+
+  const handleClaudeConnectionTest = async () => {
+    try {
+      setClaudeTestLoading(true)
+      setClaudeTestResult(null)
+      const res = await fetch(`${backendUrl}/api/usage/oauth-test`)
+      const data = await res.json()
+      if (data.tokenFound && data.apiResponse) {
+        const usage = data.apiResponse
+        const subscription = usage.subscription_type || usage.plan || 'Unknown'
+        setClaudeTestResult({
+          success: true,
+          message: `Connected (source: ${data.tokenSource || 'unknown'})`,
+          subscription,
+        })
+      } else {
+        setClaudeTestResult({
+          success: false,
+          message: data.error || 'Connection failed',
+        })
+      }
+    } catch {
+      setClaudeTestResult({
+        success: false,
+        message: 'Failed to reach backend',
+      })
+    } finally {
+      setClaudeTestLoading(false)
+    }
+  }
 
   const handleRequestPermission = async () => {
     const granted = await notificationService.requestPermission()
@@ -175,6 +287,139 @@ export function SettingsPage() {
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 API key is stored in memory only and not persisted
               </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Claude Code */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <Terminal className="w-5 h-5" />
+            Claude Code
+          </h3>
+          <div className="space-y-4">
+            {/* Current Status */}
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Auth Status</span>
+              <div className="flex items-center gap-2">
+                {claudeConfigLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                ) : claudeConfig?.oauth_token_set ? (
+                  <>
+                    <Shield className="w-4 h-4 text-green-500" />
+                    <span className="text-sm text-green-600 dark:text-green-400">
+                      Token set ({claudeConfig.token_source})
+                    </span>
+                  </>
+                ) : claudeConfig?.token_source && claudeConfig.token_source !== 'none' ? (
+                  <>
+                    <Shield className="w-4 h-4 text-blue-500" />
+                    <span className="text-sm text-blue-600 dark:text-blue-400">
+                      Using {claudeConfig.token_source}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                    <span className="text-sm text-yellow-600 dark:text-yellow-400">No token</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Token masked display */}
+            {claudeConfig?.oauth_token_masked && (
+              <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                <span className="text-sm text-gray-500 dark:text-gray-400 font-mono">
+                  {claudeConfig.oauth_token_masked}
+                </span>
+                {claudeConfig.token_source === 'config' && (
+                  <button
+                    onClick={handleClaudeTokenClear}
+                    className="text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Token Input */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-2">
+                <Key className="w-4 h-4" />
+                OAuth Token
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={claudeTokenInput}
+                  onChange={(e) => setClaudeTokenInput(e.target.value)}
+                  className="flex-1 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="Paste OAuth token..."
+                />
+                <button
+                  onClick={handleClaudeTokenSave}
+                  disabled={!claudeTokenInput || claudeSaveStatus === 'saving'}
+                  className={cn(
+                    'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                    claudeSaveStatus === 'saved'
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                      : 'bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed'
+                  )}
+                >
+                  {claudeSaveStatus === 'saving' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : claudeSaveStatus === 'saved' ? (
+                    'Saved'
+                  ) : (
+                    'Save'
+                  )}
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Stored in ~/.claude/aos-claude-config.json (file permissions: owner only)
+              </p>
+            </div>
+
+            {/* Connection Test */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleClaudeConnectionTest}
+                disabled={claudeTestLoading}
+                className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {claudeTestLoading ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-3 h-3" />
+                )}
+                Test Connection
+              </button>
+              {claudeTestResult && (
+                <div className="flex items-center gap-2">
+                  {claudeTestResult.success ? (
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <XCircle className="w-4 h-4 text-red-500" />
+                  )}
+                  <span
+                    className={cn(
+                      'text-sm',
+                      claudeTestResult.success
+                        ? 'text-green-600 dark:text-green-400'
+                        : 'text-red-600 dark:text-red-400'
+                    )}
+                  >
+                    {claudeTestResult.message}
+                  </span>
+                  {claudeTestResult.subscription && (
+                    <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded">
+                      {claudeTestResult.subscription}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

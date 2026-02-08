@@ -20,6 +20,13 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 VALID_ROLES = ("user", "manager", "admin")
 
+# 기본 메뉴 순서 (Sidebar 기본 배열 순서)
+DEFAULT_MENU_ORDER: list[str] = [
+    "dashboard", "projects", "tasks", "agents", "activity",
+    "monitor", "claude-sessions", "project-configs", "git",
+    "organizations", "audit", "notifications", "analytics", "playground",
+]
+
 # 기본 메뉴 가시성 설정
 DEFAULT_MENU_VISIBILITY: dict[str, dict[str, bool]] = {
     "dashboard": {"user": True, "manager": True, "admin": True},
@@ -70,21 +77,30 @@ class UserListResponse(BaseModel):
     total: int
 
 
+class RoleDistribution(BaseModel):
+    user: int = 0
+    manager: int = 0
+    admin: int = 0
+
+
 class SystemInfo(BaseModel):
     version: str = "1.0.0"
     user_count: int = 0
     active_user_count: int = 0
     admin_count: int = 0
+    role_distribution: RoleDistribution | None = None
 
 
 class MenuVisibilityResponse(BaseModel):
     """메뉴 가시성 설정 응답: { menuKey: { user: bool, manager: bool, admin: bool } }"""
     visibility: dict[str, dict[str, bool]]
+    menu_order: list[str] = []
 
 
 class MenuVisibilityUpdateRequest(BaseModel):
     """메뉴 가시성 일괄 업데이트 요청"""
     visibility: dict[str, dict[str, bool]]
+    menu_order: list[str] | None = None
 
 
 # ============================================================================
@@ -251,14 +267,21 @@ async def get_menu_visibility(
 
             if not rows:
                 # DB에 설정 없으면 기본값 반환
-                return MenuVisibilityResponse(visibility=DEFAULT_MENU_VISIBILITY)
+                return MenuVisibilityResponse(
+                    visibility=DEFAULT_MENU_VISIBILITY,
+                    menu_order=DEFAULT_MENU_ORDER,
+                )
 
             # DB 데이터를 딕셔너리로 변환
             visibility: dict[str, dict[str, bool]] = {}
+            # sort_order 수집 (menu_key -> sort_order, 첫 번째 role의 값 사용)
+            sort_orders: dict[str, int] = {}
             for row in rows:
                 if row.menu_key not in visibility:
                     visibility[row.menu_key] = {}
                 visibility[row.menu_key][row.role] = row.visible
+                if row.sort_order is not None and row.menu_key not in sort_orders:
+                    sort_orders[row.menu_key] = row.sort_order
 
             # DB에 없는 메뉴는 기본값으로 채움
             for menu_key, defaults in DEFAULT_MENU_VISIBILITY.items():
@@ -269,9 +292,24 @@ async def get_menu_visibility(
                         if role not in visibility[menu_key]:
                             visibility[menu_key][role] = defaults.get(role, False)
 
-            return MenuVisibilityResponse(visibility=visibility)
+            # menu_order 구성: sort_order가 있으면 정렬, 없으면 기본값
+            if sort_orders:
+                # sort_order가 있는 메뉴는 sort_order 기준, 없는 메뉴는 기본 순서 뒤에 추가
+                ordered = sorted(sort_orders.items(), key=lambda x: x[1])
+                menu_order = [k for k, _ in ordered]
+                # sort_order가 없지만 DEFAULT_MENU_ORDER에 있는 메뉴 추가
+                for mk in DEFAULT_MENU_ORDER:
+                    if mk not in menu_order:
+                        menu_order.append(mk)
+            else:
+                menu_order = DEFAULT_MENU_ORDER
+
+            return MenuVisibilityResponse(visibility=visibility, menu_order=menu_order)
     except ImportError:
-        return MenuVisibilityResponse(visibility=DEFAULT_MENU_VISIBILITY)
+        return MenuVisibilityResponse(
+            visibility=DEFAULT_MENU_VISIBILITY,
+            menu_order=DEFAULT_MENU_ORDER,
+        )
 
 
 @router.put("/menu-visibility", response_model=MenuVisibilityResponse)
@@ -285,7 +323,13 @@ async def update_menu_visibility(
         from sqlalchemy import select
 
         async with async_session_factory() as session:
+            # menu_order를 sort_order로 변환
+            order_map: dict[str, int] = {}
+            if request.menu_order:
+                order_map = {mk: idx for idx, mk in enumerate(request.menu_order)}
+
             for menu_key, roles in request.visibility.items():
+                sort_order_val = order_map.get(menu_key)
                 for role, visible in roles.items():
                     if role not in VALID_ROLES:
                         continue
@@ -305,12 +349,15 @@ async def update_menu_visibility(
 
                     if existing:
                         existing.visible = visible
+                        if sort_order_val is not None:
+                            existing.sort_order = sort_order_val
                     else:
                         session.add(
                             MenuVisibilityModel(
                                 menu_key=menu_key,
                                 role=role,
                                 visible=visible,
+                                sort_order=sort_order_val,
                             )
                         )
 
@@ -321,10 +368,13 @@ async def update_menu_visibility(
             rows = result.scalars().all()
 
             visibility: dict[str, dict[str, bool]] = {}
+            sort_orders: dict[str, int] = {}
             for row in rows:
                 if row.menu_key not in visibility:
                     visibility[row.menu_key] = {}
                 visibility[row.menu_key][row.role] = row.visible
+                if row.sort_order is not None and row.menu_key not in sort_orders:
+                    sort_orders[row.menu_key] = row.sort_order
 
             # 기본값 채움
             for mk, defaults in DEFAULT_MENU_VISIBILITY.items():
@@ -335,7 +385,17 @@ async def update_menu_visibility(
                         if r not in visibility[mk]:
                             visibility[mk][r] = defaults.get(r, False)
 
-            return MenuVisibilityResponse(visibility=visibility)
+            # menu_order 구성
+            if sort_orders:
+                ordered = sorted(sort_orders.items(), key=lambda x: x[1])
+                menu_order = [k for k, _ in ordered]
+                for mk in DEFAULT_MENU_ORDER:
+                    if mk not in menu_order:
+                        menu_order.append(mk)
+            else:
+                menu_order = request.menu_order or DEFAULT_MENU_ORDER
+
+            return MenuVisibilityResponse(visibility=visibility, menu_order=menu_order)
     except ImportError:
         raise HTTPException(status_code=503, detail="Database not available")
 
@@ -373,10 +433,36 @@ async def get_system_info(
                 )
             ).scalar() or 0
 
+            # Sync: is_admin=True but role!='admin' → fix role
+            from sqlalchemy import update
+            await session.execute(
+                update(UserModel)
+                .where(UserModel.is_admin == True, UserModel.role != "admin")  # noqa: E712
+                .values(role="admin")
+            )
+            await session.commit()
+
+            # Role distribution based on role column
+            role_counts = (
+                await session.execute(
+                    select(UserModel.role, func.count(UserModel.id)).group_by(UserModel.role)
+                )
+            ).all()
+            role_dist = RoleDistribution()
+            for role_val, count in role_counts:
+                role_key = (role_val or "user").lower()
+                if role_key == "user":
+                    role_dist.user = count
+                elif role_key == "manager":
+                    role_dist.manager = count
+                elif role_key == "admin":
+                    role_dist.admin = count
+
             return SystemInfo(
                 user_count=total,
                 active_user_count=active,
                 admin_count=admins,
+                role_distribution=role_dist,
             )
     except ImportError:
         return SystemInfo()

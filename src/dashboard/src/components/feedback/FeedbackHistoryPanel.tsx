@@ -10,13 +10,13 @@ import {
   ThumbsDown,
   Edit,
   Clock,
-  CheckCircle,
-  XCircle,
   AlertCircle,
   Filter,
   RefreshCw,
   Play,
   Bot,
+  MessageSquare,
+  FolderOpen,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import {
@@ -24,12 +24,9 @@ import {
   FeedbackEntry,
   FeedbackType,
   FeedbackStatus,
-  feedbackTypeLabel,
-  feedbackReasonLabel,
-  feedbackStatusLabel,
   feedbackTypeColors,
-  feedbackStatusColors,
 } from '../../stores/feedback'
+import { AgentEvalPanel } from './AgentEvalPanel'
 
 interface FeedbackHistoryPanelProps {
   className?: string
@@ -95,6 +92,9 @@ export function FeedbackHistoryPanel({ className }: FeedbackHistoryPanelProps) {
           />
         </div>
       )}
+
+      {/* Agent Evaluation Stats */}
+      <AgentEvalPanel />
 
       {/* Filters & Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -200,15 +200,27 @@ export function FeedbackHistoryPanel({ className }: FeedbackHistoryPanelProps) {
           <p className="text-sm mt-1">Feedbacks will appear here when users provide them</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {feedbacks.map((feedback) => (
-            <FeedbackCard
-              key={feedback.id}
-              feedback={feedback}
-              onProcess={() => processFeedback(feedback.id)}
-              isLoading={isLoading}
-            />
-          ))}
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+          {/* Table Header */}
+          <div className="grid grid-cols-[minmax(250px,1fr)_120px_100px_auto_200px_auto] gap-3 px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-500 dark:text-gray-400">
+            <span>Context Summary</span>
+            <span>프로젝트</span>
+            <span>Effort</span>
+            <span>결과</span>
+            <span>Comment</span>
+            <span className="w-16" />
+          </div>
+          {/* Table Body */}
+          <div className="divide-y divide-gray-100 dark:divide-gray-700">
+            {feedbacks.map((feedback) => (
+              <FeedbackRow
+                key={feedback.id}
+                feedback={feedback}
+                onProcess={() => processFeedback(feedback.id)}
+                isLoading={isLoading}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -252,105 +264,113 @@ function StatCard({ label, value, icon, color }: StatCardProps) {
   )
 }
 
-interface FeedbackCardProps {
+interface FeedbackRowProps {
   feedback: FeedbackEntry
   onProcess: () => void
   isLoading: boolean
 }
 
-function FeedbackCard({ feedback, onProcess, isLoading }: FeedbackCardProps) {
+function FeedbackRow({ feedback, onProcess, isLoading }: FeedbackRowProps) {
   const typeIcon = {
-    implicit: <Edit className="w-4 h-4" />,
-    explicit_positive: <ThumbsUp className="w-4 h-4" />,
-    explicit_negative: <ThumbsDown className="w-4 h-4" />,
+    implicit: <Edit className="w-3.5 h-3.5" />,
+    explicit_positive: <ThumbsUp className="w-3.5 h-3.5" />,
+    explicit_negative: <ThumbsDown className="w-3.5 h-3.5" />,
   }
 
-  const statusIcon = {
-    pending: <Clock className="w-3 h-3" />,
-    processed: <CheckCircle className="w-3 h-3" />,
-    skipped: <XCircle className="w-3 h-3" />,
-    error: <AlertCircle className="w-3 h-3" />,
+  // Context summary - extract meaningful preview
+  const contextSummary = feedback.original_output.replace(/\n/g, ' ').slice(0, 60)
+  const hasMore = feedback.original_output.length > 60
+
+  // Effort level color mapping
+  const effortColors: Record<string, string> = {
+    quick: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    moderate: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    thorough: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+    comprehensive: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
   }
+
+  // Comment
+  const comment = feedback.reason_detail || feedback.corrected_output || ''
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3 flex-1 min-w-0">
-          {/* Type Icon */}
-          <div
-            className={cn(
-              'p-2 rounded-lg',
-              feedbackTypeColors[feedback.feedback_type]
-            )}
-          >
-            {typeIcon[feedback.feedback_type]}
-          </div>
+    <div className="grid grid-cols-[minmax(250px,1fr)_120px_100px_auto_200px_auto] gap-3 px-4 py-2.5 items-center hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group">
+      {/* Context Summary - text only */}
+      <div className="min-w-0">
+        <span className="text-sm text-gray-700 dark:text-gray-300 truncate block" title={feedback.original_output}>
+          {contextSummary}{hasMore && '...'}
+        </span>
+        {feedback.agent_id && (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 mt-0.5">
+            <Bot className="w-2.5 h-2.5" />
+            {feedback.agent_id}
+          </span>
+        )}
+      </div>
 
-          {/* Content */}
-          <div className="flex-1 min-w-0">
-            {/* Header */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={cn('px-2 py-0.5 rounded text-xs font-medium', feedbackTypeColors[feedback.feedback_type])}>
-                {feedbackTypeLabel[feedback.feedback_type]}
-              </span>
-              <span className={cn('px-2 py-0.5 rounded text-xs font-medium flex items-center gap-1', feedbackStatusColors[feedback.status])}>
-                {statusIcon[feedback.status]}
-                {feedbackStatusLabel[feedback.status]}
-              </span>
-              {feedback.agent_id && (
-                <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400 flex items-center gap-1">
-                  <Bot className="w-3 h-3" />
-                  {feedback.agent_id}
-                </span>
-              )}
-            </div>
+      {/* 프로젝트 */}
+      <div className="min-w-0 flex items-center gap-1.5">
+        {feedback.project_name ? (
+          <>
+            <FolderOpen className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400 flex-shrink-0" />
+            <span className="text-xs text-blue-600 dark:text-blue-400 font-medium truncate" title={feedback.project_name}>
+              {feedback.project_name}
+            </span>
+          </>
+        ) : (
+          <span className="text-xs text-gray-400 dark:text-gray-600">-</span>
+        )}
+      </div>
 
-            {/* Reason */}
-            {feedback.reason && (
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                <span className="font-medium">Reason:</span> {feedbackReasonLabel[feedback.reason]}
-                {feedback.reason_detail && ` - ${feedback.reason_detail}`}
-              </p>
-            )}
+      {/* Effort Level */}
+      <div className="flex justify-center">
+        {feedback.effort_level ? (
+          <span className={cn(
+            'px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap',
+            effortColors[feedback.effort_level] || 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+          )}>
+            {feedback.effort_level}
+          </span>
+        ) : (
+          <span className="text-xs text-gray-400 dark:text-gray-600">-</span>
+        )}
+      </div>
 
-            {/* Output Preview */}
-            <div className="mt-2 p-2 bg-gray-50 dark:bg-gray-900 rounded text-xs font-mono text-gray-600 dark:text-gray-400 truncate">
-              {feedback.original_output.slice(0, 200)}
-              {feedback.original_output.length > 200 && '...'}
-            </div>
-
-            {/* Corrected Output (for implicit feedback) */}
-            {feedback.corrected_output && (
-              <div className="mt-2 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded text-xs font-mono text-green-700 dark:text-green-400 truncate">
-                <span className="font-medium">Corrected:</span> {feedback.corrected_output.slice(0, 150)}
-                {feedback.corrected_output.length > 150 && '...'}
-              </div>
-            )}
-
-            {/* Metadata */}
-            <div className="mt-2 flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-              <span>Task: {feedback.task_id.slice(0, 8)}...</span>
-              <span>Session: {feedback.session_id.slice(0, 8)}...</span>
-              <span>{new Date(feedback.created_at).toLocaleString()}</span>
-            </div>
-          </div>
+      {/* 결과 - icon only */}
+      <div className="flex justify-center">
+        <div className={cn('p-1.5 rounded', feedbackTypeColors[feedback.feedback_type])}>
+          {typeIcon[feedback.feedback_type]}
         </div>
+      </div>
 
-        {/* Actions */}
-        {feedback.status === 'pending' && (
+      {/* Comment */}
+      <div className="min-w-0 flex items-center gap-1">
+        {comment ? (
+          <span className="text-xs text-gray-500 dark:text-gray-400 truncate" title={comment}>
+            <MessageSquare className="w-3 h-3 inline mr-1 opacity-50" />
+            {comment}
+          </span>
+        ) : (
+          <span className="text-xs text-gray-400 dark:text-gray-600">-</span>
+        )}
+      </div>
+
+      {/* Action */}
+      <div className="w-16 text-right">
+        {feedback.status === 'pending' ? (
           <button
             onClick={onProcess}
             disabled={isLoading}
             className={cn(
-              'px-3 py-1.5 rounded-lg text-xs font-medium',
+              'px-2 py-1 rounded text-[10px] font-medium',
               'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400',
               'hover:bg-primary-200 dark:hover:bg-primary-900/50',
-              'disabled:opacity-50 disabled:cursor-not-allowed'
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+              'opacity-0 group-hover:opacity-100 transition-opacity'
             )}
           >
             Process
           </button>
-        )}
+        ) : null}
       </div>
     </div>
   )

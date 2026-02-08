@@ -1,0 +1,89 @@
+import { useAuthStore } from '../../stores/auth'
+import type { AdminUser, MenuVisibility, SystemInfo, UserListResponse } from './types'
+import { API_BASE } from './types'
+
+export async function getAuthHeaders(): Promise<Record<string, string>> {
+  const token = useAuthStore.getState().accessToken
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+}
+
+export async function fetchUsers(params: {
+  search?: string
+  is_active?: boolean | null
+  is_admin?: boolean | null
+  limit: number
+  offset: number
+}): Promise<UserListResponse> {
+  const query = new URLSearchParams()
+  if (params.search) query.append('search', params.search)
+  if (params.is_active !== null && params.is_active !== undefined)
+    query.append('is_active', String(params.is_active))
+  if (params.is_admin !== null && params.is_admin !== undefined)
+    query.append('is_admin', String(params.is_admin))
+  query.append('limit', String(params.limit))
+  query.append('offset', String(params.offset))
+
+  const res = await fetch(`${API_BASE}/admin/users?${query}`, {
+    headers: await getAuthHeaders(),
+  })
+  if (!res.ok) throw new Error(`Failed to fetch users: ${res.statusText}`)
+  return res.json()
+}
+
+export async function updateUser(
+  userId: string,
+  update: { is_active?: boolean; is_admin?: boolean; role?: string; name?: string }
+): Promise<AdminUser> {
+  const res = await fetch(`${API_BASE}/admin/users/${userId}`, {
+    method: 'PATCH',
+    headers: await getAuthHeaders(),
+    body: JSON.stringify(update),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || res.statusText)
+  }
+  return res.json()
+}
+
+export async function fetchSystemInfo(): Promise<SystemInfo> {
+  const res = await fetch(`${API_BASE}/admin/system-info`, {
+    headers: await getAuthHeaders(),
+  })
+  if (!res.ok) throw new Error(`Failed to fetch system info: ${res.statusText}`)
+  return res.json()
+}
+
+export interface MenuVisibilityData {
+  visibility: MenuVisibility
+  menu_order: string[]
+}
+
+export async function fetchMenuVisibilityData(): Promise<MenuVisibilityData> {
+  const res = await fetch(`${API_BASE}/admin/menu-visibility`, {
+    headers: await getAuthHeaders(),
+  })
+  if (!res.ok) throw new Error(`Failed to fetch menu visibility: ${res.statusText}`)
+  return res.json()
+}
+
+export async function fetchMenuVisibility(): Promise<MenuVisibility> {
+  const data = await fetchMenuVisibilityData()
+  return data.visibility
+}
+
+export async function saveMenuVisibility(
+  visibility: MenuVisibility,
+  menuOrder?: string[],
+): Promise<MenuVisibilityData> {
+  const res = await fetch(`${API_BASE}/admin/menu-visibility`, {
+    method: 'PUT',
+    headers: await getAuthHeaders(),
+    body: JSON.stringify({ visibility, menu_order: menuOrder }),
+  })
+  if (!res.ok) throw new Error(`Failed to save menu visibility: ${res.statusText}`)
+  return res.json()
+}

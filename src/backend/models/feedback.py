@@ -56,6 +56,8 @@ class FeedbackSubmit(BaseModel):
     reason_detail: str | None = Field(None, description="상세 사유 설명")
     original_output: str = Field(..., description="원본 출력")
     corrected_output: str | None = Field(None, description="수정된 출력 (implicit 피드백)")
+    project_name: str | None = Field(None, description="프로젝트명")
+    effort_level: str | None = Field(None, description="effort level (quick/moderate/thorough/comprehensive)")
 
     class Config:
         json_schema_extra = {
@@ -95,6 +97,8 @@ class FeedbackEntry(BaseModel):
     original_output: str
     corrected_output: str | None = None
     agent_id: str | None = None
+    project_name: str | None = None
+    effort_level: str | None = None
     status: FeedbackStatus
     created_at: datetime
     processed_at: datetime | None = None
@@ -212,6 +216,9 @@ class TaskEvaluationSubmit(BaseModel):
     speed_satisfaction: bool = Field(..., description="응답 속도가 적절했는가")
     comment: str | None = Field(None, description="자유 코멘트")
     agent_id: str | None = Field(None, description="평가 대상 에이전트 ID")
+    context_summary: str | None = Field(None, description="태스크 컨텍스트 요약")
+    project_name: str | None = Field(None, description="프로젝트명")
+    effort_level: str | None = Field(None, description="effort level")
 
     class Config:
         json_schema_extra = {

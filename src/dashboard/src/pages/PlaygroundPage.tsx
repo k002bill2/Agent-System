@@ -909,6 +909,7 @@ function MessageBubble({ message, onCopy, copied, sessionId, agentId }: MessageB
                   sessionId={sessionId}
                   taskId={message.id}
                   agentId={agentId}
+                  contextSummary={message.content?.slice(0, 200)}
                 />
               )}
               <button

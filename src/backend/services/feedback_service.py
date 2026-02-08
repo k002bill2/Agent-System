@@ -78,6 +78,8 @@ class FeedbackService:
             "original_output": feedback.original_output,
             "corrected_output": feedback.corrected_output,
             "agent_id": agent_id,
+            "project_name": feedback.project_name,
+            "effort_level": feedback.effort_level,
             "context_json": context or {},
             "status": FeedbackStatus.PENDING.value,
             "created_at": now,
@@ -111,9 +113,16 @@ class FeedbackService:
         self,
         params: FeedbackQueryParams,
     ) -> list[FeedbackEntry]:
-        """피드백 목록 조회"""
+        """피드백 목록 조회 (DB + in-memory fallback 병합)"""
         if self.use_database:
-            return await self._query_feedbacks_from_db(params)
+            db_results = await self._query_feedbacks_from_db(params)
+            # In-memory fallback 데이터도 포함 (FK 제약으로 DB 저장 실패한 항목)
+            memory_results = self._query_feedbacks_memory(params)
+            if memory_results:
+                db_results.extend(memory_results)
+                # 시간 역순 정렬
+                db_results.sort(key=lambda f: f.created_at, reverse=True)
+            return db_results
         else:
             return self._query_feedbacks_memory(params)
 
@@ -142,9 +151,28 @@ class FeedbackService:
         start_date: datetime | None = None,
         end_date: datetime | None = None,
     ) -> FeedbackStats:
-        """피드백 통계 조회"""
+        """피드백 통계 조회 (DB + in-memory fallback 병합)"""
         if self.use_database:
-            return await self._get_stats_from_db(start_date, end_date)
+            db_stats = await self._get_stats_from_db(start_date, end_date)
+            # In-memory fallback 데이터 통계도 병합
+            if self._feedbacks:
+                mem_stats = self._get_stats_memory(start_date, end_date)
+                db_stats.total_count += mem_stats.total_count
+                for k, v in mem_stats.by_type.items():
+                    db_stats.by_type[k] = db_stats.by_type.get(k, 0) + v
+                for k, v in mem_stats.by_status.items():
+                    db_stats.by_status[k] = db_stats.by_status.get(k, 0) + v
+                for k, v in mem_stats.by_reason.items():
+                    db_stats.by_reason[k] = db_stats.by_reason.get(k, 0) + v
+                for k, v in mem_stats.by_agent.items():
+                    db_stats.by_agent[k] = db_stats.by_agent.get(k, 0) + v
+                # Recalculate rates
+                if db_stats.total_count > 0:
+                    positive = db_stats.by_type.get("explicit_positive", 0)
+                    implicit = db_stats.by_type.get("implicit", 0)
+                    db_stats.positive_rate = positive / db_stats.total_count * 100
+                    db_stats.implicit_rate = implicit / db_stats.total_count * 100
+            return db_stats
         else:
             return self._get_stats_memory(start_date, end_date)
 
@@ -260,7 +288,11 @@ class FeedbackService:
         self,
         evaluation: TaskEvaluationSubmit,
     ) -> TaskEvaluationResponse:
-        """태스크 종합 평가 제출"""
+        """태스크 종합 평가 제출
+
+        Task evaluation을 저장하고, feedback 시스템에도 연동하여
+        Feedback History에서 조회 가능하게 합니다.
+        """
         eval_id = str(uuid.uuid4())
         now = datetime.now()
         key = f"{evaluation.session_id}:{evaluation.task_id}"
@@ -278,6 +310,65 @@ class FeedbackService:
         }
 
         self._task_evaluations[key] = eval_data
+
+        # Feedback History에도 연동 저장
+        # DB 모드에서 FK 제약(session_id) 실패 시 in-memory에 저장
+        feedback_type = (
+            FeedbackType.EXPLICIT_POSITIVE if evaluation.rating >= 3
+            else FeedbackType.EXPLICIT_NEGATIVE
+        )
+        reason = None
+        if evaluation.rating < 3:
+            if not evaluation.result_accuracy:
+                reason = FeedbackReason.INCORRECT
+            elif not evaluation.speed_satisfaction:
+                reason = FeedbackReason.PERFORMANCE
+            else:
+                reason = FeedbackReason.OTHER
+
+        # original_output에 context_summary가 있으면 사용, 없으면 기본 텍스트
+        output_text = (
+            evaluation.context_summary
+            if evaluation.context_summary
+            else f"Task evaluation: rating={evaluation.rating}"
+        )
+
+        try:
+            feedback_submit = FeedbackSubmit(
+                session_id=evaluation.session_id,
+                task_id=evaluation.task_id,
+                feedback_type=feedback_type,
+                reason=reason,
+                reason_detail=evaluation.comment,
+                original_output=output_text,
+                project_name=evaluation.project_name,
+                effort_level=evaluation.effort_level,
+            )
+            await self.submit_feedback(
+                feedback_submit,
+                agent_id=evaluation.agent_id,
+            )
+        except Exception:
+            # FK constraint failure (session not in DB) - save to in-memory
+            feedback_id = str(uuid.uuid4())
+            self._feedbacks[feedback_id] = {
+                "id": feedback_id,
+                "session_id": evaluation.session_id,
+                "task_id": evaluation.task_id,
+                "message_id": None,
+                "feedback_type": feedback_type.value,
+                "reason": reason.value if reason else None,
+                "reason_detail": evaluation.comment,
+                "original_output": output_text,
+                "corrected_output": None,
+                "agent_id": evaluation.agent_id,
+                "project_name": evaluation.project_name,
+                "effort_level": evaluation.effort_level,
+                "context_json": {},
+                "status": FeedbackStatus.PENDING.value,
+                "created_at": now,
+                "processed_at": None,
+            }
 
         return TaskEvaluationResponse(
             id=eval_id,
@@ -530,6 +621,8 @@ class FeedbackService:
             original_output=data["original_output"],
             corrected_output=data.get("corrected_output"),
             agent_id=data.get("agent_id"),
+            project_name=data.get("project_name"),
+            effort_level=data.get("effort_level"),
             status=FeedbackStatus(data["status"]),
             created_at=data["created_at"],
             processed_at=data.get("processed_at"),
@@ -735,6 +828,8 @@ class FeedbackService:
                 original_output=model.original_output,
                 corrected_output=model.corrected_output,
                 agent_id=model.agent_id,
+                project_name=getattr(model, 'project_name', None),
+                effort_level=getattr(model, 'effort_level', None),
                 status=FeedbackStatus(model.status),
                 created_at=model.created_at,
                 processed_at=model.processed_at,
@@ -784,6 +879,8 @@ class FeedbackService:
                     original_output=m.original_output,
                     corrected_output=m.corrected_output,
                     agent_id=m.agent_id,
+                    project_name=getattr(m, 'project_name', None),
+                    effort_level=getattr(m, 'effort_level', None),
                     status=FeedbackStatus(m.status),
                     created_at=m.created_at,
                     processed_at=m.processed_at,
