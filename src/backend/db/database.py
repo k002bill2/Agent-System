@@ -13,7 +13,7 @@ from sqlalchemy.orm import DeclarativeBase
 # Database URL from environment
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/agent_orchestrator",
+    "postgresql+asyncpg://aos:aos@localhost:5432/aos",
 )
 
 # Create async engine

@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
 
     # Database
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/agent_orchestrator"
+    database_url: str = "postgresql+asyncpg://aos:aos@localhost:5432/aos"
     use_database: bool = False
 
     # Redis

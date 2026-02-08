@@ -96,7 +96,7 @@ LLM_PROVIDER=google
 GOOGLE_API_KEY=your_google_api_key
 
 # Database (선택)
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/agent_orchestrator
+DATABASE_URL=postgresql+asyncpg://aos:aos@localhost:5432/aos
 USE_DATABASE=false
 
 # Auth

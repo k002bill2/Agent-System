@@ -183,7 +183,7 @@ cd infra/scripts && ./dev.sh
 
 ```bash
 # PostgreSQL 연결
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/agent_orchestrator
+DATABASE_URL=postgresql+asyncpg://aos:aos@localhost:5432/aos
 
 # DB 사용 여부 (false면 DB 없이 개발 가능)
 USE_DATABASE=false

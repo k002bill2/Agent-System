@@ -77,7 +77,7 @@ LLM_PROVIDER=ollama  # or "anthropic"
 OLLAMA_MODEL=qwen2.5:7b
 
 # Database
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/agent_orchestrator
+DATABASE_URL=postgresql+asyncpg://aos:aos@localhost:5432/aos
 ```
 
 ---

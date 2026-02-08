@@ -88,7 +88,7 @@ GOOGLE_API_KEY=...
 ANTHROPIC_API_KEY=...
 
 # Database
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/agent_orchestrator
+DATABASE_URL=postgresql+asyncpg://aos:aos@localhost:5432/aos
 USE_DATABASE=false
 
 # Auth
