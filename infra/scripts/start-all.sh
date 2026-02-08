@@ -70,7 +70,7 @@ if ! python -c "import fastapi" 2>/dev/null; then
     pip install -e . -q
 fi
 
-# Kill existing backend if running
+# Kill existing backend if running (PID file + port + orphaned workers)
 if [ -f "$PID_DIR/backend.pid" ]; then
     OLD_PID=$(cat "$PID_DIR/backend.pid")
     if kill -0 "$OLD_PID" 2>/dev/null; then
@@ -79,6 +79,10 @@ if [ -f "$PID_DIR/backend.pid" ]; then
         sleep 1
     fi
 fi
+# Kill any orphaned uvicorn processes and workers on port 8000
+pkill -9 -f "uvicorn api.app" 2>/dev/null || true
+lsof -ti :8000 | xargs kill -9 2>/dev/null || true
+sleep 0.5
 
 # Load specific environment variables from .env
 export GITHUB_TOKEN=$(grep "^GITHUB_TOKEN=" "$PROJECT_ROOT/.env" | cut -d'=' -f2-)
