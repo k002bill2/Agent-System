@@ -20,6 +20,7 @@ export type ViewType =
   | 'notifications'
   | 'analytics'
   | 'playground'
+  | 'admin'
   | 'settings'
 
 // Views that don't require authentication

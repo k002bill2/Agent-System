@@ -244,6 +244,24 @@ async def get_task_evaluation_stats() -> TaskEvaluationStats:
     return await service.get_task_evaluation_stats()
 
 
+@router.get("/task-evaluation/list", response_model=list[TaskEvaluationResponse])
+async def list_task_evaluations(
+    agent_id: str | None = Query(None, description="에이전트 ID 필터"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> list[TaskEvaluationResponse]:
+    """태스크 평가 목록 조회 (comment 포함)
+
+    최신순으로 정렬된 평가 목록을 반환합니다.
+    """
+    service = get_feedback_service()
+    return await service.list_task_evaluations(
+        agent_id=agent_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
 @router.get("/task-evaluation/{session_id}/{task_id}", response_model=TaskEvaluationResponse)
 async def get_task_evaluation(
     session_id: str,

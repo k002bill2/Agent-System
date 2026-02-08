@@ -24,6 +24,7 @@ import { NotificationsPage } from './pages/NotificationsPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import { PlaygroundPage } from './pages/PlaygroundPage'
 import { OrganizationsPage } from './pages/OrganizationsPage'
+import { AdminPage } from './pages/AdminPage'
 import { InvitationAcceptPage } from './pages/InvitationAcceptPage'
 import {
   SidebarSkeleton,
@@ -54,6 +55,7 @@ const viewTitles: Record<string, string> = {
   notifications: 'Notifications',
   analytics: 'Analytics',
   playground: 'Agent Playground',
+  admin: 'Admin',
   settings: 'Settings',
 }
 
@@ -279,6 +281,8 @@ export default function App() {
         return <AnalyticsPage />
       case 'playground':
         return <PlaygroundPage />
+      case 'admin':
+        return <AdminPage />
       case 'settings':
         return <SettingsPage />
       default:
@@ -315,6 +319,8 @@ export default function App() {
       case 'analytics':
         return <MonitorSkeleton />
       case 'playground':
+        return <MonitorSkeleton />
+      case 'admin':
         return <MonitorSkeleton />
       case 'settings':
         return <SettingsSkeleton />

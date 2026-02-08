@@ -35,6 +35,9 @@ import {
   ThumbsUp,
   Star,
   Gauge,
+  MessageSquare,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useProjectsStore, Project } from '../stores/projects'
@@ -159,6 +162,18 @@ interface TaskEvalStats {
   by_agent: AgentEvalStats[]
 }
 
+interface TaskEvaluation {
+  id: string
+  session_id: string
+  task_id: string
+  rating: number
+  result_accuracy: boolean
+  speed_satisfaction: boolean
+  comment: string | null
+  agent_id: string | null
+  created_at: string
+}
+
 // ─────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────
@@ -203,6 +218,17 @@ async function fetchTaskEvalStats(): Promise<TaskEvalStats> {
   return res.json()
 }
 
+async function fetchTaskEvalList(
+  agentId?: string,
+  limit = 50,
+): Promise<TaskEvaluation[]> {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (agentId) params.set('agent_id', agentId)
+  const res = await fetch(`${API_BASE}/feedback/task-evaluation/list?${params}`)
+  if (!res.ok) throw new Error('Failed to fetch evaluation list')
+  return res.json()
+}
+
 async function fetchMultiProjectTrends(
   projectIds: string[],
   metric: CompareMetric,
@@ -232,6 +258,9 @@ export function AnalyticsPage() {
   const [compareData, setCompareData] = useState<MultiProjectTrendsResponse | null>(null)
   const [compareLoading, setCompareLoading] = useState(false)
   const [evalStats, setEvalStats] = useState<TaskEvalStats | null>(null)
+  const [evalList, setEvalList] = useState<TaskEvaluation[]>([])
+  const [evalFilterAgent, setEvalFilterAgent] = useState<string>('')
+  const [showEvalList, setShowEvalList] = useState(true)
 
   // Get projects from store
   const { projects, fetchProjects } = useProjectsStore()
@@ -257,12 +286,14 @@ export function AnalyticsPage() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [result, evalResult] = await Promise.all([
+      const [result, evalResult, evalListResult] = await Promise.all([
         fetchDashboard(timeRange, selectedProjectId || undefined),
         fetchTaskEvalStats().catch(() => null),
+        fetchTaskEvalList(evalFilterAgent || undefined).catch(() => []),
       ])
       setData(result)
       setEvalStats(evalResult)
+      setEvalList(evalListResult)
       setError(null)
     } catch (e) {
       setError((e as Error).message)
@@ -433,6 +464,111 @@ export function AnalyticsPage() {
             color={evalStats.speed_satisfaction_rate >= 0.8 ? 'green' : 'amber'}
             subtitle="속도가 적절했다고 응답"
           />
+        </div>
+      )}
+
+      {/* Evaluation List with Comments */}
+      {evalList.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 mb-6">
+          <div
+            className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-700 cursor-pointer"
+            onClick={() => setShowEvalList(!showEvalList)}
+          >
+            <div className="flex items-center gap-2">
+              {showEvalList ? (
+                <ChevronDown className="w-4 h-4 text-gray-500" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-gray-500" />
+              )}
+              <MessageSquare className="w-4 h-4 text-blue-500" />
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                최근 평가 ({evalList.length})
+              </h3>
+            </div>
+            {/* Agent filter */}
+            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              <select
+                value={evalFilterAgent}
+                onChange={(e) => {
+                  setEvalFilterAgent(e.target.value)
+                  fetchTaskEvalList(e.target.value || undefined).then(setEvalList).catch(() => {})
+                }}
+                className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              >
+                <option value="">전체 에이전트</option>
+                {Array.from(new Set(evalList.map(e => e.agent_id).filter(Boolean))).map(aid => (
+                  <option key={aid} value={aid!}>{aid}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {showEvalList && (
+            <div className="divide-y divide-gray-100 dark:divide-gray-700 max-h-[400px] overflow-y-auto">
+              {evalList.map((evaluation) => (
+                <div key={evaluation.id} className="px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      {/* Rating stars */}
+                      <div className="flex items-center gap-0.5">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star
+                            key={star}
+                            className={cn(
+                              'w-3.5 h-3.5',
+                              star <= evaluation.rating
+                                ? 'text-yellow-500 fill-yellow-500'
+                                : 'text-gray-300 dark:text-gray-600'
+                            )}
+                          />
+                        ))}
+                      </div>
+                      {/* Accuracy / Speed badges */}
+                      <span className={cn(
+                        'text-xs px-1.5 py-0.5 rounded',
+                        evaluation.result_accuracy
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                          : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                      )}>
+                        {evaluation.result_accuracy ? '정확' : '부정확'}
+                      </span>
+                      <span className={cn(
+                        'text-xs px-1.5 py-0.5 rounded',
+                        evaluation.speed_satisfaction
+                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                          : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+                      )}>
+                        {evaluation.speed_satisfaction ? '빠름' : '느림'}
+                      </span>
+                      {evaluation.agent_id && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                          {evaluation.agent_id}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs text-gray-400">
+                      {new Date(evaluation.created_at).toLocaleString('ko-KR', {
+                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                      })}
+                    </span>
+                  </div>
+                  {evaluation.comment && (
+                    <p className="text-sm text-gray-700 dark:text-gray-300 mt-1 pl-1">
+                      "{evaluation.comment}"
+                    </p>
+                  )}
+                  {!evaluation.comment && (
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 pl-1 italic">
+                      코멘트 없음
+                    </p>
+                  )}
+                  <div className="text-xs text-gray-400 dark:text-gray-500 mt-1 pl-1 font-mono">
+                    {evaluation.task_id.slice(0, 8)}... / {evaluation.session_id.slice(0, 8)}...
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

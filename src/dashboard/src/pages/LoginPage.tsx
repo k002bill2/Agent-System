@@ -147,46 +147,38 @@ export function LoginPage() {
             </button>
           </p>
 
-          {/* OAuth Section - only show when OAuth is enabled */}
-          {authStatus?.oauth_enabled && (
-            <>
-              {/* Divider */}
-              <div className="relative my-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-200 dark:border-gray-700" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-white dark:bg-gray-800 text-gray-500">
-                    또는
-                  </span>
-                </div>
-              </div>
+          {/* OAuth Section - always visible */}
+          {/* Divider */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200 dark:border-gray-700" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-white dark:bg-gray-800 text-gray-500">
+                또는
+              </span>
+            </div>
+          </div>
 
-              <div className="space-y-3">
-                {/* Google Login Button */}
-                {authStatus?.google_enabled && (
-                  <button
-                    onClick={handleGoogleLogin}
-                    className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
-                  >
-                    <GoogleIcon className="w-5 h-5" />
-                    Google로 계속하기
-                  </button>
-                )}
+          <div className="space-y-3">
+            {/* Google Login Button */}
+            <button
+              onClick={handleGoogleLogin}
+              className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
+            >
+              <GoogleIcon className="w-5 h-5" />
+              Google로 계속하기
+            </button>
 
-                {/* GitHub Login Button */}
-                {authStatus?.github_enabled && (
-                  <button
-                    onClick={handleGitHubLogin}
-                    className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-gray-900 dark:bg-gray-700 rounded-lg text-white hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors font-medium"
-                  >
-                    <GitHubIcon className="w-5 h-5" />
-                    GitHub로 계속하기
-                  </button>
-                )}
-              </div>
-            </>
-          )}
+            {/* GitHub Login Button */}
+            <button
+              onClick={handleGitHubLogin}
+              className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-gray-900 dark:bg-gray-700 rounded-lg text-white hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors font-medium"
+            >
+              <GitHubIcon className="w-5 h-5" />
+              GitHub로 계속하기
+            </button>
+          </div>
         </div>
 
         {/* Footer */}

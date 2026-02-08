@@ -262,7 +262,7 @@ class FeedbackService:
     ) -> TaskEvaluationResponse:
         """태스크 종합 평가 제출"""
         eval_id = str(uuid.uuid4())
-        now = datetime.utcnow()
+        now = datetime.now()
         key = f"{evaluation.session_id}:{evaluation.task_id}"
 
         eval_data = {
@@ -313,6 +313,40 @@ class FeedbackService:
             agent_id=data.get("agent_id"),
             created_at=data["created_at"],
         )
+
+    async def list_task_evaluations(
+        self,
+        agent_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[TaskEvaluationResponse]:
+        """태스크 평가 목록 조회 (comment 포함)"""
+        evaluations = list(self._task_evaluations.values())
+
+        # 에이전트 필터
+        if agent_id:
+            evaluations = [e for e in evaluations if e.get("agent_id") == agent_id]
+
+        # 최신순 정렬
+        evaluations.sort(key=lambda e: e["created_at"], reverse=True)
+
+        # 페이지네이션
+        evaluations = evaluations[offset : offset + limit]
+
+        return [
+            TaskEvaluationResponse(
+                id=e["id"],
+                session_id=e["session_id"],
+                task_id=e["task_id"],
+                rating=e["rating"],
+                result_accuracy=e["result_accuracy"],
+                speed_satisfaction=e["speed_satisfaction"],
+                comment=e.get("comment"),
+                agent_id=e.get("agent_id"),
+                created_at=e["created_at"],
+            )
+            for e in evaluations
+        ]
 
     async def get_task_evaluation_stats(self) -> TaskEvaluationStats:
         """태스크 종합 평가 통계"""

@@ -16,6 +16,7 @@ import {
   FlaskConical,
   GitBranch,
   Building2,
+  ShieldCheck,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useOrchestrationStore } from '../stores/orchestration'
@@ -83,6 +84,20 @@ export function Sidebar() {
 
       {/* Settings and User Section */}
       <div className="p-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
+        {user?.is_admin && (
+          <button
+            onClick={() => setView('admin')}
+            className={cn(
+              'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+              currentView === 'admin'
+                ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400'
+                : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
+            )}
+          >
+            <ShieldCheck className="w-5 h-5" />
+            Admin
+          </button>
+        )}
         <button
           onClick={() => setView('settings')}
           className={cn(

@@ -139,6 +139,11 @@ async def google_callback(
             ),
         )
     except Exception as e:
+        import logging
+
+        logging.getLogger(__name__).error(
+            "Google OAuth callback error: %s, redirect_uri=%s", str(e), redirect_uri
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to authenticate with Google: {str(e)}",

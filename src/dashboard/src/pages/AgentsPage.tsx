@@ -15,7 +15,7 @@ import { AgentCard } from '../components/AgentCard'
 import { AgentStatsPanel } from '../components/AgentStatsPanel'
 import { TaskAnalyzer } from '../components/TaskAnalyzer'
 import { MCPManagerTab } from '../components/mcp/MCPManagerTab'
-import { FeedbackHistoryPanel, DatasetPanel } from '../components/feedback'
+import { FeedbackHistoryPanel, DatasetPanel, AgentEvalPanel } from '../components/feedback'
 import { useFeedbackStore } from '../stores/feedback'
 import { ProjectAgentCard } from '../components/ProjectAgentCard'
 import {
@@ -465,7 +465,13 @@ interface FeedbackTabContentProps {
 }
 
 function FeedbackTabContent({ projectFilter, selectedProject }: FeedbackTabContentProps) {
-  const [subTab, setSubTab] = useState<'history' | 'dataset'>('history')
+  const [subTab, setSubTab] = useState<'history' | 'dataset' | 'evaluations'>('history')
+
+  const subTabs = [
+    { id: 'history' as const, label: 'Feedback History' },
+    { id: 'evaluations' as const, label: 'Agent Evaluations' },
+    { id: 'dataset' as const, label: 'Dataset' },
+  ]
 
   return (
     <div className="space-y-4">
@@ -480,32 +486,25 @@ function FeedbackTabContent({ projectFilter, selectedProject }: FeedbackTabConte
 
       {/* Sub-tabs */}
       <div className="flex gap-2">
-        <button
-          onClick={() => setSubTab('history')}
-          className={cn(
-            'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-            subTab === 'history'
-              ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
-              : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-          )}
-        >
-          Feedback History
-        </button>
-        <button
-          onClick={() => setSubTab('dataset')}
-          className={cn(
-            'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-            subTab === 'dataset'
-              ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
-              : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-          )}
-        >
-          Dataset
-        </button>
+        {subTabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setSubTab(tab.id)}
+            className={cn(
+              'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+              subTab === tab.id
+                ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Content */}
       {subTab === 'history' && <FeedbackHistoryPanel />}
+      {subTab === 'evaluations' && <AgentEvalPanel />}
       {subTab === 'dataset' && <DatasetPanel />}
     </div>
   )

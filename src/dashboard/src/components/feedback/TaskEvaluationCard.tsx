@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ThumbsUp, ThumbsDown, MessageSquare, Check, X } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { useFeedbackStore, TaskEvaluationSubmit } from '../../stores/feedback'
@@ -23,12 +23,24 @@ export function TaskEvaluationCard({ sessionId, taskId, agentId }: TaskEvaluatio
   const [selected, setSelected] = useState<'up' | 'down' | null>(null)
   const [showComment, setShowComment] = useState(false)
   const [comment, setComment] = useState('')
+  const fetchedRef = useRef(false)
+  const syncedRef = useRef(false)
 
+  // Fetch existing evaluation once on mount (StrictMode safe)
   useEffect(() => {
-    if (!existing) {
+    if (!fetchedRef.current && !existing) {
+      fetchedRef.current = true
       fetchTaskEvaluation(sessionId, taskId)
     }
-  }, [sessionId, taskId, existing, fetchTaskEvaluation])
+  }, [sessionId, taskId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync from server data (once)
+  useEffect(() => {
+    if (existing && !syncedRef.current && !selected) {
+      syncedRef.current = true
+      setSelected(existing.rating >= 3 ? 'up' : 'down')
+    }
+  }, [existing]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleVote = async (vote: 'up' | 'down') => {
     // Toggle off if already selected
@@ -66,13 +78,6 @@ export function TaskEvaluationCard({ sessionId, taskId, agentId }: TaskEvaluatio
     setShowComment(false)
     setComment('')
   }
-
-  // Sync from server data
-  useEffect(() => {
-    if (existing && !selected) {
-      setSelected(existing.rating >= 3 ? 'up' : 'down')
-    }
-  }, [existing]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex items-center gap-0.5">

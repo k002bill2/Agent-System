@@ -142,6 +142,9 @@ class AuthService:
 
     async def exchange_google_code(self, code: str, redirect_uri: str) -> UserInfo:
         """Exchange Google authorization code for user info."""
+        import logging
+
+        logger = logging.getLogger(__name__)
         async with httpx.AsyncClient() as client:
             # Exchange code for tokens
             token_response = await client.post(
@@ -154,7 +157,19 @@ class AuthService:
                     "redirect_uri": redirect_uri,
                 },
             )
-            token_response.raise_for_status()
+            if token_response.status_code != 200:
+                error_detail = token_response.json()
+                logger.error(
+                    "Google OAuth token exchange failed: status=%s, error=%s, redirect_uri=%s",
+                    token_response.status_code,
+                    error_detail,
+                    redirect_uri,
+                )
+                error_msg = error_detail.get("error", "unknown_error")
+                error_desc = error_detail.get("error_description", "")
+                raise Exception(
+                    f"Google token exchange failed: {error_msg} - {error_desc}"
+                )
             tokens = token_response.json()
 
             # Get user info

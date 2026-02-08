@@ -477,6 +477,7 @@ export function PlaygroundPage() {
                       onCopy={(content) => handleCopy(content, msg.id)}
                       copied={copiedId === msg.id}
                       sessionId={currentSession.id}
+                      agentId={currentSession.agent_id || undefined}
                     />
                   ))
                 )}
@@ -782,9 +783,10 @@ interface MessageBubbleProps {
   onCopy: (content: string) => void
   copied: boolean
   sessionId?: string
+  agentId?: string
 }
 
-function MessageBubble({ message, onCopy, copied, sessionId }: MessageBubbleProps) {
+function MessageBubble({ message, onCopy, copied, sessionId, agentId }: MessageBubbleProps) {
   const isUser = message.role === 'user'
   const isTool = message.role === 'tool'
   const [showSources, setShowSources] = useState(false)
@@ -906,6 +908,7 @@ function MessageBubble({ message, onCopy, copied, sessionId }: MessageBubbleProp
                 <TaskEvaluationCard
                   sessionId={sessionId}
                   taskId={message.id}
+                  agentId={agentId}
                 />
               )}
               <button
