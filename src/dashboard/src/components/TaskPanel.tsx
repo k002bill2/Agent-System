@@ -162,7 +162,8 @@ function TaskNode({ task, depth, allTasks, sessionId }: TaskNodeProps) {
 }
 
 export function TaskPanel() {
-  const { tasks, rootTaskId, isProcessing, sessionId } = useOrchestrationStore()
+  const { tasks, rootTaskId, isProcessing, sessionId, selectedProjectId, projects } = useOrchestrationStore()
+  const currentProjectName = selectedProjectId ? (projects.find(p => p.id === selectedProjectId)?.name || undefined) : undefined
   // Filter out deleted tasks
   const taskList = Object.values(tasks).filter((t) => !t.isDeleted)
   const rootTask = rootTaskId && tasks[rootTaskId] && !tasks[rootTaskId].isDeleted
@@ -206,7 +207,7 @@ export function TaskPanel() {
       {/* Task Evaluation - shown when root task is completed */}
       {rootTask && rootTask.status === 'completed' && sessionId && (
         <div className="px-3 py-2 border-t border-gray-200 dark:border-gray-700">
-          <TaskEvaluationCard sessionId={sessionId} taskId={rootTask.id} contextSummary={rootTask.description?.slice(0, 200)} />
+          <TaskEvaluationCard sessionId={sessionId} taskId={rootTask.id} contextSummary={rootTask.description?.slice(0, 200)} projectName={currentProjectName} />
         </div>
       )}
 

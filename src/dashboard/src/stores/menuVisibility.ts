@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { authFetch } from './auth'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
@@ -21,15 +22,7 @@ export const useMenuVisibilityStore = create<MenuVisibilityState>((set, get) => 
     if (get().isLoaded) return
 
     try {
-      const { useAuthStore } = await import('./auth')
-      const token = useAuthStore.getState().accessToken
-      if (!token) return
-
-      const res = await fetch(`${API_BASE_URL}/admin/menu-visibility`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
+      const res = await authFetch(`${API_BASE_URL}/admin/menu-visibility`)
 
       if (res.ok) {
         const data = await res.json()

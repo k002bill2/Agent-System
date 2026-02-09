@@ -67,6 +67,7 @@ import { cn } from '@/lib/utils';
 | `NotificationsPage` | `/notifications` | 알림 규칙/채널 설정 |
 | `PlaygroundPage` | `/playground` | 에이전트 테스트 환경 |
 | `OrganizationsPage` | `/organizations` | 조직 관리 (멤버, 역할, 통계) |
+| `AdminPage` | `/admin` | 관리자 페이지 (사용자 관리, 메뉴 설정, 시스템 정보) |
 | `SettingsPage` | `/settings` | 시스템 설정 |
 | `LoginPage` | `/login` | OAuth/Email 로그인 |
 | `RegisterPage` | `/register` | 이메일/비밀번호 회원가입 |
@@ -234,6 +235,14 @@ import { cn } from '@/lib/utils';
 | `UsageProgressBar` | 사용량 진행바 |
 | `ClaudeUsageDashboard` | Claude 사용량 대시보드 |
 
+### Admin Components
+
+| 컴포넌트 | 설명 |
+|----------|------|
+| `MenuSettingsTab` | 메뉴 가시성/순서 설정 (드래그 앤 드롭) |
+| `UserManagementTab` | 사용자 관리 (역할 변경, 활성화) |
+| `SystemInfoTab` | 시스템 정보 조회 |
+
 ### Permission Components
 
 | 컴포넌트 | 설명 |
@@ -271,6 +280,7 @@ import { cn } from '@/lib/utils';
 | `useGit` | `git.ts` | Git 브랜치/머지 관리 |
 | `useOrganizations` | `organizations.ts` | 조직/멤버 관리 |
 | `useAudit` | `audit.ts` | 감사 로그 |
+| `useMenuVisibilityStore` | `menuVisibility.ts` | 메뉴 가시성 및 순서 (visibility, menuOrder) |
 
 ### Store Pattern
 
@@ -383,9 +393,15 @@ src/dashboard/
 │   │   │   └── ResizablePanel.tsx
 │   │   ├── rag/                # RAG 검색
 │   │   │   └── RAGQueryPanel.tsx
+│   │   ├── admin/              # 관리자 설정
+│   │   │   ├── MenuSettingsTab.tsx
+│   │   │   ├── UserManagementTab.tsx
+│   │   │   ├── SystemInfoTab.tsx
+│   │   │   ├── api.ts
+│   │   │   └── types.ts
 │   │   └── analytics/          # Analytics
 │   │       └── ProjectMultiSelect.tsx
-│   ├── stores/                 # Zustand 스토어 (21개)
+│   ├── stores/                 # Zustand 스토어 (22개)
 │   │   ├── orchestration.ts
 │   │   ├── projects.ts
 │   │   ├── projectConfigs.ts
@@ -404,7 +420,8 @@ src/dashboard/
 │   │   ├── settings.ts
 │   │   ├── git.ts
 │   │   ├── organizations.ts
-│   │   └── audit.ts
+│   │   ├── audit.ts
+│   │   └── menuVisibility.ts
 │   ├── hooks/                  # 커스텀 훅
 │   ├── lib/                    # 유틸리티
 │   │   ├── utils.ts            # cn() 등 헬퍼 함수

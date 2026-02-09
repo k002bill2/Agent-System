@@ -1,14 +1,6 @@
-import { useAuthStore } from '../../stores/auth'
+import { authFetch } from '../../stores/auth'
 import type { AdminUser, MenuVisibility, SystemInfo, UserListResponse } from './types'
 import { API_BASE } from './types'
-
-export async function getAuthHeaders(): Promise<Record<string, string>> {
-  const token = useAuthStore.getState().accessToken
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  }
-}
 
 export async function fetchUsers(params: {
   search?: string
@@ -26,9 +18,7 @@ export async function fetchUsers(params: {
   query.append('limit', String(params.limit))
   query.append('offset', String(params.offset))
 
-  const res = await fetch(`${API_BASE}/admin/users?${query}`, {
-    headers: await getAuthHeaders(),
-  })
+  const res = await authFetch(`${API_BASE}/admin/users?${query}`)
   if (!res.ok) throw new Error(`Failed to fetch users: ${res.statusText}`)
   return res.json()
 }
@@ -37,9 +27,9 @@ export async function updateUser(
   userId: string,
   update: { is_active?: boolean; is_admin?: boolean; role?: string; name?: string }
 ): Promise<AdminUser> {
-  const res = await fetch(`${API_BASE}/admin/users/${userId}`, {
+  const res = await authFetch(`${API_BASE}/admin/users/${userId}`, {
     method: 'PATCH',
-    headers: await getAuthHeaders(),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(update),
   })
   if (!res.ok) {
@@ -50,9 +40,7 @@ export async function updateUser(
 }
 
 export async function fetchSystemInfo(): Promise<SystemInfo> {
-  const res = await fetch(`${API_BASE}/admin/system-info`, {
-    headers: await getAuthHeaders(),
-  })
+  const res = await authFetch(`${API_BASE}/admin/system-info`)
   if (!res.ok) throw new Error(`Failed to fetch system info: ${res.statusText}`)
   return res.json()
 }
@@ -63,9 +51,7 @@ export interface MenuVisibilityData {
 }
 
 export async function fetchMenuVisibilityData(): Promise<MenuVisibilityData> {
-  const res = await fetch(`${API_BASE}/admin/menu-visibility`, {
-    headers: await getAuthHeaders(),
-  })
+  const res = await authFetch(`${API_BASE}/admin/menu-visibility`)
   if (!res.ok) throw new Error(`Failed to fetch menu visibility: ${res.statusText}`)
   return res.json()
 }
@@ -79,9 +65,9 @@ export async function saveMenuVisibility(
   visibility: MenuVisibility,
   menuOrder?: string[],
 ): Promise<MenuVisibilityData> {
-  const res = await fetch(`${API_BASE}/admin/menu-visibility`, {
+  const res = await authFetch(`${API_BASE}/admin/menu-visibility`, {
     method: 'PUT',
-    headers: await getAuthHeaders(),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ visibility, menu_order: menuOrder }),
   })
   if (!res.ok) throw new Error(`Failed to save menu visibility: ${res.statusText}`)

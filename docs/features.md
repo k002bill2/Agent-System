@@ -195,8 +195,9 @@ class AuthService:
 ```
 
 **토큰 설정**:
-- Access Token: 15분 유효
+- Access Token: 60분 유효
 - Refresh Token: 7일 유효
+- `authFetch` 래퍼를 통한 자동 토큰 갱신 (401 시 refresh 자동 수행)
 
 ---
 
@@ -666,16 +667,33 @@ class HealthService:
 
 ---
 
-## 33. Warp Mode
+## 33. Warp Terminal Integration
 
-고속 실행 모드:
+Warp 터미널을 통한 Claude Code 실행:
 
 ```python
 class WarpService:
-    async def execute_fast(task: str) -> WarpResult
+    def build_claude_command(task: str | None = None) -> str
+    def open_with_command(path: str, command: str, title: str | None = None) -> dict
+    def cleanup_old_configs(max_age_hours: int = 24) -> int
 ```
 
 **특징**:
-- 캐시 활용
-- 병렬 처리 최적화
-- 간단한 작업 우선 처리
+- Warp Launch Configuration (YAML) 기반 실행
+- 태스크 내용을 임시 파일로 저장 후 `claude --dangerously-skip-permissions "$(cat file)"` 방식으로 전달
+- Docker 모드 지원 (URI를 프론트엔드로 반환)
+- 오래된 설정 파일 자동 정리
+
+---
+
+## 34. Admin Menu Management
+
+관리자 페이지에서 사이드바 메뉴 가시성 및 순서 관리:
+
+**기능**:
+- 역할별(user/manager/admin) 메뉴 가시성 제어
+- 드래그 앤 드롭으로 메뉴 순서 변경 (HTML5 네이티브 DnD)
+- 변경사항 DB 저장 후 모든 사용자에게 적용
+- `MENU_LABELS` 단일 소스로 메뉴 이름 일관성 유지
+
+**DB 모델**: `MenuVisibilityModel` (menu_key, role, visible, sort_order)

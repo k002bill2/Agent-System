@@ -478,6 +478,7 @@ export function PlaygroundPage() {
                       copied={copiedId === msg.id}
                       sessionId={currentSession.id}
                       agentId={currentSession.agent_id || undefined}
+                      projectName={currentSession.project_id ? (projects.find(p => p.id === currentSession.project_id)?.name || undefined) : undefined}
                     />
                   ))
                 )}
@@ -784,9 +785,10 @@ interface MessageBubbleProps {
   copied: boolean
   sessionId?: string
   agentId?: string
+  projectName?: string
 }
 
-function MessageBubble({ message, onCopy, copied, sessionId, agentId }: MessageBubbleProps) {
+function MessageBubble({ message, onCopy, copied, sessionId, agentId, projectName }: MessageBubbleProps) {
   const isUser = message.role === 'user'
   const isTool = message.role === 'tool'
   const [showSources, setShowSources] = useState(false)
@@ -910,6 +912,7 @@ function MessageBubble({ message, onCopy, copied, sessionId, agentId }: MessageB
                   taskId={message.id}
                   agentId={agentId}
                   contextSummary={message.content?.slice(0, 200)}
+                  projectName={projectName}
                 />
               )}
               <button

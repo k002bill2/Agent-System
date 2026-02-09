@@ -538,6 +538,46 @@ AOS Backend API 엔드포인트 문서입니다.
 
 ---
 
+## Admin
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/admin/users` | 사용자 목록 조회 (관리자 전용) |
+| PATCH | `/api/admin/users/{user_id}` | 사용자 정보 수정 (관리자 전용) |
+| GET | `/api/admin/menu-visibility` | 메뉴 가시성 설정 조회 (인증 사용자) |
+| PUT | `/api/admin/menu-visibility` | 메뉴 가시성 일괄 업데이트 (관리자 전용) |
+| GET | `/api/admin/system-info` | 시스템 정보 조회 (관리자 전용) |
+
+**사용자 목록 쿼리 파라미터** (`GET /api/admin/users`):
+- `is_active`: 활성 상태 필터
+- `is_admin`: 관리자 필터
+- `role`: 역할 필터 (`user`, `manager`, `admin`)
+- `search`: 이메일/이름 검색
+- `limit`, `offset`: 페이지네이션
+
+**메뉴 가시성 응답** (`GET /api/admin/menu-visibility`):
+```json
+{
+  "visibility": {
+    "dashboard": {"user": true, "manager": true, "admin": true},
+    "agents": {"user": false, "manager": true, "admin": true}
+  },
+  "menu_order": ["dashboard", "projects", "tasks", "agents", "..."]
+}
+```
+
+**메뉴 가시성 업데이트 요청** (`PUT /api/admin/menu-visibility`):
+```json
+{
+  "visibility": {"dashboard": {"user": true, "manager": true, "admin": true}},
+  "menu_order": ["dashboard", "projects", "tasks"]
+}
+```
+
+**역할**: `user`, `manager`, `admin`
+
+---
+
 ## Rate Limits
 
 | Method | Path | 설명 |

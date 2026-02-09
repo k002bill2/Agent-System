@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     # OAuth/JWT Settings
     session_secret_key: str = ""  # JWT signing key
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 15
+    access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 7
 
     # Google OAuth

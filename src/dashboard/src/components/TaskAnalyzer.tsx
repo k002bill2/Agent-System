@@ -602,6 +602,7 @@ function HistoryItem({ item, projectName, onDelete, onSelect, isDeleting, isSele
                 taskId={item.id}
                 contextSummary={item.task_input}
                 effortLevel={item.effort_level || undefined}
+                projectName={projectName}
               />
             </div>
           )}
