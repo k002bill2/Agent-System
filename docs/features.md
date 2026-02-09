@@ -707,3 +707,72 @@ class WarpService:
 - `MENU_LABELS` 단일 소스로 메뉴 이름 일관성 유지
 
 **DB 모델**: `MenuVisibilityModel` (menu_key, role, visible, sort_order)
+
+---
+
+## 35. E2E 암호화
+
+민감 데이터 필드 암호화 및 패스워드 해싱 업그레이드:
+
+```python
+class EncryptedString(TypeDecorator):
+    """SQLAlchemy 커스텀 타입 - DB 저장 시 AES-256-GCM 암호화"""
+    impl = String
+    # process_bind_param: 저장 시 encrypt
+    # process_result_value: 읽기 시 decrypt
+
+class KeyManager:
+    """HKDF 기반 마스터 키에서 서비스별 키 파생"""
+    def get_field_encryption_key() -> bytes
+    def rotate_key(old_key, new_key, db_session)
+```
+
+**암호화 대상**: ChannelConfigModel (webhook_url, api_key, bot_token, smtp_password), SAMLConfigModel (idp_certificate)
+
+**패스워드**: SHA-256 → bcrypt 점진적 마이그레이션 (로그인 시 자동 업그레이드)
+
+**TLS**: PostgreSQL/Redis 서비스 간 TLS 지원 (DB_SSL_MODE, REDIS_SSL)
+
+**하위 호환**: `ENCRYPTION_MASTER_KEY` 미설정 시 평문 저장
+
+---
+
+## 36. 프로젝트별 RBAC
+
+프로젝트 단위 세분화된 접근제어:
+
+```python
+class ProjectAccessService:
+    async def grant_access(db, project_id, user_id, role, granted_by)
+    async def check_access(db, project_id, user_id) -> str | None
+    async def has_any_access_control(db, project_id) -> bool
+```
+
+**역할 계층**: `viewer` (0) < `editor` (1) < `owner` (2)
+
+**하위 호환**: project_access 레코드가 없는 프로젝트 → 모든 인증 사용자 접근 허용
+
+**시스템 admin**: 모든 프로젝트 접근 바이패스
+
+**Dashboard UI**: `ProjectMembersPanel` - 멤버 목록, 초대, 역할 변경, 제거
+
+---
+
+## 37. Kubernetes 스케일링
+
+프로덕션 수준 K8s 배포 및 Helm Chart:
+
+**K8s 매니페스트** (`infra/k8s/base/`):
+- Backend/Dashboard Deployment + HPA (CPU 70%, 2-10 replicas)
+- PostgreSQL/Redis StatefulSet (영구 스토리지)
+- NetworkPolicy (기본 deny + 선택적 허용)
+- Ingress (TLS 종료, /api→backend, /→dashboard)
+
+**Helm Chart** (`infra/helm/aos/`):
+- 환경별 values (개발/프로덕션)
+- 전체 리소스 템플릿화
+
+**Dockerfile 최적화**:
+- 멀티스테이지 빌드 (builder → runtime)
+- non-root 유저, HEALTHCHECK
+- Dashboard: nginx-alpine 기반 SPA 호스팅

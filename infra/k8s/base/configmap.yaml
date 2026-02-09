@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aos-config
+  namespace: aos
+  labels:
+    app.kubernetes.io/name: aos
+data:
+  LLM_PROVIDER: "google"
+  FRONTEND_URL: "http://aos-dashboard"
+  USE_DATABASE: "true"
+  HOST: "0.0.0.0"
+  PORT: "8000"
+  LOG_LEVEL: "info"
+  REDIS_URL: "redis://aos-redis:6379"

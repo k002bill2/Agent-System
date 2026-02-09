@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: aos-dashboard
+  namespace: aos
+  labels:
+    app.kubernetes.io/name: aos
+    app.kubernetes.io/component: dashboard
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: aos
+    app.kubernetes.io/component: dashboard

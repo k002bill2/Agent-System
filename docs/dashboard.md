@@ -171,6 +171,12 @@ import { cn } from '@/lib/utils';
 | `MemberCard` | 멤버 카드 (역할 변경, 제거) |
 | `InviteMemberModal` | 멤버 초대 모달 |
 
+### Project Access Components
+
+| 컴포넌트 | 설명 |
+|----------|------|
+| `ProjectMembersPanel` | 프로젝트 멤버 관리 (목록, 추가, 역할 변경, 제거) |
+
 ### Monitor Components
 
 | 컴포넌트 | 설명 |
@@ -281,6 +287,7 @@ import { cn } from '@/lib/utils';
 | `useOrganizations` | `organizations.ts` | 조직/멤버 관리 |
 | `useAudit` | `audit.ts` | 감사 로그 |
 | `useMenuVisibilityStore` | `menuVisibility.ts` | 메뉴 가시성 및 순서 (visibility, menuOrder) |
+| `useProjectAccess` | `projectAccess.ts` | 프로젝트별 멤버/역할 관리 |
 
 ### Store Pattern
 
@@ -375,6 +382,8 @@ src/dashboard/
 │   │   │   ├── MergeRequestCard.tsx
 │   │   │   ├── MergePreviewPanel.tsx
 │   │   │   └── PullRequestList.tsx
+│   │   ├── projects/            # 프로젝트 접근제어
+│   │   │   └── ProjectMembersPanel.tsx
 │   │   ├── organizations/      # 조직 관리
 │   │   │   ├── OrganizationCard.tsx
 │   │   │   ├── OrganizationFormModal.tsx
@@ -421,7 +430,8 @@ src/dashboard/
 │   │   ├── git.ts
 │   │   ├── organizations.ts
 │   │   ├── audit.ts
-│   │   └── menuVisibility.ts
+│   │   ├── menuVisibility.ts
+│   │   └── projectAccess.ts
 │   ├── hooks/                  # 커스텀 훅
 │   ├── lib/                    # 유틸리티
 │   │   ├── utils.ts            # cn() 등 헬퍼 함수

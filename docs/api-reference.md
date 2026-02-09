@@ -553,6 +553,25 @@ AOS Backend API 엔드포인트 문서입니다.
 
 ---
 
+## Project Access (RBAC)
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/projects/{project_id}/access` | 프로젝트 멤버 목록 (viewer+) |
+| POST | `/api/projects/{project_id}/access` | 멤버 추가 (owner) |
+| PUT | `/api/projects/{project_id}/access/{user_id}` | 역할 변경 (owner) |
+| DELETE | `/api/projects/{project_id}/access/{user_id}` | 멤버 제거 (owner) |
+| GET | `/api/projects/{project_id}/access/me` | 내 프로젝트 역할 조회 |
+
+**역할**: `owner`, `editor`, `viewer`
+
+**접근제어 규칙**:
+- project_access 레코드가 없는 프로젝트 → 모든 인증 사용자 접근 허용 (하위 호환)
+- 시스템 admin (role=="admin")은 모든 프로젝트 접근 바이패스
+- 역할 계층: viewer(0) < editor(1) < owner(2)
+
+---
+
 ## Admin
 
 | Method | Path | 설명 |
