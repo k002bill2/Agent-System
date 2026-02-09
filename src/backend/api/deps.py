@@ -265,3 +265,61 @@ async def require_org_role(
             detail=f"Requires at least '{min_role.value}' role in this organization",
         )
     return membership
+
+
+# ─────────────────────────────────────────────────────────────
+# Project Role Dependencies (RBAC)
+# ─────────────────────────────────────────────────────────────
+
+_PROJECT_ROLE_HIERARCHY: dict[str, int] = {
+    "viewer": 0,
+    "editor": 1,
+    "owner": 2,
+}
+
+
+async def require_project_role(
+    project_id: str,
+    current_user: UserModel,
+    db: AsyncSession,
+    min_role: str = "viewer",
+) -> str:
+    """Verify user has at least the specified role in a project.
+
+    Returns the user's role string.
+
+    Rules:
+    - System admins (role=="admin" or is_admin==True) bypass all checks.
+    - Projects with no access control records are open to all authenticated users.
+    - Otherwise, the user must have at least `min_role` level.
+    """
+    from services.project_access_service import ProjectAccessService
+
+    # System admin bypass
+    if current_user.role == "admin" or current_user.is_admin:
+        return "owner"
+
+    # Check if the project has any access control
+    has_acl = await ProjectAccessService.has_any_access_control(db, project_id)
+    if not has_acl:
+        # No access control → open to all authenticated users
+        return "editor"
+
+    # Check user's role
+    user_role = await ProjectAccessService.check_access(db, project_id, current_user.id)
+    if user_role is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No access to this project",
+        )
+
+    user_level = _PROJECT_ROLE_HIERARCHY.get(user_role, 0)
+    required_level = _PROJECT_ROLE_HIERARCHY.get(min_role, 0)
+
+    if user_level < required_level:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Requires at least '{min_role}' role in this project",
+        )
+
+    return user_role

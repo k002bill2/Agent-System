@@ -6,11 +6,12 @@ import os
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # Docker mode: skip host filesystem validations
 IS_DOCKER = bool(os.getenv("CLAUDE_HOME"))
 
-from api.deps import get_engine
+from api.deps import get_current_user_optional, get_db_session, get_engine, require_project_role
 from models.agent_state import TaskStatus
 from models.context_usage import ContextUsage, get_context_limit
 from models.hitl import ApprovalResponse, ApprovalStatus
@@ -568,9 +569,39 @@ class ProjectReorderRequest(BaseModel):
 
 
 @router.get("/projects", response_model=list[ProjectResponse])
-async def get_projects():
-    """List all registered projects, sorted by sort_order."""
+async def get_projects(
+    current_user=Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """List all registered projects, sorted by sort_order.
+
+    If the user is authenticated, only returns projects they have access to.
+    Projects without any access control records are visible to all authenticated users.
+    """
     projects = list_projects()
+
+    # Filter by accessible projects if user is authenticated
+    if current_user:
+        # System admins see all projects
+        is_admin = current_user.role == "admin" or current_user.is_admin
+        if not is_admin:
+            from services.project_access_service import ProjectAccessService
+
+            accessible_ids = await ProjectAccessService.get_accessible_project_ids(
+                db, current_user.id
+            )
+            if accessible_ids is not None:
+                # User has explicit access to some projects; also include
+                # projects without any access control (open to all).
+                filtered = []
+                for p in projects:
+                    if p.id in accessible_ids:
+                        filtered.append(p)
+                    else:
+                        has_acl = await ProjectAccessService.has_any_access_control(db, p.id)
+                        if not has_acl:
+                            filtered.append(p)
+                projects = filtered
 
     # Try to get RAG stats if available
     try:
@@ -774,11 +805,19 @@ async def create_project_from_template(request: ProjectCreateFromTemplate):
 
 
 @router.get("/projects/{project_id}", response_model=ProjectResponse)
-async def get_project_by_id(project_id: str):
-    """Get a specific project."""
+async def get_project_by_id(
+    project_id: str,
+    current_user=Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Get a specific project. Requires viewer+ role if access control is active."""
     project = get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    # Apply RBAC if user is authenticated
+    if current_user:
+        await require_project_role(project_id, current_user, db, min_role="viewer")
 
     return ProjectResponse(
         id=project.id,
@@ -813,8 +852,17 @@ async def create_project(request: ProjectCreate):
 
 
 @router.put("/projects/{project_id}", response_model=ProjectResponse)
-async def update_project_endpoint(project_id: str, request: ProjectUpdate):
-    """Update project name, description, or path."""
+async def update_project_endpoint(
+    project_id: str,
+    request: ProjectUpdate,
+    current_user=Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Update project name, description, or path. Requires editor+ role."""
+    # Apply RBAC if user is authenticated
+    if current_user:
+        await require_project_role(project_id, current_user, db, min_role="editor")
+
     try:
         project = update_project(project_id, request.name, request.description, request.path)
         if not project:
@@ -857,9 +905,13 @@ async def get_deletion_preview(project_id: str):
 
 
 @router.delete("/projects/{project_id}")
-async def delete_project(project_id: str):
+async def delete_project(
+    project_id: str,
+    current_user=Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db_session),
+):
     """
-    Delete a project with cascade cleanup.
+    Delete a project with cascade cleanup. Requires owner role.
 
     This removes:
     - All DB records (sessions, tasks, messages, approvals, feedbacks)
@@ -872,6 +924,10 @@ async def delete_project(project_id: str):
     IMPORTANT: Source files are NEVER deleted, only the symlink.
     """
     from services.project_cleanup_service import get_cleanup_service
+
+    # Apply RBAC if user is authenticated
+    if current_user:
+        await require_project_role(project_id, current_user, db, min_role="owner")
 
     project = get_project(project_id)
     if not project:
