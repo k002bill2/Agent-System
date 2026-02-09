@@ -5,6 +5,8 @@ import {
   ChevronRight,
   UserCheck,
   UserX,
+  Check,
+  Loader2,
 } from 'lucide-react'
 import type { UserRole } from '../../stores/auth'
 import type { AdminUser } from './types'
@@ -26,6 +28,8 @@ export function UserManagementTab({ currentUserId }: Props) {
   const [page, setPage] = useState(0)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchAction, setBatchAction] = useState<string>('')
+  const [savingRoleId, setSavingRoleId] = useState<string | null>(null)
+  const [savedRoleId, setSavedRoleId] = useState<string | null>(null)
   const limit = 20
 
   const load = useCallback(async () => {
@@ -68,11 +72,17 @@ export function UserManagementTab({ currentUserId }: Props) {
   }
 
   const handleRoleChange = async (userId: string, newRole: UserRole) => {
+    setSavingRoleId(userId)
+    setSavedRoleId(null)
     try {
       const updated = await updateUser(userId, { role: newRole })
       setUsers((prev) => prev.map((u) => (u.id === userId ? updated : u)))
+      setSavedRoleId(userId)
+      setTimeout(() => setSavedRoleId((prev) => (prev === userId ? null : prev)), 2000)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Update failed')
+    } finally {
+      setSavingRoleId(null)
     }
   }
 
@@ -336,18 +346,26 @@ export function UserManagementTab({ currentUserId }: Props) {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <select
-                      value={u.role || (u.is_admin ? 'admin' : 'user')}
-                      onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)}
-                      disabled={u.id === currentUserId}
-                      className={`px-2 py-1 rounded text-xs font-medium border-0 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 ${
-                        ROLE_COLORS[u.role || (u.is_admin ? 'admin' : 'user')]
-                      }`}
-                    >
-                      <option value="user">일반 (User)</option>
-                      <option value="manager">관리자 (Manager)</option>
-                      <option value="admin">최고관리자 (Admin)</option>
-                    </select>
+                    <div className="inline-flex items-center gap-1.5">
+                      <select
+                        value={u.role || (u.is_admin ? 'admin' : 'user')}
+                        onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)}
+                        disabled={u.id === currentUserId || savingRoleId === u.id}
+                        className={`px-2 py-1 rounded text-xs font-medium border-0 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 ${
+                          ROLE_COLORS[u.role || (u.is_admin ? 'admin' : 'user')]
+                        }`}
+                      >
+                        <option value="user">일반 (User)</option>
+                        <option value="manager">관리자 (Manager)</option>
+                        <option value="admin">최고관리자 (Admin)</option>
+                      </select>
+                      {savingRoleId === u.id && (
+                        <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin" />
+                      )}
+                      {savedRoleId === u.id && (
+                        <Check className="w-3.5 h-3.5 text-green-500" />
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">
                     <span title={u.created_at ? new Date(u.created_at).toLocaleString() : ''}>
@@ -460,18 +478,26 @@ export function UserManagementTab({ currentUserId }: Props) {
                     >
                       {u.is_active ? 'Active' : 'Inactive'}
                     </span>
-                    <select
-                      value={u.role || (u.is_admin ? 'admin' : 'user')}
-                      onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)}
-                      disabled={u.id === currentUserId}
-                      className={`px-2 py-0.5 rounded text-xs font-medium border-0 ${
-                        ROLE_COLORS[u.role || (u.is_admin ? 'admin' : 'user')]
-                      }`}
-                    >
-                      <option value="user">일반</option>
-                      <option value="manager">관리자</option>
-                      <option value="admin">최고관리자</option>
-                    </select>
+                    <div className="inline-flex items-center gap-1">
+                      <select
+                        value={u.role || (u.is_admin ? 'admin' : 'user')}
+                        onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)}
+                        disabled={u.id === currentUserId || savingRoleId === u.id}
+                        className={`px-2 py-0.5 rounded text-xs font-medium border-0 ${
+                          ROLE_COLORS[u.role || (u.is_admin ? 'admin' : 'user')]
+                        }`}
+                      >
+                        <option value="user">일반</option>
+                        <option value="manager">관리자</option>
+                        <option value="admin">최고관리자</option>
+                      </select>
+                      {savingRoleId === u.id && (
+                        <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
+                      )}
+                      {savedRoleId === u.id && (
+                        <Check className="w-3 h-3 text-green-500" />
+                      )}
+                    </div>
                   </div>
                 </div>
                 <button

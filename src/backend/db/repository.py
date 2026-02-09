@@ -7,7 +7,14 @@ from typing import Any
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import ApprovalModel, MessageModel, SessionModel, TaskModel
+from db.models import (
+    ApprovalModel,
+    BranchProtectionRuleModel,
+    MergeRequestModel,
+    MessageModel,
+    SessionModel,
+    TaskModel,
+)
 
 
 def serialize_value(value: Any) -> Any:
@@ -491,3 +498,125 @@ class ApprovalRepository:
             .order_by(ApprovalModel.created_at)
         )
         return list(result.scalars().all())
+
+
+class MergeRequestRepository:
+    """Repository for merge request operations."""
+
+    def __init__(self, session: AsyncSession):
+        self.db = session
+
+    async def create(self, **kwargs) -> MergeRequestModel:
+        """Create a new merge request."""
+        mr = MergeRequestModel(**kwargs)
+        self.db.add(mr)
+        await self.db.flush()
+        return mr
+
+    async def get(self, mr_id: str) -> MergeRequestModel | None:
+        """Get merge request by ID."""
+        result = await self.db.execute(
+            select(MergeRequestModel).where(MergeRequestModel.id == mr_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def list_by_project(
+        self,
+        project_id: str,
+        status: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[MergeRequestModel]:
+        """List merge requests for a project."""
+        query = select(MergeRequestModel).where(
+            MergeRequestModel.project_id == project_id
+        )
+        if status:
+            query = query.where(MergeRequestModel.status == status)
+        query = query.order_by(MergeRequestModel.created_at.desc()).limit(limit).offset(offset)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
+    async def update(self, mr_id: str, **kwargs) -> bool:
+        """Update merge request fields."""
+        kwargs["updated_at"] = datetime.utcnow()
+        result = await self.db.execute(
+            update(MergeRequestModel)
+            .where(MergeRequestModel.id == mr_id)
+            .values(**kwargs)
+        )
+        return result.rowcount > 0
+
+    async def delete(self, mr_id: str) -> bool:
+        """Delete a merge request."""
+        result = await self.db.execute(
+            delete(MergeRequestModel).where(MergeRequestModel.id == mr_id)
+        )
+        return result.rowcount > 0
+
+
+class BranchProtectionRepository:
+    """Repository for branch protection rule operations."""
+
+    def __init__(self, session: AsyncSession):
+        self.db = session
+
+    async def create(self, **kwargs) -> BranchProtectionRuleModel:
+        """Create a new branch protection rule."""
+        rule = BranchProtectionRuleModel(**kwargs)
+        self.db.add(rule)
+        await self.db.flush()
+        return rule
+
+    async def get(self, rule_id: str) -> BranchProtectionRuleModel | None:
+        """Get rule by ID."""
+        result = await self.db.execute(
+            select(BranchProtectionRuleModel).where(BranchProtectionRuleModel.id == rule_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def list_by_project(
+        self,
+        project_id: str,
+        enabled_only: bool = False,
+    ) -> list[BranchProtectionRuleModel]:
+        """List rules for a project."""
+        query = select(BranchProtectionRuleModel).where(
+            BranchProtectionRuleModel.project_id == project_id
+        )
+        if enabled_only:
+            query = query.where(BranchProtectionRuleModel.enabled == True)  # noqa: E712
+        query = query.order_by(BranchProtectionRuleModel.created_at)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
+    async def find_matching_rule(
+        self,
+        project_id: str,
+        branch_name: str,
+    ) -> BranchProtectionRuleModel | None:
+        """Find the first enabled rule matching a branch name."""
+        import fnmatch
+
+        rules = await self.list_by_project(project_id, enabled_only=True)
+        for rule in rules:
+            if fnmatch.fnmatch(branch_name, rule.branch_pattern):
+                return rule
+        return None
+
+    async def update(self, rule_id: str, **kwargs) -> bool:
+        """Update rule fields."""
+        kwargs["updated_at"] = datetime.utcnow()
+        result = await self.db.execute(
+            update(BranchProtectionRuleModel)
+            .where(BranchProtectionRuleModel.id == rule_id)
+            .values(**kwargs)
+        )
+        return result.rowcount > 0
+
+    async def delete(self, rule_id: str) -> bool:
+        """Delete a rule."""
+        result = await self.db.execute(
+            delete(BranchProtectionRuleModel).where(BranchProtectionRuleModel.id == rule_id)
+        )
+        return result.rowcount > 0

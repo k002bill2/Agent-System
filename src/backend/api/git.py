@@ -11,6 +11,11 @@ from models.git import (
     BranchCreateRequest,
     BranchDiff,
     BranchListResponse,
+    # Branch Protection models
+    BranchProtectionListResponse,
+    BranchProtectionRule,
+    BranchProtectionRuleCreate,
+    BranchProtectionRuleUpdate,
     CommitCreateRequest,
     CommitCreateResult,
     CommitFile,
@@ -124,7 +129,7 @@ def get_merge_service_for_project(project_id: str):
     return service
 
 
-def get_mr_service_for_project(project_id: str):
+def get_mr_service_for_project(project_id: str, db_session=None):
     """Get MergeRequestService for a project."""
     from services.merge_service import MergeRequestService, get_merge_service
 
@@ -134,7 +139,19 @@ def get_mr_service_for_project(project_id: str):
 
     git_path = get_effective_git_path(project)
     merge_service = get_merge_service(git_path)
-    return MergeRequestService(project_id, merge_service)
+    return MergeRequestService(project_id, merge_service, db_session=db_session)
+
+
+async def _get_db_session():
+    """Get optional DB session (returns None if DB not configured)."""
+    import os
+    if os.getenv("USE_DATABASE", "false").lower() != "true":
+        return None
+    try:
+        from db.database import async_session_factory
+        return async_session_factory()
+    except Exception:
+        return None
 
 
 def get_github_service():
@@ -863,13 +880,21 @@ async def list_merge_requests(
     status: MergeRequestStatus | None = Query(None, description="Filter by status"),
 ):
     """List merge requests for a project."""
-    mr_service = get_mr_service_for_project(project_id)
-    mrs = mr_service.list_merge_requests(status=status)
-
-    return MergeRequestListResponse(
-        merge_requests=mrs,
-        total=len(mrs),
-    )
+    db_session = await _get_db_session()
+    try:
+        mr_service = get_mr_service_for_project(project_id, db_session=db_session)
+        if db_session:
+            async with db_session:
+                mrs = await mr_service.list_merge_requests_async(status=status)
+                await db_session.commit()
+        else:
+            mrs = mr_service.list_merge_requests(status=status)
+        return MergeRequestListResponse(merge_requests=mrs, total=len(mrs))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to list merge requests: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/projects/{project_id}/merge-requests/{mr_id}", response_model=MergeRequest)
@@ -878,13 +903,24 @@ async def get_merge_request(
     mr_id: str,
 ):
     """Get a merge request by ID."""
-    mr_service = get_mr_service_for_project(project_id)
-    mr = mr_service.get_merge_request(mr_id)
+    db_session = await _get_db_session()
+    try:
+        mr_service = get_mr_service_for_project(project_id, db_session=db_session)
+        if db_session:
+            async with db_session:
+                mr = await mr_service.get_merge_request_async(mr_id)
+                await db_session.commit()
+        else:
+            mr = mr_service.get_merge_request(mr_id)
 
-    if not mr:
-        raise HTTPException(status_code=404, detail="Merge request not found")
-
-    return mr
+        if not mr:
+            raise HTTPException(status_code=404, detail="Merge request not found")
+        return mr
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get merge request: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/projects/{project_id}/merge-requests", response_model=MergeRequest)
@@ -896,20 +932,41 @@ async def create_merge_request(
     author_email: str = Query("system@example.com", description="Author email"),
 ):
     """Create a new merge request."""
-    mr_service = get_mr_service_for_project(project_id)
-
-    mr = mr_service.create_merge_request(
-        title=request.title,
-        source_branch=request.source_branch,
-        target_branch=request.target_branch,
-        description=request.description,
-        reviewers=request.reviewers,
-        author_id=author_id,
-        author_name=author_name,
-        author_email=author_email,
-    )
-
-    return mr
+    db_session = await _get_db_session()
+    try:
+        mr_service = get_mr_service_for_project(project_id, db_session=db_session)
+        if db_session:
+            async with db_session:
+                mr = await mr_service.create_merge_request_async(
+                    title=request.title,
+                    source_branch=request.source_branch,
+                    target_branch=request.target_branch,
+                    description=request.description,
+                    reviewers=request.reviewers,
+                    author_id=author_id,
+                    author_name=author_name,
+                    author_email=author_email,
+                    auto_merge=request.auto_merge,
+                )
+                await db_session.commit()
+        else:
+            mr = mr_service.create_merge_request(
+                title=request.title,
+                source_branch=request.source_branch,
+                target_branch=request.target_branch,
+                description=request.description,
+                reviewers=request.reviewers,
+                author_id=author_id,
+                author_name=author_name,
+                author_email=author_email,
+                auto_merge=request.auto_merge,
+            )
+        return mr
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create merge request: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.put("/projects/{project_id}/merge-requests/{mr_id}", response_model=MergeRequest)
@@ -919,20 +976,37 @@ async def update_merge_request(
     request: MergeRequestUpdate,
 ):
     """Update a merge request."""
-    mr_service = get_mr_service_for_project(project_id)
+    db_session = await _get_db_session()
+    try:
+        mr_service = get_mr_service_for_project(project_id, db_session=db_session)
+        if db_session:
+            async with db_session:
+                mr = await mr_service.update_merge_request_async(
+                    mr_id=mr_id,
+                    title=request.title,
+                    description=request.description,
+                    status=request.status,
+                    reviewers=request.reviewers,
+                    auto_merge=request.auto_merge,
+                )
+                await db_session.commit()
+        else:
+            mr = mr_service.update_merge_request(
+                mr_id=mr_id,
+                title=request.title,
+                description=request.description,
+                status=request.status,
+                reviewers=request.reviewers,
+            )
 
-    mr = mr_service.update_merge_request(
-        mr_id=mr_id,
-        title=request.title,
-        description=request.description,
-        status=request.status,
-        reviewers=request.reviewers,
-    )
-
-    if not mr:
-        raise HTTPException(status_code=404, detail="Merge request not found")
-
-    return mr
+        if not mr:
+            raise HTTPException(status_code=404, detail="Merge request not found")
+        return mr
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update merge request: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/projects/{project_id}/merge-requests/{mr_id}/approve", response_model=MergeRequest)
@@ -941,15 +1015,25 @@ async def approve_merge_request(
     mr_id: str,
     user_id: str = Query(..., description="Approving user ID"),
 ):
-    """Approve a merge request."""
-    mr_service = get_mr_service_for_project(project_id)
+    """Approve a merge request. Triggers auto-merge if conditions met."""
+    db_session = await _get_db_session()
+    try:
+        mr_service = get_mr_service_for_project(project_id, db_session=db_session)
+        if db_session:
+            async with db_session:
+                mr = await mr_service.approve_merge_request_async(mr_id=mr_id, user_id=user_id)
+                await db_session.commit()
+        else:
+            mr = mr_service.approve_merge_request(mr_id=mr_id, user_id=user_id)
 
-    mr = mr_service.approve_merge_request(mr_id=mr_id, user_id=user_id)
-
-    if not mr:
-        raise HTTPException(status_code=404, detail="Merge request not found")
-
-    return mr
+        if not mr:
+            raise HTTPException(status_code=404, detail="Merge request not found")
+        return mr
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to approve merge request: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/projects/{project_id}/merge-requests/{mr_id}/merge")
@@ -960,28 +1044,48 @@ async def merge_merge_request(
     user_role: str = Query("member", description="User role for permission check"),
 ):
     """Merge a merge request."""
-    mr_service = get_mr_service_for_project(project_id)
+    db_session = await _get_db_session()
+    try:
+        mr_service = get_mr_service_for_project(project_id, db_session=db_session)
 
-    # Get MR to check target branch
-    mr = mr_service.get_merge_request(mr_id)
-    if not mr:
-        raise HTTPException(status_code=404, detail="Merge request not found")
+        if db_session:
+            async with db_session:
+                mr = await mr_service.get_merge_request_async(mr_id)
+                if not mr:
+                    raise HTTPException(status_code=404, detail="Merge request not found")
 
-    # Check permissions
-    if not can_merge_to_branch(user_role, mr.target_branch):
-        raise HTTPException(
-            status_code=403, detail=f"Insufficient permissions to merge to '{mr.target_branch}'"
-        )
+                if not can_merge_to_branch(user_role, mr.target_branch):
+                    raise HTTPException(
+                        status_code=403, detail=f"Insufficient permissions to merge to '{mr.target_branch}'"
+                    )
 
-    mr, result = mr_service.merge_merge_request(mr_id=mr_id, merged_by=user_id)
+                mr, result = await mr_service.merge_merge_request_async(mr_id=mr_id, merged_by=user_id)
+                await db_session.commit()
 
-    if not mr:
-        raise HTTPException(status_code=404, detail="Merge request not found")
+                # Trigger auto-deploy after successful merge
+                if result and result.success:
+                    await mr_service._try_auto_deploy(mr)
+        else:
+            mr = mr_service.get_merge_request(mr_id)
+            if not mr:
+                raise HTTPException(status_code=404, detail="Merge request not found")
 
-    return {
-        "merge_request": mr,
-        "merge_result": result,
-    }
+            if not can_merge_to_branch(user_role, mr.target_branch):
+                raise HTTPException(
+                    status_code=403, detail=f"Insufficient permissions to merge to '{mr.target_branch}'"
+                )
+
+            mr, result = mr_service.merge_merge_request(mr_id=mr_id, merged_by=user_id)
+
+        if not mr:
+            raise HTTPException(status_code=404, detail="Merge request not found")
+
+        return {"merge_request": mr, "merge_result": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to merge: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/projects/{project_id}/merge-requests/{mr_id}/close", response_model=MergeRequest)
@@ -991,14 +1095,24 @@ async def close_merge_request(
     user_id: str = Query(..., description="User ID closing the MR"),
 ):
     """Close a merge request without merging."""
-    mr_service = get_mr_service_for_project(project_id)
+    db_session = await _get_db_session()
+    try:
+        mr_service = get_mr_service_for_project(project_id, db_session=db_session)
+        if db_session:
+            async with db_session:
+                mr = await mr_service.close_merge_request_async(mr_id=mr_id, closed_by=user_id)
+                await db_session.commit()
+        else:
+            mr = mr_service.close_merge_request(mr_id=mr_id, closed_by=user_id)
 
-    mr = mr_service.close_merge_request(mr_id=mr_id, closed_by=user_id)
-
-    if not mr:
-        raise HTTPException(status_code=404, detail="Merge request not found")
-
-    return mr
+        if not mr:
+            raise HTTPException(status_code=404, detail="Merge request not found")
+        return mr
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to close merge request: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post(
@@ -1009,14 +1123,200 @@ async def refresh_mr_conflicts(
     mr_id: str,
 ):
     """Refresh conflict status for a merge request."""
-    mr_service = get_mr_service_for_project(project_id)
+    db_session = await _get_db_session()
+    try:
+        mr_service = get_mr_service_for_project(project_id, db_session=db_session)
+        if db_session:
+            async with db_session:
+                mr = await mr_service.refresh_conflict_status_async(mr_id)
+                await db_session.commit()
+        else:
+            mr = mr_service.refresh_conflict_status(mr_id)
 
-    mr = mr_service.refresh_conflict_status(mr_id)
+        if not mr:
+            raise HTTPException(status_code=404, detail="Merge request not found")
+        return mr
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to refresh conflict status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-    if not mr:
-        raise HTTPException(status_code=404, detail="Merge request not found")
 
-    return mr
+# =============================================================================
+# Branch Protection Rule Endpoints
+# =============================================================================
+
+
+@router.get("/projects/{project_id}/branch-protection", response_model=BranchProtectionListResponse)
+async def list_branch_protection_rules(project_id: str):
+    """List branch protection rules for a project."""
+    import os
+    import uuid
+
+    if os.getenv("USE_DATABASE", "false").lower() == "true":
+        db_session = await _get_db_session()
+        if db_session:
+            async with db_session:
+                from db.repository import BranchProtectionRepository
+                repo = BranchProtectionRepository(db_session)
+                models = await repo.list_by_project(project_id)
+                rules = [
+                    BranchProtectionRule(
+                        id=m.id,
+                        project_id=m.project_id,
+                        branch_pattern=m.branch_pattern,
+                        require_approvals=m.require_approvals or 0,
+                        require_no_conflicts=m.require_no_conflicts if m.require_no_conflicts is not None else True,
+                        allowed_merge_roles=m.allowed_merge_roles or ["owner", "admin"],
+                        allow_force_push=m.allow_force_push or False,
+                        allow_deletion=m.allow_deletion or False,
+                        auto_deploy=m.auto_deploy or False,
+                        deploy_workflow=m.deploy_workflow,
+                        enabled=m.enabled if m.enabled is not None else True,
+                        created_at=m.created_at,
+                        updated_at=m.updated_at,
+                    )
+                    for m in models
+                ]
+                return BranchProtectionListResponse(rules=rules, total=len(rules))
+
+    # Fallback: return default rules
+    default_rules = [
+        BranchProtectionRule(
+            id=str(uuid.uuid4()),
+            project_id=project_id,
+            branch_pattern=pattern,
+            require_approvals=0,
+        )
+        for pattern in DEFAULT_PROTECTED_BRANCHES
+    ]
+    return BranchProtectionListResponse(rules=default_rules, total=len(default_rules))
+
+
+@router.post("/projects/{project_id}/branch-protection", response_model=BranchProtectionRule)
+async def create_branch_protection_rule(
+    project_id: str,
+    request: BranchProtectionRuleCreate,
+):
+    """Create a new branch protection rule."""
+    import os
+    import uuid
+
+    if os.getenv("USE_DATABASE", "false").lower() != "true":
+        raise HTTPException(status_code=503, detail="Database not configured for branch protection rules")
+
+    db_session = await _get_db_session()
+    if not db_session:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    async with db_session:
+        from db.repository import BranchProtectionRepository
+        repo = BranchProtectionRepository(db_session)
+        model = await repo.create(
+            id=str(uuid.uuid4()),
+            project_id=project_id,
+            branch_pattern=request.branch_pattern,
+            require_approvals=request.require_approvals,
+            require_no_conflicts=request.require_no_conflicts,
+            allowed_merge_roles=request.allowed_merge_roles,
+            allow_force_push=request.allow_force_push,
+            allow_deletion=request.allow_deletion,
+            auto_deploy=request.auto_deploy,
+            deploy_workflow=request.deploy_workflow,
+            enabled=request.enabled,
+        )
+        await db_session.commit()
+
+        return BranchProtectionRule(
+            id=model.id,
+            project_id=model.project_id,
+            branch_pattern=model.branch_pattern,
+            require_approvals=model.require_approvals or 0,
+            require_no_conflicts=model.require_no_conflicts if model.require_no_conflicts is not None else True,
+            allowed_merge_roles=model.allowed_merge_roles or ["owner", "admin"],
+            allow_force_push=model.allow_force_push or False,
+            allow_deletion=model.allow_deletion or False,
+            auto_deploy=model.auto_deploy or False,
+            deploy_workflow=model.deploy_workflow,
+            enabled=model.enabled if model.enabled is not None else True,
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+        )
+
+
+@router.put("/projects/{project_id}/branch-protection/{rule_id}", response_model=BranchProtectionRule)
+async def update_branch_protection_rule(
+    project_id: str,
+    rule_id: str,
+    request: BranchProtectionRuleUpdate,
+):
+    """Update a branch protection rule."""
+    import os
+
+    if os.getenv("USE_DATABASE", "false").lower() != "true":
+        raise HTTPException(status_code=503, detail="Database not configured")
+
+    db_session = await _get_db_session()
+    if not db_session:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    async with db_session:
+        from db.repository import BranchProtectionRepository
+        repo = BranchProtectionRepository(db_session)
+
+        updates = {k: v for k, v in request.model_dump().items() if v is not None}
+        if not updates:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        success = await repo.update(rule_id, **updates)
+        if not success:
+            raise HTTPException(status_code=404, detail="Rule not found")
+
+        model = await repo.get(rule_id)
+        await db_session.commit()
+
+        return BranchProtectionRule(
+            id=model.id,
+            project_id=model.project_id,
+            branch_pattern=model.branch_pattern,
+            require_approvals=model.require_approvals or 0,
+            require_no_conflicts=model.require_no_conflicts if model.require_no_conflicts is not None else True,
+            allowed_merge_roles=model.allowed_merge_roles or ["owner", "admin"],
+            allow_force_push=model.allow_force_push or False,
+            allow_deletion=model.allow_deletion or False,
+            auto_deploy=model.auto_deploy or False,
+            deploy_workflow=model.deploy_workflow,
+            enabled=model.enabled if model.enabled is not None else True,
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+        )
+
+
+@router.delete("/projects/{project_id}/branch-protection/{rule_id}")
+async def delete_branch_protection_rule(
+    project_id: str,
+    rule_id: str,
+):
+    """Delete a branch protection rule."""
+    import os
+
+    if os.getenv("USE_DATABASE", "false").lower() != "true":
+        raise HTTPException(status_code=503, detail="Database not configured")
+
+    db_session = await _get_db_session()
+    if not db_session:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    async with db_session:
+        from db.repository import BranchProtectionRepository
+        repo = BranchProtectionRepository(db_session)
+        success = await repo.delete(rule_id)
+        await db_session.commit()
+
+        if not success:
+            raise HTTPException(status_code=404, detail="Rule not found")
+        return {"success": True, "message": "Rule deleted"}
 
 
 # =============================================================================

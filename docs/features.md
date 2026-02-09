@@ -501,9 +501,10 @@ class MergeService:
 
 ### Merge Request (내부 MR)
 
-- 팀 내부 머지 요청 생성
+- 팀 내부 머지 요청 생성 (DB 영속화, 서버 재시작 시에도 유지)
 - 승인/거부 워크플로우
 - MR 상태: `open`, `merged`, `closed`, `draft`
+- **Auto-Merge**: MR 생성 시 `auto_merge` 활성화 → 승인 조건 충족 시 자동 머지
 
 ### GitHub 통합
 
@@ -520,7 +521,16 @@ class MergeService:
 | member | ✓ | ✓ | - | - |
 | viewer | ✓ | - | - | - |
 
-**보호 브랜치**: `main`, `master` 브랜치는 `merge_main` 권한 필요
+### 브랜치 보호 규칙 (동적)
+
+DB 기반 동적 브랜치 보호 규칙 관리:
+- glob 패턴 매칭 (`main`, `release/*`, `feature/*`)
+- 필요 승인 수, 충돌 금지, 역할별 머지 권한 설정
+- Force push / 삭제 허용 여부
+- **Auto-Deploy**: 머지 시 GitHub Actions workflow 자동 트리거
+- Dashboard Protection 탭에서 CRUD 관리
+
+**보호 브랜치**: 규칙 미설정 시 기본으로 `main`, `master` 브랜치는 `merge_main` 권한 필요
 
 ---
 

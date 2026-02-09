@@ -524,6 +524,21 @@ AOS Backend API 엔드포인트 문서입니다.
 
 **충돌 상태**: `unknown`, `no_conflicts`, `has_conflicts`
 
+**MR 생성 시 `auto_merge: true`**: 승인 조건 충족 시 자동 머지 실행
+
+**Auto-Deploy**: 브랜치 보호 규칙에 `auto_deploy` 설정 시 머지 후 GitHub Actions workflow 자동 트리거
+
+### Branch Protection Rules
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/git/projects/{id}/branch-protection` | 보호 규칙 목록 |
+| POST | `/api/git/projects/{id}/branch-protection` | 보호 규칙 생성 |
+| PUT | `/api/git/projects/{id}/branch-protection/{rule_id}` | 보호 규칙 수정 |
+| DELETE | `/api/git/projects/{id}/branch-protection/{rule_id}` | 보호 규칙 삭제 |
+
+**규칙 필드**: `branch_pattern`, `require_approvals`, `require_no_conflicts`, `allowed_merge_roles`, `allow_force_push`, `allow_deletion`, `auto_deploy`, `deploy_workflow`, `enabled`
+
 ### GitHub Integration
 
 | Method | Path | 설명 |

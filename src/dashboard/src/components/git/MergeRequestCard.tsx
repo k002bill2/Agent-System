@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   User,
   MoreVertical,
+  Zap,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import type { MergeRequest, MergeRequestStatus, ConflictStatus } from '../../stores/git'
@@ -129,7 +130,7 @@ export function MergeRequestCard({
         'border rounded-lg p-4 transition-colors',
         mr.status === 'open'
           ? 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
-          : 'bg-gray-50 dark:bg-gray-850 border-gray-200 dark:border-gray-700 opacity-75'
+          : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 opacity-75'
       )}
     >
       {/* Header */}
@@ -156,6 +157,12 @@ export function MergeRequestCard({
         <div className="flex items-center gap-2">
           {getStatusBadge(mr.status)}
           {getConflictBadge(mr.conflict_status)}
+          {mr.auto_merge && mr.status === 'open' && (
+            <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+              <Zap className="w-3 h-3" />
+              Auto-merge
+            </span>
+          )}
 
           {mr.status === 'open' && (
             <div className="relative">

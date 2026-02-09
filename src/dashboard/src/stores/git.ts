@@ -48,6 +48,7 @@ export interface MergeRequest {
   author_name: string
   author_email: string
   conflict_status: ConflictStatus
+  auto_merge: boolean
   reviewers: string[]
   approved_by: string[]
   created_at: string
@@ -56,6 +57,22 @@ export interface MergeRequest {
   merged_by: string | null
   closed_at: string | null
   closed_by: string | null
+}
+
+export interface BranchProtectionRule {
+  id: string
+  project_id: string
+  branch_pattern: string
+  require_approvals: number
+  require_no_conflicts: boolean
+  allowed_merge_roles: string[]
+  allow_force_push: boolean
+  allow_deletion: boolean
+  auto_deploy: boolean
+  deploy_workflow: string | null
+  enabled: boolean
+  created_at: string
+  updated_at: string
 }
 
 export interface MergePreview {
@@ -140,7 +157,7 @@ export interface GitHubPRReview {
   commit_id: string | null
 }
 
-export type GitTab = 'changes' | 'branches' | 'merge-requests' | 'pull-requests' | 'history' | 'remotes'
+export type GitTab = 'changes' | 'branches' | 'merge-requests' | 'pull-requests' | 'history' | 'remotes' | 'protection'
 
 // Working Directory Types
 export type FileStatusType = 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | 'staged'
@@ -282,6 +299,9 @@ interface GitState {
   // Remote Management
   remotes: GitRemote[]
 
+  // Branch Protection
+  branchProtectionRules: BranchProtectionRule[]
+
   // Commit Detail
   commitFiles: Record<string, CommitFile[]>  // sha -> files
   commitDiff: Record<string, string>  // sha -> diff or sha:path -> diff
@@ -341,7 +361,8 @@ interface GitState {
     title: string,
     source: string,
     target: string,
-    description?: string
+    description?: string,
+    autoMerge?: boolean
   ) => Promise<boolean>
   approveMergeRequest: (projectId: string, mrId: string, userId: string) => Promise<boolean>
   mergeMergeRequest: (projectId: string, mrId: string, userId: string) => Promise<boolean>
@@ -364,6 +385,12 @@ interface GitState {
   fetchRemote: (projectId: string, remote?: string) => Promise<boolean>
   pullRemote: (projectId: string, branch?: string, remote?: string) => Promise<boolean>
   pushRemote: (projectId: string, branch?: string, remote?: string) => Promise<boolean>
+
+  // Actions - Branch Protection
+  fetchBranchProtectionRules: (projectId: string) => Promise<void>
+  createBranchProtectionRule: (projectId: string, rule: Omit<BranchProtectionRule, 'id' | 'project_id' | 'created_at' | 'updated_at'>) => Promise<boolean>
+  updateBranchProtectionRule: (projectId: string, ruleId: string, updates: Partial<BranchProtectionRule>) => Promise<boolean>
+  deleteBranchProtectionRule: (projectId: string, ruleId: string) => Promise<boolean>
 }
 
 // =============================================================================
@@ -425,6 +452,9 @@ export const useGitStore = create<GitState>((set, get) => ({
 
   // Remote Management
   remotes: [],
+
+  // Branch Protection
+  branchProtectionRules: [],
 
   // Commit Detail
   commitFiles: {},
@@ -969,7 +999,7 @@ export const useGitStore = create<GitState>((set, get) => ({
     }
   },
 
-  createMergeRequest: async (projectId, title, source, target, description = '') => {
+  createMergeRequest: async (projectId, title, source, target, description = '', autoMerge = false) => {
     set({ isLoading: true, error: null })
     try {
       const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/merge-requests`, {
@@ -980,6 +1010,7 @@ export const useGitStore = create<GitState>((set, get) => ({
           source_branch: source,
           target_branch: target,
           description,
+          auto_merge: autoMerge,
         }),
       })
       if (!response.ok) {
@@ -1335,6 +1366,87 @@ export const useGitStore = create<GitState>((set, get) => ({
         throw new Error(extractErrorMessage(data.detail, 'Failed to push to remote'))
       }
       await get().fetchBranches(projectId)
+      set({ isLoading: false })
+      return true
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return false
+    }
+  },
+
+  // Branch Protection
+  fetchBranchProtectionRules: async (projectId) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/branch-protection`)
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch branch protection rules'))
+      }
+      const data = await response.json()
+      set({ branchProtectionRules: data.rules, isLoading: false })
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+    }
+  },
+
+  createBranchProtectionRule: async (projectId, rule) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/branch-protection`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rule),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to create rule'))
+      }
+      await get().fetchBranchProtectionRules(projectId)
+      set({ isLoading: false })
+      return true
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return false
+    }
+  },
+
+  updateBranchProtectionRule: async (projectId, ruleId, updates) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/git/projects/${projectId}/branch-protection/${ruleId}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+        }
+      )
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to update rule'))
+      }
+      await get().fetchBranchProtectionRules(projectId)
+      set({ isLoading: false })
+      return true
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return false
+    }
+  },
+
+  deleteBranchProtectionRule: async (projectId, ruleId) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/git/projects/${projectId}/branch-protection/${ruleId}`,
+        { method: 'DELETE' }
+      )
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to delete rule'))
+      }
+      await get().fetchBranchProtectionRules(projectId)
       set({ isLoading: false })
       return true
     } catch (error) {

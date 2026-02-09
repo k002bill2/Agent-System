@@ -556,6 +556,40 @@ class GitHubService:
         )
 
 
+    # =========================================================================
+    # Workflow Dispatch
+    # =========================================================================
+
+    def dispatch_workflow(
+        self,
+        workflow_file: str,
+        ref: str = "main",
+        inputs: dict | None = None,
+        repo: str | None = None,
+    ) -> bool:
+        """Dispatch a GitHub Actions workflow.
+
+        Args:
+            workflow_file: Workflow filename (e.g. 'deploy-staging.yml')
+            ref: Git ref to run the workflow on
+            inputs: Optional workflow inputs
+            repo: Repository in "owner/repo" format
+
+        Returns:
+            True if dispatch was successful
+        """
+        try:
+            repository = self._get_repo(repo)
+            workflow = repository.get_workflow(workflow_file)
+            result = workflow.create_dispatch(ref=ref, inputs=inputs or {})
+            logger.info(f"Dispatched workflow {workflow_file} on {ref}: {result}")
+            return result
+        except GithubException as e:
+            raise GitHubServiceError(f"Failed to dispatch workflow: {e}")
+        except Exception as e:
+            raise GitHubServiceError(f"Workflow dispatch error: {e}")
+
+
 def get_github_service(
     token: str | None = None, default_repo: str | None = None
 ) -> GitHubService | None:
