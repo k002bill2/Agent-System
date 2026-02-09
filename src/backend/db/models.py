@@ -18,6 +18,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from db.database import Base
+from db.types import EncryptedString
 
 
 class SessionModel(Base):
@@ -450,7 +451,7 @@ class SAMLConfigModel(Base):
     idp_entity_id = Column(String(500), nullable=False)
     idp_sso_url = Column(String(500), nullable=False)
     idp_slo_url = Column(String(500), nullable=True)
-    idp_certificate = Column(Text, nullable=False)
+    idp_certificate = Column(EncryptedString(length=None), nullable=False)
 
     # SP settings (overrides)
     sp_entity_id = Column(String(500), nullable=True)
@@ -634,17 +635,17 @@ class ChannelConfigModel(Base):
     channel = Column(String(20), nullable=False, unique=True)  # slack, discord, email, webhook
     enabled = Column(Boolean, default=True)
 
-    # Channel-specific settings (encrypted in production)
-    webhook_url = Column(String(500), nullable=True)
-    api_key = Column(String(500), nullable=True)
-    bot_token = Column(String(500), nullable=True)
+    # Channel-specific settings (encrypted at rest via EncryptedString)
+    webhook_url = Column(EncryptedString(500), nullable=True)
+    api_key = Column(EncryptedString(500), nullable=True)
+    bot_token = Column(EncryptedString(500), nullable=True)
     email_address = Column(String(255), nullable=True)
 
     # SMTP settings for email
     smtp_host = Column(String(255), nullable=True)
     smtp_port = Column(Integer, default=587)
     smtp_username = Column(String(255), nullable=True)
-    smtp_password = Column(String(500), nullable=True)  # App password (encrypted in production)
+    smtp_password = Column(EncryptedString(500), nullable=True)  # App password (encrypted at rest)
     smtp_use_tls = Column(Boolean, default=True)
 
     # Rate limiting
@@ -813,3 +814,34 @@ class BranchProtectionRuleModel(Base):
         Index("ix_branch_protection_project", "project_id"),
         Index("ix_branch_protection_enabled", "project_id", "enabled"),
     )
+
+
+# ─────────────────────────────────────────────────────────────
+# Project Access Control (RBAC) Models
+# ─────────────────────────────────────────────────────────────
+
+
+class ProjectAccessModel(Base):
+    """Project-level access control model for RBAC."""
+
+    __tablename__ = "project_access"
+
+    id = Column(String(36), primary_key=True)
+    project_id = Column(String(36), nullable=False, index=True)
+    user_id = Column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role = Column(String(20), nullable=False)  # owner, editor, viewer
+    granted_by = Column(String(36), nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "user_id", name="uq_project_user"),
+        Index("ix_project_access_project_user", "project_id", "user_id"),
+    )
+
+    # Relationships
+    user = relationship("UserModel")

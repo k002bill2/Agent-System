@@ -388,24 +388,63 @@ class AuthService:
         return user
 
     # ─────────────────────────────────────────────────────────────
-    # Password Hashing (hashlib-based, no external dependencies)
+    # Password Hashing (bcrypt with SHA-256 legacy support)
     # ─────────────────────────────────────────────────────────────
 
     @staticmethod
     def hash_password(password: str) -> str:
-        """Hash password using SHA-256 with random salt."""
-        salt = secrets.token_hex(16)
-        password_hash = hashlib.sha256((password + salt).encode()).hexdigest()
-        return f"{salt}:{password_hash}"
+        """Hash password using bcrypt."""
+        import bcrypt
+
+        return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("ascii")
 
     @staticmethod
-    def verify_password(password: str, hashed: str) -> bool:
-        """Verify password against stored hash."""
+    def _is_legacy_sha256(hashed: str) -> bool:
+        """Detect legacy SHA-256 format: ``{salt_hex32}:{hash_hex64}`` (total 97 chars)."""
+        if len(hashed) != 97:
+            return False
+        parts = hashed.split(":")
+        return len(parts) == 2 and len(parts[0]) == 32 and len(parts[1]) == 64
+
+    @staticmethod
+    def _verify_sha256(password: str, hashed: str) -> bool:
+        """Verify against legacy SHA-256 hash."""
         try:
             salt, password_hash = hashed.split(":")
             return hashlib.sha256((password + salt).encode()).hexdigest() == password_hash
         except ValueError:
             return False
+
+    @staticmethod
+    def _verify_bcrypt(password: str, hashed: str) -> bool:
+        """Verify against bcrypt hash."""
+        import bcrypt
+
+        try:
+            return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("ascii"))
+        except Exception:
+            return False
+
+    @classmethod
+    def verify_password(cls, password: str, hashed: str) -> bool:
+        """Verify password against stored hash (bcrypt or legacy SHA-256)."""
+        if cls._is_legacy_sha256(hashed):
+            return cls._verify_sha256(password, hashed)
+        return cls._verify_bcrypt(password, hashed)
+
+    @classmethod
+    def verify_and_upgrade_password(cls, password: str, hashed: str) -> tuple[bool, str | None]:
+        """Verify password and return upgraded hash if legacy format detected.
+
+        Returns:
+            Tuple of (is_valid, new_hash_or_none).
+            new_hash is non-None only when a legacy SHA-256 hash was successfully verified.
+        """
+        if cls._is_legacy_sha256(hashed):
+            if cls._verify_sha256(password, hashed):
+                return True, cls.hash_password(password)
+            return False, None
+        return cls._verify_bcrypt(password, hashed), None
 
     # ─────────────────────────────────────────────────────────────
     # Email/Password Authentication
@@ -454,8 +493,13 @@ class AuthService:
         if not user or not user.password_hash:
             raise ValueError("이메일 또는 비밀번호가 올바르지 않습니다")
 
-        if not self.verify_password(password, user.password_hash):
+        is_valid, new_hash = self.verify_and_upgrade_password(password, user.password_hash)
+        if not is_valid:
             raise ValueError("이메일 또는 비밀번호가 올바르지 않습니다")
+
+        # Auto-upgrade legacy SHA-256 hash to bcrypt
+        if new_hash is not None:
+            user.password_hash = new_hash
 
         if not user.is_active:
             raise ValueError("비활성화된 계정입니다")

@@ -91,6 +91,16 @@ class Settings(BaseSettings):
     password_hash_algorithm: str = "bcrypt"
     bcrypt_rounds: int = 12
 
+    # Encryption
+    encryption_master_key: str = ""  # Hex-encoded 32+ byte key for AES-256 field encryption
+
+    # Database TLS
+    db_ssl_mode: str = ""  # e.g. "require", "verify-ca", "verify-full"
+    db_ssl_cert_path: str = ""  # Path to CA cert for verify-ca / verify-full
+
+    # Redis TLS
+    redis_ssl: bool = False
+
     # Session TTL
     session_ttl_days: int = 7
     session_inactive_hours: int = 24

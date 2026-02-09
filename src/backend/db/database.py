@@ -16,6 +16,22 @@ DATABASE_URL = os.getenv(
     "postgresql+asyncpg://aos:aos@localhost:5432/aos",
 )
 
+# Build connect_args with optional SSL
+_connect_args: dict = {"statement_cache_size": 0}
+
+_db_ssl_mode = os.getenv("DB_SSL_MODE", "")
+if _db_ssl_mode:
+    import ssl as _ssl
+
+    ssl_ctx = _ssl.create_default_context()
+    _db_ssl_cert_path = os.getenv("DB_SSL_CERT_PATH", "")
+    if _db_ssl_cert_path:
+        ssl_ctx.load_verify_locations(_db_ssl_cert_path)
+    if _db_ssl_mode == "require":
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = _ssl.CERT_NONE
+    _connect_args["ssl"] = ssl_ctx
+
 # Create async engine
 engine = create_async_engine(
     DATABASE_URL,
@@ -23,7 +39,7 @@ engine = create_async_engine(
     pool_pre_ping=True,
     pool_size=10,
     max_overflow=20,
-    connect_args={"statement_cache_size": 0},
+    connect_args=_connect_args,
 )
 
 # Async session factory
@@ -180,6 +196,37 @@ async def _run_migrations() -> None:
         if not result.fetchone():
             await conn.execute(text(
                 "ALTER TABLE merge_requests ADD COLUMN auto_merge BOOLEAN DEFAULT FALSE"
+            ))
+
+        # Migration 6: Create project_access table for RBAC
+        result = await conn.execute(text(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_name = 'project_access'"
+        ))
+        if not result.fetchone():
+            await conn.execute(text("""
+                CREATE TABLE project_access (
+                    id VARCHAR(36) PRIMARY KEY,
+                    project_id VARCHAR(36) NOT NULL,
+                    user_id VARCHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    role VARCHAR(20) NOT NULL,
+                    granted_by VARCHAR(36),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    CONSTRAINT uq_project_user UNIQUE (project_id, user_id)
+                )
+            """))
+            await conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_project_access_project "
+                "ON project_access (project_id)"
+            ))
+            await conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_project_access_user "
+                "ON project_access (user_id)"
+            ))
+            await conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_project_access_project_user "
+                "ON project_access (project_id, user_id)"
             ))
 
 
