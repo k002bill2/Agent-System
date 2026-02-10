@@ -376,7 +376,7 @@ export function GitPage() {
                 currentUserId={currentUserId}
                 userRole={userRole}
                 onApprove={(mrId) => approveMergeRequest(selectedProjectId, mrId, currentUserId)}
-                onMerge={(mrId) => mergeMergeRequest(selectedProjectId, mrId, currentUserId)}
+                onMerge={(mrId) => mergeMergeRequest(selectedProjectId, mrId, currentUserId, userRole)}
                 onClose={(mrId) => closeMergeRequest(selectedProjectId, mrId, currentUserId)}
                 onCreateNew={() => setShowCreateMR(true)}
               />

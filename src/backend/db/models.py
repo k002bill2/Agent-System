@@ -204,6 +204,8 @@ class FeedbackModel(Base):
 
     # Metadata
     agent_id = Column(String(100), nullable=True, index=True)
+    project_name = Column(String(255), nullable=True)
+    effort_level = Column(String(20), nullable=True)
     status = Column(String(20), default="pending", index=True)  # pending, processed, skipped, error
 
     # Timestamps
@@ -845,3 +847,38 @@ class ProjectAccessModel(Base):
 
     # Relationships
     user = relationship("UserModel")
+
+
+class TaskEvaluationModel(Base):
+    """Task evaluation model for storing task-level RLHF evaluations."""
+
+    __tablename__ = "task_evaluations"
+
+    id = Column(String(36), primary_key=True)
+    session_id = Column(
+        String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    task_id = Column(
+        String(36), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    # Evaluation details
+    rating = Column(Integer, nullable=False)  # 1-5
+    result_accuracy = Column(Boolean, nullable=False, default=True)
+    speed_satisfaction = Column(Boolean, nullable=False, default=True)
+    comment = Column(Text, nullable=True)
+
+    # Metadata
+    agent_id = Column(String(100), nullable=True, index=True)
+    context_summary = Column(Text, nullable=True)
+    project_name = Column(String(255), nullable=True)
+    effort_level = Column(String(20), nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        UniqueConstraint("session_id", "task_id", name="uq_task_eval_session_task"),
+        Index("ix_task_eval_agent_created", "agent_id", "created_at"),
+        Index("ix_task_eval_rating", "rating"),
+    )

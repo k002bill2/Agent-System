@@ -5,10 +5,11 @@
  * 2-Column Layout: 좌측(입력+결과), 우측(히스토리)
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { cn } from '../lib/utils'
 import { useAgentsStore, TaskAnalysisHistory } from '../stores/agents'
 import { Project, useOrchestrationStore } from '../stores/orchestration'
+import { useNavigationStore } from '../stores/navigation'
 import { TaskEvaluationCard } from './feedback/TaskEvaluationCard'
 import {
   Sparkles,
@@ -95,8 +96,10 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
     clearExecution,
   } = useAgentsStore()
   const { projects } = useOrchestrationStore()
+  const { pendingTaskInput, setPendingTaskInput } = useNavigationStore()
   const [taskInput, setTaskInput] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const pendingProcessedRef = useRef(false)
 
   // Create a map for quick project name lookup
   const projectMap = new Map(projects.map(p => [p.id, p]))
@@ -105,6 +108,27 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
   useEffect(() => {
     fetchAnalysisHistory(projectFilter, true)
   }, [projectFilter, fetchAnalysisHistory])
+
+  // ChatInput에서 전달된 pendingTaskInput 처리
+  useEffect(() => {
+    if (pendingTaskInput && !pendingProcessedRef.current) {
+      pendingProcessedRef.current = true
+      setTaskInput(pendingTaskInput)
+      setPendingTaskInput(null)
+      // 프로젝트 컨텍스트와 함께 자동 분석 시작
+      const context = selectedProject
+        ? { project_id: projectFilter, project_name: selectedProject.name, project_path: selectedProject.path }
+        : undefined
+      // Clear history selection
+      if (selectedHistoryId) {
+        selectHistoryItem(null)
+      }
+      analyzeTask(pendingTaskInput.trim(), context)
+    }
+    if (!pendingTaskInput) {
+      pendingProcessedRef.current = false
+    }
+  }, [pendingTaskInput, setPendingTaskInput, selectedProject, projectFilter, analyzeTask, selectedHistoryId, selectHistoryItem])
 
   const handleAnalyze = async () => {
     if (!taskInput.trim() || isLoading) return

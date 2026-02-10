@@ -1,24 +1,16 @@
 import { useState, useRef, useEffect } from 'react'
 import { cn } from '../lib/utils'
 import { useOrchestrationStore } from '../stores/orchestration'
-import { Send, StopCircle, Loader2, ChevronDown, FolderGit2, Terminal } from 'lucide-react'
-
-interface WarpToast {
-  show: boolean
-  message: string
-  type: 'success' | 'error'
-}
+import { useNavigationStore } from '../stores/navigation'
+import { Send, Loader2, ChevronDown, FolderGit2 } from 'lucide-react'
 
 export function ChatInput() {
   const [input, setInput] = useState('')
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
-  const [warpToast, setWarpToast] = useState<WarpToast | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   const {
-    sendMessage,
-    cancelTask,
     isProcessing,
     connected,
     projects,
@@ -26,11 +18,9 @@ export function ChatInput() {
     selectProject,
     fetchProjects,
     reconnect,
-    openInWarp,
-    checkWarpStatus,
-    warpInstalled,
-    warpLoading,
   } = useOrchestrationStore()
+
+  const { setView, setProjectFilter, setPendingTaskInput } = useNavigationStore()
 
   // Auto-resize textarea
   useEffect(() => {
@@ -41,19 +31,10 @@ export function ChatInput() {
     }
   }, [input])
 
-  // Fetch projects and check Warp status on mount
+  // Fetch projects on mount
   useEffect(() => {
     fetchProjects()
-    checkWarpStatus()
-  }, [fetchProjects, checkWarpStatus])
-
-  // Auto-dismiss warp toast
-  useEffect(() => {
-    if (warpToast?.show) {
-      const timer = setTimeout(() => setWarpToast(null), 5000)
-      return () => clearTimeout(timer)
-    }
-  }, [warpToast])
+  }, [fetchProjects])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -78,8 +59,11 @@ export function ChatInput() {
   }
 
   const handleSubmit = () => {
-    if (!input.trim() || isProcessing || !connected) return
-    sendMessage(input.trim())
+    if (!input.trim() || isProcessing) return
+    // navigation store에 프로젝트 설정 + 입력값 저장 → Task Analyzer로 이동
+    setProjectFilter(selectedProjectId)
+    setPendingTaskInput(input.trim())
+    setView('agents')
     setInput('')
   }
 
@@ -87,29 +71,6 @@ export function ChatInput() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSubmit()
-    }
-  }
-
-  const handleWarpOpen = async () => {
-    if (!selectedProjectId) return
-    // input이 있으면 one-shot 모드 (-p "task"), 없으면 interactive 모드
-    const task = input.trim() || undefined
-    const result = await openInWarp(task)
-    if (!result.success && result.error) {
-      console.error('Failed to open Warp:', result.error)
-      setWarpToast({ show: true, message: `Warp 실행 실패: ${result.error}`, type: 'error' })
-    }
-    if (result.success) {
-      // 성공 시 input 초기화
-      if (task) setInput('')
-      // 세션 모니터링 안내 토스트
-      setWarpToast({
-        show: true,
-        message: task
-          ? 'Claude CLI 시작 후 태스크가 자동 전송됩니다. Claude Sessions에서 진행 상황을 확인하세요.'
-          : 'Claude CLI 인터랙티브 모드가 Warp에서 실행됩니다.',
-        type: 'success',
-      })
     }
   }
 
@@ -121,9 +82,7 @@ export function ChatInput() {
           onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}
           className={cn(
             'flex items-center gap-3 p-3 rounded-xl border-2 transition-colors',
-            connected
-              ? 'border-gray-200 dark:border-gray-600 focus-within:border-primary-500 dark:focus-within:border-primary-400'
-              : 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20'
+            'border-gray-200 dark:border-gray-600 focus-within:border-primary-500 dark:focus-within:border-primary-400'
           )}
         >
           {/* Project Selector */}
@@ -238,12 +197,7 @@ export function ChatInput() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={
-              connected
-                ? 'Describe the task you want to orchestrate...'
-                : 'Connecting to server...'
-            }
-            disabled={!connected}
+            placeholder="Describe the task you want to analyze..."
             rows={1}
             autoComplete="new-password"
             autoCorrect="off"
@@ -254,107 +208,36 @@ export function ChatInput() {
             data-1p-ignore="true"
             className={cn(
               'flex-1 resize-none bg-transparent text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500',
-              'focus:outline-none scrollbar-thin',
-              !connected && 'cursor-not-allowed opacity-50'
+              'focus:outline-none scrollbar-thin'
             )}
           />
 
           <div className="flex items-center gap-2 self-center">
-            {/* Warp Terminal Button */}
-            {warpInstalled && (
-              <button
-                type="button"
-                onClick={handleWarpOpen}
-                disabled={!selectedProjectId || warpLoading}
-                title={
-                  !selectedProjectId
-                    ? 'Select a project first'
-                    : warpLoading
-                    ? 'Opening Warp...'
-                    : input.trim()
-                    ? 'Run with Claude CLI in Warp'
-                    : 'Open Claude CLI (interactive) in Warp'
-                }
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                  'border border-gray-200 dark:border-gray-600',
-                  selectedProjectId && !warpLoading
-                    ? 'hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 cursor-pointer'
-                    : 'text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-50',
-                  'focus:outline-none focus:ring-2 focus:ring-primary-500'
-                )}
-              >
-                {warpLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Terminal className="w-4 h-4" />
-                )}
-                <span className="hidden sm:inline">Warp</span>
-              </button>
-            )}
-
-            {isProcessing ? (
-              <button
-                onClick={cancelTask}
-                className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
-                title="Cancel"
-              >
-                <StopCircle className="w-5 h-5" />
-              </button>
-            ) : (
-              <button
-                onClick={handleSubmit}
-                disabled={!input.trim() || !connected}
-                className={cn(
-                  'p-2 rounded-lg transition-colors',
-                  input.trim() && connected
-                    ? 'bg-primary-500 text-white hover:bg-primary-600'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
-                )}
-                title="Send"
-              >
-                {isProcessing ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <Send className="w-5 h-5" />
-                )}
-              </button>
-            )}
+            <button
+              onClick={handleSubmit}
+              disabled={!input.trim()}
+              className={cn(
+                'p-2 rounded-lg transition-colors',
+                input.trim()
+                  ? 'bg-primary-500 text-white hover:bg-primary-600'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
+              )}
+              title="Analyze Task"
+            >
+              {isProcessing ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Send className="w-5 h-5" />
+              )}
+            </button>
           </div>
         </form>
 
         <div className="flex items-center justify-between mt-2 px-1">
           <span className="text-xs text-gray-400 dark:text-gray-500">
-            Press <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 font-mono text-[10px]">Enter</kbd> to send, <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 font-mono text-[10px]">Shift+Enter</kbd> for new line
-          </span>
-          <span className={cn(
-            'text-xs',
-            connected ? 'text-green-500' : 'text-red-500'
-          )}>
-            {connected ? '● Connected' : '○ Disconnected'}
+            Press <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 font-mono text-[10px]">Enter</kbd> to analyze, <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 font-mono text-[10px]">Shift+Enter</kbd> for new line
           </span>
         </div>
-
-        {/* Warp Toast Notification */}
-        {warpToast?.show && (
-          <div
-            className={cn(
-              'mt-2 px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-all',
-              warpToast.type === 'success'
-                ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800'
-                : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
-            )}
-          >
-            <span>{warpToast.message}</span>
-            <button
-              type="button"
-              onClick={() => setWarpToast(null)}
-              className="ml-2 text-current opacity-50 hover:opacity-100"
-            >
-              ✕
-            </button>
-          </div>
-        )}
       </div>
     </div>
   )

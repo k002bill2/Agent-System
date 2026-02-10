@@ -365,7 +365,7 @@ interface GitState {
     autoMerge?: boolean
   ) => Promise<boolean>
   approveMergeRequest: (projectId: string, mrId: string, userId: string) => Promise<boolean>
-  mergeMergeRequest: (projectId: string, mrId: string, userId: string) => Promise<boolean>
+  mergeMergeRequest: (projectId: string, mrId: string, userId: string, userRole?: string) => Promise<boolean>
   closeMergeRequest: (projectId: string, mrId: string, userId: string) => Promise<boolean>
 
   // Actions - GitHub PRs
@@ -1046,11 +1046,11 @@ export const useGitStore = create<GitState>((set, get) => ({
     }
   },
 
-  mergeMergeRequest: async (projectId, mrId, userId) => {
+  mergeMergeRequest: async (projectId, mrId, userId, userRole = 'member') => {
     set({ isLoading: true, error: null })
     try {
       const response = await fetch(
-        `${API_BASE}/api/git/projects/${projectId}/merge-requests/${mrId}/merge?user_id=${userId}`,
+        `${API_BASE}/api/git/projects/${projectId}/merge-requests/${mrId}/merge?user_id=${userId}&user_role=${userRole}`,
         { method: 'POST' }
       )
       if (!response.ok) {

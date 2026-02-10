@@ -183,7 +183,7 @@ export function BranchProtectionSettings({
           Allowed Merge Roles
         </label>
         <div className="flex gap-2">
-          {['owner', 'admin', 'member', 'viewer'].map(role => (
+          {['owner', 'admin', 'manager', 'member', 'viewer'].map(role => (
             <button
               key={role}
               onClick={() => toggleRole(role)}

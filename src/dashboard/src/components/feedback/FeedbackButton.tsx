@@ -5,7 +5,7 @@
  */
 
 import { useState } from 'react'
-import { ThumbsUp, ThumbsDown, Loader2 } from 'lucide-react'
+import { ThumbsUp, ThumbsDown, Loader2, AlertCircle } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { useFeedbackStore, FeedbackSubmit } from '../../stores/feedback'
 
@@ -30,12 +30,17 @@ export function FeedbackButton({
   className,
   onFeedbackSubmitted,
 }: FeedbackButtonProps) {
-  const { submitFeedback, isSubmitting } = useFeedbackStore()
+  const { submitFeedback, isSubmitting, pendingFeedbacks, retryPendingSubmissions } = useFeedbackStore()
   const [submitted, setSubmitted] = useState<'positive' | 'negative' | null>(null)
   const [showNegativeModal, setShowNegativeModal] = useState(false)
 
   const iconSize = size === 'sm' ? 'w-4 h-4' : 'w-5 h-5'
   const buttonSize = size === 'sm' ? 'p-1.5' : 'p-2'
+
+  // Check for pending items for this task
+  const pendingItem = pendingFeedbacks.find(
+    (p) => p.feedback.session_id === sessionId && p.feedback.task_id === taskId
+  )
 
   const handlePositive = async () => {
     if (submitted || isSubmitting) return
@@ -77,6 +82,40 @@ export function FeedbackButton({
       setShowNegativeModal(false)
       onFeedbackSubmitted?.(false)
     }
+  }
+
+  // Pending/Failed state display
+  if (pendingItem) {
+    if (pendingItem.status === 'retrying') {
+      return (
+        <div className={cn('flex items-center gap-1 text-xs text-yellow-600 dark:text-yellow-400', className)}>
+          <Loader2 className={cn(iconSize, 'animate-spin')} />
+          <span>Retrying...</span>
+        </div>
+      )
+    }
+    if (pendingItem.status === 'failed') {
+      return (
+        <button
+          onClick={() => retryPendingSubmissions()}
+          className={cn(
+            'flex items-center gap-1 text-xs text-red-600 dark:text-red-400',
+            'hover:text-red-700 dark:hover:text-red-300 transition-colors',
+            className
+          )}
+        >
+          <AlertCircle className={iconSize} />
+          <span>Failed - Tap to retry</span>
+        </button>
+      )
+    }
+    // queued
+    return (
+      <div className={cn('flex items-center gap-1 text-xs text-yellow-600 dark:text-yellow-400', className)}>
+        <AlertCircle className={iconSize} />
+        <span>Queued</span>
+      </div>
+    )
   }
 
   if (submitted) {

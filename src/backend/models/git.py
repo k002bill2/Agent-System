@@ -572,6 +572,11 @@ GIT_ROLE_PERMISSIONS: dict[str, list[GitPermission]] = {
         GitPermission.WRITE,
         GitPermission.MERGE_MAIN,
     ],
+    "manager": [
+        GitPermission.READ,
+        GitPermission.WRITE,
+        GitPermission.MERGE_MAIN,
+    ],
     "member": [
         GitPermission.READ,
         GitPermission.WRITE,

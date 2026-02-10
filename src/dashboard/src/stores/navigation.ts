@@ -34,13 +34,17 @@ export function isPublicView(view: ViewType): boolean {
 interface NavigationState {
   currentView: ViewType
   projectFilter: string | null  // null = All Projects
+  pendingTaskInput: string | null  // Task Analyzer로 전달할 초기 입력값
   setView: (view: ViewType) => void
   setProjectFilter: (projectId: string | null) => void
+  setPendingTaskInput: (text: string | null) => void
 }
 
 export const useNavigationStore = create<NavigationState>((set) => ({
   currentView: 'dashboard',
   projectFilter: null,
+  pendingTaskInput: null,
   setView: (view) => set({ currentView: view }),
   setProjectFilter: (projectId) => set({ projectFilter: projectId }),
+  setPendingTaskInput: (text) => set({ pendingTaskInput: text }),
 }))
