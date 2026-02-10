@@ -335,7 +335,7 @@ interface GitState {
   // Actions - Branches
   fetchBranches: (projectId: string) => Promise<void>
   createBranch: (projectId: string, name: string, startPoint?: string) => Promise<boolean>
-  deleteBranch: (projectId: string, name: string, force?: boolean) => Promise<boolean>
+  deleteBranch: (projectId: string, name: string, force?: boolean, deleteRemote?: boolean) => Promise<boolean>
 
   // Actions - Commits
   fetchCommits: (projectId: string, branch?: string, limit?: number) => Promise<void>
@@ -716,11 +716,12 @@ export const useGitStore = create<GitState>((set, get) => ({
     }
   },
 
-  deleteBranch: async (projectId, name, force = false) => {
+  deleteBranch: async (projectId, name, force = false, deleteRemote = false) => {
     set({ isLoading: true, error: null })
     try {
+      const params = new URLSearchParams({ force: String(force), delete_remote: String(deleteRemote) })
       const response = await fetch(
-        `${API_BASE}/api/git/projects/${projectId}/branches/${encodeURIComponent(name)}?force=${force}`,
+        `${API_BASE}/api/git/projects/${projectId}/branches/${encodeURIComponent(name)}?${params}`,
         { method: 'DELETE' }
       )
       if (!response.ok) {

@@ -598,14 +598,15 @@ async def delete_branch(
     project_id: str,
     branch_name: str,
     force: bool = Query(False, description="Force delete even if not merged"),
+    delete_remote: bool = Query(False, description="Also delete the remote tracking branch"),
 ):
-    """Delete a branch."""
+    """Delete a branch (local and/or remote)."""
     from services.git_service import GitServiceError
 
     git_service = get_git_service_for_project(project_id)
 
     try:
-        success = git_service.delete_branch(name=branch_name, force=force)
+        success = git_service.delete_branch(name=branch_name, force=force, delete_remote=delete_remote)
         return {"success": success, "message": f"Branch '{branch_name}' deleted"}
     except GitServiceError as e:
         raise HTTPException(status_code=400, detail=str(e))
