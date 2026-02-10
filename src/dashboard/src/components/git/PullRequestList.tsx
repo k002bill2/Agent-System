@@ -14,6 +14,7 @@ import {
   Eye,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
+import { extractGitHubRepo } from '../../utils/gitUtils'
 import type { GitHubPullRequest, GitHubPRReview } from '../../stores/git'
 
 interface PullRequestCardProps {
@@ -240,24 +241,7 @@ export function PullRequestList({
 
   const handleSetRepo = () => {
     if (repoInput.trim()) {
-      // Parse GitHub URL to owner/repo format
-      let repo = repoInput.trim()
-
-      // Handle SSH format: git@github.com:owner/repo.git
-      const sshMatch = repo.match(/git@github\.com:([^/]+\/[^/]+?)(?:\.git)?$/)
-      if (sshMatch) {
-        repo = sshMatch[1]
-      }
-
-      // Handle HTTPS format: https://github.com/owner/repo
-      const httpsMatch = repo.match(/https?:\/\/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:\/)?$/)
-      if (httpsMatch) {
-        repo = httpsMatch[1]
-      }
-
-      // Remove .git suffix if present
-      repo = repo.replace(/\.git$/, '')
-
+      const repo = extractGitHubRepo(repoInput.trim()) || repoInput.trim().replace(/\.git$/, '')
       onSetRepo(repo)
       setShowConfig(false)
       onRefresh('open')
