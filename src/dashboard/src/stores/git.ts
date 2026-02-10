@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { extractGitHubRepo } from '../utils/gitUtils'
 
 const API_BASE = import.meta.env.VITE_API_URL || ''
 
@@ -1234,6 +1235,17 @@ export const useGitStore = create<GitState>((set, get) => ({
       }
       const data = await response.json()
       set({ remotes: data.remotes, isLoading: false })
+
+      // Auto-detect GitHub repo from origin remote
+      if (!get().githubRepo) {
+        const origin = (data.remotes as GitRemote[]).find((r: GitRemote) => r.name === 'origin')
+        if (origin) {
+          const detectedRepo = extractGitHubRepo(origin.url)
+          if (detectedRepo) {
+            set({ githubRepo: detectedRepo })
+          }
+        }
+      }
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })
     }

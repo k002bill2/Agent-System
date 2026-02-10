@@ -84,7 +84,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:sha-${{ github.sha }}
+          image: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}@${{ steps.build.outputs.digest }}
           format: spdx-json
           output-file: backend-sbom.spdx.json
 
@@ -159,7 +159,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.REGISTRY }}/${{ env.DASHBOARD_IMAGE }}:sha-${{ github.sha }}
+          image: ${{ env.REGISTRY }}/${{ env.DASHBOARD_IMAGE }}@${{ steps.build.outputs.digest }}
           format: spdx-json
           output-file: dashboard-sbom.spdx.json
 
