@@ -424,7 +424,7 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
           project_id: pid,
           command: prompt,
           title: `Task: ${analysisData.task_input?.substring(0, 40) || 'Analysis'}`,
-          new_window: true,
+          new_window: false, // Prefer tab in existing Warp window
           use_claude_cli: true,
         }),
       })

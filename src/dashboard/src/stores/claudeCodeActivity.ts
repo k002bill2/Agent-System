@@ -55,7 +55,7 @@ interface ClaudeCodeActivityState {
 
 export const useClaudeCodeActivityStore = create<ClaudeCodeActivityState>((set, get) => ({
   // Initial state
-  dataSource: 'aos',
+  dataSource: 'claude-code',
   activeSessionId: null,
 
   // Activity initial state

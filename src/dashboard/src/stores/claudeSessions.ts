@@ -145,8 +145,8 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   sortBy: 'last_activity',
   sortOrder: 'desc',
 
-  // Filtering initial state
-  projectFilter: null,
+  // Filtering initial state - default to Agent-System project
+  projectFilter: 'Agent-System',
   sourceUserFilter: null,
   searchQuery: '',
 

@@ -109,7 +109,7 @@ export function VerticalSplitPanel({
           </button>
         </div>
         {/* Top Panel Content */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
           {topContent}
         </div>
       </div>
@@ -160,7 +160,7 @@ export function VerticalSplitPanel({
           </button>
         </div>
         {/* Bottom Panel Content */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
           {bottomContent}
         </div>
       </div>

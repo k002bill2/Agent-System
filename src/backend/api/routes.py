@@ -1429,6 +1429,7 @@ class WarpOpenResponse(BaseModel):
     error: str | None = None
     uri: str | None = None
     open_via_frontend: bool = False
+    opened_as: str | None = None  # "tab" or "window"
 
 
 @router.post("/warp/open", response_model=WarpOpenResponse)
@@ -1487,6 +1488,7 @@ async def open_in_warp(request: WarpOpenRequest):
         error=result.get("error"),
         uri=result.get("uri"),
         open_via_frontend=result.get("open_via_frontend", False),
+        opened_as=result.get("opened_as"),
     )
 
 

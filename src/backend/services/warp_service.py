@@ -3,16 +3,17 @@
 This service integrates with Warp terminal to open projects
 and execute commands using Warp's Launch Configuration feature.
 
-Two-phase Claude CLI execution:
-1. Launch Claude CLI in interactive mode via Warp
-2. After startup (sleep), inject the task text via `expect`
-3. Hand control back to user via `interact`
+Tab reuse:
+- If Warp is already running and new_window=False, opens a new **tab**
+  in the existing window via AppleScript + wrapper script.
+- Otherwise, uses Launch Configuration (which creates a new window).
 
 Reference:
 - URI Scheme: https://docs.warp.dev/features/uri-scheme
 - Launch Configurations: https://docs.warp.dev/terminal/sessions/launch-configurations
 """
 
+import logging
 import os
 import subprocess
 import urllib.parse
@@ -20,6 +21,8 @@ from datetime import datetime
 from pathlib import Path
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 # Docker mode: CLAUDE_HOME is set in Docker environment
 IS_DOCKER = bool(os.getenv("CLAUDE_HOME"))
@@ -43,6 +46,26 @@ class WarpService:
             self.launch_config_dir = Path("/home/aos/.warp/launch_configurations")
         else:
             self.launch_config_dir = Path.home() / ".warp" / "launch_configurations"
+
+    def is_warp_running(self) -> bool:
+        """Check if Warp terminal is currently running.
+
+        Returns False in Docker mode since we can't check host processes.
+        """
+        if IS_DOCKER:
+            return False
+
+        try:
+            # Warp.app의 실제 바이너리 이름은 "stable"이므로 pgrep -x로 찾을 수 없음.
+            # pgrep -f로 Warp.app 경로 패턴 매칭 사용.
+            result = subprocess.run(
+                ["pgrep", "-f", "Warp.app/Contents/MacOS"],
+                capture_output=True,
+                text=True,
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
 
     def is_warp_installed(self) -> bool:
         """Check if Warp is installed.
@@ -140,6 +163,73 @@ class WarpService:
                 "error": f"Failed to open Warp: {e}",
             }
 
+    def _open_tab_with_command(self, path: str, command: str) -> dict:
+        """Open a new tab in the existing Warp window and execute a command.
+
+        Uses Warp URI scheme to open a new tab at the given path,
+        then uses AppleScript to type and execute the command in it.
+
+        Args:
+            path: Directory path for the tab's working directory
+            command: Command to execute in the new tab
+
+        Returns:
+            dict with success status and message
+        """
+        # Create wrapper script to avoid shell escaping issues
+        script_name = f"aos-tab-{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+        self.launch_config_dir.mkdir(parents=True, exist_ok=True)
+        script_path = self.launch_config_dir / f"{script_name}.sh"
+
+        # exec replaces the shell so Claude CLI owns the tab process
+        script_content = f'#!/bin/bash\ncd "{path}" || exit 1\nexec {command}\n'
+        script_path.write_text(script_content, encoding="utf-8")
+        script_path.chmod(0o755)
+
+        script_str = str(script_path)
+
+        try:
+            # Step 1: Open new tab via Warp URI scheme (reliable native method)
+            encoded_path = urllib.parse.quote(path, safe="")
+            warp_tab_url = f"warp://action/new_tab?path={encoded_path}"
+            subprocess.run(["open", warp_tab_url], check=True)
+
+            # Step 2: Wait for tab to open, then type command via AppleScript
+            applescript = (
+                "delay 1.0\n"
+                "tell application \"System Events\"\n"
+                '    tell process "Warp"\n'
+                f'        keystroke "bash {script_str}"\n'
+                "        delay 0.1\n"
+                "        key code 36\n"
+                "    end tell\n"
+                "end tell\n"
+            )
+            subprocess.run(
+                ["osascript", "-e", applescript],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            return {
+                "success": True,
+                "message": f"Opened new Warp tab at {path}",
+                "opened_as": "tab",
+                "script_path": script_str,
+            }
+        except subprocess.TimeoutExpired:
+            return {
+                "success": False,
+                "error": "AppleScript timed out while opening Warp tab",
+            }
+        except subprocess.CalledProcessError as e:
+            logger.warning("Warp tab open failed: %s", e)
+            return {
+                "success": False,
+                "error": f"Failed to open Warp tab: {e}",
+            }
+
     def open_with_command(
         self,
         path: str,
@@ -171,6 +261,14 @@ class WarpService:
                 "success": False,
                 "error": f"Path does not exist: {path}",
             }
+
+        # If not forcing new window and Warp is already running, open as tab
+        if not new_window and not IS_DOCKER and self.is_warp_running():
+            result = self._open_tab_with_command(path, command)
+            if result.get("success"):
+                return result
+            # Fall through to launch config if tab approach fails
+            logger.info("Tab open failed, falling back to launch config: %s", result.get("error"))
 
         # Create launch configuration
         config_name = f"aos-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -233,6 +331,7 @@ class WarpService:
                 "config_name": config_name,
                 "config_path": str(config_path),
                 "open_via_frontend": False,
+                "opened_as": "window",
             }
         except subprocess.CalledProcessError as e:
             return {
@@ -256,8 +355,8 @@ class WarpService:
         removed = 0
         cutoff = datetime.now().timestamp() - (max_age_hours * 3600)
 
-        # Clean up both .yaml and .exp files
-        for pattern in ("aos-*.yaml", "aos-*.exp"):
+        # Clean up .yaml, .exp, .sh, and .txt files
+        for pattern in ("aos-*.yaml", "aos-*.exp", "aos-tab-*.sh", "aos-prompt-*.txt"):
             for config_file in self.launch_config_dir.glob(pattern):
                 try:
                     if config_file.stat().st_mtime < cutoff:
