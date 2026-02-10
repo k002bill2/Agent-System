@@ -5,7 +5,6 @@ Fetches real usage data from Anthropic OAuth API using macOS Keychain credential
 
 import json
 import os
-import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -14,6 +13,14 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+
+from services.claude_config_service import (
+    get_claude_config,
+    update_claude_config,
+)
+from services.claude_config_service import (
+    get_oauth_token as config_get_oauth_token,
+)
 
 router = APIRouter(prefix="/usage", tags=["Usage"])
 
@@ -205,43 +212,11 @@ def get_oauth_token() -> str | None:
     Extract OAuth access token.
 
     Priority:
-    1. CLAUDE_OAUTH_TOKEN env var (for deployment / non-macOS)
-    2. macOS Keychain (local development)
+    1. aos-claude-config.json (dashboard-managed)
+    2. CLAUDE_OAUTH_TOKEN env var (for deployment / non-macOS)
+    3. macOS Keychain (local development)
     """
-    # 1. Environment variable (works on any platform)
-    env_token = os.getenv("CLAUDE_OAUTH_TOKEN")
-    if env_token:
-        return env_token
-
-    # 2. macOS Keychain fallback (local dev only)
-    if sys.platform != "darwin":
-        return None
-
-    try:
-        result = subprocess.run(
-            ["security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-
-        if result.returncode != 0:
-            return None
-
-        # Parse JSON credentials
-        creds_json = result.stdout.strip()
-        if not creds_json:
-            return None
-
-        creds = json.loads(creds_json)
-
-        # Get access token from claudeAiOauth
-        claude_oauth = creds.get("claudeAiOauth", {})
-        return claude_oauth.get("accessToken")
-
-    except (subprocess.TimeoutExpired, json.JSONDecodeError, Exception) as e:
-        print(f"Error extracting OAuth token: {e}")
-        return None
+    return config_get_oauth_token()
 
 
 async def fetch_usage_from_anthropic(token: str) -> dict[str, Any] | None:
@@ -489,25 +464,24 @@ async def test_oauth() -> dict[str, Any]:
 
     Returns diagnostic information about OAuth status.
     """
-    result = {
+    result: dict[str, Any] = {
         "platform": sys.platform,
         "tokenFound": False,
         "tokenPrefix": None,
+        "tokenSource": None,
         "apiResponse": None,
         "error": None,
     }
 
-    if sys.platform != "darwin":
-        result["error"] = "OAuth only available on macOS"
-        return result
-
     token = get_oauth_token()
     if not token:
-        result["error"] = "Token not found in Keychain"
+        result["error"] = "Token not found (check config, env, or Keychain)"
         return result
 
+    config = get_claude_config()
     result["tokenFound"] = True
     result["tokenPrefix"] = token[:20] + "..." if len(token) > 20 else token
+    result["tokenSource"] = config.get("token_source", "unknown")
 
     usage_data = await fetch_usage_from_anthropic(token)
     if usage_data:
@@ -516,3 +490,27 @@ async def test_oauth() -> dict[str, Any]:
         result["error"] = "API call failed"
 
     return result
+
+
+class ClaudeConfigUpdate(BaseModel):
+    """Claude Code config update request."""
+
+    oauth_token: str | None = None
+    stats_cache_path: str | None = None
+    usage_cache_path: str | None = None
+
+
+@router.get("/claude-config")
+async def get_config() -> dict[str, Any]:
+    """Get current Claude Code configuration (tokens masked)."""
+    return get_claude_config()
+
+
+@router.put("/claude-config")
+async def put_config(body: ClaudeConfigUpdate) -> dict[str, Any]:
+    """Update Claude Code configuration."""
+    return update_claude_config(
+        oauth_token=body.oauth_token,
+        stats_cache_path=body.stats_cache_path,
+        usage_cache_path=body.usage_cache_path,
+    )

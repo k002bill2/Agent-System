@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
 
     # Database
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/agent_orchestrator"
+    database_url: str = "postgresql+asyncpg://aos:aos@localhost:5432/aos"
     use_database: bool = False
 
     # Redis
@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     # OAuth/JWT Settings
     session_secret_key: str = ""  # JWT signing key
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 15
+    access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 7
 
     # Google OAuth
@@ -84,9 +84,22 @@ class Settings(BaseSettings):
     saml_idp_metadata_url: str = ""
     oidc_issuer_url: str = ""
 
+    # Super Admins (comma-separated emails that always have admin role)
+    super_admin_emails: str = ""
+
     # Password Hashing
     password_hash_algorithm: str = "bcrypt"
     bcrypt_rounds: int = 12
+
+    # Encryption
+    encryption_master_key: str = ""  # Hex-encoded 32+ byte key for AES-256 field encryption
+
+    # Database TLS
+    db_ssl_mode: str = ""  # e.g. "require", "verify-ca", "verify-full"
+    db_ssl_cert_path: str = ""  # Path to CA cert for verify-ca / verify-full
+
+    # Redis TLS
+    redis_ssl: bool = False
 
     # Session TTL
     session_ttl_days: int = 7

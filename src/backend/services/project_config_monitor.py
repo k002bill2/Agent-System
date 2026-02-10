@@ -190,12 +190,52 @@ class ProjectConfigMonitor:
             return "/" + project_id[1:].replace("-", "/")
         return project_id.replace("-", "/")
 
+    def _refresh_project_paths(self) -> None:
+        """Re-scan known directories for newly added projects.
+
+        Checks parent projects/ directory and CLAUDE_PROJECT_PATHS
+        for any new project directories not yet in _project_paths.
+        """
+        # Re-scan projects/ directory (symlinked projects)
+        try:
+            # Find the Agent-System root from any known path
+            for existing_path in list(self._project_paths):
+                projects_dir = existing_path.parent / "projects"
+                if projects_dir.exists() and projects_dir.is_dir():
+                    for entry in projects_dir.iterdir():
+                        if entry.is_dir():
+                            resolved = entry.resolve() if not self._is_docker else entry
+                            if resolved not in self._project_paths:
+                                if self._is_docker or resolved.exists():
+                                    self._project_paths.append(resolved)
+                                    logger.info(f"Auto-discovered new project: {resolved}")
+                    break  # Only need to scan projects/ once
+        except Exception as e:
+            logger.debug(f"Error refreshing project paths: {e}")
+
+        # Re-scan CLAUDE_PROJECT_PATHS env var
+        env_paths = os.getenv("CLAUDE_PROJECT_PATHS", "")
+        if env_paths:
+            for p in env_paths.split(","):
+                p = p.strip()
+                if p:
+                    path = Path(p) if self._is_docker else Path(p).resolve()
+                    if path not in self._project_paths:
+                        if self._is_docker or (path.exists() and path.is_dir()):
+                            self._project_paths.append(path)
+                            logger.info(f"Added project path from env: {path}")
+
     def discover_projects(self) -> list[ProjectInfo]:
         """Discover all projects with Claude Code configuration.
+
+        Automatically refreshes project paths to detect newly added projects.
 
         Returns:
             List of ProjectInfo for each discovered project
         """
+        # Refresh paths to pick up new projects
+        self._refresh_project_paths()
+
         projects = []
 
         for project_path in self._project_paths:

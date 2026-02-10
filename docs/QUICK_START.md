@@ -59,7 +59,7 @@ OLLAMA_BASE_URL=http://localhost:11434
 
 # 데이터베이스 (선택사항)
 USE_DATABASE=false
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/agent_orchestrator
+DATABASE_URL=postgresql+asyncpg://aos:aos@localhost:5432/aos
 ```
 
 ---

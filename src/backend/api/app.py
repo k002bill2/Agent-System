@@ -106,6 +106,7 @@ else:
     git_router = safe_import("api.git", "router")
     llm_models_router = safe_import("api.llm", "router")
     admin_router = safe_import("api.admin", "router")
+    project_access_router = safe_import("api.project_access", "router")
 
     # Optional orchestrator
     try:
@@ -356,6 +357,8 @@ else:
             app.include_router(llm_models_router, prefix="/api")
         if admin_router:
             app.include_router(admin_router, prefix="/api")
+        if project_access_router:
+            app.include_router(project_access_router, prefix="/api")
 
         # Add Rate Limiting Middleware
         rate_limit_enabled = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"

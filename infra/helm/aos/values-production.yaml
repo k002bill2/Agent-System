@@ -1,0 +1,62 @@
+# Production values override
+global:
+  namespace: aos
+
+backend:
+  replicaCount: 3
+  image:
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 60
+  config:
+    LOG_LEVEL: "warning"
+
+dashboard:
+  replicaCount: 3
+  image:
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+postgresql:
+  enabled: true
+  persistence:
+    size: 50Gi
+
+redis:
+  enabled: true
+  persistence:
+    size: 10Gi
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: aos.example.com
+      paths:
+        - path: /api
+          service: backend
+        - path: /
+          service: dashboard
+  tls:
+    - hosts:
+        - aos.example.com
+      secretName: aos-tls
+
+networkPolicies:
+  enabled: true

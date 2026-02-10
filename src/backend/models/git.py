@@ -144,6 +144,7 @@ class MergeRequest(BaseModel):
     author_name: str
     author_email: str
     conflict_status: ConflictStatus = ConflictStatus.UNKNOWN
+    auto_merge: bool = False
     # Review
     reviewers: list[str] = []  # user IDs
     approved_by: list[str] = []  # user IDs
@@ -164,6 +165,7 @@ class MergeRequestCreate(BaseModel):
     source_branch: str
     target_branch: str = Field(default="main")
     reviewers: list[str] = []
+    auto_merge: bool = False
 
 
 class MergeRequestUpdate(BaseModel):
@@ -173,6 +175,65 @@ class MergeRequestUpdate(BaseModel):
     description: str | None = None
     status: MergeRequestStatus | None = None
     reviewers: list[str] | None = None
+    auto_merge: bool | None = None
+
+
+# =============================================================================
+# Branch Protection Models
+# =============================================================================
+
+
+class BranchProtectionRule(BaseModel):
+    """Branch protection rule."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    project_id: str
+    branch_pattern: str = Field(..., description="Branch pattern, e.g. 'main', 'release/*'")
+    require_approvals: int = Field(default=0, ge=0)
+    require_no_conflicts: bool = True
+    allowed_merge_roles: list[str] = Field(default_factory=lambda: ["owner", "admin"])
+    allow_force_push: bool = False
+    allow_deletion: bool = False
+    auto_deploy: bool = False
+    deploy_workflow: str | None = None
+    enabled: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class BranchProtectionRuleCreate(BaseModel):
+    """Request to create a branch protection rule."""
+
+    branch_pattern: str = Field(..., min_length=1, max_length=200)
+    require_approvals: int = Field(default=0, ge=0)
+    require_no_conflicts: bool = True
+    allowed_merge_roles: list[str] = Field(default_factory=lambda: ["owner", "admin"])
+    allow_force_push: bool = False
+    allow_deletion: bool = False
+    auto_deploy: bool = False
+    deploy_workflow: str | None = None
+    enabled: bool = True
+
+
+class BranchProtectionRuleUpdate(BaseModel):
+    """Request to update a branch protection rule."""
+
+    branch_pattern: str | None = None
+    require_approvals: int | None = Field(default=None, ge=0)
+    require_no_conflicts: bool | None = None
+    allowed_merge_roles: list[str] | None = None
+    allow_force_push: bool | None = None
+    allow_deletion: bool | None = None
+    auto_deploy: bool | None = None
+    deploy_workflow: str | None = None
+    enabled: bool | None = None
+
+
+class BranchProtectionListResponse(BaseModel):
+    """Response for branch protection list endpoint."""
+
+    rules: list[BranchProtectionRule]
+    total: int
 
 
 # =============================================================================
@@ -507,6 +568,11 @@ GIT_ROLE_PERMISSIONS: dict[str, list[GitPermission]] = {
         GitPermission.ADMIN,
     ],
     "admin": [
+        GitPermission.READ,
+        GitPermission.WRITE,
+        GitPermission.MERGE_MAIN,
+    ],
+    "manager": [
         GitPermission.READ,
         GitPermission.WRITE,
         GitPermission.MERGE_MAIN,

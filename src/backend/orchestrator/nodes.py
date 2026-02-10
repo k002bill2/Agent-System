@@ -363,8 +363,124 @@ class PlannerNode(BaseNode):
 
         return context
 
+    def _build_tasks_from_analysis(
+        self, state: AgentState, pre_analyzed_plan: dict[str, Any]
+    ) -> dict[str, Any]:
+        """
+        사전 분석된 실행 계획에서 TaskNode를 직접 생성.
+
+        LLM 호출을 건너뛰고 분석 결과의 subtasks와 parallel_groups를
+        기반으로 태스크 트리를 구성합니다.
+        """
+        messages = state.get("messages", [])
+        user_messages = [m for m in messages if m.get("role") == "user"]
+        task_description = user_messages[-1].get("content", "") if user_messages else ""
+
+        subtasks_map = pre_analyzed_plan.get("subtasks", {})
+        execution_order = pre_analyzed_plan.get("execution_order", [])
+
+        # Create root task
+        root_task_id = str(uuid.uuid4())
+        root_task = TaskNode(
+            id=root_task_id,
+            title="Root Task",
+            description=task_description,
+            status=TaskStatus.IN_PROGRESS,
+        )
+
+        tasks: dict[str, TaskNode] = {root_task_id: root_task}
+        subtask_ids: list[str] = []
+        title_to_id: dict[str, str] = {}
+
+        # 실행 순서를 따르되, 없으면 subtasks_map의 키 순서 사용
+        ordered_keys = execution_order if execution_order else list(subtasks_map.keys())
+
+        # First pass: Create all subtasks
+        for task_key in ordered_keys:
+            subtask_info = subtasks_map.get(task_key, {})
+            if not subtask_info:
+                continue
+
+            subtask_id = str(uuid.uuid4())
+            subtask = TaskNode(
+                id=subtask_id,
+                parent_id=root_task_id,
+                title=subtask_info.get("title", task_key),
+                description=subtask_info.get("title", task_key),
+                status=TaskStatus.PENDING,
+                assigned_agent=subtask_info.get("agent"),
+            )
+            tasks[subtask_id] = subtask
+            subtask_ids.append(subtask_id)
+            title_to_id[task_key] = subtask_id
+
+        # Second pass: Set up dependencies from subtask info
+        dependencies: dict[str, list[str]] = {}
+        for task_key in ordered_keys:
+            subtask_info = subtasks_map.get(task_key, {})
+            if not subtask_info:
+                continue
+
+            subtask_id = title_to_id.get(task_key)
+            if not subtask_id:
+                continue
+
+            dep_ids = []
+            for dep_key in subtask_info.get("dependencies", []):
+                if dep_key in title_to_id:
+                    dep_ids.append(title_to_id[dep_key])
+
+            if dep_ids:
+                dependencies[subtask_id] = dep_ids
+
+        root_task.children = subtask_ids
+
+        # Audit: Log task creation
+        session_id = state.get("session_id", "")
+        audit_task_created(
+            session_id=session_id,
+            task_id=root_task_id,
+            task_data={"title": root_task.title, "description": task_description},
+        )
+        for subtask_id in subtask_ids:
+            subtask = tasks[subtask_id]
+            audit_task_created(
+                session_id=session_id,
+                task_id=subtask_id,
+                task_data={
+                    "title": subtask.title,
+                    "description": subtask.description,
+                    "parent_id": root_task_id,
+                },
+            )
+
+        return {
+            "tasks": tasks,
+            "root_task_id": root_task_id,
+            "messages": [
+                self._create_message(
+                    "system",
+                    f"Using pre-analyzed execution plan. Subtasks: {len(subtask_ids)}",
+                )
+            ],
+            "plan_metadata": {
+                "analysis": "Pre-analyzed execution plan (skipped LLM planning)",
+                "is_complex": len(subtask_ids) > 1,
+                "subtask_count": len(subtask_ids),
+                "dependencies": dependencies,
+                "pre_analyzed": True,
+            },
+        }
+
     async def run(self, state: AgentState) -> dict[str, Any]:
         """Run LLM-based planner logic."""
+        # 사전 분석된 실행 계획이 있으면 LLM 호출 건너뛰기
+        plan_metadata = state.get("plan_metadata", {})
+        pre_analyzed_plan = plan_metadata.get("pre_analyzed_execution_plan")
+
+        if pre_analyzed_plan and pre_analyzed_plan.get("subtasks"):
+            return self._build_tasks_from_analysis(state, pre_analyzed_plan)
+
         messages = state.get("messages", [])
 
         # Get the latest user message for planning

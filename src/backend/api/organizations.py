@@ -1,9 +1,21 @@
 """Organization API routes for multi-tenant support."""
 
-from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, EmailStr
+import logging
 
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.deps import (
+    get_current_user,
+    get_db_session,
+    require_org_member,
+    require_org_role,
+)
 from config import get_settings
+from db.models import UserModel
+
+logger = logging.getLogger(__name__)
 from models.notification import (
     ChannelConfig,
     NotificationChannel,
@@ -30,29 +42,40 @@ from services.organization_service import OrganizationService
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
 
+async def _sync_user_role(db: AsyncSession, user_id: str) -> None:
+    """Helper to sync a user's role from their organization memberships."""
+    from services.auth_service import AuthService
+
+    auth_service = AuthService(db)
+    user = await auth_service.get_user_by_id(user_id)
+    if user:
+        await auth_service.sync_user_role_from_org(user)
+
+
 # ─────────────────────────────────────────────────────────────
 # Organization CRUD
 # ─────────────────────────────────────────────────────────────
 
 
 class CreateOrganizationRequest(BaseModel):
-    """Request to create an organization with owner info."""
+    """Request to create an organization."""
 
     organization: OrganizationCreate
-    owner_user_id: str
-    owner_email: EmailStr
     owner_name: str | None = None
 
 
 @router.post("", response_model=Organization)
-async def create_organization(data: CreateOrganizationRequest):
-    """Create a new organization."""
+async def create_organization(
+    data: CreateOrganizationRequest,
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Create a new organization. The current user becomes the owner."""
     try:
         return OrganizationService.create_organization(
             data=data.organization,
-            owner_user_id=data.owner_user_id,
-            owner_email=data.owner_email,
-            owner_name=data.owner_name,
+            owner_user_id=current_user.id,
+            owner_email=current_user.email or "",
+            owner_name=data.owner_name or current_user.name,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -64,19 +87,29 @@ async def list_organizations(
     plan: OrganizationPlan | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    current_user: UserModel = Depends(get_current_user),
 ):
-    """List all organizations."""
-    return OrganizationService.list_organizations(
-        status=status,
-        plan=plan,
-        limit=limit,
-        offset=offset,
-    )
+    """List organizations the current user belongs to (admins see all)."""
+    # System admins can see all organizations
+    if current_user.role == "admin" or current_user.is_admin:
+        return OrganizationService.list_organizations(
+            status=status,
+            plan=plan,
+            limit=limit,
+            offset=offset,
+        )
+    # Regular users only see their own organizations
+    return OrganizationService.get_user_organizations(current_user.id)
 
 
 @router.get("/{org_id}", response_model=Organization)
-async def get_organization(org_id: str):
-    """Get an organization by ID."""
+async def get_organization(
+    org_id: str,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Get an organization by ID. Requires membership."""
+    await require_org_member(org_id, current_user, db)
     org = OrganizationService.get_organization(org_id)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -84,8 +117,11 @@ async def get_organization(org_id: str):
 
 
 @router.get("/slug/{slug}", response_model=Organization)
-async def get_organization_by_slug(slug: str):
-    """Get an organization by slug."""
+async def get_organization_by_slug(
+    slug: str,
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Get an organization by slug. Requires authentication."""
     org = OrganizationService.get_organization_by_slug(slug)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -93,8 +129,14 @@ async def get_organization_by_slug(slug: str):
 
 
 @router.patch("/{org_id}", response_model=Organization)
-async def update_organization(org_id: str, data: OrganizationUpdate):
-    """Update an organization."""
+async def update_organization(
+    org_id: str,
+    data: OrganizationUpdate,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Update an organization. Requires admin role in the org."""
+    await require_org_role(org_id, current_user, db, min_role=MemberRole.ADMIN)
     org = OrganizationService.update_organization(org_id, data)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -102,8 +144,13 @@ async def update_organization(org_id: str, data: OrganizationUpdate):
 
 
 @router.delete("/{org_id}")
-async def delete_organization(org_id: str):
-    """Delete an organization (soft delete)."""
+async def delete_organization(
+    org_id: str,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Delete an organization (soft delete). Requires owner role."""
+    await require_org_role(org_id, current_user, db, min_role=MemberRole.OWNER)
     if not OrganizationService.delete_organization(org_id):
         raise HTTPException(status_code=404, detail="Organization not found")
     return {"success": True, "message": "Organization deleted"}
@@ -116,8 +163,14 @@ class UpgradePlanRequest(BaseModel):
 
 
 @router.post("/{org_id}/upgrade", response_model=Organization)
-async def upgrade_plan(org_id: str, data: UpgradePlanRequest):
-    """Upgrade organization plan."""
+async def upgrade_plan(
+    org_id: str,
+    data: UpgradePlanRequest,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Upgrade organization plan. Requires admin role."""
+    await require_org_role(org_id, current_user, db, min_role=MemberRole.ADMIN)
     org = OrganizationService.upgrade_plan(org_id, data.plan)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -130,8 +183,13 @@ async def upgrade_plan(org_id: str, data: UpgradePlanRequest):
 
 
 @router.get("/{org_id}/members", response_model=list[OrganizationMember])
-async def list_members(org_id: str):
-    """List all members of an organization."""
+async def list_members(
+    org_id: str,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """List all members of an organization. Requires membership."""
+    await require_org_member(org_id, current_user, db)
     return OrganizationService.get_members(org_id)
 
 
@@ -198,10 +256,16 @@ class InvitationResponse(BaseModel):
 
 
 @router.post("/{org_id}/members/invite", response_model=InvitationResponse)
-async def invite_member(org_id: str, data: InviteMemberRequest, invited_by: str):
-    """Invite a new member to the organization."""
+async def invite_member(
+    org_id: str,
+    data: InviteMemberRequest,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Invite a new member to the organization. Requires admin role."""
+    await require_org_role(org_id, current_user, db, min_role=MemberRole.ADMIN)
     try:
-        invitation = OrganizationService.invite_member(org_id, data, invited_by)
+        invitation = OrganizationService.invite_member(org_id, data, current_user.id)
 
         # Get organization name for email
         org = OrganizationService.get_organization(org_id)
@@ -220,14 +284,25 @@ async def invite_member(org_id: str, data: InviteMemberRequest, invited_by: str)
 
 
 @router.get("/{org_id}/invitations")
-async def list_invitations(org_id: str):
-    """List pending invitations for an organization."""
+async def list_invitations(
+    org_id: str,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """List pending invitations for an organization. Requires admin role."""
+    await require_org_role(org_id, current_user, db, min_role=MemberRole.ADMIN)
     return OrganizationService.get_pending_invitations(org_id)
 
 
 @router.delete("/{org_id}/invitations/{invitation_id}")
-async def cancel_invitation(org_id: str, invitation_id: str):
-    """Cancel a pending invitation."""
+async def cancel_invitation(
+    org_id: str,
+    invitation_id: str,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Cancel a pending invitation. Requires admin role."""
+    await require_org_role(org_id, current_user, db, min_role=MemberRole.ADMIN)
     try:
         OrganizationService.cancel_invitation(org_id, invitation_id)
         return {"success": True, "message": "Invitation cancelled"}
@@ -239,19 +314,27 @@ class AcceptInvitationRequest(BaseModel):
     """Request to accept an invitation."""
 
     token: str
-    user_id: str
     user_name: str | None = None
 
 
 @router.post("/invitations/accept", response_model=OrganizationMember)
-async def accept_invitation(data: AcceptInvitationRequest):
+async def accept_invitation(
+    data: AcceptInvitationRequest,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
     """Accept an invitation and join the organization."""
     try:
-        return OrganizationService.accept_invitation(
+        member = OrganizationService.accept_invitation(
             token=data.token,
-            user_id=data.user_id,
-            user_name=data.user_name,
+            user_id=current_user.id,
+            user_name=data.user_name or current_user.name,
         )
+
+        # Sync user role from organization membership
+        await _sync_user_role(db, current_user.id)
+
+        return member
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -263,23 +346,54 @@ class UpdateRoleRequest(BaseModel):
 
 
 @router.patch("/{org_id}/members/{member_id}/role", response_model=OrganizationMember)
-async def update_member_role(org_id: str, member_id: str, data: UpdateRoleRequest):
-    """Update a member's role."""
+async def update_member_role(
+    org_id: str,
+    member_id: str,
+    data: UpdateRoleRequest,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Update a member's role. Requires owner role."""
+    await require_org_role(org_id, current_user, db, min_role=MemberRole.OWNER)
     try:
         member = OrganizationService.update_member_role(member_id, data.role)
         if not member:
             raise HTTPException(status_code=404, detail="Member not found")
+
+        # Sync user role from organization membership
+        if member.user_id:
+            await _sync_user_role(db, member.user_id)
+
         return member
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete("/{org_id}/members/{member_id}")
-async def remove_member(org_id: str, member_id: str):
-    """Remove a member from the organization."""
+async def remove_member(
+    org_id: str,
+    member_id: str,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Remove a member from the organization. Requires admin role."""
+    await require_org_role(org_id, current_user, db, min_role=MemberRole.ADMIN)
     try:
+        # Get user_id before removal for role sync
+        members = OrganizationService.get_members(org_id)
+        target_user_id = None
+        for m in members:
+            if m.id == member_id:
+                target_user_id = m.user_id
+                break
+
         if not OrganizationService.remove_member(member_id):
             raise HTTPException(status_code=404, detail="Member not found")
+
+        # Sync user role after removal (recalculate from remaining orgs)
+        if target_user_id:
+            await _sync_user_role(db, target_user_id)
+
         return {"success": True, "message": "Member removed"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -291,14 +405,24 @@ async def remove_member(org_id: str, member_id: str):
 
 
 @router.get("/user/{user_id}/organizations", response_model=list[Organization])
-async def get_user_organizations(user_id: str):
-    """Get all organizations a user belongs to."""
+async def get_user_organizations(
+    user_id: str,
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Get all organizations a user belongs to. Users can only query their own."""
+    if current_user.id != user_id and not (current_user.role == "admin" or current_user.is_admin):
+        raise HTTPException(status_code=403, detail="Cannot view other user's organizations")
     return OrganizationService.get_user_organizations(user_id)
 
 
 @router.get("/user/{user_id}/memberships", response_model=list[OrganizationMember])
-async def get_user_memberships(user_id: str):
-    """Get all memberships for a user."""
+async def get_user_memberships(
+    user_id: str,
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Get all memberships for a user. Users can only query their own."""
+    if current_user.id != user_id and not (current_user.role == "admin" or current_user.is_admin):
+        raise HTTPException(status_code=403, detail="Cannot view other user's memberships")
     return OrganizationService.get_user_memberships(user_id)
 
 
@@ -308,8 +432,17 @@ async def get_user_memberships(user_id: str):
 
 
 @router.get("/{org_id}/context/{user_id}", response_model=TenantContext)
-async def get_tenant_context(org_id: str, user_id: str):
+async def get_tenant_context(
+    org_id: str,
+    user_id: str,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
     """Get tenant context for a user within an organization."""
+    # Users can only get their own context, admins can get any
+    if current_user.id != user_id and not (current_user.role == "admin" or current_user.is_admin):
+        raise HTTPException(status_code=403, detail="Access denied")
+    await require_org_member(org_id, current_user, db)
     context = OrganizationService.get_tenant_context(org_id, user_id)
     if not context:
         raise HTTPException(status_code=403, detail="Access denied")
@@ -322,8 +455,13 @@ async def get_tenant_context(org_id: str, user_id: str):
 
 
 @router.get("/{org_id}/stats", response_model=OrganizationStats)
-async def get_organization_stats(org_id: str):
-    """Get statistics for an organization."""
+async def get_organization_stats(
+    org_id: str,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Get statistics for an organization. Requires membership."""
+    await require_org_member(org_id, current_user, db)
     return OrganizationService.get_organization_stats(org_id)
 
 
@@ -342,12 +480,18 @@ class TrackUsageRequest(BaseModel):
 
 
 @router.post("/{org_id}/usage/track")
-async def track_usage(org_id: str, data: TrackUsageRequest):
-    """Track token usage for an organization (and optionally per-member)."""
+async def track_usage(
+    org_id: str,
+    data: TrackUsageRequest,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Track token usage for an organization. Requires membership."""
+    await require_org_member(org_id, current_user, db)
     if not OrganizationService.track_token_usage(
         org_id,
         data.tokens,
-        user_id=data.user_id,
+        user_id=data.user_id or current_user.id,
         session_id=data.session_id,
         model=data.model,
     ):
@@ -367,11 +511,11 @@ async def track_usage(org_id: str, data: TrackUsageRequest):
 async def get_member_usage(
     org_id: str,
     period: str = Query(default="month", regex="^(day|week|month)$"),
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
 ):
-    """Get per-member usage breakdown for an organization.
-
-    Returns token usage, session count, and percentage of org total for each member.
-    """
+    """Get per-member usage breakdown. Requires admin role in the org."""
+    await require_org_role(org_id, current_user, db, min_role=MemberRole.ADMIN)
     org = OrganizationService.get_organization(org_id)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -386,13 +530,15 @@ async def get_member_usage(
 
 
 @router.get("/{org_id}/quota")
-async def get_quota_status(org_id: str):
-    """Get full quota status for an organization.
-
-    Returns current/limit for members, projects, sessions, and tokens.
-    """
+async def get_quota_status(
+    org_id: str,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Get quota status. Requires membership."""
     from services.quota_service import QuotaService
 
+    await require_org_member(org_id, current_user, db)
     org = OrganizationService.get_organization(org_id)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")

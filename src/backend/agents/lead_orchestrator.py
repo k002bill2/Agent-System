@@ -188,7 +188,7 @@ class LeadOrchestratorAgent(BaseAgent):
             description="Multi-agent workflow coordinator that decomposes complex tasks and delegates to specialized agents",
             system_prompt=LEAD_ORCHESTRATOR_SYSTEM_PROMPT,
             model_name=LLMModelRegistry.get_default(LLMProvider.GOOGLE),
-            temperature=0.3,  # 결정적 분석을 위해 낮은 temperature
+            temperature=0.0,  # 일관된 분석 결과를 위해 temperature 0
             max_tokens=4096,
         )
         super().__init__(config)

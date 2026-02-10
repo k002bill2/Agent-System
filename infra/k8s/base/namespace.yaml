@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aos
+  labels:
+    app.kubernetes.io/name: aos
+    app.kubernetes.io/managed-by: kubectl

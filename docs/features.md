@@ -195,8 +195,9 @@ class AuthService:
 ```
 
 **토큰 설정**:
-- Access Token: 15분 유효
+- Access Token: 60분 유효
 - Refresh Token: 7일 유효
+- `authFetch` 래퍼를 통한 자동 토큰 갱신 (401 시 refresh 자동 수행)
 
 ---
 
@@ -500,9 +501,10 @@ class MergeService:
 
 ### Merge Request (내부 MR)
 
-- 팀 내부 머지 요청 생성
+- 팀 내부 머지 요청 생성 (DB 영속화, 서버 재시작 시에도 유지)
 - 승인/거부 워크플로우
 - MR 상태: `open`, `merged`, `closed`, `draft`
+- **Auto-Merge**: MR 생성 시 `auto_merge` 활성화 → 승인 조건 충족 시 자동 머지
 
 ### GitHub 통합
 
@@ -519,7 +521,16 @@ class MergeService:
 | member | ✓ | ✓ | - | - |
 | viewer | ✓ | - | - | - |
 
-**보호 브랜치**: `main`, `master` 브랜치는 `merge_main` 권한 필요
+### 브랜치 보호 규칙 (동적)
+
+DB 기반 동적 브랜치 보호 규칙 관리:
+- glob 패턴 매칭 (`main`, `release/*`, `feature/*`)
+- 필요 승인 수, 충돌 금지, 역할별 머지 권한 설정
+- Force push / 삭제 허용 여부
+- **Auto-Deploy**: 머지 시 GitHub Actions workflow 자동 트리거
+- Dashboard Protection 탭에서 CRUD 관리
+
+**보호 브랜치**: 규칙 미설정 시 기본으로 `main`, `master` 브랜치는 `merge_main` 권한 필요
 
 ---
 
@@ -666,16 +677,102 @@ class HealthService:
 
 ---
 
-## 33. Warp Mode
+## 33. Warp Terminal Integration
 
-고속 실행 모드:
+Warp 터미널을 통한 Claude Code 실행:
 
 ```python
 class WarpService:
-    async def execute_fast(task: str) -> WarpResult
+    def build_claude_command(task: str | None = None) -> str
+    def open_with_command(path: str, command: str, title: str | None = None) -> dict
+    def cleanup_old_configs(max_age_hours: int = 24) -> int
 ```
 
 **특징**:
-- 캐시 활용
-- 병렬 처리 최적화
-- 간단한 작업 우선 처리
+- Warp Launch Configuration (YAML) 기반 실행
+- 태스크 내용을 임시 파일로 저장 후 `claude --dangerously-skip-permissions "$(cat file)"` 방식으로 전달
+- Docker 모드 지원 (URI를 프론트엔드로 반환)
+- 오래된 설정 파일 자동 정리
+
+---
+
+## 34. Admin Menu Management
+
+관리자 페이지에서 사이드바 메뉴 가시성 및 순서 관리:
+
+**기능**:
+- 역할별(user/manager/admin) 메뉴 가시성 제어
+- 드래그 앤 드롭으로 메뉴 순서 변경 (HTML5 네이티브 DnD)
+- 변경사항 DB 저장 후 모든 사용자에게 적용
+- `MENU_LABELS` 단일 소스로 메뉴 이름 일관성 유지
+
+**DB 모델**: `MenuVisibilityModel` (menu_key, role, visible, sort_order)
+
+---
+
+## 35. E2E 암호화
+
+민감 데이터 필드 암호화 및 패스워드 해싱 업그레이드:
+
+```python
+class EncryptedString(TypeDecorator):
+    """SQLAlchemy 커스텀 타입 - DB 저장 시 AES-256-GCM 암호화"""
+    impl = String
+    # process_bind_param: 저장 시 encrypt
+    # process_result_value: 읽기 시 decrypt
+
+class KeyManager:
+    """HKDF 기반 마스터 키에서 서비스별 키 파생"""
+    def get_field_encryption_key() -> bytes
+    def rotate_key(old_key, new_key, db_session)
+```
+
+**암호화 대상**: ChannelConfigModel (webhook_url, api_key, bot_token, smtp_password), SAMLConfigModel (idp_certificate)
+
+**패스워드**: SHA-256 → bcrypt 점진적 마이그레이션 (로그인 시 자동 업그레이드)
+
+**TLS**: PostgreSQL/Redis 서비스 간 TLS 지원 (DB_SSL_MODE, REDIS_SSL)
+
+**하위 호환**: `ENCRYPTION_MASTER_KEY` 미설정 시 평문 저장
+
+---
+
+## 36. 프로젝트별 RBAC
+
+프로젝트 단위 세분화된 접근제어:
+
+```python
+class ProjectAccessService:
+    async def grant_access(db, project_id, user_id, role, granted_by)
+    async def check_access(db, project_id, user_id) -> str | None
+    async def has_any_access_control(db, project_id) -> bool
+```
+
+**역할 계층**: `viewer` (0) < `editor` (1) < `owner` (2)
+
+**하위 호환**: project_access 레코드가 없는 프로젝트 → 모든 인증 사용자 접근 허용
+
+**시스템 admin**: 모든 프로젝트 접근 바이패스
+
+**Dashboard UI**: `ProjectMembersPanel` - 멤버 목록, 초대, 역할 변경, 제거
+
+---
+
+## 37. Kubernetes 스케일링
+
+프로덕션 수준 K8s 배포 및 Helm Chart:
+
+**K8s 매니페스트** (`infra/k8s/base/`):
+- Backend/Dashboard Deployment + HPA (CPU 70%, 2-10 replicas)
+- PostgreSQL/Redis StatefulSet (영구 스토리지)
+- NetworkPolicy (기본 deny + 선택적 허용)
+- Ingress (TLS 종료, /api→backend, /→dashboard)
+
+**Helm Chart** (`infra/helm/aos/`):
+- 환경별 values (개발/프로덕션)
+- 전체 리소스 템플릿화
+
+**Dockerfile 최적화**:
+- 멀티스테이지 빌드 (builder → runtime)
+- non-root 유저, HEALTHCHECK
+- Dashboard: nginx-alpine 기반 SPA 호스팅

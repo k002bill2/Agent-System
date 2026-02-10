@@ -7,9 +7,12 @@ interface TaskEvaluationCardProps {
   sessionId: string
   taskId: string
   agentId?: string
+  contextSummary?: string
+  projectName?: string
+  effortLevel?: string
 }
 
-export function TaskEvaluationCard({ sessionId, taskId, agentId }: TaskEvaluationCardProps) {
+export function TaskEvaluationCard({ sessionId, taskId, agentId, contextSummary, projectName, effortLevel }: TaskEvaluationCardProps) {
   const {
     taskEvaluations,
     submitTaskEvaluation,
@@ -57,6 +60,9 @@ export function TaskEvaluationCard({ sessionId, taskId, agentId }: TaskEvaluatio
       result_accuracy: vote === 'up',
       speed_satisfaction: vote === 'up',
       ...(agentId && { agent_id: agentId }),
+      ...(contextSummary && { context_summary: contextSummary }),
+      ...(projectName && { project_name: projectName }),
+      ...(effortLevel && { effort_level: effortLevel }),
     }
     await submitTaskEvaluation(evaluation)
   }
@@ -72,6 +78,9 @@ export function TaskEvaluationCard({ sessionId, taskId, agentId }: TaskEvaluatio
       speed_satisfaction: selected !== 'down',
       comment: comment.trim(),
       ...(agentId && { agent_id: agentId }),
+      ...(contextSummary && { context_summary: contextSummary }),
+      ...(projectName && { project_name: projectName }),
+      ...(effortLevel && { effort_level: effortLevel }),
     }
 
     await submitTaskEvaluation(evaluation)

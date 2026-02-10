@@ -23,6 +23,14 @@ vi.mock('@/stores/auth', () => ({
   })),
 }))
 
+vi.mock('@/stores/menuVisibility', () => ({
+  useMenuVisibilityStore: vi.fn(() => ({
+    visibility: {},
+    menuOrder: [],
+    fetchVisibility: vi.fn(),
+  })),
+}))
+
 import { useNavigationStore } from '@/stores/navigation'
 import { useAuthStore } from '@/stores/auth'
 
@@ -57,7 +65,7 @@ describe('Sidebar', () => {
     expect(screen.getByText('Dashboard')).toBeInTheDocument()
     expect(screen.getByText('Projects')).toBeInTheDocument()
     expect(screen.getByText('Tasks')).toBeInTheDocument()
-    expect(screen.getByText('Agents')).toBeInTheDocument()
+    expect(screen.getByText('Task Analyzer')).toBeInTheDocument()
     expect(screen.getByText('Activity')).toBeInTheDocument()
     expect(screen.getByText('Monitor')).toBeInTheDocument()
     expect(screen.getByText('Claude Sessions')).toBeInTheDocument()

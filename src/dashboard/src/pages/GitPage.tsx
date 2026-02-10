@@ -10,6 +10,8 @@ import {
   AlertCircle,
   FileEdit,
   Cloud,
+  Shield,
+  Zap,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useGitStore, GitTab } from '../stores/git'
@@ -26,6 +28,7 @@ import {
   GitSetup,
   WorkingDirectory,
   RemoteList,
+  BranchProtectionSettings,
 } from '../components/git'
 
 const tabs: { id: GitTab; label: string; icon: typeof GitBranch }[] = [
@@ -35,6 +38,7 @@ const tabs: { id: GitTab; label: string; icon: typeof GitBranch }[] = [
   { id: 'pull-requests', label: 'Pull Requests', icon: GitPullRequest },
   { id: 'history', label: 'History', icon: History },
   { id: 'remotes', label: 'Remotes', icon: Cloud },
+  { id: 'protection', label: 'Protection', icon: Shield },
 ]
 
 export function GitPage() {
@@ -107,6 +111,12 @@ export function GitPage() {
     isGeneratingDrafts,
     generateDraftCommits,
     clearDraftCommits,
+    // Branch Protection
+    branchProtectionRules,
+    fetchBranchProtectionRules,
+    createBranchProtectionRule,
+    updateBranchProtectionRule,
+    deleteBranchProtectionRule,
   } = useGitStore()
 
   const { projects, fetchProjects, selectedProjectId: globalSelectedProjectId } = useProjectsStore()
@@ -172,8 +182,9 @@ export function GitPage() {
       fetchCommits(selectedProjectId)
       fetchWorkingStatus(selectedProjectId)
       fetchRemotes(selectedProjectId)
+      fetchBranchProtectionRules(selectedProjectId)
     }
-  }, [selectedProjectId, gitStatus?.is_valid_repo, fetchBranches, fetchMergeRequests, fetchCommits, fetchWorkingStatus, fetchRemotes])
+  }, [selectedProjectId, gitStatus?.is_valid_repo, fetchBranches, fetchMergeRequests, fetchCommits, fetchWorkingStatus, fetchRemotes, fetchBranchProtectionRules])
 
   // Handle merge click from branch list
   const handleMergeClick = async (source: string) => {
@@ -365,7 +376,7 @@ export function GitPage() {
                 currentUserId={currentUserId}
                 userRole={userRole}
                 onApprove={(mrId) => approveMergeRequest(selectedProjectId, mrId, currentUserId)}
-                onMerge={(mrId) => mergeMergeRequest(selectedProjectId, mrId, currentUserId)}
+                onMerge={(mrId) => mergeMergeRequest(selectedProjectId, mrId, currentUserId, userRole)}
                 onClose={(mrId) => closeMergeRequest(selectedProjectId, mrId, currentUserId)}
                 onCreateNew={() => setShowCreateMR(true)}
               />
@@ -410,6 +421,17 @@ export function GitPage() {
                 onRefresh={() => fetchRemotes(selectedProjectId)}
               />
             )}
+
+            {activeTab === 'protection' && (
+              <BranchProtectionSettings
+                rules={branchProtectionRules}
+                isLoading={isLoading}
+                onCreateRule={(rule) => createBranchProtectionRule(selectedProjectId, rule)}
+                onUpdateRule={(ruleId, updates) => updateBranchProtectionRule(selectedProjectId, ruleId, updates)}
+                onDeleteRule={(ruleId) => deleteBranchProtectionRule(selectedProjectId, ruleId)}
+                onRefresh={() => fetchBranchProtectionRules(selectedProjectId)}
+              />
+            )}
           </>
         )}
       </div>
@@ -435,13 +457,14 @@ export function GitPage() {
         <CreateMergeRequestModal
           branches={branches.filter((b) => !b.is_remote)}
           currentBranch={currentBranch}
-          onSubmit={async (title, source, target, description) => {
+          onSubmit={async (title, source, target, description, autoMerge) => {
             const success = await createMergeRequest(
               selectedProjectId,
               title,
               source,
               target,
-              description
+              description,
+              autoMerge
             )
             if (success) {
               setShowCreateMR(false)
@@ -470,7 +493,7 @@ export function GitPage() {
 interface CreateMergeRequestModalProps {
   branches: { name: string; is_current: boolean }[]
   currentBranch: string
-  onSubmit: (title: string, source: string, target: string, description: string) => Promise<boolean>
+  onSubmit: (title: string, source: string, target: string, description: string, autoMerge?: boolean) => Promise<boolean>
   onClose: () => void
 }
 
@@ -484,12 +507,13 @@ function CreateMergeRequestModal({
   const [source, setSource] = useState(currentBranch)
   const [target, setTarget] = useState('main')
   const [description, setDescription] = useState('')
+  const [autoMerge, setAutoMerge] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   const handleSubmit = async () => {
     if (!title.trim()) return
     setSubmitting(true)
-    await onSubmit(title.trim(), source, target, description.trim())
+    await onSubmit(title.trim(), source, target, description.trim(), autoMerge)
     setSubmitting(false)
   }
 
@@ -561,6 +585,17 @@ function CreateMergeRequestModal({
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
             />
           </div>
+
+          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoMerge}
+              onChange={(e) => setAutoMerge(e.target.checked)}
+              className="rounded"
+            />
+            <Zap className="w-4 h-4 text-blue-500" />
+            승인 조건 충족 시 자동 머지
+          </label>
         </div>
 
         <div className="flex justify-end gap-3 mt-6">

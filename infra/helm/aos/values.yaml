@@ -1,0 +1,69 @@
+global:
+  namespace: aos
+
+backend:
+  replicaCount: 2
+  image:
+    repository: aos-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  config:
+    LLM_PROVIDER: "google"
+    USE_DATABASE: "true"
+    HOST: "0.0.0.0"
+    PORT: "8000"
+    LOG_LEVEL: "info"
+
+dashboard:
+  replicaCount: 2
+  image:
+    repository: aos-dashboard
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+postgresql:
+  enabled: true
+  persistence:
+    size: 10Gi
+  auth:
+    database: aos
+    username: aos
+
+redis:
+  enabled: true
+  persistence:
+    size: 5Gi
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: aos.local
+      paths:
+        - path: /api
+          service: backend
+        - path: /
+          service: dashboard
+  tls: []
+
+networkPolicies:
+  enabled: true

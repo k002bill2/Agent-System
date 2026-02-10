@@ -24,13 +24,10 @@ import yaml
 # Docker mode: CLAUDE_HOME is set in Docker environment
 IS_DOCKER = bool(os.getenv("CLAUDE_HOME"))
 
-# Pattern that indicates Claude CLI is ready for input
-# Claude shows "bypass permissions on" in the status bar when fully loaded
-CLAUDE_READY_PATTERN = "bypass permissions"
-# Max time to wait for Claude to start (seconds)
-CLAUDE_STARTUP_TIMEOUT = 30
-# Small delay after pattern match to let TUI fully render
-CLAUDE_POST_MATCH_DELAY = 1
+# Legacy expect-based constants (no longer used, kept for reference)
+# CLAUDE_READY_PATTERN = "bypass permissions"
+# CLAUDE_STARTUP_TIMEOUT = 30
+# CLAUDE_POST_MATCH_DELAY = 1
 
 
 class WarpService:
@@ -63,9 +60,9 @@ class WarpService:
     def build_claude_command(self, task: str | None = None) -> str:
         """Build a Claude CLI command for Warp launch config.
 
-        Two-phase approach:
-        - With task: Uses `expect` to start Claude interactively,
-          wait for startup, inject the task, then hand over to user.
+        - With task: Saves prompt to file, passes to Claude CLI as argument.
+          Claude CLI accepts a prompt as positional argument and starts
+          an interactive session with that prompt already submitted.
         - Without task: Starts Claude in plain interactive mode.
 
         Args:
@@ -77,45 +74,16 @@ class WarpService:
         if not task:
             return "claude --dangerously-skip-permissions"
 
-        # Write an expect script that:
-        # 1. Spawns Claude CLI in interactive mode
-        # 2. Waits for it to start up
-        # 3. Sends the task text
-        # 4. Hands control back to user (interact)
-        script_name = f"aos-{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
-        script_path = self.launch_config_dir / f"{script_name}.exp"
-
-        # Escape for expect's `send` command:
-        # - backslash, double-quote, square brackets (expect special chars)
-        escaped_task = (
-            task.replace("\\", "\\\\").replace('"', '\\"').replace("[", "\\[").replace("$", "\\$")
-        )
-
-        script_content = (
-            f"#!/usr/bin/expect -f\n"
-            f"set timeout {CLAUDE_STARTUP_TIMEOUT}\n"
-            f"spawn claude --dangerously-skip-permissions\n"
-            f"\n"
-            f"# Wait for Claude CLI to be fully ready\n"
-            f"expect {{\n"
-            f'    "*{CLAUDE_READY_PATTERN}*" {{\n'
-            f"        sleep {CLAUDE_POST_MATCH_DELAY}\n"
-            f'        send "{escaped_task}\\r"\n'
-            f"    }}\n"
-            f"    timeout {{\n"
-            f'        send_user "\\nClaude CLI startup timeout. Please type manually.\\n"\n'
-            f"    }}\n"
-            f"}}\n"
-            f"interact\n"
-        )
-
-        # Ensure directory exists and write the script
+        # Write prompt to a temp file to avoid shell escaping issues
+        prompt_name = f"aos-prompt-{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
         self.launch_config_dir.mkdir(parents=True, exist_ok=True)
-        script_path.write_text(script_content, encoding="utf-8")
-        script_path.chmod(0o755)
+        prompt_path = self.launch_config_dir / f"{prompt_name}.txt"
+        prompt_path.write_text(task, encoding="utf-8")
 
-        # Return command using ~ (expands on the HOST, not in Docker)
-        return f"expect ~/.warp/launch_configurations/{script_name}.exp"
+        # Use $(cat file) to pass the prompt as a positional argument
+        # This starts an interactive Claude session with the prompt pre-submitted
+        prompt_file_path = f"~/.warp/launch_configurations/{prompt_name}.txt"
+        return f'claude --dangerously-skip-permissions "$(cat {prompt_file_path})"'
 
     def open_path(self, path: str, new_window: bool = True) -> dict:
         """

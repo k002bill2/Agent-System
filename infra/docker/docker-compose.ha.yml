@@ -22,9 +22,9 @@ services:
     image: postgres:16-alpine
     container_name: aos-postgres-primary
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: agent_orchestrator
+      POSTGRES_USER: aos
+      POSTGRES_PASSWORD: aos
+      POSTGRES_DB: aos
       POSTGRES_INITDB_ARGS: "--data-checksums"
     volumes:
       - postgres-primary-data:/var/lib/postgresql/data
@@ -36,7 +36,7 @@ services:
     networks:
       - aos-ha-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U aos"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -48,22 +48,22 @@ services:
     image: postgres:16-alpine
     container_name: aos-postgres-replica1
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: agent_orchestrator
-      PGUSER: postgres
+      POSTGRES_USER: aos
+      POSTGRES_PASSWORD: aos
+      POSTGRES_DB: aos
+      PGUSER: aos
     volumes:
       - postgres-replica1-data:/var/lib/postgresql/data
       - ./postgres/replica.conf:/etc/postgresql/postgresql.conf:ro
     command: >
       bash -c "
         # Wait for primary to be ready
-        until pg_isready -h postgres-primary -U postgres; do sleep 2; done;
+        until pg_isready -h postgres-primary -U aos; do sleep 2; done;
 
         # If data directory is empty, create replica from primary
         if [ ! -f /var/lib/postgresql/data/PG_VERSION ]; then
           rm -rf /var/lib/postgresql/data/*
-          pg_basebackup -h postgres-primary -U postgres -D /var/lib/postgresql/data -R -P -X stream
+          pg_basebackup -h postgres-primary -U aos -D /var/lib/postgresql/data -R -P -X stream
         fi
 
         postgres -c config_file=/etc/postgresql/postgresql.conf
@@ -74,7 +74,7 @@ services:
     networks:
       - aos-ha-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U aos"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -86,20 +86,20 @@ services:
     image: postgres:16-alpine
     container_name: aos-postgres-replica2
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: agent_orchestrator
-      PGUSER: postgres
+      POSTGRES_USER: aos
+      POSTGRES_PASSWORD: aos
+      POSTGRES_DB: aos
+      PGUSER: aos
     volumes:
       - postgres-replica2-data:/var/lib/postgresql/data
       - ./postgres/replica.conf:/etc/postgresql/postgresql.conf:ro
     command: >
       bash -c "
-        until pg_isready -h postgres-primary -U postgres; do sleep 2; done;
+        until pg_isready -h postgres-primary -U aos; do sleep 2; done;
 
         if [ ! -f /var/lib/postgresql/data/PG_VERSION ]; then
           rm -rf /var/lib/postgresql/data/*
-          pg_basebackup -h postgres-primary -U postgres -D /var/lib/postgresql/data -R -P -X stream
+          pg_basebackup -h postgres-primary -U aos -D /var/lib/postgresql/data -R -P -X stream
         fi
 
         postgres -c config_file=/etc/postgresql/postgresql.conf
@@ -110,7 +110,7 @@ services:
     networks:
       - aos-ha-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U aos"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -123,10 +123,10 @@ services:
     container_name: aos-pgpool
     environment:
       PGPOOL_BACKEND_NODES: "0:postgres-primary:5432,1:postgres-replica1:5432,2:postgres-replica2:5432"
-      PGPOOL_SR_CHECK_USER: postgres
-      PGPOOL_SR_CHECK_PASSWORD: postgres
-      PGPOOL_POSTGRES_USERNAME: postgres
-      PGPOOL_POSTGRES_PASSWORD: postgres
+      PGPOOL_SR_CHECK_USER: aos
+      PGPOOL_SR_CHECK_PASSWORD: aos
+      PGPOOL_POSTGRES_USERNAME: aos
+      PGPOOL_POSTGRES_PASSWORD: aos
       PGPOOL_ADMIN_USERNAME: admin
       PGPOOL_ADMIN_PASSWORD: adminpassword
       PGPOOL_ENABLE_LOAD_BALANCING: "yes"

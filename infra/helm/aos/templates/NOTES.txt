@@ -1,0 +1,21 @@
+AOS (Agent Orchestration Service) has been deployed!
+
+1. Get the application URL:
+{{- if .Values.ingress.enabled }}
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else }}
+  kubectl port-forward svc/{{ include "aos.fullname" . }}-backend 8000:8000 -n {{ .Values.global.namespace }}
+  kubectl port-forward svc/{{ include "aos.fullname" . }}-dashboard 8080:80 -n {{ .Values.global.namespace }}
+
+  Then visit:
+  - Backend API: http://localhost:8000
+  - Dashboard:   http://localhost:8080
+{{- end }}
+
+2. Check pod status:
+  kubectl get pods -n {{ .Values.global.namespace }}
+
+3. View backend logs:
+  kubectl logs -f deployment/{{ include "aos.fullname" . }}-backend -n {{ .Values.global.namespace }}

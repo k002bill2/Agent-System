@@ -7,7 +7,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [authStatus, setAuthStatus] = useState<{
+  const [_authStatus, setAuthStatus] = useState<{
     oauth_enabled: boolean
     google_enabled: boolean
     github_enabled: boolean

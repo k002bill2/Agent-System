@@ -524,6 +524,21 @@ AOS Backend API 엔드포인트 문서입니다.
 
 **충돌 상태**: `unknown`, `no_conflicts`, `has_conflicts`
 
+**MR 생성 시 `auto_merge: true`**: 승인 조건 충족 시 자동 머지 실행
+
+**Auto-Deploy**: 브랜치 보호 규칙에 `auto_deploy` 설정 시 머지 후 GitHub Actions workflow 자동 트리거
+
+### Branch Protection Rules
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/git/projects/{id}/branch-protection` | 보호 규칙 목록 |
+| POST | `/api/git/projects/{id}/branch-protection` | 보호 규칙 생성 |
+| PUT | `/api/git/projects/{id}/branch-protection/{rule_id}` | 보호 규칙 수정 |
+| DELETE | `/api/git/projects/{id}/branch-protection/{rule_id}` | 보호 규칙 삭제 |
+
+**규칙 필드**: `branch_pattern`, `require_approvals`, `require_no_conflicts`, `allowed_merge_roles`, `allow_force_push`, `allow_deletion`, `auto_deploy`, `deploy_workflow`, `enabled`
+
 ### GitHub Integration
 
 | Method | Path | 설명 |
@@ -535,6 +550,65 @@ AOS Backend API 엔드포인트 문서입니다.
 | POST | `/api/git/github/{repo}/pulls/{number}/reviews` | GitHub PR 리뷰 생성 |
 
 **GitHub 머지 방식**: `merge`, `squash`, `rebase`
+
+---
+
+## Project Access (RBAC)
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/projects/{project_id}/access` | 프로젝트 멤버 목록 (viewer+) |
+| POST | `/api/projects/{project_id}/access` | 멤버 추가 (owner) |
+| PUT | `/api/projects/{project_id}/access/{user_id}` | 역할 변경 (owner) |
+| DELETE | `/api/projects/{project_id}/access/{user_id}` | 멤버 제거 (owner) |
+| GET | `/api/projects/{project_id}/access/me` | 내 프로젝트 역할 조회 |
+
+**역할**: `owner`, `editor`, `viewer`
+
+**접근제어 규칙**:
+- project_access 레코드가 없는 프로젝트 → 모든 인증 사용자 접근 허용 (하위 호환)
+- 시스템 admin (role=="admin")은 모든 프로젝트 접근 바이패스
+- 역할 계층: viewer(0) < editor(1) < owner(2)
+
+---
+
+## Admin
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/admin/users` | 사용자 목록 조회 (관리자 전용) |
+| PATCH | `/api/admin/users/{user_id}` | 사용자 정보 수정 (관리자 전용) |
+| GET | `/api/admin/menu-visibility` | 메뉴 가시성 설정 조회 (인증 사용자) |
+| PUT | `/api/admin/menu-visibility` | 메뉴 가시성 일괄 업데이트 (관리자 전용) |
+| GET | `/api/admin/system-info` | 시스템 정보 조회 (관리자 전용) |
+
+**사용자 목록 쿼리 파라미터** (`GET /api/admin/users`):
+- `is_active`: 활성 상태 필터
+- `is_admin`: 관리자 필터
+- `role`: 역할 필터 (`user`, `manager`, `admin`)
+- `search`: 이메일/이름 검색
+- `limit`, `offset`: 페이지네이션
+
+**메뉴 가시성 응답** (`GET /api/admin/menu-visibility`):
+```json
+{
+  "visibility": {
+    "dashboard": {"user": true, "manager": true, "admin": true},
+    "agents": {"user": false, "manager": true, "admin": true}
+  },
+  "menu_order": ["dashboard", "projects", "tasks", "agents", "..."]
+}
+```
+
+**메뉴 가시성 업데이트 요청** (`PUT /api/admin/menu-visibility`):
+```json
+{
+  "visibility": {"dashboard": {"user": true, "manager": true, "admin": true}},
+  "menu_order": ["dashboard", "projects", "tasks"]
+}
+```
+
+**역할**: `user`, `manager`, `admin`
 
 ---
 

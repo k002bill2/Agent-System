@@ -78,6 +78,8 @@ class FeedbackService:
             "original_output": feedback.original_output,
             "corrected_output": feedback.corrected_output,
             "agent_id": agent_id,
+            "project_name": feedback.project_name,
+            "effort_level": feedback.effort_level,
             "context_json": context or {},
             "status": FeedbackStatus.PENDING.value,
             "created_at": now,
@@ -111,9 +113,16 @@ class FeedbackService:
         self,
         params: FeedbackQueryParams,
     ) -> list[FeedbackEntry]:
-        """피드백 목록 조회"""
+        """피드백 목록 조회 (DB + in-memory fallback 병합)"""
         if self.use_database:
-            return await self._query_feedbacks_from_db(params)
+            db_results = await self._query_feedbacks_from_db(params)
+            # In-memory fallback 데이터도 포함 (FK 제약으로 DB 저장 실패한 항목)
+            memory_results = self._query_feedbacks_memory(params)
+            if memory_results:
+                db_results.extend(memory_results)
+                # 시간 역순 정렬
+                db_results.sort(key=lambda f: f.created_at, reverse=True)
+            return db_results
         else:
             return self._query_feedbacks_memory(params)
 
@@ -142,9 +151,28 @@ class FeedbackService:
         start_date: datetime | None = None,
         end_date: datetime | None = None,
     ) -> FeedbackStats:
-        """피드백 통계 조회"""
+        """피드백 통계 조회 (DB + in-memory fallback 병합)"""
         if self.use_database:
-            return await self._get_stats_from_db(start_date, end_date)
+            db_stats = await self._get_stats_from_db(start_date, end_date)
+            # In-memory fallback 데이터 통계도 병합
+            if self._feedbacks:
+                mem_stats = self._get_stats_memory(start_date, end_date)
+                db_stats.total_count += mem_stats.total_count
+                for k, v in mem_stats.by_type.items():
+                    db_stats.by_type[k] = db_stats.by_type.get(k, 0) + v
+                for k, v in mem_stats.by_status.items():
+                    db_stats.by_status[k] = db_stats.by_status.get(k, 0) + v
+                for k, v in mem_stats.by_reason.items():
+                    db_stats.by_reason[k] = db_stats.by_reason.get(k, 0) + v
+                for k, v in mem_stats.by_agent.items():
+                    db_stats.by_agent[k] = db_stats.by_agent.get(k, 0) + v
+                # Recalculate rates
+                if db_stats.total_count > 0:
+                    positive = db_stats.by_type.get("explicit_positive", 0)
+                    implicit = db_stats.by_type.get("implicit", 0)
+                    db_stats.positive_rate = positive / db_stats.total_count * 100
+                    db_stats.implicit_rate = implicit / db_stats.total_count * 100
+            return db_stats
         else:
             return self._get_stats_memory(start_date, end_date)
 
@@ -260,7 +288,11 @@ class FeedbackService:
         self,
         evaluation: TaskEvaluationSubmit,
     ) -> TaskEvaluationResponse:
-        """태스크 종합 평가 제출"""
+        """태스크 종합 평가 제출
+
+        Task evaluation을 저장하고, feedback 시스템에도 연동하여
+        Feedback History에서 조회 가능하게 합니다.
+        """
         eval_id = str(uuid.uuid4())
         now = datetime.now()
         key = f"{evaluation.session_id}:{evaluation.task_id}"
@@ -274,10 +306,80 @@ class FeedbackService:
             "speed_satisfaction": evaluation.speed_satisfaction,
             "comment": evaluation.comment,
             "agent_id": evaluation.agent_id,
+            "context_summary": evaluation.context_summary,
+            "project_name": evaluation.project_name,
+            "effort_level": evaluation.effort_level,
             "created_at": now,
         }
 
         self._task_evaluations[key] = eval_data
+
+        # DB 저장 시도
+        if self.use_database:
+            try:
+                await self._save_task_evaluation_to_db(eval_data)
+            except Exception:
+                pass  # in-memory fallback already saved above
+
+        # Feedback History에도 연동 저장
+        # DB 모드에서 FK 제약(session_id) 실패 시 in-memory에 저장
+        feedback_type = (
+            FeedbackType.EXPLICIT_POSITIVE
+            if evaluation.rating >= 3
+            else FeedbackType.EXPLICIT_NEGATIVE
+        )
+        reason = None
+        if evaluation.rating < 3:
+            if not evaluation.result_accuracy:
+                reason = FeedbackReason.INCORRECT
+            elif not evaluation.speed_satisfaction:
+                reason = FeedbackReason.PERFORMANCE
+            else:
+                reason = FeedbackReason.OTHER
+
+        # original_output에 context_summary가 있으면 사용, 없으면 기본 텍스트
+        output_text = (
+            evaluation.context_summary
+            if evaluation.context_summary
+            else f"Task evaluation: rating={evaluation.rating}"
+        )
+
+        try:
+            feedback_submit = FeedbackSubmit(
+                session_id=evaluation.session_id,
+                task_id=evaluation.task_id,
+                feedback_type=feedback_type,
+                reason=reason,
+                reason_detail=evaluation.comment,
+                original_output=output_text,
+                project_name=evaluation.project_name,
+                effort_level=evaluation.effort_level,
+            )
+            await self.submit_feedback(
+                feedback_submit,
+                agent_id=evaluation.agent_id,
+            )
+        except Exception:
+            # FK constraint failure (session not in DB) - save to in-memory
+            feedback_id = str(uuid.uuid4())
+            self._feedbacks[feedback_id] = {
+                "id": feedback_id,
+                "session_id": evaluation.session_id,
+                "task_id": evaluation.task_id,
+                "message_id": None,
+                "feedback_type": feedback_type.value,
+                "reason": reason.value if reason else None,
+                "reason_detail": evaluation.comment,
+                "original_output": output_text,
+                "corrected_output": None,
+                "agent_id": evaluation.agent_id,
+                "project_name": evaluation.project_name,
+                "effort_level": evaluation.effort_level,
+                "context_json": {},
+                "status": FeedbackStatus.PENDING.value,
+                "created_at": now,
+                "processed_at": None,
+            }
 
         return TaskEvaluationResponse(
             id=eval_id,
@@ -299,6 +401,11 @@ class FeedbackService:
         """세션+태스크 ID로 평가 조회"""
         key = f"{session_id}:{task_id}"
         data = self._task_evaluations.get(key)
+        if not data and self.use_database:
+            data = await self._get_task_evaluation_from_db(session_id, task_id)
+            if data:
+                self._task_evaluations[key] = data  # cache
+
         if not data:
             return None
 
@@ -320,38 +427,105 @@ class FeedbackService:
         limit: int = 50,
         offset: int = 0,
     ) -> list[TaskEvaluationResponse]:
-        """태스크 평가 목록 조회 (comment 포함)"""
-        evaluations = list(self._task_evaluations.values())
-
-        # 에이전트 필터
-        if agent_id:
-            evaluations = [e for e in evaluations if e.get("agent_id") == agent_id]
-
-        # 최신순 정렬
-        evaluations.sort(key=lambda e: e["created_at"], reverse=True)
-
-        # 페이지네이션
-        evaluations = evaluations[offset : offset + limit]
-
-        return [
-            TaskEvaluationResponse(
-                id=e["id"],
-                session_id=e["session_id"],
-                task_id=e["task_id"],
-                rating=e["rating"],
-                result_accuracy=e["result_accuracy"],
-                speed_satisfaction=e["speed_satisfaction"],
-                comment=e.get("comment"),
-                agent_id=e.get("agent_id"),
-                created_at=e["created_at"],
-            )
-            for e in evaluations
-        ]
+        """태스크 평가 목록 조회 (DB + in-memory 병합)"""
+        if self.use_database:
+            db_results = await self._list_task_evaluations_from_db(agent_id, limit, offset)
+            # In-memory fallback 데이터도 포함
+            memory_evals = list(self._task_evaluations.values())
+            if agent_id:
+                memory_evals = [e for e in memory_evals if e.get("agent_id") == agent_id]
+            # DB에 없는 in-memory 항목만 추가
+            db_ids = {r.id for r in db_results}
+            for e in memory_evals:
+                if e["id"] not in db_ids:
+                    db_results.append(
+                        TaskEvaluationResponse(
+                            id=e["id"],
+                            session_id=e["session_id"],
+                            task_id=e["task_id"],
+                            rating=e["rating"],
+                            result_accuracy=e["result_accuracy"],
+                            speed_satisfaction=e["speed_satisfaction"],
+                            comment=e.get("comment"),
+                            agent_id=e.get("agent_id"),
+                            created_at=e["created_at"],
+                        )
+                    )
+            db_results.sort(key=lambda r: r.created_at, reverse=True)
+            return db_results[:limit]
+        else:
+            evaluations = list(self._task_evaluations.values())
+            if agent_id:
+                evaluations = [e for e in evaluations if e.get("agent_id") == agent_id]
+            evaluations.sort(key=lambda e: e["created_at"], reverse=True)
+            evaluations = evaluations[offset : offset + limit]
+            return [
+                TaskEvaluationResponse(
+                    id=e["id"],
+                    session_id=e["session_id"],
+                    task_id=e["task_id"],
+                    rating=e["rating"],
+                    result_accuracy=e["result_accuracy"],
+                    speed_satisfaction=e["speed_satisfaction"],
+                    comment=e.get("comment"),
+                    agent_id=e.get("agent_id"),
+                    created_at=e["created_at"],
+                )
+                for e in evaluations
+            ]
 
     async def get_task_evaluation_stats(self) -> TaskEvaluationStats:
-        """태스크 종합 평가 통계"""
+        """태스크 종합 평가 통계 (DB + in-memory 병합)"""
         from models.feedback import AgentEvalStats
 
+        if self.use_database:
+            db_stats = await self._get_task_evaluation_stats_from_db()
+            # In-memory fallback 병합
+            if self._task_evaluations:
+                mem_evals = list(self._task_evaluations.values())
+                mem_total = len(mem_evals)
+                if mem_total > 0:
+                    combined_total = db_stats.total_count + mem_total
+                    combined_avg = (
+                        (
+                            (
+                                db_stats.avg_rating * db_stats.total_count
+                                + sum(e["rating"] for e in mem_evals)
+                            )
+                            / combined_total
+                        )
+                        if combined_total > 0
+                        else 0
+                    )
+                    combined_accuracy = (
+                        (
+                            (
+                                db_stats.accuracy_rate * db_stats.total_count
+                                + sum(1 for e in mem_evals if e["result_accuracy"])
+                            )
+                            / combined_total
+                        )
+                        if combined_total > 0
+                        else 0
+                    )
+                    combined_speed = (
+                        (
+                            (
+                                db_stats.speed_satisfaction_rate * db_stats.total_count
+                                + sum(1 for e in mem_evals if e["speed_satisfaction"])
+                            )
+                            / combined_total
+                        )
+                        if combined_total > 0
+                        else 0
+                    )
+                    db_stats.total_count = combined_total
+                    db_stats.avg_rating = round(combined_avg, 2)
+                    db_stats.accuracy_rate = round(combined_accuracy, 4)
+                    db_stats.speed_satisfaction_rate = round(combined_speed, 4)
+            return db_stats
+
+        # Pure in-memory
         evaluations = list(self._task_evaluations.values())
         total = len(evaluations)
 
@@ -362,7 +536,6 @@ class FeedbackService:
         accuracy_rate = sum(1 for e in evaluations if e["result_accuracy"]) / total
         speed_rate = sum(1 for e in evaluations if e["speed_satisfaction"]) / total
 
-        # 에이전트별 집계
         agent_map: dict[str, list[dict]] = {}
         for e in evaluations:
             aid = e.get("agent_id")
@@ -530,6 +703,8 @@ class FeedbackService:
             original_output=data["original_output"],
             corrected_output=data.get("corrected_output"),
             agent_id=data.get("agent_id"),
+            project_name=data.get("project_name"),
+            effort_level=data.get("effort_level"),
             status=FeedbackStatus(data["status"]),
             created_at=data["created_at"],
             processed_at=data.get("processed_at"),
@@ -704,6 +879,8 @@ class FeedbackService:
                 corrected_output=data.get("corrected_output"),
                 context_json=data.get("context_json", {}),
                 agent_id=data.get("agent_id"),
+                project_name=data.get("project_name"),
+                effort_level=data.get("effort_level"),
                 status=data["status"],
                 created_at=data["created_at"],
             )
@@ -735,6 +912,8 @@ class FeedbackService:
                 original_output=model.original_output,
                 corrected_output=model.corrected_output,
                 agent_id=model.agent_id,
+                project_name=model.project_name,
+                effort_level=model.effort_level,
                 status=FeedbackStatus(model.status),
                 created_at=model.created_at,
                 processed_at=model.processed_at,
@@ -784,6 +963,8 @@ class FeedbackService:
                     original_output=m.original_output,
                     corrected_output=m.corrected_output,
                     agent_id=m.agent_id,
+                    project_name=m.project_name,
+                    effort_level=m.effort_level,
                     status=FeedbackStatus(m.status),
                     created_at=m.created_at,
                     processed_at=m.processed_at,
@@ -941,6 +1122,161 @@ class FeedbackService:
                 )
 
             return entries
+
+    async def _save_task_evaluation_to_db(self, data: dict[str, Any]) -> None:
+        """태스크 평가를 DB에 저장 (UPSERT)"""
+        from sqlalchemy.dialects.postgresql import insert
+
+        from db.database import async_session_factory
+        from db.models import TaskEvaluationModel
+
+        async with async_session_factory() as db:
+            stmt = insert(TaskEvaluationModel).values(
+                id=data["id"],
+                session_id=data["session_id"],
+                task_id=data["task_id"],
+                rating=data["rating"],
+                result_accuracy=data["result_accuracy"],
+                speed_satisfaction=data["speed_satisfaction"],
+                comment=data.get("comment"),
+                agent_id=data.get("agent_id"),
+                context_summary=data.get("context_summary"),
+                project_name=data.get("project_name"),
+                effort_level=data.get("effort_level"),
+                created_at=data["created_at"],
+            )
+            stmt = stmt.on_conflict_do_update(
+                constraint="uq_task_eval_session_task",
+                set_={
+                    "rating": stmt.excluded.rating,
+                    "result_accuracy": stmt.excluded.result_accuracy,
+                    "speed_satisfaction": stmt.excluded.speed_satisfaction,
+                    "comment": stmt.excluded.comment,
+                    "agent_id": stmt.excluded.agent_id,
+                    "context_summary": stmt.excluded.context_summary,
+                    "project_name": stmt.excluded.project_name,
+                    "effort_level": stmt.excluded.effort_level,
+                },
+            )
+            await db.execute(stmt)
+            await db.commit()
+
+    async def _get_task_evaluation_from_db(
+        self, session_id: str, task_id: str
+    ) -> dict[str, Any] | None:
+        """DB에서 태스크 평가 조회"""
+        from sqlalchemy import select
+
+        from db.database import async_session_factory
+        from db.models import TaskEvaluationModel
+
+        async with async_session_factory() as db:
+            result = await db.execute(
+                select(TaskEvaluationModel).where(
+                    TaskEvaluationModel.session_id == session_id,
+                    TaskEvaluationModel.task_id == task_id,
+                )
+            )
+            model = result.scalar_one_or_none()
+            if not model:
+                return None
+
+            return {
+                "id": model.id,
+                "session_id": model.session_id,
+                "task_id": model.task_id,
+                "rating": model.rating,
+                "result_accuracy": model.result_accuracy,
+                "speed_satisfaction": model.speed_satisfaction,
+                "comment": model.comment,
+                "agent_id": model.agent_id,
+                "context_summary": model.context_summary,
+                "project_name": model.project_name,
+                "effort_level": model.effort_level,
+                "created_at": model.created_at,
+            }
+
+    async def _list_task_evaluations_from_db(
+        self, agent_id: str | None, limit: int, offset: int
+    ) -> list[TaskEvaluationResponse]:
+        """DB에서 태스크 평가 목록 조회"""
+        from sqlalchemy import desc, select
+
+        from db.database import async_session_factory
+        from db.models import TaskEvaluationModel
+
+        async with async_session_factory() as db:
+            query = select(TaskEvaluationModel)
+            if agent_id:
+                query = query.where(TaskEvaluationModel.agent_id == agent_id)
+            query = query.order_by(desc(TaskEvaluationModel.created_at))
+            query = query.offset(offset).limit(limit)
+
+            result = await db.execute(query)
+            models = result.scalars().all()
+
+            return [
+                TaskEvaluationResponse(
+                    id=m.id,
+                    session_id=m.session_id,
+                    task_id=m.task_id,
+                    rating=m.rating,
+                    result_accuracy=m.result_accuracy,
+                    speed_satisfaction=m.speed_satisfaction,
+                    comment=m.comment,
+                    agent_id=m.agent_id,
+                    created_at=m.created_at,
+                )
+                for m in models
+            ]
+
+    async def _get_task_evaluation_stats_from_db(self) -> TaskEvaluationStats:
+        """DB에서 태스크 평가 통계 조회"""
+        from sqlalchemy import select
+
+        from db.database import async_session_factory
+        from db.models import TaskEvaluationModel
+        from models.feedback import AgentEvalStats
+
+        async with async_session_factory() as db:
+            result = await db.execute(select(TaskEvaluationModel))
+            models = result.scalars().all()
+            total = len(models)
+
+            if total == 0:
+                return TaskEvaluationStats()
+
+            avg_rating = sum(m.rating for m in models) / total
+            accuracy_rate = sum(1 for m in models if m.result_accuracy) / total
+            speed_rate = sum(1 for m in models if m.speed_satisfaction) / total
+
+            agent_map: dict[str, list] = {}
+            for m in models:
+                if m.agent_id:
+                    agent_map.setdefault(m.agent_id, []).append(m)
+
+            by_agent = []
+            for aid, evals in agent_map.items():
+                cnt = len(evals)
+                by_agent.append(
+                    AgentEvalStats(
+                        agent_id=aid,
+                        avg_rating=round(sum(m.rating for m in evals) / cnt, 2),
+                        accuracy_rate=round(sum(1 for m in evals if m.result_accuracy) / cnt, 4),
+                        speed_satisfaction_rate=round(
+                            sum(1 for m in evals if m.speed_satisfaction) / cnt, 4
+                        ),
+                        total_count=cnt,
+                    )
+                )
+
+            return TaskEvaluationStats(
+                avg_rating=round(avg_rating, 2),
+                accuracy_rate=round(accuracy_rate, 4),
+                speed_satisfaction_rate=round(speed_rate, 4),
+                total_count=total,
+                by_agent=by_agent,
+            )
 
     async def _get_dataset_stats_from_db(self) -> DatasetStats:
         """DB에서 데이터셋 통계 조회"""

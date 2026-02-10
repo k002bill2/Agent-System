@@ -7,8 +7,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import async_session_factory
-from db.models import UserModel
+from db.models import OrganizationMemberModel, UserModel
 from db.repository import ApprovalRepository, MessageRepository, SessionRepository, TaskRepository
+from models.organization import MemberRole
 from orchestrator import OrchestrationEngine
 from services.auth_service import AuthService
 
@@ -167,11 +168,158 @@ async def get_current_admin_user(
 
     Use this for admin-only endpoints.
     """
-    # Support both legacy is_admin flag and new role system
-    is_admin = current_user.is_admin or getattr(current_user, "role", "user") == "admin"
+    # role 필드 우선, is_admin은 레거시 폴백
+    is_admin = current_user.role == "admin" or current_user.is_admin
     if not is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin privileges required",
         )
     return current_user
+
+
+# ─────────────────────────────────────────────────────────────
+# Organization Role Dependencies
+# ─────────────────────────────────────────────────────────────
+
+# Role hierarchy for comparison
+_ORG_ROLE_HIERARCHY: dict[str, int] = {
+    MemberRole.VIEWER.value: 0,
+    MemberRole.MEMBER.value: 1,
+    MemberRole.ADMIN.value: 2,
+    MemberRole.OWNER.value: 3,
+}
+
+
+async def _get_org_membership(
+    org_id: str,
+    user: UserModel,
+    db: AsyncSession,
+) -> "OrganizationMemberModel | None":
+    """Get user's membership in a specific organization."""
+    from sqlalchemy import and_, select
+
+    from db.models import OrganizationMemberModel
+
+    result = await db.execute(
+        select(OrganizationMemberModel).where(
+            and_(
+                OrganizationMemberModel.organization_id == org_id,
+                OrganizationMemberModel.user_id == user.id,
+                OrganizationMemberModel.is_active == True,  # noqa: E712
+            )
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def require_org_member(
+    org_id: str,
+    current_user: UserModel,
+    db: AsyncSession,
+) -> "OrganizationMemberModel":
+    """Verify user is a member of the organization (any role)."""
+    # System admins bypass org membership check
+    if current_user.role == "admin" or current_user.is_admin:
+        # Return a synthetic membership for admin access
+        from db.models import OrganizationMemberModel
+
+        membership = await _get_org_membership(org_id, current_user, db)
+        if membership:
+            return membership
+        # Admin can still access even without membership
+        synthetic = OrganizationMemberModel(
+            id="system-admin",
+            organization_id=org_id,
+            user_id=current_user.id,
+            email=current_user.email or "",
+            role=MemberRole.OWNER.value,
+            is_active=True,
+        )
+        return synthetic
+
+    membership = await _get_org_membership(org_id, current_user, db)
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not a member of this organization",
+        )
+    return membership
+
+
+async def require_org_role(
+    org_id: str,
+    current_user: UserModel,
+    db: AsyncSession,
+    min_role: MemberRole = MemberRole.MEMBER,
+) -> "OrganizationMemberModel":
+    """Verify user has at least the specified role in the organization."""
+    membership = await require_org_member(org_id, current_user, db)
+
+    user_level = _ORG_ROLE_HIERARCHY.get(membership.role, 0)
+    required_level = _ORG_ROLE_HIERARCHY.get(min_role.value, 0)
+
+    if user_level < required_level:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Requires at least '{min_role.value}' role in this organization",
+        )
+    return membership
+
+
+# ─────────────────────────────────────────────────────────────
+# Project Role Dependencies (RBAC)
+# ─────────────────────────────────────────────────────────────
+
+_PROJECT_ROLE_HIERARCHY: dict[str, int] = {
+    "viewer": 0,
+    "editor": 1,
+    "owner": 2,
+}
+
+
+async def require_project_role(
+    project_id: str,
+    current_user: UserModel,
+    db: AsyncSession,
+    min_role: str = "viewer",
+) -> str:
+    """Verify user has at least the specified role in a project.
+
+    Returns the user's role string.
+
+    Rules:
+    - System admins (role=="admin" or is_admin==True) bypass all checks.
+    - Projects with no access control records are open to all authenticated users.
+    - Otherwise, the user must have at least `min_role` level.
+    """
+    from services.project_access_service import ProjectAccessService
+
+    # System admin bypass
+    if current_user.role == "admin" or current_user.is_admin:
+        return "owner"
+
+    # Check if the project has any access control
+    has_acl = await ProjectAccessService.has_any_access_control(db, project_id)
+    if not has_acl:
+        # No access control → open to all authenticated users
+        return "editor"
+
+    # Check user's role
+    user_role = await ProjectAccessService.check_access(db, project_id, current_user.id)
+    if user_role is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No access to this project",
+        )
+
+    user_level = _PROJECT_ROLE_HIERARCHY.get(user_role, 0)
+    required_level = _PROJECT_ROLE_HIERARCHY.get(min_role, 0)
+
+    if user_level < required_level:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Requires at least '{min_role}' role in this project",
+        )
+
+    return user_role

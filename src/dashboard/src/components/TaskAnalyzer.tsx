@@ -5,10 +5,12 @@
  * 2-Column Layout: 좌측(입력+결과), 우측(히스토리)
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { cn } from '../lib/utils'
 import { useAgentsStore, TaskAnalysisHistory } from '../stores/agents'
 import { Project, useOrchestrationStore } from '../stores/orchestration'
+import { useNavigationStore } from '../stores/navigation'
+import { TaskEvaluationCard } from './feedback/TaskEvaluationCard'
 import {
   Sparkles,
   Loader2,
@@ -26,6 +28,7 @@ import {
   XCircle,
   ChevronDown,
   FolderOpen,
+  Terminal,
 } from 'lucide-react'
 
 // 노력 수준 색상
@@ -49,7 +52,12 @@ interface TaskAnalyzerProps {
 
 // Relative time formatting
 function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString)
+  // Backend stores UTC via datetime.utcnow() but without 'Z' suffix.
+  // Without 'Z', JS Date() parses as local time. Append 'Z' to fix.
+  const normalized = dateString.includes('Z') || dateString.includes('+')
+    ? dateString
+    : dateString + 'Z'
+  const date = new Date(normalized)
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
   const diffSec = Math.floor(diffMs / 1000)
@@ -81,10 +89,17 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
     deleteAnalysis,
     selectHistoryItem,
     selectedHistoryId,
+    // Execution
+    executingAnalysisId,
+    executionError,
+    executeWithWarp,
+    clearExecution,
   } = useAgentsStore()
   const { projects } = useOrchestrationStore()
+  const { pendingTaskInput, setPendingTaskInput } = useNavigationStore()
   const [taskInput, setTaskInput] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const pendingProcessedRef = useRef(false)
 
   // Create a map for quick project name lookup
   const projectMap = new Map(projects.map(p => [p.id, p]))
@@ -94,8 +109,29 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
     fetchAnalysisHistory(projectFilter, true)
   }, [projectFilter, fetchAnalysisHistory])
 
+  // ChatInput에서 전달된 pendingTaskInput 처리
+  useEffect(() => {
+    if (pendingTaskInput && !pendingProcessedRef.current) {
+      pendingProcessedRef.current = true
+      setTaskInput(pendingTaskInput)
+      setPendingTaskInput(null)
+      // 프로젝트 컨텍스트와 함께 자동 분석 시작
+      const context = selectedProject
+        ? { project_id: projectFilter, project_name: selectedProject.name, project_path: selectedProject.path }
+        : undefined
+      // Clear history selection
+      if (selectedHistoryId) {
+        selectHistoryItem(null)
+      }
+      analyzeTask(pendingTaskInput.trim(), context)
+    }
+    if (!pendingTaskInput) {
+      pendingProcessedRef.current = false
+    }
+  }, [pendingTaskInput, setPendingTaskInput, selectedProject, projectFilter, analyzeTask, selectedHistoryId, selectHistoryItem])
+
   const handleAnalyze = async () => {
-    if (!taskInput.trim()) return
+    if (!taskInput.trim() || isLoading) return
     // Clear history selection when running new analysis
     if (selectedHistoryId) {
       selectHistoryItem(null)
@@ -106,7 +142,7 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.repeat) {
       e.preventDefault()
       handleAnalyze()
     }
@@ -126,6 +162,13 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
     } else {
       selectHistoryItem(item)
     }
+  }
+
+  const handleExecute = async () => {
+    const analysisId = lastAnalysis?.analysis_id
+    if (!analysisId || executingAnalysisId) return
+
+    await executeWithWarp(analysisId, projectFilter)
   }
 
   return (
@@ -355,19 +398,62 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
                 )}
               </div>
 
-              {/* Execution Time */}
+              {/* Execution Time + Execute Button */}
               <div className="pt-3 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
                 <div className="flex items-center gap-1">
                   <Clock className="w-4 h-4" />
                   <span>Analysis completed in {lastAnalysis.execution_time_ms}ms</span>
                 </div>
-                {lastAnalysis.analysis.analysis.requires_decomposition && (
-                  <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
-                    <AlertCircle className="w-4 h-4" />
-                    <span>Task requires decomposition</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-3">
+                  {lastAnalysis.analysis.analysis.requires_decomposition && (
+                    <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>Task requires decomposition</span>
+                    </div>
+                  )}
+                  {/* Execute with Claude Code Button */}
+                  {lastAnalysis.analysis_id && (
+                    <button
+                      onClick={handleExecute}
+                      disabled={!!executingAnalysisId || isLoading || !projectFilter}
+                      title={!projectFilter ? '프로젝트를 먼저 선택하세요' : 'Warp 터미널에서 Claude Code 실행'}
+                      className={cn(
+                        'px-3 py-1.5 rounded-lg font-medium text-xs flex items-center gap-1.5 transition-colors',
+                        executingAnalysisId || !projectFilter
+                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
+                          : 'bg-green-500 hover:bg-green-600 text-white'
+                      )}
+                    >
+                      {executingAnalysisId ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          Opening Warp...
+                        </>
+                      ) : (
+                        <>
+                          <Terminal className="w-3.5 h-3.5" />
+                          Execute with Claude Code
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {/* Execution Error */}
+              {executionError && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{executionError}</span>
+                  <button
+                    onClick={clearExecution}
+                    className="ml-auto text-xs hover:underline"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
+
             </div>
           )}
 
@@ -382,7 +468,7 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
       </div>
 
       {/* Right Column: Analysis History */}
-      <div className="w-full lg:w-80 xl:w-96 flex-shrink-0">
+      <div className="w-full lg:w-72 xl:w-80 flex-shrink-0">
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 h-full flex flex-col">
           {/* History Header */}
           <div className="p-4 border-b border-gray-200 dark:border-gray-700">
@@ -530,6 +616,19 @@ function HistoryItem({ item, projectName, onDelete, onSelect, isDeleting, isSele
             <p className="mt-1 text-xs text-red-500 dark:text-red-400 truncate" title={item.error}>
               {item.error}
             </p>
+          )}
+
+          {/* Evaluation - 선택된 성공 항목에만 표시 */}
+          {isSelected && item.success && (
+            <div className="mt-2 pt-1.5 border-t border-gray-200 dark:border-gray-700" onClick={(e) => e.stopPropagation()}>
+              <TaskEvaluationCard
+                sessionId="task-analyzer"
+                taskId={item.id}
+                contextSummary={item.task_input}
+                effortLevel={item.effort_level || undefined}
+                projectName={projectName}
+              />
+            </div>
           )}
         </div>
 

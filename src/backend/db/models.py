@@ -18,6 +18,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from db.database import Base
+from db.types import EncryptedString
 
 
 class SessionModel(Base):
@@ -203,6 +204,8 @@ class FeedbackModel(Base):
 
     # Metadata
     agent_id = Column(String(100), nullable=True, index=True)
+    project_name = Column(String(255), nullable=True)
+    effort_level = Column(String(20), nullable=True)
     status = Column(String(20), default="pending", index=True)  # pending, processed, skipped, error
 
     # Timestamps
@@ -450,7 +453,7 @@ class SAMLConfigModel(Base):
     idp_entity_id = Column(String(500), nullable=False)
     idp_sso_url = Column(String(500), nullable=False)
     idp_slo_url = Column(String(500), nullable=True)
-    idp_certificate = Column(Text, nullable=False)
+    idp_certificate = Column(EncryptedString(length=None), nullable=False)
 
     # SP settings (overrides)
     sp_entity_id = Column(String(500), nullable=True)
@@ -634,17 +637,17 @@ class ChannelConfigModel(Base):
     channel = Column(String(20), nullable=False, unique=True)  # slack, discord, email, webhook
     enabled = Column(Boolean, default=True)
 
-    # Channel-specific settings (encrypted in production)
-    webhook_url = Column(String(500), nullable=True)
-    api_key = Column(String(500), nullable=True)
-    bot_token = Column(String(500), nullable=True)
+    # Channel-specific settings (encrypted at rest via EncryptedString)
+    webhook_url = Column(EncryptedString(500), nullable=True)
+    api_key = Column(EncryptedString(500), nullable=True)
+    bot_token = Column(EncryptedString(500), nullable=True)
     email_address = Column(String(255), nullable=True)
 
     # SMTP settings for email
     smtp_host = Column(String(255), nullable=True)
     smtp_port = Column(Integer, default=587)
     smtp_username = Column(String(255), nullable=True)
-    smtp_password = Column(String(500), nullable=True)  # App password (encrypted in production)
+    smtp_password = Column(EncryptedString(500), nullable=True)  # App password (encrypted at rest)
     smtp_use_tls = Column(Boolean, default=True)
 
     # Rate limiting
@@ -738,5 +741,144 @@ class MenuVisibilityModel(Base):
     menu_key = Column(String(50), nullable=False)  # ViewType 값 (dashboard, tasks, ...)
     role = Column(String(20), nullable=False)  # user, manager, admin
     visible = Column(Boolean, default=True)
+    sort_order = Column(Integer, nullable=True)  # 메뉴 순서 (낮을수록 먼저 표시)
 
     __table_args__ = (UniqueConstraint("menu_key", "role", name="uq_menu_role"),)
+
+
+# ─────────────────────────────────────────────────────────────
+# Git Collaboration Models
+# ─────────────────────────────────────────────────────────────
+
+
+class MergeRequestModel(Base):
+    """Merge request model for persistent MR storage."""
+
+    __tablename__ = "merge_requests"
+
+    id = Column(String(36), primary_key=True)
+    project_id = Column(String(100), nullable=False, index=True)
+    title = Column(String(500), nullable=False)
+    description = Column(Text, nullable=True)
+    source_branch = Column(String(200), nullable=False)
+    target_branch = Column(String(200), nullable=False)
+    status = Column(String(20), default="open")  # draft/open/merged/closed
+    conflict_status = Column(String(20), default="unknown")
+    auto_merge = Column(Boolean, default=False)
+
+    # Author info
+    author_id = Column(String(100), nullable=True)
+    author_name = Column(String(200), nullable=True)
+    author_email = Column(String(300), nullable=True)
+
+    # Review
+    reviewers = Column(JSONB, default=list)
+    approved_by = Column(JSONB, default=list)
+
+    # Merge/Close info
+    merged_by = Column(String(100), nullable=True)
+    closed_by = Column(String(100), nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    merged_at = Column(DateTime, nullable=True)
+    closed_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("ix_merge_requests_project_status", "project_id", "status"),
+        Index("ix_merge_requests_created", "created_at"),
+    )
+
+
+class BranchProtectionRuleModel(Base):
+    """Branch protection rule model for dynamic branch protection."""
+
+    __tablename__ = "branch_protection_rules"
+
+    id = Column(String(36), primary_key=True)
+    project_id = Column(String(100), nullable=False, index=True)
+    branch_pattern = Column(String(200), nullable=False)  # "main", "release/*"
+    require_approvals = Column(Integer, default=0)
+    require_no_conflicts = Column(Boolean, default=True)
+    allowed_merge_roles = Column(JSONB, default=lambda: ["owner", "admin"])
+    allow_force_push = Column(Boolean, default=False)
+    allow_deletion = Column(Boolean, default=False)
+    auto_deploy = Column(Boolean, default=False)
+    deploy_workflow = Column(String(200), nullable=True)  # e.g. "deploy-staging.yml"
+    enabled = Column(Boolean, default=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_branch_protection_project", "project_id"),
+        Index("ix_branch_protection_enabled", "project_id", "enabled"),
+    )
+
+
+# ─────────────────────────────────────────────────────────────
+# Project Access Control (RBAC) Models
+# ─────────────────────────────────────────────────────────────
+
+
+class ProjectAccessModel(Base):
+    """Project-level access control model for RBAC."""
+
+    __tablename__ = "project_access"
+
+    id = Column(String(36), primary_key=True)
+    project_id = Column(String(36), nullable=False, index=True)
+    user_id = Column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role = Column(String(20), nullable=False)  # owner, editor, viewer
+    granted_by = Column(String(36), nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "user_id", name="uq_project_user"),
+        Index("ix_project_access_project_user", "project_id", "user_id"),
+    )
+
+    # Relationships
+    user = relationship("UserModel")
+
+
+class TaskEvaluationModel(Base):
+    """Task evaluation model for storing task-level RLHF evaluations."""
+
+    __tablename__ = "task_evaluations"
+
+    id = Column(String(36), primary_key=True)
+    session_id = Column(
+        String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    task_id = Column(
+        String(36), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    # Evaluation details
+    rating = Column(Integer, nullable=False)  # 1-5
+    result_accuracy = Column(Boolean, nullable=False, default=True)
+    speed_satisfaction = Column(Boolean, nullable=False, default=True)
+    comment = Column(Text, nullable=True)
+
+    # Metadata
+    agent_id = Column(String(100), nullable=True, index=True)
+    context_summary = Column(Text, nullable=True)
+    project_name = Column(String(255), nullable=True)
+    effort_level = Column(String(20), nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        UniqueConstraint("session_id", "task_id", name="uq_task_eval_session_task"),
+        Index("ix_task_eval_agent_created", "agent_id", "created_at"),
+        Index("ix_task_eval_rating", "rating"),
+    )

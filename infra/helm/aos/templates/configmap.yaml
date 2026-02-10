@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "aos.fullname" . }}-config
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "aos.labels" . | nindent 4 }}
+data:
+  LLM_PROVIDER: {{ .Values.backend.config.LLM_PROVIDER | quote }}
+  FRONTEND_URL: "http://{{ include "aos.fullname" . }}-dashboard"
+  USE_DATABASE: {{ .Values.backend.config.USE_DATABASE | quote }}
+  HOST: {{ .Values.backend.config.HOST | quote }}
+  PORT: {{ .Values.backend.config.PORT | quote }}
+  LOG_LEVEL: {{ .Values.backend.config.LOG_LEVEL | quote }}
+  REDIS_URL: "redis://{{ include "aos.fullname" . }}-redis:6379"

@@ -6,10 +6,12 @@ import { CostMonitor } from '../components/CostMonitor'
 import { ClaudeUsageDashboard } from '../components/usage/ClaudeUsageDashboard'
 import { ConfigStatsCard, ConfigChartCard } from '../components/ProjectConfigStats'
 import { ProcessMonitorWidget } from '../components/ProcessMonitorWidget'
+import { useNavigationStore } from '../stores/navigation'
 
 export function DashboardPage() {
   const { tasks, agents } = useOrchestrationStore()
-  const { sessions, fetchSessions, isLoading: isLoadingSessions } = useClaudeSessionsStore()
+  const { sessions, fetchSessions, isLoading: isLoadingSessions, selectSession } = useClaudeSessionsStore()
+  const { setView } = useNavigationStore()
 
   // Fetch Claude Code sessions on mount
   useEffect(() => {
@@ -161,7 +163,11 @@ export function DashboardPage() {
               {recentSessions.map((session) => (
                 <div
                   key={session.session_id}
-                  className="p-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  className="p-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                  onClick={() => {
+                    selectSession(session.session_id)
+                    setView('claude-sessions')
+                  }}
                 >
                   <div className="flex items-center gap-2 mb-1">
                     {/* Status indicator */}
