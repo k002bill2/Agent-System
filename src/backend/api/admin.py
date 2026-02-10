@@ -22,9 +22,20 @@ VALID_ROLES = ("user", "manager", "admin")
 
 # 기본 메뉴 순서 (Sidebar 기본 배열 순서)
 DEFAULT_MENU_ORDER: list[str] = [
-    "dashboard", "projects", "tasks", "agents", "activity",
-    "monitor", "claude-sessions", "project-configs", "git",
-    "organizations", "audit", "notifications", "analytics", "playground",
+    "dashboard",
+    "projects",
+    "tasks",
+    "agents",
+    "activity",
+    "monitor",
+    "claude-sessions",
+    "project-configs",
+    "git",
+    "organizations",
+    "audit",
+    "notifications",
+    "analytics",
+    "playground",
 ]
 
 # 기본 메뉴 가시성 설정
@@ -93,12 +104,14 @@ class SystemInfo(BaseModel):
 
 class MenuVisibilityResponse(BaseModel):
     """메뉴 가시성 설정 응답: { menuKey: { user: bool, manager: bool, admin: bool } }"""
+
     visibility: dict[str, dict[str, bool]]
     menu_order: list[str] = []
 
 
 class MenuVisibilityUpdateRequest(BaseModel):
     """메뉴 가시성 일괄 업데이트 요청"""
+
     visibility: dict[str, dict[str, bool]]
     menu_order: list[str] | None = None
 
@@ -120,8 +133,9 @@ async def list_users(
 ) -> UserListResponse:
     """사용자 목록 조회 (관리자 전용)"""
     try:
-        from db.database import async_session_factory
         from sqlalchemy import func, select
+
+        from db.database import async_session_factory
 
         async with async_session_factory() as session:
             query = select(UserModel)
@@ -135,8 +149,7 @@ async def list_users(
             if search:
                 search_pattern = f"%{search}%"
                 query = query.where(
-                    (UserModel.email.ilike(search_pattern))
-                    | (UserModel.name.ilike(search_pattern))
+                    (UserModel.email.ilike(search_pattern)) | (UserModel.name.ilike(search_pattern))
                 )
 
             # Count total
@@ -203,13 +216,12 @@ async def update_user(
         )
 
     try:
-        from db.database import async_session_factory
         from sqlalchemy import select
 
+        from db.database import async_session_factory
+
         async with async_session_factory() as session:
-            result = await session.execute(
-                select(UserModel).where(UserModel.id == user_id)
-            )
+            result = await session.execute(select(UserModel).where(UserModel.id == user_id))
             user = result.scalar_one_or_none()
 
             if not user:
@@ -258,8 +270,9 @@ async def get_menu_visibility(
 ) -> MenuVisibilityResponse:
     """메뉴 가시성 설정 조회 (인증 사용자)"""
     try:
-        from db.database import async_session_factory
         from sqlalchemy import select
+
+        from db.database import async_session_factory
 
         async with async_session_factory() as session:
             result = await session.execute(select(MenuVisibilityModel))
@@ -319,8 +332,9 @@ async def update_menu_visibility(
 ) -> MenuVisibilityResponse:
     """메뉴 가시성 일괄 업데이트 (관리자 전용)"""
     try:
-        from db.database import async_session_factory
         from sqlalchemy import select
+
+        from db.database import async_session_factory
 
         async with async_session_factory() as session:
             # menu_order를 sort_order로 변환
@@ -411,13 +425,12 @@ async def get_system_info(
 ) -> SystemInfo:
     """시스템 정보 조회 (관리자 전용)"""
     try:
-        from db.database import async_session_factory
         from sqlalchemy import func, select
 
+        from db.database import async_session_factory
+
         async with async_session_factory() as session:
-            total = (
-                await session.execute(select(func.count(UserModel.id)))
-            ).scalar() or 0
+            total = (await session.execute(select(func.count(UserModel.id)))).scalar() or 0
             active = (
                 await session.execute(
                     select(func.count(UserModel.id)).where(
@@ -435,6 +448,7 @@ async def get_system_info(
 
             # Sync: is_admin=True but role!='admin' → fix role
             from sqlalchemy import update
+
             await session.execute(
                 update(UserModel)
                 .where(UserModel.is_admin == True, UserModel.role != "admin")  # noqa: E712

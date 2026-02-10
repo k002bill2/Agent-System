@@ -551,8 +551,6 @@ async def execute_analysis(request: ExecuteAnalysisRequest):
     project = None
     project_id = request.project_id or entry.project_id
     if project_id:
-        from models.project import Project
-
         # 프로젝트 DB 조회 시도, 없으면 최소한의 정보로 생성
         try:
             from services.project_service import get_project_service
@@ -598,8 +596,12 @@ async def check_claude_auth_status():
     tmux = get_tmux_service()
 
     if not tmux.is_available():
-        return {"authenticated": False, "has_credits": False, "error": "tmux_not_installed",
-                "message": "tmux가 설치되어 있지 않습니다."}
+        return {
+            "authenticated": False,
+            "has_credits": False,
+            "error": "tmux_not_installed",
+            "message": "tmux가 설치되어 있지 않습니다.",
+        }
 
     auth_status = await tmux.check_claude_auth()
     return auth_status.model_dump()
@@ -647,6 +649,7 @@ async def execute_with_tmux(request: ExecuteWithTmuxRequest):
     if project_id:
         try:
             from services.project_service import get_project_service
+
             project_service = get_project_service()
             project = await project_service.get_project(project_id)
             if project and project.path:
@@ -736,7 +739,7 @@ async def stream_tmux_session(session_name: str):
         while True:
             current_info = tmux.get_session(session_name)
             if not current_info:
-                yield f"data: {{'event': 'session_ended', 'active': false}}\n\n"
+                yield "data: {'event': 'session_ended', 'active': false}\n\n"
                 break
 
             captured = tmux.capture_output(session_name)
@@ -745,11 +748,14 @@ async def stream_tmux_session(session_name: str):
             # 새로운 출력이 있으면 전송
             if output != last_output:
                 import json
-                data = json.dumps({
-                    "event": "output",
-                    "output": output,
-                    "active": current_info.active,
-                })
+
+                data = json.dumps(
+                    {
+                        "event": "output",
+                        "output": output,
+                        "active": current_info.active,
+                    }
+                )
                 yield f"data: {data}\n\n"
                 last_output = output
                 inactive_count = 0
@@ -759,17 +765,20 @@ async def stream_tmux_session(session_name: str):
             # 세션이 종료되면 마지막 상태 전송 후 종료
             if not current_info.active:
                 import json
-                data = json.dumps({
-                    "event": "session_ended",
-                    "output": output,
-                    "active": False,
-                })
+
+                data = json.dumps(
+                    {
+                        "event": "session_ended",
+                        "output": output,
+                        "active": False,
+                    }
+                )
                 yield f"data: {data}\n\n"
                 break
 
             # 5분 동안 변화 없으면 종료 (150 * 2초)
             if inactive_count > 150:
-                yield f"data: {{'event': 'timeout'}}\n\n"
+                yield "data: {'event': 'timeout'}\n\n"
                 break
 
             await asyncio.sleep(2)

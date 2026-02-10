@@ -528,9 +528,7 @@ class MergeRequestRepository:
         offset: int = 0,
     ) -> list[MergeRequestModel]:
         """List merge requests for a project."""
-        query = select(MergeRequestModel).where(
-            MergeRequestModel.project_id == project_id
-        )
+        query = select(MergeRequestModel).where(MergeRequestModel.project_id == project_id)
         if status:
             query = query.where(MergeRequestModel.status == status)
         query = query.order_by(MergeRequestModel.created_at.desc()).limit(limit).offset(offset)
@@ -541,9 +539,7 @@ class MergeRequestRepository:
         """Update merge request fields."""
         kwargs["updated_at"] = datetime.utcnow()
         result = await self.db.execute(
-            update(MergeRequestModel)
-            .where(MergeRequestModel.id == mr_id)
-            .values(**kwargs)
+            update(MergeRequestModel).where(MergeRequestModel.id == mr_id).values(**kwargs)
         )
         return result.rowcount > 0
 

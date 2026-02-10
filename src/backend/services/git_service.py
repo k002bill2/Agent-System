@@ -395,7 +395,11 @@ class GitService:
         try:
             commit = self.repo.commit(sha)
             parent = commit.parents[0] if commit.parents else None
-            diff = parent.diff(commit, create_patch=True) if parent else commit.diff(None, create_patch=True)
+            diff = (
+                parent.diff(commit, create_patch=True)
+                if parent
+                else commit.diff(None, create_patch=True)
+            )
 
             result_lines: list[str] = []
             for d in diff:
@@ -720,7 +724,9 @@ class GitService:
                         name=remote.name,
                         url=urls[0] if urls else "",
                         fetch_url=urls[0] if urls else None,
-                        push_url=remote.url if hasattr(remote, "url") else (urls[0] if urls else None),
+                        push_url=remote.url
+                        if hasattr(remote, "url")
+                        else (urls[0] if urls else None),
                     )
                 )
             return remotes
@@ -789,17 +795,11 @@ class GitService:
 
         try:
             if name not in [r.name for r in self.repo.remotes]:
-                return RemoteOperationResult(
-                    success=False, message=f"Remote '{name}' not found"
-                )
+                return RemoteOperationResult(success=False, message=f"Remote '{name}' not found")
             self.repo.delete_remote(name)
-            return RemoteOperationResult(
-                success=True, message=f"Remote '{name}' removed"
-            )
+            return RemoteOperationResult(success=True, message=f"Remote '{name}' removed")
         except Exception as e:
-            return RemoteOperationResult(
-                success=False, message=f"Failed to remove remote: {e}"
-            )
+            return RemoteOperationResult(success=False, message=f"Failed to remove remote: {e}")
 
     def rename_remote(self, name: str, new_name: str):
         """Rename a remote.
@@ -815,18 +815,14 @@ class GitService:
 
         try:
             if name not in [r.name for r in self.repo.remotes]:
-                return RemoteOperationResult(
-                    success=False, message=f"Remote '{name}' not found"
-                )
+                return RemoteOperationResult(success=False, message=f"Remote '{name}' not found")
             remote = self.repo.remotes[name]
             remote.rename(new_name)
             return RemoteOperationResult(
                 success=True, message=f"Remote '{name}' renamed to '{new_name}'"
             )
         except Exception as e:
-            return RemoteOperationResult(
-                success=False, message=f"Failed to rename remote: {e}"
-            )
+            return RemoteOperationResult(success=False, message=f"Failed to rename remote: {e}")
 
     def set_remote_url(self, name: str, url: str):
         """Set URL for a remote.
@@ -842,18 +838,14 @@ class GitService:
 
         try:
             if name not in [r.name for r in self.repo.remotes]:
-                return RemoteOperationResult(
-                    success=False, message=f"Remote '{name}' not found"
-                )
+                return RemoteOperationResult(success=False, message=f"Remote '{name}' not found")
             remote = self.repo.remotes[name]
             remote.set_url(url)
             return RemoteOperationResult(
                 success=True, message=f"Remote '{name}' URL updated to '{url}'"
             )
         except Exception as e:
-            return RemoteOperationResult(
-                success=False, message=f"Failed to set remote URL: {e}"
-            )
+            return RemoteOperationResult(success=False, message=f"Failed to set remote URL: {e}")
 
     # =========================================================================
     # Remote Operations

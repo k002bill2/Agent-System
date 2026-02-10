@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import and_, delete, select, func
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import ProjectAccessModel
@@ -26,7 +26,9 @@ class ProjectAccessService:
         # Check existing access
         existing = await ProjectAccessService.check_access(db, project_id, user_id)
         if existing is not None:
-            raise ValueError(f"User {user_id} already has '{existing}' access to project {project_id}")
+            raise ValueError(
+                f"User {user_id} already has '{existing}' access to project {project_id}"
+            )
 
         access = ProjectAccessModel(
             id=str(uuid.uuid4()),
@@ -121,9 +123,9 @@ class ProjectAccessService:
         If False, the project is open to all authenticated users (backward compatible).
         """
         result = await db.execute(
-            select(func.count()).select_from(ProjectAccessModel).where(
-                ProjectAccessModel.project_id == project_id
-            )
+            select(func.count())
+            .select_from(ProjectAccessModel)
+            .where(ProjectAccessModel.project_id == project_id)
         )
         count = result.scalar()
         return (count or 0) > 0
@@ -140,9 +142,7 @@ class ProjectAccessService:
         Returns a list of project IDs if they have explicit access.
         """
         result = await db.execute(
-            select(ProjectAccessModel.project_id).where(
-                ProjectAccessModel.user_id == user_id
-            )
+            select(ProjectAccessModel.project_id).where(ProjectAccessModel.user_id == user_id)
         )
         project_ids = list(result.scalars().all())
 

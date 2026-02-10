@@ -727,7 +727,9 @@ class MergeRequestService:
             author_id=model.author_id or "",
             author_name=model.author_name or "",
             author_email=model.author_email or "",
-            conflict_status=ConflictStatus(model.conflict_status) if model.conflict_status else ConflictStatus.UNKNOWN,
+            conflict_status=ConflictStatus(model.conflict_status)
+            if model.conflict_status
+            else ConflictStatus.UNKNOWN,
             auto_merge=model.auto_merge if model.auto_merge is not None else False,
             reviewers=model.reviewers or [],
             approved_by=model.approved_by or [],
@@ -742,16 +744,20 @@ class MergeRequestService:
     async def _get_repo(self):
         """Get MergeRequestRepository."""
         from db.repository import MergeRequestRepository
+
         return MergeRequestRepository(self.db_session)
 
     async def _get_protection_repo(self):
         """Get BranchProtectionRepository."""
         from db.repository import BranchProtectionRepository
+
         return BranchProtectionRepository(self.db_session)
 
     # ── List ──
 
-    async def list_merge_requests_async(self, status: MergeRequestStatus | None = None) -> list[MergeRequest]:
+    async def list_merge_requests_async(
+        self, status: MergeRequestStatus | None = None
+    ) -> list[MergeRequest]:
         if self.use_database:
             repo = await self._get_repo()
             models = await repo.list_by_project(
@@ -842,9 +848,15 @@ class MergeRequestService:
 
     # Sync wrapper for backward compatibility
     def create_merge_request(
-        self, title: str, source_branch: str, target_branch: str,
-        author_id: str, author_name: str, author_email: str,
-        description: str = "", reviewers: list[str] | None = None,
+        self,
+        title: str,
+        source_branch: str,
+        target_branch: str,
+        author_id: str,
+        author_name: str,
+        author_email: str,
+        description: str = "",
+        reviewers: list[str] | None = None,
         auto_merge: bool = False,
     ) -> MergeRequest:
         conflict_status = ConflictStatus.UNKNOWN
@@ -856,10 +868,16 @@ class MergeRequestService:
                 pass
 
         mr = MergeRequest(
-            project_id=self.project_id, title=title, description=description,
-            source_branch=source_branch, target_branch=target_branch,
-            author_id=author_id, author_name=author_name, author_email=author_email,
-            conflict_status=conflict_status, auto_merge=auto_merge,
+            project_id=self.project_id,
+            title=title,
+            description=description,
+            source_branch=source_branch,
+            target_branch=target_branch,
+            author_id=author_id,
+            author_name=author_name,
+            author_email=author_email,
+            conflict_status=conflict_status,
+            auto_merge=auto_merge,
             reviewers=reviewers or [],
         )
         _merge_requests[self.project_id][mr.id] = mr
@@ -868,9 +886,13 @@ class MergeRequestService:
     # ── Update ──
 
     async def update_merge_request_async(
-        self, mr_id: str, title: str | None = None,
-        description: str | None = None, status: MergeRequestStatus | None = None,
-        reviewers: list[str] | None = None, auto_merge: bool | None = None,
+        self,
+        mr_id: str,
+        title: str | None = None,
+        description: str | None = None,
+        status: MergeRequestStatus | None = None,
+        reviewers: list[str] | None = None,
+        auto_merge: bool | None = None,
     ) -> MergeRequest | None:
         if self.use_database:
             repo = await self._get_repo()
@@ -891,8 +913,11 @@ class MergeRequestService:
         return self.update_merge_request(mr_id, title, description, status, reviewers)
 
     def update_merge_request(
-        self, mr_id: str, title: str | None = None,
-        description: str | None = None, status: MergeRequestStatus | None = None,
+        self,
+        mr_id: str,
+        title: str | None = None,
+        description: str | None = None,
+        status: MergeRequestStatus | None = None,
         reviewers: list[str] | None = None,
     ) -> MergeRequest | None:
         mr = _merge_requests[self.project_id].get(mr_id)
@@ -966,7 +991,9 @@ class MergeRequestService:
         # Refresh conflict check
         if self.merge_service and mr.conflict_status == ConflictStatus.UNKNOWN:
             try:
-                preview = self.merge_service.check_merge_conflicts(mr.source_branch, mr.target_branch)
+                preview = self.merge_service.check_merge_conflicts(
+                    mr.source_branch, mr.target_branch
+                )
                 if preview.conflict_status == ConflictStatus.HAS_CONFLICTS:
                     if self.use_database:
                         repo = await self._get_repo()
@@ -1013,6 +1040,7 @@ class MergeRequestService:
             # Dispatch GitHub Actions workflow
             try:
                 from services.github_service import get_github_service
+
                 github_service = get_github_service()
                 if github_service:
                     github_service.dispatch_workflow(
@@ -1147,7 +1175,9 @@ class MergeRequestService:
             if not mr or not self.merge_service:
                 return mr
             try:
-                preview = self.merge_service.check_merge_conflicts(mr.source_branch, mr.target_branch)
+                preview = self.merge_service.check_merge_conflicts(
+                    mr.source_branch, mr.target_branch
+                )
                 repo = await self._get_repo()
                 await repo.update(mr_id, conflict_status=preview.conflict_status.value)
                 return await self.get_merge_request_async(mr_id)

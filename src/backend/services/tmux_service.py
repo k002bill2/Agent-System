@@ -88,14 +88,15 @@ class TmuxService:
         try:
             # login shell (-l)을 통해 실행하여 사용자 환경 상속
             proc = await asyncio.create_subprocess_exec(
-                "/bin/bash", "-l", "-c", 'claude -p "respond with only: ok"',
+                "/bin/bash",
+                "-l",
+                "-c",
+                'claude -p "respond with only: ok"',
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env={**os.environ, "HOME": str(Path.home())},
             )
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=30
-            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
 
             stdout_text = stdout.decode().strip() if stdout else ""
             stderr_text = stderr.decode().strip() if stderr else ""
@@ -117,7 +118,11 @@ class TmuxService:
                 )
 
             # 인증 안됨
-            if "not logged in" in combined or "unauthorized" in combined or "authentication" in combined:
+            if (
+                "not logged in" in combined
+                or "unauthorized" in combined
+                or "authentication" in combined
+            ):
                 return ClaudeAuthStatus(
                     authenticated=False,
                     has_credits=False,
@@ -141,7 +146,7 @@ class TmuxService:
                 message=f"Claude CLI 체크 실패: {stderr_text or stdout_text or 'exit code ' + str(proc.returncode)}",
             )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return ClaudeAuthStatus(
                 authenticated=False,
                 has_credits=False,
@@ -213,10 +218,13 @@ class TmuxService:
         try:
             result = subprocess.run(
                 [
-                    "tmux", "capture-pane",
-                    "-t", name,
-                    "-p",          # stdout으로 출력
-                    "-S", f"-{lines}",  # 시작 줄 (음수 = 스크롤백)
+                    "tmux",
+                    "capture-pane",
+                    "-t",
+                    name,
+                    "-p",  # stdout으로 출력
+                    "-S",
+                    f"-{lines}",  # 시작 줄 (음수 = 스크롤백)
                 ],
                 check=True,
                 capture_output=True,
@@ -264,7 +272,9 @@ class TmuxService:
                 capture_output=True,
                 text=True,
             )
-            live_sessions = set(result.stdout.strip().split("\n")) if result.stdout.strip() else set()
+            live_sessions = (
+                set(result.stdout.strip().split("\n")) if result.stdout.strip() else set()
+            )
         except subprocess.CalledProcessError:
             live_sessions = set()
 
@@ -333,13 +343,15 @@ class TmuxService:
                 lines.append("")
 
         # 지침 추가
-        lines.extend([
-            "## Instructions",
-            "- 위 순서대로 서브태스크를 실행하세요",
-            "- 각 서브태스크 완료 후 결과를 검증하세요",
-            "- 가능한 경우 Claude Code 에이전트와 스킬을 활용하세요",
-            "- 에러 발생 시 근본 원인을 분석하고 수정하세요",
-        ])
+        lines.extend(
+            [
+                "## Instructions",
+                "- 위 순서대로 서브태스크를 실행하세요",
+                "- 각 서브태스크 완료 후 결과를 검증하세요",
+                "- 가능한 경우 Claude Code 에이전트와 스킬을 활용하세요",
+                "- 에러 발생 시 근본 원인을 분석하고 수정하세요",
+            ]
+        )
 
         return "\n".join(lines)
 
@@ -387,6 +399,7 @@ class TmuxService:
 
         # 프롬프트를 임시 파일로 저장 (셸 이스케이프 문제 방지)
         import tempfile
+
         prompt_dir = Path(tempfile.mkdtemp(prefix="aos-"))
         prompt_file = prompt_dir / f"{session_name}.md"
         prompt_file.write_text(prompt, encoding="utf-8")
@@ -395,9 +408,7 @@ class TmuxService:
         # login shell(bash -l)로 감싸서 사용자 환경(PATH, 키체인 등) 상속
         # - print mode: 깔끔한 stdout 출력, TUI 아티팩트 없음
         # - login shell: tmux 세션에서도 인증 토큰 정상 접근
-        claude_cmd = (
-            f"bash -l -c 'cat \"{prompt_file}\" | claude -p'"
-        )
+        claude_cmd = f"bash -l -c 'cat \"{prompt_file}\" | claude -p'"
 
         if not self.send_command(session_name, claude_cmd):
             self.kill_session(session_name)

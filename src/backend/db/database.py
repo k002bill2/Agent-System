@@ -94,36 +94,41 @@ async def _run_migrations() -> None:
 
     async with engine.begin() as conn:
         # Migration 1: Add 'role' column to users table
-        result = await conn.execute(text(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'users' AND column_name = 'role'"
-        ))
+        result = await conn.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'users' AND column_name = 'role'"
+            )
+        )
         if not result.fetchone():
-            await conn.execute(text(
-                "ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'user'"
-            ))
+            await conn.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'user'"))
             # Sync existing is_admin flags
-            await conn.execute(text(
-                "UPDATE users SET role = 'admin' WHERE is_admin = true AND (role IS NULL OR role = 'user')"
-            ))
+            await conn.execute(
+                text(
+                    "UPDATE users SET role = 'admin' WHERE is_admin = true AND (role IS NULL OR role = 'user')"
+                )
+            )
 
         # Migration 2: Add 'sort_order' column to menu_visibility table
-        result = await conn.execute(text(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'menu_visibility' AND column_name = 'sort_order'"
-        ))
+        result = await conn.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'menu_visibility' AND column_name = 'sort_order'"
+            )
+        )
         if not result.fetchone():
-            await conn.execute(text(
-                "ALTER TABLE menu_visibility ADD COLUMN sort_order INTEGER"
-            ))
+            await conn.execute(text("ALTER TABLE menu_visibility ADD COLUMN sort_order INTEGER"))
 
         # Migration 3: Create merge_requests table
-        result = await conn.execute(text(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_name = 'merge_requests'"
-        ))
+        result = await conn.execute(
+            text(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_name = 'merge_requests'"
+            )
+        )
         if not result.fetchone():
-            await conn.execute(text("""
+            await conn.execute(
+                text("""
                 CREATE TABLE merge_requests (
                     id VARCHAR(36) PRIMARY KEY,
                     project_id VARCHAR(100) NOT NULL,
@@ -146,23 +151,31 @@ async def _run_migrations() -> None:
                     merged_at TIMESTAMP,
                     closed_at TIMESTAMP
                 )
-            """))
-            await conn.execute(text(
-                "CREATE INDEX IF NOT EXISTS ix_merge_requests_project_status "
-                "ON merge_requests (project_id, status)"
-            ))
-            await conn.execute(text(
-                "CREATE INDEX IF NOT EXISTS ix_merge_requests_created "
-                "ON merge_requests (created_at)"
-            ))
+            """)
+            )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_merge_requests_project_status "
+                    "ON merge_requests (project_id, status)"
+                )
+            )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_merge_requests_created "
+                    "ON merge_requests (created_at)"
+                )
+            )
 
         # Migration 4: Create branch_protection_rules table
-        result = await conn.execute(text(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_name = 'branch_protection_rules'"
-        ))
+        result = await conn.execute(
+            text(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_name = 'branch_protection_rules'"
+            )
+        )
         if not result.fetchone():
-            await conn.execute(text("""
+            await conn.execute(
+                text("""
                 CREATE TABLE branch_protection_rules (
                     id VARCHAR(36) PRIMARY KEY,
                     project_id VARCHAR(100) NOT NULL,
@@ -178,33 +191,43 @@ async def _run_migrations() -> None:
                     created_at TIMESTAMP DEFAULT NOW(),
                     updated_at TIMESTAMP DEFAULT NOW()
                 )
-            """))
-            await conn.execute(text(
-                "CREATE INDEX IF NOT EXISTS ix_branch_protection_project "
-                "ON branch_protection_rules (project_id)"
-            ))
-            await conn.execute(text(
-                "CREATE INDEX IF NOT EXISTS ix_branch_protection_enabled "
-                "ON branch_protection_rules (project_id, enabled)"
-            ))
+            """)
+            )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_branch_protection_project "
+                    "ON branch_protection_rules (project_id)"
+                )
+            )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_branch_protection_enabled "
+                    "ON branch_protection_rules (project_id, enabled)"
+                )
+            )
 
         # Migration 5: Add auto_merge column to merge_requests (if table existed before)
-        result = await conn.execute(text(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'merge_requests' AND column_name = 'auto_merge'"
-        ))
+        result = await conn.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'merge_requests' AND column_name = 'auto_merge'"
+            )
+        )
         if not result.fetchone():
-            await conn.execute(text(
-                "ALTER TABLE merge_requests ADD COLUMN auto_merge BOOLEAN DEFAULT FALSE"
-            ))
+            await conn.execute(
+                text("ALTER TABLE merge_requests ADD COLUMN auto_merge BOOLEAN DEFAULT FALSE")
+            )
 
         # Migration 6: Create project_access table for RBAC
-        result = await conn.execute(text(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_name = 'project_access'"
-        ))
+        result = await conn.execute(
+            text(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_name = 'project_access'"
+            )
+        )
         if not result.fetchone():
-            await conn.execute(text("""
+            await conn.execute(
+                text("""
                 CREATE TABLE project_access (
                     id VARCHAR(36) PRIMARY KEY,
                     project_id VARCHAR(36) NOT NULL,
@@ -215,19 +238,25 @@ async def _run_migrations() -> None:
                     updated_at TIMESTAMP DEFAULT NOW(),
                     CONSTRAINT uq_project_user UNIQUE (project_id, user_id)
                 )
-            """))
-            await conn.execute(text(
-                "CREATE INDEX IF NOT EXISTS ix_project_access_project "
-                "ON project_access (project_id)"
-            ))
-            await conn.execute(text(
-                "CREATE INDEX IF NOT EXISTS ix_project_access_user "
-                "ON project_access (user_id)"
-            ))
-            await conn.execute(text(
-                "CREATE INDEX IF NOT EXISTS ix_project_access_project_user "
-                "ON project_access (project_id, user_id)"
-            ))
+            """)
+            )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_project_access_project "
+                    "ON project_access (project_id)"
+                )
+            )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_project_access_user ON project_access (user_id)"
+                )
+            )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_project_access_project_user "
+                    "ON project_access (project_id, user_id)"
+                )
+            )
 
 
 async def close_db() -> None:

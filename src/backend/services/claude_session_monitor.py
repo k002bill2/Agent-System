@@ -1155,7 +1155,9 @@ class ClaudeSessionMonitor:
                                         id=event_id,
                                         type=ActivityEventType.TOOL_RESULT,
                                         timestamp=timestamp,
-                                        tool_result=result_content[:500] if result_content else None,
+                                        tool_result=result_content[:500]
+                                        if result_content
+                                        else None,
                                         session_id=session_id,
                                     )
                                 )

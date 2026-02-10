@@ -7,7 +7,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import async_session_factory
-from db.models import UserModel
+from db.models import OrganizationMemberModel, UserModel
 from db.repository import ApprovalRepository, MessageRepository, SessionRepository, TaskRepository
 from models.organization import MemberRole
 from orchestrator import OrchestrationEngine

@@ -57,7 +57,9 @@ class FeedbackSubmit(BaseModel):
     original_output: str = Field(..., description="원본 출력")
     corrected_output: str | None = Field(None, description="수정된 출력 (implicit 피드백)")
     project_name: str | None = Field(None, description="프로젝트명")
-    effort_level: str | None = Field(None, description="effort level (quick/moderate/thorough/comprehensive)")
+    effort_level: str | None = Field(
+        None, description="effort level (quick/moderate/thorough/comprehensive)"
+    )
 
     class Config:
         json_schema_extra = {

@@ -3,7 +3,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import (

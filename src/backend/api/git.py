@@ -28,12 +28,6 @@ from models.git import (
     DraftCommit,
     DraftCommitsRequest,
     DraftCommitsResponse,
-    # Remote management models
-    GitRemote,
-    RemoteAddRequest,
-    RemoteListResponse,
-    RemoteOperationResult,
-    RemoteUpdateRequest,
     # Remote operation models
     FetchResult,
     # Branch models
@@ -47,7 +41,7 @@ from models.git import (
     GitHubPRReviewCreate,
     # GitHub models
     GitHubPullRequest,
-    # Git Repository models
+    # Remote management models
     GitRepository,
     GitRepositoryCreate,
     GitRepositoryListResponse,
@@ -67,6 +61,10 @@ from models.git import (
     MergeResult,
     PullResult,
     PushResult,
+    RemoteAddRequest,
+    RemoteListResponse,
+    RemoteOperationResult,
+    RemoteUpdateRequest,
     ThreeWayDiff,
     # Permission helpers
     can_merge_to_branch,
@@ -145,10 +143,12 @@ def get_mr_service_for_project(project_id: str, db_session=None):
 async def _get_db_session():
     """Get optional DB session (returns None if DB not configured)."""
     import os
+
     if os.getenv("USE_DATABASE", "false").lower() != "true":
         return None
     try:
         from db.database import async_session_factory
+
         return async_session_factory()
     except Exception:
         return None
@@ -1056,10 +1056,13 @@ async def merge_merge_request(
 
                 if not can_merge_to_branch(user_role, mr.target_branch):
                     raise HTTPException(
-                        status_code=403, detail=f"Insufficient permissions to merge to '{mr.target_branch}'"
+                        status_code=403,
+                        detail=f"Insufficient permissions to merge to '{mr.target_branch}'",
                     )
 
-                mr, result = await mr_service.merge_merge_request_async(mr_id=mr_id, merged_by=user_id)
+                mr, result = await mr_service.merge_merge_request_async(
+                    mr_id=mr_id, merged_by=user_id
+                )
                 await db_session.commit()
 
                 # Trigger auto-deploy after successful merge
@@ -1072,7 +1075,8 @@ async def merge_merge_request(
 
             if not can_merge_to_branch(user_role, mr.target_branch):
                 raise HTTPException(
-                    status_code=403, detail=f"Insufficient permissions to merge to '{mr.target_branch}'"
+                    status_code=403,
+                    detail=f"Insufficient permissions to merge to '{mr.target_branch}'",
                 )
 
             mr, result = mr_service.merge_merge_request(mr_id=mr_id, merged_by=user_id)
@@ -1159,6 +1163,7 @@ async def list_branch_protection_rules(project_id: str):
         if db_session:
             async with db_session:
                 from db.repository import BranchProtectionRepository
+
                 repo = BranchProtectionRepository(db_session)
                 models = await repo.list_by_project(project_id)
                 rules = [
@@ -1167,7 +1172,9 @@ async def list_branch_protection_rules(project_id: str):
                         project_id=m.project_id,
                         branch_pattern=m.branch_pattern,
                         require_approvals=m.require_approvals or 0,
-                        require_no_conflicts=m.require_no_conflicts if m.require_no_conflicts is not None else True,
+                        require_no_conflicts=m.require_no_conflicts
+                        if m.require_no_conflicts is not None
+                        else True,
                         allowed_merge_roles=m.allowed_merge_roles or ["owner", "admin"],
                         allow_force_push=m.allow_force_push or False,
                         allow_deletion=m.allow_deletion or False,
@@ -1204,7 +1211,9 @@ async def create_branch_protection_rule(
     import uuid
 
     if os.getenv("USE_DATABASE", "false").lower() != "true":
-        raise HTTPException(status_code=503, detail="Database not configured for branch protection rules")
+        raise HTTPException(
+            status_code=503, detail="Database not configured for branch protection rules"
+        )
 
     db_session = await _get_db_session()
     if not db_session:
@@ -1212,6 +1221,7 @@ async def create_branch_protection_rule(
 
     async with db_session:
         from db.repository import BranchProtectionRepository
+
         repo = BranchProtectionRepository(db_session)
         model = await repo.create(
             id=str(uuid.uuid4()),
@@ -1233,7 +1243,9 @@ async def create_branch_protection_rule(
             project_id=model.project_id,
             branch_pattern=model.branch_pattern,
             require_approvals=model.require_approvals or 0,
-            require_no_conflicts=model.require_no_conflicts if model.require_no_conflicts is not None else True,
+            require_no_conflicts=model.require_no_conflicts
+            if model.require_no_conflicts is not None
+            else True,
             allowed_merge_roles=model.allowed_merge_roles or ["owner", "admin"],
             allow_force_push=model.allow_force_push or False,
             allow_deletion=model.allow_deletion or False,
@@ -1245,7 +1257,9 @@ async def create_branch_protection_rule(
         )
 
 
-@router.put("/projects/{project_id}/branch-protection/{rule_id}", response_model=BranchProtectionRule)
+@router.put(
+    "/projects/{project_id}/branch-protection/{rule_id}", response_model=BranchProtectionRule
+)
 async def update_branch_protection_rule(
     project_id: str,
     rule_id: str,
@@ -1263,6 +1277,7 @@ async def update_branch_protection_rule(
 
     async with db_session:
         from db.repository import BranchProtectionRepository
+
         repo = BranchProtectionRepository(db_session)
 
         updates = {k: v for k, v in request.model_dump().items() if v is not None}
@@ -1281,7 +1296,9 @@ async def update_branch_protection_rule(
             project_id=model.project_id,
             branch_pattern=model.branch_pattern,
             require_approvals=model.require_approvals or 0,
-            require_no_conflicts=model.require_no_conflicts if model.require_no_conflicts is not None else True,
+            require_no_conflicts=model.require_no_conflicts
+            if model.require_no_conflicts is not None
+            else True,
             allowed_merge_roles=model.allowed_merge_roles or ["owner", "admin"],
             allow_force_push=model.allow_force_push or False,
             allow_deletion=model.allow_deletion or False,
@@ -1310,6 +1327,7 @@ async def delete_branch_protection_rule(
 
     async with db_session:
         from db.repository import BranchProtectionRepository
+
         repo = BranchProtectionRepository(db_session)
         success = await repo.delete(rule_id)
         await db_session.commit()

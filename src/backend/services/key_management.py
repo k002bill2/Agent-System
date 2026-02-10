@@ -58,7 +58,7 @@ class KeyManager:
         Returns:
             Dict with counts of re-encrypted rows per table.
         """
-        from sqlalchemy import select, text
+        from sqlalchemy import text
 
         # Tables and columns that use EncryptedString
         encrypted_columns: list[tuple[str, list[str]]] = [

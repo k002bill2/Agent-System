@@ -377,7 +377,6 @@ class PlannerNode(BaseNode):
         task_description = user_messages[-1].get("content", "") if user_messages else ""
 
         subtasks_map = pre_analyzed_plan.get("subtasks", {})
-        parallel_groups = pre_analyzed_plan.get("parallel_groups", [])
         execution_order = pre_analyzed_plan.get("execution_order", [])
 
         # Create root task

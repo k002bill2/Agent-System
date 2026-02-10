@@ -5,7 +5,6 @@ Fetches real usage data from Anthropic OAuth API using macOS Keychain credential
 
 import json
 import os
-import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -17,8 +16,10 @@ from pydantic import BaseModel, Field
 
 from services.claude_config_service import (
     get_claude_config,
-    get_oauth_token as config_get_oauth_token,
     update_claude_config,
+)
+from services.claude_config_service import (
+    get_oauth_token as config_get_oauth_token,
 )
 
 router = APIRouter(prefix="/usage", tags=["Usage"])

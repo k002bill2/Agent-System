@@ -324,7 +324,8 @@ class FeedbackService:
         # Feedback History에도 연동 저장
         # DB 모드에서 FK 제약(session_id) 실패 시 in-memory에 저장
         feedback_type = (
-            FeedbackType.EXPLICIT_POSITIVE if evaluation.rating >= 3
+            FeedbackType.EXPLICIT_POSITIVE
+            if evaluation.rating >= 3
             else FeedbackType.EXPLICIT_NEGATIVE
         )
         reason = None
@@ -437,17 +438,19 @@ class FeedbackService:
             db_ids = {r.id for r in db_results}
             for e in memory_evals:
                 if e["id"] not in db_ids:
-                    db_results.append(TaskEvaluationResponse(
-                        id=e["id"],
-                        session_id=e["session_id"],
-                        task_id=e["task_id"],
-                        rating=e["rating"],
-                        result_accuracy=e["result_accuracy"],
-                        speed_satisfaction=e["speed_satisfaction"],
-                        comment=e.get("comment"),
-                        agent_id=e.get("agent_id"),
-                        created_at=e["created_at"],
-                    ))
+                    db_results.append(
+                        TaskEvaluationResponse(
+                            id=e["id"],
+                            session_id=e["session_id"],
+                            task_id=e["task_id"],
+                            rating=e["rating"],
+                            result_accuracy=e["result_accuracy"],
+                            speed_satisfaction=e["speed_satisfaction"],
+                            comment=e.get("comment"),
+                            agent_id=e.get("agent_id"),
+                            created_at=e["created_at"],
+                        )
+                    )
             db_results.sort(key=lambda r: r.created_at, reverse=True)
             return db_results[:limit]
         else:
@@ -458,10 +461,15 @@ class FeedbackService:
             evaluations = evaluations[offset : offset + limit]
             return [
                 TaskEvaluationResponse(
-                    id=e["id"], session_id=e["session_id"], task_id=e["task_id"],
-                    rating=e["rating"], result_accuracy=e["result_accuracy"],
-                    speed_satisfaction=e["speed_satisfaction"], comment=e.get("comment"),
-                    agent_id=e.get("agent_id"), created_at=e["created_at"],
+                    id=e["id"],
+                    session_id=e["session_id"],
+                    task_id=e["task_id"],
+                    rating=e["rating"],
+                    result_accuracy=e["result_accuracy"],
+                    speed_satisfaction=e["speed_satisfaction"],
+                    comment=e.get("comment"),
+                    agent_id=e.get("agent_id"),
+                    created_at=e["created_at"],
                 )
                 for e in evaluations
             ]
@@ -479,17 +487,38 @@ class FeedbackService:
                 if mem_total > 0:
                     combined_total = db_stats.total_count + mem_total
                     combined_avg = (
-                        (db_stats.avg_rating * db_stats.total_count + sum(e["rating"] for e in mem_evals))
-                        / combined_total
-                    ) if combined_total > 0 else 0
+                        (
+                            (
+                                db_stats.avg_rating * db_stats.total_count
+                                + sum(e["rating"] for e in mem_evals)
+                            )
+                            / combined_total
+                        )
+                        if combined_total > 0
+                        else 0
+                    )
                     combined_accuracy = (
-                        (db_stats.accuracy_rate * db_stats.total_count + sum(1 for e in mem_evals if e["result_accuracy"]))
-                        / combined_total
-                    ) if combined_total > 0 else 0
+                        (
+                            (
+                                db_stats.accuracy_rate * db_stats.total_count
+                                + sum(1 for e in mem_evals if e["result_accuracy"])
+                            )
+                            / combined_total
+                        )
+                        if combined_total > 0
+                        else 0
+                    )
                     combined_speed = (
-                        (db_stats.speed_satisfaction_rate * db_stats.total_count + sum(1 for e in mem_evals if e["speed_satisfaction"]))
-                        / combined_total
-                    ) if combined_total > 0 else 0
+                        (
+                            (
+                                db_stats.speed_satisfaction_rate * db_stats.total_count
+                                + sum(1 for e in mem_evals if e["speed_satisfaction"])
+                            )
+                            / combined_total
+                        )
+                        if combined_total > 0
+                        else 0
+                    )
                     db_stats.total_count = combined_total
                     db_stats.avg_rating = round(combined_avg, 2)
                     db_stats.accuracy_rate = round(combined_accuracy, 4)
@@ -1203,7 +1232,7 @@ class FeedbackService:
 
     async def _get_task_evaluation_stats_from_db(self) -> TaskEvaluationStats:
         """DB에서 태스크 평가 통계 조회"""
-        from sqlalchemy import func, select
+        from sqlalchemy import select
 
         from db.database import async_session_factory
         from db.models import TaskEvaluationModel

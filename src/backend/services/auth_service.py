@@ -1,7 +1,6 @@
 """Authentication service for OAuth, email/password, and JWT token management."""
 
 import hashlib
-import secrets
 import uuid
 from datetime import datetime, timedelta
 from typing import Any
@@ -167,9 +166,7 @@ class AuthService:
                 )
                 error_msg = error_detail.get("error", "unknown_error")
                 error_desc = error_detail.get("error_description", "")
-                raise Exception(
-                    f"Google token exchange failed: {error_msg} - {error_desc}"
-                )
+                raise Exception(f"Google token exchange failed: {error_msg} - {error_desc}")
             tokens = token_response.json()
 
             # Get user info
