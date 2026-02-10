@@ -28,7 +28,7 @@ dependencies = [
     "redis>=5.2.0",
 
     # Utilities
-    "pydantic>=2.10.0",
+    "pydantic[email]>=2.10.0",
     "pydantic-settings>=2.6.0",
     "python-dotenv>=1.0.0",
     "httpx>=0.28.0",
