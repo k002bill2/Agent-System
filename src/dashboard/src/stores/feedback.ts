@@ -315,7 +315,8 @@ export const useFeedbackStore = create<FeedbackState>()(
             `${API_BASE}/task-evaluation/${encodeURIComponent(sessionId)}/${encodeURIComponent(taskId)}`
           )
 
-          if (response.status === 404) return null
+          // 204: 평가 없음, 404: 하위 호환
+          if (response.status === 204 || response.status === 404) return null
           if (!response.ok) {
             throw new Error(`Failed to fetch task evaluation: ${response.statusText}`)
           }
