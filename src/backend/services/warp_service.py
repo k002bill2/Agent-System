@@ -262,13 +262,10 @@ class WarpService:
                 "error": f"Path does not exist: {path}",
             }
 
-        # If not forcing new window and Warp is already running, open as tab
-        if not new_window and not IS_DOCKER and self.is_warp_running():
-            result = self._open_tab_with_command(path, command)
-            if result.get("success"):
-                return result
-            # Fall through to launch config if tab approach fails
-            logger.info("Tab open failed, falling back to launch config: %s", result.get("error"))
+        # Always use Launch Configuration for reliability.
+        # The previous AppleScript-based tab approach (_open_tab_with_command)
+        # was unreliable due to keystroke timing issues and accessibility permissions.
+        # Launch configs natively embed the command in YAML, which Warp executes directly.
 
         # Create launch configuration
         config_name = f"aos-{datetime.now().strftime('%Y%m%d%H%M%S')}"
