@@ -178,12 +178,8 @@ class FeedbackModel(Base):
     __tablename__ = "feedbacks"
 
     id = Column(String(36), primary_key=True)
-    session_id = Column(
-        String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    task_id = Column(
-        String(36), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True
-    )
+    session_id = Column(String(36), nullable=False, index=True)
+    task_id = Column(String(36), nullable=True, index=True)
     message_id = Column(String(36), nullable=True)
 
     # Feedback details
@@ -855,12 +851,8 @@ class TaskEvaluationModel(Base):
     __tablename__ = "task_evaluations"
 
     id = Column(String(36), primary_key=True)
-    session_id = Column(
-        String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    task_id = Column(
-        String(36), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True
-    )
+    session_id = Column(String(36), nullable=False, index=True)
+    task_id = Column(String(36), nullable=True, index=True)
 
     # Evaluation details
     rating = Column(Integer, nullable=False)  # 1-5

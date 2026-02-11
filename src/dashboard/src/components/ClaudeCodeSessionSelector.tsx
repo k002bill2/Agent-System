@@ -99,7 +99,7 @@ export function ClaudeCodeSessionSelector({
                 selectedSessionId === session.session_id ? null : session.session_id
               )}
               className={cn(
-                'w-full text-left p-3 rounded-lg border transition-all',
+                'w-full text-left p-3 rounded-lg border transition-all overflow-hidden',
                 'hover:shadow-md',
                 selectedSessionId === session.session_id
                   ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 ring-1 ring-primary-500'
