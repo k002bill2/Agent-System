@@ -38,6 +38,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          docker system prune -af --volumes
+          df -h
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -84,7 +90,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}@${{ steps.build.outputs.digest }}
+          path: ./src/backend
           format: spdx-json
           output-file: backend-sbom.spdx.json
 
@@ -111,6 +117,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          docker system prune -af --volumes
+          df -h
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -159,7 +171,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.REGISTRY }}/${{ env.DASHBOARD_IMAGE }}@${{ steps.build.outputs.digest }}
+          path: ./src/dashboard
           format: spdx-json
           output-file: dashboard-sbom.spdx.json
 
