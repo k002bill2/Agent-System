@@ -55,7 +55,7 @@ function ActivityEventItem({ event }: { event: ActivityEvent }) {
             {event.tool_name}
           </span>
           {event.tool_input && (
-            <pre className="text-xs text-gray-600 dark:text-gray-400 overflow-x-auto max-h-20 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-2 rounded">
+            <pre className="text-xs text-gray-600 dark:text-gray-400 overflow-x-auto max-w-full max-h-20 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-2 rounded">
               {JSON.stringify(event.tool_input, null, 2)}
             </pre>
           )}
@@ -65,7 +65,7 @@ function ActivityEventItem({ event }: { event: ActivityEvent }) {
 
     if (event.type === 'tool_result') {
       return (
-        <pre className="text-xs text-gray-600 dark:text-gray-400 overflow-x-auto max-h-20 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-2 rounded">
+        <pre className="text-xs text-gray-600 dark:text-gray-400 overflow-x-auto max-w-full max-h-20 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-2 rounded">
           {event.tool_result || 'No result'}
         </pre>
       )
@@ -153,7 +153,7 @@ function SessionDetailPanel() {
       )}
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2 text-center">
           <Clock className="w-4 h-4 mx-auto text-gray-400 mb-1" />
           <p className="text-xs text-gray-500 dark:text-gray-400">Last Activity</p>
@@ -235,9 +235,9 @@ export function ClaudeCodeTasks() {
   } = useClaudeCodeActivityStore()
 
   return (
-    <div className="flex-1 flex overflow-hidden">
+    <div className="flex-1 flex overflow-hidden min-w-0">
       {/* Left Panel - Session List */}
-      <div className="w-1/3 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+      <div className="w-1/3 min-w-0 border-r border-gray-200 dark:border-gray-700 flex flex-col">
         {/* Error Display */}
         {error && (
           <div className="px-4 py-2 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800">
@@ -254,7 +254,7 @@ export function ClaudeCodeTasks() {
         )}
 
         {/* Session Selector */}
-        <div className="p-4 flex-1 overflow-y-auto">
+        <div className="p-4 flex-1 overflow-y-auto overflow-x-hidden">
           <ClaudeCodeSessionSelector
             selectedSessionId={activeSessionId}
             onSelect={setActiveSession}
@@ -263,7 +263,7 @@ export function ClaudeCodeTasks() {
       </div>
 
       {/* Right Panel - Session Details (top) + Activity Log (bottom) */}
-      <div className="w-2/3 flex flex-col overflow-hidden">
+      <div className="w-2/3 min-w-0 flex flex-col overflow-hidden">
         {activeSessionId ? (
           <VerticalSplitPanel
             storageKey="claude-tasks-split-height"

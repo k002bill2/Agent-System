@@ -99,7 +99,7 @@ export function ClaudeCodeSessionSelector({
                 selectedSessionId === session.session_id ? null : session.session_id
               )}
               className={cn(
-                'w-full text-left p-3 rounded-lg border transition-all',
+                'w-full text-left p-3 rounded-lg border transition-all overflow-hidden',
                 'hover:shadow-md',
                 selectedSessionId === session.session_id
                   ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 ring-1 ring-primary-500'
@@ -107,10 +107,10 @@ export function ClaudeCodeSessionSelector({
               )}
             >
               {/* Project Name & Status */}
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Terminal className="w-4 h-4 text-gray-500" />
-                  <span className="font-medium text-gray-900 dark:text-white truncate max-w-[200px]">
+              <div className="flex items-center justify-between mb-2 min-w-0">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <Terminal className="w-4 h-4 text-gray-500 shrink-0" />
+                  <span className="font-medium text-gray-900 dark:text-white truncate">
                     {session.project_name || 'Unknown Project'}
                   </span>
                 </div>
@@ -135,7 +135,7 @@ export function ClaudeCodeSessionSelector({
               ) : null}
 
               {/* Stats */}
-              <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+              <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400 flex-wrap">
                 <div className="flex items-center gap-1">
                   <Clock className="w-3 h-3" />
                   <span>{formatRelativeTime(session.last_activity)}</span>

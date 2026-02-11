@@ -7,7 +7,7 @@ RLHF Feedback API Router
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 
 from models.feedback import (
     BatchProcessResult,
@@ -266,12 +266,15 @@ async def list_task_evaluations(
 async def get_task_evaluation(
     session_id: str,
     task_id: str,
-) -> TaskEvaluationResponse:
-    """특정 태스크 평가 조회"""
+) -> TaskEvaluationResponse | Response:
+    """특정 태스크 평가 조회
+
+    평가가 없으면 204 No Content를 반환합니다 (404 콘솔 에러 방지).
+    """
     service = get_feedback_service()
     evaluation = await service.get_task_evaluation(session_id, task_id)
 
     if not evaluation:
-        raise HTTPException(status_code=404, detail="Task evaluation not found")
+        return Response(status_code=204)
 
     return evaluation

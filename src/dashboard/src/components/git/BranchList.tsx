@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import {
   GitBranch as GitBranchIcon,
   Shield,
@@ -10,9 +10,19 @@ import {
   ArrowUp,
   ArrowDown,
   Cloud,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import type { GitBranch, ConflictStatus } from '../../stores/git'
+
+interface DeleteConfirmState {
+  branchName: string
+  isProtected: boolean
+  isUnmerged: boolean
+  isRemote: boolean
+  hasTracking: boolean
+}
 
 interface BranchListProps {
   branches: GitBranch[]
@@ -20,7 +30,7 @@ interface BranchListProps {
   protectedBranches: string[]
   isLoading: boolean
   onCreateBranch: (name: string, startPoint?: string) => Promise<boolean>
-  onDeleteBranch: (name: string, force?: boolean) => Promise<boolean>
+  onDeleteBranch: (name: string, force?: boolean, deleteRemote?: boolean) => Promise<boolean>
   onMergeClick: (source: string) => void
   onRefresh: () => void
   conflictStatuses?: Record<string, ConflictStatus>
@@ -28,8 +38,8 @@ interface BranchListProps {
 
 export function BranchList({
   branches,
-  currentBranch: _currentBranch,
-  protectedBranches: _protectedBranches,
+  currentBranch,
+  protectedBranches,
   isLoading,
   onCreateBranch,
   onDeleteBranch,
@@ -37,15 +47,17 @@ export function BranchList({
   onRefresh,
   conflictStatuses = {},
 }: BranchListProps) {
-  // Props used for informational display in parent component
-  void _currentBranch
-  void _protectedBranches
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newBranchName, setNewBranchName] = useState('')
   const [startPoint, setStartPoint] = useState('HEAD')
   const [creating, setCreating] = useState(false)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'local' | 'remote'>('local')
+  const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState | null>(null)
+  const [forceDelete, setForceDelete] = useState(false)
+  const [deleteRemote, setDeleteRemote] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const filteredBranches = branches.filter((b) => {
     if (filter === 'local') return !b.is_remote
@@ -65,11 +77,49 @@ export function BranchList({
     setCreating(false)
   }
 
-  const handleDelete = async (name: string) => {
-    if (confirm(`'${name}' 브랜치를 삭제하시겠습니까?`)) {
-      await onDeleteBranch(name)
-    }
+  const isBranchProtected = useCallback(
+    (name: string) => protectedBranches.includes(name),
+    [protectedBranches]
+  )
+
+  const canDeleteBranch = useCallback(
+    (branch: GitBranch) =>
+      !branch.is_current && branch.name !== currentBranch,
+    [currentBranch]
+  )
+
+  const openDeleteConfirm = useCallback((branch: GitBranch) => {
+    setDeleteConfirm({
+      branchName: branch.name,
+      isProtected: branch.is_protected || isBranchProtected(branch.name),
+      isUnmerged: (branch.ahead ?? 0) > 0,
+      isRemote: branch.is_remote,
+      hasTracking: !!branch.tracking_branch,
+    })
+    setForceDelete(false)
+    setDeleteRemote(false)
+    setDeleteError(null)
     setMenuOpen(null)
+  }, [isBranchProtected])
+
+  const handleDelete = async () => {
+    if (!deleteConfirm) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      const needsForce = forceDelete || deleteConfirm.isProtected
+      const shouldDeleteRemote = deleteConfirm.isRemote || deleteRemote
+      const success = await onDeleteBranch(deleteConfirm.branchName, needsForce, shouldDeleteRemote)
+      if (success) {
+        setDeleteConfirm(null)
+      } else {
+        setDeleteError('브랜치 삭제에 실패했습니다. 강제 삭제를 시도해보세요.')
+      }
+    } catch {
+      setDeleteError('브랜치 삭제 중 오류가 발생했습니다.')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   const getConflictBadge = (branchName: string) => {
@@ -233,7 +283,7 @@ export function BranchList({
                 </button>
               )}
 
-              {!branch.is_current && !branch.is_remote && (
+              {canDeleteBranch(branch) && (
                 <div className="relative">
                   <button
                     onClick={() => setMenuOpen(menuOpen === branch.name ? null : branch.name)}
@@ -250,11 +300,11 @@ export function BranchList({
                       />
                       <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]">
                         <button
-                          onClick={() => handleDelete(branch.name)}
+                          onClick={() => openDeleteConfirm(branch)}
                           className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                         >
                           <Trash2 className="w-4 h-4" />
-                          Delete
+                          삭제
                         </button>
                       </div>
                     </>
@@ -328,6 +378,133 @@ export function BranchList({
                 className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
               >
                 {creating ? 'Creating...' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Branch Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  브랜치 삭제
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  이 작업은 되돌릴 수 없습니다
+                </p>
+              </div>
+            </div>
+
+            <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+              <div className="flex items-center gap-2">
+                <GitBranchIcon className="w-4 h-4 text-gray-500" />
+                <span className="font-mono text-sm font-medium text-gray-900 dark:text-white">
+                  {deleteConfirm.branchName}
+                </span>
+              </div>
+            </div>
+
+            {/* Warnings */}
+            {(deleteConfirm.isProtected || deleteConfirm.isUnmerged || deleteConfirm.isRemote) && (
+              <div className="mb-4 space-y-2">
+                {deleteConfirm.isRemote && (
+                  <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                    <Cloud className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-blue-700 dark:text-blue-300">
+                      원격 브랜치입니다. 삭제 시 리모트에서도 제거됩니다.
+                    </p>
+                  </div>
+                )}
+                {deleteConfirm.isProtected && (
+                  <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                    <Shield className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-amber-700 dark:text-amber-300">
+                      보호된 브랜치입니다. 강제 삭제가 필요합니다.
+                    </p>
+                  </div>
+                )}
+                {deleteConfirm.isUnmerged && (
+                  <div className="flex items-start gap-2 p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+                    <AlertTriangle className="w-4 h-4 text-orange-600 dark:text-orange-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-orange-700 dark:text-orange-300">
+                      머지되지 않은 커밋이 있습니다. 삭제 시 변경사항이 손실될 수 있습니다.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Options */}
+            <div className="mb-4 space-y-2">
+              {/* Force delete checkbox */}
+              {!deleteConfirm.isRemote && (deleteConfirm.isProtected || deleteConfirm.isUnmerged) && (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={forceDelete}
+                    onChange={(e) => setForceDelete(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    강제 삭제 (머지 여부와 관계없이 삭제)
+                  </span>
+                </label>
+              )}
+
+              {/* Delete remote tracking branch checkbox */}
+              {!deleteConfirm.isRemote && deleteConfirm.hasTracking && (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={deleteRemote}
+                    onChange={(e) => setDeleteRemote(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    원격 브랜치도 함께 삭제
+                  </span>
+                </label>
+              )}
+            </div>
+
+            {/* Error message */}
+            {deleteError && (
+              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <p className="text-sm text-red-700 dark:text-red-300">{deleteError}</p>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                disabled={deleting}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting || (deleteConfirm.isProtected && !forceDelete)}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+              >
+                {deleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    삭제 중...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    {forceDelete ? '강제 삭제' : '삭제'}
+                  </>
+                )}
               </button>
             </div>
           </div>

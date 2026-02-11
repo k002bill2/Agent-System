@@ -404,11 +404,11 @@ export function AnalyticsPage() {
       {/* Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <MetricCard
-          title="Total Tasks"
-          value={data.overview.total_tasks}
+          title="Total Sessions"
+          value={data.overview.total_sessions}
           icon={Zap}
           color="blue"
-          subtitle={`${data.overview.completed_tasks} completed`}
+          subtitle={`${data.overview.completed_tasks} completed, ${data.overview.total_tasks} tool calls`}
         />
         <MetricCard
           title="Success Rate"
@@ -638,8 +638,8 @@ export function AnalyticsPage() {
 
       {/* Charts Row 2 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        {/* Cost by Agent */}
-        <ChartCard title="Cost by Agent" icon={DollarSign}>
+        {/* Cost by Project */}
+        <ChartCard title="Cost by Project" icon={DollarSign}>
           <ResponsiveContainer width="100%" height={250}>
             <PieChart>
               <Pie
@@ -665,8 +665,8 @@ export function AnalyticsPage() {
           </ResponsiveContainer>
         </ChartCard>
 
-        {/* Agent Performance */}
-        <ChartCard title="Agent Performance" icon={Users} className="lg:col-span-2">
+        {/* Model Performance */}
+        <ChartCard title="Model Performance" icon={Users} className="lg:col-span-2">
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={data.agents.agents} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
@@ -782,13 +782,13 @@ export function AnalyticsPage() {
         <ActivityHeatmapChart data={data.activity} />
       </ChartCard>
 
-      {/* Agent Table */}
-      <ChartCard title="Agent Details" icon={Users}>
+      {/* Model Details Table */}
+      <ChartCard title="Model Details" icon={Users}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-                <th className="pb-3 font-medium">Agent</th>
+                <th className="pb-3 font-medium">Model</th>
                 <th className="pb-3 font-medium text-right">Tasks</th>
                 <th className="pb-3 font-medium text-right">Success</th>
                 <th className="pb-3 font-medium text-right">Avg Duration</th>
@@ -975,7 +975,7 @@ function ActivityHeatmapChart({ data }: { data: ActivityHeatmap }) {
                       : `rgba(59, 130, 246, ${0.2 + intensity * 0.8})`,
                   }}
                   className="rounded-sm cursor-pointer hover:ring-2 hover:ring-blue-400"
-                  title={`${DAY_LABELS[day]} ${hour}:00 - ${value} tasks`}
+                  title={`${DAY_LABELS[day]} ${hour}:00 - ${value} sessions`}
                 />
               )
             })}

@@ -6,6 +6,7 @@
  */
 
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import {
   ActivityEvent,
   ActivityResponse,
@@ -53,9 +54,11 @@ interface ClaudeCodeActivityState {
   clearError: () => void
 }
 
-export const useClaudeCodeActivityStore = create<ClaudeCodeActivityState>((set, get) => ({
+export const useClaudeCodeActivityStore = create<ClaudeCodeActivityState>()(
+  persist(
+    (set, get) => ({
   // Initial state
-  dataSource: 'aos',
+  dataSource: 'claude-code',
   activeSessionId: null,
 
   // Activity initial state
@@ -256,4 +259,28 @@ export const useClaudeCodeActivityStore = create<ClaudeCodeActivityState>((set, 
   clearError: () => {
     set({ error: null })
   },
-}))
+}),
+    {
+      name: 'claude-code-activity-storage',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        dataSource: state.dataSource,
+        activeSessionId: state.activeSessionId,
+        activities: state.activities,
+        activityTotalCount: state.activityTotalCount,
+        hasMoreActivity: state.hasMoreActivity,
+        activityOffset: state.activityOffset,
+        tasks: state.tasks,
+        rootTaskIds: state.rootTaskIds,
+      }),
+      onRehydrateStorage: () => (state) => {
+        if (state?.activeSessionId) {
+          // Defer SSE reconnection to next tick to ensure store is fully initialized
+          setTimeout(() => {
+            state.startStreaming(state.activeSessionId!)
+          }, 0)
+        }
+      },
+    },
+  ),
+)

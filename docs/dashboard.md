@@ -97,9 +97,10 @@ import { cn } from '@/lib/utils';
 
 | 컴포넌트 | 설명 |
 |----------|------|
-| `ClaudeCodeActivity` | 실시간 활동 피드 |
-| `ClaudeCodeTasks` | 태스크 목록 뷰 |
-| `ClaudeCodeSessionSelector` | 세션 선택 드롭다운 |
+| `ClaudeCodeActivity` | 실시간 활동 피드 (세션 기반 필터링) |
+| `ClaudeCodeTasks` | 태스크 목록 뷰 (세션별 필터) |
+| `ClaudeCodeSessionSelector` | 세션 선택 드롭다운 (프로젝트 그룹핑) |
+| `VerticalSplitPanel` | 세로 분할 패널 (리사이즈 가능) |
 
 ### Claude Sessions Components
 
@@ -152,7 +153,7 @@ import { cn } from '@/lib/utils';
 |----------|------|
 | `GitSetup` | Git 초기 설정 안내 |
 | `WorkingDirectory` | 작업 디렉토리 (staged/unstaged/untracked) |
-| `BranchList` | 브랜치 목록 (local/remote 필터, ahead/behind) |
+| `BranchList` | 브랜치 목록 (local/remote 필터, ahead/behind, 원격 브랜치 삭제) |
 | `CommitHistory` | 커밋 타임라인 (확장 가능한 상세) |
 | `MergeRequestCard` | 내부 MR 카드 (승인/머지/닫기) |
 | `MergePreviewPanel` | 머지 미리보기 모달 (충돌 정보) |
@@ -199,6 +200,8 @@ import { cn } from '@/lib/utils';
 | 컴포넌트 | 설명 |
 |----------|------|
 | `ProjectMultiSelect` | 멀티 프로젝트 선택 (최대 5개, 색상 표시) |
+
+> **Note**: Analytics 데이터는 Claude 세션 파일에서 직접 수집됩니다 (DB 모드와 무관). 트렌드 차트는 세션 `created_at` 기준으로 버킷팅되며, 에이전트 성능은 실제 모델명(claude-opus-4-6 등)으로 그룹화됩니다.
 
 ### Audit Components
 

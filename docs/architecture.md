@@ -64,12 +64,15 @@ src/backend/
 │   ├── parallel_executor.py # 병렬 실행
 │   └── tools.py             # MCP 도구 실행자
 ├── services/
-│   ├── agent_registry.py    # 에이전트 등록소
-│   ├── auth_service.py      # OAuth/JWT/Email 인증
-│   ├── mcp_service.py       # MCP 서버 관리
-│   ├── feedback_service.py  # RLHF 피드백
-│   ├── rag_service.py       # Vector DB + RAG
-│   ├── sandbox_manager.py   # Docker 격리 실행
+│   ├── agent_registry.py        # 에이전트 등록소
+│   ├── analytics_service.py     # 분석 서비스 (세션 파일 + DB 이중 지원)
+│   ├── auth_service.py          # OAuth/JWT/Email 인증
+│   ├── claude_session_monitor.py # Claude 세션 파일 스캔/파싱
+│   ├── mcp_service.py           # MCP 서버 관리
+│   ├── feedback_service.py      # RLHF 피드백
+│   ├── rag_service.py           # Vector DB + RAG
+│   ├── sandbox_manager.py       # Docker 격리 실행
+│   ├── warp_service.py          # Warp 터미널 + MCP 에이전트
 │   └── ...
 ├── api/                     # FastAPI 라우터
 ├── db/                      # SQLAlchemy ORM
@@ -240,3 +243,27 @@ alembic current
 # 마이그레이션 히스토리
 alembic history
 ```
+
+## Analytics Data Flow
+
+Analytics 대시보드는 Claude 세션 파일에서 직접 데이터를 수집합니다:
+
+```
+~/.claude/projects/          Claude 세션 JSONL 파일
+         ↓
+ClaudeSessionMonitor         세션 파일 스캔/파싱 (mtime+size 캐싱)
+         ↓
+AnalyticsService             *_from_sessions() 메서드
+  ├── get_overview_from_sessions()     # 전체 메트릭
+  ├── get_trends_from_sessions()       # 시간별 트렌드 (created_at 기준 버킷)
+  ├── get_agent_performance_from_sessions()  # 모델별 성능
+  ├── get_cost_analytics_from_sessions()     # 프로젝트별/모델별 비용
+  └── get_activity_heatmap_from_sessions()   # 요일/시간 히트맵
+         ↓
+api/analytics.py             REST API (항상 세션 기반, DB 무관)
+         ↓
+Dashboard AnalyticsPage      Recharts 차트 시각화
+```
+
+> **Note**: `USE_DATABASE=true`여도 analytics 엔드포인트는 세션 파일 기반 메서드를 사용합니다.
+> DB 기반 `*_async()` 메서드는 향후 DB에 세션 데이터가 동기화될 때를 위해 유지됩니다.

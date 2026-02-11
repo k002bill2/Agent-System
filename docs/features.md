@@ -278,15 +278,25 @@ class AuditAction(str, Enum):
 
 ## 18. Analytics Dashboard
 
-메트릭, 트렌드, 성능 데이터 시각화:
+Claude 세션 파일 기반 실제 데이터 시각화:
 
 ```python
 class AnalyticsService:
-    def get_overview() -> OverviewMetrics
-    def get_trends(time_range) -> MultiTrendData
-    def get_agent_performance(time_range) -> AgentPerformanceList
-    def get_cost_analytics(time_range) -> CostAnalytics
+    # Claude 세션 파일에서 실시간 데이터 수집 (USE_DATABASE 무관)
+    def get_overview_from_sessions(project_name) -> OverviewMetrics
+    def get_trends_from_sessions(time_range, project_name) -> MultiTrendData
+    def get_agent_performance_from_sessions(time_range, project_name) -> AgentPerformanceList
+    def get_cost_analytics_from_sessions(time_range, project_name) -> CostAnalytics
+    def get_activity_heatmap_from_sessions(time_range, project_name) -> ActivityHeatmap
 ```
+
+**데이터 소스**: `~/.claude/projects/` 세션 파일 스캔 (DB 모드와 무관)
+
+**버킷팅 기준**: `created_at` (세션 생성 시점) 기준 시간별 분포
+
+**에이전트 그룹화**: 실제 모델명 기준 (claude-opus-4-6, claude-haiku 등)
+
+**비용 분류**: 프로젝트별 + 모델별 이중 분류
 
 ---
 
@@ -466,9 +476,10 @@ AI가 Git 변경사항을 분석하여 논리적인 커밋 그룹을 제안:
 ### 브랜치 관리
 
 - 로컬/리모트 브랜치 목록 조회
-- 브랜치 생성/삭제
+- 브랜치 생성/삭제 (로컬 + 원격)
 - Ahead/Behind 커밋 수 계산
 - 보호 브랜치 (main, master) 설정
+- 원격 브랜치 삭제 (`?remote=true` 쿼리 파라미터)
 
 ### 충돌 감지
 
@@ -686,6 +697,8 @@ class WarpService:
     def build_claude_command(task: str | None = None) -> str
     def open_with_command(path: str, command: str, title: str | None = None) -> dict
     def cleanup_old_configs(max_age_hours: int = 24) -> int
+    def list_models() -> list[dict]          # Warp 사용 가능 모델 목록
+    def run_agent(task, model, mcp_servers) -> dict  # MCP 연동 에이전트 실행
 ```
 
 **특징**:
@@ -693,6 +706,7 @@ class WarpService:
 - 태스크 내용을 임시 파일로 저장 후 `claude --dangerously-skip-permissions "$(cat file)"` 방식으로 전달
 - Docker 모드 지원 (URI를 프론트엔드로 반환)
 - 오래된 설정 파일 자동 정리
+- MCP 서버 연동 에이전트 실행 지원
 
 ---
 

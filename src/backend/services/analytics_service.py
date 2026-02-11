@@ -1,6 +1,8 @@
 """Analytics service for dashboard metrics."""
 
+import logging
 import random
+from collections import defaultdict
 from datetime import datetime, timedelta
 
 from sqlalchemy import and_, case, func, select
@@ -25,6 +27,8 @@ from models.analytics import (
     TrendDataPoint,
 )
 from models.project import get_project
+
+logger = logging.getLogger(__name__)
 
 
 def _get_time_delta(time_range: TimeRange) -> timedelta:
@@ -401,6 +405,329 @@ class AnalyticsService:
             costs=AnalyticsService.get_cost_analytics(time_range),
             activity=AnalyticsService.get_activity_heatmap(time_range),
             errors=AnalyticsService.get_error_analytics(time_range),
+        )
+
+    # ─────────────────────────────────────────────────────────────
+    # Claude Session-Based Methods (USE_DATABASE=false, real data)
+    # ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _get_sessions(project_name: str | None = None):
+        """Get Claude sessions, optionally filtered by project name."""
+        from services.claude_session_monitor import get_monitor
+
+        monitor = get_monitor()
+        sessions = monitor.discover_sessions()
+
+        if project_name:
+            sessions = [s for s in sessions if s.project_name == project_name]
+
+        return sessions
+
+    @staticmethod
+    def get_overview_from_sessions(project_name: str | None = None) -> OverviewMetrics:
+        """Get overview metrics from Claude Code sessions."""
+        sessions = AnalyticsService._get_sessions(project_name)
+
+        total = len(sessions)
+        active = sum(1 for s in sessions if s.status.value == "active")
+        completed = sum(1 for s in sessions if s.status.value == "completed")
+        total_tokens = sum(s.total_input_tokens + s.total_output_tokens for s in sessions)
+        total_cost = sum(s.estimated_cost for s in sessions)
+        total_tool_calls = sum(s.tool_call_count for s in sessions)
+
+        # Avg session duration in ms
+        durations = []
+        for s in sessions:
+            created = s.created_at.replace(tzinfo=None) if s.created_at.tzinfo else s.created_at
+            last = s.last_activity.replace(tzinfo=None) if s.last_activity.tzinfo else s.last_activity
+            dur = (last - created).total_seconds() * 1000
+            if dur > 0:
+                durations.append(dur)
+        avg_duration = sum(durations) / len(durations) if durations else 0
+
+        success_rate = (completed / total * 100) if total > 0 else 0.0
+
+        return OverviewMetrics(
+            total_sessions=total,
+            active_sessions=active,
+            total_tasks=total_tool_calls,
+            completed_tasks=completed,
+            failed_tasks=0,
+            pending_tasks=active,
+            success_rate=round(success_rate, 1),
+            total_tokens=total_tokens,
+            total_cost=round(total_cost, 2),
+            avg_task_duration_ms=int(avg_duration),
+            approvals_pending=0,
+            approvals_granted=0,
+            approvals_denied=0,
+        )
+
+    @staticmethod
+    def get_trends_from_sessions(
+        time_range: TimeRange = TimeRange.WEEK,
+        project_name: str | None = None,
+    ) -> MultiTrendData:
+        """Get trend data from Claude Code sessions."""
+        sessions = AnalyticsService._get_sessions(project_name)
+        delta = _get_time_delta(time_range)
+        interval = _get_interval(time_range)
+        now = datetime.utcnow()
+        start = now - delta
+
+        # Filter sessions in time range
+        def _normalize_dt(dt):
+            return dt.replace(tzinfo=None) if dt.tzinfo else dt
+
+        range_sessions = [
+            s for s in sessions if _normalize_dt(s.created_at) >= start
+        ]
+
+        tasks_data = []
+        costs_data = []
+        tokens_data = []
+        success_rate_data = []
+
+        current = start
+        while current <= now:
+            bucket_end = current + interval
+
+            bucket = [
+                s for s in range_sessions
+                if current <= _normalize_dt(s.created_at) < bucket_end
+            ]
+
+            bucket_completed = sum(1 for s in bucket if s.status.value == "completed")
+            bucket_total = len(bucket)
+            sr = (bucket_completed / bucket_total * 100) if bucket_total > 0 else 0.0
+
+            label = current.strftime("%Y-%m-%d %H:%M")
+            tasks_data.append(TrendDataPoint(timestamp=current, value=bucket_total, label=label))
+            costs_data.append(
+                TrendDataPoint(
+                    timestamp=current,
+                    value=round(sum(s.estimated_cost for s in bucket), 3),
+                    label=label,
+                )
+            )
+            tokens_data.append(
+                TrendDataPoint(
+                    timestamp=current,
+                    value=sum(s.total_input_tokens + s.total_output_tokens for s in bucket),
+                    label=label,
+                )
+            )
+            success_rate_data.append(
+                TrendDataPoint(timestamp=current, value=round(sr, 1), label=label)
+            )
+
+            current += interval
+
+        return MultiTrendData(
+            time_range=time_range,
+            tasks=tasks_data,
+            success_rate=success_rate_data,
+            costs=costs_data,
+            tokens=tokens_data,
+        )
+
+    @staticmethod
+    def get_agent_performance_from_sessions(
+        time_range: TimeRange = TimeRange.WEEK,
+        project_name: str | None = None,
+    ) -> AgentPerformanceList:
+        """Get model-level performance from Claude Code sessions."""
+        sessions = AnalyticsService._get_sessions(project_name)
+        delta = _get_time_delta(time_range)
+        start = datetime.utcnow() - delta
+
+        def _normalize_dt(dt):
+            return dt.replace(tzinfo=None) if dt.tzinfo else dt
+
+        range_sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
+
+        # Group by model
+        by_model: dict[str, list] = defaultdict(list)
+        for s in range_sessions:
+            by_model[s.model or "unknown"].append(s)
+
+        agents = []
+        for model_name, model_sessions in by_model.items():
+            total = len(model_sessions)
+            completed = sum(1 for s in model_sessions if s.status.value == "completed")
+            failed = 0
+            sr = (completed / total * 100) if total > 0 else 0.0
+
+            durations = []
+            for s in model_sessions:
+                created = _normalize_dt(s.created_at)
+                last = _normalize_dt(s.last_activity)
+                dur = (last - created).total_seconds() * 1000
+                if dur > 0:
+                    durations.append(dur)
+
+            agents.append(
+                AgentPerformance(
+                    agent_id=model_name,
+                    agent_name=model_name,
+                    category="model",
+                    total_tasks=total,
+                    completed_tasks=completed,
+                    failed_tasks=failed,
+                    success_rate=round(sr, 1),
+                    avg_duration_ms=int(sum(durations) / len(durations)) if durations else 0,
+                    total_tokens=sum(
+                        s.total_input_tokens + s.total_output_tokens for s in model_sessions
+                    ),
+                    total_cost=round(sum(s.estimated_cost for s in model_sessions), 2),
+                )
+            )
+
+        agents.sort(key=lambda a: a.total_tasks, reverse=True)
+        return AgentPerformanceList(agents=agents, time_range=time_range)
+
+    @staticmethod
+    def get_cost_analytics_from_sessions(
+        time_range: TimeRange = TimeRange.WEEK,
+        project_name: str | None = None,
+    ) -> CostAnalytics:
+        """Get cost analytics from Claude Code sessions."""
+        sessions = AnalyticsService._get_sessions(project_name)
+        delta = _get_time_delta(time_range)
+        start = datetime.utcnow() - delta
+
+        def _normalize_dt(dt):
+            return dt.replace(tzinfo=None) if dt.tzinfo else dt
+
+        range_sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
+
+        total_cost = sum(s.estimated_cost for s in range_sessions)
+        total_tokens = sum(s.total_input_tokens + s.total_output_tokens for s in range_sessions)
+        total_sessions = len(range_sessions)
+
+        # By model
+        model_costs: dict[str, dict] = defaultdict(lambda: {"cost": 0.0, "tokens": 0})
+        for s in range_sessions:
+            model = s.model or "unknown"
+            model_costs[model]["cost"] += s.estimated_cost
+            model_costs[model]["tokens"] += s.total_input_tokens + s.total_output_tokens
+
+        by_model = []
+        for model, data in model_costs.items():
+            pct = (data["cost"] / total_cost * 100) if total_cost > 0 else 0
+            by_model.append(
+                CostBreakdown(
+                    category="model",
+                    value=model,
+                    cost=round(data["cost"], 4),
+                    tokens=data["tokens"],
+                    percentage=round(pct, 1),
+                )
+            )
+        by_model.sort(key=lambda x: x.cost, reverse=True)
+
+        # By project
+        project_costs: dict[str, dict] = defaultdict(lambda: {"cost": 0.0, "tokens": 0})
+        for s in range_sessions:
+            pname = s.project_name or "unknown"
+            project_costs[pname]["cost"] += s.estimated_cost
+            project_costs[pname]["tokens"] += s.total_input_tokens + s.total_output_tokens
+
+        by_agent = []  # Reuse by_agent field for project breakdown
+        for pname, data in project_costs.items():
+            pct = (data["cost"] / total_cost * 100) if total_cost > 0 else 0
+            by_agent.append(
+                CostBreakdown(
+                    category="project",
+                    value=pname,
+                    cost=round(data["cost"], 4),
+                    tokens=data["tokens"],
+                    percentage=round(pct, 1),
+                )
+            )
+        by_agent.sort(key=lambda x: x.cost, reverse=True)
+
+        # Projected monthly
+        days_in_range = delta.days or 1
+        daily_cost = total_cost / days_in_range
+        projected_monthly = daily_cost * 30
+
+        avg_cost = total_cost / total_sessions if total_sessions > 0 else 0
+
+        return CostAnalytics(
+            time_range=time_range,
+            total_cost=round(total_cost, 2),
+            total_tokens=total_tokens,
+            avg_cost_per_task=round(avg_cost, 4),
+            by_agent=by_agent,
+            by_model=by_model,
+            projected_monthly=round(projected_monthly, 2),
+        )
+
+    @staticmethod
+    def get_activity_heatmap_from_sessions(
+        time_range: TimeRange = TimeRange.WEEK,
+        project_name: str | None = None,
+    ) -> ActivityHeatmap:
+        """Get activity heatmap from Claude Code sessions."""
+        sessions = AnalyticsService._get_sessions(project_name)
+        delta = _get_time_delta(time_range)
+        start = datetime.utcnow() - delta
+
+        def _normalize_dt(dt):
+            return dt.replace(tzinfo=None) if dt.tzinfo else dt
+
+        range_sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
+
+        heatmap: dict[tuple[int, int], int] = {}
+        for day in range(7):
+            for hour in range(24):
+                heatmap[(day, hour)] = 0
+
+        for s in range_sessions:
+            ca = _normalize_dt(s.created_at)
+            day = ca.weekday()  # 0=Monday
+            hour = ca.hour
+            # Convert to Sunday=0 format
+            day = (day + 1) % 7
+            heatmap[(day, hour)] += 1
+
+        cells = []
+        max_value = 0
+        for (day, hour), value in heatmap.items():
+            max_value = max(max_value, value)
+            cells.append(HeatmapCell(day=day, hour=hour, value=value))
+
+        return ActivityHeatmap(cells=cells, max_value=max_value, time_range=time_range)
+
+    @staticmethod
+    def get_error_analytics_from_sessions(
+        time_range: TimeRange = TimeRange.WEEK,
+        project_name: str | None = None,
+    ) -> ErrorAnalytics:
+        """Get error analytics (minimal, since sessions don't track errors explicitly)."""
+        return ErrorAnalytics(
+            time_range=time_range,
+            total_errors=0,
+            error_rate=0.0,
+            by_type=[],
+            by_agent=[],
+        )
+
+    @staticmethod
+    def get_dashboard_from_sessions(
+        time_range: TimeRange = TimeRange.WEEK,
+        project_name: str | None = None,
+    ) -> AnalyticsDashboard:
+        """Get complete dashboard from Claude Code sessions."""
+        return AnalyticsDashboard(
+            overview=AnalyticsService.get_overview_from_sessions(project_name),
+            trends=AnalyticsService.get_trends_from_sessions(time_range, project_name),
+            agents=AnalyticsService.get_agent_performance_from_sessions(time_range, project_name),
+            costs=AnalyticsService.get_cost_analytics_from_sessions(time_range, project_name),
+            activity=AnalyticsService.get_activity_heatmap_from_sessions(time_range, project_name),
+            errors=AnalyticsService.get_error_analytics_from_sessions(time_range, project_name),
         )
 
     # ─────────────────────────────────────────────────────────────

@@ -208,14 +208,20 @@ AOS Backend API 엔드포인트 문서입니다.
 **환경 변수**: `CLAUDE_OAUTH_TOKEN`, `CLAUDE_STATS_CACHE_PATH`, `CLAUDE_USAGE_CACHE_PATH` ([배포 가이드](./deployment.md#claude-code-usage-환경-변수) 참조)
 | GET | `/api/analytics/overview` | 개요 메트릭 |
 | GET | `/api/analytics/trends` | 시간별 트렌드 |
-| GET | `/api/analytics/agents` | 에이전트 성능 메트릭 |
-| GET | `/api/analytics/costs` | 비용 분석 |
+| GET | `/api/analytics/agents` | 모델별 성능 메트릭 |
+| GET | `/api/analytics/costs` | 비용 분석 (모델별/프로젝트별) |
 | GET | `/api/analytics/activity` | 활동 히트맵 |
 | GET | `/api/analytics/errors` | 에러 분석 |
 | GET | `/api/analytics/dashboard` | 전체 대시보드 데이터 |
 | GET | `/api/analytics/trends/compare` | 멀티 프로젝트 트렌드 비교 |
 
-**쿼리 파라미터**: `time_range`: `1h` | `24h` | `7d` | `30d` | `all` (기본: `7d`)
+**데이터 소스**: Claude 세션 파일 기반 (`~/.claude/projects/` 스캔). `USE_DATABASE` 설정과 무관하게 항상 세션 파일에서 실제 데이터를 읽음.
+
+**쿼리 파라미터**:
+- `time_range`: `1h` | `24h` | `7d` | `30d` | `all` (기본: `7d`)
+- `project_id`: 프로젝트 이름으로 필터 (선택)
+
+**버킷팅 기준**: 세션 `created_at` (생성 시점) 기준으로 시간별 분포 계산
 
 **멀티 프로젝트 비교** (`GET /api/analytics/trends/compare`):
 - `project_ids`: 비교할 프로젝트 ID 목록 (최대 5개, 필수)
@@ -460,7 +466,8 @@ AOS Backend API 엔드포인트 문서입니다.
 |--------|------|------|
 | GET | `/api/git/projects/{id}/branches` | 브랜치 목록 조회 |
 | POST | `/api/git/projects/{id}/branches` | 브랜치 생성 |
-| DELETE | `/api/git/projects/{id}/branches/{name}` | 브랜치 삭제 |
+| DELETE | `/api/git/projects/{id}/branches/{name}` | 브랜치 삭제 (로컬) |
+| DELETE | `/api/git/projects/{id}/branches/{name}?remote=true` | 원격 브랜치 삭제 |
 | GET | `/api/git/projects/{id}/commits` | 커밋 히스토리 |
 
 ### Remote Operations

@@ -208,12 +208,13 @@ class GitService:
         except GitCommandError as e:
             raise GitServiceError(f"Failed to create branch: {e}")
 
-    def delete_branch(self, name: str, force: bool = False) -> bool:
-        """Delete a branch.
+    def delete_branch(self, name: str, force: bool = False, delete_remote: bool = False) -> bool:
+        """Delete a branch (local and optionally remote).
 
         Args:
             name: Branch name to delete
             force: Force delete even if not merged
+            delete_remote: Also delete the branch from the remote
 
         Returns:
             True if deleted successfully
@@ -225,10 +226,51 @@ class GitService:
             raise GitServiceError(f"Cannot delete protected branch '{name}' without force flag")
 
         try:
-            self.repo.delete_head(name, force=force)
+            # Check if this is a remote-only branch (e.g. "origin/feature")
+            is_remote_ref = "/" in name and any(
+                name.startswith(r.name + "/") for r in self.repo.remotes
+            )
+
+            if is_remote_ref:
+                # Parse remote name and branch name
+                parts = name.split("/", 1)
+                remote_name, remote_branch = parts[0], parts[1]
+                try:
+                    remote_obj = self.repo.remotes[remote_name]
+                    remote_obj.push(refspec=f":refs/heads/{remote_branch}")
+                except GitCommandError as e:
+                    raise GitServiceError(f"Failed to delete remote branch: {e}")
+            else:
+                # Delete local branch
+                self.repo.delete_head(name, force=force)
+
+                # Optionally delete remote tracking branch
+                if delete_remote:
+                    self._delete_remote_tracking_branch(name)
+
             return True
+        except GitServiceError:
+            raise
         except GitCommandError as e:
             raise GitServiceError(f"Failed to delete branch: {e}")
+
+    def _delete_remote_tracking_branch(self, branch_name: str) -> None:
+        """Delete the remote tracking branch for a local branch.
+
+        Args:
+            branch_name: Local branch name
+        """
+        # Find which remote tracks this branch
+        for remote in self.repo.remotes:
+            remote_ref = f"{remote.name}/{branch_name}"
+            refs = [ref.name for ref in remote.refs]
+            if remote_ref in refs:
+                try:
+                    remote.push(refspec=f":refs/heads/{branch_name}")
+                except GitCommandError as e:
+                    raise GitServiceError(
+                        f"Local branch deleted but failed to delete remote '{remote.name}/{branch_name}': {e}"
+                    )
 
     def checkout_branch(self, name: str, create: bool = False) -> GitBranch:
         """Checkout a branch.
