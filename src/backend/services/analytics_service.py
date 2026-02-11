@@ -440,7 +440,9 @@ class AnalyticsService:
         durations = []
         for s in sessions:
             created = s.created_at.replace(tzinfo=None) if s.created_at.tzinfo else s.created_at
-            last = s.last_activity.replace(tzinfo=None) if s.last_activity.tzinfo else s.last_activity
+            last = (
+                s.last_activity.replace(tzinfo=None) if s.last_activity.tzinfo else s.last_activity
+            )
             dur = (last - created).total_seconds() * 1000
             if dur > 0:
                 durations.append(dur)
@@ -480,9 +482,7 @@ class AnalyticsService:
         def _normalize_dt(dt):
             return dt.replace(tzinfo=None) if dt.tzinfo else dt
 
-        range_sessions = [
-            s for s in sessions if _normalize_dt(s.created_at) >= start
-        ]
+        range_sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
 
         tasks_data = []
         costs_data = []
@@ -494,8 +494,7 @@ class AnalyticsService:
             bucket_end = current + interval
 
             bucket = [
-                s for s in range_sessions
-                if current <= _normalize_dt(s.created_at) < bucket_end
+                s for s in range_sessions if current <= _normalize_dt(s.created_at) < bucket_end
             ]
 
             bucket_completed = sum(1 for s in bucket if s.status.value == "completed")

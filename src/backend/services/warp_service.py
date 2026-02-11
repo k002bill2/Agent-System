@@ -197,7 +197,7 @@ class WarpService:
             # Step 2: Wait for tab to open, then type command via AppleScript
             applescript = (
                 "delay 1.0\n"
-                "tell application \"System Events\"\n"
+                'tell application "System Events"\n'
                 '    tell process "Warp"\n'
                 f'        keystroke "bash {script_str}"\n'
                 "        delay 0.1\n"

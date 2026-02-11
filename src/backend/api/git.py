@@ -606,7 +606,9 @@ async def delete_branch(
     git_service = get_git_service_for_project(project_id)
 
     try:
-        success = git_service.delete_branch(name=branch_name, force=force, delete_remote=delete_remote)
+        success = git_service.delete_branch(
+            name=branch_name, force=force, delete_remote=delete_remote
+        )
         return {"success": success, "message": f"Branch '{branch_name}' deleted"}
     except GitServiceError as e:
         raise HTTPException(status_code=400, detail=str(e))

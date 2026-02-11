@@ -46,9 +46,7 @@ async def get_agent_performance(
     project_id: str | None = Query(default=None, description="Filter by project name"),
 ):
     """Get performance metrics by model."""
-    return AnalyticsService.get_agent_performance_from_sessions(
-        time_range, project_name=project_id
-    )
+    return AnalyticsService.get_agent_performance_from_sessions(time_range, project_name=project_id)
 
 
 @router.get("/costs", response_model=CostAnalytics)
@@ -66,9 +64,7 @@ async def get_activity_heatmap(
     project_id: str | None = Query(default=None, description="Filter by project name"),
 ):
     """Get activity heatmap data."""
-    return AnalyticsService.get_activity_heatmap_from_sessions(
-        time_range, project_name=project_id
-    )
+    return AnalyticsService.get_activity_heatmap_from_sessions(time_range, project_name=project_id)
 
 
 @router.get("/errors", response_model=ErrorAnalytics)
@@ -77,9 +73,7 @@ async def get_error_analytics(
     project_id: str | None = Query(default=None, description="Filter by project name"),
 ):
     """Get error analytics breakdown."""
-    return AnalyticsService.get_error_analytics_from_sessions(
-        time_range, project_name=project_id
-    )
+    return AnalyticsService.get_error_analytics_from_sessions(time_range, project_name=project_id)
 
 
 @router.get("/dashboard", response_model=AnalyticsDashboard)
