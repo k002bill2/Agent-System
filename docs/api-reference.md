@@ -666,6 +666,79 @@ AOS Backend API 엔드포인트 문서입니다.
 
 ---
 
+## Workflows (CI/CD Automation)
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/workflows` | 워크플로우 목록 조회 (`?project_id=` 필터) |
+| POST | `/api/workflows` | 워크플로우 생성 (YAML 또는 JSON 정의) |
+| GET | `/api/workflows/{id}` | 워크플로우 상세 조회 |
+| PUT | `/api/workflows/{id}` | 워크플로우 수정 |
+| DELETE | `/api/workflows/{id}` | 워크플로우 삭제 |
+| GET | `/api/workflows/{id}/runs` | 실행 이력 조회 (`?limit=50`) |
+| POST | `/api/workflows/{id}/runs` | 워크플로우 실행 트리거 |
+| GET | `/api/workflows/runs/{run_id}` | 실행 상세 조회 |
+| POST | `/api/workflows/runs/{run_id}/cancel` | 실행 취소 |
+| POST | `/api/workflows/runs/{run_id}/retry` | 실패한 실행 재시도 |
+| GET | `/api/workflows/runs/{run_id}/stream` | SSE 실시간 로그 스트림 |
+| GET | `/api/workflows/{id}/yaml` | YAML 내보내기 |
+
+---
+
+## Secrets
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/secrets` | 시크릿 목록 조회 (`?scope=`, `?scope_id=`) |
+| POST | `/api/secrets` | 시크릿 생성 (name, value, scope) |
+| PUT | `/api/secrets/{id}` | 시크릿 수정 |
+| DELETE | `/api/secrets/{id}` | 시크릿 삭제 |
+
+---
+
+## Webhooks
+
+| Method | Path | 설명 |
+|--------|------|------|
+| POST | `/api/webhooks/{webhook_id}` | Webhook 수신 (HMAC-SHA256 검증) |
+| GET | `/api/workflows/{id}/webhooks` | 워크플로우 웹훅 목록 |
+| POST | `/api/workflows/{id}/webhooks` | 웹훅 생성 |
+| DELETE | `/api/workflows/{id}/webhooks/{webhook_id}` | 웹훅 삭제 |
+
+---
+
+## Workflow Schedule
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/workflows/{id}/schedule` | 스케줄 조회 |
+| PUT | `/api/workflows/{id}/schedule` | 스케줄 설정/수정 (cron, timezone) |
+| DELETE | `/api/workflows/{id}/schedule` | 스케줄 삭제 |
+
+---
+
+## Artifacts
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/workflows/runs/{run_id}/artifacts` | 실행별 아티팩트 목록 |
+| POST | `/api/workflows/runs/{run_id}/artifacts` | 아티팩트 업로드 (multipart) |
+| GET | `/api/workflows/artifacts/{id}/download` | 아티팩트 다운로드 |
+| DELETE | `/api/workflows/artifacts/{id}` | 아티팩트 삭제 |
+
+---
+
+## Templates
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/workflows/templates` | 템플릿 목록 (`?category=`, `?search=`) |
+| POST | `/api/workflows/templates` | 템플릿 생성 |
+| GET | `/api/workflows/templates/{id}` | 템플릿 상세 |
+| POST | `/api/workflows/from-template/{id}` | 템플릿으로 워크플로우 생성 |
+
+---
+
 ## WebSocket Events
 
 ### 클라이언트 → 서버

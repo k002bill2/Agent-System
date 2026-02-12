@@ -107,6 +107,12 @@ else:
     llm_models_router = safe_import("api.llm", "router")
     admin_router = safe_import("api.admin", "router")
     project_access_router = safe_import("api.project_access", "router")
+    workflows_router = safe_import("api.workflows", "router")
+    secrets_router = safe_import("api.secrets", "router")
+    webhooks_router = safe_import("api.webhooks", "router")
+    workflow_webhook_router = safe_import("api.webhooks", "workflow_webhook_router")
+    artifacts_router = safe_import("api.artifacts", "router")
+    templates_router = safe_import("api.templates", "router")
 
     # Optional orchestrator
     try:
@@ -359,6 +365,18 @@ else:
             app.include_router(admin_router, prefix="/api")
         if project_access_router:
             app.include_router(project_access_router, prefix="/api")
+        if workflows_router:
+            app.include_router(workflows_router, prefix="/api")
+        if secrets_router:
+            app.include_router(secrets_router, prefix="/api")
+        if webhooks_router:
+            app.include_router(webhooks_router, prefix="/api")
+        if workflow_webhook_router:
+            app.include_router(workflow_webhook_router, prefix="/api")
+        if artifacts_router:
+            app.include_router(artifacts_router, prefix="/api")
+        if templates_router:
+            app.include_router(templates_router, prefix="/api")
 
         # Add Rate Limiting Middleware
         rate_limit_enabled = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"

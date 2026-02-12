@@ -26,6 +26,7 @@ import { AnalyticsPage } from './pages/AnalyticsPage'
 import { PlaygroundPage } from './pages/PlaygroundPage'
 import { OrganizationsPage } from './pages/OrganizationsPage'
 import { AdminPage } from './pages/AdminPage'
+import { WorkflowsPage } from './pages/WorkflowsPage'
 import { InvitationAcceptPage } from './pages/InvitationAcceptPage'
 import {
   SidebarSkeleton,
@@ -56,6 +57,7 @@ const viewTitles: Record<string, string> = {
   notifications: 'Notifications',
   analytics: 'Analytics',
   playground: 'Agent Playground',
+  workflows: 'Workflows',
   admin: 'Admin',
   settings: 'Settings',
 }
@@ -299,6 +301,8 @@ export default function App() {
         return <AnalyticsPage />
       case 'playground':
         return <PlaygroundPage />
+      case 'workflows':
+        return <WorkflowsPage />
       case 'admin':
         return <AdminPage />
       case 'settings':
@@ -337,6 +341,8 @@ export default function App() {
       case 'analytics':
         return <MonitorSkeleton />
       case 'playground':
+        return <MonitorSkeleton />
+      case 'workflows':
         return <MonitorSkeleton />
       case 'admin':
         return <MonitorSkeleton />

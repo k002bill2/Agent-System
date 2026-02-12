@@ -41,6 +41,7 @@ const navigation: { icon: typeof LayoutDashboard; view: ViewType }[] = [
   { icon: Bell, view: 'notifications' },
   { icon: BarChart3, view: 'analytics' },
   { icon: FlaskConical, view: 'playground' },
+  { icon: GitBranch, view: 'workflows' },
 ]
 
 export function Sidebar() {

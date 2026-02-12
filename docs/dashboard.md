@@ -67,6 +67,7 @@ import { cn } from '@/lib/utils';
 | `NotificationsPage` | `/notifications` | 알림 규칙/채널 설정 |
 | `PlaygroundPage` | `/playground` | 에이전트 테스트 환경 |
 | `OrganizationsPage` | `/organizations` | 조직 관리 (멤버, 역할, 통계) |
+| `WorkflowsPage` | `/workflows` | 워크플로우 자동화 (CI/CD 파이프라인 관리) |
 | `AdminPage` | `/admin` | 관리자 페이지 (사용자 관리, 메뉴 설정, 시스템 정보) |
 | `SettingsPage` | `/settings` | 시스템 설정 |
 | `LoginPage` | `/login` | OAuth/Email 로그인 |
@@ -127,7 +128,27 @@ import { cn } from '@/lib/utils';
 | `MCPServerModal` | MCP 서버 편집 모달 |
 | `HooksTab` | Hook 목록 탭 |
 | `HookEditModal` | Hook 편집 모달 |
+
+### Workflow Components
+
+| 컴포넌트 | 설명 |
+|----------|------|
+| `WorkflowList` | 워크플로우 목록 (상태, 최근 실행) |
+| `WorkflowDetail` | 워크플로우 상세 (DAG + 실행 이력) |
+| `WorkflowDAG` | Job 의존성 DAG 시각화 |
+| `WorkflowRunsTable` | 실행 이력 테이블 |
+| `WorkflowRunLogs` | 실시간 로그 뷰어 (SSE) |
+| `WorkflowCreateModal` | 워크플로우 생성 모달 (YAML 에디터) |
 | `CopyToProjectModal` | 프로젝트 간 복사 모달 |
+| `YamlEditor` | YAML 편집기 (js-yaml 검증, 라인번호, Preview) |
+| `EnhancedRunLogs` | 향상된 로그 뷰어 (레벨 필터, 검색, job 접기) |
+| `InteractiveDAG` | 확장 가능한 DAG 시각화 (step 펼침, 상태 아이콘) |
+| `TriggerConfigPanel` | 트리거 설정 패널 (Manual/Schedule/Webhook/Push/PR) |
+| `CronBuilder` | Cron 표현식 빌더 (프리셋, 사람 읽기 가능 미리보기) |
+| `TemplateGallery` | 템플릿 갤러리 모달 (카테고리 필터, YAML 미리보기) |
+| `ArtifactBrowser` | 아티팩트 브라우저 (파일 목록, 다운로드, 삭제) |
+| `SecretsManager` | 시크릿 관리 모달 (CRUD, 마스킹, scope 선택) |
+| `ExecutionTimeline` | 실행 타임라인 (Gantt 차트 스타일) |
 
 ### Feedback Components
 
@@ -291,6 +312,7 @@ import { cn } from '@/lib/utils';
 | `useAudit` | `audit.ts` | 감사 로그 |
 | `useMenuVisibilityStore` | `menuVisibility.ts` | 메뉴 가시성 및 순서 (visibility, menuOrder) |
 | `useProjectAccess` | `projectAccess.ts` | 프로젝트별 멤버/역할 관리 |
+| `useWorkflowStore` | `workflows.ts` | 워크플로우 CRUD, 실행, 시크릿, 스케줄, 웹훅, 아티팩트, 템플릿 |
 
 ### Store Pattern
 

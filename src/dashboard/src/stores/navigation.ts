@@ -19,6 +19,7 @@ export type ViewType =
   | 'audit'
   | 'notifications'
   | 'analytics'
+  | 'workflows'
   | 'playground'
   | 'admin'
   | 'settings'
