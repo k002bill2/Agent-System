@@ -141,13 +141,14 @@ export function withErrorBoundary<P extends Record<string, unknown>>(
 // ---------------------------------------------------------------------------
 
 /** Lazy-load pages with built-in Suspense and ErrorBoundary. */
-export function lazyWithBoundary<P extends Record<string, unknown>>(
-  factory: () => Promise<{ default: ComponentType<P> }>,
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function lazyWithBoundary(
+  factory: () => Promise<{ default: ComponentType<any> }>,
   fallbackUI?: ComponentType<FallbackProps>,
-): ComponentType<P> {
+): ComponentType<any> {
   const LazyComponent = React.lazy(factory)
 
-  function LazyWithBoundary(props: P) {
+  function LazyWithBoundary(props: Record<string, unknown>) {
     return (
       <ErrorBoundary fallback={fallbackUI}>
         <Suspense fallback={<LoadingSkeleton />}>
@@ -157,7 +158,7 @@ export function lazyWithBoundary<P extends Record<string, unknown>>(
     )
   }
 
-  LazyWithBoundary.displayName = `lazyWithBoundary(${LazyComponent.displayName ?? 'LazyComponent'})`
+  LazyWithBoundary.displayName = 'lazyWithBoundary'
   return LazyWithBoundary
 }
 
