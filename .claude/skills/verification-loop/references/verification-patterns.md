@@ -3,12 +3,12 @@
 ## 패턴 1: 기능 구현 후 검증
 
 ### 시나리오
-새로운 훅 `useStationSearch`를 구현 완료한 상황
+새로운 훅 `useAgentSearch`를 구현 완료한 상황
 
 ### 검증 흐름
 ```
-1. useStationSearch.ts 작성 완료
-2. useStationSearch.test.ts 테스트 작성
+1. useAgentSearch.ts 작성 완료
+2. useAgentSearch.test.ts 테스트 작성
 3. /verify-app 실행
 4. 결과 확인 및 수정
 5. 커밋 준비
@@ -57,7 +57,7 @@
 ## 패턴 3: 버그 수정 후 검증
 
 ### 시나리오
-`StationCard` 컴포넌트 버그 수정
+`AgentCard` 컴포넌트 버그 수정
 
 ### 검증 흐름
 ```
@@ -72,7 +72,7 @@
 ```typescript
 // 1. 먼저 실패하는 테스트 작성
 it('should handle empty arrival data', () => {
-  const { getByText } = render(<StationCard arrivals={[]} />);
+  const { getByText } = render(<AgentCard agents={[]} />);
   expect(getByText('도착 정보 없음')).toBeTruthy();
 });
 

@@ -91,12 +91,12 @@ For each check in the task definition:
 
 ```markdown
 ## Code Check: file_exists
-- Target: src/components/station/StationCard.tsx
+- Target: src/components/agents/AgentCard.tsx
 - Result: PASS/FAIL
 - Evidence: [file path or error message]
 
 ## Code Check: no_any_types
-- Target: src/components/station/StationCard.tsx
+- Target: src/components/agents/AgentCard.tsx
 - Result: PASS/FAIL
 - Count: 0 instances found
 ```
@@ -299,8 +299,8 @@ Receive grading request:
 **Agent**: web-ui-specialist
 
 **Files Created**:
-- src/components/station/StationCard.tsx
-- src/components/station/__tests__/StationCard.test.tsx
+- src/components/agents/AgentCard.tsx
+- src/components/agents/__tests__/AgentCard.test.tsx
 
 **Transcript Path**: .temp/traces/sessions/sess_xyz/
 
@@ -322,12 +322,12 @@ graders:
     weight: 0.2
     expect:
       files:
-        "src/components/station/StationCard.tsx":
+        "src/components/agents/AgentCard.tsx":
           exists: true
           contains: ["React.memo"]
           not_contains: [": any"]
       firebase:
-        "stations/{id}":
+        "agents/{id}":
           status: "active"
 ```
 
@@ -347,7 +347,7 @@ grep -c ": any" "$FILE_PATH"
 
 2. **Firebase 상태 검증** (가능한 경우):
 ```typescript
-const doc = await db.collection('stations').doc(id).get();
+const doc = await db.collection('agents').doc(id).get();
 const passed = doc.exists && doc.data()?.status === 'active';
 ```
 

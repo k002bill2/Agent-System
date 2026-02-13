@@ -26,6 +26,7 @@ class TaskAnalysisEntry(BaseModel):
     effort_level: str | None = None
     subtask_count: int | None = None
     strategy: str | None = None
+    image_paths: list[str] | None = None
     created_at: datetime
 
     class Config:
@@ -51,6 +52,7 @@ class TaskAnalysisSaveRequest(BaseModel):
     analysis: dict[str, Any] | None = None
     error: str | None = None
     execution_time_ms: int = 0
+    image_paths: list[str] | None = None
 
 
 class TaskAnalysisQueryParams(BaseModel):

@@ -1,19 +1,6 @@
 import { useState, useEffect } from 'react'
 import { File, Download, Trash2, FileText, Image, Archive, RefreshCw } from 'lucide-react'
-
-interface Artifact {
-  id: string
-  run_id: string
-  job_id?: string
-  step_id?: string
-  name: string
-  path: string
-  size_bytes: number
-  content_type: string
-  retention_days: number
-  expires_at?: string
-  created_at: string
-}
+import type { Artifact } from '../../types/workflow'
 
 interface ArtifactBrowserProps {
   runId: string
@@ -40,6 +27,7 @@ export function ArtifactBrowser({ runId }: ArtifactBrowserProps) {
 
   useEffect(() => {
     fetchArtifacts()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId])
 
   const fetchArtifacts = async () => {

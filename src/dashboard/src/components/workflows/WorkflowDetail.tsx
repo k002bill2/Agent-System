@@ -1,7 +1,9 @@
+import { useEffect } from 'react'
 import { useWorkflowStore } from '../../stores/workflows'
+import { useProjectsStore } from '../../stores/projects'
 import { WorkflowDAG } from './WorkflowDAG'
 import { WorkflowRunsTable } from './WorkflowRunsTable'
-import { Play, Trash2, Code } from 'lucide-react'
+import { Play, Trash2, Code, FolderKanban } from 'lucide-react'
 
 export function WorkflowDetail() {
   const {
@@ -9,15 +11,26 @@ export function WorkflowDetail() {
     selectedWorkflowId,
     runs,
     isRunning,
+    fetchRuns,
     triggerRun,
     deleteWorkflow,
     setShowYamlEditor,
   } = useWorkflowStore()
 
+  const { projects } = useProjectsStore()
+
   const workflow = workflows.find(w => w.id === selectedWorkflowId)
+
+  useEffect(() => {
+    if (workflow?.id) {
+      fetchRuns(workflow.id)
+    }
+  }, [workflow?.id, fetchRuns])
+
   if (!workflow) return null
 
   const workflowRuns = runs[workflow.id] || []
+  const project = workflow.project_id ? projects.find(p => p.id === workflow.project_id) : null
 
   return (
     <div className="p-6 space-y-6">
@@ -31,6 +44,12 @@ export function WorkflowDetail() {
           <div className="flex items-center gap-3 mt-2 text-xs text-gray-500 dark:text-gray-400">
             <span>v{workflow.version}</span>
             <span>Jobs: {Object.keys(workflow.definition.jobs || {}).length}</span>
+            {project && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                <FolderKanban className="w-3 h-3" />
+                {project.name}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">

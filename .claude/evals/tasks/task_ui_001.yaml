@@ -1,12 +1,12 @@
-# Task: StationCard 컴포넌트 생성
+# Task: AgentCard 컴포넌트 생성
 id: task_ui_001
-name: "StationCard 컴포넌트 생성"
+name: "AgentCard 컴포넌트 생성"
 category: ui_component
 difficulty: medium
 
 description: |
-  충전소 정보를 표시하는 StationCard 컴포넌트를 생성합니다.
-  카드에는 충전소 이름, 상태 배지, 가용 커넥터 수, 주소가 표시되어야 합니다.
+  에이전트 정보를 표시하는 AgentCard 컴포넌트를 생성합니다.
+  카드에는 에이전트 이름, 상태 배지, 사용 가능한 도구 수, 엔드포인트가 표시되어야 합니다.
   클릭 시 상세 페이지로 이동하는 기능을 포함해야 합니다.
 
 acceptance_criteria:
@@ -19,27 +19,27 @@ acceptance_criteria:
 
 input:
   prompt: |
-    충전소 정보를 표시하는 StationCard 컴포넌트를 생성해주세요.
+    에이전트 정보를 표시하는 AgentCard 컴포넌트를 생성해주세요.
 
     요구사항:
-    - 충전소 이름, 상태, 가용 커넥터 수, 주소 표시
+    - 에이전트 이름, 상태, 사용 가능한 도구 수, 엔드포인트 표시
     - 상태별 색상 배지 (available/busy/offline)
     - 클릭 시 onSelect 콜백 호출
     - Tailwind CSS 사용
     - 접근성 고려
 
-    Station 타입은 src/dashboard/src/types/에서 참조하세요.
+    Agent 타입은 src/dashboard/src/types/에서 참조하세요.
   context_files:
     - src/dashboard/src/types/index.ts
   dependencies: []
 
 expected_output:
   files:
-    - src/dashboard/src/components/station/StationCard.tsx
-    - src/dashboard/src/components/station/StationCard.test.tsx
+    - src/dashboard/src/components/agents/AgentCard.tsx
+    - src/dashboard/src/components/agents/AgentCard.test.tsx
   patterns:
     - "interface.*Props"
-    - "export.*StationCard"
+    - "export.*AgentCard"
     - "aria-label"
     - "onClick|onSelect"
   forbidden_patterns:
@@ -58,5 +58,5 @@ evaluation:
 metadata:
   created_at: 2025-01-28
   author: system
-  tags: [react, component, ui, station]
+  tags: [react, component, ui, agent]
   recommended_agent: web-ui-specialist

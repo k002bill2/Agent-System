@@ -4,7 +4,7 @@ import type { WorkflowJob } from '../../types/workflow'
 
 interface InteractiveDAGProps {
   jobs: WorkflowJob[]
-  definition?: Record<string, { needs?: string[]; steps: any[] }>
+  definition?: Record<string, { needs?: string[]; steps: unknown[] }>
 }
 
 const STATUS_CONFIG: Record<string, { icon: typeof CheckCircle; color: string; bgColor: string }> = {
@@ -143,7 +143,7 @@ export function InteractiveDAG({ jobs, definition: _definition }: InteractiveDAG
               <div className="w-px h-4 bg-gray-300 dark:bg-gray-600" />
             </div>
           )}
-          <div className={`grid gap-2 ${layer.length > 1 ? `grid-cols-${Math.min(layer.length, 3)}` : 'grid-cols-1'}`}>
+          <div className={`grid gap-2 ${layer.length > 1 ? ({ 2: 'grid-cols-2', 3: 'grid-cols-3' } as Record<number, string>)[Math.min(layer.length, 3)] || 'grid-cols-3' : 'grid-cols-1'}`}>
             {layer.map(job => (
               <JobNode key={job.id} job={job} />
             ))}

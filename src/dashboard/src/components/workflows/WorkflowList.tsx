@@ -1,6 +1,12 @@
 import { useWorkflowStore } from '../../stores/workflows'
+import { useProjectsStore } from '../../stores/projects'
 import type { Workflow } from '../../types/workflow'
-import { GitBranch, CheckCircle, XCircle, Clock, Pause } from 'lucide-react'
+import {
+  GitBranch, CheckCircle, XCircle, Clock, Pause,
+  Code, Rocket, Zap, Activity, Database,
+  GitPullRequest, Box, Shield, Tag, Trash2,
+  Gauge, Monitor, Hexagon, FolderKanban, type LucideIcon,
+} from 'lucide-react'
 import { cn } from '../../lib/utils'
 
 const statusIcon: Record<string, React.ReactNode> = {
@@ -9,6 +15,34 @@ const statusIcon: Record<string, React.ReactNode> = {
   running: <Clock className="w-3.5 h-3.5 text-blue-500 animate-spin" />,
   queued: <Clock className="w-3.5 h-3.5 text-yellow-500" />,
   cancelled: <Pause className="w-3.5 h-3.5 text-gray-500" />,
+}
+
+/** Keyword-based icon + color mapping for workflow names */
+const WORKFLOW_ICON_RULES: { keywords: string[]; icon: LucideIcon; color: string }[] = [
+  { keywords: ['health', 'health check'],   icon: Activity,       color: 'text-emerald-500' },
+  { keywords: ['database', 'backup', 'db'], icon: Database,       color: 'text-amber-500' },
+  { keywords: ['pr ', 'pull request', 'pr validation'], icon: GitPullRequest, color: 'text-blue-500' },
+  { keywords: ['docker', 'container', 'image'], icon: Box,        color: 'text-cyan-500' },
+  { keywords: ['security', 'scan', 'audit'],icon: Shield,         color: 'text-red-400' },
+  { keywords: ['release', 'version'],       icon: Tag,            color: 'text-violet-500' },
+  { keywords: ['cleanup', 'clean', 'log cleanup'], icon: Trash2,  color: 'text-gray-400' },
+  { keywords: ['benchmark', 'performance', 'perf'], icon: Gauge,  color: 'text-orange-500' },
+  { keywords: ['branch', 'git branch'],     icon: GitBranch,      color: 'text-pink-500' },
+  { keywords: ['dashboard', 'react', 'frontend', 'dev server'], icon: Monitor, color: 'text-indigo-500' },
+  { keywords: ['deploy', 'ship'],           icon: Rocket,         color: 'text-green-500' },
+  { keywords: ['test', 'spec'],             icon: CheckCircle,    color: 'text-purple-500' },
+  { keywords: ['node', 'npm'],              icon: Hexagon,        color: 'text-green-600' },
+  { keywords: ['python', 'ci'],             icon: Code,           color: 'text-blue-400' },
+]
+
+function getWorkflowIcon(name: string): { Icon: LucideIcon; color: string } {
+  const lower = name.toLowerCase()
+  for (const rule of WORKFLOW_ICON_RULES) {
+    if (rule.keywords.some(kw => lower.includes(kw))) {
+      return { Icon: rule.icon, color: rule.color }
+    }
+  }
+  return { Icon: Zap, color: 'text-gray-400' }
 }
 
 function formatTimeAgo(dateStr: string | null): string {
@@ -24,6 +58,7 @@ function formatTimeAgo(dateStr: string | null): string {
 
 export function WorkflowList() {
   const { workflows, selectedWorkflowId, selectWorkflow, fetchRuns } = useWorkflowStore()
+  const { projects } = useProjectsStore()
 
   const handleSelect = (workflow: Workflow) => {
     selectWorkflow(workflow.id)
@@ -37,7 +72,9 @@ export function WorkflowList() {
           워크플로우가 없습니다
         </div>
       ) : (
-        workflows.map(w => (
+        workflows.map(w => {
+          const { Icon: WfIcon, color: iconColor } = getWorkflowIcon(w.name)
+          return (
           <button
             key={w.id}
             onClick={() => handleSelect(w)}
@@ -47,12 +84,12 @@ export function WorkflowList() {
             )}
           >
             <div className="flex items-center gap-2">
-              <GitBranch className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              <WfIcon className={cn('w-4 h-4 flex-shrink-0', iconColor)} />
               <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
                 {w.name}
               </span>
             </div>
-            <div className="flex items-center gap-2 mt-1 ml-6">
+            <div className="flex items-center gap-2 mt-1 ml-6 flex-wrap">
               {w.last_run_status && statusIcon[w.last_run_status]}
               <span className="text-xs text-gray-500 dark:text-gray-400">
                 {formatTimeAgo(w.last_run_at)}
@@ -65,9 +102,19 @@ export function WorkflowList() {
               )}>
                 {w.status}
               </span>
+              {w.project_id && (() => {
+                const project = projects.find(p => p.id === w.project_id)
+                return project ? (
+                  <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                    <FolderKanban className="w-3 h-3" />
+                    {project.name}
+                  </span>
+                ) : null
+              })()}
             </div>
           </button>
-        ))
+          )
+        })
       )}
     </div>
   )

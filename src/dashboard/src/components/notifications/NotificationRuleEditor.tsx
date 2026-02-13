@@ -245,7 +245,7 @@ export function NotificationRuleEditor({ className }: NotificationRuleEditorProp
   useEffect(() => {
     loadData()
     fetchProjects()
-  }, [])
+  }, [fetchProjects])
 
   const loadData = async () => {
     try {

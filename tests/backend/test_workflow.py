@@ -331,6 +331,9 @@ jobs:
 
     def setup_method(self):
         self.svc = WorkflowService()
+        # 시드 워크플로우 제거하여 테스트 격리
+        for wf in list(self.svc._workflows.values()):
+            self.svc.delete_workflow(wf["id"])
 
     def test_create_workflow(self):
         wf = self.svc.create_workflow(

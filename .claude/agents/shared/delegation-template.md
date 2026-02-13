@@ -99,13 +99,13 @@ Success Criteria:
 ### Example 1: UI Component
 
 ```markdown
-## Task: Create StationInfoCard Component
+## Task: Create AgentInfoCard Component
 
 ### Objective
-Create a reusable card component displaying station information.
+Create a reusable card component displaying agent information.
 
 Success Criteria:
-- [ ] Shows station name with line color indicator
+- [ ] Shows agent name with status indicator
 - [ ] Displays distance when provided
 - [ ] Includes onPress handler for navigation
 - [ ] Has accessibility labels
@@ -114,20 +114,20 @@ Success Criteria:
 **Location**: `.temp/agent_workspaces/web-ui/proposals/`
 
 **Files to create:**
-- `StationInfoCard.tsx` - Main component with styles
-- `StationInfoCard.types.ts` - Props interface (optional)
+- `AgentInfoCard.tsx` - Main component with styles
+- `AgentInfoCard.types.ts` - Props interface (optional)
 
 **Code Requirements:**
 - TypeScript strict mode
 - Use memo() wrapper
-- Follow patterns in `src/components/train/StationCard.tsx`
+- Follow patterns in `src/components/agents/AgentCard.tsx`
 
 ### Tools & Sources
 **Invoke skill**: `react-web-development`
 
 **Reference files:**
-- `src/components/train/StationCard.tsx` - Existing pattern
-- `src/models/station.ts` - Station type definition
+- `src/components/agents/AgentCard.tsx` - Existing pattern
+- `src/models/agent.ts` - Agent type definition
 - `src/utils/lineColors.ts` - Line color constants
 
 ### Task Boundaries
@@ -141,19 +141,19 @@ Success Criteria:
 - None (types already exist)
 
 **STOP IF:**
-- You need Station type changes
+- You need Agent type changes
 ```
 
 ### Example 2: Backend Service
 
 ```markdown
-## Task: Implement StationService
+## Task: Implement AgentService
 
 ### Objective
-Create service for fetching station data from Seoul API.
+Create service for fetching agent data from API.
 
 Success Criteria:
-- [ ] Fetches station list from Seoul API
+- [ ] Fetches agent list from API
 - [ ] Fetches real-time arrival data
 - [ ] Implements caching with 30s TTL
 - [ ] Handles API errors gracefully
@@ -162,8 +162,8 @@ Success Criteria:
 **Location**: `.temp/agent_workspaces/backend-integration/proposals/`
 
 **Files to create:**
-- `stationService.ts` - Service with all methods
-- `stationService.types.ts` - Request/response types
+- `agentService.ts` - Service with all methods
+- `agentService.types.ts` - Request/response types
 
 **Code Requirements:**
 - TypeScript strict mode
@@ -178,7 +178,7 @@ Success Criteria:
 - `src/services/train/trainService.ts` - Service pattern
 
 **APIs/Services:**
-- Seoul Open Data API - Station endpoints
+- Agent Registry API - Agent endpoints
 
 ### Task Boundaries
 
@@ -194,10 +194,10 @@ Success Criteria:
 ### Example 3: Test Suite
 
 ```markdown
-## Task: Write StationInfoCard Tests
+## Task: Write AgentInfoCard Tests
 
 ### Objective
-Create comprehensive test suite for StationInfoCard component.
+Create comprehensive test suite for AgentInfoCard component.
 
 Success Criteria:
 - [ ] Tests rendering with all prop combinations
@@ -209,7 +209,7 @@ Success Criteria:
 **Location**: `.temp/agent_workspaces/test-automation/proposals/`
 
 **Files to create:**
-- `StationInfoCard.test.tsx` - Test suite
+- `AgentInfoCard.test.tsx` - Test suite
 
 **Code Requirements:**
 - Use React Testing Library
@@ -220,8 +220,8 @@ Success Criteria:
 **Invoke skill**: `test-automation`
 
 **Reference files:**
-- `src/components/train/__tests__/StationCard.test.tsx` - Test pattern
-- Web-ui proposals: `StationInfoCard.tsx` - Component to test
+- `src/components/agents/__tests__/AgentCard.test.tsx` - Test pattern
+- Web-ui proposals: `AgentInfoCard.tsx` - Component to test
 
 ### Task Boundaries
 
@@ -231,7 +231,7 @@ Success Criteria:
 - Create: snapshot tests (prefer assertions)
 
 **WAIT FOR:**
-- `web-ui-specialist` to complete: StationInfoCard.tsx
+- `web-ui-specialist` to complete: AgentInfoCard.tsx
 ```
 
 ---
@@ -241,20 +241,20 @@ Success Criteria:
 ### ❌ Vague Objective
 ```markdown
 ### Objective
-Create a component for stations.
+Create a component for agents.
 ```
 
 ### ✅ Clear Objective
 ```markdown
 ### Objective
-Create a StationInfoCard component that displays station name,
+Create a AgentInfoCard component that displays agent name,
 line color indicator, and optional distance, with tap navigation.
 
 Success Criteria:
-- [ ] Shows station name prominently
-- [ ] Line color matches station.lineId
+- [ ] Shows agent name prominently
+- [ ] Status badge matches agent.status
 - [ ] Distance formatted as "X.Xkm" when provided
-- [ ] onPress triggers with station.id
+- [ ] onPress triggers with agent.id
 ```
 
 ### ❌ Missing Boundaries
@@ -284,7 +284,7 @@ Check the types somewhere in the codebase
 ```markdown
 ### Tools & Sources
 **Reference files:**
-- `src/models/station.ts` - Station interface (lines 1-20)
+- `src/models/agent.ts` - Agent interface (lines 1-20)
 - `src/utils/lineColors.ts` - LINE_COLORS constant
 
 **WAIT FOR:**

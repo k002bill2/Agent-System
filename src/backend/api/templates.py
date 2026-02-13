@@ -39,6 +39,14 @@ async def get_template(template_id: str):
     return template
 
 
+@router.delete("/workflows/templates/{template_id}", status_code=204)
+async def delete_template(template_id: str):
+    """Delete a workflow template."""
+    service = get_template_service()
+    if not service.delete_template(template_id):
+        raise HTTPException(status_code=404, detail="Template not found")
+
+
 @router.post("/workflows/from-template/{template_id}", status_code=201)
 async def create_from_template(
     template_id: str,

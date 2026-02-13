@@ -97,30 +97,30 @@ See [effort-scaling.md](../../agents/shared/effort-scaling.md) for complete guid
 ### Real Example
 
 ```markdown
-## Task: Create StationInfoCard Component
+## Task: Create AgentInfoCard Component
 
 ### Objective
-Create a reusable card component displaying station information including:
-- Station name with line color indicator
+Create a reusable card component displaying agent information including:
+- Agent name with status indicator
 - Distance from user (optional)
 - Tap handler for navigation
 
 ### Output Format
-- File: `.temp/agent_workspaces/web-ui/proposals/StationInfoCard.tsx`
+- File: `.temp/agent_workspaces/web-ui/proposals/AgentInfoCard.tsx`
 - Props interface exported
 - memo() wrapper for performance
 - Accessibility labels included
 
 ### Tools & Sources
 - Invoke: `react-web-development` skill
-- Reference: `src/components/train/StationCard.tsx` (existing pattern)
-- Types: `src/models/station.ts`
+- Reference: `src/components/agents/AgentCard.tsx` (existing pattern)
+- Types: `src/models/agent.ts`
 
 ### Task Boundaries (DO NOT)
-- DO NOT fetch station data (backend handles)
+- DO NOT fetch agent data (backend handles)
 - DO NOT implement navigation logic (screen handles)
 - DO NOT write tests (test-automation handles)
-- DO NOT modify existing StationCard
+- DO NOT modify existing AgentCard
 ```
 
 ---
@@ -173,19 +173,19 @@ After subagent completion, check:
 ## Follow-up: Missing Error Handling
 
 ### Context
-Initial StationInfoCard implementation complete but missing:
-- Error state when station data unavailable
+Initial AgentInfoCard implementation complete but missing:
+- Error state when agent data unavailable
 - Loading skeleton while data fetches
 
 ### Objective
-Add error and loading states to StationInfoCard
+Add error and loading states to AgentInfoCard
 
 ### Output Format
 - Update existing file in proposals/
 - Add LoadingState and ErrorState sub-components
 
 ### Task Boundaries
-- ONLY modify StationInfoCard.tsx
+- ONLY modify AgentInfoCard.tsx
 - DO NOT change prop interface
 ```
 
@@ -317,10 +317,10 @@ Define strategic context:
 **Tool Usage**:
 ```typescript
 // GOOD: Agent writes to own workspace
-Write(.temp/agent_workspaces/web-ui/proposals/StationCard.tsx)
+Write(.temp/agent_workspaces/web-ui/proposals/AgentCard.tsx)
 
 // BAD: Agent writes to src/ directly (DENIED)
-Write(src/components/train/StationCard.tsx)
+Write(src/components/agents/AgentCard.tsx)
 
 // GOOD: Agent reads from src/ for reference
 Read(src/components/train/ExistingComponent.tsx)

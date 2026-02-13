@@ -1,5 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Search, X, Code, Rocket, CheckCircle, Zap } from 'lucide-react'
+import {
+  Search, X, Code, Rocket, CheckCircle, Zap,
+  Activity, Database, GitPullRequest, Box, Shield,
+  Tag, Trash2, Gauge, GitBranch, Monitor, Hexagon,
+  type LucideIcon,
+} from 'lucide-react'
 
 export interface Template {
   id: string
@@ -17,11 +22,29 @@ interface TemplateGalleryProps {
   onClose: () => void
 }
 
-const CATEGORY_CONFIG: Record<string, { label: string; icon: typeof Code; color: string }> = {
+const CATEGORY_CONFIG: Record<string, { label: string; icon: LucideIcon; color: string }> = {
   ci: { label: 'CI', icon: Code, color: 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' },
   deploy: { label: 'Deploy', icon: Rocket, color: 'text-green-500 bg-green-50 dark:bg-green-900/20' },
   test: { label: 'Test', icon: CheckCircle, color: 'text-purple-500 bg-purple-50 dark:bg-purple-900/20' },
   utility: { label: 'Utility', icon: Zap, color: 'text-orange-500 bg-orange-50 dark:bg-orange-900/20' },
+}
+
+const ICON_MAP: Record<string, LucideIcon> = {
+  code: Code,
+  hexagon: Hexagon,
+  rocket: Rocket,
+  'check-circle': CheckCircle,
+  zap: Zap,
+  monitor: Monitor,
+  activity: Activity,
+  database: Database,
+  'git-pull-request': GitPullRequest,
+  box: Box,
+  shield: Shield,
+  tag: Tag,
+  'trash-2': Trash2,
+  gauge: Gauge,
+  'git-branch': GitBranch,
 }
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
@@ -35,6 +58,7 @@ export function TemplateGallery({ onSelect, onClose }: TemplateGalleryProps) {
 
   useEffect(() => {
     fetchTemplates()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category, search])
 
   const fetchTemplates = async () => {
@@ -139,7 +163,7 @@ export function TemplateGallery({ onSelect, onClose }: TemplateGalleryProps) {
             <div className="grid grid-cols-2 gap-3">
               {templates.map(tpl => {
                 const catConfig = CATEGORY_CONFIG[tpl.category] || CATEGORY_CONFIG.utility
-                const CatIcon = catConfig.icon
+                const TplIcon = ICON_MAP[tpl.icon] || catConfig.icon
                 return (
                   <div
                     key={tpl.id}
@@ -148,7 +172,7 @@ export function TemplateGallery({ onSelect, onClose }: TemplateGalleryProps) {
                   >
                     <div className="flex items-start gap-2.5">
                       <div className={`p-2 rounded-lg ${catConfig.color}`}>
-                        <CatIcon className="w-4 h-4" />
+                        <TplIcon className="w-4 h-4" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <h4 className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{tpl.name}</h4>

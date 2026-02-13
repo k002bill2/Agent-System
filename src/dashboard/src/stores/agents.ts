@@ -89,6 +89,7 @@ export interface TaskAnalysisHistory {
   effort_level: string | null
   subtask_count: number | null
   strategy: string | null
+  image_paths: string[] | null
   created_at: string
 }
 
@@ -118,14 +119,21 @@ interface AgentsState {
   selectedAgentId: string | null
   categoryFilter: AgentCategory | null
 
+  // Image state
+  attachedImages: File[]
+
   // Actions
   fetchAgents: (category?: AgentCategory, availableOnly?: boolean) => Promise<void>
   fetchStats: () => Promise<void>
   searchAgents: (query: string, category?: AgentCategory) => Promise<void>
-  analyzeTask: (task: string, context?: Record<string, unknown>) => Promise<TaskAnalysisResult | null>
+  analyzeTask: (task: string, context?: Record<string, unknown>, images?: File[]) => Promise<TaskAnalysisResult | null>
   setSelectedAgent: (agentId: string | null) => void
   setCategoryFilter: (category: AgentCategory | null) => void
   clearError: () => void
+  setAttachedImages: (images: File[]) => void
+  addAttachedImages: (images: File[]) => void
+  removeAttachedImage: (index: number) => void
+  clearAttachedImages: () => void
 
   // Execution Actions
   executeAnalysis: (analysisId: string, projectId?: string | null) => Promise<string | null>
@@ -224,6 +232,9 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
   executionSessionId: null,
   executionError: null,
 
+  // Image state
+  attachedImages: [],
+
   // UI state
   isLoading: false,
   error: null,
@@ -308,22 +319,44 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
     }
   },
 
-  analyzeTask: async (task: string, context?: Record<string, unknown>) => {
+  analyzeTask: async (task: string, context?: Record<string, unknown>, images?: File[]) => {
     set({ isLoading: true, error: null })
 
+    const attachedImages = images || get().attachedImages
+
     try {
-      const response = await fetch(`${API_BASE}/agents/orchestrate/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ task, context: context || null }),
-      })
+      let response: Response
+
+      if (attachedImages.length > 0) {
+        // Use multipart/form-data endpoint when images are attached
+        const formData = new FormData()
+        formData.append('task', task)
+        if (context) {
+          formData.append('context', JSON.stringify(context))
+        }
+        for (const img of attachedImages) {
+          formData.append('images', img)
+        }
+
+        response = await fetch(`${API_BASE}/agents/orchestrate/analyze-with-images`, {
+          method: 'POST',
+          body: formData,
+        })
+      } else {
+        // Use JSON endpoint when no images
+        response = await fetch(`${API_BASE}/agents/orchestrate/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task, context: context || null }),
+        })
+      }
 
       if (!response.ok) {
         throw new Error(`Failed to analyze task: ${response.statusText}`)
       }
 
       const result: TaskAnalysisResult = await response.json()
-      set({ lastAnalysis: result, isLoading: false })
+      set({ lastAnalysis: result, isLoading: false, attachedImages: [] })
 
       // Refresh history after successful analysis
       const projectId = context?.project_id as string | undefined
@@ -353,6 +386,26 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
 
   clearError: () => {
     set({ error: null })
+  },
+
+  setAttachedImages: (images: File[]) => {
+    set({ attachedImages: images })
+  },
+
+  addAttachedImages: (images: File[]) => {
+    const current = get().attachedImages
+    // Max 5 images
+    const combined = [...current, ...images].slice(0, 5)
+    set({ attachedImages: combined })
+  },
+
+  removeAttachedImage: (index: number) => {
+    const current = get().attachedImages
+    set({ attachedImages: current.filter((_, i) => i !== index) })
+  },
+
+  clearAttachedImages: () => {
+    set({ attachedImages: [] })
   },
 
   // Execution Actions
@@ -426,6 +479,7 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
           title: `Task: ${analysisData.task_input?.substring(0, 40) || 'Analysis'}`,
           new_window: false, // Prefer tab in existing Warp window
           use_claude_cli: true,
+          image_paths: analysisData.image_paths || null,
         }),
       })
 

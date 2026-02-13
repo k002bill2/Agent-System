@@ -132,7 +132,7 @@ Claude:
 ## useNotifications.ts 분석 결과
 
 ### 🔴 높은 우선순위
-1. `monitorStationDelays` (128-228줄) - 함수가 100줄 초과
+1. `monitorAgentDelays` (128-228줄) - 함수가 100줄 초과
    - 제안: `checkDelays`, `checkDisruptions` 함수로 분리
 
 ### 🟡 중간 우선순위

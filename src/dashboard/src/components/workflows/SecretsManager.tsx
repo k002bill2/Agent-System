@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Lock, X, Shield } from 'lucide-react'
+import { Plus, Trash2, Lock, X, Shield, ShieldAlert } from 'lucide-react'
+import { useAuthStore, authFetch } from '../../stores/auth'
 
 interface Secret {
   id: string
@@ -18,6 +19,9 @@ interface SecretsManagerProps {
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
 export function SecretsManager({ onClose }: SecretsManagerProps) {
+  const user = useAuthStore((s) => s.user)
+  const isAdmin = user?.role === 'admin' || user?.is_admin === true
+
   const [secrets, setSecrets] = useState<Secret[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
@@ -27,13 +31,17 @@ export function SecretsManager({ onClose }: SecretsManagerProps) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchSecrets()
-  }, [])
+    if (isAdmin) {
+      fetchSecrets()
+    } else {
+      setIsLoading(false)
+    }
+  }, [isAdmin])
 
   const fetchSecrets = async () => {
     setIsLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/secrets`)
+      const res = await authFetch(`${API_BASE}/secrets`)
       if (res.ok) {
         const data = await res.json()
         setSecrets(data.secrets || [])
@@ -48,7 +56,7 @@ export function SecretsManager({ onClose }: SecretsManagerProps) {
     if (!newName.trim() || !newValue.trim()) return
     setError(null)
     try {
-      const res = await fetch(`${API_BASE}/secrets`, {
+      const res = await authFetch(`${API_BASE}/secrets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName, value: newValue, scope: newScope }),
@@ -69,13 +77,38 @@ export function SecretsManager({ onClose }: SecretsManagerProps) {
 
   const handleDelete = async (id: string) => {
     try {
-      const res = await fetch(`${API_BASE}/secrets/${id}`, { method: 'DELETE' })
+      const res = await authFetch(`${API_BASE}/secrets/${id}`, { method: 'DELETE' })
       if (res.ok) {
         setSecrets(prev => prev.filter(s => s.id !== id))
       }
     } catch (e) {
       console.error('Failed to delete secret:', e)
     }
+  }
+
+  // Non-admin guard
+  if (!isAdmin) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-[400px] p-6 text-center">
+          <ShieldAlert className="w-10 h-10 mx-auto mb-3 text-amber-500" />
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-2">
+            Access Restricted
+          </h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Only administrators can manage secrets.
+          </p>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
+            >
+              Close
+            </button>
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (

@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useWorkflowStore } from '../../stores/workflows'
-import { X } from 'lucide-react'
+import { useProjectsStore } from '../../stores/projects'
+import { X, FolderKanban } from 'lucide-react'
 
 const SAMPLE_YAML = `name: CI Pipeline
 description: Run tests and build
@@ -34,9 +35,15 @@ jobs:
 
 export function WorkflowCreateModal() {
   const { createWorkflow, setShowCreateModal, isLoading, error } = useWorkflowStore()
+  const { projects, fetchProjects } = useProjectsStore()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [projectId, setProjectId] = useState<string | null>(null)
   const [yamlContent, setYamlContent] = useState(SAMPLE_YAML)
+
+  useEffect(() => {
+    fetchProjects()
+  }, [fetchProjects])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -44,6 +51,7 @@ export function WorkflowCreateModal() {
       name: name || 'New Workflow',
       description,
       yaml_content: yamlContent,
+      project_id: projectId,
     })
   }
 
@@ -78,6 +86,23 @@ export function WorkflowCreateModal() {
               placeholder="Optional description"
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <FolderKanban className="w-4 h-4 inline-block mr-1 -mt-0.5" />
+              프로젝트
+            </label>
+            <select
+              value={projectId || ''}
+              onChange={e => setProjectId(e.target.value || null)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            >
+              <option value="">프로젝트 없음</option>
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
           </div>
 
           <div>

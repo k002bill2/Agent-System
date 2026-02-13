@@ -41,7 +41,7 @@ interface WorkflowState {
   fetchWorkflows: (projectId?: string) => Promise<void>
   fetchRuns: (workflowId: string) => Promise<void>
   fetchRun: (runId: string) => Promise<void>
-  createWorkflow: (data: { name: string; description?: string; yaml_content?: string }) => Promise<Workflow | null>
+  createWorkflow: (data: { name: string; description?: string; yaml_content?: string; project_id?: string | null }) => Promise<Workflow | null>
   updateWorkflow: (id: string, data: Partial<Workflow>) => Promise<void>
   deleteWorkflow: (id: string) => Promise<void>
   triggerRun: (workflowId: string, triggerType?: TriggerType, inputs?: Record<string, unknown>) => Promise<WorkflowRun | null>

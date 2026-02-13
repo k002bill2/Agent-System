@@ -1,12 +1,14 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useWorkflowStore } from '../stores/workflows'
+import { useProjectsStore } from '../stores/projects'
 import { WorkflowList } from '../components/workflows/WorkflowList'
 import { WorkflowDetail } from '../components/workflows/WorkflowDetail'
 import { WorkflowRunLogs } from '../components/workflows/WorkflowRunLogs'
 import { WorkflowCreateModal } from '../components/workflows/WorkflowCreateModal'
 import { SecretsManager } from '../components/workflows/SecretsManager'
 import { TemplateGallery } from '../components/workflows/TemplateGallery'
-import { Plus, RefreshCw, Shield, LayoutTemplate } from 'lucide-react'
+import { WorkflowYamlModal } from '../components/workflows/WorkflowYamlModal'
+import { Plus, RefreshCw, Shield, LayoutTemplate, FolderKanban } from 'lucide-react'
 
 export function WorkflowsPage() {
   const {
@@ -14,6 +16,7 @@ export function WorkflowsPage() {
     activeRun,
     isLoading,
     showCreateModal,
+    showYamlEditor,
     showSecretsManager,
     showTemplateGallery,
     fetchWorkflows,
@@ -23,14 +26,21 @@ export function WorkflowsPage() {
     createWorkflow,
   } = useWorkflowStore()
 
+  const { projects, fetchProjects } = useProjectsStore()
+  const [filterProjectId, setFilterProjectId] = useState<string>('')
+
   useEffect(() => {
-    fetchWorkflows()
-  }, [fetchWorkflows])
+    fetchProjects()
+  }, [fetchProjects])
+
+  useEffect(() => {
+    fetchWorkflows(filterProjectId || undefined)
+  }, [fetchWorkflows, filterProjectId])
 
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* Workflow List Panel */}
-      <div className="w-64 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col">
+      <div className="w-96 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col">
         <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Workflows</h2>
           <div className="flex items-center gap-1">
@@ -62,6 +72,22 @@ export function WorkflowsPage() {
             >
               <Plus className="w-4 h-4" />
             </button>
+          </div>
+        </div>
+        {/* Project Filter */}
+        <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center gap-1.5">
+            <FolderKanban className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+            <select
+              value={filterProjectId}
+              onChange={e => setFilterProjectId(e.target.value)}
+              className="flex-1 text-xs bg-transparent border-none text-gray-600 dark:text-gray-400 focus:ring-0 cursor-pointer p-0"
+            >
+              <option value="">모든 프로젝트</option>
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
           </div>
         </div>
         <WorkflowList />
@@ -96,6 +122,7 @@ export function WorkflowsPage() {
       </div>
 
       {showCreateModal && <WorkflowCreateModal />}
+      {showYamlEditor && <WorkflowYamlModal />}
       {showSecretsManager && <SecretsManager onClose={() => setShowSecretsManager(false)} />}
       {showTemplateGallery && (
         <TemplateGallery

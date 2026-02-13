@@ -27,10 +27,11 @@ export function YamlEditor({ value, onChange, readOnly = false }: YamlEditorProp
       }
       setError(null)
       return true
-    } catch (e: any) {
-      const mark = e.mark
+    } catch (e: unknown) {
+      const err = e as { mark?: { line: number }; message?: string }
+      const mark = err.mark
       setError({
-        message: e.message || 'Invalid YAML',
+        message: err.message || 'Invalid YAML',
         line: mark ? mark.line + 1 : undefined,
       })
       return false

@@ -1,0 +1,121 @@
+# Integration Evaluation Rubric
+# 풀스택 통합 태스크 평가 기준
+
+rubric_id: integration
+version: "1.0"
+description: Frontend + Backend + State 통합 태스크 품질 평가 루브릭
+
+# 코드 검사 (자동화 가능)
+code_checks:
+  file_existence:
+    weight: 8
+    description: 필수 파일 존재 여부
+    checks:
+      - type: file_exists
+        pattern: "{expected_files}"
+
+  test_existence:
+    weight: 8
+    description: 테스트 파일 존재 여부 (frontend + backend)
+    checks:
+      - type: file_exists
+        pattern: "*.test.{tsx,ts,py}"
+
+  typescript_quality:
+    weight: 8
+    description: TypeScript/Python 타입 안전성
+    checks:
+      - type: pattern_absent
+        pattern: ": any"
+        message: "any 타입 사용 금지"
+      - type: pattern_absent
+        pattern: "# type: ignore"
+        message: "type ignore 사용 금지"
+
+  api_contract:
+    weight: 8
+    description: API 계약 일관성 (frontend ↔ backend 타입 일치)
+    checks:
+      - type: pattern_present
+        pattern: "interface|type.*Response|BaseModel"
+        message: "API 응답 타입 정의 필요"
+
+  error_handling:
+    weight: 8
+    description: 에러 처리 (양쪽 레이어)
+    checks:
+      - type: pattern_present
+        pattern: "try|catch|HTTPException|Error"
+        message: "에러 처리 필요"
+
+# LLM 평가 기준
+llm_grading:
+  dimensions:
+    architecture:
+      weight: 20
+      description: 전체 아키텍처 일관성
+      criteria:
+        5: Frontend/Backend/State 레이어 간 완벽한 관심사 분리, 일관된 데이터 흐름
+        4: 좋은 아키텍처, 사소한 결합도 이슈
+        3: 기능적으로 동작하나 레이어 간 결합도 높음
+        2: 아키텍처 불일치, 혼재된 관심사
+        1: 아키텍처 원칙 심각하게 위반
+
+    data_flow:
+      weight: 20
+      description: 데이터 흐름 (API → Store → Component)
+      criteria:
+        5: 단방향 데이터 흐름, 옵티미스틱 업데이트, 에러 롤백
+        4: 깔끔한 데이터 흐름, 사소한 개선 여지
+        3: 기본적인 데이터 흐름
+        2: 데이터 흐름 불명확
+        1: 양방향 의존성, 순환 참조
+
+    error_resilience:
+      weight: 20
+      description: 에러 복원력 (네트워크 실패, 타임아웃, 경쟁 상태)
+      criteria:
+        5: 포괄적 에러 처리, 재시도 로직, 사용자 피드백, 그레이스풀 디그레이드
+        4: 좋은 에러 처리, 대부분의 케이스 커버
+        3: 기본적인 에러 처리
+        2: 에러 처리 부족, 일부 크래시 가능
+        1: 에러 처리 거의 없음
+
+    type_safety:
+      weight: 20
+      description: 엔드투엔드 타입 안전성
+      criteria:
+        5: API 계약 타입 공유, 런타임 검증, Zod/Pydantic 활용
+        4: 타입 잘 정의됨, 프론트/백 일관
+        3: 기본적인 타입 정의
+        2: 타입 불일치 존재
+        1: 타입 안전성 거의 없음
+
+    testing:
+      weight: 20
+      description: 테스트 품질 (단위 + 통합)
+      criteria:
+        5: 단위/통합 테스트 모두 포함, 모킹 전략 명확, 엣지 케이스 커버
+        4: 좋은 테스트 커버리지
+        3: 기본적인 테스트
+        2: 테스트 부족
+        1: 테스트 없음
+
+# 점수 계산
+scoring:
+  code_checks_total: 40
+  llm_grading_total: 60
+  passing_threshold: 0.75  # 통합 태스크는 높은 기준
+
+feedback_template: |
+  ## 코드 검사 결과 ({code_score}%)
+  {code_feedback}
+
+  ## LLM 평가 결과 ({llm_score}%)
+  {llm_feedback}
+
+  ## 총점: {total_score}%
+  ## 결과: {result}
+
+  ## 개선 제안
+  {suggestions}

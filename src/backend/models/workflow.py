@@ -119,6 +119,7 @@ class WorkflowUpdate(BaseModel):
     yaml_content: str | None = None
     definition: WorkflowDefinitionSchema | None = None
     status: WorkflowStatus | None = None
+    project_id: str | None = None
 
 
 class WorkflowResponse(BaseModel):

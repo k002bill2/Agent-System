@@ -72,6 +72,7 @@ class TaskAnalysisService:
             "effort_level": effort_level,
             "subtask_count": subtask_count,
             "strategy": strategy,
+            "image_paths": request.image_paths,
             "created_at": now,
         }
 
@@ -94,6 +95,7 @@ class TaskAnalysisService:
             effort_level=effort_level,
             subtask_count=subtask_count,
             strategy=strategy,
+            image_paths=request.image_paths,
             created_at=now,
         )
 
@@ -177,6 +179,7 @@ class TaskAnalysisService:
             effort_level=data.get("effort_level"),
             subtask_count=data.get("subtask_count"),
             strategy=data.get("strategy"),
+            image_paths=data.get("image_paths"),
             created_at=data["created_at"],
         )
 

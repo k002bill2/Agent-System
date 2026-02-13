@@ -258,6 +258,33 @@ async def _run_migrations() -> None:
                 )
             )
 
+        # Migration 7: Add unique constraint and FK to workflow_secrets
+        result = await conn.execute(
+            text(
+                "SELECT constraint_name FROM information_schema.table_constraints "
+                "WHERE table_name = 'workflow_secrets' AND constraint_name = 'uq_secret_name_scope'"
+            )
+        )
+        if not result.fetchone():
+            # Add unique constraint (name, scope, scope_id)
+            await conn.execute(
+                text(
+                    "ALTER TABLE workflow_secrets "
+                    "ADD CONSTRAINT uq_secret_name_scope UNIQUE (name, scope, scope_id)"
+                )
+            )
+            # Add FK from created_by → users.id (if column exists but has no FK)
+            try:
+                await conn.execute(
+                    text(
+                        "ALTER TABLE workflow_secrets "
+                        "ADD CONSTRAINT fk_workflow_secrets_created_by "
+                        "FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL"
+                    )
+                )
+            except Exception:
+                pass  # FK may already exist or users table may not exist yet
+
 
 async def close_db() -> None:
     """Close database connection pool."""

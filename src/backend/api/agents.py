@@ -1,9 +1,19 @@
 """Agent API routes - Agent Registry, Lead Orchestrator, MCP Manager."""
 
+import json
+import os
+import uuid
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
+
+# Image upload directory
+UPLOAD_DIR = Path(os.getenv("AOS_UPLOAD_DIR", "/tmp/aos-uploads"))
+ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
+MAX_IMAGE_SIZE = 20 * 1024 * 1024  # 20MB per image
+MAX_IMAGES = 5
 
 from agents.lead_orchestrator import (
     ExecutionStrategy,
@@ -95,6 +105,7 @@ class TaskAnalysisHistoryResponse(BaseModel):
     effort_level: str | None = None
     subtask_count: int | None = None
     strategy: str | None = None
+    image_paths: list[str] | None = None
     created_at: str
 
 
@@ -434,6 +445,133 @@ async def analyze_task(request: TaskAnalysisRequest):
             )
 
 
+@router.post("/orchestrate/analyze-with-images", response_model=TaskAnalysisResponse)
+async def analyze_task_with_images(
+    task: str = Form(..., description="분석할 태스크 설명"),
+    context: str | None = Form(None, description="JSON 형태의 추가 컨텍스트"),
+    images: list[UploadFile] = File(default=[], description="첨부 이미지 파일들 (최대 5개)"),
+):
+    """
+    이미지를 포함한 태스크 분석 및 실행 계획 생성.
+
+    multipart/form-data로 이미지 파일을 함께 업로드할 수 있습니다.
+    업로드된 이미지는 서버에 임시 저장되며, Warp 실행 시 Claude CLI의 --image 플래그로 전달됩니다.
+
+    지원 형식: PNG, JPG, JPEG, GIF, WEBP, BMP, SVG
+    최대 이미지 크기: 20MB/개, 최대 5개
+    """
+    orchestrator = get_lead_orchestrator()
+    analysis_service = get_task_analysis_service()
+
+    # Parse context JSON
+    parsed_context: dict[str, Any] | None = None
+    if context:
+        try:
+            parsed_context = json.loads(context)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON in context field")
+
+    # Validate and save uploaded images
+    saved_image_paths: list[str] = []
+
+    if len(images) > MAX_IMAGES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"최대 {MAX_IMAGES}개의 이미지만 업로드할 수 있습니다",
+        )
+
+    if images:
+        # Create upload directory
+        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+        for img in images:
+            # Validate file extension
+            if img.filename:
+                ext = Path(img.filename).suffix.lower()
+                if ext not in ALLOWED_IMAGE_EXTENSIONS:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"지원하지 않는 이미지 형식: {ext}. 지원: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}",
+                    )
+            else:
+                ext = ".png"
+
+            # Read and validate size
+            content = await img.read()
+            if len(content) > MAX_IMAGE_SIZE:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"이미지 크기가 너무 큽니다: {img.filename} ({len(content) / 1024 / 1024:.1f}MB > {MAX_IMAGE_SIZE / 1024 / 1024:.0f}MB)",
+                )
+
+            # Save to disk
+            file_id = str(uuid.uuid4())
+            save_path = UPLOAD_DIR / f"{file_id}{ext}"
+            save_path.write_bytes(content)
+            saved_image_paths.append(str(save_path))
+
+    try:
+        result = await orchestrator.execute(
+            task=task,
+            context=parsed_context,
+        )
+
+        # Extract project_id from context
+        project_id = None
+        if parsed_context:
+            project_id = parsed_context.get("project_id")
+
+        # Save analysis to history (with image paths)
+        save_request = TaskAnalysisSaveRequest(
+            task_input=task,
+            context=parsed_context,
+            project_id=project_id,
+            success=result.success,
+            analysis=result.output if result.success else None,
+            error=result.error if not result.success else None,
+            execution_time_ms=result.execution_time_ms,
+            image_paths=saved_image_paths if saved_image_paths else None,
+        )
+        saved_entry = await analysis_service.save_analysis(save_request)
+
+        if result.success:
+            return TaskAnalysisResponse(
+                success=True,
+                analysis=result.output,
+                execution_time_ms=result.execution_time_ms,
+                analysis_id=saved_entry.id,
+            )
+        else:
+            return TaskAnalysisResponse(
+                success=False,
+                error=result.error,
+                execution_time_ms=result.execution_time_ms,
+                analysis_id=saved_entry.id,
+            )
+    except Exception as e:
+        try:
+            save_request = TaskAnalysisSaveRequest(
+                task_input=task,
+                context=parsed_context,
+                project_id=parsed_context.get("project_id") if parsed_context else None,
+                success=False,
+                error=str(e),
+                execution_time_ms=0,
+                image_paths=saved_image_paths if saved_image_paths else None,
+            )
+            saved_entry = await analysis_service.save_analysis(save_request)
+            return TaskAnalysisResponse(
+                success=False,
+                error=str(e),
+                analysis_id=saved_entry.id,
+            )
+        except Exception:
+            return TaskAnalysisResponse(
+                success=False,
+                error="Unknown error during task analysis",
+            )
+
+
 @router.get("/orchestrate/analyses", response_model=TaskAnalysisHistoryListResponse)
 async def get_analysis_history(
     project_id: str | None = None,
@@ -472,6 +610,7 @@ async def get_analysis_history(
                 effort_level=item.effort_level,
                 subtask_count=item.subtask_count,
                 strategy=item.strategy,
+                image_paths=item.image_paths,
                 created_at=item.created_at.isoformat(),
             )
             for item in result.items
@@ -502,6 +641,7 @@ async def get_analysis(analysis_id: str):
         effort_level=entry.effort_level,
         subtask_count=entry.subtask_count,
         strategy=entry.strategy,
+        image_paths=entry.image_paths,
         created_at=entry.created_at.isoformat(),
     )
 

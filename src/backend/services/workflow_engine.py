@@ -122,12 +122,16 @@ class WorkflowEngine:
             "error_summary": None,
         }
 
-        # Load secrets for this run
+        # Load secrets for this run (using a standalone DB session)
         try:
-            from services.secret_service import get_secret_service
-            self._secrets = get_secret_service().get_secrets_for_workflow(
-                trigger_payload.get("workflow_id", "")
-            )
+            from db.database import async_session_factory
+            from services.secret_service import SecretService
+
+            async with async_session_factory() as session:
+                svc = SecretService(session)
+                self._secrets = await svc.get_secrets_for_workflow(
+                    trigger_payload.get("workflow_id", "")
+                )
         except Exception:
             self._secrets = {}
 

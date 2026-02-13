@@ -1,0 +1,142 @@
+# Task: 실시간 에이전트 모니터링 풀스택 기능
+id: task_integration_001
+name: "실시간 에이전트 모니터링 풀스택 구현"
+category: integration
+difficulty: hard
+
+description: |
+  에이전트 실행 상태를 실시간으로 모니터링하는 풀스택 기능을 구현합니다.
+
+  Backend:
+  - SSE(Server-Sent Events) 엔드포인트로 실시간 에이전트 상태 스트리밍
+  - 에이전트 메트릭 집계 API (실행시간, 성공률, 비용 추이)
+  - 시계열 데이터 저장 (5분 버킷 집계)
+
+  Frontend:
+  - 실시간 업데이트되는 에이전트 상태 패널
+  - 메트릭 차트 (시간별 성공률, 비용 추이)
+  - 에이전트별 상세 드릴다운
+  - 자동 재연결 및 에러 복구
+
+  State:
+  - SSE 연결 관리 스토어
+  - 옵티미스틱 업데이트
+  - 시계열 데이터 버퍼 (최근 1시간)
+
+acceptance_criteria:
+  - Backend SSE 엔드포인트 (async generator)
+  - 시계열 메트릭 집계 API
+  - Frontend SSE 연결 관리 (자동 재연결, backoff)
+  - 실시간 상태 패널 컴포넌트
+  - 메트릭 차트 컴포넌트 (svg 또는 canvas)
+  - Zustand 스토어 (SSE 상태 + 메트릭 데이터)
+  - API ↔ Frontend 타입 일관성
+  - 에러 처리 (네트워크 실패, 서버 다운, 데이터 형식 오류)
+  - 테스트: Backend API 5개 + Frontend 컴포넌트 5개 + Store 3개 (최소 13개)
+
+input:
+  prompt: |
+    에이전트 실시간 모니터링 기능을 풀스택으로 구현해주세요.
+
+    ## Backend (FastAPI)
+
+    ### SSE 엔드포인트
+    ```
+    GET /api/v1/agents/monitor/stream
+    Accept: text/event-stream
+
+    Events:
+    - agent_status: { agent_id, status, timestamp }
+    - agent_metric: { agent_id, metric_type, value, timestamp }
+    - heartbeat: { timestamp }
+    ```
+
+    ### 메트릭 API
+    ```
+    GET /api/v1/agents/metrics?agent_id=xxx&period=1h&bucket=5m
+    Response: {
+      agent_id: string
+      buckets: [{ timestamp, success_rate, avg_duration_ms, total_cost, task_count }]
+    }
+
+    GET /api/v1/agents/metrics/summary
+    Response: {
+      total_agents: number
+      active_agents: number
+      avg_success_rate: number
+      total_cost_24h: number
+      tasks_completed_24h: number
+    }
+    ```
+
+    ## Frontend
+
+    ### AgentMonitorPanel
+    - 실시간 에이전트 상태 목록 (상태 변경 시 애니메이션)
+    - 연결 상태 표시 (connected/reconnecting/disconnected)
+    - 에이전트 클릭 시 상세 드릴다운
+
+    ### MetricsChart
+    - 시간별 성공률 라인 차트
+    - 비용 추이 바 차트
+    - 기간 선택 (1h, 6h, 24h)
+    - SVG 기반 (외부 차트 라이브러리 없이)
+
+    ## State (Zustand)
+    - SSE EventSource 연결 관리
+    - 자동 재연결 (exponential backoff)
+    - 시계열 데이터 버퍼 (최대 720개 = 1시간/5초)
+    - 옵티미스틱 상태 업데이트
+  context_files:
+    - src/backend/api/agents.py
+    - src/dashboard/src/stores/agents.ts
+    - src/dashboard/src/components/AgentCard.tsx
+  dependencies: []
+
+expected_output:
+  files:
+    # Backend
+    - src/backend/api/v1/agent_monitor.py
+    - tests/backend/api/test_agent_monitor.py
+    # Frontend
+    - src/dashboard/src/components/monitor/AgentMonitorPanel.tsx
+    - src/dashboard/src/components/monitor/MetricsChart.tsx
+    - src/dashboard/src/components/monitor/AgentMonitorPanel.test.tsx
+    # State
+    - src/dashboard/src/stores/agentMonitor.ts
+    - src/dashboard/src/stores/__tests__/agentMonitor.test.ts
+  patterns:
+    # Backend
+    - "async def.*stream|event_stream|generator"
+    - "text/event-stream|EventSourceResponse|StreamingResponse"
+    - "yield|async for"
+    # Frontend
+    - "EventSource|useEventSource"
+    - "export.*AgentMonitorPanel"
+    - "export.*MetricsChart"
+    - "<svg|<path|<line|<rect"
+    # State
+    - "create<"
+    - "export.*use.*Store"
+    # Shared
+    - "interface|type.*Metric"
+    - "useEffect|useCallback|useMemo"
+  forbidden_patterns:
+    - ": any"
+    - "// @ts-ignore"
+    - "# type: ignore"
+    - "console\\.log"
+
+evaluation:
+  timeout_minutes: 60
+  rubric: integration.yaml
+  weights:
+    code_checks: 35
+    llm_grading: 65
+  passing_score: 0.75
+
+metadata:
+  created_at: 2026-02-13
+  author: system
+  tags: [fullstack, sse, realtime, monitoring, metrics, chart, integration, hard]
+  recommended_agent: lead-orchestrator

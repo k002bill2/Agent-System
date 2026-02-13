@@ -1,0 +1,134 @@
+# Task: WebSocket Race Condition + Memory Leak 수정
+id: task_bug_002
+name: "WebSocket 경쟁 상태 + 메모리 누수 복합 버그 수정"
+category: bug_fix
+difficulty: hard
+
+description: |
+  실시간 모니터링 대시보드의 WebSocket 연결에서 복합 버그가 발생합니다.
+
+  버그 1 (Race Condition):
+  - 빠른 페이지 전환 시 이전 WebSocket 연결이 완전히 정리되기 전에
+    새 연결이 생성되어 중복 메시지 수신.
+  - 이전 구독의 콜백이 새 컴포넌트 상태를 업데이트하여 데이터 불일치 발생.
+
+  버그 2 (Memory Leak):
+  - 언마운트 시 이벤트 리스너가 제거되지 않아 메모리 누수.
+  - setInterval이 정리되지 않아 백그라운드에서 계속 실행.
+  - 클로저가 stale state를 캡처하여 잘못된 데이터로 API 호출.
+
+  버그 3 (Stale Closure):
+  - useEffect 내부 콜백이 초기 렌더 시점의 state를 캡처.
+  - reconnect 로직에서 최신 설정 대신 초기 설정을 사용.
+
+  재현 시나리오:
+  1. 모니터링 페이지 접속 → WebSocket 연결
+  2. 다른 페이지로 빠르게 전환 (3번 반복)
+  3. 모니터링 페이지 재접속
+  4. 콘솔: 중복 메시지, 메모리 증가, stale data 확인
+
+acceptance_criteria:
+  - 3가지 버그 모두 수정 (race condition, memory leak, stale closure)
+  - WebSocket 연결 생명주기 관리 (connect → subscribe → cleanup)
+  - AbortController 또는 cleanup flag로 race condition 방지
+  - useRef로 최신 상태/콜백 참조
+  - 모든 리스너/타이머 cleanup 보장
+  - 회귀 테스트 (각 버그별 최소 2개, 총 6개 이상)
+  - 근본 원인 분석 주석 포함
+  - 기존 기능 유지
+
+input:
+  prompt: |
+    실시간 모니터링 훅 useRealtimeMonitor에서 복합 버그가 발생합니다.
+
+    아래 버그가 있는 코드를 수정해주세요:
+
+    ```typescript
+    // 버그가 있는 코드 (src/dashboard/src/hooks/useRealtimeMonitor.ts)
+    function useRealtimeMonitor(projectId: string, config: MonitorConfig) {
+      const [data, setData] = useState<MonitorData[]>([])
+      const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected')
+
+      // BUG 1: 매 렌더마다 새 ws 인스턴스 생성 가능
+      useEffect(() => {
+        const ws = new WebSocket(`ws://localhost:8000/ws/monitor/${projectId}`)
+
+        ws.onopen = () => setStatus('connected')
+
+        // BUG 2: stale closure - config가 초기값으로 고정됨
+        ws.onmessage = (event) => {
+          const msg = JSON.parse(event.data)
+          if (config.filterTypes.includes(msg.type)) {
+            setData(prev => [...prev, msg])  // BUG 3: 무한 배열 증가 (메모리 누수)
+          }
+        }
+
+        // BUG 4: reconnect에서 stale projectId 사용
+        ws.onclose = () => {
+          setStatus('disconnected')
+          setTimeout(() => {
+            // reconnect with stale projectId
+            const newWs = new WebSocket(`ws://localhost:8000/ws/monitor/${projectId}`)
+          }, 3000)
+        }
+
+        // BUG 5: interval cleanup 누락
+        const heartbeat = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }))
+          }
+        }, 25000)
+
+        // BUG 6: cleanup이 불완전 (race condition)
+        return () => {
+          ws.close()
+          // heartbeat interval 미정리
+          // reconnect setTimeout 미정리
+        }
+      }, [projectId])  // BUG 7: config가 의존성에 누락
+
+      return { data, status }
+    }
+    ```
+
+    수정사항:
+    1. Race condition 방지 (AbortController 패턴 또는 cleanup flag)
+    2. Memory leak 방지 (모든 리스너/타이머 정리, 데이터 버퍼 제한)
+    3. Stale closure 방지 (useRef로 최신 config/projectId 참조)
+    4. Reconnect 로직 안정화 (exponential backoff, max attempts)
+    5. 모든 cleanup 보장
+    6. 회귀 테스트 작성
+  context_files:
+    - src/dashboard/src/stores/monitoring.ts
+  dependencies: []
+
+expected_output:
+  files:
+    - src/dashboard/src/hooks/useRealtimeMonitor.ts
+    - src/dashboard/src/hooks/useRealtimeMonitor.test.ts
+  patterns:
+    - "useEffect"
+    - "useCallback|useMemo"
+    - "useRef"
+    - "AbortController|aborted|cancelled|isMounted"
+    - "clearInterval|clearTimeout"
+    - "cleanup|dispose|unmount"
+    - "WebSocket|onmessage|onclose"
+  forbidden_patterns:
+    - "// eslint-disable"
+    - "// @ts-ignore"
+    - ": any"
+
+evaluation:
+  timeout_minutes: 30
+  rubric: bug_fix.yaml
+  weights:
+    code_checks: 40
+    llm_grading: 60
+  passing_score: 0.80
+
+metadata:
+  created_at: 2026-02-13
+  author: system
+  tags: [bug, react, hooks, websocket, race-condition, memory-leak, stale-closure, hard]
+  recommended_agent: performance-optimizer

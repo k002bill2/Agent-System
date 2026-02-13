@@ -5,7 +5,7 @@
  * 2-Column Layout: 좌측(입력+결과), 우측(히스토리)
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { cn } from '../lib/utils'
 import { useAgentsStore, TaskAnalysisHistory } from '../stores/agents'
 import { Project, useOrchestrationStore } from '../stores/orchestration'
@@ -29,7 +29,12 @@ import {
   ChevronDown,
   FolderOpen,
   Terminal,
+  ImagePlus,
+  X,
 } from 'lucide-react'
+
+const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml']
+const MAX_IMAGES = 5
 
 // 노력 수준 색상
 const effortColors: Record<string, string> = {
@@ -94,12 +99,20 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
     executionError,
     executeWithWarp,
     clearExecution,
+    // Images
+    attachedImages,
+    addAttachedImages,
+    removeAttachedImage,
+    clearAttachedImages,
   } = useAgentsStore()
   const { projects } = useOrchestrationStore()
   const { pendingTaskInput, setPendingTaskInput } = useNavigationStore()
   const [taskInput, setTaskInput] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [isDragOver, setIsDragOver] = useState(false)
   const pendingProcessedRef = useRef(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Create a map for quick project name lookup
   const projectMap = new Map(projects.map(p => [p.id, p]))
@@ -171,6 +184,57 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
     await executeWithWarp(analysisId, projectFilter)
   }
 
+  // Image handling
+  const handleImageFiles = useCallback((files: FileList | File[]) => {
+    const validFiles = Array.from(files).filter(f => ALLOWED_IMAGE_TYPES.includes(f.type))
+    if (validFiles.length === 0) return
+    addAttachedImages(validFiles)
+  }, [addAttachedImages])
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData.items
+    const imageFiles: File[] = []
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        const file = items[i].getAsFile()
+        if (file) imageFiles.push(file)
+      }
+    }
+    if (imageFiles.length > 0) {
+      e.preventDefault()
+      handleImageFiles(imageFiles)
+    }
+  }, [handleImageFiles])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+    if (e.dataTransfer.files.length > 0) {
+      handleImageFiles(e.dataTransfer.files)
+    }
+  }, [handleImageFiles])
+
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      handleImageFiles(e.target.files)
+    }
+    // Reset input to allow re-selecting same file
+    e.target.value = ''
+  }, [handleImageFiles])
+
   return (
     <div className="flex flex-col lg:flex-row gap-4">
       {/* Left Column: Input + Results */}
@@ -198,16 +262,102 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
           </div>
 
           {/* Input */}
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          <div
+            className={cn(
+              'p-4 border-b border-gray-200 dark:border-gray-700 transition-colors',
+              isDragOver && 'bg-primary-50 dark:bg-primary-900/10 border-primary-300 dark:border-primary-700'
+            )}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
             <textarea
+              ref={textareaRef}
               value={taskInput}
               onChange={(e) => setTaskInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Enter a task to analyze... (e.g., 'Implement user authentication with Firebase')"
+              onPaste={handlePaste}
+              placeholder="Enter a task to analyze... (이미지를 붙여넣기하거나 드래그하세요)"
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
               rows={3}
             />
-            <div className="flex justify-end mt-3">
+
+            {/* Image Previews */}
+            {attachedImages.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {attachedImages.map((file, idx) => (
+                  <div
+                    key={`${file.name}-${idx}`}
+                    className="relative group w-16 h-16 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-800"
+                  >
+                    <img
+                      src={URL.createObjectURL(file)}
+                      alt={file.name}
+                      className="w-full h-full object-cover"
+                      onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
+                    />
+                    <button
+                      onClick={() => removeAttachedImage(idx)}
+                      className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                      title="이미지 제거"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[8px] px-1 truncate">
+                      {file.name}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Drag overlay hint */}
+            {isDragOver && (
+              <div className="mt-2 py-3 border-2 border-dashed border-primary-400 dark:border-primary-600 rounded-lg text-center text-sm text-primary-600 dark:text-primary-400">
+                <ImagePlus className="w-5 h-5 mx-auto mb-1" />
+                여기에 이미지를 놓으세요
+              </div>
+            )}
+
+            <div className="flex items-center justify-between mt-3">
+              <div className="flex items-center gap-2">
+                {/* File input (hidden) */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={ALLOWED_IMAGE_TYPES.join(',')}
+                  multiple
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={attachedImages.length >= MAX_IMAGES}
+                  className={cn(
+                    'p-2 rounded-lg transition-colors flex items-center gap-1.5 text-xs',
+                    attachedImages.length >= MAX_IMAGES
+                      ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-300'
+                  )}
+                  title={attachedImages.length >= MAX_IMAGES ? `최대 ${MAX_IMAGES}개` : '이미지 첨부'}
+                >
+                  <ImagePlus className="w-4 h-4" />
+                  <span>이미지</span>
+                </button>
+                {attachedImages.length > 0 && (
+                  <button
+                    onClick={clearAttachedImages}
+                    className="text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                  >
+                    전체 삭제
+                  </button>
+                )}
+                {attachedImages.length > 0 && (
+                  <span className="text-xs text-gray-400 dark:text-gray-500">
+                    {attachedImages.length}/{MAX_IMAGES}
+                  </span>
+                )}
+              </div>
               <button
                 onClick={handleAnalyze}
                 disabled={isLoading || !taskInput.trim()}

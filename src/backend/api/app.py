@@ -365,6 +365,8 @@ else:
             app.include_router(admin_router, prefix="/api")
         if project_access_router:
             app.include_router(project_access_router, prefix="/api")
+        if templates_router:
+            app.include_router(templates_router, prefix="/api")
         if workflows_router:
             app.include_router(workflows_router, prefix="/api")
         if secrets_router:
@@ -375,8 +377,6 @@ else:
             app.include_router(workflow_webhook_router, prefix="/api")
         if artifacts_router:
             app.include_router(artifacts_router, prefix="/api")
-        if templates_router:
-            app.include_router(templates_router, prefix="/api")
 
         # Add Rate Limiting Middleware
         rate_limit_enabled = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"

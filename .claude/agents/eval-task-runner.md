@@ -47,7 +47,7 @@ Parse YAML task files from `.claude/evals/tasks/`:
 ```yaml
 # Task structure
 id: task_ui_001
-name: "StationCard component creation"
+name: "AgentCard component creation"
 category: ui_component
 input:
   description: "..."
@@ -175,10 +175,10 @@ where:
 **Task ID**: task_ui_001
 **Run ID**: run_20250110_abc123
 
-**Objective**: Create StationCard component
+**Objective**: Create AgentCard component
 
 **Requirements**:
-1. Display station name and line color
+1. Display agent name and status badge
 2. Navigate to detail screen on tap
 3. Include accessibility labels
 4. TypeScript strict mode compliance
@@ -194,8 +194,8 @@ where:
 - No `any` types
 
 **Output Expected**:
-- Component file: src/components/station/StationCard.tsx
-- Test file: src/components/station/__tests__/StationCard.test.tsx
+- Component file: src/components/agents/AgentCard.tsx
+- Test file: src/components/agents/__tests__/AgentCard.test.tsx
 
 **IMPORTANT**: This is an evaluation run. Complete the task to the best of your ability. Your output will be graded.
 ```
@@ -208,8 +208,8 @@ where:
 **Duration**: 8m 32s
 
 **Files Created**:
-- src/components/station/StationCard.tsx
-- src/components/station/__tests__/StationCard.test.tsx
+- src/components/agents/AgentCard.tsx
+- src/components/agents/__tests__/AgentCard.test.tsx
 
 **Self-Assessment**:
 - TypeScript: Passed
@@ -235,7 +235,7 @@ where:
 ```json
 {
   "task_id": "task_ui_001",
-  "task_name": "StationCard component creation",
+  "task_name": "AgentCard component creation",
   "evaluated_at": "2025-01-10T12:00:00Z",
   "k": 3,
 
@@ -248,8 +248,8 @@ where:
       "transcript_path": ".temp/traces/sessions/eval_sess_001/",
       "outcome": {
         "files_created": [
-          "src/components/station/StationCard.tsx",
-          "src/components/station/__tests__/StationCard.test.tsx"
+          "src/components/agents/AgentCard.tsx",
+          "src/components/agents/__tests__/AgentCard.test.tsx"
         ],
         "typescript_errors": 0,
         "test_results": {"passed": 8, "failed": 0},

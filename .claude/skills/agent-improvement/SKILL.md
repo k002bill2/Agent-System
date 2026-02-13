@@ -73,7 +73,7 @@ Store in `.temp/improvement/patterns/`:
   "examples": [
     {
       "session_id": "sess_abc",
-      "file": "StationCard.tsx",
+      "file": "AgentCard.tsx",
       "issue": "Missing accessibilityLabel on TouchableOpacity"
     }
   ],

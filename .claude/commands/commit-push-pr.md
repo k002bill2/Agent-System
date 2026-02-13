@@ -74,8 +74,8 @@ EOF
 
 Claude:
 1. git status 확인... 5개 파일 변경됨
-2. 변경 분석: src/components/StationCard.tsx - UI 개선
-3. 커밋 메시지: "feat(ui): StationCard 컴포넌트 디자인 개선"
+2. 변경 분석: src/components/AgentCard.tsx - UI 개선
+3. 커밋 메시지: "feat(ui): AgentCard 컴포넌트 디자인 개선"
 4. 커밋 및 푸시 완료
 5. PR 생성: https://github.com/user/repo/pull/123
 ```

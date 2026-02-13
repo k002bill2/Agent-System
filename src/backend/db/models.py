@@ -1004,20 +1004,23 @@ class WorkflowStepModel(Base):
 
 
 class WorkflowSecretModel(Base):
-    """Workflow secret model for encrypted secrets storage."""
+    """Workflow secret model for encrypted secrets storage (AES-256-GCM)."""
 
     __tablename__ = "workflow_secrets"
 
     id = Column(String(36), primary_key=True)
     name = Column(String(255), nullable=False)
-    encrypted_value = Column(Text, nullable=False)
+    encrypted_value = Column(EncryptedString(length=None), nullable=False)
     scope = Column(String(20), nullable=False, default="workflow")  # workflow, project, global
     scope_id = Column(String(36), nullable=True, index=True)
-    created_by = Column(String(36), nullable=True)
+    created_by = Column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     __table_args__ = (
+        UniqueConstraint("name", "scope", "scope_id", name="uq_secret_name_scope"),
         Index("ix_workflow_secrets_scope", "scope", "scope_id"),
         Index("ix_workflow_secrets_name_scope", "name", "scope", "scope_id"),
     )

@@ -150,7 +150,7 @@ find .temp/agent_workspaces/*/proposals/ -type f -name "*.ts" -o -name "*.tsx"
 
 # Output:
 # .temp/agent_workspaces/backend-integration/proposals/seoulSubwayApi.ts
-# .temp/agent_workspaces/web-ui/proposals/StationDetailScreen.tsx
+# .temp/agent_workspaces/web-ui/proposals/AgentDetailScreen.tsx
 # .temp/agent_workspaces/test-automation/proposals/seoulSubwayApi.test.ts
 ```
 
@@ -224,7 +224,7 @@ diff .temp/integration/conflicts/file_agent-a.ts \
 
 ---
 
-## Complete Example: Favorite Stations Feature
+## Complete Example: Favorite Agents Feature
 
 ### Task Decomposition
 ```json
@@ -241,9 +241,9 @@ diff .temp/integration/conflicts/file_agent-a.ts \
     {
       "id": "star_icon",
       "agent": "web-ui-specialist",
-      "task": "Add star icon to StationCard",
+      "task": "Add star icon to AgentCard component",
       "skill": "react-web-development",
-      "output": "src/components/train/StationCard.tsx",
+      "output": "src/components/agents/AgentCard.tsx",
       "dependencies": ["favorites_service"]
     },
     {
@@ -275,7 +275,7 @@ T0:15 - backend-integration: Completes favoritesService.ts
 T0:16 - Primary: Invokes web-ui-specialist + test-automation-specialist
         → Both can proceed (backend types available)
 
-T0:26 - web-ui: Completes StationCard.tsx
+T0:26 - web-ui: Completes AgentCard.tsx
 T0:31 - test-automation: Completes favoritesService.test.ts
 T0:32 - Primary: Invokes web-ui-specialist (favorites_screen)
 T0:47 - web-ui: Completes FavoritesScreen.tsx
@@ -286,7 +286,7 @@ Feature completed in 47 minutes vs ~75 minutes sequential = 1.6x speedup
 ### Integration
 ```bash
 cp .temp/agent_workspaces/backend-integration/proposals/favoritesService.ts src/services/favorites/
-cp .temp/agent_workspaces/web-ui/proposals/StationCard.tsx src/components/train/
+cp .temp/agent_workspaces/web-ui/proposals/AgentCard.tsx src/components/agents/
 cp .temp/agent_workspaces/web-ui/proposals/FavoritesScreen.tsx src/screens/
 cp .temp/agent_workspaces/test-automation/proposals/favoritesService.test.ts src/services/favorites/__tests__/
 ```

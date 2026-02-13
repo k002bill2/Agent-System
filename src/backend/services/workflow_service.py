@@ -18,6 +18,55 @@ from services.workflow_engine import get_workflow_engine
 from services.workflow_yaml_parser import parse_workflow_yaml
 
 
+SEED_WORKFLOWS = [
+    {
+        "name": "React Dashboard Dev Server",
+        "description": "React 대시보드 개발 서버 실행 (포트 확인 → 의존성 설치 → 타입 체크 → Vite 시작)",
+        "yaml_content": """name: React Dashboard Dev Server
+on:
+  manual: {}
+env:
+  DASHBOARD_DIR: src/dashboard
+  DEV_PORT: "5173"
+jobs:
+  check-port:
+    name: Check port availability
+    runs_on: local
+    steps:
+      - name: Kill existing Vite process if running
+        run: pkill -f "vite" 2>/dev/null || echo "No existing process"
+      - name: Verify port is free
+        run: lsof -i :${{ env.DEV_PORT }} 2>/dev/null && echo "WARNING - port still in use" || echo "Port ${{ env.DEV_PORT }} is free"
+  install-deps:
+    name: Install dependencies
+    runs_on: local
+    steps:
+      - name: Install npm dependencies
+        run: cd ${{ env.DASHBOARD_DIR }} && test -d node_modules && echo "node_modules exists, skipping install" || npm install
+  type-check:
+    name: TypeScript type check
+    runs_on: local
+    needs: [install-deps]
+    steps:
+      - name: Run tsc --noEmit
+        run: cd ${{ env.DASHBOARD_DIR }} && npx tsc --noEmit
+        continue_on_error: true
+  start-server:
+    name: Start Vite dev server
+    runs_on: local
+    needs: [check-port, type-check]
+    steps:
+      - name: Start dev server in background
+        run: cd ${{ env.DASHBOARD_DIR }} && nohup npm run dev > /tmp/vite-dev.log 2>&1 & echo "Dev server PID=$!"
+      - name: Wait for server to be ready
+        run: sleep 3 && curl -s -o /dev/null -w "HTTP %{http_code}" http://localhost:${{ env.DEV_PORT }}/ || echo "Server starting..."
+      - name: Print access info
+        run: echo "Dashboard available at http://localhost:${{ env.DEV_PORT }}"
+""",
+    },
+]
+
+
 class WorkflowService:
     """Service for managing workflow definitions and runs."""
 
@@ -25,6 +74,18 @@ class WorkflowService:
         self._workflows: dict[str, dict] = {}
         self._runs: dict[str, dict] = {}
         self._run_tasks: dict[str, asyncio.Task] = {}
+        self._seed_workflows()
+
+    def _seed_workflows(self):
+        """Seed built-in workflows."""
+        for seed in SEED_WORKFLOWS:
+            data = WorkflowCreate(
+                name=seed["name"],
+                description=seed.get("description", ""),
+                yaml_content=seed["yaml_content"],
+                project_id=seed.get("project_id"),
+            )
+            self.create_workflow(data)
 
     # ── Workflow CRUD ───────────────────────────────────────
 
@@ -86,6 +147,8 @@ class WorkflowService:
             workflow["description"] = data.description
         if data.status is not None:
             workflow["status"] = data.status
+        if "project_id" in data.model_fields_set:
+            workflow["project_id"] = data.project_id
         if data.yaml_content is not None:
             workflow["yaml_content"] = data.yaml_content
             workflow["definition"] = parse_workflow_yaml(data.yaml_content)

@@ -31,16 +31,16 @@ export function CheckCard({
 }: CheckCardProps) {
   const getStatusIcon = () => {
     if (isRunning) {
-      return <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+      return <Loader2 className="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" />
     }
     switch (status) {
       case 'success':
-        return <CheckCircle2 className="w-5 h-5 text-green-500" />
+        return <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
       case 'failure':
-        return <XCircle className="w-5 h-5 text-red-500" />
+        return <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
       case 'idle':
       default:
-        return <Clock className="w-5 h-5 text-gray-400" />
+        return <Clock className="w-4 h-4 text-gray-400 flex-shrink-0" />
     }
   }
 
@@ -57,55 +57,55 @@ export function CheckCard({
     }
   }
 
-  const getStatusColor = () => {
-    if (isRunning) return 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800'
+  const getBorderColor = () => {
+    if (isRunning) return 'border-blue-300 dark:border-blue-700'
     switch (status) {
       case 'success':
-        return 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800'
+        return 'border-green-300 dark:border-green-700'
       case 'failure':
-        return 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800'
+        return 'border-red-300 dark:border-red-700'
       case 'idle':
       default:
-        return 'bg-gray-50 border-gray-200 dark:bg-gray-800/50 dark:border-gray-700'
+        return 'border-gray-200 dark:border-gray-700'
     }
   }
 
   const formatDuration = (ms: number | null) => {
-    if (ms === null) return '-'
+    if (ms === null) return null
     if (ms < 1000) return `${ms}ms`
     return `${(ms / 1000).toFixed(1)}s`
   }
 
+  const duration = formatDuration(durationMs)
+
   return (
     <div
       className={cn(
-        'relative rounded-lg border-2 p-4 transition-all cursor-pointer',
-        getStatusColor(),
-        isSelected && 'ring-2 ring-primary-500 ring-offset-2'
+        'flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-all cursor-pointer',
+        'hover:bg-gray-50 dark:hover:bg-gray-750',
+        getBorderColor(),
+        isSelected && 'ring-2 ring-primary-500 ring-offset-1 dark:ring-offset-gray-800'
       )}
       onClick={onClick}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="font-semibold text-gray-900 dark:text-white">
-          {CHECK_TYPE_LABELS[checkType]}
-        </h3>
-        {getStatusIcon()}
+      {getStatusIcon()}
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+            {CHECK_TYPE_LABELS[checkType]}
+          </span>
+          <span className="text-xs text-gray-400 dark:text-gray-500">
+            {getStatusText()}
+          </span>
+          {duration && (
+            <span className="text-xs text-gray-400 dark:text-gray-500">
+              {duration}
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Status */}
-      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-        {getStatusText()}
-      </p>
-
-      {/* Duration */}
-      {durationMs !== null && (
-        <p className="text-xs text-gray-500 dark:text-gray-500">
-          {formatDuration(durationMs)}
-        </p>
-      )}
-
-      {/* Run button */}
       <button
         onClick={(e) => {
           e.stopPropagation()
@@ -113,19 +113,14 @@ export function CheckCard({
         }}
         disabled={isRunning}
         className={cn(
-          'absolute bottom-2 right-2 p-1.5 rounded-full transition-colors',
+          'p-1 rounded-md transition-colors flex-shrink-0',
           isRunning
-            ? 'bg-gray-200 dark:bg-gray-700 cursor-not-allowed'
-            : 'bg-primary-100 hover:bg-primary-200 dark:bg-primary-900/30 dark:hover:bg-primary-900/50'
+            ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+            : 'text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/30'
         )}
         title={`Run ${CHECK_TYPE_LABELS[checkType]}`}
       >
-        <Play
-          className={cn(
-            'w-4 h-4',
-            isRunning ? 'text-gray-400' : 'text-primary-600 dark:text-primary-400'
-          )}
-        />
+        <Play className="w-3.5 h-3.5" />
       </button>
     </div>
   )
