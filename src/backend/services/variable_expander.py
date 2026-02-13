@@ -73,7 +73,7 @@ def parse_step_outputs(stdout: str) -> dict[str, str]:
         line = line.strip()
         if line.startswith("::set-output name="):
             # Format: ::set-output name=KEY::VALUE
-            rest = line[len("::set-output name="):]
+            rest = line[len("::set-output name=") :]
             if "::" in rest:
                 key, value = rest.split("::", 1)
                 outputs[key.strip()] = value.strip()

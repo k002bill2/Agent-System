@@ -39,10 +39,7 @@ class WebhookService:
 
     def get_webhooks_for_workflow(self, workflow_id: str) -> list[dict]:
         """Get all webhooks for a workflow."""
-        return [
-            w for w in self._webhooks.values()
-            if w["workflow_id"] == workflow_id
-        ]
+        return [w for w in self._webhooks.values() if w["workflow_id"] == workflow_id]
 
     def delete_webhook(self, webhook_id: str) -> bool:
         """Delete a webhook."""
@@ -54,11 +51,14 @@ class WebhookService:
         if not webhook:
             return False
 
-        expected = "sha256=" + hmac.new(
-            webhook["secret"].encode(),
-            payload,
-            hashlib.sha256,
-        ).hexdigest()
+        expected = (
+            "sha256="
+            + hmac.new(
+                webhook["secret"].encode(),
+                payload,
+                hashlib.sha256,
+            ).hexdigest()
+        )
 
         return hmac.compare_digest(expected, signature)
 
@@ -121,18 +121,14 @@ class WebhookService:
         """Check if any changed file matches the path filters."""
         if not filters:
             return True  # No filters = match all
-        return any(
-            fnmatch(f, pattern)
-            for f in changed_files
-            for pattern in filters
-        )
+        return any(fnmatch(f, pattern) for f in changed_files for pattern in filters)
 
     def _extract_branch(self, event_type: str, payload: dict) -> str | None:
         """Extract branch name from webhook payload."""
         if event_type == "push":
             ref = payload.get("ref", "")
             if ref.startswith("refs/heads/"):
-                return ref[len("refs/heads/"):]
+                return ref[len("refs/heads/") :]
             return ref
         elif event_type == "pull_request":
             pr = payload.get("pull_request", {})

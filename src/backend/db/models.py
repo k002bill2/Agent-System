@@ -901,9 +901,7 @@ class WorkflowDefinitionModel(Base):
 
     runs = relationship("WorkflowRunModel", back_populates="workflow", cascade="all, delete-orphan")
 
-    __table_args__ = (
-        Index("ix_workflow_defs_project_status", "project_id", "status"),
-    )
+    __table_args__ = (Index("ix_workflow_defs_project_status", "project_id", "status"),)
 
 
 class WorkflowRunModel(Base):
@@ -963,9 +961,7 @@ class WorkflowJobModel(Base):
     run = relationship("WorkflowRunModel", back_populates="jobs")
     steps = relationship("WorkflowStepModel", back_populates="job", cascade="all, delete-orphan")
 
-    __table_args__ = (
-        Index("ix_workflow_jobs_run_status", "run_id", "status"),
-    )
+    __table_args__ = (Index("ix_workflow_jobs_run_status", "run_id", "status"),)
 
 
 class WorkflowStepModel(Base):
@@ -998,9 +994,7 @@ class WorkflowStepModel(Base):
 
     job = relationship("WorkflowJobModel", back_populates="steps")
 
-    __table_args__ = (
-        Index("ix_workflow_steps_job_order", "job_id", "step_order"),
-    )
+    __table_args__ = (Index("ix_workflow_steps_job_order", "job_id", "step_order"),)
 
 
 class WorkflowSecretModel(Base):
@@ -1013,9 +1007,7 @@ class WorkflowSecretModel(Base):
     encrypted_value = Column(EncryptedString(length=None), nullable=False)
     scope = Column(String(20), nullable=False, default="workflow")  # workflow, project, global
     scope_id = Column(String(36), nullable=True, index=True)
-    created_by = Column(
-        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
-    )
+    created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -1043,9 +1035,7 @@ class WorkflowWebhookModel(Base):
     allowed_events = Column(JSONB, default=lambda: ["push", "pull_request"])
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    __table_args__ = (
-        Index("ix_workflow_webhooks_workflow", "workflow_id"),
-    )
+    __table_args__ = (Index("ix_workflow_webhooks_workflow", "workflow_id"),)
 
 
 class WorkflowArtifactModel(Base):

@@ -80,9 +80,7 @@ class SecretService:
 
     # ── Create ────────────────────────────────────────────────
 
-    async def create_secret(
-        self, data: SecretCreate, user_id: str | None = None
-    ) -> dict:
+    async def create_secret(self, data: SecretCreate, user_id: str | None = None) -> dict:
         """Create a new secret (value is encrypted by EncryptedString)."""
         # Duplicate check
         existing = await self._db.execute(

@@ -213,9 +213,7 @@ async def event_stream(
                 for agent in _agents.values():
                     # Simulate metric event
                     success_rate = (
-                        agent.successful_tasks / agent.total_tasks
-                        if agent.total_tasks > 0
-                        else 0.0
+                        agent.successful_tasks / agent.total_tasks if agent.total_tasks > 0 else 0.0
                     )
                     metric_event = AgentMetricEvent(
                         agent_id=agent.agent_id,
@@ -331,9 +329,7 @@ def _generate_metric_buckets(
 
     if agent:
         base_success_rate = (
-            agent.successful_tasks / agent.total_tasks
-            if agent.total_tasks > 0
-            else 0.9
+            agent.successful_tasks / agent.total_tasks if agent.total_tasks > 0 else 0.9
         )
         base_cost = agent.total_cost / max(agent.total_tasks, 1)
         base_duration = agent.avg_duration_ms

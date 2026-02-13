@@ -80,6 +80,7 @@ class AuthenticatedUser(BaseModel):
 # In-memory user store (for eval/demo purposes)
 # ─────────────────────────────────────────────────────────────
 
+
 class UserRecord(BaseModel):
     """In-memory user record."""
 

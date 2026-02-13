@@ -18,10 +18,7 @@ class ArtifactService:
 
     def list_artifacts(self, run_id: str) -> list[dict]:
         """List artifacts for a run."""
-        return [
-            a for a in self._artifacts.values()
-            if a["run_id"] == run_id
-        ]
+        return [a for a in self._artifacts.values() if a["run_id"] == run_id]
 
     def get_artifact(self, artifact_id: str) -> dict | None:
         """Get artifact metadata by ID."""
@@ -88,7 +85,8 @@ class ArtifactService:
         """Remove expired artifacts. Returns number of artifacts cleaned."""
         now = datetime.utcnow()
         expired_ids = [
-            aid for aid, a in self._artifacts.items()
+            aid
+            for aid, a in self._artifacts.items()
             if a.get("expires_at") and a["expires_at"] < now
         ]
         for aid in expired_ids:
@@ -97,10 +95,7 @@ class ArtifactService:
 
     def get_run_artifacts_size(self, run_id: str) -> int:
         """Get total size of artifacts for a run."""
-        return sum(
-            a["size_bytes"] for a in self._artifacts.values()
-            if a["run_id"] == run_id
-        )
+        return sum(a["size_bytes"] for a in self._artifacts.values() if a["run_id"] == run_id)
 
 
 # Singleton

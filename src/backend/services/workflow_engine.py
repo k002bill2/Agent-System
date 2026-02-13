@@ -87,10 +87,10 @@ class WorkflowEngine:
         # Apply exclude filter
         if job.matrix_exclude:
             combinations = [
-                combo for combo in combinations
+                combo
+                for combo in combinations
                 if not any(
-                    all(combo.get(k) == v for k, v in excl.items())
-                    for excl in job.matrix_exclude
+                    all(combo.get(k) == v for k, v in excl.items()) for excl in job.matrix_exclude
                 )
             ]
 
@@ -99,7 +99,10 @@ class WorkflowEngine:
             for incl in job.matrix_include:
                 combinations.append(incl)
 
-        return [(f"{job_name} ({', '.join(f'{k}={v}' for k, v in combo.items())})", combo) for combo in combinations]
+        return [
+            (f"{job_name} ({', '.join(f'{k}={v}' for k, v in combo.items())})", combo)
+            for combo in combinations
+        ]
 
     # ── Execution ───────────────────────────────────────────
 
@@ -156,10 +159,14 @@ class WorkflowEngine:
                     job_def = definition.jobs[job_name]
 
                     # Check if dependencies succeeded
-                    deps_ok = all(job_results.get(dep) == JobStatus.SUCCESS for dep in job_def.needs)
+                    deps_ok = all(
+                        job_results.get(dep) == JobStatus.SUCCESS for dep in job_def.needs
+                    )
                     if not deps_ok:
                         job_results[job_name] = JobStatus.SKIPPED
-                        self._emit_log(run_id, "job", f"Job '{job_name}' skipped (dependency failed)")
+                        self._emit_log(
+                            run_id, "job", f"Job '{job_name}' skipped (dependency failed)"
+                        )
                         continue
 
                     # Expand matrix
@@ -361,17 +368,24 @@ class WorkflowEngine:
                     else:
                         step_state["status"] = StepStatus.FAILURE
                         if attempt < max_attempts - 1:
-                            wait_time = delay * (2 ** attempt if backoff == "exponential" else (attempt + 1))
+                            wait_time = delay * (
+                                2**attempt if backoff == "exponential" else (attempt + 1)
+                            )
                             self._emit_log(
-                                run_id, "step",
-                                f"  Step '{step_def.name}' failed (attempt {attempt + 1}/{max_attempts}), retrying in {wait_time:.1f}s..."
+                                run_id,
+                                "step",
+                                f"  Step '{step_def.name}' failed (attempt {attempt + 1}/{max_attempts}), retrying in {wait_time:.1f}s...",
                             )
                             await asyncio.sleep(wait_time)
                             continue
                         break
 
                 elif step_def.uses:
-                    self._emit_log(run_id, "step", f"  Action '{step_def.uses}' (built-in actions not yet supported)")
+                    self._emit_log(
+                        run_id,
+                        "step",
+                        f"  Action '{step_def.uses}' (built-in actions not yet supported)",
+                    )
                     step_state["status"] = StepStatus.SUCCESS
                     step_state["output"] = f"Action '{step_def.uses}' executed (stub)"
                     break
@@ -384,7 +398,9 @@ class WorkflowEngine:
                 step_state["status"] = StepStatus.FAILURE
                 step_state["error"] = f"Step timed out after {step_def.timeout_minutes} minutes"
                 if attempt < max_attempts - 1:
-                    self._emit_log(run_id, "step", f"  Step '{step_def.name}' timed out, retrying...")
+                    self._emit_log(
+                        run_id, "step", f"  Step '{step_def.name}' timed out, retrying..."
+                    )
                     continue
                 break
             except Exception as e:
@@ -396,7 +412,11 @@ class WorkflowEngine:
         step_state["completed_at"] = datetime.utcnow()
 
         status_icon = "+" if step_state["status"] == StepStatus.SUCCESS else "x"
-        self._emit_log(run_id, "step", f"  {status_icon} Step '{step_def.name}' ({step_state['duration_ms']}ms)")
+        self._emit_log(
+            run_id,
+            "step",
+            f"  {status_icon} Step '{step_def.name}' ({step_state['duration_ms']}ms)",
+        )
 
         return step_state
 
@@ -435,7 +455,9 @@ class WorkflowEngine:
                 }
             except ImportError:
                 # Fallback to local execution with warning
-                self._emit_log(run_id, "warning", "  Docker runner unavailable, falling back to local")
+                self._emit_log(
+                    run_id, "warning", "  Docker runner unavailable, falling back to local"
+                )
 
         # Local execution
         process = await asyncio.create_subprocess_shell(

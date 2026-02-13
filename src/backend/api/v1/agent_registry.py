@@ -194,21 +194,11 @@ class AgentCreateRequest(BaseModel):
     capabilities: list[CapabilitySchema] = Field(
         default_factory=list, description="Agent capabilities"
     )
-    specializations: list[str] = Field(
-        default_factory=list, description="Area specializations"
-    )
-    estimated_cost_per_task: float = Field(
-        default=0.0, ge=0.0, description="Estimated cost in USD"
-    )
-    avg_execution_time_ms: int = Field(
-        default=0, ge=0, description="Average execution time in ms"
-    )
-    max_concurrent_tasks: int = Field(
-        default=1, ge=1, le=100, description="Max concurrent tasks"
-    )
-    success_rate: float = Field(
-        default=1.0, ge=0.0, le=1.0, description="Success rate (0.0-1.0)"
-    )
+    specializations: list[str] = Field(default_factory=list, description="Area specializations")
+    estimated_cost_per_task: float = Field(default=0.0, ge=0.0, description="Estimated cost in USD")
+    avg_execution_time_ms: int = Field(default=0, ge=0, description="Average execution time in ms")
+    max_concurrent_tasks: int = Field(default=1, ge=1, le=100, description="Max concurrent tasks")
+    success_rate: float = Field(default=1.0, ge=0.0, le=1.0, description="Success rate (0.0-1.0)")
 
 
 class AgentUpdateRequest(BaseModel):
@@ -302,8 +292,18 @@ def _seed_default_agents() -> None:
             "category": AgentCategory.DEVELOPMENT.value,
             "status": AgentStatus.AVAILABLE.value,
             "capabilities": [
-                {"name": "react-components", "description": "React component design", "keywords": ["react", "ui", "component"], "priority": 10},
-                {"name": "responsive-design", "description": "Responsive layouts", "keywords": ["responsive", "layout", "css"], "priority": 8},
+                {
+                    "name": "react-components",
+                    "description": "React component design",
+                    "keywords": ["react", "ui", "component"],
+                    "priority": 10,
+                },
+                {
+                    "name": "responsive-design",
+                    "description": "Responsive layouts",
+                    "keywords": ["responsive", "layout", "css"],
+                    "priority": 8,
+                },
             ],
             "specializations": ["React", "TypeScript", "Tailwind"],
             "estimated_cost_per_task": 0.05,
@@ -321,8 +321,18 @@ def _seed_default_agents() -> None:
             "category": AgentCategory.DEVELOPMENT.value,
             "status": AgentStatus.AVAILABLE.value,
             "capabilities": [
-                {"name": "api-integration", "description": "REST/GraphQL APIs", "keywords": ["api", "rest", "graphql"], "priority": 10},
-                {"name": "database", "description": "Database management", "keywords": ["database", "sql", "orm"], "priority": 9},
+                {
+                    "name": "api-integration",
+                    "description": "REST/GraphQL APIs",
+                    "keywords": ["api", "rest", "graphql"],
+                    "priority": 10,
+                },
+                {
+                    "name": "database",
+                    "description": "Database management",
+                    "keywords": ["database", "sql", "orm"],
+                    "priority": 9,
+                },
             ],
             "specializations": ["FastAPI", "PostgreSQL", "SQLAlchemy"],
             "estimated_cost_per_task": 0.06,
@@ -340,7 +350,12 @@ def _seed_default_agents() -> None:
             "category": AgentCategory.QUALITY.value,
             "status": AgentStatus.BUSY.value,
             "capabilities": [
-                {"name": "code-review", "description": "Code review", "keywords": ["review", "quality"], "priority": 10},
+                {
+                    "name": "code-review",
+                    "description": "Code review",
+                    "keywords": ["review", "quality"],
+                    "priority": 10,
+                },
             ],
             "specializations": ["Code Review", "Testing"],
             "estimated_cost_per_task": 0.03,
@@ -358,7 +373,12 @@ def _seed_default_agents() -> None:
             "category": AgentCategory.DEVOPS.value,
             "status": AgentStatus.UNAVAILABLE.value,
             "capabilities": [
-                {"name": "cicd", "description": "CI/CD pipeline management", "keywords": ["ci", "cd", "pipeline", "deploy"], "priority": 10},
+                {
+                    "name": "cicd",
+                    "description": "CI/CD pipeline management",
+                    "keywords": ["ci", "cd", "pipeline", "deploy"],
+                    "priority": 10,
+                },
             ],
             "specializations": ["Docker", "Kubernetes", "GitHub Actions"],
             "estimated_cost_per_task": 0.08,
@@ -417,9 +437,7 @@ def _decode_cursor(cursor: str) -> str | None:
         return None
 
 
-async def _apply_rate_limit(
-    request: Request, user: AuthenticatedUser | None
-) -> None:
+async def _apply_rate_limit(request: Request, user: AuthenticatedUser | None) -> None:
     """Apply rate limiting based on user authentication status."""
     if user and user.role == UserRole.ADMIN:
         tier = RateLimitTier.ADMIN
@@ -459,9 +477,7 @@ async def login(request_body: LoginRequest, request: Request) -> TokenPairRespon
 
 
 @router.post("/auth/refresh", response_model=TokenPairResponse)
-async def refresh_token(
-    request_body: RefreshTokenRequest, request: Request
-) -> TokenPairResponse:
+async def refresh_token(request_body: RefreshTokenRequest, request: Request) -> TokenPairResponse:
     """Refresh access token using a valid refresh token.
 
     Validates the refresh token (7-day expiry) and issues a new token pair.
@@ -503,9 +519,13 @@ async def list_agents(
     request: Request,
     current_user: AuthenticatedUser | None = Depends(get_optional_user),
     # Filtering
-    agent_status: str | None = Query(None, alias="status", description="Comma-separated statuses: available,busy"),
+    agent_status: str | None = Query(
+        None, alias="status", description="Comma-separated statuses: available,busy"
+    ),
     category: str | None = Query(None, description="Single category filter"),
-    min_success_rate: float | None = Query(None, ge=0.0, le=1.0, description="Minimum success rate"),
+    min_success_rate: float | None = Query(
+        None, ge=0.0, le=1.0, description="Minimum success rate"
+    ),
     search: str | None = Query(None, description="Search in name and description"),
     # Sorting
     sort: str | None = Query(None, description="Multi-sort: name:asc,success_rate:desc"),
@@ -541,8 +561,7 @@ async def list_agents(
         agents = [
             a
             for a in agents
-            if search_lower in a["name"].lower()
-            or search_lower in a.get("description", "").lower()
+            if search_lower in a["name"].lower() or search_lower in a.get("description", "").lower()
         ]
 
     total = len(agents)
@@ -631,27 +650,23 @@ async def get_agent_stats(
         "total_agents": len(agents),
         "available_agents": sum(1 for a in agents if a["status"] == AgentStatus.AVAILABLE.value),
         "busy_agents": sum(1 for a in agents if a["status"] == AgentStatus.BUSY.value),
-        "unavailable_agents": sum(1 for a in agents if a["status"] == AgentStatus.UNAVAILABLE.value),
+        "unavailable_agents": sum(
+            1 for a in agents if a["status"] == AgentStatus.UNAVAILABLE.value
+        ),
         "error_agents": sum(1 for a in agents if a["status"] == AgentStatus.ERROR.value),
         "by_category": {},
         "total_tasks_completed": sum(a.get("total_tasks_completed", 0) for a in agents),
         "avg_success_rate": (
-            sum(a.get("success_rate", 0) for a in agents) / len(agents)
-            if agents
-            else 0.0
+            sum(a.get("success_rate", 0) for a in agents) / len(agents) if agents else 0.0
         ),
         "avg_execution_time_ms": (
-            sum(a.get("avg_execution_time_ms", 0) for a in agents) / len(agents)
-            if agents
-            else 0.0
+            sum(a.get("avg_execution_time_ms", 0) for a in agents) / len(agents) if agents else 0.0
         ),
     }
 
     # Category breakdown
     for cat in AgentCategory:
-        stats_data["by_category"][cat.value] = sum(
-            1 for a in agents if a["category"] == cat.value
-        )
+        stats_data["by_category"][cat.value] = sum(1 for a in agents if a["category"] == cat.value)
 
     cache.set(cache_key, stats_data, CACHE_TTL_STATS)
     return AgentStatsResponse(**stats_data)

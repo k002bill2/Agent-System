@@ -55,14 +55,10 @@ class SlidingWindowCounter:
         if self._cleanup_counter >= self._cleanup_interval:
             self._cleanup_counter = 0
             now = time.monotonic()
-            max_window = max(
-                cfg[1] for cfg in RATE_LIMIT_CONFIG.values() if cfg[1] > 0
-            )
+            max_window = max(cfg[1] for cfg in RATE_LIMIT_CONFIG.values() if cfg[1] > 0)
             keys_to_delete: list[str] = []
             for key, timestamps in self._windows.items():
-                self._windows[key] = [
-                    ts for ts in timestamps if ts > now - max_window
-                ]
+                self._windows[key] = [ts for ts in timestamps if ts > now - max_window]
                 if not self._windows[key]:
                     keys_to_delete.append(key)
             for key in keys_to_delete:
@@ -180,14 +176,10 @@ async def check_rate_limit(
     max_requests, window_seconds = RATE_LIMIT_CONFIG[tier]
     client_key = _get_client_key(request, user_id)
 
-    is_limited, info = limiter.is_rate_limited(
-        client_key, max_requests, window_seconds
-    )
+    is_limited, info = limiter.is_rate_limited(client_key, max_requests, window_seconds)
 
     if is_limited:
-        logger.warning(
-            "Rate limit exceeded for %s (tier=%s)", client_key, tier.value
-        )
+        logger.warning("Rate limit exceeded for %s (tier=%s)", client_key, tier.value)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail={

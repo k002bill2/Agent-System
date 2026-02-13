@@ -642,7 +642,8 @@ class TemplateService:
         if search:
             search_lower = search.lower()
             templates = [
-                t for t in templates
+                t
+                for t in templates
                 if search_lower in t["name"].lower()
                 or search_lower in t["description"].lower()
                 or any(search_lower in tag.lower() for tag in t.get("tags", []))
