@@ -94,8 +94,8 @@ Task(eval-task-runner):
 
 ## 상세 피드백
 ### 코드 검사 (40%)
-- ✅ 파일 존재: src/components/station/StationCard.tsx
-- ✅ 테스트 존재: StationCard.test.tsx
+- ✅ 파일 존재: src/components/agents/AgentCard.tsx
+- ✅ 테스트 존재: AgentCard.test.tsx
 - ✅ any 타입 없음
 - ⚠️ 접근성 레이블 일부 누락
 

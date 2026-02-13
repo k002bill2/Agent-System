@@ -97,7 +97,7 @@ PostToolUse 훅에서 자동 실행:
 
 ### 권장 조치
 1. ESLint 경고 5개 확인 권장
-   - src/components/StationCard.tsx:45 - unused variable
+   - src/components/AgentCard.tsx:45 - unused variable
    - ...
 ```
 

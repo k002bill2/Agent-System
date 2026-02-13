@@ -12,50 +12,44 @@ dependencies = [
     "langchain-openai>=0.2.0",
     "langchain-ollama>=0.2.0",
     "langchain-google-genai>=2.0.0",
-
     # API Framework
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "websockets>=14.0",
-
     # Database
     "sqlalchemy>=2.0.0",
     "asyncpg>=0.30.0",
     "alembic>=1.14.0",
-    "greenlet>=3.0.0",  # SQLAlchemy async 필수
-
+    "greenlet>=3.0.0", # SQLAlchemy async 필수
     # Redis
     "redis>=5.2.0",
-
     # Utilities
     "pydantic[email]>=2.10.0",
     "pydantic-settings>=2.6.0",
     "python-dotenv>=1.0.0",
     "httpx>=0.28.0",
     "pyjwt>=2.8.0",
-    "aiosmtplib>=3.0.0",  # SMTP email support
-
+    "aiosmtplib>=3.0.0", # SMTP email support
     # Monitoring
     "opentelemetry-api>=1.28.0",
     "opentelemetry-sdk>=1.28.0",
     "opentelemetry-instrumentation-fastapi>=0.49b0",
     "structlog>=24.4.0",
-
     # Vector DB & RAG
     "chromadb>=0.4.0",
     "langchain-chroma>=0.1.0",
     "sentence-transformers>=2.2.0",
-
     # Docker (for sandbox)
     "docker>=6.0.0",
-
     # Git integration
     "gitpython>=3.1.40",
     "PyGithub>=2.1.1",
-
     # Security / Encryption
     "cryptography>=42.0.0",
     "bcrypt>=4.1.0",
+    "apscheduler>=3.10.0",
+    "croniter>=1.3.0",
+    "python-multipart>=0.0.22",
 ]
 
 [project.optional-dependencies]

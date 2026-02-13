@@ -43,7 +43,7 @@ Create comprehensive unit and integration tests for AOS Dashboard components, ho
 
 ### Test Location
 - Co-located with source files in `__tests__/` directories
-- Example: `src/components/train/__tests__/StationCard.test.tsx`
+- Example: `src/components/agents/__tests__/AgentCard.test.tsx`
 
 ### Naming Conventions
 - Test files: `*.test.ts` or `*.test.tsx`
@@ -122,32 +122,32 @@ vi.mock('react-router-dom', async () => {
 
 **Component Tests**:
 ```typescript
-describe('StationCard', () => {
-  const mockStation = {
-    id: 'station1',
-    name: '강남역',
-    lineId: 'line2',
-    coordinates: { latitude: 37.498, longitude: 127.028 }
+describe('AgentCard', () => {
+  const mockAgent = {
+    id: 'agent1',
+    name: 'web-ui-specialist',
+    status: 'available',
+    tools: ['read', 'edit', 'bash']
   };
 
-  it('renders station name correctly', () => {
-    const { getByText } = render(<StationCard station={mockStation} />);
-    expect(getByText('강남역')).toBeTruthy();
+  it('renders agent name correctly', () => {
+    const { getByText } = render(<AgentCard agent={mockAgent} />);
+    expect(getByText('web-ui-specialist')).toBeTruthy();
   });
 
   it('handles press event', () => {
     const onPress = jest.fn();
     const { getByTestId } = render(
-      <StationCard station={mockStation} onPress={onPress} />
+      <AgentCard agent={mockAgent} onPress={onPress} />
     );
 
-    fireEvent.press(getByTestId('station-card'));
-    expect(onPress).toHaveBeenCalledWith(mockStation);
+    fireEvent.press(getByTestId('agent-card'));
+    expect(onPress).toHaveBeenCalledWith(mockAgent);
   });
 
   it('shows loading state', () => {
     const { getByTestId } = render(
-      <StationCard station={mockStation} loading={true} />
+      <AgentCard agent={mockAgent} loading={true} />
     );
     expect(getByTestId('loading-indicator')).toBeTruthy();
   });
@@ -157,12 +157,12 @@ describe('StationCard', () => {
 **Hook Tests**:
 ```typescript
 import { renderHook, act } from '@testing-library/react-hooks';
-import { useRealtimeTrains } from '../useRealtimeTrains';
+import { useRealtimeAgents } from '../useRealtimeAgents';
 
-describe('useRealtimeTrains', () => {
+describe('useRealtimeAgents', () => {
   it('fetches train data on mount', async () => {
     const { result, waitForNextUpdate } = renderHook(() =>
-      useRealtimeTrains('station1')
+      useRealtimeAgents('agent1')
     );
 
     expect(result.current.loading).toBe(true);
@@ -178,7 +178,7 @@ describe('useRealtimeTrains', () => {
     jest.spyOn(console, 'error').mockImplementation(() => {});
 
     const { result, waitForNextUpdate } = renderHook(() =>
-      useRealtimeTrains('invalid-station')
+      useRealtimeAgents('invalid-agent')
     );
 
     await waitForNextUpdate();
@@ -199,19 +199,19 @@ describe('dataManager', () => {
   });
 
   it('fetches from Seoul API first', async () => {
-    const data = await dataManager.getTrainArrivals('station1');
+    const data = await dataManager.getAgentTasks('agent1');
 
-    expect(seoulSubwayApi.getRealtimeArrival).toHaveBeenCalledWith('station1');
+    expect(agentRegistryApi.getAgentStatus).toHaveBeenCalledWith('agent1');
     expect(data).toBeDefined();
   });
 
   it('falls back to Firebase on API failure', async () => {
     // Mock Seoul API failure
-    seoulSubwayApi.getRealtimeArrival.mockRejectedValue(new Error('API Error'));
+    agentRegistryApi.getAgentStatus.mockRejectedValue(new Error('API Error'));
 
-    const data = await dataManager.getTrainArrivals('station1');
+    const data = await dataManager.getAgentTasks('agent1');
 
-    expect(trainService.getTrainArrivals).toHaveBeenCalledWith('station1');
+    expect(trainService.getAgentTasks).toHaveBeenCalledWith('agent1');
   });
 
   it('uses cache when available and fresh', async () => {
@@ -221,10 +221,10 @@ describe('dataManager', () => {
       timestamp: Date.now()
     }));
 
-    const data = await dataManager.getTrainArrivals('station1');
+    const data = await dataManager.getAgentTasks('agent1');
 
     // Should not call APIs
-    expect(seoulSubwayApi.getRealtimeArrival).not.toHaveBeenCalled();
+    expect(agentRegistryApi.getAgentStatus).not.toHaveBeenCalled();
     expect(data).toEqual(mockData);
   });
 });

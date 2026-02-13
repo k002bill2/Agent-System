@@ -1,33 +1,63 @@
 import { useEffect, useRef } from 'react'
 import { cn } from '../../lib/utils'
 import { Terminal, Trash2 } from 'lucide-react'
-import { ALL_CHECK_TYPES, CHECK_TYPE_LABELS } from '../../types/monitoring'
+import { ALL_CHECK_TYPES, CHECK_TYPE_LABELS, CheckType } from '../../types/monitoring'
 import { useMonitoringStore } from '../../stores/monitoring'
 
 interface OutputLogProps {
   projectId: string
 }
 
+/** Check if view is a standard CheckType */
+function isCheckType(view: string): view is CheckType {
+  return ALL_CHECK_TYPES.includes(view as CheckType)
+}
+
 export function OutputLog({ projectId }: OutputLogProps) {
-  const { checkLogs, activeLogView, setActiveLogView, clearLogs } = useMonitoringStore()
+  const {
+    checkLogs,
+    activeLogView,
+    setActiveLogView,
+    clearLogs,
+    workflowChecks,
+    workflowLogs,
+    clearWorkflowLogs,
+  } = useMonitoringStore()
   const logContainerRef = useRef<HTMLDivElement>(null)
+
+  // Check if current view is a workflow ID
+  const isWorkflowView = activeLogView !== 'all' && !isCheckType(activeLogView)
 
   // Get logs based on active view, filtered by current project
   const getDisplayLogs = () => {
     if (activeLogView === 'all') {
-      // Combine all logs, filter by projectId, and sort by timestamp
-      const allLogs = ALL_CHECK_TYPES.flatMap((ct) =>
+      // Combine all check logs + workflow logs, sorted by timestamp
+      const allCheckLogs = ALL_CHECK_TYPES.flatMap((ct) =>
         checkLogs[ct]
           .filter((log) => log.projectId === projectId)
-          .map((log) => ({ ...log, checkType: ct }))
+          .map((log) => ({ ...log, label: CHECK_TYPE_LABELS[ct] }))
       )
-      return allLogs.sort(
+      const allWfLogs = Object.entries(workflowLogs).flatMap(([wfId, logs]) => {
+        const wf = workflowChecks.find((w) => w.id === wfId)
+        return logs.map((log) => ({ ...log, label: wf?.name || wfId }))
+      })
+      return [...allCheckLogs, ...allWfLogs].sort(
         (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
       )
     }
-    return checkLogs[activeLogView]
+
+    if (isWorkflowView) {
+      // Workflow logs
+      return (workflowLogs[activeLogView] || []).map((log) => {
+        const wf = workflowChecks.find((w) => w.id === activeLogView)
+        return { ...log, label: wf?.name || activeLogView }
+      })
+    }
+
+    // Standard check type logs
+    return checkLogs[activeLogView as CheckType]
       .filter((log) => log.projectId === projectId)
-      .map((log) => ({ ...log, checkType: activeLogView }))
+      .map((log) => ({ ...log, label: CHECK_TYPE_LABELS[activeLogView as CheckType] }))
   }
 
   const displayLogs = getDisplayLogs()
@@ -38,6 +68,17 @@ export function OutputLog({ projectId }: OutputLogProps) {
       logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight
     }
   }, [displayLogs.length])
+
+  const handleClear = () => {
+    if (activeLogView === 'all') {
+      clearLogs()
+      clearWorkflowLogs()
+    } else if (isWorkflowView) {
+      clearWorkflowLogs(activeLogView)
+    } else {
+      clearLogs(activeLogView as CheckType)
+    }
+  }
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col h-full min-h-[300px]">
@@ -52,7 +93,8 @@ export function OutputLog({ projectId }: OutputLogProps) {
 
         <div className="flex items-center gap-2">
           {/* Tab buttons */}
-          <div className="flex rounded-lg bg-gray-100 dark:bg-gray-700 p-1">
+          <div className="flex items-center rounded-lg bg-gray-100 dark:bg-gray-700 p-1">
+            {/* Standard tabs */}
             <button
               onClick={() => setActiveLogView('all')}
               className={cn(
@@ -78,11 +120,33 @@ export function OutputLog({ projectId }: OutputLogProps) {
                 {CHECK_TYPE_LABELS[ct]}
               </button>
             ))}
+
+            {/* Workflow tabs (with divider) */}
+            {workflowChecks.length > 0 && (
+              <>
+                <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1" />
+                {workflowChecks.map((wc) => (
+                  <button
+                    key={wc.id}
+                    onClick={() => setActiveLogView(wc.id)}
+                    className={cn(
+                      'px-3 py-1 text-xs font-medium rounded-md transition-colors truncate max-w-[80px]',
+                      activeLogView === wc.id
+                        ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                    )}
+                    title={wc.name}
+                  >
+                    {wc.name}
+                  </button>
+                ))}
+              </>
+            )}
           </div>
 
           {/* Clear button */}
           <button
-            onClick={() => clearLogs(activeLogView === 'all' ? undefined : activeLogView)}
+            onClick={handleClear}
             className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             title="Clear logs"
           >
@@ -113,7 +177,7 @@ export function OutputLog({ projectId }: OutputLogProps) {
               >
                 {activeLogView === 'all' && (
                   <span className="text-gray-500 mr-2">
-                    [{CHECK_TYPE_LABELS[log.checkType]}]
+                    [{log.label}]
                   </span>
                 )}
                 {log.text}

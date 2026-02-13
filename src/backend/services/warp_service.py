@@ -80,22 +80,36 @@ class WarpService:
         warp_app = Path("/Applications/Warp.app")
         return warp_app.exists()
 
-    def build_claude_command(self, task: str | None = None) -> str:
+    def build_claude_command(
+        self,
+        task: str | None = None,
+        image_paths: list[str] | None = None,
+    ) -> str:
         """Build a Claude CLI command for Warp launch config.
 
         - With task: Saves prompt to file, passes to Claude CLI as argument.
           Claude CLI accepts a prompt as positional argument and starts
           an interactive session with that prompt already submitted.
         - Without task: Starts Claude in plain interactive mode.
+        - With image_paths: Adds --image flags for each image file.
 
         Args:
             task: Optional task description. If None, opens interactive mode.
+            image_paths: Optional list of absolute image file paths to attach.
 
         Returns:
             Shell command string to execute in Warp.
         """
+        # Build --image flags
+        image_flags = ""
+        if image_paths:
+            image_flags = " ".join(f'--image "{p}"' for p in image_paths)
+
         if not task:
-            return "claude --dangerously-skip-permissions"
+            base = "claude --dangerously-skip-permissions"
+            if image_flags:
+                return f"{base} {image_flags}"
+            return base
 
         # Write prompt to a temp file to avoid shell escaping issues
         prompt_name = f"aos-prompt-{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
@@ -106,7 +120,10 @@ class WarpService:
         # Use $(cat file) to pass the prompt as a positional argument
         # This starts an interactive Claude session with the prompt pre-submitted
         prompt_file_path = f"~/.warp/launch_configurations/{prompt_name}.txt"
-        return f'claude --dangerously-skip-permissions "$(cat {prompt_file_path})"'
+        base_cmd = "claude --dangerously-skip-permissions"
+        if image_flags:
+            base_cmd += f" {image_flags}"
+        return f'{base_cmd} "$(cat {prompt_file_path})"'
 
     def open_path(self, path: str, new_window: bool = True) -> dict:
         """

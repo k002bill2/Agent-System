@@ -65,6 +65,18 @@ export const CHECK_TYPE_COMMANDS: Record<CheckType, string> = {
 
 export const ALL_CHECK_TYPES: CheckType[] = ['test', 'lint', 'typecheck', 'build']
 
+// Workflow check types for monitor integration
+export type WorkflowCheckStatus = 'idle' | 'running' | 'success' | 'failure'
+
+export interface WorkflowCheck {
+  id: string
+  name: string
+  description: string
+  status: WorkflowCheckStatus
+  lastRunAt: string | null
+  lastRunDuration: number | null // seconds
+}
+
 // Project Context types
 export interface DevDocFile {
   name: string

@@ -1,6 +1,7 @@
 export { CheckCard } from './CheckCard'
 export { HealthOverview } from './HealthOverview'
 export { OutputLog } from './OutputLog'
+export { WorkflowCheckCard } from './WorkflowCheckCard'
 export { ContextPanel } from './ContextPanel'
 export { ResizablePanel } from './ResizablePanel'
 export { ProjectsPanel } from './ProjectsPanel'

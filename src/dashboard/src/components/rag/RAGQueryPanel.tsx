@@ -134,11 +134,6 @@ export function RAGQueryPanel({ projectId, projectName, className, onClose }: RA
   // Expanded results
   const [expandedResults, setExpandedResults] = useState<Set<number>>(new Set())
 
-  // Load stats on mount
-  useEffect(() => {
-    loadStats()
-  }, [projectId])
-
   const loadStats = useCallback(async () => {
     setIsLoadingStats(true)
     setError(null)
@@ -151,6 +146,11 @@ export function RAGQueryPanel({ projectId, projectName, className, onClose }: RA
       setIsLoadingStats(false)
     }
   }, [projectId])
+
+  // Load stats on mount
+  useEffect(() => {
+    loadStats()
+  }, [projectId, loadStats])
 
   const handleSearch = useCallback(async () => {
     if (!query.trim()) return

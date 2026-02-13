@@ -53,7 +53,7 @@ Enable systematic diagnosis of multi-agent workflow failures by tracking:
   "data": {
     "agent_type": "web-ui-specialist",
     "model": "sonnet",
-    "task_summary": "Create StationCard component",
+    "task_summary": "Create AgentCard component",
     "complexity": "simple",
     "parent_agent": "lead-orchestrator"
   }
@@ -271,7 +271,7 @@ Analysis workflow:
 # Session Summary: sess_abc123
 
 ## Overview
-- Task: Add station favorites feature
+- Task: Add agent favorites feature
 - Complexity: Moderate
 - Duration: 12m 34s
 - Status: COMPLETED

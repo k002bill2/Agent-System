@@ -13,6 +13,7 @@ export function MonitorPage() {
     isLoadingHealth,
     error,
     fetchProjectHealth,
+    fetchWorkflowChecks,
     runAllChecks,
     clearError,
   } = useMonitoringStore()
@@ -30,12 +31,13 @@ export function MonitorPage() {
     fetchProjects()
   }, [fetchProjects])
 
-  // Fetch health when project changes
+  // Fetch health and workflow checks when project changes
   useEffect(() => {
     if (selectedProjectId) {
       fetchProjectHealth(selectedProjectId)
+      fetchWorkflowChecks(selectedProjectId)
     }
-  }, [selectedProjectId, fetchProjectHealth])
+  }, [selectedProjectId, fetchProjectHealth, fetchWorkflowChecks])
 
   // No project selected - show projects panel for selection
   if (!selectedProjectId || !selectedProject) {
@@ -67,7 +69,7 @@ export function MonitorPage() {
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden p-6 space-y-4">
+      <div className="flex-1 flex flex-col overflow-y-auto p-6 space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -178,7 +180,7 @@ export function MonitorPage() {
           <>
             <HealthOverview health={projectHealth} projectId={selectedProjectId} />
 
-            <div className="flex-1 min-h-0">
+            <div className="h-[500px] min-h-[400px]">
               <OutputLog projectId={selectedProjectId} />
             </div>
           </>

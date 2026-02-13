@@ -1,13 +1,13 @@
-# Task: Station 서비스 API 엔드포인트
+# Task: Agent 서비스 API 엔드포인트
 id: task_service_001
-name: "Station CRUD API 엔드포인트"
+name: "Agent CRUD API 엔드포인트"
 category: service
 difficulty: medium
 
 description: |
-  충전소(Station) 관리를 위한 CRUD API 엔드포인트를 구현합니다.
-  GET /stations, GET /stations/{id}, POST /stations,
-  PUT /stations/{id}, DELETE /stations/{id} 엔드포인트가 필요합니다.
+  에이전트(Agent) 관리를 위한 CRUD API 엔드포인트를 구현합니다.
+  GET /agents, GET /agents/{id}, POST /agents,
+  PUT /agents/{id}, DELETE /agents/{id} 엔드포인트가 필요합니다.
 
 acceptance_criteria:
   - FastAPI 라우터로 구현
@@ -19,14 +19,14 @@ acceptance_criteria:
 
 input:
   prompt: |
-    충전소(Station) 관리를 위한 CRUD API를 구현해주세요.
+    에이전트(Agent) 관리를 위한 CRUD API를 구현해주세요.
 
     엔드포인트:
-    - GET /api/v1/stations - 목록 조회 (페이지네이션)
-    - GET /api/v1/stations/{id} - 단일 조회
-    - POST /api/v1/stations - 생성
-    - PUT /api/v1/stations/{id} - 수정
-    - DELETE /api/v1/stations/{id} - 삭제
+    - GET /api/v1/agents - 목록 조회 (페이지네이션)
+    - GET /api/v1/agents/{id} - 단일 조회
+    - POST /api/v1/agents - 생성
+    - PUT /api/v1/agents/{id} - 수정
+    - DELETE /api/v1/agents/{id} - 삭제
 
     요구사항:
     - FastAPI 라우터 사용
@@ -34,14 +34,14 @@ input:
     - 적절한 에러 처리 (404, 400, 500)
     - 비동기 처리
   context_files:
-    - src/backend/models/station.py
+    - src/backend/models/agent.py
     - src/backend/api/routes.py
   dependencies: []
 
 expected_output:
   files:
-    - src/backend/api/v1/stations.py
-    - tests/backend/api/test_stations.py
+    - src/backend/api/v1/agents.py
+    - tests/backend/api/test_agents.py
   patterns:
     - "@router.get"
     - "@router.post"
@@ -63,5 +63,5 @@ evaluation:
 metadata:
   created_at: 2025-01-28
   author: system
-  tags: [api, fastapi, crud, station]
+  tags: [api, fastapi, crud, agent]
   recommended_agent: backend-integration-specialist

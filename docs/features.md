@@ -790,3 +790,81 @@ class ProjectAccessService:
 - 멀티스테이지 빌드 (builder → runtime)
 - non-root 유저, HEALTHCHECK
 - Dashboard: nginx-alpine 기반 SPA 호스팅
+
+---
+
+## 38. Workflow Automation (CI/CD)
+
+GitHub Actions 유사 워크플로우 자동화 시스템:
+
+```python
+class WorkflowEngine:
+    def build_job_dag(jobs) -> list[list[str]]          # 위상정렬 기반 DAG 병렬 그룹
+    async def execute_run(run_id, definition, ...) -> dict  # 워크플로우 실행
+    def expand_matrix(job_name, job) -> list[tuple]     # Matrix 전략 확장
+    def cancel_run(run_id)                               # 실행 취소
+```
+
+**워크플로우 정의** (YAML DSL):
+- `name`, `description`: 워크플로우 메타데이터
+- `on`: 트리거 설정 (manual, push, pull_request, schedule, webhook, merge)
+- `jobs`: Job 정의 (needs 의존성, steps, matrix, environment)
+- `env`: 환경 변수
+
+**실행 엔진**:
+- Kahn's Algorithm 기반 위상정렬로 DAG 스케줄링
+- Job 단위 병렬 실행 (asyncio.gather)
+- Matrix 전략: 모든 조합 자동 확장
+- Runner: `local` (직접 실행) / `docker` (SandboxManager 위임)
+- `${{ matrix.* }}`, `${{ env.* }}` 변수 치환
+- Step 타임아웃 지원
+
+**API 엔드포인트** (12개):
+- `GET/POST /api/workflows` - 워크플로우 CRUD
+- `GET/PUT/DELETE /api/workflows/{id}` - 개별 워크플로우
+- `GET/POST /api/workflows/{id}/runs` - 실행 목록/트리거
+- `GET /api/workflows/runs/{id}` - 실행 상세
+- `POST /api/workflows/runs/{id}/cancel` - 실행 취소
+- `POST /api/workflows/runs/{id}/retry` - 실행 재시도
+- `GET /api/workflows/runs/{id}/stream` - SSE 실시간 로그
+- `GET /api/workflows/{id}/yaml` - YAML 내보내기
+
+**Dashboard UI**:
+- `WorkflowsPage`: 3-패널 레이아웃 (목록 | 상세+DAG | 로그)
+- `WorkflowDAG`: 의존성 기반 파이프라인 시각화
+- `WorkflowRunLogs`: 터미널 스타일 실시간 로그 (SSE)
+- `WorkflowCreateModal`: YAML 에디터 (샘플 템플릿 포함)
+
+**DB 테이블**: `workflow_definitions`, `workflow_runs`, `workflow_jobs`, `workflow_steps`, `workflow_secrets`, `workflow_webhooks`, `workflow_artifacts`, `workflow_templates`
+
+### Phase 2: 트리거 시스템 + 고급 UI
+
+**Variable Expander**: `${{ steps.<id>.outputs.<key> }}`, `${{ secrets.<name> }}`, `${{ inputs.<key> }}`, `${{ env.<key> }}`, `${{ matrix.<key> }}` 패턴 지원. Step stdout에서 `::set-output name=KEY::VALUE` 캡처.
+
+**Secret Management**: Fernet 암호화 기반 시크릿 저장. scope (workflow/project/global). 로그에서 자동 마스킹 (`***`).
+
+**Scheduler Service**: APScheduler BackgroundScheduler + CronTrigger 기반. cron 프리셋, 일시정지/재개, 다음 실행 미리보기.
+
+**Webhook Service**: HMAC-SHA256 서명 검증. GitHub push/PR payload 파싱. branch/path fnmatch 필터 매칭.
+
+**고급 UI**:
+- `YamlEditor`: js-yaml 검증, 에러 라인 표시, Edit/Preview 토글
+- `EnhancedRunLogs`: 로그 레벨 필터, 검색, job 접기/펴기
+- `InteractiveDAG`: 확장 가능한 Job 노드, 위상정렬 레이어링
+- `TriggerConfigPanel` + `CronBuilder`: 트리거 유형별 탭 UI
+
+### Phase 3: Matrix 고도화 + Artifacts + Templates
+
+**Advanced Matrix**: `exclude` (조합 제외), `include` (추가 커스텀 조합) 지원.
+
+**Step-level Retry**: `retry: {max_attempts, backoff: linear|exponential, delay_seconds}`. 지수 백오프 `delay * 2^attempt`.
+
+**Artifact Service**: 로컬 파일시스템 `./data/artifacts/{run_id}/` 저장. 보존 정책 (expires_at). multipart 업로드.
+
+**Template Service**: 내장 4종 (Python CI, Node.js CI, Deploy, Test Suite). 카테고리별 필터, popularity 추적.
+
+**추가 UI**:
+- `TemplateGallery`: 카테고리 필터 + 검색, YAML 미리보기
+- `ArtifactBrowser`: 파일 아이콘/크기, 다운로드
+- `SecretsManager`: 시크릿 CRUD 모달, 마스킹 표시
+- `ExecutionTimeline`: Gantt 차트 스타일 실행 타임라인

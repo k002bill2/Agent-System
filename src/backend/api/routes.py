@@ -1419,6 +1419,9 @@ class WarpOpenRequest(BaseModel):
     use_claude_cli: bool = Field(
         False, description="Wrap command with claude --dangerously-skip-permissions"
     )
+    image_paths: list[str] | None = Field(
+        None, description="Image file paths to pass to Claude CLI via --image flags"
+    )
 
 
 class WarpOpenResponse(BaseModel):
@@ -1462,6 +1465,7 @@ async def open_in_warp(request: WarpOpenRequest):
         # Two-phase: start Claude interactively, then inject task via expect
         actual_command = warp.build_claude_command(
             task=request.command,  # None → interactive mode, string → expect inject
+            image_paths=request.image_paths,
         )
         tab_title = request.title or "Claude CLI"
     else:

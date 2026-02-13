@@ -79,23 +79,23 @@ You are a senior React Web performance specialist focusing on optimizing the AOS
 // ❌ BAD: Memory leak
 useEffect(() => {
   const unsubscribe = trainService.subscribeToTrainUpdates(
-    stationId,
+    agentId,
     setTrains
   );
   // Missing cleanup!
-}, [stationId]);
+}, [agentId]);
 
 // ✅ GOOD: Proper cleanup
 useEffect(() => {
   const unsubscribe = trainService.subscribeToTrainUpdates(
-    stationId,
+    agentId,
     setTrains
   );
 
   return () => {
     unsubscribe();
   };
-}, [stationId]);
+}, [agentId]);
 ```
 
 **Detection**: Look for:
@@ -297,15 +297,15 @@ When optimizing a screen or component, systematically check:
 ### Memoization Pattern
 ```typescript
 // Expensive calculation
-const sortedStations = useMemo(() => {
-  return stations
-    .filter(s => s.lineId === lineId)
+const sortedAgents = useMemo(() => {
+  return agents
+    .filter(a => a.status === filterStatus)
     .sort((a, b) => a.name.localeCompare(b.name));
-}, [stations, lineId]);
+}, [agents, filterStatus]);
 
 // Callback passed to child
-const handleStationPress = useCallback((station: Station) => {
-  navigation.navigate('StationDetail', { stationId: station.id });
+const handleAgentPress = useCallback((agent: Agent) => {
+  navigation.navigate('AgentDetail', { agentId: agent.id });
 }, [navigation]);
 ```
 
@@ -328,7 +328,7 @@ function SearchScreen() {
     <TextInput
       value={searchText}
       onChangeText={setSearchText}
-      placeholder="Search stations..."
+      placeholder="Search agents..."
     />
   );
 }
@@ -398,12 +398,12 @@ When asked to optimize performance:
 
 ## Identified Issues
 1. ❌ Entire component re-renders on train data update
-2. ❌ Nearby stations calculation happens on every render
+2. ❌ Agent list filtering happens on every render
 3. ❌ Firebase subscription not cleaned up properly
 
 ## Optimizations Applied
-1. ✅ Memoized StationCard components
-2. ✅ Moved nearby stations calculation to useMemo
+1. ✅ Memoized AgentCard components
+2. ✅ Moved agent list filtering to useMemo
 3. ✅ Added subscription cleanup in useEffect
 
 ## Results

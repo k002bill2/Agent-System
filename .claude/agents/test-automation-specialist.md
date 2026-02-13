@@ -129,7 +129,7 @@ coverageThreshold: {
 
 **Priority Order for Test Coverage**:
 1. **Critical Paths**: Auth, data integrity, financial operations (if any)
-2. **Core Features**: Train arrivals, station search, favorites
+2. **Core Features**: Agent management, agent search, favorites
 3. **User Interactions**: Button clicks, form submissions, navigation
 4. **Error Handling**: Network errors, API failures, edge cases
 5. **Edge Cases**: Empty states, loading states, error states

@@ -1,0 +1,133 @@
+# Task: API 서비스 레이어 추출 + 에러 바운더리 + 코드 스플리팅
+id: task_refactor_002
+name: "API 서비스 레이어 추출 및 에러 바운더리 리팩토링"
+category: refactor
+difficulty: hard
+
+description: |
+  현재 Zustand 스토어에 직접 포함된 API 호출 로직을 서비스 레이어로 추출하고,
+  표준화된 에러 처리 체계를 도입하며, React 코드 스플리팅을 적용합니다.
+
+  현재 문제:
+  1. 스토어에 fetch 로직이 직접 포함 → 테스트 어려움, 중복 코드
+  2. 에러 처리가 각 컴포넌트에 산재 → 일관성 없음, 사용자 경험 나쁨
+  3. 모든 페이지가 한 번들 → 초기 로드 느림
+
+  목표:
+  1. API Client 추상화 (인터셉터, 자동 토큰 갱신, 재시도)
+  2. 서비스 레이어 패턴 (Repository 패턴과 유사)
+  3. 통합 에러 바운더리 (ErrorBoundary + Toast + Retry)
+  4. React.lazy + Suspense로 코드 스플리팅
+
+acceptance_criteria:
+  - API Client 클래스 (인터셉터 체인, 토큰 갱신, 재시도 로직)
+  - 서비스 레이어 (Agent, Task, Auth 서비스)
+  - 통합 에러 처리 (ErrorBoundary HOC, useErrorHandler 훅)
+  - React.lazy + Suspense 코드 스플리팅
+  - 기존 스토어 호환성 유지 (점진적 마이그레이션 가능)
+  - 타입 안전성 완전 보장
+  - 테스트 (API Client 5개 + 서비스 3개 + ErrorBoundary 3개, 최소 11개)
+  - `: any` 타입 금지
+  - 마이그레이션 가이드 주석
+
+input:
+  prompt: |
+    스토어에 직접 포함된 API 로직을 서비스 레이어로 추출하고
+    에러 처리를 표준화해주세요.
+
+    ## 1. API Client (`src/dashboard/src/services/apiClient.ts`)
+
+    ```typescript
+    // 구현할 API Client 인터페이스
+    interface ApiClientConfig {
+      baseURL: string
+      timeout?: number
+      headers?: Record<string, string>
+    }
+
+    interface RequestInterceptor {
+      onRequest: (config: RequestConfig) => RequestConfig | Promise<RequestConfig>
+      onRequestError?: (error: Error) => void
+    }
+
+    interface ResponseInterceptor {
+      onResponse: (response: Response) => Response | Promise<Response>
+      onResponseError?: (error: ApiError) => ApiError | Promise<ApiError>
+    }
+
+    // 기능:
+    // - 인터셉터 체인 (요청/응답 전처리)
+    // - 자동 토큰 갱신 (401 → refresh → retry)
+    // - 재시도 (네트워크 에러 시 3회, exponential backoff)
+    // - 타임아웃 (AbortController)
+    // - 요청 취소 (AbortController)
+    ```
+
+    ## 2. 서비스 레이어
+
+    ```typescript
+    // AgentService: Agent CRUD + 검색
+    // TaskService: Task CRUD + 상태 변경
+    // AuthService: 로그인/로그아웃/토큰 갱신
+    ```
+
+    ## 3. 에러 처리
+
+    ```typescript
+    // ApiError 클래스 (status, code, message, details)
+    // ErrorBoundary HOC (fallback UI + 재시도 버튼)
+    // useErrorHandler 훅 (toast + 에러 상태 관리)
+    // 에러 코드별 사용자 메시지 매핑
+    ```
+
+    ## 4. 코드 스플리팅
+
+    ```typescript
+    // React.lazy + Suspense로 페이지별 분리
+    // 로딩 UI (Skeleton)
+    // 에러 시 재시도
+    ```
+  context_files:
+    - src/dashboard/src/stores/auth.ts
+    - src/dashboard/src/stores/agents.ts
+    - src/dashboard/src/stores/orchestration.ts
+  dependencies: []
+
+expected_output:
+  files:
+    - src/dashboard/src/services/apiClient.ts
+    - src/dashboard/src/services/agentService.ts
+    - src/dashboard/src/services/errors.ts
+    - src/dashboard/src/components/ErrorBoundary.tsx
+    - src/dashboard/src/hooks/useErrorHandler.ts
+    - src/dashboard/src/services/__tests__/apiClient.test.ts
+    - src/dashboard/src/components/__tests__/ErrorBoundary.test.tsx
+  patterns:
+    - "class ApiClient|createApiClient"
+    - "interceptor|Interceptor"
+    - "AbortController|abort|signal"
+    - "retry|retries|backoff"
+    - "class ApiError|extends Error"
+    - "ErrorBoundary|componentDidCatch|getDerivedStateFromError"
+    - "React\\.lazy|lazy\\("
+    - "Suspense"
+    - "export.*Service|export.*service"
+  forbidden_patterns:
+    - ": any"
+    - "// @ts-ignore"
+    - "console\\.log"
+    - "fetch\\("  # raw fetch 대신 apiClient 사용
+
+evaluation:
+  timeout_minutes: 45
+  rubric: ui_component.yaml
+  weights:
+    code_checks: 30
+    llm_grading: 70
+  passing_score: 0.75
+
+metadata:
+  created_at: 2026-02-13
+  author: system
+  tags: [refactor, api-client, service-layer, error-handling, code-splitting, hard]
+  recommended_agent: web-ui-specialist
