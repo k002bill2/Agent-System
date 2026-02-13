@@ -212,3 +212,22 @@ module.exports = {
   validateEthically,
   formatValidationResult
 };
+
+// CLI entry point for hook system
+if (require.main === module) {
+  let inputData = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (chunk) => { inputData += chunk; });
+  process.stdin.on('end', () => {
+    try {
+      const event = JSON.parse(inputData);
+      const result = validateEthically(event.tool_name || '', event.tool_input || {}, {});
+      const message = formatValidationResult(result);
+      if (message) {
+        process.stdout.write(message);
+      }
+    } catch (e) { /* ignore parse errors */ }
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(0), 5000);
+}

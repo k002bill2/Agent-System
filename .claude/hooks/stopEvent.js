@@ -371,3 +371,19 @@ function displayTestReminder(files, language = 'typescript') {
 }
 
 module.exports = { onStopEvent };
+
+// CLI entry point for hook system
+if (require.main === module) {
+  let inputData = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (chunk) => { inputData += chunk; });
+  process.stdin.on('end', () => {
+    try {
+      const event = inputData.trim() ? JSON.parse(inputData) : {};
+      onStopEvent(event);
+    } catch (e) {
+      onStopEvent({});
+    }
+  });
+  setTimeout(() => process.exit(0), 10000);
+}

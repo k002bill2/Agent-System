@@ -229,3 +229,23 @@ module.exports = {
   getParallelStatus,
   clearAllTasks
 };
+
+// CLI entry point for hook system
+if (require.main === module) {
+  const mode = process.argv[2]; // 'pre' or 'post'
+  let inputData = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (chunk) => { inputData += chunk; });
+  process.stdin.on('end', () => {
+    try {
+      const event = JSON.parse(inputData);
+      if (mode === 'pre') {
+        onTaskPreExecute({ tool_input: event.tool_input || {} });
+      } else {
+        onTaskPostExecute({ task_id: event.tool_input?.description, success: true });
+      }
+    } catch (e) { /* ignore */ }
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(0), 5000);
+}

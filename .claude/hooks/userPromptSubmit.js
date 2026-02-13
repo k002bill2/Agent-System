@@ -337,3 +337,21 @@ function generateActivationMessage(skills) {
 }
 
 module.exports = { onUserPromptSubmit };
+
+// CLI entry point for hook system
+if (require.main === module) {
+  let inputData = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (chunk) => { inputData += chunk; });
+  process.stdin.on('end', async () => {
+    try {
+      const event = JSON.parse(inputData);
+      const prompt = event.prompt || event.user_prompt || '';
+      if (prompt) {
+        await onUserPromptSubmit(prompt, { workspaceRoot: process.cwd() });
+      }
+    } catch (e) { /* ignore */ }
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(0), 5000);
+}
