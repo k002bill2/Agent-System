@@ -335,6 +335,7 @@ interface GitState {
   // Actions - Branches
   fetchBranches: (projectId: string) => Promise<void>
   createBranch: (projectId: string, name: string, startPoint?: string) => Promise<boolean>
+  checkoutBranch: (projectId: string, name: string) => Promise<boolean>
   deleteBranch: (projectId: string, name: string, force?: boolean, deleteRemote?: boolean) => Promise<boolean>
 
   // Actions - Commits
@@ -706,6 +707,26 @@ export const useGitStore = create<GitState>((set, get) => ({
       if (!response.ok) {
         const data = await response.json()
         throw new Error(extractErrorMessage(data.detail, 'Failed to create branch'))
+      }
+      await get().fetchBranches(projectId)
+      set({ isLoading: false })
+      return true
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return false
+    }
+  },
+
+  checkoutBranch: async (projectId, name) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/git/projects/${projectId}/branches/${encodeURIComponent(name)}/checkout`,
+        { method: 'POST' }
+      )
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(extractErrorMessage(data.detail, 'Failed to checkout branch'))
       }
       await get().fetchBranches(projectId)
       set({ isLoading: false })

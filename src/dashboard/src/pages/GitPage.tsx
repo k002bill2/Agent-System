@@ -60,6 +60,7 @@ export function GitPage() {
     protectedBranches,
     fetchBranches,
     createBranch,
+    checkoutBranch,
     deleteBranch,
     // Commits
     commits,
@@ -364,6 +365,7 @@ export function GitPage() {
                 onCreateBranch={(name, startPoint) =>
                   createBranch(selectedProjectId, name, startPoint)
                 }
+                onCheckoutBranch={(name) => checkoutBranch(selectedProjectId, name)}
                 onDeleteBranch={(name, force, deleteRemote) => deleteBranch(selectedProjectId, name, force, deleteRemote)}
                 onMergeClick={handleMergeClick}
                 onRefresh={() => fetchBranches(selectedProjectId)}

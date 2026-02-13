@@ -593,6 +593,23 @@ async def create_branch(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/projects/{project_id}/branches/{branch_name:path}/checkout")
+async def checkout_branch(
+    project_id: str,
+    branch_name: str,
+):
+    """Checkout (switch to) a branch."""
+    from services.git_service import GitServiceError
+
+    git_service = get_git_service_for_project(project_id)
+
+    try:
+        branch = git_service.checkout_branch(name=branch_name)
+        return {"success": True, "message": f"Switched to branch '{branch_name}'", "branch": branch}
+    except GitServiceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.delete("/projects/{project_id}/branches/{branch_name:path}")
 async def delete_branch(
     project_id: str,
