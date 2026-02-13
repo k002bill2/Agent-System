@@ -12,6 +12,7 @@ import {
   Cloud,
   AlertTriangle,
   Loader2,
+  ArrowRightLeft,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import type { GitBranch, ConflictStatus } from '../../stores/git'
@@ -30,6 +31,7 @@ interface BranchListProps {
   protectedBranches: string[]
   isLoading: boolean
   onCreateBranch: (name: string, startPoint?: string) => Promise<boolean>
+  onCheckoutBranch: (name: string) => Promise<boolean>
   onDeleteBranch: (name: string, force?: boolean, deleteRemote?: boolean) => Promise<boolean>
   onMergeClick: (source: string) => void
   onRefresh: () => void
@@ -42,6 +44,7 @@ export function BranchList({
   protectedBranches,
   isLoading,
   onCreateBranch,
+  onCheckoutBranch,
   onDeleteBranch,
   onMergeClick,
   onRefresh,
@@ -58,6 +61,7 @@ export function BranchList({
   const [deleteRemote, setDeleteRemote] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [checkingOut, setCheckingOut] = useState<string | null>(null)
 
   const filteredBranches = branches.filter((b) => {
     if (filter === 'local') return !b.is_remote
@@ -299,6 +303,24 @@ export function BranchList({
                         onClick={() => setMenuOpen(null)}
                       />
                       <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[140px]">
+                        <button
+                          onClick={async () => {
+                            setMenuOpen(null)
+                            setCheckingOut(branch.name)
+                            await onCheckoutBranch(branch.name)
+                            setCheckingOut(null)
+                          }}
+                          disabled={checkingOut === branch.name}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                        >
+                          {checkingOut === branch.name ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <ArrowRightLeft className="w-4 h-4" />
+                          )}
+                          체크아웃
+                        </button>
+                        <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
                         <button
                           onClick={() => openDeleteConfirm(branch)}
                           className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
