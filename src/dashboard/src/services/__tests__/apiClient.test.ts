@@ -88,10 +88,14 @@ describe('ApiClient', () => {
     })
 
     mockFetch(
-      () =>
-        new Promise<Response>((resolve) => {
-          // Respond after timeout; the abort should fire first
-          setTimeout(() => resolve(jsonResponse({ late: true })), 200)
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((resolve, reject) => {
+          const timer = setTimeout(() => resolve(jsonResponse({ late: true })), 200)
+          // Respect the abort signal like real fetch does
+          init?.signal?.addEventListener('abort', () => {
+            clearTimeout(timer)
+            reject(new DOMException('The operation was aborted.', 'AbortError'))
+          })
         }),
     )
 
@@ -219,14 +223,21 @@ describe('ApiClient', () => {
   // ── 10. Exhausted retries throw NETWORK_ERROR ─────────────
 
   it('throws NETWORK_ERROR after all retries are exhausted', async () => {
+    // Use a client with no retries to avoid timeout
+    const noRetryClient = createApiClient({
+      baseURL: 'https://api.test',
+      timeout: 5_000,
+      maxRetries: 0,
+    })
+
     mockFetch(async () => {
       throw new TypeError('Failed to fetch')
     })
 
-    await expect(client.get('/api/unreachable')).rejects.toThrow(ApiError)
+    await expect(noRetryClient.get('/api/unreachable')).rejects.toThrow(ApiError)
 
     try {
-      await client.get('/api/unreachable')
+      await noRetryClient.get('/api/unreachable')
     } catch (err) {
       expect(err).toBeInstanceOf(ApiError)
       expect((err as ApiError).code).toBe(ApiErrorCode.NETWORK_ERROR)
