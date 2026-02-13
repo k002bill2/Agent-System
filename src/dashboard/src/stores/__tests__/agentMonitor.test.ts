@@ -28,6 +28,7 @@ class MockEventSource implements MockEventSourceInstance {
 
   constructor(url: string) {
     this.url = url
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     lastEventSource = this
   }
 
