@@ -8,6 +8,7 @@ Minimum 20 test cases required.
 import time
 
 import pytest
+import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from fastapi import FastAPI
 
@@ -40,7 +41,7 @@ def app():
     return test_app
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def client(app):
     """Create async test client."""
     async with AsyncClient(

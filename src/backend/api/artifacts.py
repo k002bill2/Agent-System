@@ -1,6 +1,6 @@
 """Workflow artifacts API router."""
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 
 from services.artifact_service import get_artifact_service

@@ -2,6 +2,16 @@
 
 Provides per-client rate limiting using a sliding window algorithm.
 Different tiers: anonymous (10/min), authenticated (100/min), admin (unlimited).
+
+Algorithm:
+    Uses a sliding window log approach where each request timestamp is
+    recorded. On each check, expired timestamps outside the window are
+    pruned, and the count of remaining timestamps determines whether
+    the request is allowed.
+
+Memory management:
+    Periodic cleanup runs every 100 requests to remove stale entries
+    and prevent unbounded memory growth.
 """
 
 import logging
@@ -16,7 +26,13 @@ logger = logging.getLogger(__name__)
 
 
 class RateLimitTier(str, Enum):
-    """Rate limit tiers for different user types."""
+    """Rate limit tiers for different user types.
+
+    Tiers:
+        ANONYMOUS: Unauthenticated users (10 requests/minute).
+        AUTHENTICATED: Logged-in users (100 requests/minute).
+        ADMIN: Admin users (unlimited).
+    """
 
     ANONYMOUS = "anonymous"
     AUTHENTICATED = "authenticated"
@@ -24,6 +40,7 @@ class RateLimitTier(str, Enum):
 
 
 # Rate limit configurations: (max_requests, window_seconds)
+# max_requests=0 means unlimited
 RATE_LIMIT_CONFIG: dict[RateLimitTier, tuple[int, int]] = {
     RateLimitTier.ANONYMOUS: (10, 60),
     RateLimitTier.AUTHENTICATED: (100, 60),
@@ -35,7 +52,14 @@ class SlidingWindowCounter:
     """Sliding window rate limiter using in-memory storage.
 
     Tracks request timestamps per client key and enforces rate limits
-    using a sliding window algorithm.
+    using a sliding window algorithm. This provides more accurate rate
+    limiting than fixed-window approaches by avoiding the boundary
+    burst problem.
+
+    Attributes:
+        _windows: Per-key list of request timestamps.
+        _cleanup_counter: Counter for triggering periodic cleanup.
+        _cleanup_interval: Number of requests between cleanup runs.
     """
 
     def __init__(self) -> None:
@@ -44,13 +68,17 @@ class SlidingWindowCounter:
         self._cleanup_interval: int = 100
 
     def _cleanup_expired(self, key: str, window_seconds: int) -> None:
-        """Remove expired timestamps from the window."""
+        """Remove expired timestamps from the window for a specific key."""
         now = time.monotonic()
         cutoff = now - window_seconds
         self._windows[key] = [ts for ts in self._windows[key] if ts > cutoff]
 
     def _periodic_cleanup(self) -> None:
-        """Periodically clean up all expired entries to prevent memory leaks."""
+        """Periodically clean up all expired entries to prevent memory leaks.
+
+        Runs every _cleanup_interval requests. Removes timestamps outside
+        the maximum window and deletes empty key entries.
+        """
         self._cleanup_counter += 1
         if self._cleanup_counter >= self._cleanup_interval:
             self._cleanup_counter = 0
@@ -75,7 +103,8 @@ class SlidingWindowCounter:
             window_seconds: Size of the sliding window in seconds.
 
         Returns:
-            Tuple of (is_limited, rate_limit_info).
+            Tuple of (is_limited, rate_limit_info) where rate_limit_info
+            contains remaining count, limit, and reset time.
         """
         if max_requests <= 0:
             return False, {
@@ -110,16 +139,33 @@ class SlidingWindowCounter:
         }
 
     def get_usage(self, key: str, window_seconds: int) -> int:
-        """Get current request count for a key within the window."""
+        """Get current request count for a key within the window.
+
+        Args:
+            key: Client identifier to check.
+            window_seconds: Window size to count within.
+
+        Returns:
+            Number of requests in the current window.
+        """
         self._cleanup_expired(key, window_seconds)
         return len(self._windows[key])
 
     def reset(self, key: str | None = None) -> None:
-        """Reset rate limit counters. If key is None, reset all."""
+        """Reset rate limit counters.
+
+        Args:
+            key: Specific key to reset. If None, resets all keys.
+        """
         if key is None:
             self._windows.clear()
         elif key in self._windows:
             del self._windows[key]
+
+    @property
+    def active_keys(self) -> int:
+        """Number of active client keys being tracked."""
+        return len(self._windows)
 
 
 # Global rate limiter instance
@@ -127,7 +173,7 @@ _rate_limiter: SlidingWindowCounter | None = None
 
 
 def get_rate_limiter() -> SlidingWindowCounter:
-    """Get the global rate limiter instance."""
+    """Get the global rate limiter instance (lazily created)."""
     global _rate_limiter
     if _rate_limiter is None:
         _rate_limiter = SlidingWindowCounter()
@@ -135,7 +181,18 @@ def get_rate_limiter() -> SlidingWindowCounter:
 
 
 def _get_client_key(request: Request, user_id: str | None = None) -> str:
-    """Generate a unique client key from request info."""
+    """Generate a unique client key from request info.
+
+    Authenticated users are keyed by user ID, anonymous users by IP.
+    Supports X-Forwarded-For for clients behind reverse proxies.
+
+    Args:
+        request: The FastAPI request object.
+        user_id: Optional user ID for authenticated users.
+
+    Returns:
+        A string key like "user:usr_001" or "ip:192.168.1.1".
+    """
     if user_id:
         return f"user:{user_id}"
     # Use X-Forwarded-For if behind a proxy, otherwise client host
@@ -147,12 +204,33 @@ def _get_client_key(request: Request, user_id: str | None = None) -> str:
     return f"ip:{client_ip}"
 
 
+def build_rate_limit_headers(info: dict[str, Any]) -> dict[str, str]:
+    """Build standard rate limit response headers.
+
+    Follows the IETF RateLimit header field draft standard.
+
+    Args:
+        info: Rate limit info dict from SlidingWindowCounter.
+
+    Returns:
+        Dict of header name to header value.
+    """
+    return {
+        "X-RateLimit-Limit": str(info["rate_limit_limit"]),
+        "X-RateLimit-Remaining": str(info["rate_limit_remaining"]),
+        "X-RateLimit-Reset": str(info["rate_limit_reset"]),
+    }
+
+
 async def check_rate_limit(
     request: Request,
     tier: RateLimitTier = RateLimitTier.ANONYMOUS,
     user_id: str | None = None,
 ) -> dict[str, Any]:
     """Check rate limit for a request and raise HTTPException if exceeded.
+
+    Admin tier bypasses all rate limiting. Other tiers are checked
+    against the sliding window counter.
 
     Args:
         request: The FastAPI request object.
@@ -189,8 +267,7 @@ async def check_rate_limit(
             },
             headers={
                 "Retry-After": str(info["rate_limit_reset"]),
-                "X-RateLimit-Limit": str(info["rate_limit_limit"]),
-                "X-RateLimit-Remaining": str(info["rate_limit_remaining"]),
+                **build_rate_limit_headers(info),
             },
         )
 

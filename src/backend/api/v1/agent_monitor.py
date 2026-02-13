@@ -5,11 +5,9 @@ and aggregated metrics for agent performance analysis.
 """
 
 import asyncio
-import time
-from datetime import datetime, timedelta, timezone
+from collections.abc import AsyncGenerator
+from datetime import UTC, datetime, timedelta
 from enum import Enum
-from typing import AsyncGenerator
-from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -123,7 +121,7 @@ _sse_subscribers: list[asyncio.Queue[str]] = []
 
 def _now_iso() -> str:
     """Return current UTC time as ISO string."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _seed_agents() -> None:
@@ -318,7 +316,7 @@ def _generate_metric_buckets(
     bucket_size: timedelta,
 ) -> list[MetricBucket]:
     """Generate time-bucketed metrics for an agent."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start = now - period
     bucket_count = max(1, int(period.total_seconds() / bucket_size.total_seconds()))
 

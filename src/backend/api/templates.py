@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Query
 
-from models.template import TemplateCategory, TemplateCreate, TemplateListResponse, TemplateUpdate
+from models.template import TemplateCategory, TemplateCreate, TemplateListResponse
 from services.template_service import get_template_service
 
 router = APIRouter(tags=["templates"])

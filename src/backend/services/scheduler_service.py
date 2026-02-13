@@ -145,7 +145,7 @@ class SchedulerService:
     async def _async_trigger(self, workflow_id: str):
         """Async workflow trigger."""
         try:
-            from models.workflow import WorkflowRunTrigger, TriggerType
+            from models.workflow import TriggerType, WorkflowRunTrigger
             from services.workflow_service import get_workflow_service
 
             service = get_workflow_service()

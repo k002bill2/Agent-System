@@ -6,7 +6,7 @@ import uuid
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 from models.workflow import (
     JobStatus,
@@ -76,7 +76,7 @@ class WorkflowEngine:
         values = [job.matrix[k] for k in keys]
 
         combinations: list[dict[str, str]] = [{}]
-        for key, vals in zip(keys, values):
+        for key, vals in zip(keys, values, strict=False):
             new_combos = []
             for combo in combinations:
                 for val in vals:
@@ -188,7 +188,9 @@ class WorkflowEngine:
                 if tasks:
                     results = await asyncio.gather(*tasks, return_exceptions=True)
                     for job_name_in_group, result in zip(
-                        [n for n in group if job_results.get(n) != JobStatus.SKIPPED], results
+                        [n for n in group if job_results.get(n) != JobStatus.SKIPPED],
+                        results,
+                        strict=False,
                     ):
                         if isinstance(result, Exception):
                             job_results[job_name_in_group] = JobStatus.FAILURE
@@ -394,7 +396,7 @@ class WorkflowEngine:
                     step_state["status"] = StepStatus.SKIPPED
                     break
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 step_state["status"] = StepStatus.FAILURE
                 step_state["error"] = f"Step timed out after {step_def.timeout_minutes} minutes"
                 if attempt < max_attempts - 1:
@@ -471,7 +473,7 @@ class WorkflowEngine:
             stdout_bytes, stderr_bytes = await asyncio.wait_for(
                 process.communicate(), timeout=timeout
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             process.kill()
             raise
 

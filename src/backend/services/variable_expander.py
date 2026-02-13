@@ -3,7 +3,6 @@
 import re
 from typing import Any
 
-
 # Pattern: ${{ steps.build.outputs.version }}, ${{ secrets.API_KEY }}, etc.
 VARIABLE_PATTERN = re.compile(r"\$\{\{\s*(.*?)\s*\}\}")
 

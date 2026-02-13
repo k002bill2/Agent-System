@@ -6,7 +6,6 @@ from datetime import datetime
 from typing import Any
 
 from models.workflow import (
-    TriggerType,
     WorkflowCreate,
     WorkflowDefinitionSchema,
     WorkflowRunStatus,
@@ -16,7 +15,6 @@ from models.workflow import (
 )
 from services.workflow_engine import get_workflow_engine
 from services.workflow_yaml_parser import parse_workflow_yaml
-
 
 SEED_WORKFLOWS = [
     {

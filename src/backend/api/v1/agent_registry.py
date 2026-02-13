@@ -9,10 +9,9 @@ Provides CRUD endpoints for managing agents in the registry with:
 """
 
 import base64
-import hashlib
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 from uuid import uuid4
@@ -22,12 +21,10 @@ from pydantic import BaseModel, Field
 
 from api.v1.auth_middleware import (
     AuthenticatedUser,
-    RBACMiddleware,
     TokenPairResponse,
     UserRole,
     authenticate_user,
     create_token_pair,
-    get_current_user,
     get_optional_user,
     get_user_store,
     require_admin,
@@ -37,7 +34,6 @@ from api.v1.auth_middleware import (
 from api.v1.rate_limiter import (
     RateLimitTier,
     check_rate_limit,
-    get_rate_limiter,
 )
 
 logger = logging.getLogger(__name__)
@@ -283,7 +279,7 @@ def _seed_default_agents() -> None:
     """Seed the store with default agents if empty."""
     if _agents:
         return
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     defaults = [
         {
             "id": "agent-web-ui",
@@ -716,7 +712,7 @@ async def create_agent(
     """
     await _apply_rate_limit(request, current_user)
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     agent_id = f"agent-{uuid4().hex[:12]}"
 
     agent_data: dict[str, Any] = {
@@ -780,7 +776,7 @@ async def update_agent(
         ]
 
     agent.update(update_data)
-    agent["updated_at"] = datetime.now(timezone.utc).isoformat()
+    agent["updated_at"] = datetime.now(UTC).isoformat()
 
     # Invalidate caches
     cache = get_cache()

@@ -1,6 +1,6 @@
 """Webhook API router."""
 
-from fastapi import APIRouter, HTTPException, Header, Request
+from fastapi import APIRouter, Header, HTTPException, Request
 
 from services.webhook_service import get_webhook_service
 

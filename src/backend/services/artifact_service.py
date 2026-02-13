@@ -1,7 +1,5 @@
 """Workflow artifact management service."""
 
-import os
-import shutil
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path

@@ -7,7 +7,6 @@ from typing import Any
 from models.template import TemplateCategory, TemplateCreate, TemplateUpdate
 from services.workflow_yaml_parser import parse_workflow_yaml
 
-
 # Built-in templates
 BUILTIN_TEMPLATES = [
     {
@@ -367,7 +366,7 @@ jobs:
         "category": TemplateCategory.TEST,
         "tags": ["security", "audit", "vulnerability", "scan"],
         "icon": "shield",
-        "yaml_content": """name: Security Scan
+        "yaml_content": r"""name: Security Scan
 on:
   manual: {}
   schedule:
@@ -579,9 +578,9 @@ jobs:
     runs_on: local
     steps:
       - name: List merged local branches
-        run: git branch --merged main | grep -v "main\|develop" | grep -v "\\*" || echo "No merged branches"
+        run: git branch --merged main | grep -v "main\\|develop" | grep -v "\\*" || echo "No merged branches"
       - name: List stale remote branches
-        run: git fetch --prune 2>&1 && git branch -r --merged origin/main | grep -v "main\|develop\|HEAD" || echo "No stale remote branches"
+        run: git fetch --prune 2>&1 && git branch -r --merged origin/main | grep -v "main\\|develop\\|HEAD" || echo "No stale remote branches"
       - name: Show branch age
         run: git for-each-ref --sort=committerdate refs/heads/ --format="%(committerdate:short) %(refname:short)" | head -20
   cleanup-local:
@@ -590,7 +589,7 @@ jobs:
     needs: [analyze]
     steps:
       - name: Delete merged local branches
-        run: git branch --merged main | grep -v "main\|develop" | grep -v "\\*" | xargs git branch -d 2>/dev/null || echo "No branches to delete"
+        run: git branch --merged main | grep -v "main\\|develop" | grep -v "\\*" | xargs git branch -d 2>/dev/null || echo "No branches to delete"
         continue_on_error: true
   report:
     name: Branch report

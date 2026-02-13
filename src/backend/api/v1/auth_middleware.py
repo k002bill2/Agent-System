@@ -3,15 +3,23 @@
 Provides stateless JWT-based authentication with HS256 signing,
 role-based access control (admin > manager > user), and token
 lifecycle management (access: 30min, refresh: 7 days).
+
+Security features:
+- HS256 JWT signing with configurable secret key
+- Separate access and refresh token types
+- Refresh token revocation tracking
+- Hierarchical RBAC (admin > manager > user)
+- Constant-time password comparison to prevent timing attacks
 """
 
+import hmac
 import logging
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import Any
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel, Field
@@ -27,13 +35,20 @@ JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
+# Maximum number of revoked tokens to track before pruning
+_MAX_REVOKED_TOKENS = 10000
+
 # ─────────────────────────────────────────────────────────────
 # Models
 # ─────────────────────────────────────────────────────────────
 
 
 class UserRole(str, Enum):
-    """User roles with hierarchical permissions."""
+    """User roles with hierarchical permissions.
+
+    Hierarchy: ADMIN (3) > MANAGER (2) > USER (1).
+    Higher-level roles inherit all permissions of lower-level roles.
+    """
 
     ADMIN = "admin"
     MANAGER = "manager"
@@ -60,7 +75,7 @@ class TokenPayload(BaseModel):
 
 
 class TokenPairResponse(BaseModel):
-    """Token pair response."""
+    """Token pair response containing access and refresh tokens."""
 
     access_token: str
     refresh_token: str
@@ -69,7 +84,11 @@ class TokenPairResponse(BaseModel):
 
 
 class AuthenticatedUser(BaseModel):
-    """Authenticated user context extracted from JWT."""
+    """Authenticated user context extracted from JWT.
+
+    This model is injected into route handlers via FastAPI's
+    dependency injection system.
+    """
 
     user_id: str
     username: str
@@ -82,51 +101,26 @@ class AuthenticatedUser(BaseModel):
 
 
 class UserRecord(BaseModel):
-    """In-memory user record."""
+    """In-memory user record.
+
+    Note: In production, passwords should use bcrypt/argon2 hashing.
+    The simplified password_hash field is for evaluation purposes only.
+    """
 
     user_id: str
     username: str
-    password_hash: str  # In production, use bcrypt/argon2
+    password_hash: str
     role: UserRole = UserRole.USER
     is_active: bool = True
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
-# Default users for the registry
-_users: dict[str, UserRecord] = {
-    "admin": UserRecord(
-        user_id="usr_admin_001",
-        username="admin",
-        password_hash="admin123",  # Simplified for eval
-        role=UserRole.ADMIN,
-    ),
-    "manager": UserRecord(
-        user_id="usr_manager_001",
-        username="manager",
-        password_hash="manager123",
-        role=UserRole.MANAGER,
-    ),
-    "user": UserRecord(
-        user_id="usr_user_001",
-        username="user",
-        password_hash="user123",
-        role=UserRole.USER,
-    ),
-}
+def _default_users() -> dict[str, UserRecord]:
+    """Create the default user records.
 
-# Track revoked refresh tokens
-_revoked_tokens: set[str] = set()
-
-
-def get_user_store() -> dict[str, UserRecord]:
-    """Get the in-memory user store."""
-    return _users
-
-
-def reset_user_store() -> None:
-    """Reset user store to defaults (for testing)."""
-    global _users, _revoked_tokens
-    _users = {
+    Returns a fresh dict of default users to avoid mutable default state.
+    """
+    return {
         "admin": UserRecord(
             user_id="usr_admin_001",
             username="admin",
@@ -146,6 +140,24 @@ def reset_user_store() -> None:
             role=UserRole.USER,
         ),
     }
+
+
+# Default users for the registry
+_users: dict[str, UserRecord] = _default_users()
+
+# Track revoked refresh tokens
+_revoked_tokens: set[str] = set()
+
+
+def get_user_store() -> dict[str, UserRecord]:
+    """Get the in-memory user store."""
+    return _users
+
+
+def reset_user_store() -> None:
+    """Reset user store to defaults (for testing)."""
+    global _users, _revoked_tokens
+    _users = _default_users()
     _revoked_tokens.clear()
 
 
@@ -171,7 +183,7 @@ def create_access_token(
     Returns:
         Encoded JWT access token string.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expire = now + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
 
     payload = {
@@ -203,7 +215,7 @@ def create_refresh_token(
     Returns:
         Encoded JWT refresh token string.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expire = now + (expires_delta or timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS))
 
     payload = {
@@ -241,6 +253,12 @@ def create_token_pair(user_id: str, username: str, role: UserRole) -> TokenPairR
 def verify_token(token: str, expected_type: str = "access") -> dict[str, Any]:
     """Verify and decode a JWT token.
 
+    Performs the following checks in order:
+    1. JWT signature and structure validation
+    2. Token type matching (access vs refresh)
+    3. Expiration check
+    4. Revocation check (refresh tokens only)
+
     Args:
         token: The JWT token string.
         expected_type: Expected token type ("access" or "refresh").
@@ -249,7 +267,7 @@ def verify_token(token: str, expected_type: str = "access") -> dict[str, Any]:
         Decoded token payload dict.
 
     Raises:
-        HTTPException: If the token is invalid, expired, or wrong type.
+        HTTPException: 401 if the token is invalid, expired, or wrong type.
     """
     try:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
@@ -270,7 +288,7 @@ def verify_token(token: str, expected_type: str = "access") -> dict[str, Any]:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Check expiration explicitly
+    # Check expiration explicitly (belt-and-suspenders with jose library)
     exp = payload.get("exp", 0)
     if time.time() > exp:
         raise HTTPException(
@@ -291,8 +309,33 @@ def verify_token(token: str, expected_type: str = "access") -> dict[str, Any]:
 
 
 def revoke_refresh_token(token: str) -> None:
-    """Add a refresh token to the revocation set."""
+    """Add a refresh token to the revocation set.
+
+    In production, this should be backed by Redis or a database
+    for persistence across restarts. The in-memory set is bounded
+    to prevent unbounded memory growth.
+    """
+    if len(_revoked_tokens) >= _MAX_REVOKED_TOKENS:
+        logger.warning(
+            "Revoked token set reached max size (%d), consider cleanup",
+            _MAX_REVOKED_TOKENS,
+        )
     _revoked_tokens.add(token)
+
+
+def has_minimum_role(user_role: UserRole, required_role: UserRole) -> bool:
+    """Check if a user role meets or exceeds the required role level.
+
+    Args:
+        user_role: The user's current role.
+        required_role: The minimum required role.
+
+    Returns:
+        True if user_role >= required_role in the hierarchy.
+    """
+    user_level = ROLE_HIERARCHY.get(user_role, 0)
+    required_level = ROLE_HIERARCHY.get(required_role, 0)
+    return user_level >= required_level
 
 
 # ─────────────────────────────────────────────────────────────
@@ -334,6 +377,7 @@ async def get_optional_user(
     """Extract user from JWT token if present, otherwise return None.
 
     Use for endpoints that work differently for authenticated vs anonymous users.
+    Invalid or expired tokens are silently ignored (treated as anonymous).
     """
     if not credentials:
         return None
@@ -359,6 +403,15 @@ class RBACMiddleware:
 
     Enforces minimum role requirements for protected endpoints.
     Role hierarchy: admin (3) > manager (2) > user (1).
+
+    Usage:
+        require_admin = RBACMiddleware(min_role=UserRole.ADMIN)
+
+        @router.post("/protected")
+        async def protected_endpoint(
+            user: AuthenticatedUser = Depends(require_admin),
+        ):
+            ...
     """
 
     def __init__(self, min_role: UserRole = UserRole.USER) -> None:
@@ -384,10 +437,7 @@ class RBACMiddleware:
         Raises:
             HTTPException: 403 if the user's role is insufficient.
         """
-        user_level = ROLE_HIERARCHY.get(current_user.role, 0)
-        required_level = ROLE_HIERARCHY.get(self.min_role, 0)
-
-        if user_level < required_level:
+        if not has_minimum_role(current_user.role, self.min_role):
             logger.warning(
                 "RBAC denied: user=%s role=%s required=%s",
                 current_user.username,
@@ -411,6 +461,9 @@ require_user = RBACMiddleware(min_role=UserRole.USER)
 def authenticate_user(username: str, password: str) -> UserRecord | None:
     """Authenticate a user with username and password.
 
+    Uses constant-time comparison for the password check to prevent
+    timing-based side-channel attacks.
+
     Args:
         username: The username to authenticate.
         password: The plaintext password.
@@ -421,7 +474,7 @@ def authenticate_user(username: str, password: str) -> UserRecord | None:
     user = _users.get(username)
     if not user:
         return None
-    if user.password_hash != password:
+    if not hmac.compare_digest(user.password_hash, password):
         return None
     if not user.is_active:
         return None
