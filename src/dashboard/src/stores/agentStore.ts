@@ -125,3 +125,8 @@ export const selectAgentById = (state: AgentState, id: string): AgentInfo | unde
 
 export const selectAgentsByCategory = (state: AgentState, category: AgentCategory): AgentInfo[] =>
   state.agents.filter((a) => a.category === category)
+
+export const selectSelectedAgent = (state: AgentState): AgentInfo | undefined =>
+  state.selectedAgentId ? state.agents.find((a) => a.id === state.selectedAgentId) : undefined
+
+export const selectAgentCount = (state: AgentState): number => state.agents.length

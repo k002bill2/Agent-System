@@ -13,7 +13,7 @@
 import { useEffect, useCallback, useMemo, useRef } from 'react'
 import { Activity, CheckCircle, Clock, AlertCircle, RefreshCw } from 'lucide-react'
 
-interface AgentSummary {
+export interface AgentSummary {
   id: string
   name: string
   status: 'available' | 'busy' | 'offline'
@@ -30,7 +30,7 @@ interface DashboardStats {
   availableTools: number
 }
 
-interface DashboardProps {
+export interface DashboardProps {
   agents?: AgentSummary[]
   onRefresh?: () => Promise<void>
   isLoading?: boolean
@@ -41,7 +41,7 @@ interface DashboardProps {
  * calculateStats를 컴포넌트 외부에 정의하여 참조 안정성 확보.
  * 이전에는 컴포넌트 내부에 인라인으로 정의되어 매 렌더에 새 함수가 생성됨.
  */
-function calculateStats(agents: AgentSummary[]): DashboardStats {
+export function calculateStats(agents: AgentSummary[]): DashboardStats {
   return agents.reduce(
     (acc, agent) => {
       acc.totalAgents++

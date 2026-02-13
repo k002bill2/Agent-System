@@ -156,3 +156,9 @@ export const selectTasksByStatus = (state: TaskState, status: TaskStatus): TaskI
 
 export const selectRootTasks = (state: TaskState): TaskItem[] =>
   Object.values(state.tasks).filter((t) => t.parentId === null && !t.isDeleted)
+
+export const selectSelectedTask = (state: TaskState): TaskItem | undefined =>
+  state.selectedTaskId ? state.tasks[state.selectedTaskId] : undefined
+
+export const selectActiveTaskCount = (state: TaskState): number =>
+  Object.values(state.tasks).filter((t) => !t.isDeleted).length

@@ -94,3 +94,8 @@ export const selectIsAdmin = (state: AuthState): boolean =>
 
 export const selectUserRole = (state: AuthState): UserRole =>
   state.user?.role ?? 'user'
+
+export const selectDisplayName = (state: AuthState): string =>
+  state.user?.name ?? state.user?.email ?? ''
+
+export const selectHasError = (state: AuthState): boolean => state.error !== null

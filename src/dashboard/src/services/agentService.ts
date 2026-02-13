@@ -68,6 +68,20 @@ export interface UpdateAgentInput {
   capabilities?: Omit<AgentCapability, 'priority'>[]
 }
 
+export interface AgentSearchResult {
+  agent: Agent
+  score: number
+}
+
+export interface AgentRegistryStats {
+  total_agents: number
+  available_agents: number
+  busy_agents: number
+  by_category: Record<string, number>
+  total_tasks_completed: number
+  avg_success_rate: number
+}
+
 // ---------------------------------------------------------------------------
 // Query-string builder
 // ---------------------------------------------------------------------------
@@ -113,6 +127,23 @@ export const agentService = {
   /** Delete an agent. */
   deleteAgent(id: string): Promise<void> {
     return apiClient.delete<void>(`/api/agents/${encodeURIComponent(id)}`)
+  },
+
+  /** Search agents by query. */
+  searchAgents(
+    query: string,
+    options?: { category?: string; limit?: number },
+  ): Promise<AgentSearchResult[]> {
+    return apiClient.post<AgentSearchResult[]>('/api/agents/search', {
+      query,
+      category: options?.category ?? null,
+      limit: options?.limit ?? 10,
+    })
+  },
+
+  /** Get agent registry stats. */
+  getStats(): Promise<AgentRegistryStats> {
+    return apiClient.get<AgentRegistryStats>('/api/agents/stats')
   },
 } as const
 

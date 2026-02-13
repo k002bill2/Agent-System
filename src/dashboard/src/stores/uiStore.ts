@@ -13,6 +13,8 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 
 export type Theme = 'light' | 'dark' | 'system'
 
+export type ToastType = 'success' | 'error' | 'warning' | 'info'
+
 export interface ToastMessage {
   id: string
   type: 'success' | 'error' | 'warning' | 'info'
@@ -42,6 +44,7 @@ interface UIState {
   openModal: (id: string, data?: unknown) => void
   closeModal: (id: string) => void
   isModalOpen: (id: string) => boolean
+  getModalData: (id: string) => unknown | undefined
 
   // Toasts
   toasts: ToastMessage[]
@@ -108,6 +111,8 @@ export const useUIStore = create<UIState>()(
 
       isModalOpen: (id) => get().modals[id]?.isOpen ?? false,
 
+      getModalData: (id) => get().modals[id]?.data,
+
       // Toasts
       addToast: (toast) => {
         const id = `toast-${++toastCounter}-${Date.now()}`
@@ -163,3 +168,7 @@ export const useUIStore = create<UIState>()(
 export const selectTheme = (state: UIState): Theme => state.theme
 
 export const selectActiveToasts = (state: UIState): ToastMessage[] => state.toasts
+
+export const selectHasToasts = (state: UIState): boolean => state.toasts.length > 0
+
+export const selectIsGlobalLoading = (state: UIState): boolean => state.isGlobalLoading
