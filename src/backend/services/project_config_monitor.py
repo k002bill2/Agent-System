@@ -14,6 +14,7 @@ from pathlib import Path
 
 from models.project_config import (
     AgentConfig,
+    CommandConfig,
     ConfigChangeEvent,
     ConfigChangeType,
     HookConfig,
@@ -292,6 +293,7 @@ class ProjectConfigMonitor:
         # Count resources
         skills_dir = claude_dir / "skills"
         agents_dir = claude_dir / "agents"
+        commands_dir = claude_dir / "commands"
         mcp_file = claude_dir / "mcp.json"
         hooks_file = claude_dir / "hooks.json"
 
@@ -320,6 +322,10 @@ class ProjectConfigMonitor:
             except (json.JSONDecodeError, OSError):
                 pass
 
+        command_count = 0
+        if commands_dir.exists():
+            command_count = sum(1 for f in commands_dir.glob("*.md") if f.is_file())
+
         # Count hooks
         hook_count = 0
         if hooks_file.exists():
@@ -340,7 +346,7 @@ class ProjectConfigMonitor:
 
         # Get last modified time from most recently modified config file
         last_modified = datetime.utcnow()
-        for check_path in [skills_dir, agents_dir, mcp_file, hooks_file]:
+        for check_path in [skills_dir, agents_dir, commands_dir, mcp_file, hooks_file]:
             if check_path.exists():
                 try:
                     mtime = datetime.fromtimestamp(check_path.stat().st_mtime)
@@ -358,10 +364,12 @@ class ProjectConfigMonitor:
             has_agents=agent_count > 0,
             has_mcp=mcp_file.exists(),
             has_hooks=hooks_file.exists() or (claude_dir / "hooks").exists(),
+            has_commands=command_count > 0,
             skill_count=skill_count,
             agent_count=agent_count,
             mcp_server_count=mcp_server_count,
             hook_count=hook_count,
+            command_count=command_count,
             last_modified=last_modified,
         )
 
@@ -1481,6 +1489,246 @@ class ProjectConfigMonitor:
         return hooks
 
     # ========================================
+    # Commands CRUD
+    # ========================================
+
+    def get_project_commands(self, project_id: str) -> list[CommandConfig]:
+        """Get all commands for a specific project.
+
+        Args:
+            project_id: Project identifier
+
+        Returns:
+            List of CommandConfig for the project
+        """
+        project_path = self._find_project_path(project_id)
+        if not project_path:
+            return []
+
+        commands_dir = project_path / ".claude" / "commands"
+        if not commands_dir.exists():
+            return []
+
+        commands = []
+        for cmd_file in commands_dir.glob("*.md"):
+            if not cmd_file.is_file():
+                continue
+            try:
+                command = self._parse_command(cmd_file, project_id)
+                if command:
+                    commands.append(command)
+            except Exception as e:
+                logger.error(f"Error parsing command {cmd_file}: {e}")
+                continue
+
+        commands.sort(key=lambda c: c.name.lower())
+        return commands
+
+    def _parse_command(self, command_file: Path, project_id: str) -> CommandConfig | None:
+        """Parse a command .md file.
+
+        Args:
+            command_file: Path to command .md file
+            project_id: Parent project ID
+
+        Returns:
+            CommandConfig or None if parsing fails
+        """
+        frontmatter, body = FrontmatterParser.parse_file(str(command_file))
+        if not frontmatter:
+            frontmatter = {}
+
+        command_id = command_file.stem
+        stat = command_file.stat()
+
+        return CommandConfig(
+            command_id=command_id,
+            project_id=project_id,
+            name=FrontmatterParser.get_string_field(frontmatter, "name", command_id),
+            description=FrontmatterParser.get_string_field(frontmatter, "description"),
+            file_path=str(command_file),
+            allowed_tools=frontmatter.get("allowed-tools"),
+            argument_hint=frontmatter.get("argument-hint"),
+            modified_at=datetime.fromtimestamp(stat.st_mtime),
+        )
+
+    def get_command_content(
+        self, project_id: str, command_id: str
+    ) -> tuple[CommandConfig | None, str]:
+        """Get full content of a command.
+
+        Args:
+            project_id: Project identifier
+            command_id: Command identifier
+
+        Returns:
+            Tuple of (CommandConfig, content) or (None, "")
+        """
+        project_path = self._find_project_path(project_id)
+        if not project_path:
+            return None, ""
+
+        command_file = project_path / ".claude" / "commands" / f"{command_id}.md"
+        if not command_file.exists():
+            return None, ""
+
+        command = self._parse_command(command_file, project_id)
+        if not command:
+            return None, ""
+
+        content = command_file.read_text(encoding="utf-8")
+        return command, content
+
+    def create_command(
+        self, project_id: str, command_id: str, content: str
+    ) -> CommandConfig | None:
+        """Create a new command.
+
+        Args:
+            project_id: Project identifier
+            command_id: Command identifier (filename without .md)
+            content: Command .md content
+
+        Returns:
+            Created CommandConfig or None if failed
+        """
+        project_path = self._find_project_path(project_id)
+        if not project_path:
+            logger.error(f"Project not found: {project_id}")
+            return None
+
+        commands_dir = project_path / ".claude" / "commands"
+        commands_dir.mkdir(parents=True, exist_ok=True)
+
+        command_file = commands_dir / f"{command_id}.md"
+        if command_file.exists():
+            logger.error(f"Command already exists: {command_id}")
+            return None
+
+        try:
+            with open(command_file, "w", encoding="utf-8") as f:
+                f.write(content)
+                if not content.endswith("\n"):
+                    f.write("\n")
+
+            logger.info(f"Created command {command_id} in project {project_id}")
+            return self._parse_command(command_file, project_id)
+
+        except OSError as e:
+            logger.error(f"Error creating command: {e}")
+            return None
+
+    def update_command_content(self, project_id: str, command_id: str, content: str) -> bool:
+        """Update command .md content.
+
+        Args:
+            project_id: Project identifier
+            command_id: Command identifier
+            content: New command .md content
+
+        Returns:
+            True if updated successfully
+        """
+        project_path = self._find_project_path(project_id)
+        if not project_path:
+            logger.error(f"Project not found: {project_id}")
+            return False
+
+        command_file = project_path / ".claude" / "commands" / f"{command_id}.md"
+        if not command_file.exists():
+            logger.error(f"Command not found: {command_id}")
+            return False
+
+        try:
+            with open(command_file, "w", encoding="utf-8") as f:
+                f.write(content)
+                if not content.endswith("\n"):
+                    f.write("\n")
+
+            logger.info(f"Updated command {command_id} in project {project_id}")
+            return True
+
+        except OSError as e:
+            logger.error(f"Error updating command: {e}")
+            return False
+
+    def delete_command(self, project_id: str, command_id: str) -> bool:
+        """Delete a command.
+
+        Args:
+            project_id: Project identifier
+            command_id: Command identifier
+
+        Returns:
+            True if deleted successfully
+        """
+        project_path = self._find_project_path(project_id)
+        if not project_path:
+            logger.error(f"Project not found: {project_id}")
+            return False
+
+        command_file = project_path / ".claude" / "commands" / f"{command_id}.md"
+        if not command_file.exists():
+            logger.error(f"Command not found: {command_id}")
+            return False
+
+        try:
+            command_file.unlink()
+            logger.info(f"Deleted command {command_id} from project {project_id}")
+            return True
+
+        except OSError as e:
+            logger.error(f"Error deleting command: {e}")
+            return False
+
+    def copy_command(self, source_project_id: str, command_id: str, target_project_id: str) -> bool:
+        """Copy a command to another project.
+
+        Args:
+            source_project_id: Source project identifier
+            command_id: Command identifier to copy
+            target_project_id: Target project identifier
+
+        Returns:
+            True if copied successfully
+        """
+        import shutil
+
+        source_path = self._find_project_path(source_project_id)
+        target_path = self._find_project_path(target_project_id)
+
+        if not source_path or not target_path:
+            logger.error("Source or target project not found")
+            return False
+
+        source_file = source_path / ".claude" / "commands" / f"{command_id}.md"
+        if not source_file.exists():
+            logger.error(f"Source command not found: {command_id}")
+            return False
+
+        target_commands_dir = target_path / ".claude" / "commands"
+        target_commands_dir.mkdir(parents=True, exist_ok=True)
+
+        target_file = target_commands_dir / f"{command_id}.md"
+
+        # Handle name collision
+        if target_file.exists():
+            suffix = 1
+            while (target_commands_dir / f"{command_id}-{suffix}.md").exists():
+                suffix += 1
+            target_file = target_commands_dir / f"{command_id}-{suffix}.md"
+
+        try:
+            shutil.copy2(source_file, target_file)
+            logger.info(
+                f"Copied command {command_id} from {source_project_id} to {target_project_id}"
+            )
+            return True
+        except OSError as e:
+            logger.error(f"Error copying command: {e}")
+            return False
+
+    # ========================================
     # Copy Operations
     # ========================================
 
@@ -1764,6 +2012,7 @@ class ProjectConfigMonitor:
             mcp_servers=self.get_project_mcp_config(project_id),
             user_mcp_servers=self.get_user_mcp_config(project_id),
             hooks=self.get_project_hooks(project_id),
+            commands=self.get_project_commands(project_id),
         )
 
     def _find_project_path(self, project_id: str) -> Path | None:
@@ -1834,6 +2083,12 @@ class ProjectConfigMonitor:
             if agents_dir.exists():
                 for agent_file in agents_dir.glob("**/*.md"):
                     files_to_track.append(agent_file)
+
+            # Track command files
+            commands_dir = claude_dir / "commands"
+            if commands_dir.exists():
+                for cmd_file in commands_dir.glob("*.md"):
+                    files_to_track.append(cmd_file)
 
             # Record mtimes
             for file_path in files_to_track:
@@ -1981,6 +2236,39 @@ class ProjectConfigMonitor:
                     except OSError:
                         pass
 
+            # Check commands
+            commands_dir = claude_dir / "commands"
+            if commands_dir.exists():
+                for cmd_file in commands_dir.glob("*.md"):
+                    try:
+                        mtime = cmd_file.stat().st_mtime
+                        key = str(cmd_file)
+                        current_mtimes[key] = mtime
+
+                        if key in self._file_mtimes:
+                            if mtime != self._file_mtimes[key]:
+                                changes.append(
+                                    ConfigChangeEvent(
+                                        event_type=ConfigChangeType.MODIFIED,
+                                        project_id=project_id,
+                                        config_type="commands",
+                                        item_id=cmd_file.stem,
+                                        timestamp=datetime.utcnow(),
+                                    )
+                                )
+                        else:
+                            changes.append(
+                                ConfigChangeEvent(
+                                    event_type=ConfigChangeType.CREATED,
+                                    project_id=project_id,
+                                    config_type="commands",
+                                    item_id=cmd_file.stem,
+                                    timestamp=datetime.utcnow(),
+                                )
+                            )
+                    except OSError:
+                        pass
+
         # Check for deletions
         for old_key in self._file_mtimes:
             if old_key not in current_mtimes:
@@ -1993,6 +2281,8 @@ class ProjectConfigMonitor:
                     config_type = "skills"
                 elif "/agents/" in old_key or "\\agents\\" in old_key:
                     config_type = "agents"
+                elif "/commands/" in old_key or "\\commands\\" in old_key:
+                    config_type = "commands"
                 else:
                     continue
 

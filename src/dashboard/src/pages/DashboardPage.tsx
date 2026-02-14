@@ -9,9 +9,13 @@ import { ProcessMonitorWidget } from '../components/ProcessMonitorWidget'
 import { useNavigationStore } from '../stores/navigation'
 
 export function DashboardPage() {
-  const { tasks, agents } = useOrchestrationStore()
-  const { sessions, fetchSessions, isLoading: isLoadingSessions, selectSession } = useClaudeSessionsStore()
-  const { setView } = useNavigationStore()
+  const tasks = useOrchestrationStore(s => s.tasks)
+  const agents = useOrchestrationStore(s => s.agents)
+  const sessions = useClaudeSessionsStore(s => s.sessions)
+  const fetchSessions = useClaudeSessionsStore(s => s.fetchSessions)
+  const isLoadingSessions = useClaudeSessionsStore(s => s.isLoading)
+  const selectSession = useClaudeSessionsStore(s => s.selectSession)
+  const setView = useNavigationStore(s => s.setView)
 
   // Fetch Claude Code sessions on mount
   useEffect(() => {

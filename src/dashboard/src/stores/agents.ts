@@ -122,6 +122,9 @@ interface AgentsState {
   // Image state
   attachedImages: File[]
 
+  // OCR state (key = `${file.name}_${file.size}_${file.lastModified}`)
+  ocrStatuses: Record<string, 'processing' | 'done' | 'error'>
+
   // Actions
   fetchAgents: (category?: AgentCategory, availableOnly?: boolean) => Promise<void>
   fetchStats: () => Promise<void>
@@ -134,6 +137,12 @@ interface AgentsState {
   addAttachedImages: (images: File[]) => void
   removeAttachedImage: (index: number) => void
   clearAttachedImages: () => void
+
+  // OCR Actions
+  extractTextFromImage: (file: File) => Promise<string | null>
+  setOcrStatus: (fileKey: string, status: 'processing' | 'done' | 'error') => void
+  removeOcrStatus: (fileKey: string) => void
+  clearOcrStatuses: () => void
 
   // Execution Actions
   executeAnalysis: (analysisId: string, projectId?: string | null) => Promise<string | null>
@@ -212,6 +221,7 @@ function buildClaudePrompt(analysis: TaskAnalysisResult['analysis'], taskInput: 
   return lines.join('\n')
 }
 
+/** 에이전트 레지스트리 및 태스크 분석 상태 관리 스토어. */
 export const useAgentsStore = create<AgentsState>((set, get) => ({
   // Initial state
   agents: [],
@@ -234,6 +244,7 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
 
   // Image state
   attachedImages: [],
+  ocrStatuses: {},
 
   // UI state
   isLoading: false,
@@ -356,7 +367,7 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
       }
 
       const result: TaskAnalysisResult = await response.json()
-      set({ lastAnalysis: result, isLoading: false, attachedImages: [] })
+      set({ lastAnalysis: result, isLoading: false, attachedImages: [], ocrStatuses: {} })
 
       // Refresh history after successful analysis
       const projectId = context?.project_id as string | undefined
@@ -405,7 +416,53 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
   },
 
   clearAttachedImages: () => {
-    set({ attachedImages: [] })
+    set({ attachedImages: [], ocrStatuses: {} })
+  },
+
+  // OCR Actions
+  extractTextFromImage: async (file: File) => {
+    try {
+      const formData = new FormData()
+      formData.append('image', file)
+
+      const response = await fetch(`${API_BASE}/agents/ocr`, {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error(`OCR failed: ${response.statusText}`)
+      }
+
+      const result = await response.json()
+
+      if (!result.success) {
+        console.error('OCR error:', result.error)
+        return null
+      }
+
+      return result.text as string
+    } catch (error) {
+      console.error('OCR request failed:', error)
+      return null
+    }
+  },
+
+  setOcrStatus: (fileKey: string, status: 'processing' | 'done' | 'error') => {
+    set((state) => ({
+      ocrStatuses: { ...state.ocrStatuses, [fileKey]: status },
+    }))
+  },
+
+  removeOcrStatus: (fileKey: string) => {
+    set((state) => {
+      const { [fileKey]: _, ...rest } = state.ocrStatuses
+      return { ocrStatuses: rest }
+    })
+  },
+
+  clearOcrStatuses: () => {
+    set({ ocrStatuses: {} })
   },
 
   // Execution Actions

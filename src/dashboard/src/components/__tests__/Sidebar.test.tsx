@@ -2,33 +2,37 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { Sidebar } from '../Sidebar'
 
-// Mock stores
+// Helper to create selector-compatible mock (must be inline in vi.mock factories)
+const selectorMock = (state: Record<string, unknown>) =>
+  ((selector?: (s: Record<string, unknown>) => unknown) => selector ? selector(state) : state) as never
+
+// Mock stores with selector support
 vi.mock('@/stores/orchestration', () => ({
-  useOrchestrationStore: vi.fn(() => ({
-    fetchProjects: vi.fn(),
-  })),
+  useOrchestrationStore: vi.fn((selector?: (s: Record<string, unknown>) => unknown) => {
+    const state = { fetchProjects: vi.fn() }
+    return selector ? selector(state) : state
+  }),
 }))
 
 vi.mock('@/stores/navigation', () => ({
-  useNavigationStore: vi.fn(() => ({
-    currentView: 'dashboard',
-    setView: vi.fn(),
-  })),
+  useNavigationStore: vi.fn((selector?: (s: Record<string, unknown>) => unknown) => {
+    const state = { currentView: 'dashboard', setView: vi.fn() }
+    return selector ? selector(state) : state
+  }),
 }))
 
 vi.mock('@/stores/auth', () => ({
-  useAuthStore: vi.fn(() => ({
-    user: null,
-    logout: vi.fn(),
-  })),
+  useAuthStore: vi.fn((selector?: (s: Record<string, unknown>) => unknown) => {
+    const state = { user: null, logout: vi.fn() }
+    return selector ? selector(state) : state
+  }),
 }))
 
 vi.mock('@/stores/menuVisibility', () => ({
-  useMenuVisibilityStore: vi.fn(() => ({
-    visibility: {},
-    menuOrder: [],
-    fetchVisibility: vi.fn(),
-  })),
+  useMenuVisibilityStore: vi.fn((selector?: (s: Record<string, unknown>) => unknown) => {
+    const state = { visibility: {}, menuOrder: [], fetchVisibility: vi.fn() }
+    return selector ? selector(state) : state
+  }),
 }))
 
 import { useNavigationStore } from '@/stores/navigation'
@@ -41,15 +45,13 @@ describe('Sidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
-    vi.mocked(useNavigationStore).mockReturnValue({
-      currentView: 'dashboard',
-      setView: mockSetView,
-    } as unknown as ReturnType<typeof useNavigationStore>)
+    vi.mocked(useNavigationStore).mockImplementation(
+      selectorMock({ currentView: 'dashboard', setView: mockSetView })
+    )
 
-    vi.mocked(useAuthStore).mockReturnValue({
-      user: null,
-      logout: mockLogout,
-    } as unknown as ReturnType<typeof useAuthStore>)
+    vi.mocked(useAuthStore).mockImplementation(
+      selectorMock({ user: null, logout: mockLogout })
+    )
   })
 
   it('renders logo and branding', () => {
@@ -101,10 +103,12 @@ describe('Sidebar', () => {
   })
 
   it('shows user avatar when user exists', () => {
-    vi.mocked(useAuthStore).mockReturnValue({
-      user: { name: 'Test User', email: 'test@example.com', avatar_url: null },
-      logout: mockLogout,
-    } as unknown as ReturnType<typeof useAuthStore>)
+    vi.mocked(useAuthStore).mockImplementation(
+      selectorMock({
+        user: { name: 'Test User', email: 'test@example.com', avatar_url: null },
+        logout: mockLogout,
+      })
+    )
 
     render(<Sidebar />)
 
@@ -113,10 +117,12 @@ describe('Sidebar', () => {
   })
 
   it('shows first initial in avatar fallback', () => {
-    vi.mocked(useAuthStore).mockReturnValue({
-      user: { name: 'John Doe', email: 'john@example.com', avatar_url: null },
-      logout: mockLogout,
-    } as unknown as ReturnType<typeof useAuthStore>)
+    vi.mocked(useAuthStore).mockImplementation(
+      selectorMock({
+        user: { name: 'John Doe', email: 'john@example.com', avatar_url: null },
+        logout: mockLogout,
+      })
+    )
 
     render(<Sidebar />)
 
@@ -124,10 +130,9 @@ describe('Sidebar', () => {
   })
 
   it('highlights current view', () => {
-    vi.mocked(useNavigationStore).mockReturnValue({
-      currentView: 'tasks',
-      setView: mockSetView,
-    } as unknown as ReturnType<typeof useNavigationStore>)
+    vi.mocked(useNavigationStore).mockImplementation(
+      selectorMock({ currentView: 'tasks', setView: mockSetView })
+    )
 
     render(<Sidebar />)
 

@@ -59,6 +59,7 @@ export const MENU_LABELS: Record<string, string> = {
   monitor: 'Monitor',
   'claude-sessions': 'Claude Sessions',
   'project-configs': 'Project Configs',
+  'project-management': 'Project Registry',
   git: 'Git',
   organizations: 'Organizations',
   audit: 'Audit Trail',
@@ -82,7 +83,7 @@ export const MENU_CATEGORIES: { label: string; keys: string[] }[] = [
   },
   {
     label: 'Operations',
-    keys: ['monitor', 'claude-sessions', 'project-configs', 'git', 'workflows'],
+    keys: ['monitor', 'claude-sessions', 'project-configs', 'project-management', 'git', 'workflows'],
   },
   {
     label: 'Organization',

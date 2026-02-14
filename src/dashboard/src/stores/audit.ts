@@ -74,6 +74,7 @@ interface AuditState {
   refresh: () => Promise<void>
 }
 
+/** 감사 로그 상태 관리 스토어 (조회, 필터, 통계). */
 export const useAuditStore = create<AuditState>((set, get) => ({
   // Initial state
   logs: [],

@@ -113,6 +113,7 @@ else:
     workflow_webhook_router = safe_import("api.webhooks", "workflow_webhook_router")
     artifacts_router = safe_import("api.artifacts", "router")
     templates_router = safe_import("api.templates", "router")
+    projects_router = safe_import("api.projects", "router")
 
     # Optional orchestrator
     try:
@@ -377,6 +378,8 @@ else:
             app.include_router(workflow_webhook_router, prefix="/api")
         if artifacts_router:
             app.include_router(artifacts_router, prefix="/api")
+        if projects_router:
+            app.include_router(projects_router, prefix="/api")
 
         # Add Rate Limiting Middleware
         rate_limit_enabled = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"

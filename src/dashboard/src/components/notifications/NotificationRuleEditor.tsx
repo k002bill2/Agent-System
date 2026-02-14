@@ -24,6 +24,7 @@ import {
   Pencil,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { getApiUrl } from '@/config/api'
 import { useOrchestrationStore } from '@/stores/orchestration'
 
 // ─────────────────────────────────────────────────────────────
@@ -128,23 +129,21 @@ const PRIORITY_COLORS: Record<NotificationPriority, string> = {
 // API Calls
 // ─────────────────────────────────────────────────────────────
 
-const API_BASE = 'http://localhost:8000/api'
-
 async function fetchRules(): Promise<NotificationRule[]> {
-  const res = await fetch(`${API_BASE}/notifications/rules`)
+  const res = await fetch(getApiUrl('/api/notifications/rules'))
   if (!res.ok) throw new Error('Failed to fetch rules')
   return res.json()
 }
 
 async function fetchChannels(): Promise<ChannelStatus[]> {
-  const res = await fetch(`${API_BASE}/notifications/channels`)
+  const res = await fetch(getApiUrl('/api/notifications/channels'))
   if (!res.ok) throw new Error('Failed to fetch channels')
   const data = await res.json()
   return data.channels
 }
 
 async function createRule(rule: Partial<NotificationRule>): Promise<NotificationRule> {
-  const res = await fetch(`${API_BASE}/notifications/rules`, {
+  const res = await fetch(getApiUrl('/api/notifications/rules'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(rule),
@@ -154,7 +153,7 @@ async function createRule(rule: Partial<NotificationRule>): Promise<Notification
 }
 
 async function updateRule(ruleId: string, data: Partial<NotificationRule>): Promise<NotificationRule> {
-  const res = await fetch(`${API_BASE}/notifications/rules/${ruleId}`, {
+  const res = await fetch(`${getApiUrl('/api/notifications/rules')}/${ruleId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -164,14 +163,14 @@ async function updateRule(ruleId: string, data: Partial<NotificationRule>): Prom
 }
 
 async function deleteRule(ruleId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/notifications/rules/${ruleId}`, {
+  const res = await fetch(`${getApiUrl('/api/notifications/rules')}/${ruleId}`, {
     method: 'DELETE',
   })
   if (!res.ok) throw new Error('Failed to delete rule')
 }
 
 async function toggleRule(ruleId: string): Promise<{ enabled: boolean }> {
-  const res = await fetch(`${API_BASE}/notifications/rules/${ruleId}/toggle`, {
+  const res = await fetch(`${getApiUrl('/api/notifications/rules')}/${ruleId}/toggle`, {
     method: 'POST',
   })
   if (!res.ok) throw new Error('Failed to toggle rule')
@@ -191,7 +190,7 @@ async function updateChannel(
     smtp_use_tls?: boolean
   }
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/notifications/channels/${channel}`, {
+  const res = await fetch(`${getApiUrl('/api/notifications/channels')}/${channel}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -200,7 +199,7 @@ async function updateChannel(
 }
 
 async function testChannel(channel: NotificationChannel): Promise<{ success: boolean; error?: string }> {
-  const res = await fetch(`${API_BASE}/notifications/channels/${channel}/test`, {
+  const res = await fetch(`${getApiUrl('/api/notifications/channels')}/${channel}/test`, {
     method: 'POST',
   })
   return res.json()

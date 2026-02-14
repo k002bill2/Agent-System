@@ -258,6 +258,56 @@ async def _run_migrations() -> None:
                 )
             )
 
+        # Migration 8: Create projects table for DB-managed project registry
+        result = await conn.execute(
+            text("SELECT table_name FROM information_schema.tables WHERE table_name = 'projects'")
+        )
+        if not result.fetchone():
+            await conn.execute(
+                text("""
+                CREATE TABLE projects (
+                    id VARCHAR(36) PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL UNIQUE,
+                    slug VARCHAR(100) NOT NULL UNIQUE,
+                    description TEXT,
+                    path VARCHAR(1000),
+                    is_active BOOLEAN DEFAULT TRUE,
+                    settings JSONB DEFAULT '{}'::jsonb,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    created_by VARCHAR(36) REFERENCES users(id) ON DELETE SET NULL
+                )
+            """)
+            )
+            await conn.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_projects_active ON projects (is_active)")
+            )
+            await conn.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_projects_slug ON projects (slug)")
+            )
+            await conn.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_projects_created ON projects (created_at)")
+            )
+
+            # Seed: "Agent-System" project
+            import uuid
+
+            agent_system_id = str(uuid.uuid4())
+            await conn.execute(
+                text(
+                    "INSERT INTO projects (id, name, slug, description, path, is_active) "
+                    "VALUES (:id, :name, :slug, :desc, :path, TRUE) "
+                    "ON CONFLICT (name) DO NOTHING"
+                ),
+                {
+                    "id": agent_system_id,
+                    "name": "Agent-System",
+                    "slug": "agent-system",
+                    "desc": "LangGraph 기반 멀티 에이전트 오케스트레이션 서비스",
+                    "path": None,  # Will be set via API if needed
+                },
+            )
+
         # Migration 7: Add unique constraint and FK to workflow_secrets
         result = await conn.execute(
             text(

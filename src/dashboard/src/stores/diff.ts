@@ -37,6 +37,7 @@ interface DiffState {
   getPendingEntries: () => DiffEntry[];
 }
 
+/** 파일 변경 사항(Diff) 관리 스토어. */
 export const useDiffStore = create<DiffState>((set, get) => ({
   // Initial state
   entries: [],

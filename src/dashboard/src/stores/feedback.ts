@@ -198,6 +198,7 @@ const API_BASE = 'http://localhost:8000/api/feedback'
 // Store Implementation
 // ============================================================================
 
+/** RLHF 피드백 수집/처리/데이터셋 관리 스토어. */
 export const useFeedbackStore = create<FeedbackState>()(
   persist(
     (set, get) => ({

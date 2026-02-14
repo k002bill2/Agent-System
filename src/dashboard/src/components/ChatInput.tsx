@@ -3,32 +3,47 @@ import { cn } from '../lib/utils'
 import { useOrchestrationStore } from '../stores/orchestration'
 import { useNavigationStore } from '../stores/navigation'
 import { useAgentsStore } from '../stores/agents'
-import { Send, Loader2, ChevronDown, FolderGit2, ImagePlus, X } from 'lucide-react'
+import { Send, Loader2, ChevronDown, FolderGit2, ImagePlus, X, CheckCircle2, AlertCircle } from 'lucide-react'
 
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml']
 const MAX_IMAGES = 5
+
+/** 파일 고유 키 생성 (OCR 상태 추적용) */
+function getFileKey(file: File): string {
+  return `${file.name}_${file.size}_${file.lastModified}`
+}
+
+/** 입력 텍스트에서 특정 파일의 OCR 블록을 제거 */
+function removeOcrBlock(text: string, filename: string): string {
+  // [이미지 OCR: filename]\n...텍스트... 블록 제거 (다음 블록 또는 끝까지)
+  const escaped = filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = new RegExp(`\\n?\\n?\\[이미지 OCR: ${escaped}\\][\\s\\S]*?(?=\\n\\n\\[이미지 OCR:|$)`)
+  return text.replace(pattern, '').trim()
+}
 
 export function ChatInput() {
   const [input, setInput] = useState('')
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [images, setImages] = useState<File[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
+  const [ocrStatuses, setOcrStatuses] = useState<Record<string, 'processing' | 'done' | 'error'>>({})
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const {
-    isProcessing,
-    connected,
-    projects,
-    selectedProjectId,
-    selectProject,
-    fetchProjects,
-    reconnect,
-  } = useOrchestrationStore()
+  const isProcessing = useOrchestrationStore(s => s.isProcessing)
+  const connected = useOrchestrationStore(s => s.connected)
+  const projects = useOrchestrationStore(s => s.projects)
+  const selectedProjectId = useOrchestrationStore(s => s.selectedProjectId)
+  const selectProject = useOrchestrationStore(s => s.selectProject)
+  const fetchProjects = useOrchestrationStore(s => s.fetchProjects)
+  const reconnect = useOrchestrationStore(s => s.reconnect)
 
-  const { setView, setProjectFilter, setPendingTaskInput } = useNavigationStore()
-  const { setAttachedImages } = useAgentsStore()
+  const setView = useNavigationStore(s => s.setView)
+  const setProjectFilter = useNavigationStore(s => s.setProjectFilter)
+  const setPendingTaskInput = useNavigationStore(s => s.setPendingTaskInput)
+  const setAttachedImages = useAgentsStore(s => s.setAttachedImages)
+  const extractTextFromImage = useAgentsStore(s => s.extractTextFromImage)
 
   // Auto-resize textarea
   useEffect(() => {
@@ -74,6 +89,7 @@ export function ChatInput() {
     if (images.length > 0) {
       setAttachedImages(images)
       setImages([])
+      setOcrStatuses({})
     }
     setPendingTaskInput(input.trim())
     setView('agents')
@@ -87,12 +103,35 @@ export function ChatInput() {
     }
   }
 
+  // OCR 트리거
+  const triggerOcr = useCallback((file: File) => {
+    const fileKey = getFileKey(file)
+    setOcrStatuses(prev => ({ ...prev, [fileKey]: 'processing' }))
+
+    extractTextFromImage(file).then(text => {
+      if (text !== null && text.trim().length > 0) {
+        setInput(prev => `${prev}${prev ? '\n\n' : ''}[이미지 OCR: ${file.name}]\n${text.trim()}`)
+        setOcrStatuses(prev => ({ ...prev, [fileKey]: 'done' }))
+      } else if (text !== null) {
+        setOcrStatuses(prev => ({ ...prev, [fileKey]: 'done' }))
+      } else {
+        setOcrStatuses(prev => ({ ...prev, [fileKey]: 'error' }))
+      }
+    })
+  }, [extractTextFromImage])
+
   // Image handling
   const addImages = useCallback((files: FileList | File[]) => {
     const validFiles = Array.from(files).filter(f => ALLOWED_IMAGE_TYPES.includes(f.type))
     if (validFiles.length === 0) return
     setImages(prev => [...prev, ...validFiles].slice(0, MAX_IMAGES))
-  }, [])
+
+    // 각 비-SVG 이미지에 대해 비동기 OCR 실행
+    for (const file of validFiles) {
+      if (file.type === 'image/svg+xml') continue
+      triggerOcr(file)
+    }
+  }, [triggerOcr])
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const items = e.clipboardData.items
@@ -156,29 +195,67 @@ export function ChatInput() {
           {/* Image Previews (above input row) */}
           {images.length > 0 && (
             <div className="flex flex-wrap gap-1.5 px-1">
-              {images.map((file, idx) => (
-                <div
-                  key={`${file.name}-${idx}`}
-                  className="relative group w-12 h-12 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 flex-shrink-0"
-                >
-                  <img
-                    src={URL.createObjectURL(file)}
-                    alt={file.name}
-                    className="w-full h-full object-cover"
-                    onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setImages(prev => prev.filter((_, i) => i !== idx))}
-                    className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+              {images.map((file, idx) => {
+                const status = ocrStatuses[getFileKey(file)]
+                return (
+                  <div
+                    key={`${file.name}-${idx}`}
+                    className="relative group w-12 h-12 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 flex-shrink-0"
                   >
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                </div>
-              ))}
+                    <img
+                      src={URL.createObjectURL(file)}
+                      alt={file.name}
+                      className="w-full h-full object-cover"
+                      onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const key = getFileKey(file)
+                        setOcrStatuses(prev => { const { [key]: _, ...rest } = prev; return rest })
+                        setInput(prev => removeOcrBlock(prev, file.name))
+                        setImages(prev => prev.filter((_, i) => i !== idx))
+                      }}
+                      className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                    {/* OCR 상태 오버레이 */}
+                    {status === 'processing' && (
+                      <div className="absolute bottom-0 right-0 p-0.5 bg-blue-500 rounded-tl-md" title="OCR 처리 중...">
+                        <Loader2 className="w-2.5 h-2.5 text-white animate-spin" />
+                      </div>
+                    )}
+                    {status === 'done' && (
+                      <div className="absolute bottom-0 right-0 p-0.5 bg-green-500 rounded-tl-md" title="OCR 완료">
+                        <CheckCircle2 className="w-2.5 h-2.5 text-white" />
+                      </div>
+                    )}
+                    {status === 'error' && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); triggerOcr(file) }}
+                        className="absolute bottom-0 right-0 p-0.5 bg-red-500 rounded-tl-md hover:bg-red-600 transition-colors"
+                        title="OCR 실패 - 클릭하여 재시도"
+                      >
+                        <AlertCircle className="w-2.5 h-2.5 text-white" />
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
               <button
                 type="button"
-                onClick={() => setImages([])}
+                onClick={() => {
+                  // 모든 이미지의 OCR 텍스트 제거
+                  setInput(prev => {
+                    let text = prev
+                    for (const file of images) text = removeOcrBlock(text, file.name)
+                    return text
+                  })
+                  setImages([])
+                  setOcrStatuses({})
+                }}
                 className="text-[10px] text-gray-400 hover:text-red-400 self-end pb-1 transition-colors"
               >
                 전체 삭제

@@ -54,6 +54,7 @@ const initialState = {
 // Store
 // ─────────────────────────────────────────────────────────────
 
+/** 인증 상태 관리 스토어 (슬라이스 래퍼). */
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -89,13 +90,17 @@ export const useAuthStore = create<AuthState>()(
 // Selectors
 // ─────────────────────────────────────────────────────────────
 
+/** 관리자 여부를 반환하는 셀렉터. */
 export const selectIsAdmin = (state: AuthState): boolean =>
   state.user?.is_admin ?? false
 
+/** 사용자 역할을 반환하는 셀렉터. */
 export const selectUserRole = (state: AuthState): UserRole =>
   state.user?.role ?? 'user'
 
+/** 표시 이름(name 또는 email)을 반환하는 셀렉터. */
 export const selectDisplayName = (state: AuthState): string =>
   state.user?.name ?? state.user?.email ?? ''
 
+/** 에러 존재 여부를 반환하는 셀렉터. */
 export const selectHasError = (state: AuthState): boolean => state.error !== null

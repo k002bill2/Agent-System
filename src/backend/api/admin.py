@@ -30,12 +30,14 @@ DEFAULT_MENU_ORDER: list[str] = [
     "monitor",
     "claude-sessions",
     "project-configs",
+    "project-management",
     "git",
     "organizations",
     "audit",
     "notifications",
     "analytics",
     "playground",
+    "workflows",
 ]
 
 # 기본 메뉴 가시성 설정
@@ -48,12 +50,14 @@ DEFAULT_MENU_VISIBILITY: dict[str, dict[str, bool]] = {
     "monitor": {"user": False, "manager": True, "admin": True},
     "claude-sessions": {"user": False, "manager": True, "admin": True},
     "project-configs": {"user": False, "manager": True, "admin": True},
+    "project-management": {"user": False, "manager": True, "admin": True},
     "git": {"user": False, "manager": True, "admin": True},
     "organizations": {"user": False, "manager": True, "admin": True},
     "audit": {"user": False, "manager": True, "admin": True},
     "notifications": {"user": True, "manager": True, "admin": True},
     "analytics": {"user": False, "manager": True, "admin": True},
     "playground": {"user": True, "manager": True, "admin": True},
+    "workflows": {"user": False, "manager": True, "admin": True},
     "settings": {"user": True, "manager": True, "admin": True},
     "admin": {"user": False, "manager": False, "admin": True},
 }

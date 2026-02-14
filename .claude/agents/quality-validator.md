@@ -108,6 +108,10 @@ import { X } from '../../../components/X';  // BAD
 // Check for missing exports
 ```
 
+### Verify Skills
+- Run `/verify-implementation` for project-specific rule verification
+- Check barrel exports, docs sync, and other registered verify skills
+
 ## Output Format
 
 After validation, produce a report:
@@ -166,6 +170,14 @@ npm test -- --coverage
    - Code style
    - Accessibility
    - Test coverage
+
+### Step 2.5: Verify Skills Execution
+변경된 파일과 관련된 verify-* 스킬을 실행합니다:
+
+1. `.claude/skills/verify-implementation/SKILL.md`를 읽어 등록된 스킬 목록 확인
+2. 변경된 파일과 매칭되는 스킬만 선택적 실행
+3. 각 스킬의 Workflow 단계를 순서대로 실행
+4. 이슈 발견 시 Quality Validation Report에 포함
 
 ### Step 3: Verify Integration
 1. Check imports between new files

@@ -128,6 +128,8 @@ import { cn } from '@/lib/utils';
 | `MCPServerModal` | MCP 서버 편집 모달 |
 | `HooksTab` | Hook 목록 탭 |
 | `HookEditModal` | Hook 편집 모달 |
+| `CommandsTab` | 커맨드 목록 탭 |
+| `CommandEditModal` | 커맨드 편집 모달 |
 
 ### Workflow Components
 
@@ -293,7 +295,7 @@ import { cn } from '@/lib/utils';
 |-------|------|------|
 | `useOrchestration` | `orchestration.ts` | 세션/태스크 관리, WebSocket 연결 |
 | `useProjects` | `projects.ts` | 프로젝트 목록 및 상태 |
-| `useProjectConfigs` | `projectConfigs.ts` | 프로젝트 설정 (Skills, Agents, MCP, Hooks) |
+| `useProjectConfigs` | `projectConfigs.ts` | 프로젝트 설정 (Skills, Agents, MCP, Hooks) + DB 프로젝트 CRUD |
 | `useAgents` | `agents.ts` | 에이전트 레지스트리 |
 | `useTasks` | `tasks.ts` | 태스크 관리 |
 | `useFeedback` | `feedback.ts` | RLHF 피드백 |
@@ -393,6 +395,8 @@ src/dashboard/
 │   │   │   ├── MCPServerModal.tsx
 │   │   │   ├── HooksTab.tsx
 │   │   │   ├── HookEditModal.tsx
+│   │   │   ├── CommandsTab.tsx
+│   │   │   ├── CommandEditModal.tsx
 │   │   │   └── CopyToProjectModal.tsx
 │   │   ├── mcp/                # MCP 관리
 │   │   ├── audit/              # 감사 로그

@@ -9,6 +9,7 @@ import {
   Monitor,
   Code2,
   FolderCog,
+  Database,
   LogOut,
   FileText,
   Bell,
@@ -35,6 +36,7 @@ const navigation: { icon: typeof LayoutDashboard; view: ViewType }[] = [
   { icon: Monitor, view: 'monitor' },
   { icon: Code2, view: 'claude-sessions' },
   { icon: FolderCog, view: 'project-configs' },
+  { icon: Database, view: 'project-management' },
   { icon: GitBranch, view: 'git' },
   { icon: Building2, view: 'organizations' },
   { icon: FileText, view: 'audit' },
@@ -45,10 +47,13 @@ const navigation: { icon: typeof LayoutDashboard; view: ViewType }[] = [
 ]
 
 export function Sidebar() {
-  const { fetchProjects } = useOrchestrationStore()
-  const { currentView, setView } = useNavigationStore()
-  const { user } = useAuthStore()
-  const { visibility, menuOrder, fetchVisibility } = useMenuVisibilityStore()
+  const fetchProjects = useOrchestrationStore(s => s.fetchProjects)
+  const currentView = useNavigationStore(s => s.currentView)
+  const setView = useNavigationStore(s => s.setView)
+  const user = useAuthStore(s => s.user)
+  const visibility = useMenuVisibilityStore(s => s.visibility)
+  const menuOrder = useMenuVisibilityStore(s => s.menuOrder)
+  const fetchVisibility = useMenuVisibilityStore(s => s.fetchVisibility)
 
   useEffect(() => {
     fetchProjects()
@@ -166,8 +171,8 @@ export function Sidebar() {
 }
 
 function LogoutButton() {
-  const { logout } = useAuthStore()
-  const { setView } = useNavigationStore()
+  const logout = useAuthStore(s => s.logout)
+  const setView = useNavigationStore(s => s.setView)
 
   const handleLogout = () => {
     logout()
@@ -187,8 +192,8 @@ function LogoutButton() {
 
 function UserAvatar({ user }: { user: { name: string | null; email: string; avatar_url?: string | null } }) {
   const [imageError, setImageError] = useState(false)
-  const { logout } = useAuthStore()
-  const { setView } = useNavigationStore()
+  const logout = useAuthStore(s => s.logout)
+  const setView = useNavigationStore(s => s.setView)
 
   const handleLogout = () => {
     logout()
@@ -210,7 +215,7 @@ function UserAvatar({ user }: { user: { name: string | null; email: string; avat
       ) : (
         <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
           <span className="text-primary-700 dark:text-primary-400 font-medium text-sm">
-            {(user.name || user.email).charAt(0).toUpperCase()}
+            {(user.name || user.email || '?').charAt(0).toUpperCase()}
           </span>
         </div>
       )}

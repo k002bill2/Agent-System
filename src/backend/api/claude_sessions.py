@@ -288,11 +288,38 @@ async def list_source_users() -> dict:
 
 @router.get("/projects")
 async def list_projects() -> dict:
-    """List all unique project names from discovered sessions.
+    """List all project names for session filtering.
+
+    Fetches from DB (projects table) when USE_DATABASE=true.
+    Falls back to filesystem-based discovery otherwise.
 
     Returns:
-        List of unique project names
+        List of project names
     """
+    import os
+
+    use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
+
+    if use_database:
+        try:
+            from sqlalchemy import select
+
+            from db.database import async_session_factory
+            from db.models import ProjectModel
+
+            async with async_session_factory() as session:
+                result = await session.execute(
+                    select(ProjectModel.name)
+                    .where(ProjectModel.is_active == True)  # noqa: E712
+                    .order_by(ProjectModel.name)
+                )
+                project_names = [row[0] for row in result.fetchall()]
+
+                return {"projects": project_names}
+        except Exception as e:
+            logger.warning(f"DB project lookup failed, falling back to filesystem: {e}")
+
+    # Fallback: filesystem-based discovery
     monitor = get_monitor()
     projects = monitor.get_unique_projects()
 
@@ -496,8 +523,11 @@ async def cleanup_stale() -> ProcessKillResponse:
 
 
 @router.get("/summaries/pending-count")
-async def get_pending_summary_count() -> dict:
+async def get_pending_summary_count(project: str | None = None) -> dict:
     """Get count of sessions without summaries.
+
+    Args:
+        project: Optional project name to filter sessions
 
     Returns:
         Count of sessions that need summary generation
@@ -506,7 +536,12 @@ async def get_pending_summary_count() -> dict:
     all_sessions = monitor.discover_sessions()
 
     pending_count = 0
+    total_filtered = 0
     for session in all_sessions:
+        # Filter by project if specified
+        if project and getattr(session, "project_name", None) != project:
+            continue
+        total_filtered += 1
         # Skip empty and ghost sessions
         if session.message_count == 0:
             continue
@@ -519,7 +554,7 @@ async def get_pending_summary_count() -> dict:
 
     return {
         "pending_count": pending_count,
-        "total_sessions": len(all_sessions),
+        "total_sessions": total_filtered if project else len(all_sessions),
     }
 
 

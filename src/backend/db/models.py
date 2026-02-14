@@ -1066,6 +1066,28 @@ class WorkflowArtifactModel(Base):
     )
 
 
+class ProjectModel(Base):
+    """Project model for DB-managed project registry."""
+
+    __tablename__ = "projects"
+
+    id = Column(String(36), primary_key=True)
+    name = Column(String(255), nullable=False, unique=True)
+    slug = Column(String(100), nullable=False, unique=True, index=True)
+    description = Column(Text, nullable=True)
+    path = Column(String(1000), nullable=True)  # Filesystem path for config scanning
+    is_active = Column(Boolean, default=True, index=True)
+    settings = Column(JSONB, default=dict)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    # Note: slug, is_active, created_at indexes are created via column-level index=True
+    __table_args__: tuple = ()
+
+
 class WorkflowTemplateModel(Base):
     """Workflow template model for reusable workflow definitions."""
 

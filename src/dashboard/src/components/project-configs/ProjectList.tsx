@@ -1,6 +1,6 @@
 import { cn } from '../../lib/utils'
-import { FolderCode, Plus, X } from 'lucide-react'
-import { useState } from 'react'
+import { FolderCode, Plus, X, Trash2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
 import { useProjectConfigsStore, ProjectInfo } from '../../stores/projectConfigs'
 
 export function ProjectList() {
@@ -8,24 +8,53 @@ export function ProjectList() {
     projects,
     selectedProjectId,
     selectProject,
-    addExternalPath,
+    createDBProject,
+    deleteDBProject,
+    fetchDBProjects,
+    dbProjects,
     isLoading,
   } = useProjectConfigsStore()
 
-  const [showAddPath, setShowAddPath] = useState(false)
+  const [showAddProject, setShowAddProject] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newDescription, setNewDescription] = useState('')
   const [newPath, setNewPath] = useState('')
   const [isAdding, setIsAdding] = useState(false)
 
-  const handleAddPath = async () => {
-    if (!newPath.trim()) return
+  useEffect(() => {
+    fetchDBProjects()
+  }, [fetchDBProjects])
+
+  const handleAddProject = async () => {
+    if (!newName.trim()) return
 
     setIsAdding(true)
-    const success = await addExternalPath(newPath.trim())
+    const success = await createDBProject({
+      name: newName.trim(),
+      description: newDescription.trim() || undefined,
+      path: newPath.trim() || undefined,
+    })
     setIsAdding(false)
 
     if (success) {
+      setNewName('')
+      setNewDescription('')
       setNewPath('')
-      setShowAddPath(false)
+      setShowAddProject(false)
+    }
+  }
+
+  const handleDeleteProject = async (e: React.MouseEvent, projectId: string) => {
+    e.stopPropagation()
+    // Find matching DB project by name
+    const configProject = projects.find(p => p.project_id === projectId)
+    if (!configProject) return
+
+    const dbProject = dbProjects.find(p => p.name === configProject.project_name)
+    if (!dbProject) return
+
+    if (confirm(`"${dbProject.name}" 프로젝트를 비활성화하시겠습니까?`)) {
+      await deleteDBProject(dbProject.id)
     }
   }
 
@@ -49,30 +78,44 @@ export function ProjectList() {
           Projects ({projects.length})
         </h3>
         <button
-          onClick={() => setShowAddPath(!showAddPath)}
+          onClick={() => setShowAddProject(!showAddProject)}
           className="p-1 text-gray-500 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-          title="Add external project"
+          title="Add project"
         >
-          {showAddPath ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+          {showAddProject ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
         </button>
       </div>
 
-      {showAddPath && (
+      {showAddProject && (
         <div className="p-3 border-b border-gray-200 dark:border-gray-700 space-y-2">
+          <input
+            type="text"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Project name *"
+            className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleAddProject()
+              if (e.key === 'Escape') setShowAddProject(false)
+            }}
+          />
+          <input
+            type="text"
+            value={newDescription}
+            onChange={(e) => setNewDescription(e.target.value)}
+            placeholder="Description (optional)"
+            className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+          />
           <input
             type="text"
             value={newPath}
             onChange={(e) => setNewPath(e.target.value)}
-            placeholder="/path/to/project"
+            placeholder="Path (optional, e.g. /Users/you/project)"
             className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleAddPath()
-              if (e.key === 'Escape') setShowAddPath(false)
-            }}
           />
           <button
-            onClick={handleAddPath}
-            disabled={isAdding || !newPath.trim()}
+            onClick={handleAddProject}
+            disabled={isAdding || !newName.trim()}
             className="w-full px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50"
           >
             {isAdding ? 'Adding...' : 'Add Project'}
@@ -87,6 +130,8 @@ export function ProjectList() {
             project={project}
             isSelected={selectedProjectId === project.project_id}
             onClick={() => selectProject(project.project_id)}
+            onDelete={(e) => handleDeleteProject(e, project.project_id)}
+            canDelete={dbProjects.some(p => p.name === project.project_name)}
           />
         ))}
 
@@ -94,7 +139,7 @@ export function ProjectList() {
           <div className="p-4 text-center text-gray-500 dark:text-gray-400 text-sm">
             No projects found.
             <br />
-            Add a project path above.
+            Add a project above.
           </div>
         )}
       </div>
@@ -106,14 +151,16 @@ interface ProjectCardProps {
   project: ProjectInfo
   isSelected: boolean
   onClick: () => void
+  onDelete: (e: React.MouseEvent) => void
+  canDelete: boolean
 }
 
-function ProjectCard({ project, isSelected, onClick }: ProjectCardProps) {
+function ProjectCard({ project, isSelected, onClick, onDelete, canDelete }: ProjectCardProps) {
   return (
     <button
       onClick={onClick}
       className={cn(
-        'w-full text-left p-3 rounded-lg transition-colors',
+        'w-full text-left p-3 rounded-lg transition-colors group',
         isSelected
           ? 'bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800'
           : 'hover:bg-gray-100 dark:hover:bg-gray-800 border border-transparent'
@@ -160,6 +207,15 @@ function ProjectCard({ project, isSelected, onClick }: ProjectCardProps) {
             )}
           </div>
         </div>
+        {canDelete && (
+          <button
+            onClick={onDelete}
+            className="p-1 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
+            title="Remove project"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </button>
   )

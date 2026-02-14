@@ -3,7 +3,9 @@ import { SessionList, SessionDetails, ProcessCleanupPanel } from '../components/
 import { useClaudeSessionsStore } from '../stores/claudeSessions'
 
 export function ClaudeSessionsPage() {
-  const { stopStreaming, clearError, error } = useClaudeSessionsStore()
+  const stopStreaming = useClaudeSessionsStore(s => s.stopStreaming)
+  const clearError = useClaudeSessionsStore(s => s.clearError)
+  const error = useClaudeSessionsStore(s => s.error)
   const [showProcessPanel, setShowProcessPanel] = useState(false)
 
   // Cleanup on unmount

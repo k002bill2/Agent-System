@@ -830,5 +830,44 @@
         "(feedback|verification).*?loop"
       ]
     }
+  },
+  "verify-implementation": {
+    "type": "workflow",
+    "enforcement": "suggest",
+    "priority": "high",
+    "description": "등록된 verify 스킬 통합 실행. 기능 구현 후, PR 전 사용.",
+    "promptTriggers": {
+      "keywords": [
+        "verify",
+        "검증",
+        "PR",
+        "리뷰",
+        "코드 리뷰",
+        "구현 검증"
+      ],
+      "intentPatterns": [
+        "(verify|검증|확인).*?(implementation|구현|코드)",
+        "(PR|pull request).*?(전|before|준비)",
+        "(code|코드).*?(review|리뷰)"
+      ]
+    }
+  },
+  "manage-skills": {
+    "type": "meta",
+    "enforcement": "suggest",
+    "priority": "normal",
+    "description": "검증 스킬 유지보수. 스킬 드리프트 탐지 및 수정.",
+    "promptTriggers": {
+      "keywords": [
+        "manage skill",
+        "스킬 관리",
+        "스킬 유지보수",
+        "verify skill"
+      ],
+      "intentPatterns": [
+        "(manage|관리|유지보수).*?(skill|스킬)",
+        "(create|update).*?verify.*?skill"
+      ]
+    }
   }
 }

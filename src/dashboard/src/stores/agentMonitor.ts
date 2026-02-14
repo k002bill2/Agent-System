@@ -122,6 +122,7 @@ interface AgentMonitorState {
 // Store
 // ─────────────────────────────────────────────────────────────
 
+/** 에이전트 실시간 모니터링 상태 관리 스토어 (SSE 연결, 메트릭, 이벤트 버퍼). */
 export const useAgentMonitorStore = create<AgentMonitorState>((set, get) => ({
   // Initial state
   connectionStatus: 'disconnected',

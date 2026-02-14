@@ -147,7 +147,7 @@ export function HookEditModal({ isOpen, onClose, onSave }: HookEditModalProps) {
             </label>
             <div className="space-y-2">
               {hooks.map((hook, index) => (
-                <div key={index} className="flex items-start gap-2">
+                <div key={`hook-${hook.type}-${index}`} className="flex items-start gap-2">
                   <select
                     value={hook.type}
                     onChange={(e) => handleHookChange(index, 'type', e.target.value)}

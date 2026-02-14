@@ -36,6 +36,18 @@ import {
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml']
 const MAX_IMAGES = 5
 
+/** 파일 고유 키 생성 (OCR 상태 추적용) */
+function getFileKey(file: File): string {
+  return `${file.name}_${file.size}_${file.lastModified}`
+}
+
+/** 입력 텍스트에서 특정 파일의 OCR 블록을 제거 */
+function removeOcrBlock(text: string, filename: string): string {
+  const escaped = filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = new RegExp(`\\n?\\n?\\[이미지 OCR: ${escaped}\\][\\s\\S]*?(?=\\n\\n\\[이미지 OCR:|$)`)
+  return text.replace(pattern, '').trim()
+}
+
 // 노력 수준 색상
 const effortColors: Record<string, string> = {
   quick: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
@@ -104,6 +116,11 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
     addAttachedImages,
     removeAttachedImage,
     clearAttachedImages,
+    // OCR
+    ocrStatuses,
+    extractTextFromImage,
+    setOcrStatus,
+    removeOcrStatus,
   } = useAgentsStore()
   const { projects } = useOrchestrationStore()
   const { pendingTaskInput, setPendingTaskInput } = useNavigationStore()
@@ -184,12 +201,44 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
     await executeWithWarp(analysisId, projectFilter)
   }
 
-  // Image handling
+  // Image handling + OCR
+  const triggerOcr = useCallback((file: File) => {
+    const fileKey = getFileKey(file)
+    setOcrStatus(fileKey, 'processing')
+
+    extractTextFromImage(file).then(text => {
+      if (text !== null && text.trim().length > 0) {
+        setTaskInput(prev => `${prev}\n\n[이미지 OCR: ${file.name}]\n${text.trim()}`)
+        setOcrStatus(fileKey, 'done')
+      } else if (text !== null) {
+        // 텍스트 없는 이미지 - 에러 아닌 정상 완료
+        setOcrStatus(fileKey, 'done')
+      } else {
+        setOcrStatus(fileKey, 'error')
+      }
+    })
+  }, [extractTextFromImage, setOcrStatus])
+
   const handleImageFiles = useCallback((files: FileList | File[]) => {
     const validFiles = Array.from(files).filter(f => ALLOWED_IMAGE_TYPES.includes(f.type))
     if (validFiles.length === 0) return
     addAttachedImages(validFiles)
-  }, [addAttachedImages])
+
+    // 각 비-SVG 이미지에 대해 비동기 OCR 실행
+    for (const file of validFiles) {
+      if (file.type === 'image/svg+xml') continue
+      triggerOcr(file)
+    }
+  }, [addAttachedImages, triggerOcr])
+
+  const handleRemoveImage = useCallback((idx: number) => {
+    const file = attachedImages[idx]
+    if (file) {
+      removeOcrStatus(getFileKey(file))
+      setTaskInput(prev => removeOcrBlock(prev, file.name))
+    }
+    removeAttachedImage(idx)
+  }, [attachedImages, removeAttachedImage, removeOcrStatus])
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const items = e.clipboardData.items
@@ -285,29 +334,55 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
             {/* Image Previews */}
             {attachedImages.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
-                {attachedImages.map((file, idx) => (
-                  <div
-                    key={`${file.name}-${idx}`}
-                    className="relative group w-16 h-16 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-800"
-                  >
-                    <img
-                      src={URL.createObjectURL(file)}
-                      alt={file.name}
-                      className="w-full h-full object-cover"
-                      onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
-                    />
-                    <button
-                      onClick={() => removeAttachedImage(idx)}
-                      className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                      title="이미지 제거"
+                {attachedImages.map((file, idx) => {
+                  const ocrStatus = ocrStatuses[getFileKey(file)]
+                  return (
+                    <div
+                      key={`${file.name}-${idx}`}
+                      className="relative group w-16 h-16 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-800"
                     >
-                      <X className="w-3 h-3" />
-                    </button>
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[8px] px-1 truncate">
-                      {file.name}
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={file.name}
+                        className="w-full h-full object-cover"
+                        onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
+                      />
+                      <button
+                        onClick={() => handleRemoveImage(idx)}
+                        className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                        title="이미지 제거"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[8px] px-1 truncate">
+                        {file.name}
+                      </div>
+                      {/* OCR 상태 오버레이 */}
+                      {ocrStatus === 'processing' && (
+                        <div className="absolute bottom-0 right-0 p-0.5 bg-blue-500 rounded-tl-md" title="OCR 처리 중...">
+                          <Loader2 className="w-3 h-3 text-white animate-spin" />
+                        </div>
+                      )}
+                      {ocrStatus === 'done' && (
+                        <div className="absolute bottom-0 right-0 p-0.5 bg-green-500 rounded-tl-md" title="OCR 완료">
+                          <CheckCircle2 className="w-3 h-3 text-white" />
+                        </div>
+                      )}
+                      {ocrStatus === 'error' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            triggerOcr(file)
+                          }}
+                          className="absolute bottom-0 right-0 p-0.5 bg-red-500 rounded-tl-md hover:bg-red-600 transition-colors"
+                          title="OCR 실패 - 클릭하여 재시도"
+                        >
+                          <AlertCircle className="w-3 h-3 text-white" />
+                        </button>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
 
@@ -346,7 +421,14 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
                 </button>
                 {attachedImages.length > 0 && (
                   <button
-                    onClick={clearAttachedImages}
+                    onClick={() => {
+                      setTaskInput(prev => {
+                        let text = prev
+                        for (const file of attachedImages) text = removeOcrBlock(text, file.name)
+                        return text
+                      })
+                      clearAttachedImages()
+                    }}
                     className="text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                   >
                     전체 삭제

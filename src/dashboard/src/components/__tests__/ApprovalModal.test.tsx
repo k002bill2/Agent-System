@@ -2,13 +2,16 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { ApprovalModal, ApprovalBanner } from '../ApprovalModal'
 
-// Mock the orchestration store
+// Mock the orchestration store with selector support
 vi.mock('@/stores/orchestration', () => ({
-  useOrchestrationStore: vi.fn(() => ({
-    approveOperation: vi.fn(),
-    denyOperation: vi.fn(),
-    pendingApprovals: {},
-  })),
+  useOrchestrationStore: vi.fn((selector?: (state: Record<string, unknown>) => unknown) => {
+    const state = {
+      approveOperation: vi.fn(),
+      denyOperation: vi.fn(),
+      pendingApprovals: {},
+    }
+    return selector ? selector(state) : state
+  }),
 }))
 
 import { useOrchestrationStore } from '@/stores/orchestration'
@@ -30,11 +33,14 @@ describe('ApprovalModal', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(useOrchestrationStore).mockReturnValue({
+    const state = {
       approveOperation: mockApproveOperation,
       denyOperation: mockDenyOperation,
       pendingApprovals: {},
-    } as unknown as ReturnType<typeof useOrchestrationStore>)
+    }
+    vi.mocked(useOrchestrationStore).mockImplementation(
+      ((selector?: (s: typeof state) => unknown) => selector ? selector(state) : state) as typeof useOrchestrationStore
+    )
   })
 
   it('renders approval modal with correct info', () => {
@@ -126,25 +132,31 @@ describe('ApprovalBanner', () => {
   })
 
   it('returns null when no pending approvals', () => {
-    vi.mocked(useOrchestrationStore).mockReturnValue({
+    const bannerState = {
       approveOperation: vi.fn(),
       denyOperation: vi.fn(),
       pendingApprovals: {},
-    } as unknown as ReturnType<typeof useOrchestrationStore>)
+    }
+    vi.mocked(useOrchestrationStore).mockImplementation(
+      ((selector?: (s: typeof bannerState) => unknown) => selector ? selector(bannerState) : bannerState) as typeof useOrchestrationStore
+    )
 
     const { container } = render(<ApprovalBanner />)
     expect(container.firstChild).toBeNull()
   })
 
   it('shows banner with pending approval count', () => {
-    vi.mocked(useOrchestrationStore).mockReturnValue({
+    const s = {
       approveOperation: vi.fn(),
       denyOperation: vi.fn(),
       pendingApprovals: {
         'approval-1': { ...mockApproval, status: 'pending' },
         'approval-2': { ...mockApproval, approval_id: 'approval-2', status: 'pending' },
       },
-    } as unknown as ReturnType<typeof useOrchestrationStore>)
+    }
+    vi.mocked(useOrchestrationStore).mockImplementation(
+      ((sel?: (st: typeof s) => unknown) => sel ? sel(s) : s) as typeof useOrchestrationStore
+    )
 
     render(<ApprovalBanner />)
 
@@ -153,13 +165,16 @@ describe('ApprovalBanner', () => {
   })
 
   it('shows singular text for one approval', () => {
-    vi.mocked(useOrchestrationStore).mockReturnValue({
+    const s = {
       approveOperation: vi.fn(),
       denyOperation: vi.fn(),
       pendingApprovals: {
         'approval-1': { ...mockApproval, status: 'pending' },
       },
-    } as unknown as ReturnType<typeof useOrchestrationStore>)
+    }
+    vi.mocked(useOrchestrationStore).mockImplementation(
+      ((sel?: (st: typeof s) => unknown) => sel ? sel(s) : s) as typeof useOrchestrationStore
+    )
 
     render(<ApprovalBanner />)
 
@@ -167,13 +182,16 @@ describe('ApprovalBanner', () => {
   })
 
   it('opens modal when Review clicked', () => {
-    vi.mocked(useOrchestrationStore).mockReturnValue({
+    const s = {
       approveOperation: vi.fn(),
       denyOperation: vi.fn(),
       pendingApprovals: {
         'approval-1': { ...mockApproval, status: 'pending' },
       },
-    } as unknown as ReturnType<typeof useOrchestrationStore>)
+    }
+    vi.mocked(useOrchestrationStore).mockImplementation(
+      ((sel?: (st: typeof s) => unknown) => sel ? sel(s) : s) as typeof useOrchestrationStore
+    )
 
     render(<ApprovalBanner />)
 
@@ -183,14 +201,17 @@ describe('ApprovalBanner', () => {
   })
 
   it('excludes non-pending approvals from count', () => {
-    vi.mocked(useOrchestrationStore).mockReturnValue({
+    const s = {
       approveOperation: vi.fn(),
       denyOperation: vi.fn(),
       pendingApprovals: {
         'approval-1': { ...mockApproval, status: 'pending' },
         'approval-2': { ...mockApproval, approval_id: 'approval-2', status: 'approved' },
       },
-    } as unknown as ReturnType<typeof useOrchestrationStore>)
+    }
+    vi.mocked(useOrchestrationStore).mockImplementation(
+      ((sel?: (st: typeof s) => unknown) => sel ? sel(s) : s) as typeof useOrchestrationStore
+    )
 
     render(<ApprovalBanner />)
 
