@@ -125,7 +125,10 @@ async def _get_db_filtered_projects(monitor) -> list:
     filtered = []
     seen_paths = set()
     for discovered in all_discovered:
-        if discovered.project_name in db_project_names or discovered.project_path in db_project_paths:
+        if (
+            discovered.project_name in db_project_names
+            or discovered.project_path in db_project_paths
+        ):
             if discovered.project_path not in seen_paths:
                 filtered.append(discovered)
                 seen_paths.add(discovered.project_path)

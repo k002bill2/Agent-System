@@ -5,7 +5,6 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import get_db
-from services.audit_service import AuditAction, AuditService, ResourceType
 from models.notification import (
     NotificationChannel,
     NotificationEventType,
@@ -14,6 +13,7 @@ from models.notification import (
     NotificationRuleCreate,
     NotificationRuleUpdate,
 )
+from services.audit_service import AuditAction, AuditService, ResourceType
 from services.notification_service import USE_DATABASE, NotificationService
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])

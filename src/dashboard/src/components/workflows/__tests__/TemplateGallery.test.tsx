@@ -2,6 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { TemplateGallery } from '../TemplateGallery'
 
+vi.mock('@/stores/projects', () => ({
+  useProjectsStore: () => ({
+    projects: [
+      { id: 'p1', name: 'Test Project', description: '', status: 'active' },
+    ],
+    fetchProjects: vi.fn(),
+  }),
+}))
+
 const mockTemplates = [
   { id: 't1', name: 'Python CI', description: 'Python lint and test', category: 'ci', tags: ['python', 'pytest'], yaml_content: 'name: CI', icon: 'code', popularity: 10 },
   { id: 't2', name: 'Deploy', description: 'Production deploy', category: 'deploy', tags: ['docker'], yaml_content: 'name: Deploy', icon: 'rocket', popularity: 5 },

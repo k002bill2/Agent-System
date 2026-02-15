@@ -3,7 +3,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from services.audit_service import AuditAction, AuditService, ResourceType
 from models.llm_router import (
     LLMHealthCheck,
     LLMProviderConfig,
@@ -15,6 +14,7 @@ from models.llm_router import (
     LLMRoutingStats,
     LLMRoutingStrategy,
 )
+from services.audit_service import AuditAction, AuditService, ResourceType
 from services.llm_router_service import LLMRouterService
 
 router = APIRouter(prefix="/llm-router", tags=["llm-router"])
@@ -207,7 +207,10 @@ async def update_router_config(data: UpdateRouterConfig):
         action=AuditAction.LLM_PROVIDER_CHANGED,
         resource_type=ResourceType.LLM_PROVIDER,
         resource_id="router_config",
-        metadata={"operation": "config_updated", "strategy": config.strategy.value if config.strategy else None},
+        metadata={
+            "operation": "config_updated",
+            "strategy": config.strategy.value if config.strategy else None,
+        },
     )
     return config
 
