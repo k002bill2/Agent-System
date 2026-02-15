@@ -303,6 +303,9 @@ class AuditLogModel(Base):
     new_value = Column(JSONB, nullable=True)  # New state
     changes = Column(JSONB, nullable=True)  # Diff of changes
 
+    # Project scope
+    project_id = Column(String(36), nullable=True, index=True)
+
     # Context
     agent_id = Column(String(100), nullable=True, index=True)
     ip_address = Column(String(45), nullable=True)  # IPv6 compatible
@@ -340,6 +343,7 @@ class AuditLogModel(Base):
         Index("ix_audit_user_action", "user_id", "action"),
         Index("ix_audit_resource", "resource_type", "resource_id"),
         Index("ix_audit_created_action", "created_at", "action"),
+        Index("ix_audit_project_action", "project_id", "action"),
         Index("ix_audit_classification", "data_classification"),
         Index("ix_audit_expires", "expires_at"),
     )

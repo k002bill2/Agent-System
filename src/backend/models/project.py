@@ -72,7 +72,8 @@ class Project(BaseModel):
         if package_json.exists():
             try:
                 pkg = json.loads(package_json.read_text())
-                name = pkg.get("name", name)
+                # Note: pkg "name" is npm package name, NOT project display name
+                # Only use description as fallback
                 description = pkg.get("description", "")
             except json.JSONDecodeError:
                 pass

@@ -61,6 +61,26 @@ class AuditAction(str, Enum):
     USER_LOGIN = "user_login"
     USER_LOGOUT = "user_logout"
     TOKEN_REFRESHED = "token_refreshed"
+    USER_REGISTERED = "user_registered"
+    LOGIN_FAILED = "login_failed"
+
+    # Project actions
+    PROJECT_CREATED = "project_created"
+    PROJECT_UPDATED = "project_updated"
+    PROJECT_DELETED = "project_deleted"
+
+    # Config actions (skills, agents, MCP, hooks, commands)
+    CONFIG_CREATED = "config_created"
+    CONFIG_UPDATED = "config_updated"
+    CONFIG_DELETED = "config_deleted"
+
+    # Notification actions
+    NOTIFICATION_RULE_CREATED = "notification_rule_created"
+    NOTIFICATION_RULE_UPDATED = "notification_rule_updated"
+    NOTIFICATION_RULE_DELETED = "notification_rule_deleted"
+
+    # LLM Router actions
+    LLM_PROVIDER_CHANGED = "llm_provider_changed"
 
 
 class ResourceType(str, Enum):
@@ -73,6 +93,10 @@ class ResourceType(str, Enum):
     USER = "user"
     PERMISSION = "permission"
     TOOL = "tool"
+    PROJECT = "project"
+    CONFIG = "config"
+    NOTIFICATION = "notification"
+    LLM_PROVIDER = "llm_provider"
 
 
 class AuditLogEntry(BaseModel):
@@ -81,6 +105,7 @@ class AuditLogEntry(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str | None = None
     user_id: str | None = None
+    project_id: str | None = None
 
     action: AuditAction
     resource_type: ResourceType
@@ -114,6 +139,7 @@ class AuditLogFilter(BaseModel):
 
     session_id: str | None = None
     user_id: str | None = None
+    project_id: str | None = None
     action: AuditAction | None = None
     resource_type: ResourceType | None = None
     resource_id: str | None = None
@@ -189,6 +215,7 @@ class AuditService:
         resource_id: str | None = None,
         session_id: str | None = None,
         user_id: str | None = None,
+        project_id: str | None = None,
         agent_id: str | None = None,
         old_value: dict | None = None,
         new_value: dict | None = None,
@@ -213,6 +240,7 @@ class AuditService:
         entry = AuditLogEntry(
             session_id=session_id,
             user_id=user_id,
+            project_id=project_id,
             action=action,
             resource_type=resource_type,
             resource_id=resource_id,
@@ -283,6 +311,7 @@ class AuditService:
                     id=entry.id,
                     session_id=entry.session_id,
                     user_id=entry.user_id,
+                    project_id=entry.project_id,
                     action=entry.action.value,
                     resource_type=entry.resource_type.value,
                     resource_id=entry.resource_id,
@@ -320,6 +349,7 @@ class AuditService:
         resource_id: str | None = None,
         session_id: str | None = None,
         user_id: str | None = None,
+        project_id: str | None = None,
         agent_id: str | None = None,
         old_value: dict | None = None,
         new_value: dict | None = None,
@@ -348,6 +378,7 @@ class AuditService:
             id=entry_id,
             session_id=session_id,
             user_id=user_id,
+            project_id=project_id,
             action=action.value,
             resource_type=resource_type.value,
             resource_id=resource_id,
@@ -374,6 +405,7 @@ class AuditService:
             id=entry_id,
             session_id=session_id,
             user_id=user_id,
+            project_id=project_id,
             action=action,
             resource_type=resource_type,
             resource_id=resource_id,
@@ -403,6 +435,9 @@ class AuditService:
 
         if filter.user_id:
             results = [r for r in results if r.user_id == filter.user_id]
+
+        if filter.project_id:
+            results = [r for r in results if r.project_id == filter.project_id]
 
         if filter.action:
             results = [r for r in results if r.action == filter.action]
@@ -451,6 +486,9 @@ class AuditService:
         if filter.user_id:
             conditions.append(AuditLogModel.user_id == filter.user_id)
 
+        if filter.project_id:
+            conditions.append(AuditLogModel.project_id == filter.project_id)
+
         if filter.action:
             conditions.append(AuditLogModel.action == filter.action.value)
 
@@ -494,6 +532,7 @@ class AuditService:
                     id=row.id,
                     session_id=row.session_id,
                     user_id=row.user_id,
+                    project_id=getattr(row, "project_id", None),
                     action=AuditAction(row.action),
                     resource_type=ResourceType(row.resource_type),
                     resource_id=row.resource_id,
@@ -547,6 +586,7 @@ class AuditService:
             id=row.id,
             session_id=row.session_id,
             user_id=row.user_id,
+            project_id=getattr(row, "project_id", None),
             action=AuditAction(row.action),
             resource_type=ResourceType(row.resource_type),
             resource_id=row.resource_id,
@@ -745,4 +785,56 @@ def audit_approval(
         session_id=session_id,
         user_id=user_id,
         metadata={"note": note} if note else None,
+    )
+
+
+def audit_user_auth(
+    action: AuditAction,
+    user_id: str | None = None,
+    metadata: dict | None = None,
+    status: str = "success",
+    error_message: str | None = None,
+) -> AuditLogEntry:
+    """Log authentication event (login, logout, register, token refresh)."""
+    return AuditService.log(
+        action=action,
+        resource_type=ResourceType.USER,
+        resource_id=user_id,
+        user_id=user_id,
+        metadata=metadata or {},
+        status=status,
+        error_message=error_message,
+    )
+
+
+def audit_config_change(
+    action: AuditAction,
+    config_type: str,
+    config_id: str,
+    project_id: str | None = None,
+    user_id: str | None = None,
+) -> AuditLogEntry:
+    """Log configuration change (skill, agent, MCP, hook, command)."""
+    return AuditService.log(
+        action=action,
+        resource_type=ResourceType.CONFIG,
+        resource_id=config_id,
+        user_id=user_id,
+        project_id=project_id,
+        metadata={"config_type": config_type},
+    )
+
+
+def audit_project_change(
+    action: AuditAction,
+    project_id: str,
+    user_id: str | None = None,
+) -> AuditLogEntry:
+    """Log project change."""
+    return AuditService.log(
+        action=action,
+        resource_type=ResourceType.PROJECT,
+        resource_id=project_id,
+        user_id=user_id,
+        project_id=project_id,
     )

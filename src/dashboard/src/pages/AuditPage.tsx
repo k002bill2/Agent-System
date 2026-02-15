@@ -18,8 +18,9 @@ import { useOrchestrationStore } from '../stores/orchestration'
 import { cn } from '../lib/utils'
 
 export function AuditPage() {
-  const { sessionId } = useOrchestrationStore()
+  const { sessionId, projects, fetchProjects } = useOrchestrationStore()
   const [filterBySession, setFilterBySession] = useState(false)
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('')
   const isFirstMount = useRef(true)
 
   const {
@@ -36,25 +37,34 @@ export function AuditPage() {
   useEffect(() => {
     fetchLogs()
     fetchStats()
+    if (projects.length === 0) fetchProjects()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Handle session filter toggle - skip first mount
+  // Handle session/project filter toggle - skip first mount
   useEffect(() => {
     if (isFirstMount.current) {
       isFirstMount.current = false
       return
     }
 
+    const newFilter: Record<string, string> = {}
     if (filterBySession && sessionId) {
-      setFilter({ session_id: sessionId })
-      fetchStats(sessionId)
+      newFilter.session_id = sessionId
+    }
+    if (selectedProjectId) {
+      newFilter.project_id = selectedProjectId
+    }
+
+    if (Object.keys(newFilter).length > 0) {
+      setFilter(newFilter)
+      fetchStats(filterBySession ? sessionId || undefined : undefined)
     } else {
       clearFilter()
       fetchStats()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterBySession, sessionId])
+  }, [filterBySession, sessionId, selectedProjectId])
 
   const handleRefresh = () => {
     refresh()
@@ -74,6 +84,18 @@ export function AuditPage() {
         </div>
 
         <div className="flex items-center gap-4">
+          {/* Project filter */}
+          <select
+            value={selectedProjectId}
+            onChange={(e) => setSelectedProjectId(e.target.value)}
+            className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+          >
+            <option value="">All Projects</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+
           {/* Refresh button */}
           <button
             onClick={handleRefresh}
@@ -86,7 +108,7 @@ export function AuditPage() {
             )} />
           </button>
 
-          {/* Filter toggle */}
+          {/* Session filter toggle */}
           {sessionId && (
             <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
               <input
@@ -198,6 +220,7 @@ export function AuditPage() {
       {/* Audit Log Table */}
       <AuditLogTable
         sessionId={filterBySession ? sessionId || undefined : undefined}
+        projectId={selectedProjectId || undefined}
         className="shadow-sm"
       />
     </div>

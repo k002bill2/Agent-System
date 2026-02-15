@@ -66,6 +66,7 @@ import { cn } from '@/lib/utils';
 | `AuditPage` | `/audit` | 감사 로그 뷰어 |
 | `NotificationsPage` | `/notifications` | 알림 규칙/채널 설정 |
 | `PlaygroundPage` | `/playground` | 에이전트 테스트 환경 |
+| `ProjectManagementPage` | `/project-management` | DB 기반 프로젝트 레지스트리 관리 (CRUD, soft-delete, 복원) |
 | `OrganizationsPage` | `/organizations` | 조직 관리 (멤버, 역할, 통계) |
 | `WorkflowsPage` | `/workflows` | 워크플로우 자동화 (CI/CD 파이프라인 관리) |
 | `AdminPage` | `/admin` | 관리자 페이지 (사용자 관리, 메뉴 설정, 시스템 정보) |
@@ -295,7 +296,7 @@ import { cn } from '@/lib/utils';
 |-------|------|------|
 | `useOrchestration` | `orchestration.ts` | 세션/태스크 관리, WebSocket 연결 |
 | `useProjects` | `projects.ts` | 프로젝트 목록 및 상태 |
-| `useProjectConfigs` | `projectConfigs.ts` | 프로젝트 설정 (Skills, Agents, MCP, Hooks) + DB 프로젝트 CRUD |
+| `useProjectConfigs` | `projectConfigs.ts` | 프로젝트 설정 (Skills, Agents, MCP, Hooks) + DB 프로젝트 CRUD (fetchDBProjects, createDBProject, updateDBProject, deleteDBProject, restoreDBProject) |
 | `useAgents` | `agents.ts` | 에이전트 레지스트리 |
 | `useTasks` | `tasks.ts` | 태스크 관리 |
 | `useFeedback` | `feedback.ts` | RLHF 피드백 |
@@ -360,7 +361,7 @@ export const useStore = create<State>((set, get) => ({
 ```
 src/dashboard/
 ├── src/
-│   ├── pages/                  # 페이지 컴포넌트 (19개)
+│   ├── pages/                  # 페이지 컴포넌트 (20개)
 │   │   ├── DashboardPage.tsx
 │   │   ├── ProjectsPage.tsx
 │   │   ├── ProjectConfigsPage.tsx
@@ -375,6 +376,7 @@ src/dashboard/
 │   │   ├── NotificationsPage.tsx
 │   │   ├── PlaygroundPage.tsx
 │   │   ├── OrganizationsPage.tsx
+│   │   ├── ProjectManagementPage.tsx
 │   │   ├── SettingsPage.tsx
 │   │   ├── LoginPage.tsx
 │   │   ├── RegisterPage.tsx

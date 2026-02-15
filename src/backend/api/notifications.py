@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import get_db
+from services.audit_service import AuditAction, AuditService, ResourceType
 from models.notification import (
     NotificationChannel,
     NotificationEventType,
@@ -47,8 +48,16 @@ async def get_rule(rule_id: str, db: AsyncSession = Depends(get_db)):
 async def create_rule(data: NotificationRuleCreate, db: AsyncSession = Depends(get_db)):
     """Create a new notification rule."""
     if USE_DATABASE:
-        return await NotificationService.create_rule_async(db, data)
-    return NotificationService.create_rule(data)
+        rule = await NotificationService.create_rule_async(db, data)
+    else:
+        rule = NotificationService.create_rule(data)
+    AuditService.log(
+        action=AuditAction.NOTIFICATION_RULE_CREATED,
+        resource_type=ResourceType.NOTIFICATION,
+        resource_id=rule.id,
+        metadata={"name": rule.name, "event_type": rule.event_type.value},
+    )
+    return rule
 
 
 @router.put("/rules/{rule_id}", response_model=NotificationRule)
@@ -62,6 +71,11 @@ async def update_rule(
         rule = NotificationService.update_rule(rule_id, data)
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
+    AuditService.log(
+        action=AuditAction.NOTIFICATION_RULE_UPDATED,
+        resource_type=ResourceType.NOTIFICATION,
+        resource_id=rule_id,
+    )
     return rule
 
 
@@ -74,6 +88,11 @@ async def delete_rule(rule_id: str, db: AsyncSession = Depends(get_db)):
         success = NotificationService.delete_rule(rule_id)
     if not success:
         raise HTTPException(status_code=404, detail="Rule not found")
+    AuditService.log(
+        action=AuditAction.NOTIFICATION_RULE_DELETED,
+        resource_type=ResourceType.NOTIFICATION,
+        resource_id=rule_id,
+    )
     return {"success": True, "message": "Rule deleted"}
 
 
@@ -88,15 +107,22 @@ async def toggle_rule(rule_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Rule not found")
 
     # Toggle and save
+    new_enabled = not rule.enabled
     if USE_DATABASE:
         from models.notification import NotificationRuleUpdate
 
         await NotificationService.update_rule_async(
-            db, rule_id, NotificationRuleUpdate(enabled=not rule.enabled)
+            db, rule_id, NotificationRuleUpdate(enabled=new_enabled)
         )
     else:
-        rule.enabled = not rule.enabled
-    return {"success": True, "enabled": not rule.enabled}
+        rule.enabled = new_enabled
+    AuditService.log(
+        action=AuditAction.NOTIFICATION_RULE_UPDATED,
+        resource_type=ResourceType.NOTIFICATION,
+        resource_id=rule_id,
+        metadata={"toggled": True, "enabled": new_enabled},
+    )
+    return {"success": True, "enabled": new_enabled}
 
 
 # ─────────────────────────────────────────────────────────────

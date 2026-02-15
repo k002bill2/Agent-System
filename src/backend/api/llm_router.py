@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from services.audit_service import AuditAction, AuditService, ResourceType
 from models.llm_router import (
     LLMHealthCheck,
     LLMProviderConfig,
@@ -39,6 +40,12 @@ async def list_providers():
 async def create_provider(data: LLMProviderConfigCreate):
     """Create a new LLM provider configuration."""
     provider = LLMRouterService.create_provider(data)
+    AuditService.log(
+        action=AuditAction.LLM_PROVIDER_CHANGED,
+        resource_type=ResourceType.LLM_PROVIDER,
+        resource_id=provider.id,
+        metadata={"operation": "created", "provider": provider.provider, "name": provider.name},
+    )
     # Mask API key in response
     if provider.api_key:
         provider.api_key = "***" + provider.api_key[-4:] if len(provider.api_key) > 4 else "***"
@@ -63,6 +70,12 @@ async def update_provider(provider_id: str, data: LLMProviderConfigUpdate):
     provider = LLMRouterService.update_provider(provider_id, data)
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
+    AuditService.log(
+        action=AuditAction.LLM_PROVIDER_CHANGED,
+        resource_type=ResourceType.LLM_PROVIDER,
+        resource_id=provider_id,
+        metadata={"operation": "updated", "provider": provider.provider},
+    )
     # Mask API key in response
     if provider.api_key:
         provider.api_key = "***" + provider.api_key[-4:] if len(provider.api_key) > 4 else "***"
@@ -74,6 +87,12 @@ async def delete_provider(provider_id: str):
     """Delete an LLM provider."""
     if not LLMRouterService.delete_provider(provider_id):
         raise HTTPException(status_code=404, detail="Provider not found")
+    AuditService.log(
+        action=AuditAction.LLM_PROVIDER_CHANGED,
+        resource_type=ResourceType.LLM_PROVIDER,
+        resource_id=provider_id,
+        metadata={"operation": "deleted"},
+    )
     return {"success": True, "message": "Provider deleted"}
 
 
@@ -87,6 +106,12 @@ async def toggle_provider(provider_id: str):
     updated = LLMRouterService.update_provider(
         provider_id,
         LLMProviderConfigUpdate(enabled=not provider.enabled),
+    )
+    AuditService.log(
+        action=AuditAction.LLM_PROVIDER_CHANGED,
+        resource_type=ResourceType.LLM_PROVIDER,
+        resource_id=provider_id,
+        metadata={"operation": "toggled", "enabled": updated.enabled if updated else False},
     )
     return {"success": True, "enabled": updated.enabled if updated else False}
 
@@ -169,7 +194,7 @@ class UpdateRouterConfig(BaseModel):
 @router.patch("/config", response_model=LLMRouterConfig)
 async def update_router_config(data: UpdateRouterConfig):
     """Update the router configuration."""
-    return LLMRouterService.update_router_config(
+    config = LLMRouterService.update_router_config(
         strategy=data.strategy,
         health_check_interval_seconds=data.health_check_interval_seconds,
         auto_failover=data.auto_failover,
@@ -178,6 +203,13 @@ async def update_router_config(data: UpdateRouterConfig):
         enable_fallback=data.enable_fallback,
         fallback_providers=data.fallback_providers,
     )
+    AuditService.log(
+        action=AuditAction.LLM_PROVIDER_CHANGED,
+        resource_type=ResourceType.LLM_PROVIDER,
+        resource_id="router_config",
+        metadata={"operation": "config_updated", "strategy": config.strategy.value if config.strategy else None},
+    )
+    return config
 
 
 # ─────────────────────────────────────────────────────────────

@@ -18,6 +18,7 @@ export interface AuditLogEntry {
   id: string
   session_id: string | null
   user_id: string | null
+  project_id: string | null
   action: string
   resource_type: string
   resource_id: string | null
@@ -43,6 +44,7 @@ export interface AuditLogResponse {
 export interface AuditLogFilter {
   session_id?: string
   user_id?: string
+  project_id?: string
   action?: string
   resource_type?: string
   status?: string
@@ -52,6 +54,7 @@ export interface AuditLogFilter {
 
 interface AuditLogTableProps {
   sessionId?: string
+  projectId?: string
   className?: string
 }
 
@@ -74,6 +77,11 @@ const actionColors: Record<string, string> = {
   granted: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
   denied: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
   executed: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+  login: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
+  logout: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400',
+  registered: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  refreshed: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+  changed: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
 }
 
 function getActionColor(action: string): string {
@@ -85,7 +93,12 @@ function getActionColor(action: string): string {
   return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400'
 }
 
-export function AuditLogTable({ sessionId, className }: AuditLogTableProps) {
+interface FilterOption {
+  value: string
+  label: string
+}
+
+export function AuditLogTable({ sessionId, projectId, className }: AuditLogTableProps) {
   const [logs, setLogs] = useState<AuditLogEntry[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -94,7 +107,21 @@ export function AuditLogTable({ sessionId, className }: AuditLogTableProps) {
   const [filter, setFilter] = useState<AuditLogFilter>({})
   const [showFilters, setShowFilters] = useState(false)
   const [page, setPage] = useState(0)
+  const [availableActions, setAvailableActions] = useState<FilterOption[]>([])
+  const [availableResourceTypes, setAvailableResourceTypes] = useState<FilterOption[]>([])
   const pageSize = 20
+
+  // Fetch filter options from API
+  useEffect(() => {
+    fetch('/api/audit/actions')
+      .then((r) => r.json())
+      .then((d) => setAvailableActions(d.actions || []))
+      .catch(() => {})
+    fetch('/api/audit/resource-types')
+      .then((r) => r.json())
+      .then((d) => setAvailableResourceTypes(d.resource_types || []))
+      .catch(() => {})
+  }, [])
 
   const fetchLogs = useCallback(async () => {
     setLoading(true)
@@ -103,6 +130,7 @@ export function AuditLogTable({ sessionId, className }: AuditLogTableProps) {
     try {
       const params = new URLSearchParams()
       if (sessionId) params.set('session_id', sessionId)
+      if (projectId) params.set('project_id', projectId)
       if (filter.action) params.set('action', filter.action)
       if (filter.resource_type) params.set('resource_type', filter.resource_type)
       if (filter.status) params.set('status', filter.status)
@@ -122,7 +150,7 @@ export function AuditLogTable({ sessionId, className }: AuditLogTableProps) {
     } finally {
       setLoading(false)
     }
-  }, [sessionId, filter, page])
+  }, [sessionId, projectId, filter, page])
 
   useEffect(() => {
     fetchLogs()
@@ -144,6 +172,7 @@ export function AuditLogTable({ sessionId, className }: AuditLogTableProps) {
     const params = new URLSearchParams()
     params.set('format', format)
     if (sessionId) params.set('session_id', sessionId)
+    if (projectId) params.set('project_id', projectId)
     if (filter.action) params.set('action', filter.action)
     if (filter.resource_type) params.set('resource_type', filter.resource_type)
 
@@ -200,12 +229,9 @@ export function AuditLogTable({ sessionId, className }: AuditLogTableProps) {
               className="px-3 py-2 text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
             >
               <option value="">All Actions</option>
-              <option value="task_created">Task Created</option>
-              <option value="task_completed">Task Completed</option>
-              <option value="task_failed">Task Failed</option>
-              <option value="tool_executed">Tool Executed</option>
-              <option value="approval_granted">Approval Granted</option>
-              <option value="approval_denied">Approval Denied</option>
+              {availableActions.map((a) => (
+                <option key={a.value} value={a.value}>{a.label}</option>
+              ))}
             </select>
             <select
               value={filter.resource_type || ''}
@@ -213,11 +239,9 @@ export function AuditLogTable({ sessionId, className }: AuditLogTableProps) {
               className="px-3 py-2 text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
             >
               <option value="">All Resources</option>
-              <option value="session">Session</option>
-              <option value="task">Task</option>
-              <option value="approval">Approval</option>
-              <option value="agent">Agent</option>
-              <option value="tool">Tool</option>
+              {availableResourceTypes.map((rt) => (
+                <option key={rt.value} value={rt.value}>{rt.label}</option>
+              ))}
             </select>
             <select
               value={filter.status || ''}

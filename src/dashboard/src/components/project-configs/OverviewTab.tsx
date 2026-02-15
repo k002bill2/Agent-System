@@ -6,6 +6,11 @@ export function OverviewTab() {
   const { selectedProject, isLoadingProject, removeProject, selectProject } = useProjectConfigsStore()
   const [isRemoving, setIsRemoving] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({})
+
+  const toggleSection = (section: string) => {
+    setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }))
+  }
 
   if (isLoadingProject) {
     return (
@@ -119,7 +124,7 @@ export function OverviewTab() {
             Skills
           </h3>
           <div className="space-y-2">
-            {skills.slice(0, 5).map((skill) => (
+            {(expandedSections.skills ? skills : skills.slice(0, 5)).map((skill) => (
               <div
                 key={skill.skill_id}
                 className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2"
@@ -133,7 +138,12 @@ export function OverviewTab() {
               </div>
             ))}
             {skills.length > 5 && (
-              <p className="text-xs text-gray-500">+{skills.length - 5} more</p>
+              <button
+                onClick={() => toggleSection('skills')}
+                className="text-xs text-primary-500 hover:text-primary-400 cursor-pointer transition-colors"
+              >
+                {expandedSections.skills ? 'Show less' : `+${skills.length - 5} more`}
+              </button>
             )}
             {skills.length === 0 && (
               <p className="text-sm text-gray-500">No skills found</p>
@@ -148,7 +158,7 @@ export function OverviewTab() {
             Agents
           </h3>
           <div className="space-y-2">
-            {agents.slice(0, 5).map((agent) => (
+            {(expandedSections.agents ? agents : agents.slice(0, 5)).map((agent) => (
               <div
                 key={agent.agent_id}
                 className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2"
@@ -167,7 +177,12 @@ export function OverviewTab() {
               </div>
             ))}
             {agents.length > 5 && (
-              <p className="text-xs text-gray-500">+{agents.length - 5} more</p>
+              <button
+                onClick={() => toggleSection('agents')}
+                className="text-xs text-primary-500 hover:text-primary-400 cursor-pointer transition-colors"
+              >
+                {expandedSections.agents ? 'Show less' : `+${agents.length - 5} more`}
+              </button>
             )}
             {agents.length === 0 && (
               <p className="text-sm text-gray-500">No agents found</p>
@@ -182,7 +197,7 @@ export function OverviewTab() {
             Commands
           </h3>
           <div className="space-y-2">
-            {commands.slice(0, 5).map((cmd) => (
+            {(expandedSections.commands ? commands : commands.slice(0, 5)).map((cmd) => (
               <div
                 key={cmd.command_id}
                 className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2"
@@ -196,7 +211,12 @@ export function OverviewTab() {
               </div>
             ))}
             {commands.length > 5 && (
-              <p className="text-xs text-gray-500">+{commands.length - 5} more</p>
+              <button
+                onClick={() => toggleSection('commands')}
+                className="text-xs text-primary-500 hover:text-primary-400 cursor-pointer transition-colors"
+              >
+                {expandedSections.commands ? 'Show less' : `+${commands.length - 5} more`}
+              </button>
             )}
             {commands.length === 0 && (
               <p className="text-sm text-gray-500">No commands found</p>

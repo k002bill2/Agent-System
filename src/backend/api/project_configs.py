@@ -39,6 +39,7 @@ from models.project_config import (
     SkillCreateRequest,
     SkillUpdateRequest,
 )
+from services.audit_service import AuditAction, audit_config_change
 from services.project_config_monitor import get_project_config_monitor
 
 logger = logging.getLogger(__name__)
@@ -119,19 +120,23 @@ async def _get_db_filtered_projects(monitor) -> list:
     # Get all discovered projects from filesystem
     all_discovered = monitor.discover_projects()
 
-    # Filter: only keep projects whose name matches a DB project
-    # or whose path matches a DB project path
+    # Filter: only keep projects whose name or path matches a DB project
+    # Use seen_paths to prevent duplicates when DB name != filesystem name
     filtered = []
+    seen_paths = set()
     for discovered in all_discovered:
-        if discovered.project_name in db_project_names:
-            filtered.append(discovered)
-        elif discovered.project_path in db_project_paths:
-            filtered.append(discovered)
+        if discovered.project_name in db_project_names or discovered.project_path in db_project_paths:
+            if discovered.project_path not in seen_paths:
+                filtered.append(discovered)
+                seen_paths.add(discovered.project_path)
 
     # Also ensure DB projects with paths not yet in monitor get added
     discovered_names = {p.project_name for p in filtered}
     for db_proj in db_projects:
         if db_proj.name not in discovered_names and db_proj.path:
+            # Skip if this path was already added (matched by path in first loop)
+            if db_proj.path in seen_paths:
+                continue
             # Try to add the path and scan
             path = PathLib(db_proj.path)
             if path.exists() and path.is_dir():
@@ -141,6 +146,7 @@ async def _get_db_filtered_projects(monitor) -> list:
                 summary = monitor.get_project_summary(project_id)
                 if summary and summary.project:
                     filtered.append(summary.project)
+                    seen_paths.add(summary.project.project_path)
 
     return filtered
 
@@ -450,6 +456,7 @@ async def create_skill(project_id: str, request: SkillCreateRequest) -> SkillCon
             detail=f"Failed to create skill: {request.skill_id}. Check if project exists and skill ID is unique.",
         )
 
+    audit_config_change(AuditAction.CONFIG_CREATED, "skill", request.skill_id, project_id)
     return result
 
 
@@ -468,6 +475,7 @@ async def update_skill(project_id: str, skill_id: str, request: SkillUpdateReque
     monitor = get_project_config_monitor()
 
     if monitor.update_skill_content(project_id, skill_id, request.content):
+        audit_config_change(AuditAction.CONFIG_UPDATED, "skill", skill_id, project_id)
         return {
             "success": True,
             "message": f"Updated skill: {skill_id}",
@@ -495,6 +503,7 @@ async def delete_skill(project_id: str, skill_id: str) -> dict:
     monitor = get_project_config_monitor()
 
     if monitor.delete_skill(project_id, skill_id):
+        audit_config_change(AuditAction.CONFIG_DELETED, "skill", skill_id, project_id)
         return {
             "success": True,
             "message": f"Deleted skill: {skill_id}",
@@ -589,6 +598,7 @@ async def create_agent(project_id: str, request: AgentCreateRequest) -> AgentCon
             detail=f"Failed to create agent: {request.agent_id}. Check if project exists and agent ID is unique.",
         )
 
+    audit_config_change(AuditAction.CONFIG_CREATED, "agent", request.agent_id, project_id)
     return result
 
 
@@ -607,6 +617,7 @@ async def update_agent(project_id: str, agent_id: str, request: AgentUpdateReque
     monitor = get_project_config_monitor()
 
     if monitor.update_agent_content(project_id, agent_id, request.content):
+        audit_config_change(AuditAction.CONFIG_UPDATED, "agent", agent_id, project_id)
         return {
             "success": True,
             "message": f"Updated agent: {agent_id}",
@@ -634,6 +645,7 @@ async def delete_agent(project_id: str, agent_id: str) -> dict:
     monitor = get_project_config_monitor()
 
     if monitor.delete_agent(project_id, agent_id):
+        audit_config_change(AuditAction.CONFIG_DELETED, "agent", agent_id, project_id)
         return {
             "success": True,
             "message": f"Deleted agent: {agent_id}",
@@ -800,6 +812,7 @@ async def update_mcp_server(
             detail=f"Failed to update MCP server: {server_id}. Check if project and server exist.",
         )
 
+    audit_config_change(AuditAction.CONFIG_UPDATED, "mcp_server", server_id, project_id)
     return result
 
 
@@ -833,6 +846,7 @@ async def create_mcp_server(project_id: str, request: MCPServerCreateRequest) ->
             "Check if project exists and server ID is unique.",
         )
 
+    audit_config_change(AuditAction.CONFIG_CREATED, "mcp_server", request.server_id, project_id)
     return result
 
 
@@ -850,6 +864,7 @@ async def delete_mcp_server(project_id: str, server_id: str) -> dict:
     monitor = get_project_config_monitor()
 
     if monitor.delete_mcp_server(project_id, server_id):
+        audit_config_change(AuditAction.CONFIG_DELETED, "mcp_server", server_id, project_id)
         return {
             "success": True,
             "message": f"Deleted MCP server: {server_id}",
@@ -902,6 +917,7 @@ async def update_hooks(project_id: str, request: HooksUpdateRequest) -> dict:
     monitor = get_project_config_monitor()
 
     if monitor.update_hooks(project_id, {"hooks": request.hooks}):
+        audit_config_change(AuditAction.CONFIG_UPDATED, "hooks", "hooks.json", project_id)
         return {
             "success": True,
             "message": "Updated hooks configuration",
@@ -929,6 +945,7 @@ async def add_hook_entry(project_id: str, event: str, request: HookEntryRequest)
     monitor = get_project_config_monitor()
 
     if monitor.add_hook_entry(project_id, event, request.matcher, request.hooks):
+        audit_config_change(AuditAction.CONFIG_CREATED, "hook", event, project_id)
         return {
             "success": True,
             "message": f"Added hook entry for event: {event}",
@@ -957,6 +974,7 @@ async def delete_hook(project_id: str, event: str, index: int) -> dict:
     monitor = get_project_config_monitor()
 
     if monitor.delete_hook(project_id, event, index):
+        audit_config_change(AuditAction.CONFIG_DELETED, "hook", f"{event}[{index}]", project_id)
         return {
             "success": True,
             "message": f"Deleted hook {event}[{index}]",
@@ -1041,6 +1059,7 @@ async def create_command(project_id: str, request: CommandCreateRequest) -> Comm
             detail=f"Failed to create command: {request.command_id}. Check if project exists and command ID is unique.",
         )
 
+    audit_config_change(AuditAction.CONFIG_CREATED, "command", request.command_id, project_id)
     return result
 
 
@@ -1059,6 +1078,7 @@ async def update_command(project_id: str, command_id: str, request: CommandUpdat
     monitor = get_project_config_monitor()
 
     if monitor.update_command_content(project_id, command_id, request.content):
+        audit_config_change(AuditAction.CONFIG_UPDATED, "command", command_id, project_id)
         return {
             "success": True,
             "message": f"Updated command: {command_id}",
@@ -1086,6 +1106,7 @@ async def delete_command(project_id: str, command_id: str) -> dict:
     monitor = get_project_config_monitor()
 
     if monitor.delete_command(project_id, command_id):
+        audit_config_change(AuditAction.CONFIG_DELETED, "command", command_id, project_id)
         return {
             "success": True,
             "message": f"Deleted command: {command_id}",

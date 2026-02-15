@@ -38,10 +38,15 @@ import {
   MessageSquare,
   ChevronDown,
   ChevronRight,
+  ArrowRight,
+  GitBranch,
+  Loader2,
+  FileText,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useProjectsStore, Project } from '../stores/projects'
 import { ProjectMultiSelect } from '../components/analytics/ProjectMultiSelect'
+import type { TaskAnalysisHistory } from '../stores/agents'
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -229,6 +234,30 @@ async function fetchTaskEvalList(
   return res.json()
 }
 
+async function fetchAnalysisDetail(analysisId: string): Promise<TaskAnalysisHistory | null> {
+  try {
+    const res = await fetch(`${API_BASE}/agents/orchestrate/analyses/${analysisId}`)
+    if (!res.ok) return null
+    return res.json()
+  } catch {
+    return null
+  }
+}
+
+// Effort level colors (matches TaskAnalyzer)
+const effortColors: Record<string, string> = {
+  quick: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  medium: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+  thorough: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+}
+
+// Strategy icons (matches TaskAnalyzer)
+const strategyIcons: Record<string, typeof GitBranch> = {
+  sequential: ArrowRight,
+  parallel: Zap,
+  mixed: GitBranch,
+}
+
 async function fetchMultiProjectTrends(
   projectIds: string[],
   metric: CompareMetric,
@@ -261,6 +290,11 @@ export function AnalyticsPage() {
   const [evalList, setEvalList] = useState<TaskEvaluation[]>([])
   const [evalFilterAgent, setEvalFilterAgent] = useState<string>('')
   const [showEvalList, setShowEvalList] = useState(true)
+
+  // Expandable evaluation detail state
+  const [expandedEvalId, setExpandedEvalId] = useState<string | null>(null)
+  const [evalDetail, setEvalDetail] = useState<TaskAnalysisHistory | null>(null)
+  const [evalDetailLoading, setEvalDetailLoading] = useState(false)
 
   // Get projects from store
   const { projects, fetchProjects } = useProjectsStore()
@@ -464,111 +498,6 @@ export function AnalyticsPage() {
             color={evalStats.speed_satisfaction_rate >= 0.8 ? 'green' : 'amber'}
             subtitle="속도가 적절했다고 응답"
           />
-        </div>
-      )}
-
-      {/* Evaluation List with Comments */}
-      {evalList.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 mb-6">
-          <div
-            className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-700 cursor-pointer"
-            onClick={() => setShowEvalList(!showEvalList)}
-          >
-            <div className="flex items-center gap-2">
-              {showEvalList ? (
-                <ChevronDown className="w-4 h-4 text-gray-500" />
-              ) : (
-                <ChevronRight className="w-4 h-4 text-gray-500" />
-              )}
-              <MessageSquare className="w-4 h-4 text-blue-500" />
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-                최근 평가 ({evalList.length})
-              </h3>
-            </div>
-            {/* Agent filter */}
-            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-              <select
-                value={evalFilterAgent}
-                onChange={(e) => {
-                  setEvalFilterAgent(e.target.value)
-                  fetchTaskEvalList(e.target.value || undefined).then(setEvalList).catch(() => {})
-                }}
-                className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              >
-                <option value="">전체 에이전트</option>
-                {Array.from(new Set(evalList.map(e => e.agent_id).filter(Boolean))).map(aid => (
-                  <option key={aid} value={aid!}>{aid}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {showEvalList && (
-            <div className="divide-y divide-gray-100 dark:divide-gray-700 max-h-[400px] overflow-y-auto">
-              {evalList.map((evaluation) => (
-                <div key={evaluation.id} className="px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      {/* Rating stars */}
-                      <div className="flex items-center gap-0.5">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <Star
-                            key={star}
-                            className={cn(
-                              'w-3.5 h-3.5',
-                              star <= evaluation.rating
-                                ? 'text-yellow-500 fill-yellow-500'
-                                : 'text-gray-300 dark:text-gray-600'
-                            )}
-                          />
-                        ))}
-                      </div>
-                      {/* Accuracy / Speed badges */}
-                      <span className={cn(
-                        'text-xs px-1.5 py-0.5 rounded',
-                        evaluation.result_accuracy
-                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                          : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                      )}>
-                        {evaluation.result_accuracy ? '정확' : '부정확'}
-                      </span>
-                      <span className={cn(
-                        'text-xs px-1.5 py-0.5 rounded',
-                        evaluation.speed_satisfaction
-                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                          : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
-                      )}>
-                        {evaluation.speed_satisfaction ? '빠름' : '느림'}
-                      </span>
-                      {evaluation.agent_id && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
-                          {evaluation.agent_id}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-xs text-gray-400">
-                      {new Date(evaluation.created_at).toLocaleString('ko-KR', {
-                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-                      })}
-                    </span>
-                  </div>
-                  {evaluation.comment && (
-                    <p className="text-sm text-gray-700 dark:text-gray-300 mt-1 pl-1">
-                      "{evaluation.comment}"
-                    </p>
-                  )}
-                  {!evaluation.comment && (
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 pl-1 italic">
-                      코멘트 없음
-                    </p>
-                  )}
-                  <div className="text-xs text-gray-400 dark:text-gray-500 mt-1 pl-1 font-mono">
-                    {evaluation.task_id.slice(0, 8)}... / {evaluation.session_id.slice(0, 8)}...
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 
@@ -783,7 +712,7 @@ export function AnalyticsPage() {
       </ChartCard>
 
       {/* Model Details Table */}
-      <ChartCard title="Model Details" icon={Users}>
+      <ChartCard title="Model Details" icon={Users} className="mb-6">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -872,6 +801,167 @@ export function AnalyticsPage() {
           </table>
         </div>
       </ChartCard>
+
+      {/* Evaluation List with Comments */}
+      {evalList.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 mb-6">
+          <div
+            className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-700 cursor-pointer"
+            onClick={() => setShowEvalList(!showEvalList)}
+          >
+            <div className="flex items-center gap-2">
+              {showEvalList ? (
+                <ChevronDown className="w-4 h-4 text-gray-500" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-gray-500" />
+              )}
+              <MessageSquare className="w-4 h-4 text-blue-500" />
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                최근 평가 ({evalList.length})
+              </h3>
+            </div>
+            {/* Agent filter */}
+            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              <select
+                value={evalFilterAgent}
+                onChange={(e) => {
+                  setEvalFilterAgent(e.target.value)
+                  fetchTaskEvalList(e.target.value || undefined).then(setEvalList).catch(() => {})
+                }}
+                className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              >
+                <option value="">전체 에이전트</option>
+                {Array.from(new Set(evalList.map(e => e.agent_id).filter(Boolean))).map(aid => (
+                  <option key={aid} value={aid!}>{aid}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {showEvalList && (
+            <div className="divide-y divide-gray-100 dark:divide-gray-700 max-h-[500px] overflow-y-auto">
+              {evalList.map((evaluation) => {
+                const isExpanded = expandedEvalId === evaluation.id
+                const isTaskAnalyzer = evaluation.session_id === 'task-analyzer'
+
+                return (
+                  <div key={evaluation.id}>
+                    <div
+                      className={cn(
+                        'px-5 py-3 transition-colors',
+                        isTaskAnalyzer ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30' : '',
+                        isExpanded && 'border-l-2 border-primary-500 bg-primary-50/50 dark:bg-primary-900/10'
+                      )}
+                      onClick={async () => {
+                        if (!isTaskAnalyzer) return
+                        if (isExpanded) {
+                          setExpandedEvalId(null)
+                          setEvalDetail(null)
+                          return
+                        }
+                        setExpandedEvalId(evaluation.id)
+                        setEvalDetailLoading(true)
+                        setEvalDetail(null)
+                        const detail = await fetchAnalysisDetail(evaluation.task_id)
+                        setEvalDetail(detail)
+                        setEvalDetailLoading(false)
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          {/* Expand icon for task-analyzer evals */}
+                          {isTaskAnalyzer && (
+                            isExpanded
+                              ? <ChevronDown className="w-3.5 h-3.5 text-primary-500 flex-shrink-0" />
+                              : <ChevronRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                          )}
+                          {/* Rating stars */}
+                          <div className="flex items-center gap-0.5">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star
+                                key={star}
+                                className={cn(
+                                  'w-3.5 h-3.5',
+                                  star <= evaluation.rating
+                                    ? 'text-yellow-500 fill-yellow-500'
+                                    : 'text-gray-300 dark:text-gray-600'
+                                )}
+                              />
+                            ))}
+                          </div>
+                          {/* Accuracy / Speed badges */}
+                          <span className={cn(
+                            'text-xs px-1.5 py-0.5 rounded',
+                            evaluation.result_accuracy
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                              : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                          )}>
+                            {evaluation.result_accuracy ? '정확' : '부정확'}
+                          </span>
+                          <span className={cn(
+                            'text-xs px-1.5 py-0.5 rounded',
+                            evaluation.speed_satisfaction
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                              : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+                          )}>
+                            {evaluation.speed_satisfaction ? '빠름' : '느림'}
+                          </span>
+                          {evaluation.agent_id && (
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                              {evaluation.agent_id}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs text-gray-400">
+                          {new Date(evaluation.created_at).toLocaleString('ko-KR', {
+                            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                      {evaluation.comment && (
+                        <p className="text-sm text-gray-700 dark:text-gray-300 mt-1 pl-1">
+                          &ldquo;{evaluation.comment}&rdquo;
+                        </p>
+                      )}
+                      {!evaluation.comment && (
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 pl-1 italic">
+                          코멘트 없음
+                        </p>
+                      )}
+                      <div className="text-xs text-gray-400 dark:text-gray-500 mt-1 pl-1 font-mono">
+                        {evaluation.task_id.slice(0, 8)}... / {evaluation.session_id.slice(0, 8)}...
+                      </div>
+                    </div>
+
+                    {/* Expanded Analysis Detail */}
+                    {isExpanded && (
+                      <div className="px-5 pb-4">
+                        {evalDetailLoading && (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader2 className="w-5 h-5 animate-spin text-primary-500" />
+                            <span className="ml-2 text-sm text-gray-500">분석 데이터 로딩 중...</span>
+                          </div>
+                        )}
+
+                        {!evalDetailLoading && !evalDetail && (
+                          <div className="py-6 text-center text-sm text-gray-400 dark:text-gray-500">
+                            분석 데이터를 찾을 수 없습니다.
+                          </div>
+                        )}
+
+                        {!evalDetailLoading && evalDetail && (
+                          <EvalDetailView detail={evalDetail} />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+     
     </div>
   )
 }
@@ -933,6 +1023,162 @@ function ChartCard({ title, icon: Icon, children, className }: ChartCardProps) {
         {title}
       </h3>
       {children}
+    </div>
+  )
+}
+
+function EvalDetailView({ detail }: { detail: TaskAnalysisHistory }) {
+  const analysis = detail.analysis
+
+  return (
+    <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 space-y-4 mt-2">
+      {/* Task Input */}
+      <div className="flex items-start gap-2">
+        <FileText className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+        <div>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">태스크 입력</p>
+          <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap line-clamp-3">
+            {detail.task_input}
+          </p>
+        </div>
+      </div>
+
+      {/* Analysis Summary 4-grid */}
+      {analysis && (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Complexity</p>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                {analysis.analysis?.complexity_score ?? detail.complexity_score ?? '-'}/10
+              </p>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Effort Level</p>
+              {(analysis.analysis?.effort_level || detail.effort_level) ? (
+                <span className={cn('px-2 py-1 rounded-full text-xs font-medium', effortColors[analysis.analysis?.effort_level || detail.effort_level || ''])}>
+                  {analysis.analysis?.effort_level || detail.effort_level}
+                </span>
+              ) : (
+                <span className="text-sm text-gray-400">-</span>
+              )}
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Subtasks</p>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                {analysis.subtask_count ?? detail.subtask_count ?? '-'}
+              </p>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Strategy</p>
+              <div className="flex items-center gap-1">
+                {(() => {
+                  const strategy = analysis.strategy || detail.strategy || ''
+                  const StrategyIcon = strategyIcons[strategy] || GitBranch
+                  return <StrategyIcon className="w-4 h-4 text-primary-500" />
+                })()}
+                <span className="text-sm font-medium text-gray-900 dark:text-white capitalize">
+                  {analysis.strategy || detail.strategy || '-'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Context Summary */}
+          {analysis.analysis?.context_summary && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+              <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Context Summary</h4>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {analysis.analysis.context_summary}
+              </p>
+            </div>
+          )}
+
+          {/* Key Requirements */}
+          {analysis.analysis?.key_requirements && analysis.analysis.key_requirements.length > 0 && (
+            <div>
+              <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Key Requirements</h4>
+              <div className="flex flex-wrap gap-1.5">
+                {analysis.analysis.key_requirements.map((req, i) => (
+                  <span
+                    key={i}
+                    className="px-2 py-0.5 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 text-xs rounded-full"
+                  >
+                    {req}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Execution Plan */}
+          {analysis.execution_plan?.parallel_groups && analysis.execution_plan.parallel_groups.length > 0 && (
+            <div>
+              <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Execution Plan</h4>
+              <div className="space-y-2">
+                {analysis.execution_plan.parallel_groups.map((group, groupIndex) => (
+                  <div key={groupIndex}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                        Step {groupIndex + 1}
+                      </span>
+                      {group.length > 1 && (
+                        <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-[10px] rounded-full flex items-center gap-0.5">
+                          <Zap className="w-2.5 h-2.5" />
+                          Parallel
+                        </span>
+                      )}
+                    </div>
+                    <div className={cn('grid gap-2', group.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1')}>
+                      {group.map((taskId) => {
+                        const subtask = analysis.execution_plan?.subtasks[taskId]
+                        if (!subtask) return null
+                        return (
+                          <div
+                            key={taskId}
+                            className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-2.5"
+                          >
+                            <div className="flex items-start justify-between mb-1">
+                              <h5 className="text-xs font-medium text-gray-900 dark:text-white">
+                                {subtask.title}
+                              </h5>
+                              <span className={cn('px-1.5 py-0.5 text-[10px] rounded-full flex-shrink-0 ml-2', effortColors[subtask.effort])}>
+                                {subtask.effort}
+                              </span>
+                            </div>
+                            {subtask.agent && (
+                              <div className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400">
+                                <Users className="w-2.5 h-2.5" />
+                                <span>{subtask.agent}</span>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                    {groupIndex < analysis.execution_plan!.parallel_groups.length - 1 && (
+                      <div className="flex justify-center my-1">
+                        <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600 rotate-90" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Fallback for no analysis data */}
+      {!analysis && (
+        <div className="text-sm text-gray-500 dark:text-gray-400">
+          <p>분석 결과: {detail.success ? '성공' : '실패'}</p>
+          {detail.error && <p className="text-red-500 mt-1">{detail.error}</p>}
+          {detail.execution_time_ms > 0 && (
+            <p className="mt-1">실행 시간: {detail.execution_time_ms}ms</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
