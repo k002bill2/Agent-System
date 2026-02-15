@@ -115,7 +115,7 @@ export function WorkflowCheckCard({
           'p-1 rounded-md transition-colors flex-shrink-0',
           isRunning
             ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
-            : 'text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/30'
+            : 'text-primary-500 hover:bg-primary-50 dark:hover:bg-gray-600'
         )}
         title={`Run ${workflow.name}`}
       >
