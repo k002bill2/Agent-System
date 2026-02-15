@@ -73,6 +73,19 @@ src/backend/
 │   ├── rag_service.py           # Vector DB + RAG
 │   ├── sandbox_manager.py       # Docker 격리 실행
 │   ├── warp_service.py          # Warp 터미널 + MCP 에이전트
+│   ├── notification_service.py    # 알림 서비스 (Slack, Discord, Email, Webhook)
+│   ├── audit_service.py           # 감사 로그 서비스
+│   ├── cost_allocation_service.py # 비용 추적/할당 서비스
+│   ├── organization_service.py    # 조직/멀티테넌트 서비스
+│   ├── workflow_service.py        # 워크플로우 실행 엔진
+│   ├── rate_limit_service.py      # API 속도 제한 서비스
+│   ├── health_service.py          # 시스템 헬스체크 서비스
+│   ├── encryption_service.py      # AES-256-GCM 암호화 서비스
+│   ├── git_service.py             # Git 작업 관리 서비스
+│   ├── github_service.py          # GitHub API 통합
+│   ├── project_access_service.py  # RBAC 접근제어 서비스
+│   ├── quota_service.py           # 사용량 쿼터 서비스
+│   ├── template_service.py        # 프로젝트/워크플로우 템플릿
 │   └── ...
 ├── api/                     # FastAPI 라우터
 ├── db/                      # SQLAlchemy ORM
@@ -206,11 +219,20 @@ USE_DATABASE=false
 |--------|------|
 | `sessions` | 세션 정보 |
 | `tasks` | 태스크 트리 |
+| `messages` | 대화 메시지 |
+| `approvals` | HITL 승인 요청 |
 | `users` | 사용자 (OAuth + Email) |
 | `organizations` | 멀티테넌트 조직 |
+| `organization_members` | 조직 멤버 |
+| `projects` | DB 기반 프로젝트 레지스트리 |
 | `audit_logs` | 감사 로그 |
 | `feedback` | RLHF 피드백 |
 | `config_versions` | 설정 버전 관리 |
+| `notification_rules` | 알림 규칙 |
+| `secrets` | 암호화된 시크릿 |
+| `rate_limits` | API 속도 제한 |
+| `workflow_definitions` | 워크플로우 정의 |
+| `workflow_runs` | 워크플로우 실행 이력 |
 
 ### Database Migration (Alembic)
 

@@ -420,9 +420,15 @@ class ProjectConfigMonitor:
 
 ### Hooks 관리
 - Hook 생성/수정/삭제
-- 이벤트 타입 선택 (PreToolUse, PostToolUse, Notification, Stop)
+- 이벤트 타입 선택 (PreToolUse, PostToolUse, PostToolUseFailure, Notification, UserPromptSubmit, SessionStart, SessionEnd, Stop, SubagentStart, SubagentStop, PreCompact, PermissionRequest, Setup)
 - 매처 패턴 설정
 - 타임아웃 설정
+
+### Commands 관리
+- 커맨드 생성/수정/삭제
+- 콘텐츠 편집
+- 허용 도구 설정
+- 프로젝트 간 커맨드 복사
 
 ---
 
@@ -439,6 +445,11 @@ class ProjectConfigMonitor:
 ```json
 {"messages": [...], "metadata": {"feedback_type": "implicit", "agent_id": "..."}}
 ```
+
+**태스크 평가**:
+- 세션/태스크 단위 평가 제출
+- 평가 통계 및 목록 조회
+- AgentEvalPanel 컴포넌트로 시각화
 
 ---
 
@@ -565,6 +576,7 @@ class ProjectRunner:
 - 실시간 출력 로그
 - 체크 실행/중지
 - 결과 히스토리
+- `WorkflowCheckCard`
 
 ---
 
@@ -894,7 +906,8 @@ class WorkflowEngine:
 **Template Service**: 내장 4종 (Python CI, Node.js CI, Deploy, Test Suite). 카테고리별 필터, popularity 추적.
 
 **추가 UI**:
-- `TemplateGallery`: 카테고리 필터 + 검색, YAML 미리보기
+- `TemplateGallery`: 카테고리 필터 + 검색, YAML 미리보기, 프로젝트 선택 + 중복 검증
+- `WorkflowCreateModal`: 워크플로우 생성 모달 (프로젝트 선택, 중복 검증)
 - `ArtifactBrowser`: 파일 아이콘/크기, 다운로드
 - `SecretsManager`: 시크릿 CRUD 모달, 마스킹 표시
 - `ExecutionTimeline`: Gantt 차트 스타일 실행 타임라인

@@ -18,9 +18,23 @@ AOS Backend API 엔드포인트 문서입니다.
 | GET | `/api/sessions/{id}/approvals` | 대기 중인 승인 요청 조회 |
 | POST | `/api/sessions/{id}/approve/{approval_id}` | 작업 승인 |
 | POST | `/api/sessions/{id}/deny/{approval_id}` | 작업 거부 |
+| GET | `/api/sessions/{id}/info` | 세션 메타데이터/TTL 조회 |
+| POST | `/api/sessions/{id}/refresh` | 세션 만료 갱신 |
+| DELETE | `/api/sessions/{id}` | 세션 삭제 |
+| GET | `/api/sessions/{id}/sync` | 클라이언트 상태 동기화 |
+| POST | `/api/sessions/{id}/cancel` | 활성 오케스트레이션 취소 |
 | POST | `/api/sessions/{id}/tasks/{tid}/retry` | 태스크 재시도 |
 | POST | `/api/sessions/{id}/tasks/{tid}/cancel` | 태스크 취소 |
 | DELETE | `/api/sessions/{id}/tasks/{tid}` | 태스크 소프트 삭제 |
+| GET | `/api/sessions/{id}/tasks/{tid}` | 특정 태스크 조회 |
+| GET | `/api/sessions/{id}/tasks/{tid}/deletion-info` | 삭제 영향 미리보기 |
+| POST | `/api/sessions/{id}/tasks/{tid}/pause` | 태스크 일시정지 |
+| POST | `/api/sessions/{id}/tasks/{tid}/resume` | 태스크 재개 |
+| GET | `/api/sessions/{id}/tree` | 태스크 트리 구조 |
+| GET | `/api/sessions/{id}/context-usage` | 컨텍스트 사용량 메트릭 |
+| GET | `/api/sessions/{id}/permissions` | 세션 권한 조회 |
+| PUT | `/api/sessions/{id}/permissions` | 권한 업데이트 |
+| POST | `/api/sessions/{id}/permissions/toggle/{permission}` | 권한 토글 |
 
 ---
 
@@ -37,6 +51,7 @@ AOS Backend API 엔드포인트 문서입니다.
 | POST | `/api/auth/refresh` | Access Token 갱신 |
 | GET | `/api/auth/me` | 현재 사용자 정보 |
 | POST | `/api/auth/logout` | 로그아웃 |
+| GET | `/api/auth/status` | OAuth 설정 상태 확인 |
 
 ---
 
@@ -93,8 +108,26 @@ AOS Backend API 엔드포인트 문서입니다.
 | GET | `/api/claude-sessions/{id}/stream` | 실시간 SSE 스트리밍 |
 | GET | `/api/claude-sessions/{id}/transcript` | Raw 트랜스크립트 |
 | POST | `/api/claude-sessions/{id}/save` | 세션 DB 저장 |
-| GET | `/api/claude-sessions/{id}/processes` | 세션 프로세스 목록 |
-| POST | `/api/claude-sessions/{id}/processes/cleanup` | 프로세스 정리 |
+| GET | `/api/claude-sessions/external-paths` | 외부 경로 목록 |
+| POST | `/api/claude-sessions/external-paths` | 외부 경로 추가 |
+| DELETE | `/api/claude-sessions/external-paths/{path}` | 외부 경로 제거 |
+| GET | `/api/claude-sessions/source-users` | 사용자 목록 |
+| GET | `/api/claude-sessions/projects` | 프로젝트 목록 |
+| GET | `/api/claude-sessions/empty/list` | 빈 세션 목록 |
+| GET | `/api/claude-sessions/ghost/list` | 고스트 프로세스 목록 |
+| DELETE | `/api/claude-sessions/ghost` | 고스트 프로세스 정리 |
+| GET | `/api/claude-sessions/processes` | 프로세스 목록 |
+| POST | `/api/claude-sessions/processes/kill` | 프로세스 종료 |
+| POST | `/api/claude-sessions/processes/cleanup-stale` | 오래된 프로세스 정리 |
+| GET | `/api/claude-sessions/summaries/pending-count` | 요약 대기 수 |
+| POST | `/api/claude-sessions/summaries/generate-batch` | 요약 일괄 생성 |
+| POST | `/api/claude-sessions/{id}/summary` | 세션 요약 생성 |
+| GET | `/api/claude-sessions/{id}/summary` | 세션 요약 조회 |
+| DELETE | `/api/claude-sessions/{id}` | 세션 삭제 |
+| DELETE | `/api/claude-sessions` | 전체 세션 삭제 |
+| GET | `/api/claude-sessions/{id}/activity` | 세션 활동 조회 |
+| GET | `/api/claude-sessions/{id}/activity/stream` | 활동 스트림 |
+| GET | `/api/claude-sessions/{id}/tasks` | 세션 태스크 목록 |
 
 **쿼리 파라미터** (`GET /api/claude-sessions`):
 - `status`: `active` | `idle` | `completed`
@@ -130,6 +163,10 @@ AOS Backend API 엔드포인트 문서입니다.
 | POST | `/api/feedback/process-pending` | 대기 중 자동 처리 |
 | GET | `/api/feedback/dataset/stats` | 데이터셋 통계 |
 | GET | `/api/feedback/dataset/export` | 데이터셋 내보내기 (JSONL/CSV) |
+| POST | `/api/feedback/task-evaluation` | 태스크 평가 제출 |
+| GET | `/api/feedback/task-evaluation/stats` | 평가 통계 |
+| GET | `/api/feedback/task-evaluation/list` | 평가 목록 |
+| GET | `/api/feedback/task-evaluation/{session_id}/{task_id}` | 특정 평가 조회 |
 
 **피드백 유형**: `implicit`, `explicit_positive`, `explicit_negative`
 
@@ -234,10 +271,8 @@ AOS Backend API 엔드포인트 문서입니다.
 | GET | `/api/usage` | Claude Code 사용량 (Plan Limits + 토큰 통계) |
 | GET | `/api/usage/raw` | Raw stats-cache.json 데이터 |
 | GET | `/api/usage/oauth-test` | OAuth 토큰 진단 |
-| GET | `/api/usage/summary` | 사용량 요약 |
-| GET | `/api/usage/by-session/{session_id}` | 세션별 사용량 |
-| GET | `/api/usage/by-agent/{agent_id}` | 에이전트별 사용량 |
-| GET | `/api/usage/trends` | 사용량 트렌드 |
+| GET | `/api/usage/claude-config` | Claude 설정 조회 |
+| PUT | `/api/usage/claude-config` | Claude 설정 업데이트 |
 
 **`GET /api/usage` 응답**:
 - `planLimits`: Anthropic OAuth API 실시간 Plan Limits (session, weekly, model별)
@@ -311,6 +346,11 @@ AOS Backend API 엔드포인트 문서입니다.
 | POST | `/api/notifications/channels/{channel}/test` | 채널 테스트 |
 | POST | `/api/notifications/send` | 수동 알림 발송 |
 | GET | `/api/notifications/history` | 알림 히스토리 |
+| GET | `/api/notifications/rules/{id}` | 특정 규칙 조회 |
+| GET | `/api/notifications/channels/{channel}` | 채널 설정 조회 |
+| DELETE | `/api/notifications/history` | 히스토리 삭제 |
+| GET | `/api/notifications/event-types` | 이벤트 타입 목록 |
+| GET | `/api/notifications/priorities` | 우선순위 목록 |
 
 **채널**: `slack`, `discord`, `email`, `webhook`
 
@@ -326,15 +366,6 @@ AOS Backend API 엔드포인트 문서입니다.
 | POST | `/api/playground/sessions` | 세션 생성 |
 | GET | `/api/playground/sessions/{id}` | 세션 상세 조회 |
 | DELETE | `/api/playground/sessions/{id}` | 세션 삭제 |
-| PATCH | `/api/playground/sessions/{id}/settings` | 세션 설정 업데이트 |
-| POST | `/api/playground/sessions/{id}/execute` | 프롬프트 실행 |
-| POST | `/api/playground/sessions/{id}/execute/stream` | 스트리밍 실행 |
-| GET | `/api/playground/sessions/{id}/history` | 실행 히스토리 |
-| POST | `/api/playground/sessions/{id}/clear` | 히스토리 초기화 |
-| GET | `/api/playground/tools` | 사용 가능한 도구 목록 |
-| POST | `/api/playground/tools/test` | 도구 테스트 |
-| POST | `/api/playground/compare` | 에이전트 비교 (2-5개) |
-| GET | `/api/playground/models` | 사용 가능한 모델 목록 |
 
 ---
 
@@ -415,6 +446,7 @@ AOS Backend API 엔드포인트 문서입니다.
 | GET | `/api/config-versions/latest/{type}/{id}` | 최신 버전 조회 |
 | GET | `/api/config-versions/compare/{a}/{b}` | 버전 비교 (diff) |
 | POST | `/api/config-versions/rollback` | 롤백 실행 |
+| GET | `/api/config-versions/by-number/{type}/{id}/{number}` | 버전 번호로 조회 |
 
 **설정 타입**: `agent`, `session`, `project`, `workflow`, `permission`, `notification_rule`, `llm_router`
 
@@ -437,6 +469,9 @@ AOS Backend API 엔드포인트 문서입니다.
 | PATCH | `/api/organizations/{id}/members/{mid}/role` | 역할 변경 |
 | DELETE | `/api/organizations/{id}/members/{mid}` | 멤버 제거 |
 | GET | `/api/organizations/user/{uid}/organizations` | 사용자 조직 목록 |
+| GET | `/api/organizations/user/{uid}/memberships` | 사용자 멤버십 목록 |
+| GET | `/api/organizations/{id}/invitations` | 초대 목록 |
+| DELETE | `/api/organizations/{id}/invitations/{invitation_id}` | 초대 취소 |
 | GET | `/api/organizations/{id}/context/{uid}` | 테넌트 컨텍스트 |
 | GET | `/api/organizations/{id}/stats` | 조직 통계 |
 | POST | `/api/organizations/{id}/usage/track` | 토큰 사용량 기록 (user_id, session_id, model 옵션) |
@@ -664,8 +699,14 @@ AOS Backend API 엔드포인트 문서입니다.
 | Method | Path | 설명 |
 |--------|------|------|
 | GET | `/api/rate-limits/status` | 현재 사용자 제한 상태 |
-| GET | `/api/rate-limits/config` | 제한 설정 조회 |
-| PATCH | `/api/rate-limits/config` | 제한 설정 수정 |
+| GET | `/api/rate-limits/tiers` | 제한 티어 목록 |
+| GET | `/api/rate-limits/tiers/{tier}` | 특정 티어 설정 |
+| POST | `/api/rate-limits/reset` | 제한 초기화 |
+| GET | `/api/rate-limits/overrides` | 오버라이드 목록 |
+| GET | `/api/rate-limits/overrides/{identifier}` | 특정 오버라이드 조회 |
+| POST | `/api/rate-limits/overrides` | 오버라이드 생성 |
+| DELETE | `/api/rate-limits/overrides/{identifier}` | 오버라이드 삭제 |
+| POST | `/api/rate-limits/check` | 제한 확인 |
 
 ---
 
@@ -687,7 +728,11 @@ AOS Backend API 엔드포인트 문서입니다.
 |--------|------|------|
 | GET | `/api/health` | 기본 헬스체크 |
 | GET | `/api/health/detailed` | 상세 헬스체크 |
-| GET | `/api/health/components` | 컴포넌트별 상태 |
+| GET | `/api/health/live` | Liveness 프로브 |
+| GET | `/api/health/ready` | Readiness 프로브 |
+| GET | `/api/health/database` | 데이터베이스 헬스 |
+| GET | `/api/health/redis` | Redis 헬스 |
+| GET | `/api/health/llm` | LLM 프로바이더 헬스 |
 
 ---
 
@@ -776,6 +821,27 @@ AOS Backend API 엔드포인트 문서입니다.
 | POST | `/api/workflows/templates` | 템플릿 생성 |
 | GET | `/api/workflows/templates/{id}` | 템플릿 상세 |
 | POST | `/api/workflows/from-template/{id}` | 템플릿으로 워크플로우 생성 |
+
+---
+
+## Warp Terminal
+
+| Method | Path | 설명 |
+|--------|------|------|
+| POST | `/api/warp/open` | Warp 터미널에서 프로젝트 열기 |
+| GET | `/api/warp/status` | Warp 설치 상태 확인 |
+| POST | `/api/warp/cleanup` | 오래된 설정 파일 정리 |
+
+---
+
+## MCP Protocol
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/mcp/sse` | MCP SSE 스트림 |
+| POST | `/api/mcp/messages` | MCP 메시지 전송 |
+| GET | `/api/mcp/health` | MCP 헬스체크 |
+| GET | `/api/mcp/tools` | MCP 도구 목록 |
 
 ---
 

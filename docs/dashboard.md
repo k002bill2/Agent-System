@@ -94,6 +94,11 @@ import { cn } from '@/lib/utils';
 | `AgentStatsPanel` | 레지스트리 통계 패널 |
 | `TaskAnalyzer` | 태스크 분석 UI |
 | `DataSourceToggle` | 데이터 소스 선택 토글 |
+| `ProjectFilter` | 프로젝트 필터링 UI |
+| `ProjectFormModal` | 프로젝트 생성/수정 모달 |
+| `ErrorBoundary` | React 에러 바운더리 |
+| `DeleteTaskDialog` | 태스크 삭제 확인 다이얼로그 |
+| `ExecutionProgress` | 워크플로우 실행 진행 트래커 |
 
 ### Claude Code Components
 
@@ -131,6 +136,8 @@ import { cn } from '@/lib/utils';
 | `HookEditModal` | Hook 편집 모달 |
 | `CommandsTab` | 커맨드 목록 탭 |
 | `CommandEditModal` | 커맨드 편집 모달 |
+| `DeleteProjectModal` | 프로젝트 삭제 확인 모달 |
+| `ProjectClaudeConfigPanel` | 프로젝트 Claude 설정 패널 |
 
 ### Workflow Components
 
@@ -152,6 +159,7 @@ import { cn } from '@/lib/utils';
 | `ArtifactBrowser` | 아티팩트 브라우저 (파일 목록, 다운로드, 삭제) |
 | `SecretsManager` | 시크릿 관리 모달 (CRUD, 마스킹, scope 선택) |
 | `ExecutionTimeline` | 실행 타임라인 (Gantt 차트 스타일) |
+| `WorkflowYamlModal` | YAML 편집 모달 |
 
 ### Feedback Components
 
@@ -161,6 +169,9 @@ import { cn } from '@/lib/utils';
 | `FeedbackModal` | 부정 피드백 사유 선택 |
 | `FeedbackHistoryPanel` | 피드백 히스토리 목록 |
 | `DatasetPanel` | 데이터셋 통계 및 내보내기 |
+| `AgentEvalPanel` | 에이전트 평가 패널 |
+| `TaskEvaluationCard` | 태스크 평가 카드 |
+| `PendingFeedbackIndicator` | 대기 중 피드백 인디케이터 |
 
 ### MCP Components
 
@@ -182,6 +193,11 @@ import { cn } from '@/lib/utils';
 | `MergeRequestCard` | 내부 MR 카드 (승인/머지/닫기) |
 | `MergePreviewPanel` | 머지 미리보기 모달 (충돌 정보) |
 | `PullRequestList` | GitHub PR 목록 + 리뷰 패널 |
+| `ConflictResolverPanel` | 머지 충돌 해결 UI (3-way diff, 전략 선택) |
+| `FileGroup` | 파일 변경 그룹 표시 |
+| `RemoteList` | Git 리모트 관리 |
+| `BranchProtectionSettings` | 브랜치 보호 규칙 설정 |
+| `GitAlert` | Git 관련 알림/경고 |
 
 ### Organization Components
 
@@ -231,33 +247,25 @@ import { cn } from '@/lib/utils';
 
 | 컴포넌트 | 설명 |
 |----------|------|
-| `AuditLogTable` | 감사 로그 테이블 |
-| `AuditFilters` | 감사 로그 필터 |
-| `AuditExport` | 감사 로그 내보내기 |
+| `AuditLogTable` | 감사 로그 테이블 (필터링, 내보내기 포함) |
 
 ### Notification Components
 
 | 컴포넌트 | 설명 |
 |----------|------|
-| `NotificationRuleEditor` | 알림 규칙 에디터 |
-| `NotificationHistory` | 알림 히스토리 |
-| `ChannelSettings` | 채널 설정 |
+| `NotificationRuleEditor` | 알림 규칙 편집 (생성, 수정, 채널 설정 포함) |
 
 ### LLM Router Components
 
 | 컴포넌트 | 설명 |
 |----------|------|
-| `LLMRouterSettings` | LLM 라우터 설정 |
-| `ProviderCard` | 프로바이더 카드 |
-| `RoutingStats` | 라우팅 통계 |
+| `LLMRouterSettings` | LLM 라우터 설정 (프로바이더 관리, 통계 포함) |
 
 ### Version Control Components
 
 | 컴포넌트 | 설명 |
 |----------|------|
-| `VersionHistory` | 버전 타임라인 |
-| `VersionCompare` | 버전 비교 (diff) |
-| `RollbackModal` | 롤백 모달 |
+| `VersionHistory` | 버전 히스토리 (타임라인, 비교, 롤백 포함) |
 
 ### Usage & Cost Components
 
@@ -288,6 +296,28 @@ import { cn } from '@/lib/utils';
 |----------|------|
 | `ProcessMonitorWidget` | 프로세스 모니터 위젯 |
 
+### Common Components
+
+| 컴포넌트 | 설명 |
+|----------|------|
+| `Pagination` | 페이지네이션 컨트롤 |
+| `VirtualizedDataTable` | 가상 스크롤 데이터 테이블 |
+
+### Skeleton Components
+
+| 컴포넌트 | 설명 |
+|----------|------|
+| `DashboardSkeleton` | 대시보드 로딩 스켈레톤 |
+| `ProjectsSkeleton` | 프로젝트 페이지 스켈레톤 |
+| `ProjectsGridSkeleton` | 프로젝트 그리드 스켈레톤 |
+| `TasksSkeleton` | 태스크 페이지 스켈레톤 |
+| `AgentsSkeleton` | 에이전트 페이지 스켈레톤 |
+| `ActivitySkeleton` | 활동 페이지 스켈레톤 |
+| `MonitorSkeleton` | 모니터 페이지 스켈레톤 |
+| `SettingsSkeleton` | 설정 페이지 스켈레톤 |
+| `ClaudeSessionsSkeleton` | Claude 세션 스켈레톤 |
+| `SidebarSkeleton` | 사이드바 로딩 스켈레톤 |
+
 ---
 
 ## Zustand Stores
@@ -296,26 +326,30 @@ import { cn } from '@/lib/utils';
 |-------|------|------|
 | `useOrchestration` | `orchestration.ts` | 세션/태스크 관리, WebSocket 연결 |
 | `useProjects` | `projects.ts` | 프로젝트 목록 및 상태 |
-| `useProjectConfigs` | `projectConfigs.ts` | 프로젝트 설정 (Skills, Agents, MCP, Hooks) + DB 프로젝트 CRUD (fetchDBProjects, createDBProject, updateDBProject, deleteDBProject, restoreDBProject) |
+| `useProjectConfigs` | `projectConfigs.ts` | 프로젝트 설정 (Skills, Agents, MCP, Hooks) + DB 프로젝트 CRUD |
+| `useAgentStore` | `agentStore.ts` | 에이전트 CRUD 관리 |
 | `useAgents` | `agents.ts` | 에이전트 레지스트리 |
-| `useTasks` | `tasks.ts` | 태스크 관리 |
+| `useAgentMonitor` | `agentMonitor.ts` | 에이전트 모니터링 메트릭 |
+| `useTaskStore` | `taskStore.ts` | 태스크 CRUD 관리 |
 | `useFeedback` | `feedback.ts` | RLHF 피드백 |
 | `useClaudeSessions` | `claudeSessions.ts` | Claude 세션 모니터링 |
 | `useClaudeCodeActivity` | `claudeCodeActivity.ts` | Claude Code 실시간 활동 |
 | `useClaudeUsage` | `claudeUsage.ts` | Context Window 사용량 |
 | `useMCP` | `mcp.ts` | MCP 서버 관리 |
-| `useAuth` | `auth.ts` | 인증 상태 |
+| `useAuthStore` | `authStore.ts` | 인증 상태 (토큰 관리) |
+| `useAuth` | `auth.ts` | 인증 상태 (OAuth/Email) |
 | `useDiff` | `diff.ts` | 파일 변경 비교 |
 | `usePermissions` | `permissions.ts` | 세션 권한 상태 |
 | `useNavigation` | `navigation.ts` | 네비게이션 상태 |
+| `useUIStore` | `uiStore.ts` | UI 상태 (테마, 모달, 토스트) |
 | `useMonitoring` | `monitoring.ts` | 프로젝트 모니터링 |
 | `useSettings` | `settings.ts` | 설정 상태 |
 | `useGit` | `git.ts` | Git 브랜치/머지 관리 |
 | `useOrganizations` | `organizations.ts` | 조직/멤버 관리 |
 | `useAudit` | `audit.ts` | 감사 로그 |
-| `useMenuVisibilityStore` | `menuVisibility.ts` | 메뉴 가시성 및 순서 (visibility, menuOrder) |
+| `useMenuVisibilityStore` | `menuVisibility.ts` | 메뉴 가시성 및 순서 |
 | `useProjectAccess` | `projectAccess.ts` | 프로젝트별 멤버/역할 관리 |
-| `useWorkflowStore` | `workflows.ts` | 워크플로우 CRUD, 실행, 시크릿, 스케줄, 웹훅, 아티팩트, 템플릿 |
+| `useWorkflowStore` | `workflows.ts` | 워크플로우 CRUD, 실행, 시크릿, 스케줄 |
 
 ### Store Pattern
 
@@ -361,7 +395,7 @@ export const useStore = create<State>((set, get) => ({
 ```
 src/dashboard/
 ├── src/
-│   ├── pages/                  # 페이지 컴포넌트 (20개)
+│   ├── pages/                  # 페이지 컴포넌트 (22개)
 │   │   ├── DashboardPage.tsx
 │   │   ├── ProjectsPage.tsx
 │   │   ├── ProjectConfigsPage.tsx
@@ -377,6 +411,8 @@ src/dashboard/
 │   │   ├── PlaygroundPage.tsx
 │   │   ├── OrganizationsPage.tsx
 │   │   ├── ProjectManagementPage.tsx
+│   │   ├── WorkflowsPage.tsx
+│   │   ├── AdminPage.tsx
 │   │   ├── SettingsPage.tsx
 │   │   ├── LoginPage.tsx
 │   │   ├── RegisterPage.tsx
@@ -384,6 +420,20 @@ src/dashboard/
 │   │   └── InvitationAcceptPage.tsx
 │   ├── components/
 │   │   ├── ui/                 # 공통 UI 컴포넌트
+│   │   ├── common/             # 범용 컴포넌트
+│   │   │   ├── Pagination.tsx
+│   │   │   └── VirtualizedDataTable.tsx
+│   │   ├── skeletons/          # 로딩 스켈레톤
+│   │   │   ├── DashboardSkeleton.tsx
+│   │   │   ├── ProjectsSkeleton.tsx
+│   │   │   ├── ProjectsGridSkeleton.tsx
+│   │   │   ├── TasksSkeleton.tsx
+│   │   │   ├── AgentsSkeleton.tsx
+│   │   │   ├── ActivitySkeleton.tsx
+│   │   │   ├── MonitorSkeleton.tsx
+│   │   │   ├── SettingsSkeleton.tsx
+│   │   │   ├── ClaudeSessionsSkeleton.tsx
+│   │   │   └── SidebarSkeleton.tsx
 │   │   ├── feedback/           # RLHF 피드백
 │   │   ├── claude-sessions/    # Claude Sessions
 │   │   ├── project-configs/    # 프로젝트 설정
@@ -400,6 +450,13 @@ src/dashboard/
 │   │   │   ├── CommandsTab.tsx
 │   │   │   ├── CommandEditModal.tsx
 │   │   │   └── CopyToProjectModal.tsx
+│   │   ├── workflows/          # 워크플로우
+│   │   │   ├── WorkflowList.tsx
+│   │   │   ├── WorkflowDetail.tsx
+│   │   │   ├── WorkflowCreateModal.tsx
+│   │   │   ├── WorkflowYamlModal.tsx
+│   │   │   ├── TemplateGallery.tsx
+│   │   │   └── ...
 │   │   ├── mcp/                # MCP 관리
 │   │   ├── audit/              # 감사 로그
 │   │   ├── notifications/      # 알림 설정
@@ -412,7 +469,12 @@ src/dashboard/
 │   │   │   ├── CommitHistory.tsx
 │   │   │   ├── MergeRequestCard.tsx
 │   │   │   ├── MergePreviewPanel.tsx
-│   │   │   └── PullRequestList.tsx
+│   │   │   ├── PullRequestList.tsx
+│   │   │   ├── ConflictResolverPanel.tsx
+│   │   │   ├── RemoteList.tsx
+│   │   │   ├── BranchProtectionSettings.tsx
+│   │   │   ├── FileGroup.tsx
+│   │   │   └── GitAlert.tsx
 │   │   ├── projects/            # 프로젝트 접근제어
 │   │   │   └── ProjectMembersPanel.tsx
 │   │   ├── organizations/      # 조직 관리
@@ -441,28 +503,34 @@ src/dashboard/
 │   │   │   └── types.ts
 │   │   └── analytics/          # Analytics
 │   │       └── ProjectMultiSelect.tsx
-│   ├── stores/                 # Zustand 스토어 (22개)
+│   ├── services/               # API 서비스 레이어
+│   ├── stores/                 # Zustand 스토어 (27개)
 │   │   ├── orchestration.ts
 │   │   ├── projects.ts
 │   │   ├── projectConfigs.ts
+│   │   ├── agentStore.ts
 │   │   ├── agents.ts
-│   │   ├── tasks.ts
+│   │   ├── agentMonitor.ts
+│   │   ├── taskStore.ts
 │   │   ├── feedback.ts
 │   │   ├── claudeSessions.ts
 │   │   ├── claudeCodeActivity.ts
 │   │   ├── claudeUsage.ts
 │   │   ├── mcp.ts
+│   │   ├── authStore.ts
 │   │   ├── auth.ts
 │   │   ├── diff.ts
 │   │   ├── permissions.ts
 │   │   ├── navigation.ts
+│   │   ├── uiStore.ts
 │   │   ├── monitoring.ts
 │   │   ├── settings.ts
 │   │   ├── git.ts
 │   │   ├── organizations.ts
 │   │   ├── audit.ts
 │   │   ├── menuVisibility.ts
-│   │   └── projectAccess.ts
+│   │   ├── projectAccess.ts
+│   │   └── workflows.ts
 │   ├── hooks/                  # 커스텀 훅
 │   ├── lib/                    # 유틸리티
 │   │   ├── utils.ts            # cn() 등 헬퍼 함수

@@ -77,7 +77,7 @@ export function WorkflowCheckCard({
     <div
       className={cn(
         'flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-all cursor-pointer',
-        'hover:bg-gray-50 dark:hover:bg-gray-750',
+        'hover:bg-gray-50 dark:hover:bg-gray-700',
         getBorderColor(),
         isSelected && 'ring-2 ring-primary-500 ring-offset-1 dark:ring-offset-gray-800'
       )}
@@ -88,7 +88,10 @@ export function WorkflowCheckCard({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <Workflow className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 flex-shrink-0" />
-          <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+          <span
+            className="text-sm font-medium text-gray-900 dark:text-white truncate"
+            title={workflow.name}
+          >
             {workflow.name}
           </span>
           <span className="text-xs text-gray-400 dark:text-gray-500">

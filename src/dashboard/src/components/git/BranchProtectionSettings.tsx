@@ -43,63 +43,16 @@ const defaultFormData: RuleFormData = {
   enabled: true,
 }
 
-export function BranchProtectionSettings({
-  rules,
-  isLoading,
-  onCreateRule,
-  onUpdateRule,
-  onDeleteRule,
-  onRefresh,
-}: BranchProtectionSettingsProps) {
-  const [showCreate, setShowCreate] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [formData, setFormData] = useState<RuleFormData>(defaultFormData)
+interface RuleFormProps {
+  isEdit?: boolean
+  formData: RuleFormData
+  setFormData: React.Dispatch<React.SetStateAction<RuleFormData>>
+  isLoading: boolean
+  onCancel: () => void
+  onSubmit: () => void
+}
 
-  const handleCreate = async () => {
-    if (!formData.branch_pattern.trim()) return
-    const success = await onCreateRule({
-      ...formData,
-      deploy_workflow: formData.deploy_workflow || null,
-    })
-    if (success) {
-      setShowCreate(false)
-      setFormData(defaultFormData)
-    }
-  }
-
-  const handleEdit = (rule: BranchProtectionRule) => {
-    setEditingId(rule.id)
-    setFormData({
-      branch_pattern: rule.branch_pattern,
-      require_approvals: rule.require_approvals,
-      require_no_conflicts: rule.require_no_conflicts,
-      allowed_merge_roles: rule.allowed_merge_roles,
-      allow_force_push: rule.allow_force_push,
-      allow_deletion: rule.allow_deletion,
-      auto_deploy: rule.auto_deploy,
-      deploy_workflow: rule.deploy_workflow || '',
-      enabled: rule.enabled,
-    })
-  }
-
-  const handleSaveEdit = async () => {
-    if (!editingId) return
-    const success = await onUpdateRule(editingId, {
-      ...formData,
-      deploy_workflow: formData.deploy_workflow || null,
-    })
-    if (success) {
-      setEditingId(null)
-      setFormData(defaultFormData)
-    }
-  }
-
-  const handleDelete = async (ruleId: string) => {
-    if (confirm('이 보호 규칙을 삭제하시겠습니까?')) {
-      await onDeleteRule(ruleId)
-    }
-  }
-
+function RuleForm({ isEdit = false, formData, setFormData, isLoading, onCancel, onSubmit }: RuleFormProps) {
   const toggleRole = (role: string) => {
     setFormData(prev => ({
       ...prev,
@@ -109,7 +62,7 @@ export function BranchProtectionSettings({
     }))
   }
 
-  const RuleForm = ({ isEdit = false }: { isEdit?: boolean }) => (
+  return (
     <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -230,20 +183,13 @@ export function BranchProtectionSettings({
 
       <div className="flex justify-end gap-2 pt-2">
         <button
-          onClick={() => {
-            if (isEdit) {
-              setEditingId(null)
-            } else {
-              setShowCreate(false)
-            }
-            setFormData(defaultFormData)
-          }}
+          onClick={onCancel}
           className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
         >
           Cancel
         </button>
         <button
-          onClick={isEdit ? handleSaveEdit : handleCreate}
+          onClick={onSubmit}
           disabled={!formData.branch_pattern.trim() || isLoading}
           className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 rounded-lg"
         >
@@ -253,6 +199,74 @@ export function BranchProtectionSettings({
       </div>
     </div>
   )
+}
+
+export function BranchProtectionSettings({
+  rules,
+  isLoading,
+  onCreateRule,
+  onUpdateRule,
+  onDeleteRule,
+  onRefresh,
+}: BranchProtectionSettingsProps) {
+  const [showCreate, setShowCreate] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [formData, setFormData] = useState<RuleFormData>(defaultFormData)
+
+  const handleCreate = async () => {
+    if (!formData.branch_pattern.trim()) return
+    const success = await onCreateRule({
+      ...formData,
+      deploy_workflow: formData.deploy_workflow || null,
+    })
+    if (success) {
+      setShowCreate(false)
+      setFormData(defaultFormData)
+    }
+  }
+
+  const handleEdit = (rule: BranchProtectionRule) => {
+    setEditingId(rule.id)
+    setFormData({
+      branch_pattern: rule.branch_pattern,
+      require_approvals: rule.require_approvals,
+      require_no_conflicts: rule.require_no_conflicts,
+      allowed_merge_roles: rule.allowed_merge_roles,
+      allow_force_push: rule.allow_force_push,
+      allow_deletion: rule.allow_deletion,
+      auto_deploy: rule.auto_deploy,
+      deploy_workflow: rule.deploy_workflow || '',
+      enabled: rule.enabled,
+    })
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingId) return
+    const success = await onUpdateRule(editingId, {
+      ...formData,
+      deploy_workflow: formData.deploy_workflow || null,
+    })
+    if (success) {
+      setEditingId(null)
+      setFormData(defaultFormData)
+    }
+  }
+
+  const handleDelete = async (ruleId: string) => {
+    if (confirm('이 보호 규칙을 삭제하시겠습니까?')) {
+      await onDeleteRule(ruleId)
+    }
+  }
+
+  const handleCancelCreate = () => {
+    setShowCreate(false)
+    setFormData(defaultFormData)
+  }
+
+  const handleCancelEdit = () => {
+    setEditingId(null)
+    setFormData(defaultFormData)
+  }
 
   return (
     <div className="space-y-4">
@@ -291,14 +305,29 @@ export function BranchProtectionSettings({
       </div>
 
       {/* Create Form */}
-      {showCreate && <RuleForm />}
+      {showCreate && (
+        <RuleForm
+          formData={formData}
+          setFormData={setFormData}
+          isLoading={isLoading}
+          onCancel={handleCancelCreate}
+          onSubmit={handleCreate}
+        />
+      )}
 
       {/* Rules List */}
       <div className="space-y-3">
         {rules.map(rule => (
           <div key={rule.id}>
             {editingId === rule.id ? (
-              <RuleForm isEdit />
+              <RuleForm
+                isEdit
+                formData={formData}
+                setFormData={setFormData}
+                isLoading={isLoading}
+                onCancel={handleCancelEdit}
+                onSubmit={handleSaveEdit}
+              />
             ) : (
               <div
                 className={cn(
