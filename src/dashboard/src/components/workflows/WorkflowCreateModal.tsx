@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useWorkflowStore } from '../../stores/workflows'
 import { useProjectsStore } from '../../stores/projects'
-import { X, FolderKanban } from 'lucide-react'
+import { X, FolderKanban, AlertCircle } from 'lucide-react'
 
 const SAMPLE_YAML = `name: CI Pipeline
 description: Run tests and build
@@ -34,12 +34,19 @@ jobs:
 `
 
 export function WorkflowCreateModal() {
-  const { createWorkflow, setShowCreateModal, isLoading, error } = useWorkflowStore()
+  const { createWorkflow, setShowCreateModal, isLoading, error, workflows } = useWorkflowStore()
   const { projects, fetchProjects } = useProjectsStore()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [projectId, setProjectId] = useState<string | null>(null)
+  const [projectId, setProjectId] = useState<string>('')
   const [yamlContent, setYamlContent] = useState(SAMPLE_YAML)
+  const [showProjectError, setShowProjectError] = useState(false)
+  const [duplicateConfirmed, setDuplicateConfirmed] = useState(false)
+
+  const workflowName = name || 'New Workflow'
+  const isDuplicate = projectId && workflows.some(
+    w => w.project_id === projectId && w.name === workflowName
+  )
 
   useEffect(() => {
     fetchProjects()
@@ -47,8 +54,15 @@ export function WorkflowCreateModal() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!projectId) {
+      setShowProjectError(true)
+      return
+    }
+    if (isDuplicate && !duplicateConfirmed) {
+      return
+    }
     await createWorkflow({
-      name: name || 'New Workflow',
+      name: workflowName,
       description,
       yaml_content: yamlContent,
       project_id: projectId,
@@ -71,7 +85,7 @@ export function WorkflowCreateModal() {
             <input
               type="text"
               value={name}
-              onChange={e => setName(e.target.value)}
+              onChange={e => { setName(e.target.value); setDuplicateConfirmed(false) }}
               placeholder="CI Pipeline"
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
@@ -91,19 +105,58 @@ export function WorkflowCreateModal() {
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               <FolderKanban className="w-4 h-4 inline-block mr-1 -mt-0.5" />
-              프로젝트
+              프로젝트 <span className="text-red-500">*</span>
             </label>
             <select
-              value={projectId || ''}
-              onChange={e => setProjectId(e.target.value || null)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              value={projectId}
+              onChange={e => {
+                setProjectId(e.target.value)
+                setShowProjectError(false)
+                setDuplicateConfirmed(false)
+              }}
+              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                showProjectError
+                  ? 'border-red-400 dark:border-red-500'
+                  : 'border-gray-300 dark:border-gray-600'
+              }`}
             >
-              <option value="">프로젝트 없음</option>
+              <option value="">프로젝트를 선택하세요</option>
               {projects.map(p => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
+            {showProjectError && (
+              <p className="mt-1 text-xs text-red-500 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                프로젝트를 선택해주세요
+              </p>
+            )}
           </div>
+
+          {isDuplicate && !duplicateConfirmed && (
+            <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <p className="text-sm text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                이 프로젝트에 &quot;{workflowName}&quot; 워크플로우가 이미 존재합니다.
+              </p>
+              <div className="flex gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setDuplicateConfirmed(true)}
+                  className="px-3 py-1 text-xs bg-amber-600 text-white rounded hover:bg-amber-700"
+                >
+                  그래도 생성
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProjectId('')}
+                  className="px-3 py-1 text-xs bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300 dark:hover:bg-gray-500"
+                >
+                  다른 프로젝트 선택
+                </button>
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -134,8 +187,8 @@ export function WorkflowCreateModal() {
             </button>
             <button
               type="submit"
-              disabled={isLoading}
-              className="px-4 py-2 text-sm text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+              disabled={isLoading || (!!isDuplicate && !duplicateConfirmed)}
+              className="px-4 py-2 text-sm text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {isLoading ? '생성 중...' : '생성'}
             </button>

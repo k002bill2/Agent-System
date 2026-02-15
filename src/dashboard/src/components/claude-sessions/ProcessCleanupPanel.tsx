@@ -275,7 +275,7 @@ export function ProcessCleanupPanel() {
                     )}
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    v{proc.version} · {proc.terminal} · Started {proc.started}
+                    {proc.version && proc.version !== 'unknown' ? `v${proc.version}` : '-'} · {proc.terminal && proc.terminal !== '??' ? proc.terminal : '-'} · Started {proc.started}
                   </div>
                 </div>
               </div>

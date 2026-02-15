@@ -126,8 +126,8 @@ export function WorkflowsPage() {
       {showSecretsManager && <SecretsManager onClose={() => setShowSecretsManager(false)} />}
       {showTemplateGallery && (
         <TemplateGallery
-          onSelect={async (tpl) => {
-            await createWorkflow({ name: tpl.name, yaml_content: tpl.yaml_content })
+          onSelect={async (tpl, projectId) => {
+            await createWorkflow({ name: tpl.name, yaml_content: tpl.yaml_content, project_id: projectId })
             setShowTemplateGallery(false)
             fetchWorkflows()
           }}

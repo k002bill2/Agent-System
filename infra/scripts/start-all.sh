@@ -90,7 +90,10 @@ export GOOGLE_API_KEY=$(grep "^GOOGLE_API_KEY=" "$PROJECT_ROOT/.env" | cut -d'='
 export ANTHROPIC_API_KEY=$(grep "^ANTHROPIC_API_KEY=" "$PROJECT_ROOT/.env" | cut -d'=' -f2-)
 
 # Start backend in background
-USE_DATABASE=true nohup uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload > "$PROJECT_ROOT/logs/backend.log" 2>&1 &
+USE_DATABASE=true nohup uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload \
+    --reload-exclude ".claude/*" --reload-exclude ".temp/*" --reload-exclude "*.json" \
+    --reload-exclude "logs/*" --reload-exclude "node_modules/*" \
+    > "$PROJECT_ROOT/logs/backend.log" 2>&1 &
 BACKEND_PID=$!
 echo $BACKEND_PID > "$PID_DIR/backend.pid"
 echo -e "${GREEN}      Backend started (PID: $BACKEND_PID)${NC}"
