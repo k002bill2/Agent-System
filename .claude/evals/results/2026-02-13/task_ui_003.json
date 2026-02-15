@@ -1,0 +1,41 @@
+{
+  "task_id": "task_ui_003",
+  "task_name": "VirtualizedDataTable 컴포넌트 생성",
+  "category": "ui_component",
+  "difficulty": "hard",
+  "evaluated_at": "2026-02-13T02:40:41Z",
+  "k": 1,
+  "passing_score": 0.75,
+  "runs": [{
+    "run": 1,
+    "agent": "web-ui-specialist",
+    "code_checks": {
+      "score": 1.0,
+      "details": {
+        "required_patterns_found": 8,
+        "required_patterns_total": 8,
+        "forbidden_patterns_found": 0,
+        "typescript_errors": 0,
+        "tests_passed": true
+      }
+    },
+    "llm_grading": {
+      "score": 0.89,
+      "dimensions": {
+        "type_safety": 0.95,
+        "performance": 0.90,
+        "accessibility": 0.95,
+        "code_quality": 0.85,
+        "testing": 0.80
+      }
+    },
+    "final_score": 0.93,
+    "grade": "A",
+    "passed": true
+  }],
+  "metrics": {
+    "pass_at_1": 1.0,
+    "avg_score": 0.93,
+    "success_rate": 1.0
+  }
+}

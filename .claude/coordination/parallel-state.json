@@ -1,0 +1,700 @@
+{
+  "activeAgents": [
+    {
+      "taskId": "task_1770950296910_b6o6kl",
+      "subagentType": "eval-task-runner",
+      "description": "Eval task_ui_001 AgentCard",
+      "startTime": 1770950296910,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1770950303966_pkegmx",
+      "subagentType": "eval-task-runner",
+      "description": "Eval task_ui_002 Pagination",
+      "startTime": 1770950303966,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1770950316841_pe6r9n",
+      "subagentType": "eval-task-runner",
+      "description": "Eval task_ui_003 DataTable",
+      "startTime": 1770950316841,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1770950324867_l3q5ko",
+      "subagentType": "eval-task-runner",
+      "description": "Eval task_service_001 CRUD API",
+      "startTime": 1770950324867,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1770950336028_72nu6i",
+      "subagentType": "eval-task-runner",
+      "description": "Eval task_service_002 Auth API",
+      "startTime": 1770950336028,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1770950342134_4ervnw",
+      "subagentType": "eval-task-runner",
+      "description": "Eval task_bug_001 useEffect",
+      "startTime": 1770950342134,
+      "status": "running",
+      "targetAreas": [
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1770950354893_i1zib9",
+      "subagentType": "eval-task-runner",
+      "description": "Eval task_bug_002 WebSocket",
+      "startTime": 1770950354893,
+      "status": "running",
+      "targetAreas": [
+        "hooks"
+      ]
+    },
+    {
+      "taskId": "task_1770950361919_av9mih",
+      "subagentType": "eval-task-runner",
+      "description": "Eval task_refactor_001 Zustand",
+      "startTime": 1770950361919,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1770950373058_z25usb",
+      "subagentType": "eval-task-runner",
+      "description": "Eval task_refactor_002 API layer",
+      "startTime": 1770950373058,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1770950388430_f41v3c",
+      "subagentType": "eval-task-runner",
+      "description": "Eval task_integration_001 monitor",
+      "startTime": 1770950388430,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1770955130736_4ahouf",
+      "subagentType": "web-ui-specialist",
+      "description": "Eval task_ui_001 AgentCard",
+      "startTime": 1770955130736,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1770955136229_d3kp9b",
+      "subagentType": "web-ui-specialist",
+      "description": "Eval task_ui_002 Pagination",
+      "startTime": 1770955136229,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1770955145428_34fkvv",
+      "subagentType": "backend-integration-specialist",
+      "description": "Eval task_service_001 CRUD API",
+      "startTime": 1770955145428,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1770955157895_raqj99",
+      "subagentType": "backend-integration-specialist",
+      "description": "Eval task_service_002 Auth API",
+      "startTime": 1770955157895,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1770955166421_gqoxcq",
+      "subagentType": "general-purpose",
+      "description": "Eval task_bug_001 useEffect fix",
+      "startTime": 1770955166421,
+      "status": "running",
+      "targetAreas": [
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1770955183720_tp8kyj",
+      "subagentType": "general-purpose",
+      "description": "Eval task_bug_002 WebSocket",
+      "startTime": 1770955183720,
+      "status": "running",
+      "targetAreas": [
+        "hooks"
+      ]
+    },
+    {
+      "taskId": "task_1770955195065_zmydqs",
+      "subagentType": "web-ui-specialist",
+      "description": "Eval task_refactor_001 Zustand",
+      "startTime": 1770955195065,
+      "status": "running",
+      "targetAreas": []
+    },
+    {
+      "taskId": "task_1770955206999_99d2m9",
+      "subagentType": "web-ui-specialist",
+      "description": "Eval task_refactor_002 API layer",
+      "startTime": 1770955206999,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "hooks",
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1770955266633_ontg78",
+      "subagentType": "eval-grader",
+      "description": "Grade task_ui_002 Pagination",
+      "startTime": 1770955266633,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1770955326529_rrw5qe",
+      "subagentType": "eval-grader",
+      "description": "Grade task_ui_001 AgentCard",
+      "startTime": 1770955326529,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1770992788498_vcn88y",
+      "subagentType": "Explore",
+      "description": "Explore project config codebase",
+      "startTime": 1770992788498,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1770992860860_ys03xp",
+      "subagentType": "Explore",
+      "description": "Explore commands in backend service",
+      "startTime": 1770992860860,
+      "status": "running",
+      "targetAreas": [
+        "services"
+      ]
+    },
+    {
+      "taskId": "task_1771042749704_94e74r",
+      "subagentType": "Explore",
+      "description": "Analyze backend patterns",
+      "startTime": 1771042749704,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771042754383_azcar7",
+      "subagentType": "Explore",
+      "description": "Analyze frontend patterns",
+      "startTime": 1771042754383,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "hooks"
+      ]
+    },
+    {
+      "taskId": "task_1771046096352_ok759s",
+      "subagentType": "Explore",
+      "description": "verify 스킬 패턴 수집",
+      "startTime": 1771046096352,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "navigation",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771046215333_jcn5pl",
+      "subagentType": "general-purpose",
+      "description": "verify-admin 검증 실행",
+      "startTime": 1771046215333,
+      "status": "running",
+      "targetAreas": []
+    },
+    {
+      "taskId": "task_1771046217633_9xyhcw",
+      "subagentType": "general-purpose",
+      "description": "verify-api-route 검증 실행",
+      "startTime": 1771046217633,
+      "status": "running",
+      "targetAreas": [
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771046220311_ozn3fn",
+      "subagentType": "general-purpose",
+      "description": "verify-badges 검증 실행",
+      "startTime": 1771046220311,
+      "status": "running",
+      "targetAreas": []
+    },
+    {
+      "taskId": "task_1771046222358_jf6bue",
+      "subagentType": "general-purpose",
+      "description": "verify-barrel-exports 검증",
+      "startTime": 1771046222358,
+      "status": "running",
+      "targetAreas": []
+    },
+    {
+      "taskId": "task_1771046225022_djz0ab",
+      "subagentType": "general-purpose",
+      "description": "verify-comments 검증 실행",
+      "startTime": 1771046225022,
+      "status": "running",
+      "targetAreas": []
+    },
+    {
+      "taskId": "task_1771046227344_sv75vk",
+      "subagentType": "general-purpose",
+      "description": "verify-detail-pages 검증",
+      "startTime": 1771046227344,
+      "status": "running",
+      "targetAreas": []
+    },
+    {
+      "taskId": "task_1771046229547_avmovw",
+      "subagentType": "general-purpose",
+      "description": "verify-docs-sync 검증 실행",
+      "startTime": 1771046229547,
+      "status": "running",
+      "targetAreas": []
+    },
+    {
+      "taskId": "task_1771046231796_vcpdxe",
+      "subagentType": "general-purpose",
+      "description": "verify-editable-components 검증",
+      "startTime": 1771046231796,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1771046234125_peii5f",
+      "subagentType": "general-purpose",
+      "description": "verify-forms 검증 실행",
+      "startTime": 1771046234125,
+      "status": "running",
+      "targetAreas": []
+    },
+    {
+      "taskId": "task_1771046236455_w3sz0g",
+      "subagentType": "general-purpose",
+      "description": "verify-framework 검증 실행",
+      "startTime": 1771046236455,
+      "status": "running",
+      "targetAreas": []
+    },
+    {
+      "taskId": "task_1771046238922_cjv5jc",
+      "subagentType": "general-purpose",
+      "description": "verify-navigation 검증 실행",
+      "startTime": 1771046238922,
+      "status": "running",
+      "targetAreas": [
+        "navigation"
+      ]
+    },
+    {
+      "taskId": "task_1771046241128_s5whc2",
+      "subagentType": "general-purpose",
+      "description": "verify-notifications 검증",
+      "startTime": 1771046241128,
+      "status": "running",
+      "targetAreas": []
+    },
+    {
+      "taskId": "task_1771046243477_5ub4z4",
+      "subagentType": "general-purpose",
+      "description": "verify-points 검증 실행",
+      "startTime": 1771046243477,
+      "status": "running",
+      "targetAreas": []
+    },
+    {
+      "taskId": "task_1771046246991_8ttk7s",
+      "subagentType": "general-purpose",
+      "description": "verify-react-best-practices 검증",
+      "startTime": 1771046246991,
+      "status": "running",
+      "targetAreas": []
+    },
+    {
+      "taskId": "task_1771046248208_o6x22z",
+      "subagentType": "general-purpose",
+      "description": "verify-shortlinks 검증 실행",
+      "startTime": 1771046248208,
+      "status": "running",
+      "targetAreas": []
+    },
+    {
+      "taskId": "task_1771046250570_kxnjrx",
+      "subagentType": "general-purpose",
+      "description": "verify-storybook 검증 실행",
+      "startTime": 1771046250570,
+      "status": "running",
+      "targetAreas": []
+    },
+    {
+      "taskId": "task_1771046253642_8sx5gb",
+      "subagentType": "general-purpose",
+      "description": "verify-test 검증 실행",
+      "startTime": 1771046253642,
+      "status": "running",
+      "targetAreas": []
+    },
+    {
+      "taskId": "task_1771046255341_a9yx99",
+      "subagentType": "general-purpose",
+      "description": "verify-ui 검증 실행",
+      "startTime": 1771046255341,
+      "status": "running",
+      "targetAreas": []
+    },
+    {
+      "taskId": "task_1771047100466_50ec8a",
+      "subagentType": "Explore",
+      "description": "Backend verification (admin, api-route, points)",
+      "startTime": 1771047100466,
+      "status": "running",
+      "targetAreas": [
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771047117026_d6a80i",
+      "subagentType": "Explore",
+      "description": "Frontend structure verification",
+      "startTime": 1771047117026,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "navigation"
+      ]
+    },
+    {
+      "taskId": "task_1771047132588_is5q7g",
+      "subagentType": "Explore",
+      "description": "UI/UX verification (badges, ui, detail-pages)",
+      "startTime": 1771047132588,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1771047148699_c43me9",
+      "subagentType": "Explore",
+      "description": "Code quality verification",
+      "startTime": 1771047148699,
+      "status": "running",
+      "targetAreas": [
+        "hooks",
+        "services"
+      ]
+    },
+    {
+      "taskId": "task_1771047163442_jgs2gv",
+      "subagentType": "Explore",
+      "description": "Integration verification",
+      "startTime": 1771047163442,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771047179317_z6n5zf",
+      "subagentType": "Explore",
+      "description": "Components verification",
+      "startTime": 1771047179317,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1771047857371_zk0tqv",
+      "subagentType": "general-purpose",
+      "description": "Python docstring 추가",
+      "startTime": 1771047857371,
+      "status": "running",
+      "targetAreas": [
+        "services"
+      ]
+    },
+    {
+      "taskId": "task_1771047864816_jxdepa",
+      "subagentType": "general-purpose",
+      "description": "TypeScript JSDoc 추가",
+      "startTime": 1771047864816,
+      "status": "running",
+      "targetAreas": [
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771047875010_rzaul4",
+      "subagentType": "general-purpose",
+      "description": "Zustand 셀렉터 패턴 수정 (상위 파일)",
+      "startTime": 1771047875010,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1771048020866_ichukj",
+      "subagentType": "general-purpose",
+      "description": "나머지 Python docstring 추가",
+      "startTime": 1771048020866,
+      "status": "running",
+      "targetAreas": [
+        "services"
+      ]
+    },
+    {
+      "taskId": "task_1771060404957_8l2m8y",
+      "subagentType": "Explore",
+      "description": "Claude Sessions 자동요약 코드 분석",
+      "startTime": 1771060404958,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771062421968_b8kl3d",
+      "subagentType": "Explore",
+      "description": "Explore Claude Sessions code",
+      "startTime": 1771062421968,
+      "status": "running",
+      "targetAreas": [
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771085269093_6cd2ty",
+      "subagentType": "Explore",
+      "description": "프로젝트 중복 원인 조사",
+      "startTime": 1771085269093,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771086852305_7ix0kt",
+      "subagentType": "Explore",
+      "description": "Audit trail data gap investigation",
+      "startTime": 1771086852305,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "hooks",
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771087033251_3l5epw",
+      "subagentType": "Explore",
+      "description": "프로젝트명 변경 원인 조사",
+      "startTime": 1771087033251,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771087105369_4q9nk5",
+      "subagentType": "Explore",
+      "description": "Check session-based audit implementation",
+      "startTime": 1771087105369,
+      "status": "running",
+      "targetAreas": [
+        "hooks",
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771087108516_jj6ky5",
+      "subagentType": "Bash",
+      "description": "Check git history for audit changes",
+      "startTime": 1771087108516,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771087298969_b5jmti",
+      "subagentType": "Plan",
+      "description": "Plan session activity audit tracking",
+      "startTime": 1771087298969,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771140395512_369kcg",
+      "subagentType": "Explore",
+      "description": "Explore eval list & analysis API",
+      "startTime": 1771140395512,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771143895149_ztz5xg",
+      "subagentType": "Explore",
+      "description": "Explore audit trail implementation",
+      "startTime": 1771143895149,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "services"
+      ]
+    },
+    {
+      "taskId": "task_1771144043730_mewso6",
+      "subagentType": "Explore",
+      "description": "Git Management 에러 처리 탐색",
+      "startTime": 1771144043730,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771144048951_vk9d81",
+      "subagentType": "Explore",
+      "description": "Git 에러 유형 및 Alert 패턴 탐색",
+      "startTime": 1771144048951,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1771144225613_sqa8u3",
+      "subagentType": "Plan",
+      "description": "Git 에러 Alert 시스템 설계",
+      "startTime": 1771144225613,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771146200045_zmmbl0",
+      "subagentType": "Explore",
+      "description": "이미지 저장/로드 코드 탐색",
+      "startTime": 1771146200045,
+      "status": "running",
+      "targetAreas": [
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771146204009_b5jgsx",
+      "subagentType": "Explore",
+      "description": "DB 모델 및 마이그레이션 탐색",
+      "startTime": 1771146204009,
+      "status": "running",
+      "targetAreas": []
+    },
+    {
+      "taskId": "task_1771146209025_6v1g37",
+      "subagentType": "Explore",
+      "description": "에러 로그 및 이미지 에러 패턴",
+      "startTime": 1771146209025,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "api"
+      ]
+    }
+  ],
+  "lastUpdated": "2026-02-15T09:03:29.026Z",
+  "sessionId": "session_1770950296910_bp60yfrgy"
+}

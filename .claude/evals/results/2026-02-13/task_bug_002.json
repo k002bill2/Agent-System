@@ -1,0 +1,18 @@
+{
+  "task_id": "task_bug_002",
+  "task_name": "WebSocket 경쟁 상태 + 메모리 누수 복합 버그 수정",
+  "category": "bug_fix",
+  "difficulty": "hard",
+  "evaluated_at": "2026-02-13T02:39:29Z",
+  "k": 1,
+  "passing_score": 0.80,
+  "runs": [{
+    "run": 1,
+    "agent": "performance-optimizer",
+    "status": "incomplete",
+    "reason": "에이전트가 인프라 부재를 보고하고 실행하지 않음",
+    "final_score": null,
+    "passed": null
+  }],
+  "metrics": { "pass_at_1": null, "avg_score": null, "success_rate": null }
+}

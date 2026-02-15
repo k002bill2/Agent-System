@@ -1,0 +1,18 @@
+{
+  "task_id": "task_refactor_001",
+  "task_name": "Zustand Store 리팩토링",
+  "category": "refactor",
+  "difficulty": "hard",
+  "evaluated_at": "2026-02-13T02:39:26Z",
+  "k": 1,
+  "passing_score": 0.7,
+  "runs": [{
+    "run": 1,
+    "agent": "web-ui-specialist",
+    "status": "incomplete",
+    "reason": "eval-task-runner가 서브에이전트 스폰을 시도했으나 실행되지 않음",
+    "final_score": null,
+    "passed": null
+  }],
+  "metrics": { "pass_at_1": null, "avg_score": null, "success_rate": null }
+}

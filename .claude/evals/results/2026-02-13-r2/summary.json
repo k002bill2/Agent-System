@@ -1,0 +1,206 @@
+{
+  "date": "2026-02-13",
+  "run": "r2",
+  "description": "eval-task-runner 프롬프트 개선 후 재실행 (8개 태스크 + task_bug_001 재평가)",
+  "total_tasks": 10,
+  "evaluated_tasks": 8,
+  "results": {
+    "completed_and_graded": [
+      {
+        "task_id": "task_ui_001",
+        "name": "AgentCard 컴포넌트 생성",
+        "category": "ui_component",
+        "difficulty": "medium",
+        "agent": "web-ui-specialist",
+        "agent_behavior": "XML_TAGS_ONLY",
+        "files_exist": true,
+        "files_from": "prior_development",
+        "tests_pass": true,
+        "test_count": 15,
+        "score": 0.952,
+        "grade": "A+",
+        "passed": true,
+        "note": "에이전트가 XML 태그 작성. 파일은 이전 개발에서 존재. 코드 품질은 우수."
+      },
+      {
+        "task_id": "task_ui_002",
+        "name": "Pagination 컴포넌트 생성",
+        "category": "ui_component",
+        "difficulty": "easy",
+        "agent": "web-ui-specialist",
+        "agent_behavior": "XML_TAGS_ONLY",
+        "files_exist": true,
+        "files_from": "prior_development",
+        "tests_pass": true,
+        "test_count": 15,
+        "score": 0.952,
+        "grade": "A+",
+        "passed": true,
+        "note": "에이전트가 XML 태그 작성. 파일은 이전 개발에서 존재. 코드 품질은 우수."
+      },
+      {
+        "task_id": "task_ui_003",
+        "name": "VirtualizedDataTable 컴포넌트 생성",
+        "category": "ui_component",
+        "difficulty": "hard",
+        "agent": "web-ui-specialist",
+        "agent_behavior": "UNKNOWN",
+        "score": 0.93,
+        "grade": "A",
+        "passed": true,
+        "note": "1차 실행에서 완료 (r1 결과)"
+      },
+      {
+        "task_id": "task_bug_001",
+        "name": "useEffect 무한 리렌더링 버그 수정",
+        "category": "bug_fix",
+        "difficulty": "easy",
+        "agent": "general-purpose",
+        "agent_behavior": "REAL_TOOL_CALLS",
+        "files_exist": true,
+        "files_from": "agent_created",
+        "tests_pass": true,
+        "test_count": 24,
+        "tsc_pass": true,
+        "score": 0.96,
+        "grade": "A+",
+        "passed": true,
+        "note": "general-purpose 에이전트가 실제 Tool 호출로 Dashboard.tsx 수정 + Dashboard.test.tsx 생성. 24/24 테스트 통과, tsc 통과."
+      },
+      {
+        "task_id": "task_bug_002",
+        "name": "WebSocket 경쟁 상태 + 메모리 누수 복합 버그 수정",
+        "category": "bug_fix",
+        "difficulty": "hard",
+        "agent": "general-purpose",
+        "agent_behavior": "REAL_TOOL_CALLS",
+        "files_exist": true,
+        "files_from": "agent_verified",
+        "tests_pass": true,
+        "test_count": 19,
+        "score": 0.94,
+        "grade": "A",
+        "passed": true,
+        "note": "general-purpose 에이전트가 실제 Grep/Bash 도구로 코드 검증. 19/19 테스트 통과."
+      },
+      {
+        "task_id": "task_integration_001",
+        "name": "실시간 에이전트 모니터링 풀스택 구현",
+        "category": "integration",
+        "difficulty": "hard",
+        "agent": "general-purpose",
+        "agent_behavior": "UNKNOWN",
+        "score": 0.97,
+        "grade": "A+",
+        "passed": true,
+        "note": "1차 실행에서 완료 (r1 결과)"
+      }
+    ],
+    "incomplete_or_failed": [
+      {
+        "task_id": "task_service_001",
+        "name": "Agent CRUD API Endpoints",
+        "category": "service",
+        "difficulty": "medium",
+        "agent": "backend-integration-specialist",
+        "agent_behavior": "XML_TAGS_ONLY",
+        "files_exist": false,
+        "tests_pass": false,
+        "score": null,
+        "grade": "F",
+        "passed": false,
+        "reason": "에이전트가 XML 태그로 코드 작성. 실제 파일 미생성 (agents_crud.py, test_agents_crud.py 없음)."
+      },
+      {
+        "task_id": "task_service_002",
+        "name": "Agent Registry API with Auth, Rate Limit, Cache",
+        "category": "service",
+        "difficulty": "hard",
+        "agent": "backend-integration-specialist",
+        "agent_behavior": "XML_TAGS_ONLY",
+        "files_exist": true,
+        "files_from": "prior_development",
+        "tests_pass": false,
+        "test_errors": 35,
+        "score": 0.3,
+        "grade": "F",
+        "passed": false,
+        "reason": "에이전트가 XML 태그 작성. 파일은 이전 개발에서 존재하나, 테스트 35개 전부 import ERROR."
+      },
+      {
+        "task_id": "task_refactor_001",
+        "name": "Zustand Store 리팩토링",
+        "category": "refactor",
+        "difficulty": "hard",
+        "agent": "web-ui-specialist",
+        "agent_behavior": "XML_TAGS_ONLY",
+        "files_exist": true,
+        "files_from": "prior_development",
+        "score": null,
+        "grade": "INCOMPLETE",
+        "passed": false,
+        "reason": "에이전트가 XML 태그 작성. Store 파일은 이전 개발에서 존재하나 에이전트가 실제로 분리/수정하지 않음."
+      },
+      {
+        "task_id": "task_refactor_002",
+        "name": "API 서비스 레이어 추출 및 에러 바운더리 리팩토링",
+        "category": "refactor",
+        "difficulty": "hard",
+        "agent": "web-ui-specialist",
+        "agent_behavior": "XML_TAGS_ONLY",
+        "files_exist": true,
+        "files_from": "prior_development",
+        "score": null,
+        "grade": "INCOMPLETE",
+        "passed": false,
+        "reason": "에이전트가 XML 태그 작성. 서비스 레이어 파일은 이전 개발에서 존재하나 에이전트가 실제로 리팩토링하지 않음."
+      }
+    ]
+  },
+  "metrics": {
+    "total_pass_rate": 0.60,
+    "graded_pass_rate": 0.75,
+    "completed_avg_score": 0.95,
+    "overall_completion_rate": 0.60,
+    "by_agent_type": {
+      "general-purpose": {
+        "tasks": 2,
+        "tool_usage": "REAL_TOOL_CALLS",
+        "pass_rate": 1.0,
+        "avg_score": 0.95
+      },
+      "web-ui-specialist": {
+        "tasks": 4,
+        "tool_usage": "XML_TAGS_ONLY",
+        "pass_rate": 0.5,
+        "avg_score": null,
+        "note": "2개는 기존 코드로 PASS (실제 에이전트 작업 아님), 2개는 INCOMPLETE"
+      },
+      "backend-integration-specialist": {
+        "tasks": 2,
+        "tool_usage": "XML_TAGS_ONLY",
+        "pass_rate": 0.0,
+        "avg_score": null
+      }
+    }
+  },
+  "comparison_with_r1": {
+    "r1_completion_rate": 0.30,
+    "r2_completion_rate": 0.60,
+    "improvement": "+100%",
+    "r1_avg_score": 0.816,
+    "r2_avg_score": 0.95,
+    "key_change": "general-purpose 에이전트 사용으로 bug_fix 태스크 성공률 향상. specialist 에이전트는 여전히 XML 태그 문제 지속."
+  },
+  "root_cause_analysis": {
+    "primary_issue": "specialist 에이전트 타입(web-ui-specialist, backend-integration-specialist)이 Tool API 대신 XML 태그를 텍스트로 작성",
+    "affected_agents": ["web-ui-specialist", "backend-integration-specialist", "eval-grader"],
+    "working_agents": ["general-purpose"],
+    "hypothesis": "specialist 에이전트의 시스템 프롬프트가 XML 형식의 도구 사용을 지시하고 있을 가능성. general-purpose 에이전트만 Claude Code의 Tool API를 올바르게 사용.",
+    "recommendations": [
+      "모든 evaluation 태스크에 general-purpose 에이전트 사용",
+      "specialist 에이전트 프롬프트에 Tool API 사용법 명시적 추가",
+      "eval-grader 에이전트도 general-purpose로 교체하거나 프롬프트 수정 필요"
+    ]
+  }
+}

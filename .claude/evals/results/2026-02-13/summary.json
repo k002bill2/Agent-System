@@ -1,0 +1,53 @@
+{
+  "date": "2026-02-13",
+  "total_tasks": 10,
+  "completed_tasks": 3,
+  "incomplete_tasks": 7,
+  "results": {
+    "completed": [
+      {
+        "task_id": "task_ui_003",
+        "name": "VirtualizedDataTable 컴포넌트 생성",
+        "category": "ui_component",
+        "difficulty": "hard",
+        "score": 0.93,
+        "grade": "A",
+        "passed": true
+      },
+      {
+        "task_id": "task_bug_001",
+        "name": "useEffect 무한 리렌더링 버그 수정",
+        "category": "bug_fix",
+        "difficulty": "easy",
+        "score": 0.548,
+        "grade": "F",
+        "passed": false,
+        "failure_reason": "테스트 파일 미생성"
+      },
+      {
+        "task_id": "task_integration_001",
+        "name": "실시간 에이전트 모니터링 풀스택 구현",
+        "category": "integration",
+        "difficulty": "hard",
+        "score": 0.97,
+        "grade": "A+",
+        "passed": true
+      }
+    ],
+    "incomplete": [
+      { "task_id": "task_ui_001", "reason": "서브에이전트 스폰 실패" },
+      { "task_id": "task_ui_002", "reason": "서브에이전트 스폰 실패" },
+      { "task_id": "task_service_001", "reason": "서브에이전트 스폰 실패" },
+      { "task_id": "task_service_002", "reason": "계획만 생성, 실행 안됨" },
+      { "task_id": "task_bug_002", "reason": "인프라 부재 보고" },
+      { "task_id": "task_refactor_001", "reason": "서브에이전트 스폰 실패" },
+      { "task_id": "task_refactor_002", "reason": "서브에이전트 스폰 실패" }
+    ]
+  },
+  "metrics": {
+    "completed_pass_rate": 0.667,
+    "completed_avg_score": 0.816,
+    "overall_completion_rate": 0.30
+  },
+  "root_cause": "eval-task-runner 에이전트가 XML 형식의 서브에이전트 스폰을 시도했으나, 실제 Tool API 호출이 아니어서 실행되지 않음. Task 도구를 직접 사용하도록 에이전트 프롬프트 개선 필요."
+}

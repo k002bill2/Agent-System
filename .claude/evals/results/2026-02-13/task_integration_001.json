@@ -1,0 +1,44 @@
+{
+  "task_id": "task_integration_001",
+  "task_name": "실시간 에이전트 모니터링 풀스택 구현",
+  "category": "integration",
+  "difficulty": "hard",
+  "evaluated_at": "2026-02-13T02:44:34Z",
+  "k": 1,
+  "passing_score": 0.75,
+  "runs": [{
+    "run": 1,
+    "agent": "general-purpose",
+    "code_checks": {
+      "score": 1.0,
+      "details": {
+        "backend_files": true,
+        "frontend_files": true,
+        "test_files": true,
+        "all_patterns_found": true,
+        "no_forbidden_patterns": true,
+        "typescript_errors": 0,
+        "backend_tests_passed": 10,
+        "frontend_tests_passed": 8
+      }
+    },
+    "llm_grading": {
+      "score": 0.94,
+      "dimensions": {
+        "architecture": 0.95,
+        "data_flow": 0.90,
+        "error_resilience": 0.92,
+        "type_safety": 1.0,
+        "testing": 0.95
+      }
+    },
+    "final_score": 0.97,
+    "grade": "A+",
+    "passed": true
+  }],
+  "metrics": {
+    "pass_at_1": 1.0,
+    "avg_score": 0.97,
+    "success_rate": 1.0
+  }
+}

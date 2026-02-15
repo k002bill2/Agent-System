@@ -1,0 +1,45 @@
+{
+  "task_id": "task_bug_001",
+  "task_name": "useEffect 무한 리렌더링 버그 수정",
+  "category": "bug_fix",
+  "difficulty": "easy",
+  "evaluated_at": "2026-02-13T02:40:16Z",
+  "k": 1,
+  "passing_score": 0.75,
+  "runs": [{
+    "run": 1,
+    "agent": "performance-optimizer",
+    "code_checks": {
+      "score": 0.60,
+      "details": {
+        "typescript_errors": 0,
+        "file_modified": true,
+        "useEffect_found": true,
+        "memoization_used": true,
+        "no_eslint_disable": true,
+        "test_file_created": false
+      }
+    },
+    "llm_grading": {
+      "score": 0.495,
+      "dimensions": {
+        "root_cause_analysis": 0.85,
+        "fix_quality": 0.90,
+        "test_coverage": 0.00,
+        "documentation": 0.70
+      }
+    },
+    "final_score": 0.548,
+    "grade": "F",
+    "passed": false,
+    "failure_reasons": [
+      "Missing required test file",
+      "Score 0.548 below threshold 0.75"
+    ]
+  }],
+  "metrics": {
+    "pass_at_1": 0.0,
+    "avg_score": 0.548,
+    "success_rate": 0.0
+  }
+}

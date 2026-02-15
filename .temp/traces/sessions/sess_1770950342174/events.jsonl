@@ -1,0 +1,1 @@
+{"event":"agent_spawned","timestamp":"2026-02-13T02:39:02.174Z","session_id":"sess_1770950342174","data":{"agent_type":"eval-task-runner","description":"Eval task_bug_001 useEffect","model":"default","run_in_background":true}}

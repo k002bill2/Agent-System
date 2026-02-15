@@ -1,0 +1,14 @@
+{
+  "session_id": "sess_1771048020923",
+  "aggregated_at": "2026-02-14T09:13:52.905Z",
+  "total_events": 1,
+  "total_agents_spawned": 1,
+  "agents_by_type": {
+    "general-purpose": 1
+  },
+  "models_used": {
+    "default": 1
+  },
+  "first_event": "2026-02-14T05:47:00.923Z",
+  "last_event": "2026-02-14T05:47:00.923Z"
+}

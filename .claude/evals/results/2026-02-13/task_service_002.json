@@ -1,0 +1,18 @@
+{
+  "task_id": "task_service_002",
+  "task_name": "Agent Registry API with Auth, Rate Limit, Cache",
+  "category": "service",
+  "difficulty": "hard",
+  "evaluated_at": "2026-02-13T02:39:08Z",
+  "k": 1,
+  "passing_score": 0.75,
+  "runs": [{
+    "run": 1,
+    "agent": "backend-integration-specialist",
+    "status": "incomplete",
+    "reason": "에이전트가 계획만 생성하고 실제 실행하지 않음",
+    "final_score": null,
+    "passed": null
+  }],
+  "metrics": { "pass_at_1": null, "avg_score": null, "success_rate": null }
+}

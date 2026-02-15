@@ -1,0 +1,1 @@
+{"event":"agent_spawned","timestamp":"2026-02-13T02:39:48.483Z","session_id":"sess_1770950388483","data":{"agent_type":"eval-task-runner","description":"Eval task_integration_001 monitor","model":"default","run_in_background":true}}

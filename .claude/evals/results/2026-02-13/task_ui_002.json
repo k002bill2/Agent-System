@@ -1,0 +1,18 @@
+{
+  "task_id": "task_ui_002",
+  "task_name": "Pagination 컴포넌트 생성",
+  "category": "ui_component",
+  "difficulty": "easy",
+  "evaluated_at": "2026-02-13T02:38:33Z",
+  "k": 1,
+  "passing_score": 0.7,
+  "runs": [{
+    "run": 1,
+    "agent": "web-ui-specialist",
+    "status": "incomplete",
+    "reason": "eval-task-runner가 서브에이전트 스폰을 시도했으나 실행되지 않음",
+    "final_score": null,
+    "passed": null
+  }],
+  "metrics": { "pass_at_1": null, "avg_score": null, "success_rate": null }
+}

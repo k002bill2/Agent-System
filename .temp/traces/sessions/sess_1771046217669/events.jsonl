@@ -1,0 +1,1 @@
+{"event":"agent_spawned","timestamp":"2026-02-14T05:16:57.669Z","session_id":"sess_1771046217669","data":{"agent_type":"general-purpose","description":"verify-api-route 검증 실행","model":"haiku","run_in_background":true}}

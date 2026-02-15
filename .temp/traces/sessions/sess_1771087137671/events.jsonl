@@ -1,0 +1,1 @@
+{"event":"agent_spawned","timestamp":"2026-02-14T16:38:57.672Z","session_id":"sess_1771087137671","data":{"agent_type":"Bash","description":"Check git history for audit changes","model":"default","run_in_background":false}}

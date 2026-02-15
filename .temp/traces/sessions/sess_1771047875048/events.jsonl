@@ -1,0 +1,1 @@
+{"event":"agent_spawned","timestamp":"2026-02-14T05:44:35.048Z","session_id":"sess_1771047875048","data":{"agent_type":"general-purpose","description":"Zustand 셀렉터 패턴 수정 (상위 파일)","model":"default","run_in_background":true}}
