@@ -12,6 +12,7 @@ export interface AuditLogEntry {
   id: string
   session_id: string | null
   user_id: string | null
+  project_id: string | null
   action: string
   resource_type: string
   resource_id: string | null
@@ -30,6 +31,7 @@ export interface AuditLogEntry {
 export interface AuditLogFilter {
   session_id?: string
   user_id?: string
+  project_id?: string
   action?: string
   resource_type?: string
   status?: string
@@ -74,6 +76,7 @@ interface AuditState {
   refresh: () => Promise<void>
 }
 
+/** 감사 로그 상태 관리 스토어 (조회, 필터, 통계). */
 export const useAuditStore = create<AuditState>((set, get) => ({
   // Initial state
   logs: [],
@@ -96,6 +99,7 @@ export const useAuditStore = create<AuditState>((set, get) => ({
 
       if (filter.session_id) params.set('session_id', filter.session_id)
       if (filter.user_id) params.set('user_id', filter.user_id)
+      if (filter.project_id) params.set('project_id', filter.project_id)
       if (filter.action) params.set('action', filter.action)
       if (filter.resource_type) params.set('resource_type', filter.resource_type)
       if (filter.status) params.set('status', filter.status)
@@ -133,6 +137,8 @@ export const useAuditStore = create<AuditState>((set, get) => ({
     try {
       const params = new URLSearchParams()
       if (sessionId) params.set('session_id', sessionId)
+      const { filter } = get()
+      if (filter.project_id) params.set('project_id', filter.project_id)
 
       const response = await fetch(`${API_BASE_URL}/api/audit/stats?${params}`)
 

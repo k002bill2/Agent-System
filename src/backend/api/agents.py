@@ -231,6 +231,37 @@ class MCPManagerStatsResponse(BaseModel):
     servers: dict[str, dict[str, Any]]
 
 
+class OCRResponse(BaseModel):
+    """OCR 텍스트 추출 응답."""
+
+    success: bool
+    text: str = ""
+    filename: str = ""
+    error: str | None = None
+    model_used: str = ""
+
+
+# ─────────────────────────────────────────────────────────────
+# OCR Constants
+# ─────────────────────────────────────────────────────────────
+
+OCR_PROMPT = """Extract ALL text visible in this image exactly as it appears.
+Rules:
+- Preserve the original language (Korean, English, etc.)
+- Maintain line breaks and structure where possible
+- Output ONLY the extracted text, nothing else
+- If no text is found, respond with an empty string"""
+
+_MIME_TYPE_MAP = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+}
+
+
 # ─────────────────────────────────────────────────────────────
 # Agent Registry API
 # ─────────────────────────────────────────────────────────────
@@ -299,6 +330,117 @@ async def get_registry_stats():
     registry = get_agent_registry()
     stats = registry.get_stats()
     return AgentRegistryStatsResponse(**stats)
+
+
+@router.post("/ocr", response_model=OCRResponse)
+async def extract_text_from_image(
+    image: UploadFile = File(..., description="OCR 대상 이미지"),
+):
+    """
+    이미지에서 텍스트를 추출합니다 (Vision LLM 기반 OCR).
+
+    지원 형식: PNG, JPG, JPEG, GIF, WEBP, BMP (SVG 제외)
+    최대 크기: 20MB
+    """
+    import asyncio
+    import base64
+
+    from langchain_core.messages import HumanMessage
+
+    from models.llm_models import LLMModelRegistry
+    from services.llm_service import LLMService
+
+    filename = image.filename or "image.png"
+    ext = Path(filename).suffix.lower()
+
+    # SVG는 벡터 이미지이므로 OCR 스킵
+    if ext == ".svg":
+        return OCRResponse(success=True, text="", filename=filename, model_used="")
+
+    # 파일 확장자 검증
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"지원하지 않는 이미지 형식: {ext}. 지원: {', '.join(ALLOWED_IMAGE_EXTENSIONS - {'.svg'})}",
+        )
+
+    # 이미지 읽기 + 크기 검증
+    content = await image.read()
+    if len(content) > MAX_IMAGE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"이미지 크기 초과: {len(content) / 1024 / 1024:.1f}MB (최대 {MAX_IMAGE_SIZE / 1024 / 1024:.0f}MB)",
+        )
+
+    # Vision 지원 + 사용 가능한 모델 자동 선택
+    # LLM_PROVIDER 설정에 맞는 프로바이더를 우선 시도
+    preferred_provider = os.getenv("LLM_PROVIDER", "google")
+    vision_model = None
+    fallback_model = None
+    for model in LLMModelRegistry.get_enabled():
+        if model.supports_vision and LLMModelRegistry.is_available(model.id):
+            if model.provider.value == preferred_provider and vision_model is None:
+                vision_model = model
+            elif fallback_model is None:
+                fallback_model = model
+    if vision_model is None:
+        vision_model = fallback_model
+
+    if not vision_model:
+        return OCRResponse(
+            success=False,
+            filename=filename,
+            error="OCR 서비스 사용 불가 - Vision 지원 모델의 API 키를 설정하세요",
+        )
+
+    # Base64 인코딩
+    image_b64 = base64.b64encode(content).decode("utf-8")
+    mime_type = _MIME_TYPE_MAP.get(ext, "image/png")
+
+    # LLM Vision 호출 (30초 타임아웃)
+    try:
+        llm = LLMService._get_llm(vision_model.id, temperature=0.0, max_tokens=4096)
+
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": OCR_PROMPT},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{mime_type};base64,{image_b64}"},
+                },
+            ]
+        )
+
+        response = await asyncio.wait_for(llm.ainvoke([message]), timeout=30.0)
+        # Gemini는 content를 list로 반환할 수 있음
+        raw = response.content
+        if isinstance(raw, list):
+            extracted_text = "".join(
+                part.get("text", "") if isinstance(part, dict) else str(part) for part in raw
+            ).strip()
+        else:
+            extracted_text = str(raw).strip()
+
+        return OCRResponse(
+            success=True,
+            text=extracted_text,
+            filename=filename,
+            model_used=vision_model.id,
+        )
+    except TimeoutError:
+        return OCRResponse(
+            success=False,
+            filename=filename,
+            error="OCR 타임아웃 (30초 초과)",
+            model_used=vision_model.id,
+        )
+    except Exception as e:
+        return OCRResponse(
+            success=False,
+            filename=filename,
+            error=f"텍스트 추출 실패: {str(e)}",
+            model_used=vision_model.id,
+        )
 
 
 @router.get("/{agent_id}", response_model=AgentResponse)

@@ -59,6 +59,7 @@ interface AuthState {
 // Store
 // ─────────────────────────────────────────────────────────────
 
+/** 인증 상태 관리 스토어 (OAuth, 토큰 갱신, 세션 유지). */
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({

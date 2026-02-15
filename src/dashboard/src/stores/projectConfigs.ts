@@ -12,10 +12,12 @@ export interface ProjectInfo {
   has_agents: boolean
   has_mcp: boolean
   has_hooks: boolean
+  has_commands: boolean
   skill_count: number
   agent_count: number
   mcp_server_count: number
   hook_count: number
+  command_count: number
   last_modified: string
 }
 
@@ -75,6 +77,17 @@ export interface HookConfig {
   file_path: string
 }
 
+export interface CommandConfig {
+  command_id: string
+  project_id: string
+  name: string
+  description: string
+  file_path: string
+  allowed_tools: string | null
+  argument_hint: string | null
+  modified_at: string | null
+}
+
 export interface ProjectConfigSummary {
   project: ProjectInfo
   skills: SkillConfig[]
@@ -82,6 +95,7 @@ export interface ProjectConfigSummary {
   mcp_servers: MCPServerConfig[]
   user_mcp_servers: MCPServerConfig[]
   hooks: HookConfig[]
+  commands: CommandConfig[]
 }
 
 export interface ConfigChangeEvent {
@@ -93,7 +107,21 @@ export interface ConfigChangeEvent {
   details: Record<string, unknown>
 }
 
-export type TabType = 'overview' | 'skills' | 'agents' | 'mcp' | 'hooks'
+// DB-managed project types
+export interface DBProject {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  path: string | null
+  is_active: boolean
+  settings: Record<string, unknown>
+  created_at: string | null
+  updated_at: string | null
+  created_by: string | null
+}
+
+export type TabType = 'overview' | 'skills' | 'agents' | 'mcp' | 'hooks' | 'commands'
 
 // MCP Modal Types
 export type MCPModalMode = 'create' | 'edit' | null
@@ -101,6 +129,7 @@ export type MCPModalMode = 'create' | 'edit' | null
 // Skill/Agent Modal Types
 export type SkillModalMode = 'create' | 'edit' | null
 export type AgentModalMode = 'create' | 'edit' | null
+export type CommandModalMode = 'create' | 'edit' | null
 
 interface ProjectConfigsState {
   // Projects
@@ -152,6 +181,13 @@ interface ProjectConfigsState {
   agentContent: string | null
   savingAgent: boolean
   deletingAgents: Set<string>
+
+  // Command Modal state
+  commandModalMode: CommandModalMode
+  editingCommand: CommandConfig | null
+  commandContent: string | null
+  savingCommand: boolean
+  deletingCommands: Set<string>
 
   // Actions
   fetchProjects: () => Promise<void>
@@ -209,11 +245,29 @@ interface ProjectConfigsState {
   addHookEntry: (projectId: string, event: string, matcher: string, hooks: { type: string; command: string }[]) => Promise<boolean>
   deleteHook: (projectId: string, event: string, index: number) => Promise<boolean>
 
+  // Command CRUD actions
+  openCommandModal: (mode: 'create' | 'edit', command?: CommandConfig) => void
+  closeCommandModal: () => void
+  fetchCommandContent: (projectId: string, commandId: string) => Promise<void>
+  createCommand: (projectId: string, commandId: string, content: string) => Promise<boolean>
+  updateCommand: (projectId: string, commandId: string, content: string) => Promise<boolean>
+  deleteCommand: (projectId: string, commandId: string) => Promise<boolean>
+
   // Copy actions
   copySkill: (sourceProjectId: string, skillId: string, targetProjectId: string) => Promise<boolean>
   copyAgent: (sourceProjectId: string, agentId: string, targetProjectId: string) => Promise<boolean>
   copyMCPServer: (sourceProjectId: string, serverId: string, targetProjectId: string) => Promise<boolean>
   copyHook: (sourceProjectId: string, event: string, index: number, targetProjectId: string) => Promise<boolean>
+  copyCommand: (sourceProjectId: string, commandId: string, targetProjectId: string) => Promise<boolean>
+
+  // DB Project CRUD actions
+  dbProjects: DBProject[]
+  isLoadingDBProjects: boolean
+  fetchDBProjects: () => Promise<void>
+  createDBProject: (data: { name: string; description?: string; path?: string }) => Promise<boolean>
+  updateDBProject: (id: string, data: { name?: string; description?: string; path?: string }) => Promise<boolean>
+  deleteDBProject: (id: string) => Promise<boolean>
+  restoreDBProject: (id: string) => Promise<boolean>
 }
 
 export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => ({
@@ -260,6 +314,17 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
   agentContent: null,
   savingAgent: false,
   deletingAgents: new Set(),
+
+  // DB Projects
+  dbProjects: [],
+  isLoadingDBProjects: false,
+
+  // Command Modal state
+  commandModalMode: null,
+  editingCommand: null,
+  commandContent: null,
+  savingCommand: false,
+  deletingCommands: new Set(),
 
   // Actions
   fetchProjects: async () => {
@@ -1022,6 +1087,269 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
 
       await get().fetchProjects()
       await get().fetchProjectSummary(targetProjectId)
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    }
+  },
+
+  // Command CRUD actions
+  openCommandModal: (mode, command) => {
+    set({
+      commandModalMode: mode,
+      editingCommand: command || null,
+      commandContent: null,
+    })
+    if (mode === 'edit' && command) {
+      get().fetchCommandContent(command.project_id, command.command_id)
+    }
+  },
+
+  closeCommandModal: () => {
+    set({
+      commandModalMode: null,
+      editingCommand: null,
+      commandContent: null,
+    })
+  },
+
+  fetchCommandContent: async (projectId, commandId) => {
+    set({ isLoadingContent: true })
+
+    try {
+      const res = await fetch(`${API_BASE}/project-configs/${projectId}/commands/${commandId}/content`)
+      if (!res.ok) {
+        throw new Error('Failed to fetch command content')
+      }
+
+      const data = await res.json()
+      set({ commandContent: data.content, isLoadingContent: false })
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage, isLoadingContent: false })
+    }
+  },
+
+  createCommand: async (projectId, commandId, content) => {
+    set({ savingCommand: true, error: null })
+
+    try {
+      const res = await fetch(`${API_BASE}/project-configs/${projectId}/commands`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command_id: commandId, content }),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.detail || 'Failed to create command')
+      }
+
+      await get().fetchProjectSummary(projectId)
+      set({ commandModalMode: null, editingCommand: null })
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    } finally {
+      set({ savingCommand: false })
+    }
+  },
+
+  updateCommand: async (projectId, commandId, content) => {
+    set({ savingCommand: true, error: null })
+
+    try {
+      const res = await fetch(`${API_BASE}/project-configs/${projectId}/commands/${commandId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.detail || 'Failed to update command')
+      }
+
+      await get().fetchProjectSummary(projectId)
+      set({ commandModalMode: null, editingCommand: null })
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    } finally {
+      set({ savingCommand: false })
+    }
+  },
+
+  deleteCommand: async (projectId, commandId) => {
+    const key = `${projectId}:${commandId}`
+    set((state) => ({ deletingCommands: new Set([...state.deletingCommands, key]) }))
+
+    try {
+      const res = await fetch(`${API_BASE}/project-configs/${projectId}/commands/${commandId}`, {
+        method: 'DELETE',
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.detail || 'Failed to delete command')
+      }
+
+      await get().fetchProjectSummary(projectId)
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    } finally {
+      set((state) => {
+        const newSet = new Set(state.deletingCommands)
+        newSet.delete(key)
+        return { deletingCommands: newSet }
+      })
+    }
+  },
+
+  copyCommand: async (sourceProjectId, commandId, targetProjectId) => {
+    set({ error: null })
+
+    try {
+      const res = await fetch(`${API_BASE}/project-configs/${sourceProjectId}/commands/${commandId}/copy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command_id: commandId, target_project_id: targetProjectId }),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.detail || 'Failed to copy command')
+      }
+
+      await get().fetchProjects()
+      await get().fetchProjectSummary(targetProjectId)
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    }
+  },
+
+  // DB Project CRUD actions
+  fetchDBProjects: async () => {
+    set({ isLoadingDBProjects: true, error: null })
+
+    try {
+      const res = await fetch(`${API_BASE}/project-registry`)
+      if (!res.ok) {
+        throw new Error(`Failed to fetch DB projects: ${res.statusText}`)
+      }
+
+      const data = await res.json()
+      set({
+        dbProjects: data.projects,
+        isLoadingDBProjects: false,
+      })
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage, isLoadingDBProjects: false })
+    }
+  },
+
+  createDBProject: async (data) => {
+    set({ error: null })
+
+    try {
+      const res = await fetch(`${API_BASE}/project-registry`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.detail || 'Failed to create project')
+      }
+
+      // Refresh both DB projects and config projects
+      await get().fetchDBProjects()
+      await get().fetchProjects()
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    }
+  },
+
+  updateDBProject: async (id, data) => {
+    set({ error: null })
+
+    try {
+      const res = await fetch(`${API_BASE}/project-registry/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.detail || 'Failed to update project')
+      }
+
+      await get().fetchDBProjects()
+      await get().fetchProjects()
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    }
+  },
+
+  deleteDBProject: async (id) => {
+    set({ error: null })
+
+    try {
+      const res = await fetch(`${API_BASE}/project-registry/${id}`, {
+        method: 'DELETE',
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.detail || 'Failed to delete project')
+      }
+
+      await get().fetchDBProjects()
+      await get().fetchProjects()
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    }
+  },
+
+  restoreDBProject: async (id) => {
+    set({ error: null })
+
+    try {
+      const res = await fetch(`${API_BASE}/project-registry/${id}/restore`, {
+        method: 'POST',
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.detail || 'Failed to restore project')
+      }
+
+      await get().fetchDBProjects()
+      await get().fetchProjects()
       return true
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'

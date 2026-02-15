@@ -454,7 +454,7 @@ export function RAGQueryPanel({ projectId, projectName, className, onClose }: RA
 
                 return (
                   <div
-                    key={index}
+                    key={`result-${doc.source ?? 'unknown'}-${index}`}
                     className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800"
                   >
                     {/* Result Header */}

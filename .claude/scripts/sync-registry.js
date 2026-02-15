@@ -295,26 +295,77 @@ function syncHooks() {
   return { synced, errors };
 }
 
+function syncCommands() {
+  console.log('Commands sync...');
+
+  const commandsDir = path.join(CLAUDE_DIR, 'commands');
+  const registryPath = path.join(CLAUDE_DIR, 'commands-registry.json');
+
+  if (!fs.existsSync(commandsDir)) {
+    console.log('   No commands directory found');
+    return { synced: 0, errors: [] };
+  }
+
+  const commandFiles = fs.readdirSync(commandsDir).filter(f => f.endsWith('.md'));
+
+  const registry = {
+    _generated: new Date().toISOString(),
+    _description: 'Auto-generated commands registry. Do not edit manually.',
+    commands: {}
+  };
+
+  let synced = 0;
+  const errors = [];
+
+  for (const file of commandFiles) {
+    const cmdPath = path.join(commandsDir, file);
+
+    try {
+      const content = fs.readFileSync(cmdPath, 'utf-8');
+      const { data } = parseComplexFrontmatter(content);
+
+      const name = data.name || file.replace(/\.md$/, '');
+      registry.commands[name] = {
+        file: '.claude/commands/' + file,
+        description: data.description || '',
+        allowedTools: data['allowed-tools'] || null
+      };
+      synced++;
+      console.log('   + ' + name);
+    } catch (e) {
+      errors.push({ file, error: e.message });
+    }
+  }
+
+  fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2) + '\n');
+
+  console.log('   Synced: ' + synced + ' commands');
+  return { synced, errors };
+}
+
 function syncAll() {
   console.log('Syncing all registries...\n');
 
   const results = {
     skills: syncSkills(),
     agents: syncAgents(),
-    hooks: syncHooks()
+    hooks: syncHooks(),
+    commands: syncCommands()
   };
 
   console.log('\n========================================');
   console.log('Sync Summary');
   console.log('========================================');
-  console.log('Skills: ' + results.skills.synced + ' synced');
-  console.log('Agents: ' + results.agents.synced + ' synced');
-  console.log('Hooks:  ' + results.hooks.synced + ' synced');
+  console.log('Skills:   ' + results.skills.synced + ' synced');
+  console.log('Agents:   ' + results.agents.synced + ' synced');
+  console.log('Hooks:    ' + results.hooks.synced + ' synced');
+  console.log('Commands: ' + results.commands.synced + ' synced');
 
   const totalErrors = [
     ...results.skills.errors,
     ...results.agents.errors,
-    ...results.hooks.errors
+    ...results.hooks.errors,
+    ...results.commands.errors
   ];
 
   if (totalErrors.length > 0) {
@@ -334,20 +385,24 @@ if (args.includes('--help') || args.includes('-h')) {
   console.log('  --skills    Sync skills only');
   console.log('  --agents    Sync agents only');
   console.log('  --hooks     Sync hooks only');
+  console.log('  --commands  Sync commands only');
   console.log('  --all       Sync all (default)');
   process.exit(0);
 }
 
-if (args.includes('--skills') && !args.includes('--agents') && !args.includes('--hooks')) {
-  syncSkills();
-} else if (args.includes('--agents') && !args.includes('--skills') && !args.includes('--hooks')) {
-  syncAgents();
-} else if (args.includes('--hooks') && !args.includes('--skills') && !args.includes('--agents')) {
-  syncHooks();
-} else if (args.length === 0 || args.includes('--all')) {
+const syncTargets = ['--skills', '--agents', '--hooks', '--commands'];
+const selected = syncTargets.filter(t => args.includes(t));
+
+if (args.length === 0 || args.includes('--all')) {
   syncAll();
+} else if (selected.length === 1) {
+  if (selected[0] === '--skills') syncSkills();
+  else if (selected[0] === '--agents') syncAgents();
+  else if (selected[0] === '--hooks') syncHooks();
+  else if (selected[0] === '--commands') syncCommands();
 } else {
   if (args.includes('--skills')) syncSkills();
   if (args.includes('--agents')) syncAgents();
   if (args.includes('--hooks')) syncHooks();
+  if (args.includes('--commands')) syncCommands();
 }

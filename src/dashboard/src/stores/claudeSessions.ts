@@ -87,6 +87,7 @@ interface ClaudeSessionsState {
   generateSummary: (sessionId: string) => Promise<void>
   generateSummaryQuiet: (sessionId: string) => Promise<void>
   setAutoGenerateSummaries: (enabled: boolean) => void
+  autoGenerateMissingSummaries: () => Promise<void>
 
   // Delete actions
   deleteSession: (sessionId: string) => Promise<boolean>
@@ -116,6 +117,7 @@ interface ClaudeSessionsState {
   stopStreaming: () => void
 }
 
+/** Claude 세션 목록/상세/스트리밍 상태 관리 스토어. */
 export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => ({
   // Initial state
   sessions: [],
@@ -145,8 +147,8 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   sortBy: 'last_activity',
   sortOrder: 'desc',
 
-  // Filtering initial state - default to Agent-System project
-  projectFilter: 'Agent-System',
+  // Filtering initial state - show all projects by default
+  projectFilter: null,
   sourceUserFilter: null,
   searchQuery: '',
 
@@ -217,13 +219,9 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
         isLoading: false,
       })
 
-      // Auto-generate summaries for sessions without one
+      // Trigger auto-generate for missing summaries (non-blocking)
       if (autoGenerateSummaries) {
-        const sessionsWithoutSummary = data.sessions.filter(s => !s.summary)
-        // Generate summaries one by one to avoid overwhelming the LLM
-        for (const session of sessionsWithoutSummary) {
-          await get().generateSummaryQuiet(session.session_id)
-        }
+        get().autoGenerateMissingSummaries()
       }
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
@@ -668,6 +666,41 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
     set({ autoGenerateSummaries: enabled })
   },
 
+  // Auto-generate summaries for sessions without one (up to 200 sessions)
+  autoGenerateMissingSummaries: async () => {
+    const { autoGenerateSummaries, projectFilter, sourceUserFilter, sortBy, sortOrder, generatingSummaryFor } = get()
+    if (!autoGenerateSummaries || generatingSummaryFor) return
+
+    try {
+      const params = new URLSearchParams()
+      if (projectFilter) params.set('project', projectFilter)
+      if (sourceUserFilter) params.set('source_user', sourceUserFilter)
+      params.set('sort_by', sortBy)
+      params.set('sort_order', sortOrder)
+      params.set('offset', '0')
+      params.set('limit', '200')
+
+      const res = await fetch(`${API_BASE}/claude-sessions?${params.toString()}`)
+      if (!res.ok) return
+
+      const data: ClaudeSessionResponse = await res.json()
+      const sessionsWithoutSummary = data.sessions.filter(s => !s.summary)
+
+      // Generate summaries one by one to avoid overwhelming the LLM
+      for (const session of sessionsWithoutSummary) {
+        if (!get().autoGenerateSummaries) break
+        await get().generateSummaryQuiet(session.session_id)
+      }
+
+      // Refresh pending count after generation
+      if (sessionsWithoutSummary.length > 0) {
+        await get().fetchPendingSummaryCount()
+      }
+    } catch {
+      // Silently fail for auto-generation
+    }
+  },
+
   // Delete a single session
   deleteSession: async (sessionId: string) => {
     try {
@@ -777,7 +810,10 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   // Fetch count of sessions without summaries
   fetchPendingSummaryCount: async () => {
     try {
-      const res = await fetch(`${API_BASE}/claude-sessions/summaries/pending-count`)
+      const { projectFilter } = get()
+      const params = new URLSearchParams()
+      if (projectFilter) params.set('project', projectFilter)
+      const res = await fetch(`${API_BASE}/claude-sessions/summaries/pending-count?${params.toString()}`)
       if (!res.ok) return
 
       const data = await res.json()

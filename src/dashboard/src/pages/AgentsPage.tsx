@@ -20,10 +20,11 @@ import {
 type TabType = 'analyzer' | 'feedback'
 
 export function AgentsPage() {
-  const { projectFilter } = useNavigationStore()
+  const projectFilter = useNavigationStore(s => s.projectFilter)
 
   // Feedback store (for count)
-  const { feedbacks, fetchFeedbacks } = useFeedbackStore()
+  const feedbacks = useFeedbackStore(s => s.feedbacks)
+  const fetchFeedbacks = useFeedbackStore(s => s.fetchFeedbacks)
 
   // Local state
   const [activeTab, setActiveTab] = useState<TabType>('analyzer')
@@ -34,7 +35,7 @@ export function AgentsPage() {
   }, [fetchFeedbacks])
 
   // Get selected project info from orchestration store
-  const { projects } = useOrchestrationStore()
+  const projects = useOrchestrationStore(s => s.projects)
   const selectedProject = useMemo(() =>
     projects.find(p => p.id === projectFilter),
     [projects, projectFilter]

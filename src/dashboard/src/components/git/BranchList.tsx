@@ -15,6 +15,7 @@ import {
   ArrowRightLeft,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
+import { GitAlert } from './GitAlert'
 import type { GitBranch, ConflictStatus } from '../../stores/git'
 
 interface DeleteConfirmState {
@@ -498,9 +499,7 @@ export function BranchList({
 
             {/* Error message */}
             {deleteError && (
-              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                <p className="text-sm text-red-700 dark:text-red-300">{deleteError}</p>
-              </div>
+              <GitAlert error={deleteError} onClose={() => setDeleteError(null)} className="mb-4" />
             )}
 
             <div className="flex justify-end gap-3">

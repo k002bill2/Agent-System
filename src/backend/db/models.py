@@ -303,6 +303,9 @@ class AuditLogModel(Base):
     new_value = Column(JSONB, nullable=True)  # New state
     changes = Column(JSONB, nullable=True)  # Diff of changes
 
+    # Project scope
+    project_id = Column(String(36), nullable=True, index=True)
+
     # Context
     agent_id = Column(String(100), nullable=True, index=True)
     ip_address = Column(String(45), nullable=True)  # IPv6 compatible
@@ -340,6 +343,7 @@ class AuditLogModel(Base):
         Index("ix_audit_user_action", "user_id", "action"),
         Index("ix_audit_resource", "resource_type", "resource_id"),
         Index("ix_audit_created_action", "created_at", "action"),
+        Index("ix_audit_project_action", "project_id", "action"),
         Index("ix_audit_classification", "data_classification"),
         Index("ix_audit_expires", "expires_at"),
     )
@@ -1064,6 +1068,28 @@ class WorkflowArtifactModel(Base):
         Index("ix_workflow_artifacts_run", "run_id"),
         Index("ix_workflow_artifacts_expires", "expires_at"),
     )
+
+
+class ProjectModel(Base):
+    """Project model for DB-managed project registry."""
+
+    __tablename__ = "projects"
+
+    id = Column(String(36), primary_key=True)
+    name = Column(String(255), nullable=False, unique=True)
+    slug = Column(String(100), nullable=False, unique=True, index=True)
+    description = Column(Text, nullable=True)
+    path = Column(String(1000), nullable=True)  # Filesystem path for config scanning
+    is_active = Column(Boolean, default=True, index=True)
+    settings = Column(JSONB, default=dict)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    # Note: slug, is_active, created_at indexes are created via column-level index=True
+    __table_args__: tuple = ()
 
 
 class WorkflowTemplateModel(Base):

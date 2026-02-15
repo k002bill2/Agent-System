@@ -230,7 +230,7 @@ export function SessionList({ statusFilter }: SessionListProps) {
       <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
         <div>
           <h2 className="font-semibold text-gray-900 dark:text-white">
-            Sessions
+            {projectFilter || 'All Projects'}
           </h2>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
             {activeCount} active / {sessions.length} loaded / {filteredCount} total

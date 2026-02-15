@@ -81,6 +81,7 @@ const initialState = {
 // Store
 // ─────────────────────────────────────────────────────────────
 
+/** 에이전트 레지스트리 상태 관리 스토어 (슬라이스 래퍼). */
 export const useAgentStore = create<AgentState>()((set) => ({
   ...initialState,
 
@@ -117,16 +118,21 @@ export const useAgentStore = create<AgentState>()((set) => ({
 // Selectors
 // ─────────────────────────────────────────────────────────────
 
+/** 사용 가능한 에이전트만 필터링하는 셀렉터. */
 export const selectAvailableAgents = (state: AgentState): AgentInfo[] =>
   state.agents.filter((a) => a.is_available)
 
+/** ID로 에이전트를 조회하는 셀렉터. */
 export const selectAgentById = (state: AgentState, id: string): AgentInfo | undefined =>
   state.agents.find((a) => a.id === id)
 
+/** 카테고리별 에이전트를 필터링하는 셀렉터. */
 export const selectAgentsByCategory = (state: AgentState, category: AgentCategory): AgentInfo[] =>
   state.agents.filter((a) => a.category === category)
 
+/** 현재 선택된 에이전트를 반환하는 셀렉터. */
 export const selectSelectedAgent = (state: AgentState): AgentInfo | undefined =>
   state.selectedAgentId ? state.agents.find((a) => a.id === state.selectedAgentId) : undefined
 
+/** 전체 에이전트 수를 반환하는 셀렉터. */
 export const selectAgentCount = (state: AgentState): number => state.agents.length

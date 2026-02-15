@@ -136,7 +136,7 @@ function JsonTree({ data, depth = 0, maxDepth = 6 }: JsonTreeProps) {
         {expanded && (
           <div className="ml-4 border-l border-gray-300 dark:border-gray-600 pl-2">
             {data.map((item, index) => (
-              <div key={index} className="my-1">
+              <div key={`arr-${depth}-${index}`} className="my-1">
                 <span className="text-gray-500">{index}: </span>
                 <JsonTree data={item} depth={depth + 1} maxDepth={maxDepth} />
               </div>

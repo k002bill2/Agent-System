@@ -186,7 +186,7 @@ export function MCPServerModal() {
             </label>
             <div className="space-y-2">
               {args.map((arg, index) => (
-                <div key={index} className="flex items-center gap-2">
+                <div key={`arg-${arg}-${index}`} className="flex items-center gap-2">
                   <code className="flex-1 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-sm text-gray-700 dark:text-gray-300">
                     {arg}
                   </code>
@@ -231,7 +231,7 @@ export function MCPServerModal() {
             </label>
             <div className="space-y-2">
               {envPairs.map((pair, index) => (
-                <div key={index} className="flex items-center gap-2">
+                <div key={`env-${pair.key}-${index}`} className="flex items-center gap-2">
                   <input
                     type="text"
                     value={pair.key}

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { cn } from '../lib/utils'
-import { LayoutGrid, Sparkles, Bot, Server, Webhook, RefreshCw, AlertCircle } from 'lucide-react'
+import { LayoutGrid, Sparkles, Bot, Server, Webhook, Terminal, RefreshCw, AlertCircle } from 'lucide-react'
 import {
   ProjectList,
   OverviewTab,
@@ -8,6 +8,7 @@ import {
   AgentsTab,
   MCPTab,
   HooksTab,
+  CommandsTab,
 } from '../components/project-configs'
 import { useProjectConfigsStore, TabType } from '../stores/projectConfigs'
 
@@ -15,23 +16,22 @@ const tabs: { id: TabType; label: string; icon: typeof LayoutGrid }[] = [
   { id: 'overview', label: 'Overview', icon: LayoutGrid },
   { id: 'skills', label: 'Skills', icon: Sparkles },
   { id: 'agents', label: 'Agents', icon: Bot },
+  { id: 'commands', label: 'Commands', icon: Terminal },
   { id: 'mcp', label: 'MCP', icon: Server },
   { id: 'hooks', label: 'Hooks', icon: Webhook },
 ]
 
 export function ProjectConfigsPage() {
-  const {
-    fetchProjects,
-    startStreaming,
-    stopStreaming,
-    activeTab,
-    setActiveTab,
-    error,
-    clearError,
-    refresh,
-    isLoading,
-    selectedProject,
-  } = useProjectConfigsStore()
+  const fetchProjects = useProjectConfigsStore(s => s.fetchProjects)
+  const startStreaming = useProjectConfigsStore(s => s.startStreaming)
+  const stopStreaming = useProjectConfigsStore(s => s.stopStreaming)
+  const activeTab = useProjectConfigsStore(s => s.activeTab)
+  const setActiveTab = useProjectConfigsStore(s => s.setActiveTab)
+  const error = useProjectConfigsStore(s => s.error)
+  const clearError = useProjectConfigsStore(s => s.clearError)
+  const refresh = useProjectConfigsStore(s => s.refresh)
+  const isLoading = useProjectConfigsStore(s => s.isLoading)
+  const selectedProject = useProjectConfigsStore(s => s.selectedProject)
 
   useEffect(() => {
     fetchProjects()
@@ -52,6 +52,8 @@ export function ProjectConfigsPage() {
         return <AgentsTab />
       case 'mcp':
         return <MCPTab />
+      case 'commands':
+        return <CommandsTab />
       case 'hooks':
         return <HooksTab />
       default:
@@ -112,6 +114,11 @@ export function ProjectConfigsPage() {
                   {tab.id === 'mcp' && selectedProject?.mcp_servers?.length ? (
                     <span className="ml-1 text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
                       {selectedProject.mcp_servers.length}
+                    </span>
+                  ) : null}
+                  {tab.id === 'commands' && selectedProject?.commands?.length ? (
+                    <span className="ml-1 text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
+                      {selectedProject.commands.length}
                     </span>
                   ) : null}
                   {tab.id === 'hooks' && selectedProject?.hooks?.length ? (

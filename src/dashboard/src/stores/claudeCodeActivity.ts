@@ -54,6 +54,7 @@ interface ClaudeCodeActivityState {
   clearError: () => void
 }
 
+/** Claude Code 활동 이벤트 및 태스크 실시간 스트리밍 스토어. */
 export const useClaudeCodeActivityStore = create<ClaudeCodeActivityState>()(
   persist(
     (set, get) => ({

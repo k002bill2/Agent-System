@@ -32,6 +32,7 @@ class AuditLogQueryParams(BaseModel):
 
     session_id: str | None = None
     user_id: str | None = None
+    project_id: str | None = None
     action: str | None = None
     resource_type: str | None = None
     resource_id: str | None = None
@@ -46,6 +47,7 @@ class AuditLogQueryParams(BaseModel):
 async def get_audit_logs(
     session_id: str | None = Query(None),
     user_id: str | None = Query(None),
+    project_id: str | None = Query(None),
     action: str | None = Query(None),
     resource_type: str | None = Query(None),
     resource_id: str | None = Query(None),
@@ -62,6 +64,7 @@ async def get_audit_logs(
     Supports filtering by:
     - session_id: Filter by session
     - user_id: Filter by user
+    - project_id: Filter by project
     - action: Filter by action type (e.g., task_created, tool_executed)
     - resource_type: Filter by resource type (e.g., task, session, approval)
     - resource_id: Filter by specific resource ID
@@ -86,6 +89,7 @@ async def get_audit_logs(
     filter = AuditLogFilter(
         session_id=session_id,
         user_id=user_id,
+        project_id=project_id,
         action=action_enum,
         resource_type=resource_type_enum,
         resource_id=resource_id,
@@ -104,6 +108,7 @@ async def get_audit_logs(
 @router.get("/stats")
 async def get_audit_stats(
     session_id: str | None = Query(None),
+    project_id: str | None = Query(None),
     start_date: datetime | None = Query(None),
     end_date: datetime | None = Query(None),
     db: AsyncSession = Depends(get_db),
@@ -121,6 +126,7 @@ async def get_audit_stats(
     # Get all logs for stats calculation
     filter = AuditLogFilter(
         session_id=session_id,
+        project_id=project_id,
         start_date=start_date,
         end_date=end_date,
         limit=10000,  # Get enough for accurate stats
@@ -197,6 +203,7 @@ async def export_audit_logs(
     format: str = Query("json", enum=["json", "csv"]),
     session_id: str | None = Query(None),
     user_id: str | None = Query(None),
+    project_id: str | None = Query(None),
     action: str | None = Query(None),
     resource_type: str | None = Query(None),
     start_date: datetime | None = Query(None),
@@ -224,6 +231,7 @@ async def export_audit_logs(
     filter = AuditLogFilter(
         session_id=session_id,
         user_id=user_id,
+        project_id=project_id,
         action=action_enum,
         resource_type=resource_type_enum,
         start_date=start_date,
@@ -437,6 +445,19 @@ async def seed_sample_data(db: AsyncSession = Depends(get_db)):
         (AuditAction.TASK_COMPLETED, ResourceType.TASK, "success"),
         (AuditAction.AGENT_ASSIGNED, ResourceType.AGENT, "success"),
         (AuditAction.AGENT_COMPLETED, ResourceType.AGENT, "success"),
+        # New system activity events
+        (AuditAction.USER_LOGIN, ResourceType.USER, "success"),
+        (AuditAction.USER_LOGIN, ResourceType.USER, "success"),
+        (AuditAction.USER_REGISTERED, ResourceType.USER, "success"),
+        (AuditAction.LOGIN_FAILED, ResourceType.USER, "failed"),
+        (AuditAction.TOKEN_REFRESHED, ResourceType.USER, "success"),
+        (AuditAction.USER_LOGOUT, ResourceType.USER, "success"),
+        (AuditAction.CONFIG_CREATED, ResourceType.CONFIG, "success"),
+        (AuditAction.CONFIG_UPDATED, ResourceType.CONFIG, "success"),
+        (AuditAction.CONFIG_DELETED, ResourceType.CONFIG, "success"),
+        (AuditAction.NOTIFICATION_RULE_CREATED, ResourceType.NOTIFICATION, "success"),
+        (AuditAction.NOTIFICATION_RULE_UPDATED, ResourceType.NOTIFICATION, "success"),
+        (AuditAction.LLM_PROVIDER_CHANGED, ResourceType.LLM_PROVIDER, "success"),
     ]
 
     tool_names = ["bash_execute", "file_read", "file_write", "code_search", "web_fetch"]

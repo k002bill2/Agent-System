@@ -14,7 +14,8 @@ const riskColors: Record<string, string> = {
 }
 
 export function ApprovalModal({ approval, onClose }: ApprovalModalProps) {
-  const { approveOperation, denyOperation } = useOrchestrationStore()
+  const approveOperation = useOrchestrationStore(s => s.approveOperation)
+  const denyOperation = useOrchestrationStore(s => s.denyOperation)
   const [note, setNote] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
 
@@ -162,7 +163,7 @@ export function ApprovalModal({ approval, onClose }: ApprovalModalProps) {
 }
 
 export function ApprovalBanner() {
-  const { pendingApprovals } = useOrchestrationStore()
+  const pendingApprovals = useOrchestrationStore(s => s.pendingApprovals)
   const [selectedApproval, setSelectedApproval] = useState<ApprovalRequest | null>(null)
 
   const pendingList = Object.values(pendingApprovals).filter(

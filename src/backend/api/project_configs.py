@@ -16,7 +16,12 @@ from models.project_config import (
     AgentContentResponse,
     AgentCreateRequest,
     AgentUpdateRequest,
+    CommandConfig,
+    CommandContentResponse,
+    CommandCreateRequest,
+    CommandUpdateRequest,
     CopyAgentRequest,
+    CopyCommandRequest,
     CopyHookRequest,
     CopyMCPRequest,
     CopySkillRequest,
@@ -34,6 +39,7 @@ from models.project_config import (
     SkillCreateRequest,
     SkillUpdateRequest,
 )
+from services.audit_service import AuditAction, audit_config_change
 from services.project_config_monitor import get_project_config_monitor
 
 logger = logging.getLogger(__name__)
@@ -48,13 +54,26 @@ router = APIRouter(prefix="/project-configs", tags=["project-configs"])
 
 @router.get("", response_model=ProjectConfigResponse)
 async def list_projects() -> ProjectConfigResponse:
-    """List all discovered projects with Claude Code configuration.
+    """List projects with Claude Code configuration.
+
+    When USE_DATABASE=true, only returns projects registered in DB.
+    Otherwise, falls back to filesystem auto-discovery.
 
     Returns:
         List of projects with summary counts
     """
     monitor = get_project_config_monitor()
-    projects = monitor.discover_projects()
+
+    use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
+
+    if use_database:
+        try:
+            projects = await _get_db_filtered_projects(monitor)
+        except Exception as e:
+            logger.warning(f"DB project filter failed, falling back to discovery: {e}")
+            projects = monitor.discover_projects()
+    else:
+        projects = monitor.discover_projects()
 
     total_skills = sum(p.skill_count for p in projects)
     total_agents = sum(p.agent_count for p in projects)
@@ -67,6 +86,69 @@ async def list_projects() -> ProjectConfigResponse:
         total_agents=total_agents,
         total_mcp_servers=total_mcp_servers,
     )
+
+
+async def _get_db_filtered_projects(monitor) -> list:
+    """Get projects filtered by DB registration.
+
+    For each DB project with a path, scan its config.
+    For DB projects without a path, include basic info from discovered projects
+    matched by name.
+    """
+    from pathlib import Path as PathLib
+
+    from sqlalchemy import select
+
+    from db.database import async_session_factory
+    from db.models import ProjectModel
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(ProjectModel)
+            .where(ProjectModel.is_active == True)  # noqa: E712
+            .order_by(ProjectModel.name)
+        )
+        db_projects = result.scalars().all()
+
+    if not db_projects:
+        return []
+
+    # Build set of DB project names for matching
+    db_project_names = {p.name for p in db_projects}
+    db_project_paths = {p.path for p in db_projects if p.path}
+
+    # Get all discovered projects from filesystem
+    all_discovered = monitor.discover_projects()
+
+    # Filter: only keep projects whose name or path matches a DB project
+    # Use seen_paths to prevent duplicates when DB name != filesystem name
+    filtered = []
+    seen_paths = set()
+    for discovered in all_discovered:
+        if discovered.project_name in db_project_names or discovered.project_path in db_project_paths:
+            if discovered.project_path not in seen_paths:
+                filtered.append(discovered)
+                seen_paths.add(discovered.project_path)
+
+    # Also ensure DB projects with paths not yet in monitor get added
+    discovered_names = {p.project_name for p in filtered}
+    for db_proj in db_projects:
+        if db_proj.name not in discovered_names and db_proj.path:
+            # Skip if this path was already added (matched by path in first loop)
+            if db_proj.path in seen_paths:
+                continue
+            # Try to add the path and scan
+            path = PathLib(db_proj.path)
+            if path.exists() and path.is_dir():
+                monitor.add_external_project(str(path))
+                # Re-scan this specific project
+                project_id = str(path).replace("/", "-").replace("\\", "-")
+                summary = monitor.get_project_summary(project_id)
+                if summary and summary.project:
+                    filtered.append(summary.project)
+                    seen_paths.add(summary.project.project_path)
+
+    return filtered
 
 
 @router.get("/paths")
@@ -374,6 +456,7 @@ async def create_skill(project_id: str, request: SkillCreateRequest) -> SkillCon
             detail=f"Failed to create skill: {request.skill_id}. Check if project exists and skill ID is unique.",
         )
 
+    audit_config_change(AuditAction.CONFIG_CREATED, "skill", request.skill_id, project_id)
     return result
 
 
@@ -392,6 +475,7 @@ async def update_skill(project_id: str, skill_id: str, request: SkillUpdateReque
     monitor = get_project_config_monitor()
 
     if monitor.update_skill_content(project_id, skill_id, request.content):
+        audit_config_change(AuditAction.CONFIG_UPDATED, "skill", skill_id, project_id)
         return {
             "success": True,
             "message": f"Updated skill: {skill_id}",
@@ -419,6 +503,7 @@ async def delete_skill(project_id: str, skill_id: str) -> dict:
     monitor = get_project_config_monitor()
 
     if monitor.delete_skill(project_id, skill_id):
+        audit_config_change(AuditAction.CONFIG_DELETED, "skill", skill_id, project_id)
         return {
             "success": True,
             "message": f"Deleted skill: {skill_id}",
@@ -513,6 +598,7 @@ async def create_agent(project_id: str, request: AgentCreateRequest) -> AgentCon
             detail=f"Failed to create agent: {request.agent_id}. Check if project exists and agent ID is unique.",
         )
 
+    audit_config_change(AuditAction.CONFIG_CREATED, "agent", request.agent_id, project_id)
     return result
 
 
@@ -531,6 +617,7 @@ async def update_agent(project_id: str, agent_id: str, request: AgentUpdateReque
     monitor = get_project_config_monitor()
 
     if monitor.update_agent_content(project_id, agent_id, request.content):
+        audit_config_change(AuditAction.CONFIG_UPDATED, "agent", agent_id, project_id)
         return {
             "success": True,
             "message": f"Updated agent: {agent_id}",
@@ -558,6 +645,7 @@ async def delete_agent(project_id: str, agent_id: str) -> dict:
     monitor = get_project_config_monitor()
 
     if monitor.delete_agent(project_id, agent_id):
+        audit_config_change(AuditAction.CONFIG_DELETED, "agent", agent_id, project_id)
         return {
             "success": True,
             "message": f"Deleted agent: {agent_id}",
@@ -724,6 +812,7 @@ async def update_mcp_server(
             detail=f"Failed to update MCP server: {server_id}. Check if project and server exist.",
         )
 
+    audit_config_change(AuditAction.CONFIG_UPDATED, "mcp_server", server_id, project_id)
     return result
 
 
@@ -757,6 +846,7 @@ async def create_mcp_server(project_id: str, request: MCPServerCreateRequest) ->
             "Check if project exists and server ID is unique.",
         )
 
+    audit_config_change(AuditAction.CONFIG_CREATED, "mcp_server", request.server_id, project_id)
     return result
 
 
@@ -774,6 +864,7 @@ async def delete_mcp_server(project_id: str, server_id: str) -> dict:
     monitor = get_project_config_monitor()
 
     if monitor.delete_mcp_server(project_id, server_id):
+        audit_config_change(AuditAction.CONFIG_DELETED, "mcp_server", server_id, project_id)
         return {
             "success": True,
             "message": f"Deleted MCP server: {server_id}",
@@ -826,6 +917,7 @@ async def update_hooks(project_id: str, request: HooksUpdateRequest) -> dict:
     monitor = get_project_config_monitor()
 
     if monitor.update_hooks(project_id, {"hooks": request.hooks}):
+        audit_config_change(AuditAction.CONFIG_UPDATED, "hooks", "hooks.json", project_id)
         return {
             "success": True,
             "message": "Updated hooks configuration",
@@ -853,6 +945,7 @@ async def add_hook_entry(project_id: str, event: str, request: HookEntryRequest)
     monitor = get_project_config_monitor()
 
     if monitor.add_hook_entry(project_id, event, request.matcher, request.hooks):
+        audit_config_change(AuditAction.CONFIG_CREATED, "hook", event, project_id)
         return {
             "success": True,
             "message": f"Added hook entry for event: {event}",
@@ -881,6 +974,7 @@ async def delete_hook(project_id: str, event: str, index: int) -> dict:
     monitor = get_project_config_monitor()
 
     if monitor.delete_hook(project_id, event, index):
+        audit_config_change(AuditAction.CONFIG_DELETED, "hook", f"{event}[{index}]", project_id)
         return {
             "success": True,
             "message": f"Deleted hook {event}[{index}]",
@@ -892,6 +986,137 @@ async def delete_hook(project_id: str, event: str, index: int) -> dict:
         raise HTTPException(
             status_code=400,
             detail=f"Failed to delete hook {event}[{index}]. Check if project and hook exist.",
+        )
+
+
+# ========================================
+# Commands
+# ========================================
+
+
+@router.get("/{project_id}/commands", response_model=list[CommandConfig])
+async def list_project_commands(project_id: str) -> list[CommandConfig]:
+    """Get all commands for a specific project.
+
+    Args:
+        project_id: Project identifier
+
+    Returns:
+        List of commands for the project
+    """
+    monitor = get_project_config_monitor()
+    commands = monitor.get_project_commands(project_id)
+
+    if not commands:
+        # Check if project exists
+        summary = monitor.get_project_summary(project_id)
+        if summary is None:
+            raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+
+    return commands
+
+
+@router.get("/{project_id}/commands/{command_id}/content", response_model=CommandContentResponse)
+async def get_command_content(project_id: str, command_id: str) -> CommandContentResponse:
+    """Get full content of a command.
+
+    Args:
+        project_id: Project identifier
+        command_id: Command identifier
+
+    Returns:
+        Command configuration with full content
+    """
+    monitor = get_project_config_monitor()
+    command, content = monitor.get_command_content(project_id, command_id)
+
+    if command is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Command not found: {command_id} in project {project_id}",
+        )
+
+    return CommandContentResponse(command=command, content=content)
+
+
+@router.post("/{project_id}/commands", response_model=CommandConfig)
+async def create_command(project_id: str, request: CommandCreateRequest) -> CommandConfig:
+    """Create a new command.
+
+    Args:
+        project_id: Project identifier
+        request: Command create request
+
+    Returns:
+        Created command configuration
+    """
+    monitor = get_project_config_monitor()
+    result = monitor.create_command(project_id, request.command_id, request.content)
+
+    if result is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to create command: {request.command_id}. Check if project exists and command ID is unique.",
+        )
+
+    audit_config_change(AuditAction.CONFIG_CREATED, "command", request.command_id, project_id)
+    return result
+
+
+@router.put("/{project_id}/commands/{command_id}")
+async def update_command(project_id: str, command_id: str, request: CommandUpdateRequest) -> dict:
+    """Update command content.
+
+    Args:
+        project_id: Project identifier
+        command_id: Command identifier
+        request: Update request with new content
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    if monitor.update_command_content(project_id, command_id, request.content):
+        audit_config_change(AuditAction.CONFIG_UPDATED, "command", command_id, project_id)
+        return {
+            "success": True,
+            "message": f"Updated command: {command_id}",
+            "project_id": project_id,
+            "command_id": command_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to update command: {command_id}. Check if project and command exist.",
+        )
+
+
+@router.delete("/{project_id}/commands/{command_id}")
+async def delete_command(project_id: str, command_id: str) -> dict:
+    """Delete a command.
+
+    Args:
+        project_id: Project identifier
+        command_id: Command identifier
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    if monitor.delete_command(project_id, command_id):
+        audit_config_change(AuditAction.CONFIG_DELETED, "command", command_id, project_id)
+        return {
+            "success": True,
+            "message": f"Deleted command: {command_id}",
+            "project_id": project_id,
+            "command_id": command_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to delete command: {command_id}. Check if project and command exist.",
         )
 
 
@@ -1023,4 +1248,35 @@ async def copy_hook(project_id: str, event: str, index: int, request: CopyHookRe
         raise HTTPException(
             status_code=400,
             detail=f"Failed to copy hook '{event}[{index}]'. Check if source and target projects exist.",
+        )
+
+
+@router.post("/{project_id}/commands/{command_id}/copy")
+async def copy_command(project_id: str, command_id: str, request: CopyCommandRequest) -> dict:
+    """Copy a command to another project.
+
+    Args:
+        project_id: Source project identifier
+        command_id: Command identifier to copy
+        request: Copy request with target project
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    result = monitor.copy_command(project_id, command_id, request.target_project_id)
+
+    if result:
+        return {
+            "success": True,
+            "message": f"Copied command '{command_id}' to project '{request.target_project_id}'",
+            "source_project_id": project_id,
+            "target_project_id": request.target_project_id,
+            "command_id": command_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to copy command '{command_id}'. Check if source and target projects exist.",
         )

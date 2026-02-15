@@ -14,6 +14,7 @@ Claude Code configuration for AOS (Agent Orchestration Service) Dashboard.
 ├── checklists/       # 코드 리뷰/테스트/배포 체크리스트
 ├── memory/           # 공통 패턴 문서
 ├── hooks.json        # 훅 설정
+├── commands-registry.json  # 커맨드 레지스트리 (자동 생성)
 └── mcp.json          # MCP 서버 설정
 ```
 

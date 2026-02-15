@@ -1,11 +1,16 @@
 import { useState } from 'react'
-import { FolderCode, Sparkles, Bot, Server, Webhook, Clock, Trash2, Loader2 } from 'lucide-react'
+import { FolderCode, Sparkles, Bot, Server, Webhook, Terminal, Clock, Trash2, Loader2 } from 'lucide-react'
 import { useProjectConfigsStore } from '../../stores/projectConfigs'
 
 export function OverviewTab() {
   const { selectedProject, isLoadingProject, removeProject, selectProject } = useProjectConfigsStore()
   const [isRemoving, setIsRemoving] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({})
+
+  const toggleSection = (section: string) => {
+    setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }))
+  }
 
   if (isLoadingProject) {
     return (
@@ -28,7 +33,7 @@ export function OverviewTab() {
     )
   }
 
-  const { project, skills, agents, mcp_servers, user_mcp_servers, hooks } = selectedProject
+  const { project, skills, agents, mcp_servers, user_mcp_servers, hooks, commands } = selectedProject
   const totalMCPCount = mcp_servers.length + (user_mcp_servers?.length || 0)
   const enabledMCPCount = mcp_servers.filter((s) => !s.disabled).length +
     (user_mcp_servers?.filter((s) => !s.disabled).length || 0)
@@ -70,7 +75,7 @@ export function OverviewTab() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <StatCard
           icon={Sparkles}
           label="Skills"
@@ -84,6 +89,13 @@ export function OverviewTab() {
           count={agents.length}
           color="text-blue-600 dark:text-blue-400"
           bgColor="bg-blue-100 dark:bg-blue-900/30"
+        />
+        <StatCard
+          icon={Terminal}
+          label="Commands"
+          count={commands.length}
+          color="text-teal-600 dark:text-teal-400"
+          bgColor="bg-teal-100 dark:bg-teal-900/30"
         />
         <StatCard
           icon={Server}
@@ -104,7 +116,7 @@ export function OverviewTab() {
       </div>
 
       {/* Quick Lists */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Skills List */}
         <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
@@ -112,7 +124,7 @@ export function OverviewTab() {
             Skills
           </h3>
           <div className="space-y-2">
-            {skills.slice(0, 5).map((skill) => (
+            {(expandedSections.skills ? skills : skills.slice(0, 5)).map((skill) => (
               <div
                 key={skill.skill_id}
                 className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2"
@@ -126,7 +138,12 @@ export function OverviewTab() {
               </div>
             ))}
             {skills.length > 5 && (
-              <p className="text-xs text-gray-500">+{skills.length - 5} more</p>
+              <button
+                onClick={() => toggleSection('skills')}
+                className="text-xs text-primary-500 hover:text-primary-400 cursor-pointer transition-colors"
+              >
+                {expandedSections.skills ? 'Show less' : `+${skills.length - 5} more`}
+              </button>
             )}
             {skills.length === 0 && (
               <p className="text-sm text-gray-500">No skills found</p>
@@ -141,7 +158,7 @@ export function OverviewTab() {
             Agents
           </h3>
           <div className="space-y-2">
-            {agents.slice(0, 5).map((agent) => (
+            {(expandedSections.agents ? agents : agents.slice(0, 5)).map((agent) => (
               <div
                 key={agent.agent_id}
                 className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2"
@@ -160,10 +177,49 @@ export function OverviewTab() {
               </div>
             ))}
             {agents.length > 5 && (
-              <p className="text-xs text-gray-500">+{agents.length - 5} more</p>
+              <button
+                onClick={() => toggleSection('agents')}
+                className="text-xs text-primary-500 hover:text-primary-400 cursor-pointer transition-colors"
+              >
+                {expandedSections.agents ? 'Show less' : `+${agents.length - 5} more`}
+              </button>
             )}
             {agents.length === 0 && (
               <p className="text-sm text-gray-500">No agents found</p>
+            )}
+          </div>
+        </div>
+
+        {/* Commands List */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+            <Terminal className="w-4 h-4 text-teal-500" />
+            Commands
+          </h3>
+          <div className="space-y-2">
+            {(expandedSections.commands ? commands : commands.slice(0, 5)).map((cmd) => (
+              <div
+                key={cmd.command_id}
+                className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2"
+              >
+                <span className="font-medium font-mono">/{cmd.command_id}</span>
+                {cmd.description && (
+                  <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                    {cmd.description}
+                  </span>
+                )}
+              </div>
+            ))}
+            {commands.length > 5 && (
+              <button
+                onClick={() => toggleSection('commands')}
+                className="text-xs text-primary-500 hover:text-primary-400 cursor-pointer transition-colors"
+              >
+                {expandedSections.commands ? 'Show less' : `+${commands.length - 5} more`}
+              </button>
+            )}
+            {commands.length === 0 && (
+              <p className="text-sm text-gray-500">No commands found</p>
             )}
           </div>
         </div>

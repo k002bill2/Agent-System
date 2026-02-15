@@ -16,6 +16,7 @@ import { MonitorPage } from './pages/MonitorPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ClaudeSessionsPage } from './pages/ClaudeSessionsPage'
 import { ProjectConfigsPage } from './pages/ProjectConfigsPage'
+import { ProjectManagementPage } from './pages/ProjectManagementPage'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { AuthCallbackPage } from './pages/AuthCallbackPage'
@@ -51,6 +52,7 @@ const viewTitles: Record<string, string> = {
   monitor: 'Monitor',
   'claude-sessions': 'Claude Sessions',
   'project-configs': 'Project Configs',
+  'project-management': 'Project Registry',
   git: 'Git Management',
   organizations: 'Organizations',
   audit: 'Audit Trail',
@@ -289,6 +291,8 @@ export default function App() {
         return <ClaudeSessionsPage />
       case 'project-configs':
         return <ProjectConfigsPage />
+      case 'project-management':
+        return <ProjectManagementPage />
       case 'git':
         return <GitPage />
       case 'organizations':
@@ -329,6 +333,8 @@ export default function App() {
       case 'claude-sessions':
         return <ClaudeSessionsSkeleton />
       case 'project-configs':
+        return <MonitorSkeleton />
+      case 'project-management':
         return <MonitorSkeleton />
       case 'git':
         return <MonitorSkeleton />

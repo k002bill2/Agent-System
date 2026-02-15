@@ -239,7 +239,7 @@ function OverviewContent({ session }: { session: ClaudeSessionDetail }) {
           ) : (
             <div className="space-y-1">
               {session.recent_messages.map((message, index) => (
-                <MessageItem key={index} message={message} />
+                <MessageItem key={`msg-${message.type ?? 'unknown'}-${index}`} message={message} />
               ))}
             </div>
           )}

@@ -41,10 +41,12 @@ class ProjectInfo(BaseModel):
     has_agents: bool = Field(default=False, description="Whether project has agents")
     has_mcp: bool = Field(default=False, description="Whether project has MCP config")
     has_hooks: bool = Field(default=False, description="Whether project has hooks")
+    has_commands: bool = Field(default=False, description="Whether project has commands")
     skill_count: int = Field(default=0, description="Number of skills")
     agent_count: int = Field(default=0, description="Number of agents")
     mcp_server_count: int = Field(default=0, description="Number of MCP servers")
     hook_count: int = Field(default=0, description="Number of hooks")
+    command_count: int = Field(default=0, description="Number of commands")
     last_modified: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -131,6 +133,23 @@ class HookConfig(BaseModel):
     file_path: str = Field(default="", description="Path to hook script if external")
 
 
+class CommandConfig(BaseModel):
+    """Parsed command configuration from .md file in .claude/commands/."""
+
+    command_id: str = Field(..., description="Command identifier (filename without .md)")
+    project_id: str = Field(..., description="Parent project ID")
+    name: str = Field(..., description="Command name from frontmatter or command_id")
+    description: str = Field(default="", description="Command description from frontmatter")
+    file_path: str = Field(..., description="Path to command .md file")
+
+    # Optional frontmatter fields
+    allowed_tools: str | None = Field(default=None, description="Allowed tools specification")
+    argument_hint: str | None = Field(default=None, description="Argument hint for the command")
+
+    # Timestamps
+    modified_at: datetime | None = Field(default=None)
+
+
 class ProjectConfigSummary(BaseModel):
     """Summary of project configuration."""
 
@@ -142,6 +161,7 @@ class ProjectConfigSummary(BaseModel):
         default_factory=list, description="User-level MCP servers from ~/.claude.json"
     )
     hooks: list[HookConfig] = Field(default_factory=list)
+    commands: list[CommandConfig] = Field(default_factory=list)
 
 
 class ConfigChangeEvent(BaseModel):
@@ -190,6 +210,13 @@ class AgentContentResponse(BaseModel):
 
     agent: AgentConfig
     content: str = Field(..., description="Full agent.md content")
+
+
+class CommandContentResponse(BaseModel):
+    """Response for command content."""
+
+    command: CommandConfig
+    content: str = Field(..., description="Full command .md content")
 
 
 # ========================================
@@ -245,6 +272,19 @@ class AgentCreateRequest(BaseModel):
     is_shared: bool = Field(default=False, description="Whether to create in shared/ directory")
 
 
+class CommandUpdateRequest(BaseModel):
+    """Request to update command content."""
+
+    content: str = Field(..., description="Full command .md content")
+
+
+class CommandCreateRequest(BaseModel):
+    """Request to create a new command."""
+
+    command_id: str = Field(..., description="Command identifier (filename without .md)")
+    content: str = Field(..., description="Command .md content")
+
+
 class HookEntryRequest(BaseModel):
     """Request to add a hook entry."""
 
@@ -289,4 +329,11 @@ class CopyHookRequest(BaseModel):
 
     event: str = Field(..., description="Hook event name")
     index: int = Field(..., description="Hook entry index")
+    target_project_id: str = Field(..., description="Target project ID")
+
+
+class CopyCommandRequest(BaseModel):
+    """Request to copy command to another project."""
+
+    command_id: str = Field(..., description="Command identifier to copy")
     target_project_id: str = Field(..., description="Target project ID")

@@ -72,7 +72,8 @@ class Project(BaseModel):
         if package_json.exists():
             try:
                 pkg = json.loads(package_json.read_text())
-                name = pkg.get("name", name)
+                # Note: pkg "name" is npm package name, NOT project display name
+                # Only use description as fallback
                 description = pkg.get("description", "")
             except json.JSONDecodeError:
                 pass
@@ -154,6 +155,51 @@ class ProjectCreateFromTemplate(BaseModel):
     template: str = Field(
         "default", description="Template name: default, react-native, python, fastapi"
     )
+
+
+# ========================================
+# DB-managed Project Models (for projects table)
+# ========================================
+
+
+class DBProjectCreate(BaseModel):
+    """Request to create a DB-managed project."""
+
+    name: str = Field(..., description="Unique project name", min_length=1, max_length=255)
+    description: str | None = Field(None, description="Project description")
+    path: str | None = Field(None, description="Filesystem path for config scanning")
+    settings: dict | None = Field(None, description="Extra settings (JSON)")
+
+
+class DBProjectUpdate(BaseModel):
+    """Request to update a DB-managed project."""
+
+    name: str | None = Field(None, description="Project name", max_length=255)
+    description: str | None = Field(None, description="Project description")
+    path: str | None = Field(None, description="Filesystem path for config scanning")
+    settings: dict | None = Field(None, description="Extra settings (JSON)")
+
+
+class DBProjectResponse(BaseModel):
+    """Response for a DB-managed project."""
+
+    id: str
+    name: str
+    slug: str
+    description: str | None = None
+    path: str | None = None
+    is_active: bool = True
+    settings: dict = Field(default_factory=dict)
+    created_at: str | None = None
+    updated_at: str | None = None
+    created_by: str | None = None
+
+
+class DBProjectListResponse(BaseModel):
+    """Response for projects list."""
+
+    projects: list[DBProjectResponse]
+    total_count: int
 
 
 # Registry of known projects

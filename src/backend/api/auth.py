@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.deps import get_current_user, get_db_session
 from config import get_settings
 from db.models import UserModel
+from services.audit_service import AuditAction, audit_user_auth
 from services.auth_service import AuthService, TokenPair
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -133,6 +134,12 @@ async def google_callback(
         # Create token pair
         tokens = auth_service.create_token_pair(user.id)
 
+        audit_user_auth(
+            AuditAction.USER_LOGIN,
+            user_id=user.id,
+            metadata={"provider": "google", "email": user.email},
+        )
+
         return AuthResponse(
             access_token=tokens.access_token,
             refresh_token=tokens.refresh_token,
@@ -198,6 +205,12 @@ async def github_callback(
 
         # Create token pair
         tokens = auth_service.create_token_pair(user.id)
+
+        audit_user_auth(
+            AuditAction.USER_LOGIN,
+            user_id=user.id,
+            metadata={"provider": "github", "email": user.email},
+        )
 
         return AuthResponse(
             access_token=tokens.access_token,
@@ -269,6 +282,12 @@ async def register(
 
     tokens = auth_service.create_token_pair(user.id)
 
+    audit_user_auth(
+        AuditAction.USER_REGISTERED,
+        user_id=user.id,
+        metadata={"provider": "email", "email": request.email},
+    )
+
     return AuthResponse(
         access_token=tokens.access_token,
         refresh_token=tokens.refresh_token,
@@ -300,12 +319,24 @@ async def login(
             password=request.password,
         )
     except ValueError as e:
+        audit_user_auth(
+            AuditAction.LOGIN_FAILED,
+            metadata={"email": request.email, "reason": str(e)},
+            status="failed",
+            error_message=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e),
         )
 
     tokens = auth_service.create_token_pair(user.id)
+
+    audit_user_auth(
+        AuditAction.USER_LOGIN,
+        user_id=user.id,
+        metadata={"provider": "email", "email": user.email},
+    )
 
     return AuthResponse(
         access_token=tokens.access_token,
@@ -367,7 +398,14 @@ async def refresh_token(
         )
 
     # Create new token pair
-    return auth_service.create_token_pair(user_id)
+    tokens = auth_service.create_token_pair(user_id)
+
+    audit_user_auth(
+        AuditAction.TOKEN_REFRESHED,
+        user_id=user_id,
+    )
+
+    return tokens
 
 
 # ─────────────────────────────────────────────────────────────
@@ -392,11 +430,17 @@ async def get_current_user_info(
 
 
 @router.post("/logout")
-async def logout():
+async def logout(
+    current_user: UserModel = Depends(get_current_user),
+):
     """Logout user.
 
     Note: Since we use stateless JWT tokens, logout is handled client-side
     by deleting the tokens. This endpoint exists for future token blacklisting
     if needed.
     """
+    audit_user_auth(
+        AuditAction.USER_LOGOUT,
+        user_id=current_user.id,
+    )
     return {"message": "Logged out successfully"}

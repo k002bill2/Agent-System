@@ -37,7 +37,10 @@ async function onStopEvent(context) {
     // 2. 코드 변경사항 분석
     await analyzeCodeChanges(editedFiles);
 
-    // 3. 테스트 커버리지 알림 (TS/TSX 파일 변경 시)
+    // 3. Verify 스킬 매칭 안내
+    suggestVerifySkills(editedFiles);
+
+    // 4. 테스트 커버리지 알림 (TS/TSX 파일 변경 시)
     const tsFiles = editedFiles.filter(f =>
       f.endsWith('.ts') || f.endsWith('.tsx')
     );
@@ -46,7 +49,7 @@ async function onStopEvent(context) {
       displayTestReminder(tsFiles, 'typescript');
     }
 
-    // 4. Python 테스트 알림 (PY 파일 변경 시)
+    // 5. Python 테스트 알림 (PY 파일 변경 시)
     const pyFiles = editedFiles.filter(f => f.endsWith('.py'));
 
     if (pyFiles.length > 0) {
@@ -190,6 +193,110 @@ async function analyzeCodeChanges(editedFiles) {
   }
 
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+}
+
+/**
+ * 변경된 파일과 매칭되는 verify 스킬 안내
+ * manage-skills/SKILL.md의 등록된 검증 스킬 테이블에서 스킬명 + 커버 파일 패턴을 파싱하여
+ * 변경된 파일 목록과 매칭합니다.
+ */
+function suggestVerifySkills(editedFiles) {
+  try {
+    const skillRegistryPath = path.join('.claude', 'skills', 'manage-skills', 'SKILL.md');
+    if (!fs.existsSync(skillRegistryPath)) {
+      return;
+    }
+
+    const content = fs.readFileSync(skillRegistryPath, 'utf-8');
+
+    // 등록된 검증 스킬 테이블 파싱
+    // 형식: | `verify-name` | 설명 | `pattern1`, `pattern2` |
+    const tableRegex = /\|\s*`(verify-[^`]+)`\s*\|[^|]+\|\s*([^|]+)\|/g;
+    const skills = [];
+    let match;
+
+    while ((match = tableRegex.exec(content)) !== null) {
+      const skillName = match[1];
+      const patternsRaw = match[2].trim();
+
+      // 백틱으로 감싸진 패턴들 추출
+      const patterns = [];
+      const patternRegex = /`([^`]+)`/g;
+      let patternMatch;
+      while ((patternMatch = patternRegex.exec(patternsRaw)) !== null) {
+        patterns.push(patternMatch[1]);
+      }
+
+      if (patterns.length > 0) {
+        skills.push({ name: skillName, patterns });
+      }
+    }
+
+    if (skills.length === 0) {
+      return;
+    }
+
+    // 변경된 파일과 패턴 매칭
+    const matchedSkills = {};
+
+    for (const file of editedFiles) {
+      for (const skill of skills) {
+        for (const pattern of skill.patterns) {
+          if (matchesPattern(file, pattern)) {
+            if (!matchedSkills[skill.name]) {
+              matchedSkills[skill.name] = [];
+            }
+            if (!matchedSkills[skill.name].includes(file)) {
+              matchedSkills[skill.name].push(file);
+            }
+            break; // 한 스킬에 대해 파일이 한번 매칭되면 충분
+          }
+        }
+      }
+    }
+
+    const matchedCount = Object.keys(matchedSkills).length;
+    if (matchedCount === 0) {
+      return;
+    }
+
+    // 안내 출력
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🔍 VERIFY SKILLS MATCHED');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    console.log('변경된 파일이 다음 verify 스킬과 매칭됩니다:');
+
+    for (const [skillName, files] of Object.entries(matchedSkills)) {
+      console.log(`• ${skillName} (${files.length} files)`);
+    }
+
+    console.log('\n실행: /verify-implementation');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+  } catch (error) {
+    // verify 스킬 매칭 실패는 무시
+  }
+}
+
+/**
+ * 간단한 glob 패턴 매칭
+ * 지원: ** (any path), * (any name segment), *.ext (extension match)
+ */
+function matchesPattern(filePath, pattern) {
+  // 정규화: 백슬래시를 슬래시로
+  const normalizedFile = filePath.replace(/\\/g, '/');
+  const normalizedPattern = pattern.replace(/\\/g, '/');
+
+  // 패턴을 regex로 변환
+  let regexStr = normalizedPattern
+    .replace(/\./g, '\\.')           // . → \.
+    .replace(/\*\*\//g, '(.+/)?')   // **/ → 임의 경로
+    .replace(/\*\*/g, '.*')         // ** → 임의 문자열
+    .replace(/\*/g, '[^/]*');        // * → 경로 구분자 제외 임의 문자
+
+  // 정확한 경로 매칭 또는 패턴 매칭
+  const regex = new RegExp(`(^|/)${regexStr}$`);
+  return regex.test(normalizedFile);
 }
 
 /**

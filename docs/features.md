@@ -793,7 +793,37 @@ class ProjectAccessService:
 
 ---
 
-## 38. Workflow Automation (CI/CD)
+## 38. DB 기반 프로젝트 레지스트리
+
+파일시스템 스캔 대신 DB에 명시적으로 등록된 프로젝트만 관리:
+
+```python
+class ProjectModel(Base):
+    __tablename__ = "projects"
+    id          = Column(String(36), primary_key=True)  # UUID
+    name        = Column(String(255), unique=True, nullable=False)
+    slug        = Column(String(100), unique=True, nullable=False)
+    description = Column(Text, nullable=True)
+    path        = Column(String(1000), nullable=True)   # 파일시스템 경로 (config 스캔용)
+    is_active   = Column(Boolean, default=True)
+    settings    = Column(JSON, default={})
+```
+
+**기능**:
+- DB 기반 프로젝트 CRUD (생성, 조회, 수정, 비활성화, 복원)
+- Soft-delete 패턴 (`is_active` 플래그)으로 안전한 삭제
+- URL-friendly slug 자동 생성 (`_slugify()`)
+- Claude Sessions 프로젝트 필터가 DB 등록 프로젝트만 표시
+- ProjectConfigs 연동: DB 프로젝트의 `path`가 있는 프로젝트만 설정 스캔
+- 서버 시작 시 자동 마이그레이션 (Migration 8)
+
+**API**: `/api/project-registry` (7개 엔드포인트)
+
+**Dashboard UI**: `ProjectManagementPage` - 프로젝트 생성, 검색, 인라인 편집, 비활성화/복원
+
+---
+
+## 39. Workflow Automation (CI/CD)
 
 GitHub Actions 유사 워크플로우 자동화 시스템:
 

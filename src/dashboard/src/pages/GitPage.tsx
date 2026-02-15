@@ -7,7 +7,6 @@ import {
   RefreshCw,
   Download,
   Upload,
-  AlertCircle,
   FileEdit,
   Cloud,
   Shield,
@@ -29,6 +28,7 @@ import {
   WorkingDirectory,
   RemoteList,
   BranchProtectionSettings,
+  GitAlert,
 } from '../components/git'
 
 const tabs: { id: GitTab; label: string; icon: typeof GitBranch }[] = [
@@ -286,16 +286,7 @@ export function GitPage() {
 
       {/* Error Banner */}
       {error && (
-        <div className="mx-6 mt-4 flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <span className="flex-1">{error}</span>
-          <button
-            onClick={clearError}
-            className="text-red-500 hover:text-red-700 dark:hover:text-red-300"
-          >
-            ×
-          </button>
-        </div>
+        <GitAlert error={error} onClose={clearError} className="mx-6 mt-4" />
       )}
 
       {/* Tabs - only show when git is enabled */}

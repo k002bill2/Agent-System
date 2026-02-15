@@ -9,8 +9,8 @@ import { useMenuVisibilityStore } from '../../stores/menuVisibility'
 // 기본 메뉴 순서 (Sidebar와 동일)
 const DEFAULT_MENU_ORDER: string[] = [
   'dashboard', 'projects', 'tasks', 'agents', 'activity',
-  'monitor', 'claude-sessions', 'project-configs', 'git',
-  'organizations', 'audit', 'notifications', 'analytics', 'playground',
+  'monitor', 'claude-sessions', 'project-configs', 'project-management', 'git',
+  'organizations', 'audit', 'notifications', 'analytics', 'playground', 'workflows',
 ]
 
 export function MenuSettingsTab() {

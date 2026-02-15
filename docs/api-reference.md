@@ -52,6 +52,7 @@ AOS Backend API 엔드포인트 문서입니다.
 | POST | `/api/agents/mcp/servers/{id}/start` | MCP 서버 시작 |
 | POST | `/api/agents/mcp/servers/{id}/stop` | MCP 서버 중지 |
 | POST | `/api/agents/mcp/tools/call` | MCP 도구 호출 |
+| POST | `/api/agents/ocr` | 이미지 OCR 텍스트 추출 (Vision LLM) |
 
 ---
 
@@ -136,6 +137,34 @@ AOS Backend API 엔드포인트 문서입니다.
 
 ---
 
+## Project Registry (DB 관리)
+
+| Method | Path | 설명 |
+|--------|------|------|
+| POST | `/api/project-registry` | 프로젝트 생성 |
+| GET | `/api/project-registry` | 활성 프로젝트 목록 |
+| GET | `/api/project-registry/all` | 전체 프로젝트 (비활성 포함) |
+| GET | `/api/project-registry/{id}` | 프로젝트 상세 |
+| PUT | `/api/project-registry/{id}` | 프로젝트 수정 |
+| DELETE | `/api/project-registry/{id}` | 프로젝트 비활성화 (soft-delete) |
+| POST | `/api/project-registry/{id}/restore` | 프로젝트 복원 |
+
+**요청 본문** (`POST /api/project-registry`):
+```json
+{
+  "name": "My Project",
+  "description": "프로젝트 설명",
+  "path": "/path/to/project",
+  "settings": {}
+}
+```
+
+**응답**: `ProjectResponse` (id, name, slug, description, path, is_active, settings, created_at, updated_at)
+
+> **Note**: 기존 `/api/projects` 경로는 오케스트레이션 세션 프로젝트용이며, 이 API는 DB 기반 프로젝트 레지스트리 관리 전용입니다.
+
+---
+
 ## Project Configs
 
 | Method | Path | 설명 |
@@ -184,6 +213,17 @@ AOS Backend API 엔드포인트 문서입니다.
 | POST | `/api/project-configs/{project_id}/hooks/copy` | Hook 복사 |
 
 **Hook 이벤트 타입**: `PreToolUse`, `PostToolUse`, `Notification`, `Stop`
+
+### Commands
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/project-configs/{project_id}/commands` | 커맨드 목록 |
+| GET | `/api/project-configs/{project_id}/commands/{command_id}/content` | 커맨드 내용 조회 |
+| POST | `/api/project-configs/{project_id}/commands` | 커맨드 생성 |
+| PUT | `/api/project-configs/{project_id}/commands/{command_id}` | 커맨드 수정 |
+| DELETE | `/api/project-configs/{project_id}/commands/{command_id}` | 커맨드 삭제 |
+| POST | `/api/project-configs/{project_id}/commands/{command_id}/copy` | 커맨드 복사 |
 
 ---
 

@@ -44,3 +44,10 @@ src/backend/data/
 projects/*
 !projects/.gitkeep
 src/dashboard/coverage/
+
+# Claude Code transient files
+.claude/evals/results/
+.claude/coordination/
+.claude/plans/
+.claude/hooks/.context-state.json
+.temp/

@@ -31,7 +31,8 @@ interface TaskNodeProps {
 }
 
 function TaskNode({ task, depth, allTasks, sessionId }: TaskNodeProps) {
-  const { pauseTask, resumeTask } = useOrchestrationStore()
+  const pauseTask = useOrchestrationStore(s => s.pauseTask)
+  const resumeTask = useOrchestrationStore(s => s.resumeTask)
   const [actionLoading, setActionLoading] = useState(false)
   const config = statusConfig[task.status]
   const Icon = config.icon
@@ -162,7 +163,12 @@ function TaskNode({ task, depth, allTasks, sessionId }: TaskNodeProps) {
 }
 
 export function TaskPanel() {
-  const { tasks, rootTaskId, isProcessing, sessionId, selectedProjectId, projects } = useOrchestrationStore()
+  const tasks = useOrchestrationStore(s => s.tasks)
+  const rootTaskId = useOrchestrationStore(s => s.rootTaskId)
+  const isProcessing = useOrchestrationStore(s => s.isProcessing)
+  const sessionId = useOrchestrationStore(s => s.sessionId)
+  const selectedProjectId = useOrchestrationStore(s => s.selectedProjectId)
+  const projects = useOrchestrationStore(s => s.projects)
   const currentProjectName = selectedProjectId ? (projects.find(p => p.id === selectedProjectId)?.name || undefined) : undefined
   // Filter out deleted tasks
   const taskList = Object.values(tasks).filter((t) => !t.isDeleted)

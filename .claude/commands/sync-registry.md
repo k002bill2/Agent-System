@@ -1,11 +1,11 @@
 ---
 name: sync-registry
-description: 스킬, 에이전트, 훅 레지스트리 자동 동기화
+description: 스킬, 에이전트, 훅, 커맨드 레지스트리 자동 동기화
 ---
 
 # Registry Sync
 
-새로 추가된 스킬, 에이전트, 훅을 자동으로 감지하고 레지스트리를 업데이트합니다.
+새로 추가된 스킬, 에이전트, 훅, 커맨드를 자동으로 감지하고 레지스트리를 업데이트합니다.
 
 ## 실행 스크립트
 
@@ -29,6 +29,11 @@ node .claude/scripts/sync-registry.js --all
    - `.claude/hooks/*.js` 스캔
    - `@hook-config` 주석 파싱
    - `hooks.json` 자동 업데이트
+
+4. **Commands 동기화**
+   - `.claude/commands/*.md` 스캔
+   - frontmatter의 `name`, `description`, `allowed-tools` 추출
+   - `commands-registry.json` 생성
 
 ## 새 컴포넌트 추가 방법
 
@@ -65,6 +70,16 @@ triggers:
 ---
 ```
 
+### 커맨드 추가
+```yaml
+# .claude/commands/my-command.md
+---
+name: my-command
+description: My command description
+allowed-tools: read, bash
+---
+```
+
 ### 훅 추가
 ```javascript
 // .claude/hooks/myHook.js
@@ -82,3 +97,4 @@ triggers:
 - `.claude/skill-rules.json` - 스킬 활성화 규칙
 - `.claude/agents-registry.json` - 에이전트 레지스트리
 - `.claude/hooks.json` - 훅 설정
+- `.claude/commands-registry.json` - 커맨드 레지스트리

@@ -15,6 +15,7 @@ interface ClaudeUsageState {
   clearError: () => void
 }
 
+/** Claude 사용량 데이터 조회 스토어. */
 export const useClaudeUsageStore = create<ClaudeUsageState>((set, get) => ({
   usage: null,
   isLoading: false,
