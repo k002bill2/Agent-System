@@ -305,13 +305,14 @@ class ProjectConfigMonitor:
 
         agent_count = 0
         if agents_dir.exists():
+            # Count only direct .md files (glob("*.md") does not recurse into subdirectories)
             agent_count = sum(
                 1 for f in agents_dir.glob("*.md") if f.is_file() and not f.name.startswith(".")
             )
-            # Exclude shared/ directory files from agent count
+            # Add shared agents count
             shared_dir = agents_dir / "shared"
             if shared_dir.exists():
-                agent_count -= sum(1 for f in shared_dir.glob("*.md") if f.is_file())
+                agent_count += sum(1 for f in shared_dir.glob("*.md") if f.is_file())
 
         mcp_server_count = 0
         if mcp_file.exists():

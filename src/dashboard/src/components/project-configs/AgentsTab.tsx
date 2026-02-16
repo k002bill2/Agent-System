@@ -1,5 +1,5 @@
 import { cn } from '../../lib/utils'
-import { Bot, Code, Shield, ChevronDown, ChevronUp, Plus, Pencil, Trash2, Copy } from 'lucide-react'
+import { Bot, Code, Shield, ChevronDown, ChevronUp, Plus, Pencil, Trash2, Copy, FileText, Clock } from 'lucide-react'
 import { useState } from 'react'
 import { useProjectConfigsStore, AgentConfig } from '../../stores/projectConfigs'
 import { AgentEditModal } from './AgentEditModal'
@@ -277,14 +277,43 @@ function AgentCard({ agent, isExpanded, isDeleting, onToggle, onEdit, onDelete, 
         </div>
       </div>
 
-      {isExpanded && agent.ace_capabilities && (
-        <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-4">
-          <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            ACE Capabilities
-          </h5>
-          <pre className="text-xs text-gray-600 dark:text-gray-400 overflow-x-auto">
-            {JSON.stringify(agent.ace_capabilities, null, 2)}
-          </pre>
+      {isExpanded && (
+        <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-4 space-y-3">
+          {/* Agent Details */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {agent.file_path && (
+              <div className="flex items-start gap-2">
+                <FileText className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 block">File Path</span>
+                  <span className="text-xs text-gray-700 dark:text-gray-300 break-all">{agent.file_path}</span>
+                </div>
+              </div>
+            )}
+            {agent.modified_at && (
+              <div className="flex items-start gap-2">
+                <Clock className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
+                <div>
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 block">Modified</span>
+                  <span className="text-xs text-gray-700 dark:text-gray-300">
+                    {new Date(agent.modified_at).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ACE Capabilities */}
+          {agent.ace_capabilities && (
+            <div>
+              <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                ACE Capabilities
+              </h5>
+              <pre className="text-xs text-gray-600 dark:text-gray-400 overflow-x-auto bg-white dark:bg-gray-800 rounded p-3 border border-gray-200 dark:border-gray-700">
+                {JSON.stringify(agent.ace_capabilities, null, 2)}
+              </pre>
+            </div>
+          )}
         </div>
       )}
     </div>
