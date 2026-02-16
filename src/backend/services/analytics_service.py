@@ -436,9 +436,26 @@ class AnalyticsService:
         return sessions
 
     @staticmethod
-    def get_overview_from_sessions(project_name: str | None = None) -> OverviewMetrics:
+    def get_overview_from_sessions(
+        time_range: TimeRange = TimeRange.ALL,
+        project_name: str | None = None,
+    ) -> OverviewMetrics:
         """Get overview metrics from Claude Code sessions."""
         sessions = AnalyticsService._get_sessions(project_name)
+
+        # Filter by time range
+        if time_range != TimeRange.ALL:
+            delta = _get_time_delta(time_range)
+            now = datetime.now()
+            start = now - delta
+
+            def _normalize_dt(dt):
+                """Convert to naive local time for consistent filtering."""
+                if dt.tzinfo:
+                    return dt.astimezone().replace(tzinfo=None)
+                return dt
+
+            sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
 
         total = len(sessions)
         active = sum(1 for s in sessions if s.status.value == "active")
@@ -741,7 +758,7 @@ class AnalyticsService:
     ) -> AnalyticsDashboard:
         """Get complete dashboard from Claude Code sessions."""
         return AnalyticsDashboard(
-            overview=AnalyticsService.get_overview_from_sessions(project_name),
+            overview=AnalyticsService.get_overview_from_sessions(time_range, project_name),
             trends=AnalyticsService.get_trends_from_sessions(time_range, project_name),
             agents=AnalyticsService.get_agent_performance_from_sessions(time_range, project_name),
             costs=AnalyticsService.get_cost_analytics_from_sessions(time_range, project_name),

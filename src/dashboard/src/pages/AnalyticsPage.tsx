@@ -18,6 +18,8 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  AreaChart,
+  Area,
 } from 'recharts'
 import {
   BarChart3,
@@ -45,6 +47,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useProjectsStore, Project } from '../stores/projects'
+import { useClaudeUsageStore } from '../stores/claudeUsage'
 import { ProjectMultiSelect } from '../components/analytics/ProjectMultiSelect'
 import type { TaskAnalysisHistory } from '../stores/agents'
 
@@ -304,10 +307,18 @@ export function AnalyticsPage() {
   // Get projects from store
   const { projects, fetchProjects } = useProjectsStore()
 
+  // Get Claude usage data from store
+  const { usage: claudeUsage, fetchUsage } = useClaudeUsageStore()
+
   // Fetch projects on mount
   useEffect(() => {
     fetchProjects()
   }, [fetchProjects])
+
+  // Fetch Claude usage on mount
+  useEffect(() => {
+    fetchUsage()
+  }, [fetchUsage])
 
   useEffect(() => {
     loadData()
@@ -512,7 +523,7 @@ export function AnalyticsPage() {
         {/* Task Trend */}
         <ChartCard title="Task Volume" icon={BarChart3}>
           <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={formatTrendData(data.trends.tasks)}>
+            <LineChart data={formatTrendData(data.trends.tasks, timeRange)}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis
                 dataKey="label"
@@ -524,6 +535,8 @@ export function AnalyticsPage() {
                 contentStyle={{
                   backgroundColor: 'var(--tooltip-bg, #fff)',
                   borderColor: 'var(--tooltip-border, #e5e7eb)',
+                  borderRadius: '12px',
+                  padding: '8px 12px',
                 }}
               />
               <Line
@@ -540,7 +553,7 @@ export function AnalyticsPage() {
         {/* Success Rate Trend */}
         <ChartCard title="Success Rate Trend" icon={TrendingUp}>
           <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={formatTrendData(data.trends.success_rate)}>
+            <LineChart data={formatTrendData(data.trends.success_rate, timeRange)}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis
                 dataKey="label"
@@ -556,6 +569,8 @@ export function AnalyticsPage() {
                 contentStyle={{
                   backgroundColor: 'var(--tooltip-bg, #fff)',
                   borderColor: 'var(--tooltip-border, #e5e7eb)',
+                  borderRadius: '12px',
+                  padding: '8px 12px',
                 }}
                 formatter={(value) => [
                   value != null ? `${Number(value).toFixed(1)}%` : 'No data',
@@ -572,6 +587,88 @@ export function AnalyticsPage() {
               />
             </LineChart>
           </ResponsiveContainer>
+        </ChartCard>
+      </div>
+
+      {/* Token Usage Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Token Usage Trend */}
+        <ChartCard title="Token Usage Trend" icon={Zap}>
+          <ResponsiveContainer width="100%" height={250}>
+            <AreaChart data={formatTrendData(data.trends.tokens, timeRange)}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 12 }}
+                className="text-gray-500"
+              />
+              <YAxis
+                tick={{ fontSize: 12 }}
+                className="text-gray-500"
+                tickFormatter={formatTokenCount}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'var(--tooltip-bg, #fff)',
+                  borderColor: 'var(--tooltip-border, #e5e7eb)',
+                  borderRadius: '12px',
+                  padding: '8px 12px',
+                }}
+                formatter={(value) => [formatTokenCount(Number(value)), 'Tokens']}
+              />
+              <Area
+                type="monotone"
+                dataKey="value"
+                stroke={CHART_COLORS[4]}
+                fill={CHART_COLORS[4]}
+                fillOpacity={0.3}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        {/* Model Token Breakdown (Weekly) */}
+        <ChartCard title="Model Token Breakdown (7 Days)" icon={Users}>
+          {claudeUsage && claudeUsage.weeklyModelTokens ? (
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={transformModelTokensData(claudeUsage.weeklyModelTokens)}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 12 }}
+                  className="text-gray-500"
+                />
+                <YAxis
+                  tick={{ fontSize: 12 }}
+                  className="text-gray-500"
+                  tickFormatter={formatTokenCount}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'var(--tooltip-bg, #fff)',
+                    borderColor: 'var(--tooltip-border, #e5e7eb)',
+                  }}
+                  formatter={(value) => [formatTokenCount(Number(value)), 'Tokens']}
+                />
+                <Legend />
+                {extractModelNames(claudeUsage.weeklyModelTokens).map((modelName, index) => (
+                  <Bar
+                    key={modelName}
+                    dataKey={modelName}
+                    stackId="tokens"
+                    fill={CHART_COLORS[index % CHART_COLORS.length]}
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[250px] flex items-center justify-center text-gray-500 dark:text-gray-400">
+              <div className="text-center">
+                <Zap className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p>No model token data available</p>
+              </div>
+            </div>
+          )}
         </ChartCard>
       </div>
 
@@ -597,6 +694,12 @@ export function AnalyticsPage() {
                 ))}
               </Pie>
               <Tooltip
+                contentStyle={{
+                  backgroundColor: 'var(--tooltip-bg, #fff)',
+                  borderColor: 'var(--tooltip-border, #e5e7eb)',
+                  borderRadius: '12px',
+                  padding: '8px 12px',
+                }}
                 formatter={(value) => [`$${Number(value).toFixed(2)}`, 'Cost']}
               />
               <Legend
@@ -622,6 +725,12 @@ export function AnalyticsPage() {
                 tick={{ fontSize: 11 }}
               />
               <Tooltip
+                contentStyle={{
+                  backgroundColor: 'var(--tooltip-bg, #fff)',
+                  borderColor: 'var(--tooltip-border, #e5e7eb)',
+                  borderRadius: '12px',
+                  padding: '8px 12px',
+                }}
                 formatter={(value) => [`${Number(value).toFixed(1)}%`, 'Success Rate']}
               />
               <Bar dataKey="success_rate" fill={CHART_COLORS[1]} radius={[0, 4, 4, 0]} />
@@ -630,8 +739,9 @@ export function AnalyticsPage() {
         </ChartCard>
       </div>
 
-      {/* Multi-Project Comparison Section */}
-      <ChartCard title="프로젝트 비교" icon={GitCompare} className="mb-6">
+      {/* Multi-Project Comparison + Activity Heatmap Row (3:1) */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-6">
+      <ChartCard title="프로젝트 비교" icon={GitCompare} className="lg:col-span-3">
         <div className="space-y-4">
           {/* Controls */}
           <div className="flex flex-wrap items-center gap-4">
@@ -694,6 +804,8 @@ export function AnalyticsPage() {
                   contentStyle={{
                     backgroundColor: 'var(--tooltip-bg, #fff)',
                     borderColor: 'var(--tooltip-border, #e5e7eb)',
+                    borderRadius: '12px',
+                    padding: '8px 12px',
                   }}
                   formatter={(value, name) => {
                     const numValue = Number(value)
@@ -722,9 +834,10 @@ export function AnalyticsPage() {
       </ChartCard>
 
       {/* Activity Heatmap */}
-      <ChartCard title="Activity Heatmap" icon={Calendar} className="mb-6">
+      <ChartCard title="Activity Heatmap" icon={Calendar} className="lg:col-span-1">
         <ActivityHeatmapChart data={data.activity} />
       </ChartCard>
+      </div>
 
       {/* Model Details Table */}
       <ChartCard title="Model Details" icon={Users} className="mb-6">
@@ -1029,7 +1142,7 @@ function ChartCard({ title, icon: Icon, children, className }: ChartCardProps) {
   return (
     <div
       className={cn(
-        'bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4',
+        'bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8',
         className
       )}
     >
@@ -1199,18 +1312,18 @@ function EvalDetailView({ detail }: { detail: TaskAnalysisHistory }) {
 }
 
 function ActivityHeatmapChart({ data }: { data: ActivityHeatmap }) {
-  const cellSize = 16
+  const cellHeight = 16
 
   return (
-    <div className="overflow-x-auto">
-      <div className="flex gap-1">
+    <div className="w-full overflow-hidden">
+      <div className="flex gap-1 w-full">
         {/* Hour labels */}
-        <div className="flex flex-col gap-[2px] text-xs text-gray-500 pr-2">
+        <div className="flex flex-col gap-[2px] text-[10px] text-gray-500 pr-1 flex-shrink-0 w-8">
           {Array.from({ length: 24 }, (_, i) => (
             <div
               key={i}
-              style={{ height: cellSize }}
-              className="flex items-center justify-end"
+              style={{ height: cellHeight }}
+              className="flex items-center justify-end leading-none"
             >
               {i % 6 === 0 ? `${i}:00` : ''}
             </div>
@@ -1219,7 +1332,7 @@ function ActivityHeatmapChart({ data }: { data: ActivityHeatmap }) {
 
         {/* Heatmap grid */}
         {Array.from({ length: 7 }, (_, day) => (
-          <div key={day} className="flex flex-col gap-[2px]">
+          <div key={day} className="flex flex-col gap-[2px] flex-1 min-w-0">
             {Array.from({ length: 24 }, (_, hour) => {
               const cell = data.cells.find((c) => c.day === day && c.hour === hour)
               const value = cell?.value || 0
@@ -1229,18 +1342,17 @@ function ActivityHeatmapChart({ data }: { data: ActivityHeatmap }) {
                 <div
                   key={hour}
                   style={{
-                    width: cellSize,
-                    height: cellSize,
+                    height: cellHeight,
                     backgroundColor: intensity === 0
-                      ? 'var(--heatmap-empty, #e5e7eb)'
+                      ? 'var(--heatmap-empty, #171f2aff)'
                       : `rgba(59, 130, 246, ${0.2 + intensity * 0.8})`,
                   }}
-                  className="rounded-sm cursor-pointer hover:ring-2 hover:ring-blue-400"
+                  className="w-full rounded-sm cursor-pointer hover:ring-2 hover:ring-blue-400"
                   title={`${DAY_LABELS[day]} ${hour}:00 - ${value} sessions`}
                 />
               )
             })}
-            <div className="text-xs text-gray-500 text-center mt-1">
+            <div className="text-[10px] text-gray-500 text-center mt-1 truncate">
               {DAY_LABELS[day]}
             </div>
           </div>
@@ -1279,20 +1391,42 @@ function formatNumber(num: number): string {
   return num.toString()
 }
 
+function formatTokenCount(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`
+  return String(value)
+}
+
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
   return `${(ms / 60000).toFixed(1)}m`
 }
 
+function formatTrendLabel(timestamp: string, timeRange: TimeRange): string {
+  const date = new Date(timestamp)
+  switch (timeRange) {
+    case '1h':
+      return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+    case '24h':
+      return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+    case '7d':
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    case '30d':
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    case 'all':
+      return date.toLocaleDateString('en-US', { year: '2-digit', month: 'short' })
+    default:
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+}
+
 function formatTrendData(
   data: TrendDataPoint[],
+  timeRange: TimeRange = '7d',
 ): { label: string; value: number | undefined }[] {
   return data.map((d) => ({
-    label: new Date(d.timestamp).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-    }),
+    label: formatTrendLabel(d.timestamp, timeRange),
     value: d.value ?? undefined, // null → undefined for Recharts gap handling
   }))
 }
@@ -1308,10 +1442,7 @@ function transformMultiSeriesData(
 
   response.series.forEach((series) => {
     series.data.forEach((point) => {
-      const dateKey = new Date(point.timestamp).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-      })
+      const dateKey = formatTrendLabel(point.timestamp, response.period)
       const existing = dateMap.get(dateKey) || { date: dateKey }
       existing[series.project_id] = point.value
       dateMap.set(dateKey, existing)
@@ -1319,6 +1450,40 @@ function transformMultiSeriesData(
   })
 
   return Array.from(dateMap.values())
+}
+
+/**
+ * Transform model tokens data for stacked bar chart
+ * Converts from DailyModelTokens[] to Recharts format
+ */
+function transformModelTokensData(
+  data: { date: string; tokensByModel: Record<string, number> }[]
+): Record<string, string | number>[] {
+  return data.map((day) => {
+    const dateKey = new Date(day.date).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    })
+    return {
+      date: dateKey,
+      ...day.tokensByModel,
+    }
+  })
+}
+
+/**
+ * Extract all unique model names from weekly model tokens data
+ */
+function extractModelNames(
+  data: { date: string; tokensByModel: Record<string, number> }[]
+): string[] {
+  const modelNamesSet = new Set<string>()
+  data.forEach((day) => {
+    Object.keys(day.tokensByModel).forEach((modelName) => {
+      modelNamesSet.add(modelName)
+    })
+  })
+  return Array.from(modelNamesSet)
 }
 
 export default AnalyticsPage

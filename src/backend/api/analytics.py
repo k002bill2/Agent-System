@@ -25,10 +25,11 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 @router.get("/overview", response_model=OverviewMetrics)
 async def get_overview(
+    time_range: TimeRange = Query(default=TimeRange.ALL, description="Time range for data"),
     project_id: str | None = Query(default=None, description="Filter by project name"),
 ):
     """Get high-level overview metrics."""
-    return AnalyticsService.get_overview_from_sessions(project_name=project_id)
+    return AnalyticsService.get_overview_from_sessions(time_range, project_name=project_id)
 
 
 @router.get("/trends", response_model=MultiTrendData)
