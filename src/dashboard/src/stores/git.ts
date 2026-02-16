@@ -321,6 +321,7 @@ interface GitState {
   fetchWorkingStatus: (projectId: string) => Promise<GitWorkingStatus | null>
   stageFiles: (projectId: string, paths?: string[], all?: boolean) => Promise<boolean>
   commitChanges: (projectId: string, message: string, authorName?: string, authorEmail?: string) => Promise<boolean>
+  commitAndPush: (projectId: string, message: string, authorName?: string, authorEmail?: string) => Promise<boolean>
 
   // Actions - Draft Commits (LLM-based)
   generateDraftCommits: (projectId: string, stagedOnly?: boolean) => Promise<DraftCommit[]>
@@ -566,6 +567,29 @@ export const useGitStore = create<GitState>((set, get) => ({
       await get().fetchCommits(projectId)
       // Clear draft commits after successful commit
       set({ isLoading: false, draftCommits: [] })
+      return true
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return false
+    }
+  },
+
+  commitAndPush: async (projectId, message, authorName, authorEmail) => {
+    set({ isLoading: true, error: null })
+    try {
+      // 1. Commit
+      const commitSuccess = await get().commitChanges(projectId, message, authorName, authorEmail)
+      if (!commitSuccess) {
+        return false
+      }
+
+      // 2. Push
+      const pushSuccess = await get().pushRemote(projectId)
+      if (!pushSuccess) {
+        set({ error: 'Commit succeeded but push failed' })
+        return false
+      }
+
       return true
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })

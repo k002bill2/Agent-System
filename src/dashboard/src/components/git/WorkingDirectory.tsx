@@ -12,6 +12,7 @@ import {
   FolderTree,
   Sparkles,
   Loader2,
+  ArrowUp,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { GitWorkingStatus, GitStatusFile, FileStatusType, DraftCommit } from '../../stores/git'
@@ -27,6 +28,7 @@ interface WorkingDirectoryProps {
   onStageFiles: (paths: string[]) => Promise<boolean>
   onStageAll: () => Promise<boolean>
   onCommit: (message: string) => Promise<boolean>
+  onCommitAndPush?: (message: string) => Promise<boolean>
   // LLM Draft Commits
   draftCommits: DraftCommit[]
   isGeneratingDrafts: boolean
@@ -124,6 +126,7 @@ export function WorkingDirectory({
   onStageFiles,
   onStageAll,
   onCommit,
+  onCommitAndPush,
   draftCommits,
   isGeneratingDrafts,
   onGenerateDrafts,
@@ -132,6 +135,7 @@ export function WorkingDirectory({
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
   const [commitMessage, setCommitMessage] = useState('')
   const [isCommitting, setIsCommitting] = useState(false)
+  const [isCommittingAndPushing, setIsCommittingAndPushing] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('list')
 
   const handleSelectFile = (path: string) => {
@@ -164,6 +168,16 @@ export function WorkingDirectory({
     setIsCommitting(false)
   }
 
+  const handleCommitAndPush = async () => {
+    if (!commitMessage.trim() || !onCommitAndPush) return
+    setIsCommittingAndPushing(true)
+    const success = await onCommitAndPush(commitMessage.trim())
+    if (success) {
+      setCommitMessage('')
+    }
+    setIsCommittingAndPushing(false)
+  }
+
   if (!workingStatus) {
     return (
       <div className="text-center py-12 text-gray-500 dark:text-gray-400">
@@ -185,6 +199,12 @@ export function WorkingDirectory({
   // Handler for committing a specific group
   const handleCommitGroup = async (message: string, _paths: string[]): Promise<boolean> => {
     return onCommit(message)
+  }
+
+  // Handler for committing and pushing a specific group
+  const handleCommitAndPushGroup = async (message: string, _paths: string[]): Promise<boolean> => {
+    if (!onCommitAndPush) return false
+    return onCommitAndPush(message)
   }
 
   return (
@@ -313,6 +333,7 @@ export function WorkingDirectory({
               onSelectFile={handleSelectFile}
               onStageFiles={onStageFiles}
               onCommitGroup={handleCommitGroup}
+              onCommitAndPush={onCommitAndPush ? handleCommitAndPushGroup : undefined}
               isLoading={isLoading}
             />
           ))}
@@ -358,14 +379,27 @@ export function WorkingDirectory({
                   rows={2}
                   className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
                 />
-                <button
-                  onClick={handleCommit}
-                  disabled={!commitMessage.trim() || isCommitting}
-                  className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
-                >
-                  <Send className="w-4 h-4" />
-                  {isCommitting ? 'Committing...' : 'Commit'}
-                </button>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={handleCommit}
+                    disabled={!commitMessage.trim() || isCommitting || isCommittingAndPushing}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+                  >
+                    <Send className="w-4 h-4" />
+                    {isCommitting ? 'Committing...' : 'Commit'}
+                  </button>
+                  {onCommitAndPush && (
+                    <button
+                      onClick={handleCommitAndPush}
+                      disabled={!commitMessage.trim() || isCommitting || isCommittingAndPushing}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+                    >
+                      <Send className="w-4 h-4" />
+                      <ArrowUp className="w-4 h-4" />
+                      {isCommittingAndPushing ? 'Committing & Pushing...' : 'Commit & Push'}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>

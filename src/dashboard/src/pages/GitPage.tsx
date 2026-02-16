@@ -107,6 +107,7 @@ export function GitPage() {
     fetchWorkingStatus,
     stageFiles,
     commitChanges,
+    commitAndPush,
     // Draft Commits (LLM-based)
     draftCommits,
     isGeneratingDrafts,
@@ -339,6 +340,7 @@ export function GitPage() {
                 onStageFiles={(paths) => stageFiles(selectedProjectId, paths)}
                 onStageAll={() => stageFiles(selectedProjectId, [], true)}
                 onCommit={(message) => commitChanges(selectedProjectId, message)}
+                onCommitAndPush={(message) => commitAndPush(selectedProjectId, message)}
                 // LLM Draft Commits
                 draftCommits={draftCommits}
                 isGeneratingDrafts={isGeneratingDrafts}

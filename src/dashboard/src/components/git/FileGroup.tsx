@@ -14,6 +14,7 @@ import {
   Sparkles,
   Pencil,
   Files,
+  ArrowUp,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { GitStatusFile, FileStatusType } from '../../stores/git'
@@ -117,6 +118,7 @@ interface FileGroupCardProps {
   onSelectFile: (path: string) => void
   onStageFiles: (paths: string[]) => Promise<boolean>
   onCommitGroup: (message: string, paths: string[]) => Promise<boolean>
+  onCommitAndPush?: (message: string, paths: string[]) => Promise<boolean>
   isLoading: boolean
 }
 
@@ -126,6 +128,7 @@ export function FileGroupCard({
   onSelectFile,
   onStageFiles,
   onCommitGroup,
+  onCommitAndPush,
   isLoading,
 }: FileGroupCardProps) {
   const [isFilesExpanded, setIsFilesExpanded] = useState(true)
@@ -133,6 +136,7 @@ export function FileGroupCard({
   const [isEditing, setIsEditing] = useState(false)
   const [copied, setCopied] = useState(false)
   const [isCommitting, setIsCommitting] = useState(false)
+  const [isCommittingAndPushing, setIsCommittingAndPushing] = useState(false)
 
   const stats = getGroupStats(group.files)
   const stagedCount = group.files.filter(f => f.staged).length
@@ -170,6 +174,26 @@ export function FileGroupCard({
     const paths = group.files.map(f => f.path)
     await onCommitGroup(editableMessage.trim(), paths)
     setIsCommitting(false)
+  }
+
+  const handleCommitAndPushGroup = async () => {
+    if (!editableMessage.trim() || !onCommitAndPush) return
+    setIsCommittingAndPushing(true)
+
+    // First stage all unstaged files in this group
+    const unstagedPaths = group.files.filter(f => !f.staged).map(f => f.path)
+    if (unstagedPaths.length > 0) {
+      const stageSuccess = await onStageFiles(unstagedPaths)
+      if (!stageSuccess) {
+        setIsCommittingAndPushing(false)
+        return
+      }
+    }
+
+    // Then commit and push
+    const paths = group.files.map(f => f.path)
+    await onCommitAndPush(editableMessage.trim(), paths)
+    setIsCommittingAndPushing(false)
   }
 
   return (
@@ -308,12 +332,23 @@ export function FileGroupCard({
         )}
         <button
           onClick={handleCommitGroup}
-          disabled={isLoading || isCommitting || !editableMessage.trim()}
+          disabled={isLoading || isCommitting || isCommittingAndPushing || !editableMessage.trim()}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Send className="w-3.5 h-3.5" />
           {isCommitting ? 'Committing...' : 'Commit'}
         </button>
+        {onCommitAndPush && (
+          <button
+            onClick={handleCommitAndPushGroup}
+            disabled={isLoading || isCommitting || isCommittingAndPushing || !editableMessage.trim()}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <ArrowUp className="w-3.5 h-3.5" />
+            {isCommittingAndPushing ? 'Committing & Pushing...' : 'Commit & Push'}
+          </button>
+        )}
       </div>
     </div>
   )
