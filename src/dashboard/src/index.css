@@ -82,6 +82,12 @@
   }
 }
 
+/* Recharts focus outline 제거 */
+.recharts-wrapper:focus,
+.recharts-surface:focus {
+  outline: none;
+}
+
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;

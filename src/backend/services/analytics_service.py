@@ -31,6 +31,17 @@ from models.project import get_project
 logger = logging.getLogger(__name__)
 
 
+def _normalize_model_name(model: str) -> str:
+    """Normalize model name for display."""
+    if not model or model == "unknown":
+        return "unknown (no model info)"
+    if model.startswith("<") and model.endswith(">"):
+        # e.g. "<synthetic>" → "synthetic (system-generated)"
+        inner = model.strip("<>")
+        return f"{inner} (system-generated)"
+    return model
+
+
 def _get_time_delta(time_range: TimeRange) -> timedelta:
     """Convert time range to timedelta."""
     mapping = {
@@ -558,7 +569,7 @@ class AnalyticsService:
         # Group by model
         by_model: dict[str, list] = defaultdict(list)
         for s in range_sessions:
-            by_model[s.model or "unknown"].append(s)
+            by_model[_normalize_model_name(s.model or "unknown")].append(s)
 
         agents = []
         for model_name, model_sessions in by_model.items():
@@ -617,7 +628,7 @@ class AnalyticsService:
         # By model
         model_costs: dict[str, dict] = defaultdict(lambda: {"cost": 0.0, "tokens": 0})
         for s in range_sessions:
-            model = s.model or "unknown"
+            model = _normalize_model_name(s.model or "unknown")
             model_costs[model]["cost"] += s.estimated_cost
             model_costs[model]["tokens"] += s.total_input_tokens + s.total_output_tokens
 

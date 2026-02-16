@@ -205,6 +205,9 @@ function ProjectCard({ project, isSelected, onClick, onDelete, canDelete }: Proj
             {project.mcp_server_count > 0 && (
               <span>{project.mcp_server_count} MCP</span>
             )}
+            {project.command_count > 0 && (
+              <span>{project.command_count} commands</span>
+            )}
           </div>
         </div>
         {canDelete && (

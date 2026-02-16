@@ -424,12 +424,13 @@ class FeedbackService:
     async def list_task_evaluations(
         self,
         agent_id: str | None = None,
+        project_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[TaskEvaluationResponse]:
         """태스크 평가 목록 조회 (DB + in-memory 병합)"""
         if self.use_database:
-            db_results = await self._list_task_evaluations_from_db(agent_id, limit, offset)
+            db_results = await self._list_task_evaluations_from_db(agent_id, limit, offset, project_id=project_id)
             # In-memory fallback 데이터도 포함
             memory_evals = list(self._task_evaluations.values())
             if agent_id:
@@ -474,12 +475,12 @@ class FeedbackService:
                 for e in evaluations
             ]
 
-    async def get_task_evaluation_stats(self) -> TaskEvaluationStats:
+    async def get_task_evaluation_stats(self, project_id: str | None = None) -> TaskEvaluationStats:
         """태스크 종합 평가 통계 (DB + in-memory 병합)"""
         from models.feedback import AgentEvalStats
 
         if self.use_database:
-            db_stats = await self._get_task_evaluation_stats_from_db()
+            db_stats = await self._get_task_evaluation_stats_from_db(project_id=project_id)
             # In-memory fallback 병합
             if self._task_evaluations:
                 mem_evals = list(self._task_evaluations.values())
@@ -1197,7 +1198,7 @@ class FeedbackService:
             }
 
     async def _list_task_evaluations_from_db(
-        self, agent_id: str | None, limit: int, offset: int
+        self, agent_id: str | None, limit: int, offset: int, project_id: str | None = None
     ) -> list[TaskEvaluationResponse]:
         """DB에서 태스크 평가 목록 조회"""
         from sqlalchemy import desc, select
@@ -1207,6 +1208,13 @@ class FeedbackService:
 
         async with async_session_factory() as db:
             query = select(TaskEvaluationModel)
+            if project_id:
+                project_name = self._resolve_project_name(project_id)
+                if project_name:
+                    query = query.where(TaskEvaluationModel.project_name == project_name)
+                else:
+                    # project_id를 찾을 수 없으면 빈 결과 반환
+                    return []
             if agent_id:
                 query = query.where(TaskEvaluationModel.agent_id == agent_id)
             query = query.order_by(desc(TaskEvaluationModel.created_at))
@@ -1230,7 +1238,17 @@ class FeedbackService:
                 for m in models
             ]
 
-    async def _get_task_evaluation_stats_from_db(self) -> TaskEvaluationStats:
+    def _resolve_project_name(self, project_id: str) -> str | None:
+        """project_id → project_name 매핑"""
+        try:
+            from models.project import get_project
+
+            project = get_project(project_id)
+            return project.name if project else None
+        except Exception:
+            return None
+
+    async def _get_task_evaluation_stats_from_db(self, project_id: str | None = None) -> TaskEvaluationStats:
         """DB에서 태스크 평가 통계 조회"""
         from sqlalchemy import select
 
@@ -1239,7 +1257,14 @@ class FeedbackService:
         from models.feedback import AgentEvalStats
 
         async with async_session_factory() as db:
-            result = await db.execute(select(TaskEvaluationModel))
+            query = select(TaskEvaluationModel)
+            if project_id:
+                project_name = self._resolve_project_name(project_id)
+                if project_name:
+                    query = query.where(TaskEvaluationModel.project_name == project_name)
+                else:
+                    return TaskEvaluationStats()
+            result = await db.execute(query)
             models = result.scalars().all()
             total = len(models)
 

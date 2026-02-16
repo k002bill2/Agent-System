@@ -217,8 +217,11 @@ async function fetchDashboard(timeRange: TimeRange, projectId?: string): Promise
   return res.json()
 }
 
-async function fetchTaskEvalStats(): Promise<TaskEvalStats> {
-  const res = await fetch(`${API_BASE}/feedback/task-evaluation/stats`)
+async function fetchTaskEvalStats(projectId?: string): Promise<TaskEvalStats> {
+  const params = new URLSearchParams()
+  if (projectId) params.set('project_id', projectId)
+  const qs = params.toString()
+  const res = await fetch(`${API_BASE}/feedback/task-evaluation/stats${qs ? `?${qs}` : ''}`)
   if (!res.ok) throw new Error('Failed to fetch evaluation stats')
   return res.json()
 }
@@ -226,9 +229,11 @@ async function fetchTaskEvalStats(): Promise<TaskEvalStats> {
 async function fetchTaskEvalList(
   agentId?: string,
   limit = 50,
+  projectId?: string,
 ): Promise<TaskEvaluation[]> {
   const params = new URLSearchParams({ limit: String(limit) })
   if (agentId) params.set('agent_id', agentId)
+  if (projectId) params.set('project_id', projectId)
   const res = await fetch(`${API_BASE}/feedback/task-evaluation/list?${params}`)
   if (!res.ok) throw new Error('Failed to fetch evaluation list')
   return res.json()
@@ -320,10 +325,11 @@ export function AnalyticsPage() {
   const loadData = async () => {
     try {
       setLoading(true)
+      const projectIdParam = selectedProjectId || undefined
       const [result, evalResult, evalListResult] = await Promise.all([
-        fetchDashboard(timeRange, selectedProjectId || undefined),
-        fetchTaskEvalStats().catch(() => null),
-        fetchTaskEvalList(evalFilterAgent || undefined).catch(() => []),
+        fetchDashboard(timeRange, projectIdParam),
+        fetchTaskEvalStats(projectIdParam).catch(() => null),
+        fetchTaskEvalList(evalFilterAgent || undefined, 50, projectIdParam).catch(() => []),
       ])
       setData(result)
       setEvalStats(evalResult)
@@ -570,36 +576,41 @@ export function AnalyticsPage() {
       </div>
 
       {/* Charts Row 2 */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        {/* Cost by Project */}
-        <ChartCard title="Cost by Project" icon={DollarSign}>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Cost by Model */}
+        <ChartCard title="Cost by Model" icon={DollarSign}>
           <ResponsiveContainer width="100%" height={250}>
             <PieChart>
               <Pie
-                data={data.costs.by_agent}
-                cx="50%"
+                data={data.costs.by_model}
+                cx="35%"
                 cy="50%"
-                innerRadius={60}
-                outerRadius={80}
+                innerRadius={70}
+                outerRadius={90}
                 paddingAngle={2}
                 dataKey="cost"
                 nameKey="value"
                 label={({ value }) => `$${value.toFixed(2)}`}
               >
-                {data.costs.by_agent.map((_, index) => (
+                {data.costs.by_model.map((_, index) => (
                   <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                 ))}
               </Pie>
               <Tooltip
                 formatter={(value) => [`$${Number(value).toFixed(2)}`, 'Cost']}
               />
-              <Legend />
+              <Legend
+                layout="vertical"
+                align="right"
+                verticalAlign="middle"
+                wrapperStyle={{ fontSize: '12px', paddingLeft: '8px', left: '60%' }}
+              />
             </PieChart>
           </ResponsiveContainer>
         </ChartCard>
 
         {/* Model Performance */}
-        <ChartCard title="Model Performance" icon={Users} className="lg:col-span-2">
+        <ChartCard title="Model Performance" icon={Users}>
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={data.agents.agents} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
@@ -684,12 +695,12 @@ export function AnalyticsPage() {
                     backgroundColor: 'var(--tooltip-bg, #fff)',
                     borderColor: 'var(--tooltip-border, #e5e7eb)',
                   }}
-                  formatter={(value) => {
+                  formatter={(value, name) => {
                     const numValue = Number(value)
-                    if (compareMetric === 'cost') return [`$${numValue.toFixed(3)}`, '']
-                    if (compareMetric === 'success_rate') return [`${numValue.toFixed(1)}%`, '']
-                    if (compareMetric === 'tokens') return [formatNumber(numValue), '']
-                    return [numValue, '']
+                    if (compareMetric === 'cost') return [`$${numValue.toFixed(2)}`, name]
+                    if (compareMetric === 'success_rate') return [`${Math.round(numValue)}%`, name]
+                    if (compareMetric === 'tokens') return [formatNumber(numValue), name]
+                    return [Math.round(numValue), name]
                   }}
                 />
                 <Legend />
@@ -830,7 +841,7 @@ export function AnalyticsPage() {
                 value={evalFilterAgent}
                 onChange={(e) => {
                   setEvalFilterAgent(e.target.value)
-                  fetchTaskEvalList(e.target.value || undefined).then(setEvalList).catch(() => {})
+                  fetchTaskEvalList(e.target.value || undefined, 50, selectedProjectId || undefined).then(setEvalList).catch(() => {})
                 }}
                 className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               >

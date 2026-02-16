@@ -235,18 +235,21 @@ async def submit_task_evaluation(
 
 
 @router.get("/task-evaluation/stats", response_model=TaskEvaluationStats)
-async def get_task_evaluation_stats() -> TaskEvaluationStats:
+async def get_task_evaluation_stats(
+    project_id: str | None = Query(None, description="프로젝트 ID 필터"),
+) -> TaskEvaluationStats:
     """태스크 종합 평가 통계
 
     평균 별점, 정확도 비율, 속도 만족도 비율을 반환합니다.
     """
     service = get_feedback_service()
-    return await service.get_task_evaluation_stats()
+    return await service.get_task_evaluation_stats(project_id=project_id)
 
 
 @router.get("/task-evaluation/list", response_model=list[TaskEvaluationResponse])
 async def list_task_evaluations(
     agent_id: str | None = Query(None, description="에이전트 ID 필터"),
+    project_id: str | None = Query(None, description="프로젝트 ID 필터"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> list[TaskEvaluationResponse]:
@@ -257,6 +260,7 @@ async def list_task_evaluations(
     service = get_feedback_service()
     return await service.list_task_evaluations(
         agent_id=agent_id,
+        project_id=project_id,
         limit=limit,
         offset=offset,
     )
