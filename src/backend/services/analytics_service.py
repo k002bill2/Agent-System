@@ -534,7 +534,6 @@ class AnalyticsService:
             bucket_total = len(bucket)
             if bucket_total > 0:
                 sr = round(bucket_completed / bucket_total * 100, 1)
-                last_sr = sr
             else:
                 sr = None  # No data ≠ 0% success
 
@@ -554,9 +553,7 @@ class AnalyticsService:
                     label=label,
                 )
             )
-            success_rate_data.append(
-                TrendDataPoint(timestamp=current, value=sr, label=label)
-            )
+            success_rate_data.append(TrendDataPoint(timestamp=current, value=sr, label=label))
 
             current += interval
 

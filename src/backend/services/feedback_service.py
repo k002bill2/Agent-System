@@ -430,7 +430,9 @@ class FeedbackService:
     ) -> list[TaskEvaluationResponse]:
         """태스크 평가 목록 조회 (DB + in-memory 병합)"""
         if self.use_database:
-            db_results = await self._list_task_evaluations_from_db(agent_id, limit, offset, project_id=project_id)
+            db_results = await self._list_task_evaluations_from_db(
+                agent_id, limit, offset, project_id=project_id
+            )
             # In-memory fallback 데이터도 포함
             memory_evals = list(self._task_evaluations.values())
             if agent_id:
@@ -1248,7 +1250,9 @@ class FeedbackService:
         except Exception:
             return None
 
-    async def _get_task_evaluation_stats_from_db(self, project_id: str | None = None) -> TaskEvaluationStats:
+    async def _get_task_evaluation_stats_from_db(
+        self, project_id: str | None = None
+    ) -> TaskEvaluationStats:
         """DB에서 태스크 평가 통계 조회"""
         from sqlalchemy import select
 

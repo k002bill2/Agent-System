@@ -401,9 +401,7 @@ class WorkflowService:
         for seed in SEED_WORKFLOWS:
             # Check if already exists by name
             result = await db.execute(
-                select(WorkflowDefinitionModel).where(
-                    WorkflowDefinitionModel.name == seed["name"]
-                )
+                select(WorkflowDefinitionModel).where(WorkflowDefinitionModel.name == seed["name"])
             )
             if result.scalar_one_or_none():
                 continue
@@ -431,9 +429,7 @@ class WorkflowService:
     # ── Workflow CRUD (database) ───────────────────────────
 
     @staticmethod
-    async def list_workflows_async(
-        db: AsyncSession, project_id: str | None = None
-    ) -> list[dict]:
+    async def list_workflows_async(db: AsyncSession, project_id: str | None = None) -> list[dict]:
         """List all workflows from database."""
         from db.models import WorkflowDefinitionModel
 
@@ -452,9 +448,7 @@ class WorkflowService:
         from db.models import WorkflowDefinitionModel
 
         result = await db.execute(
-            select(WorkflowDefinitionModel).where(
-                WorkflowDefinitionModel.id == workflow_id
-            )
+            select(WorkflowDefinitionModel).where(WorkflowDefinitionModel.id == workflow_id)
         )
         row = result.scalar_one_or_none()
         if not row:
@@ -512,9 +506,7 @@ class WorkflowService:
         from db.models import WorkflowDefinitionModel
 
         result = await db.execute(
-            select(WorkflowDefinitionModel).where(
-                WorkflowDefinitionModel.id == workflow_id
-            )
+            select(WorkflowDefinitionModel).where(WorkflowDefinitionModel.id == workflow_id)
         )
         row = result.scalar_one_or_none()
         if not row:
@@ -547,9 +539,7 @@ class WorkflowService:
         from db.models import WorkflowDefinitionModel
 
         result = await db.execute(
-            select(WorkflowDefinitionModel).where(
-                WorkflowDefinitionModel.id == workflow_id
-            )
+            select(WorkflowDefinitionModel).where(WorkflowDefinitionModel.id == workflow_id)
         )
         row = result.scalar_one_or_none()
         if not row:
@@ -568,12 +558,9 @@ class WorkflowService:
         """List workflow runs from database."""
         from db.models import WorkflowRunModel
 
-        query = (
-            select(WorkflowRunModel)
-            .options(
-                selectinload(WorkflowRunModel.jobs),
-                selectinload(WorkflowRunModel.workflow),
-            )
+        query = select(WorkflowRunModel).options(
+            selectinload(WorkflowRunModel.jobs),
+            selectinload(WorkflowRunModel.workflow),
         )
         if workflow_id:
             query = query.where(WorkflowRunModel.workflow_id == workflow_id)
@@ -613,9 +600,7 @@ class WorkflowService:
 
         # Get workflow from DB
         result = await db.execute(
-            select(WorkflowDefinitionModel).where(
-                WorkflowDefinitionModel.id == workflow_id
-            )
+            select(WorkflowDefinitionModel).where(WorkflowDefinitionModel.id == workflow_id)
         )
         wf_row = result.scalar_one_or_none()
         if not wf_row:
@@ -699,9 +684,7 @@ class WorkflowService:
 
                 # Persist final run state and jobs/steps to DB
                 status_val = (
-                    final_status.value
-                    if hasattr(final_status, "value")
-                    else str(final_status)
+                    final_status.value if hasattr(final_status, "value") else str(final_status)
                 )
                 await engine.update_run_status_db(
                     run_id,
@@ -719,9 +702,7 @@ class WorkflowService:
                         await engine.save_step_to_db(job_id, step_data)
 
                 # Update workflow last_run info
-                await engine.update_workflow_last_run_db(
-                    workflow_id, now, status_val
-                )
+                await engine.update_workflow_last_run_db(workflow_id, now, status_val)
 
             except Exception as e:
                 run_dict["status"] = WorkflowRunStatus.FAILED
@@ -755,9 +736,7 @@ class WorkflowService:
         now = datetime.utcnow()
 
         # Update DB
-        result = await db.execute(
-            select(WorkflowRunModel).where(WorkflowRunModel.id == run_id)
-        )
+        result = await db.execute(select(WorkflowRunModel).where(WorkflowRunModel.id == run_id))
         row = result.scalar_one_or_none()
         if row:
             row.status = "cancelled"

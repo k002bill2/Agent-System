@@ -608,9 +608,7 @@ class WorkflowEngine:
 
             async with async_session_factory() as session:
                 result = await session.execute(
-                    select(WorkflowDefinitionModel).where(
-                        WorkflowDefinitionModel.id == workflow_id
-                    )
+                    select(WorkflowDefinitionModel).where(WorkflowDefinitionModel.id == workflow_id)
                 )
                 row = result.scalar_one_or_none()
                 if row:
