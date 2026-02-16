@@ -520,7 +520,6 @@ class AnalyticsService:
         costs_data = []
         tokens_data = []
         success_rate_data = []
-        last_sr: float | None = None  # carry-forward for empty buckets
 
         current = start
         while current <= now:
