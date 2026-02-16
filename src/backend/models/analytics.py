@@ -59,7 +59,7 @@ class TrendDataPoint(BaseModel):
     """Single data point in a trend."""
 
     timestamp: datetime
-    value: float
+    value: float | None  # None = no data (e.g., empty bucket)
     label: str | None = None
 
 

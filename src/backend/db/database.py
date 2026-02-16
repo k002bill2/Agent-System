@@ -308,6 +308,25 @@ async def _run_migrations() -> None:
                 },
             )
 
+        # Migration 9: Add last_run_at and last_run_status to workflow_definitions
+        result = await conn.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'workflow_definitions' AND column_name = 'last_run_at'"
+            )
+        )
+        if not result.fetchone():
+            await conn.execute(
+                text(
+                    "ALTER TABLE workflow_definitions ADD COLUMN last_run_at TIMESTAMP"
+                )
+            )
+            await conn.execute(
+                text(
+                    "ALTER TABLE workflow_definitions ADD COLUMN last_run_status VARCHAR(20)"
+                )
+            )
+
         # Migration 7: Add unique constraint and FK to workflow_secrets
         result = await conn.execute(
             text(

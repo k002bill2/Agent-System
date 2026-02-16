@@ -146,13 +146,30 @@ else:
 
         if USE_DATABASE:
             try:
-                from db.database import init_db
+                from db.database import async_session_factory, init_db
 
                 await init_db()
                 if logger:
                     logger.info("database_initialized", type="postgresql")
                 else:
                     print("✅ Database initialized (PostgreSQL)")
+
+                # Seed built-in workflows into DB
+                try:
+                    from services.workflow_service import WorkflowService
+
+                    async with async_session_factory() as session:
+                        await WorkflowService.seed_workflows_async(session)
+                    if logger:
+                        logger.info("workflow_seeds_initialized")
+                    else:
+                        print("✅ Workflow seeds initialized")
+                except Exception as e:
+                    if logger:
+                        logger.warning("workflow_seed_failed", error=str(e))
+                    else:
+                        print(f"⚠️  Workflow seed failed: {e}")
+
             except ImportError:
                 if logger:
                     logger.warning("database_module_not_available")

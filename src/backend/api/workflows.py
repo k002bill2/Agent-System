@@ -3,9 +3,11 @@
 import asyncio
 import json
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from db.database import get_db
 from models.workflow import (
     WorkflowCreate,
     WorkflowListResponse,
@@ -13,7 +15,7 @@ from models.workflow import (
     WorkflowUpdate,
 )
 from services.workflow_engine import get_workflow_engine
-from services.workflow_service import get_workflow_service
+from services.workflow_service import USE_DATABASE, WorkflowService, get_workflow_service
 from services.workflow_yaml_parser import workflow_to_yaml
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -60,10 +62,16 @@ def _to_run_response(r: dict) -> dict:
 
 
 @router.get("", response_model=WorkflowListResponse)
-async def list_workflows(project_id: str | None = Query(None)):
+async def list_workflows(
+    project_id: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
     """List all workflow definitions."""
     service = get_workflow_service()
-    workflows = service.list_workflows(project_id=project_id)
+    if USE_DATABASE:
+        workflows = await WorkflowService.list_workflows_async(db, project_id=project_id)
+    else:
+        workflows = service.list_workflows(project_id=project_id)
     return {
         "workflows": [_to_workflow_response(w) for w in workflows],
         "total": len(workflows),
@@ -71,32 +79,45 @@ async def list_workflows(project_id: str | None = Query(None)):
 
 
 @router.get("/{workflow_id}")
-async def get_workflow(workflow_id: str):
+async def get_workflow(workflow_id: str, db: AsyncSession = Depends(get_db)):
     """Get a workflow definition by ID."""
     service = get_workflow_service()
-    workflow = service.get_workflow(workflow_id)
+    if USE_DATABASE:
+        workflow = await WorkflowService.get_workflow_async(db, workflow_id)
+    else:
+        workflow = service.get_workflow(workflow_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
     return _to_workflow_response(workflow)
 
 
 @router.post("", status_code=201)
-async def create_workflow(data: WorkflowCreate):
+async def create_workflow(data: WorkflowCreate, db: AsyncSession = Depends(get_db)):
     """Create a new workflow definition."""
     try:
         service = get_workflow_service()
-        workflow = service.create_workflow(data)
+        if USE_DATABASE:
+            workflow = await WorkflowService.create_workflow_async(db, data)
+        else:
+            workflow = service.create_workflow(data)
         return _to_workflow_response(workflow)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.put("/{workflow_id}")
-async def update_workflow(workflow_id: str, data: WorkflowUpdate):
+async def update_workflow(
+    workflow_id: str,
+    data: WorkflowUpdate,
+    db: AsyncSession = Depends(get_db),
+):
     """Update a workflow definition."""
     try:
         service = get_workflow_service()
-        workflow = service.update_workflow(workflow_id, data)
+        if USE_DATABASE:
+            workflow = await WorkflowService.update_workflow_async(db, workflow_id, data)
+        else:
+            workflow = service.update_workflow(workflow_id, data)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
         return _to_workflow_response(workflow)
@@ -105,10 +126,14 @@ async def update_workflow(workflow_id: str, data: WorkflowUpdate):
 
 
 @router.delete("/{workflow_id}", status_code=204)
-async def delete_workflow(workflow_id: str):
+async def delete_workflow(workflow_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a workflow definition."""
     service = get_workflow_service()
-    if not service.delete_workflow(workflow_id):
+    if USE_DATABASE:
+        success = await WorkflowService.delete_workflow_async(db, workflow_id)
+    else:
+        success = service.delete_workflow(workflow_id)
+    if not success:
         raise HTTPException(status_code=404, detail="Workflow not found")
 
 
@@ -116,10 +141,17 @@ async def delete_workflow(workflow_id: str):
 
 
 @router.get("/{workflow_id}/runs")
-async def list_runs(workflow_id: str, limit: int = Query(50, le=200)):
+async def list_runs(
+    workflow_id: str,
+    limit: int = Query(50, le=200),
+    db: AsyncSession = Depends(get_db),
+):
     """List runs for a workflow."""
     service = get_workflow_service()
-    runs = service.list_runs(workflow_id=workflow_id, limit=limit)
+    if USE_DATABASE:
+        runs = await WorkflowService.list_runs_async(db, workflow_id=workflow_id, limit=limit)
+    else:
+        runs = service.list_runs(workflow_id=workflow_id, limit=limit)
     return {
         "runs": [_to_run_response(r) for r in runs],
         "total": len(runs),
@@ -127,47 +159,69 @@ async def list_runs(workflow_id: str, limit: int = Query(50, le=200)):
 
 
 @router.post("/{workflow_id}/runs", status_code=201)
-async def trigger_run(workflow_id: str, data: WorkflowRunTrigger | None = None):
+async def trigger_run(
+    workflow_id: str,
+    data: WorkflowRunTrigger | None = None,
+    db: AsyncSession = Depends(get_db),
+):
     """Trigger a new workflow run."""
     try:
         service = get_workflow_service()
         trigger = data or WorkflowRunTrigger()
-        run = await service.trigger_run(workflow_id, trigger)
+        if USE_DATABASE:
+            run = await service.trigger_run_async(db, workflow_id, trigger)
+        else:
+            run = await service.trigger_run(workflow_id, trigger)
         return _to_run_response(run)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/runs/{run_id}")
-async def get_run(run_id: str):
+async def get_run(run_id: str, db: AsyncSession = Depends(get_db)):
     """Get a workflow run by ID."""
     service = get_workflow_service()
-    run = service.get_run(run_id)
+    if USE_DATABASE:
+        # Check in-memory first (active runs for SSE)
+        run = service.get_run(run_id)
+        if not run:
+            run = await WorkflowService.get_run_async(db, run_id)
+    else:
+        run = service.get_run(run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     return _to_run_response(run)
 
 
 @router.post("/runs/{run_id}/cancel")
-async def cancel_run(run_id: str):
+async def cancel_run(run_id: str, db: AsyncSession = Depends(get_db)):
     """Cancel a running workflow."""
     service = get_workflow_service()
-    run = service.cancel_run(run_id)
+    if USE_DATABASE:
+        run = await service.cancel_run_async(db, run_id)
+    else:
+        run = service.cancel_run(run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     return _to_run_response(run)
 
 
 @router.post("/runs/{run_id}/retry", status_code=201)
-async def retry_run(run_id: str):
+async def retry_run(run_id: str, db: AsyncSession = Depends(get_db)):
     """Retry a failed workflow run."""
     service = get_workflow_service()
-    workflow_id = service.retry_run(run_id)
+    if USE_DATABASE:
+        workflow_id = await WorkflowService.retry_run_async(db, run_id)
+    else:
+        workflow_id = service.retry_run(run_id)
     if not workflow_id:
         raise HTTPException(status_code=404, detail="Run not found")
 
     trigger = WorkflowRunTrigger()
-    run = await service.trigger_run(workflow_id, trigger)
+    if USE_DATABASE:
+        run = await service.trigger_run_async(db, workflow_id, trigger)
+    else:
+        run = await service.trigger_run(workflow_id, trigger)
     return _to_run_response(run)
 
 
@@ -175,10 +229,13 @@ async def retry_run(run_id: str):
 
 
 @router.get("/runs/{run_id}/stream")
-async def stream_run_logs(run_id: str):
+async def stream_run_logs(run_id: str, db: AsyncSession = Depends(get_db)):
     """Stream real-time logs for a workflow run via SSE."""
     service = get_workflow_service()
+    # Check in-memory first (active runs); fallback to DB for completed
     run = service.get_run(run_id)
+    if not run and USE_DATABASE:
+        run = await WorkflowService.get_run_async(db, run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
 
@@ -193,7 +250,7 @@ async def stream_run_logs(run_id: str):
                 yield f"event: log\ndata: {json.dumps(log)}\n\n"
                 log_index += 1
 
-            # Check run status
+            # Check run status (in-memory is authoritative for active runs)
             current_run = service.get_run(run_id)
             if current_run:
                 status = current_run["status"]
@@ -226,10 +283,13 @@ async def stream_run_logs(run_id: str):
 
 
 @router.get("/{workflow_id}/yaml")
-async def export_yaml(workflow_id: str):
+async def export_yaml(workflow_id: str, db: AsyncSession = Depends(get_db)):
     """Export workflow definition as YAML."""
     service = get_workflow_service()
-    workflow = service.get_workflow(workflow_id)
+    if USE_DATABASE:
+        workflow = await WorkflowService.get_workflow_async(db, workflow_id)
+    else:
+        workflow = service.get_workflow(workflow_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
 

@@ -72,7 +72,7 @@ interface OverviewMetrics {
 
 interface TrendDataPoint {
   timestamp: string
-  value: number
+  value: number | null
   label: string
 }
 
@@ -551,7 +551,10 @@ export function AnalyticsPage() {
                   backgroundColor: 'var(--tooltip-bg, #fff)',
                   borderColor: 'var(--tooltip-border, #e5e7eb)',
                 }}
-                formatter={(value) => [`${Number(value).toFixed(1)}%`, 'Success Rate']}
+                formatter={(value) => [
+                  value != null ? `${Number(value).toFixed(1)}%` : 'No data',
+                  'Success Rate',
+                ]}
               />
               <Line
                 type="monotone"
@@ -559,6 +562,7 @@ export function AnalyticsPage() {
                 stroke={CHART_COLORS[1]}
                 strokeWidth={2}
                 dot={false}
+                connectNulls
               />
             </LineChart>
           </ResponsiveContainer>
@@ -1270,13 +1274,15 @@ function formatDuration(ms: number): string {
   return `${(ms / 60000).toFixed(1)}m`
 }
 
-function formatTrendData(data: TrendDataPoint[]): { label: string; value: number }[] {
+function formatTrendData(
+  data: TrendDataPoint[],
+): { label: string; value: number | undefined }[] {
   return data.map((d) => ({
     label: new Date(d.timestamp).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
     }),
-    value: d.value,
+    value: d.value ?? undefined, // null → undefined for Recharts gap handling
   }))
 }
 
@@ -1286,8 +1292,8 @@ function formatTrendData(data: TrendDataPoint[]): { label: string; value: number
  */
 function transformMultiSeriesData(
   response: MultiProjectTrendsResponse
-): Record<string, string | number>[] {
-  const dateMap = new Map<string, Record<string, string | number>>()
+): Record<string, string | number | null>[] {
+  const dateMap = new Map<string, Record<string, string | number | null>>()
 
   response.series.forEach((series) => {
     series.data.forEach((point) => {

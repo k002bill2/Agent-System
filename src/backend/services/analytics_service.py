@@ -475,12 +475,16 @@ class AnalyticsService:
         sessions = AnalyticsService._get_sessions(project_name)
         delta = _get_time_delta(time_range)
         interval = _get_interval(time_range)
-        now = datetime.utcnow()
+        # Use local time for bucket boundaries (session timestamps are converted to local)
+        now = datetime.now()
         start = now - delta
 
         # Filter sessions in time range
         def _normalize_dt(dt):
-            return dt.replace(tzinfo=None) if dt.tzinfo else dt
+            """Convert to naive local time for consistent bucketing."""
+            if dt.tzinfo:
+                return dt.astimezone().replace(tzinfo=None)
+            return dt
 
         range_sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
 
@@ -488,6 +492,7 @@ class AnalyticsService:
         costs_data = []
         tokens_data = []
         success_rate_data = []
+        last_sr: float | None = None  # carry-forward for empty buckets
 
         current = start
         while current <= now:
@@ -499,7 +504,11 @@ class AnalyticsService:
 
             bucket_completed = sum(1 for s in bucket if s.status.value == "completed")
             bucket_total = len(bucket)
-            sr = (bucket_completed / bucket_total * 100) if bucket_total > 0 else 0.0
+            if bucket_total > 0:
+                sr = round(bucket_completed / bucket_total * 100, 1)
+                last_sr = sr
+            else:
+                sr = None  # No data ≠ 0% success
 
             label = current.strftime("%Y-%m-%d %H:%M")
             tasks_data.append(TrendDataPoint(timestamp=current, value=bucket_total, label=label))
@@ -518,7 +527,7 @@ class AnalyticsService:
                 )
             )
             success_rate_data.append(
-                TrendDataPoint(timestamp=current, value=round(sr, 1), label=label)
+                TrendDataPoint(timestamp=current, value=sr, label=label)
             )
 
             current += interval

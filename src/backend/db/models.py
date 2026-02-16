@@ -902,6 +902,8 @@ class WorkflowDefinitionModel(Base):
     created_by = Column(String(36), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_run_at = Column(DateTime, nullable=True)
+    last_run_status = Column(String(20), nullable=True)
 
     runs = relationship("WorkflowRunModel", back_populates="workflow", cascade="all, delete-orphan")
 

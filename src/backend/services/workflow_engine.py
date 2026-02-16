@@ -8,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import select
+
 from models.workflow import (
     JobStatus,
     RetryConfig,
@@ -494,6 +496,129 @@ class WorkflowEngine:
         self._cancelled.add(run_id)
         if run_id in self._running_runs:
             self._running_runs[run_id].cancel()
+
+    # ── DB Persistence Helpers ─────────────────────────────
+
+    async def update_run_status_db(
+        self,
+        run_id: str,
+        status: str,
+        **kwargs: Any,
+    ) -> None:
+        """Update run status in DB using a standalone session."""
+        try:
+            from db.database import async_session_factory
+            from db.models import WorkflowRunModel
+
+            async with async_session_factory() as session:
+                result = await session.execute(
+                    select(WorkflowRunModel).where(WorkflowRunModel.id == run_id)
+                )
+                row = result.scalar_one_or_none()
+                if row:
+                    row.status = status
+                    if "completed_at" in kwargs and kwargs["completed_at"]:
+                        row.completed_at = kwargs["completed_at"]
+                    if "duration_seconds" in kwargs and kwargs["duration_seconds"] is not None:
+                        row.duration_seconds = kwargs["duration_seconds"]
+                    if "total_cost" in kwargs and kwargs["total_cost"] is not None:
+                        row.total_cost = kwargs["total_cost"]
+                    if "error_summary" in kwargs:
+                        row.error_summary = kwargs["error_summary"]
+                    await session.commit()
+        except Exception:
+            pass  # Best-effort DB update; in-memory state is authoritative
+
+    async def save_job_to_db(self, run_id: str, job_data: dict) -> str:
+        """Save a completed job to DB. Returns the job ID."""
+        job_id = job_data.get("id", str(uuid.uuid4()))
+        try:
+            from db.database import async_session_factory
+            from db.models import WorkflowJobModel
+
+            status = job_data.get("status", "unknown")
+            if hasattr(status, "value"):
+                status = status.value
+
+            runner = job_data.get("runner", "local")
+            if hasattr(runner, "value"):
+                runner = runner.value
+
+            async with async_session_factory() as session:
+                db_job = WorkflowJobModel(
+                    id=job_id,
+                    run_id=run_id,
+                    name=job_data.get("name", ""),
+                    needs=job_data.get("needs", []),
+                    runs_on=runner,
+                    status=status,
+                    matrix_values=job_data.get("matrix_values"),
+                    outputs=job_data.get("outputs", {}),
+                    error=job_data.get("error"),
+                    started_at=job_data.get("started_at"),
+                    completed_at=job_data.get("completed_at"),
+                    duration_seconds=job_data.get("duration_seconds"),
+                )
+                session.add(db_job)
+                await session.commit()
+        except Exception:
+            pass
+        return job_id
+
+    async def save_step_to_db(self, job_id: str, step_data: dict) -> None:
+        """Save a completed step to DB."""
+        try:
+            from db.database import async_session_factory
+            from db.models import WorkflowStepModel
+
+            step_id = step_data.get("id", str(uuid.uuid4()))
+
+            status = step_data.get("status", "unknown")
+            if hasattr(status, "value"):
+                status = status.value
+
+            async with async_session_factory() as session:
+                db_step = WorkflowStepModel(
+                    id=step_id,
+                    job_id=job_id,
+                    name=step_data.get("name", ""),
+                    status=status,
+                    output=step_data.get("output"),
+                    error=step_data.get("error"),
+                    exit_code=step_data.get("exit_code"),
+                    duration_ms=step_data.get("duration_ms"),
+                    started_at=step_data.get("started_at"),
+                    completed_at=step_data.get("completed_at"),
+                )
+                session.add(db_step)
+                await session.commit()
+        except Exception:
+            pass
+
+    async def update_workflow_last_run_db(
+        self,
+        workflow_id: str,
+        last_run_at: datetime,
+        last_run_status: str,
+    ) -> None:
+        """Update workflow's last_run_at and last_run_status in DB."""
+        try:
+            from db.database import async_session_factory
+            from db.models import WorkflowDefinitionModel
+
+            async with async_session_factory() as session:
+                result = await session.execute(
+                    select(WorkflowDefinitionModel).where(
+                        WorkflowDefinitionModel.id == workflow_id
+                    )
+                )
+                row = result.scalar_one_or_none()
+                if row:
+                    row.last_run_at = last_run_at
+                    row.last_run_status = last_run_status
+                    await session.commit()
+        except Exception:
+            pass
 
     # ── Logging ─────────────────────────────────────────────
 
