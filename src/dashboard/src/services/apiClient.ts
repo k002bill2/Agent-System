@@ -8,6 +8,7 @@
 
 import { ApiError, ApiErrorCode, errorCodeFromStatus } from './errors'
 import { getApiUrl } from '../config/api'
+import { analytics } from './analytics'
 
 // ---------------------------------------------------------------------------
 // Config & interceptor types
@@ -201,6 +202,12 @@ class ApiClient {
             finalError = await interceptor.onResponseError(finalError)
           }
         }
+
+        analytics.track('api_error', {
+          url: config.url,
+          method: config.method,
+          status: processed.status,
+        })
 
         throw finalError
       }
