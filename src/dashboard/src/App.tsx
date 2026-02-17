@@ -29,6 +29,7 @@ import { OrganizationsPage } from './pages/OrganizationsPage'
 import { AdminPage } from './pages/AdminPage'
 import { WorkflowsPage } from './pages/WorkflowsPage'
 import { InvitationAcceptPage } from './pages/InvitationAcceptPage'
+import { analytics } from './services/analytics'
 import {
   SidebarSkeleton,
   DashboardSkeleton,
@@ -99,6 +100,16 @@ export default function App() {
   // Email auth is always available (frontend form + backend endpoints exist)
   const emailEnabled = authStatus?.email_enabled ?? true
   const anyAuthAvailable = oauthEnabled === true || emailEnabled
+
+  // PostHog 초기화 (앱 마운트 시 1회)
+  useEffect(() => {
+    analytics.init()
+  }, [])
+
+  // 페이지뷰 추적
+  useEffect(() => {
+    analytics.page(currentView)
+  }, [currentView])
 
   // Check auth configuration on mount
   useEffect(() => {
