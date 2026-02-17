@@ -627,18 +627,17 @@ async def get_projects(
             accessible_ids = await ProjectAccessService.get_accessible_project_ids(
                 db, current_user.id
             )
-            if accessible_ids is not None:
-                # User has explicit access to some projects; also include
-                # projects without any access control (open to all).
-                filtered = []
-                for p in projects:
-                    if p.id in accessible_ids:
+            # Always filter: show only projects user has access to,
+            # or projects with no ACL (public/legacy projects).
+            filtered = []
+            for p in projects:
+                if p.id in accessible_ids:
+                    filtered.append(p)
+                else:
+                    has_acl = await ProjectAccessService.has_any_access_control(db, p.id)
+                    if not has_acl:
                         filtered.append(p)
-                    else:
-                        has_acl = await ProjectAccessService.has_any_access_control(db, p.id)
-                        if not has_acl:
-                            filtered.append(p)
-                projects = filtered
+            projects = filtered
 
     # Try to get RAG stats if available
     try:
@@ -852,8 +851,15 @@ async def get_project_by_id(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Apply RBAC if user is authenticated
+    # Apply RBAC and is_active filtering if user is authenticated
     if current_user:
+        is_admin = current_user.role == "admin" or current_user.is_admin
+        if not is_admin:
+            # 비활성 프로젝트는 일반 사용자에게 404 반환 (존재 자체를 숨김)
+            inactive_paths = await get_inactive_project_paths(db)
+            if project.path in inactive_paths:
+                raise HTTPException(status_code=404, detail="Project not found")
+
         await require_project_role(project_id, current_user, db, min_role="viewer")
 
     return ProjectResponse(

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { analytics } from '../services/analytics'
+import { authFetch } from './auth'
 
 const API_BASE = import.meta.env.VITE_API_URL || ''
 
@@ -112,11 +113,11 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   searchQuery: '',
   selectedProjectId: null,
 
-  // Fetch all projects
+  // Fetch all projects (인증 헤더 포함 - 비활성 프로젝트 필터링을 위해)
   fetchProjects: async () => {
     set({ isLoading: true, error: null })
     try {
-      const response = await fetch(`${API_BASE}/api/projects`)
+      const response = await authFetch(`${API_BASE}/api/projects`)
       if (!response.ok) {
         throw new Error(`Failed to fetch projects: ${response.statusText}`)
       }
