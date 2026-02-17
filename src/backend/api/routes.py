@@ -1,7 +1,10 @@
 """REST API routes."""
 
 import json
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -572,9 +575,8 @@ async def get_inactive_project_paths(db: AsyncSession) -> set[str]:
     """DB project-registry에서 is_active=False인 프로젝트의 path set 반환.
 
     USE_DATABASE=false이거나 DB 오류 시 빈 set 반환 (필터링 스킵).
+    관리자 분기에서는 호출되지 않음.
     """
-    import os
-
     use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
     if not use_database:
         return set()
@@ -591,8 +593,8 @@ async def get_inactive_project_paths(db: AsyncSession) -> set[str]:
         )
         paths = {row[0] for row in result.all() if row[0]}
         return paths
-    except Exception:
-        # DB 오류 시 필터링 미적용 (안전한 기본값)
+    except Exception as e:
+        logger.warning("project-registry is_active 조회 실패, 필터링 스킵: %s", e)
         return set()
 
 
@@ -603,8 +605,9 @@ async def get_projects(
 ):
     """List all registered projects, sorted by sort_order.
 
-    If the user is authenticated, only returns projects they have access to.
-    Projects without any access control records are visible to all authenticated users.
+    Admins see all projects.
+    Regular users: projects deactivated in project-registry (is_active=False) are hidden.
+    Projects without any access control records are visible to all regular users.
     """
     projects = list_projects()
 
