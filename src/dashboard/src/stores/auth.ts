@@ -5,6 +5,7 @@ import {
   migrateLocalStorageToCookie,
   clearAllAuthStorage,
 } from '../lib/cookieStorage'
+import { analytics } from '../services/analytics'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -86,10 +87,19 @@ export const useAuthStore = create<AuthState>()(
       // Set user info
       setUser: (user) => {
         set({ user, error: null })
+        analytics.identify(user.id, {
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          is_admin: user.is_admin,
+        })
+        analytics.track('user_logged_in', { provider: user.oauth_provider })
       },
 
       // Logout
       logout: () => {
+        analytics.track('user_logged_out')
+        analytics.reset()
         // 상태 초기화
         set({
           user: null,
