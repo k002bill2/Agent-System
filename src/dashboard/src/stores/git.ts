@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { extractGitHubRepo } from '../utils/gitUtils'
+import { analytics } from '../services/analytics'
 
 const API_BASE = import.meta.env.VITE_API_URL || ''
 
@@ -590,6 +591,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         return false
       }
 
+      analytics.track('git_commit_pushed', { project_id: projectId })
       return true
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })
@@ -734,6 +736,7 @@ export const useGitStore = create<GitState>((set, get) => ({
       }
       await get().fetchBranches(projectId)
       set({ isLoading: false })
+      analytics.track('git_branch_created', { project_id: projectId, branch_name: name })
       return true
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })
