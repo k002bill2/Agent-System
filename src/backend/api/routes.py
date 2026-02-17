@@ -568,6 +568,34 @@ class ProjectReorderRequest(BaseModel):
     project_ids: list[str] = Field(..., description="List of project IDs in desired order")
 
 
+async def get_inactive_project_paths(db: AsyncSession) -> set[str]:
+    """DB project-registry에서 is_active=False인 프로젝트의 path set 반환.
+
+    USE_DATABASE=false이거나 DB 오류 시 빈 set 반환 (필터링 스킵).
+    """
+    import os
+
+    use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
+    if not use_database:
+        return set()
+
+    try:
+        from db.models import ProjectModel
+        from sqlalchemy import select
+
+        result = await db.execute(
+            select(ProjectModel.path).where(
+                ProjectModel.is_active == False,  # noqa: E712
+                ProjectModel.path.isnot(None),
+            )
+        )
+        paths = {row[0] for row in result.all() if row[0]}
+        return paths
+    except Exception:
+        # DB 오류 시 필터링 미적용 (안전한 기본값)
+        return set()
+
+
 @router.get("/projects", response_model=list[ProjectResponse])
 async def get_projects(
     current_user=Depends(get_current_user_optional),
@@ -585,6 +613,12 @@ async def get_projects(
         # System admins see all projects
         is_admin = current_user.role == "admin" or current_user.is_admin
         if not is_admin:
+            # 1. project-registry 비활성화 path 기반 필터링
+            inactive_paths = await get_inactive_project_paths(db)
+            if inactive_paths:
+                projects = [p for p in projects if p.path not in inactive_paths]
+
+            # 2. 기존 ProjectAccess 권한 필터링 유지
             from services.project_access_service import ProjectAccessService
 
             accessible_ids = await ProjectAccessService.get_accessible_project_ids(
