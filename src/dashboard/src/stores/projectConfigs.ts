@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { authFetch } from './auth'
 
 const API_BASE = '/api'
 
@@ -268,6 +269,7 @@ interface ProjectConfigsState {
   updateDBProject: (id: string, data: { name?: string; description?: string; path?: string }) => Promise<boolean>
   deleteDBProject: (id: string) => Promise<boolean>
   restoreDBProject: (id: string) => Promise<boolean>
+  toggleDBProjectActive: (id: string) => Promise<boolean>
 }
 
 export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => ({
@@ -1245,7 +1247,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ isLoadingDBProjects: true, error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-registry`)
+      const res = await authFetch(`${API_BASE}/project-registry`)
       if (!res.ok) {
         throw new Error(`Failed to fetch DB projects: ${res.statusText}`)
       }
@@ -1346,6 +1348,29 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
       if (!res.ok) {
         const errorData = await res.json()
         throw new Error(errorData.detail || 'Failed to restore project')
+      }
+
+      await get().fetchDBProjects()
+      await get().fetchProjects()
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    }
+  },
+
+  toggleDBProjectActive: async (id) => {
+    set({ error: null })
+
+    try {
+      const res = await fetch(`${API_BASE}/project-registry/${id}/toggle-active`, {
+        method: 'PATCH',
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.detail || 'Failed to toggle project active status')
       }
 
       await get().fetchDBProjects()
