@@ -134,18 +134,15 @@ class ProjectAccessService:
     async def get_accessible_project_ids(
         db: AsyncSession,
         user_id: str,
-    ) -> list[str] | None:
+    ) -> list[str]:
         """Get list of project IDs the user has explicit access to.
 
-        Returns None if the user has no explicit access records at all,
-        meaning they should see all projects (backward compatible).
-        Returns a list of project IDs if they have explicit access.
+        Returns list of project IDs the user has been explicitly granted access to.
+        Returns an empty list if the user has no explicit access records.
+        Projects with no ACL at all (public) are handled separately by the caller.
         """
         result = await db.execute(
             select(ProjectAccessModel.project_id).where(ProjectAccessModel.user_id == user_id)
         )
         project_ids = list(result.scalars().all())
-
-        # Also include projects with no access control at all
-        # (those are open to everyone)
-        return project_ids if project_ids else None
+        return project_ids

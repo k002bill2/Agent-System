@@ -443,7 +443,12 @@ class WorkflowEngine:
         run_id: str,
     ) -> dict:
         """Execute a shell command."""
-        cwd = project_path or str(Path.cwd())
+        # Default to project root (3 levels up from this file: workflow_engine.py -> services -> backend -> src -> project root)
+        if project_path:
+            cwd = project_path
+        else:
+            # Resolve project root: src/backend/services/workflow_engine.py -> project root
+            cwd = str(Path(__file__).parent.parent.parent.parent)
 
         if runner == RunnerType.DOCKER:
             # Docker sandbox execution (delegate to SandboxManager if available)
