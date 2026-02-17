@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { analytics } from '../services/analytics'
 
 const API_BASE = import.meta.env.VITE_API_URL || ''
 
@@ -161,6 +162,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
       }
       await get().fetchProjects()
       set({ isLoading: false, modalMode: null })
+      analytics.track('project_created', { project_id: id, name, template })
       return true
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })
@@ -205,6 +207,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
       }
       await get().fetchProjects()
       set({ isLoading: false, modalMode: null, editingProject: null })
+      analytics.track('project_updated', { project_id: id })
       return true
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })
@@ -225,6 +228,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
       }
       await get().fetchProjects()
       set({ isLoading: false })
+      analytics.track('project_deleted', { project_id: id })
       return true
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })
