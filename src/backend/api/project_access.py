@@ -209,3 +209,175 @@ async def get_my_access(
         role=role,
         has_access=role is not None,
     )
+
+
+# ─────────────────────────────────────────────────────────────
+# Invitation Endpoints
+# ─────────────────────────────────────────────────────────────
+
+invitation_router = APIRouter(
+    prefix="/projects/{project_id}/invitations",
+    tags=["project-invitations"],
+)
+
+public_invitation_router = APIRouter(
+    prefix="/invitations",
+    tags=["project-invitations"],
+)
+
+
+class InvitationCreate(BaseModel):
+    """Request to create an invitation."""
+
+    email: str
+    role: str = "viewer"
+
+
+class InvitationResponse(BaseModel):
+    """Response for a project invitation."""
+
+    id: str
+    project_id: str
+    email: str
+    role: str
+    status: str
+    expires_at: str
+    created_at: str
+
+
+class InvitationPreviewResponse(BaseModel):
+    """Response for invitation preview (public endpoint)."""
+
+    project_id: str
+    project_name: str | None = None
+    email: str
+    role: str
+    expires_at: str
+    valid: bool
+
+
+def _to_invitation_response(inv) -> InvitationResponse:
+    return InvitationResponse(
+        id=inv.id,
+        project_id=inv.project_id,
+        email=inv.email,
+        role=inv.role,
+        status=inv.status,
+        expires_at=inv.expires_at.isoformat() if inv.expires_at else "",
+        created_at=inv.created_at.isoformat() if inv.created_at else "",
+    )
+
+
+@invitation_router.post("", response_model=InvitationResponse, status_code=201)
+async def create_invitation(
+    project_id: str,
+    request: InvitationCreate,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """이메일로 프로젝트 초대 생성. owner 권한 필요."""
+    await require_project_role(project_id, current_user, db, min_role="owner")
+    if request.role not in {"owner", "editor", "viewer"}:
+        raise HTTPException(status_code=400, detail="Invalid role")
+
+    from services.project_invitation_service import ProjectInvitationService
+
+    inv = await ProjectInvitationService.create_invitation(
+        db=db,
+        project_id=project_id,
+        invited_by=current_user.id,
+        email=request.email,
+        role=request.role,
+    )
+    logger.info(f"Invitation created: {inv.token[:8]}... → {request.email}")
+    return _to_invitation_response(inv)
+
+
+@invitation_router.get("", response_model=list[InvitationResponse])
+async def list_invitations(
+    project_id: str,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """pending 초대 목록. owner 권한 필요."""
+    await require_project_role(project_id, current_user, db, min_role="owner")
+
+    from services.project_invitation_service import ProjectInvitationService
+
+    invs = await ProjectInvitationService.list_pending(db, project_id)
+    return [_to_invitation_response(i) for i in invs]
+
+
+@invitation_router.delete("/{invitation_id}")
+async def cancel_invitation(
+    project_id: str,
+    invitation_id: str,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """초대 취소. owner 권한 필요."""
+    await require_project_role(project_id, current_user, db, min_role="owner")
+
+    from services.project_invitation_service import ProjectInvitationService
+
+    cancelled = await ProjectInvitationService.cancel_invitation(db, invitation_id, project_id)
+    if not cancelled:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+    return {"message": "Invitation cancelled"}
+
+
+@public_invitation_router.get("/{token}", response_model=InvitationPreviewResponse)
+async def preview_invitation(
+    token: str,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """토큰으로 초대 미리보기 (인증 불필요)."""
+    from datetime import datetime as dt
+
+    from sqlalchemy import select
+
+    from db.models import ProjectModel
+    from services.project_invitation_service import ProjectInvitationService
+
+    inv = await ProjectInvitationService.get_by_token(db, token)
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+
+    valid = inv.status == "pending" and inv.expires_at > dt.utcnow()
+
+    proj_result = await db.execute(select(ProjectModel).where(ProjectModel.id == inv.project_id))
+    project = proj_result.scalar_one_or_none()
+
+    return InvitationPreviewResponse(
+        project_id=inv.project_id,
+        project_name=project.name if project else None,
+        email=inv.email,
+        role=inv.role,
+        expires_at=inv.expires_at.isoformat(),
+        valid=valid,
+    )
+
+
+@public_invitation_router.post("/{token}/accept")
+async def accept_invitation(
+    token: str,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """초대 수락. 로그인 필요."""
+    from services.project_invitation_service import ProjectInvitationService
+
+    try:
+        access = await ProjectInvitationService.accept_invitation(
+            db=db,
+            token=token,
+            user_id=current_user.id,
+            user_email=current_user.email,
+        )
+        return {
+            "message": "초대를 수락했습니다",
+            "project_id": access.project_id,
+            "role": access.role,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

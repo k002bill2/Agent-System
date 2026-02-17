@@ -107,6 +107,8 @@ else:
     llm_models_router = safe_import("api.llm", "router")
     admin_router = safe_import("api.admin", "router")
     project_access_router = safe_import("api.project_access", "router")
+    invitation_router = safe_import("api.project_access", "invitation_router")
+    public_invitation_router = safe_import("api.project_access", "public_invitation_router")
     workflows_router = safe_import("api.workflows", "router")
     secrets_router = safe_import("api.secrets", "router")
     webhooks_router = safe_import("api.webhooks", "router")
@@ -383,6 +385,10 @@ else:
             app.include_router(admin_router, prefix="/api")
         if project_access_router:
             app.include_router(project_access_router, prefix="/api")
+        if invitation_router:
+            app.include_router(invitation_router, prefix="/api/v1")
+        if public_invitation_router:
+            app.include_router(public_invitation_router, prefix="/api/v1")
         if templates_router:
             app.include_router(templates_router, prefix="/api")
         if workflows_router:
