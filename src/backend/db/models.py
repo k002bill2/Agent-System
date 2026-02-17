@@ -1094,6 +1094,33 @@ class ProjectModel(Base):
     __table_args__: tuple = ()
 
 
+class ProjectInvitationModel(Base):
+    """Project invitation model for email-based membership."""
+
+    __tablename__ = "project_invitations"
+
+    id = Column(String(36), primary_key=True)
+    project_id = Column(String(36), nullable=False)
+    invited_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    email = Column(String(255), nullable=False)
+    role = Column(String(20), nullable=False)  # owner, editor, viewer
+    token = Column(String(128), nullable=False, unique=True)
+    status = Column(String(20), nullable=False, default="pending")  # pending, accepted, expired
+
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "email", name="uq_project_invitation_email"),
+        Index("ix_project_invitation_token", "token"),
+        Index("ix_project_invitation_project", "project_id"),
+    )
+
+    # Relationships
+    inviter = relationship("UserModel", foreign_keys=[invited_by])
+
+
 class WorkflowTemplateModel(Base):
     """Workflow template model for reusable workflow definitions."""
 
