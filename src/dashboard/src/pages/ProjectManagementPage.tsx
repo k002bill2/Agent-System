@@ -3,8 +3,6 @@ import {
   Plus,
   Search,
   Pencil,
-  Trash2,
-  RotateCcw,
   FolderOpen,
   FolderX,
   X,
@@ -13,6 +11,14 @@ import {
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useProjectConfigsStore, DBProject } from '../stores/projectConfigs'
+import { MembersTab } from '@/components/project-management/MembersTab'
+
+type DetailTab = 'info' | 'members'
+
+const DETAIL_TABS: { id: DetailTab; label: string }[] = [
+  { id: 'info', label: '정보' },
+  { id: 'members', label: '멤버' },
+]
 
 export function ProjectManagementPage() {
   const {
@@ -23,14 +29,17 @@ export function ProjectManagementPage() {
     fetchDBProjects,
     createDBProject,
     updateDBProject,
-    deleteDBProject,
-    restoreDBProject,
+    toggleDBProjectActive,
   } = useProjectConfigsStore()
+
+  const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set())
 
   const [searchQuery, setSearchQuery] = useState('')
   const [showInactive, setShowInactive] = useState(false)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingProject, setEditingProject] = useState<DBProject | null>(null)
+  const [selectedProject, setSelectedProject] = useState<DBProject | null>(null)
+  const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>('info')
 
   // Create form state
   const [createName, setCreateName] = useState('')
@@ -104,17 +113,108 @@ export function ProjectManagementPage() {
     }
   }
 
-  const handleDelete = async (project: DBProject) => {
-    if (confirm(`"${project.name}" 프로젝트를 비활성화하시겠습니까?`)) {
-      await deleteDBProject(project.id)
-    }
+  const handleToggleActive = async (project: DBProject) => {
+    setTogglingIds((prev) => new Set(prev).add(project.id))
+    await toggleDBProjectActive(project.id)
+    setTogglingIds((prev) => {
+      const next = new Set(prev)
+      next.delete(project.id)
+      return next
+    })
   }
 
-  const handleRestore = async (project: DBProject) => {
-    await restoreDBProject(project.id)
+  const renderDetailPanel = () => {
+    if (!selectedProject) return null
+
+    return (
+      <div className="w-96 border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col overflow-hidden">
+        {/* Panel Header */}
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-gray-900 dark:text-white text-sm">
+              {selectedProject.name}
+            </h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+              {selectedProject.slug}
+            </p>
+          </div>
+          <button
+            onClick={() => setSelectedProject(null)}
+            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-gray-200 dark:border-gray-700">
+          {DETAIL_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveDetailTab(tab.id)}
+              className={cn(
+                'flex-1 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors',
+                activeDetailTab === tab.id
+                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab Content */}
+        <div className="flex-1 overflow-auto p-4">
+          {activeDetailTab === 'info' && (
+            <div className="space-y-3 text-sm">
+              {selectedProject.description && (
+                <div>
+                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">설명</p>
+                  <p className="text-gray-700 dark:text-gray-300">{selectedProject.description}</p>
+                </div>
+              )}
+              {selectedProject.path && (
+                <div>
+                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">경로</p>
+                  <p className="text-gray-700 dark:text-gray-300 font-mono text-xs break-all">
+                    {selectedProject.path}
+                  </p>
+                </div>
+              )}
+              <div>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">상태</p>
+                <span
+                  className={cn(
+                    'px-2 py-0.5 rounded text-xs font-medium',
+                    selectedProject.is_active
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                      : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                  )}
+                >
+                  {selectedProject.is_active ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+              {selectedProject.created_at && (
+                <div>
+                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">생성일</p>
+                  <p className="text-gray-700 dark:text-gray-300">
+                    {new Date(selectedProject.created_at).toLocaleDateString('ko-KR')}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+          {activeDetailTab === 'members' && (
+            <MembersTab projectId={selectedProject.id} />
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (
+    <div className="flex-1 flex overflow-hidden">
     <div className="flex-1 overflow-auto p-6">
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
@@ -279,11 +379,20 @@ export function ProjectManagementPage() {
         {filtered.map((project) => (
           <div
             key={project.id}
+            onClick={() => {
+              if (editingProject?.id !== project.id) {
+                setSelectedProject((prev) => prev?.id === project.id ? null : project)
+                setActiveDetailTab('info')
+              }
+            }}
             className={cn(
-              'bg-white dark:bg-gray-800 border rounded-lg p-4 transition-colors',
+              'bg-white dark:bg-gray-800 border rounded-lg p-4 transition-colors cursor-pointer',
               project.is_active
                 ? 'border-gray-200 dark:border-gray-700'
-                : 'border-gray-200 dark:border-gray-700 opacity-60'
+                : 'border-gray-200 dark:border-gray-700 opacity-60',
+              selectedProject?.id === project.id
+                ? 'ring-2 ring-primary-500'
+                : 'hover:border-gray-300 dark:hover:border-gray-600'
             )}
           >
             {editingProject?.id === project.id ? (
@@ -394,34 +503,35 @@ export function ProjectManagementPage() {
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  {project.is_active ? (
-                    <>
-                      <button
-                        onClick={() => handleStartEdit(project)}
-                        className="p-2 text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                        title="Edit"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(project)}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                        title="Deactivate"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </>
-                  ) : (
+                <div className="flex items-center gap-2">
+                  {project.is_active && (
                     <button
-                      onClick={() => handleRestore(project)}
-                      className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
-                      title="Restore"
+                      onClick={() => handleStartEdit(project)}
+                      className="p-2 text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                      title="Edit"
                     >
-                      <RotateCcw className="w-4 h-4" />
-                      Restore
+                      <Pencil className="w-4 h-4" />
                     </button>
                   )}
+                  {/* Toggle switch */}
+                  <button
+                    onClick={() => handleToggleActive(project)}
+                    disabled={togglingIds.has(project.id)}
+                    title={project.is_active ? 'Deactivate project' : 'Activate project'}
+                    className={cn(
+                      'relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed',
+                      project.is_active
+                        ? 'bg-green-500 hover:bg-green-600'
+                        : 'bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500'
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform',
+                        project.is_active ? 'translate-x-4' : 'translate-x-0.5'
+                      )}
+                    />
+                  </button>
                 </div>
               </div>
             )}
@@ -436,6 +546,8 @@ export function ProjectManagementPage() {
           <p className="text-sm">No matching projects</p>
         </div>
       )}
+    </div>
+    {renderDetailPanel()}
     </div>
   )
 }
