@@ -30,6 +30,7 @@ export interface Project {
   git_path: string | null
   git_enabled: boolean
   sort_order: number
+  is_active: boolean
 }
 
 export interface DeletionPreview {
@@ -69,6 +70,7 @@ interface ProjectsState {
 
   // Search/Filter
   searchQuery: string
+  showInactive: boolean
 
   // Selected project for details panel
   selectedProjectId: string | null
@@ -92,6 +94,7 @@ interface ProjectsState {
 
   // Actions - Search
   setSearchQuery: (query: string) => void
+  setShowInactive: (show: boolean) => void
 
   // Actions - Selection
   selectProject: (id: string | null) => void
@@ -110,6 +113,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   modalMode: null,
   editingProject: null,
   searchQuery: '',
+  showInactive: true,
   selectedProjectId: null,
 
   // Fetch all projects
@@ -303,17 +307,25 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
 
   // Search
   setSearchQuery: (query) => set({ searchQuery: query }),
+  setShowInactive: (show) => set({ showInactive: show }),
 
   // Selection
   selectProject: (id) => set({ selectedProjectId: id }),
 
   // Computed: filtered projects
   filteredProjects: () => {
-    const { projects, searchQuery } = get()
-    if (!searchQuery.trim()) return projects
+    const { projects, searchQuery, showInactive } = get()
+    let filtered = projects
+
+    // Filter inactive unless showInactive is true
+    if (!showInactive) {
+      filtered = filtered.filter((p) => p.is_active !== false)
+    }
+
+    if (!searchQuery.trim()) return filtered
 
     const query = searchQuery.toLowerCase()
-    return projects.filter(
+    return filtered.filter(
       (p) =>
         p.id.toLowerCase().includes(query) ||
         p.name.toLowerCase().includes(query) ||

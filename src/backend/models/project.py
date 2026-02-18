@@ -128,6 +128,7 @@ class ProjectResponse(BaseModel):
     git_enabled: bool = False
     sort_order: int = 0
     organization_id: str | None = None
+    is_active: bool = True
 
 
 class ProjectUpdate(BaseModel):

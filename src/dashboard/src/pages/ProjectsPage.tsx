@@ -96,7 +96,8 @@ function SortableProjectCard({
         isSelected
           ? 'border-primary-500 ring-2 ring-primary-200 dark:ring-primary-800'
           : 'border-gray-200 dark:border-gray-700',
-        isDragging && 'shadow-lg'
+        isDragging && 'shadow-lg',
+        project.is_active === false && 'opacity-60'
       )}
     >
       {/* Drag Handle */}
@@ -195,6 +196,13 @@ function SortableProjectCard({
 
       {/* Status Badges */}
       <div className="flex flex-wrap gap-2">
+        {/* Inactive Badge */}
+        {project.is_active === false && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+            Inactive
+          </span>
+        )}
+
         {/* CLAUDE.md Status */}
         <span
           className={cn(
@@ -263,10 +271,12 @@ export function ProjectsPage() {
     isLoading,
     error,
     searchQuery,
+    showInactive,
     selectedProjectId,
     fetchProjects,
     fetchTemplates,
     setSearchQuery,
+    setShowInactive,
     openCreateModal,
     openLinkModal,
     openEditModal,
@@ -390,9 +400,9 @@ export function ProjectsPage() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="mb-6">
-        <div className="relative">
+      {/* Search + Filter */}
+      <div className="mb-6 flex items-center gap-4">
+        <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
@@ -402,6 +412,17 @@ export function ProjectsPage() {
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
           />
         </div>
+        {projects.some((p) => p.is_active === false) && (
+          <label className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 cursor-pointer whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={showInactive}
+              onChange={(e) => setShowInactive(e.target.checked)}
+              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            Show inactive ({projects.filter((p) => p.is_active === false).length})
+          </label>
+        )}
       </div>
 
       {/* Error */}

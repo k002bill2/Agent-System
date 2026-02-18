@@ -196,7 +196,11 @@ async def _get_org_membership(
     user: UserModel,
     db: AsyncSession,
 ) -> "OrganizationMemberModel | None":
-    """Get user's membership in a specific organization."""
+    """Get user's membership in a specific organization.
+
+    Checks the DB first, then falls back to the in-memory/JSON service.
+    This handles orgs created via the sync API (stored in JSON, not DB).
+    """
     from sqlalchemy import and_, select
 
     from db.models import OrganizationMemberModel
@@ -210,7 +214,31 @@ async def _get_org_membership(
             )
         )
     )
-    return result.scalar_one_or_none()
+    db_membership = result.scalar_one_or_none()
+    if db_membership:
+        return db_membership
+
+    # Fallback: check in-memory/JSON service (org created via sync API)
+    from services.organization_service import OrganizationService
+
+    mem_membership = OrganizationService.get_member_by_user(org_id, user.id)
+    if mem_membership:
+        role_value = (
+            mem_membership.role.value
+            if hasattr(mem_membership.role, "value")
+            else mem_membership.role
+        )
+        synthetic = OrganizationMemberModel(
+            id=mem_membership.id,
+            organization_id=org_id,
+            user_id=user.id,
+            email=user.email or "",
+            role=role_value,
+            is_active=True,
+        )
+        return synthetic
+
+    return None
 
 
 async def require_org_member(

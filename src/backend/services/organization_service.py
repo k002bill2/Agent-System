@@ -157,8 +157,12 @@ def _init_storage():
     _invitations = _load_invitations()
     _member_usage = _load_member_usage()
 
-    # Rebuild indexes
-    _slug_to_id = {org.slug: org.id for org in _organizations.values()}
+    # Rebuild indexes (exclude soft-deleted orgs from slug index)
+    _slug_to_id = {
+        org.slug: org.id
+        for org in _organizations.values()
+        if org.status != OrganizationStatus.DELETED
+    }
     _user_orgs = {}
     for member in _members.values():
         if member.is_active:
@@ -265,7 +269,12 @@ class OrganizationService:
         orgs = list(_organizations.values())
 
         if status:
+            # Explicit status filter: return only matching status
             orgs = [o for o in orgs if o.status == status]
+        else:
+            # Default: exclude soft-deleted organizations
+            orgs = [o for o in orgs if o.status != OrganizationStatus.DELETED]
+
         if plan:
             orgs = [o for o in orgs if o.plan == plan]
 
@@ -307,6 +316,10 @@ class OrganizationService:
 
         org.status = OrganizationStatus.DELETED
         org.updated_at = datetime.utcnow()
+
+        # Remove slug from index so it can be reused
+        _slug_to_id.pop(org.slug, None)
+
         _save_organizations(_organizations)
         return True
 
@@ -538,9 +551,14 @@ class OrganizationService:
 
     @staticmethod
     def get_user_organizations(user_id: str) -> list[Organization]:
-        """Get all organizations a user belongs to."""
+        """Get all organizations a user belongs to (excludes soft-deleted)."""
         org_ids = _user_orgs.get(user_id, [])
-        return [_organizations[oid] for oid in org_ids if oid in _organizations]
+        return [
+            _organizations[oid]
+            for oid in org_ids
+            if oid in _organizations
+            and _organizations[oid].status != OrganizationStatus.DELETED
+        ]
 
     @staticmethod
     def get_user_memberships(user_id: str) -> list[OrganizationMember]:

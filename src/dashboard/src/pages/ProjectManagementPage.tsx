@@ -26,7 +26,7 @@ export function ProjectManagementPage() {
     isLoadingDBProjects,
     error,
     clearError,
-    fetchDBProjects,
+    fetchAllDBProjects,
     createDBProject,
     updateDBProject,
     toggleDBProjectActive,
@@ -35,7 +35,7 @@ export function ProjectManagementPage() {
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set())
 
   const [searchQuery, setSearchQuery] = useState('')
-  const [showInactive, setShowInactive] = useState(false)
+  const [showInactive, setShowInactive] = useState(true)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingProject, setEditingProject] = useState<DBProject | null>(null)
   const [selectedProject, setSelectedProject] = useState<DBProject | null>(null)
@@ -54,8 +54,8 @@ export function ProjectManagementPage() {
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
-    fetchDBProjects()
-  }, [fetchDBProjects])
+    fetchAllDBProjects()
+  }, [fetchAllDBProjects])
 
   // Filter projects
   const filtered = dbProjects.filter((p) => {

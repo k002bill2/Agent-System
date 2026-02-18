@@ -265,6 +265,7 @@ interface ProjectConfigsState {
   dbProjects: DBProject[]
   isLoadingDBProjects: boolean
   fetchDBProjects: () => Promise<void>
+  fetchAllDBProjects: () => Promise<void>
   createDBProject: (data: { name: string; description?: string; path?: string }) => Promise<boolean>
   updateDBProject: (id: string, data: { name?: string; description?: string; path?: string }) => Promise<boolean>
   deleteDBProject: (id: string) => Promise<boolean>
@@ -1263,11 +1264,31 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     }
   },
 
+  fetchAllDBProjects: async () => {
+    set({ isLoadingDBProjects: true, error: null })
+
+    try {
+      const res = await authFetch(`${API_BASE}/project-registry/all`)
+      if (!res.ok) {
+        throw new Error(`Failed to fetch all DB projects: ${res.statusText}`)
+      }
+
+      const data = await res.json()
+      set({
+        dbProjects: data.projects,
+        isLoadingDBProjects: false,
+      })
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage, isLoadingDBProjects: false })
+    }
+  },
+
   createDBProject: async (data) => {
     set({ error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-registry`, {
+      const res = await authFetch(`${API_BASE}/project-registry`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -1279,7 +1300,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
       }
 
       // Refresh both DB projects and config projects
-      await get().fetchDBProjects()
+      await get().fetchAllDBProjects()
       await get().fetchProjects()
       return true
     } catch (e) {
@@ -1293,7 +1314,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-registry/${id}`, {
+      const res = await authFetch(`${API_BASE}/project-registry/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -1304,7 +1325,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
         throw new Error(errorData.detail || 'Failed to update project')
       }
 
-      await get().fetchDBProjects()
+      await get().fetchAllDBProjects()
       await get().fetchProjects()
       return true
     } catch (e) {
@@ -1318,7 +1339,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-registry/${id}`, {
+      const res = await authFetch(`${API_BASE}/project-registry/${id}`, {
         method: 'DELETE',
       })
 
@@ -1327,7 +1348,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
         throw new Error(errorData.detail || 'Failed to delete project')
       }
 
-      await get().fetchDBProjects()
+      await get().fetchAllDBProjects()
       await get().fetchProjects()
       return true
     } catch (e) {
@@ -1341,7 +1362,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-registry/${id}/restore`, {
+      const res = await authFetch(`${API_BASE}/project-registry/${id}/restore`, {
         method: 'POST',
       })
 
@@ -1350,7 +1371,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
         throw new Error(errorData.detail || 'Failed to restore project')
       }
 
-      await get().fetchDBProjects()
+      await get().fetchAllDBProjects()
       await get().fetchProjects()
       return true
     } catch (e) {
@@ -1364,7 +1385,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-registry/${id}/toggle-active`, {
+      const res = await authFetch(`${API_BASE}/project-registry/${id}/toggle-active`, {
         method: 'PATCH',
       })
 
@@ -1373,7 +1394,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
         throw new Error(errorData.detail || 'Failed to toggle project active status')
       }
 
-      await get().fetchDBProjects()
+      await get().fetchAllDBProjects()
       await get().fetchProjects()
       return true
     } catch (e) {
