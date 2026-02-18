@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Server, Bot, Sparkles, Webhook } from 'lucide-react'
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts'
 import { useProjectConfigsStore } from '../stores/projectConfigs'
 
 const COLORS = {
@@ -62,8 +62,8 @@ export function ConfigChartCard() {
   const { projects, isLoading } = useProjectConfigsStore()
 
   const barData = projects.map(project => ({
-    name: project.project_name.length > 18
-      ? project.project_name.slice(0, 18) + '...'
+    name: project.project_name.length > 15
+      ? project.project_name.slice(0, 15) + '...'
       : project.project_name,
     fullName: project.project_name,
     mcp: project.mcp_server_count,
@@ -85,16 +85,15 @@ export function ConfigChartCard() {
       </h3>
 
       {barData.length > 0 ? (
-        <div style={{ height: Math.max(240, barData.length * 50) }} className="w-full">
+        <div className="h-40 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={barData} layout="vertical" margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(156,163,175,0.2)" />
+            <BarChart data={barData} layout="vertical" margin={{ left: 0, right: 10 }}>
               <XAxis type="number" tick={{ fontSize: 10 }} />
               <YAxis
                 type="category"
                 dataKey="name"
-                tick={{ fontSize: 11 }}
-                width={100}
+                tick={{ fontSize: 10 }}
+                width={90}
               />
               <Tooltip
                 contentStyle={{
@@ -104,7 +103,7 @@ export function ConfigChartCard() {
                   color: 'white',
                   fontSize: 12,
                 }}
-                formatter={(value, name) => [value, (name as string).charAt(0).toUpperCase() + (name as string).slice(1)]}
+                formatter={(value) => [value, '']}
                 labelFormatter={(_, payload) => {
                   const item = payload?.[0]?.payload
                   return item?.fullName || ''
@@ -114,10 +113,10 @@ export function ConfigChartCard() {
                 wrapperStyle={{ fontSize: 10 }}
                 formatter={(value) => value.charAt(0).toUpperCase() + value.slice(1)}
               />
-              <Bar dataKey="mcp" fill={COLORS.mcp} name="mcp" radius={[0, 4, 4, 0]} />
-              <Bar dataKey="agents" fill={COLORS.agents} name="agents" radius={[0, 4, 4, 0]} />
-              <Bar dataKey="skills" fill={COLORS.skills} name="skills" radius={[0, 4, 4, 0]} />
-              <Bar dataKey="hooks" fill={COLORS.hooks} name="hooks" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="mcp" stackId="a" fill={COLORS.mcp} name="mcp" />
+              <Bar dataKey="agents" stackId="a" fill={COLORS.agents} name="agents" />
+              <Bar dataKey="skills" stackId="a" fill={COLORS.skills} name="skills" />
+              <Bar dataKey="hooks" stackId="a" fill={COLORS.hooks} name="hooks" />
             </BarChart>
           </ResponsiveContainer>
         </div>

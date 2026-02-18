@@ -30,22 +30,21 @@ def mock_projects():
 @pytest.mark.asyncio
 async def test_regular_user_cannot_see_inactive_project(mock_projects):
     """일반 사용자는 is_active=False 프로젝트를 볼 수 없어야 한다."""
-    with patch.dict("os.environ", {"USE_DATABASE": "true"}):
-        from api.routes import get_inactive_project_paths
+    from api.routes import get_inactive_project_paths
 
-        mock_db = AsyncMock()
-        mock_result = MagicMock()
-        mock_result.all.return_value = [("/projects/inactive",)]
-        mock_db.execute = AsyncMock(return_value=mock_result)
+    mock_db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.all.return_value = [("/projects/inactive",)]
+    mock_db.execute = AsyncMock(return_value=mock_result)
 
-        inactive_paths = await get_inactive_project_paths(mock_db)
-        assert "/projects/inactive" in inactive_paths
-        assert "/projects/active" not in inactive_paths
+    inactive_paths = await get_inactive_project_paths(mock_db)
+    assert "/projects/inactive" in inactive_paths
+    assert "/projects/active" not in inactive_paths
 
-        # 필터링 적용
-        filtered = [p for p in mock_projects if p.path not in inactive_paths]
-        assert len(filtered) == 1
-        assert filtered[0].name == "Active Project"
+    # 필터링 적용
+    filtered = [p for p in mock_projects if p.path not in inactive_paths]
+    assert len(filtered) == 1
+    assert filtered[0].name == "Active Project"
 
 
 @pytest.mark.asyncio
@@ -61,39 +60,37 @@ async def test_admin_sees_all_projects(mock_projects):
 @pytest.mark.asyncio
 async def test_no_inactive_registry_shows_all(mock_projects):
     """project-registry에 비활성화 항목이 없으면 모두 표시."""
-    with patch.dict("os.environ", {"USE_DATABASE": "true"}):
-        from api.routes import get_inactive_project_paths
+    from api.routes import get_inactive_project_paths
 
-        mock_db = AsyncMock()
-        mock_result = MagicMock()
-        mock_result.all.return_value = []
-        mock_db.execute = AsyncMock(return_value=mock_result)
+    mock_db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.all.return_value = []
+    mock_db.execute = AsyncMock(return_value=mock_result)
 
-        inactive_paths = await get_inactive_project_paths(mock_db)
-        assert len(inactive_paths) == 0
+    inactive_paths = await get_inactive_project_paths(mock_db)
+    assert len(inactive_paths) == 0
 
-        filtered = [p for p in mock_projects if p.path not in inactive_paths]
-        assert len(filtered) == 2
+    filtered = [p for p in mock_projects if p.path not in inactive_paths]
+    assert len(filtered) == 2
 
 
 @pytest.mark.asyncio
 async def test_unregistered_project_always_visible(mock_projects):
     """project-registry에 없는 프로젝트(path 미매칭)는 항상 표시."""
-    with patch.dict("os.environ", {"USE_DATABASE": "true"}):
-        from api.routes import get_inactive_project_paths
+    from api.routes import get_inactive_project_paths
 
-        mock_db = AsyncMock()
-        mock_result = MagicMock()
-        # DB에는 /projects/other 만 비활성화
-        mock_result.all.return_value = [("/projects/other",)]
-        mock_db.execute = AsyncMock(return_value=mock_result)
+    mock_db = AsyncMock()
+    mock_result = MagicMock()
+    # DB에는 /projects/other 만 비활성화
+    mock_result.all.return_value = [("/projects/other",)]
+    mock_db.execute = AsyncMock(return_value=mock_result)
 
-        inactive_paths = await get_inactive_project_paths(mock_db)
-        assert "/projects/other" in inactive_paths
-        assert "/projects/active" not in inactive_paths
-        assert "/projects/inactive" not in inactive_paths
-        filtered = [p for p in mock_projects if p.path not in inactive_paths]
-        assert len(filtered) == 2  # 두 프로젝트 모두 보임
+    inactive_paths = await get_inactive_project_paths(mock_db)
+    assert "/projects/other" in inactive_paths
+    assert "/projects/active" not in inactive_paths
+    assert "/projects/inactive" not in inactive_paths
+    filtered = [p for p in mock_projects if p.path not in inactive_paths]
+    assert len(filtered) == 2  # 두 프로젝트 모두 보임
 
 
 @pytest.mark.asyncio

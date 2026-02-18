@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { notificationService } from '../services/notificationService'
-import { authFetch } from './auth'
 
 // Types
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'paused'
@@ -281,10 +280,10 @@ export const useOrchestrationStore = create<OrchestrationState>()(
   _hasHydrated: false,
   setHasHydrated: (state: boolean) => set({ _hasHydrated: state }),
 
-  // Fetch projects from API (인증 헤더 포함 - 비활성 프로젝트 필터링을 위해)
+  // Fetch projects from API
   fetchProjects: async () => {
     try {
-      const res = await authFetch('/api/projects')
+      const res = await fetch('/api/projects')
       if (res.ok) {
         const projects = await res.json()
         set({ projects })

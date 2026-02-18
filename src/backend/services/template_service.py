@@ -28,20 +28,20 @@ jobs:
     runs_on: local
     steps:
       - name: Run ruff linter
-        run: cd src/backend && uv run ruff check . 2>&1
+        run: ruff check .
       - name: Run ruff formatter
-        run: cd src/backend && uv run ruff format --check . 2>&1
+        run: ruff format --check .
   typecheck:
     runs_on: local
     steps:
       - name: Run mypy
-        run: cd src/backend && uv run mypy . --ignore-missing-imports --explicit-package-bases 2>&1
+        run: mypy . --ignore-missing-imports
   test:
     runs_on: local
     needs: [lint, typecheck]
     steps:
       - name: Run pytest
-        run: cd src/backend && uv run pytest ../../tests/backend --tb=short -q 2>&1
+        run: pytest --tb=short -q
 """,
     },
     {
