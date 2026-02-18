@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { analytics } from '../services/analytics'
+import { authFetch } from './auth'
 
 const API_BASE = import.meta.env.VITE_API_URL || ''
 
@@ -120,7 +121,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   fetchProjects: async () => {
     set({ isLoading: true, error: null })
     try {
-      const response = await fetch(`${API_BASE}/api/projects`)
+      const response = await authFetch(`${API_BASE}/api/projects`)
       if (!response.ok) {
         throw new Error(`Failed to fetch projects: ${response.statusText}`)
       }
@@ -140,7 +141,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   // Fetch available templates
   fetchTemplates: async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/projects/templates`)
+      const response = await authFetch(`${API_BASE}/api/projects/templates`)
       if (!response.ok) {
         throw new Error(`Failed to fetch templates: ${response.statusText}`)
       }
@@ -155,7 +156,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   createProject: async (id, name, description, template) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await fetch(`${API_BASE}/api/projects/create`, {
+      const response = await authFetch(`${API_BASE}/api/projects/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, name, description, template }),
@@ -178,7 +179,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   linkProject: async (id, sourcePath) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await fetch(`${API_BASE}/api/projects/link`, {
+      const response = await authFetch(`${API_BASE}/api/projects/link`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, source_path: sourcePath }),
@@ -200,7 +201,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   updateProject: async (id, name, description, path) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await fetch(`${API_BASE}/api/projects/${id}`, {
+      const response = await authFetch(`${API_BASE}/api/projects/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, description, path }),
@@ -223,7 +224,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   deleteProject: async (id) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await fetch(`${API_BASE}/api/projects/${id}`, {
+      const response = await authFetch(`${API_BASE}/api/projects/${id}`, {
         method: 'DELETE',
       })
       if (!response.ok) {
@@ -244,7 +245,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   indexProject: async (id) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await fetch(`${API_BASE}/api/rag/projects/${id}/index`, {
+      const response = await authFetch(`${API_BASE}/api/rag/projects/${id}/index`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ force_reindex: false }),
@@ -265,7 +266,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   // Fetch deletion preview
   fetchDeletionPreview: async (id) => {
     try {
-      const response = await fetch(`${API_BASE}/api/projects/${id}/deletion-preview`)
+      const response = await authFetch(`${API_BASE}/api/projects/${id}/deletion-preview`)
       if (!response.ok) {
         const data = await response.json()
         throw new Error(extractErrorMessage(data.detail, 'Failed to fetch deletion preview'))
@@ -281,7 +282,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   reorderProjects: async (projectIds) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await fetch(`${API_BASE}/api/projects/reorder`, {
+      const response = await authFetch(`${API_BASE}/api/projects/reorder`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ project_ids: projectIds }),
