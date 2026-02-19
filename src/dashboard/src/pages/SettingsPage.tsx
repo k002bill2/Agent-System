@@ -20,6 +20,7 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { LLMRouterSettings } from '../components/llm-router'
+import { LLMAccountsSettings } from '../components/usage'
 
 export function SettingsPage() {
   const {
@@ -455,6 +456,9 @@ export function SettingsPage() {
 
         {/* LLM Auto-Switch */}
         <LLMRouterSettings />
+
+        {/* My LLM API Keys */}
+        <LLMAccountsSettings />
 
         {/* Notifications */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
