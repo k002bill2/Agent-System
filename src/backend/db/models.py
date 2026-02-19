@@ -1,5 +1,6 @@
 """SQLAlchemy models for database persistence."""
 
+import uuid
 from datetime import datetime
 
 from sqlalchemy import (
@@ -1141,4 +1142,30 @@ class WorkflowTemplateModel(Base):
     __table_args__ = (
         Index("ix_workflow_templates_category", "category"),
         Index("ix_workflow_templates_popularity", "popularity"),
+    )
+
+
+# ─────────────────────────────────────────────────────────────
+# User LLM Credential Model
+# ─────────────────────────────────────────────────────────────
+
+
+class UserLLMCredentialModel(Base):
+    """User's personal LLM API credentials (encrypted at rest)."""
+
+    __tablename__ = "user_llm_credentials"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(255), nullable=False, index=True)
+    provider = Column(String(50), nullable=False)          # "openai" | "google_gemini" | "anthropic"
+    key_name = Column(String(255), nullable=False)         # 사용자 표시용 이름
+    api_key = Column(EncryptedString(1024), nullable=False)  # Fernet 자동 암호화
+    is_active = Column(Boolean, default=True, nullable=False)
+    last_verified_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "provider", "key_name", name="uq_user_provider_key_name"),
+        Index("ix_user_llm_cred_user_provider", "user_id", "provider"),
     )
