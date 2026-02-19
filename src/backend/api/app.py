@@ -118,6 +118,7 @@ else:
     projects_router = safe_import("api.projects", "router")
     external_usage_router = safe_import("api.external_usage", "router")
     llm_credentials_router = safe_import("api.llm_credentials", "router")
+    llm_proxy_router = safe_import("api.llm_proxy", "router")
 
     # Optional orchestrator
     try:
@@ -409,6 +410,8 @@ else:
             app.include_router(external_usage_router, prefix="/api")
         if llm_credentials_router:
             app.include_router(llm_credentials_router, prefix="/api")
+        if llm_proxy_router:
+            app.include_router(llm_proxy_router, prefix="/api")
 
         # Add Rate Limiting Middleware
         rate_limit_enabled = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
