@@ -602,6 +602,38 @@ async def add_project_member(
         if not target_user:
             raise HTTPException(status_code=404, detail=f"User not found: {request.user_id}")
 
+        # 프로젝트에 org_id가 있으면, 추가할 유저도 같은 org 멤버인지 검증
+        proj_org_result = await session.execute(
+            select(ProjectModel).where(ProjectModel.id == project_id)
+        )
+        proj_org = proj_org_result.scalar_one_or_none()
+        if proj_org and proj_org.organization_id:
+            from sqlalchemy import and_
+            from db.models import OrganizationMemberModel
+            org_mem_result = await session.execute(
+                select(OrganizationMemberModel).where(
+                    and_(
+                        OrganizationMemberModel.organization_id == proj_org.organization_id,
+                        OrganizationMemberModel.user_id == request.user_id,
+                        OrganizationMemberModel.is_active == True,  # noqa: E712
+                    )
+                )
+            )
+            is_org_member = org_mem_result.scalar_one_or_none() is not None
+
+            if not is_org_member:
+                from services.organization_service import OrganizationService
+                json_mem = OrganizationService.get_member_by_user(
+                    proj_org.organization_id, request.user_id
+                )
+                is_org_member = json_mem is not None
+
+            if not is_org_member:
+                raise HTTPException(
+                    status_code=400,
+                    detail="해당 유저는 프로젝트의 조직에 속하지 않습니다. 먼저 조직에 초대해 주세요.",
+                )
+
         existing = await session.execute(
             select(ProjectAccessModel).where(
                 ProjectAccessModel.project_id == project_id,
