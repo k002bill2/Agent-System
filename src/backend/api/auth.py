@@ -425,6 +425,8 @@ async def get_current_user_info(
     admin_org_ids: list[str] = []
 
     if os.getenv("USE_DATABASE", "false").lower() == "true":
+        # DB와 JSON 모두 확인 (projects.py의 _get_admin_org_ids와 동일한 패턴)
+        # circular import 방지를 위해 인라인으로 구현
         # DB에서 조직 admin 역할 조회
         try:
             from db.database import async_session_factory
@@ -455,7 +457,11 @@ async def get_current_user_info(
                         db_org_ids.append(org.id)
 
             admin_org_ids = db_org_ids
-        except Exception:
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Failed to fetch org admin info for user %s: %s", current_user.id, e
+            )
             admin_org_ids = []
 
     is_org_admin = len(admin_org_ids) > 0
