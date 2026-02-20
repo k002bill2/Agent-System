@@ -11,6 +11,7 @@ const DEFAULT_MENU_ORDER: string[] = [
   'dashboard', 'projects', 'tasks', 'agents', 'activity',
   'monitor', 'claude-sessions', 'project-configs', 'project-management', 'git',
   'organizations', 'audit', 'notifications', 'analytics', 'playground', 'workflows',
+  'external-usage',
 ]
 
 export function MenuSettingsTab() {
@@ -19,6 +20,7 @@ export function MenuSettingsTab() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [isDirty, setIsDirty] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Drag state
@@ -59,6 +61,7 @@ export function MenuSettingsTab() {
       }
     })
     setSaved(false)
+    setIsDirty(true)
   }
 
   const handleSave = async () => {
@@ -70,6 +73,7 @@ export function MenuSettingsTab() {
       setVisibility(data.visibility)
       setMenuOrder(data.menu_order?.length ? data.menu_order : menuOrder)
       setSaved(true)
+      setIsDirty(false)
       // 글로벌 store도 업데이트하여 Sidebar에 즉시 반영
       useMenuVisibilityStore.setState({
         visibility: data.visibility,
@@ -126,6 +130,7 @@ export function MenuSettingsTab() {
       return newOrder
     })
     setSaved(false)
+    setIsDirty(true)
     handleDragEnd()
   }, [dragIndex, handleDragEnd])
 
@@ -156,30 +161,40 @@ export function MenuSettingsTab() {
             역할별 메뉴 노출을 설정하고, 드래그로 순서를 변경합니다. 최고관리자는 항상 모든 메뉴에 접근할 수 있습니다.
           </p>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving || saved}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            saved
-              ? 'bg-green-600 text-white'
-              : 'bg-primary-600 text-white hover:bg-primary-700'
-          } disabled:opacity-60`}
-        >
-          {saved ? (
-            <>
-              <Check className="w-4 h-4" />
-              저장됨
-            </>
-          ) : (
-            <>
-              <Save className="w-4 h-4" />
-              {saving ? '저장 중...' : '저장'}
-            </>
+        <div className="flex items-center gap-2">
+          {isDirty && !saved && (
+            <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500" />
+              저장되지 않은 변경사항
+            </span>
           )}
-        </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || saved}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              saved
+                ? 'bg-green-600 text-white'
+                : isDirty
+                  ? 'bg-amber-600 text-white hover:bg-amber-700'
+                  : 'bg-primary-600 text-white hover:bg-primary-700'
+            } disabled:opacity-60`}
+          >
+            {saved ? (
+              <>
+                <Check className="w-4 h-4" />
+                저장됨
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                {saving ? '저장 중...' : '저장'}
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-900/50">
             <tr>

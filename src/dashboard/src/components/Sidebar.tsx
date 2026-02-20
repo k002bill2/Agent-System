@@ -18,6 +18,7 @@ import {
   GitBranch,
   Building2,
   ShieldCheck,
+  Wallet,
 } from 'lucide-react'
 import { useEffect, useState, useMemo } from 'react'
 import { useOrchestrationStore } from '../stores/orchestration'
@@ -44,6 +45,7 @@ const navigation: { icon: typeof LayoutDashboard; view: ViewType }[] = [
   { icon: BarChart3, view: 'analytics' },
   { icon: FlaskConical, view: 'playground' },
   { icon: GitBranch, view: 'workflows' },
+  { icon: Wallet, view: 'external-usage' },
 ]
 
 export function Sidebar() {
@@ -59,9 +61,13 @@ export function Sidebar() {
     fetchProjects()
   }, [fetchProjects])
 
+  // 사용자 변경 시 메뉴 가시성 재로딩 (다른 계정으로 전환 시 stale data 방지)
   useEffect(() => {
-    fetchVisibility()
-  }, [fetchVisibility])
+    if (user?.id) {
+      useMenuVisibilityStore.setState({ isLoaded: false })
+      fetchVisibility()
+    }
+  }, [user?.id, fetchVisibility])
 
   const userRole = user?.role || (user?.is_admin ? 'admin' : 'user')
 
