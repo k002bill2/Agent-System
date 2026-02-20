@@ -37,6 +37,13 @@ export interface ProjectInvitation {
   created_at: string
 }
 
+export interface OrgMemberForProject {
+  user_id: string
+  email: string
+  name: string | null
+  org_role: string  // owner, admin, member, viewer
+}
+
 interface ProjectAccessState {
   members: ProjectAccessMember[]
   myAccess: MyAccess | null
@@ -56,6 +63,9 @@ interface ProjectAccessState {
   inviteByEmail: (projectId: string, email: string, role: string) => Promise<void>
   cancelInvitation: (projectId: string, invitationId: string) => Promise<void>
   acceptInvitation: (token: string) => Promise<{ project_id: string; role: string }>
+  availableOrgMembers: OrgMemberForProject[]
+  isLoadingAvailableMembers: boolean
+  fetchAvailableOrgMembers: (projectId: string) => Promise<void>
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -69,9 +79,11 @@ export const useProjectAccessStore = create<ProjectAccessState>((set, get) => ({
   error: null,
   invitations: [],
   isLoadingInvitations: false,
+  availableOrgMembers: [],
+  isLoadingAvailableMembers: false,
 
   fetchMembers: async (projectId: string) => {
-    set({ loading: true, error: null })
+    set({ loading: true, error: null, members: [] })  // 프로젝트 전환 시 이전 멤버 즉시 초기화
     try {
       const res = await authFetch(
         `${API_BASE_URL}/api/projects/${projectId}/access`
@@ -160,18 +172,18 @@ export const useProjectAccessStore = create<ProjectAccessState>((set, get) => ({
   },
 
   fetchMyAccess: async (projectId: string) => {
+    set({ myAccess: null })  // 프로젝트 전환 시 이전 값 초기화
     try {
       const res = await authFetch(
         `${API_BASE_URL}/api/projects/${projectId}/access/me`
       )
       if (!res.ok) {
-        set({ myAccess: null })
         return
       }
       const data = await res.json()
       set({ myAccess: data })
     } catch {
-      set({ myAccess: null })
+      // 접근 권한 없으면 null 유지
     }
   },
 
@@ -181,7 +193,7 @@ export const useProjectAccessStore = create<ProjectAccessState>((set, get) => ({
     set({ isLoadingInvitations: true })
     try {
       const res = await authFetch(
-        `${API_BASE_URL}/api/projects/${projectId}/invitations`
+        `${API_BASE_URL}/api/v1/projects/${projectId}/invitations`
       )
       if (res.ok) {
         const data = await res.json()
@@ -196,7 +208,7 @@ export const useProjectAccessStore = create<ProjectAccessState>((set, get) => ({
 
   inviteByEmail: async (projectId: string, email: string, role: string) => {
     const res = await authFetch(
-      `${API_BASE_URL}/api/projects/${projectId}/invitations`,
+      `${API_BASE_URL}/api/v1/projects/${projectId}/invitations`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -212,7 +224,7 @@ export const useProjectAccessStore = create<ProjectAccessState>((set, get) => ({
 
   cancelInvitation: async (projectId: string, invitationId: string) => {
     await authFetch(
-      `${API_BASE_URL}/api/projects/${projectId}/invitations/${invitationId}`,
+      `${API_BASE_URL}/api/v1/projects/${projectId}/invitations/${invitationId}`,
       { method: 'DELETE' }
     )
     await get().fetchInvitations(projectId)
@@ -220,7 +232,7 @@ export const useProjectAccessStore = create<ProjectAccessState>((set, get) => ({
 
   acceptInvitation: async (token: string) => {
     const res = await authFetch(
-      `${API_BASE_URL}/api/invitations/${token}/accept`,
+      `${API_BASE_URL}/api/v1/invitations/${token}/accept`,
       { method: 'POST' }
     )
     if (!res.ok) {
@@ -228,5 +240,22 @@ export const useProjectAccessStore = create<ProjectAccessState>((set, get) => ({
       throw new Error(err.detail || '수락 실패')
     }
     return res.json()
+  },
+
+  fetchAvailableOrgMembers: async (projectId: string) => {
+    set({ isLoadingAvailableMembers: true })
+    try {
+      const res = await authFetch(
+        `${API_BASE_URL}/api/project-registry/${projectId}/available-members`
+      )
+      if (res.ok) {
+        const data = await res.json()
+        set({ availableOrgMembers: data.members, isLoadingAvailableMembers: false })
+      } else {
+        set({ availableOrgMembers: [], isLoadingAvailableMembers: false })
+      }
+    } catch {
+      set({ availableOrgMembers: [], isLoadingAvailableMembers: false })
+    }
   },
 }))
