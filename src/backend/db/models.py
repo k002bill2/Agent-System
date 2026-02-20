@@ -1086,6 +1086,9 @@ class ProjectModel(Base):
     is_active = Column(Boolean, default=True, index=True)
     settings = Column(JSONB, default=dict)
 
+    # Organization ownership
+    organization_id = Column(String(36), nullable=True, index=True)
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -1148,6 +1151,33 @@ class WorkflowTemplateModel(Base):
 # ─────────────────────────────────────────────────────────────
 # User LLM Credential Model
 # ─────────────────────────────────────────────────────────────
+
+
+class LLMModelConfigModel(Base):
+    """LLM Model configuration stored in database.
+
+    Single source of truth for all available LLM models.
+    Seeded from llm_models._MODELS on first startup.
+    """
+
+    __tablename__ = "llm_model_configs"
+
+    id = Column(String(100), primary_key=True)  # e.g. "gemini-3-flash-preview"
+    display_name = Column(String(255), nullable=False)
+    provider = Column(String(50), nullable=False, index=True)  # "google" | "anthropic" | ...
+    context_window = Column(Integer, nullable=False, default=128000)
+    input_price = Column(Float, nullable=False, default=0.001)   # USD per 1K tokens
+    output_price = Column(Float, nullable=False, default=0.002)  # USD per 1K tokens
+    is_default = Column(Boolean, default=False, nullable=False)
+    is_enabled = Column(Boolean, default=True, nullable=False, index=True)
+    supports_tools = Column(Boolean, default=True, nullable=False)
+    supports_vision = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_llm_model_provider_enabled", "provider", "is_enabled"),
+    )
 
 
 class UserLLMCredentialModel(Base):
