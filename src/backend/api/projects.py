@@ -197,56 +197,66 @@ async def list_active_projects(
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> DBProjectListResponse:
-    """List all active projects.
+    """List active projects filtered by org membership.
 
-    Admins see all active projects.
-    Regular users see projects they are members of, plus projects with no ACL (public).
-
-    Returns:
-        List of active projects
+    - 시스템admin: 전체 활성 프로젝트
+    - 조직admin/owner: 자신의 조직 소속 프로젝트
+    - 일반 유저/member: ProjectAccess에 명시된 프로젝트만
     """
     import os
+    from sqlalchemy import or_
 
     use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
     if not use_database:
         raise HTTPException(status_code=503, detail="Database mode is not enabled")
 
-    from sqlalchemy import or_
-
     from db.database import async_session_factory
     from db.models import ProjectAccessModel, ProjectModel
 
     async with async_session_factory() as session:
-        is_admin = current_user.role == "admin" or current_user.is_admin
-        if is_admin:
+        is_system_admin = current_user.role == "admin" or current_user.is_admin
+
+        if is_system_admin:
             result = await session.execute(
                 select(ProjectModel)
                 .where(ProjectModel.is_active == True)  # noqa: E712
                 .order_by(ProjectModel.name)
             )
         else:
-            # 유저가 멤버인 프로젝트
-            member_subq = (
-                select(ProjectAccessModel.project_id)
-                .where(ProjectAccessModel.user_id == current_user.id)
-                .scalar_subquery()
-            )
-            # ACL이 전혀 없는 프로젝트 (공개)
-            acl_subq = (
-                select(ProjectAccessModel.project_id)
-                .scalar_subquery()
-            )
-            result = await session.execute(
-                select(ProjectModel)
-                .where(
-                    ProjectModel.is_active == True,  # noqa: E712
-                    or_(
-                        ProjectModel.id.in_(member_subq),
-                        ProjectModel.id.notin_(acl_subq),
-                    )
+            admin_org_ids = await _get_admin_org_ids(current_user)
+
+            if admin_org_ids:
+                member_subq = (
+                    select(ProjectAccessModel.project_id)
+                    .where(ProjectAccessModel.user_id == current_user.id)
+                    .scalar_subquery()
                 )
-                .order_by(ProjectModel.name)
-            )
+                result = await session.execute(
+                    select(ProjectModel)
+                    .where(
+                        ProjectModel.is_active == True,  # noqa: E712
+                        or_(
+                            ProjectModel.organization_id.in_(admin_org_ids),
+                            ProjectModel.id.in_(member_subq),
+                        ),
+                    )
+                    .order_by(ProjectModel.name)
+                )
+            else:
+                member_subq = (
+                    select(ProjectAccessModel.project_id)
+                    .where(ProjectAccessModel.user_id == current_user.id)
+                    .scalar_subquery()
+                )
+                result = await session.execute(
+                    select(ProjectModel)
+                    .where(
+                        ProjectModel.is_active == True,  # noqa: E712
+                        ProjectModel.id.in_(member_subq),
+                    )
+                    .order_by(ProjectModel.name)
+                )
+
         projects = result.scalars().all()
         return DBProjectListResponse(
             projects=[_model_to_response(p) for p in projects],
