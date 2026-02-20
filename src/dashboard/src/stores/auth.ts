@@ -31,6 +31,8 @@ export interface User {
   oauth_provider: 'google' | 'github' | 'email'
   is_admin: boolean
   role: UserRole
+  is_org_admin?: boolean
+  admin_org_ids?: string[]
 }
 
 interface AuthState {

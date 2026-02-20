@@ -11,7 +11,9 @@ import {
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useProjectConfigsStore, DBProject } from '../stores/projectConfigs'
-import { MembersTab } from '@/components/project-management/MembersTab'
+import { useProjectAccessStore } from '@/stores/projectAccess'
+import { useAuthStore } from '../stores/auth'
+import { ProjectMembersContent } from '@/components/project-management/ProjectMembersContent'
 
 type DetailTab = 'info' | 'members'
 
@@ -32,6 +34,9 @@ export function ProjectManagementPage() {
     toggleDBProjectActive,
   } = useProjectConfigsStore()
 
+  const { fetchMembers } = useProjectAccessStore()
+  const currentUser = useAuthStore((s) => s.user)
+  const canCreateProject = (currentUser?.is_admin ?? false) || (currentUser?.is_org_admin ?? false)
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set())
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -206,7 +211,7 @@ export function ProjectManagementPage() {
             </div>
           )}
           {activeDetailTab === 'members' && (
-            <MembersTab projectId={selectedProject.id} />
+            <ProjectMembersContent projectId={selectedProject.id} projectName={selectedProject.name} />
           )}
         </div>
       </div>
@@ -226,13 +231,15 @@ export function ProjectManagementPage() {
             DB 등록 프로젝트를 관리합니다. Claude Sessions, Project Configs에서 이 목록을 참조합니다.
           </p>
         </div>
-        <button
-          onClick={() => setShowCreateForm(true)}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700"
-        >
-          <Plus className="w-4 h-4" />
-          Add Project
-        </button>
+        {canCreateProject && (
+          <button
+            onClick={() => setShowCreateForm(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700"
+          >
+            <Plus className="w-4 h-4" />
+            Add Project
+          </button>
+        )}
       </div>
 
       {/* Error */}
@@ -279,7 +286,7 @@ export function ProjectManagementPage() {
       </div>
 
       {/* Create Form */}
-      {showCreateForm && (
+      {canCreateProject && showCreateForm && (
         <div className="mb-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-5">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
             New Project
@@ -381,8 +388,12 @@ export function ProjectManagementPage() {
             key={project.id}
             onClick={() => {
               if (editingProject?.id !== project.id) {
-                setSelectedProject((prev) => prev?.id === project.id ? null : project)
+                const isDeselecting = selectedProject?.id === project.id
+                setSelectedProject(isDeselecting ? null : project)
                 setActiveDetailTab('info')
+                if (!isDeselecting) {
+                  fetchMembers(project.id)  // 프로젝트 전환 시 즉시 멤버 초기화 & 프리패치
+                }
               }
             }}
             className={cn(

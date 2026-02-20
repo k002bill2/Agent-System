@@ -50,6 +50,8 @@ class UserResponse(BaseModel):
     oauth_provider: str
     is_admin: bool
     role: str = "user"
+    is_org_admin: bool = False
+    admin_org_ids: list[str] = []
 
     class Config:
         from_attributes = True
@@ -418,6 +420,46 @@ async def get_current_user_info(
     current_user: UserModel = Depends(get_current_user),
 ):
     """Get current authenticated user info."""
+    # 조직 admin 여부 계산 (circular import 방지를 위해 인라인 구현)
+    import os
+    admin_org_ids: list[str] = []
+
+    if os.getenv("USE_DATABASE", "false").lower() == "true":
+        # DB에서 조직 admin 역할 조회
+        try:
+            from db.database import async_session_factory
+            from db.models import OrganizationMemberModel
+            from sqlalchemy import and_, select
+
+            admin_roles = {"owner", "admin"}
+            async with async_session_factory() as session:
+                result = await session.execute(
+                    select(OrganizationMemberModel.organization_id).where(
+                        and_(
+                            OrganizationMemberModel.user_id == current_user.id,
+                            OrganizationMemberModel.role.in_(admin_roles),
+                            OrganizationMemberModel.is_active == True,  # noqa: E712
+                        )
+                    )
+                )
+                db_org_ids = [row[0] for row in result.all()]
+
+            # JSON fallback
+            from services.organization_service import OrganizationService
+            all_orgs = OrganizationService.list_organizations()
+            for org in all_orgs:
+                mem = OrganizationService.get_member_by_user(org.id, current_user.id)
+                if mem:
+                    role_val = mem.role.value if hasattr(mem.role, "value") else mem.role
+                    if role_val in admin_roles and org.id not in db_org_ids:
+                        db_org_ids.append(org.id)
+
+            admin_org_ids = db_org_ids
+        except Exception:
+            admin_org_ids = []
+
+    is_org_admin = len(admin_org_ids) > 0
+
     return UserResponse(
         id=current_user.id,
         email=current_user.email,
@@ -426,6 +468,8 @@ async def get_current_user_info(
         oauth_provider=current_user.oauth_provider,
         is_admin=current_user.is_admin,
         role=_get_user_role(current_user),
+        is_org_admin=is_org_admin,
+        admin_org_ids=admin_org_ids,
     )
 
 
