@@ -19,11 +19,65 @@ from models.project import (
     DBProjectListResponse,
     DBProjectResponse,
     DBProjectUpdate,
+    ProjectMemberAdd,
+    ProjectMemberListResponse,
+    ProjectMemberResponse,
+    ProjectMemberUpdate,
 )
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/project-registry", tags=["project-registry"])
+
+
+async def _get_admin_org_ids(user) -> list[str]:
+    """유저가 admin/owner인 조직 ID 목록을 반환한다.
+
+    시스템 admin은 특별 처리하지 않음 (호출자가 별도 처리).
+    JSON fallback(in-memory)도 지원.
+    """
+    import os
+
+    if os.getenv("USE_DATABASE", "false").lower() != "true":
+        return []
+
+    from db.database import async_session_factory
+    from db.models import OrganizationMemberModel
+    from sqlalchemy import and_, select
+
+    admin_roles = {"owner", "admin"}
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(OrganizationMemberModel.organization_id).where(
+                and_(
+                    OrganizationMemberModel.user_id == user.id,
+                    OrganizationMemberModel.role.in_(admin_roles),
+                    OrganizationMemberModel.is_active == True,  # noqa: E712
+                )
+            )
+        )
+        db_org_ids = [row[0] for row in result.all()]
+
+    # JSON fallback
+    from services.organization_service import OrganizationService
+    all_orgs = OrganizationService.list_organizations()
+    json_org_ids = []
+    for org in all_orgs:
+        mem = OrganizationService.get_member_by_user(org.id, user.id)
+        if mem:
+            role_val = mem.role.value if hasattr(mem.role, "value") else mem.role
+            if role_val in admin_roles:
+                json_org_ids.append(org.id)
+
+    # 합집합 (순서 유지, 중복 제거)
+    seen = set()
+    combined = []
+    for oid in db_org_ids + json_org_ids:
+        if oid not in seen:
+            seen.add(oid)
+            combined.append(oid)
+    return combined
 
 
 def _slugify(name: str) -> str:
@@ -405,3 +459,246 @@ async def restore_project(project_id: str) -> DBProjectResponse:
         await session.refresh(project)
 
         return _model_to_response(project)
+
+
+# ========================================
+# Project Member Management
+# ========================================
+
+VALID_ROLES = {"owner", "editor", "viewer"}
+
+
+async def _check_project_manage_permission(
+    project_id: str, current_user, session
+) -> None:
+    """Admin 또는 project owner만 멤버 관리 가능."""
+    from db.models import ProjectAccessModel
+
+    is_admin = current_user.role == "admin" or current_user.is_admin
+    if is_admin:
+        return
+
+    result = await session.execute(
+        select(ProjectAccessModel).where(
+            ProjectAccessModel.project_id == project_id,
+            ProjectAccessModel.user_id == current_user.id,
+            ProjectAccessModel.role == "owner",
+        )
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="Project owner or admin required")
+
+
+@router.get("/{project_id}/members", response_model=ProjectMemberListResponse)
+async def list_project_members(
+    project_id: str,
+    current_user: UserModel = Depends(get_current_user),
+) -> ProjectMemberListResponse:
+    """프로젝트 멤버 목록 조회. Admin 또는 project owner만 가능."""
+    import os
+
+    if os.getenv("USE_DATABASE", "false").lower() != "true":
+        raise HTTPException(status_code=503, detail="Database mode is not enabled")
+
+    from db.database import async_session_factory
+    from db.models import ProjectAccessModel, ProjectModel
+    from db.models import UserModel as UserModelDB
+
+    async with async_session_factory() as session:
+        proj = await session.execute(
+            select(ProjectModel).where(ProjectModel.id == project_id)
+        )
+        if not proj.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+
+        await _check_project_manage_permission(project_id, current_user, session)
+
+        result = await session.execute(
+            select(ProjectAccessModel, UserModelDB)
+            .join(UserModelDB, ProjectAccessModel.user_id == UserModelDB.id, isouter=True)
+            .where(ProjectAccessModel.project_id == project_id)
+            .order_by(ProjectAccessModel.created_at)
+        )
+        rows = result.all()
+
+        members = [
+            ProjectMemberResponse(
+                user_id=access.user_id,
+                role=access.role,
+                email=user.email if user else None,
+                name=user.name if user else None,
+                granted_by=access.granted_by,
+                created_at=access.created_at.isoformat() if access.created_at else None,
+            )
+            for access, user in rows
+        ]
+        return ProjectMemberListResponse(members=members, total_count=len(members))
+
+
+@router.post("/{project_id}/members", response_model=ProjectMemberResponse, status_code=201)
+async def add_project_member(
+    project_id: str,
+    request: ProjectMemberAdd,
+    current_user: UserModel = Depends(get_current_user),
+) -> ProjectMemberResponse:
+    """프로젝트에 멤버 추가. Admin 또는 project owner만 가능."""
+    import os
+
+    if os.getenv("USE_DATABASE", "false").lower() != "true":
+        raise HTTPException(status_code=503, detail="Database mode is not enabled")
+
+    if request.role not in VALID_ROLES:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid role. Must be one of: {', '.join(VALID_ROLES)}"
+        )
+
+    from db.database import async_session_factory
+    from db.models import ProjectAccessModel, ProjectModel
+    from db.models import UserModel as UserModelDB
+
+    async with async_session_factory() as session:
+        proj = await session.execute(
+            select(ProjectModel).where(ProjectModel.id == project_id)
+        )
+        if not proj.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+
+        await _check_project_manage_permission(project_id, current_user, session)
+
+        user_result = await session.execute(
+            select(UserModelDB).where(UserModelDB.id == request.user_id)
+        )
+        target_user = user_result.scalar_one_or_none()
+        if not target_user:
+            raise HTTPException(status_code=404, detail=f"User not found: {request.user_id}")
+
+        existing = await session.execute(
+            select(ProjectAccessModel).where(
+                ProjectAccessModel.project_id == project_id,
+                ProjectAccessModel.user_id == request.user_id,
+            )
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=409, detail="User is already a member of this project")
+
+        access = ProjectAccessModel(
+            id=str(uuid.uuid4()),
+            project_id=project_id,
+            user_id=request.user_id,
+            role=request.role,
+            granted_by=current_user.id,
+        )
+        session.add(access)
+        await session.commit()
+        await session.refresh(access)
+
+        return ProjectMemberResponse(
+            user_id=access.user_id,
+            role=access.role,
+            email=target_user.email,
+            name=target_user.name,
+            granted_by=access.granted_by,
+            created_at=access.created_at.isoformat() if access.created_at else None,
+        )
+
+
+@router.patch("/{project_id}/members/{user_id}", response_model=ProjectMemberResponse)
+async def update_project_member_role(
+    project_id: str,
+    user_id: str,
+    request: ProjectMemberUpdate,
+    current_user: UserModel = Depends(get_current_user),
+) -> ProjectMemberResponse:
+    """멤버 역할 변경. Admin 또는 project owner만 가능."""
+    import os
+
+    if os.getenv("USE_DATABASE", "false").lower() != "true":
+        raise HTTPException(status_code=503, detail="Database mode is not enabled")
+
+    if request.role not in VALID_ROLES:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid role. Must be one of: {', '.join(VALID_ROLES)}"
+        )
+
+    from db.database import async_session_factory
+    from db.models import ProjectAccessModel
+    from db.models import UserModel as UserModelDB
+
+    async with async_session_factory() as session:
+        await _check_project_manage_permission(project_id, current_user, session)
+
+        result = await session.execute(
+            select(ProjectAccessModel).where(
+                ProjectAccessModel.project_id == project_id,
+                ProjectAccessModel.user_id == user_id,
+            )
+        )
+        access = result.scalar_one_or_none()
+        if not access:
+            raise HTTPException(status_code=404, detail="Member not found in this project")
+
+        access.role = request.role
+        await session.commit()
+        await session.refresh(access)
+
+        user_result = await session.execute(
+            select(UserModelDB).where(UserModelDB.id == user_id)
+        )
+        user = user_result.scalar_one_or_none()
+
+        return ProjectMemberResponse(
+            user_id=access.user_id,
+            role=access.role,
+            email=user.email if user else None,
+            name=user.name if user else None,
+            granted_by=access.granted_by,
+            created_at=access.created_at.isoformat() if access.created_at else None,
+        )
+
+
+@router.delete("/{project_id}/members/{user_id}")
+async def remove_project_member(
+    project_id: str,
+    user_id: str,
+    current_user: UserModel = Depends(get_current_user),
+) -> dict:
+    """멤버 제거. Admin 또는 project owner만 가능. 마지막 owner는 제거 불가."""
+    import os
+
+    if os.getenv("USE_DATABASE", "false").lower() != "true":
+        raise HTTPException(status_code=503, detail="Database mode is not enabled")
+
+    from db.database import async_session_factory
+    from db.models import ProjectAccessModel
+
+    async with async_session_factory() as session:
+        await _check_project_manage_permission(project_id, current_user, session)
+
+        result = await session.execute(
+            select(ProjectAccessModel).where(
+                ProjectAccessModel.project_id == project_id,
+                ProjectAccessModel.user_id == user_id,
+            )
+        )
+        access = result.scalar_one_or_none()
+        if not access:
+            raise HTTPException(status_code=404, detail="Member not found in this project")
+
+        # 마지막 owner 제거 방지
+        if access.role == "owner":
+            owner_count_result = await session.execute(
+                select(ProjectAccessModel).where(
+                    ProjectAccessModel.project_id == project_id,
+                    ProjectAccessModel.role == "owner",
+                )
+            )
+            owners = owner_count_result.scalars().all()
+            if len(owners) <= 1:
+                raise HTTPException(
+                    status_code=400, detail="Cannot remove the last owner of a project"
+                )
+
+        await session.delete(access)
+        await session.commit()
+
+        return {"success": True, "message": f"Member {user_id} removed from project {project_id}"}
