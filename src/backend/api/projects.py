@@ -19,6 +19,8 @@ from models.project import (
     DBProjectListResponse,
     DBProjectResponse,
     DBProjectUpdate,
+    OrgMemberForProject,
+    OrgMemberListResponse,
     ProjectMemberAdd,
     ProjectMemberListResponse,
     ProjectMemberResponse,
@@ -730,3 +732,105 @@ async def remove_project_member(
         await session.commit()
 
         return {"success": True, "message": f"Member {user_id} removed from project {project_id}"}
+
+
+@router.get("/{project_id}/available-members", response_model=OrgMemberListResponse)
+async def list_available_org_members(
+    project_id: str,
+    current_user: UserModel = Depends(get_current_user),
+) -> OrgMemberListResponse:
+    """프로젝트에 추가 가능한 조직 멤버 목록 반환.
+
+    프로젝트의 organization_id로 org 멤버를 조회하되,
+    이미 ProjectAccess에 있는 유저는 제외한다.
+    Admin/owner만 호출 가능.
+    """
+    import os
+
+    if os.getenv("USE_DATABASE", "false").lower() != "true":
+        raise HTTPException(status_code=503, detail="Database mode is not enabled")
+
+    from db.database import async_session_factory
+    from db.models import OrganizationMemberModel, ProjectAccessModel, ProjectModel
+    from db.models import UserModel as UserModelDB
+    from sqlalchemy import and_, select
+
+    is_system_admin = current_user.role == "admin" or current_user.is_admin
+
+    async with async_session_factory() as session:
+        # 프로젝트 존재 확인
+        proj_result = await session.execute(
+            select(ProjectModel).where(ProjectModel.id == project_id)
+        )
+        project = proj_result.scalar_one_or_none()
+        if not project:
+            raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+
+        # 권한 확인: system admin 또는 프로젝트 org의 admin/owner
+        if not is_system_admin:
+            admin_org_ids = await _get_admin_org_ids(current_user)
+            if project.organization_id not in admin_org_ids:
+                raise HTTPException(status_code=403, detail="Project owner or admin required")
+
+        # 이미 프로젝트에 속한 user_id 집합
+        existing_result = await session.execute(
+            select(ProjectAccessModel.user_id).where(
+                ProjectAccessModel.project_id == project_id
+            )
+        )
+        existing_user_ids = {row[0] for row in existing_result.all()}
+
+        org_id = project.organization_id
+        if not org_id:
+            return OrgMemberListResponse(members=[], total_count=0)
+
+        # DB org 멤버 조회 (UserModel과 join)
+        members_result = await session.execute(
+            select(OrganizationMemberModel, UserModelDB)
+            .join(UserModelDB, OrganizationMemberModel.user_id == UserModelDB.id, isouter=True)
+            .where(
+                and_(
+                    OrganizationMemberModel.organization_id == org_id,
+                    OrganizationMemberModel.is_active == True,  # noqa: E712
+                )
+            )
+        )
+        rows = members_result.all()
+
+        available = []
+        seen_user_ids = set()
+
+        for mem, user in rows:
+            if mem.user_id in existing_user_ids:
+                continue
+            if mem.user_id in seen_user_ids:
+                continue
+            seen_user_ids.add(mem.user_id)
+            available.append(
+                OrgMemberForProject(
+                    user_id=mem.user_id,
+                    email=mem.email,
+                    name=user.name if user else mem.name,
+                    org_role=mem.role,
+                )
+            )
+
+        # JSON fallback
+        from services.organization_service import OrganizationService
+        json_members = OrganizationService.get_members(org_id) or []
+        for jmem in json_members:
+            uid = jmem.user_id if hasattr(jmem, "user_id") else ""
+            if not uid or uid in existing_user_ids or uid in seen_user_ids:
+                continue
+            seen_user_ids.add(uid)
+            role_val = jmem.role.value if hasattr(jmem.role, "value") else str(jmem.role)
+            available.append(
+                OrgMemberForProject(
+                    user_id=uid,
+                    email=getattr(jmem, "email", ""),
+                    name=getattr(jmem, "name", None),
+                    org_role=role_val,
+                )
+            )
+
+        return OrgMemberListResponse(members=available, total_count=len(available))

@@ -241,6 +241,22 @@ class ProjectMemberListResponse(BaseModel):
     total_count: int
 
 
+class OrgMemberForProject(BaseModel):
+    """조직 멤버 중 프로젝트에 추가 가능한 사람."""
+
+    user_id: str
+    email: str
+    name: str | None = None
+    org_role: str  # owner, admin, member, viewer
+
+
+class OrgMemberListResponse(BaseModel):
+    """Available org members response."""
+
+    members: list[OrgMemberForProject]
+    total_count: int
+
+
 # Registry of known projects
 PROJECTS_REGISTRY: dict[str, Project] = {}
 
