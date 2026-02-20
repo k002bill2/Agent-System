@@ -99,6 +99,7 @@ def _model_to_response(row) -> DBProjectResponse:
         path=row.path,
         is_active=row.is_active,
         settings=row.settings or {},
+        organization_id=row.organization_id,
         created_at=row.created_at.isoformat() if row.created_at else None,
         updated_at=row.updated_at.isoformat() if row.updated_at else None,
         created_by=row.created_by,
@@ -110,15 +111,7 @@ async def create_project(
     request: DBProjectCreate,
     current_user: UserModel = Depends(get_current_user),
 ) -> DBProjectResponse:
-    """Create a new project.
-
-    Args:
-        request: Project creation data
-        current_user: Authenticated user (becomes project owner)
-
-    Returns:
-        Created project
-    """
+    """Create a new project. Only system admins or org admin/owners can create."""
     import os
 
     use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
@@ -128,21 +121,47 @@ async def create_project(
     from db.database import async_session_factory
     from db.models import ProjectAccessModel, ProjectModel
 
+    is_system_admin = current_user.role == "admin" or current_user.is_admin
+
+    # 조직 admin 체크
+    admin_org_ids = []
+    if not is_system_admin:
+        admin_org_ids = await _get_admin_org_ids(current_user)
+        if not admin_org_ids:
+            raise HTTPException(
+                status_code=403,
+                detail="프로젝트 등록 권한이 없습니다. 조직의 admin 또는 owner만 등록 가능합니다.",
+            )
+
+    # organization_id 결정
+    org_id = request.organization_id
+    if not is_system_admin:
+        if org_id and org_id not in admin_org_ids:
+            raise HTTPException(
+                status_code=403,
+                detail="해당 조직에 대한 admin 권한이 없습니다.",
+            )
+        if not org_id:
+            if len(admin_org_ids) == 1:
+                org_id = admin_org_ids[0]
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="여러 조직에 속해 있습니다. organization_id를 명시해 주세요.",
+                )
+
     slug = _slugify(request.name)
     project_id = str(uuid.uuid4())
 
     async with async_session_factory() as session:
-        # Check for duplicate name
         existing = await session.execute(
             select(ProjectModel).where(ProjectModel.name == request.name)
         )
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=409, detail=f"Project '{request.name}' already exists")
 
-        # Check for duplicate slug
         existing_slug = await session.execute(select(ProjectModel).where(ProjectModel.slug == slug))
         if existing_slug.scalar_one_or_none():
-            # Append a suffix
             slug = f"{slug}-{project_id[:8]}"
 
         project = ProjectModel(
@@ -153,13 +172,12 @@ async def create_project(
             path=request.path,
             is_active=True,
             settings=request.settings or {},
+            organization_id=org_id,
+            created_by=current_user.id,
         )
-
-        project.created_by = current_user.id
         session.add(project)
-        await session.flush()  # ID 확정
+        await session.flush()
 
-        # owner로 project_access 등록
         access = ProjectAccessModel(
             id=str(uuid.uuid4()),
             project_id=project_id,

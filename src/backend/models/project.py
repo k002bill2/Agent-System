@@ -170,6 +170,7 @@ class DBProjectCreate(BaseModel):
     description: str | None = Field(None, description="Project description")
     path: str | None = Field(None, description="Filesystem path for config scanning")
     settings: dict | None = Field(None, description="Extra settings (JSON)")
+    organization_id: str | None = Field(None, description="조직 ID (자동 감지 또는 명시)")
 
 
 class DBProjectUpdate(BaseModel):
@@ -191,6 +192,7 @@ class DBProjectResponse(BaseModel):
     path: str | None = None
     is_active: bool = True
     settings: dict = Field(default_factory=dict)
+    organization_id: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
     created_by: str | None = None
@@ -200,6 +202,42 @@ class DBProjectListResponse(BaseModel):
     """Response for projects list."""
 
     projects: list[DBProjectResponse]
+    total_count: int
+
+
+# ========================================
+# Project Member Models
+# ========================================
+
+
+class ProjectMemberAdd(BaseModel):
+    """Request to add a member to a project."""
+
+    user_id: str = Field(..., description="User UUID to add")
+    role: str = Field("viewer", description="Role: owner, editor, viewer")
+
+
+class ProjectMemberUpdate(BaseModel):
+    """Request to update a member's role."""
+
+    role: str = Field(..., description="New role: owner, editor, viewer")
+
+
+class ProjectMemberResponse(BaseModel):
+    """Single project member response."""
+
+    user_id: str
+    role: str
+    email: str | None = None
+    name: str | None = None
+    granted_by: str | None = None
+    created_at: str | None = None
+
+
+class ProjectMemberListResponse(BaseModel):
+    """Response for project members list."""
+
+    members: list[ProjectMemberResponse]
     total_count: int
 
 
