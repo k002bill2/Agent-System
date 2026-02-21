@@ -1,15 +1,3 @@
 {
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/autoCommitPush.js"
-          }
-        ]
-      }
-    ]
-  }
+  "hooks": {}
 }

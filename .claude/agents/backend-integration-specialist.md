@@ -2,7 +2,7 @@
 name: backend-integration-specialist
 description: Backend integration specialist for AOS Dashboard. Expert in Firebase, REST APIs, and data synchronization strategies.
 tools: edit, create, read, grep, bash
-model: sonnet
+model: inherit
 ace_capabilities:
   layer_3_self_assessment:
     strengths:

@@ -2,7 +2,7 @@
 name: eval-grader
 description: AI agent evaluation grader. Performs code-based checks and LLM-powered deep analysis using rubrics.
 tools: read, grep, glob, bash
-model: sonnet
+model: inherit
 role: grader
 ace_capabilities:
   layer_3_self_assessment:

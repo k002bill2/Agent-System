@@ -2,7 +2,7 @@
 name: eval-task-runner
 description: Evaluation task orchestrator. Loads task definitions, executes evaluation runs, records transcripts, and calculates pass@k metrics.
 tools: read, grep, glob, bash, task
-model: sonnet
+model: inherit
 role: evaluator
 ace_capabilities:
   layer_2_global_strategy:
