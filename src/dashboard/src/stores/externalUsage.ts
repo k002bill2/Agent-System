@@ -1,19 +1,7 @@
 import { create } from 'zustand'
+import { authFetch } from './auth'
 
 const API_BASE = '/api'
-
-// Helper - authFetch with JWT token
-async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const token = localStorage.getItem('auth_token')
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string> || {}),
-  }
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-  return fetch(url, { ...options, headers })
-}
 
 export interface ExternalProviderConfig {
   provider: string

@@ -22,6 +22,7 @@ export type ViewType =
   | 'analytics'
   | 'workflows'
   | 'playground'
+  | 'external-usage'
   | 'admin'
   | 'settings'
 

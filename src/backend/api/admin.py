@@ -38,6 +38,7 @@ DEFAULT_MENU_ORDER: list[str] = [
     "analytics",
     "playground",
     "workflows",
+    "external-usage",
 ]
 
 # 기본 메뉴 가시성 설정
@@ -58,6 +59,7 @@ DEFAULT_MENU_VISIBILITY: dict[str, dict[str, bool]] = {
     "analytics": {"user": False, "manager": True, "admin": True},
     "playground": {"user": True, "manager": True, "admin": True},
     "workflows": {"user": False, "manager": True, "admin": True},
+    "external-usage": {"user": False, "manager": True, "admin": True},
     "settings": {"user": True, "manager": True, "admin": True},
     "admin": {"user": False, "manager": False, "admin": True},
 }
