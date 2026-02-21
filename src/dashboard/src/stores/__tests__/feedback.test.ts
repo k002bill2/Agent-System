@@ -404,3 +404,164 @@ describe('feedback helpers', () => {
     expect(Object.keys(feedbackStatusColors)).toHaveLength(4)
   })
 })
+
+// ── Selector Logic Tests (via store state) ─────────────
+
+describe('feedback selector logic', () => {
+  it('feedbacks.length counts all feedbacks', () => {
+    useFeedbackStore.setState({
+      feedbacks: [
+        { id: 'f1', status: 'pending' } as any,
+        { id: 'f2', status: 'processed' } as any,
+      ],
+    })
+    const state = useFeedbackStore.getState()
+    expect(state.feedbacks.length).toBe(2)
+  })
+
+  it('pending feedbacks with status=pending can be counted', () => {
+    useFeedbackStore.setState({
+      feedbacks: [
+        { id: 'f1', status: 'pending' } as any,
+        { id: 'f2', status: 'processed' } as any,
+      ],
+    })
+    const state = useFeedbackStore.getState()
+    const pendingCount = state.feedbacks.filter(f => f.status === 'pending').length
+    expect(pendingCount).toBe(1)
+  })
+
+  it('positive_rate from stats', () => {
+    useFeedbackStore.setState({ stats: { positive_rate: 0.75 } as any })
+    const state = useFeedbackStore.getState()
+    expect(state.stats?.positive_rate ?? 0).toBe(0.75)
+  })
+
+  it('positive_rate falls back to 0 when stats null', () => {
+    useFeedbackStore.setState({ stats: null })
+    const state = useFeedbackStore.getState()
+    expect(state.stats?.positive_rate ?? 0).toBe(0)
+  })
+
+  it('pendingFeedbacks + pendingEvaluations gives total pending count', () => {
+    useFeedbackStore.setState({
+      pendingFeedbacks: [{ id: 'pf-1' } as any],
+      pendingEvaluations: [{ id: 'pe-1' } as any],
+    })
+    const state = useFeedbackStore.getState()
+    const total = state.pendingFeedbacks.length + state.pendingEvaluations.length
+    expect(total).toBe(2)
+  })
+})
+
+// ── retryPendingSubmissions edge cases ─────────────────
+
+describe('retryPendingSubmissions', () => {
+  beforeEach(() => {
+    useFeedbackStore.setState({
+      feedbacks: [],
+      pendingFeedbacks: [],
+      pendingEvaluations: [],
+      taskEvaluations: {},
+    })
+    vi.clearAllMocks()
+  })
+
+  it('marks feedback as failed when retryCount >= maxRetries', async () => {
+    useFeedbackStore.setState({
+      pendingFeedbacks: [
+        {
+          id: 'pf-expired',
+          feedback: { type: 'explicit_positive' },
+          agentId: undefined,
+          status: 'queued',
+          retryCount: 3,
+          maxRetries: 3,
+        } as any,
+      ],
+      pendingEvaluations: [],
+    })
+
+    await useFeedbackStore.getState().retryPendingSubmissions()
+
+    const state = useFeedbackStore.getState()
+    const item = state.pendingFeedbacks.find(p => p.id === 'pf-expired')
+    expect(item?.status).toBe('failed')
+  })
+
+  it('marks evaluation as failed when retryCount >= maxRetries', async () => {
+    useFeedbackStore.setState({
+      pendingFeedbacks: [],
+      pendingEvaluations: [
+        {
+          id: 'pe-expired',
+          evaluation: { session_id: 's1', task_id: 't1' },
+          status: 'queued',
+          retryCount: 5,
+          maxRetries: 3,
+        } as any,
+      ],
+    })
+
+    await useFeedbackStore.getState().retryPendingSubmissions()
+
+    const state = useFeedbackStore.getState()
+    const item = state.pendingEvaluations.find(p => p.id === 'pe-expired')
+    expect(item?.status).toBe('failed')
+  })
+
+  it('retries feedback and succeeds', async () => {
+    useFeedbackStore.setState({
+      pendingFeedbacks: [
+        {
+          id: 'pf-retry',
+          feedback: { type: 'explicit_positive' },
+          agentId: undefined,
+          status: 'queued',
+          retryCount: 0,
+          maxRetries: 3,
+        } as any,
+      ],
+      pendingEvaluations: [],
+    })
+
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: 'f-new', type: 'explicit_positive' }),
+    })
+
+    await useFeedbackStore.getState().retryPendingSubmissions()
+
+    const state = useFeedbackStore.getState()
+    expect(state.pendingFeedbacks).toHaveLength(0)
+    expect(state.feedbacks).toHaveLength(1)
+  })
+
+  it('retries evaluation and succeeds', async () => {
+    useFeedbackStore.setState({
+      pendingFeedbacks: [],
+      pendingEvaluations: [
+        {
+          id: 'pe-retry',
+          evaluation: { session_id: 's1', task_id: 't1' },
+          status: 'queued',
+          retryCount: 0,
+          maxRetries: 3,
+        } as any,
+      ],
+    })
+
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ session_id: 's1', task_id: 't1', rating: 5 }),
+    })
+
+    await useFeedbackStore.getState().retryPendingSubmissions()
+
+    const state = useFeedbackStore.getState()
+    expect(state.pendingEvaluations).toHaveLength(0)
+    expect(state.taskEvaluations['s1:t1']).toBeTruthy()
+  })
+})

@@ -69,6 +69,7 @@ import { cn } from '@/lib/utils';
 | `ProjectManagementPage` | `/project-management` | DB 기반 프로젝트 레지스트리 관리 (CRUD, soft-delete, 복원) |
 | `OrganizationsPage` | `/organizations` | 조직 관리 (멤버, 역할, 통계) |
 | `WorkflowsPage` | `/workflows` | 워크플로우 자동화 (CI/CD 파이프라인 관리) |
+| `ExternalUsagePage` | `/external-usage` | 외부 LLM 프로바이더 사용량 모니터링 (비용, 토큰, 프로바이더별 현황) |
 | `AdminPage` | `/admin` | 관리자 페이지 (사용자 관리, 메뉴 설정, 시스템 정보) |
 | `SettingsPage` | `/settings` | 시스템 설정 |
 | `LoginPage` | `/login` | OAuth/Email 로그인 |

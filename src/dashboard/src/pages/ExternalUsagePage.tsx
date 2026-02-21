@@ -56,7 +56,7 @@ function formatTokens(tokens: number): string {
   return tokens.toString()
 }
 
-export default function ExternalUsagePage() {
+export function ExternalUsagePage() {
   const { summary, providers, isLoading, error, fetchSummary, fetchProviders, syncProvider } =
     useExternalUsageStore()
   const [selectedPeriod, setSelectedPeriod] = useState(30)
@@ -107,7 +107,7 @@ export default function ExternalUsagePage() {
   })
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="flex-1 overflow-y-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

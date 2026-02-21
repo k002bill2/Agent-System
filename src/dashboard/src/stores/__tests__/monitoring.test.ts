@@ -5,15 +5,25 @@ import { useMonitoringStore } from '../monitoring'
 const mockFetch = vi.fn()
 global.fetch = mockFetch
 
-// Mock EventSource
+// Mock EventSource - tracks created instances for test assertions
+const eventSourceInstances: MockEventSource[] = []
+
 class MockEventSource {
   url: string
   listeners: Record<string, ((e: MessageEvent) => void)[]> = {}
   close = vi.fn()
-  constructor(url: string) { this.url = url }
+  constructor(url: string) {
+    this.url = url
+    eventSourceInstances.push(this)
+  }
   addEventListener(event: string, handler: (e: MessageEvent) => void) {
     if (!this.listeners[event]) this.listeners[event] = []
     this.listeners[event].push(handler)
+  }
+  /** Helper to simulate receiving an event */
+  emit(event: string, data: unknown) {
+    const msg = { data: JSON.stringify(data) } as MessageEvent
+    ;(this.listeners[event] || []).forEach((h) => h(msg))
   }
 }
 // @ts-expect-error - Mock
@@ -35,6 +45,7 @@ function resetStore() {
     workflowLogs: {},
     error: null,
   })
+  eventSourceInstances.length = 0
 }
 
 describe('monitoring store', () => {
@@ -280,6 +291,313 @@ describe('monitoring store', () => {
     it('clears all workflow logs when no ID', () => {
       useMonitoringStore.getState().clearWorkflowLogs()
       expect(useMonitoringStore.getState().workflowLogs).toEqual({})
+    })
+  })
+
+  // ── runCheck ───────────────────────────────────────────
+
+  describe('runCheck', () => {
+    it('creates EventSource and marks check as running', () => {
+      useMonitoringStore.getState().runCheck('p1', 'test')
+
+      expect(eventSourceInstances).toHaveLength(1)
+      expect(eventSourceInstances[0].url).toContain('/projects/p1/checks/test')
+      expect(useMonitoringStore.getState().runningChecksMap['p1']?.has('test')).toBe(true)
+    })
+
+    it('does not start if check already running', () => {
+      useMonitoringStore.setState({
+        runningChecksMap: { p1: new Set(['test' as any]) },
+      })
+
+      useMonitoringStore.getState().runCheck('p1', 'test')
+
+      expect(eventSourceInstances).toHaveLength(0)
+    })
+
+    it('handles check_started event and adds log', () => {
+      useMonitoringStore.getState().runCheck('p1', 'test')
+      const es = eventSourceInstances[0]
+
+      es.emit('check_started', {
+        project_id: 'p1',
+        check_type: 'test',
+        started_at: '2025-01-01T00:00:00Z',
+      })
+
+      const logs = useMonitoringStore.getState().checkLogs['test']
+      expect(logs).toHaveLength(1)
+      expect(logs[0].text).toContain('Starting test')
+    })
+
+    it('ignores check_started event from different project', () => {
+      useMonitoringStore.getState().runCheck('p1', 'test')
+      const es = eventSourceInstances[0]
+
+      es.emit('check_started', {
+        project_id: 'p2', // different project
+        check_type: 'test',
+        started_at: '2025-01-01T00:00:00Z',
+      })
+
+      expect(useMonitoringStore.getState().checkLogs['test']).toHaveLength(0)
+    })
+
+    it('handles check_progress event and appends log', () => {
+      useMonitoringStore.getState().runCheck('p1', 'test')
+      const es = eventSourceInstances[0]
+
+      es.emit('check_progress', {
+        project_id: 'p1',
+        check_type: 'test',
+        output: 'Test output line',
+        is_stderr: false,
+      })
+
+      const logs = useMonitoringStore.getState().checkLogs['test']
+      expect(logs[0].text).toBe('Test output line')
+      expect(logs[0].isStderr).toBe(false)
+    })
+
+    it('handles check_completed event and removes from running', () => {
+      useMonitoringStore.getState().runCheck('p1', 'test')
+      const es = eventSourceInstances[0]
+
+      es.emit('check_completed', {
+        project_id: 'p1',
+        check_type: 'test',
+        status: 'success',
+        exit_code: 0,
+        duration_ms: 1200,
+        stdout: 'All tests passed',
+        stderr: '',
+      })
+
+      expect(useMonitoringStore.getState().runningChecksMap['p1']?.has('test')).toBe(false)
+      expect(es.close).toHaveBeenCalled()
+    })
+
+    it('updates health on check_completed when health exists', () => {
+      useMonitoringStore.setState({
+        projectHealthMap: {
+          p1: { project_id: 'p1', checks: { test: { status: 'running' } }, last_updated: '' } as any,
+        },
+      })
+
+      useMonitoringStore.getState().runCheck('p1', 'test')
+      const es = eventSourceInstances[0]
+
+      es.emit('check_completed', {
+        project_id: 'p1',
+        check_type: 'test',
+        status: 'success',
+        exit_code: 0,
+        duration_ms: 500,
+        stdout: 'ok',
+        stderr: '',
+      })
+
+      const health = useMonitoringStore.getState().projectHealthMap['p1']
+      expect(health.checks['test'].status).toBe('success')
+    })
+
+    it('handles error event and removes from running', () => {
+      useMonitoringStore.getState().runCheck('p1', 'test')
+      const es = eventSourceInstances[0]
+
+      es.emit('error', {})
+
+      expect(useMonitoringStore.getState().runningChecksMap['p1']?.has('test')).toBe(false)
+      expect(useMonitoringStore.getState().error).toContain('test')
+      expect(es.close).toHaveBeenCalled()
+    })
+  })
+
+  // ── runAllChecks ───────────────────────────────────────
+
+  describe('runAllChecks', () => {
+    it('creates EventSource for run-all', () => {
+      useMonitoringStore.getState().runAllChecks('p1')
+
+      expect(eventSourceInstances).toHaveLength(1)
+      expect(eventSourceInstances[0].url).toContain('/projects/p1/checks/run-all')
+    })
+
+    it('does not start if any check already running', () => {
+      useMonitoringStore.setState({
+        runningChecksMap: { p1: new Set(['test' as any]) },
+      })
+
+      useMonitoringStore.getState().runAllChecks('p1')
+
+      expect(eventSourceInstances).toHaveLength(0)
+    })
+
+    it('handles check_started event for each check type', () => {
+      useMonitoringStore.getState().runAllChecks('p1')
+      const es = eventSourceInstances[0]
+
+      es.emit('check_started', {
+        project_id: 'p1',
+        check_type: 'lint',
+        started_at: '2025-01-01T00:00:00Z',
+      })
+
+      expect(useMonitoringStore.getState().runningChecksMap['p1']?.has('lint')).toBe(true)
+      expect(useMonitoringStore.getState().checkLogs['lint']).toHaveLength(1)
+    })
+
+    it('closes EventSource on build check_completed', () => {
+      useMonitoringStore.getState().runAllChecks('p1')
+      const es = eventSourceInstances[0]
+
+      es.emit('check_completed', {
+        project_id: 'p1',
+        check_type: 'build',
+        status: 'success',
+        exit_code: 0,
+        duration_ms: 5000,
+        stdout: '',
+        stderr: '',
+      })
+
+      expect(es.close).toHaveBeenCalled()
+    })
+
+    it('handles error event and clears running checks', () => {
+      useMonitoringStore.getState().runAllChecks('p1')
+      const es = eventSourceInstances[0]
+
+      es.emit('error', {})
+
+      const runningChecks = useMonitoringStore.getState().runningChecksMap['p1']
+      expect(runningChecks?.size).toBe(0)
+      expect(useMonitoringStore.getState().error).toBe('Failed to run checks')
+      expect(es.close).toHaveBeenCalled()
+    })
+  })
+
+  // ── runWorkflowCheck ───────────────────────────────────
+
+  describe('runWorkflowCheck', () => {
+    const mockWorkflow = {
+      id: 'wf-1',
+      name: 'CI Pipeline',
+      description: 'Run CI',
+      status: 'idle' as const,
+      lastRunAt: null,
+      lastRunDuration: null,
+    }
+
+    beforeEach(() => {
+      useMonitoringStore.setState({ workflowChecks: [mockWorkflow] })
+    })
+
+    it('marks workflow as running and adds start log', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'run-1' }),
+      })
+
+      const promise = useMonitoringStore.getState().runWorkflowCheck('wf-1')
+
+      // Wait for the fetch and SSE setup
+      await promise
+
+      const state = useMonitoringStore.getState()
+      // At least the start log should exist
+      expect((state.workflowLogs['wf-1'] || []).length).toBeGreaterThan(0)
+    })
+
+    it('does not start if already running', async () => {
+      useMonitoringStore.setState({
+        runningWorkflowIds: new Set(['wf-1']),
+      })
+
+      await useMonitoringStore.getState().runWorkflowCheck('wf-1')
+
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it('sets error when trigger fails', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Bad Request',
+      })
+
+      await useMonitoringStore.getState().runWorkflowCheck('wf-1')
+
+      const state = useMonitoringStore.getState()
+      expect(state.error).toContain('Failed to trigger workflow')
+      expect(state.runningWorkflowIds.has('wf-1')).toBe(false)
+      const wf = state.workflowChecks.find((w) => w.id === 'wf-1')
+      expect(wf?.status).toBe('failure')
+    })
+
+    it('handles SSE log event', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'run-1' }),
+      })
+
+      await useMonitoringStore.getState().runWorkflowCheck('wf-1')
+
+      const es = eventSourceInstances[0]
+      es.emit('log', { message: 'Running tests...', timestamp: '2025-01-01T00:00:00Z' })
+
+      const logs = useMonitoringStore.getState().workflowLogs['wf-1']
+      const logEntry = logs.find((l) => l.text === 'Running tests...')
+      expect(logEntry).toBeDefined()
+    })
+
+    it('handles SSE done event and marks success', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'run-1' }),
+      })
+
+      await useMonitoringStore.getState().runWorkflowCheck('wf-1')
+
+      const es = eventSourceInstances[0]
+      es.emit('done', {
+        status: 'completed',
+        completed_at: '2025-01-01T00:05:00Z',
+        duration_seconds: 300,
+      })
+
+      const state = useMonitoringStore.getState()
+      expect(state.runningWorkflowIds.has('wf-1')).toBe(false)
+      const wf = state.workflowChecks.find((w) => w.id === 'wf-1')
+      expect(wf?.status).toBe('success')
+      expect(es.close).toHaveBeenCalled()
+    })
+
+    it('handles SSE error event and marks failure', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'run-1' }),
+      })
+
+      await useMonitoringStore.getState().runWorkflowCheck('wf-1')
+
+      const es = eventSourceInstances[0]
+      es.emit('error', {})
+
+      const state = useMonitoringStore.getState()
+      expect(state.runningWorkflowIds.has('wf-1')).toBe(false)
+      expect(state.error).toBe('Workflow stream error')
+      const wf = state.workflowChecks.find((w) => w.id === 'wf-1')
+      expect(wf?.status).toBe('failure')
+    })
+
+    it('handles network error gracefully', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Connection refused'))
+
+      await useMonitoringStore.getState().runWorkflowCheck('wf-1')
+
+      const state = useMonitoringStore.getState()
+      expect(state.error).toBe('Connection refused')
+      expect(state.runningWorkflowIds.has('wf-1')).toBe(false)
     })
   })
 })
