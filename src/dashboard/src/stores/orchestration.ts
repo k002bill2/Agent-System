@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { notificationService } from '../services/notificationService'
+import { authFetch } from './auth'
 
 // Types
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'paused'
@@ -37,6 +38,7 @@ export interface Project {
   path: string
   description: string
   has_claude_md: boolean
+  is_active?: boolean
 }
 
 export interface Task {
@@ -283,7 +285,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
   // Fetch projects from API
   fetchProjects: async () => {
     try {
-      const res = await fetch('/api/projects')
+      const res = await authFetch('/api/projects')
       if (res.ok) {
         const projects = await res.json()
         set({ projects })

@@ -123,6 +123,10 @@ export function GitPage() {
 
   const { projects, fetchProjects, selectedProjectId: globalSelectedProjectId } = useProjectsStore()
   const { user } = useAuthStore()
+  const isAdmin = user?.is_admin ?? false
+  const visibleProjects = isAdmin
+    ? projects
+    : projects.filter((p) => p.is_active !== false)
   const {
     currentOrganization,
     fetchUserMemberships,
@@ -162,12 +166,13 @@ export function GitPage() {
     fetchProjects()
   }, [fetchProjects])
 
-  // Auto-select project
+  // Auto-select project (비활성 프로젝트 제외)
   useEffect(() => {
-    if (!selectedProjectId && projects.length > 0) {
-      setSelectedProject(globalSelectedProjectId || projects[0].id)
+    if (!selectedProjectId && visibleProjects.length > 0) {
+      const firstVisible = visibleProjects.find((p) => p.id === globalSelectedProjectId) || visibleProjects[0]
+      setSelectedProject(firstVisible.id)
     }
-  }, [selectedProjectId, projects, globalSelectedProjectId, setSelectedProject])
+  }, [selectedProjectId, visibleProjects, globalSelectedProjectId, setSelectedProject])
 
   // Fetch git status when project changes
   useEffect(() => {
@@ -239,7 +244,7 @@ export function GitPage() {
             className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           >
             <option value="">Select Project</option>
-            {projects.map((project) => (
+            {visibleProjects.map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name}
               </option>

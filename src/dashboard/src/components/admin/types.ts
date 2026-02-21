@@ -67,6 +67,7 @@ export const MENU_LABELS: Record<string, string> = {
   analytics: 'Analytics',
   playground: 'Playground',
   workflows: 'Workflows',
+  'external-usage': 'External Usage',
   settings: 'Settings',
   admin: 'Admin',
 }
@@ -91,6 +92,6 @@ export const MENU_CATEGORIES: { label: string; keys: string[] }[] = [
   },
   {
     label: 'Analytics & Admin',
-    keys: ['audit', 'analytics', 'settings', 'admin'],
+    keys: ['audit', 'analytics', 'external-usage', 'settings', 'admin'],
   },
 ]

@@ -40,6 +40,7 @@ export function UserManagementTab({ currentUserId }: Props) {
         search: search || undefined,
         is_active: filterActive,
         is_admin: null,
+        role: filterRole || undefined,
         limit,
         offset: page * limit,
       })
@@ -51,11 +52,11 @@ export function UserManagementTab({ currentUserId }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [search, filterActive, page])
+  }, [search, filterActive, filterRole, page])
 
   useEffect(() => {
     load()
-  }, [page, filterActive, filterRole]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [load])
 
   const handleSearch = () => {
     setPage(0)

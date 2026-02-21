@@ -6,6 +6,7 @@ export async function fetchUsers(params: {
   search?: string
   is_active?: boolean | null
   is_admin?: boolean | null
+  role?: string | null
   limit: number
   offset: number
 }): Promise<UserListResponse> {
@@ -15,6 +16,8 @@ export async function fetchUsers(params: {
     query.append('is_active', String(params.is_active))
   if (params.is_admin !== null && params.is_admin !== undefined)
     query.append('is_admin', String(params.is_admin))
+  if (params.role !== null && params.role !== undefined)
+    query.append('role', params.role)
   query.append('limit', String(params.limit))
   query.append('offset', String(params.offset))
 
