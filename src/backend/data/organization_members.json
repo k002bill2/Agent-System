@@ -103,5 +103,20 @@
     "joined_at": "2026-02-18 11:16:16.784380",
     "last_active_at": null,
     "created_at": "2026-02-18 11:16:16.784483"
+  },
+  "590f1fa5-5b2c-462f-80ec-154b16b3fa44": {
+    "id": "590f1fa5-5b2c-462f-80ec-154b16b3fa44",
+    "organization_id": "c8f03856-9318-4ae5-b62a-58cfddc2fff1",
+    "user_id": "0f223ea8-bbd9-4e72-a380-5673551f483e",
+    "email": "002bill@gmail.com",
+    "name": "강영환",
+    "role": "admin",
+    "permissions": [],
+    "is_active": true,
+    "invited_by": "0f223ea8-bbd9-4e72-a380-5673551f483e",
+    "invited_at": "2026-02-18 16:21:08.788630",
+    "joined_at": "2026-02-18 16:21:36.227586",
+    "last_active_at": null,
+    "created_at": "2026-02-18 16:21:36.227956"
   }
 }

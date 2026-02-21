@@ -103,10 +103,10 @@ class RateLimitService:
         if not result["allowed"]:
             if result["minute_remaining"] <= 0:
                 reset_at = now_dt + timedelta(seconds=60 - (now % 60))
-                retry_after = int(60 - (now % 60))
+                retry_after = max(1, int(60 - (now % 60)))
             else:
                 reset_at = now_dt + timedelta(seconds=3600 - (now % 3600))
-                retry_after = int(3600 - (now % 3600))
+                retry_after = max(1, int(3600 - (now % 3600)))
         else:
             reset_at = now_dt + timedelta(seconds=60 - (now % 60))
             retry_after = None
