@@ -323,6 +323,66 @@ async def _run_migrations() -> None:
                 text("ALTER TABLE workflow_definitions ADD COLUMN last_run_status VARCHAR(20)")
             )
 
+        # Migration 10: Create llm_model_configs table and seed from registry
+        result = await conn.execute(
+            text(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_name = 'llm_model_configs'"
+            )
+        )
+        if not result.fetchone():
+            await conn.execute(
+                text("""
+                CREATE TABLE llm_model_configs (
+                    id VARCHAR(100) PRIMARY KEY,
+                    display_name VARCHAR(255) NOT NULL,
+                    provider VARCHAR(50) NOT NULL,
+                    context_window INTEGER NOT NULL DEFAULT 128000,
+                    input_price FLOAT NOT NULL DEFAULT 0.001,
+                    output_price FLOAT NOT NULL DEFAULT 0.002,
+                    is_default BOOLEAN NOT NULL DEFAULT FALSE,
+                    is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                    supports_tools BOOLEAN NOT NULL DEFAULT TRUE,
+                    supports_vision BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+            )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_llm_model_provider_enabled "
+                    "ON llm_model_configs (provider, is_enabled)"
+                )
+            )
+            # Seed from in-memory registry
+            from models.llm_models import _MODELS
+
+            for model in _MODELS:
+                await conn.execute(
+                    text(
+                        "INSERT INTO llm_model_configs "
+                        "(id, display_name, provider, context_window, input_price, output_price, "
+                        "is_default, is_enabled, supports_tools, supports_vision) "
+                        "VALUES (:id, :display_name, :provider, :context_window, :input_price, "
+                        ":output_price, :is_default, :is_enabled, :supports_tools, :supports_vision) "
+                        "ON CONFLICT (id) DO NOTHING"
+                    ),
+                    {
+                        "id": model.id,
+                        "display_name": model.display_name,
+                        "provider": model.provider.value,
+                        "context_window": model.context_window,
+                        "input_price": model.input_price,
+                        "output_price": model.output_price,
+                        "is_default": model.is_default,
+                        "is_enabled": model.is_enabled,
+                        "supports_tools": model.supports_tools,
+                        "supports_vision": model.supports_vision,
+                    },
+                )
+            print(f"✅ llm_model_configs seeded with {len(_MODELS)} models")
+
         # Migration 7: Add unique constraint and FK to workflow_secrets
         result = await conn.execute(
             text(

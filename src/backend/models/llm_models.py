@@ -217,23 +217,82 @@ class LLMModelRegistry:
     """Central registry for LLM model configurations.
 
     Single source of truth for all model information.
-    Use this class instead of hardcoding model lists elsewhere.
+    When USE_DATABASE=true, populated from DB on startup via load_from_db().
+    Falls back to in-memory _MODELS list when DB is not available.
     """
+
+    # DB-loaded cache (None = not yet loaded from DB, use _MODELS fallback)
+    _db_cache: list[LLMModelConfig] | None = None
+    _db_index: dict[str, LLMModelConfig] = {}
+
+    @classmethod
+    def _models(cls) -> list[LLMModelConfig]:
+        """Return active model list: DB cache if loaded, else in-memory fallback."""
+        return cls._db_cache if cls._db_cache is not None else _MODELS
+
+    @classmethod
+    def _index(cls) -> dict[str, LLMModelConfig]:
+        """Return active model index: DB index if loaded, else in-memory fallback."""
+        return cls._db_index if cls._db_cache is not None else _MODEL_INDEX
+
+    @classmethod
+    async def load_from_db(cls, session: Any) -> None:
+        """Load model configurations from DB into in-memory cache.
+
+        Called once on application startup when USE_DATABASE=true.
+        After this, all registry methods serve data from DB.
+        """
+        from sqlalchemy import select
+
+        try:
+            from db.models import LLMModelConfigModel
+
+            result = await session.execute(select(LLMModelConfigModel))
+            db_models = result.scalars().all()
+
+            if db_models:
+                loaded = []
+                for m in db_models:
+                    try:
+                        loaded.append(
+                            LLMModelConfig(
+                                id=m.id,
+                                display_name=m.display_name,
+                                provider=LLMProvider(m.provider),
+                                context_window=m.context_window,
+                                input_price=m.input_price,
+                                output_price=m.output_price,
+                                is_default=m.is_default,
+                                is_enabled=m.is_enabled,
+                                supports_tools=m.supports_tools,
+                                supports_vision=m.supports_vision,
+                            )
+                        )
+                    except Exception:
+                        continue  # Skip malformed rows
+
+                cls._db_cache = loaded
+                cls._db_index = {m.id: m for m in loaded}
+                print(f"✅ LLMModelRegistry loaded {len(loaded)} models from DB")
+            else:
+                print("⚠️  llm_model_configs table is empty, using in-memory fallback")
+        except Exception as e:
+            print(f"⚠️  Failed to load models from DB: {e}. Using in-memory fallback.")
 
     @classmethod
     def get_all(cls) -> list[LLMModelConfig]:
         """Get all registered models."""
-        return _MODELS.copy()
+        return cls._models().copy()
 
     @classmethod
     def get_enabled(cls) -> list[LLMModelConfig]:
         """Get all enabled models."""
-        return [m for m in _MODELS if m.is_enabled]
+        return [m for m in cls._models() if m.is_enabled]
 
     @classmethod
     def get_by_id(cls, model_id: str) -> LLMModelConfig | None:
         """Get a model by its ID."""
-        return _MODEL_INDEX.get(model_id)
+        return cls._index().get(model_id)
 
     @classmethod
     def get_by_provider(cls, provider: LLMProvider | str) -> list[LLMModelConfig]:
@@ -243,7 +302,7 @@ class LLMModelRegistry:
                 provider = LLMProvider(provider)
             except ValueError:
                 return []
-        return [m for m in _MODELS if m.provider == provider and m.is_enabled]
+        return [m for m in cls._models() if m.provider == provider and m.is_enabled]
 
     @classmethod
     def get_default(cls, provider: LLMProvider | str | None = None) -> str:
@@ -291,7 +350,7 @@ class LLMModelRegistry:
 
         # Try partial match for unknown models
         model_lower = model_id.lower()
-        for m in _MODELS:
+        for m in cls._models():
             if m.id.lower() in model_lower or model_lower in m.id.lower():
                 return {"input": m.input_price, "output": m.output_price}
 
@@ -313,7 +372,7 @@ class LLMModelRegistry:
     @classmethod
     def exists(cls, model_id: str) -> bool:
         """Check if a model exists in the registry."""
-        return model_id in _MODEL_INDEX
+        return model_id in cls._index()
 
     @classmethod
     def is_available(cls, model_id: str) -> bool:
@@ -340,7 +399,7 @@ class LLMModelRegistry:
         Returns a list suitable for API responses.
         """
         result = []
-        for model in _MODELS:
+        for model in cls._models():
             if not model.is_enabled:
                 continue
 

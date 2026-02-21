@@ -159,6 +159,18 @@ else:
                 else:
                     print("✅ Database initialized (PostgreSQL)")
 
+                # Load LLM model configs from DB into registry cache
+                try:
+                    from models.llm_models import LLMModelRegistry
+
+                    async with async_session_factory() as session:
+                        await LLMModelRegistry.load_from_db(session)
+                except Exception as e:
+                    if logger:
+                        logger.warning("llm_model_registry_load_failed", error=str(e))
+                    else:
+                        print(f"⚠️  LLM model registry load failed: {e}")
+
                 # Seed built-in workflows into DB
                 try:
                     from services.workflow_service import WorkflowService

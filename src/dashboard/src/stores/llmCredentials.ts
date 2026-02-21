@@ -1,16 +1,7 @@
 import { create } from 'zustand'
+import { authFetch } from './auth'
 
 const API_BASE = '/api'
-
-async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const token = localStorage.getItem('auth_token')
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string> || {}),
-  }
-  if (token) headers['Authorization'] = `Bearer ${token}`
-  return fetch(url, { ...options, headers })
-}
 
 export interface LLMCredential {
   id: string
@@ -67,6 +58,7 @@ export const useLLMCredentialStore = create<LLMCredentialStore>((set) => ({
     try {
       const resp = await authFetch(`${API_BASE}/users/me/llm-credentials`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
       if (!resp.ok) {
