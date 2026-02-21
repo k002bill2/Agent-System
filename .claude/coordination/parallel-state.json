@@ -897,8 +897,515 @@
       "targetAreas": [
         "api"
       ]
+    },
+    {
+      "taskId": "task_1771492680862_r6cwi6",
+      "subagentType": "Explore",
+      "description": "Explore LLM monitoring capabilities",
+      "startTime": 1771492680862,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771492684496_xm3k42",
+      "subagentType": "Explore",
+      "description": "Explore dashboard monitoring UI",
+      "startTime": 1771492684496,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1771492780162_e15mxb",
+      "subagentType": "Explore",
+      "description": "Explore backend LLM monitoring",
+      "startTime": 1771492780162,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771493267750_z4hmhv",
+      "subagentType": "Explore",
+      "description": "Explore existing codebase structure",
+      "startTime": 1771493267750,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771493496903_718q01",
+      "subagentType": "general-purpose",
+      "description": "백엔드 외부 LLM 사용량 모니터링 구현",
+      "startTime": 1771493496903,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771493565020_5cl3pv",
+      "subagentType": "general-purpose",
+      "description": "프론트엔드 외부 LLM 사용량 페이지 구현",
+      "startTime": 1771493565020,
+      "status": "running",
+      "targetAreas": [
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771506327329_xua5u6",
+      "subagentType": "general-purpose",
+      "description": "LLM 공급자 사용량 API 조사",
+      "startTime": 1771506327329,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771506343713_bwen8o",
+      "subagentType": "general-purpose",
+      "description": "모니터링 대시보드 UI/UX 기획",
+      "startTime": 1771506343713,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771506760376_b6i05p",
+      "subagentType": "Explore",
+      "description": "Explore members panel code",
+      "startTime": 1771506760376,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1771506763341_m9nqau",
+      "subagentType": "Explore",
+      "description": "Explore backend members API",
+      "startTime": 1771506763341,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771507377974_bisnq1",
+      "subagentType": "Plan",
+      "description": "Design members migration plan",
+      "startTime": 1771507377974,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771509841493_g3pou9",
+      "subagentType": "general-purpose",
+      "description": "Task 1: DB 모델 추가",
+      "startTime": 1771509841493,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771509952683_p8u1mk",
+      "subagentType": "general-purpose",
+      "description": "Task 2+3: Pydantic 스키마 + Credential Service",
+      "startTime": 1771509952683,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771510058512_ldcbgv",
+      "subagentType": "general-purpose",
+      "description": "Task 4: LLM Credentials API + app.py 등록",
+      "startTime": 1771510058512,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771510213654_8zjpmp",
+      "subagentType": "general-purpose",
+      "description": "Task 5+6: Proxy 엔드포인트 + Anthropic Collector",
+      "startTime": 1771510213654,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771510416928_5g6u9x",
+      "subagentType": "general-purpose",
+      "description": "Task 7+8: Frontend 스토어 + LLMAccountsSettings",
+      "startTime": 1771510416928,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771510587526_xr1ag7",
+      "subagentType": "general-purpose",
+      "description": "Task 9+10: MemberUsageTable + DailyCostTrend",
+      "startTime": 1771510587526,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1771510768388_h8nnno",
+      "subagentType": "general-purpose",
+      "description": "Task 11+12+13: 페이지 통합 + 최종 검증",
+      "startTime": 1771510768388,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "navigation"
+      ]
+    },
+    {
+      "taskId": "task_1771552866982_jypnpz",
+      "subagentType": "general-purpose",
+      "description": "Task 1: DB 스키마 organization_id 추가",
+      "startTime": 1771552866982,
+      "status": "running",
+      "targetAreas": [
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771552943989_l709ok",
+      "subagentType": "general-purpose",
+      "description": "Task 1 스펙 검토",
+      "startTime": 1771552943989,
+      "status": "running",
+      "targetAreas": []
+    },
+    {
+      "taskId": "task_1771553014822_83gk4x",
+      "subagentType": "general-purpose",
+      "description": "Task 2+3+4: Backend 핵심 로직 구현",
+      "startTime": 1771553014822,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771553191218_5xklzu",
+      "subagentType": "general-purpose",
+      "description": "Task 2-4 스펙 검토",
+      "startTime": 1771553191218,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771553257512_km8hqk",
+      "subagentType": "general-purpose",
+      "description": "Task 5+6: available-members 엔드포인트 + 멤버 추가 검증",
+      "startTime": 1771553257512,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771553544476_t6uu4m",
+      "subagentType": "general-purpose",
+      "description": "Task 7: projectAccess store 업데이트",
+      "startTime": 1771553544476,
+      "status": "running",
+      "targetAreas": [
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771553618847_es6her",
+      "subagentType": "general-purpose",
+      "description": "Task 7 스펙 리뷰",
+      "startTime": 1771553618847,
+      "status": "running",
+      "targetAreas": [
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771553636662_8wdf1b",
+      "subagentType": "general-purpose",
+      "description": "Task 7 코드 품질 리뷰",
+      "startTime": 1771553636662,
+      "status": "running",
+      "targetAreas": []
+    },
+    {
+      "taskId": "task_1771553742388_o5la2c",
+      "subagentType": "general-purpose",
+      "description": "Task 8: ProjectMembersContent UI 교체",
+      "startTime": 1771553742388,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771553832768_dfgcjf",
+      "subagentType": "general-purpose",
+      "description": "Task 8 스펙 리뷰",
+      "startTime": 1771553832768,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771553859188_7nnz83",
+      "subagentType": "general-purpose",
+      "description": "Task 8 코드 품질 리뷰",
+      "startTime": 1771553859188,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "hooks"
+      ]
+    },
+    {
+      "taskId": "task_1771553962810_9llldj",
+      "subagentType": "general-purpose",
+      "description": "Task 9+10: 권한 체크 및 org admin 노출",
+      "startTime": 1771553962810,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771554077236_cz7d3f",
+      "subagentType": "general-purpose",
+      "description": "Task 9+10 스펙 리뷰",
+      "startTime": 1771554077236,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771554115770_qrmq5t",
+      "subagentType": "general-purpose",
+      "description": "Task 9+10 코드 품질 리뷰",
+      "startTime": 1771554115770,
+      "status": "running",
+      "targetAreas": [
+        "hooks",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771554197239_66nufe",
+      "subagentType": "general-purpose",
+      "description": "auth.py 로깅 추가 수정",
+      "startTime": 1771554197239,
+      "status": "running",
+      "targetAreas": [
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771554241345_dnvnab",
+      "subagentType": "general-purpose",
+      "description": "Task 9+10 재검토",
+      "startTime": 1771554241345,
+      "status": "running",
+      "targetAreas": [
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771672070739_zp3nuz",
+      "subagentType": "Explore",
+      "description": "Find untested dashboard files",
+      "startTime": 1771672070739,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "hooks"
+      ]
+    },
+    {
+      "taskId": "task_1771672273597_9pv0vk",
+      "subagentType": "Explore",
+      "description": "프로젝트 접근 제어 백엔드 분석",
+      "startTime": 1771672273597,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771672279368_n9f5mr",
+      "subagentType": "Explore",
+      "description": "프로젝트 노출 프론트엔드 분석",
+      "startTime": 1771672279368,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1771690588972_h0x7h5",
+      "subagentType": "Explore",
+      "description": "프로젝트 리스트 사용처 전수 조사",
+      "startTime": 1771690588972,
+      "status": "running",
+      "targetAreas": [
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771694741866_wcdeo2",
+      "subagentType": "general-purpose",
+      "description": "Eval: task_ui_001 AgentCard",
+      "startTime": 1771694741866,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1771694748440_j7ouch",
+      "subagentType": "general-purpose",
+      "description": "Eval: task_ui_002 Pagination",
+      "startTime": 1771694748440,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1771694761734_bwwss4",
+      "subagentType": "general-purpose",
+      "description": "Eval: task_ui_003 DataTable",
+      "startTime": 1771694761734,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1771694771026_udqn23",
+      "subagentType": "general-purpose",
+      "description": "Eval: task_service_001 CRUD API",
+      "startTime": 1771694771026,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771694779918_sd76vz",
+      "subagentType": "general-purpose",
+      "description": "Eval: task_bug_001 useEffect fix",
+      "startTime": 1771694779918,
+      "status": "running",
+      "targetAreas": [
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771694805182_b7c3lc",
+      "subagentType": "general-purpose",
+      "description": "Eval: task_service_002 Auth API",
+      "startTime": 1771694805182,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771694820768_pzy07k",
+      "subagentType": "general-purpose",
+      "description": "Eval: task_bug_002 WebSocket fix",
+      "startTime": 1771694820768,
+      "status": "running",
+      "targetAreas": [
+        "hooks"
+      ]
+    },
+    {
+      "taskId": "task_1771694829014_xydpa9",
+      "subagentType": "general-purpose",
+      "description": "Eval: task_refactor_001 Zustand",
+      "startTime": 1771694829014,
+      "status": "running",
+      "targetAreas": [
+        "hooks"
+      ]
+    },
+    {
+      "taskId": "task_1771694841733_jrfabj",
+      "subagentType": "general-purpose",
+      "description": "Eval: task_refactor_002 API layer",
+      "startTime": 1771694841733,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "hooks",
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771694857525_zvalf5",
+      "subagentType": "general-purpose",
+      "description": "Eval: task_integration_001 monitor",
+      "startTime": 1771694857525,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "api"
+      ]
     }
   ],
-  "lastUpdated": "2026-02-16T17:27:17.780Z",
+  "lastUpdated": "2026-02-21T17:27:40.804Z",
   "sessionId": "session_1770950296910_bp60yfrgy"
 }
