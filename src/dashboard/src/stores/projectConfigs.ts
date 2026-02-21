@@ -334,7 +334,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ isLoading: true, error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs`)
+      const res = await authFetch(`${API_BASE}/project-configs`)
       if (!res.ok) {
         throw new Error(`Failed to fetch projects: ${res.statusText}`)
       }

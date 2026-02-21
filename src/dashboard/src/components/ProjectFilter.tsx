@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Folder } from 'lucide-react'
 import { useNavigationStore } from '../stores/navigation'
 import { useOrchestrationStore } from '../stores/orchestration'
+import { useAuthStore } from '../stores/auth'
 import { cn } from '../lib/utils'
 
 interface ProjectFilterProps {
@@ -11,6 +12,7 @@ interface ProjectFilterProps {
 export function ProjectFilter({ className }: ProjectFilterProps) {
   const { projectFilter, setProjectFilter } = useNavigationStore()
   const { projects, fetchProjects } = useOrchestrationStore()
+  const isAdmin = useAuthStore((s) => s.user?.is_admin ?? false)
 
   useEffect(() => {
     if (projects.length === 0) {
@@ -18,8 +20,10 @@ export function ProjectFilter({ className }: ProjectFilterProps) {
     }
   }, [projects.length, fetchProjects])
 
-  // 모든 프로젝트를 필터 옵션으로 표시
-  const availableProjects = projects
+  // 일반 사용자에게는 비활성 프로젝트 숨김
+  const availableProjects = isAdmin
+    ? projects
+    : projects.filter((p) => p.is_active !== false)
 
   const selectedProject = projects.find((p) => p.id === projectFilter)
 

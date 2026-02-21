@@ -8,8 +8,10 @@ import logging
 import os
 from collections.abc import AsyncGenerator
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+
+from api.deps import get_current_user_optional
 
 from models.project_config import (
     AgentConfig,
@@ -53,14 +55,15 @@ router = APIRouter(prefix="/project-configs", tags=["project-configs"])
 
 
 @router.get("", response_model=ProjectConfigResponse)
-async def list_projects() -> ProjectConfigResponse:
-    """List projects with Claude Code configuration.
+async def list_projects(
+    current_user=Depends(get_current_user_optional),
+) -> ProjectConfigResponse:
+    """List projects with Claude Code configuration (접근 제어 적용).
 
-    When USE_DATABASE=true, only returns projects registered in DB.
-    Otherwise, falls back to filesystem auto-discovery.
-
-    Returns:
-        List of projects with summary counts
+    접근 규칙:
+        - 시스템 admin: 모든 활성 프로젝트
+        - 조직 admin/owner: 자신의 조직 프로젝트 + 명시적 ProjectAccess
+        - 일반 member: 명시적 ProjectAccess만
     """
     monitor = get_project_config_monitor()
 
@@ -68,7 +71,7 @@ async def list_projects() -> ProjectConfigResponse:
 
     if use_database:
         try:
-            projects = await _get_db_filtered_projects(monitor)
+            projects = await _get_db_filtered_projects(monitor, current_user)
         except Exception as e:
             logger.warning(f"DB project filter failed, falling back to discovery: {e}")
             projects = monitor.discover_projects()
@@ -88,8 +91,8 @@ async def list_projects() -> ProjectConfigResponse:
     )
 
 
-async def _get_db_filtered_projects(monitor) -> list:
-    """Get projects filtered by DB registration.
+async def _get_db_filtered_projects(monitor, current_user=None) -> list:
+    """Get projects filtered by DB registration + 접근 제어.
 
     For each DB project with a path, scan its config.
     For DB projects without a path, include basic info from discovered projects
@@ -97,17 +100,56 @@ async def _get_db_filtered_projects(monitor) -> list:
     """
     from pathlib import Path as PathLib
 
-    from sqlalchemy import select
+    from sqlalchemy import select, or_
 
     from db.database import async_session_factory
-    from db.models import ProjectModel
+    from db.models import ProjectAccessModel, ProjectModel
 
     async with async_session_factory() as session:
-        result = await session.execute(
-            select(ProjectModel)
-            .where(ProjectModel.is_active == True)  # noqa: E712
-            .order_by(ProjectModel.name)
-        )
+        is_admin = False
+        if current_user:
+            is_admin = current_user.role == "admin" or current_user.is_admin
+
+        if is_admin or not current_user:
+            # 시스템 admin 또는 미인증: 전체 활성 프로젝트
+            result = await session.execute(
+                select(ProjectModel)
+                .where(ProjectModel.is_active == True)  # noqa: E712
+                .order_by(ProjectModel.name)
+            )
+        else:
+            from api.projects import _get_admin_org_ids
+
+            admin_org_ids = await _get_admin_org_ids(current_user)
+
+            member_subq = (
+                select(ProjectAccessModel.project_id)
+                .where(ProjectAccessModel.user_id == current_user.id)
+                .scalar_subquery()
+            )
+
+            if admin_org_ids:
+                result = await session.execute(
+                    select(ProjectModel)
+                    .where(
+                        ProjectModel.is_active == True,  # noqa: E712
+                        or_(
+                            ProjectModel.organization_id.in_(admin_org_ids),
+                            ProjectModel.id.in_(member_subq),
+                        ),
+                    )
+                    .order_by(ProjectModel.name)
+                )
+            else:
+                result = await session.execute(
+                    select(ProjectModel)
+                    .where(
+                        ProjectModel.is_active == True,  # noqa: E712
+                        ProjectModel.id.in_(member_subq),
+                    )
+                    .order_by(ProjectModel.name)
+                )
+
         db_projects = result.scalars().all()
 
     if not db_projects:

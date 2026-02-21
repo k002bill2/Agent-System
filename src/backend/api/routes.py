@@ -595,15 +595,21 @@ async def get_inactive_project_paths(db: AsyncSession) -> set[str]:
         return set()
 
 
-async def _get_accessible_paths_for_user(db: AsyncSession, user_id: str) -> set[str] | None:
+async def _get_accessible_paths_for_user(
+    db: AsyncSession, user_id: str, admin_org_ids: list[str] | None = None
+) -> set[str] | None:
     """파일시스템 프로젝트의 접근 가능한 path set을 반환.
 
     ProjectModel.path ↔ project_access(project_id) 를 크로스레퍼런스하여
     파일시스템 프로젝트의 RBAC 필터링을 지원한다.
 
+    접근 규칙:
+        - 조직 admin/owner: 자신의 조직 프로젝트 + 명시적 ProjectAccess
+        - 일반 member: 명시적 ProjectAccess만
+
     Returns:
-        - None: DB에 ACL 레코드가 전혀 없음 → 필터링 스킵 (하위호환)
-        - set[str]: 접근 가능한 path 집합 (ACL이 없는 프로젝트 path 포함)
+        - None: DB 미사용 또는 DB에 등록된 프로젝트 없음 → 필터링 스킵
+        - set[str]: 접근 가능한 path 집합
     """
     import os
 
@@ -616,13 +622,15 @@ async def _get_accessible_paths_for_user(db: AsyncSession, user_id: str) -> set[
 
         from db.models import ProjectAccessModel, ProjectModel
 
-        # 1. ProjectModel 전체 (path → id, has_acl) 매핑 구성
-        proj_result = await db.execute(select(ProjectModel.id, ProjectModel.path))
-        path_to_uuid: dict[str, str] = {
-            row[1]: row[0] for row in proj_result.all() if row[1]
-        }
+        # 1. ProjectModel 전체 (path → id, org_id) 매핑 구성
+        proj_result = await db.execute(
+            select(ProjectModel.id, ProjectModel.path, ProjectModel.organization_id)
+        )
+        path_map: list[tuple[str, str, str | None]] = [
+            (row[0], row[1], row[2]) for row in proj_result.all() if row[1]
+        ]
 
-        if not path_to_uuid:
+        if not path_map:
             # DB에 등록된 프로젝트 없음 → 필터링 스킵
             return None
 
@@ -634,26 +642,18 @@ async def _get_accessible_paths_for_user(db: AsyncSession, user_id: str) -> set[
         )
         user_accessible_uuids: set[str] = {row[0] for row in access_result.all()}
 
-        # 3. ACL이 존재하는 project_id (UUID) 집합
-        acl_result = await db.execute(
-            select(ProjectAccessModel.project_id).distinct()
-        )
-        acl_exists_uuids: set[str] = {row[0] for row in acl_result.all()}
+        admin_org_set = set(admin_org_ids) if admin_org_ids else set()
 
-        if not acl_exists_uuids:
-            # 어떤 프로젝트에도 ACL 없음 → 필터링 스킵 (하위호환)
-            return None
-
-        # 4. path별 접근 가능 여부 판단
+        # 3. path별 접근 가능 여부 판단
         accessible_paths: set[str] = set()
-        for path, uuid in path_to_uuid.items():
+        for uuid, path, org_id in path_map:
             if uuid in user_accessible_uuids:
-                # 사용자가 명시적으로 접근 가능
+                # 사용자가 명시적으로 접근 가능 (ProjectAccess 레코드 존재)
                 accessible_paths.add(path)
-            elif uuid not in acl_exists_uuids:
-                # 이 프로젝트에 ACL 레코드가 없음 → 공개 (모든 인증 사용자 접근 가능)
+            elif org_id and org_id in admin_org_set:
+                # 조직 admin/owner → 자신의 조직 프로젝트
                 accessible_paths.add(path)
-            # else: ACL 있지만 사용자는 없음 → 접근 불가
+            # else: 접근 불가
 
         return accessible_paths
 
@@ -666,11 +666,13 @@ async def get_projects(
     current_user=Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """List all registered projects, sorted by sort_order.
+    """List registered projects filtered by access control.
 
-    If the user is authenticated, only returns projects they have access to.
-    Projects whose path is not in DB project-registry are visible to all (legacy).
-    Projects in DB with no ACL records are also visible to all authenticated users.
+    접근 규칙:
+        - 시스템 admin: 모든 프로젝트
+        - 조직 admin/owner: 자신의 조직 프로젝트 + 명시적 ProjectAccess
+        - 일반 member: 명시적 ProjectAccess만
+        - DB에 등록되지 않은 레거시 프로젝트는 인증된 사용자 모두 표시
     """
     projects = list_projects()
 
@@ -679,15 +681,19 @@ async def get_projects(
 
     # Filter by accessible projects if user is authenticated
     if current_user:
-        # System admins see all projects
         is_admin = current_user.role == "admin" or current_user.is_admin
         if not is_admin:
-            accessible_paths = await _get_accessible_paths_for_user(db, current_user.id)
+            # 조직 admin/owner 여부 확인
+            from api.projects import _get_admin_org_ids
+
+            admin_org_ids = await _get_admin_org_ids(current_user)
+            accessible_paths = await _get_accessible_paths_for_user(
+                db, current_user.id, admin_org_ids
+            )
             if accessible_paths is not None:
-                # accessible_paths에 없는 프로젝트는 제거
-                # DB에 등록되지 않은 파일시스템 프로젝트(path가 매핑 없음)는 유지 (하위호환)
-                from db.models import ProjectModel
                 from sqlalchemy import select
+
+                from db.models import ProjectModel
 
                 path_result = await db.execute(select(ProjectModel.path))
                 db_registered_paths: set[str] = {
@@ -697,7 +703,7 @@ async def get_projects(
                 filtered = []
                 for p in projects:
                     if p.path not in db_registered_paths:
-                        # DB에 등록되지 않은 레거시 프로젝트 → 모두에게 표시
+                        # DB에 등록되지 않은 레거시 프로젝트 → 인증 사용자 모두 표시
                         filtered.append(p)
                     elif p.path in accessible_paths:
                         filtered.append(p)

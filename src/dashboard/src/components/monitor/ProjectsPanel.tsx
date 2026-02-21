@@ -8,11 +8,18 @@ import {
 } from 'lucide-react'
 import { useOrchestrationStore } from '../../stores/orchestration'
 import { useNavigationStore } from '../../stores/navigation'
+import { useAuthStore } from '../../stores/auth'
 
 export function ProjectsPanel() {
   const { projects, selectedProjectId, selectProject } = useOrchestrationStore()
   const { setView } = useNavigationStore()
+  const isAdmin = useAuthStore((s) => s.user?.is_admin ?? false)
   const [showFilter, setShowFilter] = useState(false)
+
+  // 일반 사용자에게는 비활성 프로젝트 숨김
+  const visibleProjects = isAdmin
+    ? projects
+    : projects.filter((p) => p.is_active !== false)
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 w-[250px] min-w-[250px] max-w-[250px]">
@@ -46,7 +53,7 @@ export function ProjectsPanel() {
       {/* Projects List */}
       <div className="flex-1 overflow-y-auto">
         <div className="py-1">
-          {projects.length === 0 ? (
+          {visibleProjects.length === 0 ? (
             <div className="px-3 py-6 text-center">
               <FolderOpen className="w-6 h-6 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
               <p className="text-xs text-gray-400 dark:text-gray-500">
@@ -54,7 +61,7 @@ export function ProjectsPanel() {
               </p>
             </div>
           ) : (
-            projects.map((project) => (
+            visibleProjects.map((project) => (
               <button
                 key={project.id}
                 onClick={() => selectProject(selectedProjectId === project.id ? null : project.id)}

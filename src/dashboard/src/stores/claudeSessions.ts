@@ -7,6 +7,7 @@ import {
   TranscriptEntry,
   TranscriptResponse,
 } from '../types/claudeSession'
+import { authFetch } from './auth'
 
 const API_BASE = '/api'
 
@@ -369,7 +370,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
   fetchProjects: async () => {
     try {
-      const res = await fetch(`${API_BASE}/claude-sessions/projects`)
+      const res = await authFetch(`${API_BASE}/claude-sessions/projects`)
       if (!res.ok) {
         return
       }

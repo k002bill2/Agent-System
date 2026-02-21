@@ -15,10 +15,15 @@ import {
 import { AuditLogTable } from '../components/audit/AuditLogTable'
 import { useAuditStore } from '../stores/audit'
 import { useOrchestrationStore } from '../stores/orchestration'
+import { useAuthStore } from '../stores/auth'
 import { cn } from '../lib/utils'
 
 export function AuditPage() {
   const { sessionId, projects, fetchProjects } = useOrchestrationStore()
+  const isAdmin = useAuthStore((s) => s.user?.is_admin ?? false)
+  const visibleProjects = isAdmin
+    ? projects
+    : projects.filter((p) => p.is_active !== false)
   const [filterBySession, setFilterBySession] = useState(false)
   const [selectedProjectId, setSelectedProjectId] = useState<string>('')
   const isFirstMount = useRef(true)
@@ -91,7 +96,7 @@ export function AuditPage() {
             className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
           >
             <option value="">All Projects</option>
-            {projects.map((p) => (
+            {visibleProjects.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>

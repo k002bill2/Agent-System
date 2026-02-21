@@ -82,23 +82,34 @@ export function OutputLog({ projectId }: OutputLogProps) {
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col h-full min-h-[300px]">
-      {/* Header with tabs */}
-      <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 px-4 py-2">
-        <div className="flex items-center gap-2">
-          <Terminal className="w-5 h-5 text-gray-500" />
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Output Log
-          </h2>
+      {/* Header */}
+      <div className="border-b border-gray-200 dark:border-gray-700">
+        {/* Title + Clear button row */}
+        <div className="flex items-center justify-between px-4 pt-2 pb-1">
+          <div className="flex items-center gap-2">
+            <Terminal className="w-5 h-5 text-gray-500" />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Output Log
+            </h2>
+          </div>
+          {/* Clear button */}
+          <button
+            onClick={handleClear}
+            className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            title="Clear logs"
+          >
+            <Trash2 className="w-4 h-4 text-gray-500" />
+          </button>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Tab buttons */}
-          <div className="flex items-center rounded-lg bg-gray-100 dark:bg-gray-700 p-1">
+        {/* Tabs row - scrollable */}
+        <div className="px-4 pb-2 overflow-x-auto">
+          <div className="flex items-center rounded-lg bg-gray-100 dark:bg-gray-700 p-1 w-fit min-w-full">
             {/* Standard tabs */}
             <button
               onClick={() => setActiveLogView('all')}
               className={cn(
-                'px-3 py-1 text-xs font-medium rounded-md transition-colors',
+                'px-3 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap',
                 activeLogView === 'all'
                   ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
                   : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
@@ -111,7 +122,7 @@ export function OutputLog({ projectId }: OutputLogProps) {
                 key={ct}
                 onClick={() => setActiveLogView(ct)}
                 className={cn(
-                  'px-3 py-1 text-xs font-medium rounded-md transition-colors',
+                  'px-3 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap',
                   activeLogView === ct
                     ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
                     : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
@@ -124,18 +135,17 @@ export function OutputLog({ projectId }: OutputLogProps) {
             {/* Workflow tabs (with divider) */}
             {workflowChecks.length > 0 && (
               <>
-                <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1" />
+                <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1 shrink-0" />
                 {workflowChecks.map((wc) => (
                   <button
                     key={wc.id}
                     onClick={() => setActiveLogView(wc.id)}
                     className={cn(
-                      'px-3 py-1 text-xs font-medium rounded-md transition-colors truncate max-w-[80px]',
+                      'px-3 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap',
                       activeLogView === wc.id
                         ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
                         : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                     )}
-                    title={wc.name}
                   >
                     {wc.name}
                   </button>
@@ -143,15 +153,6 @@ export function OutputLog({ projectId }: OutputLogProps) {
               </>
             )}
           </div>
-
-          {/* Clear button */}
-          <button
-            onClick={handleClear}
-            className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            title="Clear logs"
-          >
-            <Trash2 className="w-4 h-4 text-gray-500" />
-          </button>
         </div>
       </div>
 

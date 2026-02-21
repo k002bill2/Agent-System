@@ -7,7 +7,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from api.deps import get_current_user_optional
 
 logger = logging.getLogger(__name__)
 from fastapi.responses import StreamingResponse
@@ -287,34 +289,70 @@ async def list_source_users() -> dict:
 
 
 @router.get("/projects")
-async def list_projects() -> dict:
-    """List all project names for session filtering.
+async def list_projects(
+    current_user=Depends(get_current_user_optional),
+) -> dict:
+    """List project names for session filtering (접근 제어 적용).
 
-    Fetches from DB (projects table) when USE_DATABASE=true.
-    Falls back to filesystem-based discovery otherwise.
-
-    Returns:
-        List of project names
+    접근 규칙:
+        - 시스템 admin: 모든 활성 프로젝트
+        - 조직 admin/owner: 자신의 조직 프로젝트 + 명시적 ProjectAccess
+        - 일반 member: 명시적 ProjectAccess만
     """
     import os
 
     use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
 
-    if use_database:
+    if use_database and current_user:
         try:
-            from sqlalchemy import select
+            from sqlalchemy import select, or_
 
             from db.database import async_session_factory
-            from db.models import ProjectModel
+            from db.models import ProjectAccessModel, ProjectModel
+
+            is_admin = current_user.role == "admin" or current_user.is_admin
 
             async with async_session_factory() as session:
-                result = await session.execute(
-                    select(ProjectModel.name)
-                    .where(ProjectModel.is_active == True)  # noqa: E712
-                    .order_by(ProjectModel.name)
-                )
-                project_names = [row[0] for row in result.fetchall()]
+                if is_admin:
+                    result = await session.execute(
+                        select(ProjectModel.name)
+                        .where(ProjectModel.is_active == True)  # noqa: E712
+                        .order_by(ProjectModel.name)
+                    )
+                else:
+                    from api.projects import _get_admin_org_ids
 
+                    admin_org_ids = await _get_admin_org_ids(current_user)
+
+                    member_subq = (
+                        select(ProjectAccessModel.project_id)
+                        .where(ProjectAccessModel.user_id == current_user.id)
+                        .scalar_subquery()
+                    )
+
+                    if admin_org_ids:
+                        result = await session.execute(
+                            select(ProjectModel.name)
+                            .where(
+                                ProjectModel.is_active == True,  # noqa: E712
+                                or_(
+                                    ProjectModel.organization_id.in_(admin_org_ids),
+                                    ProjectModel.id.in_(member_subq),
+                                ),
+                            )
+                            .order_by(ProjectModel.name)
+                        )
+                    else:
+                        result = await session.execute(
+                            select(ProjectModel.name)
+                            .where(
+                                ProjectModel.is_active == True,  # noqa: E712
+                                ProjectModel.id.in_(member_subq),
+                            )
+                            .order_by(ProjectModel.name)
+                        )
+
+                project_names = [row[0] for row in result.fetchall()]
                 return {"projects": project_names}
         except Exception as e:
             logger.warning(f"DB project lookup failed, falling back to filesystem: {e}")

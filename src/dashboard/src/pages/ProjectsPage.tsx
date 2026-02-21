@@ -36,6 +36,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { cn } from '../lib/utils'
 import { useProjectsStore, Project } from '../stores/projects'
 import { useNavigationStore } from '../stores/navigation'
+import { useAuthStore } from '../stores/auth'
 import { useProjectConfigsStore } from '../stores/projectConfigs'
 import { ProjectFormModal } from '../components/ProjectFormModal'
 import { ProjectsGridSkeleton } from '../components/skeletons'
@@ -291,6 +292,9 @@ export function ProjectsPage() {
 
   const { setView } = useNavigationStore()
   const { selectProject: selectConfigProject } = useProjectConfigsStore()
+  const isAdmin = useAuthStore((s) => s.user?.is_admin ?? false)
+  const isOrgAdmin = useAuthStore((s) => s.user?.is_org_admin ?? false)
+  const canCreateProject = isAdmin || isOrgAdmin
 
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [indexingId, setIndexingId] = useState<string | null>(null)
@@ -368,7 +372,9 @@ export function ProjectsPage() {
     setIndexingId(null)
   }
 
-  const displayedProjects = filteredProjects()
+  const displayedProjects = isAdmin
+    ? filteredProjects()
+    : filteredProjects().filter((p) => p.is_active !== false)
 
   return (
     <div className="flex-1 flex overflow-hidden">
@@ -382,6 +388,7 @@ export function ProjectsPage() {
             Manage your projects and their RAG indexes
           </p>
         </div>
+        {canCreateProject && (
         <div className="flex gap-2">
           <button
             onClick={openLinkModal}
@@ -398,6 +405,8 @@ export function ProjectsPage() {
             Create New
           </button>
         </div>
+        )}
+
       </div>
 
       {/* Search + Filter */}
@@ -412,7 +421,7 @@ export function ProjectsPage() {
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
           />
         </div>
-        {projects.some((p) => p.is_active === false) && (
+        {isAdmin && projects.some((p) => p.is_active === false) && (
           <label className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 cursor-pointer whitespace-nowrap">
             <input
               type="checkbox"

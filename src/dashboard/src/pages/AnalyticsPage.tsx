@@ -48,6 +48,7 @@ import {
 import { cn } from '../lib/utils'
 import { useProjectsStore, Project } from '../stores/projects'
 import { useClaudeUsageStore } from '../stores/claudeUsage'
+import { useAuthStore } from '../stores/auth'
 import { ProjectMultiSelect } from '../components/analytics/ProjectMultiSelect'
 import type { TaskAnalysisHistory } from '../stores/agents'
 
@@ -306,6 +307,10 @@ export function AnalyticsPage() {
 
   // Get projects from store
   const { projects, fetchProjects } = useProjectsStore()
+  const isAdmin = useAuthStore((s) => s.user?.is_admin ?? false)
+  const visibleProjects = isAdmin
+    ? projects
+    : projects.filter((p: Project) => p.is_active !== false)
 
   // Get Claude usage data from store
   const { usage: claudeUsage, fetchUsage } = useClaudeUsageStore()
@@ -419,7 +424,7 @@ export function AnalyticsPage() {
               className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm min-w-[160px]"
             >
               <option value="">전체 프로젝트</option>
-              {projects.map((project) => (
+              {visibleProjects.map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.name}
                 </option>
@@ -750,7 +755,7 @@ export function AnalyticsPage() {
                 프로젝트 선택 (2-5개)
               </label>
               <ProjectMultiSelect
-                projects={projects.map((p: Project) => ({ id: p.id, name: p.name }))}
+                projects={visibleProjects.map((p: Project) => ({ id: p.id, name: p.name }))}
                 selectedIds={compareProjectIds}
                 onChange={setCompareProjectIds}
                 maxSelections={5}
