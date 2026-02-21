@@ -29,6 +29,8 @@ import {
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { TaskEvaluationCard } from '../components/feedback/TaskEvaluationCard'
+import { useAuthStore, authFetch } from '../stores/auth'
+import { useNavigationStore } from '../stores/navigation'
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -99,6 +101,7 @@ interface Project {
   has_claude_md: boolean
   vector_store_initialized?: boolean
   indexed_at?: string | null
+  is_active?: boolean
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -112,13 +115,13 @@ const API_BASE = 'http://localhost:8000/api'
 // ─────────────────────────────────────────────────────────────
 
 async function fetchSessions(): Promise<PlaygroundSession[]> {
-  const res = await fetch(`${API_BASE}/playground/sessions`)
+  const res = await authFetch(`${API_BASE}/playground/sessions`)
   if (!res.ok) throw new Error('Failed to fetch sessions')
   return res.json()
 }
 
 async function fetchProjects(): Promise<Project[]> {
-  const res = await fetch(`${API_BASE}/projects`)
+  const res = await authFetch(`${API_BASE}/projects`)
   if (!res.ok) throw new Error('Failed to fetch projects')
   return res.json()
 }
@@ -129,7 +132,7 @@ async function createSession(
   projectId?: string,
   workingDirectory?: string
 ): Promise<PlaygroundSession> {
-  const res = await fetch(`${API_BASE}/playground/sessions`, {
+  const res = await authFetch(`${API_BASE}/playground/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -144,7 +147,7 @@ async function createSession(
 }
 
 async function deleteSession(sessionId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/playground/sessions/${sessionId}`, {
+  const res = await authFetch(`${API_BASE}/playground/sessions/${sessionId}`, {
     method: 'DELETE',
   })
   if (!res.ok) throw new Error('Failed to delete session')
@@ -155,7 +158,7 @@ async function executePrompt(
   prompt: string,
   options?: { temperature?: number; max_tokens?: number }
 ): Promise<unknown> {
-  const res = await fetch(`${API_BASE}/playground/sessions/${sessionId}/execute`, {
+  const res = await authFetch(`${API_BASE}/playground/sessions/${sessionId}/execute`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt, ...options }),
@@ -175,7 +178,7 @@ async function updateSettings(
     rag_enabled: boolean
   }>
 ): Promise<PlaygroundSession> {
-  const res = await fetch(`${API_BASE}/playground/sessions/${sessionId}/settings`, {
+  const res = await authFetch(`${API_BASE}/playground/sessions/${sessionId}/settings`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
@@ -185,21 +188,21 @@ async function updateSettings(
 }
 
 async function clearHistory(sessionId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/playground/sessions/${sessionId}/clear`, {
+  const res = await authFetch(`${API_BASE}/playground/sessions/${sessionId}/clear`, {
     method: 'POST',
   })
   if (!res.ok) throw new Error('Failed to clear history')
 }
 
 async function fetchTools(): Promise<PlaygroundTool[]> {
-  const res = await fetch(`${API_BASE}/playground/tools`)
+  const res = await authFetch(`${API_BASE}/playground/tools`)
   if (!res.ok) throw new Error('Failed to fetch tools')
   const data = await res.json()
   return data.tools
 }
 
 async function fetchModels(): Promise<Model[]> {
-  const res = await fetch(`${API_BASE}/playground/models`)
+  const res = await authFetch(`${API_BASE}/playground/models`)
   if (!res.ok) throw new Error('Failed to fetch models')
   const data = await res.json()
   return data.models
@@ -215,6 +218,8 @@ export function PlaygroundPage() {
   const [tools, setTools] = useState<PlaygroundTool[]>([])
   const [models, setModels] = useState<Model[]>([])
   const [projects, setProjects] = useState<Project[]>([])
+  const isAdmin = useAuthStore((s) => s.user?.is_admin ?? false)
+  const { projectFilter } = useNavigationStore()
   const [loading, setLoading] = useState(true)
   const [executing, setExecuting] = useState(false)
   const [prompt, setPrompt] = useState('')
@@ -365,7 +370,7 @@ export function PlaygroundPage() {
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {sessions.map((session) => (
+          {(projectFilter ? sessions.filter(s => s.project_id === projectFilter) : sessions).map((session) => (
             <div
               key={session.id}
               onClick={() => setCurrentSession(session)}
@@ -403,10 +408,10 @@ export function PlaygroundPage() {
               </div>
             </div>
           ))}
-          {sessions.length === 0 && (
+          {(projectFilter ? sessions.filter(s => s.project_id === projectFilter) : sessions).length === 0 && (
             <div className="text-center text-gray-500 dark:text-gray-400 py-8">
               <Terminal className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">No sessions yet</p>
+              <p className="text-sm">{projectFilter ? '이 프로젝트의 세션 없음' : 'No sessions yet'}</p>
             </div>
           )}
         </div>
@@ -722,7 +727,7 @@ export function PlaygroundPage() {
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">No Project</option>
-                  {projects.map((project) => (
+                  {(isAdmin ? projects : projects.filter((p) => p.is_active !== false)).map((project) => (
                     <option key={project.id} value={project.id}>
                       {project.name}
                     </option>

@@ -184,6 +184,7 @@ class PlaygroundService:
         session = PlaygroundSession(
             name=data.name,
             description=data.description,
+            user_id=data.user_id,
             project_id=data.project_id,
             working_directory=data.working_directory,
             agent_id=data.agent_id,
@@ -202,11 +203,15 @@ class PlaygroundService:
         return _sessions.get(session_id)
 
     @staticmethod
-    def list_sessions() -> list[PlaygroundSession]:
-        """List all playground sessions."""
+    def list_sessions(user_id: str | None = None) -> list[PlaygroundSession]:
+        """List playground sessions. If user_id given, return only that user's sessions."""
         _load_sessions()  # Ensure sessions are loaded
+        sessions = _sessions.values()
+        if user_id:
+            # 자신의 세션 + user_id 없는 레거시 세션 포함
+            sessions = (s for s in sessions if s.user_id == user_id or s.user_id is None)
         return sorted(
-            _sessions.values(),
+            sessions,
             key=lambda s: s.updated_at,
             reverse=True,
         )

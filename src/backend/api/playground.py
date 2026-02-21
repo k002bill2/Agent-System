@@ -1,9 +1,11 @@
 """Playground API routes."""
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from api.deps import get_current_user_optional
+from db.models import UserModel
 from models.playground import (
     PlaygroundCompareRequest,
     PlaygroundCompareResult,
@@ -25,14 +27,22 @@ router = APIRouter(prefix="/playground", tags=["playground"])
 
 
 @router.get("/sessions", response_model=list[PlaygroundSession])
-async def list_sessions():
-    """List all playground sessions."""
-    return PlaygroundService.list_sessions()
+async def list_sessions(
+    current_user: UserModel | None = Depends(get_current_user_optional),
+):
+    """List playground sessions for the current user."""
+    user_id = current_user.id if current_user else None
+    return PlaygroundService.list_sessions(user_id=user_id)
 
 
 @router.post("/sessions", response_model=PlaygroundSession)
-async def create_session(data: PlaygroundSessionCreate):
+async def create_session(
+    data: PlaygroundSessionCreate,
+    current_user: UserModel | None = Depends(get_current_user_optional),
+):
     """Create a new playground session."""
+    if current_user:
+        data.user_id = current_user.id
     return PlaygroundService.create_session(data)
 
 

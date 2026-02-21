@@ -79,6 +79,9 @@ class PlaygroundSession(BaseModel):
     name: str = "Untitled Session"
     description: str = ""
 
+    # Owner
+    user_id: str | None = None  # Owner user ID (None = legacy/unowned)
+
     # Project context
     project_id: str | None = None  # Optional project ID
     working_directory: str | None = None  # Working directory for code execution and file ops
@@ -116,6 +119,7 @@ class PlaygroundSessionCreate(BaseModel):
 
     name: str = "Untitled Session"
     description: str = ""
+    user_id: str | None = None  # Set by API route from auth context
     project_id: str | None = None  # Optional project ID
     working_directory: str | None = None  # Working directory for tools
     agent_id: str | None = None
