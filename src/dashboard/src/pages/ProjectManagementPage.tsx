@@ -28,6 +28,7 @@ export function ProjectManagementPage() {
     isLoadingDBProjects,
     error,
     clearError,
+    fetchDBProjects,
     fetchAllDBProjects,
     createDBProject,
     updateDBProject,
@@ -36,7 +37,8 @@ export function ProjectManagementPage() {
 
   const { fetchMembers } = useProjectAccessStore()
   const currentUser = useAuthStore((s) => s.user)
-  const canCreateProject = (currentUser?.is_admin ?? false) || (currentUser?.is_org_admin ?? false)
+  const isSystemAdmin = currentUser?.is_admin ?? false
+  const canCreateProject = isSystemAdmin || (currentUser?.is_org_admin ?? false)
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set())
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -59,8 +61,13 @@ export function ProjectManagementPage() {
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
-    fetchAllDBProjects()
-  }, [fetchAllDBProjects])
+    // 시스템 admin: 전체 프로젝트 (비활성 포함), 그 외: 접근 권한 기반 필터링
+    if (isSystemAdmin) {
+      fetchAllDBProjects()
+    } else {
+      fetchDBProjects()
+    }
+  }, [isSystemAdmin, fetchAllDBProjects, fetchDBProjects])
 
   // Filter projects
   const filtered = dbProjects.filter((p) => {
@@ -69,7 +76,7 @@ export function ProjectManagementPage() {
       const q = searchQuery.toLowerCase()
       return (
         p.name.toLowerCase().includes(q) ||
-        p.slug.toLowerCase().includes(q) ||
+        (p.slug && p.slug.toLowerCase().includes(q)) ||
         (p.description && p.description.toLowerCase().includes(q)) ||
         (p.path && p.path.toLowerCase().includes(q))
       )

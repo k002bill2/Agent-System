@@ -469,5 +469,202 @@ describe('workflow store', () => {
         expect.stringContaining('?category=ci')
       )
     })
+
+    it('fetchTemplates handles error', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+
+      await useWorkflowStore.getState().fetchTemplates()
+
+      expect(useWorkflowStore.getState().error).toBe('Network error')
+    })
+  })
+
+  // ── fetchRun ───────────────────────────────────────────
+
+  describe('fetchRun', () => {
+    it('fetches a single run and sets activeRun', async () => {
+      const run = { id: 'run-1', status: 'completed', workflow_id: 'wf-1' }
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(run),
+      })
+
+      await useWorkflowStore.getState().fetchRun('run-1')
+
+      expect(useWorkflowStore.getState().activeRun).toEqual(run)
+    })
+
+    it('sets error on failure', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: false })
+
+      await useWorkflowStore.getState().fetchRun('run-1')
+
+      expect(useWorkflowStore.getState().error).toBeTruthy()
+    })
+  })
+
+  // ── cancelRun ──────────────────────────────────────────
+
+  describe('cancelRun', () => {
+    it('cancels run and updates activeRun', async () => {
+      const run = { id: 'run-1', status: 'cancelled', workflow_id: 'wf-1' }
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(run),
+      })
+
+      await useWorkflowStore.getState().cancelRun('run-1')
+
+      expect(useWorkflowStore.getState().activeRun).toEqual(run)
+    })
+
+    it('sets error on failure', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: false })
+
+      await useWorkflowStore.getState().cancelRun('run-1')
+
+      expect(useWorkflowStore.getState().error).toBeTruthy()
+    })
+  })
+
+  // ── retryRun ───────────────────────────────────────────
+
+  describe('retryRun', () => {
+    it('retries run and updates activeRun', async () => {
+      const run = { id: 'run-2', status: 'running', workflow_id: 'wf-1' }
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(run),
+      })
+
+      await useWorkflowStore.getState().retryRun('run-1')
+
+      expect(useWorkflowStore.getState().activeRun).toEqual(run)
+    })
+
+    it('sets error on failure', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: false })
+
+      await useWorkflowStore.getState().retryRun('run-1')
+
+      expect(useWorkflowStore.getState().error).toBeTruthy()
+    })
+  })
+
+  // ── fetchArtifacts ─────────────────────────────────────
+
+  describe('fetchArtifacts', () => {
+    it('fetches and stores artifacts for a run', async () => {
+      const artifacts = [{ id: 'a-1', name: 'output.txt', type: 'file' }]
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ artifacts }),
+      })
+
+      await useWorkflowStore.getState().fetchArtifacts('run-1')
+
+      expect(useWorkflowStore.getState().artifacts['run-1']).toEqual(artifacts)
+    })
+
+    it('sets error on failure', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+
+      await useWorkflowStore.getState().fetchArtifacts('run-1')
+
+      expect(useWorkflowStore.getState().error).toBe('Network error')
+    })
+  })
+
+  // ── stopLogStream ──────────────────────────────────────
+
+  describe('stopLogStream', () => {
+    it('stops existing log stream', () => {
+      // Start stream first
+      useWorkflowStore.getState().streamRunLogs('run-1')
+      // Then stop it
+      useWorkflowStore.getState().stopLogStream()
+      // No error expected - just verifying it runs without issues
+      expect(useWorkflowStore.getState().error).toBeNull()
+    })
+  })
+
+  // ── createSecret / deleteSecret ────────────────────────
+
+  describe('createSecret', () => {
+    it('creates secret via POST and calls fetchSecrets', async () => {
+      const fetchSpy = mockFetch
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ secrets: [] }) })
+
+      await useWorkflowStore.getState().createSecret({ name: 'API_KEY', value: 'secret', scope: 'project' })
+      // Give the non-awaited fetchSecrets call a tick to settle
+      await new Promise(resolve => setTimeout(resolve, 0))
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining('/secrets'),
+        expect.objectContaining({ method: 'POST' })
+      )
+    })
+  })
+
+  describe('deleteSecret', () => {
+    it('deletes secret and removes from local state', async () => {
+      useWorkflowStore.setState({ secrets: [{ id: 's-1', name: 'API_KEY' } as any] })
+      mockFetch.mockResolvedValueOnce({ ok: true })
+
+      await useWorkflowStore.getState().deleteSecret('s-1')
+
+      expect(useWorkflowStore.getState().secrets).toHaveLength(0)
+    })
+  })
+
+  // ── fetchSchedule ──────────────────────────────────────
+
+  describe('fetchSchedule', () => {
+    it('fetches schedule and stores it', async () => {
+      const schedule = { id: 'sch-1', cron: '0 * * * *', is_active: true }
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(schedule),
+      })
+
+      await useWorkflowStore.getState().fetchSchedule('wf-1')
+
+      expect(useWorkflowStore.getState().schedule).toEqual(schedule)
+    })
+
+    it('sets null when not found', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: false })
+
+      await useWorkflowStore.getState().fetchSchedule('wf-1')
+
+      expect(useWorkflowStore.getState().schedule).toBeNull()
+    })
+  })
+
+  // ── createWebhook ──────────────────────────────────────
+
+  describe('createWebhook', () => {
+    it('creates webhook via POST and triggers fetchWebhooks', async () => {
+      const fetchSpy = mockFetch
+        .mockResolvedValueOnce({ ok: true })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ webhooks: [] }) })
+
+      await useWorkflowStore.getState().createWebhook('wf-1')
+      await new Promise(resolve => setTimeout(resolve, 0))
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining('/webhooks'),
+        expect.objectContaining({ method: 'POST' })
+      )
+    })
+
+    it('sets error on failure', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+
+      await useWorkflowStore.getState().createWebhook('wf-1')
+
+      expect(useWorkflowStore.getState().error).toBe('Network error')
+    })
   })
 })

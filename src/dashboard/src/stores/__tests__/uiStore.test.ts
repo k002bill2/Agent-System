@@ -23,33 +23,13 @@ import {
   type ToastType,
 } from '../uiStore'
 
-// Mock localStorage
-const localStorageMock = (() => {
-  let store: Record<string, string> = {}
-
-  return {
-    getItem: (key: string) => store[key] || null,
-    setItem: (key: string, value: string) => {
-      store[key] = value.toString()
-    },
-    removeItem: (key: string) => {
-      delete store[key]
-    },
-    clear: () => {
-      store = {}
-    },
-  }
-})()
-
-Object.defineProperty(window, 'localStorage', {
-  value: localStorageMock,
-})
+// localStorage mock은 test/setup.ts에서 글로벌 제공
 
 describe('useUIStore', () => {
   beforeEach(() => {
     // Reset store to initial state before each test
     useUIStore.getState().reset()
-    localStorageMock.clear()
+    window.localStorage.clear()
     vi.clearAllTimers()
   })
 

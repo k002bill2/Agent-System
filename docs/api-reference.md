@@ -305,6 +305,22 @@ AOS Backend API 엔드포인트 문서입니다.
 
 ---
 
+## External Usage (외부 LLM 사용량)
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/external-usage/summary` | 외부 LLM 프로바이더 사용량 요약 |
+| GET | `/api/external-usage/providers` | 지원 프로바이더 목록 및 설정 상태 |
+| GET | `/api/external-usage/providers/{provider}/health` | 프로바이더 연결 상태 확인 |
+| POST | `/api/external-usage/sync` | 사용량 데이터 수동 동기화 |
+
+**쿼리 파라미터** (`GET /summary`):
+- `start_time`: 시작 시간 (기본: 30일 전)
+- `end_time`: 종료 시간 (기본: 현재)
+- `providers`: 필터할 프로바이더 목록
+
+---
+
 ## Audit Trail
 
 | Method | Path | 설명 |

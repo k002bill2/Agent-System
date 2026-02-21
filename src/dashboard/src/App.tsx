@@ -28,6 +28,7 @@ import { PlaygroundPage } from './pages/PlaygroundPage'
 import { OrganizationsPage } from './pages/OrganizationsPage'
 import { AdminPage } from './pages/AdminPage'
 import { WorkflowsPage } from './pages/WorkflowsPage'
+import { ExternalUsagePage } from './pages/ExternalUsagePage'
 import { InvitationAcceptPage } from './pages/InvitationAcceptPage'
 import { analytics } from './services/analytics'
 import {
@@ -61,6 +62,7 @@ const viewTitles: Record<string, string> = {
   analytics: 'Analytics',
   playground: 'Agent Playground',
   workflows: 'Workflows',
+  'external-usage': 'External Usage',
   admin: 'Admin',
   settings: 'Settings',
 }
@@ -318,6 +320,8 @@ export default function App() {
         return <PlaygroundPage />
       case 'workflows':
         return <WorkflowsPage />
+      case 'external-usage':
+        return <ExternalUsagePage />
       case 'admin':
         return <AdminPage />
       case 'settings':
@@ -360,6 +364,8 @@ export default function App() {
       case 'playground':
         return <MonitorSkeleton />
       case 'workflows':
+        return <MonitorSkeleton />
+      case 'external-usage':
         return <MonitorSkeleton />
       case 'admin':
         return <MonitorSkeleton />

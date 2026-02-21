@@ -321,5 +321,173 @@ describe('projects store', () => {
       expect(result).toBe(true)
       expect(useProjectsStore.getState().projects).toEqual(reordered)
     })
+
+    it('returns false and sets error on failure', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({ detail: 'Reorder failed' }),
+      })
+
+      const result = await useProjectsStore.getState().reorderProjects(['p-1', 'p-2'])
+
+      expect(result).toBe(false)
+      expect(useProjectsStore.getState().error).toBeTruthy()
+    })
+  })
+
+  // ── fetchTemplates ─────────────────────────────────────
+
+  describe('fetchTemplates', () => {
+    it('fetches and stores templates', async () => {
+      const templates = [{ id: 't-1', name: 'Python', description: 'Python project' }]
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(templates),
+      })
+
+      await useProjectsStore.getState().fetchTemplates()
+
+      expect(useProjectsStore.getState().templates).toEqual(templates)
+    })
+
+    it('handles fetch failure gracefully', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      await useProjectsStore.getState().fetchTemplates()
+
+      expect(consoleSpy).toHaveBeenCalled()
+      consoleSpy.mockRestore()
+    })
+  })
+
+  // ── linkProject ────────────────────────────────────────
+
+  describe('linkProject', () => {
+    it('links project and refreshes list', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) })
+
+      const result = await useProjectsStore.getState().linkProject('p-link', '/path/to/project')
+
+      expect(result).toBe(true)
+    })
+
+    it('returns false on error', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({ detail: 'Path not found' }),
+      })
+
+      const result = await useProjectsStore.getState().linkProject('p-link', '/bad/path')
+
+      expect(result).toBe(false)
+      expect(useProjectsStore.getState().error).toBeTruthy()
+    })
+  })
+
+  // ── updateProject ──────────────────────────────────────
+
+  describe('updateProject', () => {
+    it('updates project and refreshes list', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([mockProject('p-1', 'Updated')]) })
+
+      const result = await useProjectsStore.getState().updateProject('p-1', 'Updated', 'New desc', '/new/path')
+
+      expect(result).toBe(true)
+      expect(useProjectsStore.getState().modalMode).toBeNull()
+    })
+
+    it('returns false on error', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({ detail: 'Not found' }),
+      })
+
+      const result = await useProjectsStore.getState().updateProject('p-1', 'Name', 'Desc', '/path')
+
+      expect(result).toBe(false)
+    })
+  })
+
+  // ── indexProject ───────────────────────────────────────
+
+  describe('indexProject', () => {
+    it('indexes project and refreshes list', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) })
+
+      const result = await useProjectsStore.getState().indexProject('p-1')
+
+      expect(result).toBe(true)
+    })
+
+    it('returns false on error', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({ detail: 'Index failed' }),
+      })
+
+      const result = await useProjectsStore.getState().indexProject('p-1')
+
+      expect(result).toBe(false)
+    })
+  })
+
+  // ── fetchDeletionPreview ───────────────────────────────
+
+  describe('fetchDeletionPreview', () => {
+    it('returns deletion preview data', async () => {
+      const preview = { tasks_count: 5, agents_count: 2 }
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(preview),
+      })
+
+      const result = await useProjectsStore.getState().fetchDeletionPreview('p-1')
+
+      expect(result).toEqual(preview)
+    })
+
+    it('returns null on error', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({ detail: 'Not found' }),
+      })
+
+      const result = await useProjectsStore.getState().fetchDeletionPreview('p-1')
+
+      expect(result).toBeNull()
+    })
+  })
+
+  // ── setShowInactive ────────────────────────────────────
+
+  describe('setShowInactive', () => {
+    it('sets showInactive to false', () => {
+      useProjectsStore.getState().setShowInactive(false)
+      expect(useProjectsStore.getState().showInactive).toBe(false)
+    })
+
+    it('sets showInactive to true', () => {
+      useProjectsStore.setState({ showInactive: false })
+      useProjectsStore.getState().setShowInactive(true)
+      expect(useProjectsStore.getState().showInactive).toBe(true)
+    })
+
+    it('filteredProjects respects showInactive=false', () => {
+      useProjectsStore.setState({
+        projects: [
+          { ...mockProject('p-1', 'Active'), is_active: true },
+          { ...mockProject('p-2', 'Inactive'), is_active: false },
+        ],
+        showInactive: false,
+        searchQuery: '',
+      })
+      const result = useProjectsStore.getState().filteredProjects()
+      expect(result).toHaveLength(1)
+      expect(result[0].id).toBe('p-1')
+    })
   })
 })
