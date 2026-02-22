@@ -925,7 +925,7 @@ describe('MCPToolCaller', () => {
 
       // The close button is next to "Batch Result" text, it contains an X icon.
       // Find all X icons and click the one in the batch result area.
-      const xIcons = screen.getAllByTestId('icon-x')
+      const _xIcons = screen.getAllByTestId('icon-x')
       // The batch result close button's X icon - find the one whose parent button
       // is inside the batch result summary header
       const batchResultEl = screen.getByText('Batch Result').closest('.rounded-lg')!

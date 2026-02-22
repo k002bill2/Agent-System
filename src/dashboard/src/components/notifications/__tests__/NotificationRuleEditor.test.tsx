@@ -437,7 +437,7 @@ describe('NotificationRuleEditor', () => {
       // There should be 4 channel buttons in the new rule form
       // The channel icons in the form section (slack, discord, email, webhook buttons)
       const newRuleSection = screen.getByText('New Rule').closest('div')!
-      const channelButtons = newRuleSection.querySelectorAll('button')
+      const _channelButtons = newRuleSection.querySelectorAll('button')
       // Filter to just the channel toggle buttons (they contain icon elements)
       const slackButtons = newRuleSection.querySelectorAll('[data-testid="slack-icon"]')
       expect(slackButtons.length).toBeGreaterThan(0)

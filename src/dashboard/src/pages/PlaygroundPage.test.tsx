@@ -279,10 +279,8 @@ describe('PlaygroundPage', () => {
     // Make fetch hang to keep loading state
     mockAuthFetch.mockImplementation(() => new Promise(() => {}))
 
-    let container: HTMLElement
     await act(async () => {
-      const result = render(<PlaygroundPage />)
-      container = result.container
+      render(<PlaygroundPage />)
     })
 
     // The loading state should show RefreshCw spinner (rendered as <span> via mock)

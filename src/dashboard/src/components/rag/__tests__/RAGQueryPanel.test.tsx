@@ -154,13 +154,13 @@ describe('RAGQueryPanel', () => {
   })
 
   it('performs search on button click', async () => {
-    let callCount = 0
+    let _callCount = 0
     vi.mocked(global.fetch).mockImplementation(async (url) => {
       const u = String(url)
       if (u.includes('/query')) {
         return { ok: true, json: async () => mockQueryResult } as Response
       }
-      callCount++
+      _callCount++
       return { ok: true, json: async () => mockStats } as Response
     })
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, select
@@ -31,11 +31,11 @@ router = APIRouter(prefix="/external-usage", tags=["external-usage"])
 
 
 def _default_start() -> datetime:
-    return datetime.now(tz=timezone.utc) - timedelta(days=30)
+    return datetime.now(tz=UTC) - timedelta(days=30)
 
 
 def _default_end() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 @router.get("/summary", response_model=ExternalUsageSummaryResponse)
@@ -84,9 +84,7 @@ if AUTH_AVAILABLE:
 
         # Merge: if user has a DB credential, mark provider as enabled
         return [
-            cfg.model_copy(update={"enabled": True})
-            if cfg.provider.value in db_providers
-            else cfg
+            cfg.model_copy(update={"enabled": True}) if cfg.provider.value in db_providers else cfg
             for cfg in configs
         ]
 

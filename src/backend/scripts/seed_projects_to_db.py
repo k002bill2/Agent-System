@@ -7,9 +7,9 @@
 """
 
 import asyncio
+import re
 import sys
 import uuid
-import re
 from pathlib import Path
 
 # src/backend를 sys.path에 추가
@@ -30,10 +30,11 @@ async def main(dry_run: bool = False):
 
     os.environ.setdefault("USE_DATABASE", "true")
 
+    from sqlalchemy import select
+
     from db.database import async_session_factory
     from db.models import ProjectAccessModel, ProjectModel, UserModel
     from models.project import init_projects, list_projects
-    from sqlalchemy import select
 
     # projects/ 디렉토리에서 프로젝트 로드
     base_path = Path(__file__).parent.parent.parent.parent

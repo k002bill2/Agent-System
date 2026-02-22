@@ -35,6 +35,7 @@ AOS Backend API 엔드포인트 문서입니다.
 | GET | `/api/sessions/{id}/permissions` | 세션 권한 조회 |
 | PUT | `/api/sessions/{id}/permissions` | 권한 업데이트 |
 | POST | `/api/sessions/{id}/permissions/toggle/{permission}` | 권한 토글 |
+| POST | `/api/sessions/{id}/permissions/agents/{agent_id}/toggle` | 에이전트 토글 |
 
 ---
 
@@ -55,36 +56,54 @@ AOS Backend API 엔드포인트 문서입니다.
 
 ---
 
-## Agents & MCP
+## Agents
 
 | Method | Path | 설명 |
 |--------|------|------|
 | GET | `/api/agents` | 에이전트 목록 조회 |
 | GET | `/api/agents/stats` | 레지스트리 통계 |
+| GET | `/api/agents/{agent_id}` | 에이전트 상세 조회 |
 | POST | `/api/agents/search` | 능력 기반 검색 |
-| POST | `/api/agents/orchestrate/analyze` | 태스크 분석 |
-| GET | `/api/agents/mcp/servers` | MCP 서버 목록 |
-| POST | `/api/agents/mcp/servers/{id}/start` | MCP 서버 시작 |
-| POST | `/api/agents/mcp/servers/{id}/stop` | MCP 서버 중지 |
-| POST | `/api/agents/mcp/tools/call` | MCP 도구 호출 |
+| POST | `/api/agents/{agent_id}/status` | 에이전트 상태 업데이트 |
 | POST | `/api/agents/ocr` | 이미지 OCR 텍스트 추출 (Vision LLM) |
 
----
-
-## MCP (Model Context Protocol)
+### Task Analysis & Orchestration
 
 | Method | Path | 설명 |
 |--------|------|------|
-| GET | `/api/mcp/servers` | MCP 서버 목록 조회 |
-| POST | `/api/mcp/servers` | MCP 서버 추가 |
-| GET | `/api/mcp/servers/{id}` | MCP 서버 상세 |
-| PUT | `/api/mcp/servers/{id}` | MCP 서버 수정 |
-| DELETE | `/api/mcp/servers/{id}` | MCP 서버 삭제 |
-| POST | `/api/mcp/servers/{id}/start` | 서버 시작 |
-| POST | `/api/mcp/servers/{id}/stop` | 서버 중지 |
-| GET | `/api/mcp/servers/{id}/tools` | 도구 목록 조회 |
-| POST | `/api/mcp/servers/{id}/tools/{tool}/call` | 도구 호출 |
-| GET | `/api/mcp/stats` | MCP 통계 |
+| POST | `/api/agents/orchestrate/analyze` | 태스크 분석 |
+| POST | `/api/agents/orchestrate/analyze-with-images` | 이미지 포함 태스크 분석 |
+| GET | `/api/agents/orchestrate/analyses` | 분석 이력 조회 |
+| GET | `/api/agents/orchestrate/analyses/{analysis_id}` | 분석 상세 조회 |
+| DELETE | `/api/agents/orchestrate/analyses/{analysis_id}` | 분석 삭제 |
+| POST | `/api/agents/orchestrate/execute-analysis` | 분석 실행 |
+| GET | `/api/agents/orchestrate/strategies` | 실행 전략 목록 |
+| GET | `/api/agents/orchestrate/claude-auth-status` | Claude 인증 상태 |
+
+### Tmux Session Management
+
+| Method | Path | 설명 |
+|--------|------|------|
+| POST | `/api/agents/orchestrate/execute-with-tmux` | Tmux 세션으로 실행 |
+| GET | `/api/agents/orchestrate/tmux-sessions` | Tmux 세션 목록 |
+| GET | `/api/agents/orchestrate/tmux-sessions/{name}/status` | 세션 상태 조회 |
+| GET | `/api/agents/orchestrate/tmux-sessions/{name}/stream` | 세션 출력 스트리밍 |
+| POST | `/api/agents/orchestrate/tmux-sessions/{name}/stop` | 세션 중지 |
+
+### MCP Server Management
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/agents/mcp/servers` | MCP 서버 목록 |
+| GET | `/api/agents/mcp/servers/{id}` | MCP 서버 상세 |
+| POST | `/api/agents/mcp/servers/{id}/start` | MCP 서버 시작 |
+| POST | `/api/agents/mcp/servers/{id}/stop` | MCP 서버 중지 |
+| POST | `/api/agents/mcp/servers/{id}/restart` | MCP 서버 재시작 |
+| GET | `/api/agents/mcp/servers/{id}/tools` | 서버 도구 목록 |
+| POST | `/api/agents/mcp/tools/call` | MCP 도구 호출 |
+| POST | `/api/agents/mcp/tools/batch-call` | MCP 도구 일괄 호출 |
+| GET | `/api/agents/mcp/tools` | 전체 도구 목록 |
+| GET | `/api/agents/mcp/stats` | MCP 통계 |
 
 ---
 
@@ -199,6 +218,28 @@ AOS Backend API 엔드포인트 문서입니다.
 **응답**: `ProjectResponse` (id, name, slug, description, path, is_active, settings, created_at, updated_at)
 
 > **Note**: 기존 `/api/projects` 경로는 오케스트레이션 세션 프로젝트용이며, 이 API는 DB 기반 프로젝트 레지스트리 관리 전용입니다.
+
+---
+
+## Projects (오케스트레이션)
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/projects` | 프로젝트 목록 (접근 제어 적용) |
+| POST | `/api/projects` | 프로젝트 등록 |
+| POST | `/api/projects/create` | 템플릿에서 프로젝트 생성 |
+| POST | `/api/projects/link` | 외부 프로젝트 심볼릭 링크 |
+| POST | `/api/projects/reorder` | 프로젝트 순서 변경 |
+| GET | `/api/projects/templates` | 프로젝트 템플릿 목록 |
+| GET | `/api/projects/{id}` | 프로젝트 상세 조회 |
+| PUT | `/api/projects/{id}` | 프로젝트 수정 |
+| DELETE | `/api/projects/{id}` | 프로젝트 삭제 (cascade) |
+| GET | `/api/projects/{id}/health` | 프로젝트 헬스 상태 |
+| GET | `/api/projects/{id}/checks/run-all` | 전체 체크 실행 (SSE) |
+| GET | `/api/projects/{id}/checks/{check_type}` | 특정 체크 실행 (SSE) |
+| GET | `/api/projects/{id}/deletion-preview` | 삭제 미리보기 |
+| GET | `/api/projects/{id}/context` | 프로젝트 컨텍스트 (CLAUDE.md, dev docs) |
+| GET | `/api/projects/{id}/claude-md` | CLAUDE.md 내용 조회 |
 
 ---
 
@@ -334,7 +375,11 @@ AOS Backend API 엔드포인트 문서입니다.
 | GET | `/api/audit/resource-types` | 가능한 리소스 타입 목록 |
 | POST | `/api/audit/cleanup` | 오래된 로그 정리 |
 | POST | `/api/audit/seed` | 테스트용 샘플 데이터 생성 |
-| POST | `/api/audit/verify-integrity` | 무결성 검증 |
+| GET | `/api/audit/integrity/verify` | 무결성 검증 |
+| GET | `/api/audit/compliance/report` | 컴플라이언스 보고서 |
+| POST | `/api/audit/retention/apply` | 보존 정책 적용 |
+| GET | `/api/audit/retention-policies` | 보존 정책 목록 |
+| GET | `/api/audit/data-classifications` | 데이터 분류 목록 |
 
 **쿼리 파라미터** (`GET /api/audit`):
 - `session_id`, `user_id`: 필터
@@ -850,14 +895,16 @@ AOS Backend API 엔드포인트 문서입니다.
 
 ---
 
-## MCP Protocol
+## MCP Protocol (Warp Terminal Integration)
 
 | Method | Path | 설명 |
 |--------|------|------|
-| GET | `/api/mcp/sse` | MCP SSE 스트림 |
+| GET | `/api/mcp/sse` | MCP SSE 스트림 (Warp 클라이언트 연결) |
 | POST | `/api/mcp/messages` | MCP 메시지 전송 |
 | GET | `/api/mcp/health` | MCP 헬스체크 |
 | GET | `/api/mcp/tools` | MCP 도구 목록 |
+
+> **Note**: 이 API는 Warp 터미널 MCP 클라이언트와의 통신용입니다. MCP 서버 관리는 `/api/agents/mcp/` 엔드포인트를 사용합니다.
 
 ---
 

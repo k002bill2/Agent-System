@@ -305,7 +305,7 @@ async def list_projects(
 
     if use_database and current_user:
         try:
-            from sqlalchemy import select, or_
+            from sqlalchemy import or_, select
 
             from db.database import async_session_factory
             from db.models import ProjectAccessModel, ProjectModel

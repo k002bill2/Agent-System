@@ -15,9 +15,10 @@ async def main():
 
     os.environ.setdefault("USE_DATABASE", "true")
 
+    from sqlalchemy import select
+
     from db.database import async_session_factory
     from db.models import ProjectAccessModel, ProjectModel, UserModel
-    from sqlalchemy import select
 
     async with async_session_factory() as session:
         # 어드민 유저 조회
@@ -44,9 +45,7 @@ async def main():
         for proj in projects:
             # 이미 ACL이 있는지 확인
             acl_result = await session.execute(
-                select(ProjectAccessModel)
-                .where(ProjectAccessModel.project_id == proj.id)
-                .limit(1)
+                select(ProjectAccessModel).where(ProjectAccessModel.project_id == proj.id).limit(1)
             )
             existing = acl_result.scalar_one_or_none()
             if existing:

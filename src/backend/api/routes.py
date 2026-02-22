@@ -580,8 +580,9 @@ async def get_inactive_project_paths(db: AsyncSession) -> set[str]:
         return set()
 
     try:
-        from db.models import ProjectModel
         from sqlalchemy import select
+
+        from db.models import ProjectModel
 
         result = await db.execute(
             select(ProjectModel.path).where(
@@ -636,9 +637,7 @@ async def _get_accessible_paths_for_user(
 
         # 2. 이 user가 접근 가능한 project_id (UUID) 집합
         access_result = await db.execute(
-            select(ProjectAccessModel.project_id).where(
-                ProjectAccessModel.user_id == user_id
-            )
+            select(ProjectAccessModel.project_id).where(ProjectAccessModel.user_id == user_id)
         )
         user_accessible_uuids: set[str] = {row[0] for row in access_result.all()}
 
@@ -696,9 +695,7 @@ async def get_projects(
                 from db.models import ProjectModel
 
                 path_result = await db.execute(select(ProjectModel.path))
-                db_registered_paths: set[str] = {
-                    row[0] for row in path_result.all() if row[0]
-                }
+                db_registered_paths: set[str] = {row[0] for row in path_result.all() if row[0]}
 
                 filtered = []
                 for p in projects:

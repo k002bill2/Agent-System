@@ -556,8 +556,7 @@ class OrganizationService:
         return [
             _organizations[oid]
             for oid in org_ids
-            if oid in _organizations
-            and _organizations[oid].status != OrganizationStatus.DELETED
+            if oid in _organizations and _organizations[oid].status != OrganizationStatus.DELETED
         ]
 
     @staticmethod

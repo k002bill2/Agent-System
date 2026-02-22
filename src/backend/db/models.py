@@ -1166,7 +1166,7 @@ class LLMModelConfigModel(Base):
     display_name = Column(String(255), nullable=False)
     provider = Column(String(50), nullable=False, index=True)  # "google" | "anthropic" | ...
     context_window = Column(Integer, nullable=False, default=128000)
-    input_price = Column(Float, nullable=False, default=0.001)   # USD per 1K tokens
+    input_price = Column(Float, nullable=False, default=0.001)  # USD per 1K tokens
     output_price = Column(Float, nullable=False, default=0.002)  # USD per 1K tokens
     is_default = Column(Boolean, default=False, nullable=False)
     is_enabled = Column(Boolean, default=True, nullable=False, index=True)
@@ -1175,9 +1175,7 @@ class LLMModelConfigModel(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    __table_args__ = (
-        Index("ix_llm_model_provider_enabled", "provider", "is_enabled"),
-    )
+    __table_args__ = (Index("ix_llm_model_provider_enabled", "provider", "is_enabled"),)
 
 
 class UserLLMCredentialModel(Base):
@@ -1187,8 +1185,8 @@ class UserLLMCredentialModel(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(255), nullable=False, index=True)
-    provider = Column(String(50), nullable=False)          # "openai" | "google_gemini" | "anthropic"
-    key_name = Column(String(255), nullable=False)         # 사용자 표시용 이름
+    provider = Column(String(50), nullable=False)  # "openai" | "google_gemini" | "anthropic"
+    key_name = Column(String(255), nullable=False)  # 사용자 표시용 이름
     api_key = Column(EncryptedString(1024), nullable=False)  # Fernet 자동 암호화
     is_active = Column(Boolean, default=True, nullable=False)
     last_verified_at = Column(DateTime, nullable=True)

@@ -422,6 +422,7 @@ async def get_current_user_info(
     """Get current authenticated user info."""
     # 조직 admin 여부 계산 (circular import 방지를 위해 인라인 구현)
     import os
+
     admin_org_ids: list[str] = []
 
     if os.getenv("USE_DATABASE", "false").lower() == "true":
@@ -429,9 +430,10 @@ async def get_current_user_info(
         # circular import 방지를 위해 인라인으로 구현
         # DB에서 조직 admin 역할 조회
         try:
+            from sqlalchemy import and_, select
+
             from db.database import async_session_factory
             from db.models import OrganizationMemberModel
-            from sqlalchemy import and_, select
 
             admin_roles = {"owner", "admin"}
             async with async_session_factory() as session:
@@ -448,6 +450,7 @@ async def get_current_user_info(
 
             # JSON fallback
             from services.organization_service import OrganizationService
+
             all_orgs = OrganizationService.list_organizations()
             for org in all_orgs:
                 mem = OrganizationService.get_member_by_user(org.id, current_user.id)
@@ -459,6 +462,7 @@ async def get_current_user_info(
             admin_org_ids = db_org_ids
         except Exception as e:
             import logging
+
             logging.getLogger(__name__).warning(
                 "Failed to fetch org admin info for user %s: %s", current_user.id, e
             )
