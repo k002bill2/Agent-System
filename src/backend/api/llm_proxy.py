@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -154,7 +154,7 @@ if AUTH_AVAILABLE:
             svc.add_record(
                 UnifiedUsageRecord(
                     provider=provider_enum,
-                    timestamp=datetime.now(tz=timezone.utc),
+                    timestamp=datetime.now(tz=UTC),
                     bucket_width="realtime",
                     input_tokens=input_tok,
                     output_tokens=output_tok,

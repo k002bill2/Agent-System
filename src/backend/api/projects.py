@@ -43,9 +43,10 @@ async def _get_admin_org_ids(user) -> list[str]:
     if os.getenv("USE_DATABASE", "false").lower() != "true":
         return []
 
+    from sqlalchemy import and_, select
+
     from db.database import async_session_factory
     from db.models import OrganizationMemberModel
-    from sqlalchemy import and_, select
 
     admin_roles = {"owner", "admin"}
 
@@ -206,6 +207,7 @@ async def list_active_projects(
     - 일반 유저/member: ProjectAccess에 명시된 프로젝트만
     """
     import os
+
     from sqlalchemy import or_
 
     use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
@@ -609,6 +611,7 @@ async def add_project_member(
         proj_org = proj_org_result.scalar_one_or_none()
         if proj_org and proj_org.organization_id:
             from sqlalchemy import and_
+
             from db.models import OrganizationMemberModel
             org_mem_result = await session.execute(
                 select(OrganizationMemberModel).where(
@@ -782,10 +785,11 @@ async def list_available_org_members(
     if os.getenv("USE_DATABASE", "false").lower() != "true":
         raise HTTPException(status_code=503, detail="Database mode is not enabled")
 
+    from sqlalchemy import and_, select
+
     from db.database import async_session_factory
     from db.models import OrganizationMemberModel, ProjectAccessModel, ProjectModel
     from db.models import UserModel as UserModelDB
-    from sqlalchemy import and_, select
 
     is_system_admin = current_user.role == "admin" or current_user.is_admin
 

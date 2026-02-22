@@ -12,7 +12,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from api.deps import get_current_user_optional
-
 from models.project_config import (
     AgentConfig,
     AgentContentResponse,
@@ -100,7 +99,7 @@ async def _get_db_filtered_projects(monitor, current_user=None) -> list:
     """
     from pathlib import Path as PathLib
 
-    from sqlalchemy import select, or_
+    from sqlalchemy import or_, select
 
     from db.database import async_session_factory
     from db.models import ProjectAccessModel, ProjectModel

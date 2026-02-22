@@ -429,9 +429,10 @@ async def get_current_user_info(
         # circular import 방지를 위해 인라인으로 구현
         # DB에서 조직 admin 역할 조회
         try:
+            from sqlalchemy import and_, select
+
             from db.database import async_session_factory
             from db.models import OrganizationMemberModel
-            from sqlalchemy import and_, select
 
             admin_roles = {"owner", "admin"}
             async with async_session_factory() as session:

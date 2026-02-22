@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 
 import httpx
 
@@ -103,7 +103,7 @@ class OpenAIUsageCollector(BaseUsageCollector):
 
                 data = resp.json()
                 for bucket in data.get("data", []):
-                    ts = datetime.fromtimestamp(bucket.get("start_time", 0), tz=timezone.utc)
+                    ts = datetime.fromtimestamp(bucket.get("start_time", 0), tz=UTC)
                     for result in bucket.get("results", []):
                         input_tok = result.get("input_tokens", 0) or 0
                         output_tok = result.get("output_tokens", 0) or 0
@@ -194,7 +194,7 @@ class GitHubCopilotCollector(BaseUsageCollector):
                 for day_data in resp.json():
                     date_str = day_data.get("date", "")
                     try:
-                        ts = datetime.fromisoformat(date_str).replace(tzinfo=timezone.utc)
+                        ts = datetime.fromisoformat(date_str).replace(tzinfo=UTC)
                     except ValueError:
                         continue
 
@@ -267,7 +267,7 @@ class AnthropicUsageCollector(BaseUsageCollector):
         """Collect from Anthropic Usage Report API."""
         records: list[UnifiedUsageRecord] = []
 
-        COSTS: dict[str, tuple[float, float]] = {
+        costs: dict[str, tuple[float, float]] = {
             "claude-opus-4": (0.015, 0.075),
             "claude-sonnet-4": (0.003, 0.015),
             "claude-haiku-4": (0.00025, 0.00125),
@@ -305,7 +305,7 @@ class AnthropicUsageCollector(BaseUsageCollector):
                     input_tok = item.get("input_tokens", 0)
                     output_tok = item.get("output_tokens", 0)
                     cost = 0.0
-                    for prefix, (ci, co) in COSTS.items():
+                    for prefix, (ci, co) in costs.items():
                         if model.startswith(prefix):
                             cost = (input_tok / 1000) * ci + (output_tok / 1000) * co
                             break

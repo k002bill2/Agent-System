@@ -15,9 +15,10 @@ async def main():
 
     os.environ.setdefault("USE_DATABASE", "true")
 
+    from sqlalchemy import select
+
     from db.database import async_session_factory
     from db.models import ProjectAccessModel, ProjectModel, UserModel
-    from sqlalchemy import select
 
     async with async_session_factory() as session:
         # 어드민 유저 조회

@@ -580,8 +580,9 @@ async def get_inactive_project_paths(db: AsyncSession) -> set[str]:
         return set()
 
     try:
-        from db.models import ProjectModel
         from sqlalchemy import select
+
+        from db.models import ProjectModel
 
         result = await db.execute(
             select(ProjectModel.path).where(
