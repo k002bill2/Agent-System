@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render, screen, cleanup } from '@testing-library/react'
 import { ClaudeUsageDashboard } from '../ClaudeUsageDashboard'
 import type { ClaudeUsageResponse } from '../../../types/claudeUsage'
 

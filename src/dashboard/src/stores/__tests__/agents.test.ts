@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
-import { useAgentsStore, Agent, AgentRegistryStats } from '../agents'
+import { useAgentsStore, Agent, AgentRegistryStats, TaskAnalysisHistory, TaskAnalysisResult } from '../agents'
 
 const mockAgent: Agent = {
   id: 'agent-1',
@@ -420,7 +420,7 @@ describe('agents store', () => {
     })
 
     it('resets history when reset=true', async () => {
-      useAgentsStore.setState({ analysisHistory: [{ id: 'old' } as any] })
+      useAgentsStore.setState({ analysisHistory: [{ id: 'old' } as unknown as TaskAnalysisHistory] })
       vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify(mockHistoryData)))
       await useAgentsStore.getState().fetchAnalysisHistory(undefined, true)
       expect(useAgentsStore.getState().analysisHistory).toHaveLength(1)
@@ -461,7 +461,7 @@ describe('agents store', () => {
       useAgentsStore.setState({
         historyHasMore: true,
         historyLoading: false,
-        analysisHistory: [{ id: 'h1' } as any],
+        analysisHistory: [{ id: 'h1' } as unknown as TaskAnalysisHistory],
         historyProjectFilter: null,
       })
       vi.spyOn(global, 'fetch').mockResolvedValue(
@@ -476,7 +476,7 @@ describe('agents store', () => {
   describe('deleteAnalysis', () => {
     it('removes item from history on success', async () => {
       useAgentsStore.setState({
-        analysisHistory: [{ id: 'h1' } as any, { id: 'h2' } as any],
+        analysisHistory: [{ id: 'h1' } as unknown as TaskAnalysisHistory, { id: 'h2' } as unknown as TaskAnalysisHistory],
         historyTotal: 2,
         selectedHistoryId: null,
       })
@@ -489,10 +489,10 @@ describe('agents store', () => {
 
     it('clears selection if deleted item was selected', async () => {
       useAgentsStore.setState({
-        analysisHistory: [{ id: 'h1' } as any],
+        analysisHistory: [{ id: 'h1' } as unknown as TaskAnalysisHistory],
         historyTotal: 1,
         selectedHistoryId: 'h1',
-        lastAnalysis: { success: true } as any,
+        lastAnalysis: { success: true } as unknown as TaskAnalysisResult,
       })
       vi.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 200 }))
       await useAgentsStore.getState().deleteAnalysis('h1')
@@ -509,7 +509,7 @@ describe('agents store', () => {
 
   describe('selectHistoryItem', () => {
     it('clears selection when null is passed', () => {
-      useAgentsStore.setState({ selectedHistoryId: 'h1', lastAnalysis: { success: true } as any })
+      useAgentsStore.setState({ selectedHistoryId: 'h1', lastAnalysis: { success: true } as unknown as TaskAnalysisResult })
       useAgentsStore.getState().selectHistoryItem(null)
       expect(useAgentsStore.getState().selectedHistoryId).toBeNull()
       expect(useAgentsStore.getState().lastAnalysis).toBeNull()
@@ -529,7 +529,7 @@ describe('agents store', () => {
         strategy: 'sequential',
         project_id: 'proj-1',
       }
-      useAgentsStore.getState().selectHistoryItem(historyItem as any)
+      useAgentsStore.getState().selectHistoryItem(historyItem as unknown as TaskAnalysisHistory)
       expect(useAgentsStore.getState().selectedHistoryId).toBe('h1')
       expect(useAgentsStore.getState().lastAnalysis).toMatchObject({
         success: true,
@@ -1208,7 +1208,7 @@ describe('agents store', () => {
         ...mockAnalysisData,
         analysis: {
           ...mockAnalysisData.analysis,
-          execution_plan: null as any,
+          execution_plan: null as unknown,
         },
       }
       vi.spyOn(global, 'fetch')
@@ -1282,7 +1282,7 @@ describe('agents store', () => {
 
     it('resets history when project filter changes', async () => {
       useAgentsStore.setState({
-        analysisHistory: [{ id: 'old' } as any],
+        analysisHistory: [{ id: 'old' } as unknown as TaskAnalysisHistory],
         historyTotal: 5,
         historyProjectFilter: 'proj-old',
       })
@@ -1298,7 +1298,7 @@ describe('agents store', () => {
 
     it('does not reset when same project filter is used', async () => {
       useAgentsStore.setState({
-        analysisHistory: [{ id: 'existing' } as any],
+        analysisHistory: [{ id: 'existing' } as unknown as TaskAnalysisHistory],
         historyProjectFilter: 'proj-1',
         historyTotal: 1,
         historyHasMore: false,
@@ -1343,7 +1343,7 @@ describe('agents store', () => {
       useAgentsStore.setState({
         historyHasMore: true,
         historyLoading: false,
-        analysisHistory: [{ id: 'h1' } as any],
+        analysisHistory: [{ id: 'h1' } as unknown as TaskAnalysisHistory],
         historyProjectFilter: 'proj-filter',
       })
       const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
@@ -1359,7 +1359,7 @@ describe('agents store', () => {
       useAgentsStore.setState({
         historyHasMore: true,
         historyLoading: false,
-        analysisHistory: [{ id: 'h1' } as any, { id: 'h2' } as any, { id: 'h3' } as any],
+        analysisHistory: [{ id: 'h1' } as unknown as TaskAnalysisHistory, { id: 'h2' } as unknown as TaskAnalysisHistory, { id: 'h3' } as unknown as TaskAnalysisHistory],
         historyProjectFilter: null,
       })
       const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
@@ -1409,10 +1409,10 @@ describe('agents store', () => {
   describe('deleteAnalysis - additional branches', () => {
     it('preserves selection when deleted item was not selected', async () => {
       useAgentsStore.setState({
-        analysisHistory: [{ id: 'h1' } as any, { id: 'h2' } as any],
+        analysisHistory: [{ id: 'h1' } as unknown as TaskAnalysisHistory, { id: 'h2' } as unknown as TaskAnalysisHistory],
         historyTotal: 2,
         selectedHistoryId: 'h2',
-        lastAnalysis: { success: true } as any,
+        lastAnalysis: { success: true } as unknown as TaskAnalysisResult,
       })
       vi.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 200 }))
 
@@ -1453,7 +1453,7 @@ describe('agents store', () => {
         image_paths: null,
         created_at: '2025-01-01T00:00:00Z',
       }
-      useAgentsStore.getState().selectHistoryItem(historyItem as any)
+      useAgentsStore.getState().selectHistoryItem(historyItem as unknown as TaskAnalysisHistory)
 
       const lastAnalysis = useAgentsStore.getState().lastAnalysis
       expect(lastAnalysis).not.toBeNull()

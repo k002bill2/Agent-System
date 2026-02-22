@@ -86,6 +86,20 @@ src/backend/
 │   ├── project_access_service.py  # RBAC 접근제어 서비스
 │   ├── quota_service.py           # 사용량 쿼터 서비스
 │   ├── template_service.py        # 프로젝트/워크플로우 템플릿
+│   ├── llm_router_service.py      # LLM 라우팅/Failover
+│   ├── session_service.py         # 세션 생명주기 관리
+│   ├── task_service.py            # 태스크 CRUD/상태 관리
+│   ├── merge_service.py           # Git 머지/충돌 해결
+│   ├── mcp_manager.py             # MCP 서버 생명주기 관리
+│   ├── project_config_monitor.py  # 프로젝트 설정 파일 모니터링
+│   ├── tmux_service.py            # Tmux 세션 관리
+│   ├── playground_service.py      # 에이전트 플레이그라운드
+│   ├── credential_service.py      # 자격증명 암호화/저장
+│   ├── secret_service.py          # 시크릿 관리
+│   ├── webhook_service.py         # Webhook 딜리버리
+│   ├── external_usage_service.py  # 외부 LLM 사용량 추적
+│   ├── task_analysis_service.py   # 태스크 분석
+│   ├── project_cleanup_service.py # 프로젝트 삭제/정리
 │   └── ...
 ├── api/                     # FastAPI 라우터
 ├── db/                      # SQLAlchemy ORM
@@ -233,6 +247,24 @@ USE_DATABASE=false
 | `rate_limits` | API 속도 제한 |
 | `workflow_definitions` | 워크플로우 정의 |
 | `workflow_runs` | 워크플로우 실행 이력 |
+| `workflow_jobs` | 워크플로우 잡 |
+| `workflow_steps` | 워크플로우 스텝 |
+| `workflow_secrets` | 워크플로우 시크릿 |
+| `workflow_webhooks` | 워크플로우 웹훅 |
+| `workflow_artifacts` | 워크플로우 아티팩트 |
+| `workflow_templates` | 워크플로우 템플릿 |
+| `merge_requests` | 머지 요청 |
+| `branch_protection_rules` | 브랜치 보호 규칙 |
+| `cost_centers` | 비용 센터 |
+| `cost_allocations` | 비용 할당 |
+| `llm_model_configs` | LLM 모델 설정 |
+| `user_llm_credentials` | 사용자 LLM 자격증명 |
+| `project_access` | 프로젝트 접근 제어 |
+| `project_invitations` | 프로젝트 초대 |
+| `menu_visibility` | UI 메뉴 가시성 |
+| `task_evaluations` | 태스크 평가 |
+| `session_activities` | 세션 활동 |
+| `task_analyses` | 태스크 분석 |
 
 ### Database Migration (Alembic)
 

@@ -39,8 +39,8 @@ const mockCreatePRReview = vi.fn()
 let lastBranchListProps: Record<string, unknown> = {}
 let lastMergeRequestListProps: Record<string, unknown> = {}
 let lastPullRequestListProps: Record<string, unknown> = {}
-let lastMergePreviewPanelProps: Record<string, unknown> = {}
-let lastPRReviewPanelProps: Record<string, unknown> = {}
+let _lastMergePreviewPanelProps: Record<string, unknown> = {}
+let _lastPRReviewPanelProps: Record<string, unknown> = {}
 let lastGitSetupProps: Record<string, unknown> = {}
 let lastWorkingDirectoryProps: Record<string, unknown> = {}
 let lastCommitHistoryProps: Record<string, unknown> = {}
@@ -160,7 +160,7 @@ vi.mock('../components/git', () => ({
     return <div data-testid="merge-request-list">MergeRequestList</div>
   },
   MergePreviewPanel: (props: Record<string, unknown>) => {
-    lastMergePreviewPanelProps = props
+    _lastMergePreviewPanelProps = props
     return <div data-testid="merge-preview">MergePreviewPanel</div>
   },
   PullRequestList: (props: Record<string, unknown>) => {
@@ -168,7 +168,7 @@ vi.mock('../components/git', () => ({
     return <div data-testid="pull-request-list">PullRequestList</div>
   },
   PRReviewPanel: (props: Record<string, unknown>) => {
-    lastPRReviewPanelProps = props
+    _lastPRReviewPanelProps = props
     return <div data-testid="pr-review-panel">PRReviewPanel</div>
   },
   CommitHistory: (props: Record<string, unknown>) => {
@@ -803,7 +803,7 @@ describe('GitPage', () => {
   it('applies animate-spin class to Fetch icon when loading', () => {
     setValidRepoTab('changes', { isLoading: true })
 
-    const { container } = render(<GitPage />)
+    render(<GitPage />)
 
     // The RefreshCw icon (mocked as <span>) should have animate-spin
     const fetchBtn = screen.getByTitle('Fetch from remote')

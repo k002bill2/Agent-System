@@ -137,6 +137,7 @@ import { cn } from '@/lib/utils';
 | `HookEditModal` | Hook 편집 모달 |
 | `CommandsTab` | 커맨드 목록 탭 |
 | `CommandEditModal` | 커맨드 편집 모달 |
+| `ConfirmDeleteModal` | 삭제 확인 범용 모달 |
 | `DeleteProjectModal` | 프로젝트 삭제 확인 모달 |
 | `ProjectClaudeConfigPanel` | 프로젝트 Claude 설정 패널 |
 
@@ -218,6 +219,7 @@ import { cn } from '@/lib/utils';
 | 컴포넌트 | 설명 |
 |----------|------|
 | `ProjectMembersPanel` | 프로젝트 멤버 관리 (목록, 추가, 역할 변경, 제거) |
+| `ProjectMembersContent` | 프로젝트 멤버 관리 콘텐츠 (멤버십 목록, 관리) |
 
 ### Monitor Components
 
@@ -229,6 +231,9 @@ import { cn } from '@/lib/utils';
 | `ContextPanel` | 컨텍스트 정보 패널 |
 | `OutputLog` | 실시간 출력 로그 |
 | `ResizablePanel` | 리사이즈 가능 패널 |
+| `AgentMonitorPanel` | 에이전트 모니터링 패널 |
+| `MetricsChart` | 메트릭 차트 시각화 |
+| `WorkflowCheckCard` | 워크플로우 체크 카드 |
 
 ### RAG Components
 
@@ -276,6 +281,9 @@ import { cn } from '@/lib/utils';
 | `CostMonitor` | 비용 모니터링 패널 |
 | `UsageProgressBar` | 사용량 진행바 |
 | `ClaudeUsageDashboard` | Claude 사용량 대시보드 |
+| `DailyCostTrend` | 일간 비용 추이 차트 |
+| `LLMAccountsSettings` | LLM 계정/API 키 설정 |
+| `MemberUsageTable` | 멤버별 사용량 테이블 |
 
 ### Admin Components
 
@@ -351,6 +359,8 @@ import { cn } from '@/lib/utils';
 | `useMenuVisibilityStore` | `menuVisibility.ts` | 메뉴 가시성 및 순서 |
 | `useProjectAccess` | `projectAccess.ts` | 프로젝트별 멤버/역할 관리 |
 | `useWorkflowStore` | `workflows.ts` | 워크플로우 CRUD, 실행, 시크릿, 스케줄 |
+| `useExternalUsage` | `externalUsage.ts` | 외부 LLM 프로바이더 사용량 추적 |
+| `useLLMCredentials` | `llmCredentials.ts` | LLM 프로바이더 자격증명/API 키 관리 |
 
 ### Store Pattern
 
@@ -396,7 +406,7 @@ export const useStore = create<State>((set, get) => ({
 ```
 src/dashboard/
 ├── src/
-│   ├── pages/                  # 페이지 컴포넌트 (22개)
+│   ├── pages/                  # 페이지 컴포넌트 (23개)
 │   │   ├── DashboardPage.tsx
 │   │   ├── ProjectsPage.tsx
 │   │   ├── ProjectConfigsPage.tsx
@@ -413,6 +423,7 @@ src/dashboard/
 │   │   ├── OrganizationsPage.tsx
 │   │   ├── ProjectManagementPage.tsx
 │   │   ├── WorkflowsPage.tsx
+│   │   ├── ExternalUsagePage.tsx
 │   │   ├── AdminPage.tsx
 │   │   ├── SettingsPage.tsx
 │   │   ├── LoginPage.tsx
@@ -450,6 +461,7 @@ src/dashboard/
 │   │   │   ├── HookEditModal.tsx
 │   │   │   ├── CommandsTab.tsx
 │   │   │   ├── CommandEditModal.tsx
+│   │   │   ├── ConfirmDeleteModal.tsx
 │   │   │   └── CopyToProjectModal.tsx
 │   │   ├── workflows/          # 워크플로우
 │   │   │   ├── WorkflowList.tsx
@@ -493,7 +505,10 @@ src/dashboard/
 │   │   │   ├── CheckCard.tsx
 │   │   │   ├── ContextPanel.tsx
 │   │   │   ├── OutputLog.tsx
-│   │   │   └── ResizablePanel.tsx
+│   │   │   ├── ResizablePanel.tsx
+│   │   │   ├── AgentMonitorPanel.tsx
+│   │   │   ├── MetricsChart.tsx
+│   │   │   └── WorkflowCheckCard.tsx
 │   │   ├── rag/                # RAG 검색
 │   │   │   └── RAGQueryPanel.tsx
 │   │   ├── admin/              # 관리자 설정
@@ -505,7 +520,7 @@ src/dashboard/
 │   │   └── analytics/          # Analytics
 │   │       └── ProjectMultiSelect.tsx
 │   ├── services/               # API 서비스 레이어
-│   ├── stores/                 # Zustand 스토어 (27개)
+│   ├── stores/                 # Zustand 스토어 (29개)
 │   │   ├── orchestration.ts
 │   │   ├── projects.ts
 │   │   ├── projectConfigs.ts
@@ -531,11 +546,15 @@ src/dashboard/
 │   │   ├── audit.ts
 │   │   ├── menuVisibility.ts
 │   │   ├── projectAccess.ts
+│   │   ├── externalUsage.ts
+│   │   ├── llmCredentials.ts
 │   │   └── workflows.ts
 │   ├── hooks/                  # 커스텀 훅
+│   │   ├── useErrorHandler.ts
+│   │   └── useRealtimeMonitor.ts
 │   ├── lib/                    # 유틸리티
 │   │   ├── utils.ts            # cn() 등 헬퍼 함수
-│   │   └── api.ts              # API 클라이언트
+│   │   └── cookieStorage.ts    # 쿠키 기반 스토리지
 │   └── types/                  # TypeScript 타입
 ├── public/
 ├── index.html
@@ -544,6 +563,15 @@ src/dashboard/
 ├── tsconfig.json
 └── package.json
 ```
+
+---
+
+## Custom Hooks
+
+| Hook | 파일 | 설명 |
+|------|------|------|
+| `useErrorHandler` | `useErrorHandler.ts` | 에러 핸들링 유틸리티 훅 |
+| `useRealtimeMonitor` | `useRealtimeMonitor.ts` | 실시간 모니터링 WebSocket 훅 |
 
 ---
 

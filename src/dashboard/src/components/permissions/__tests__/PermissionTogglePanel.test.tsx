@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
-import type { PermissionInfo, AgentPermission } from '../../../stores/permissions'
+import type { PermissionInfo } from '../../../stores/permissions'
 
 // Mock lucide-react icons
 vi.mock('lucide-react', () => ({

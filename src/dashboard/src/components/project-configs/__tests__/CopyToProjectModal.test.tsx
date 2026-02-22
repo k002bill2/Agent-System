@@ -105,7 +105,6 @@ describe('CopyToProjectModal', () => {
 
   it('shows empty state when no other projects available', () => {
     // Source project is proj-1, and we only have proj-1 in the list
-    vi.mocked
     render(
       <CopyToProjectModal
         {...defaultProps}

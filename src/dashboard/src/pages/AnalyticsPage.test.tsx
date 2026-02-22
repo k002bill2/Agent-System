@@ -1,5 +1,4 @@
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 
 // Mock lucide-react icons

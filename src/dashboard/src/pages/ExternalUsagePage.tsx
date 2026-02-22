@@ -67,7 +67,7 @@ export function ExternalUsagePage() {
     const startTime = new Date(Date.now() - selectedPeriod * 86_400_000).toISOString()
     fetchSummary(startTime, endTime)
     fetchProviders()
-  }, [selectedPeriod])
+  }, [selectedPeriod, fetchSummary, fetchProviders])
 
   const handleSync = async () => {
     setIsSyncing(true)

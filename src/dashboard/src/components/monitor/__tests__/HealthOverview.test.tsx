@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { HealthOverview } from '../HealthOverview'
 import type { ProjectHealth, CheckType, WorkflowCheck } from '../../../types/monitoring'
 
