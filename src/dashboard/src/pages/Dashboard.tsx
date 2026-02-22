@@ -83,15 +83,21 @@ export function Dashboard({
   const hasFetchedRef = useRef(false)
 
   /**
-   * [BUG FIX] useCallback으로 래핑하여 참조 안정성 확보.
-   * 이전: onRefresh를 직접 useEffect 의존성에 넣어 무한 루프 발생.
-   * 수정: useCallback으로 메모이제이션 + ref로 중복 호출 방지.
+   * [BUG FIX] onRefresh를 ref에 저장하여 useCallback 의존성에서 제거.
+   * 이전: useCallback([onRefresh]) → onRefresh가 매 렌더에 새 참조를 가지면
+   *   handleRefresh도 새 참조 → useEffect 재실행 → 무한 루프.
+   * 수정: ref로 최신 콜백 추적 + useCallback 의존성 빈 배열 → 완전히 안정적인 참조.
    */
+  const onRefreshRef = useRef(onRefresh)
+  useEffect(() => {
+    onRefreshRef.current = onRefresh
+  })
+
   const handleRefresh = useCallback(async () => {
-    if (onRefresh && !hasFetchedRef.current) {
+    if (onRefreshRef.current && !hasFetchedRef.current) {
       hasFetchedRef.current = true
       try {
-        await onRefresh()
+        await onRefreshRef.current()
       } finally {
         // 일정 시간 후 다시 호출 가능하도록
         setTimeout(() => {
@@ -99,13 +105,13 @@ export function Dashboard({
         }, 5000)
       }
     }
-  }, [onRefresh])
+  }, [])
 
   /**
    * [BUG FIX] 초기 데이터 로드.
    * 이전: useEffect(() => { fetchData() }, [fetchData, filters, options])
    *   -> filters/options가 매 렌더에 새 객체로 생성되어 무한 루프.
-   * 수정: handleRefresh를 안정적인 콜백으로 사용 + 빈 의존성 배열.
+   * 수정: handleRefresh가 완전히 안정적인 참조이므로 useEffect는 마운트 시 1회만 실행.
    */
   useEffect(() => {
     handleRefresh()

@@ -1,3 +1,4 @@
+export { AgentMonitorPanel } from './AgentMonitorPanel'
 export { CheckCard } from './CheckCard'
 export { HealthOverview } from './HealthOverview'
 export { OutputLog } from './OutputLog'
