@@ -1481,8 +1481,51 @@
       "startTime": 1771733037199,
       "status": "running",
       "targetAreas": []
+    },
+    {
+      "taskId": "task_1771758179603_31bxj0",
+      "subagentType": "Explore",
+      "description": "RAG indexing/embedding 파이프라인 분석",
+      "startTime": 1771758179603,
+      "status": "running",
+      "targetAreas": [
+        "services"
+      ]
+    },
+    {
+      "taskId": "task_1771766154178_787uus",
+      "subagentType": "Explore",
+      "description": "Find project member invite code",
+      "startTime": 1771766154178,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771767371363_9rpdy0",
+      "subagentType": "Explore",
+      "description": "RAG 의존성 및 활용 지점 탐색",
+      "startTime": 1771767371363,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771767463534_a4jp8f",
+      "subagentType": "Plan",
+      "description": "RAG 고도화 구현 계획 설계",
+      "startTime": 1771767463534,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
     }
   ],
-  "lastUpdated": "2026-02-22T04:07:36.191Z",
+  "lastUpdated": "2026-02-22T13:40:49.947Z",
   "sessionId": "session_1770950296910_bp60yfrgy"
 }
