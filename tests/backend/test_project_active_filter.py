@@ -2,6 +2,9 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+# USE_DATABASE=true로 설정해야 get_inactive_project_paths가 DB 조회를 수행함
+_USE_DB_ENV = {"USE_DATABASE": "true"}
+
 
 @pytest.fixture
 def mock_projects():
@@ -37,14 +40,15 @@ async def test_regular_user_cannot_see_inactive_project(mock_projects):
     mock_result.all.return_value = [("/projects/inactive",)]
     mock_db.execute = AsyncMock(return_value=mock_result)
 
-    inactive_paths = await get_inactive_project_paths(mock_db)
-    assert "/projects/inactive" in inactive_paths
-    assert "/projects/active" not in inactive_paths
+    with patch.dict("os.environ", _USE_DB_ENV):
+        inactive_paths = await get_inactive_project_paths(mock_db)
+        assert "/projects/inactive" in inactive_paths
+        assert "/projects/active" not in inactive_paths
 
-    # 필터링 적용
-    filtered = [p for p in mock_projects if p.path not in inactive_paths]
-    assert len(filtered) == 1
-    assert filtered[0].name == "Active Project"
+        # 필터링 적용
+        filtered = [p for p in mock_projects if p.path not in inactive_paths]
+        assert len(filtered) == 1
+        assert filtered[0].name == "Active Project"
 
 
 @pytest.mark.asyncio
@@ -67,7 +71,8 @@ async def test_no_inactive_registry_shows_all(mock_projects):
     mock_result.all.return_value = []
     mock_db.execute = AsyncMock(return_value=mock_result)
 
-    inactive_paths = await get_inactive_project_paths(mock_db)
+    with patch.dict("os.environ", _USE_DB_ENV):
+        inactive_paths = await get_inactive_project_paths(mock_db)
     assert len(inactive_paths) == 0
 
     filtered = [p for p in mock_projects if p.path not in inactive_paths]
@@ -85,7 +90,8 @@ async def test_unregistered_project_always_visible(mock_projects):
     mock_result.all.return_value = [("/projects/other",)]
     mock_db.execute = AsyncMock(return_value=mock_result)
 
-    inactive_paths = await get_inactive_project_paths(mock_db)
+    with patch.dict("os.environ", _USE_DB_ENV):
+        inactive_paths = await get_inactive_project_paths(mock_db)
     assert "/projects/other" in inactive_paths
     assert "/projects/active" not in inactive_paths
     assert "/projects/inactive" not in inactive_paths

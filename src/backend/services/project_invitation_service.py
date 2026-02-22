@@ -63,9 +63,7 @@ class ProjectInvitationService:
     ) -> ProjectInvitationModel | None:
         """토큰으로 초대 조회."""
         result = await db.execute(
-            select(ProjectInvitationModel).where(
-                ProjectInvitationModel.token == token
-            )
+            select(ProjectInvitationModel).where(ProjectInvitationModel.token == token)
         )
         return result.scalar_one_or_none()
 
@@ -90,6 +88,7 @@ class ProjectInvitationService:
             raise ValueError("이메일이 일치하지 않습니다")
 
         from services.project_access_service import ProjectAccessService
+
         try:
             access = await ProjectAccessService.grant_access(
                 db=db,
@@ -120,12 +119,14 @@ class ProjectInvitationService:
     ) -> list[ProjectInvitationModel]:
         """프로젝트의 pending 초대 목록 조회."""
         result = await db.execute(
-            select(ProjectInvitationModel).where(
+            select(ProjectInvitationModel)
+            .where(
                 and_(
                     ProjectInvitationModel.project_id == project_id,
                     ProjectInvitationModel.status == "pending",
                 )
-            ).order_by(ProjectInvitationModel.created_at.desc())
+            )
+            .order_by(ProjectInvitationModel.created_at.desc())
         )
         return list(result.scalars().all())
 

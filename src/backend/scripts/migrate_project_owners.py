@@ -45,9 +45,7 @@ async def main():
         for proj in projects:
             # 이미 ACL이 있는지 확인
             acl_result = await session.execute(
-                select(ProjectAccessModel)
-                .where(ProjectAccessModel.project_id == proj.id)
-                .limit(1)
+                select(ProjectAccessModel).where(ProjectAccessModel.project_id == proj.id).limit(1)
             )
             existing = acl_result.scalar_one_or_none()
             if existing:

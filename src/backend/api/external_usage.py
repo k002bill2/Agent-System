@@ -84,9 +84,7 @@ if AUTH_AVAILABLE:
 
         # Merge: if user has a DB credential, mark provider as enabled
         return [
-            cfg.model_copy(update={"enabled": True})
-            if cfg.provider.value in db_providers
-            else cfg
+            cfg.model_copy(update={"enabled": True}) if cfg.provider.value in db_providers else cfg
             for cfg in configs
         ]
 

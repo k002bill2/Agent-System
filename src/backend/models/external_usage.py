@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 class ExternalProvider(str, Enum):
     """Supported external LLM providers."""
+
     OPENAI = "openai"
     GITHUB_COPILOT = "github_copilot"
     GOOGLE_GEMINI = "google_gemini"
@@ -19,6 +20,7 @@ class ExternalProvider(str, Enum):
 
 class ProviderHealthStatus(BaseModel):
     """Health check result for a provider."""
+
     provider: ExternalProvider
     is_healthy: bool
     last_checked: datetime = Field(default_factory=datetime.utcnow)
@@ -28,6 +30,7 @@ class ProviderHealthStatus(BaseModel):
 
 class UnifiedUsageRecord(BaseModel):
     """Normalized usage record across providers."""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     provider: ExternalProvider
     timestamp: datetime
@@ -58,6 +61,7 @@ class UnifiedUsageRecord(BaseModel):
 
 class UsageSummary(BaseModel):
     """Aggregated usage summary for a provider."""
+
     provider: ExternalProvider
     period_start: datetime
     period_end: datetime
@@ -71,6 +75,7 @@ class UsageSummary(BaseModel):
 
 class ExternalUsageSummaryResponse(BaseModel):
     """Combined external usage response."""
+
     providers: list[UsageSummary] = Field(default_factory=list)
     total_cost_usd: float = 0.0
     records: list[UnifiedUsageRecord] = Field(default_factory=list)
@@ -80,6 +85,7 @@ class ExternalUsageSummaryResponse(BaseModel):
 
 class ProviderConfig(BaseModel):
     """Provider configuration status."""
+
     provider: ExternalProvider
     enabled: bool
     api_key_masked: str | None = None
@@ -90,12 +96,14 @@ class ProviderConfig(BaseModel):
 
 class ProviderConfigRequest(BaseModel):
     """Request to configure a provider."""
+
     api_key: str
     org_id: str | None = None
 
 
 class SyncRequest(BaseModel):
     """Request to sync usage data."""
+
     provider: ExternalProvider | None = None
     start_time: datetime | None = None
     end_time: datetime | None = None
@@ -103,8 +111,10 @@ class SyncRequest(BaseModel):
 
 # ── LLM Credential 관련 스키마 ────────────────────────────────────
 
+
 class LLMCredentialCreate(BaseModel):
     """사용자가 API Key 등록 시 전달하는 요청 바디."""
+
     provider: ExternalProvider
     key_name: str = Field(min_length=1, max_length=100)
     api_key: str = Field(min_length=10)
@@ -112,6 +122,7 @@ class LLMCredentialCreate(BaseModel):
 
 class LLMCredentialResponse(BaseModel):
     """API 응답 — api_key는 마스킹 처리."""
+
     id: str
     provider: ExternalProvider
     key_name: str
@@ -123,6 +134,7 @@ class LLMCredentialResponse(BaseModel):
 
 class LLMCredentialVerifyResponse(BaseModel):
     """API Key 유효성 검증 결과."""
+
     is_valid: bool
     provider: ExternalProvider
     error_message: str | None = None

@@ -170,9 +170,7 @@ async def update_model(
 
     from db.models import LLMModelConfigModel
 
-    result = await db.execute(
-        select(LLMModelConfigModel).where(LLMModelConfigModel.id == model_id)
-    )
+    result = await db.execute(select(LLMModelConfigModel).where(LLMModelConfigModel.id == model_id))
     db_model = result.scalar_one_or_none()
 
     if not db_model:

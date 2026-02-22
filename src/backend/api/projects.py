@@ -64,6 +64,7 @@ async def _get_admin_org_ids(user) -> list[str]:
 
     # JSON fallback
     from services.organization_service import OrganizationService
+
     all_orgs = OrganizationService.list_organizations()
     json_org_ids = []
     for org in all_orgs:
@@ -500,9 +501,7 @@ async def restore_project(project_id: str) -> DBProjectResponse:
 VALID_ROLES = {"owner", "editor", "viewer"}
 
 
-async def _check_project_manage_permission(
-    project_id: str, current_user, session
-) -> None:
+async def _check_project_manage_permission(project_id: str, current_user, session) -> None:
     """Admin 또는 project owner만 멤버 관리 가능."""
     from db.models import ProjectAccessModel
 
@@ -537,9 +536,7 @@ async def list_project_members(
     from db.models import UserModel as UserModelDB
 
     async with async_session_factory() as session:
-        proj = await session.execute(
-            select(ProjectModel).where(ProjectModel.id == project_id)
-        )
+        proj = await session.execute(select(ProjectModel).where(ProjectModel.id == project_id))
         if not proj.scalar_one_or_none():
             raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
 
@@ -589,9 +586,7 @@ async def add_project_member(
     from db.models import UserModel as UserModelDB
 
     async with async_session_factory() as session:
-        proj = await session.execute(
-            select(ProjectModel).where(ProjectModel.id == project_id)
-        )
+        proj = await session.execute(select(ProjectModel).where(ProjectModel.id == project_id))
         if not proj.scalar_one_or_none():
             raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
 
@@ -613,6 +608,7 @@ async def add_project_member(
             from sqlalchemy import and_
 
             from db.models import OrganizationMemberModel
+
             org_mem_result = await session.execute(
                 select(OrganizationMemberModel).where(
                     and_(
@@ -626,6 +622,7 @@ async def add_project_member(
 
             if not is_org_member:
                 from services.organization_service import OrganizationService
+
                 json_mem = OrganizationService.get_member_by_user(
                     proj_org.organization_id, request.user_id
                 )
@@ -706,9 +703,7 @@ async def update_project_member_role(
         await session.commit()
         await session.refresh(access)
 
-        user_result = await session.execute(
-            select(UserModelDB).where(UserModelDB.id == user_id)
-        )
+        user_result = await session.execute(select(UserModelDB).where(UserModelDB.id == user_id))
         user = user_result.scalar_one_or_none()
 
         return ProjectMemberResponse(
@@ -810,9 +805,7 @@ async def list_available_org_members(
 
         # 이미 프로젝트에 속한 user_id 집합
         existing_result = await session.execute(
-            select(ProjectAccessModel.user_id).where(
-                ProjectAccessModel.project_id == project_id
-            )
+            select(ProjectAccessModel.user_id).where(ProjectAccessModel.project_id == project_id)
         )
         existing_user_ids = {row[0] for row in existing_result.all()}
 
@@ -853,6 +846,7 @@ async def list_available_org_members(
 
         # JSON fallback
         from services.organization_service import OrganizationService
+
         json_members = OrganizationService.get_members(org_id) or []
         for jmem in json_members:
             uid = jmem.user_id if hasattr(jmem, "user_id") else ""

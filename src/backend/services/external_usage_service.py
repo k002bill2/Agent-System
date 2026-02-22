@@ -22,9 +22,7 @@ class BaseUsageCollector(ABC):
     """Abstract base for external LLM usage collectors."""
 
     @abstractmethod
-    async def collect(
-        self, start_time: datetime, end_time: datetime
-    ) -> list[UnifiedUsageRecord]:
+    async def collect(self, start_time: datetime, end_time: datetime) -> list[UnifiedUsageRecord]:
         """Collect usage records for the given period."""
         ...
 
@@ -34,8 +32,7 @@ class BaseUsageCollector(ABC):
         ...
 
     @abstractmethod
-    def get_provider(self) -> ExternalProvider:
-        ...
+    def get_provider(self) -> ExternalProvider: ...
 
 
 class OpenAIUsageCollector(BaseUsageCollector):
@@ -78,9 +75,7 @@ class OpenAIUsageCollector(BaseUsageCollector):
                 error_message=str(e),
             )
 
-    async def collect(
-        self, start_time: datetime, end_time: datetime
-    ) -> list[UnifiedUsageRecord]:
+    async def collect(self, start_time: datetime, end_time: datetime) -> list[UnifiedUsageRecord]:
         records: list[UnifiedUsageRecord] = []
         try:
             start_ts = int(start_time.timestamp())
@@ -174,9 +169,7 @@ class GitHubCopilotCollector(BaseUsageCollector):
                 error_message=str(e),
             )
 
-    async def collect(
-        self, start_time: datetime, end_time: datetime
-    ) -> list[UnifiedUsageRecord]:
+    async def collect(self, start_time: datetime, end_time: datetime) -> list[UnifiedUsageRecord]:
         records: list[UnifiedUsageRecord] = []
         try:
             async with httpx.AsyncClient(timeout=30) as client:
@@ -371,9 +364,7 @@ class ExternalUsageService:
         summaries: list[UsageSummary] = []
 
         target_collectors = {
-            p: c
-            for p, c in self._collectors.items()
-            if providers is None or p in providers
+            p: c for p, c in self._collectors.items() if providers is None or p in providers
         }
 
         for provider, collector in target_collectors.items():
@@ -404,9 +395,7 @@ class ExternalUsageService:
                 continue
 
         # Merge proxy-collected records within the requested period
-        filtered_proxy = [
-            r for r in self._proxy_records if start_time <= r.timestamp <= end_time
-        ]
+        filtered_proxy = [r for r in self._proxy_records if start_time <= r.timestamp <= end_time]
         all_records.extend(filtered_proxy)
 
         total_cost = sum(s.total_cost_usd for s in summaries)

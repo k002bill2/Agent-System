@@ -25,9 +25,7 @@ def _mask_key(key: str) -> str:
     return key[:6] + "..." + key[-4:]
 
 
-async def list_user_credentials(
-    db: AsyncSession, user_id: str
-) -> list[LLMCredentialResponse]:
+async def list_user_credentials(db: AsyncSession, user_id: str) -> list[LLMCredentialResponse]:
     """Return all active credentials for a user (keys masked)."""
     result = await db.execute(
         select(UserLLMCredentialModel)
@@ -78,9 +76,7 @@ async def create_credential(
     )
 
 
-async def delete_credential(
-    db: AsyncSession, user_id: str, credential_id: str
-) -> bool:
+async def delete_credential(db: AsyncSession, user_id: str, credential_id: str) -> bool:
     """Soft-delete (deactivate) a credential. Returns False if not found/owned."""
     result = await db.execute(
         select(UserLLMCredentialModel).where(
@@ -177,9 +173,7 @@ async def _test_key(provider: ExternalProvider, api_key: str) -> tuple[bool, str
     return False, f"Unsupported provider: {provider}"
 
 
-async def get_raw_key(
-    db: AsyncSession, user_id: str, provider: ExternalProvider
-) -> str | None:
+async def get_raw_key(db: AsyncSession, user_id: str, provider: ExternalProvider) -> str | None:
     """Return decrypted API key for a user+provider (for proxy use). None if not found."""
     result = await db.execute(
         select(UserLLMCredentialModel)
