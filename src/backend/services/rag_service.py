@@ -617,10 +617,7 @@ class ProjectVectorStore:
             # Check skip directories using only the relative path parts
             # (avoids false positives from parent dirs above project_root)
             rel_parents = rel_path.parts[:-1]
-            if any(
-                self._should_skip_directory(Path(part))
-                for part in rel_parents
-            ):
+            if any(self._should_skip_directory(Path(part)) for part in rel_parents):
                 logger.debug(f"Skipped by dir filter: {rel_path} (parents: {rel_parents})")
                 continue
 
@@ -707,9 +704,7 @@ class ProjectVectorStore:
             where_filter = {"priority": filter_priority}
 
         if RAG_ENABLE_HYBRID and BM25_AVAILABLE:
-            return await self._hybrid_query(
-                project_id, collection, query, k, where_filter
-            )
+            return await self._hybrid_query(project_id, collection, query, k, where_filter)
 
         # ── Standard semantic-only path ───────────────────────────────────
         results = collection.similarity_search_with_score(
