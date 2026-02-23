@@ -1,7 +1,6 @@
 import { cn } from '../lib/utils'
 import {
   LayoutDashboard,
-  ListTodo,
   Users,
   Settings,
   Activity,
@@ -31,9 +30,8 @@ import { MENU_LABELS } from './admin/types'
 const navigation: { icon: typeof LayoutDashboard; view: ViewType }[] = [
   { icon: LayoutDashboard, view: 'dashboard' },
   { icon: FolderKanban, view: 'projects' },
-  { icon: ListTodo, view: 'tasks' },
+  { icon: Activity, view: 'sessions' },
   { icon: Users, view: 'agents' },
-  { icon: Activity, view: 'activity' },
   { icon: Monitor, view: 'monitor' },
   { icon: Code2, view: 'claude-sessions' },
   { icon: FolderCog, view: 'project-configs' },

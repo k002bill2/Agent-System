@@ -11,6 +11,16 @@ vi.mock('lucide-react', () => ({
   AlertTriangle: (props: Record<string, unknown>) => <span data-testid="icon-alert" {...props} />,
   Loader2: (props: Record<string, unknown>) => <span data-testid="icon-loader" {...props} />,
   Info: (props: Record<string, unknown>) => <span data-testid="icon-info" {...props} />,
+  Activity: (props: Record<string, unknown>) => <span data-testid="icon-activity" {...props} />,
+  ListTodo: (props: Record<string, unknown>) => <span data-testid="icon-list-todo" {...props} />,
+  Clock: (props: Record<string, unknown>) => <span data-testid="icon-clock" {...props} />,
+  CheckCircle2: (props: Record<string, unknown>) => <span data-testid="icon-check2" {...props} />,
+  XCircle: (props: Record<string, unknown>) => <span data-testid="icon-x" {...props} />,
+  ChevronDown: (props: Record<string, unknown>) => <span data-testid="icon-chevron-down" {...props} />,
+  ChevronRight: (props: Record<string, unknown>) => <span data-testid="icon-chevron-right" {...props} />,
+  Terminal: (props: Record<string, unknown>) => <span data-testid="icon-terminal" {...props} />,
+  MessageSquare: (props: Record<string, unknown>) => <span data-testid="icon-msg" {...props} />,
+  DollarSign: (props: Record<string, unknown>) => <span data-testid="icon-dollar" {...props} />,
 }))
 
 // Mock ClaudeCodeSessionSelector
@@ -20,6 +30,11 @@ vi.mock('../ClaudeCodeSessionSelector', () => ({
       <button onClick={() => onSelect('sess-1')}>Select Session</button>
     </div>
   ),
+}))
+
+// Mock TaskBoard
+vi.mock('../TaskBoard', () => ({
+  TaskBoard: () => <div data-testid="task-board">TaskBoard</div>,
 }))
 
 const mockSetActiveSession = vi.fn()
@@ -67,7 +82,9 @@ const mockActivities: ActivityEvent[] = [
 let storeState = {
   activeSessionId: null as string | null,
   activities: [] as ActivityEvent[],
+  tasks: {} as Record<string, unknown>,
   isLoadingActivity: false,
+  isLoadingTasks: false,
   error: null as string | null,
   setActiveSession: mockSetActiveSession,
   clearError: mockClearError,
@@ -85,7 +102,9 @@ describe('ClaudeCodeActivity', () => {
     storeState = {
       activeSessionId: null,
       activities: [],
+      tasks: {},
       isLoadingActivity: false,
+      isLoadingTasks: false,
       error: null,
       setActiveSession: mockSetActiveSession,
       clearError: mockClearError,
@@ -169,5 +188,18 @@ describe('ClaudeCodeActivity', () => {
     }]
     render(<ClaudeCodeActivity />)
     expect(screen.getByText('No content')).toBeInTheDocument()
+  })
+
+  it('renders Activity and Tasks tabs', () => {
+    render(<ClaudeCodeActivity />)
+    expect(screen.getByText('Activity')).toBeInTheDocument()
+    expect(screen.getByText('Tasks')).toBeInTheDocument()
+  })
+
+  it('switches to Tasks tab and shows TaskBoard', () => {
+    storeState.activeSessionId = 'sess-1'
+    render(<ClaudeCodeActivity />)
+    fireEvent.click(screen.getByText('Tasks'))
+    expect(screen.getByTestId('task-board')).toBeInTheDocument()
   })
 })

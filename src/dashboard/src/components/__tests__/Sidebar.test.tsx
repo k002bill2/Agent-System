@@ -66,9 +66,8 @@ describe('Sidebar', () => {
 
     expect(screen.getByText('Dashboard')).toBeInTheDocument()
     expect(screen.getByText('Projects')).toBeInTheDocument()
-    expect(screen.getByText('Tasks')).toBeInTheDocument()
+    expect(screen.getByText('Sessions')).toBeInTheDocument()
     expect(screen.getByText('Task Analyzer')).toBeInTheDocument()
-    expect(screen.getByText('Activity')).toBeInTheDocument()
     expect(screen.getByText('Monitor')).toBeInTheDocument()
     expect(screen.getByText('Claude Sessions')).toBeInTheDocument()
     expect(screen.getByText('Settings')).toBeInTheDocument()
@@ -77,8 +76,8 @@ describe('Sidebar', () => {
   it('calls setView when navigation item clicked', () => {
     render(<Sidebar />)
 
-    fireEvent.click(screen.getByText('Tasks'))
-    expect(mockSetView).toHaveBeenCalledWith('tasks')
+    fireEvent.click(screen.getByText('Sessions'))
+    expect(mockSetView).toHaveBeenCalledWith('sessions')
   })
 
   it('calls setView when Settings clicked', () => {
@@ -131,12 +130,12 @@ describe('Sidebar', () => {
 
   it('highlights current view', () => {
     vi.mocked(useNavigationStore).mockImplementation(
-      selectorMock({ currentView: 'tasks', setView: mockSetView })
+      selectorMock({ currentView: 'sessions', setView: mockSetView })
     )
 
     render(<Sidebar />)
 
-    const tasksButton = screen.getByText('Tasks').closest('button')
-    expect(tasksButton).toHaveClass('bg-primary-50')
+    const sessionsButton = screen.getByText('Sessions').closest('button')
+    expect(sessionsButton).toHaveClass('bg-primary-50')
   })
 })

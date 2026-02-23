@@ -1,11 +1,14 @@
 /**
- * Claude Code Activity component
+ * Claude Code Sessions - Unified View
  *
- * Displays activity events from a Claude Code session with real-time updates.
+ * Combines Activity log and Task board in a single tabbed interface.
+ * Left: Session selector | Right: [Activity | Tasks] tab content
  */
 
+import { useState } from 'react'
 import { useClaudeCodeActivityStore } from '../stores/claudeCodeActivity'
 import { ClaudeCodeSessionSelector } from './ClaudeCodeSessionSelector'
+import { TaskBoard } from './TaskBoard'
 import { cn } from '../lib/utils'
 import {
   User,
@@ -15,8 +18,12 @@ import {
   AlertTriangle,
   Loader2,
   Info,
+  Activity,
+  ListTodo,
 } from 'lucide-react'
 import type { ActivityEvent, ActivityEventType } from '../types/claudeCodeActivity'
+
+type TabType = 'activity' | 'tasks'
 
 const typeIcons: Record<ActivityEventType, typeof User> = {
   user: User,
@@ -90,15 +97,58 @@ function ActivityEventItem({ event }: { event: ActivityEvent }) {
   )
 }
 
+function ActivityLog() {
+  const { activeSessionId, activities, isLoadingActivity } = useClaudeCodeActivityStore()
+
+  if (!activeSessionId) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
+        <Info className="w-12 h-12 mb-4 opacity-50" />
+        <p>Select a Claude Code session</p>
+        <p className="text-sm mt-1">Activity events will appear here</p>
+      </div>
+    )
+  }
+
+  if (isLoadingActivity) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+      </div>
+    )
+  }
+
+  if (activities.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
+        <Info className="w-12 h-12 mb-4 opacity-50" />
+        <p>No activity in this session</p>
+        <p className="text-sm mt-1">Events will appear as the session progresses</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-4 space-y-2 overflow-y-auto h-full">
+      {activities.map((event) => (
+        <ActivityEventItem key={event.id} event={event} />
+      ))}
+    </div>
+  )
+}
+
 export function ClaudeCodeActivity() {
+  const [activeTab, setActiveTab] = useState<TabType>('activity')
   const {
     activeSessionId,
     activities,
-    isLoadingActivity,
+    tasks,
     error,
     setActiveSession,
     clearError,
   } = useClaudeCodeActivityStore()
+
+  const taskCount = Object.keys(tasks).length
 
   return (
     <div className="flex-1 flex overflow-hidden min-w-0">
@@ -112,7 +162,7 @@ export function ClaudeCodeActivity() {
         </div>
       </div>
 
-      {/* Right Panel - Activity Log */}
+      {/* Right Panel - Tabbed Content */}
       <div className="w-2/3 min-w-0 flex flex-col overflow-hidden">
         {/* Error Display */}
         {error && (
@@ -129,29 +179,47 @@ export function ClaudeCodeActivity() {
           </div>
         )}
 
-        {/* Activity List */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {!activeSessionId ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
-              <Info className="w-12 h-12 mb-4 opacity-50" />
-              <p>Select a Claude Code session</p>
-              <p className="text-sm mt-1">Activity events will appear here</p>
-            </div>
-          ) : isLoadingActivity ? (
-            <div className="flex items-center justify-center h-full">
-              <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
-            </div>
-          ) : activities.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
-              <Info className="w-12 h-12 mb-4 opacity-50" />
-              <p>No activity in this session</p>
-              <p className="text-sm mt-1">Events will appear as the session progresses</p>
-            </div>
-          ) : (
-            activities.map((event) => (
-              <ActivityEventItem key={event.id} event={event} />
-            ))
-          )}
+        {/* Tab Bar */}
+        <div className="flex items-center border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4">
+          <button
+            onClick={() => setActiveTab('activity')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors',
+              activeTab === 'activity'
+                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+            )}
+          >
+            <Activity className="w-4 h-4" />
+            Activity
+            {activeSessionId && activities.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                {activities.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('tasks')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors',
+              activeTab === 'tasks'
+                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+            )}
+          >
+            <ListTodo className="w-4 h-4" />
+            Tasks
+            {activeSessionId && taskCount > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                {taskCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        <div className="flex-1 overflow-hidden">
+          {activeTab === 'activity' ? <ActivityLog /> : <TaskBoard />}
         </div>
       </div>
     </div>

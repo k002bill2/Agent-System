@@ -53,9 +53,8 @@ export const ROLE_COLORS: Record<UserRole, string> = {
 export const MENU_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
   projects: 'Projects',
-  tasks: 'Tasks',
+  sessions: 'Sessions',
   agents: 'Task Analyzer',
-  activity: 'Activity',
   monitor: 'Monitor',
   'claude-sessions': 'Claude Sessions',
   'project-configs': 'Project Configs',
@@ -76,11 +75,11 @@ export const MENU_LABELS: Record<string, string> = {
 export const MENU_CATEGORIES: { label: string; keys: string[] }[] = [
   {
     label: 'Core',
-    keys: ['dashboard', 'projects', 'tasks'],
+    keys: ['dashboard', 'projects', 'sessions'],
   },
   {
     label: 'Development',
-    keys: ['agents', 'activity', 'playground'],
+    keys: ['agents', 'playground'],
   },
   {
     label: 'Operations',

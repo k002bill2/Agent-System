@@ -26,8 +26,8 @@ describe('navigation store', () => {
     it('updates currentView', () => {
       const { setView } = useNavigationStore.getState()
 
-      setView('tasks')
-      expect(useNavigationStore.getState().currentView).toBe('tasks')
+      setView('sessions')
+      expect(useNavigationStore.getState().currentView).toBe('sessions')
 
       setView('agents')
       expect(useNavigationStore.getState().currentView).toBe('agents')
@@ -79,8 +79,8 @@ describe('isPublicView', () => {
     expect(isPublicView('dashboard')).toBe(false)
   })
 
-  it('returns false for tasks', () => {
-    expect(isPublicView('tasks')).toBe(false)
+  it('returns false for sessions', () => {
+    expect(isPublicView('sessions')).toBe(false)
   })
 
   it('returns false for settings', () => {

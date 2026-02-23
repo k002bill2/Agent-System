@@ -9,9 +9,8 @@ import { useAuthStore } from './stores/auth'
 import { useMenuVisibilityStore } from './stores/menuVisibility'
 import { DashboardPage } from './pages/DashboardPage'
 import { ProjectsPage } from './pages/ProjectsPage'
-import { TasksPage } from './pages/TasksPage'
+import { SessionsPage } from './pages/SessionsPage'
 import { AgentsPage } from './pages/AgentsPage'
-import { ActivityPage } from './pages/ActivityPage'
 import { MonitorPage } from './pages/MonitorPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ClaudeSessionsPage } from './pages/ClaudeSessionsPage'
@@ -35,7 +34,6 @@ import {
   SidebarSkeleton,
   DashboardSkeleton,
   ProjectsSkeleton,
-  TasksSkeleton,
   AgentsSkeleton,
   ActivitySkeleton,
   MonitorSkeleton,
@@ -48,9 +46,8 @@ import { RotateCcw, Trash2 } from 'lucide-react'
 const viewTitles: Record<string, string> = {
   dashboard: 'Dashboard',
   projects: 'Projects',
-  tasks: 'Tasks',
+  sessions: 'Sessions',
   agents: 'Agents',
-  activity: 'Activity',
   monitor: 'Monitor',
   'claude-sessions': 'Claude Sessions',
   'project-configs': 'Project Configs',
@@ -292,12 +289,10 @@ export default function App() {
         return <DashboardPage />
       case 'projects':
         return <ProjectsPage />
-      case 'tasks':
-        return <TasksPage />
+      case 'sessions':
+        return <SessionsPage />
       case 'agents':
         return <AgentsPage />
-      case 'activity':
-        return <ActivityPage />
       case 'monitor':
         return <MonitorPage />
       case 'claude-sessions':
@@ -337,12 +332,10 @@ export default function App() {
         return <DashboardSkeleton />
       case 'projects':
         return <ProjectsSkeleton />
-      case 'tasks':
-        return <TasksSkeleton />
+      case 'sessions':
+        return <ActivitySkeleton />
       case 'agents':
         return <AgentsSkeleton />
-      case 'activity':
-        return <ActivitySkeleton />
       case 'monitor':
         return <MonitorSkeleton />
       case 'claude-sessions':
@@ -443,7 +436,7 @@ export default function App() {
         </div>
 
         {/* Chat Input - only show on dashboard, tasks, and activity views */}
-        {!isInitialLoading && ['dashboard', 'tasks', 'activity'].includes(currentView) && <ChatInput />}
+        {!isInitialLoading && ['dashboard', 'sessions'].includes(currentView) && <ChatInput />}
       </div>
     </div>
   )

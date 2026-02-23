@@ -28,9 +28,9 @@ const mockVisibilityData = {
   visibility: {
     dashboard: { user: true, manager: true, admin: true },
     projects: { user: true, manager: true, admin: true },
-    tasks: { user: false, manager: true, admin: true },
+    sessions: { user: false, manager: true, admin: true },
   },
-  menu_order: ['dashboard', 'projects', 'tasks'],
+  menu_order: ['dashboard', 'projects', 'sessions'],
 }
 
 describe('MenuSettingsTab', () => {
@@ -89,7 +89,7 @@ describe('MenuSettingsTab', () => {
     await waitFor(() => {
       expect(screen.getByText('Dashboard')).toBeInTheDocument()
       expect(screen.getByText('Projects')).toBeInTheDocument()
-      expect(screen.getByText('Tasks')).toBeInTheDocument()
+      expect(screen.getByText('Sessions')).toBeInTheDocument()
     })
   })
 
@@ -101,9 +101,9 @@ describe('MenuSettingsTab', () => {
       expect(screen.getByText('Dashboard')).toBeInTheDocument()
     })
 
-    // 3 menus x 3 roles = 9 checkboxes
+    // syncVisibility adds defaults for all DEFAULT_MENU_ORDER items (16 menus x 3 roles = 48)
     const checkboxes = screen.getAllByRole('checkbox')
-    expect(checkboxes.length).toBe(9)
+    expect(checkboxes.length).toBe(48)
   })
 
   it('disables admin role checkboxes', async () => {
@@ -115,7 +115,7 @@ describe('MenuSettingsTab', () => {
     })
 
     const checkboxes = screen.getAllByRole('checkbox')
-    // Every 3rd checkbox is the admin column (index 2, 5, 8)
+    // Every 3rd checkbox is the admin column (disabled)
     expect(checkboxes[2]).toBeDisabled()
     expect(checkboxes[5]).toBeDisabled()
     expect(checkboxes[8]).toBeDisabled()

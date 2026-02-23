@@ -1,9 +1,8 @@
-import { ClaudeCodeTasks } from '../components/ClaudeCodeTasks'
+/**
+ * @deprecated Use SessionsPage instead. This page is kept for backward compatibility.
+ */
+import { SessionsPage } from './SessionsPage'
 
 export function TasksPage() {
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-      <ClaudeCodeTasks />
-    </div>
-  )
+  return <SessionsPage />
 }
