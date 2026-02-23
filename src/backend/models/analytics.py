@@ -141,7 +141,7 @@ class CostBreakdown(BaseModel):
     """Cost breakdown by category."""
 
     category: str  # e.g., "agent_name", "model", "session"
-    value: str  # e.g., "web-ui-specialist", "claude-sonnet-4-20250514"
+    value: str  # e.g., "web-ui-specialist", "claude-sonnet-4-6"
     cost: float
     tokens: int
     percentage: float = 0.0

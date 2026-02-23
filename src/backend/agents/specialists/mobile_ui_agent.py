@@ -98,7 +98,7 @@ class MobileUIAgent(BaseAgent):
             name="MobileUISpecialist",
             description="React Native UI/UX expert specializing in components, layouts, and navigation",
             system_prompt=MOBILE_UI_SYSTEM_PROMPT,
-            model_name="claude-sonnet-4-20250514",
+            model_name="claude-sonnet-4-6",
             temperature=0.5,
             max_tokens=8192,  # UI 코드는 길 수 있음
             tools=["file_read", "file_write", "code_search"],

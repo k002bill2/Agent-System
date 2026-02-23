@@ -53,7 +53,7 @@ class ClaudeSessionInfo(BaseModel):
     session_id: str = Field(..., description="Unique session ID (UUID)")
     slug: str = Field(..., description="Human-readable slug like 'federated-booping-frog'")
     status: SessionStatus = Field(default=SessionStatus.UNKNOWN, description="Session status")
-    model: str = Field(default="unknown", description="Model name like 'claude-opus-4-5-20251101'")
+    model: str = Field(default="unknown", description="Model name like 'claude-opus-4-6'")
     project_path: str = Field(
         ..., description="Encoded project path like '-Users-username-Work-MyProject'"
     )
@@ -202,6 +202,10 @@ class TasksResponse(BaseModel):
 
 # Cost per 1K tokens for different models
 MODEL_COSTS = {
+    "claude-opus-4-6": {"input": 0.015, "output": 0.075},
+    "claude-sonnet-4-6": {"input": 0.003, "output": 0.015},
+    "claude-haiku-4-5-20251001": {"input": 0.001, "output": 0.005},
+    # Legacy model IDs for backward compatibility
     "claude-opus-4-5-20251101": {"input": 0.015, "output": 0.075},
     "claude-sonnet-4-20250514": {"input": 0.003, "output": 0.015},
     "claude-3-5-sonnet-20241022": {"input": 0.003, "output": 0.015},

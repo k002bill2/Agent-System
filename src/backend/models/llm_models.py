@@ -23,7 +23,7 @@ class LLMProvider(str, Enum):
 class LLMModelConfig(BaseModel):
     """Configuration for an LLM model."""
 
-    id: str  # "claude-sonnet-4-20250514"
+    id: str  # "claude-sonnet-4-6"
     display_name: str  # "Claude Sonnet 4"
     provider: LLMProvider
     context_window: int  # Max context window size
@@ -45,8 +45,8 @@ _MODELS: list[LLMModelConfig] = [
     # Anthropic Claude Models
     # ─────────────────────────────────────────────────────────
     LLMModelConfig(
-        id="claude-opus-4-5-20250514",
-        display_name="Claude Opus 4.5",
+        id="claude-opus-4-6",
+        display_name="Claude Opus 4.6",
         provider=LLMProvider.ANTHROPIC,
         context_window=200000,
         input_price=0.015,
@@ -56,13 +56,24 @@ _MODELS: list[LLMModelConfig] = [
         supports_vision=True,
     ),
     LLMModelConfig(
-        id="claude-sonnet-4-20250514",
-        display_name="Claude Sonnet 4",
+        id="claude-sonnet-4-6",
+        display_name="Claude Sonnet 4.6",
         provider=LLMProvider.ANTHROPIC,
         context_window=200000,
         input_price=0.003,
         output_price=0.015,
         is_default=True,  # Default Anthropic model
+        supports_tools=True,
+        supports_vision=True,
+    ),
+    LLMModelConfig(
+        id="claude-haiku-4-5-20251001",
+        display_name="Claude Haiku 4.5",
+        provider=LLMProvider.ANTHROPIC,
+        context_window=200000,
+        input_price=0.001,
+        output_price=0.005,
+        is_default=False,
         supports_tools=True,
         supports_vision=True,
     ),

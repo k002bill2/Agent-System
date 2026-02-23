@@ -3,7 +3,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CheckType(str, Enum):
@@ -36,8 +36,7 @@ class CheckResult(BaseModel):
     started_at: datetime | None = None
     completed_at: datetime | None = None
 
-    class Config:
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
 
 
 class ProjectHealth(BaseModel):

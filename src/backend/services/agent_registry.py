@@ -54,7 +54,7 @@ class AgentMetadata(BaseModel):
     name: str
     description: str
     category: AgentCategory
-    model: str = "claude-sonnet-4-20250514"
+    model: str = "claude-sonnet-4-6"
 
     # 능력 및 전문 영역
     capabilities: list[AgentCapability] = Field(default_factory=list)

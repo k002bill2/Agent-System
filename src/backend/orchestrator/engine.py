@@ -28,7 +28,7 @@ def get_llm():
         from langchain_anthropic import ChatAnthropic
 
         return ChatAnthropic(
-            model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
+            model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
             api_key=os.getenv("ANTHROPIC_API_KEY"),
         )
     elif LLM_PROVIDER == "google":

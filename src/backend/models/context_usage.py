@@ -17,10 +17,9 @@ class LLMProvider(str, Enum):
 # Provider context window limits (tokens)
 PROVIDER_CONTEXT_LIMITS = {
     LLMProvider.ANTHROPIC: {
-        "claude-3-opus": 200_000,
-        "claude-3-sonnet": 200_000,
-        "claude-sonnet-4-20250514": 200_000,
-        "claude-3-haiku": 200_000,
+        "claude-opus-4-6": 200_000,
+        "claude-sonnet-4-6": 200_000,
+        "claude-haiku-4-5-20251001": 200_000,
         "default": 200_000,
     },
     LLMProvider.GOOGLE: {

@@ -147,7 +147,7 @@ class TestAutomationAgent(BaseAgent):
             name="TestAutomationSpecialist",
             description="Testing expert specializing in Jest, RNTL, coverage analysis, and TDD",
             system_prompt=TEST_AUTOMATION_SYSTEM_PROMPT,
-            model_name="claude-sonnet-4-20250514",
+            model_name="claude-sonnet-4-6",
             temperature=0.3,  # 정확한 테스트 코드 생성
             max_tokens=8192,
             tools=["file_read", "file_write", "code_search", "test_run"],

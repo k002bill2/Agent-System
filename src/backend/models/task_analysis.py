@@ -7,7 +7,7 @@ Task Analysis Pydantic models
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TaskAnalysisEntry(BaseModel):
@@ -29,8 +29,7 @@ class TaskAnalysisEntry(BaseModel):
     image_paths: list[str] | None = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TaskAnalysisListResponse(BaseModel):

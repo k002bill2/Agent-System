@@ -147,7 +147,7 @@ class BackendIntegrationAgent(BaseAgent):
             name="BackendIntegrationSpecialist",
             description="Firebase and API integration expert specializing in data sync, auth, and security",
             system_prompt=BACKEND_SYSTEM_PROMPT,
-            model_name="claude-sonnet-4-20250514",
+            model_name="claude-sonnet-4-6",
             temperature=0.4,  # 정확한 코드 생성을 위해 낮은 temperature
             max_tokens=8192,
             tools=["file_read", "file_write", "code_search", "api_test"],

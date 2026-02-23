@@ -267,14 +267,14 @@ class AnalyticsService:
         by_model = [
             CostBreakdown(
                 category="model",
-                value="claude-sonnet-4-20250514",
+                value="claude-sonnet-4-6",
                 cost=12.50,
                 tokens=850000,
                 percentage=66.7,
             ),
             CostBreakdown(
                 category="model",
-                value="gemini-2.0-flash",
+                value="gemini-3-flash-preview",
                 cost=4.25,
                 tokens=300000,
                 percentage=22.7,

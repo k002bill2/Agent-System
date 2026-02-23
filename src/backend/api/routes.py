@@ -1728,9 +1728,9 @@ async def get_context_usage(
     provider = os.getenv("LLM_PROVIDER", "google")
 
     if provider == "google":
-        model = os.getenv("GOOGLE_MODEL", "gemini-2.0-flash")
+        model = os.getenv("GOOGLE_MODEL", "gemini-3-flash-preview")
     elif provider == "anthropic":
-        model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+        model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
     elif provider == "openai":
         model = os.getenv("OPENAI_MODEL", "gpt-4o")
     elif provider == "ollama":

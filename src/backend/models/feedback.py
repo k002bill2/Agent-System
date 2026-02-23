@@ -9,7 +9,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class FeedbackType(str, Enum):
@@ -61,8 +61,8 @@ class FeedbackSubmit(BaseModel):
         None, description="effort level (quick/moderate/thorough/comprehensive)"
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "session_id": "sess-abc123",
                 "task_id": "task-xyz789",
@@ -72,6 +72,7 @@ class FeedbackSubmit(BaseModel):
                 "original_output": "function add(a, b) { return a + b; }",
             }
         }
+    )
 
 
 class FeedbackResponse(BaseModel):
@@ -222,8 +223,8 @@ class TaskEvaluationSubmit(BaseModel):
     project_name: str | None = Field(None, description="프로젝트명")
     effort_level: str | None = Field(None, description="effort level")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "session_id": "sess-abc123",
                 "task_id": "task-xyz789",
@@ -234,6 +235,7 @@ class TaskEvaluationSubmit(BaseModel):
                 "agent_id": "web-ui-specialist",
             }
         }
+    )
 
 
 class TaskEvaluationResponse(BaseModel):

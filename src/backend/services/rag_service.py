@@ -8,10 +8,13 @@ All new features are off by default and controlled via environment variables.
 """
 
 import hashlib
+import logging
 import os
 import re
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from pydantic import BaseModel
 
@@ -570,9 +573,15 @@ class ProjectVectorStore:
             self._bm25_corpus.pop(project_id, None)
             collection = self._get_or_create_collection(project_id)
 
-        project_root = Path(project_path)
+        # Resolve symlinks for consistent path handling
+        project_root = Path(project_path).resolve()
+        logger.info(f"Indexing project '{project_id}' at: {project_root}")
+        logger.info(f"  Original path: {project_path}")
+        logger.info(f"  Resolved path: {project_root}")
+        logger.info(f"  Is symlink: {Path(project_path).is_symlink()}")
         documents: list[Document] = []
         files_indexed = 0
+        skipped_count = 0
 
         priority_files = ["CLAUDE.md", "README.md", "package.json", "pyproject.toml"]
 
@@ -589,14 +598,32 @@ class ProjectVectorStore:
                         chunk.metadata["priority"] = "high"
                     documents.extend(chunks)
                     files_indexed += 1
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Skipped priority file {file_path}: {e}")
 
         for item in project_root.rglob("*"):
-            if any(self._should_skip_directory(parent) for parent in item.parents):
-                continue
             if not item.is_file():
                 continue
+
+            # Compute relative path first; skip files outside project_root
+            # (e.g. broken symlinks or resolve mismatches)
+            try:
+                rel_path = item.relative_to(project_root)
+            except ValueError:
+                skipped_count += 1
+                logger.warning(f"Skipped file (relative_to failed): {item}")
+                continue
+
+            # Check skip directories using only the relative path parts
+            # (avoids false positives from parent dirs above project_root)
+            rel_parents = rel_path.parts[:-1]
+            if any(
+                self._should_skip_directory(Path(part))
+                for part in rel_parents
+            ):
+                logger.debug(f"Skipped by dir filter: {rel_path} (parents: {rel_parents})")
+                continue
+
             if item.name in priority_files:
                 continue
             if not self._should_index_file(item):
@@ -609,14 +636,21 @@ class ProjectVectorStore:
 
                 chunks = self._chunk_document(
                     content,
-                    str(item.relative_to(project_root)),
+                    str(rel_path),
                 )
                 for chunk in chunks:
                     chunk.metadata["priority"] = "normal"
                 documents.extend(chunks)
                 files_indexed += 1
-            except Exception:
+            except Exception as e:
+                skipped_count += 1
+                logger.warning(f"Skipped file (read/chunk failed): {item}: {e}")
                 continue
+
+        logger.info(
+            f"Indexing complete: {files_indexed} files, "
+            f"{len(documents)} chunks, {skipped_count} skipped"
+        )
 
         if documents:
             texts = [doc.page_content for doc in documents]

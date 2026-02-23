@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 if TYPE_CHECKING:
     pass
@@ -105,9 +105,7 @@ class Settings(BaseSettings):
     session_ttl_days: int = 7
     session_inactive_hours: int = 24
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
 @lru_cache

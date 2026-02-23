@@ -415,7 +415,7 @@ class LLMRouterService:
             LLMRouterService.create_provider(
                 LLMProviderConfigCreate(
                     provider=LLMProvider.ANTHROPIC,
-                    model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
+                    model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
                     api_key=anthropic_key,
                     priority=100,
                     cost_per_1k_input=0.003,
@@ -429,7 +429,7 @@ class LLMRouterService:
             LLMRouterService.create_provider(
                 LLMProviderConfigCreate(
                     provider=LLMProvider.GOOGLE,
-                    model=os.getenv("GOOGLE_MODEL", "gemini-2.0-flash"),
+                    model=os.getenv("GOOGLE_MODEL", "gemini-3-flash-preview"),
                     api_key=google_key,
                     priority=90,
                     cost_per_1k_input=0.00025,

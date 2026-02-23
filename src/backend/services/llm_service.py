@@ -60,6 +60,8 @@ class LLMService:
         max_tokens: int = 4096,
     ) -> Any:
         """Get or create LLM instance for the specified model."""
+        if not model_id:
+            model_id = LLMModelRegistry.get_default()
         config = MODEL_CONFIGS.get(model_id)
         if not config:
             raise ValueError(f"Unknown model: {model_id}")
@@ -121,7 +123,7 @@ class LLMService:
     async def invoke(
         cls,
         prompt: str,
-        model_id: str = "gemini-3-flash-preview",
+        model_id: str = "",
         system_prompt: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
@@ -132,7 +134,7 @@ class LLMService:
 
         Args:
             prompt: The user's prompt
-            model_id: Model identifier (e.g., "gemini-3-flash-preview", "claude-sonnet-4-20250514")
+            model_id: Model identifier (e.g., "gemini-3-flash-preview", "claude-sonnet-4-6")
             system_prompt: Optional system prompt
             temperature: Sampling temperature
             max_tokens: Maximum output tokens
@@ -205,7 +207,7 @@ class LLMService:
     async def stream(
         cls,
         prompt: str,
-        model_id: str = "gemini-3-flash-preview",
+        model_id: str = "",
         system_prompt: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
@@ -244,7 +246,7 @@ class LLMService:
     async def stream_with_tokens(
         cls,
         prompt: str,
-        model_id: str = "gemini-3-flash-preview",
+        model_id: str = "",
         system_prompt: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
@@ -345,7 +347,7 @@ class LLMService:
         cls,
         prompt: str,
         tools: list[str],
-        model_id: str = "gemini-3-flash-preview",
+        model_id: str = "",
         system_prompt: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
