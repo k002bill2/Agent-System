@@ -1,5 +1,5 @@
 # Backend Dockerfile (Full Features)
-# Includes: ChromaDB, RAG, Docker SDK, all LLM providers
+# Includes: Qdrant, RAG, Docker SDK, all LLM providers
 
 FROM python:3.11-slim
 
@@ -23,7 +23,7 @@ COPY . .
 RUN touch README.md && uv pip install --system -e .
 
 # Create data directories
-RUN mkdir -p /app/data/chromadb /app/data/summaries
+RUN mkdir -p /app/data/summaries
 
 # Non-root user for security
 RUN useradd -m -u 1000 aos && \

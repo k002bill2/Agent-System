@@ -105,6 +105,11 @@ class Settings(BaseSettings):
     session_ttl_days: int = 7
     session_inactive_hours: int = 24
 
+    # Qdrant Vector Database
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_api_key: str = ""  # Cloud deployment
+    qdrant_prefer_grpc: bool = True
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

@@ -4,7 +4,7 @@
 
 ### 0. 인프라 실행 (선택사항)
 ```bash
-# PostgreSQL, Redis, ChromaDB 실행 (DB 사용 시)
+# PostgreSQL, Redis, Qdrant 실행 (DB 사용 시)
 cd infra/scripts && ./dev.sh
 ```
 

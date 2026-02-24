@@ -30,7 +30,7 @@ Agent System/
 
 | Layer | Stack |
 |-------|-------|
-| Backend | LangGraph 0.2+, FastAPI 0.115+, SQLAlchemy 2.0+, PostgreSQL, Redis, ChromaDB |
+| Backend | LangGraph 0.2+, FastAPI 0.115+, SQLAlchemy 2.0+, PostgreSQL, Redis, Qdrant |
 | Frontend | React 18.3, Zustand 5.0, Tailwind CSS 3.4, Vite 6.0+, TypeScript 5.6+ |
 | LLM | Google Gemini (기본), Anthropic Claude, Ollama |
 
@@ -118,7 +118,7 @@ cd src/dashboard && npm test
 
 - **LangGraph Nodes**: Orchestrator, Planner, Executor, ParallelExecutor, Reviewer, SelfCorrection
 - **HITL 승인**: 위험 작업 전 사용자 승인 요청
-- **RAG**: ChromaDB 기반 의미론적 검색
+- **RAG**: Qdrant 기반 의미론적 검색
 - **MCP**: 외부 도구 연동 (filesystem, github, playwright)
 - **Agent Registry**: 에이전트 등록/검색/선택
 - **인증**: OAuth (Google/GitHub) + Email/Password

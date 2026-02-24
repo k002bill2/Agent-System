@@ -717,7 +717,7 @@ async def get_projects(
 
     result = []
     for p in projects:
-        # ChromaDB에서 실제 인덱스 상태 조회 (if available)
+        # Qdrant에서 실제 인덱스 상태 조회 (if available)
         if rag_available:
             stats = store.get_collection_stats(p.id)
             vector_initialized = stats.get("indexed", False)

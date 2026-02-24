@@ -1,5 +1,5 @@
 # Requirements for Railway deployment
-# Excludes: chromadb, sentence-transformers (heavy ML models ~6GB)
+# Excludes: qdrant-client, sentence-transformers (heavy ML models)
 
 # Core LangChain
 langgraph>=0.2.0
@@ -27,5 +27,5 @@ pyjwt>=2.8.0
 # Monitoring
 structlog>=24.4.0
 
-# Note: RAG disabled (no chromadb/sentence-transformers)
+# Note: RAG disabled (no qdrant-client/sentence-transformers)
 # Note: PostgreSQL driver (asyncpg) disabled - use SQLite in-memory

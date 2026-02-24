@@ -198,14 +198,14 @@ container = client.containers.run(
 |----|------|------|
 | **PostgreSQL** | 메인 DB | 관계형 데이터 (사용자, 세션, 태스크 등) |
 | **Redis** | 캐시/세션 | 실시간 상태, 세션 스토어 |
-| **ChromaDB** | 벡터 DB | RAG용 임베딩 검색 |
+| **Qdrant** | 벡터 DB | RAG용 임베딩 검색 |
 
 > ⚠️ **Firebase가 아닙니다!** PostgreSQL은 오픈소스 DB로 가입이 필요 없습니다.
 
 ### 실행 방법
 
 ```bash
-# Docker로 로컬 실행 (PostgreSQL, Redis, ChromaDB 모두 포함)
+# Docker로 로컬 실행 (PostgreSQL, Redis, Qdrant 모두 포함)
 cd infra/scripts && ./dev.sh
 ```
 

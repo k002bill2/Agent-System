@@ -1,6 +1,6 @@
 """Tests for RAG service: chunking, hybrid search, BM25, reranking."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -19,11 +19,11 @@ def _make_document(page_content: str, metadata: dict | None = None):
 
 
 @pytest.fixture(autouse=True)
-def _mock_chroma(monkeypatch):
-    """Ensure CHROMA_AVAILABLE is True with mocked Chroma for all tests."""
+def _mock_qdrant(monkeypatch):
+    """Ensure QDRANT_AVAILABLE is True with mocked Qdrant for all tests."""
     import services.rag_service as rag_mod
 
-    monkeypatch.setattr(rag_mod, "CHROMA_AVAILABLE", True)
+    monkeypatch.setattr(rag_mod, "QDRANT_AVAILABLE", True)
 
     # Mock Document to behave like a simple dataclass
     class FakeDocument:
@@ -35,8 +35,8 @@ def _mock_chroma(monkeypatch):
 
 
 @pytest.fixture
-def vector_store(monkeypatch, tmp_path):
-    """Create a ProjectVectorStore with mocked embeddings."""
+def vector_store(monkeypatch):
+    """Create a ProjectVectorStore with mocked Qdrant client and embeddings."""
     import services.rag_service as rag_mod
 
     # Mock embeddings to avoid loading real models
@@ -47,7 +47,12 @@ def vector_store(monkeypatch, tmp_path):
         lambda self, model=None: mock_embeddings,
     )
 
-    store = rag_mod.ProjectVectorStore(persist_directory=str(tmp_path / "chroma"))
+    # Mock QdrantClient to avoid needing a real Qdrant server
+    mock_client = MagicMock()
+    monkeypatch.setattr(rag_mod, "QdrantClient", lambda **kwargs: mock_client)
+
+    store = rag_mod.ProjectVectorStore(qdrant_url="http://localhost:6333")
+    store.client = mock_client
     return store
 
 
@@ -58,7 +63,7 @@ class TestChunkDocument:
     """Tests for _chunk_document with language-aware splitting."""
 
     def test_small_file_single_chunk(self, vector_store):
-        """Files below RAG_FULL_CONTEXT_THRESHOLD → single chunk."""
+        """Files below RAG_FULL_CONTEXT_THRESHOLD -> single chunk."""
         content = "Hello world\nThis is a small file."
         chunks = vector_store._chunk_document(content, "readme.md")
 
@@ -107,12 +112,12 @@ class TestChunkDocument:
 
         content = "x" * 2500  # 2500 chars
 
-        # Default threshold 3000 → single chunk
+        # Default threshold 3000 -> single chunk
         monkeypatch.setattr(rag_mod, "RAG_FULL_CONTEXT_THRESHOLD", 3000)
         chunks = vector_store._chunk_document(content, "file.txt")
         assert len(chunks) == 1
 
-        # Threshold 500 → multiple chunks
+        # Threshold 500 -> multiple chunks
         monkeypatch.setattr(rag_mod, "RAG_FULL_CONTEXT_THRESHOLD", 500)
         chunks = vector_store._chunk_document(content, "file.txt", chunk_size=1000)
         assert len(chunks) > 1
@@ -273,7 +278,7 @@ class TestRRFFusion:
 
         results = ProjectVectorStore._rrf_fusion([list1, list2])
 
-        # doc A appears in both (rank 0 in list1, rank 1 in list2) → highest
+        # doc A appears in both (rank 0 in list1, rank 1 in list2) -> highest
         sources = [r["source"] for r in results]
         assert "a.py" in sources
         assert "c.py" in sources
@@ -366,12 +371,12 @@ class TestQueryPaths:
 
         monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
 
-        # Mock collection
+        # Mock collection (QdrantVectorStore)
         mock_collection = MagicMock()
         mock_doc = MagicMock()
         mock_doc.page_content = "test content"
         mock_doc.metadata = {"source": "test.py", "chunk_index": 0, "priority": "normal"}
-        mock_collection.similarity_search_with_score.return_value = [(mock_doc, 0.2)]
+        mock_collection.similarity_search_with_score.return_value = [(mock_doc, 0.8)]
 
         monkeypatch.setattr(
             vector_store, "_get_or_create_collection", lambda pid: mock_collection
@@ -398,7 +403,7 @@ class TestQueryPaths:
         mock_doc = MagicMock()
         mock_doc.page_content = "semantic result"
         mock_doc.metadata = {"source": "sem.py", "chunk_index": 0, "priority": "normal"}
-        mock_collection.similarity_search_with_score.return_value = [(mock_doc, 0.1)]
+        mock_collection.similarity_search_with_score.return_value = [(mock_doc, 0.9)]
 
         monkeypatch.setattr(
             vector_store, "_get_or_create_collection", lambda pid: mock_collection
@@ -457,15 +462,24 @@ class TestConfig:
         # These are the defaults when env vars are not set
         assert rag_mod.RAG_FULL_CONTEXT_THRESHOLD >= 1000  # Sensible default
 
-    def test_collection_stats_includes_hybrid_info(self, vector_store, monkeypatch):
-        """get_collection_stats reports hybrid/rerank status."""
-        mock_collection = MagicMock()
-        mock_collection._collection.count.return_value = 42
-        monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
-        )
+    def test_collection_stats_with_qdrant(self, vector_store, monkeypatch):
+        """get_collection_stats uses Qdrant client to get point count."""
+        # Mock the Qdrant client get_collection response
+        mock_collection_info = MagicMock()
+        mock_collection_info.points_count = 42
+        vector_store.client.get_collection.return_value = mock_collection_info
 
         stats = vector_store.get_collection_stats("proj1")
         assert stats["document_count"] == 42
+        assert stats["indexed"] is True
         assert "hybrid_enabled" in stats
         assert "rerank_enabled" in stats
+
+    def test_collection_stats_not_found(self, vector_store):
+        """get_collection_stats handles missing collection gracefully."""
+        vector_store.client.get_collection.side_effect = Exception("Not found")
+
+        stats = vector_store.get_collection_stats("proj1")
+        assert stats["document_count"] == 0
+        assert stats["indexed"] is False
+        assert "error" in stats

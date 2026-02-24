@@ -98,9 +98,27 @@ services:
     # read_only: false
     # user: sandbox
 
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: aos-qdrant
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aos-network
+
 volumes:
   postgres_data:
   redis_data:
+  qdrant_data:
 
 networks:
   aos-network:

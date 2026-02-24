@@ -83,7 +83,7 @@ USE_DATABASE=true
 
 ## 6. Vector DB + RAG
 
-프로젝트 코드를 ChromaDB에 인덱싱하여 의미론적 검색:
+프로젝트 코드를 Qdrant에 인덱싱하여 의미론적 검색:
 
 ```python
 class ProjectVectorStore:

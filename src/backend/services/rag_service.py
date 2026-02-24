@@ -5,6 +5,8 @@ Supports:
 - Hybrid search (semantic + BM25 with RRF fusion)
 - CrossEncoder reranking
 All new features are off by default and controlled via environment variables.
+
+Vector DB backend: Qdrant (migrated from ChromaDB).
 """
 
 import hashlib
@@ -26,15 +28,19 @@ RAG_FULL_CONTEXT_THRESHOLD = int(os.getenv("RAG_FULL_CONTEXT_THRESHOLD", "3000")
 RAG_CANDIDATE_MULTIPLIER = int(os.getenv("RAG_CANDIDATE_MULTIPLIER", "3"))
 
 # ── Conditional imports ───────────────────────────────────────────────────────
-CHROMA_AVAILABLE = False
+QDRANT_AVAILABLE = False
 try:
-    from langchain_chroma import Chroma
     from langchain_core.documents import Document
     from langchain_core.embeddings import Embeddings
+    from langchain_qdrant import QdrantVectorStore
+    from qdrant_client import QdrantClient
+    from qdrant_client.models import Distance, FieldCondition, MatchValue, VectorParams
+    from qdrant_client.models import Filter as QdrantFilter
 
-    CHROMA_AVAILABLE = True
+    QDRANT_AVAILABLE = True
 except ImportError:
-    Chroma = None  # type: ignore
+    QdrantClient = None  # type: ignore
+    QdrantVectorStore = None  # type: ignore
     Document = None  # type: ignore
     Embeddings = None  # type: ignore
 
@@ -112,7 +118,7 @@ def _tokenize(text: str) -> list[str]:
 
 class ProjectVectorStore:
     """
-    Chroma-based vector store for project documents.
+    Qdrant-based vector store for project documents.
 
     Indexes project files (especially CLAUDE.md and source code)
     for semantic search during task planning.
@@ -167,18 +173,33 @@ class ProjectVectorStore:
 
     def __init__(
         self,
-        persist_directory: str | None = None,
+        qdrant_url: str | None = None,
+        qdrant_api_key: str | None = None,
         embedding_model: str | None = None,
+        prefer_grpc: bool = True,
     ):
-        self.persist_directory = persist_directory or os.path.join(
-            os.path.expanduser("~"), ".ags", "chroma_db"
+        self.qdrant_url = qdrant_url or os.getenv(
+            "QDRANT_URL", "http://localhost:6333"
         )
-        Path(self.persist_directory).mkdir(parents=True, exist_ok=True)
+        self.qdrant_api_key = qdrant_api_key or os.getenv("QDRANT_API_KEY", "")
+        self.prefer_grpc = prefer_grpc
+
+        # Initialize Qdrant client
+        client_kwargs: dict[str, Any] = {
+            "url": self.qdrant_url,
+            "prefer_grpc": self.prefer_grpc,
+        }
+        if self.qdrant_api_key:
+            client_kwargs["api_key"] = self.qdrant_api_key
+        self.client = QdrantClient(**client_kwargs)
 
         self.embeddings = self._create_embeddings(embedding_model)
 
-        # Collection cache
-        self._collections: dict[str, Chroma] = {}
+        # Detect embedding dimension (needed for Qdrant collection creation)
+        self._embedding_dimension: int | None = None
+
+        # Collection cache (collection_name → QdrantVectorStore)
+        self._collections: dict[str, QdrantVectorStore] = {}
 
         # BM25 indices (project_id → index)
         self._bm25_indices: dict[str, Any] = {}  # BM25Okapi instances
@@ -247,23 +268,58 @@ class ProjectVectorStore:
             "or set OPENAI_API_KEY/GOOGLE_API_KEY for cloud embeddings."
         )
 
+    def _get_embedding_dimension(self) -> int:
+        """Detect embedding dimension by embedding a sample text."""
+        if self._embedding_dimension is None:
+            sample = self.embeddings.embed_query("test")
+            self._embedding_dimension = len(sample)
+        return self._embedding_dimension
+
     # ── Collection helpers ────────────────────────────────────────────────────
 
     def _get_collection_name(self, project_id: str) -> str:
-        """Generate a valid Chroma collection name."""
+        """Generate a valid collection name for Qdrant."""
         safe_name = "".join(c if c.isalnum() else "_" for c in project_id)
         return f"proj_{safe_name}"[:63]
 
-    def _get_or_create_collection(self, project_id: str) -> Chroma:
-        """Get or create a Chroma collection for a project."""
+    def _ensure_collection_exists(self, collection_name: str) -> None:
+        """Ensure a Qdrant collection exists, creating it if needed."""
+        try:
+            self.client.get_collection(collection_name)
+        except Exception:
+            # Collection doesn't exist, create it
+            dim = self._get_embedding_dimension()
+            self.client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(
+                    size=dim,
+                    distance=Distance.COSINE,
+                ),
+            )
+            logger.info(
+                f"Created Qdrant collection '{collection_name}' (dim={dim}, cosine)"
+            )
+
+    def _get_or_create_collection(self, project_id: str) -> QdrantVectorStore:
+        """Get or create a Qdrant vector store for a project."""
         collection_name = self._get_collection_name(project_id)
 
         if collection_name not in self._collections:
-            self._collections[collection_name] = Chroma(
+            self._ensure_collection_exists(collection_name)
+
+            vs_kwargs: dict[str, Any] = {
+                "collection_name": collection_name,
+                "embedding": self.embeddings,
+                "url": self.qdrant_url,
+                "prefer_grpc": self.prefer_grpc,
+            }
+            if self.qdrant_api_key:
+                vs_kwargs["api_key"] = self.qdrant_api_key
+
+            self._collections[collection_name] = QdrantVectorStore(
+                client=self.client,
                 collection_name=collection_name,
-                embedding_function=self.embeddings,
-                persist_directory=self.persist_directory,
-                collection_metadata={"hnsw:space": "cosine"},
+                embedding=self.embeddings,
             )
 
         return self._collections[collection_name]
@@ -307,7 +363,7 @@ class ProjectVectorStore:
         """
         content_hash = hashlib.md5(content.encode()).hexdigest()[:8]
 
-        # Small files → single chunk (use configurable threshold)
+        # Small files -> single chunk (use configurable threshold)
         effective_threshold = max(chunk_size, RAG_FULL_CONTEXT_THRESHOLD)
         if len(content) <= effective_threshold:
             return [
@@ -424,7 +480,7 @@ class ProjectVectorStore:
         self._bm25_corpus[project_id] = list(zip(texts, metadatas, strict=True))
 
     def _ensure_bm25_index(self, project_id: str) -> bool:
-        """Lazy rebuild BM25 index from ChromaDB if not present."""
+        """Lazy rebuild BM25 index from Qdrant if not present."""
         if project_id in self._bm25_indices:
             return True
 
@@ -432,13 +488,30 @@ class ProjectVectorStore:
             return False
 
         try:
-            collection = self._get_or_create_collection(project_id)
-            result = collection._collection.get()
-            if not result or not result.get("documents"):
+            collection_name = self._get_collection_name(project_id)
+            # Scroll all points from Qdrant to rebuild BM25
+            all_points, _next_offset = self.client.scroll(
+                collection_name=collection_name,
+                limit=10000,
+                with_payload=True,
+                with_vectors=False,
+            )
+            if not all_points:
                 return False
 
-            texts = result["documents"]
-            metadatas = result.get("metadatas", [{}] * len(texts))
+            texts = []
+            metadatas = []
+            for point in all_points:
+                payload = point.payload or {}
+                page_content = payload.get("page_content", "")
+                metadata = payload.get("metadata", {})
+                if page_content:
+                    texts.append(page_content)
+                    metadatas.append(metadata)
+
+            if not texts:
+                return False
+
             self._build_bm25_index(project_id, texts, metadatas)
             return project_id in self._bm25_indices
         except Exception:
@@ -564,7 +637,7 @@ class ProjectVectorStore:
 
         if force_reindex:
             try:
-                collection._client.delete_collection(collection_name)
+                self.client.delete_collection(collection_name)
             except Exception:
                 pass
             self._collections.pop(collection_name, None)
@@ -699,23 +772,35 @@ class ProjectVectorStore:
         """
         collection = self._get_or_create_collection(project_id)
 
-        where_filter = None
+        # Build Qdrant filter for priority
+        qdrant_filter = None
         if filter_priority:
-            where_filter = {"priority": filter_priority}
+            qdrant_filter = QdrantFilter(
+                must=[
+                    FieldCondition(
+                        key="metadata.priority",
+                        match=MatchValue(value=filter_priority),
+                    )
+                ]
+            )
 
         if RAG_ENABLE_HYBRID and BM25_AVAILABLE:
-            return await self._hybrid_query(project_id, collection, query, k, where_filter)
+            return await self._hybrid_query(
+                project_id, collection, query, k, qdrant_filter
+            )
 
         # ── Standard semantic-only path ───────────────────────────────────
         results = collection.similarity_search_with_score(
             query=query,
             k=k,
-            filter=where_filter,
+            filter=qdrant_filter,
         )
 
         documents = []
-        for doc, distance in results:
-            similarity = max(0.0, min(1.0, 1.0 - float(distance)))
+        for doc, score in results:
+            # Qdrant returns cosine similarity (0~1 for cosine distance)
+            # LangChain-Qdrant returns score directly as similarity
+            similarity = max(0.0, min(1.0, float(score)))
             documents.append(
                 {
                     "content": doc.page_content,
@@ -731,19 +816,19 @@ class ProjectVectorStore:
     async def _hybrid_query(
         self,
         project_id: str,
-        collection: Chroma,
+        collection: QdrantVectorStore,
         query: str,
         k: int,
-        where_filter: dict | None,
+        qdrant_filter: QdrantFilter | None,
     ) -> QueryResult:
-        """Hybrid search: semantic + BM25 → RRF → optional rerank."""
+        """Hybrid search: semantic + BM25 -> RRF -> optional rerank."""
 
         # 1. Semantic candidates (expanded)
         semantic_k = k * RAG_CANDIDATE_MULTIPLIER
         semantic_results = collection.similarity_search_with_score(
             query=query,
             k=semantic_k,
-            filter=where_filter,
+            filter=qdrant_filter,
         )
         semantic_ranked: list[tuple[str, dict[str, Any]]] = [
             (doc.page_content, doc.metadata) for doc, _score in semantic_results
@@ -775,10 +860,8 @@ class ProjectVectorStore:
         collection_name = self._get_collection_name(project_id)
 
         try:
-            if collection_name in self._collections:
-                collection = self._collections[collection_name]
-                collection._client.delete_collection(collection_name)
-                del self._collections[collection_name]
+            self.client.delete_collection(collection_name)
+            self._collections.pop(collection_name, None)
             # Clear BM25 caches
             self._bm25_indices.pop(project_id, None)
             self._bm25_corpus.pop(project_id, None)
@@ -788,13 +871,14 @@ class ProjectVectorStore:
 
     def get_collection_stats(self, project_id: str) -> dict[str, Any]:
         """Get statistics for a project's collection."""
-        collection = self._get_or_create_collection(project_id)
+        collection_name = self._get_collection_name(project_id)
 
         try:
-            count = collection._collection.count()
+            collection_info = self.client.get_collection(collection_name)
+            count = collection_info.points_count or 0
             return {
                 "project_id": project_id,
-                "collection_name": self._get_collection_name(project_id),
+                "collection_name": collection_name,
                 "document_count": count,
                 "indexed": count > 0,
                 "hybrid_enabled": RAG_ENABLE_HYBRID,
@@ -803,7 +887,7 @@ class ProjectVectorStore:
         except Exception as e:
             return {
                 "project_id": project_id,
-                "collection_name": self._get_collection_name(project_id),
+                "collection_name": collection_name,
                 "document_count": 0,
                 "indexed": False,
                 "error": str(e),
@@ -816,8 +900,8 @@ _vector_store: "ProjectVectorStore | None" = None
 
 def get_vector_store() -> "ProjectVectorStore":
     """Get or create the global vector store instance."""
-    if not CHROMA_AVAILABLE:
-        raise ImportError("ChromaDB not available. RAG features are disabled.")
+    if not QDRANT_AVAILABLE:
+        raise ImportError("Qdrant not available. RAG features are disabled.")
 
     global _vector_store
     if _vector_store is None:

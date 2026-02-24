@@ -1,5 +1,5 @@
 # Lightweight requirements for Railway deployment
-# Excludes heavy ML dependencies (chromadb, sentence-transformers)
+# Excludes heavy ML dependencies (qdrant-client, sentence-transformers)
 
 # Core LangChain (without heavy embeddings)
 langgraph>=0.2.0
@@ -22,6 +22,6 @@ pyjwt>=2.8.0
 # Monitoring (lightweight)
 structlog>=24.4.0
 
-# Note: RAG features disabled (no chromadb/sentence-transformers)
+# Note: RAG features disabled (no qdrant-client/sentence-transformers)
 # Note: Database features disabled (no sqlalchemy/asyncpg)
 # Note: Redis disabled

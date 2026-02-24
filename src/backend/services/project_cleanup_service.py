@@ -99,9 +99,9 @@ class ProjectCleanupService:
 
         # Check RAG index
         try:
-            from services.rag_service import CHROMA_AVAILABLE, get_vector_store
+            from services.rag_service import QDRANT_AVAILABLE, get_vector_store
 
-            if CHROMA_AVAILABLE:
+            if QDRANT_AVAILABLE:
                 store = get_vector_store()
                 stats = store.get_collection_stats(project_id)
                 preview.has_rag_index = stats.get("indexed", False)
@@ -157,9 +157,9 @@ class ProjectCleanupService:
 
         # 2. Delete RAG index
         try:
-            from services.rag_service import CHROMA_AVAILABLE, get_vector_store
+            from services.rag_service import QDRANT_AVAILABLE, get_vector_store
 
-            if CHROMA_AVAILABLE:
+            if QDRANT_AVAILABLE:
                 store = get_vector_store()
                 deleted = await store.delete_project_index(project_id)
                 summary.rag_index_deleted = deleted
