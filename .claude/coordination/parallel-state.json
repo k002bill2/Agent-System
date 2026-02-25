@@ -1524,8 +1524,191 @@
         "services",
         "api"
       ]
+    },
+    {
+      "taskId": "task_1771777362212_82uj3t",
+      "subagentType": "Explore",
+      "description": "RAG 서비스 코드 분석",
+      "startTime": 1771777362212,
+      "status": "running",
+      "targetAreas": [
+        "services"
+      ]
+    },
+    {
+      "taskId": "task_1771863872455_6rtvq2",
+      "subagentType": "Explore",
+      "description": "Explore Activity and Task views",
+      "startTime": 1771863872455,
+      "status": "running",
+      "targetAreas": [
+        "components",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771863876879_yt7e3s",
+      "subagentType": "Explore",
+      "description": "Explore backend task/activity models",
+      "startTime": 1771863876879,
+      "status": "running",
+      "targetAreas": [
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771864571987_43yzx7",
+      "subagentType": "Explore",
+      "description": "Explore RAG chunking and folder exclusion",
+      "startTime": 1771864571987,
+      "status": "running",
+      "targetAreas": [
+        "services"
+      ]
+    },
+    {
+      "taskId": "task_1771864577753_1ghqa9",
+      "subagentType": "Explore",
+      "description": "Explore RAG models and API routes",
+      "startTime": 1771864577753,
+      "status": "running",
+      "targetAreas": [
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771866184856_eg6q3e",
+      "subagentType": "Explore",
+      "description": "Find obsidian project config",
+      "startTime": 1771866184856,
+      "status": "running",
+      "targetAreas": [
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771947227582_x2b1uq",
+      "subagentType": "Explore",
+      "description": "Explore current CLI setup",
+      "startTime": 1771947227582,
+      "status": "running",
+      "targetAreas": [
+        "hooks"
+      ]
+    },
+    {
+      "taskId": "task_1771947231944_hz24n4",
+      "subagentType": "Explore",
+      "description": "Research Gemini CLI capabilities",
+      "startTime": 1771947231944,
+      "status": "running",
+      "targetAreas": [
+        "hooks"
+      ]
+    },
+    {
+      "taskId": "task_1771947684214_phwxgw",
+      "subagentType": "Plan",
+      "description": "Design Gemini-Claude integration",
+      "startTime": 1771947684214,
+      "status": "running",
+      "targetAreas": [
+        "hooks",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771951213884_pnhm79",
+      "subagentType": "Explore",
+      "description": "Find task analyzer components",
+      "startTime": 1771951213884,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1771953708808_g9fobk",
+      "subagentType": "Explore",
+      "description": "RAG 구현 상태 조사",
+      "startTime": 1771953708808,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771953839890_olcdwk",
+      "subagentType": "Explore",
+      "description": "Find LLM config components",
+      "startTime": 1771953839890,
+      "status": "running",
+      "targetAreas": [
+        "components"
+      ]
+    },
+    {
+      "taskId": "task_1771953872344_rxle7w",
+      "subagentType": "Explore",
+      "description": "Playground UI/Store 탐색",
+      "startTime": 1771953872344,
+      "status": "running",
+      "targetAreas": [
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771953878680_wxfp9m",
+      "subagentType": "Explore",
+      "description": "RAG API/서비스 상세 탐색",
+      "startTime": 1771953878680,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771954004586_tk451h",
+      "subagentType": "Plan",
+      "description": "RAG 활성화 구현 설계",
+      "startTime": 1771954004586,
+      "status": "running",
+      "targetAreas": [
+        "services",
+        "api"
+      ]
+    },
+    {
+      "taskId": "task_1771954180112_tcsocw",
+      "subagentType": "claude-code-guide",
+      "description": "Parallel agents max limit",
+      "startTime": 1771954180112,
+      "status": "running",
+      "targetAreas": []
+    },
+    {
+      "taskId": "task_1771954736010_pko7pl",
+      "subagentType": "Explore",
+      "description": "ChromaDB usage analysis",
+      "startTime": 1771954736010,
+      "status": "running",
+      "targetAreas": [
+        "services"
+      ]
+    },
+    {
+      "taskId": "task_1771954740341_m7stbk",
+      "subagentType": "Explore",
+      "description": "Qdrant comparison research",
+      "startTime": 1771954740341,
+      "status": "running",
+      "targetAreas": [
+        "services"
+      ]
     }
   ],
-  "lastUpdated": "2026-02-22T13:40:49.947Z",
+  "lastUpdated": "2026-02-24T17:40:22.158Z",
   "sessionId": "session_1770950296910_bp60yfrgy"
 }

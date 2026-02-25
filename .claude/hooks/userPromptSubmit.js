@@ -37,6 +37,10 @@ process.stdin.on('end', () => {
 
     const messages = [];
 
+    // 0. Gemini 크로스 리뷰 결과 확인 (가장 먼저 실행)
+    const geminiMsg = checkPendingGeminiReviews();
+    if (geminiMsg) messages.push(geminiMsg);
+
     // 1. React Web 패턴 감지
     const reactMsg = detectReactWebPatterns(prompt);
     if (reactMsg) messages.push(reactMsg);
@@ -222,6 +226,96 @@ function shouldActivateSkill(prompt, rule) {
   }
 
   return false;
+}
+
+// ─── Gemini 크로스 리뷰 결과 확인 ─────────────────────────────
+function checkPendingGeminiReviews() {
+  try {
+    const stateFile = path.join(PROJECT_ROOT, '.claude', 'coordination', 'gemini-state.json');
+    if (!fs.existsSync(stateFile)) return null;
+
+    const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+    const pending = (state.pendingReviews || []).filter(r => r.status === 'completed');
+
+    if (pending.length === 0) return null;
+
+    const reviewsDir = path.join(PROJECT_ROOT, '.claude', 'gemini-bridge', 'reviews');
+    const reviewBlocks = [];
+    const thirtyMinAgo = Date.now() - 30 * 60 * 1000;
+
+    for (const review of pending) {
+      // 30분 이상 된 리뷰는 stale로 폐기
+      const reviewTime = new Date(review.timestamp).getTime();
+      if (reviewTime < thirtyMinAgo) {
+        review.status = 'stale';
+        continue;
+      }
+
+      // 리뷰 파일 읽기
+      const reviewFile = path.join(reviewsDir, `${review.id}.json`);
+      if (!fs.existsSync(reviewFile)) {
+        review.status = 'missing';
+        continue;
+      }
+
+      try {
+        const reviewData = JSON.parse(fs.readFileSync(reviewFile, 'utf8'));
+        if (reviewData.review) {
+          // 리뷰 내용에서 핵심 부분 추출 (ISSUES/VERDICT/SUMMARY)
+          const extracted = extractReviewSummary(reviewData.review);
+          reviewBlocks.push(extracted);
+        }
+        review.status = 'shown';
+      } catch (_) {
+        review.status = 'read_error';
+      }
+    }
+
+    // 상태 업데이트 (shown/stale/missing 마킹)
+    fs.writeFileSync(stateFile, JSON.stringify(state, null, 2) + '\n');
+
+    if (reviewBlocks.length === 0) return null;
+
+    let msg = '[GEMINI REVIEW - Cross-verification by Gemini CLI]';
+    for (const block of reviewBlocks) {
+      msg += '\n' + block;
+    }
+    msg += '\n[/GEMINI REVIEW]';
+
+    return msg;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Gemini 리뷰에서 핵심 ISSUES/VERDICT/SUMMARY 부분을 추출
+ */
+function extractReviewSummary(reviewText) {
+  // ISSUES ~ SUMMARY 패턴 추출 시도
+  const issuesMatch = reviewText.match(/ISSUES:[\s\S]*?SUMMARY:.*$/m);
+  if (issuesMatch) {
+    return issuesMatch[0].trim();
+  }
+
+  // VERDICT 패턴만이라도 추출
+  const verdictMatch = reviewText.match(/VERDICT:.*$/m);
+  if (verdictMatch) {
+    // VERDICT 앞 5줄 + VERDICT + 뒤 2줄
+    const lines = reviewText.split('\n');
+    const verdictIdx = lines.findIndex(l => /^VERDICT:/.test(l));
+    if (verdictIdx >= 0) {
+      const start = Math.max(0, verdictIdx - 5);
+      const end = Math.min(lines.length, verdictIdx + 3);
+      return lines.slice(start, end).join('\n').trim();
+    }
+  }
+
+  // 폴백: 마지막 500자
+  if (reviewText.length > 500) {
+    return '...' + reviewText.slice(-500).trim();
+  }
+  return reviewText.trim();
 }
 
 // ─── 에이전트 자동 추천 (skill→agent 연계) ──────────────────

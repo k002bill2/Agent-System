@@ -21,9 +21,15 @@ import {
   Wrench,
   DollarSign,
   ListTodo,
+  User,
+  FileCode,
+  GitBranch,
+  Search,
+  PenTool,
+  TerminalSquare,
 } from 'lucide-react'
-import { useState } from 'react'
-import type { ClaudeCodeTask, ClaudeCodeTaskStatus } from '../types/claudeCodeActivity'
+import { useMemo, useState } from 'react'
+import type { ActivityEvent, ClaudeCodeTask, ClaudeCodeTaskStatus } from '../types/claudeCodeActivity'
 
 const statusConfig: Record<
   ClaudeCodeTaskStatus,
@@ -235,6 +241,122 @@ function SessionDetailCard() {
   )
 }
 
+/** Tool icon mapping for common tools */
+const toolIconMap: Record<string, typeof Wrench> = {
+  Read: FileCode,
+  Edit: PenTool,
+  Write: PenTool,
+  Grep: Search,
+  Glob: Search,
+  Bash: TerminalSquare,
+  Task: GitBranch,
+}
+
+/** Derive tool usage stats and user prompts from activities */
+function useActivitySummary(activities: ActivityEvent[]) {
+  return useMemo(() => {
+    const toolCounts: Record<string, number> = {}
+    const userPrompts: { content: string; timestamp: string }[] = []
+
+    for (const event of activities) {
+      if (event.type === 'tool_use' && event.tool_name) {
+        toolCounts[event.tool_name] = (toolCounts[event.tool_name] || 0) + 1
+      }
+      if (event.type === 'user' && event.content) {
+        // Filter out system/internal messages (XML tags, empty commands)
+        const content = event.content.trim()
+        if (
+          content.startsWith('<') ||
+          content.length === 0
+        ) {
+          continue
+        }
+        userPrompts.push({
+          content,
+          timestamp: event.timestamp,
+        })
+      }
+    }
+
+    // Sort tools by count descending
+    const sortedTools = Object.entries(toolCounts)
+      .sort(([, a], [, b]) => b - a)
+
+    return { sortedTools, userPrompts, totalToolCalls: Object.values(toolCounts).reduce((a, b) => a + b, 0) }
+  }, [activities])
+}
+
+/** Shows tool usage and user prompt timeline when no explicit tasks exist */
+function ActivitySummaryView() {
+  const { activities } = useClaudeCodeActivityStore()
+  const { sortedTools, userPrompts, totalToolCalls } = useActivitySummary(activities)
+
+  if (activities.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center flex-1 text-gray-500 dark:text-gray-400">
+        <ListTodo className="w-12 h-12 mb-4 opacity-50" />
+        <p>No activity yet</p>
+        <p className="text-sm mt-1">Activity will appear as the session progresses</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Tool Usage Summary */}
+      {sortedTools.length > 0 && (
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+            Tool Usage ({totalToolCalls} calls)
+          </h3>
+          <div className="grid grid-cols-2 gap-2">
+            {sortedTools.map(([name, count]) => {
+              const Icon = toolIconMap[name] || Wrench
+              return (
+                <div
+                  key={name}
+                  className="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2"
+                >
+                  <Icon className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  <span className="text-sm text-gray-700 dark:text-gray-300 truncate font-mono">{name}</span>
+                  <span className="ml-auto text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded-full">
+                    {count}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* User Prompt Timeline */}
+      {userPrompts.length > 0 && (
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+            User Prompts ({userPrompts.length})
+          </h3>
+          <div className="space-y-2">
+            {userPrompts.map((prompt, idx) => (
+              <div
+                key={idx}
+                className="flex items-start gap-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3"
+              >
+                <User className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-900 dark:text-white line-clamp-2">{prompt.content}</p>
+                  <span className="text-xs text-gray-400 dark:text-gray-500">
+                    {new Date(prompt.timestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function TaskBoard() {
   const { activeSessionId, tasks, isLoadingTasks } = useClaudeCodeActivityStore()
 
@@ -260,13 +382,9 @@ export function TaskBoard() {
 
   if (taskList.length === 0) {
     return (
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full overflow-hidden">
         <SessionDetailCard />
-        <div className="flex flex-col items-center justify-center flex-1 text-gray-500 dark:text-gray-400">
-          <ListTodo className="w-12 h-12 mb-4 opacity-50" />
-          <p>No tasks in this session</p>
-          <p className="text-sm mt-1">Tasks will appear when created by the agent</p>
-        </div>
+        <ActivitySummaryView />
       </div>
     )
   }

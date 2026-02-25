@@ -110,6 +110,13 @@ class Settings(BaseSettings):
     qdrant_api_key: str = ""  # Cloud deployment
     qdrant_prefer_grpc: bool = True
 
+    # RAG Settings
+    rag_enable_hybrid: bool = False
+    rag_enable_rerank: bool = False
+    rag_rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    rag_full_context_threshold: int = 3000
+    rag_candidate_multiplier: int = 3
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

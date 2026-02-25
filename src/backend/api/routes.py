@@ -3,7 +3,7 @@
 import json
 import os
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -933,9 +933,11 @@ async def get_project_by_id(
 
 
 @router.post("/projects", response_model=ProjectResponse)
-async def create_project(request: ProjectCreate):
-    """Register a new project."""
+async def create_project(request: ProjectCreate, background_tasks: BackgroundTasks):
+    """Register a new project and trigger background indexing."""
     from pathlib import Path
+
+    from api.rag import trigger_background_indexing
 
     # Normalize path to remove shell escape characters
     normalized_path = normalize_path(request.path)
@@ -945,6 +947,13 @@ async def create_project(request: ProjectCreate):
         raise HTTPException(status_code=400, detail=f"Path does not exist: {normalized_path}")
 
     project = register_project(request.id, normalized_path)
+
+    # Auto-trigger background indexing for RAG
+    trigger_background_indexing(
+        project_id=project.id,
+        project_path=project.path,
+        background_tasks=background_tasks,
+    )
 
     return ProjectResponse(
         id=project.id,

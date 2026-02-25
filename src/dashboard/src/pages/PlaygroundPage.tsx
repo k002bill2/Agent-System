@@ -208,6 +208,24 @@ async function fetchModels(): Promise<Model[]> {
   return data.models
 }
 
+async function triggerIndexing(projectId: string): Promise<{ status: string }> {
+  const res = await authFetch(`${API_BASE}/rag/projects/${projectId}/index`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  })
+  if (!res.ok) throw new Error('Failed to trigger indexing')
+  return res.json()
+}
+
+async function fetchIndexingStatus(
+  projectId: string
+): Promise<{ project_id: string; status: string; indexed: boolean; document_count: number }> {
+  const res = await authFetch(`${API_BASE}/rag/status/${projectId}`)
+  if (!res.ok) throw new Error('Failed to fetch indexing status')
+  return res.json()
+}
+
 // ─────────────────────────────────────────────────────────────
 // Component
 // ─────────────────────────────────────────────────────────────
@@ -226,6 +244,9 @@ export function PlaygroundPage() {
   const [showSettings, setShowSettings] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
+  // Indexing status: Record<projectId, status>
+  const [indexingStatus, setIndexingStatus] = useState<Record<string, string>>({})
+
   // New Session Dialog state
   const [showNewSessionDialog, setShowNewSessionDialog] = useState(false)
   const [newSessionName, setNewSessionName] = useState('')
@@ -241,6 +262,33 @@ export function PlaygroundPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [currentSession?.messages])
+
+  // Poll indexing status for projects that are currently indexing
+  useEffect(() => {
+    const indexingProjectIds = Object.entries(indexingStatus)
+      .filter(([, status]) => status === 'indexing')
+      .map(([id]) => id)
+
+    if (indexingProjectIds.length === 0) return
+
+    const interval = setInterval(async () => {
+      for (const projectId of indexingProjectIds) {
+        try {
+          const result = await fetchIndexingStatus(projectId)
+          setIndexingStatus((prev) => ({ ...prev, [projectId]: result.status }))
+          if (result.status === 'completed') {
+            // Refresh projects to get updated vector_store_initialized
+            const updatedProjects = await fetchProjects()
+            setProjects(updatedProjects)
+          }
+        } catch {
+          // ignore polling errors
+        }
+      }
+    }, 3000)
+
+    return () => clearInterval(interval)
+  }, [indexingStatus])
 
   const loadData = async () => {
     try {
@@ -339,6 +387,16 @@ export function PlaygroundPage() {
       setCurrentSession({ ...currentSession, messages: [], total_tokens: 0, total_cost: 0 })
     } catch (e) {
       console.error(e)
+    }
+  }
+
+  const handleTriggerIndexing = async (projectId: string) => {
+    try {
+      setIndexingStatus((prev) => ({ ...prev, [projectId]: 'indexing' }))
+      await triggerIndexing(projectId)
+    } catch (e) {
+      console.error('Failed to trigger indexing:', e)
+      setIndexingStatus((prev) => ({ ...prev, [projectId]: 'error: trigger failed' }))
     }
   }
 
@@ -602,7 +660,17 @@ export function PlaygroundPage() {
                         type="checkbox"
                         checked={currentSession.rag_enabled}
                         disabled={!currentSession.project_id}
-                        onChange={(e) => handleUpdateSettings({ rag_enabled: e.target.checked })}
+                        onChange={(e) => {
+                          const enabled = e.target.checked
+                          handleUpdateSettings({ rag_enabled: enabled })
+                          // Auto-trigger indexing when enabling RAG on unindexed project
+                          if (enabled && currentSession.project_id) {
+                            const proj = projects.find(p => p.id === currentSession.project_id)
+                            if (proj && !proj.vector_store_initialized) {
+                              handleTriggerIndexing(currentSession.project_id)
+                            }
+                          }
+                        }}
                         className="rounded border-gray-300 dark:border-gray-600"
                       />
                       <Database className="w-4 h-4 text-gray-700 dark:text-gray-300" />
@@ -618,22 +686,74 @@ export function PlaygroundPage() {
                     {currentSession.project_id && (() => {
                       const proj = projects.find(p => p.id === currentSession.project_id)
                       if (!proj) return null
-                      return proj.vector_store_initialized ? (
-                        <div className="mt-1.5 ml-6 flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                          <span className="text-xs text-green-600 dark:text-green-400">인덱스 활성화</span>
-                          {proj.indexed_at && (
-                            <span className="text-[10px] text-gray-400 ml-1">
-                              {new Date(proj.indexed_at).toLocaleDateString('ko-KR')}
+                      const projStatus = indexingStatus[proj.id]
+
+                      // State 1: Indexed successfully
+                      if (proj.vector_store_initialized && projStatus !== 'indexing') {
+                        return (
+                          <div className="mt-1.5 ml-6 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                            <span className="text-xs text-green-600 dark:text-green-400">인덱스 활성화</span>
+                            {proj.indexed_at && (
+                              <span className="text-[10px] text-gray-400 ml-1">
+                                {new Date(proj.indexed_at).toLocaleDateString('ko-KR')}
+                              </span>
+                            )}
+                            <button
+                              onClick={() => handleTriggerIndexing(proj.id)}
+                              className="ml-auto p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded"
+                              title="리인덱싱"
+                            >
+                              <RefreshCw className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )
+                      }
+
+                      // State 2: Currently indexing
+                      if (projStatus === 'indexing') {
+                        return (
+                          <div className="mt-1.5 ml-6 flex items-center gap-1.5">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
+                            <span className="text-xs text-blue-600 dark:text-blue-400">
+                              인덱싱 중...
                             </span>
-                          )}
-                        </div>
-                      ) : (
+                          </div>
+                        )
+                      }
+
+                      // State 3: Error
+                      if (projStatus && projStatus.startsWith('error')) {
+                        return (
+                          <div className="mt-1.5 ml-6 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                            <span className="text-xs text-red-600 dark:text-red-400">
+                              인덱싱 실패
+                            </span>
+                            <button
+                              onClick={() => handleTriggerIndexing(proj.id)}
+                              className="ml-auto p-0.5 text-red-400 hover:text-red-600 dark:hover:text-red-300 rounded"
+                              title="재시도"
+                            >
+                              <RefreshCw className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )
+                      }
+
+                      // State 4: Not indexed
+                      return (
                         <div className="mt-1.5 ml-6 flex items-center gap-1.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                           <span className="text-xs text-amber-600 dark:text-amber-400">
-                            인덱싱 필요 — 프로젝트 설정에서 인덱싱을 실행하세요
+                            인덱싱 필요
                           </span>
+                          <button
+                            onClick={() => handleTriggerIndexing(proj.id)}
+                            className="ml-auto text-xs px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-900/50 rounded"
+                          >
+                            인덱싱 시작
+                          </button>
                         </div>
                       )
                     })()}

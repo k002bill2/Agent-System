@@ -25,7 +25,11 @@ const TRACE_DIR = '.temp/traces/sessions';
  */
 async function onStopEvent(context) {
   try {
-    const editedFiles = context.editedFiles || [];
+    // Stop 이벤트에는 editedFiles가 없으므로 git diff로 감지
+    let editedFiles = context.editedFiles || [];
+    if (editedFiles.length === 0) {
+      editedFiles = detectChangedFiles();
+    }
 
     // 1. 세션 메트릭 집계 (항상 실행)
     await aggregateSessionMetrics();
@@ -56,8 +60,79 @@ async function onStopEvent(context) {
       displayTestReminder(pyFiles, 'python');
     }
 
+    // 6. Gemini 크로스 리뷰 트리거 (백그라운드, 비차단)
+    triggerGeminiReview(editedFiles);
+
   } catch (error) {
     console.error('[StopEvent] Error:', error.message);
+  }
+}
+
+/**
+ * Git diff로 변경된 파일 감지
+ * Stop 이벤트에는 editedFiles가 포함되지 않으므로 git으로 직접 확인
+ */
+function detectChangedFiles() {
+  try {
+    const { execSync } = require('child_process');
+    const output = execSync('git diff --name-only HEAD 2>/dev/null || git diff --name-only 2>/dev/null', {
+      cwd: path.resolve(__dirname, '../..'),
+      encoding: 'utf8',
+      timeout: 5000
+    });
+    return output.trim().split('\n').filter(f => f.trim().length > 0);
+  } catch (_) {
+    return [];
+  }
+}
+
+/**
+ * Gemini 크로스 리뷰 트리거 (fire-and-forget)
+ * 백그라운드에서 Gemini CLI를 호출하여 코드 리뷰를 수행합니다.
+ * 결과는 .claude/gemini-bridge/reviews/에 저장되며,
+ * 다음 UserPromptSubmit에서 Claude에 주입됩니다.
+ */
+function triggerGeminiReview(editedFiles) {
+  try {
+    // 편집된 파일이 없으면 스킵
+    if (!editedFiles || editedFiles.length === 0) return;
+
+    // src/ 파일만 필터링 (설정 파일 등 제외)
+    const srcFiles = editedFiles.filter(f =>
+      f.startsWith('src/') || f.endsWith('.py') || f.endsWith('.ts') || f.endsWith('.tsx')
+    );
+    if (srcFiles.length === 0) return;
+
+    // 레이트 리밋 체크 (동기적으로 상태 파일 읽기)
+    const stateFile = path.join(__dirname, '..', 'coordination', 'gemini-state.json');
+    if (fs.existsSync(stateFile)) {
+      try {
+        const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+        const today = new Date().toISOString().slice(0, 10);
+        if (state.date === today && state.callCount >= (state.dailyLimit || 900)) {
+          return; // 일일 한도 초과
+        }
+      } catch (_) {}
+    }
+
+    // 백그라운드 spawn (fire-and-forget)
+    const bridgeScript = path.join(__dirname, 'gemini-bridge.js');
+    if (!fs.existsSync(bridgeScript)) return;
+
+    const child = require('child_process').spawn(
+      process.execPath,
+      [bridgeScript, 'review', ...srcFiles],
+      {
+        cwd: path.resolve(__dirname, '../..'),
+        stdio: 'ignore',
+        detached: true
+      }
+    );
+
+    child.unref(); // 부모 프로세스가 자식을 기다리지 않음
+
+  } catch (_) {
+    // Gemini 리뷰 트리거 실패는 무시 (기존 훅 기능에 영향 없음)
   }
 }
 

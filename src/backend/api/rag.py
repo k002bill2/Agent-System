@@ -1,5 +1,6 @@
 """RAG (Retrieval Augmented Generation) API routes."""
 
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
@@ -7,9 +8,12 @@ from pydantic import BaseModel, Field
 
 from models.project import PROJECTS_REGISTRY, get_project
 from services.rag_service import (
+    QDRANT_AVAILABLE,
     QueryResult,
     get_vector_store,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
@@ -36,9 +40,9 @@ class IndexResponse(BaseModel):
     """Response from indexing operation."""
 
     project_id: str
-    documents_indexed: int
-    chunks_created: int
-    collection_name: str
+    documents_indexed: int = 0
+    chunks_created: int = 0
+    collection_name: str = ""
     status: str
 
 
@@ -56,43 +60,15 @@ class StatsResponse(BaseModel):
 _indexing_status: dict[str, str] = {}
 
 
-@router.post("/projects/{project_id}/index", response_model=IndexResponse)
-async def index_project(
-    project_id: str,
-    background_tasks: BackgroundTasks,
-    request: IndexRequest | None = None,
-) -> IndexResponse:
-    """
-    Index a project's files for RAG search.
-
-    This indexes all relevant files (code, docs, config) in the project
-    directory for semantic search during task planning.
-
-    Indexing runs in the background and may take a few moments for large projects.
-    """
-    # Check if project exists
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(
-            status_code=404, detail=f"Project '{project_id}' not found. Register it first."
-        )
-
-    # Check if already indexing
-    if _indexing_status.get(project_id) == "indexing":
-        raise HTTPException(
-            status_code=409, detail=f"Project '{project_id}' is already being indexed"
-        )
-
-    _indexing_status[project_id] = "indexing"
-
-    # Use default values if no request body
-    force_reindex = request.force_reindex if request else False
-
+async def _do_index_project(
+    project_id: str, project_path: str, force_reindex: bool = False
+) -> None:
+    """Execute project indexing in the background."""
     try:
         store = get_vector_store()
         result = await store.index_project(
-            project_id=project.id,
-            project_path=project.path,
+            project_id=project_id,
+            project_path=project_path,
             force_reindex=force_reindex,
         )
 
@@ -103,17 +79,80 @@ async def index_project(
             PROJECTS_REGISTRY[project_id].vector_store_initialized = True
             PROJECTS_REGISTRY[project_id].indexed_at = datetime.now(UTC).isoformat()
 
-        return IndexResponse(
-            project_id=result.project_id,
-            documents_indexed=result.documents_indexed,
-            chunks_created=result.chunks_created,
-            collection_name=result.collection_name,
-            status="completed",
+        logger.info(
+            "Indexing completed for project '%s': %d docs, %d chunks",
+            project_id,
+            result.documents_indexed,
+            result.chunks_created,
         )
 
     except Exception as e:
         _indexing_status[project_id] = f"error: {str(e)}"
-        raise HTTPException(status_code=500, detail=f"Indexing failed: {str(e)}")
+        logger.error("Indexing failed for project '%s': %s", project_id, e)
+
+
+def trigger_background_indexing(
+    project_id: str,
+    project_path: str,
+    background_tasks: BackgroundTasks,
+    force_reindex: bool = False,
+) -> bool:
+    """Trigger background indexing for a project.
+
+    Returns True if indexing was triggered, False if already indexing or Qdrant unavailable.
+    """
+    if not QDRANT_AVAILABLE:
+        logger.warning("Qdrant not available, skipping indexing for '%s'", project_id)
+        return False
+
+    if _indexing_status.get(project_id) == "indexing":
+        logger.info("Project '%s' is already being indexed, skipping", project_id)
+        return False
+
+    _indexing_status[project_id] = "indexing"
+    background_tasks.add_task(_do_index_project, project_id, project_path, force_reindex)
+    logger.info("Background indexing triggered for project '%s'", project_id)
+    return True
+
+
+def get_indexing_status_value(project_id: str) -> str:
+    """Get the current indexing status for a project."""
+    return _indexing_status.get(project_id, "not_started")
+
+
+@router.post("/projects/{project_id}/index", response_model=IndexResponse)
+async def index_project(
+    project_id: str,
+    background_tasks: BackgroundTasks,
+    request: IndexRequest | None = None,
+) -> IndexResponse:
+    """
+    Index a project's files for RAG search.
+
+    Indexing runs in the background. Poll GET /status/{project_id} for progress.
+    """
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(
+            status_code=404, detail=f"Project '{project_id}' not found. Register it first."
+        )
+
+    force_reindex = request.force_reindex if request else False
+
+    triggered = trigger_background_indexing(
+        project_id=project.id,
+        project_path=project.path,
+        background_tasks=background_tasks,
+        force_reindex=force_reindex,
+    )
+
+    if not triggered and _indexing_status.get(project_id) == "indexing":
+        return IndexResponse(project_id=project_id, status="already_indexing")
+
+    if not triggered:
+        raise HTTPException(status_code=503, detail="Qdrant not available")
+
+    return IndexResponse(project_id=project_id, status="indexing")
 
 
 @router.post("/projects/{project_id}/query", response_model=QueryResult)
@@ -208,7 +247,26 @@ async def delete_project_index(project_id: str) -> dict:
 async def get_indexing_status(project_id: str) -> dict:
     """Get the current indexing status for a project."""
     status = _indexing_status.get(project_id, "not_started")
+
+    indexed = False
+    document_count = 0
+
+    # Check project registry for indexed state
+    if project_id in PROJECTS_REGISTRY:
+        indexed = PROJECTS_REGISTRY[project_id].vector_store_initialized or False
+
+    # Try to get document count from vector store
+    if QDRANT_AVAILABLE and indexed:
+        try:
+            store = get_vector_store()
+            stats = store.get_collection_stats(project_id)
+            document_count = stats.get("document_count", 0)
+        except Exception:
+            pass
+
     return {
         "project_id": project_id,
         "status": status,
+        "indexed": indexed,
+        "document_count": document_count,
     }

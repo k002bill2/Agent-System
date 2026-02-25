@@ -1,10 +1,13 @@
 """Playground API routes."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from api.deps import get_current_user_optional
+from api.rag import trigger_background_indexing
 from db.models import UserModel
 from models.playground import (
     PlaygroundCompareRequest,
@@ -15,8 +18,11 @@ from models.playground import (
     PlaygroundSessionCreate,
     PlaygroundToolTest,
 )
+from models.project import PROJECTS_REGISTRY, get_project
 from services.llm_service import LLMService
 from services.playground_service import PlaygroundService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/playground", tags=["playground"])
 
@@ -79,8 +85,12 @@ class SessionSettingsUpdate(BaseModel):
 
 
 @router.patch("/sessions/{session_id}/settings", response_model=PlaygroundSession)
-async def update_session_settings(session_id: str, data: SessionSettingsUpdate):
-    """Update session settings."""
+async def update_session_settings(
+    session_id: str,
+    data: SessionSettingsUpdate,
+    background_tasks: BackgroundTasks,
+):
+    """Update session settings. Auto-triggers indexing when RAG is enabled."""
     session = PlaygroundService.update_session_settings(
         session_id,
         name=data.name,
@@ -96,6 +106,24 @@ async def update_session_settings(session_id: str, data: SessionSettingsUpdate):
     )
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    # Auto-trigger indexing when RAG is enabled and project is not yet indexed
+    if data.rag_enabled and session.project_id:
+        project = get_project(session.project_id)
+        if project and not (
+            PROJECTS_REGISTRY.get(session.project_id)
+            and PROJECTS_REGISTRY[session.project_id].vector_store_initialized
+        ):
+            trigger_background_indexing(
+                project_id=project.id,
+                project_path=project.path,
+                background_tasks=background_tasks,
+            )
+            logger.info(
+                "Auto-triggered indexing for project '%s' on RAG enable",
+                session.project_id,
+            )
+
     return session
 
 

@@ -212,10 +212,11 @@ describe('SettingsPage', () => {
   // ---- NEW: LLM Configuration ----
 
   describe('LLM Configuration section', () => {
-    it('renders all three provider buttons', async () => {
+    it('renders all four provider buttons', async () => {
       await renderSettingsPage()
       expect(screen.getByText('Anthropic')).toBeInTheDocument()
-      expect(screen.getByText('Openai')).toBeInTheDocument()
+      expect(screen.getByText('Gemini')).toBeInTheDocument()
+      expect(screen.getByText('OpenAI')).toBeInTheDocument()
       expect(screen.getByText('Local')).toBeInTheDocument()
     })
 

@@ -59,6 +59,16 @@ describe('settings store', () => {
       expect(state.model).toBe('gpt-4o')
     })
 
+    it('selects google/gemini models when switching to google', () => {
+      const { setLLMProvider } = useSettingsStore.getState()
+
+      setLLMProvider('google')
+
+      const state = useSettingsStore.getState()
+      expect(state.llmProvider).toBe('google')
+      expect(state.model).toBe('gemini-3-flash-preview')
+    })
+
     it('selects local models when switching to local', () => {
       const { setLLMProvider } = useSettingsStore.getState()
 
@@ -152,6 +162,12 @@ describe('getModelsForProvider', () => {
     const models = getModelsForProvider('openai')
     expect(models).toContain('gpt-4o')
     expect(models).toContain('gpt-4o-mini')
+  })
+
+  it('returns google/gemini models', () => {
+    const models = getModelsForProvider('google')
+    expect(models).toContain('gemini-3-flash-preview')
+    expect(models).toContain('gemini-2.5-pro-preview-05-06')
   })
 
   it('returns local models', () => {

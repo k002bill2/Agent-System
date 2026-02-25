@@ -285,9 +285,9 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
   }, [handleImageFiles])
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4">
+    <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
       {/* Left Column: Input + Results */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 overflow-y-auto">
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
           {/* Header */}
           <div className="p-4 border-b border-gray-200 dark:border-gray-700">
@@ -699,9 +699,12 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
         </div>
       </div>
 
+      {/* Vertical Divider */}
+      <div className="hidden lg:block w-px bg-gray-200 dark:bg-gray-700 flex-shrink-0" />
+
       {/* Right Column: Analysis History */}
-      <div className="w-full lg:w-72 xl:w-80 flex-shrink-0">
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 h-full flex flex-col">
+      <div className="w-full lg:w-72 xl:w-80 flex-shrink-0 overflow-y-auto">
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 flex flex-col">
           {/* History Header */}
           <div className="p-4 border-b border-gray-200 dark:border-gray-700">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">

@@ -49,9 +49,9 @@ export function AgentsPage() {
   ]
 
   return (
-    <div className="flex-1 p-6 overflow-y-auto">
+    <div className="flex-1 flex flex-col overflow-hidden p-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-shrink-0">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Task Analyzer</h2>
         <div className="flex items-center gap-3">
           <ProjectFilter />
@@ -59,7 +59,7 @@ export function AgentsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+      <div className="flex gap-1 mb-6 bg-gray-100 dark:bg-gray-800 rounded-lg p-1 flex-shrink-0">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -91,7 +91,7 @@ export function AgentsPage() {
       )}
 
       {activeTab === 'feedback' && (
-        <div className="space-y-6">
+        <div className="flex-1 overflow-y-auto space-y-6">
           <FeedbackTabContent
             projectFilter={projectFilter}
             selectedProject={selectedProject}
