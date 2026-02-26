@@ -1,0 +1,12 @@
+{
+  "id": "review-1772007406028",
+  "timestamp": "2026-02-25T08:18:29.510Z",
+  "status": "completed",
+  "filesReviewed": [
+    "src/backend/services/claude_session_monitor.py",
+    "src/dashboard/src/pages/DashboardPage.tsx"
+  ],
+  "diffLength": 1728,
+  "review": "ISSUES: none\nVERDICT: approve\nSUMMARY: The changes correctly normalize \"no project\" sessions by returning an empty string from the backend and defensively filtering out legacy \"-\" values in the dashboard UI, preventing confusing project badges for non-project sessions.\n",
+  "error": null
+}

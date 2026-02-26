@@ -1,0 +1,11 @@
+{
+  "id": "review-1772010253849",
+  "timestamp": "2026-02-25T09:04:15.841Z",
+  "status": "failed",
+  "filesReviewed": [
+    "(all changed files)"
+  ],
+  "diffLength": 2494,
+  "review": null,
+  "error": "Exit code 1: An unexpected critical error occurred:Error: Approval mode \"plan\" is only available when experimental.plan is enabled.\n    at loadCliConfig (file:///opt/homebrew/Cellar/gemini-cli/0.29.7/libexec/lib/node_modules/@google/gemini-cli/dist/src/config/config.js:380:27)\n    at async main (file:///opt/homebrew/Cellar/gemini-cli/0.29.7/libexec/lib/node_modules/@google/gemini-cli/dist/src/gemini.js:225:27)\n"
+}

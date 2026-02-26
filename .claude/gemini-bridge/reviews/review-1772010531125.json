@@ -1,0 +1,11 @@
+{
+  "id": "review-1772010531125",
+  "timestamp": "2026-02-25T09:10:16.279Z",
+  "status": "completed",
+  "filesReviewed": [
+    "(all changed files)"
+  ],
+  "diffLength": 2494,
+  "review": "ISSUES:\n- [severity:info] src/dashboard/src/pages/DashboardPage.tsx:190 - The defensive check for `'-'` is localized to this file. Other components like `SessionCard.tsx` that use `{session.project_name || session.project_path}` may still display the hyphen for legacy sessions where both fields are set to `'-'` until those sessions are re-processed by the backend.\n\nVERDICT: approve\nSUMMARY: Changes successfully clean up non-project session identifiers by returning empty strings from the backend and adding defensive filtering in the dashboard UI.\n",
+  "error": null
+}

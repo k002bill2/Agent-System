@@ -1,0 +1,11 @@
+{
+  "id": "review-1771952227257",
+  "timestamp": "2026-02-24T16:58:23.623Z",
+  "status": "completed",
+  "filesReviewed": [
+    "(all changed files)"
+  ],
+  "diffLength": 30960,
+  "review": "ISSUES:\n- [severity:warning] src/dashboard/tsconfig.tsbuildinfo - Build metadata references new files (`sessionspage.tsx`, `taskboard.tsx`) that are not present in this diff, suggesting an incomplete file set for the PR.\n- [severity:info] src/dashboard/tsconfig.tsbuildinfo - Build artifact committed to version control. This file should be added to `.gitignore` to avoid merge conflicts and repository bloat.\n- [severity:info] src/backend/config.py:108-114 - New RAG settings (hybrid, rerank, etc.) are defined in the configuration model but are not yet integrated into the backend service logic in this diff.\n- [severity:info] .claude/hooks/stopEvent.js:84 - `gemini-state.json` is updated synchronously in a backgrounded process. While acceptable for CLI usage, it may lead to race conditions (lost `callCount` or status updates) if multiple background tasks finish concurrently.\n- [severity:info] .claude/hooks/userPromptSubmit.js:241 - No cleanup logic for stale or shown review files in `.claude/gemini-bridge/reviews/`. Over time, this directory will accumulate JSON files.\n\nVERDICT: needs-attention\nSUMMARY: The PR introduces a useful Gemini-based review bridge and fixes dashboard layout issues, but is missing referenced source files and lacks integration for the new RAG configuration.\n",
+  "error": null
+}

@@ -1,0 +1,11 @@
+{
+  "id": "review-1771954582290",
+  "timestamp": "2026-02-24T17:37:39.900Z",
+  "status": "completed",
+  "filesReviewed": [
+    "(all changed files)"
+  ],
+  "diffLength": 50038,
+  "review": "ISSUES:\n- [severity:warning] src/backend/api/rag.py:57 - `_indexing_status` is an in-memory dictionary. In a multi-worker FastAPI environment (e.g., Gunicorn/Uvicorn), indexing state will be inconsistent across processes, causing status polling to fail or redundant tasks to spawn.\n- [severity:warning] src/backend/api/rag.py:73 - The `vector_store_initialized` flag is updated in the in-memory `PROJECTS_REGISTRY` but not persisted to `.aos-project.json` or the database. This state will be lost on server restart or worker recycle, leading to repeated \"indexing required\" warnings.\n- [severity:info] src/backend/api/playground.py:113 - Background indexing is triggered on every settings update if `rag_enabled` is true. While the backend has a guard, it is more efficient to trigger indexing only when `rag_enabled` transitions from `False` to `True`.\n- [severity:info] src/dashboard/src/pages/PlaygroundPage.tsx:263 - Polling interval for indexing status (3000ms) is hardcoded. While acceptable for a dashboard, consider making this configurable or using a WebSocket if indexing frequency increases.\n\nVERDICT: needs-attention\nSUMMARY: The addition of Gemini cross-reviews and background RAG indexing significantly enhances the system, but the implementation relies on transient in-memory state for long-running operations and metadata, which will cause consistency issues in multi-worker or persistent deployments.\n",
+  "error": null
+}

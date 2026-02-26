@@ -1,0 +1,11 @@
+{
+  "id": "review-1771953032136",
+  "timestamp": "2026-02-24T17:11:15.088Z",
+  "status": "completed",
+  "filesReviewed": [
+    "(all changed files)"
+  ],
+  "diffLength": 36808,
+  "review": "ISSUES:\n- [severity:info] src/dashboard/src/components/TaskBoard.tsx:245 - The `toolIconMap` keys (e.g., 'Read', 'Edit', 'Grep') use capitalized short names, but the `tool_name` from Claude Code activities typically uses snake_case (e.g., 'read_file', 'grep_search', 'run_shell_command'). This will likely cause tool icons to default to the `Wrench` icon.\n- [severity:info] .claude/hooks/userPromptSubmit.js:275 - Synchronous file writes to `gemini-state.json` on every prompt submission could introduce minor latency or race conditions in multi-session scenarios, though impact is negligible for local development.\n\nVERDICT: approve\nSUMMARY: The integration of Gemini-based cross-reviews into the Claude Code workflow and the dashboard improvements for session activity tracking are well-designed and align with the project's multi-agent orchestration goals.\n",
+  "error": null
+}

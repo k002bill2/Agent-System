@@ -1,0 +1,13 @@
+{
+  "id": "review-1772067590877",
+  "timestamp": "2026-02-26T01:00:17.062Z",
+  "status": "completed",
+  "filesReviewed": [
+    "src/backend/services/claude_session_monitor.py",
+    "src/backend/services/rag_service.py",
+    "src/dashboard/src/pages/DashboardPage.tsx"
+  ],
+  "diffLength": 2843,
+  "review": "ISSUES:\n- [severity:info] src/backend/services/rag_service.py:732 - Potential KeyError if 'source', 'chunk_index', or 'content_hash' are missing from metadata. While typical for this pipeline, a `.get()` with defaults or a pre-check would be safer for deterministic UUID generation.\n- [severity:info] src/dashboard/src/pages/DashboardPage.tsx:190 - Redundant check `session.project_name !== '-'` if the backend change in `claude_session_monitor.py` effectively migrates all dash-placeholders to empty strings. Good for legacy data cleanup, but could be simplified once the data is sanitized.\n\nVERDICT: approve\nSUMMARY: Changes successfully address Qdrant's ID requirements and improve project name handling in the dashboard.\n",
+  "error": null
+}

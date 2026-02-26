@@ -1,0 +1,12 @@
+{
+  "id": "review-1772008193276",
+  "timestamp": "2026-02-25T08:31:07.766Z",
+  "status": "completed",
+  "filesReviewed": [
+    "src/backend/services/claude_session_monitor.py",
+    "src/dashboard/src/pages/DashboardPage.tsx"
+  ],
+  "diffLength": 1728,
+  "review": "ISSUES: none\nVERDICT: approve\nSUMMARY: The changes correctly handle global sessions by normalizing the project name from \"-\" to an empty string in both the backend parsing logic and the frontend display components.\n\nThe backend update in `claude_session_monitor.py` ensures that sessions initiated outside of a project context (where `encoded_path` is \"-\") are assigned an empty project name. The frontend update in `DashboardPage.tsx` provides a safe check to hide the project badge if the name is empty or remains \"-\" from existing data, ensuring consistent UI behavior for global sessions. No security, performance, or cross-file consistency issues were identified.\n",
+  "error": null
+}

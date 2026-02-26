@@ -1,0 +1,10 @@
+{
+  "id": "scan-1771952307659",
+  "timestamp": "2026-02-24T16:58:29.443Z",
+  "status": "failed",
+  "scope": "backend",
+  "analysisType": "security",
+  "sourceLength": 800021,
+  "analysis": null,
+  "error": "Exit code 13: Warning: Detected unsettled top-level await at file:///opt/homebrew/Cellar/gemini-cli/0.29.7/libexec/lib/node_modules/@google/gemini-cli/node_modules/yoga-layout/dist/src/index.js:13\nconst Yoga = wrapAssembly(await loadYoga());\n                          ^\n\n\n\n"
+}

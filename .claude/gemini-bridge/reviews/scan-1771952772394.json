@@ -1,0 +1,10 @@
+{
+  "id": "scan-1771952772394",
+  "timestamp": "2026-02-24T17:06:48.902Z",
+  "status": "failed",
+  "scope": "backend",
+  "analysisType": "security",
+  "sourceLength": 400057,
+  "analysis": null,
+  "error": "Exit code 1: YOLO mode is enabled. All tool calls will be automatically approved.\nLoaded cached credentials.\nYOLO mode is enabled. All tool calls will be automatically approved.\n\n<--- Last few GCs --->\n\n[13836:0x73480c000]    32960 ms: Scavenge (during sweeping) 4069.8 (4092.7) -> 4065.3 (4094.2) MB, pooled: 0.0 MB, 9.42 / 0.00 ms (average mu = 0.341, current mu = 0.318) allocation failure; \n[13836:0x73480c000]    33559 ms: Mark-Compact (reduce) 4071.5 (4095.2) -> 4061.5 (4079.0) MB, pooled: 0.0 MB, 15.06 / "
+}

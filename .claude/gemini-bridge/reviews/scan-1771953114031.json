@@ -1,0 +1,10 @@
+{
+  "id": "scan-1771953114031",
+  "timestamp": "2026-02-24T17:11:55.302Z",
+  "status": "failed",
+  "scope": "backend",
+  "analysisType": "security",
+  "sourceLength": 200057,
+  "analysis": null,
+  "error": "Exit code 1: An unexpected critical error occurred:Error: Approval mode \"plan\" is only available when experimental.plan is enabled.\n    at loadCliConfig (file:///opt/homebrew/Cellar/gemini-cli/0.29.7/libexec/lib/node_modules/@google/gemini-cli/dist/src/config/config.js:380:27)\n    at async main (file:///opt/homebrew/Cellar/gemini-cli/0.29.7/libexec/lib/node_modules/@google/gemini-cli/dist/src/gemini.js:225:27)\n"
+}

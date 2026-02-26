@@ -1,0 +1,13 @@
+{
+  "id": "review-1772067750262",
+  "timestamp": "2026-02-26T01:03:54.846Z",
+  "status": "completed",
+  "filesReviewed": [
+    "src/backend/services/claude_session_monitor.py",
+    "src/backend/services/rag_service.py",
+    "src/dashboard/src/pages/DashboardPage.tsx"
+  ],
+  "diffLength": 2843,
+  "review": "ISSUES:\n- [severity:critical] src/dashboard/src/pages/DashboardPage.tsx:190 - Syntax error: the backslash before the inequality operator `\\!==` will cause a build failure in React/TypeScript. This appears to be a literal typo in the diff.\n- [severity:warning] src/backend/services/rag_service.py:730 - Changing the vector store ID format from string to UUID is required by Qdrant, but it will cause duplication or orphaned entries if any documents were already indexed using the old string format during the initial migration (commit `bfe22e0`). A full re-index of existing project collections is recommended.\n- [severity:info] src/dashboard/src/pages/DashboardPage.tsx:190 - Redundant check: The `session.project_name !== '-'` check is good for legacy data, but once the backend fix in `claude_session_monitor.py` is fully rolled out, `session.project_name` will be `\"\"` for root sessions, which is already handled by the truthiness check.\n\nVERDICT: needs-attention\nSUMMARY: Fixing the syntax error in the frontend is critical; the backend changes for RAG ID format and project name normalization are correct but require a re-index for data consistency.\n",
+  "error": null
+}
