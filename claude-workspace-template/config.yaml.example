@@ -1,0 +1,36 @@
+# claude-workspace.yaml — 프로젝트 루트에 배치
+project:
+  name: "my-app"
+  description: "프로젝트 설명을 입력하세요"
+  language: "ko"  # ko, en, ja
+
+# 활성화할 애드온 목록
+addons: []
+  # - react-typescript
+  # - python-backend
+  # - eval-system
+  # - gemini-bridge
+
+# 소스 경로 설정
+paths:
+  src: "src"
+  tests: "tests"
+  docs: "docs"
+
+# 빌드/테스트 명령어 (check-health, verify-app 등이 참조)
+commands:
+  typecheck: ""       # e.g. "npx tsc --noEmit", "mypy src/"
+  lint: ""            # e.g. "npx eslint .", "ruff check ."
+  test: ""            # e.g. "npm test", "pytest tests/"
+  build: ""           # e.g. "npm run build", "python -m build"
+  format: ""          # e.g. "npx prettier --write", "ruff format"
+
+# 훅 설정
+hooks:
+  ethical_validator: true     # 위험 명령 차단
+  auto_formatter: true        # 저장 시 자동 포맷
+  context_monitor: true       # 컨텍스트 리밋 경고
+  protected_paths:            # Edit/Write 차단 경로
+    - ".env"
+    - "secrets"
+    - ".git/"

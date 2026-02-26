@@ -1,0 +1,33 @@
+name: example
+description: Example rubric template for grading agent tasks
+criteria:
+  - name: completeness
+    weight: 0.4
+    description: Did the agent complete all requirements?
+    levels:
+      - score: 1
+        description: Fully complete
+      - score: 0.5
+        description: Partially complete
+      - score: 0
+        description: Not complete
+  - name: quality
+    weight: 0.3
+    description: Is the implementation clean and maintainable?
+    levels:
+      - score: 1
+        description: High quality
+      - score: 0.5
+        description: Acceptable
+      - score: 0
+        description: Poor quality
+  - name: testing
+    weight: 0.3
+    description: Are tests comprehensive?
+    levels:
+      - score: 1
+        description: Well tested
+      - score: 0.5
+        description: Some tests
+      - score: 0
+        description: No tests

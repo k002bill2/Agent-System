@@ -1,0 +1,84 @@
+# AI Agent Evaluation Task Schema
+# All task definition files should follow this schema.
+
+schema_version: "1.0"
+
+task:
+  # Required fields
+  id: string                    # Unique ID (e.g., task_ui_001)
+  name: string                  # Task name
+  category: enum                # ui_component | service | bug_fix | refactor | integration | api | test
+  difficulty: enum              # easy | medium | hard | expert
+
+  # Task description
+  description: string           # Detailed description
+  acceptance_criteria: list     # Acceptance criteria list
+
+  # Input context
+  input:
+    prompt: string              # Prompt to send to the agent
+    context_files: list         # Reference files (optional)
+    dependencies: list          # Required dependencies (optional)
+
+  # Expected output
+  expected_output:
+    files: list                 # Files to be created/modified
+    patterns: list              # Patterns that should appear in the code (optional)
+    forbidden_patterns: list    # Patterns that must NOT appear (optional)
+
+  # Evaluation settings
+  evaluation:
+    timeout_minutes: number     # Timeout (default: 15)
+    rubric: string              # Rubric file to use
+    weights:                    # Evaluation weights
+      code_checks: number       # Code check weight (0-100)
+      llm_grading: number       # LLM grading weight (0-100)
+    passing_score: number       # Passing score (0-1, default: 0.7)
+
+  # Metadata
+  metadata:
+    created_at: date
+    author: string
+    tags: list
+    recommended_agent: string   # Recommended agent (optional)
+
+# Example
+example:
+  id: task_001
+  name: "Example component creation"
+  category: ui_component
+  difficulty: medium
+  description: |
+    Create a component that displays entity information.
+    The component should show name, status, and relevant metadata.
+  acceptance_criteria:
+    - Written in TypeScript
+    - Includes styling
+    - Includes accessibility labels
+    - Includes test file
+  input:
+    prompt: "Create a component that displays entity information."
+    context_files:
+      - src/types/index.ts
+  expected_output:
+    files:
+      - src/components/EntityCard.tsx
+      - src/components/EntityCard.test.tsx
+    patterns:
+      - "interface.*Props"
+      - "export.*EntityCard"
+    forbidden_patterns:
+      - ": any"
+      - "// @ts-ignore"
+  evaluation:
+    timeout_minutes: 15
+    rubric: code-quality.yaml
+    weights:
+      code_checks: 40
+      llm_grading: 60
+    passing_score: 0.7
+  metadata:
+    created_at: 2025-01-28
+    author: system
+    tags: [component, ui]
+    recommended_agent: general-purpose

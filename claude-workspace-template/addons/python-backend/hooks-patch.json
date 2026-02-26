@@ -1,0 +1,15 @@
+{
+  "PostToolUse": [
+    {
+      "matcher": "Edit|Write",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "node .claude/hooks/ruffFormatter.js 2>/dev/null || true",
+          "timeout": 10,
+          "statusMessage": "Python formatting..."
+        }
+      ]
+    }
+  ]
+}

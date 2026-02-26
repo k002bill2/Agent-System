@@ -1,0 +1,15 @@
+{
+  "Stop": [
+    {
+      "matcher": "",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "node .claude/hooks/geminiAutoReview.js 2>/dev/null || true",
+          "timeout": 10,
+          "statusMessage": "Gemini review check..."
+        }
+      ]
+    }
+  ]
+}

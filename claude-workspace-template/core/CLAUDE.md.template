@@ -1,0 +1,196 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code when working with code in this repository.
+
+## Project Overview
+
+**{{project.name}}** - {{project.description}}
+
+## Directory Structure
+
+<!-- TODO: Define your project's directory structure -->
+```
+{{project.name}}/
+├── .claude/              # Claude Code settings (skills, agents, commands, hooks)
+├── src/                  # Source code
+├── docs/                 # Documentation
+└── tests/                # Tests
+```
+
+## Tech Stack
+
+<!-- TODO: List your tech stack (framework, language, database, etc.) -->
+| Layer | Stack |
+|-------|-------|
+| Backend | ... |
+| Frontend | ... |
+
+## Quick Start
+
+<!-- TODO: Write setup and run instructions -->
+```bash
+# 1. Install dependencies
+# ...
+
+# 2. Run the app
+# ...
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `/check-health` | Typecheck, lint, test, build verification |
+| `/verify-app` | Boris Cherny-style verification loop |
+| `/test-coverage` | Test coverage analysis |
+| `/commit-push-pr` | Git workflow automation |
+| `/save-and-compact` | Save context then /compact |
+| `/resume` | Restore previous session context |
+{{#if addon.react-typescript}}
+| `/component-gen` | Generate React component boilerplate |
+{{/if}}
+{{#if addon.eval-system}}
+| `/run-evals` | Run evaluation suite |
+| `/eval-report` | Generate eval report |
+{{/if}}
+{{#if addon.gemini-bridge}}
+| `/gemini-review` | Cross-review with Gemini CLI |
+{{/if}}
+
+## Code Patterns
+
+<!-- TODO: Add your project's key code patterns and conventions -->
+```
+# Example pattern:
+# class MyService:
+#     async def execute(self, input: str) -> Result:
+#         ...
+```
+
+## Environment Variables
+
+<!-- TODO: List required and optional environment variables -->
+```bash
+# Required
+# API_KEY=...
+
+# Optional
+# DEBUG=false
+
+# Claude Code Usage (set for deployment, auto on macOS)
+# CLAUDE_OAUTH_TOKEN=...         # required on non-macOS
+# CLAUDE_STATS_CACHE_PATH=...    # default: ~/.claude/stats-cache.json
+```
+
+## Testing
+
+```bash
+# Run all tests
+{{commands.test}}
+
+# Typecheck
+{{commands.typecheck}}
+
+# Lint
+{{commands.lint}}
+
+# Build
+{{commands.build}}
+```
+
+## Key Features
+
+<!-- TODO: List your project's key features -->
+- Feature 1
+- Feature 2
+
+## Agents
+
+**Claude Code Sub-agents** (`.claude/agents/`):
+<!-- TODO: List your sub-agents or remove this section if not using sub-agents -->
+- `lead-orchestrator`: Multi-agent coordination
+- `quality-validator`: Quality verification
+
+**Shared Frameworks** (`.claude/agents/shared/`):
+- `ace-framework.md`: Parallel execution protocol
+- `quality-gates.md`: Quality gates
+- `effort-scaling.md`: Resource allocation
+
+## Dev Docs System
+
+Context preservation system for large tasks (3-file pattern):
+
+```
+dev/active/[task-name]/
+├── [task-name]-plan.md     # Approved plan
+├── [task-name]-context.md  # Key decisions
+└── [task-name]-tasks.md    # Checklist
+```
+
+**Workflow**: `/dev-docs` -> implement -> `/update-dev-docs` -> `/compact`
+
+---
+
+## Document Management
+
+**Keep CLAUDE.md slim** (under 200 lines):
+- Do not expand CLAUDE.md when adding new features
+- Add details to `docs/` and reference from here
+- CLAUDE.md should contain only key overviews
+
+**Document update rules** (required after feature implementation):
+
+| Change | Target Doc | Action |
+|--------|-----------|--------|
+| New API endpoint | `docs/api-reference.md` | Add endpoint entry |
+| New feature/service | `docs/features.md` | Add numbered section |
+| New page | `docs/dashboard.md` | Add to Pages table |
+| New component | `docs/dashboard.md` | Add to Components section |
+| New store | `docs/dashboard.md` | Add to Stores table |
+| New directory | `docs/dashboard.md` | Update directory structure |
+
+**Checklist** (on implementation completion):
+1. Source files written
+2. Tests written
+3. **Docs updated per table above** <- required!
+
+## Coding Guidelines
+
+- **Pre-deploy verification**: Run `{{commands.typecheck}}` + `{{commands.test}}` before deploy, confirm zero errors
+- **Type safety**: Use type hints consistently (TypeScript/Python), run type check after edits
+- **Debugging rule**: After 2 failed attempts with the same fix, stop and analyze root cause before suggesting a different approach (never retry same strategy 3 times)
+- **Analysis requests**: Provide analysis and concrete improvement suggestions, not just summaries
+
+{{#if addon.react-typescript}}
+## React/TypeScript Specifics
+
+- Path alias: `@/components/...`
+- State management: Zustand stores
+- Styling: Tailwind CSS utility classes
+- Run `tsc --noEmit` after every component change
+{{/if}}
+
+{{#if addon.eval-system}}
+## Eval System
+
+- Task definitions: `.claude/evals/tasks/*.yaml`
+- Results: `.claude/evals/results/{date}/summary.json`
+- Rubrics: `.claude/evals/rubrics/`
+- Use `general-purpose` subagent_type for reliable tool usage
+{{/if}}
+
+{{#if addon.gemini-bridge}}
+## Gemini Cross-Review
+
+- Bridge config: `.claude/gemini-bridge/`
+- Use `/gemini-review` for cross-model code review
+{{/if}}
+
+## Detailed Docs (Read when needed)
+
+<!-- TODO: Update with your project's documentation paths -->
+| Task Type | Document |
+|-----------|----------|
+| API endpoints | `docs/api-reference.md` |
+| Architecture | `docs/architecture.md` |
+| Features | `docs/features.md` |

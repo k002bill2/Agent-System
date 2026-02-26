@@ -1,0 +1,54 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/ethicalValidator.js 2>/dev/null || true",
+            "timeout": 5,
+            "statusMessage": "Safety check..."
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import json,sys; p=json.load(sys.stdin).get('tool_input',{}).get('file_path',''); blocked=['.env','secrets','.git/','/prod/']; sys.exit(2 if any(b in p for b in blocked) else 0)\"",
+            "timeout": 5,
+            "statusMessage": "Path check..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/autoFormatter.js 2>/dev/null || true",
+            "timeout": 10,
+            "statusMessage": "Auto formatting..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/contextMonitor.js 2>/dev/null || true",
+            "timeout": 5,
+            "statusMessage": "Context monitoring..."
+          }
+        ]
+      }
+    ]
+  }
+}
