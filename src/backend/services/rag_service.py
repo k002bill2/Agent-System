@@ -179,9 +179,7 @@ class ProjectVectorStore:
         embedding_model: str | None = None,
         prefer_grpc: bool = True,
     ):
-        self.qdrant_url = qdrant_url or os.getenv(
-            "QDRANT_URL", "http://localhost:6333"
-        )
+        self.qdrant_url = qdrant_url or os.getenv("QDRANT_URL", "http://localhost:6333")
         self.qdrant_api_key = qdrant_api_key or os.getenv("QDRANT_API_KEY", "")
         self.prefer_grpc = prefer_grpc
 
@@ -297,9 +295,7 @@ class ProjectVectorStore:
                     distance=Distance.COSINE,
                 ),
             )
-            logger.info(
-                f"Created Qdrant collection '{collection_name}' (dim={dim}, cosine)"
-            )
+            logger.info(f"Created Qdrant collection '{collection_name}' (dim={dim}, cosine)")
 
     def _get_or_create_collection(self, project_id: str) -> QdrantVectorStore:
         """Get or create a Qdrant vector store for a project."""
@@ -793,9 +789,7 @@ class ProjectVectorStore:
             )
 
         if RAG_ENABLE_HYBRID and BM25_AVAILABLE:
-            return await self._hybrid_query(
-                project_id, collection, query, k, qdrant_filter
-            )
+            return await self._hybrid_query(project_id, collection, query, k, qdrant_filter)
 
         # ── Standard semantic-only path ───────────────────────────────────
         results = collection.similarity_search_with_score(
