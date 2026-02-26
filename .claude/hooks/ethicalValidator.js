@@ -36,9 +36,41 @@ const BLOCKED_OPERATIONS = {
   git: {
     patterns: [
       /git\s+push\s+--force\s+origin\s+(main|master)/i,
-      /git\s+reset\s+--hard\s+origin/i
+      /git\s+reset\s+--hard\s+origin/i,
+      /git\s+branch\s+-D\s+(main|master)/i
     ],
-    message: 'main/master 강제 푸시는 차단됩니다.',
+    message: 'main/master 강제 푸시/리셋/삭제는 차단됩니다.',
+    severity: 'HIGH'
+  },
+  database: {
+    patterns: [
+      /DROP\s+(TABLE|DATABASE|SCHEMA)\s+/i,
+      /TRUNCATE\s+TABLE/i,
+      /DELETE\s+FROM\s+\w+(?!\s+WHERE)\s*[;\s]?$/im  // WHERE 없는 전체 삭제 (세미콜론 유무 무관)
+    ],
+    message: '파괴적 DB 작업은 차단됩니다. WHERE 조건을 사용하세요.',
+    severity: 'CRITICAL'
+  },
+  secrets: {
+    patterns: [
+      /-----BEGIN\s+(RSA |EC |DSA )?PRIVATE KEY-----/,
+      /AKIA[0-9A-Z]{16}/,  // AWS Access Key
+      /ghp_[A-Za-z0-9_]{36}/  // GitHub Personal Token
+    ],
+    message: '시크릿/키가 코드에 포함되어 있습니다.',
+    severity: 'CRITICAL'
+  },
+  dangerous_commands: {
+    patterns: [
+      /curl\s+.*\|\s*(ba)?sh/i,       // curl | bash (원격 코드 실행)
+      /wget\s+.*\|\s*(ba)?sh/i,       // wget | bash
+      /chmod\s+777\s+/,               // 과도한 권한 부여
+      /sudo\s+rm\s/i,                 // sudo rm
+      /npm\s+publish/i,               // 패키지 퍼블리시
+      /docker\s+rm\s+-f/i,            // 컨테이너 강제 삭제
+      /kubectl\s+delete\s+(ns|namespace|pod|deploy)/i  // K8s 리소스 삭제
+    ],
+    message: '위험한 시스템 명령이 감지되었습니다.',
     severity: 'HIGH'
   }
 };
@@ -222,9 +254,35 @@ if (require.main === module) {
     try {
       const event = JSON.parse(inputData);
       const result = validateEthically(event.tool_name || '', event.tool_input || {}, {});
-      const message = formatValidationResult(result);
-      if (message) {
-        process.stdout.write(message);
+
+      if (!result.allowed) {
+        // ACE Layer 1: 윤리적 거부 — 차단 결정을 JSON으로 반환
+        const blockResponse = {
+          decision: 'block',
+          reason: result.blockedReasons.map(r => `[${r.severity}] ${r.message}`).join('; ')
+        };
+        process.stdout.write(JSON.stringify(blockResponse));
+
+        // 차단 이벤트를 학습 데이터로 기록
+        try {
+          const feedbackLoop = require('../coordination/feedback-loop');
+          feedbackLoop.recordLearningEvent({
+            agentId: 'ethicalValidator',
+            eventType: 'ethical_block',
+            context: {
+              tool_name: event.tool_name,
+              blocked_categories: result.blockedReasons.map(r => r.category),
+              command_preview: (event.tool_input?.command || '').substring(0, 100)
+            },
+            suggestion: result.blockedReasons[0]?.message || '',
+            severity: result.blockedReasons[0]?.severity === 'CRITICAL' ? 'critical' : 'warning'
+          });
+        } catch {}
+      } else {
+        const message = formatValidationResult(result);
+        if (message) {
+          process.stderr.write(message);
+        }
       }
     } catch (e) { /* ignore parse errors */ }
     process.exit(0);

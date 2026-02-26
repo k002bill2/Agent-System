@@ -18,6 +18,47 @@ const fs = require('fs');
 const path = require('path');
 
 const TRACE_DIR = '.temp/traces/sessions';
+const PARALLEL_STATE_PATH = path.join(__dirname, '../coordination/parallel-state.json');
+
+/**
+ * JSON 파일 안전 읽기
+ */
+function readJsonSafe(filePath, defaultValue) {
+  try {
+    if (fs.existsSync(filePath)) {
+      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    }
+  } catch {}
+  return defaultValue;
+}
+
+/**
+ * 세션 체크포인트 생성 (checkpoint-manager.js 연동)
+ */
+function createSessionCheckpoint(editedFiles) {
+  try {
+    const cpMgr = require('../coordination/checkpoint-manager');
+    const parallelState = readJsonSafe(PARALLEL_STATE_PATH, { activeAgents: [], completedAgents: [] });
+
+    // no-op 방지: 편집 파일 0개 + 활성 에이전트 0개이면 스킵
+    if (editedFiles.length === 0 && (parallelState.activeAgents || []).length === 0) return;
+
+    cpMgr.createCheckpoint({
+      agentId: 'session',
+      trigger: 'stop_event',
+      description: `${editedFiles.length} files edited`,
+      context: {
+        editedFiles: editedFiles.slice(0, 20),
+        activeAgents: (parallelState.activeAgents || []).map(a => ({
+          subagentType: a.subagentType, status: a.status
+        })),
+        completedAgents: (parallelState.completedAgents || []).map(a => ({
+          subagentType: a.subagentType, duration_ms: a.duration_ms
+        }))
+      }
+    });
+  } catch {}
+}
 
 /**
  * Hook entry point
@@ -30,6 +71,9 @@ async function onStopEvent(context) {
     if (editedFiles.length === 0) {
       editedFiles = detectChangedFiles();
     }
+
+    // 0. 세션 체크포인트 생성
+    createSessionCheckpoint(editedFiles);
 
     // 1. 세션 메트릭 집계 (항상 실행)
     await aggregateSessionMetrics();
@@ -220,6 +264,22 @@ async function aggregateSessionMetrics() {
       });
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     }
+
+    // Feedback Loop 요약 출력
+    try {
+      const feedbackLoop = require('../coordination/feedback-loop');
+      const summary = feedbackLoop.generateMetricsSummary();
+      if (summary.totalTasks > 0) {
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('📈 FEEDBACK SUMMARY');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log(`Tasks: ${summary.totalTasks}, Success: ${summary.successRate}%, Avg: ${summary.avgDuration}ms`);
+        if (summary.recentErrors && summary.recentErrors.length > 0) {
+          console.log(`Recent errors: ${summary.recentErrors.length}`);
+        }
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      }
+    } catch {}
 
   } catch (error) {
     // 메트릭 집계 실패는 무시 (다른 작업 방해 안함)

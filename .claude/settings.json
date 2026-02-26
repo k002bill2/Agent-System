@@ -1,3 +1,79 @@
 {
-  "hooks": {}
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/ethicalValidator.js 2>/dev/null || true",
+            "timeout": 5,
+            "statusMessage": "Safety check..."
+          }
+        ]
+      },
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/parallelCoordinator.js pre 2>/dev/null || true",
+            "timeout": 5,
+            "statusMessage": "Parallel coordination..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/agentTracer.js 2>/dev/null || true",
+            "timeout": 5,
+            "statusMessage": "Agent tracing..."
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/parallelCoordinator.js post 2>/dev/null || true",
+            "timeout": 5,
+            "statusMessage": "Parallel cleanup..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/contextMonitor.js 2>/dev/null || true",
+            "timeout": 5,
+            "statusMessage": "Context monitoring..."
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/stopEvent.js 2>/dev/null || true",
+            "timeout": 10,
+            "statusMessage": "Session metrics..."
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/userPromptSubmit.js 2>/dev/null || true",
+            "timeout": 5,
+            "statusMessage": "Context activation..."
+          }
+        ]
+      }
+    ]
+  }
 }

@@ -123,6 +123,23 @@ function getLockStatus() {
 }
 
 /**
+ * 에이전트 기반 일괄 해제
+ * @param {string} agentId - 해제할 에이전트 ID
+ */
+function releaseByAgent(agentId) {
+  const locks = loadLocks();
+  let released = 0;
+  for (const [key, lock] of Object.entries(locks)) {
+    if (lock.agentId === agentId) {
+      delete locks[key];
+      released++;
+    }
+  }
+  if (released > 0) saveLocks(locks);
+  return { success: true, released };
+}
+
+/**
  * 모든 락 해제 (강제)
  */
 function clearAllLocks() {
@@ -145,11 +162,13 @@ function loadLocks() {
 }
 
 /**
- * 락 파일 저장
+ * 락 파일 저장 (atomic write: .tmp → rename)
  */
 function saveLocks(locks) {
   try {
-    fs.writeFileSync(LOCK_FILE_PATH, JSON.stringify(locks, null, 2), 'utf8');
+    const tmpPath = LOCK_FILE_PATH + '.tmp';
+    fs.writeFileSync(tmpPath, JSON.stringify(locks, null, 2), 'utf8');
+    fs.renameSync(tmpPath, LOCK_FILE_PATH);
   } catch (error) {
     console.error('[FileLockManager] Save error:', error.message);
   }
@@ -165,6 +184,7 @@ function normalizePath(filePath) {
 module.exports = {
   acquireLock,
   releaseLock,
+  releaseByAgent,
   isLocked,
   getLockStatus,
   clearAllLocks

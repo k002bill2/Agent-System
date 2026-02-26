@@ -271,16 +271,38 @@ function checkPendingGeminiReviews() {
       }
     }
 
-    // 상태 업데이트 (shown/stale/missing 마킹)
+    // 4b. Cleanup: remove shown/stale/missing reviews older than 30 minutes
+    state.pendingReviews = state.pendingReviews.filter(r => {
+      if (['shown', 'stale', 'missing', 'read_error'].includes(r.status)) {
+        const age = Date.now() - new Date(r.timestamp).getTime();
+        return age < 30 * 60 * 1000; // keep if less than 30 min old
+      }
+      return true;
+    });
+
+    // 상태 업데이트 (shown/stale/missing 마킹 + cleanup)
     fs.writeFileSync(stateFile, JSON.stringify(state, null, 2) + '\n');
 
     if (reviewBlocks.length === 0) return null;
+
+    // severity 분석하여 대응 지시 추가
+    const allText = reviewBlocks.join('\n');
+    const hasCritical = /severity:critical/i.test(allText);
+    const hasWarning = /severity:warning/i.test(allText);
+    const needsAttention = /needs-attention/i.test(allText);
 
     let msg = '[GEMINI REVIEW - Cross-verification by Gemini CLI]';
     for (const block of reviewBlocks) {
       msg += '\n' + block;
     }
     msg += '\n[/GEMINI REVIEW]';
+
+    // critical/warning 이슈가 있으면 Claude에게 대응 안내
+    if (hasCritical) {
+      msg += '\n⚠️ Gemini가 critical 이슈를 발견했습니다. 커밋 전에 반드시 확인하세요.';
+    } else if (hasWarning || needsAttention) {
+      msg += '\n💡 Gemini가 warning 이슈를 제기했습니다. 관련 작업 시 참고하세요.';
+    }
 
     return msg;
   } catch (_) {
@@ -289,39 +311,78 @@ function checkPendingGeminiReviews() {
 }
 
 /**
- * Gemini 리뷰에서 핵심 ISSUES/VERDICT/SUMMARY 부분을 추출
+ * Gemini 리뷰에서 핵심 ISSUES/VERDICT/SUMMARY 부분을 추출.
+ * 마지막 ISSUES: 블록을 사용 (Gemini의 tool-thinking preamble이
+ * 첫번째 ISSUES: 를 포함할 수 있으므로).
  */
 function extractReviewSummary(reviewText) {
-  // ISSUES ~ SUMMARY 패턴 추출 시도
-  const issuesMatch = reviewText.match(/ISSUES:[\s\S]*?SUMMARY:.*$/m);
-  if (issuesMatch) {
-    return issuesMatch[0].trim();
-  }
+  const lines = reviewText.split('\n');
 
-  // VERDICT 패턴만이라도 추출
-  const verdictMatch = reviewText.match(/VERDICT:.*$/m);
-  if (verdictMatch) {
-    // VERDICT 앞 5줄 + VERDICT + 뒤 2줄
-    const lines = reviewText.split('\n');
-    const verdictIdx = lines.findIndex(l => /^VERDICT:/.test(l));
-    if (verdictIdx >= 0) {
-      const start = Math.max(0, verdictIdx - 5);
-      const end = Math.min(lines.length, verdictIdx + 3);
-      return lines.slice(start, end).join('\n').trim();
+  // 마지막 ISSUES: 라인 인덱스 찾기
+  let lastIssuesIdx = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (/^ISSUES:/i.test(lines[i].trim())) {
+      lastIssuesIdx = i;
+      break;
     }
   }
 
-  // 폴백: 마지막 500자
+  if (lastIssuesIdx >= 0) {
+    // ISSUES: 부터 끝까지 추출
+    const block = lines.slice(lastIssuesIdx);
+
+    // VERDICT 존재 확인
+    const hasVerdict = block.some(l => /^VERDICT:/i.test(l.trim()));
+    const hasSummary = block.some(l => /^SUMMARY:/i.test(l.trim()));
+
+    if (hasVerdict) {
+      // SUMMARY까지 포함된 완전한 블록
+      if (hasSummary) {
+        const summaryIdx = block.findIndex(l => /^SUMMARY:/i.test(l.trim()));
+        return block.slice(0, summaryIdx + 1).join('\n').trim();
+      }
+      // VERDICT까지만
+      const verdictIdx = block.findIndex(l => /^VERDICT:/i.test(l.trim()));
+      return block.slice(0, verdictIdx + 1).join('\n').trim();
+    }
+
+    // VERDICT 없으면 incomplete block — 폴백
+  }
+
+  // 폴백: VERDICT 라인 주변 추출
+  const verdictIdx = lines.findIndex(l => /^VERDICT:/i.test(l.trim()));
+  if (verdictIdx >= 0) {
+    const start = Math.max(0, verdictIdx - 5);
+    const end = Math.min(lines.length, verdictIdx + 3);
+    return lines.slice(start, end).join('\n').trim();
+  }
+
+  // 최종 폴백: 마지막 500자
   if (reviewText.length > 500) {
     return '...' + reviewText.slice(-500).trim();
   }
   return reviewText.trim();
 }
 
-// ─── 에이전트 자동 추천 (skill→agent 연계) ──────────────────
+// ─── 에이전트 자동 추천 (skill→agent + task-allocator 연계) ──
 function recommendAgents(prompt) {
   const lowerPrompt = prompt.toLowerCase();
   const recommended = [];
+
+  // 0. /resume 감지 시 체크포인트 컨텍스트 주입
+  if (/^\/resume\b/i.test(prompt.trim())) {
+    try {
+      const cpMgr = require('../coordination/checkpoint-manager');
+      const checkpoints = cpMgr.listCheckpoints(3);
+      if (checkpoints.length > 0) {
+        let cpMsg = '[CHECKPOINT CONTEXT]';
+        for (const cp of checkpoints) {
+          cpMsg += `\n  ${cp.timestamp} | ${cp.trigger} | ${cp.description}`;
+        }
+        console.log(cpMsg);
+      }
+    } catch {}
+  }
 
   // 1. skill-rules.json에서 agentFile이 있는 항목 매칭
   if (fs.existsSync(RULES_PATH)) {
@@ -339,61 +400,26 @@ function recommendAgents(prompt) {
     } catch {}
   }
 
-  // 2. agents-registry.json에서 직접 매칭
-  if (fs.existsSync(AGENTS_REGISTRY_PATH)) {
-    try {
-      const registry = JSON.parse(fs.readFileSync(AGENTS_REGISTRY_PATH, 'utf-8'));
-      const agents = registry.agents || {};
-
-      // 에이전트별 트리거 패턴 (agents-registry.json의 triggers가 null이므로 여기서 보완)
-      const agentTriggers = {
-        'web-ui-specialist': {
-          keywords: ['ui', 'ux', 'design', 'layout', 'responsive', '디자인', '레이아웃', 'css', 'styling'],
-          patterns: ['(create|make|design).*?(ui|component|layout|page)', '(UI|UX).*?(개선|수정|디자인)']
-        },
-        'test-automation-specialist': {
-          keywords: ['test', 'vitest', 'coverage', 'tdd', '테스트', '커버리지'],
-          patterns: ['(write|add|create).*?test', '(coverage|커버리지).*?(improve|증가|올려)']
-        },
-        'performance-optimizer': {
-          keywords: ['performance', 'optimize', 'slow', 'memory leak', 'bundle', '성능', '최적화', '느려'],
-          patterns: ['(optimize|improve).*?performance', '(성능|속도).*?(개선|최적화)']
-        },
-        'code-simplifier': {
-          keywords: ['simplify', 'refactor', 'complexity', '단순화', '리팩토링', '복잡'],
-          patterns: ['(simplify|refactor).*?(code|function)', '(코드|함수).*?(단순화|리팩토링)']
-        },
-        'quality-validator': {
-          keywords: ['validate', 'review', 'quality', '검증', '품질', '리뷰'],
-          patterns: ['(validate|review|check).*?(quality|code)', '(코드|품질).*?(검증|리뷰)']
-        },
-        'background-verifier': {
-          keywords: ['verify', 'check all', 'full check', '전체 검증', '종합 검증'],
-          patterns: ['(verify|check).*?(all|everything)', '전체.*?검증']
-        }
-      };
-
-      for (const [agentName, triggers] of Object.entries(agentTriggers)) {
-        // 이미 skill 연계로 추천된 에이전트는 제외
-        if (recommended.some(r => r.agent === agentName)) continue;
-        if (!agents[agentName]) continue;
-
-        const keywordMatch = triggers.keywords.some(kw => lowerPrompt.includes(kw));
-        const patternMatch = triggers.patterns.some(p => {
-          try { return new RegExp(p, 'i').test(prompt); }
-          catch { return false; }
+  // 2. task-allocator.js 위임 (하드코딩된 agentTriggers 대체)
+  try {
+    const taskAllocator = require('../coordination/task-allocator');
+    const result = taskAllocator.recommendAgent(prompt);
+    if (result.confidence !== 'low') {
+      if (!recommended.some(r => r.agent === result.recommended)) {
+        recommended.push({
+          agent: result.recommended,
+          reason: `task-type:${result.taskType}`,
+          model: result.model || 'default'
         });
-
-        if (keywordMatch || patternMatch) {
-          recommended.push({
-            agent: agentName,
-            reason: 'prompt-match',
-            model: agents[agentName].model || 'haiku'
-          });
+      }
+      for (const alt of (result.alternatives || [])) {
+        if (!recommended.some(r => r.agent === alt)) {
+          const caps = taskAllocator.AGENT_CAPABILITIES[alt];
+          recommended.push({ agent: alt, reason: 'alternative', model: caps?.model || 'default' });
         }
       }
-    } catch {}
-  }
+    }
+  } catch {}
 
   if (recommended.length === 0) return null;
 
