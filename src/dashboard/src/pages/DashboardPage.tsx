@@ -187,7 +187,7 @@ export function DashboardPage() {
                     <span className="text-xs text-gray-500 dark:text-gray-400">
                       {new Date(session.last_activity).toLocaleTimeString()}
                     </span>
-                    {session.project_name && (
+                    {session.project_name && session.project_name !== '-' && (
                       <span className="text-xs px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded truncate max-w-[100px]">
                         {session.project_name}
                       </span>

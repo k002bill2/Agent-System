@@ -38,9 +38,9 @@ if ! docker info > /dev/null 2>&1; then
 fi
 
 cd "$PROJECT_ROOT/infra/docker"
-docker-compose up -d postgres redis
+docker-compose up -d postgres redis qdrant
 
-echo -e "${GREEN}      Waiting for PostgreSQL and Redis...${NC}"
+echo -e "${GREEN}      Waiting for PostgreSQL, Redis, and Qdrant...${NC}"
 sleep 3
 
 # Check if services are healthy

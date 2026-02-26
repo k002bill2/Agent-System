@@ -13,6 +13,7 @@ import hashlib
 import logging
 import os
 import re
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -725,8 +726,15 @@ class ProjectVectorStore:
         if documents:
             texts = [doc.page_content for doc in documents]
             metadatas = [doc.metadata for doc in documents]
+            # Qdrant requires UUID or integer IDs — generate deterministic UUIDs
+            # from the string key so re-indexing is idempotent.
             ids = [
-                f"{doc.metadata['source']}_{doc.metadata['chunk_index']}_{doc.metadata['content_hash']}"
+                str(
+                    uuid.uuid5(
+                        uuid.NAMESPACE_URL,
+                        f"{doc.metadata['source']}_{doc.metadata['chunk_index']}_{doc.metadata['content_hash']}",
+                    )
+                )
                 for doc in documents
             ]
 

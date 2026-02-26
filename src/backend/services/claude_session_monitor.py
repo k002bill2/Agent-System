@@ -485,8 +485,13 @@ class ClaudeSessionMonitor:
             encoded_path: Encoded folder name (e.g., "-Users-...-My-Project")
 
         Returns:
-            Last directory component as project name
+            Last directory component as project name, or empty string if not determinable
         """
+        # Sessions from non-project context (e.g., root "/") have encoded_path="-"
+        # These have no meaningful project name
+        if encoded_path == "-":
+            return ""
+
         # Prefer cwd as it preserves original path with spaces/special chars
         if cwd:
             # Extract last directory component from cwd
