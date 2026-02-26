@@ -510,7 +510,7 @@ async def track_usage(
 @router.get("/{org_id}/members/usage")
 async def get_member_usage(
     org_id: str,
-    period: str = Query(default="month", regex="^(day|week|month)$"),
+    period: str = Query(default="month", pattern="^(day|week|month)$"),
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):

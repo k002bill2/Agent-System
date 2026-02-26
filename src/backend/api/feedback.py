@@ -164,7 +164,7 @@ async def get_dataset_stats() -> DatasetStats:
 
 @router.get("/dataset/export")
 async def export_dataset(
-    format: str = Query("jsonl", regex="^(jsonl|csv)$"),
+    format: str = Query("jsonl", pattern="^(jsonl|csv)$"),
     include_negative: bool = True,
     include_implicit: bool = True,
     agent_filter: str | None = None,
