@@ -99,10 +99,13 @@ async def _get_db_filtered_projects(monitor, current_user=None) -> list:
     """
     from pathlib import Path as PathLib
 
+    from datetime import datetime
+
     from sqlalchemy import or_, select
 
     from db.database import async_session_factory
     from db.models import ProjectAccessModel, ProjectModel
+    from models.project_config import ProjectInfo
 
     async with async_session_factory() as session:
         is_admin = False
@@ -177,7 +180,10 @@ async def _get_db_filtered_projects(monitor, current_user=None) -> list:
     # Also ensure DB projects with paths not yet in monitor get added
     discovered_names = {p.project_name for p in filtered}
     for db_proj in db_projects:
-        if db_proj.name not in discovered_names and db_proj.path:
+        if db_proj.name in discovered_names:
+            continue
+
+        if db_proj.path:
             # Skip if this path was already added (matched by path in first loop)
             if db_proj.path in seen_paths:
                 continue
@@ -191,6 +197,20 @@ async def _get_db_filtered_projects(monitor, current_user=None) -> list:
                 if summary and summary.project:
                     filtered.append(summary.project)
                     seen_paths.add(summary.project.project_path)
+                    continue
+
+        # Fallback: DB project has no path or path scan failed
+        # Include it as a basic ProjectInfo so it appears in the list
+        project_id = f"db-{db_proj.id}"
+        filtered.append(
+            ProjectInfo(
+                project_id=project_id,
+                project_name=db_proj.name,
+                project_path=db_proj.path or "",
+                claude_dir="",
+                last_modified=db_proj.updated_at or db_proj.created_at or datetime.utcnow(),
+            )
+        )
 
     return filtered
 

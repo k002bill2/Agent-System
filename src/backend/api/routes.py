@@ -53,6 +53,59 @@ from services.warp_service import get_warp_service
 router = APIRouter(tags=["orchestration"])
 
 
+async def _sync_project_to_db(
+    project_id: str, name: str, path: str, description: str | None = None
+) -> None:
+    """Sync a project to the DB projects table (upsert by name).
+
+    Ensures projects created/linked via the Projects page also appear
+    in Project Configs and Project Registry.
+    """
+    import logging
+    import re
+
+    use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
+    if not use_database:
+        return
+
+    try:
+        from sqlalchemy import select
+
+        from db.database import async_session_factory
+        from db.models import ProjectModel
+
+        # Generate slug from name
+        slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+        async with async_session_factory() as session:
+            # Check if already exists by name
+            result = await session.execute(
+                select(ProjectModel).where(ProjectModel.name == name)
+            )
+            existing = result.scalar_one_or_none()
+
+            if existing:
+                # Update path if changed
+                if path and existing.path != path:
+                    existing.path = path
+                if not existing.is_active:
+                    existing.is_active = True
+                await session.commit()
+            else:
+                new_project = ProjectModel(
+                    id=project_id,
+                    name=name,
+                    slug=slug,
+                    description=description or "",
+                    path=path,
+                    is_active=True,
+                )
+                session.add(new_project)
+                await session.commit()
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"Failed to sync project to DB: {e}")
+
+
 class SessionCreate(BaseModel):
     """Session creation request."""
 
@@ -841,6 +894,9 @@ async def link_project(request: ProjectLinkRequest):
     # Register the project
     project = register_project(request.id, str(normalized_path))
 
+    # Sync to DB so it appears in Project Configs / Project Registry
+    await _sync_project_to_db(project.id, project.name, str(normalized_path), project.description)
+
     return ProjectResponse(
         id=project.id,
         name=project.name,
@@ -898,6 +954,11 @@ async def create_project_from_template(request: ProjectCreateFromTemplate):
 
     # Register the project
     project = register_project(request.id, str(project_path))
+
+    # Sync to DB so it appears in Project Configs / Project Registry
+    await _sync_project_to_db(
+        project.id, project.name, str(project_path), project.description
+    )
 
     return ProjectResponse(
         id=project.id,
