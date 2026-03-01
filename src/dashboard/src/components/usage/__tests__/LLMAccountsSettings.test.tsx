@@ -9,13 +9,16 @@ vi.mock('lucide-react', () => {
   )
   return {
     AlertCircle: icon('alert'),
+    Check: icon('check-mark'),
     CheckCircle: icon('check'),
     Eye: icon('eye'),
     EyeOff: icon('eye-off'),
     Key: icon('key'),
     Loader2: icon('loader'),
+    Pencil: icon('pencil'),
     Plus: icon('plus'),
     Trash2: icon('trash'),
+    X: icon('x'),
     XCircle: icon('x-circle'),
   }
 })

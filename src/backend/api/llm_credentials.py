@@ -115,7 +115,9 @@ else:
         raise HTTPException(status_code=503, detail="Auth service unavailable")
 
     @router.put("/{credential_id}", response_model=LLMCredentialResponse)
-    async def edit_credential(credential_id: str, body: LLMCredentialUpdate) -> LLMCredentialResponse:  # type: ignore[misc]
+    async def edit_credential(
+        credential_id: str, body: LLMCredentialUpdate
+    ) -> LLMCredentialResponse:  # type: ignore[misc]
         raise HTTPException(status_code=503, detail="Auth service unavailable")
 
     @router.delete("/{credential_id}", status_code=204)

@@ -10,7 +10,6 @@ from models.project import PROJECTS_REGISTRY, get_project
 from services.rag_service import (
     QDRANT_AVAILABLE,
     QueryResult,
-    get_cross_project_context,
     get_vector_store,
 )
 
@@ -314,9 +313,7 @@ async def cross_project_query(request: CrossProjectQueryRequest) -> QueryResult:
         return result
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Cross-project query failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Cross-project query failed: {str(e)}")
 
 
 @router.get("/collections")
@@ -354,6 +351,4 @@ async def list_collections() -> dict:
         }
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to list collections: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to list collections: {str(e)}")

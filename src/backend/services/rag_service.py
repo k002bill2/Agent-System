@@ -323,9 +323,7 @@ class ProjectVectorStore:
 
     # ── Cross-project helpers ────────────────────────────────────────────────
 
-    def _get_all_project_collections(
-        self, exclude_ids: list[str] | None = None
-    ) -> list[str]:
+    def _get_all_project_collections(self, exclude_ids: list[str] | None = None) -> list[str]:
         """Return all proj_* collection names from Qdrant.
 
         Args:
@@ -833,9 +831,7 @@ class ProjectVectorStore:
             )
 
         if RAG_ENABLE_HYBRID and BM25_AVAILABLE:
-            local_result = await self._hybrid_query(
-                project_id, collection, query, k, qdrant_filter
-            )
+            local_result = await self._hybrid_query(project_id, collection, query, k, qdrant_filter)
         else:
             # ── Standard semantic-only path ───────────────────────────────────
             results = collection.similarity_search_with_score(
@@ -858,17 +854,13 @@ class ProjectVectorStore:
                     }
                 )
 
-            local_result = QueryResult(
-                query=query, documents=documents, total_found=len(documents)
-            )
+            local_result = QueryResult(query=query, documents=documents, total_found=len(documents))
 
         if not include_shared:
             return local_result
 
         # ── Cross-project search: merge results from other collections ────
-        other_collections = self._get_all_project_collections(
-            exclude_ids=[project_id]
-        )
+        other_collections = self._get_all_project_collections(exclude_ids=[project_id])
 
         all_ranked_lists: list[list[tuple[str, dict[str, Any]]]] = []
 
@@ -943,13 +935,9 @@ class ProjectVectorStore:
 
         # Determine which collections to search
         if source_project_ids is not None:
-            collection_names = [
-                self._get_collection_name(pid) for pid in source_project_ids
-            ]
+            collection_names = [self._get_collection_name(pid) for pid in source_project_ids]
         else:
-            collection_names = self._get_all_project_collections(
-                exclude_ids=exclude_project_ids
-            )
+            collection_names = self._get_all_project_collections(exclude_ids=exclude_project_ids)
 
         all_ranked_lists: list[list[tuple[str, dict[str, Any]]]] = []
 
@@ -957,9 +945,7 @@ class ProjectVectorStore:
             try:
                 pid = self._extract_project_id_from_collection(coll_name)
                 vs = self._get_or_create_collection(pid)
-                results = vs.similarity_search_with_score(
-                    query=query, k=k, filter=qdrant_filter
-                )
+                results = vs.similarity_search_with_score(query=query, k=k, filter=qdrant_filter)
                 ranked: list[tuple[str, dict[str, Any]]] = [
                     (
                         doc.page_content,

@@ -79,9 +79,7 @@ async def _sync_project_to_db(
 
         async with async_session_factory() as session:
             # Check if already exists by name
-            result = await session.execute(
-                select(ProjectModel).where(ProjectModel.name == name)
-            )
+            result = await session.execute(select(ProjectModel).where(ProjectModel.name == name))
             existing = result.scalar_one_or_none()
 
             if existing:
@@ -956,9 +954,7 @@ async def create_project_from_template(request: ProjectCreateFromTemplate):
     project = register_project(request.id, str(project_path))
 
     # Sync to DB so it appears in Project Configs / Project Registry
-    await _sync_project_to_db(
-        project.id, project.name, str(project_path), project.description
-    )
+    await _sync_project_to_db(project.id, project.name, str(project_path), project.description)
 
     return ProjectResponse(
         id=project.id,

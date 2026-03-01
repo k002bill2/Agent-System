@@ -23,8 +23,8 @@ from models.git import (
     CommitFile,
     DiffHunk,
     FetchResult,
-    FileHunksResponse,
     FileDiffResponse,
+    FileHunksResponse,
     # New models for status/add/commit
     FileStatusType,
     GitBranch,
@@ -715,7 +715,9 @@ class GitService:
                     if full_path.exists() and full_path.is_file():
                         content = full_path.read_text(errors="ignore")
                         lines = content.split("\n")[:500]
-                        diff_text = f"--- /dev/null\n+++ b/{file_path}\n@@ -0,0 +1,{len(lines)} @@\n"
+                        diff_text = (
+                            f"--- /dev/null\n+++ b/{file_path}\n@@ -0,0 +1,{len(lines)} @@\n"
+                        )
                         diff_text += "\n".join(f"+{line}" for line in lines)
                 else:
                     diff_text = self.repo.git.diff("--unified=3", "--", file_path)
@@ -882,15 +884,10 @@ class GitService:
                     header=current_header,
                     content="\n".join(current_content_lines),
                     old_start=int(re_mod.match(r"@@ -(\d+)", current_header).group(1)),
-                    old_count=int(
-                        re_mod.match(r"@@ -\d+,?(\d*)", current_header).group(1) or "1"
-                    ),
-                    new_start=int(
-                        re_mod.match(r"@@ -\d+,?\d* \+(\d+)", current_header).group(1)
-                    ),
+                    old_count=int(re_mod.match(r"@@ -\d+,?(\d*)", current_header).group(1) or "1"),
+                    new_start=int(re_mod.match(r"@@ -\d+,?\d* \+(\d+)", current_header).group(1)),
                     new_count=int(
-                        re_mod.match(r"@@ -\d+,?\d* \+\d+,?(\d*)", current_header).group(1)
-                        or "1"
+                        re_mod.match(r"@@ -\d+,?\d* \+\d+,?(\d*)", current_header).group(1) or "1"
                     ),
                 )
             )

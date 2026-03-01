@@ -622,9 +622,7 @@ def can_merge_to_branch(
 class UnstageRequest(BaseModel):
     """Request to unstage files."""
 
-    paths: list[str] = Field(
-        default=[], description="File paths to unstage. Empty list means all."
-    )
+    paths: list[str] = Field(default=[], description="File paths to unstage. Empty list means all.")
     all: bool = Field(default=False, description="Unstage all files (git reset HEAD)")
 
 

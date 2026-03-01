@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { WorkingDirectory } from '../WorkingDirectory'
-import type { GitWorkingStatus, GitStatusFile, DraftCommit } from '../../../stores/git'
+import type { GitWorkingStatus, GitStatusFile, DraftCommit, DiffHunk } from '../../../stores/git'
 
 // Mock lucide-react icons
 vi.mock('lucide-react', () => ({
@@ -11,6 +11,7 @@ vi.mock('lucide-react', () => ({
   FileQuestion: (props: Record<string, unknown>) => <span data-testid="icon-FileQuestion" {...props} />,
   Check: (props: Record<string, unknown>) => <span data-testid="icon-Check" {...props} />,
   Plus: (props: Record<string, unknown>) => <span data-testid="icon-Plus" {...props} />,
+  Minus: (props: Record<string, unknown>) => <span data-testid="icon-Minus" {...props} />,
   RefreshCw: (props: Record<string, unknown>) => <span data-testid="icon-RefreshCw" {...props} />,
   Send: (props: Record<string, unknown>) => <span data-testid="icon-Send" {...props} />,
   List: (props: Record<string, unknown>) => <span data-testid="icon-List" {...props} />,
@@ -18,6 +19,12 @@ vi.mock('lucide-react', () => ({
   Sparkles: (props: Record<string, unknown>) => <span data-testid="icon-Sparkles" {...props} />,
   Loader2: (props: Record<string, unknown>) => <span data-testid="icon-Loader2" {...props} />,
   ArrowUp: (props: Record<string, unknown>) => <span data-testid="icon-ArrowUp" {...props} />,
+  Eye: (props: Record<string, unknown>) => <span data-testid="icon-Eye" {...props} />,
+  ChevronDown: (props: Record<string, unknown>) => <span data-testid="icon-ChevronDown" {...props} />,
+  ChevronRight: (props: Record<string, unknown>) => <span data-testid="icon-ChevronRight" {...props} />,
+  ShieldAlert: (props: Record<string, unknown>) => <span data-testid="icon-ShieldAlert" {...props} />,
+  Shield: (props: Record<string, unknown>) => <span data-testid="icon-Shield" {...props} />,
+  AlertTriangle: (props: Record<string, unknown>) => <span data-testid="icon-AlertTriangle" {...props} />,
 }))
 
 // Mock FileGroupCard
@@ -79,8 +86,22 @@ describe('WorkingDirectory', () => {
     onRefresh: vi.fn(),
     onStageFiles: vi.fn().mockResolvedValue(true),
     onStageAll: vi.fn().mockResolvedValue(true),
+    onUnstageFiles: vi.fn().mockResolvedValue(true),
+    onUnstageAll: vi.fn().mockResolvedValue(true),
     onCommit: vi.fn().mockResolvedValue(true),
     onCommitAndPush: vi.fn().mockResolvedValue(true),
+    // Diff
+    onFetchFileDiff: vi.fn().mockResolvedValue(''),
+    fileDiffs: {} as Record<string, string>,
+    isLoadingDiff: false,
+    // Staged diff review
+    onFetchStagedDiff: vi.fn().mockResolvedValue(null),
+    stagedDiff: null as string | null,
+    // Hunk staging
+    onFetchFileHunks: vi.fn().mockResolvedValue([]),
+    onStageHunks: vi.fn().mockResolvedValue(true),
+    fileHunks: {} as Record<string, DiffHunk[]>,
+    // LLM Draft Commits
     draftCommits: [] as DraftCommit[],
     isGeneratingDrafts: false,
     onGenerateDrafts: vi.fn().mockResolvedValue([]),

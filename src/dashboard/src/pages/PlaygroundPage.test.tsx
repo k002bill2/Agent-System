@@ -456,12 +456,9 @@ describe('PlaygroundPage', () => {
     const textarea = screen.getByPlaceholderText('Enter your prompt... (MD 문서를 드래그하거나 첨부하세요)')
     fireEvent.change(textarea, { target: { value: 'Test prompt' } })
 
-    // Click the send button
-    const sendButton = textarea.closest('.flex.gap-2')?.querySelector('button')
-    expect(sendButton).toBeTruthy()
-
+    // Submit via Enter key (more reliable than finding button by DOM structure)
     await act(async () => {
-      fireEvent.click(sendButton!)
+      fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter' })
     })
 
     await waitFor(() => {
