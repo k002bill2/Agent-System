@@ -47,11 +47,6 @@
       "description": "AI 에이전트 평가 태스크 실행 및 pass@k 지표 계산",
       "allowedTools": "read, grep, glob, bash, task"
     },
-    "run-workflow": {
-      "file": ".claude/commands/run-workflow.md",
-      "description": "/run-workflow",
-      "allowedTools": null
-    },
     "save-and-compact": {
       "file": ".claude/commands/save-and-compact.md",
       "description": "Save context to Dev Docs and run /compact in one command",
@@ -100,6 +95,21 @@
     "view-logs": {
       "file": ".claude/commands/view-logs.md",
       "description": "Vite 개발 서버 또는 테스트 로그 분석",
+      "allowedTools": null
+    },
+    "ace-diagnostic": {
+      "file": ".claude/commands/ace-diagnostic.md",
+      "description": "ACE Framework 거버넌스 상태 진단 - 훅 등록, 참조 무결성, 병렬 상태 확인",
+      "allowedTools": null
+    },
+    "gemini-review": {
+      "file": ".claude/commands/gemini-review.md",
+      "description": "Gemini CLI로 현재 코드 변경사항 크로스 리뷰 실행",
+      "allowedTools": null
+    },
+    "gemini-scan": {
+      "file": ".claude/commands/gemini-scan.md",
+      "description": "Gemini CLI로 대규모 코드베이스 분석 실행",
       "allowedTools": null
     }
   }
