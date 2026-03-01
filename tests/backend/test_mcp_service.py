@@ -163,7 +163,7 @@ class TestCreateTaskAndStatusTools:
 
         # Create task
         create_result = await mcp_service._tool_create_task(
-            {"project_id": "demo", "task": "Run checks", "agent_type": "lead-orchestrator"}
+            {"project_id": "demo", "task": "Run checks", "agent_type": "aos-orchestrator"}
         )
 
         assert create_result.isError is False
@@ -184,7 +184,7 @@ class TestCreateTaskAndStatusTools:
         payload = json.loads(status_text)
         assert payload["project_id"] == "demo"
         assert payload["task"] == "Run checks"
-        assert payload["agent_type"] == "lead-orchestrator"
+        assert payload["agent_type"] == "aos-orchestrator"
         assert payload["status"] == "created"
         assert payload["project_path"] == dummy_project.path
 

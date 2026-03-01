@@ -57,7 +57,7 @@ class TestAgentRegistry:
         assert self.registry.get("web-ui-specialist") is not None
         assert self.registry.get("backend-integration-specialist") is not None
         assert self.registry.get("test-automation-specialist") is not None
-        assert self.registry.get("lead-orchestrator") is not None
+        assert self.registry.get("aos-orchestrator") is not None
 
     def test_get_by_category(self):
         """카테고리별 에이전트 조회."""

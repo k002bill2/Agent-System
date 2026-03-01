@@ -427,6 +427,225 @@ class TestQueryPaths:
         assert any(s in sources for s in ["sem.py", "bm25.py"])
 
 
+# ── Cross-project query tests ─────────────────────────────────────────────
+
+
+class TestCrossProjectQuery:
+    """Tests for cross-project search functionality."""
+
+    def test_get_all_project_collections(self, vector_store):
+        """_get_all_project_collections returns proj_* collections."""
+        mock_coll1 = MagicMock()
+        mock_coll1.name = "proj_alpha"
+        mock_coll2 = MagicMock()
+        mock_coll2.name = "proj_beta"
+        mock_coll3 = MagicMock()
+        mock_coll3.name = "other_collection"
+
+        mock_response = MagicMock()
+        mock_response.collections = [mock_coll1, mock_coll2, mock_coll3]
+        vector_store.client.get_collections.return_value = mock_response
+
+        result = vector_store._get_all_project_collections()
+        assert result == ["proj_alpha", "proj_beta"]
+
+    def test_get_all_project_collections_with_exclude(self, vector_store):
+        """_get_all_project_collections excludes specified projects."""
+        mock_coll1 = MagicMock()
+        mock_coll1.name = "proj_alpha"
+        mock_coll2 = MagicMock()
+        mock_coll2.name = "proj_beta"
+
+        mock_response = MagicMock()
+        mock_response.collections = [mock_coll1, mock_coll2]
+        vector_store.client.get_collections.return_value = mock_response
+
+        result = vector_store._get_all_project_collections(exclude_ids=["alpha"])
+        assert result == ["proj_beta"]
+
+    def test_extract_project_id_from_collection(self, vector_store):
+        """_extract_project_id_from_collection extracts ID correctly."""
+        assert vector_store._extract_project_id_from_collection("proj_myproject") == "myproject"
+        assert vector_store._extract_project_id_from_collection("proj_abc_123") == "abc_123"
+        assert vector_store._extract_project_id_from_collection("other") == "other"
+
+    @pytest.mark.asyncio
+    async def test_query_cross_project_all_collections(self, vector_store, monkeypatch):
+        """query_cross_project searches across all collections."""
+        import services.rag_service as rag_mod
+
+        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
+
+        # Set up two collections
+        mock_coll1 = MagicMock()
+        mock_coll1.name = "proj_alpha"
+        mock_coll2 = MagicMock()
+        mock_coll2.name = "proj_beta"
+        mock_response = MagicMock()
+        mock_response.collections = [mock_coll1, mock_coll2]
+        vector_store.client.get_collections.return_value = mock_response
+
+        # Mock vector stores for each project
+        doc_a = MagicMock()
+        doc_a.page_content = "alpha content about auth"
+        doc_a.metadata = {"source": "auth.py", "chunk_index": 0, "priority": "high", "project_id": "alpha"}
+
+        doc_b = MagicMock()
+        doc_b.page_content = "beta content about auth"
+        doc_b.metadata = {"source": "login.py", "chunk_index": 0, "priority": "normal", "project_id": "beta"}
+
+        mock_vs_alpha = MagicMock()
+        mock_vs_alpha.similarity_search_with_score.return_value = [(doc_a, 0.9)]
+        mock_vs_beta = MagicMock()
+        mock_vs_beta.similarity_search_with_score.return_value = [(doc_b, 0.85)]
+
+        call_count = {"n": 0}
+        original_get_or_create = vector_store._get_or_create_collection
+
+        def fake_get_or_create(pid):
+            call_count["n"] += 1
+            if pid == "alpha":
+                return mock_vs_alpha
+            return mock_vs_beta
+
+        monkeypatch.setattr(vector_store, "_get_or_create_collection", fake_get_or_create)
+
+        result = await vector_store.query_cross_project("auth query", k=5)
+
+        assert result.total_found > 0
+        sources = [d["source"] for d in result.documents]
+        assert "auth.py" in sources or "login.py" in sources
+
+    @pytest.mark.asyncio
+    async def test_query_cross_project_with_filter(self, vector_store, monkeypatch):
+        """query_cross_project respects source_project_ids filter."""
+        import services.rag_service as rag_mod
+
+        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
+
+        doc = MagicMock()
+        doc.page_content = "only alpha content"
+        doc.metadata = {"source": "a.py", "chunk_index": 0, "priority": "normal", "project_id": "alpha"}
+
+        mock_vs = MagicMock()
+        mock_vs.similarity_search_with_score.return_value = [(doc, 0.8)]
+
+        monkeypatch.setattr(vector_store, "_get_or_create_collection", lambda pid: mock_vs)
+
+        result = await vector_store.query_cross_project(
+            "query", k=5, source_project_ids=["alpha"]
+        )
+
+        assert result.total_found == 1
+        assert result.documents[0]["project_id"] == "alpha"
+
+    @pytest.mark.asyncio
+    async def test_query_with_include_shared(self, vector_store, monkeypatch):
+        """query() with include_shared merges local + other project results."""
+        import services.rag_service as rag_mod
+
+        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
+
+        # Mock: 2 collections exist
+        mock_coll1 = MagicMock()
+        mock_coll1.name = "proj_main"
+        mock_coll2 = MagicMock()
+        mock_coll2.name = "proj_other"
+        mock_response = MagicMock()
+        mock_response.collections = [mock_coll1, mock_coll2]
+        vector_store.client.get_collections.return_value = mock_response
+
+        local_doc = MagicMock()
+        local_doc.page_content = "local result"
+        local_doc.metadata = {"source": "main.py", "chunk_index": 0, "priority": "normal", "project_id": "main"}
+
+        other_doc = MagicMock()
+        other_doc.page_content = "other project result"
+        other_doc.metadata = {"source": "lib.py", "chunk_index": 0, "priority": "normal", "project_id": "other"}
+
+        mock_local_vs = MagicMock()
+        mock_local_vs.similarity_search_with_score.return_value = [(local_doc, 0.9)]
+        mock_other_vs = MagicMock()
+        mock_other_vs.similarity_search_with_score.return_value = [(other_doc, 0.7)]
+
+        def fake_get(pid):
+            if pid == "main":
+                return mock_local_vs
+            return mock_other_vs
+
+        monkeypatch.setattr(vector_store, "_get_or_create_collection", fake_get)
+
+        result = await vector_store.query("main", "test query", k=5, include_shared=True)
+
+        assert result.total_found > 0
+        sources = [d["source"] for d in result.documents]
+        # Local result should be present (with boost)
+        assert "main.py" in sources
+
+    @pytest.mark.asyncio
+    async def test_backward_compatibility_include_shared_false(self, vector_store, monkeypatch):
+        """query() with include_shared=False behaves identically to original."""
+        import services.rag_service as rag_mod
+
+        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
+
+        mock_collection = MagicMock()
+        mock_doc = MagicMock()
+        mock_doc.page_content = "test content"
+        mock_doc.metadata = {"source": "test.py", "chunk_index": 0, "priority": "normal"}
+        mock_collection.similarity_search_with_score.return_value = [(mock_doc, 0.8)]
+
+        monkeypatch.setattr(
+            vector_store, "_get_or_create_collection", lambda pid: mock_collection
+        )
+
+        result = await vector_store.query("proj1", "test query", k=5, include_shared=False)
+
+        assert result.total_found == 1
+        assert result.documents[0]["content"] == "test content"
+        # get_collections should NOT have been called
+        vector_store.client.get_collections.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cross_project_result_has_project_id(self, vector_store, monkeypatch):
+        """Cross-project results include project_id in each document."""
+        import services.rag_service as rag_mod
+
+        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
+
+        mock_coll = MagicMock()
+        mock_coll.name = "proj_alpha"
+        mock_response = MagicMock()
+        mock_response.collections = [mock_coll]
+        vector_store.client.get_collections.return_value = mock_response
+
+        doc = MagicMock()
+        doc.page_content = "alpha content"
+        doc.metadata = {"source": "a.py", "chunk_index": 0, "priority": "normal", "project_id": "alpha"}
+
+        mock_vs = MagicMock()
+        mock_vs.similarity_search_with_score.return_value = [(doc, 0.85)]
+        monkeypatch.setattr(vector_store, "_get_or_create_collection", lambda pid: mock_vs)
+
+        result = await vector_store.query_cross_project("query", k=5)
+
+        assert result.total_found == 1
+        assert "project_id" in result.documents[0]
+        assert result.documents[0]["project_id"] == "alpha"
+
+    @pytest.mark.asyncio
+    async def test_cross_project_empty_collections(self, vector_store, monkeypatch):
+        """query_cross_project returns empty result when no collections exist."""
+        mock_response = MagicMock()
+        mock_response.collections = []
+        vector_store.client.get_collections.return_value = mock_response
+
+        result = await vector_store.query_cross_project("query", k=5)
+
+        assert result.total_found == 0
+        assert result.documents == []
+
+
 # ── Tokenizer test ────────────────────────────────────────────────────────────
 
 
