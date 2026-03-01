@@ -1,8 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useClaudeUsageStore } from '../claudeUsage'
 
-const mockFetch = vi.fn()
-global.fetch = mockFetch
+// Mock apiClient
+const mockGet = vi.fn()
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    get: (...args: unknown[]) => mockGet(...args),
+  },
+}))
 
 function resetStore() {
   useClaudeUsageStore.setState({
@@ -16,7 +21,7 @@ function resetStore() {
 describe('claudeUsage store', () => {
   beforeEach(() => {
     resetStore()
-    mockFetch.mockReset()
+    mockGet.mockReset()
   })
 
   // ── Initial State ──────────────────────────────────────
@@ -58,10 +63,7 @@ describe('claudeUsage store', () => {
         total_tokens: 100000,
         sessions: [],
       }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(usageData),
-      })
+      mockGet.mockResolvedValueOnce(usageData)
 
       await useClaudeUsageStore.getState().fetchUsage()
 
@@ -72,35 +74,8 @@ describe('claudeUsage store', () => {
       expect(state.error).toBeNull()
     })
 
-    it('sets error on HTTP failure with detail', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        statusText: 'Internal Server Error',
-        json: () => Promise.resolve({ detail: 'Service unavailable' }),
-      })
-
-      await useClaudeUsageStore.getState().fetchUsage()
-
-      const state = useClaudeUsageStore.getState()
-      expect(state.error).toBe('Service unavailable')
-      expect(state.isLoading).toBe(false)
-      expect(state.usage).toBeNull()
-    })
-
-    it('falls back to statusText when no detail', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        statusText: 'Not Found',
-        json: () => Promise.reject(new Error('parse error')),
-      })
-
-      await useClaudeUsageStore.getState().fetchUsage()
-
-      expect(useClaudeUsageStore.getState().error).toContain('Not Found')
-    })
-
-    it('sets error on network failure', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+    it('sets error on failure', async () => {
+      mockGet.mockRejectedValueOnce(new Error('Network error'))
 
       await useClaudeUsageStore.getState().fetchUsage()
 
@@ -110,7 +85,7 @@ describe('claudeUsage store', () => {
 
     it('prevents duplicate requests while loading', async () => {
       let resolveFirst: (v: unknown) => void
-      mockFetch.mockReturnValueOnce(
+      mockGet.mockReturnValueOnce(
         new Promise(resolve => { resolveFirst = resolve })
       )
 
@@ -120,33 +95,35 @@ describe('claudeUsage store', () => {
       // Second call should be skipped
       const promise2 = useClaudeUsageStore.getState().fetchUsage()
 
-      resolveFirst!({
-        ok: true,
-        json: () => Promise.resolve({ total_cost: 0 }),
-      })
+      resolveFirst!({ total_cost: 0 })
 
       await promise1
       await promise2
 
-      expect(mockFetch).toHaveBeenCalledTimes(1)
+      expect(mockGet).toHaveBeenCalledTimes(1)
     })
 
     it('sets isLoading during fetch', async () => {
       let resolvePromise: (v: unknown) => void
-      mockFetch.mockReturnValueOnce(
+      mockGet.mockReturnValueOnce(
         new Promise(resolve => { resolvePromise = resolve })
       )
 
       const promise = useClaudeUsageStore.getState().fetchUsage()
       expect(useClaudeUsageStore.getState().isLoading).toBe(true)
 
-      resolvePromise!({
-        ok: true,
-        json: () => Promise.resolve({ total_cost: 0 }),
-      })
+      resolvePromise!({ total_cost: 0 })
       await promise
 
       expect(useClaudeUsageStore.getState().isLoading).toBe(false)
+    })
+
+    it('calls apiClient.get with correct URL', async () => {
+      mockGet.mockResolvedValueOnce({})
+
+      await useClaudeUsageStore.getState().fetchUsage()
+
+      expect(mockGet).toHaveBeenCalledWith('/api/usage')
     })
   })
 })

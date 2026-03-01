@@ -1,7 +1,5 @@
 import { create } from 'zustand'
-import { authFetch } from './auth'
-
-const API_BASE = '/api'
+import { apiClient } from '../services/apiClient'
 
 export interface ExternalProviderConfig {
   provider: string
@@ -80,10 +78,9 @@ export const useExternalUsageStore = create<ExternalUsageStore>((set, get) => ({
       if (providerList) {
         providerList.forEach(p => params.append('providers', p))
       }
-      const url = `${API_BASE}/external-usage/summary${params.toString() ? `?${params}` : ''}`
-      const resp = await authFetch(url)
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const data: ExternalUsageSummaryResponse = await resp.json()
+      const qs = params.toString()
+      const url = `/api/external-usage/summary${qs ? `?${qs}` : ''}`
+      const data = await apiClient.get<ExternalUsageSummaryResponse>(url)
       set({ summary: data, lastFetched: new Date(), isLoading: false })
     } catch (err) {
       set({ error: (err as Error).message, isLoading: false })
@@ -92,9 +89,7 @@ export const useExternalUsageStore = create<ExternalUsageStore>((set, get) => ({
 
   fetchProviders: async () => {
     try {
-      const resp = await authFetch(`${API_BASE}/external-usage/providers`)
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const data: ExternalProviderConfig[] = await resp.json()
+      const data = await apiClient.get<ExternalProviderConfig[]>('/api/external-usage/providers')
       set({ providers: data })
     } catch (err) {
       set({ error: (err as Error).message })
@@ -105,13 +100,7 @@ export const useExternalUsageStore = create<ExternalUsageStore>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const body = provider ? { provider } : {}
-      const resp = await authFetch(`${API_BASE}/external-usage/sync`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const result = await resp.json()
+      const result = await apiClient.post<{ synced_records: number }>('/api/external-usage/sync', body)
       // Refresh summary after sync
       await get().fetchSummary()
       set({ isLoading: false })
