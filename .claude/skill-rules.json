@@ -55,69 +55,6 @@
     },
     "reminder": "useEffect에서 구독/타이머는 반드시 cleanup 함수에서 정리하세요"
   },
-  "firebase-integration": {
-    "type": "domain",
-    "enforcement": "require",
-    "priority": "high",
-    "description": "Firebase 통합 패턴 (Auth, Firestore)",
-    "promptTriggers": {
-      "keywords": [
-        "firebase",
-        "firestore",
-        "auth",
-        "인증",
-        "데이터베이스"
-      ],
-      "intentPatterns": [
-        "(firebase|firestore).*?(setup|config|integration)",
-        "(auth|인증).*?(login|signup|logout)"
-      ]
-    },
-    "fileTriggers": {
-      "pathPatterns": [
-        "**/services/firebase/**",
-        "**/services/auth/**"
-      ],
-      "contentPatterns": [
-        "firebase",
-        "firestore",
-        "auth"
-      ]
-    }
-  },
-  "seoul-api-integration": {
-    "type": "domain",
-    "enforcement": "require",
-    "priority": "critical",
-    "description": "Seoul Open Data API 통합 패턴",
-    "promptTriggers": {
-      "keywords": [
-        "seoul api",
-        "서울 api",
-        "실시간 도착",
-        "arrival",
-        "subway",
-        "지하철"
-      ],
-      "intentPatterns": [
-        "(seoul|서울).*?(api|데이터)",
-        "(실시간|realtime).*?(arrival|도착)",
-        "(fetch|get).*?(train|subway)"
-      ]
-    },
-    "fileTriggers": {
-      "pathPatterns": [
-        "**/services/api/**",
-        "**/seoulSubwayApi.ts"
-      ],
-      "contentPatterns": [
-        "seoulSubwayApi",
-        "ARRIVAL_INFO",
-        "STATION"
-      ]
-    },
-    "reminder": "API 폴링 간격은 최소 30초를 유지하세요"
-  },
   "routing-patterns": {
     "type": "guideline",
     "enforcement": "suggest",
@@ -204,37 +141,7 @@
         "Error"
       ]
     },
-    "reminder": "에러는 빈 배열/null 반환으로 처리하고, Sentry로 전송하세요"
-  },
-  "async-storage": {
-    "type": "domain",
-    "enforcement": "suggest",
-    "priority": "normal",
-    "description": "AsyncStorage 캐싱 패턴",
-    "promptTriggers": {
-      "keywords": [
-        "storage",
-        "cache",
-        "persist",
-        "캐시",
-        "저장"
-      ],
-      "intentPatterns": [
-        "(async)?storage.*?(save|get|set)",
-        "(cache|persist).*?(data|state)"
-      ]
-    },
-    "fileTriggers": {
-      "pathPatterns": [
-        "**/utils/storageUtils.ts",
-        "**/services/data/**"
-      ],
-      "contentPatterns": [
-        "AsyncStorage",
-        "setItem",
-        "getItem"
-      ]
-    }
+    "reminder": "에러는 logger 사용, FastAPI는 HTTPException으로 반환"
   },
   "test-coverage": {
     "type": "validation",
@@ -322,32 +229,12 @@
       ]
     }
   },
-  "code-simplifier": {
-    "type": "agent",
-    "enforcement": "suggest",
-    "priority": "normal",
-    "description": "코드 단순화 및 리팩토링",
-    "agentFile": ".claude/agents/code-simplifier.md",
-    "model": "haiku",
-    "promptTriggers": {
-      "keywords": [
-        "simplify",
-        "refactor",
-        "단순화",
-        "리팩토링",
-        "개선"
-      ],
-      "intentPatterns": [
-        "(simplify|refactor).*?(code|function)",
-        "(reduce|줄이).*?(complexity|복잡도)"
-      ]
-    }
-  },
   "parallel-coordinator": {
     "type": "workflow",
     "enforcement": "suggest",
     "priority": "high",
-    "description": "Coordinate parallel agent execution using ACE Framework for AOS Dashboard development. Use when implementing features with 3+ independent subtasks (UI + API + Firebase + Tests).",
+    "skillFile": ".claude/skills/parallel-coordinator/SKILL.md",
+    "description": "Coordinate parallel agent execution using ACE Framework for AOS development. Use when implementing features with 3+ independent subtasks (UI + API + Tests).",
     "promptTriggers": {
       "keywords": [
         "parallel",
@@ -613,6 +500,7 @@
     "type": "skill",
     "enforcement": "require",
     "priority": "high",
+    "skillFile": ".claude/skills/react-web-development/SKILL.md",
     "description": "React Web component development with TypeScript, Vite, Tailwind CSS, and Zustand. Use when creating UI components, pages, or implementing routing flows.",
     "promptTriggers": {
       "keywords": [
@@ -640,6 +528,7 @@
     "type": "skill",
     "enforcement": "suggest",
     "priority": "high",
+    "skillFile": ".claude/skills/test-automation/SKILL.md",
     "description": "Generate comprehensive Vitest tests for React Web components, hooks, and stores. Use when writing tests, improving coverage, or test-driven development.",
     "promptTriggers": {
       "keywords": [
@@ -816,6 +705,7 @@
     "type": "workflow",
     "enforcement": "suggest",
     "priority": "high",
+    "skillFile": ".claude/skills/verification-loop/SKILL.md",
     "description": "Boris Cherny style verification feedback loop automation. Run type check, lint, test, and build verification.",
     "promptTriggers": {
       "keywords": [

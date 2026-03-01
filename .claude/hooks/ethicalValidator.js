@@ -263,21 +263,7 @@ if (require.main === module) {
         };
         process.stdout.write(JSON.stringify(blockResponse));
 
-        // 차단 이벤트를 학습 데이터로 기록
-        try {
-          const feedbackLoop = require('../coordination/feedback-loop');
-          feedbackLoop.recordLearningEvent({
-            agentId: 'ethicalValidator',
-            eventType: 'ethical_block',
-            context: {
-              tool_name: event.tool_name,
-              blocked_categories: result.blockedReasons.map(r => r.category),
-              command_preview: (event.tool_input?.command || '').substring(0, 100)
-            },
-            suggestion: result.blockedReasons[0]?.message || '',
-            severity: result.blockedReasons[0]?.severity === 'CRITICAL' ? 'critical' : 'warning'
-          });
-        } catch {}
+        // feedback-loop.js 제거됨 — 차단 이벤트는 stdout JSON으로 충분
       } else {
         const message = formatValidationResult(result);
         if (message) {

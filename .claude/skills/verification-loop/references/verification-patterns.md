@@ -108,7 +108,7 @@ it('should handle empty arrival data', () => {
 ### 사용법
 ```
 Task(
-  subagent_type="background-verifier",
+  subagent_type="quality-validator",
   prompt="전체 검증 실행",
   run_in_background=true
 )

@@ -192,9 +192,17 @@ function activateSkills(prompt) {
     let msg = '[SKILLS ACTIVATED]';
     if (critical.length > 0) {
       msg += '\n  CRITICAL: ' + critical.map(s => s.name).join(', ');
+      for (const s of critical) {
+        const sf = getSkillFile(rules, s.name);
+        if (sf) msg += `\n  → Invoke: Skill tool "${s.name}" before implementing`;
+      }
     }
     if (high.length > 0) {
       msg += '\n  HIGH: ' + high.map(s => s.name).join(', ');
+      for (const s of high) {
+        const sf = getSkillFile(rules, s.name);
+        if (sf) msg += `\n  → Invoke: Skill tool "${s.name}" before implementing`;
+      }
     }
     if (other.length > 0) {
       msg += '\n  SUGGESTED: ' + other.map(s => s.name).join(', ');
@@ -203,6 +211,10 @@ function activateSkills(prompt) {
   } catch {
     return null;
   }
+}
+
+function getSkillFile(rules, skillName) {
+  return rules[skillName]?.skillFile || null;
 }
 
 function shouldActivateSkill(prompt, rule) {
@@ -364,7 +376,7 @@ function extractReviewSummary(reviewText) {
   return reviewText.trim();
 }
 
-// ─── 에이전트 자동 추천 (skill→agent + task-allocator 연계) ──
+// ─── 에이전트 자동 추천 (skill→agent 연계) ──
 function recommendAgents(prompt) {
   const lowerPrompt = prompt.toLowerCase();
   const recommended = [];
@@ -399,27 +411,6 @@ function recommendAgents(prompt) {
       }
     } catch {}
   }
-
-  // 2. task-allocator.js 위임 (하드코딩된 agentTriggers 대체)
-  try {
-    const taskAllocator = require('../coordination/task-allocator');
-    const result = taskAllocator.recommendAgent(prompt);
-    if (result.confidence !== 'low') {
-      if (!recommended.some(r => r.agent === result.recommended)) {
-        recommended.push({
-          agent: result.recommended,
-          reason: `task-type:${result.taskType}`,
-          model: result.model || 'default'
-        });
-      }
-      for (const alt of (result.alternatives || [])) {
-        if (!recommended.some(r => r.agent === alt)) {
-          const caps = taskAllocator.AGENT_CAPABILITIES[alt];
-          recommended.push({ agent: alt, reason: 'alternative', model: caps?.model || 'default' });
-        }
-      }
-    }
-  } catch {}
 
   if (recommended.length === 0) return null;
 

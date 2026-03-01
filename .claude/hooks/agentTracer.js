@@ -2,7 +2,6 @@
 /**
  * Agent Tracer Hook
  * PostToolUse:Task 이벤트에서 자동으로 에이전트 호출을 트레이싱합니다.
- * feedback-loop.js 연동으로 에이전트 완료 메트릭도 기록합니다.
  *
  * ACE Framework Layer 1 준수:
  * - Increase Understanding: 모든 에이전트 활동 투명하게 기록
@@ -19,15 +18,10 @@ const path = require('path');
 
 const TRACE_DIR = '.temp/traces/sessions';
 
-// feedback-loop 로드 (실패 시 no-op)
-let feedbackLoop;
-try {
-  feedbackLoop = require('../coordination/feedback-loop');
-} catch {
-  feedbackLoop = {
-    recordExecutionMetrics: () => ({ success: true })
-  };
-}
+// feedback-loop 제거됨 — 메트릭은 events.jsonl로 직접 기록
+const feedbackLoop = {
+  recordExecutionMetrics: () => ({ success: true })
+};
 
 /**
  * parallel-state.json에서 에이전트 startTime 조회하여 duration 계산

@@ -55,7 +55,7 @@ Enable systematic diagnosis of multi-agent workflow failures by tracking:
     "model": "sonnet",
     "task_summary": "Create AgentCard component",
     "complexity": "simple",
-    "parent_agent": "lead-orchestrator"
+    "parent_agent": "aos-orchestrator"
   }
 }
 ```

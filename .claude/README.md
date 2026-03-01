@@ -6,9 +6,9 @@ Claude Code configuration for AOS (Agent Orchestration Service) Dashboard.
 
 ```
 .claude/
-├── skills/           # 12개 AI 스킬
-├── agents/           # 11개 서브 에이전트
-│   └── shared/       # 4개 공유 프레임워크 (ACE, Quality Gates 등)
+├── skills/           # 34개 AI 스킬
+├── agents/           # 8개 서브 에이전트
+│   └── shared/       # 공유 프레임워크 (Quality Gates 등; ACE는 skills/ace-framework/로 이동)
 ├── commands/         # 12개 슬래시 명령어
 ├── hooks/            # 자동화 훅 스크립트
 ├── checklists/       # 코드 리뷰/테스트/배포 체크리스트
@@ -58,6 +58,7 @@ Claude Code configuration for AOS (Agent Orchestration Service) Dashboard.
 
 | Skill | Purpose |
 |-------|---------|
+| `ace-framework` | 4-Pillar 거버넌스 모델 (Soft/Hard/Boundary/Optimization) |
 | `react-web-development` | React Web 컴포넌트, Tailwind CSS, TypeScript |
 | `test-automation` | Vitest 테스트, 커버리지 분석 |
 | `parallel-coordinator` | ACE 프레임워크 병렬 작업 조율 |
@@ -89,30 +90,27 @@ Claude Code configuration for AOS (Agent Orchestration Service) Dashboard.
 |-------|-------|-----------|
 | `web-ui-specialist` | Sonnet | React Web UI/UX (Tailwind CSS) |
 | `backend-integration-specialist` | Sonnet | Firebase, API 통합 |
-| `performance-optimizer` | Sonnet | 성능 최적화, 메모리 누수 |
-| `test-automation-specialist` | Sonnet | 테스트 자동화 |
+| `performance-optimizer` | Haiku | 성능 최적화, 메모리 누수 |
+| `test-automation-specialist` | Haiku | 테스트 자동화 |
 
 ### 코드 품질
 
 | Agent | Model | Expertise |
 |-------|-------|-----------|
-| `code-simplifier` | Sonnet | 코드 복잡도 분석 및 리팩토링 |
-| `quality-validator` | Sonnet | 최종 품질 검증 |
-| `background-verifier` | Sonnet | 백그라운드 종합 검증 |
+| `quality-validator` | Haiku | 최종 품질 검증 |
 
 ### 오케스트레이션
 
 | Agent | Model | Expertise |
 |-------|-------|-----------|
-| `lead-orchestrator` | Sonnet | 멀티 에이전트 워크플로우 조율 |
+| `aos-orchestrator` | Opus | 멀티 에이전트 워크플로우 조율 |
 | `eval-grader` | Sonnet | AI 에이전트 평가 채점 |
 | `eval-task-runner` | Sonnet | 평가 태스크 실행 |
-| `brand-logo-finder` | Haiku | 브랜드 로고 검색 |
 
 ### Shared Frameworks (`shared/`)
 
-- `ace-framework.md`: 병렬 실행 프로토콜
-- `quality-gates.md`: 공유 품질 게이트
+- ~~`ace-framework.md`~~: **스킬로 이동** → `skills/ace-framework/SKILL.md`
+- `quality-reference.md`: 공유 품질 게이트
 - `effort-scaling.md`: 태스크 복잡도별 리소스 할당
 - `delegation-template.md`: 서브에이전트 위임 템플릿
 
@@ -166,4 +164,4 @@ Backups stored in `.claude-backups/` with 30-day retention.
 
 ---
 
-**Skills**: 12 | **Agents**: 11 (+4 shared) | **Commands**: 12 | **MCP Servers**: 3 enabled
+**Skills**: 34 | **Agents**: 8 (+1 shared) | **Commands**: 12 | **MCP Servers**: 3 enabled

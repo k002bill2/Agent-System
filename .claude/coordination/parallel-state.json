@@ -1,187 +1,213 @@
 {
-  "activeAgents": [],
+  "activeAgents": [
+    {
+      "taskId": "task_1772391246658_q0e6h1",
+      "subagentType": "Plan",
+      "description": "보리스 처니 보강 계획 설계",
+      "startTime": 1772391246658,
+      "status": "running",
+      "targetFiles": [
+        "src/backend/models/agent_state.py",
+        "src/backend/models/message.py",
+        "src/dashboard/src/stores/agents.ts",
+        "src/backend/agents/base.py",
+        "src/backend/orchestrator/nodes.py",
+        "src/backend/services/rag_service.py",
+        "src/backend/api/rag.py"
+      ],
+      "lockIds": [
+        "lock_1772391246658_w1mjou",
+        "lock_1772391246658_cnshfz",
+        "lock_1772391246659_h8yfme",
+        "lock_1772391246659_1v92qn",
+        "lock_1772391246659_2wyep0",
+        "lock_1772391246660_wzoag4",
+        "lock_1772391246660_gwj3t7"
+      ]
+    }
+  ],
   "completedAgents": [
     {
-      "taskId": "task_1772113651127_bcuk8w",
+      "taskId": "task_1772377179767_yehl6i",
       "subagentType": "Explore",
-      "description": "Explore image-maker project",
-      "startTime": 1772113651127,
-      "endTime": 1772113723291,
-      "duration_ms": 72164,
+      "description": "Find API keys settings code",
+      "startTime": 1772377179767,
+      "endTime": 1772377225217,
+      "duration_ms": 45450,
       "status": "completed"
     },
     {
-      "taskId": "task_1772113649389_dkekr8",
-      "subagentType": "Explore",
-      "description": "Explore LiveMetro project",
-      "startTime": 1772113649389,
-      "endTime": 1772113731346,
-      "duration_ms": 81957,
+      "taskId": "task_1772377731948_0dsl4l",
+      "subagentType": "general-purpose",
+      "description": "최종 검증 실행",
+      "startTime": 1772377731948,
+      "endTime": 1772377788689,
+      "duration_ms": 56741,
       "status": "completed"
     },
     {
-      "taskId": "task_1772114284939_wz62u7",
+      "taskId": "task_1772378798611_0057vb",
       "subagentType": "Explore",
-      "description": "Analyze AOS skills for categorization",
-      "startTime": 1772114284939,
-      "endTime": 1772114324134,
-      "duration_ms": 39195,
+      "description": "Explore dashboard routing and layout",
+      "startTime": 1772378798611,
+      "endTime": 1772378847005,
+      "duration_ms": 48394,
       "status": "completed"
     },
     {
-      "taskId": "task_1772114287534_9ipg7n",
+      "taskId": "task_1772378794665_l02xto",
       "subagentType": "Explore",
-      "description": "Analyze AOS commands categorization",
-      "startTime": 1772114287534,
-      "endTime": 1772114331712,
-      "duration_ms": 44178,
+      "description": "Explore git store and components",
+      "startTime": 1772378794665,
+      "endTime": 1772378857672,
+      "duration_ms": 63007,
       "status": "completed"
     },
     {
-      "taskId": "task_1772114575893_xds0z3",
+      "taskId": "task_1772378802722_zclia7",
+      "subagentType": "Explore",
+      "description": "Explore backend git/tmux services",
+      "startTime": 1772378802722,
+      "endTime": 1772378858760,
+      "duration_ms": 56038,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772378911828_bsti5z",
       "subagentType": "Plan",
-      "description": "Design sync plan for .claude/",
-      "startTime": 1772114575893,
-      "endTime": 1772114911150,
-      "duration_ms": 335257,
+      "description": "Design staging area enhancement plan",
+      "startTime": 1772378911828,
+      "endTime": 1772379082943,
+      "duration_ms": 171115,
       "status": "completed"
     },
     {
-      "taskId": "task_1772115705058_5v8z7l",
-      "subagentType": "general-purpose",
-      "description": "Implement Task 2: Core Hooks",
-      "startTime": 1772115705058,
-      "endTime": 1772115884296,
-      "duration_ms": 179238,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772115724481_m977fl",
-      "subagentType": "general-purpose",
-      "description": "Implement Task 4: Core Commands",
-      "startTime": 1772115724481,
-      "endTime": 1772115933285,
-      "duration_ms": 208804,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772115713274_a8s5uq",
-      "subagentType": "general-purpose",
-      "description": "Implement Task 3: Core Agents",
-      "startTime": 1772115713274,
-      "endTime": 1772116071879,
-      "duration_ms": 358605,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772115731116_2wguwi",
-      "subagentType": "general-purpose",
-      "description": "Implement Task 5: Core Skills",
-      "startTime": 1772115731116,
-      "endTime": 1772116073217,
-      "duration_ms": 342101,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772116096615_l1tj3o",
-      "subagentType": "general-purpose",
-      "description": "Implement Task 6: Checklists + Settings",
-      "startTime": 1772116096615,
-      "endTime": 1772116168672,
-      "duration_ms": 72057,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772116106961_3uzdq9",
-      "subagentType": "general-purpose",
-      "description": "Implement Task 7: CLAUDE.md template",
-      "startTime": 1772116106961,
-      "endTime": 1772116186336,
-      "duration_ms": 79375,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772116223065_ozp80i",
-      "subagentType": "general-purpose",
-      "description": "Implement Task 9: Python addon",
-      "startTime": 1772116223065,
-      "endTime": 1772116392596,
-      "duration_ms": 169531,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772116399548_kqxycv",
-      "subagentType": "general-purpose",
-      "description": "Sync .claude/ to image-maker",
-      "startTime": 1772116399548,
-      "endTime": 1772116480286,
-      "duration_ms": 80738,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772116381790_dt5fsr",
-      "subagentType": "general-purpose",
-      "description": "Sync .claude/ to LiveMetro",
-      "startTime": 1772116381790,
-      "endTime": 1772116480784,
-      "duration_ms": 98994,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772116238011_27849h",
-      "subagentType": "general-purpose",
-      "description": "Implement Task 10-11: Eval + Gemini addons",
-      "startTime": 1772116238011,
-      "endTime": 1772116490140,
-      "duration_ms": 252129,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772116211751_1zuf4m",
-      "subagentType": "general-purpose",
-      "description": "Implement Task 8: React/TS addon",
-      "startTime": 1772116211751,
-      "endTime": 1772116580322,
-      "duration_ms": 368571,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772116616177_xtnhq4",
-      "subagentType": "general-purpose",
-      "description": "Implement Task 12-13: init.sh",
-      "startTime": 1772116616177,
-      "endTime": 1772117070712,
-      "duration_ms": 454535,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772117122391_hwf5u8",
-      "subagentType": "general-purpose",
-      "description": "Implement Task 15: README + CHANGELOG",
-      "startTime": 1772117122391,
-      "endTime": 1772117269461,
-      "duration_ms": 147070,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772117102578_xo36ji",
-      "subagentType": "general-purpose",
-      "description": "Implement Task 14: Integration tests",
-      "startTime": 1772117102578,
-      "endTime": 1772117556522,
-      "duration_ms": 453944,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772153037963_h61vam",
+      "taskId": "task_1772383695735_2djea4",
       "subagentType": "Explore",
-      "description": "Explore project registration flow",
-      "startTime": 1772153037963,
-      "endTime": 1772153086016,
-      "duration_ms": 48053,
+      "description": "Explore Task Analyzer component",
+      "startTime": 1772383695735,
+      "endTime": 1772383749354,
+      "duration_ms": 53619,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772383700161_eqk7yk",
+      "subagentType": "Explore",
+      "description": "Explore backend task analysis API",
+      "startTime": 1772383700161,
+      "endTime": 1772383770260,
+      "duration_ms": 70099,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772383697605_ax24hu",
+      "subagentType": "Explore",
+      "description": "Explore Playground component",
+      "startTime": 1772383697605,
+      "endTime": 1772383786848,
+      "duration_ms": 89243,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772383829367_3bkew1",
+      "subagentType": "Plan",
+      "description": "Design MD file attachment plan",
+      "startTime": 1772383829367,
+      "endTime": 1772383997388,
+      "duration_ms": 168021,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772388315297_rev1jg",
+      "subagentType": "Explore",
+      "description": "Explore Claude Code system deeply",
+      "startTime": 1772388315297,
+      "endTime": 1772388499601,
+      "duration_ms": 184304,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772389005475_n3fd3d",
+      "subagentType": "Explore",
+      "description": "Explore skill activation mechanism",
+      "startTime": 1772389005475,
+      "endTime": 1772389099225,
+      "duration_ms": 93750,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772389201369_ghorkx",
+      "subagentType": "Plan",
+      "description": "Design cleanup and enforcement plan",
+      "startTime": 1772389201369,
+      "endTime": 1772389433050,
+      "duration_ms": 231681,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772390756783_6ztajf",
+      "subagentType": "Explore",
+      "description": "Backend 소스코드 품질 분석",
+      "startTime": 1772390756783,
+      "endTime": 1772390914693,
+      "duration_ms": 157910,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772390770366_xzctjp",
+      "subagentType": "Explore",
+      "description": "문서 및 인프라 품질 분석",
+      "startTime": 1772390770366,
+      "endTime": 1772390917520,
+      "duration_ms": 147154,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772390763500_hd6g4q",
+      "subagentType": "Explore",
+      "description": "Dashboard 프론트엔드 품질 분석",
+      "startTime": 1772390763500,
+      "endTime": 1772390948755,
+      "duration_ms": 185255,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772390750418_v0mxjr",
+      "subagentType": "Explore",
+      "description": "Claude Code 설정 구조 분석",
+      "startTime": 1772390750418,
+      "endTime": 1772391148633,
+      "duration_ms": 398215,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772391114627_62mjpi",
+      "subagentType": "Explore",
+      "description": "에이전트 통신 프로토콜 탐색",
+      "startTime": 1772391114627,
+      "endTime": 1772391177676,
+      "duration_ms": 63049,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772391124786_tgd4po",
+      "subagentType": "Explore",
+      "description": "RAG 시스템 구현 탐색",
+      "startTime": 1772391124786,
+      "endTime": 1772391181308,
+      "duration_ms": 56522,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772391119356_06fypv",
+      "subagentType": "Explore",
+      "description": "에러 처리 패턴 탐색",
+      "startTime": 1772391119356,
+      "endTime": 1772391201416,
+      "duration_ms": 82060,
       "status": "completed"
     }
   ],
-  "lastUpdated": "2026-02-27T00:44:46.016Z",
-  "sessionId": null
+  "lastUpdated": "2026-03-01T18:54:06.660Z",
+  "sessionId": "session_1772249015381_9jt9g0tbj"
 }

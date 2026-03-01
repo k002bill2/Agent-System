@@ -348,7 +348,7 @@ comm -12 /tmp/backup_files.txt /tmp/current_files.txt > /tmp/common.txt
 📁 MODIFIED (5 files):
    ~ hooks.json
    ~ commands/verify-app.md
-   ~ agents/lead-orchestrator.md
+   ~ agents/aos-orchestrator.md
 
 📊 Summary:
    Added: 3 | Removed: 1 | Modified: 5 | Unchanged: 78

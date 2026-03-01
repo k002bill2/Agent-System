@@ -37,6 +37,35 @@
     ],
     "PostToolUse": [
       {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/geminiAutoTrigger.js 2>/dev/null || true",
+            "timeout": 5,
+            "statusMessage": "Gemini review queued..."
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/workspaceGuard.js 2>/dev/null || true",
+            "timeout": 3,
+            "statusMessage": "Workspace guard..."
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/aceMatrixSync.js 2>/dev/null || true",
+            "timeout": 3,
+            "statusMessage": "ACE matrix sync..."
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/linkValidator.js 2>/dev/null || true",
+            "timeout": 3,
+            "statusMessage": "Link validation..."
+          }
+        ]
+      },
+      {
         "matcher": "Task",
         "hooks": [
           {
@@ -50,17 +79,6 @@
             "command": "node .claude/hooks/parallelCoordinator.js post 2>/dev/null || true",
             "timeout": 5,
             "statusMessage": "Parallel cleanup..."
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/autoFormatter.js 2>/dev/null || true",
-            "timeout": 10,
-            "statusMessage": "Auto formatting..."
           }
         ]
       }

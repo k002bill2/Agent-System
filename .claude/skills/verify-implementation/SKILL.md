@@ -29,24 +29,8 @@ argument-hint: "[선택사항: 특정 verify 스킬 이름]"
 
 | # | 스킬 | 설명 |
 |---|------|------|
-| 1 | `verify-admin` | Admin 페이지 접근 제어 검증 |
-| 2 | `verify-api-route` | API 라우트 컨벤션 검증 |
-| 3 | `verify-badges` | 상태 배지 일관성 검증 |
-| 4 | `verify-barrel-exports` | Dashboard 컴포넌트 barrel export 동기화 검증 |
-| 5 | `verify-comments` | 코드 문서화(JSDoc, docstring) 검증 |
-| 6 | `verify-detail-pages` | 상세 페이지 패턴 검증 |
-| 7 | `verify-docs-sync` | 소스 코드와 docs/ 문서 동기화 검증 |
-| 8 | `verify-editable-components` | 인라인 편집 컴포넌트 패턴 검증 |
-| 9 | `verify-forms` | 폼 유효성 검증/에러 표시/접근성 검증 |
-| 10 | `verify-framework` | 프레임워크 컨벤션(import, Zustand, export) 검증 |
-| 11 | `verify-navigation` | 네비게이션 동기화 검증 |
-| 12 | `verify-notifications` | 알림 시스템 동기화 검증 |
-| 13 | `verify-points` | 핵심 체크포인트(헬스체크, 환경변수, DB) 검증 |
-| 14 | `verify-react-best-practices` | React 베스트 프랙티스 검증 |
-| 15 | `verify-shortlinks` | URL/경로 패턴 동기화 검증 |
-| 16 | `verify-storybook` | 컴포넌트 시각적 문서화 검증 |
-| 17 | `verify-test` | 테스트 파일/패턴/커버리지 검증 |
-| 18 | `verify-ui` | UI 일관성(다크모드, Tailwind, 아이콘) 검증 |
+
+(아직 등록된 검증 스킬이 없습니다. `/manage-skills`로 프로젝트에 맞는 스킬을 생성하세요.)
 
 ## 워크플로우
 

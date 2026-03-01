@@ -282,5 +282,5 @@ Recommended fixes provided. Revision needed before delivery.
 
 ## Reference
 
-- ACE Framework: [shared/ace-framework.md](shared/ace-framework.md)
+- ACE Framework: [ACE Framework Skill](../skills/ace-framework/SKILL.md)
 - Project Standards: [../../CLAUDE.md](../../CLAUDE.md)

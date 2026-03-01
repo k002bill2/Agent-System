@@ -1,6 +1,6 @@
 ---
 name: parallel-coordinator
-description: Coordinate parallel agent execution using ACE Framework for AOS Dashboard development. Use when implementing features with 3+ independent subtasks (UI + API + Firebase + Tests).
+description: Coordinate parallel agent execution using ACE Framework for AOS development. Use when implementing features with 3+ independent subtasks (UI + API + Tests).
 type: workflow
 priority: high
 version: 2.0
@@ -28,7 +28,7 @@ Coordinate parallel execution of specialist agents using the **ACE (Autonomous C
 
 ### Use When:
 - Feature implementation with 3+ independent subtasks
-- Multi-layer work (UI + API + Firebase + Tests)
+- Multi-layer work (UI + API + DB + Tests)
 - Performance optimization across multiple files
 - Different file types that can be developed simultaneously
 
@@ -43,12 +43,6 @@ Coordinate parallel execution of specialist agents using the **ACE (Autonomous C
 ## Effort Scaling (Anthropic Pattern)
 
 **Critical Decision**: Determine appropriate resource allocation BEFORE spawning agents.
-
-See [effort-scaling.md](../../agents/shared/effort-scaling.md) for complete guide including:
-- Complexity matrix (Trivial → Complex)
-- Decision flowchart
-- Token economics
-- Agent selection guide
 
 **Quick Reference**:
 | Complexity | Agents | When to Use |
@@ -228,7 +222,7 @@ Define strategic context:
 | Agent | Strengths (>0.80) | Weaknesses (<0.50) |
 |-------|-------------------|---------------------|
 | **web-ui** | React (0.95), TypeScript (0.90), Tailwind CSS (0.90) | Backend (0.40), Complex animations (0.50) |
-| **backend-integration** | Firebase (0.95), Seoul API (0.90), Data sync (0.90) | UI design (0.40), Animations (0.30) |
+| **backend-integration** | FastAPI (0.95), SQLAlchemy (0.90), LangGraph (0.90) | UI design (0.40), Animations (0.30) |
 | **performance-optimizer** | React optimization (0.90), Memory leaks (0.85) | New features (0.50), UI (0.45) |
 | **test-automation** | Jest (0.95), RTL (0.90), Coverage (0.90) | Feature impl (0.40), UI design (0.35) |
 
@@ -247,7 +241,7 @@ Define strategic context:
       "output": "src/services/[feature]/[service].ts",
       "workspace": ".temp/agent_workspaces/backend-integration/",
       "dependencies": [],
-      "skill": "api-integration OR firebase-integration"
+      "skill": "backend-development"
     },
     {
       "id": "task_2",
@@ -309,9 +303,8 @@ Define strategic context:
 | Task Type | Required Skill |
 |-----------|---------------|
 | React Web UI | `react-web-development` |
-| Push notifications | `notification-system` |
-| Seoul API | `api-integration` |
-| Firebase | `firebase-integration` |
+| FastAPI/LangGraph | `backend-development` |
+| RAG/Vector DB | `rag-vector-db` |
 | Tests | `test-automation` |
 
 **Tool Usage**:
@@ -419,9 +412,9 @@ This skill enables:
 
 | Agent | Role | Model |
 |-------|------|-------|
-| `lead-orchestrator` | Coordination, effort scaling | opus |
+| `aos-orchestrator` | Coordination, effort scaling | opus |
 | `web-ui-specialist` | UI components, pages | sonnet |
-| `backend-integration-specialist` | Firebase, Seoul API | sonnet |
+| `backend-integration-specialist` | FastAPI, SQLAlchemy, LangGraph | sonnet |
 | `performance-optimizer` | Memory, render optimization | sonnet |
 | `test-automation-specialist` | Jest tests, coverage | sonnet |
 | `quality-validator` | Final review, validation | haiku |

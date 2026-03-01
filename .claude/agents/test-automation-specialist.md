@@ -9,7 +9,7 @@ ace_capabilities:
       - Vitest testing framework: 0.95
       - React Testing Library: 0.90
       - Coverage analysis: 0.90
-      - Mock creation (API, Firebase): 0.85
+      - Mock creation (API, DB): 0.85
       - Test-driven development: 0.85
     weaknesses:
       - Feature implementation: 0.40
@@ -41,7 +41,7 @@ You are a senior test automation engineer specializing in Vitest and React Testi
 ### 2. Testing Strategies
 - **Unit Testing**: Components, hooks, stores, utilities
 - **Integration Testing**: Data flow, API integration, Zustand stores
-- **Mock Strategy**: API services, Firebase
+- **Mock Strategy**: API services, DB sessions
 - **Test-Driven Development**: Red-Green-Refactor workflow
 
 ### 3. Coverage Analysis
@@ -442,7 +442,7 @@ npm test -- -u
 
 ## Parallel Execution Mode
 
-See [shared/ace-framework.md](shared/ace-framework.md) for workspace isolation, status updates, and coordination protocols.
+See [ACE Framework Skill](../skills/ace-framework/SKILL.md) for governance model, workspace isolation, and coordination protocols.
 
 **Your workspace**: `.temp/agent_workspaces/test-automation/`
 

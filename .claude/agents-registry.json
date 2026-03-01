@@ -1,46 +1,12 @@
 {
-  "_generated": "2026-02-15T16:08:53.539Z",
+  "_generated": "2026-02-28T00:00:00.000Z",
   "_description": "Auto-generated agent registry. Do not edit manually.",
   "agents": {
     "backend-integration-specialist": {
       "file": ".claude/agents/backend-integration-specialist.md",
-      "description": "Backend integration specialist for AOS Dashboard. Expert in Firebase, REST APIs, and data synchronization strategies.",
+      "description": "Backend integration specialist for AOS. Expert in FastAPI, PostgreSQL, SQLAlchemy, and LangGraph service patterns.",
       "tools": "edit, create, read, grep, bash",
       "model": "sonnet",
-      "triggers": null
-    },
-    "background-verifier": {
-      "file": ".claude/agents/background-verifier.md",
-      "description": "백그라운드 종합 검증 에이전트. 타입체크, 린트, 테스트, 빌드를 자동으로 수행하고 결과를 리포트합니다.",
-      "tools": {
-        "tools": [
-          "Bash",
-          "Read",
-          "Grep"
-        ]
-      },
-      "model": "haiku",
-      "triggers": null
-    },
-    "brand-logo-finder": {
-      "file": ".claude/agents/brand-logo-finder.md",
-      "description": "Finds brand logos using Brandfetch. Use when user asks for a brand's logo, brand assets, or brand identity information.",
-      "tools": "WebFetch, WebSearch",
-      "model": "haiku",
-      "triggers": null
-    },
-    "code-simplifier": {
-      "file": ".claude/agents/code-simplifier.md",
-      "description": "코드 복잡도 분석 및 단순화 전문가. 긴 함수, 중복 코드, 복잡한 조건문을 식별하고 리팩토링합니다.",
-      "tools": {
-        "tools": [
-          "Read",
-          "Grep",
-          "Glob",
-          "Edit"
-        ]
-      },
-      "model": "haiku",
       "triggers": null
     },
     "eval-grader": {
@@ -57,8 +23,8 @@
       "model": "sonnet",
       "triggers": null
     },
-    "lead-orchestrator": {
-      "file": ".claude/agents/lead-orchestrator.md",
+    "aos-orchestrator": {
+      "file": ".claude/agents/aos-orchestrator.md",
       "description": "Orchestrator agent that coordinates multi-agent workflows. Implements Anthropic's Orchestrator-Worker pattern for parallel execution and effort scaling.",
       "tools": "read, grep, glob, task, bash",
       "model": "opus",

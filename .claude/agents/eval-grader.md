@@ -499,5 +499,5 @@ function gradeNegativeTests(output: string, mustFail: Record<string, boolean>): 
 - Graders: [../evals/graders/](../evals/graders/)
 - Rubrics: [../evals/rubrics/](../evals/rubrics/)
 - Task Schema: [../evals/tasks/schema.yaml](../evals/tasks/schema.yaml)
-- ACE Framework: [shared/ace-framework.md](shared/ace-framework.md)
+- ACE Framework: [ACE Framework Skill](../skills/ace-framework/SKILL.md)
 - Anthropic Blog: https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents

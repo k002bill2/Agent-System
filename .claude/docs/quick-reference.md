@@ -72,10 +72,9 @@ src/
 | `web-ui-specialist` | React Web UI | Sonnet |
 | `backend-integration-specialist` | FastAPI/Firebase | Sonnet |
 | `test-automation-specialist` | Vitest/Pytest | Sonnet |
-| `lead-orchestrator` | 멀티 에이전트 조정 | Sonnet |
-| `performance-optimizer` | 성능 최적화 | Sonnet |
-| `code-simplifier` | 코드 복잡도 분석 | Haiku |
-| `quality-validator` | 품질 검증 | Sonnet |
+| `aos-orchestrator` | 멀티 에이전트 조정 | Opus |
+| `performance-optimizer` | 성능 최적화 | Haiku |
+| `quality-validator` | 품질 검증 | Haiku |
 
 ---
 

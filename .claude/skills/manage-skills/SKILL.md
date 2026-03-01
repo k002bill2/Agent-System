@@ -30,24 +30,8 @@ argument-hint: "[선택사항: 특정 스킬 이름 또는 집중할 영역]"
 
 | 스킬 | 설명 | 커버 파일 패턴 |
 |------|------|---------------|
-| `verify-admin` | Admin 페이지 접근 제어 검증 | `src/dashboard/src/pages/AdminPage.tsx`, `src/dashboard/src/App.tsx`, `src/dashboard/src/stores/auth.ts`, `src/backend/api/admin.py`, `src/backend/api/deps.py` |
-| `verify-api-route` | API 라우트 컨벤션 검증 | `src/backend/api/*.py`, `src/backend/api/app.py`, `src/backend/models/*.py` |
-| `verify-badges` | 상태 배지 일관성 검증 | `src/dashboard/src/components/**/*.tsx`, `src/dashboard/src/components/common/*.tsx` |
-| `verify-barrel-exports` | Dashboard 컴포넌트 barrel export 동기화 검증 | `src/dashboard/src/components/**/index.ts`, `src/dashboard/src/components/**/*.tsx` |
-| `verify-comments` | 코드 문서화(JSDoc, docstring) 검증 | `src/backend/services/*.py`, `src/backend/agents/*.py`, `src/backend/api/*.py`, `src/dashboard/src/stores/*.ts` |
-| `verify-detail-pages` | 상세 페이지 패턴 검증 | `src/dashboard/src/pages/*.tsx`, `src/dashboard/src/stores/*.ts`, `src/dashboard/src/components/skeletons/*.tsx` |
-| `verify-docs-sync` | 소스 코드와 docs/ 문서 동기화 검증 | `src/backend/api/*.py`, `src/dashboard/src/components/**/*.tsx`, `src/dashboard/src/pages/*.tsx`, `src/dashboard/src/stores/*.ts`, `docs/*.md` |
-| `verify-editable-components` | 인라인 편집 컴포넌트 패턴 검증 | `src/dashboard/src/components/**/*.tsx`, `src/dashboard/src/stores/*.ts` |
-| `verify-forms` | 폼 유효성 검증/에러 표시/접근성 검증 | `src/dashboard/src/components/**/*Modal*.tsx`, `src/dashboard/src/components/**/*Form*.tsx`, `src/dashboard/src/pages/LoginPage.tsx` |
-| `verify-framework` | 프레임워크 컨벤션(import, Zustand, export) 검증 | `src/dashboard/src/stores/*.ts`, `src/dashboard/src/components/**/*.tsx`, `src/dashboard/src/pages/*.tsx`, `src/dashboard/tsconfig.json` |
-| `verify-navigation` | 네비게이션 동기화 검증 | `src/dashboard/src/App.tsx`, `src/dashboard/src/components/Sidebar.tsx`, `src/dashboard/src/stores/navigation.ts`, `src/dashboard/src/pages/*.tsx` |
-| `verify-notifications` | 알림 시스템 동기화 검증 | `src/backend/api/notifications.py`, `src/backend/models/notification*.py`, `src/dashboard/src/pages/NotificationsPage.tsx`, `src/dashboard/src/components/notifications/*.tsx` |
-| `verify-points` | 핵심 체크포인트(헬스체크, 환경변수, DB) 검증 | `src/backend/api/health.py`, `src/backend/api/app.py`, `src/backend/db/*.py`, `.env`, `.env.example` |
-| `verify-react-best-practices` | React 베스트 프랙티스 검증 | `src/dashboard/src/components/**/*.tsx`, `src/dashboard/src/pages/*.tsx`, `src/dashboard/src/stores/*.ts` |
-| `verify-shortlinks` | URL/경로 패턴 동기화 검증 | `src/backend/api/*.py`, `src/dashboard/src/stores/*.ts`, `src/dashboard/src/services/*.ts`, `src/dashboard/src/App.tsx` |
-| `verify-storybook` | 컴포넌트 시각적 문서화 검증 | `src/dashboard/src/components/common/*.tsx`, `src/dashboard/src/components/ui/*.tsx`, `src/dashboard/src/components/**/*.stories.tsx` |
-| `verify-test` | 테스트 파일/패턴/커버리지 검증 | `tests/backend/*.py`, `src/dashboard/src/**/__tests__/*.test.ts(x)`, `src/dashboard/vitest.config.ts` |
-| `verify-ui` | UI 일관성(다크모드, Tailwind, 아이콘) 검증 | `src/dashboard/src/components/**/*.tsx`, `src/dashboard/src/pages/*.tsx`, `src/dashboard/tailwind.config.js` |
+
+(아직 등록된 검증 스킬이 없습니다. `/manage-skills`로 프로젝트에 맞는 스킬을 생성하세요.)
 
 ## 워크플로우
 

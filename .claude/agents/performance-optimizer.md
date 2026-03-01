@@ -15,7 +15,7 @@ ace_capabilities:
     weaknesses:
       new_feature_implementation: 0.40
       ui_component_design: 0.50
-      firebase_architecture: 0.55
+      sqlalchemy_query_profiling: 0.55
       api_integration: 0.50
       test_writing: 0.60
   layer_5_coordination:
@@ -99,7 +99,7 @@ useEffect(() => {
 ```
 
 **Detection**: Look for:
-- Firebase onSnapshot, subscribeToTrainUpdates without cleanup
+- API subscriptions without cleanup (e.g., WebSocket, polling)
 - Timers (setInterval, setTimeout) without clearInterval/clearTimeout
 - Event listeners without removeEventListener
 
@@ -336,14 +336,14 @@ function SearchScreen() {
 
 ### Lazy Loading Pattern
 ```typescript
-const SubwayMapScreen = React.lazy(() =>
-  import('./screens/map/SubwayMapScreen')
+const AgentsPage = React.lazy(() =>
+  import('@/pages/AgentsPage')
 );
 
-function AppNavigator() {
+function AppRouter() {
   return (
     <Suspense fallback={<LoadingScreen />}>
-      <Stack.Screen name="SubwayMap" component={SubwayMapScreen} />
+      <Route path="/agents" element={<AgentsPage />} />
     </Suspense>
   );
 }
@@ -399,7 +399,7 @@ When asked to optimize performance:
 ## Identified Issues
 1. ❌ Entire component re-renders on train data update
 2. ❌ Agent list filtering happens on every render
-3. ❌ Firebase subscription not cleaned up properly
+3. ❌ API subscription not cleaned up properly
 
 ## Optimizations Applied
 1. ✅ Memoized AgentCard components
@@ -436,7 +436,7 @@ See commit: abc123def
 
 ## Parallel Execution Mode
 
-See [shared/ace-framework.md](shared/ace-framework.md) for workspace isolation, status updates, and coordination protocols.
+See [ACE Framework Skill](../skills/ace-framework/SKILL.md) for governance model, workspace isolation, and coordination protocols.
 
 **Your workspace**: `.temp/agent_workspaces/performance-optimizer/`
 

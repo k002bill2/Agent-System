@@ -337,7 +337,7 @@ Always reference the `react-web-development` skill for detailed implementation g
 
 ## Parallel Execution Mode
 
-See [shared/ace-framework.md](shared/ace-framework.md) for workspace isolation, status updates, and coordination protocols.
+See [ACE Framework Skill](../skills/ace-framework/SKILL.md) for governance model, workspace isolation, and coordination protocols.
 
 **Your workspace**: `.temp/agent_workspaces/web-ui/`
 

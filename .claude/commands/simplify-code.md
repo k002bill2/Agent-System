@@ -1,11 +1,11 @@
 ---
-description: 코드 복잡도 분석 및 단순화 제안 (Boris Cherny code-simplifier 스타일)
+description: 코드 복잡도 분석 및 단순화 제안 (Boris Cherny 스타일)
 ---
 
 # 코드 단순화 워크플로우
 
 이 커맨드는 코드 복잡도를 분석하고 단순화 방안을 제안합니다.
-Boris Cherny가 사용하는 code-simplifier 서브에이전트와 동일한 기능을 제공합니다.
+Boris Cherny의 코드 단순화 패턴을 기반으로 복잡도를 분석합니다.
 
 ## 분석 대상
 

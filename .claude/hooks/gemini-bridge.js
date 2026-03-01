@@ -27,8 +27,8 @@ const ERRORS_LOG = path.join(BRIDGE_DIR, 'errors.log');
 const GEMINI_BIN = '/opt/homebrew/bin/gemini';
 const GEMINI_MD = path.join(PROJECT_ROOT, 'GEMINI.md');
 
-const TIMEOUT_REVIEW = 120_000;  // 120s
-const TIMEOUT_SCAN = 180_000;    // 180s
+const TIMEOUT_REVIEW = 180_000;  // 180s (increased from 120s for large diffs)
+const TIMEOUT_SCAN = 300_000;    // 300s (increased from 180s for full scans)
 const DAILY_LIMIT = 900;
 
 // ─── State Management ───────────────────────────────────────
@@ -154,7 +154,11 @@ function callGemini(prompt, options = {}) {
 
     const child = spawn(GEMINI_BIN, args, {
       cwd: PROJECT_ROOT,
-      env: { ...process.env, TERM: 'dumb' },
+      env: {
+        ...process.env,
+        TERM: 'dumb',
+        NODE_OPTIONS: '--max-old-space-size=2048'  // Limit Gemini CLI heap to 2GB to prevent OOM
+      },
       stdio: [useTmpFile ? 'pipe' : 'ignore', 'pipe', 'pipe']
     });
 
@@ -271,8 +275,8 @@ async function runReview(files = []) {
     return { skipped: true, reason: 'duplicate_diff', existingReview: recentDuplicate.id };
   }
 
-  // Smart diff handling for large diffs
-  const maxDiffLen = 80_000;
+  // Smart diff handling for large diffs (reduced from 80K to 50K to prevent OOM)
+  const maxDiffLen = 50_000;
   if (diff.length > maxDiffLen) {
     // Extract only key changes: file headers + first N lines per file
     diff = truncateDiffSmart(diff, maxDiffLen);
@@ -687,9 +691,9 @@ async function runScan(options = {}) {
     return { skipped: true, reason: 'no_source_files' };
   }
 
-  // Truncate to ~200K chars to stay within Gemini CLI memory limits
-  // (Gemini CLI OOMs on large stdin; 200K provides good coverage for most scopes)
-  const maxLen = 200_000;
+  // Truncate to ~120K chars to stay within Gemini CLI memory limits
+  // (Reduced from 200K to prevent OOM - Gemini CLI V8 heap exhaustion at ~4GB)
+  const maxLen = 120_000;
   if (sourceContent.length > maxLen) {
     sourceContent = sourceContent.slice(0, maxLen) + '\n\n... [TRUNCATED - ' +
       Math.round(sourceContent.length / 1024) + 'KB total, showing first ' +
