@@ -6,6 +6,8 @@ from typing import Annotated, Any, TypedDict
 
 from pydantic import BaseModel, Field
 
+from .errors import StructuredError
+
 
 class TaskStatus(str, Enum):
     """Task execution status."""
@@ -63,6 +65,7 @@ class TaskNode(BaseModel):
     retry_count: int = 0
     max_retries: int = 3
     error_history: list[str] = Field(default_factory=list)
+    structured_errors: list[StructuredError] = Field(default_factory=list)
 
     # Pause/Resume fields
     paused_at: datetime | None = None

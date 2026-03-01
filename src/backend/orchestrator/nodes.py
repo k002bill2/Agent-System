@@ -12,6 +12,7 @@ from langchain_core.tools import BaseTool
 
 from models.agent_state import AgentInfo, AgentRole, AgentState, TaskNode, TaskStatus
 from models.cost import TokenUsage, estimate_tokens, extract_token_usage
+from models.errors import ErrorCategory, StructuredError
 from models.hitl import (
     ApprovalStatus,
     assess_operation_risk,
@@ -1190,6 +1191,107 @@ Be specific about what changes are needed. If the error suggests the task is imp
                 "messages": [self._create_message("system", "Task is not in failed state")],
             }
 
+        # ── Category-based fast path (Boris Cherny: errors as values) ──
+        structured_error = None
+        if task.structured_errors:
+            structured_error = task.structured_errors[-1]
+
+        if structured_error:
+            category = structured_error.category
+
+            # PERMANENT → 즉시 실패 (재시도 무의미)
+            if category == ErrorCategory.PERMANENT:
+                task.error = (
+                    f"Permanent error (no retry): [{structured_error.original_type}] "
+                    f"{structured_error.message}"
+                )
+                task.updated_at = datetime.utcnow()
+                return {
+                    "tasks": {current_task_id: task},
+                    "messages": [
+                        self._create_message(
+                            "system",
+                            f"Self-correction: Permanent error for '{task.title}', skipping retry. "
+                            f"Hint: {structured_error.retry_hint}",
+                        )
+                    ],
+                }
+
+            # TRANSIENT → LLM 없이 단순 재시도
+            if category == ErrorCategory.TRANSIENT:
+                task.error_history = task.error_history + [task.error or "Unknown error"]
+                task.retry_count += 1
+                task.status = TaskStatus.PENDING
+                task.error = None
+                task.updated_at = datetime.utcnow()
+                return {
+                    "tasks": {current_task_id: task},
+                    "messages": [
+                        self._create_message(
+                            "system",
+                            f"Self-correction: Transient error for '{task.title}', "
+                            f"simple retry #{task.retry_count} (no LLM analysis needed).",
+                        )
+                    ],
+                    "next_action": "execute",
+                }
+
+            # RESOURCE → 경고 후 제한된 재시도 (최대 1회)
+            if category == ErrorCategory.RESOURCE:
+                if task.retry_count >= 1:
+                    task.error = (
+                        f"Resource error persists after retry: [{structured_error.original_type}] "
+                        f"{structured_error.message}"
+                    )
+                    task.updated_at = datetime.utcnow()
+                    return {
+                        "tasks": {current_task_id: task},
+                        "messages": [
+                            self._create_message(
+                                "system",
+                                f"Self-correction: Resource error for '{task.title}' "
+                                f"persists after retry, marking as failed.",
+                            )
+                        ],
+                    }
+                task.error_history = task.error_history + [task.error or "Unknown error"]
+                task.retry_count += 1
+                task.status = TaskStatus.PENDING
+                task.error = None
+                task.updated_at = datetime.utcnow()
+                return {
+                    "tasks": {current_task_id: task},
+                    "messages": [
+                        self._create_message(
+                            "system",
+                            f"Self-correction: Resource error for '{task.title}', "
+                            f"retry #{task.retry_count} after resource release.",
+                        )
+                    ],
+                    "next_action": "execute",
+                }
+
+            # LLM_ERROR → 백오프 재시도 (LLM 분석 스킵)
+            if category == ErrorCategory.LLM_ERROR:
+                task.error_history = task.error_history + [task.error or "Unknown error"]
+                task.retry_count += 1
+                task.status = TaskStatus.PENDING
+                task.error = None
+                task.updated_at = datetime.utcnow()
+                return {
+                    "tasks": {current_task_id: task},
+                    "messages": [
+                        self._create_message(
+                            "system",
+                            f"Self-correction: LLM API error for '{task.title}', "
+                            f"retry #{task.retry_count} with backoff.",
+                        )
+                    ],
+                    "next_action": "execute",
+                }
+
+        # ── LOGIC / UNKNOWN → 기존 LLM 분석 경로 ──
+
         # Use LLM to analyze error and suggest correction
         error_context = f"""
 Task Title: {task.title}
@@ -1274,6 +1376,41 @@ Error History: {task.error_history}
 
         # Update task based on correction
         if correction.get("should_retry", False):
+            # Confidence-based retry budget
+            confidence = correction.get("confidence", "low")
+            if isinstance(confidence, str):
+                confidence_map = {"high": 0.9, "medium": 0.6, "low": 0.3}
+                confidence_score = confidence_map.get(confidence.lower(), 0.3)
+            else:
+                confidence_score = float(confidence)
+
+            max_retries_by_confidence = (
+                3 if confidence_score >= 0.8
+                else 2 if confidence_score >= 0.5
+                else 1
+            )
+            if task.retry_count >= max_retries_by_confidence:
+                task.error = (
+                    f"Max retries ({max_retries_by_confidence}) reached based on "
+                    f"confidence ({confidence}). "
+                    f"Analysis: {correction.get('error_analysis', 'N/A')}"
+                )
+                task.updated_at = datetime.utcnow()
+                result = {
+                    "tasks": {current_task_id: task},
+                    "messages": [
+                        self._create_message(
+                            "system",
+                            f"Self-correction: Confidence-based retry budget exhausted "
+                            f"for '{task.title}' (confidence={confidence}, "
+                            f"max_retries={max_retries_by_confidence}).",
+                        )
+                    ],
+                }
+                if token_updates:
+                    result.update(token_updates)
+                return result
+
             # Add current error to history
             task.error_history = task.error_history + [task.error or "Unknown error"]
             task.retry_count += 1

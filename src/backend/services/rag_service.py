@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 from pydantic import BaseModel
 
+from .code_entity_extractor import CodeEntity, extract_entities
+
 # ── RAG Configuration (environment variables) ────────────────────────────────
 RAG_ENABLE_HYBRID = os.getenv("RAG_ENABLE_HYBRID", "false").lower() == "true"
 RAG_ENABLE_RERANK = os.getenv("RAG_ENABLE_RERANK", "false").lower() == "true"
@@ -115,6 +117,11 @@ class QueryResult(BaseModel):
 def _tokenize(text: str) -> list[str]:
     """Simple whitespace + lowercase tokenizer for BM25."""
     return re.findall(r"\w+", text.lower())
+
+
+def _entity_in_chunk(entity: CodeEntity, chunk: Any) -> bool:
+    """Check if a code entity is referenced in a document chunk."""
+    return entity.name in chunk.page_content
 
 
 class ProjectVectorStore:
@@ -695,13 +702,24 @@ class ProjectVectorStore:
             if file_path.exists() and file_path.is_file():
                 try:
                     content = file_path.read_text(encoding="utf-8", errors="ignore")
-                    chunks = self._chunk_document(
-                        content,
-                        str(file_path.relative_to(project_root)),
-                    )
+                    rel = str(file_path.relative_to(project_root))
+                    chunks = self._chunk_document(content, rel)
+
+                    # Extract code entities for metadata enrichment
+                    try:
+                        entities = extract_entities(rel, content)
+                        file_imports = list({imp for e in entities for imp in e.imports})
+                    except Exception:
+                        entities, file_imports = [], []
+
                     for chunk in chunks:
                         chunk.metadata["priority"] = "high"
                         chunk.metadata["project_id"] = project_id
+                        chunk_entities = [e for e in entities if _entity_in_chunk(e, chunk)]
+                        chunk.metadata["entity_names"] = [e.name for e in chunk_entities]
+                        chunk.metadata["entity_types"] = [e.entity_type.value for e in chunk_entities]
+                        chunk.metadata["imports"] = file_imports
+
                     documents.extend(chunks)
                     files_indexed += 1
                 except Exception as e:
@@ -737,13 +755,24 @@ class ProjectVectorStore:
                 if not content.strip():
                     continue
 
-                chunks = self._chunk_document(
-                    content,
-                    str(rel_path),
-                )
+                rel_str = str(rel_path)
+                chunks = self._chunk_document(content, rel_str)
+
+                # Extract code entities for metadata enrichment
+                try:
+                    entities = extract_entities(rel_str, content)
+                    file_imports = list({imp for e in entities for imp in e.imports})
+                except Exception:
+                    entities, file_imports = [], []
+
                 for chunk in chunks:
                     chunk.metadata["priority"] = "normal"
                     chunk.metadata["project_id"] = project_id
+                    chunk_entities = [e for e in entities if _entity_in_chunk(e, chunk)]
+                    chunk.metadata["entity_names"] = [e.name for e in chunk_entities]
+                    chunk.metadata["entity_types"] = [e.entity_type.value for e in chunk_entities]
+                    chunk.metadata["imports"] = file_imports
+
                 documents.extend(chunks)
                 files_indexed += 1
             except Exception as e:

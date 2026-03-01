@@ -97,9 +97,8 @@ async def _get_db_filtered_projects(monitor, current_user=None) -> list:
     For DB projects without a path, include basic info from discovered projects
     matched by name.
     """
-    from pathlib import Path as PathLib
-
     from datetime import datetime
+    from pathlib import Path as PathLib
 
     from sqlalchemy import or_, select
 

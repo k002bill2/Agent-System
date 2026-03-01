@@ -1,122 +1,6 @@
 {
-  "activeAgents": [
-    {
-      "taskId": "task_1772391246658_q0e6h1",
-      "subagentType": "Plan",
-      "description": "보리스 처니 보강 계획 설계",
-      "startTime": 1772391246658,
-      "status": "running",
-      "targetFiles": [
-        "src/backend/models/agent_state.py",
-        "src/backend/models/message.py",
-        "src/dashboard/src/stores/agents.ts",
-        "src/backend/agents/base.py",
-        "src/backend/orchestrator/nodes.py",
-        "src/backend/services/rag_service.py",
-        "src/backend/api/rag.py"
-      ],
-      "lockIds": [
-        "lock_1772391246658_w1mjou",
-        "lock_1772391246658_cnshfz",
-        "lock_1772391246659_h8yfme",
-        "lock_1772391246659_1v92qn",
-        "lock_1772391246659_2wyep0",
-        "lock_1772391246660_wzoag4",
-        "lock_1772391246660_gwj3t7"
-      ]
-    }
-  ],
+  "activeAgents": [],
   "completedAgents": [
-    {
-      "taskId": "task_1772377179767_yehl6i",
-      "subagentType": "Explore",
-      "description": "Find API keys settings code",
-      "startTime": 1772377179767,
-      "endTime": 1772377225217,
-      "duration_ms": 45450,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772377731948_0dsl4l",
-      "subagentType": "general-purpose",
-      "description": "최종 검증 실행",
-      "startTime": 1772377731948,
-      "endTime": 1772377788689,
-      "duration_ms": 56741,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772378798611_0057vb",
-      "subagentType": "Explore",
-      "description": "Explore dashboard routing and layout",
-      "startTime": 1772378798611,
-      "endTime": 1772378847005,
-      "duration_ms": 48394,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772378794665_l02xto",
-      "subagentType": "Explore",
-      "description": "Explore git store and components",
-      "startTime": 1772378794665,
-      "endTime": 1772378857672,
-      "duration_ms": 63007,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772378802722_zclia7",
-      "subagentType": "Explore",
-      "description": "Explore backend git/tmux services",
-      "startTime": 1772378802722,
-      "endTime": 1772378858760,
-      "duration_ms": 56038,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772378911828_bsti5z",
-      "subagentType": "Plan",
-      "description": "Design staging area enhancement plan",
-      "startTime": 1772378911828,
-      "endTime": 1772379082943,
-      "duration_ms": 171115,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772383695735_2djea4",
-      "subagentType": "Explore",
-      "description": "Explore Task Analyzer component",
-      "startTime": 1772383695735,
-      "endTime": 1772383749354,
-      "duration_ms": 53619,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772383700161_eqk7yk",
-      "subagentType": "Explore",
-      "description": "Explore backend task analysis API",
-      "startTime": 1772383700161,
-      "endTime": 1772383770260,
-      "duration_ms": 70099,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772383697605_ax24hu",
-      "subagentType": "Explore",
-      "description": "Explore Playground component",
-      "startTime": 1772383697605,
-      "endTime": 1772383786848,
-      "duration_ms": 89243,
-      "status": "completed"
-    },
-    {
-      "taskId": "task_1772383829367_3bkew1",
-      "subagentType": "Plan",
-      "description": "Design MD file attachment plan",
-      "startTime": 1772383829367,
-      "endTime": 1772383997388,
-      "duration_ms": 168021,
-      "status": "completed"
-    },
     {
       "taskId": "task_1772388315297_rev1jg",
       "subagentType": "Explore",
@@ -206,8 +90,98 @@
       "endTime": 1772391201416,
       "duration_ms": 82060,
       "status": "completed"
+    },
+    {
+      "taskId": "task_1772391246658_q0e6h1",
+      "subagentType": "Plan",
+      "description": "보리스 처니 보강 계획 설계",
+      "startTime": 1772391246658,
+      "endTime": 1772391451119,
+      "duration_ms": 204461,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772391935406_7xhyc3",
+      "subagentType": "Explore",
+      "description": "Explore current codebase state",
+      "startTime": 1772391935406,
+      "endTime": 1772392011353,
+      "duration_ms": 75947,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772392155908_f6bvty",
+      "subagentType": "general-purpose",
+      "description": "Create models/errors.py",
+      "startTime": 1772392155908,
+      "endTime": 1772392156253,
+      "duration_ms": 345,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772392165352_evd7hn",
+      "subagentType": "general-purpose",
+      "description": "Create models/types.py",
+      "startTime": 1772392165352,
+      "endTime": 1772392165677,
+      "duration_ms": 325,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772392211112_zln9zd",
+      "subagentType": "general-purpose",
+      "description": "Create code entity extractor",
+      "startTime": 1772392211112,
+      "endTime": 1772392211431,
+      "duration_ms": 319,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772392219507_dzb0ok",
+      "subagentType": "general-purpose",
+      "description": "Create TS branded types",
+      "startTime": 1772392219507,
+      "endTime": 1772392219847,
+      "duration_ms": 340,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772392386679_dh22s0",
+      "subagentType": "general-purpose",
+      "description": "Write test_structured_error.py",
+      "startTime": 1772392386679,
+      "endTime": 1772392386728,
+      "duration_ms": 49,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772392423243_pt1525",
+      "subagentType": "general-purpose",
+      "description": "Write test_self_correction_categories.py",
+      "startTime": 1772392423243,
+      "endTime": 1772392423290,
+      "duration_ms": 47,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772392454241_7a870j",
+      "subagentType": "general-purpose",
+      "description": "Write test_code_entity_extractor.py",
+      "startTime": 1772392454241,
+      "endTime": 1772392454293,
+      "duration_ms": 52,
+      "status": "completed"
+    },
+    {
+      "taskId": "task_1772392823327_7g4y69",
+      "subagentType": "Plan",
+      "description": "시스템 개선 구현 계획 설계",
+      "startTime": 1772392823327,
+      "endTime": 1772393133688,
+      "duration_ms": 310361,
+      "status": "completed"
     }
   ],
-  "lastUpdated": "2026-03-01T18:54:06.660Z",
+  "lastUpdated": "2026-03-01T19:25:33.688Z",
   "sessionId": "session_1772249015381_9jt9g0tbj"
 }

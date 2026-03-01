@@ -8,6 +8,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 
+from models.errors import StructuredError
 from models.llm_models import LLMModelRegistry, LLMProvider
 
 # Default model from registry
@@ -32,6 +33,7 @@ class AgentResult(BaseModel):
     success: bool
     output: Any
     error: str | None = None
+    structured_error: StructuredError | None = None
     tokens_used: int = 0
     execution_time_ms: int = 0
 
@@ -111,10 +113,12 @@ class BaseAgent(ABC):
 
         return content
 
-    def _format_error(self, error: Exception) -> AgentResult:
-        """Format an error result."""
+    def _format_error(self, error: Exception, context: dict[str, Any] | None = None) -> AgentResult:
+        """Format an error result with structured error classification."""
+        structured = StructuredError.from_exception(error, context=context)
         return AgentResult(
             success=False,
             output=None,
             error=str(error),
+            structured_error=structured,
         )
