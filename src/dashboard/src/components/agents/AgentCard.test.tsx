@@ -5,9 +5,9 @@ import type { Agent } from './AgentCard'
 
 const mockAgent: Agent = {
   id: 'agent-1',
-  name: 'Lead Orchestrator',
+  name: 'AOS Orchestrator',
   status: 'available',
-  endpoint: 'http://localhost:8000/agents/lead-orchestrator',
+  endpoint: 'http://localhost:8000/agents/aos-orchestrator',
   totalTools: 8,
   availableTools: 5,
 }
@@ -16,8 +16,8 @@ describe('AgentCard', () => {
   it('renders agent name and endpoint', () => {
     render(<AgentCard agent={mockAgent} />)
 
-    expect(screen.getByText('Lead Orchestrator')).toBeInTheDocument()
-    expect(screen.getByText('http://localhost:8000/agents/lead-orchestrator')).toBeInTheDocument()
+    expect(screen.getByText('AOS Orchestrator')).toBeInTheDocument()
+    expect(screen.getByText('http://localhost:8000/agents/aos-orchestrator')).toBeInTheDocument()
   })
 
   it('renders available status badge with green color', () => {
@@ -91,7 +91,7 @@ describe('AgentCard', () => {
     const card = screen.getByRole('button')
     expect(card).toHaveAttribute(
       'aria-label',
-      'Agent Lead Orchestrator, status: available, 5 of 8 tools available'
+      'Agent AOS Orchestrator, status: available, 5 of 8 tools available'
     )
   })
 

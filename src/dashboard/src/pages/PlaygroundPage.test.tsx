@@ -227,7 +227,7 @@ describe('PlaygroundPage', () => {
     })
 
     expect(screen.getByText('Start a conversation')).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('Enter your prompt...')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Enter your prompt... (MD 문서를 드래그하거나 첨부하세요)')).toBeInTheDocument()
   })
 
   it('opens new session dialog', async () => {
@@ -450,10 +450,10 @@ describe('PlaygroundPage', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Enter your prompt...')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText('Enter your prompt... (MD 문서를 드래그하거나 첨부하세요)')).toBeInTheDocument()
     })
 
-    const textarea = screen.getByPlaceholderText('Enter your prompt...')
+    const textarea = screen.getByPlaceholderText('Enter your prompt... (MD 문서를 드래그하거나 첨부하세요)')
     fireEvent.change(textarea, { target: { value: 'Test prompt' } })
 
     // Click the send button
@@ -481,10 +481,10 @@ describe('PlaygroundPage', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Enter your prompt...')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText('Enter your prompt... (MD 문서를 드래그하거나 첨부하세요)')).toBeInTheDocument()
     })
 
-    const textarea = screen.getByPlaceholderText('Enter your prompt...')
+    const textarea = screen.getByPlaceholderText('Enter your prompt... (MD 문서를 드래그하거나 첨부하세요)')
     fireEvent.change(textarea, { target: { value: 'Enter key prompt' } })
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false })
 
@@ -505,10 +505,10 @@ describe('PlaygroundPage', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Enter your prompt...')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText('Enter your prompt... (MD 문서를 드래그하거나 첨부하세요)')).toBeInTheDocument()
     })
 
-    const textarea = screen.getByPlaceholderText('Enter your prompt...')
+    const textarea = screen.getByPlaceholderText('Enter your prompt... (MD 문서를 드래그하거나 첨부하세요)')
     fireEvent.change(textarea, { target: { value: 'Multiline text' } })
 
     const executeCallsBefore = mockAuthFetch.mock.calls.filter(
@@ -534,10 +534,10 @@ describe('PlaygroundPage', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Enter your prompt...')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText('Enter your prompt... (MD 문서를 드래그하거나 첨부하세요)')).toBeInTheDocument()
     })
 
-    const textarea = screen.getByPlaceholderText('Enter your prompt...')
+    const textarea = screen.getByPlaceholderText('Enter your prompt... (MD 문서를 드래그하거나 첨부하세요)')
     // Leave prompt empty, press Enter
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false })
 
@@ -1289,10 +1289,10 @@ describe('PlaygroundPage', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Enter your prompt...')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText('Enter your prompt... (MD 문서를 드래그하거나 첨부하세요)')).toBeInTheDocument()
     })
 
-    const textarea = screen.getByPlaceholderText('Enter your prompt...')
+    const textarea = screen.getByPlaceholderText('Enter your prompt... (MD 문서를 드래그하거나 첨부하세요)')
     fireEvent.change(textarea, { target: { value: 'Fail prompt' } })
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false })
 

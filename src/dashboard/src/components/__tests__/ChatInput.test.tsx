@@ -746,7 +746,7 @@ describe('ChatInput', () => {
       dataTransfer: { files: [] },
     })
 
-    expect(screen.getByText(/이미지를 여기에 놓으세요/)).toBeInTheDocument()
+    expect(screen.getByText(/이미지 또는 MD 문서를 여기에 놓으세요/)).toBeInTheDocument()
   })
 
   it('hides drag overlay on drag leave', () => {
@@ -759,13 +759,13 @@ describe('ChatInput', () => {
       dataTransfer: { files: [] },
     })
 
-    expect(screen.getByText(/이미지를 여기에 놓으세요/)).toBeInTheDocument()
+    expect(screen.getByText(/이미지 또는 MD 문서를 여기에 놓으세요/)).toBeInTheDocument()
 
     fireEvent.dragLeave(form, {
       dataTransfer: { files: [] },
     })
 
-    expect(screen.queryByText(/이미지를 여기에 놓으세요/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/이미지 또는 MD 문서를 여기에 놓으세요/)).not.toBeInTheDocument()
   })
 
   it('adds images on drop', async () => {
@@ -796,14 +796,14 @@ describe('ChatInput', () => {
     fireEvent.dragOver(form, {
       dataTransfer: { files: [] },
     })
-    expect(screen.getByText(/이미지를 여기에 놓으세요/)).toBeInTheDocument()
+    expect(screen.getByText(/이미지 또는 MD 문서를 여기에 놓으세요/)).toBeInTheDocument()
 
     // Then drop (even with empty files)
     fireEvent.drop(form, {
       dataTransfer: { files: [] },
     })
 
-    expect(screen.queryByText(/이미지를 여기에 놓으세요/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/이미지 또는 MD 문서를 여기에 놓으세요/)).not.toBeInTheDocument()
   })
 
   it('does not add images on drop when no files in dataTransfer', () => {

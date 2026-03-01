@@ -7,6 +7,18 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { cn } from '../lib/utils'
+import {
+  ALLOWED_IMAGE_TYPES,
+  MAX_IMAGES,
+  MAX_MD_FILES,
+  getFileKey,
+  removeOcrBlock,
+  removeMdBlock,
+  isMdFile,
+  isImageFile,
+  readTextFile,
+  validateMdFile,
+} from '../lib/fileAttachment'
 import { useAgentsStore, TaskAnalysisHistory } from '../stores/agents'
 import { Project, useOrchestrationStore } from '../stores/orchestration'
 import { useNavigationStore } from '../stores/navigation'
@@ -30,23 +42,9 @@ import {
   FolderOpen,
   Terminal,
   ImagePlus,
+  FileText,
   X,
 } from 'lucide-react'
-
-const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml']
-const MAX_IMAGES = 5
-
-/** 파일 고유 키 생성 (OCR 상태 추적용) */
-function getFileKey(file: File): string {
-  return `${file.name}_${file.size}_${file.lastModified}`
-}
-
-/** 입력 텍스트에서 특정 파일의 OCR 블록을 제거 */
-function removeOcrBlock(text: string, filename: string): string {
-  const escaped = filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const pattern = new RegExp(`\\n?\\n?\\[이미지 OCR: ${escaped}\\][\\s\\S]*?(?=\\n\\n\\[이미지 OCR:|$)`)
-  return text.replace(pattern, '').trim()
-}
 
 // 노력 수준 색상
 const effortColors: Record<string, string> = {
@@ -121,6 +119,14 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
     extractTextFromImage,
     setOcrStatus,
     removeOcrStatus,
+    // MD files
+    attachedMdFiles,
+    addAttachedMdFiles,
+    removeAttachedMdFile,
+    clearAttachedMdFiles,
+    mdReadStatuses,
+    setMdReadStatus,
+    removeMdReadStatus,
   } = useAgentsStore()
   const { projects } = useOrchestrationStore()
   const { pendingTaskInput, setPendingTaskInput } = useNavigationStore()
@@ -129,6 +135,7 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
   const [isDragOver, setIsDragOver] = useState(false)
   const pendingProcessedRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const mdFileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Create a map for quick project name lookup
@@ -240,6 +247,54 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
     removeAttachedImage(idx)
   }, [attachedImages, removeAttachedImage, removeOcrStatus])
 
+  // MD file handling (must be before handleDrop)
+  const handleMdFiles = useCallback((files: FileList | File[]) => {
+    const mdFileList = Array.from(files).filter(isMdFile)
+    if (mdFileList.length === 0) return
+
+    const validFiles: File[] = []
+    for (const file of mdFileList) {
+      const error = validateMdFile(file, attachedMdFiles.length + validFiles.length)
+      if (error) {
+        console.warn(error)
+        continue
+      }
+      validFiles.push(file)
+    }
+
+    if (validFiles.length === 0) return
+    addAttachedMdFiles(validFiles)
+
+    // 각 파일 읽기
+    for (const file of validFiles) {
+      const fileKey = getFileKey(file)
+      setMdReadStatus(fileKey, 'reading')
+
+      readTextFile(file).then(content => {
+        setTaskInput(prev => `${prev}${prev ? '\n\n' : ''}[문서: ${file.name}]\n${content}`)
+        setMdReadStatus(fileKey, 'done')
+      }).catch(() => {
+        setMdReadStatus(fileKey, 'error')
+      })
+    }
+  }, [attachedMdFiles.length, addAttachedMdFiles, setMdReadStatus])
+
+  const handleRemoveMdFile = useCallback((idx: number) => {
+    const file = attachedMdFiles[idx]
+    if (file) {
+      removeMdReadStatus(getFileKey(file))
+      setTaskInput(prev => removeMdBlock(prev, file.name))
+    }
+    removeAttachedMdFile(idx)
+  }, [attachedMdFiles, removeAttachedMdFile, removeMdReadStatus])
+
+  const handleMdFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      handleMdFiles(e.target.files)
+    }
+    e.target.value = ''
+  }, [handleMdFiles])
+
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const items = e.clipboardData.items
     const imageFiles: File[] = []
@@ -272,9 +327,13 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
     e.stopPropagation()
     setIsDragOver(false)
     if (e.dataTransfer.files.length > 0) {
-      handleImageFiles(e.dataTransfer.files)
+      const files = Array.from(e.dataTransfer.files)
+      const imageFiles = files.filter(isImageFile)
+      const mdDropFiles = files.filter(isMdFile)
+      if (imageFiles.length > 0) handleImageFiles(imageFiles)
+      if (mdDropFiles.length > 0) handleMdFiles(mdDropFiles)
     }
-  }, [handleImageFiles])
+  }, [handleImageFiles, handleMdFiles])
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -326,7 +385,7 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
               onChange={(e) => setTaskInput(e.target.value)}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
-              placeholder="Enter a task to analyze... (이미지를 붙여넣기하거나 드래그하세요)"
+              placeholder="Enter a task to analyze... (이미지/MD 문서를 붙여넣기하거나 드래그하세요)"
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
               rows={3}
             />
@@ -386,23 +445,65 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
               </div>
             )}
 
+            {/* MD File Previews */}
+            {attachedMdFiles.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {attachedMdFiles.map((file, idx) => {
+                  const readStatus = mdReadStatuses[getFileKey(file)]
+                  return (
+                    <div
+                      key={`md-${file.name}-${idx}`}
+                      className="relative group flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-xs"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                      <span className="text-gray-700 dark:text-gray-300 max-w-[120px] truncate">{file.name}</span>
+                      {readStatus === 'reading' && (
+                        <Loader2 className="w-3 h-3 text-blue-500 animate-spin flex-shrink-0" />
+                      )}
+                      {readStatus === 'done' && (
+                        <CheckCircle2 className="w-3 h-3 text-green-500 flex-shrink-0" />
+                      )}
+                      {readStatus === 'error' && (
+                        <AlertCircle className="w-3 h-3 text-red-500 flex-shrink-0" />
+                      )}
+                      <button
+                        onClick={() => handleRemoveMdFile(idx)}
+                        className="w-4 h-4 flex items-center justify-center rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                        title="문서 제거"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
             {/* Drag overlay hint */}
             {isDragOver && (
               <div className="mt-2 py-3 border-2 border-dashed border-primary-400 dark:border-primary-600 rounded-lg text-center text-sm text-primary-600 dark:text-primary-400">
                 <ImagePlus className="w-5 h-5 mx-auto mb-1" />
-                여기에 이미지를 놓으세요
+                이미지 또는 MD 문서를 여기에 놓으세요
               </div>
             )}
 
             <div className="flex items-center justify-between mt-3">
               <div className="flex items-center gap-2">
-                {/* File input (hidden) */}
+                {/* File inputs (hidden) */}
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept={ALLOWED_IMAGE_TYPES.join(',')}
                   multiple
                   onChange={handleFileSelect}
+                  className="hidden"
+                />
+                <input
+                  ref={mdFileInputRef}
+                  type="file"
+                  accept=".md,.markdown"
+                  multiple
+                  onChange={handleMdFileSelect}
                   className="hidden"
                 />
                 <button
@@ -419,15 +520,31 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
                   <ImagePlus className="w-4 h-4" />
                   <span>이미지</span>
                 </button>
-                {attachedImages.length > 0 && (
+                <button
+                  onClick={() => mdFileInputRef.current?.click()}
+                  disabled={attachedMdFiles.length >= MAX_MD_FILES}
+                  className={cn(
+                    'p-2 rounded-lg transition-colors flex items-center gap-1.5 text-xs',
+                    attachedMdFiles.length >= MAX_MD_FILES
+                      ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-300'
+                  )}
+                  title={attachedMdFiles.length >= MAX_MD_FILES ? `최대 ${MAX_MD_FILES}개` : 'MD 문서 첨부'}
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>문서</span>
+                </button>
+                {(attachedImages.length > 0 || attachedMdFiles.length > 0) && (
                   <button
                     onClick={() => {
                       setTaskInput(prev => {
                         let text = prev
                         for (const file of attachedImages) text = removeOcrBlock(text, file.name)
+                        for (const file of attachedMdFiles) text = removeMdBlock(text, file.name)
                         return text
                       })
                       clearAttachedImages()
+                      clearAttachedMdFiles()
                     }}
                     className="text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                   >
@@ -437,6 +554,11 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
                 {attachedImages.length > 0 && (
                   <span className="text-xs text-gray-400 dark:text-gray-500">
                     {attachedImages.length}/{MAX_IMAGES}
+                  </span>
+                )}
+                {attachedMdFiles.length > 0 && (
+                  <span className="text-xs text-gray-400 dark:text-gray-500">
+                    {attachedMdFiles.length}/{MAX_MD_FILES} 문서
                   </span>
                 )}
               </div>

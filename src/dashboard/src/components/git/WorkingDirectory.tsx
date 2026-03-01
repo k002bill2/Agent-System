@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import {
   FileEdit,
   FilePlus,
@@ -6,6 +6,7 @@ import {
   FileQuestion,
   Check,
   Plus,
+  Minus,
   RefreshCw,
   Send,
   List,
@@ -13,11 +14,19 @@ import {
   Sparkles,
   Loader2,
   ArrowUp,
+  Eye,
+  ChevronDown,
+  ChevronRight,
+  ShieldAlert,
+  Shield,
+  AlertTriangle,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
-import { GitWorkingStatus, GitStatusFile, FileStatusType, DraftCommit } from '../../stores/git'
+import { GitWorkingStatus, GitStatusFile, FileStatusType, DraftCommit, DiffHunk } from '../../stores/git'
 import { groupFilesByPattern, draftCommitsToFileGroups, FileGroup } from '../../utils/gitGrouping'
 import { FileGroupCard } from './FileGroup'
+import { checkSensitiveFile, filterSensitiveFiles, type SensitivityLevel } from '../../utils/gitSafetyPatterns'
+import { calcDiffStats } from '../../utils/diffParser'
 
 type ViewMode = 'list' | 'grouped'
 
@@ -27,8 +36,21 @@ interface WorkingDirectoryProps {
   onRefresh: () => void
   onStageFiles: (paths: string[]) => Promise<boolean>
   onStageAll: () => Promise<boolean>
+  onUnstageFiles: (paths: string[]) => Promise<boolean>
+  onUnstageAll: () => Promise<boolean>
   onCommit: (message: string) => Promise<boolean>
   onCommitAndPush?: (message: string) => Promise<boolean>
+  // Diff
+  onFetchFileDiff: (filePath: string, staged: boolean) => Promise<string>
+  fileDiffs: Record<string, string>
+  isLoadingDiff: boolean
+  // Staged diff review
+  onFetchStagedDiff: () => Promise<string | null>
+  stagedDiff: string | null
+  // Hunk staging
+  onFetchFileHunks: (filePath: string, staged: boolean) => Promise<DiffHunk[]>
+  onStageHunks: (filePath: string, hunkIndices: number[]) => Promise<boolean>
+  fileHunks: Record<string, DiffHunk[]>
   // LLM Draft Commits
   draftCommits: DraftCommit[]
   isGeneratingDrafts: boolean
@@ -63,61 +85,366 @@ const statusLabels: Record<FileStatusType, string> = {
   staged: 'S',
 }
 
+const sensitivityIcons: Record<SensitivityLevel, typeof Shield | null> = {
+  danger: ShieldAlert,
+  warning: AlertTriangle,
+  safe: null,
+}
+
+const sensitivityColors: Record<SensitivityLevel, string> = {
+  danger: 'text-red-500',
+  warning: 'text-yellow-500',
+  safe: '',
+}
+
+// =============================================================================
+// FileItem with diff preview, unstage, and safety badge
+// =============================================================================
+
 function FileItem({
   file,
   selected,
   onSelect,
   onStage,
+  onUnstage,
+  onToggleDiff,
+  showDiff,
+  diffContent,
+  isLoadingDiff,
 }: {
   file: GitStatusFile
   selected: boolean
   onSelect: (path: string) => void
-  onStage: (path: string) => void
+  onStage?: (path: string) => void
+  onUnstage?: (path: string) => void
+  onToggleDiff: (path: string) => void
+  showDiff: boolean
+  diffContent?: string
+  isLoadingDiff: boolean
 }) {
   const Icon = statusIcons[file.status]
+  const sensitivity = checkSensitiveFile(file.path)
+  const SafetyIcon = sensitivityIcons[sensitivity.level]
 
   return (
-    <div
-      className={cn(
-        'flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg cursor-pointer group',
-        selected && 'bg-primary-50 dark:bg-primary-900/20'
-      )}
-      onClick={() => onSelect(file.path)}
-    >
-      <input
-        type="checkbox"
-        checked={selected}
-        onChange={() => onSelect(file.path)}
-        className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
-        onClick={(e) => e.stopPropagation()}
-      />
-      <Icon className={cn('w-4 h-4', statusColors[file.status])} />
-      <span className="flex-1 text-sm font-mono truncate text-gray-700 dark:text-gray-300">
-        {file.path}
-      </span>
-      <span
+    <div>
+      <div
         className={cn(
-          'text-xs font-bold px-1.5 py-0.5 rounded',
-          statusColors[file.status]
+          'flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg cursor-pointer group',
+          selected && 'bg-primary-50 dark:bg-primary-900/20'
         )}
+        onClick={() => onToggleDiff(file.path)}
       >
-        {statusLabels[file.status]}
-      </span>
-      {!file.staged && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            onStage(file.path)
-          }}
-          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-opacity"
-          title="Stage this file"
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onSelect(file.path)}
+          className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
+          onClick={(e) => e.stopPropagation()}
+        />
+        <Icon className={cn('w-4 h-4', statusColors[file.status])} />
+        <span className="flex-1 text-sm font-mono truncate text-gray-700 dark:text-gray-300">
+          {file.path}
+        </span>
+        {SafetyIcon && (
+          <span title={sensitivity.reason}>
+            <SafetyIcon className={cn('w-4 h-4', sensitivityColors[sensitivity.level])} />
+          </span>
+        )}
+        <span
+          className={cn(
+            'text-xs font-bold px-1.5 py-0.5 rounded',
+            statusColors[file.status]
+          )}
         >
-          <Plus className="w-4 h-4 text-green-500" />
+          {statusLabels[file.status]}
+        </span>
+        {/* Stage button for unstaged files */}
+        {onStage && !file.staged && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onStage(file.path)
+            }}
+            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-opacity"
+            title="Stage this file"
+          >
+            <Plus className="w-4 h-4 text-green-500" />
+          </button>
+        )}
+        {/* Unstage button for staged files */}
+        {onUnstage && file.staged && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onUnstage(file.path)
+            }}
+            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-opacity"
+            title="Unstage this file"
+          >
+            <Minus className="w-4 h-4 text-red-500" />
+          </button>
+        )}
+      </div>
+      {/* Inline diff preview */}
+      {showDiff && (
+        <div className="ml-6 mr-3 mb-2 bg-gray-900 rounded-lg overflow-hidden text-xs font-mono max-h-60 overflow-y-auto">
+          {isLoadingDiff ? (
+            <div className="flex items-center gap-2 p-3 text-gray-400">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Loading diff...
+            </div>
+          ) : diffContent ? (
+            <div>
+              {diffContent.split('\n').map((line, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    'px-3 py-0.5',
+                    line.startsWith('+') && !line.startsWith('+++') && 'bg-green-900/30 text-green-400',
+                    line.startsWith('-') && !line.startsWith('---') && 'bg-red-900/30 text-red-400',
+                    line.startsWith('@@') && 'bg-blue-900/30 text-blue-400',
+                    !line.startsWith('+') && !line.startsWith('-') && !line.startsWith('@@') && 'text-gray-500'
+                  )}
+                >
+                  {line || ' '}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-3 text-gray-500">No diff available</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// =============================================================================
+// Staged Diff Review Panel
+// =============================================================================
+
+function StagedDiffReviewPanel({
+  stagedDiff,
+  isLoading,
+  onFetch,
+}: {
+  stagedDiff: string | null
+  isLoading: boolean
+  onFetch: () => void
+}) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const stats = useMemo(() => stagedDiff ? calcDiffStats(stagedDiff) : null, [stagedDiff])
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-blue-200 dark:border-blue-800 overflow-hidden">
+      <button
+        onClick={() => {
+          if (!isExpanded && !stagedDiff) onFetch()
+          setIsExpanded(!isExpanded)
+        }}
+        className="w-full px-4 py-3 flex items-center justify-between bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <Eye className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+          <span className="font-medium text-blue-700 dark:text-blue-400 text-sm">
+            Review Staged Changes
+          </span>
+          {stats && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              ({stats.files} file{stats.files !== 1 ? 's' : ''}, +{stats.additions} -{stats.deletions})
+            </span>
+          )}
+        </div>
+        {isExpanded ? (
+          <ChevronDown className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+        ) : (
+          <ChevronRight className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+        )}
+      </button>
+      {isExpanded && (
+        <div className="max-h-96 overflow-y-auto bg-gray-900 text-xs font-mono">
+          {isLoading ? (
+            <div className="flex items-center gap-2 p-4 text-gray-400">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading staged diff...
+            </div>
+          ) : stagedDiff ? (
+            stagedDiff.split('\n').map((line, i) => (
+              <div
+                key={i}
+                className={cn(
+                  'px-4 py-0.5',
+                  line.startsWith('+') && !line.startsWith('+++') && 'bg-green-900/30 text-green-400',
+                  line.startsWith('-') && !line.startsWith('---') && 'bg-red-900/30 text-red-400',
+                  line.startsWith('@@') && 'bg-blue-900/30 text-blue-400',
+                  line.startsWith('diff --git') && 'bg-gray-800 text-gray-300 font-bold mt-2',
+                  !line.startsWith('+') && !line.startsWith('-') && !line.startsWith('@@') && !line.startsWith('diff') && 'text-gray-500'
+                )}
+              >
+                {line || ' '}
+              </div>
+            ))
+          ) : (
+            <div className="p-4 text-gray-500">No staged changes</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// =============================================================================
+// Sensitive Files Confirmation Dialog
+// =============================================================================
+
+function SensitiveFilesDialog({
+  dangers,
+  warnings,
+  onConfirm,
+  onCancel,
+}: {
+  dangers: { path: string; reason: string }[]
+  warnings: { path: string; reason: string }[]
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <ShieldAlert className="w-6 h-6 text-red-500" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            Sensitive Files Detected
+          </h3>
+        </div>
+
+        {dangers.length > 0 && (
+          <div className="mb-3">
+            <p className="text-sm font-medium text-red-600 dark:text-red-400 mb-1">Dangerous files:</p>
+            {dangers.map(({ path, reason }) => (
+              <div key={path} className="flex items-center gap-2 text-xs text-red-500 ml-2 py-0.5">
+                <ShieldAlert className="w-3 h-3" />
+                <span className="font-mono">{path}</span>
+                <span className="text-gray-400">- {reason}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {warnings.length > 0 && (
+          <div className="mb-3">
+            <p className="text-sm font-medium text-yellow-600 dark:text-yellow-400 mb-1">Warning files:</p>
+            {warnings.map(({ path, reason }) => (
+              <div key={path} className="flex items-center gap-2 text-xs text-yellow-500 ml-2 py-0.5">
+                <AlertTriangle className="w-3 h-3" />
+                <span className="font-mono">{path}</span>
+                <span className="text-gray-400">- {reason}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-4 mb-4">
+          Are you sure you want to stage these files?
+        </p>
+
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+          >
+            Stage Anyway
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// =============================================================================
+// Hunk Staging UI
+// =============================================================================
+
+function HunkStagingPanel({
+  hunks,
+  onStageHunks,
+  isLoading,
+}: {
+  hunks: DiffHunk[]
+  onStageHunks: (indices: number[]) => Promise<boolean>
+  isLoading: boolean
+}) {
+  const [selectedHunks, setSelectedHunks] = useState<Set<number>>(new Set())
+
+  const toggleHunk = (idx: number) => {
+    setSelectedHunks((prev) => {
+      const next = new Set(prev)
+      if (next.has(idx)) next.delete(idx)
+      else next.add(idx)
+      return next
+    })
+  }
+
+  const handleStage = async () => {
+    if (selectedHunks.size === 0) return
+    const success = await onStageHunks(Array.from(selectedHunks))
+    if (success) setSelectedHunks(new Set())
+  }
+
+  return (
+    <div className="ml-6 mr-3 mb-2 space-y-2">
+      {hunks.map((hunk) => (
+        <div key={hunk.index} className="bg-gray-900 rounded-lg overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800">
+            <input
+              type="checkbox"
+              checked={selectedHunks.has(hunk.index)}
+              onChange={() => toggleHunk(hunk.index)}
+              className="w-3.5 h-3.5 rounded border-gray-600 text-blue-500 focus:ring-blue-500"
+            />
+            <span className="text-xs text-blue-400 font-mono">{hunk.header}</span>
+          </div>
+          <div className="text-xs font-mono max-h-32 overflow-y-auto">
+            {hunk.content.split('\n').map((line, i) => (
+              <div
+                key={i}
+                className={cn(
+                  'px-3 py-0.5',
+                  line.startsWith('+') && 'bg-green-900/30 text-green-400',
+                  line.startsWith('-') && 'bg-red-900/30 text-red-400',
+                  line.startsWith(' ') && 'text-gray-500'
+                )}
+              >
+                {line || ' '}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      {selectedHunks.size > 0 && (
+        <button
+          onClick={handleStage}
+          disabled={isLoading}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Stage {selectedHunks.size} Hunk{selectedHunks.size !== 1 ? 's' : ''}
         </button>
       )}
     </div>
   )
 }
+
+// =============================================================================
+// Main WorkingDirectory Component
+// =============================================================================
 
 export function WorkingDirectory({
   workingStatus,
@@ -125,8 +452,18 @@ export function WorkingDirectory({
   onRefresh,
   onStageFiles,
   onStageAll,
+  onUnstageFiles,
+  onUnstageAll,
   onCommit,
   onCommitAndPush,
+  onFetchFileDiff,
+  fileDiffs,
+  isLoadingDiff,
+  onFetchStagedDiff,
+  stagedDiff,
+  onFetchFileHunks,
+  onStageHunks,
+  fileHunks,
   draftCommits,
   isGeneratingDrafts,
   onGenerateDrafts,
@@ -137,6 +474,12 @@ export function WorkingDirectory({
   const [isCommitting, setIsCommitting] = useState(false)
   const [isCommittingAndPushing, setIsCommittingAndPushing] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('list')
+  const [expandedDiffs, setExpandedDiffs] = useState<Set<string>>(new Set())
+  const [expandedHunks, setExpandedHunks] = useState<Set<string>>(new Set())
+  const [sensitiveDialog, setSensitiveDialog] = useState<{
+    paths: string[]
+    callback: () => void
+  } | null>(null)
 
   const handleSelectFile = (path: string) => {
     setSelectedFiles((prev) => {
@@ -150,12 +493,63 @@ export function WorkingDirectory({
     })
   }
 
+  const handleToggleDiff = async (path: string, staged: boolean) => {
+    const key = `${path}:${staged}`
+    setExpandedDiffs((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+        // Fetch diff if not already cached
+        if (!fileDiffs[key]) {
+          onFetchFileDiff(path, staged)
+        }
+      }
+      return next
+    })
+  }
+
+  const handleToggleHunks = async (path: string) => {
+    const key = path
+    setExpandedHunks((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+        if (!fileHunks[key]) {
+          onFetchFileHunks(path, false)
+        }
+      }
+      return next
+    })
+  }
+
+  // Wrap stage functions with sensitive file check
+  const checkAndStage = (paths: string[], action: () => Promise<boolean>) => {
+    const { warnings, dangers } = filterSensitiveFiles(paths)
+    if (dangers.length > 0 || warnings.length > 0) {
+      setSensitiveDialog({ paths, callback: () => { action(); setSensitiveDialog(null) } })
+    } else {
+      action()
+    }
+  }
+
   const handleStageSelected = async () => {
     if (selectedFiles.size === 0) return
-    const success = await onStageFiles(Array.from(selectedFiles))
-    if (success) {
-      setSelectedFiles(new Set())
-    }
+    const paths = Array.from(selectedFiles)
+    checkAndStage(paths, async () => {
+      const success = await onStageFiles(paths)
+      if (success) setSelectedFiles(new Set())
+      return success
+    })
+  }
+
+  const handleStageAll = () => {
+    if (!workingStatus) return
+    const paths = [...workingStatus.unstaged_files, ...workingStatus.untracked_files].map(f => f.path)
+    checkAndStage(paths, onStageAll)
   }
 
   const handleCommit = async () => {
@@ -208,9 +602,19 @@ export function WorkingDirectory({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="h-full flex flex-col gap-6">
+      {/* Sensitive Files Dialog */}
+      {sensitiveDialog && (
+        <SensitiveFilesDialog
+          dangers={filterSensitiveFiles(sensitiveDialog.paths).dangers}
+          warnings={filterSensitiveFiles(sensitiveDialog.paths).warnings}
+          onConfirm={sensitiveDialog.callback}
+          onCancel={() => setSensitiveDialog(null)}
+        />
+      )}
+
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between shrink-0">
         <div>
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
             Working Directory
@@ -340,118 +744,172 @@ export function WorkingDirectory({
         </div>
       ) : (
         /* List View */
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Staged Changes */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-green-50 dark:bg-green-900/20">
-              <h4 className="font-medium text-green-700 dark:text-green-400 flex items-center gap-2">
-                <Check className="w-4 h-4" />
-                Staged Changes ({staged_files.length})
-              </h4>
-            </div>
-            <div className="p-2 max-h-64 overflow-y-auto">
-              {staged_files.length === 0 ? (
-                <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
-                  No staged changes
-                </p>
-              ) : (
-                staged_files.map((file) => (
-                  <div
-                    key={file.path}
-                    className="flex items-center gap-2 px-3 py-2 text-sm"
-                  >
-                    <Check className="w-4 h-4 text-green-500" />
-                    <span className="font-mono truncate text-gray-700 dark:text-gray-300">
-                      {file.path}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Commit Form */}
-            {staged_files.length > 0 && (
-              <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
-                <textarea
-                  value={commitMessage}
-                  onChange={(e) => setCommitMessage(e.target.value)}
-                  placeholder="Commit message..."
-                  rows={2}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
-                />
-                <div className="mt-2 flex gap-2">
+        <div className="flex-1 min-h-0 flex flex-col gap-6">
+          <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Staged Changes */}
+            <div className="flex flex-col bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden min-h-0">
+              <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-green-50 dark:bg-green-900/20 flex items-center justify-between shrink-0">
+                <h4 className="font-medium text-green-700 dark:text-green-400 flex items-center gap-2">
+                  <Check className="w-4 h-4" />
+                  Staged Changes ({staged_files.length})
+                </h4>
+                {staged_files.length > 0 && (
                   <button
-                    onClick={handleCommit}
-                    disabled={!commitMessage.trim() || isCommitting || isCommittingAndPushing}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+                    onClick={onUnstageAll}
+                    disabled={isLoading}
+                    className="text-xs px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
                   >
-                    <Send className="w-4 h-4" />
-                    {isCommitting ? 'Committing...' : 'Commit'}
+                    Unstage All
                   </button>
-                  {onCommitAndPush && (
+                )}
+              </div>
+              <div className="flex-1 min-h-0 p-2 overflow-y-auto">
+                {staged_files.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                    No staged changes
+                  </p>
+                ) : (
+                  staged_files.map((file) => (
+                    <FileItem
+                      key={file.path}
+                      file={{ ...file, staged: true }}
+                      selected={false}
+                      onSelect={() => {}}
+                      onUnstage={(path) => onUnstageFiles([path])}
+                      onToggleDiff={(path) => handleToggleDiff(path, true)}
+                      showDiff={expandedDiffs.has(`${file.path}:true`)}
+                      diffContent={fileDiffs[`${file.path}:true`]}
+                      isLoadingDiff={isLoadingDiff}
+                    />
+                  ))
+                )}
+              </div>
+
+              {/* Review Staged Changes Panel */}
+              {staged_files.length > 0 && (
+                <div className="border-t border-gray-200 dark:border-gray-700 shrink-0">
+                  <StagedDiffReviewPanel
+                    stagedDiff={stagedDiff}
+                    isLoading={isLoadingDiff}
+                    onFetch={onFetchStagedDiff}
+                  />
+                </div>
+              )}
+
+              {/* Commit Form */}
+              {staged_files.length > 0 && (
+                <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 shrink-0">
+                  <textarea
+                    value={commitMessage}
+                    onChange={(e) => setCommitMessage(e.target.value)}
+                    placeholder="Commit message..."
+                    rows={2}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                  />
+                  <div className="mt-2 flex gap-2">
                     <button
-                      onClick={handleCommitAndPush}
+                      onClick={handleCommit}
                       disabled={!commitMessage.trim() || isCommitting || isCommittingAndPushing}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
                     >
                       <Send className="w-4 h-4" />
-                      <ArrowUp className="w-4 h-4" />
-                      {isCommittingAndPushing ? 'Committing & Pushing...' : 'Commit & Push'}
+                      {isCommitting ? 'Committing...' : 'Commit'}
                     </button>
-                  )}
+                    {onCommitAndPush && (
+                      <button
+                        onClick={handleCommitAndPush}
+                        disabled={!commitMessage.trim() || isCommitting || isCommittingAndPushing}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+                      >
+                        <Send className="w-4 h-4" />
+                        <ArrowUp className="w-4 h-4" />
+                        {isCommittingAndPushing ? 'Committing & Pushing...' : 'Commit & Push'}
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-
-          {/* Unstaged Changes */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-yellow-50 dark:bg-yellow-900/20 flex items-center justify-between">
-              <h4 className="font-medium text-yellow-700 dark:text-yellow-400 flex items-center gap-2">
-                <FileEdit className="w-4 h-4" />
-                Unstaged Changes ({allUnstagedFiles.length})
-              </h4>
-              {allUnstagedFiles.length > 0 && (
-                <button
-                  onClick={onStageAll}
-                  disabled={isLoading}
-                  className="text-xs px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors"
-                >
-                  Stage All
-                </button>
-              )}
-            </div>
-            <div className="p-2 max-h-80 overflow-y-auto">
-              {allUnstagedFiles.length === 0 ? (
-                <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
-                  No unstaged changes
-                </p>
-              ) : (
-                allUnstagedFiles.map((file) => (
-                  <FileItem
-                    key={file.path}
-                    file={file}
-                    selected={selectedFiles.has(file.path)}
-                    onSelect={handleSelectFile}
-                    onStage={(path) => onStageFiles([path])}
-                  />
-                ))
               )}
             </div>
 
-            {/* Stage Selected Button */}
-            {selectedFiles.size > 0 && (
-              <div className="p-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
-                <button
-                  onClick={handleStageSelected}
-                  disabled={isLoading}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 rounded-lg transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  Stage Selected ({selectedFiles.size})
-                </button>
+            {/* Unstaged Changes */}
+            <div className="flex flex-col bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden min-h-0">
+              <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-yellow-50 dark:bg-yellow-900/20 flex items-center justify-between shrink-0">
+                <h4 className="font-medium text-yellow-700 dark:text-yellow-400 flex items-center gap-2">
+                  <FileEdit className="w-4 h-4" />
+                  Unstaged Changes ({allUnstagedFiles.length})
+                </h4>
+                {allUnstagedFiles.length > 0 && (
+                  <button
+                    onClick={handleStageAll}
+                    disabled={isLoading}
+                    className="text-xs px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors"
+                  >
+                    Stage All
+                  </button>
+                )}
               </div>
-            )}
+              <div className="flex-1 min-h-0 p-2 overflow-y-auto">
+                {allUnstagedFiles.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                    No unstaged changes
+                  </p>
+                ) : (
+                  allUnstagedFiles.map((file) => (
+                    <div key={file.path}>
+                      <FileItem
+                        file={file}
+                        selected={selectedFiles.has(file.path)}
+                        onSelect={handleSelectFile}
+                        onStage={(path) => {
+                          checkAndStage([path], () => onStageFiles([path]))
+                        }}
+                        onToggleDiff={(path) => handleToggleDiff(path, false)}
+                        showDiff={expandedDiffs.has(`${file.path}:false`)}
+                        diffContent={fileDiffs[`${file.path}:false`]}
+                        isLoadingDiff={isLoadingDiff}
+                      />
+                      {/* Hunk staging for modified files */}
+                      {file.status === 'modified' && expandedDiffs.has(`${file.path}:false`) && (
+                        <div className="ml-6 mr-3 mb-1">
+                          <button
+                            onClick={() => handleToggleHunks(file.path)}
+                            className="text-xs text-blue-500 hover:text-blue-400 flex items-center gap-1 px-2 py-1"
+                          >
+                            {expandedHunks.has(file.path) ? (
+                              <ChevronDown className="w-3 h-3" />
+                            ) : (
+                              <ChevronRight className="w-3 h-3" />
+                            )}
+                            Stage individual hunks
+                          </button>
+                          {expandedHunks.has(file.path) && fileHunks[file.path] && (
+                            <HunkStagingPanel
+                              hunks={fileHunks[file.path]}
+                              onStageHunks={(indices) => onStageHunks(file.path, indices)}
+                              isLoading={isLoading}
+                            />
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Stage Selected Button */}
+              {selectedFiles.size > 0 && (
+                <div className="p-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+                  <button
+                    onClick={handleStageSelected}
+                    disabled={isLoading}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 rounded-lg transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Stage Selected ({selectedFiles.size})
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

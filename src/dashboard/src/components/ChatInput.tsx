@@ -1,35 +1,34 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { cn } from '../lib/utils'
+import {
+  ALLOWED_IMAGE_TYPES,
+  MAX_IMAGES,
+  MAX_MD_FILES,
+  getFileKey,
+  removeOcrBlock,
+  removeMdBlock,
+  isMdFile,
+  isImageFile,
+  readTextFile,
+  validateMdFile,
+} from '../lib/fileAttachment'
 import { useOrchestrationStore } from '../stores/orchestration'
 import { useNavigationStore } from '../stores/navigation'
 import { useAgentsStore } from '../stores/agents'
-import { Send, Loader2, ChevronDown, FolderGit2, ImagePlus, X, CheckCircle2, AlertCircle } from 'lucide-react'
-
-const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml']
-const MAX_IMAGES = 5
-
-/** 파일 고유 키 생성 (OCR 상태 추적용) */
-function getFileKey(file: File): string {
-  return `${file.name}_${file.size}_${file.lastModified}`
-}
-
-/** 입력 텍스트에서 특정 파일의 OCR 블록을 제거 */
-function removeOcrBlock(text: string, filename: string): string {
-  // [이미지 OCR: filename]\n...텍스트... 블록 제거 (다음 블록 또는 끝까지)
-  const escaped = filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const pattern = new RegExp(`\\n?\\n?\\[이미지 OCR: ${escaped}\\][\\s\\S]*?(?=\\n\\n\\[이미지 OCR:|$)`)
-  return text.replace(pattern, '').trim()
-}
+import { Send, Loader2, ChevronDown, FolderGit2, ImagePlus, FileText, X, CheckCircle2, AlertCircle } from 'lucide-react'
 
 export function ChatInput() {
   const [input, setInput] = useState('')
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [images, setImages] = useState<File[]>([])
+  const [mdFiles, setMdFiles] = useState<File[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
   const [ocrStatuses, setOcrStatuses] = useState<Record<string, 'processing' | 'done' | 'error'>>({})
+  const [mdReadStatuses, setMdReadStatuses] = useState<Record<string, 'reading' | 'done' | 'error'>>({})
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const mdFileInputRef = useRef<HTMLInputElement>(null)
 
   const isProcessing = useOrchestrationStore(s => s.isProcessing)
   const connected = useOrchestrationStore(s => s.connected)
@@ -43,6 +42,7 @@ export function ChatInput() {
   const setProjectFilter = useNavigationStore(s => s.setProjectFilter)
   const setPendingTaskInput = useNavigationStore(s => s.setPendingTaskInput)
   const setAttachedImages = useAgentsStore(s => s.setAttachedImages)
+  const setAttachedMdFiles = useAgentsStore(s => s.setAttachedMdFiles)
   const extractTextFromImage = useAgentsStore(s => s.extractTextFromImage)
 
   // Auto-resize textarea
@@ -91,6 +91,12 @@ export function ChatInput() {
       setImages([])
       setOcrStatuses({})
     }
+    // MD 파일이 있으면 agents store에 설정
+    if (mdFiles.length > 0) {
+      setAttachedMdFiles(mdFiles)
+      setMdFiles([])
+      setMdReadStatuses({})
+    }
     setPendingTaskInput(input.trim())
     setView('agents')
     setInput('')
@@ -133,6 +139,43 @@ export function ChatInput() {
     }
   }, [triggerOcr])
 
+  // MD file handling
+  const addMdFiles = useCallback((files: FileList | File[]) => {
+    const validMdFiles = Array.from(files).filter(isMdFile)
+    if (validMdFiles.length === 0) return
+
+    const accepted: File[] = []
+    for (const file of validMdFiles) {
+      const error = validateMdFile(file, mdFiles.length + accepted.length)
+      if (error) {
+        console.warn(error)
+        continue
+      }
+      accepted.push(file)
+    }
+    if (accepted.length === 0) return
+    setMdFiles(prev => [...prev, ...accepted].slice(0, MAX_MD_FILES))
+
+    for (const file of accepted) {
+      const fileKey = getFileKey(file)
+      setMdReadStatuses(prev => ({ ...prev, [fileKey]: 'reading' }))
+
+      readTextFile(file).then(content => {
+        setInput(prev => `${prev}${prev ? '\n\n' : ''}[문서: ${file.name}]\n${content}`)
+        setMdReadStatuses(prev => ({ ...prev, [fileKey]: 'done' }))
+      }).catch(() => {
+        setMdReadStatuses(prev => ({ ...prev, [fileKey]: 'error' }))
+      })
+    }
+  }, [mdFiles.length])
+
+  const handleMdFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      addMdFiles(e.target.files)
+    }
+    e.target.value = ''
+  }, [addMdFiles])
+
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const items = e.clipboardData.items
     const imageFiles: File[] = []
@@ -165,9 +208,13 @@ export function ChatInput() {
     e.stopPropagation()
     setIsDragOver(false)
     if (e.dataTransfer.files.length > 0) {
-      addImages(e.dataTransfer.files)
+      const files = Array.from(e.dataTransfer.files)
+      const imageFiles = files.filter(isImageFile)
+      const droppedMdFiles = files.filter(isMdFile)
+      if (imageFiles.length > 0) addImages(imageFiles)
+      if (droppedMdFiles.length > 0) addMdFiles(droppedMdFiles)
     }
-  }, [addImages])
+  }, [addImages, addMdFiles])
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -247,14 +294,17 @@ export function ChatInput() {
               <button
                 type="button"
                 onClick={() => {
-                  // 모든 이미지의 OCR 텍스트 제거
+                  // 모든 이미지의 OCR 텍스트 + MD 텍스트 제거
                   setInput(prev => {
                     let text = prev
                     for (const file of images) text = removeOcrBlock(text, file.name)
+                    for (const file of mdFiles) text = removeMdBlock(text, file.name)
                     return text
                   })
                   setImages([])
                   setOcrStatuses({})
+                  setMdFiles([])
+                  setMdReadStatuses({})
                 }}
                 className="text-[10px] text-gray-400 hover:text-red-400 self-end pb-1 transition-colors"
               >
@@ -263,11 +313,44 @@ export function ChatInput() {
             </div>
           )}
 
+          {/* MD File Previews */}
+          {mdFiles.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 px-1">
+              {mdFiles.map((file, idx) => {
+                const status = mdReadStatuses[getFileKey(file)]
+                return (
+                  <div
+                    key={`md-${file.name}-${idx}`}
+                    className="relative group flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-[11px]"
+                  >
+                    <FileText className="w-3 h-3 text-blue-500 flex-shrink-0" />
+                    <span className="text-gray-700 dark:text-gray-300 max-w-[100px] truncate">{file.name}</span>
+                    {status === 'reading' && <Loader2 className="w-2.5 h-2.5 text-blue-500 animate-spin" />}
+                    {status === 'done' && <CheckCircle2 className="w-2.5 h-2.5 text-green-500" />}
+                    {status === 'error' && <AlertCircle className="w-2.5 h-2.5 text-red-500" />}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const key = getFileKey(file)
+                        setMdReadStatuses(prev => { const { [key]: _, ...rest } = prev; return rest })
+                        setInput(prev => removeMdBlock(prev, file.name))
+                        setMdFiles(prev => prev.filter((_, i) => i !== idx))
+                      }}
+                      className="w-3.5 h-3.5 flex items-center justify-center rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="w-2 h-2" />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
           {/* Drag overlay */}
           {isDragOver && (
             <div className="flex items-center justify-center gap-2 py-2 text-sm text-primary-500 dark:text-primary-400">
               <ImagePlus className="w-4 h-4" />
-              이미지를 여기에 놓으세요
+              이미지 또는 MD 문서를 여기에 놓으세요
             </div>
           )}
 
@@ -385,7 +468,7 @@ export function ChatInput() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder="Describe the task you want to analyze... (이미지 붙여넣기 가능)"
+            placeholder="Describe the task you want to analyze... (이미지/MD 문서 첨부 가능)"
             rows={1}
             autoComplete="new-password"
             autoCorrect="off"
@@ -400,13 +483,21 @@ export function ChatInput() {
             )}
           />
 
-          {/* Hidden file input */}
+          {/* Hidden file inputs */}
           <input
             ref={fileInputRef}
             type="file"
             accept={ALLOWED_IMAGE_TYPES.join(',')}
             multiple
             onChange={handleFileSelect}
+            className="hidden"
+          />
+          <input
+            ref={mdFileInputRef}
+            type="file"
+            accept=".md,.markdown"
+            multiple
+            onChange={handleMdFileSelect}
             className="hidden"
           />
 
@@ -425,6 +516,21 @@ export function ChatInput() {
               title={images.length >= MAX_IMAGES ? `최대 ${MAX_IMAGES}개` : '이미지 첨부'}
             >
               <ImagePlus className="w-5 h-5" />
+            </button>
+            {/* MD attach button */}
+            <button
+              type="button"
+              onClick={() => mdFileInputRef.current?.click()}
+              disabled={mdFiles.length >= MAX_MD_FILES}
+              className={cn(
+                'p-2 rounded-lg transition-colors',
+                mdFiles.length >= MAX_MD_FILES
+                  ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                  : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+              )}
+              title={mdFiles.length >= MAX_MD_FILES ? `최대 ${MAX_MD_FILES}개` : 'MD 문서 첨부'}
+            >
+              <FileText className="w-5 h-5" />
             </button>
             <button
               type="button"
@@ -452,9 +558,12 @@ export function ChatInput() {
           <span className="text-xs text-gray-400 dark:text-gray-500">
             Press <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 font-mono text-[10px]">Enter</kbd> to analyze, <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 font-mono text-[10px]">Shift+Enter</kbd> for new line, <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 font-mono text-[10px]">Ctrl+V</kbd> to paste images
           </span>
-          {images.length > 0 && (
+          {(images.length > 0 || mdFiles.length > 0) && (
             <span className="text-xs text-primary-500 dark:text-primary-400">
-              {images.length}개 이미지 첨부됨
+              {images.length > 0 && `${images.length}개 이미지`}
+              {images.length > 0 && mdFiles.length > 0 && ', '}
+              {mdFiles.length > 0 && `${mdFiles.length}개 문서`}
+              {' '}첨부됨
             </span>
           )}
         </div>

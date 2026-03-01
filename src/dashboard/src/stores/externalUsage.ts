@@ -107,6 +107,7 @@ export const useExternalUsageStore = create<ExternalUsageStore>((set, get) => ({
       const body = provider ? { provider } : {}
       const resp = await authFetch(`${API_BASE}/external-usage/sync`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)

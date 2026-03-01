@@ -18,9 +18,8 @@ vi.mock('../components/ProcessMonitorWidget', () => ({
 }))
 
 // Store mocks
-let mockTasks: Record<string, { status: string; isDeleted?: boolean }> = {}
 let mockAgents: Record<string, { status: string }> = {}
-let mockSessions: Array<{ session_id: string; status: string; last_activity: string; project_name?: string; summary?: string; slug?: string }> = []
+let mockSessions: Array<{ session_id: string; status: string; last_activity: string; project_name?: string; summary?: string; slug?: string; message_count?: number }> = []
 let mockIsLoadingSessions = false
 const mockFetchSessions = vi.fn()
 const mockSelectSession = vi.fn()
@@ -28,7 +27,7 @@ const mockSetView = vi.fn()
 
 vi.mock('../stores/orchestration', () => ({
   useOrchestrationStore: (selector: (s: Record<string, unknown>) => unknown) =>
-    selector({ tasks: mockTasks, agents: mockAgents }),
+    selector({ agents: mockAgents }),
 }))
 
 vi.mock('../stores/claudeSessions', () => ({
@@ -49,7 +48,6 @@ vi.mock('../stores/navigation', () => ({
 describe('DashboardPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockTasks = {}
     mockAgents = {}
     mockSessions = []
     mockIsLoadingSessions = false
@@ -57,23 +55,22 @@ describe('DashboardPage', () => {
 
   it('renders stats cards', () => {
     render(<DashboardPage />)
-    expect(screen.getByText('Total Tasks')).toBeInTheDocument()
-    expect(screen.getByText('In Progress')).toBeInTheDocument()
-    expect(screen.getByText('Completed')).toBeInTheDocument()
-    expect(screen.getByText('Failed')).toBeInTheDocument()
+    expect(screen.getByText('Total Sessions')).toBeInTheDocument()
+    expect(screen.getByText('Active Sessions')).toBeInTheDocument()
+    expect(screen.getByText('Projects')).toBeInTheDocument()
+    expect(screen.getByText('Messages')).toBeInTheDocument()
   })
 
-  it('displays correct task counts', () => {
-    mockTasks = {
-      t1: { status: 'completed' },
-      t2: { status: 'in_progress' },
-      t3: { status: 'failed' },
-      t4: { status: 'pending' },
-      t5: { status: 'completed', isDeleted: true }, // should be excluded
-    }
+  it('displays correct session stats', () => {
+    mockSessions = [
+      { session_id: 's1', status: 'active', last_activity: new Date().toISOString(), project_name: 'ProjectA', message_count: 10 },
+      { session_id: 's2', status: 'done', last_activity: new Date().toISOString(), project_name: 'ProjectB', message_count: 5 },
+      { session_id: 's3', status: 'active', last_activity: new Date().toISOString(), project_name: 'ProjectA', message_count: 3 },
+    ]
     render(<DashboardPage />)
-    // Total should be 4 (excluding deleted)
-    expect(screen.getByText('4')).toBeInTheDocument()
+    // Total sessions: 3, Active: 2, Projects: 2, Messages: 18
+    expect(screen.getByText('3')).toBeInTheDocument()
+    expect(screen.getByText('2', { selector: '.text-green-600, .dark\\:text-green-400' }) || screen.getAllByText('2').length > 0).toBeTruthy()
   })
 
   it('renders agent status section', () => {

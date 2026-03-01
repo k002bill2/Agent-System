@@ -19,6 +19,11 @@ export interface LLMCredentialCreate {
   api_key: string
 }
 
+export interface LLMCredentialUpdate {
+  key_name?: string
+  api_key?: string
+}
+
 export interface VerifyResult {
   is_valid: boolean
   provider: string
@@ -33,6 +38,7 @@ interface LLMCredentialStore {
 
   fetchCredentials: () => Promise<void>
   addCredential: (data: LLMCredentialCreate) => Promise<LLMCredential | null>
+  updateCredential: (id: string, data: LLMCredentialUpdate) => Promise<LLMCredential | null>
   removeCredential: (id: string) => Promise<boolean>
   verifyCredential: (id: string) => Promise<VerifyResult | null>
 }
@@ -69,6 +75,29 @@ export const useLLMCredentialStore = create<LLMCredentialStore>((set) => ({
       const cred: LLMCredential = await resp.json()
       set(s => ({ credentials: [cred, ...s.credentials] }))
       return cred
+    } catch (err) {
+      set({ error: (err as Error).message })
+      return null
+    }
+  },
+
+  updateCredential: async (id: string, data: LLMCredentialUpdate) => {
+    try {
+      const resp = await authFetch(`${API_BASE}/users/me/llm-credentials/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (!resp.ok) {
+        const errJson = await resp.json().catch(() => ({}))
+        set({ error: (errJson as { detail?: string }).detail || 'Failed to update credential' })
+        return null
+      }
+      const updated: LLMCredential = await resp.json()
+      set(s => ({
+        credentials: s.credentials.map(c => (c.id === id ? updated : c)),
+      }))
+      return updated
     } catch (err) {
       set({ error: (err as Error).message })
       return null

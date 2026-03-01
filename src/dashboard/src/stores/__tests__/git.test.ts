@@ -134,6 +134,8 @@ describe('git store', () => {
     it('sets error on failure', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
+        status: 404,
+        headers: { get: () => 'application/json' },
         json: () => Promise.resolve({ detail: 'Not found' }),
       })
 
@@ -212,6 +214,8 @@ describe('git store', () => {
     it('returns false on failure', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
+        status: 500,
+        headers: { get: () => 'application/json' },
         json: () => Promise.resolve({ detail: 'Stage error' }),
       })
 
@@ -802,6 +806,8 @@ describe('git store', () => {
     it('fetchRemote handles failure', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
+        status: 404,
+        headers: { get: () => 'application/json' },
         json: () => Promise.resolve({ detail: 'Remote not found' }),
       })
 

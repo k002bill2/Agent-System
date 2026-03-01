@@ -106,8 +106,18 @@ export function GitPage() {
     workingStatus,
     fetchWorkingStatus,
     stageFiles,
+    unstageFiles,
     commitChanges,
     commitAndPush,
+    // Staging Area Enhancement
+    fetchFileDiff,
+    fileDiffs,
+    isLoadingDiff,
+    fetchStagedDiff,
+    stagedDiff,
+    fetchFileHunks,
+    stageHunks,
+    fileHunks,
     // Draft Commits (LLM-based)
     draftCommits,
     isGeneratingDrafts,
@@ -344,8 +354,21 @@ export function GitPage() {
                 onRefresh={() => fetchWorkingStatus(selectedProjectId)}
                 onStageFiles={(paths) => stageFiles(selectedProjectId, paths)}
                 onStageAll={() => stageFiles(selectedProjectId, [], true)}
+                onUnstageFiles={(paths) => unstageFiles(selectedProjectId, paths)}
+                onUnstageAll={() => unstageFiles(selectedProjectId, [], true)}
                 onCommit={(message) => commitChanges(selectedProjectId, message)}
                 onCommitAndPush={(message) => commitAndPush(selectedProjectId, message)}
+                // Diff preview
+                onFetchFileDiff={(path, staged) => fetchFileDiff(selectedProjectId, path, staged)}
+                fileDiffs={fileDiffs}
+                isLoadingDiff={isLoadingDiff}
+                // Staged diff review
+                onFetchStagedDiff={() => fetchStagedDiff(selectedProjectId)}
+                stagedDiff={stagedDiff}
+                // Hunk staging
+                onFetchFileHunks={(path, staged) => fetchFileHunks(selectedProjectId, path, staged)}
+                onStageHunks={(path, indices) => stageHunks(selectedProjectId, path, indices)}
+                fileHunks={fileHunks}
                 // LLM Draft Commits
                 draftCommits={draftCommits}
                 isGeneratingDrafts={isGeneratingDrafts}

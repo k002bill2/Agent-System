@@ -3,7 +3,7 @@
  * Interactive environment for testing agents
  */
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import {
   Settings,
   Trash2,
@@ -26,8 +26,18 @@ import {
   ChevronDown,
   ChevronUp,
   FileText,
+  AlertCircle,
+  CheckCircle2,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
+import {
+  MAX_MD_FILES,
+  getFileKey,
+  removeMdBlock,
+  isMdFile,
+  readTextFile,
+  validateMdFile,
+} from '../lib/fileAttachment'
 import { TaskEvaluationCard } from '../components/feedback/TaskEvaluationCard'
 import { useAuthStore, authFetch } from '../stores/auth'
 import { useNavigationStore } from '../stores/navigation'
@@ -254,6 +264,12 @@ export function PlaygroundPage() {
   const [newSessionModel, setNewSessionModel] = useState<string | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const mdFileInputRef = useRef<HTMLInputElement>(null)
+
+  // MD file state
+  const [mdFiles, setMdFiles] = useState<File[]>([])
+  const [mdReadStatuses, setMdReadStatuses] = useState<Record<string, 'reading' | 'done' | 'error'>>({})
+  const [isDragOver, setIsDragOver] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -362,6 +378,8 @@ export function PlaygroundPage() {
       const updated = updatedSessions.find((s) => s.id === currentSession.id)
       if (updated) setCurrentSession(updated)
       setPrompt('')
+      setMdFiles([])
+      setMdReadStatuses({})
     } catch (e) {
       console.error(e)
     } finally {
@@ -405,6 +423,74 @@ export function PlaygroundPage() {
     setCopiedId(id)
     setTimeout(() => setCopiedId(null), 2000)
   }
+
+  // MD file handlers
+  const addMdFiles = useCallback((files: FileList | File[]) => {
+    const validMdFiles = Array.from(files).filter(isMdFile)
+    if (validMdFiles.length === 0) return
+
+    const accepted: File[] = []
+    for (const file of validMdFiles) {
+      const error = validateMdFile(file, mdFiles.length + accepted.length)
+      if (error) {
+        console.warn(error)
+        continue
+      }
+      accepted.push(file)
+    }
+    if (accepted.length === 0) return
+    setMdFiles(prev => [...prev, ...accepted].slice(0, MAX_MD_FILES))
+
+    for (const file of accepted) {
+      const fileKey = getFileKey(file)
+      setMdReadStatuses(prev => ({ ...prev, [fileKey]: 'reading' }))
+
+      readTextFile(file).then(content => {
+        setPrompt(prev => `${prev}${prev ? '\n\n' : ''}[문서: ${file.name}]\n${content}`)
+        setMdReadStatuses(prev => ({ ...prev, [fileKey]: 'done' }))
+      }).catch(() => {
+        setMdReadStatuses(prev => ({ ...prev, [fileKey]: 'error' }))
+      })
+    }
+  }, [mdFiles.length])
+
+  const handleMdFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      addMdFiles(e.target.files)
+    }
+    e.target.value = ''
+  }, [addMdFiles])
+
+  const handleRemoveMdFile = useCallback((idx: number) => {
+    const file = mdFiles[idx]
+    if (file) {
+      const key = getFileKey(file)
+      setMdReadStatuses(prev => { const { [key]: _, ...rest } = prev; return rest })
+      setPrompt(prev => removeMdBlock(prev, file.name))
+    }
+    setMdFiles(prev => prev.filter((_, i) => i !== idx))
+  }, [mdFiles])
+
+  const handlePlaygroundDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(true)
+  }, [])
+
+  const handlePlaygroundDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+  }, [])
+
+  const handlePlaygroundDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+    if (e.dataTransfer.files.length > 0) {
+      addMdFiles(e.dataTransfer.files)
+    }
+  }, [addMdFiles])
 
   if (loading) {
     return (
@@ -550,7 +636,61 @@ export function PlaygroundPage() {
               </div>
 
               {/* Input */}
-              <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+              <div
+                className={cn(
+                  'p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 transition-colors',
+                  isDragOver && 'bg-blue-50/50 dark:bg-blue-900/10 border-blue-300 dark:border-blue-700'
+                )}
+                onDragOver={handlePlaygroundDragOver}
+                onDragLeave={handlePlaygroundDragLeave}
+                onDrop={handlePlaygroundDrop}
+              >
+                {/* MD File Previews */}
+                {mdFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {mdFiles.map((file, idx) => {
+                      const status = mdReadStatuses[getFileKey(file)]
+                      return (
+                        <div
+                          key={`md-${file.name}-${idx}`}
+                          className="relative group flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-xs"
+                        >
+                          <FileText className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                          <span className="text-gray-700 dark:text-gray-300 max-w-[120px] truncate">{file.name}</span>
+                          {status === 'reading' && <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />}
+                          {status === 'done' && <CheckCircle2 className="w-3 h-3 text-green-500" />}
+                          {status === 'error' && <AlertCircle className="w-3 h-3 text-red-500" />}
+                          <button
+                            onClick={() => handleRemoveMdFile(idx)}
+                            className="w-4 h-4 flex items-center justify-center rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="문서 제거"
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Drag overlay */}
+                {isDragOver && (
+                  <div className="flex items-center justify-center gap-2 py-2 mb-2 border-2 border-dashed border-blue-400 dark:border-blue-600 rounded-lg text-sm text-blue-500 dark:text-blue-400">
+                    <FileText className="w-4 h-4" />
+                    MD 문서를 여기에 놓으세요
+                  </div>
+                )}
+
+                {/* Hidden MD file input */}
+                <input
+                  ref={mdFileInputRef}
+                  type="file"
+                  accept=".md,.markdown"
+                  multiple
+                  onChange={handleMdFileSelect}
+                  className="hidden"
+                />
+
                 <div className="flex gap-2">
                   <textarea
                     value={prompt}
@@ -561,22 +701,37 @@ export function PlaygroundPage() {
                         handleExecute()
                       }
                     }}
-                    placeholder="Enter your prompt..."
+                    placeholder="Enter your prompt... (MD 문서를 드래그하거나 첨부하세요)"
                     rows={3}
                     className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
                     disabled={executing}
                   />
-                  <button
-                    onClick={handleExecute}
-                    disabled={executing || !prompt.trim()}
-                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {executing ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <Send className="w-5 h-5" />
-                    )}
-                  </button>
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={() => mdFileInputRef.current?.click()}
+                      disabled={mdFiles.length >= MAX_MD_FILES || executing}
+                      className={cn(
+                        'p-3 rounded-lg transition-colors',
+                        mdFiles.length >= MAX_MD_FILES || executing
+                          ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                          : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      )}
+                      title={mdFiles.length >= MAX_MD_FILES ? `최대 ${MAX_MD_FILES}개` : 'MD 문서 첨부'}
+                    >
+                      <FileText className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={handleExecute}
+                      disabled={executing || !prompt.trim()}
+                      className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      {executing ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <Send className="w-5 h-5" />
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

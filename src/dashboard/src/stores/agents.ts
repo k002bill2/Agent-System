@@ -125,6 +125,10 @@ interface AgentsState {
   // OCR state (key = `${file.name}_${file.size}_${file.lastModified}`)
   ocrStatuses: Record<string, 'processing' | 'done' | 'error'>
 
+  // MD file state
+  attachedMdFiles: File[]
+  mdReadStatuses: Record<string, 'reading' | 'done' | 'error'>
+
   // Actions
   fetchAgents: (category?: AgentCategory, availableOnly?: boolean) => Promise<void>
   fetchStats: () => Promise<void>
@@ -143,6 +147,14 @@ interface AgentsState {
   setOcrStatus: (fileKey: string, status: 'processing' | 'done' | 'error') => void
   removeOcrStatus: (fileKey: string) => void
   clearOcrStatuses: () => void
+
+  // MD File Actions
+  setAttachedMdFiles: (files: File[]) => void
+  addAttachedMdFiles: (files: File[]) => void
+  removeAttachedMdFile: (index: number) => void
+  clearAttachedMdFiles: () => void
+  setMdReadStatus: (fileKey: string, status: 'reading' | 'done' | 'error') => void
+  removeMdReadStatus: (fileKey: string) => void
 
   // Execution Actions
   executeAnalysis: (analysisId: string, projectId?: string | null) => Promise<string | null>
@@ -171,9 +183,34 @@ function buildClaudePrompt(analysis: TaskAnalysisResult['analysis'], taskInput: 
     '',
   ]
 
+  // Safety Warnings 섹션
+  const safetyFlags = (analysis?.analysis as Record<string, unknown>)?.safety_flags as string[] | undefined
+  if (safetyFlags && safetyFlags.length > 0) {
+    lines.push('## Safety Warnings')
+    for (const flag of safetyFlags) {
+      lines.push(`- ⚠️ ${flag}`)
+    }
+    lines.push('')
+  }
+
   const executionPlan = analysis?.execution_plan
   const subtasks = executionPlan?.subtasks || {}
   const parallelGroups = executionPlan?.parallel_groups || []
+
+  // 전체 분석에서 subtask별 task_boundaries 추출
+  const analysisSubtasks = (analysis?.analysis as Record<string, unknown>)?.subtasks as Array<Record<string, unknown>> | undefined
+
+  // subtask id → task_boundaries 매핑 구축
+  const boundariesMap: Record<string, Record<string, string[]>> = {}
+  if (analysisSubtasks) {
+    for (const st of analysisSubtasks) {
+      const stId = st.id as string | undefined
+      const boundaries = st.task_boundaries as Record<string, string[]> | null | undefined
+      if (stId && boundaries) {
+        boundariesMap[stId] = boundaries
+      }
+    }
+  }
 
   if (parallelGroups.length > 0) {
     lines.push('## Subtasks (순서대로 실행)')
@@ -204,6 +241,20 @@ function buildClaudePrompt(analysis: TaskAnalysisResult['analysis'], taskInput: 
         if (deps.length > 0) {
           lines.push(`  - depends on: ${deps.join(', ')}`)
         }
+
+        // Task Boundaries 렌더링
+        const boundaries = boundariesMap[taskId]
+        if (boundaries) {
+          if (boundaries.do_not?.length) {
+            lines.push(`  - **DO NOT**: ${boundaries.do_not.join('; ')}`)
+          }
+          if (boundaries.wait_for?.length) {
+            lines.push(`  - **WAIT FOR**: ${boundaries.wait_for.join('; ')}`)
+          }
+          if (boundaries.stop_if?.length) {
+            lines.push(`  - **STOP IF**: ${boundaries.stop_if.join('; ')}`)
+          }
+        }
       }
 
       lines.push('')
@@ -213,9 +264,11 @@ function buildClaudePrompt(analysis: TaskAnalysisResult['analysis'], taskInput: 
   lines.push(
     '## Instructions',
     '- 위 순서대로 서브태스크를 실행하세요',
+    '- 각 서브태스크의 task boundaries(DO NOT/WAIT FOR/STOP IF)를 반드시 준수하세요',
     '- 각 서브태스크 완료 후 결과를 검증하세요',
     '- 가능한 경우 Claude Code 에이전트와 스킬을 활용하세요',
     '- 에러 발생 시 근본 원인을 분석하고 수정하세요',
+    '- 모든 변경 후 `tsc --noEmit` (프론트엔드) / `pytest --tb=short` (백엔드) 실행으로 검증하세요',
   )
 
   return lines.join('\n')
@@ -245,6 +298,10 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
   // Image state
   attachedImages: [],
   ocrStatuses: {},
+
+  // MD file state
+  attachedMdFiles: [],
+  mdReadStatuses: {},
 
   // UI state
   isLoading: false,
@@ -367,7 +424,7 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
       }
 
       const result: TaskAnalysisResult = await response.json()
-      set({ lastAnalysis: result, isLoading: false, attachedImages: [], ocrStatuses: {} })
+      set({ lastAnalysis: result, isLoading: false, attachedImages: [], ocrStatuses: {}, attachedMdFiles: [], mdReadStatuses: {} })
 
       // Refresh history after successful analysis
       const projectId = context?.project_id as string | undefined
@@ -417,6 +474,39 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
 
   clearAttachedImages: () => {
     set({ attachedImages: [], ocrStatuses: {} })
+  },
+
+  // MD File Actions
+  setAttachedMdFiles: (files: File[]) => {
+    set({ attachedMdFiles: files })
+  },
+
+  addAttachedMdFiles: (files: File[]) => {
+    const current = get().attachedMdFiles
+    const combined = [...current, ...files].slice(0, 3)
+    set({ attachedMdFiles: combined })
+  },
+
+  removeAttachedMdFile: (index: number) => {
+    const current = get().attachedMdFiles
+    set({ attachedMdFiles: current.filter((_, i) => i !== index) })
+  },
+
+  clearAttachedMdFiles: () => {
+    set({ attachedMdFiles: [], mdReadStatuses: {} })
+  },
+
+  setMdReadStatus: (fileKey: string, status: 'reading' | 'done' | 'error') => {
+    set((state) => ({
+      mdReadStatuses: { ...state.mdReadStatuses, [fileKey]: status },
+    }))
+  },
+
+  removeMdReadStatus: (fileKey: string) => {
+    set((state) => {
+      const { [fileKey]: _, ...rest } = state.mdReadStatuses
+      return { mdReadStatuses: rest }
+    })
   },
 
   // OCR Actions

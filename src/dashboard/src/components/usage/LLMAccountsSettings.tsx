@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
 import {
   AlertCircle,
+  Check,
   CheckCircle,
   Eye,
   EyeOff,
   Key,
   Loader2,
+  Pencil,
   Plus,
   Trash2,
+  X,
   XCircle,
 } from 'lucide-react'
 import {
@@ -91,19 +94,23 @@ function CredentialRow({
   const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null)
   const [isVerifying, setIsVerifying] = useState(false)
   const [isRemoving, setIsRemoving] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editKeyName, setEditKeyName] = useState(cred.key_name)
+  const [editApiKey, setEditApiKey] = useState('')
+  const [showEditKey, setShowEditKey] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
 
   const handleVerify = async () => {
     setIsVerifying(true)
     setVerifyResult(null)
     await onVerify(cred.id)
-    // result comes back via store; we set it from the parent callback
     setIsVerifying(false)
   }
 
   const handleVerifyWithResult = async () => {
     setIsVerifying(true)
     setVerifyResult(null)
-    // We call the store directly here for the result
     const store = useLLMCredentialStore.getState()
     const result = await store.verifyCredential(cred.id)
     setVerifyResult(result)
@@ -115,7 +122,125 @@ function CredentialRow({
     onRemove(cred.id)
   }
 
+  const handleStartEdit = () => {
+    setEditKeyName(cred.key_name)
+    setEditApiKey('')
+    setShowEditKey(false)
+    setEditError(null)
+    setIsEditing(true)
+  }
+
+  const handleCancelEdit = () => {
+    setIsEditing(false)
+    setEditError(null)
+  }
+
+  const handleSaveEdit = async () => {
+    const trimmedName = editKeyName.trim()
+    const trimmedKey = editApiKey.trim()
+
+    if (!trimmedName) {
+      setEditError('Key name is required')
+      return
+    }
+
+    // Build update payload – only include changed fields
+    const payload: { key_name?: string; api_key?: string } = {}
+    if (trimmedName !== cred.key_name) payload.key_name = trimmedName
+    if (trimmedKey) payload.api_key = trimmedKey
+
+    if (Object.keys(payload).length === 0) {
+      setIsEditing(false)
+      return
+    }
+
+    setEditError(null)
+    setIsSaving(true)
+    const store = useLLMCredentialStore.getState()
+    const result = await store.updateCredential(cred.id, payload)
+    setIsSaving(false)
+    if (result) {
+      setIsEditing(false)
+    } else {
+      setEditError(store.error ?? 'Failed to update')
+    }
+  }
+
   void handleVerify
+
+  if (isEditing) {
+    return (
+      <div className="py-3 px-4 border-b border-gray-100 dark:border-gray-700/50 last:border-0 bg-gray-50 dark:bg-gray-900/30">
+        <div className="flex items-center gap-2 mb-2">
+          <Key className="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" />
+          <ProviderBadge provider={cred.provider} />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+              Key Name
+            </label>
+            <input
+              type="text"
+              value={editKeyName}
+              onChange={e => setEditKeyName(e.target.value)}
+              className="w-full px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+              New API Key <span className="text-gray-400">(leave empty to keep current)</span>
+            </label>
+            <div className="relative">
+              <input
+                type={showEditKey ? 'text' : 'password'}
+                placeholder={cred.api_key_masked}
+                value={editApiKey}
+                onChange={e => setEditApiKey(e.target.value)}
+                className="w-full px-2.5 py-1.5 pr-8 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowEditKey(v => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                tabIndex={-1}
+              >
+                {showEditKey ? (
+                  <EyeOff className="w-3.5 h-3.5" />
+                ) : (
+                  <Eye className="w-3.5 h-3.5" />
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+        {editError && (
+          <div className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400 mb-2">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+            {editError}
+          </div>
+        )}
+        <div className="flex items-center gap-2 justify-end">
+          <button
+            onClick={handleCancelEdit}
+            disabled={isSaving}
+            className="flex items-center gap-1 px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
+          >
+            <X className="w-3 h-3" />
+            Cancel
+          </button>
+          <button
+            onClick={handleSaveEdit}
+            disabled={isSaving}
+            className="flex items-center gap-1 px-2.5 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+            Save
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex items-center gap-3 py-3 px-4 border-b border-gray-100 dark:border-gray-700/50 last:border-0">
@@ -142,6 +267,14 @@ function CredentialRow({
 
       <div className="flex items-center gap-2 flex-shrink-0">
         <VerifyStatus result={verifyResult} isVerifying={isVerifying} />
+        <button
+          onClick={handleStartEdit}
+          disabled={isVerifying || isRemoving}
+          className="p-1.5 text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/20"
+          title="Edit key"
+        >
+          <Pencil className="w-4 h-4" />
+        </button>
         <button
           onClick={handleVerifyWithResult}
           disabled={isVerifying || isRemoving}

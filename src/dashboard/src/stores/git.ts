@@ -236,6 +236,23 @@ export interface CommitFile {
   old_path: string | null
 }
 
+// Staging Area Enhancement Types
+export interface FileDiffResponse {
+  file_path: string
+  diff: string
+  staged: boolean
+}
+
+export interface DiffHunk {
+  index: number
+  header: string
+  content: string
+  old_start: number
+  old_count: number
+  new_start: number
+  new_count: number
+}
+
 export interface GitRemote {
   name: string
   url: string
@@ -304,6 +321,12 @@ interface GitState {
   // Branch Protection
   branchProtectionRules: BranchProtectionRule[]
 
+  // Staging Area Enhancement
+  fileDiffs: Record<string, string>  // path -> diff content
+  isLoadingDiff: boolean
+  stagedDiff: string | null
+  fileHunks: Record<string, DiffHunk[]>  // path -> hunks
+
   // Commit Detail
   commitFiles: Record<string, CommitFile[]>  // sha -> files
   commitDiff: Record<string, string>  // sha -> diff or sha:path -> diff
@@ -321,8 +344,16 @@ interface GitState {
   // Actions - Working Directory
   fetchWorkingStatus: (projectId: string) => Promise<GitWorkingStatus | null>
   stageFiles: (projectId: string, paths?: string[], all?: boolean) => Promise<boolean>
+  unstageFiles: (projectId: string, paths?: string[], all?: boolean) => Promise<boolean>
   commitChanges: (projectId: string, message: string, authorName?: string, authorEmail?: string) => Promise<boolean>
   commitAndPush: (projectId: string, message: string, authorName?: string, authorEmail?: string) => Promise<boolean>
+
+  // Actions - Staging Area Enhancement
+  fetchFileDiff: (projectId: string, filePath: string, staged?: boolean) => Promise<string>
+  clearFileDiffs: () => void
+  fetchStagedDiff: (projectId: string) => Promise<string | null>
+  fetchFileHunks: (projectId: string, filePath: string, staged?: boolean) => Promise<DiffHunk[]>
+  stageHunks: (projectId: string, filePath: string, hunkIndices: number[]) => Promise<boolean>
 
   // Actions - Draft Commits (LLM-based)
   generateDraftCommits: (projectId: string, stagedOnly?: boolean) => Promise<DraftCommit[]>
@@ -413,6 +444,20 @@ function extractErrorMessage(detail: unknown, fallback: string): string {
   return fallback
 }
 
+async function parseErrorResponse(response: Response, fallback: string): Promise<string> {
+  try {
+    const contentType = response.headers.get('content-type') || ''
+    if (contentType.includes('application/json')) {
+      const data = await response.json()
+      return extractErrorMessage(data.detail, fallback)
+    }
+    const text = await response.text()
+    return text || fallback
+  } catch {
+    return `${fallback} (HTTP ${response.status})`
+  }
+}
+
 // =============================================================================
 // Store
 // =============================================================================
@@ -460,6 +505,12 @@ export const useGitStore = create<GitState>((set, get) => ({
   // Branch Protection
   branchProtectionRules: [],
 
+  // Staging Area Enhancement
+  fileDiffs: {},
+  isLoadingDiff: false,
+  stagedDiff: null,
+  fileHunks: {},
+
   // Commit Detail
   commitFiles: {},
   commitDiff: {},
@@ -476,8 +527,7 @@ export const useGitStore = create<GitState>((set, get) => ({
     try {
       const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/status`)
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch git status'))
+        throw new Error(await parseErrorResponse(response, 'Failed to fetch git status'))
       }
       const status = await response.json()
       set({ gitStatus: status, isLoading: false })
@@ -497,8 +547,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         body: JSON.stringify({ git_path: gitPath }),
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to update git path'))
+        throw new Error(await parseErrorResponse(response, 'Failed to update git path'))
       }
       const status = await response.json()
       set({ gitStatus: status, isLoading: false })
@@ -515,8 +564,7 @@ export const useGitStore = create<GitState>((set, get) => ({
     try {
       const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/working-status`)
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch working status'))
+        throw new Error(await parseErrorResponse(response, 'Failed to fetch working status'))
       }
       const status = await response.json()
       set({ workingStatus: status, isLoading: false })
@@ -536,8 +584,27 @@ export const useGitStore = create<GitState>((set, get) => ({
         body: JSON.stringify({ paths, all }),
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to stage files'))
+        throw new Error(await parseErrorResponse(response, 'Failed to stage files'))
+      }
+      await get().fetchWorkingStatus(projectId)
+      set({ isLoading: false })
+      return true
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return false
+    }
+  },
+
+  unstageFiles: async (projectId, paths = [], all = false) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/unstage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paths, all }),
+      })
+      if (!response.ok) {
+        throw new Error(await parseErrorResponse(response, 'Failed to unstage files'))
       }
       await get().fetchWorkingStatus(projectId)
       set({ isLoading: false })
@@ -561,8 +628,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         }),
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to create commit'))
+        throw new Error(await parseErrorResponse(response, 'Failed to create commit'))
       }
       await get().fetchWorkingStatus(projectId)
       await get().fetchCommits(projectId)
@@ -599,6 +665,82 @@ export const useGitStore = create<GitState>((set, get) => ({
     }
   },
 
+  // Staging Area Enhancement Actions
+  fetchFileDiff: async (projectId, filePath, staged = false) => {
+    set({ isLoadingDiff: true })
+    try {
+      const params = new URLSearchParams({ file_path: filePath, staged: String(staged) })
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/file-diff?${params}`)
+      if (!response.ok) {
+        throw new Error(await parseErrorResponse(response, 'Failed to fetch file diff'))
+      }
+      const data = await response.json()
+      set((state) => ({
+        fileDiffs: { ...state.fileDiffs, [`${filePath}:${staged}`]: data.diff },
+        isLoadingDiff: false,
+      }))
+      return data.diff as string
+    } catch (error) {
+      set({ isLoadingDiff: false, error: (error as Error).message })
+      return ''
+    }
+  },
+
+  clearFileDiffs: () => set({ fileDiffs: {}, stagedDiff: null, fileHunks: {} }),
+
+  fetchStagedDiff: async (projectId) => {
+    try {
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/staged-diff`)
+      if (!response.ok) {
+        throw new Error(await parseErrorResponse(response, 'Failed to fetch staged diff'))
+      }
+      const data = await response.json()
+      set({ stagedDiff: data.diff })
+      return data.diff as string | null
+    } catch (error) {
+      set({ error: (error as Error).message })
+      return null
+    }
+  },
+
+  fetchFileHunks: async (projectId, filePath, staged = false) => {
+    try {
+      const params = new URLSearchParams({ file_path: filePath, staged: String(staged) })
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/file-hunks?${params}`)
+      if (!response.ok) {
+        throw new Error(await parseErrorResponse(response, 'Failed to fetch file hunks'))
+      }
+      const data = await response.json()
+      set((state) => ({
+        fileHunks: { ...state.fileHunks, [filePath]: data.hunks },
+      }))
+      return data.hunks
+    } catch (error) {
+      set({ error: (error as Error).message })
+      return []
+    }
+  },
+
+  stageHunks: async (projectId, filePath, hunkIndices) => {
+    set({ isLoading: true, error: null })
+    try {
+      const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/stage-hunks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_path: filePath, hunk_indices: hunkIndices }),
+      })
+      if (!response.ok) {
+        throw new Error(await parseErrorResponse(response, 'Failed to stage hunks'))
+      }
+      await get().fetchWorkingStatus(projectId)
+      set({ isLoading: false })
+      return true
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return false
+    }
+  },
+
   // Draft Commits Actions (LLM-based)
   generateDraftCommits: async (projectId, stagedOnly = false) => {
     set({ isGeneratingDrafts: true, error: null })
@@ -609,8 +751,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         body: JSON.stringify({ staged_only: stagedOnly }),
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to generate draft commits'))
+        throw new Error(await parseErrorResponse(response, 'Failed to generate draft commits'))
       }
       const data: DraftCommitsResponse = await response.json()
       set({ draftCommits: data.drafts, isGeneratingDrafts: false })
@@ -629,8 +770,7 @@ export const useGitStore = create<GitState>((set, get) => ({
     try {
       const response = await fetch(`${API_BASE}/api/git/repositories`)
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch repositories'))
+        throw new Error(await parseErrorResponse(response, 'Failed to fetch repositories'))
       }
       const data = await response.json()
       set({ repositories: data.repositories, isLoading: false })
@@ -648,8 +788,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         body: JSON.stringify({ name, path, description }),
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to create repository'))
+        throw new Error(await parseErrorResponse(response, 'Failed to create repository'))
       }
       const repo = await response.json()
       await get().fetchRepositories()
@@ -670,8 +809,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         body: JSON.stringify(updates),
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to update repository'))
+        throw new Error(await parseErrorResponse(response, 'Failed to update repository'))
       }
       await get().fetchRepositories()
       set({ isLoading: false })
@@ -689,8 +827,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         method: 'DELETE',
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to delete repository'))
+        throw new Error(await parseErrorResponse(response, 'Failed to delete repository'))
       }
       await get().fetchRepositories()
       set({ isLoading: false })
@@ -707,8 +844,7 @@ export const useGitStore = create<GitState>((set, get) => ({
     try {
       const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/branches`)
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch branches'))
+        throw new Error(await parseErrorResponse(response, 'Failed to fetch branches'))
       }
       const data = await response.json()
       set({
@@ -731,8 +867,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         body: JSON.stringify({ name, start_point: startPoint }),
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to create branch'))
+        throw new Error(await parseErrorResponse(response, 'Failed to create branch'))
       }
       await get().fetchBranches(projectId)
       set({ isLoading: false })
@@ -752,8 +887,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         { method: 'POST' }
       )
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to checkout branch'))
+        throw new Error(await parseErrorResponse(response, 'Failed to checkout branch'))
       }
       await get().fetchBranches(projectId)
       set({ isLoading: false })
@@ -773,8 +907,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         { method: 'DELETE' }
       )
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to delete branch'))
+        throw new Error(await parseErrorResponse(response, 'Failed to delete branch'))
       }
       await get().fetchBranches(projectId)
       set({ isLoading: false })
@@ -795,8 +928,7 @@ export const useGitStore = create<GitState>((set, get) => ({
 
       const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/commits?${params}`)
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch commits'))
+        throw new Error(await parseErrorResponse(response, 'Failed to fetch commits'))
       }
       const data = await response.json()
       set({ commits: data.commits, isLoading: false })
@@ -813,8 +945,7 @@ export const useGitStore = create<GitState>((set, get) => ({
     try {
       const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/commits/${sha}/files`)
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch commit files'))
+        throw new Error(await parseErrorResponse(response, 'Failed to fetch commit files'))
       }
       const files: CommitFile[] = await response.json()
       set({ commitFiles: { ...get().commitFiles, [sha]: files } })
@@ -838,8 +969,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         `${API_BASE}/api/git/projects/${projectId}/commits/${sha}/diff?${params}`
       )
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch commit diff'))
+        throw new Error(await parseErrorResponse(response, 'Failed to fetch commit diff'))
       }
       const data = await response.json()
       set({ commitDiff: { ...get().commitDiff, [key]: data.diff } })
@@ -863,8 +993,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         { method: 'POST' }
       )
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to preview merge'))
+        throw new Error(await parseErrorResponse(response, 'Failed to preview merge'))
       }
       const preview = await response.json()
       set({ mergePreview: preview, isLoading: false })
@@ -889,8 +1018,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         }),
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to execute merge'))
+        throw new Error(await parseErrorResponse(response, 'Failed to execute merge'))
       }
       await get().fetchBranches(projectId)
       set({ isLoading: false, mergePreview: null })
@@ -915,8 +1043,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         `${API_BASE}/api/git/projects/${projectId}/merge/conflicts?${params}`
       )
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch conflict files'))
+        throw new Error(await parseErrorResponse(response, 'Failed to fetch conflict files'))
       }
       const files: ConflictFile[] = await response.json()
       set({ conflictFiles: files, isLoading: false })
@@ -931,8 +1058,7 @@ export const useGitStore = create<GitState>((set, get) => ({
     try {
       const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/merge/status`)
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch merge status'))
+        throw new Error(await parseErrorResponse(response, 'Failed to fetch merge status'))
       }
       const status: MergeStatus = await response.json()
       set({ mergeStatus: status })
@@ -952,8 +1078,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         body: JSON.stringify(request),
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to resolve conflict'))
+        throw new Error(await parseErrorResponse(response, 'Failed to resolve conflict'))
       }
       // Refresh merge status after resolving
       await get().fetchMergeStatus(projectId)
@@ -977,8 +1102,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         method: 'POST',
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to abort merge'))
+        throw new Error(await parseErrorResponse(response, 'Failed to abort merge'))
       }
       set({
         isLoading: false,
@@ -1004,8 +1128,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         { method: 'POST' }
       )
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to complete merge'))
+        throw new Error(await parseErrorResponse(response, 'Failed to complete merge'))
       }
       // Refresh branches after merge completion
       await get().fetchBranches(projectId)
@@ -1039,8 +1162,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         `${API_BASE}/api/git/projects/${projectId}/merge-requests?${params}`
       )
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch merge requests'))
+        throw new Error(await parseErrorResponse(response, 'Failed to fetch merge requests'))
       }
       const data = await response.json()
       set({ mergeRequests: data.merge_requests, isLoading: false })
@@ -1064,8 +1186,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         }),
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to create merge request'))
+        throw new Error(await parseErrorResponse(response, 'Failed to create merge request'))
       }
       await get().fetchMergeRequests(projectId)
       set({ isLoading: false })
@@ -1084,8 +1205,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         { method: 'POST' }
       )
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to approve merge request'))
+        throw new Error(await parseErrorResponse(response, 'Failed to approve merge request'))
       }
       await get().fetchMergeRequests(projectId)
       set({ isLoading: false })
@@ -1104,8 +1224,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         { method: 'POST' }
       )
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to merge'))
+        throw new Error(await parseErrorResponse(response, 'Failed to merge'))
       }
       await get().fetchMergeRequests(projectId)
       await get().fetchBranches(projectId)
@@ -1125,8 +1244,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         { method: 'POST' }
       )
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to close merge request'))
+        throw new Error(await parseErrorResponse(response, 'Failed to close merge request'))
       }
       await get().fetchMergeRequests(projectId)
       set({ isLoading: false })
@@ -1153,8 +1271,7 @@ export const useGitStore = create<GitState>((set, get) => ({
 
       const response = await fetch(`${API_BASE}/api/git/github/${owner}/${repo}/pulls?${params}`)
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch pull requests'))
+        throw new Error(await parseErrorResponse(response, 'Failed to fetch pull requests'))
       }
       const data = await response.json()
       set({ pullRequests: data.pull_requests, isLoading: false })
@@ -1175,8 +1292,7 @@ export const useGitStore = create<GitState>((set, get) => ({
       const [owner, repo] = githubRepo.split('/')
       const response = await fetch(`${API_BASE}/api/git/github/${owner}/${repo}/pulls/${prNumber}`)
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch pull request'))
+        throw new Error(await parseErrorResponse(response, 'Failed to fetch pull request'))
       }
       const pr = await response.json()
       set({ selectedPullRequest: pr, isLoading: false })
@@ -1201,8 +1317,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         `${API_BASE}/api/git/github/${owner}/${repo}/pulls/${prNumber}/reviews`
       )
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch reviews'))
+        throw new Error(await parseErrorResponse(response, 'Failed to fetch reviews'))
       }
       const reviews = await response.json()
       set({ prReviews: reviews, isLoading: false })
@@ -1230,8 +1345,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         }
       )
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to merge pull request'))
+        throw new Error(await parseErrorResponse(response, 'Failed to merge pull request'))
       }
       await get().fetchPullRequests()
       set({ isLoading: false })
@@ -1261,8 +1375,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         }
       )
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to create review'))
+        throw new Error(await parseErrorResponse(response, 'Failed to create review'))
       }
       await get().fetchPRReviews(prNumber)
       set({ isLoading: false })
@@ -1279,8 +1392,7 @@ export const useGitStore = create<GitState>((set, get) => ({
     try {
       const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/remotes`)
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch remotes'))
+        throw new Error(await parseErrorResponse(response, 'Failed to fetch remotes'))
       }
       const data = await response.json()
       set({ remotes: data.remotes, isLoading: false })
@@ -1309,8 +1421,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         body: JSON.stringify({ name, url }),
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to add remote'))
+        throw new Error(await parseErrorResponse(response, 'Failed to add remote'))
       }
       await get().fetchRemotes(projectId)
       set({ isLoading: false })
@@ -1329,8 +1440,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         { method: 'DELETE' }
       )
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to remove remote'))
+        throw new Error(await parseErrorResponse(response, 'Failed to remove remote'))
       }
       await get().fetchRemotes(projectId)
       set({ isLoading: false })
@@ -1353,8 +1463,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         }
       )
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to update remote'))
+        throw new Error(await parseErrorResponse(response, 'Failed to update remote'))
       }
       await get().fetchRemotes(projectId)
       set({ isLoading: false })
@@ -1376,8 +1485,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         method: 'POST',
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch from remote'))
+        throw new Error(await parseErrorResponse(response, 'Failed to fetch from remote'))
       }
       await get().fetchBranches(projectId)
       set({ isLoading: false })
@@ -1399,8 +1507,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         method: 'POST',
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to pull from remote'))
+        throw new Error(await parseErrorResponse(response, 'Failed to pull from remote'))
       }
       await get().fetchBranches(projectId)
       await get().fetchCommits(projectId)
@@ -1423,8 +1530,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         method: 'POST',
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to push to remote'))
+        throw new Error(await parseErrorResponse(response, 'Failed to push to remote'))
       }
       await get().fetchBranches(projectId)
       set({ isLoading: false })
@@ -1441,8 +1547,7 @@ export const useGitStore = create<GitState>((set, get) => ({
     try {
       const response = await fetch(`${API_BASE}/api/git/projects/${projectId}/branch-protection`)
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch branch protection rules'))
+        throw new Error(await parseErrorResponse(response, 'Failed to fetch branch protection rules'))
       }
       const data = await response.json()
       set({ branchProtectionRules: data.rules, isLoading: false })
@@ -1460,8 +1565,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         body: JSON.stringify(rule),
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to create rule'))
+        throw new Error(await parseErrorResponse(response, 'Failed to create rule'))
       }
       await get().fetchBranchProtectionRules(projectId)
       set({ isLoading: false })
@@ -1484,8 +1588,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         }
       )
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to update rule'))
+        throw new Error(await parseErrorResponse(response, 'Failed to update rule'))
       }
       await get().fetchBranchProtectionRules(projectId)
       set({ isLoading: false })
@@ -1504,8 +1607,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         { method: 'DELETE' }
       )
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to delete rule'))
+        throw new Error(await parseErrorResponse(response, 'Failed to delete rule'))
       }
       await get().fetchBranchProtectionRules(projectId)
       set({ isLoading: false })
