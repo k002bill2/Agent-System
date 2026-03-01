@@ -88,7 +88,7 @@ Overall: ✅ All passed
 - web-ui-specialist: Web UI/UX
 - backend-integration-specialist: Firebase, API
 - performance-optimizer: 성능 최적화
-- lead-orchestrator: 멀티 에이전트 조정
+- aos-orchestrator: 멀티 에이전트 조정
 ```
 
 ## API 엔드포인트

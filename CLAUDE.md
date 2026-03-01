@@ -124,20 +124,21 @@ cd src/dashboard && npm test
 - **인증**: OAuth (Google/GitHub) + Email/Password
 - **Git 협업**: 브랜치 관리, MR 시스템, 충돌 감지, GitHub PR 통합
 
-## Agents
+## Multi-Agent Orchestration
 
-**Claude Code Sub-agents** (`.claude/agents/`):
-- `web-ui-specialist`: React Web UI/UX
-- `backend-integration-specialist`: Firebase, API 통합
-- `test-automation-specialist`: Vitest 테스트
-- `lead-orchestrator`: 멀티 에이전트 조정
-- `performance-optimizer`: 성능 최적화
-- `quality-validator`: 품질 검증
+메인 에이전트(Opus)가 직접 Task 도구로 서브에이전트를 스폰합니다.
 
-**Shared Frameworks** (`.claude/agents/shared/`):
-- `ace-framework.md`: 병렬 실행 프로토콜
-- `quality-gates.md`: 품질 게이트
-- `effort-scaling.md`: 리소스 할당
+| 복잡도 | 에이전트 수 | 기준 |
+|--------|------------|------|
+| Trivial | 0 | 단일 파일, 명확한 수정 |
+| Simple | 1 | 2-3 파일, 한 영역 |
+| Moderate | 2-3 | UI+API 또는 크로스 영역 |
+| Complex | 3+ | 풀스택, 아키텍처 변경 |
+
+**에이전트**: web-ui-specialist(sonnet), backend-integration-specialist(sonnet),
+test-automation-specialist(haiku), performance-optimizer(haiku), quality-validator(haiku)
+**평가**: eval-task-runner(sonnet), eval-grader(sonnet)
+**품질 기준**: `.claude/agents/shared/quality-reference.md`
 
 ## Dev Docs System
 
@@ -161,22 +162,19 @@ dev/active/[task-name]/
 - 상세 내용은 `docs/` 문서에 추가 후 참조
 - CLAUDE.md에는 핵심 개요만 유지
 
-**문서 자동 업데이트 규칙** (기능 구현 완료 후 필수):
+**문서 업데이트**: 기능 구현 후 `docs/` 관련 문서 업데이트 필수 (상세: `docs/doc-update-rules.md` 참조)
 
-| 변경 내용 | 업데이트 문서 | 업데이트 항목 |
-|-----------|--------------|---------------|
-| 새 API 엔드포인트 | `docs/api-reference.md` | 엔드포인트 테이블 추가 |
-| 새 기능/서비스 | `docs/features.md` | 번호 매긴 새 섹션 추가 |
-| 새 페이지 | `docs/dashboard.md` | Pages 테이블에 추가 |
-| 새 컴포넌트 | `docs/dashboard.md` | Components 섹션에 추가 |
-| 새 Store | `docs/dashboard.md` | Zustand Stores 테이블 추가 |
-| 새 디렉토리 | `docs/dashboard.md` | Directory Structure 업데이트 |
+## Skill Routing (필수)
 
-**자동화 체크리스트** (구현 완료 시):
-1. ✅ Backend: models, services, api 파일 작성
-2. ✅ Frontend: store, components, page 파일 작성
-3. ✅ Tests: 테스트 파일 작성
-4. ⚠️ **Docs: 위 테이블 기준으로 문서 업데이트** ← 필수!
+구현 전 반드시 해당 스킬을 Skill 도구로 호출할 것:
+
+| 작업 유형 | 스킬 | 비고 |
+|-----------|------|------|
+| React/UI/컴포넌트/페이지 | `react-web-development` | Tailwind/Zustand 포함 |
+| FastAPI/LangGraph/DB | 아래 Backend 패턴 참조 | CLAUDE.md Code Patterns |
+| 테스트/커버리지 | `test-automation` | 구현 후 자동 실행 |
+| 병렬 에이전트 (3+ 작업) | `parallel-coordinator` | ACE Framework |
+| 구현 완료 검증 | `verification-loop` | tsc+lint+test+build |
 
 ## Coding Guidelines
 

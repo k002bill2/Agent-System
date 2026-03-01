@@ -171,7 +171,7 @@ monitors (모니터링)
 
 | Instance ID | Class | Capabilities |
 |-------------|-------|--------------|
-| `lead-orchestrator` | LeadOrchestratorAgent | task-decomposition, agent-selection, parallel-coordination |
+| `aos-orchestrator` | LeadOrchestratorAgent | task-decomposition, agent-selection, parallel-coordination |
 | `web-ui-specialist` | ExecutorAgent | react, tailwind, typescript, ui-design |
 | `backend-integration-specialist` | ExecutorAgent | firebase, api, data-sync |
 | `test-automation-specialist` | ValidatorAgent | vitest, testing-library, coverage |

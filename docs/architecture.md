@@ -123,12 +123,12 @@ class AgentRegistry:
 | `web-ui-specialist` | development | React Web UI/UX |
 | `backend-integration-specialist` | development | Firebase, API 통합 |
 | `test-automation-specialist` | quality | Vitest 테스트 자동화 |
-| `lead-orchestrator` | orchestration | 멀티 에이전트 조정 |
+| `aos-orchestrator` | orchestration | 멀티 에이전트 조정 |
 | `quality-validator` | quality | 코드 품질 검증 |
 | `code-simplifier` | quality | 복잡도 분석 |
 | `performance-optimizer` | development | 성능 최적화 |
 
-## Lead Orchestrator
+## AOS Orchestrator
 
 복잡한 태스크를 분석하고 전문 에이전트에게 위임:
 
