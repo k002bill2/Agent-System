@@ -120,6 +120,13 @@ class LLMCredentialCreate(BaseModel):
     api_key: str = Field(min_length=10)
 
 
+class LLMCredentialUpdate(BaseModel):
+    """API Key 수정 요청 바디. 모든 필드는 선택적."""
+
+    key_name: str | None = Field(default=None, min_length=1, max_length=100)
+    api_key: str | None = Field(default=None, min_length=10)
+
+
 class LLMCredentialResponse(BaseModel):
     """API 응답 — api_key는 마스킹 처리."""
 

@@ -349,6 +349,22 @@ else:
                 "docs": "/docs",
             }
 
+        # Global exception handler - always return JSON
+        @app.exception_handler(Exception)
+        async def global_exception_handler(request: Request, exc: Exception):
+            import logging
+            import traceback
+
+            from fastapi.responses import JSONResponse
+
+            logging.getLogger("aos.app").error(
+                f"Unhandled exception: {exc}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                status_code=500,
+                content={"detail": f"Internal server error: {type(exc).__name__}: {str(exc)}"},
+            )
+
         # Include core router (if available)
         if router:
             app.include_router(router, prefix="/api")

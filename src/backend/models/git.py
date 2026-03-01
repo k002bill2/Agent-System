@@ -614,6 +614,55 @@ def can_merge_to_branch(
 # =============================================================================
 
 
+# =============================================================================
+# Staging Area Enhancement Models
+# =============================================================================
+
+
+class UnstageRequest(BaseModel):
+    """Request to unstage files."""
+
+    paths: list[str] = Field(
+        default=[], description="File paths to unstage. Empty list means all."
+    )
+    all: bool = Field(default=False, description="Unstage all files (git reset HEAD)")
+
+
+class FileDiffResponse(BaseModel):
+    """Response containing diff for a single file."""
+
+    file_path: str
+    diff: str
+    staged: bool = False
+
+
+class DiffHunk(BaseModel):
+    """A single hunk from a diff."""
+
+    index: int
+    header: str
+    content: str
+    old_start: int = 0
+    old_count: int = 0
+    new_start: int = 0
+    new_count: int = 0
+
+
+class FileHunksResponse(BaseModel):
+    """Response containing hunks for a single file."""
+
+    file_path: str
+    hunks: list[DiffHunk] = []
+    total_hunks: int = 0
+
+
+class StageHunksRequest(BaseModel):
+    """Request to stage specific hunks of a file."""
+
+    file_path: str = Field(..., description="File path to stage hunks from")
+    hunk_indices: list[int] = Field(..., description="Indices of hunks to stage")
+
+
 class DraftCommit(BaseModel):
     """LLM-generated commit suggestion."""
 

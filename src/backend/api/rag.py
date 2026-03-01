@@ -10,6 +10,7 @@ from models.project import PROJECTS_REGISTRY, get_project
 from services.rag_service import (
     QDRANT_AVAILABLE,
     QueryResult,
+    get_cross_project_context,
     get_vector_store,
 )
 
@@ -31,6 +32,26 @@ class QueryRequest(BaseModel):
 
     query: str = Field(..., description="Search query")
     k: int = Field(default=5, ge=1, le=20, description="Number of results")
+    filter_priority: str | None = Field(
+        default=None, description="Filter by priority ('high' or 'normal')"
+    )
+    include_shared: bool = Field(
+        default=False,
+        description="If true, also search other project collections",
+    )
+
+
+class CrossProjectQueryRequest(BaseModel):
+    """Request to query across multiple projects."""
+
+    query: str = Field(..., description="Search query")
+    k: int = Field(default=5, ge=1, le=20, description="Number of results")
+    project_ids: list[str] | None = Field(
+        default=None, description="Project IDs to search (None = all indexed projects)"
+    )
+    exclude_project_ids: list[str] | None = Field(
+        default=None, description="Project IDs to exclude from search"
+    )
     filter_priority: str | None = Field(
         default=None, description="Filter by priority ('high' or 'normal')"
     )
@@ -177,6 +198,7 @@ async def query_project(
             query=request.query,
             k=request.k,
             filter_priority=request.filter_priority,
+            include_shared=request.include_shared,
         )
 
         return result
@@ -270,3 +292,68 @@ async def get_indexing_status(project_id: str) -> dict:
         "indexed": indexed,
         "document_count": document_count,
     }
+
+
+@router.post("/query", response_model=QueryResult)
+async def cross_project_query(request: CrossProjectQueryRequest) -> QueryResult:
+    """
+    Query across multiple project collections.
+
+    Search all indexed projects (or a subset) and return merged results
+    ranked by Reciprocal Rank Fusion.
+    """
+    try:
+        store = get_vector_store()
+        result = await store.query_cross_project(
+            query=request.query,
+            k=request.k,
+            source_project_ids=request.project_ids,
+            exclude_project_ids=request.exclude_project_ids,
+            filter_priority=request.filter_priority,
+        )
+        return result
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Cross-project query failed: {str(e)}"
+        )
+
+
+@router.get("/collections")
+async def list_collections() -> dict:
+    """
+    List all indexed project collections with statistics.
+
+    Returns a summary of all proj_* collections in Qdrant.
+    """
+    try:
+        store = get_vector_store()
+        collection_names = store._get_all_project_collections()
+
+        collections = []
+        for coll_name in collection_names:
+            pid = store._extract_project_id_from_collection(coll_name)
+            try:
+                info = store.client.get_collection(coll_name)
+                count = info.points_count or 0
+            except Exception:
+                count = 0
+
+            collections.append(
+                {
+                    "project_id": pid,
+                    "collection_name": coll_name,
+                    "document_count": count,
+                    "indexed": count > 0,
+                }
+            )
+
+        return {
+            "total_collections": len(collections),
+            "collections": collections,
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to list collections: {str(e)}"
+        )

@@ -21,7 +21,10 @@ from models.git import (
     BranchDiff,
     CommitCreateResult,
     CommitFile,
+    DiffHunk,
     FetchResult,
+    FileHunksResponse,
+    FileDiffResponse,
     # New models for status/add/commit
     FileStatusType,
     GitBranch,
@@ -646,6 +649,298 @@ class GitService:
                 success=False,
                 message=f"Error creating commit: {e}",
             )
+
+    # =========================================================================
+    # Staging Area Enhancement Operations
+    # =========================================================================
+
+    def unstage(self, paths: list[str] | None = None, all: bool = False) -> AddResult:
+        """Unstage files (git reset HEAD).
+
+        Args:
+            paths: List of file paths to unstage. None means unstage all.
+            all: If True, unstage all staged files.
+
+        Returns:
+            Result of unstage operation
+        """
+        try:
+            unstaged_files: list[str] = []
+
+            if all or not paths:
+                # git reset HEAD (unstage all)
+                self.repo.git.reset("HEAD")
+                unstaged_files = [f.path for f in self.status().unstaged_files]
+            else:
+                # Unstage specific paths
+                for path in paths:
+                    self.repo.git.reset("HEAD", "--", path)
+                    unstaged_files.append(path)
+
+            return AddResult(
+                success=True,
+                staged_files=unstaged_files,
+                message=f"Unstaged {len(unstaged_files)} file(s)",
+            )
+        except GitCommandError as e:
+            return AddResult(
+                success=False,
+                message=f"Failed to unstage files: {e}",
+            )
+        except Exception as e:
+            return AddResult(
+                success=False,
+                message=f"Error unstaging files: {e}",
+            )
+
+    def get_file_diff(self, file_path: str, staged: bool = False) -> FileDiffResponse:
+        """Get diff for a single file.
+
+        Args:
+            file_path: Path to the file (relative to repo root)
+            staged: If True, get staged diff. Otherwise get unstaged diff.
+
+        Returns:
+            FileDiffResponse with diff content
+        """
+        try:
+            diff_text = ""
+
+            if staged:
+                diff_text = self.repo.git.diff("--staged", "--unified=3", "--", file_path)
+            else:
+                # Check if file is untracked
+                if file_path in self.repo.untracked_files:
+                    full_path = self.project_path / file_path
+                    if full_path.exists() and full_path.is_file():
+                        content = full_path.read_text(errors="ignore")
+                        lines = content.split("\n")[:500]
+                        diff_text = f"--- /dev/null\n+++ b/{file_path}\n@@ -0,0 +1,{len(lines)} @@\n"
+                        diff_text += "\n".join(f"+{line}" for line in lines)
+                else:
+                    diff_text = self.repo.git.diff("--unified=3", "--", file_path)
+
+            return FileDiffResponse(
+                file_path=file_path,
+                diff=diff_text,
+                staged=staged,
+            )
+        except GitCommandError as e:
+            raise GitServiceError(f"Failed to get file diff: {e}")
+
+    def get_file_hunks(self, file_path: str, staged: bool = False) -> FileHunksResponse:
+        """Get diff hunks for a single file.
+
+        Args:
+            file_path: Path to the file (relative to repo root)
+            staged: If True, get staged hunks. Otherwise get unstaged hunks.
+
+        Returns:
+            FileHunksResponse with parsed hunks
+        """
+        try:
+            if staged:
+                diff_text = self.repo.git.diff("--staged", "--unified=3", "--", file_path)
+            else:
+                diff_text = self.repo.git.diff("--unified=3", "--", file_path)
+
+            hunks = self._parse_hunks(diff_text)
+
+            return FileHunksResponse(
+                file_path=file_path,
+                hunks=hunks,
+                total_hunks=len(hunks),
+            )
+        except GitCommandError as e:
+            raise GitServiceError(f"Failed to get file hunks: {e}")
+
+    def stage_hunks(self, file_path: str, hunk_indices: list[int]) -> AddResult:
+        """Stage specific hunks of a file.
+
+        Args:
+            file_path: Path to the file
+            hunk_indices: Indices of hunks to stage
+
+        Returns:
+            Result of staging operation
+        """
+        import subprocess
+        import tempfile
+
+        try:
+            # Get full diff for the file
+            diff_text = self.repo.git.diff("--unified=3", "--", file_path)
+            all_hunks = self._parse_hunks(diff_text)
+
+            if not all_hunks:
+                return AddResult(
+                    success=False,
+                    message="No hunks found for this file",
+                )
+
+            # Validate indices
+            valid_indices = [i for i in hunk_indices if 0 <= i < len(all_hunks)]
+            if not valid_indices:
+                return AddResult(
+                    success=False,
+                    message="No valid hunk indices provided",
+                )
+
+            # Build partial patch
+            patch = self._build_partial_patch(file_path, diff_text, all_hunks, valid_indices)
+
+            # Apply patch to index using git apply --cached
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".patch", delete=False, dir=str(self.project_path)
+            ) as f:
+                f.write(patch)
+                patch_path = f.name
+
+            try:
+                subprocess.run(
+                    ["git", "apply", "--cached", patch_path],
+                    cwd=str(self.project_path),
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+            finally:
+                Path(patch_path).unlink(missing_ok=True)
+
+            return AddResult(
+                success=True,
+                staged_files=[file_path],
+                message=f"Staged {len(valid_indices)} hunk(s) from {file_path}",
+            )
+        except subprocess.CalledProcessError as e:
+            return AddResult(
+                success=False,
+                message=f"Failed to apply patch: {e.stderr or e.stdout or str(e)}",
+            )
+        except Exception as e:
+            return AddResult(
+                success=False,
+                message=f"Error staging hunks: {e}",
+            )
+
+    def _parse_hunks(self, diff_text: str) -> list[DiffHunk]:
+        """Parse diff text into hunks.
+
+        Args:
+            diff_text: Unified diff text
+
+        Returns:
+            List of DiffHunk objects
+        """
+        import re
+
+        hunks: list[DiffHunk] = []
+        lines = diff_text.split("\n")
+        current_content_lines: list[str] = []
+        current_header = ""
+        hunk_index = 0
+
+        for line in lines:
+            hunk_match = re.match(r"^@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@(.*)$", line)
+            if hunk_match:
+                # Save previous hunk
+                if current_header:
+                    hunks.append(
+                        DiffHunk(
+                            index=hunk_index,
+                            header=current_header,
+                            content="\n".join(current_content_lines),
+                            old_start=int(re.match(r"@@ -(\d+)", current_header).group(1)),
+                            old_count=int(
+                                re.match(r"@@ -\d+,?(\d*)", current_header).group(1) or "1"
+                            ),
+                            new_start=int(
+                                re.match(r"@@ -\d+,?\d* \+(\d+)", current_header).group(1)
+                            ),
+                            new_count=int(
+                                re.match(r"@@ -\d+,?\d* \+\d+,?(\d*)", current_header).group(1)
+                                or "1"
+                            ),
+                        )
+                    )
+                    hunk_index += 1
+
+                current_header = line
+                current_content_lines = []
+            elif current_header and (
+                line.startswith("+") or line.startswith("-") or line.startswith(" ")
+            ):
+                current_content_lines.append(line)
+
+        # Save last hunk
+        if current_header:
+            import re as re_mod
+
+            hunks.append(
+                DiffHunk(
+                    index=hunk_index,
+                    header=current_header,
+                    content="\n".join(current_content_lines),
+                    old_start=int(re_mod.match(r"@@ -(\d+)", current_header).group(1)),
+                    old_count=int(
+                        re_mod.match(r"@@ -\d+,?(\d*)", current_header).group(1) or "1"
+                    ),
+                    new_start=int(
+                        re_mod.match(r"@@ -\d+,?\d* \+(\d+)", current_header).group(1)
+                    ),
+                    new_count=int(
+                        re_mod.match(r"@@ -\d+,?\d* \+\d+,?(\d*)", current_header).group(1)
+                        or "1"
+                    ),
+                )
+            )
+
+        return hunks
+
+    def _build_partial_patch(
+        self,
+        file_path: str,
+        full_diff: str,
+        all_hunks: list[DiffHunk],
+        selected_indices: list[int],
+    ) -> str:
+        """Build a partial patch containing only selected hunks.
+
+        Args:
+            file_path: File path for patch header
+            full_diff: Full diff text
+            all_hunks: All parsed hunks
+            selected_indices: Indices of hunks to include
+
+        Returns:
+            Partial patch string ready for git apply
+        """
+        lines = full_diff.split("\n")
+
+        # Extract file header lines (before first hunk)
+        header_lines: list[str] = []
+        for line in lines:
+            if line.startswith("@@"):
+                break
+            header_lines.append(line)
+
+        # If no header, build one
+        if not header_lines:
+            header_lines = [
+                f"diff --git a/{file_path} b/{file_path}",
+                f"--- a/{file_path}",
+                f"+++ b/{file_path}",
+            ]
+
+        # Build patch with selected hunks only
+        patch_parts = header_lines[:]
+        for idx in sorted(selected_indices):
+            if 0 <= idx < len(all_hunks):
+                hunk = all_hunks[idx]
+                patch_parts.append(hunk.header)
+                patch_parts.append(hunk.content)
+
+        return "\n".join(patch_parts) + "\n"
 
     # =========================================================================
     # Diff Operations

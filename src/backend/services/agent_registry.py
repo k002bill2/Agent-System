@@ -33,6 +33,7 @@ class AgentStatus(str, Enum):
 class EffortLevel(str, Enum):
     """태스크 노력 수준 (effort scaling)."""
 
+    TRIVIAL = "trivial"  # 직접 실행, 에이전트 불필요
     QUICK = "quick"  # < 5분, 단순 작업
     MEDIUM = "medium"  # 5-30분, 중간 복잡도
     THOROUGH = "thorough"  # 30분+, 복잡한 작업
@@ -201,8 +202,8 @@ DEFAULT_AGENTS: list[AgentMetadata] = [
     ),
     # 오케스트레이션
     AgentMetadata(
-        id="lead-orchestrator",
-        name="Lead Orchestrator",
+        id="aos-orchestrator",
+        name="AOS Orchestrator",
         description="멀티 에이전트 워크플로우 조정자. 태스크 분해, 에이전트 선택, 결과 집계.",
         category=AgentCategory.ORCHESTRATION,
         capabilities=[

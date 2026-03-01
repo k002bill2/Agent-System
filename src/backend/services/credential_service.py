@@ -14,6 +14,7 @@ from models.external_usage import (
     ExternalProvider,
     LLMCredentialCreate,
     LLMCredentialResponse,
+    LLMCredentialUpdate,
     LLMCredentialVerifyResponse,
 )
 
@@ -70,6 +71,43 @@ async def create_credential(
         provider=ExternalProvider(row.provider),
         key_name=row.key_name,
         api_key_masked=_mask_key(data.api_key),
+        is_active=row.is_active,
+        last_verified_at=row.last_verified_at,
+        created_at=row.created_at,
+    )
+
+
+async def update_credential(
+    db: AsyncSession, user_id: str, credential_id: str, data: LLMCredentialUpdate
+) -> LLMCredentialResponse | None:
+    """Update key_name and/or api_key for a credential. Returns None if not found/owned."""
+    result = await db.execute(
+        select(UserLLMCredentialModel).where(
+            and_(
+                UserLLMCredentialModel.id == credential_id,
+                UserLLMCredentialModel.user_id == user_id,
+                UserLLMCredentialModel.is_active == True,  # noqa: E712
+            )
+        )
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        return None
+
+    if data.key_name is not None:
+        row.key_name = data.key_name
+    if data.api_key is not None:
+        row.api_key = data.api_key
+    row.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(row)
+
+    masked = _mask_key(data.api_key) if data.api_key else _mask_key(row.api_key)
+    return LLMCredentialResponse(
+        id=row.id,
+        provider=ExternalProvider(row.provider),
+        key_name=row.key_name,
+        api_key_masked=masked,
         is_active=row.is_active,
         last_verified_at=row.last_verified_at,
         created_at=row.created_at,

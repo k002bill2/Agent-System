@@ -310,9 +310,28 @@ class TmuxService:
             "",
         ]
 
+        # Safety Warnings 섹션
+        analysis_inner = analysis.get("analysis", {})
+        safety_flags = analysis_inner.get("safety_flags", [])
+        if safety_flags:
+            lines.append("## Safety Warnings")
+            for flag in safety_flags:
+                lines.append(f"- ⚠️ {flag}")
+            lines.append("")
+
         execution_plan = analysis.get("execution_plan", {})
         subtasks = execution_plan.get("subtasks", {})
         parallel_groups = execution_plan.get("parallel_groups", [])
+
+        # subtask id → task_boundaries 매핑 구축
+        boundaries_map: dict[str, dict[str, list[str]]] = {}
+        analysis_subtasks = analysis_inner.get("subtasks", [])
+        if isinstance(analysis_subtasks, list):
+            for st in analysis_subtasks:
+                st_id = st.get("id")
+                boundaries = st.get("task_boundaries")
+                if st_id and boundaries:
+                    boundaries_map[st_id] = boundaries
 
         if parallel_groups:
             lines.append("## Subtasks (순서대로 실행)")
@@ -338,6 +357,19 @@ class TmuxService:
                     if deps:
                         parts.append(f"  - depends on: {', '.join(deps)}")
 
+                    # Task Boundaries 렌더링
+                    boundaries = boundaries_map.get(task_id)
+                    if boundaries:
+                        do_not = boundaries.get("do_not", [])
+                        wait_for = boundaries.get("wait_for", [])
+                        stop_if = boundaries.get("stop_if", [])
+                        if do_not:
+                            parts.append(f"  - **DO NOT**: {'; '.join(do_not)}")
+                        if wait_for:
+                            parts.append(f"  - **WAIT FOR**: {'; '.join(wait_for)}")
+                        if stop_if:
+                            parts.append(f"  - **STOP IF**: {'; '.join(stop_if)}")
+
                     lines.extend(parts)
 
                 lines.append("")
@@ -347,9 +379,11 @@ class TmuxService:
             [
                 "## Instructions",
                 "- 위 순서대로 서브태스크를 실행하세요",
+                "- 각 서브태스크의 task boundaries(DO NOT/WAIT FOR/STOP IF)를 반드시 준수하세요",
                 "- 각 서브태스크 완료 후 결과를 검증하세요",
                 "- 가능한 경우 Claude Code 에이전트와 스킬을 활용하세요",
                 "- 에러 발생 시 근본 원인을 분석하고 수정하세요",
+                "- 모든 변경 후 `tsc --noEmit` (프론트엔드) / `pytest --tb=short` (백엔드) 실행으로 검증하세요",
             ]
         )
 

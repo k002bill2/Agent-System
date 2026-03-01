@@ -321,6 +321,40 @@ class ProjectVectorStore:
 
         return self._collections[collection_name]
 
+    # ── Cross-project helpers ────────────────────────────────────────────────
+
+    def _get_all_project_collections(
+        self, exclude_ids: list[str] | None = None
+    ) -> list[str]:
+        """Return all proj_* collection names from Qdrant.
+
+        Args:
+            exclude_ids: Project IDs to exclude (converted to collection names).
+
+        Returns:
+            List of collection names matching the proj_* pattern.
+        """
+        exclude_names: set[str] = set()
+        if exclude_ids:
+            exclude_names = {self._get_collection_name(pid) for pid in exclude_ids}
+
+        try:
+            collections_response = self.client.get_collections()
+            return [
+                c.name
+                for c in collections_response.collections
+                if c.name.startswith("proj_") and c.name not in exclude_names
+            ]
+        except Exception as e:
+            logger.warning("Failed to list Qdrant collections: %s", e)
+            return []
+
+    def _extract_project_id_from_collection(self, collection_name: str) -> str:
+        """Extract project_id from a collection name (proj_<id> -> <id>)."""
+        if collection_name.startswith("proj_"):
+            return collection_name[5:]
+        return collection_name
+
     # ── File filtering ────────────────────────────────────────────────────────
 
     def _should_index_file(self, file_path: Path) -> bool:
@@ -593,12 +627,15 @@ class ProjectVectorStore:
                 doc_key = f"{meta.get('source', '')}::{meta.get('chunk_index', 0)}"
                 doc_scores[doc_key] = doc_scores.get(doc_key, 0.0) + 1.0 / (rank + k_rrf)
                 if doc_key not in doc_map:
-                    doc_map[doc_key] = {
+                    entry = {
                         "content": text,
                         "source": meta.get("source", "unknown"),
                         "chunk_index": meta.get("chunk_index", 0),
                         "priority": meta.get("priority", "normal"),
                     }
+                    if "project_id" in meta:
+                        entry["project_id"] = meta["project_id"]
+                    doc_map[doc_key] = entry
 
         # Sort by fused score
         sorted_keys = sorted(doc_scores, key=lambda k: doc_scores[k], reverse=True)
@@ -666,6 +703,7 @@ class ProjectVectorStore:
                     )
                     for chunk in chunks:
                         chunk.metadata["priority"] = "high"
+                        chunk.metadata["project_id"] = project_id
                     documents.extend(chunks)
                     files_indexed += 1
                 except Exception as e:
@@ -707,6 +745,7 @@ class ProjectVectorStore:
                 )
                 for chunk in chunks:
                     chunk.metadata["priority"] = "normal"
+                    chunk.metadata["project_id"] = project_id
                 documents.extend(chunks)
                 files_indexed += 1
             except Exception as e:
@@ -761,6 +800,7 @@ class ProjectVectorStore:
         query: str,
         k: int = 5,
         filter_priority: str | None = None,
+        include_shared: bool = False,
     ) -> QueryResult:
         """
         Query the vector store for relevant documents.
@@ -773,6 +813,10 @@ class ProjectVectorStore:
           5. Return top-k
 
         Otherwise: standard semantic similarity search.
+
+        Args:
+            include_shared: If True, also search other project collections
+                and merge results (current project gets a boost).
         """
         collection = self._get_or_create_collection(project_id)
 
@@ -789,31 +833,155 @@ class ProjectVectorStore:
             )
 
         if RAG_ENABLE_HYBRID and BM25_AVAILABLE:
-            return await self._hybrid_query(project_id, collection, query, k, qdrant_filter)
-
-        # ── Standard semantic-only path ───────────────────────────────────
-        results = collection.similarity_search_with_score(
-            query=query,
-            k=k,
-            filter=qdrant_filter,
-        )
-
-        documents = []
-        for doc, score in results:
-            # Qdrant returns cosine similarity (0~1 for cosine distance)
-            # LangChain-Qdrant returns score directly as similarity
-            similarity = max(0.0, min(1.0, float(score)))
-            documents.append(
-                {
-                    "content": doc.page_content,
-                    "source": doc.metadata.get("source", "unknown"),
-                    "chunk_index": doc.metadata.get("chunk_index", 0),
-                    "priority": doc.metadata.get("priority", "normal"),
-                    "score": similarity,
-                }
+            local_result = await self._hybrid_query(
+                project_id, collection, query, k, qdrant_filter
+            )
+        else:
+            # ── Standard semantic-only path ───────────────────────────────────
+            results = collection.similarity_search_with_score(
+                query=query,
+                k=k,
+                filter=qdrant_filter,
             )
 
-        return QueryResult(query=query, documents=documents, total_found=len(documents))
+            documents = []
+            for doc, score in results:
+                similarity = max(0.0, min(1.0, float(score)))
+                documents.append(
+                    {
+                        "content": doc.page_content,
+                        "source": doc.metadata.get("source", "unknown"),
+                        "chunk_index": doc.metadata.get("chunk_index", 0),
+                        "priority": doc.metadata.get("priority", "normal"),
+                        "project_id": doc.metadata.get("project_id", project_id),
+                        "score": similarity,
+                    }
+                )
+
+            local_result = QueryResult(
+                query=query, documents=documents, total_found=len(documents)
+            )
+
+        if not include_shared:
+            return local_result
+
+        # ── Cross-project search: merge results from other collections ────
+        other_collections = self._get_all_project_collections(
+            exclude_ids=[project_id]
+        )
+
+        all_ranked_lists: list[list[tuple[str, dict[str, Any]]]] = []
+
+        # Add local results as a ranked list (with boost via double insertion)
+        local_ranked: list[tuple[str, dict[str, Any]]] = [
+            (d["content"], {**d, "project_id": d.get("project_id", project_id)})
+            for d in local_result.documents
+        ]
+        # Insert local list twice to give it a boost in RRF fusion
+        all_ranked_lists.append(local_ranked)
+        all_ranked_lists.append(local_ranked)
+
+        for coll_name in other_collections:
+            try:
+                other_pid = self._extract_project_id_from_collection(coll_name)
+                other_vs = self._get_or_create_collection(other_pid)
+                other_results = other_vs.similarity_search_with_score(
+                    query=query, k=k, filter=qdrant_filter
+                )
+                other_ranked: list[tuple[str, dict[str, Any]]] = [
+                    (
+                        doc.page_content,
+                        {
+                            "source": doc.metadata.get("source", "unknown"),
+                            "chunk_index": doc.metadata.get("chunk_index", 0),
+                            "priority": doc.metadata.get("priority", "normal"),
+                            "project_id": doc.metadata.get("project_id", other_pid),
+                        },
+                    )
+                    for doc, _score in other_results
+                ]
+                all_ranked_lists.append(other_ranked)
+            except Exception as e:
+                logger.warning("Cross-project search failed for %s: %s", coll_name, e)
+
+        fused = self._rrf_fusion(all_ranked_lists)[:k]
+
+        return QueryResult(query=query, documents=fused, total_found=len(fused))
+
+    async def query_cross_project(
+        self,
+        query: str,
+        k: int = 5,
+        source_project_ids: list[str] | None = None,
+        exclude_project_ids: list[str] | None = None,
+        filter_priority: str | None = None,
+    ) -> QueryResult:
+        """Search across multiple project collections.
+
+        Args:
+            query: Search query text.
+            k: Number of results to return.
+            source_project_ids: If set, only search these projects.
+                None means all indexed projects.
+            exclude_project_ids: Project IDs to exclude from search.
+            filter_priority: Filter by document priority ('high' or 'normal').
+
+        Returns:
+            QueryResult with documents annotated with project_id metadata.
+        """
+        # Build Qdrant filter for priority
+        qdrant_filter = None
+        if filter_priority:
+            qdrant_filter = QdrantFilter(
+                must=[
+                    FieldCondition(
+                        key="metadata.priority",
+                        match=MatchValue(value=filter_priority),
+                    )
+                ]
+            )
+
+        # Determine which collections to search
+        if source_project_ids is not None:
+            collection_names = [
+                self._get_collection_name(pid) for pid in source_project_ids
+            ]
+        else:
+            collection_names = self._get_all_project_collections(
+                exclude_ids=exclude_project_ids
+            )
+
+        all_ranked_lists: list[list[tuple[str, dict[str, Any]]]] = []
+
+        for coll_name in collection_names:
+            try:
+                pid = self._extract_project_id_from_collection(coll_name)
+                vs = self._get_or_create_collection(pid)
+                results = vs.similarity_search_with_score(
+                    query=query, k=k, filter=qdrant_filter
+                )
+                ranked: list[tuple[str, dict[str, Any]]] = [
+                    (
+                        doc.page_content,
+                        {
+                            "source": doc.metadata.get("source", "unknown"),
+                            "chunk_index": doc.metadata.get("chunk_index", 0),
+                            "priority": doc.metadata.get("priority", "normal"),
+                            "project_id": doc.metadata.get("project_id", pid),
+                        },
+                    )
+                    for doc, _score in results
+                ]
+                all_ranked_lists.append(ranked)
+            except Exception as e:
+                logger.warning("Cross-project query failed for %s: %s", coll_name, e)
+
+        if not all_ranked_lists:
+            return QueryResult(query=query, documents=[], total_found=0)
+
+        fused = self._rrf_fusion(all_ranked_lists)[:k]
+
+        return QueryResult(query=query, documents=fused, total_found=len(fused))
 
     async def _hybrid_query(
         self,
@@ -911,14 +1079,22 @@ def get_vector_store() -> "ProjectVectorStore":
     return _vector_store
 
 
-async def get_project_context(project_id: str, query: str, k: int = 5) -> str:
+async def get_project_context(
+    project_id: str,
+    query: str,
+    k: int = 5,
+    include_shared: bool = False,
+) -> str:
     """
     Convenience function to get relevant project context for a query.
+
+    Args:
+        include_shared: If True, also include results from other projects.
 
     Returns formatted string of relevant document chunks.
     """
     store = get_vector_store()
-    result = await store.query(project_id, query, k=k)
+    result = await store.query(project_id, query, k=k, include_shared=include_shared)
 
     if not result.documents:
         return ""
@@ -927,23 +1103,31 @@ async def get_project_context(project_id: str, query: str, k: int = 5) -> str:
     for doc in result.documents:
         source = doc["source"]
         content = doc["content"]
-        context_parts.append(f"[{source}]\n{content}")
+        pid = doc.get("project_id", project_id)
+        prefix = f"[{source}]" if pid == project_id else f"[{pid}:{source}]"
+        context_parts.append(f"{prefix}\n{content}")
 
     return "\n\n---\n\n".join(context_parts)
 
 
 async def get_project_context_with_sources(
-    project_id: str, query: str, k: int = 5
+    project_id: str,
+    query: str,
+    k: int = 5,
+    include_shared: bool = False,
 ) -> tuple[str, list[dict]]:
     """
     Get relevant project context with structured source information.
 
+    Args:
+        include_shared: If True, also include results from other projects.
+
     Returns:
         tuple of (formatted context string, list of source document dicts)
-        Each source dict: {content, source, chunk_index, priority, score}
+        Each source dict: {content, source, chunk_index, priority, score[, project_id]}
     """
     store = get_vector_store()
-    result = await store.query(project_id, query, k=k)
+    result = await store.query(project_id, query, k=k, include_shared=include_shared)
 
     if not result.documents:
         return "", []
@@ -952,7 +1136,48 @@ async def get_project_context_with_sources(
     for doc in result.documents:
         source = doc["source"]
         content = doc["content"]
-        context_parts.append(f"[{source}]\n{content}")
+        pid = doc.get("project_id", project_id)
+        prefix = f"[{source}]" if pid == project_id else f"[{pid}:{source}]"
+        context_parts.append(f"{prefix}\n{content}")
 
     formatted = "\n\n---\n\n".join(context_parts)
     return formatted, result.documents
+
+
+async def get_cross_project_context(
+    query: str,
+    k: int = 5,
+    source_project_ids: list[str] | None = None,
+    exclude_project_ids: list[str] | None = None,
+) -> str:
+    """
+    Convenience function to search across all projects.
+
+    Args:
+        query: Search query.
+        k: Number of results.
+        source_project_ids: Limit to these projects (None = all).
+        exclude_project_ids: Exclude these projects.
+
+    Returns:
+        Formatted context string with project_id prefixed sources.
+    """
+    store = get_vector_store()
+    result = await store.query_cross_project(
+        query=query,
+        k=k,
+        source_project_ids=source_project_ids,
+        exclude_project_ids=exclude_project_ids,
+    )
+
+    if not result.documents:
+        return ""
+
+    context_parts = []
+    for doc in result.documents:
+        source = doc["source"]
+        content = doc["content"]
+        pid = doc.get("project_id", "unknown")
+        context_parts.append(f"[{pid}:{source}]\n{content}")
+
+    return "\n\n---\n\n".join(context_parts)

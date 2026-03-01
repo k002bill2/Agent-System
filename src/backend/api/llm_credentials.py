@@ -9,12 +9,14 @@ from db.models import UserModel
 from models.external_usage import (
     LLMCredentialCreate,
     LLMCredentialResponse,
+    LLMCredentialUpdate,
     LLMCredentialVerifyResponse,
 )
 from services.credential_service import (
     create_credential,
     delete_credential,
     list_user_credentials,
+    update_credential,
     verify_credential,
 )
 
@@ -61,6 +63,20 @@ if AUTH_AVAILABLE:
         user_id = _get_user_id(current_user)
         return await create_credential(db, user_id, body)
 
+    @router.put("/{credential_id}", response_model=LLMCredentialResponse)
+    async def edit_credential(
+        credential_id: str,
+        body: LLMCredentialUpdate,
+        current_user: UserModel = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db_session),
+    ) -> LLMCredentialResponse:
+        """Update key_name and/or api_key for an existing credential."""
+        user_id = _get_user_id(current_user)
+        updated = await update_credential(db, user_id, credential_id, body)
+        if not updated:
+            raise HTTPException(status_code=404, detail="Credential not found")
+        return updated
+
     @router.delete("/{credential_id}", status_code=204)
     async def remove_credential(
         credential_id: str,
@@ -96,6 +112,10 @@ else:
 
     @router.post("", response_model=LLMCredentialResponse, status_code=201)
     async def add_credential(body: LLMCredentialCreate) -> LLMCredentialResponse:  # type: ignore[misc]
+        raise HTTPException(status_code=503, detail="Auth service unavailable")
+
+    @router.put("/{credential_id}", response_model=LLMCredentialResponse)
+    async def edit_credential(credential_id: str, body: LLMCredentialUpdate) -> LLMCredentialResponse:  # type: ignore[misc]
         raise HTTPException(status_code=503, detail="Auth service unavailable")
 
     @router.delete("/{credential_id}", status_code=204)

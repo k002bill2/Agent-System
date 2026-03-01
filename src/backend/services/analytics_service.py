@@ -193,8 +193,8 @@ class AnalyticsService:
                 total_cost=3.75,
             ),
             AgentPerformance(
-                agent_id="lead-orchestrator",
-                agent_name="Lead Orchestrator",
+                agent_id="aos-orchestrator",
+                agent_name="AOS Orchestrator",
                 category="orchestration",
                 total_tasks=35,
                 completed_tasks=34,
@@ -250,7 +250,7 @@ class AnalyticsService:
             ),
             CostBreakdown(
                 category="agent",
-                value="lead-orchestrator",
+                value="aos-orchestrator",
                 cost=1.80,
                 tokens=120000,
                 percentage=9.6,

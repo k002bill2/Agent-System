@@ -243,7 +243,7 @@ To track progress, use aos_get_status with session_id: {session_id}"""
             ],
             "orchestration": [
                 {
-                    "name": "lead-orchestrator",
+                    "name": "aos-orchestrator",
                     "model": "sonnet",
                     "description": "Multi-agent workflow coordination",
                 },

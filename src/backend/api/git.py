@@ -30,6 +30,9 @@ from models.git import (
     DraftCommitsResponse,
     # Remote operation models
     FetchResult,
+    # Staging area enhancement models
+    FileDiffResponse,
+    FileHunksResponse,
     # Branch models
     GitBranch,
     # Commit models
@@ -65,7 +68,9 @@ from models.git import (
     RemoteListResponse,
     RemoteOperationResult,
     RemoteUpdateRequest,
+    StageHunksRequest,
     ThreeWayDiff,
+    UnstageRequest,
     # Permission helpers
     can_merge_to_branch,
     delete_git_repository,
@@ -309,6 +314,88 @@ async def create_commit(
         message=request.message,
         author_name=request.author_name,
         author_email=request.author_email,
+    )
+
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.message)
+
+    return result
+
+
+# =============================================================================
+# Staging Area Enhancement Endpoints
+# =============================================================================
+
+
+@router.post("/projects/{project_id}/unstage", response_model=AddResult)
+async def unstage_files(
+    project_id: str,
+    request: UnstageRequest,
+):
+    """Unstage files (git reset HEAD).
+
+    - Empty paths with all=False: unstage all files
+    - all=True: unstage all files
+    - Specific paths: unstage only those files
+    """
+    git_service = get_git_service_for_project(project_id)
+    result = git_service.unstage(paths=request.paths or None, all=request.all)
+
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.message)
+
+    return result
+
+
+@router.get("/projects/{project_id}/file-diff", response_model=FileDiffResponse)
+async def get_file_diff(
+    project_id: str,
+    file_path: str = Query(..., description="File path relative to repo root"),
+    staged: bool = Query(False, description="Get staged diff instead of unstaged"),
+):
+    """Get diff for a single file."""
+    git_service = get_git_service_for_project(project_id)
+    try:
+        return git_service.get_file_diff(file_path=file_path, staged=staged)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/projects/{project_id}/staged-diff")
+async def get_staged_diff(project_id: str):
+    """Get the full staged diff (git diff --staged)."""
+    git_service = get_git_service_for_project(project_id)
+    try:
+        diff = git_service.get_working_diff(staged_only=True)
+        return {"diff": diff}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/projects/{project_id}/file-hunks", response_model=FileHunksResponse)
+async def get_file_hunks(
+    project_id: str,
+    file_path: str = Query(..., description="File path relative to repo root"),
+    staged: bool = Query(False, description="Get staged hunks"),
+):
+    """Get diff hunks for a single file."""
+    git_service = get_git_service_for_project(project_id)
+    try:
+        return git_service.get_file_hunks(file_path=file_path, staged=staged)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/projects/{project_id}/stage-hunks", response_model=AddResult)
+async def stage_hunks(
+    project_id: str,
+    request: StageHunksRequest,
+):
+    """Stage specific hunks of a file."""
+    git_service = get_git_service_for_project(project_id)
+    result = git_service.stage_hunks(
+        file_path=request.file_path,
+        hunk_indices=request.hunk_indices,
     )
 
     if not result.success:
