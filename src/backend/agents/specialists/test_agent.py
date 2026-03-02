@@ -6,7 +6,7 @@ Jest, React Native Testing Library, 커버리지 분석, TDD를 담당합니다.
 import time
 from typing import Any
 
-from agents.base import AgentConfig, AgentResult, BaseAgent
+from agents.base import SPECIALIST_AGENT_MODEL, AgentConfig, AgentResult, BaseAgent
 
 TEST_AUTOMATION_SYSTEM_PROMPT = """You are a Test Automation Specialist Agent, an expert in testing React Native applications with Jest and React Native Testing Library.
 
@@ -147,7 +147,7 @@ class TestAutomationAgent(BaseAgent):
             name="TestAutomationSpecialist",
             description="Testing expert specializing in Jest, RNTL, coverage analysis, and TDD",
             system_prompt=TEST_AUTOMATION_SYSTEM_PROMPT,
-            model_name="claude-sonnet-4-6",
+            model_name=SPECIALIST_AGENT_MODEL,
             temperature=0.3,  # 정확한 테스트 코드 생성
             max_tokens=8192,
             tools=["file_read", "file_write", "code_search", "test_run"],

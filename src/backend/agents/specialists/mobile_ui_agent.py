@@ -6,7 +6,7 @@
 import time
 from typing import Any
 
-from agents.base import AgentConfig, AgentResult, BaseAgent
+from agents.base import SPECIALIST_AGENT_MODEL, AgentConfig, AgentResult, BaseAgent
 
 MOBILE_UI_SYSTEM_PROMPT = """You are a Mobile UI Specialist Agent, an expert in React Native development with Expo and TypeScript.
 
@@ -98,7 +98,7 @@ class MobileUIAgent(BaseAgent):
             name="MobileUISpecialist",
             description="React Native UI/UX expert specializing in components, layouts, and navigation",
             system_prompt=MOBILE_UI_SYSTEM_PROMPT,
-            model_name="claude-sonnet-4-6",
+            model_name=SPECIALIST_AGENT_MODEL,
             temperature=0.5,
             max_tokens=8192,  # UI 코드는 길 수 있음
             tools=["file_read", "file_write", "code_search"],

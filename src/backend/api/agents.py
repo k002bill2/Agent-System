@@ -6,8 +6,11 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
+
+from api.deps import get_current_user
+from db.models import UserModel
 
 # Image upload directory
 UPLOAD_DIR = Path(os.getenv("AOS_UPLOAD_DIR", "/tmp/aos-uploads"))
@@ -39,6 +42,59 @@ from services.task_analysis_service import (
 )
 
 router = APIRouter(prefix="/agents", tags=["agents"])
+
+# Default workspace roots (configurable via AOS_WORKSPACE_ROOTS env)
+_DEFAULT_WORKSPACE_ROOTS = [
+    Path.home() / "Work",
+    Path.home() / "Projects",
+    Path.home() / "Developer",
+    Path("/tmp/aos-workspaces"),
+]
+
+
+def get_allowed_workspace_roots() -> list[Path]:
+    """Get allowed workspace roots, configurable via AOS_WORKSPACE_ROOTS env.
+
+    Env format: comma-separated paths, e.g. "/home/user/Work,/opt/projects"
+    Falls back to defaults if env is not set.
+    """
+    env_roots = os.getenv("AOS_WORKSPACE_ROOTS")
+    if env_roots:
+        return [Path(p.strip()) for p in env_roots.split(",") if p.strip()]
+    return _DEFAULT_WORKSPACE_ROOTS
+
+
+# Module-level alias for backward compat
+ALLOWED_WORKSPACE_ROOTS = _DEFAULT_WORKSPACE_ROOTS
+
+
+def _validate_project_path(path_str: str) -> Path:
+    """Validate project path is within allowed workspace directories.
+
+    Raises HTTPException if path is outside allowed roots or contains traversal.
+    """
+    try:
+        resolved = Path(path_str).resolve()
+    except (ValueError, OSError):
+        raise HTTPException(status_code=400, detail=f"Invalid project path: {path_str}")
+
+    # Check for path traversal attempts
+    if ".." in Path(path_str).parts:
+        raise HTTPException(status_code=400, detail="Path traversal not allowed")
+
+    # Verify path is within allowed roots (use dynamic getter for env support)
+    allowed_roots = get_allowed_workspace_roots()
+    for allowed_root in allowed_roots:
+        try:
+            if resolved.is_relative_to(allowed_root.resolve()):
+                return resolved
+        except (ValueError, OSError):
+            continue
+
+    raise HTTPException(
+        status_code=400,
+        detail="Project path must be within allowed workspace directories",
+    )
 
 
 # ─────────────────────────────────────────────────────────────
@@ -297,6 +353,7 @@ def _agent_to_response(agent: AgentMetadata) -> AgentResponse:
 async def list_agents(
     category: str | None = None,
     available_only: bool = False,
+    _user: UserModel = Depends(get_current_user),
 ):
     """
     모든 에이전트 목록 조회.
@@ -325,7 +382,7 @@ async def list_agents(
 
 
 @router.get("/stats", response_model=AgentRegistryStatsResponse)
-async def get_registry_stats():
+async def get_registry_stats(_user: UserModel = Depends(get_current_user)):
     """에이전트 레지스트리 통계 조회."""
     registry = get_agent_registry()
     stats = registry.get_stats()
@@ -335,6 +392,7 @@ async def get_registry_stats():
 @router.post("/ocr", response_model=OCRResponse)
 async def extract_text_from_image(
     image: UploadFile = File(..., description="OCR 대상 이미지"),
+    _user: UserModel = Depends(get_current_user),
 ):
     """
     이미지에서 텍스트를 추출합니다 (Vision LLM 기반 OCR).
@@ -444,7 +502,7 @@ async def extract_text_from_image(
 
 
 @router.get("/{agent_id}", response_model=AgentResponse)
-async def get_agent(agent_id: str):
+async def get_agent(agent_id: str, _user: UserModel = Depends(get_current_user)):
     """특정 에이전트 조회."""
     registry = get_agent_registry()
     agent = registry.get(agent_id)
@@ -456,7 +514,7 @@ async def get_agent(agent_id: str):
 
 
 @router.post("/search", response_model=list[AgentSearchResult])
-async def search_agents(request: AgentSearchRequest):
+async def search_agents(request: AgentSearchRequest, _user: UserModel = Depends(get_current_user)):
     """
     능력 기반 에이전트 검색.
 
@@ -487,7 +545,7 @@ async def search_agents(request: AgentSearchRequest):
 
 
 @router.post("/{agent_id}/status")
-async def update_agent_status(agent_id: str, status: str):
+async def update_agent_status(agent_id: str, status: str, _user: UserModel = Depends(get_current_user)):
     """에이전트 상태 업데이트."""
     registry = get_agent_registry()
 
@@ -511,7 +569,7 @@ async def update_agent_status(agent_id: str, status: str):
 
 
 @router.post("/orchestrate/analyze", response_model=TaskAnalysisResponse)
-async def analyze_task(request: TaskAnalysisRequest):
+async def analyze_task(request: TaskAnalysisRequest, _user: UserModel = Depends(get_current_user)):
     """
     태스크 분석 및 실행 계획 생성.
 
@@ -592,6 +650,7 @@ async def analyze_task_with_images(
     task: str = Form(..., description="분석할 태스크 설명"),
     context: str | None = Form(None, description="JSON 형태의 추가 컨텍스트"),
     images: list[UploadFile] = File(default=[], description="첨부 이미지 파일들 (최대 5개)"),
+    _user: UserModel = Depends(get_current_user),
 ):
     """
     이미지를 포함한 태스크 분석 및 실행 계획 생성.
@@ -719,6 +778,7 @@ async def get_analysis_history(
     project_id: str | None = None,
     limit: int = 20,
     offset: int = 0,
+    _user: UserModel = Depends(get_current_user),
 ):
     """
     태스크 분석 히스토리 조회.
@@ -763,7 +823,7 @@ async def get_analysis_history(
 
 
 @router.get("/orchestrate/analyses/{analysis_id}")
-async def get_analysis(analysis_id: str):
+async def get_analysis(analysis_id: str, _user: UserModel = Depends(get_current_user)):
     """단일 태스크 분석 조회."""
     analysis_service = get_task_analysis_service()
     entry = await analysis_service.get_analysis(analysis_id)
@@ -789,7 +849,7 @@ async def get_analysis(analysis_id: str):
 
 
 @router.delete("/orchestrate/analyses/{analysis_id}")
-async def delete_analysis(analysis_id: str):
+async def delete_analysis(analysis_id: str, _user: UserModel = Depends(get_current_user)):
     """태스크 분석 삭제."""
     analysis_service = get_task_analysis_service()
     success = await analysis_service.delete_analysis(analysis_id)
@@ -801,7 +861,7 @@ async def delete_analysis(analysis_id: str):
 
 
 @router.post("/orchestrate/execute-analysis", response_model=ExecuteAnalysisResponse)
-async def execute_analysis(request: ExecuteAnalysisRequest):
+async def execute_analysis(request: ExecuteAnalysisRequest, _user: UserModel = Depends(get_current_user)):
     """
     분석 결과를 기반으로 오케스트레이션 실행.
 
@@ -868,7 +928,7 @@ async def execute_analysis(request: ExecuteAnalysisRequest):
 
 
 @router.get("/orchestrate/claude-auth-status")
-async def check_claude_auth_status():
+async def check_claude_auth_status(_user: UserModel = Depends(get_current_user)):
     """Claude CLI 인증 상태 및 크레딧 사전 체크.
 
     tmux 실행 전에 호출하여 인증/크레딧 문제를 미리 확인.
@@ -890,7 +950,7 @@ async def check_claude_auth_status():
 
 
 @router.post("/orchestrate/execute-with-tmux", response_model=TmuxSessionResponse)
-async def execute_with_tmux(request: ExecuteWithTmuxRequest):
+async def execute_with_tmux(request: ExecuteWithTmuxRequest, _user: UserModel = Depends(get_current_user)):
     """
     분석 결과를 tmux + Claude Code CLI로 실행.
 
@@ -945,6 +1005,11 @@ async def execute_with_tmux(request: ExecuteWithTmuxRequest):
         if ctx_path:
             project_path = ctx_path
 
+    # 경로 유효성 검증 (path traversal 방어)
+    # "." 포함 모든 경로를 검증 — CWD가 허용 범위 밖일 수 있음
+    validated_path = _validate_project_path(project_path)
+    project_path = str(validated_path)
+
     # tmux + Claude CLI 실행
     info = await tmux.execute_analysis(
         analysis_id=request.analysis_id,
@@ -967,7 +1032,7 @@ async def execute_with_tmux(request: ExecuteWithTmuxRequest):
 
 
 @router.get("/orchestrate/tmux-sessions/{session_name}/status", response_model=TmuxSessionResponse)
-async def get_tmux_session_status(session_name: str):
+async def get_tmux_session_status(session_name: str, _user: UserModel = Depends(get_current_user)):
     """tmux 세션 상태 + 최근 출력 조회."""
     from services.tmux_service import get_tmux_service
 
@@ -1000,7 +1065,7 @@ async def get_tmux_session_status(session_name: str):
 
 
 @router.get("/orchestrate/tmux-sessions/{session_name}/stream")
-async def stream_tmux_session(session_name: str):
+async def stream_tmux_session(session_name: str, _user: UserModel = Depends(get_current_user)):
     """SSE 스트리밍으로 tmux 세션 출력 전달 (2초 폴링)."""
     import asyncio
 
@@ -1077,7 +1142,7 @@ async def stream_tmux_session(session_name: str):
 
 
 @router.post("/orchestrate/tmux-sessions/{session_name}/stop")
-async def stop_tmux_session(session_name: str):
+async def stop_tmux_session(session_name: str, _user: UserModel = Depends(get_current_user)):
     """tmux 세션 강제 종료."""
     from services.tmux_service import get_tmux_service
 
@@ -1096,7 +1161,7 @@ async def stop_tmux_session(session_name: str):
 
 
 @router.get("/orchestrate/tmux-sessions")
-async def list_tmux_sessions():
+async def list_tmux_sessions(_user: UserModel = Depends(get_current_user)):
     """모든 AOS tmux 세션 목록."""
     from services.tmux_service import get_tmux_service
 
@@ -1120,7 +1185,7 @@ async def list_tmux_sessions():
 
 
 @router.get("/orchestrate/strategies")
-async def get_execution_strategies():
+async def get_execution_strategies(_user: UserModel = Depends(get_current_user)):
     """사용 가능한 실행 전략 목록."""
     return {
         "strategies": [
@@ -1177,7 +1242,7 @@ def _server_to_response(info) -> MCPServerResponse:
 
 
 @router.get("/mcp/servers", response_model=list[MCPServerResponse])
-async def list_mcp_servers(running_only: bool = False):
+async def list_mcp_servers(running_only: bool = False, _user: UserModel = Depends(get_current_user)):
     """
     MCP 서버 목록 조회.
 
@@ -1197,7 +1262,7 @@ async def list_mcp_servers(running_only: bool = False):
 
 
 @router.get("/mcp/servers/{server_id}", response_model=MCPServerResponse)
-async def get_mcp_server(server_id: str):
+async def get_mcp_server(server_id: str, _user: UserModel = Depends(get_current_user)):
     """특정 MCP 서버 정보 조회."""
     from services.mcp_manager import get_mcp_manager
 
@@ -1211,7 +1276,7 @@ async def get_mcp_server(server_id: str):
 
 
 @router.post("/mcp/servers/{server_id}/start")
-async def start_mcp_server(server_id: str):
+async def start_mcp_server(server_id: str, _user: UserModel = Depends(get_current_user)):
     """MCP 서버 시작."""
     from services.mcp_manager import get_mcp_manager
 
@@ -1227,7 +1292,7 @@ async def start_mcp_server(server_id: str):
 
 
 @router.post("/mcp/servers/{server_id}/stop")
-async def stop_mcp_server(server_id: str):
+async def stop_mcp_server(server_id: str, _user: UserModel = Depends(get_current_user)):
     """MCP 서버 중지."""
     from services.mcp_manager import get_mcp_manager
 
@@ -1241,7 +1306,7 @@ async def stop_mcp_server(server_id: str):
 
 
 @router.post("/mcp/servers/{server_id}/restart")
-async def restart_mcp_server(server_id: str):
+async def restart_mcp_server(server_id: str, _user: UserModel = Depends(get_current_user)):
     """MCP 서버 재시작."""
     from services.mcp_manager import get_mcp_manager
 
@@ -1255,7 +1320,7 @@ async def restart_mcp_server(server_id: str):
 
 
 @router.get("/mcp/servers/{server_id}/tools")
-async def get_mcp_server_tools(server_id: str):
+async def get_mcp_server_tools(server_id: str, _user: UserModel = Depends(get_current_user)):
     """MCP 서버의 도구 목록 조회."""
     from services.mcp_manager import get_mcp_manager
 
@@ -1279,7 +1344,7 @@ async def get_mcp_server_tools(server_id: str):
 
 
 @router.post("/mcp/tools/call", response_model=MCPToolCallResponse)
-async def call_mcp_tool(request: MCPToolCallRequest):
+async def call_mcp_tool(request: MCPToolCallRequest, _user: UserModel = Depends(get_current_user)):
     """
     MCP 도구 호출.
 
@@ -1307,7 +1372,7 @@ async def call_mcp_tool(request: MCPToolCallRequest):
 
 
 @router.post("/mcp/tools/batch-call", response_model=MCPBatchToolCallResponse)
-async def batch_call_mcp_tools(request: MCPBatchToolCallRequest):
+async def batch_call_mcp_tools(request: MCPBatchToolCallRequest, _user: UserModel = Depends(get_current_user)):
     """
     MCP 다중 도구 병렬 호출.
 
@@ -1351,7 +1416,7 @@ async def batch_call_mcp_tools(request: MCPBatchToolCallRequest):
 
 
 @router.get("/mcp/tools")
-async def list_all_mcp_tools():
+async def list_all_mcp_tools(_user: UserModel = Depends(get_current_user)):
     """모든 MCP 서버의 도구 목록 조회."""
     from services.mcp_manager import get_mcp_manager
 
@@ -1374,7 +1439,7 @@ async def list_all_mcp_tools():
 
 
 @router.get("/mcp/stats", response_model=MCPManagerStatsResponse)
-async def get_mcp_stats():
+async def get_mcp_stats(_user: UserModel = Depends(get_current_user)):
     """MCP 매니저 통계 조회."""
     from services.mcp_manager import get_mcp_manager
 

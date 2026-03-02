@@ -216,10 +216,24 @@ else:
                 if logger:
                     logger.warning("startup_notification_failed", error=str(e))
 
+        # Start upload cleanup background task
+        import asyncio
+
+        from services.upload_cleanup_service import schedule_upload_cleanup
+
+        cleanup_task = asyncio.create_task(schedule_upload_cleanup())
+
         if logger:
             logger.info("application_started")
 
         yield
+
+        # Cancel cleanup task on shutdown and await it for clean resource release
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            pass
 
         # Shutdown
         if logger:

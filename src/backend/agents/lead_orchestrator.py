@@ -223,6 +223,28 @@ dependency_rationale에 의존성 결정 이유를 간단히 설명하세요.
 """
 
 
+def _safe_effort_level(value: str) -> EffortLevel:
+    """Safely parse EffortLevel from LLM output, defaulting to MEDIUM on failure.
+
+    Case-insensitive: LLMs may output "Medium", "MEDIUM", or "medium".
+    """
+    try:
+        return EffortLevel(value.lower())
+    except (ValueError, KeyError, AttributeError):
+        return EffortLevel.MEDIUM
+
+
+def _safe_execution_strategy(value: str) -> ExecutionStrategy:
+    """Safely parse ExecutionStrategy from LLM output, defaulting to SEQUENTIAL on failure.
+
+    Case-insensitive: LLMs may output "Sequential", "PARALLEL", or "mixed".
+    """
+    try:
+        return ExecutionStrategy(value.lower())
+    except (ValueError, KeyError, AttributeError):
+        return ExecutionStrategy.SEQUENTIAL
+
+
 class LeadOrchestratorAgent(BaseAgent):
     """
     Lead Orchestrator Agent.
@@ -242,7 +264,6 @@ class LeadOrchestratorAgent(BaseAgent):
         )
         super().__init__(config)
         self._registry = get_agent_registry()
-        self._execution_results: dict[str, Any] = {}
 
     async def execute(self, task: str, context: dict[str, Any] | None = None) -> AgentResult:
         """
@@ -353,7 +374,7 @@ Remember to respond with valid JSON only."""
                     description=st_data.get("description", ""),
                     assigned_agent_id=st_data.get("assigned_agent_id"),
                     dependencies=st_data.get("dependencies", []),
-                    effort_level=EffortLevel(st_data.get("effort_level", "medium")),
+                    effort_level=_safe_effort_level(st_data.get("effort_level", "medium")),
                     priority=st_data.get("priority", 0),
                     task_boundaries=st_data.get("task_boundaries"),
                 )
@@ -365,9 +386,9 @@ Remember to respond with valid JSON only."""
             analysis = TaskAnalysis(
                 original_task=task,
                 complexity_score=analysis_data.get("complexity_score", 5),
-                effort_level=EffortLevel(analysis_data.get("effort_level", "medium")),
+                effort_level=_safe_effort_level(analysis_data.get("effort_level", "medium")),
                 requires_decomposition=analysis_data.get("requires_decomposition", False),
-                execution_strategy=ExecutionStrategy(data.get("execution_strategy", "sequential")),
+                execution_strategy=_safe_execution_strategy(data.get("execution_strategy", "sequential")),
                 subtasks=subtasks,
                 context_summary=analysis_data.get("context_summary", ""),
                 key_requirements=analysis_data.get("key_requirements", []),
