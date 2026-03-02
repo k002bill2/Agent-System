@@ -711,6 +711,7 @@ class AnalyticsService:
         def _normalize_dt(dt):
             return dt.replace(tzinfo=None) if dt.tzinfo else dt
 
+        start = _normalize_dt(start)
         range_sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
 
         heatmap: dict[tuple[int, int], int] = {}

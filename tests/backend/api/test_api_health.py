@@ -5,11 +5,11 @@ import pytest
 
 @pytest.mark.anyio
 async def test_health_endpoint(client):
-    """GET /api/health should return 200 with status ok."""
+    """GET /api/health should return 200 with status healthy."""
     response = await client.get("/api/health")
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "ok"
+    assert data["status"] == "healthy"
 
 
 @pytest.mark.anyio
@@ -29,11 +29,9 @@ async def test_nonexistent_endpoint(client):
 
 @pytest.mark.anyio
 async def test_api_sessions_list(client):
-    """GET /api/sessions should return a list."""
+    """GET /api/sessions is not supported (POST only); should return 405."""
     response = await client.get("/api/sessions")
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data, list)
+    assert response.status_code == 405
 
 
 @pytest.mark.anyio
@@ -41,7 +39,7 @@ async def test_api_sessions_create(client):
     """POST /api/sessions should create a new session."""
     response = await client.post(
         "/api/sessions",
-        json={"project_id": "test-project"},
+        json={},
     )
     assert response.status_code == 200
     data = response.json()

@@ -1,6 +1,6 @@
 """Tests for AnalyticsService."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -225,9 +225,9 @@ class TestGetDashboard:
             assert result.errors.time_range == tr
 
     def test_dashboard_generated_at_is_recent(self):
-        before = datetime.utcnow()
+        before = datetime.now(timezone.utc)
         result = AnalyticsService.get_dashboard()
-        after = datetime.utcnow()
+        after = datetime.now(timezone.utc)
         assert before <= result.generated_at <= after
 
 
@@ -555,7 +555,7 @@ class TestActivityHeatmapFromSessions:
     def test_session_increments_corresponding_cell(self):
         # Use a recent Monday within the last 365 days so it passes the utcnow filter.
         # Find the most recent Monday relative to now.
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         days_since_monday = now.weekday()  # 0=Monday
         last_monday = (now - timedelta(days=days_since_monday)).replace(
             hour=10, minute=0, second=0, microsecond=0
