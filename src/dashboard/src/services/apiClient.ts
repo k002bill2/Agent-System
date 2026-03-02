@@ -267,38 +267,14 @@ class ApiClient {
 
     this.refreshPromise = (async () => {
       try {
-        const { refreshToken: token } = useAuthStore.getState()
-        if (!token) {
+        const success = await useAuthStore.getState().refreshAccessToken()
+        if (!success) {
           throw new ApiError({
-            message: 'No refresh token available',
+            message: 'Token refresh failed',
             status: 401,
             code: ApiErrorCode.TOKEN_EXPIRED,
           })
         }
-
-        const response = await fetch(`${this.config.baseURL}/api/auth/refresh`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refresh_token: token }),
-        })
-
-        if (!response.ok) {
-          throw new ApiError({
-            message: 'Token refresh failed',
-            status: response.status,
-            code: ApiErrorCode.TOKEN_EXPIRED,
-          })
-        }
-
-        // Sync refreshed tokens back to authStore
-        const data = await response.json()
-        useAuthStore.setState({
-          accessToken: data.access_token,
-          refreshToken: data.refresh_token,
-          expiresAt: Date.now() + data.expires_in * 1000,
-          error: null,
-        })
       } finally {
         this.refreshPromise = null
       }
