@@ -1,13 +1,13 @@
 """Audit log model."""
 
 from db.models.base import (
+    JSONB,
     Base,
     Column,
     DateTime,
     ForeignKey,
     Index,
     Integer,
-    JSONB,
     String,
     Text,
     datetime,

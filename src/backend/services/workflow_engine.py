@@ -5,8 +5,6 @@ import time
 import uuid
 from collections import defaultdict
 from datetime import datetime
-
-from utils.time import utcnow
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +22,7 @@ from models.workflow import (
     WorkflowStepDef,
 )
 from services.variable_expander import expand_variables, mask_secrets, parse_step_outputs
+from utils.time import utcnow
 
 
 class WorkflowEngine:

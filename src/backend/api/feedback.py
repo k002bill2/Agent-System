@@ -6,8 +6,6 @@ RLHF Feedback API Router
 
 from datetime import datetime
 
-from utils.time import utcnow
-
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import PlainTextResponse, Response
 
@@ -28,6 +26,7 @@ from models.feedback import (
     TaskEvaluationSubmit,
 )
 from services.feedback_service import get_feedback_service
+from utils.time import utcnow
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 

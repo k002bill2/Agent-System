@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import traceback
 from datetime import datetime
-
-from utils.time import utcnow
 from enum import StrEnum
 from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field
+
+from utils.time import utcnow
 
 
 class ErrorCategory(StrEnum):

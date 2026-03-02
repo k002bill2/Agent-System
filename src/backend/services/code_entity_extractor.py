@@ -15,11 +15,11 @@ import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
 
 
 class CodeEntityType(StrEnum):
     """Types of code entities that can be extracted."""
+
     FUNCTION = "function"
     CLASS = "class"
     METHOD = "method"
@@ -35,6 +35,7 @@ class CodeEntityType(StrEnum):
 @dataclass
 class CodeEntity:
     """A single code entity extracted from source."""
+
     name: str
     entity_type: CodeEntityType
     file_path: str
@@ -50,6 +51,7 @@ class CodeEntity:
 @dataclass
 class CodeDependency:
     """A dependency relationship between code entities."""
+
     source_entity: str  # e.g., "module.ClassName.method"
     target_entity: str  # e.g., "other_module.function"
     dependency_type: str  # "imports", "calls", "inherits", "uses"
@@ -86,9 +88,7 @@ class PythonEntityExtractor:
                 # Extract methods
                 for item in ast.iter_child_nodes(node):
                     if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        entities.append(
-                            self._extract_function(item, file_path, parent=node.name)
-                        )
+                        entities.append(self._extract_function(item, file_path, parent=node.name))
             elif isinstance(node, (ast.Import, ast.ImportFrom)):
                 entities.extend(self._extract_imports(node, file_path))
             elif isinstance(node, ast.Assign):
@@ -104,9 +104,7 @@ class PythonEntityExtractor:
     ) -> CodeEntity:
         """Extract function/method entity."""
         entity_type = CodeEntityType.METHOD if parent else CodeEntityType.FUNCTION
-        decorators = [
-            self._get_decorator_name(d) for d in node.decorator_list
-        ]
+        decorators = [self._get_decorator_name(d) for d in node.decorator_list]
 
         # Build signature
         args = self._format_args(node.args)
@@ -131,9 +129,7 @@ class PythonEntityExtractor:
 
     def _extract_class(self, node: ast.ClassDef, file_path: str) -> CodeEntity:
         """Extract class entity."""
-        decorators = [
-            self._get_decorator_name(d) for d in node.decorator_list
-        ]
+        decorators = [self._get_decorator_name(d) for d in node.decorator_list]
         bases = [ast.unparse(base) for base in node.bases]
         signature = f"class {node.name}"
         if bases:
@@ -158,30 +154,32 @@ class PythonEntityExtractor:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 name = alias.asname or alias.name
-                entities.append(CodeEntity(
-                    name=name,
-                    entity_type=CodeEntityType.IMPORT,
-                    file_path=file_path,
-                    line_number=node.lineno,
-                    imports=[alias.name],
-                ))
+                entities.append(
+                    CodeEntity(
+                        name=name,
+                        entity_type=CodeEntityType.IMPORT,
+                        file_path=file_path,
+                        line_number=node.lineno,
+                        imports=[alias.name],
+                    )
+                )
         elif isinstance(node, ast.ImportFrom):
             module = node.module or ""
             for alias in node.names:
                 name = alias.asname or alias.name
                 full_import = f"{module}.{alias.name}" if module else alias.name
-                entities.append(CodeEntity(
-                    name=name,
-                    entity_type=CodeEntityType.IMPORT,
-                    file_path=file_path,
-                    line_number=node.lineno,
-                    imports=[full_import],
-                ))
+                entities.append(
+                    CodeEntity(
+                        name=name,
+                        entity_type=CodeEntityType.IMPORT,
+                        file_path=file_path,
+                        line_number=node.lineno,
+                        imports=[full_import],
+                    )
+                )
         return entities
 
-    def _extract_variable(
-        self, node: ast.Assign, file_path: str
-    ) -> CodeEntity | None:
+    def _extract_variable(self, node: ast.Assign, file_path: str) -> CodeEntity | None:
         """Extract module-level variable assignments (e.g., constants)."""
         if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
             name = node.targets[0].id
@@ -217,9 +215,7 @@ class PythonEntityExtractor:
                 parts.append(arg.arg)
         return ", ".join(parts)
 
-    def extract_dependencies(
-        self, source: str, file_path: str
-    ) -> list[CodeDependency]:
+    def extract_dependencies(self, source: str, file_path: str) -> list[CodeDependency]:
         """Extract dependency relationships from Python source."""
         try:
             tree = ast.parse(source)
@@ -230,33 +226,39 @@ class PythonEntityExtractor:
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    deps.append(CodeDependency(
-                        source_entity=Path(file_path).stem,
-                        target_entity=alias.name,
-                        dependency_type="imports",
-                        file_path=file_path,
-                        line_number=node.lineno,
-                    ))
+                    deps.append(
+                        CodeDependency(
+                            source_entity=Path(file_path).stem,
+                            target_entity=alias.name,
+                            dependency_type="imports",
+                            file_path=file_path,
+                            line_number=node.lineno,
+                        )
+                    )
             elif isinstance(node, ast.ImportFrom):
                 module = node.module or ""
                 for alias in node.names:
                     target = f"{module}.{alias.name}" if module else alias.name
-                    deps.append(CodeDependency(
-                        source_entity=Path(file_path).stem,
-                        target_entity=target,
-                        dependency_type="imports",
-                        file_path=file_path,
-                        line_number=node.lineno,
-                    ))
+                    deps.append(
+                        CodeDependency(
+                            source_entity=Path(file_path).stem,
+                            target_entity=target,
+                            dependency_type="imports",
+                            file_path=file_path,
+                            line_number=node.lineno,
+                        )
+                    )
             elif isinstance(node, ast.ClassDef):
                 for base in node.bases:
-                    deps.append(CodeDependency(
-                        source_entity=f"{Path(file_path).stem}.{node.name}",
-                        target_entity=ast.unparse(base),
-                        dependency_type="inherits",
-                        file_path=file_path,
-                        line_number=node.lineno,
-                    ))
+                    deps.append(
+                        CodeDependency(
+                            source_entity=f"{Path(file_path).stem}.{node.name}",
+                            target_entity=ast.unparse(base),
+                            dependency_type="inherits",
+                            file_path=file_path,
+                            line_number=node.lineno,
+                        )
+                    )
         return deps
 
 
@@ -320,57 +322,57 @@ class TypeScriptEntityExtractor:
     def extract(self, source: str, file_path: str) -> list[CodeEntity]:
         """Extract entities from TypeScript/JavaScript source."""
         entities: list[CodeEntity] = []
-        lines = source.split("\n")
 
         # Extract typed entities
         for entity_type, patterns in self._PATTERNS.items():
             for pattern in patterns:
                 for match in pattern.finditer(source):
                     name = match.group(1)
-                    line_num = source[:match.start()].count("\n") + 1
+                    line_num = source[: match.start()].count("\n") + 1
                     # Avoid duplicate names for same entity type
-                    if not any(
-                        e.name == name and e.entity_type == entity_type
-                        for e in entities
-                    ):
-                        entities.append(CodeEntity(
-                            name=name,
-                            entity_type=entity_type,
-                            file_path=file_path,
-                            line_number=line_num,
-                        ))
+                    if not any(e.name == name and e.entity_type == entity_type for e in entities):
+                        entities.append(
+                            CodeEntity(
+                                name=name,
+                                entity_type=entity_type,
+                                file_path=file_path,
+                                line_number=line_num,
+                            )
+                        )
 
         # Extract imports
         for match in self._IMPORT_PATTERN.finditer(source):
             module_path = match.group(1)
-            line_num = source[:match.start()].count("\n") + 1
-            entities.append(CodeEntity(
-                name=module_path,
-                entity_type=CodeEntityType.IMPORT,
-                file_path=file_path,
-                line_number=line_num,
-                imports=[module_path],
-            ))
+            line_num = source[: match.start()].count("\n") + 1
+            entities.append(
+                CodeEntity(
+                    name=module_path,
+                    entity_type=CodeEntityType.IMPORT,
+                    file_path=file_path,
+                    line_number=line_num,
+                    imports=[module_path],
+                )
+            )
 
         return entities
 
-    def extract_dependencies(
-        self, source: str, file_path: str
-    ) -> list[CodeDependency]:
+    def extract_dependencies(self, source: str, file_path: str) -> list[CodeDependency]:
         """Extract dependency relationships from TypeScript source."""
         deps: list[CodeDependency] = []
         stem = Path(file_path).stem
 
         for match in self._IMPORT_PATTERN.finditer(source):
             module_path = match.group(1)
-            line_num = source[:match.start()].count("\n") + 1
-            deps.append(CodeDependency(
-                source_entity=stem,
-                target_entity=module_path,
-                dependency_type="imports",
-                file_path=file_path,
-                line_number=line_num,
-            ))
+            line_num = source[: match.start()].count("\n") + 1
+            deps.append(
+                CodeDependency(
+                    source_entity=stem,
+                    target_entity=module_path,
+                    dependency_type="imports",
+                    file_path=file_path,
+                    line_number=line_num,
+                )
+            )
 
         return deps
 

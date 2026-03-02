@@ -1,6 +1,7 @@
 """Notification models: rules, history, and channel config."""
 
 from db.models.base import (
+    JSONB,
     Base,
     Boolean,
     Column,
@@ -9,7 +10,6 @@ from db.models.base import (
     ForeignKey,
     Index,
     Integer,
-    JSONB,
     String,
     Text,
     datetime,
@@ -42,7 +42,11 @@ class NotificationRuleModel(Base):
     message_template = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
 
 class NotificationHistoryModel(Base):
@@ -100,4 +104,8 @@ class ChannelConfigModel(Base):
     sent_this_hour = Column(Integer, default=0)
 
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )

@@ -12,8 +12,6 @@ logger = logging.getLogger(__name__)
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-
-from utils.time import utcnow
 from pathlib import Path
 
 import httpx
@@ -31,6 +29,7 @@ from models.claude_session import (
     TokenUsage,
     calculate_cost,
 )
+from utils.time import utcnow
 
 
 @dataclass

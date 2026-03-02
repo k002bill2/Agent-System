@@ -6,7 +6,7 @@ Project context (CLAUDE.md, dev docs) and context window usage meter.
 import os
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from api.deps import get_engine
 from models.context_usage import ContextUsage, get_context_limit

@@ -16,8 +16,6 @@ import logging
 import shutil
 from collections.abc import AsyncIterator
 from datetime import datetime
-
-from utils.time import utcnow
 from pathlib import Path
 
 from models.project_config import (
@@ -36,6 +34,7 @@ from services.frontmatter_parser import FrontmatterParser
 from services.mcp_config_manager import MCPConfigManager
 from services.project_discovery import ProjectDiscovery
 from services.skill_manager import SkillManager
+from utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 

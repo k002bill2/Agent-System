@@ -1,6 +1,7 @@
 """Workflow automation models."""
 
 from db.models.base import (
+    JSONB,
     Base,
     Boolean,
     Column,
@@ -10,7 +11,6 @@ from db.models.base import (
     ForeignKey,
     Index,
     Integer,
-    JSONB,
     String,
     Text,
     UniqueConstraint,
@@ -36,7 +36,11 @@ class WorkflowDefinitionModel(Base):
     version = Column(Integer, default=1)
     created_by = Column(String(36), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
     last_run_at = Column(DateTime, nullable=True)
     last_run_status = Column(String(20), nullable=True)
 
@@ -150,7 +154,11 @@ class WorkflowSecretModel(Base):
     scope_id = Column(String(36), nullable=True, index=True)
     created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     __table_args__ = (
         UniqueConstraint("name", "scope", "scope_id", name="uq_secret_name_scope"),
@@ -222,7 +230,11 @@ class WorkflowTemplateModel(Base):
     icon = Column(String(50), default="zap")
     popularity = Column(Integer, default=0)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     __table_args__ = (
         Index("ix_workflow_templates_category", "category"),

@@ -6,8 +6,6 @@ import json
 import time
 from datetime import datetime, timedelta
 
-from utils.time import utcnow
-
 from models.audit import (
     RETENTION_DAYS,
     ComplianceAuditEntry,
@@ -17,6 +15,7 @@ from models.audit import (
     RetentionApplyResult,
     RetentionPolicy,
 )
+from utils.time import utcnow
 
 
 class AuditIntegrityService:

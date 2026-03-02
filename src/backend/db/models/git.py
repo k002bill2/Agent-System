@@ -1,12 +1,13 @@
 """Git collaboration models: merge requests, branch protection."""
 
 from db.models.base import (
+    JSONB,
     Base,
     Boolean,
     Column,
     DateTime,
     Index,
-    JSONB,
+    Integer,
     String,
     Text,
     datetime,
@@ -44,7 +45,11 @@ class MergeRequestModel(Base):
 
     # Timestamps
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
     merged_at = Column(DateTime, nullable=True)
     closed_at = Column(DateTime, nullable=True)
 
@@ -73,7 +78,11 @@ class BranchProtectionRuleModel(Base):
 
     # Timestamps
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     __table_args__ = (
         Index("ix_branch_protection_project", "project_id"),

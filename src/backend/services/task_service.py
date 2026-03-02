@@ -2,11 +2,10 @@
 
 from datetime import datetime
 
-from utils.time import utcnow
-
 from pydantic import BaseModel
 
 from models.agent_state import TaskNode, TaskStatus
+from utils.time import utcnow
 
 
 class TaskDeleteValidation(BaseModel):

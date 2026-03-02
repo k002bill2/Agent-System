@@ -8,11 +8,10 @@ import json
 import logging
 import os
 from datetime import datetime
-
-from utils.time import utcnow
 from pathlib import Path
 
 from models.project_config import ProjectInfo
+from utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -121,8 +120,6 @@ class ProjectDiscovery:
         if resolved_path in self._external_paths:
             self._external_paths.remove(resolved_path)
 
-        # Clear cache for this project
-        project_id = self.encode_path(p)
         # Cache clearing is handled by the monitor
 
         logger.info(f"Removed external project: {p}")

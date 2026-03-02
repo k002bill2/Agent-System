@@ -1,11 +1,11 @@
 """Claude Code external session model."""
 
 from datetime import datetime
-
-from utils.time import utcnow
 from enum import Enum
 
 from pydantic import BaseModel, Field
+
+from utils.time import utcnow
 
 
 class SessionStatus(str, Enum):

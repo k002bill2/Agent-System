@@ -3,9 +3,7 @@
 import hashlib
 import os
 import secrets
-from datetime import datetime, timedelta
-
-from utils.time import utcnow
+from datetime import timedelta
 from urllib.parse import urlencode
 
 import httpx
@@ -14,6 +12,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
+
+from utils.time import utcnow
 
 # ─────────────────────────────────────────────────────────────
 # Configuration

@@ -1,13 +1,12 @@
 """Token and cost tracking models."""
 
 from datetime import datetime
-
-from utils.time import utcnow
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from models.llm_models import LLMModelRegistry
+from utils.time import utcnow
 
 # Default cost for unknown models
 DEFAULT_COST = {"input": 0.001, "output": 0.002}

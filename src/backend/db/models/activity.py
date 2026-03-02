@@ -1,6 +1,7 @@
 """Session activity and task analysis models."""
 
 from db.models.base import (
+    JSONB,
     Base,
     Boolean,
     Column,
@@ -8,7 +9,6 @@ from db.models.base import (
     ForeignKey,
     Index,
     Integer,
-    JSONB,
     String,
     Text,
     UniqueConstraint,

@@ -2,12 +2,12 @@
 
 import uuid
 from datetime import datetime
-
-from utils.time import utcnow
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, EmailStr, Field
+
+from utils.time import utcnow
 
 
 class OrganizationPlan(str, Enum):

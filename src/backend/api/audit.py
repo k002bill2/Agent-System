@@ -2,7 +2,6 @@
 
 from datetime import datetime, timedelta
 
-from utils.time import utcnow
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +23,7 @@ from services.audit_service import (
     AuditService,
     ResourceType,
 )
+from utils.time import utcnow
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
@@ -423,7 +423,7 @@ async def seed_sample_data(db: AsyncSession = Depends(get_db)):
     Creates various audit log entries to demonstrate the UI.
     """
     import random
-    from datetime import datetime, timedelta
+    from datetime import timedelta
 
     sample_entries = []
 

@@ -1,15 +1,14 @@
 """Session, Task, Message, Approval models."""
 
 from db.models.base import (
+    JSONB,
     Base,
-    Boolean,
     Column,
     DateTime,
     Float,
     ForeignKey,
     Index,
     Integer,
-    JSONB,
     String,
     Text,
     datetime,
@@ -34,7 +33,11 @@ class SessionModel(Base):
     # Metadata
     status = Column(String(50), default="active", index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     # Cost tracking
     total_tokens = Column(Integer, default=0)
@@ -91,7 +94,11 @@ class TaskModel(Base):
 
     # Timestamps
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
 

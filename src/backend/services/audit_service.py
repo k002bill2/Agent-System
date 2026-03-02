@@ -4,8 +4,6 @@ import asyncio
 import os
 import uuid
 from datetime import datetime, timedelta
-
-from utils.time import utcnow
 from enum import Enum
 from typing import Any
 
@@ -18,6 +16,7 @@ from models.audit import (
     DataClassification,
     RetentionPolicy,
 )
+from utils.time import utcnow
 
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 

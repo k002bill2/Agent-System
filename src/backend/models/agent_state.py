@@ -1,12 +1,12 @@
 """Agent state definitions for LangGraph."""
 
 from datetime import datetime
-
-from utils.time import utcnow
 from enum import Enum
 from typing import Annotated, Any, TypedDict
 
 from pydantic import BaseModel, Field
+
+from utils.time import utcnow
 
 from .errors import StructuredError
 

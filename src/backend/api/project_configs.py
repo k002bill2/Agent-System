@@ -97,16 +97,14 @@ async def _get_db_filtered_projects(monitor, current_user=None) -> list:
     For DB projects without a path, include basic info from discovered projects
     matched by name.
     """
-    from datetime import datetime
     from pathlib import Path as PathLib
-
-    from utils.time import utcnow
 
     from sqlalchemy import or_, select
 
     from db.database import async_session_factory
     from db.models import ProjectAccessModel, ProjectModel
     from models.project_config import ProjectInfo
+    from utils.time import utcnow
 
     async with async_session_factory() as session:
         is_admin = False

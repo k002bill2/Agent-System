@@ -16,12 +16,12 @@ import shutil
 import subprocess
 import time
 from datetime import datetime
-
-from utils.time import utcnow
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
+
+from utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 

@@ -3,13 +3,11 @@
 import hashlib
 import hmac
 import uuid
-from datetime import datetime
-
-from utils.time import utcnow
 from fnmatch import fnmatch
 from typing import Any
 
 from models.workflow import TriggerType, WorkflowRunTrigger
+from utils.time import utcnow
 
 
 class WebhookService:

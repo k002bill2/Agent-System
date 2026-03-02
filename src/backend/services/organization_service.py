@@ -4,8 +4,6 @@ import json
 import os
 import re
 from datetime import datetime, timedelta
-
-from utils.time import utcnow
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +24,7 @@ from models.organization import (
     OrganizationUpdate,
     TenantContext,
 )
+from utils.time import utcnow
 
 # ─────────────────────────────────────────────────────────────
 # Database Toggle
@@ -471,9 +470,7 @@ class OrganizationService:
         return [
             inv
             for inv in _invitations.values()
-            if inv.organization_id == org_id
-            and not inv.accepted
-            and inv.expires_at > utcnow()
+            if inv.organization_id == org_id and not inv.accepted and inv.expires_at > utcnow()
         ]
 
     @staticmethod

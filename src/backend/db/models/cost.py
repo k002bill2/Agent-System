@@ -1,6 +1,7 @@
 """Cost center and allocation models."""
 
 from db.models.base import (
+    JSONB,
     Base,
     Boolean,
     Column,
@@ -9,7 +10,6 @@ from db.models.base import (
     ForeignKey,
     Index,
     Integer,
-    JSONB,
     String,
     Text,
     datetime,
@@ -43,7 +43,11 @@ class CostCenterModel(Base):
     # Status
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     __table_args__ = (
         Index("ix_cost_centers_org", "organization_id"),

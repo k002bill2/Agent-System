@@ -3,14 +3,12 @@
 import base64
 import uuid
 import zlib
-from datetime import datetime
-
-from utils.time import utcnow
 from urllib.parse import urlencode
 from xml.etree import ElementTree as ET
 
 from auth.providers.base import AuthProvider, UserInfo
 from config import get_settings
+from utils.time import utcnow
 
 
 class SAMLConfig:

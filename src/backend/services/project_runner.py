@@ -3,9 +3,6 @@
 import asyncio
 import time
 from collections.abc import AsyncIterator, Callable
-from datetime import datetime
-
-from utils.time import utcnow
 from pathlib import Path
 
 from models.monitoring import (
@@ -16,6 +13,7 @@ from models.monitoring import (
     CheckStatus,
     CheckType,
 )
+from utils.time import utcnow
 
 # Allowed npm commands (whitelist for security)
 # Commands are run from the project root with npm scripts defined in package.json

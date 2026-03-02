@@ -1,9 +1,7 @@
 """Rate limiting service using Redis sliding window algorithm."""
 
 import time
-from datetime import datetime, timedelta
-
-from utils.time import utcnow
+from datetime import timedelta
 from typing import Any
 
 from models.rate_limit import (
@@ -14,6 +12,7 @@ from models.rate_limit import (
     RateLimitTier,
     TierConfig,
 )
+from utils.time import utcnow
 
 
 class RateLimitService:

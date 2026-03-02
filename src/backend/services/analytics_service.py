@@ -5,8 +5,6 @@ import random
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from utils.time import utcnow
-
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +27,7 @@ from models.analytics import (
     TrendDataPoint,
 )
 from models.project import get_project
+from utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 

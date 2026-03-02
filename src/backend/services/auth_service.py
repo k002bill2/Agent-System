@@ -2,9 +2,7 @@
 
 import hashlib
 import uuid
-from datetime import datetime, timedelta
-
-from utils.time import utcnow
+from datetime import timedelta
 from typing import Any
 
 import httpx
@@ -15,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings
 from db.models import OrganizationMemberModel, UserModel
+from utils.time import utcnow
 
 
 class TokenPair(BaseModel):

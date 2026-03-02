@@ -473,8 +473,7 @@ async def get_project_dependencies(
 
     if entity_name:
         all_deps = [
-            d for d in all_deps
-            if d.source_entity == entity_name or d.target_entity == entity_name
+            d for d in all_deps if d.source_entity == entity_name or d.target_entity == entity_name
         ]
 
     return {

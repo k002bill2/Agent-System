@@ -7,7 +7,6 @@ from db.models.base import (
     Float,
     Index,
     Integer,
-    JSONB,
     String,
     Text,
     datetime,

@@ -1,15 +1,14 @@
 """Feedback and Dataset models."""
 
 from db.models.base import (
+    JSONB,
     Base,
     Boolean,
     Column,
     DateTime,
-    Float,
     ForeignKey,
     Index,
     Integer,
-    JSONB,
     String,
     Text,
     UniqueConstraint,

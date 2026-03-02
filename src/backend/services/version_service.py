@@ -1,8 +1,5 @@
 """Version service for config version control."""
 
-from datetime import datetime
-
-from utils.time import utcnow
 from typing import Any
 
 from models.config_version import (
@@ -16,6 +13,7 @@ from models.config_version import (
     RollbackResult,
     VersionStatus,
 )
+from utils.time import utcnow
 
 # In-memory storage
 _versions: dict[str, ConfigVersion] = {}

@@ -4,8 +4,6 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from utils.time import utcnow
-
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +15,7 @@ from db.models import (
     SessionModel,
     TaskModel,
 )
+from utils.time import utcnow
 
 
 def serialize_value(value: Any) -> Any:
@@ -150,7 +149,6 @@ class SessionRepository:
 
     async def count_by_org_today(self, organization_id: str) -> int:
         """Count sessions created today for an organization."""
-        from datetime import datetime
 
         from sqlalchemy import func
 

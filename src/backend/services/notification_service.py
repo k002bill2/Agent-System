@@ -5,9 +5,7 @@ import os
 import ssl
 import uuid
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta
-
-from utils.time import utcnow
+from datetime import timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -30,6 +28,7 @@ from models.notification import (
     NotificationRuleUpdate,
     format_notification,
 )
+from utils.time import utcnow
 
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 

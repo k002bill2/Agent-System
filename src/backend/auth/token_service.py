@@ -2,14 +2,13 @@
 
 import uuid
 from datetime import datetime, timedelta
-
-from utils.time import utcnow
 from typing import Any
 
 import jwt
 from pydantic import BaseModel
 
 from config import get_settings
+from utils.time import utcnow
 
 
 class TokenPayload(BaseModel):

@@ -1,11 +1,11 @@
 """Analytics models for dashboard metrics."""
 
 from datetime import datetime
-
-from utils.time import utcnow
 from enum import Enum
 
 from pydantic import BaseModel, Field
+
+from utils.time import utcnow
 
 
 class TimeRange(str, Enum):

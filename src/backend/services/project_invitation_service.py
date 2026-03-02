@@ -2,14 +2,13 @@
 
 import secrets
 import uuid
-from datetime import datetime, timedelta
-
-from utils.time import utcnow
+from datetime import timedelta
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import ProjectAccessModel, ProjectInvitationModel
+from utils.time import utcnow
 
 INVITATION_EXPIRE_DAYS = 7
 

@@ -4,13 +4,10 @@ Handles session lifecycle (create, get, delete, sync, refresh) and
 task operations (submit, cancel, retry, pause, resume, delete, tree).
 """
 
-import os
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from api.deps import get_engine
-from models.agent_state import TaskStatus
 from models.task import TaskCreate, TaskTree
 from orchestrator import OrchestrationEngine
 

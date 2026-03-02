@@ -4,12 +4,12 @@ import asyncio
 import os
 import time
 from datetime import datetime
-
-from utils.time import utcnow
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+from utils.time import utcnow
 
 
 class HealthStatus(str, Enum):

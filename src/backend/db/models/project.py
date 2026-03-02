@@ -1,14 +1,13 @@
 """Project and access control models."""
 
 from db.models.base import (
+    JSONB,
     Base,
     Boolean,
     Column,
     DateTime,
     ForeignKey,
     Index,
-    Integer,
-    JSONB,
     String,
     Text,
     UniqueConstraint,
@@ -36,7 +35,11 @@ class ProjectModel(Base):
 
     # Timestamps
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
     created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     __table_args__: tuple = ()
@@ -57,7 +60,11 @@ class ProjectInvitationModel(Base):
 
     expires_at = Column(DateTime, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     __table_args__ = (
         UniqueConstraint("project_id", "email", name="uq_project_invitation_email"),
@@ -84,7 +91,11 @@ class ProjectAccessModel(Base):
 
     # Timestamps
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     __table_args__ = (
         UniqueConstraint("project_id", "user_id", name="uq_project_user"),

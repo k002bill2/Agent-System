@@ -5,13 +5,12 @@ import logging
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import UTC, datetime
-
-from utils.time import utcnow
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.deps import get_current_user_optional
+from utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 from fastapi.responses import StreamingResponse
@@ -837,9 +836,10 @@ async def save_session(
         )
 
     # Save session snapshot to database
+    from sqlalchemy import select
+
     from db.database import get_db
     from db.models.claude_session import ClaudeSessionSnapshotModel
-    from sqlalchemy import select
 
     try:
         async with get_db() as db:

@@ -5,9 +5,9 @@ import asyncio
 import json
 import sys
 from datetime import datetime
+from pathlib import Path
 
 from utils.time import utcnow
-from pathlib import Path
 
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))

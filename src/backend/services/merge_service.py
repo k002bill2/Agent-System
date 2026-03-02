@@ -2,11 +2,10 @@
 
 import logging
 import subprocess
-from datetime import datetime
-
-from utils.time import utcnow
 from pathlib import Path
 from typing import Any
+
+from utils.time import utcnow
 
 try:
     from git import GitCommandError, Repo

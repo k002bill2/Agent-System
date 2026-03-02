@@ -3,9 +3,6 @@
 import json
 import uuid
 from abc import ABC, abstractmethod
-from datetime import datetime
-
-from utils.time import utcnow
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
@@ -14,7 +11,7 @@ from langchain_core.tools import BaseTool
 
 from models.agent_state import AgentInfo, AgentRole, AgentState, TaskNode, TaskStatus
 from models.cost import TokenUsage, estimate_tokens, extract_token_usage
-from models.errors import ErrorCategory, StructuredError
+from models.errors import ErrorCategory
 from models.hitl import (
     ApprovalStatus,
     assess_operation_risk,
@@ -35,6 +32,7 @@ from services.audit_service import (
     audit_task_status_change,
     audit_tool_executed,
 )
+from utils.time import utcnow
 
 # Optional RAG service - gracefully handle missing dependencies
 try:
@@ -1387,9 +1385,7 @@ Error History: {task.error_history}
                 confidence_score = float(confidence)
 
             max_retries_by_confidence = (
-                3 if confidence_score >= 0.8
-                else 2 if confidence_score >= 0.5
-                else 1
+                3 if confidence_score >= 0.8 else 2 if confidence_score >= 0.5 else 1
             )
             if task.retry_count >= max_retries_by_confidence:
                 task.error = (

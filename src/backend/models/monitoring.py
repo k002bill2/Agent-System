@@ -1,11 +1,11 @@
 """Monitoring models for project health checks."""
 
 from datetime import datetime
-
-from utils.time import utcnow
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from utils.time import utcnow
 
 
 class CheckType(str, Enum):

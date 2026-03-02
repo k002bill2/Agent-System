@@ -2,13 +2,13 @@
 
 import logging
 from datetime import datetime
-
-from utils.time import utcnow
 from typing import Any
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from croniter import croniter
+
+from utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 

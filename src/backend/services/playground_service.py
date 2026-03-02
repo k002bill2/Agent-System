@@ -3,8 +3,6 @@
 import json
 from collections.abc import AsyncIterator
 from datetime import datetime
-
-from utils.time import utcnow
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +19,7 @@ from models.playground import (
     PlaygroundToolTest,
 )
 from services.llm_service import LLMResponse, LLMService
+from utils.time import utcnow
 
 # Persistent storage file path
 STORAGE_DIR = Path(__file__).parent.parent / "data"

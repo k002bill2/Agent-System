@@ -2,14 +2,13 @@
 
 import uuid
 from datetime import datetime
-
-from utils.time import utcnow
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from models.llm_models import LLMModelRegistry, LLMProvider
+from utils.time import utcnow
 
 
 # Get default model from central registry

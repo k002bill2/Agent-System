@@ -1,6 +1,7 @@
 """Organization, Member, and Invitation models."""
 
 from db.models.base import (
+    JSONB,
     Base,
     Boolean,
     Column,
@@ -8,7 +9,6 @@ from db.models.base import (
     ForeignKey,
     Index,
     Integer,
-    JSONB,
     String,
     Text,
     datetime,
@@ -50,7 +50,11 @@ class OrganizationModel(Base):
     # Metadata
     settings = Column(JSONB, default=dict)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
 
 class OrganizationMemberModel(Base):

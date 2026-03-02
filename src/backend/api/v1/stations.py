@@ -4,14 +4,13 @@
 GET, POST, PUT, DELETE 엔드포인트를 제공합니다.
 """
 
-from datetime import datetime
-
-from utils.time import utcnow
 from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
+
+from utils.time import utcnow
 
 router = APIRouter(prefix="/api/v1/stations", tags=["stations"])
 

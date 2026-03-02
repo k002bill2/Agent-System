@@ -1,15 +1,13 @@
 """Workflow secret management service — DB-backed with AES-256-GCM encryption."""
 
 import uuid
-from datetime import datetime
-
-from utils.time import utcnow
 
 from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import WorkflowSecretModel
 from models.secret import SecretCreate, SecretScope, SecretUpdate
+from utils.time import utcnow
 
 
 class SecretService:

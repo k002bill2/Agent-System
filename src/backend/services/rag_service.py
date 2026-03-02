@@ -717,7 +717,9 @@ class ProjectVectorStore:
                         chunk.metadata["project_id"] = project_id
                         chunk_entities = [e for e in entities if _entity_in_chunk(e, chunk)]
                         chunk.metadata["entity_names"] = [e.name for e in chunk_entities]
-                        chunk.metadata["entity_types"] = [e.entity_type.value for e in chunk_entities]
+                        chunk.metadata["entity_types"] = [
+                            e.entity_type.value for e in chunk_entities
+                        ]
                         chunk.metadata["imports"] = file_imports
 
                     documents.extend(chunks)

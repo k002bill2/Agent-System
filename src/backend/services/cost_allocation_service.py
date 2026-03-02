@@ -4,8 +4,6 @@ import os
 import uuid
 from datetime import datetime, timedelta
 
-from utils.time import utcnow
-
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +16,7 @@ from models.cost import (
     CostReport,
     SessionTokenUsage,
 )
+from utils.time import utcnow
 
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 

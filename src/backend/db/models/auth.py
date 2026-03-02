@@ -1,16 +1,14 @@
 """User, Token, and SAML authentication models."""
 
 from db.models.base import (
+    JSONB,
     Base,
     Boolean,
     Column,
     DateTime,
     EncryptedString,
     Index,
-    Integer,
-    JSONB,
     String,
-    Text,
     datetime,
     timezone,
 )
@@ -88,6 +86,10 @@ class SAMLConfigModel(Base):
     # Status
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     __table_args__ = (Index("ix_saml_configs_active", "is_active"),)

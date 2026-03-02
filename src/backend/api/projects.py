@@ -6,9 +6,6 @@ Replaces filesystem-based project discovery with explicit DB registration.
 import logging
 import re
 import uuid
-from datetime import datetime
-
-from utils.time import utcnow
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -28,6 +25,7 @@ from models.project import (
     ProjectMemberResponse,
     ProjectMemberUpdate,
 )
+from utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 

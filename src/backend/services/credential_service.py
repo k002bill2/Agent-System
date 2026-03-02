@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime
-
-from utils.time import utcnow
 
 import httpx
 from sqlalchemy import and_, select
@@ -19,6 +16,7 @@ from models.external_usage import (
     LLMCredentialUpdate,
     LLMCredentialVerifyResponse,
 )
+from utils.time import utcnow
 
 
 def _mask_key(key: str) -> str:

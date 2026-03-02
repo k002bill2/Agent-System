@@ -9,8 +9,6 @@ import json
 import os
 import uuid
 from datetime import datetime
-
-from utils.time import utcnow
 from typing import Any
 
 from models.feedback import (
@@ -32,6 +30,7 @@ from models.feedback import (
     TaskEvaluationStats,
     TaskEvaluationSubmit,
 )
+from utils.time import utcnow
 
 # Environment variable to control storage mode
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"

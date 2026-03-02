@@ -3,9 +3,7 @@
 import asyncio
 import os
 import time
-from datetime import datetime, timedelta
-
-from utils.time import utcnow
+from datetime import timedelta
 
 from models.llm_router import (
     LLMHealthCheck,
@@ -20,6 +18,7 @@ from models.llm_router import (
     LLMRoutingStats,
     LLMRoutingStrategy,
 )
+from utils.time import utcnow
 
 # In-memory storage
 _providers: dict[str, LLMProviderConfig] = {}
