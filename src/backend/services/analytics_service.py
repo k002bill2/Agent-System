@@ -3,7 +3,7 @@
 import logging
 import random
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import UTC, timedelta
 
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -447,13 +447,13 @@ class AnalyticsService:
         # Filter by time range
         if time_range != TimeRange.ALL:
             delta = _get_time_delta(time_range)
-            now = datetime.now()
+            now = utcnow()
             start = now - delta
 
             def _normalize_dt(dt):
-                """Convert to naive local time for consistent filtering."""
-                if dt.tzinfo:
-                    return dt.astimezone().replace(tzinfo=None)
+                """Convert to naive UTC for consistent comparison."""
+                if dt.tzinfo is not None:
+                    return dt.astimezone(UTC).replace(tzinfo=None)
                 return dt
 
             sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
@@ -504,15 +504,14 @@ class AnalyticsService:
         sessions = AnalyticsService._get_sessions(project_name)
         delta = _get_time_delta(time_range)
         interval = _get_interval(time_range)
-        # Use local time for bucket boundaries (session timestamps are converted to local)
-        now = datetime.now()
+        now = utcnow()
         start = now - delta
 
         # Filter sessions in time range
         def _normalize_dt(dt):
-            """Convert to naive local time for consistent bucketing."""
-            if dt.tzinfo:
-                return dt.astimezone().replace(tzinfo=None)
+            """Convert to naive UTC for consistent comparison."""
+            if dt.tzinfo is not None:
+                return dt.astimezone(UTC).replace(tzinfo=None)
             return dt
 
         range_sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
@@ -576,7 +575,10 @@ class AnalyticsService:
         start = utcnow() - delta
 
         def _normalize_dt(dt):
-            return dt.replace(tzinfo=None) if dt.tzinfo else dt
+            """Convert to naive UTC for consistent comparison."""
+            if dt.tzinfo is not None:
+                return dt.astimezone(UTC).replace(tzinfo=None)
+            return dt
 
         range_sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
 
@@ -631,7 +633,10 @@ class AnalyticsService:
         start = utcnow() - delta
 
         def _normalize_dt(dt):
-            return dt.replace(tzinfo=None) if dt.tzinfo else dt
+            """Convert to naive UTC for consistent comparison."""
+            if dt.tzinfo is not None:
+                return dt.astimezone(UTC).replace(tzinfo=None)
+            return dt
 
         range_sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
 
@@ -709,7 +714,10 @@ class AnalyticsService:
         start = utcnow() - delta
 
         def _normalize_dt(dt):
-            return dt.replace(tzinfo=None) if dt.tzinfo else dt
+            """Convert to naive UTC for consistent comparison."""
+            if dt.tzinfo is not None:
+                return dt.astimezone(UTC).replace(tzinfo=None)
+            return dt
 
         start = _normalize_dt(start)
         range_sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]

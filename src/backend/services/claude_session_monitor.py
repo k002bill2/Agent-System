@@ -427,7 +427,7 @@ class ClaudeSessionMonitor:
             last_activity = created_at
 
         # Determine status based on last activity and message type
-        # Normalize to naive datetime for comparison
+        # Normalize to naive UTC for comparison (utcnow() returns naive UTC)
         last_activity_naive = (
             last_activity.replace(tzinfo=None) if last_activity.tzinfo else last_activity
         )
