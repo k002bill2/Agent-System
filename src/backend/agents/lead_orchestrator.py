@@ -388,7 +388,9 @@ Remember to respond with valid JSON only."""
                 complexity_score=analysis_data.get("complexity_score", 5),
                 effort_level=_safe_effort_level(analysis_data.get("effort_level", "medium")),
                 requires_decomposition=analysis_data.get("requires_decomposition", False),
-                execution_strategy=_safe_execution_strategy(data.get("execution_strategy", "sequential")),
+                execution_strategy=_safe_execution_strategy(
+                    data.get("execution_strategy", "sequential")
+                ),
                 subtasks=subtasks,
                 context_summary=analysis_data.get("context_summary", ""),
                 key_requirements=analysis_data.get("key_requirements", []),

@@ -545,7 +545,9 @@ async def search_agents(request: AgentSearchRequest, _user: UserModel = Depends(
 
 
 @router.post("/{agent_id}/status")
-async def update_agent_status(agent_id: str, status: str, _user: UserModel = Depends(get_current_user)):
+async def update_agent_status(
+    agent_id: str, status: str, _user: UserModel = Depends(get_current_user)
+):
     """에이전트 상태 업데이트."""
     registry = get_agent_registry()
 
@@ -861,7 +863,9 @@ async def delete_analysis(analysis_id: str, _user: UserModel = Depends(get_curre
 
 
 @router.post("/orchestrate/execute-analysis", response_model=ExecuteAnalysisResponse)
-async def execute_analysis(request: ExecuteAnalysisRequest, _user: UserModel = Depends(get_current_user)):
+async def execute_analysis(
+    request: ExecuteAnalysisRequest, _user: UserModel = Depends(get_current_user)
+):
     """
     분석 결과를 기반으로 오케스트레이션 실행.
 
@@ -950,7 +954,9 @@ async def check_claude_auth_status(_user: UserModel = Depends(get_current_user))
 
 
 @router.post("/orchestrate/execute-with-tmux", response_model=TmuxSessionResponse)
-async def execute_with_tmux(request: ExecuteWithTmuxRequest, _user: UserModel = Depends(get_current_user)):
+async def execute_with_tmux(
+    request: ExecuteWithTmuxRequest, _user: UserModel = Depends(get_current_user)
+):
     """
     분석 결과를 tmux + Claude Code CLI로 실행.
 
@@ -1242,7 +1248,9 @@ def _server_to_response(info) -> MCPServerResponse:
 
 
 @router.get("/mcp/servers", response_model=list[MCPServerResponse])
-async def list_mcp_servers(running_only: bool = False, _user: UserModel = Depends(get_current_user)):
+async def list_mcp_servers(
+    running_only: bool = False, _user: UserModel = Depends(get_current_user)
+):
     """
     MCP 서버 목록 조회.
 
@@ -1372,7 +1380,9 @@ async def call_mcp_tool(request: MCPToolCallRequest, _user: UserModel = Depends(
 
 
 @router.post("/mcp/tools/batch-call", response_model=MCPBatchToolCallResponse)
-async def batch_call_mcp_tools(request: MCPBatchToolCallRequest, _user: UserModel = Depends(get_current_user)):
+async def batch_call_mcp_tools(
+    request: MCPBatchToolCallRequest, _user: UserModel = Depends(get_current_user)
+):
     """
     MCP 다중 도구 병렬 호출.
 

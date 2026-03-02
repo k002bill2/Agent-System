@@ -63,9 +63,7 @@ async def test_api_projects_list(client):
 
 
 @pytest.mark.anyio
-async def test_api_agents_list(client):
-    """GET /api/agents should return registered agents."""
+async def test_api_agents_list_requires_auth(client):
+    """GET /api/agents without auth should return 401."""
     response = await client.get("/api/agents")
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data, (list, dict))
+    assert response.status_code == 401
