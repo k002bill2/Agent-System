@@ -1,4 +1,5 @@
 ---
+name: review
 description: 코드 리뷰 자동화 - 변경된 파일 분석
 ---
 

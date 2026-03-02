@@ -128,7 +128,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Check for API key
         api_key = request.headers.get("X-API-Key")
         if api_key:
-            # TODO: Look up tier from API key registry
+            # TODO(deferred): Look up tier from API key registry
             # For now, use professional tier for API keys
             return f"apikey:{api_key}", RateLimitTier.PROFESSIONAL.value
 

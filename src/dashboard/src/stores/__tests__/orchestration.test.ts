@@ -1,10 +1,24 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}))
+
 import {
   useOrchestrationStore,
   identifyProvider,
   PROVIDER_CONFIG,
 } from '../orchestration'
+import { apiClient } from '../../services/apiClient'
+
+const mockApiClient = vi.mocked(apiClient)
 
 const mockFetch = vi.fn()
 global.fetch = mockFetch
@@ -408,12 +422,8 @@ describe('orchestration store', () => {
 
     it('refreshes session and updates info', async () => {
       useOrchestrationStore.setState({ sessionId: 'sess-1' })
-      mockFetch
-        .mockResolvedValueOnce({ ok: true })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ session_id: 'sess-1', ttl_remaining_hours: 24 }),
-        })
+      mockApiClient.post.mockResolvedValueOnce({})
+      mockApiClient.get.mockResolvedValueOnce({ session_id: 'sess-1', ttl_remaining_hours: 24 })
 
       const result = await useOrchestrationStore.getState().refreshSession()
 
@@ -423,7 +433,7 @@ describe('orchestration store', () => {
 
     it('returns false on refresh failure', async () => {
       useOrchestrationStore.setState({ sessionId: 'sess-1' })
-      mockFetch.mockResolvedValueOnce({ ok: false })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Failed'))
 
       const result = await useOrchestrationStore.getState().refreshSession()
 
@@ -432,7 +442,7 @@ describe('orchestration store', () => {
 
     it('returns false on network error', async () => {
       useOrchestrationStore.setState({ sessionId: 'sess-1' })
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+      mockApiClient.post.mockRejectedValueOnce(new Error('Network error'))
 
       const result = await useOrchestrationStore.getState().refreshSession()
 
@@ -444,10 +454,7 @@ describe('orchestration store', () => {
 
   describe('checkWarpStatus', () => {
     it('stores warp status', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ installed: true }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ installed: true })
 
       await useOrchestrationStore.getState().checkWarpStatus()
 
@@ -455,7 +462,7 @@ describe('orchestration store', () => {
     })
 
     it('sets false on error', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Error'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Error'))
 
       await useOrchestrationStore.getState().checkWarpStatus()
 
@@ -474,10 +481,7 @@ describe('orchestration store', () => {
 
     it('opens warp successfully', async () => {
       useOrchestrationStore.setState({ selectedProjectId: 'p1' })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ success: true }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ success: true })
 
       const result = await useOrchestrationStore.getState().openInWarp('some cmd')
 
@@ -488,10 +492,7 @@ describe('orchestration store', () => {
 
     it('returns error on failure', async () => {
       useOrchestrationStore.setState({ selectedProjectId: 'p1' })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ success: false, error: 'not installed' }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ success: false, error: 'not installed' })
 
       const result = await useOrchestrationStore.getState().openInWarp()
 
@@ -501,7 +502,7 @@ describe('orchestration store', () => {
 
     it('handles network error', async () => {
       useOrchestrationStore.setState({ selectedProjectId: 'p1' })
-      mockFetch.mockRejectedValueOnce(new Error('Network'))
+      mockApiClient.post.mockRejectedValueOnce(new Error('Network'))
 
       const result = await useOrchestrationStore.getState().openInWarp()
 
@@ -523,10 +524,7 @@ describe('orchestration store', () => {
         sessionId: 'sess-1',
         tasks: { t1: { id: 't1', isDeleted: false } as any },
       })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ deleted_task_ids: ['t1'] }),
-      })
+      mockApiClient.delete.mockResolvedValueOnce({ deleted_task_ids: ['t1'] })
 
       const result = await useOrchestrationStore.getState().deleteTask('t1')
 
@@ -537,10 +535,7 @@ describe('orchestration store', () => {
 
     it('returns error on API failure', async () => {
       useOrchestrationStore.setState({ sessionId: 'sess-1' })
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Not found' }),
-      })
+      mockApiClient.delete.mockRejectedValueOnce(new Error('Not found'))
 
       const result = await useOrchestrationStore.getState().deleteTask('t1')
 
@@ -549,7 +544,7 @@ describe('orchestration store', () => {
 
     it('handles network error', async () => {
       useOrchestrationStore.setState({ sessionId: 'sess-1' })
-      mockFetch.mockRejectedValueOnce(new Error('Network'))
+      mockApiClient.delete.mockRejectedValueOnce(new Error('Failed to connect to server'))
 
       const result = await useOrchestrationStore.getState().deleteTask('t1')
 
@@ -571,10 +566,7 @@ describe('orchestration store', () => {
         sessionId: 'sess-1',
         tasks: { t1: { id: 't1', status: 'in_progress' } as any },
       })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      })
+      mockApiClient.post.mockResolvedValueOnce({})
 
       const result = await useOrchestrationStore.getState().cancelSingleTask('t1')
 
@@ -593,15 +585,12 @@ describe('orchestration store', () => {
 
     it('fetches deletion info', async () => {
       useOrchestrationStore.setState({ sessionId: 'sess-1' })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({
-          exists: true,
-          children_count: 2,
-          in_progress_count: 1,
-          in_progress_ids: ['t2'],
-          can_delete: false,
-        }),
+      mockApiClient.get.mockResolvedValueOnce({
+        exists: true,
+        children_count: 2,
+        in_progress_count: 1,
+        in_progress_ids: ['t2'],
+        can_delete: false,
       })
 
       const result = await useOrchestrationStore.getState().getTaskDeletionInfo('t1')
@@ -625,10 +614,7 @@ describe('orchestration store', () => {
         sessionId: 'sess-1',
         tasks: { t1: { id: 't1', status: 'failed', error: 'timeout' } as any },
       })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ retry_count: 2 }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ retry_count: 2 })
 
       const result = await useOrchestrationStore.getState().retryTask('t1')
 
@@ -652,10 +638,7 @@ describe('orchestration store', () => {
         sessionId: 'sess-1',
         tasks: { t1: { id: 't1', status: 'in_progress' } as any },
       })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ paused_at: '2025-01-01T00:00:00Z' }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ paused_at: '2025-01-01T00:00:00Z' })
 
       const result = await useOrchestrationStore.getState().pauseTask('t1', 'need review')
 
@@ -666,10 +649,7 @@ describe('orchestration store', () => {
 
     it('handles API failure', async () => {
       useOrchestrationStore.setState({ sessionId: 'sess-1' })
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Cannot pause' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Cannot pause'))
 
       const result = await useOrchestrationStore.getState().pauseTask('t1')
       expect(result.success).toBe(false)
@@ -696,10 +676,7 @@ describe('orchestration store', () => {
           } as any,
         },
       })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      })
+      mockApiClient.post.mockResolvedValueOnce({})
 
       const result = await useOrchestrationStore.getState().resumeTask('t1')
 
@@ -711,10 +688,7 @@ describe('orchestration store', () => {
 
     it('handles API failure', async () => {
       useOrchestrationStore.setState({ sessionId: 'sess-1' })
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Cannot resume' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Cannot resume'))
 
       const result = await useOrchestrationStore.getState().resumeTask('t1')
       expect(result.success).toBe(false)
@@ -723,7 +697,7 @@ describe('orchestration store', () => {
 
     it('handles network error', async () => {
       useOrchestrationStore.setState({ sessionId: 'sess-1' })
-      mockFetch.mockRejectedValueOnce(new Error('Network'))
+      mockApiClient.post.mockRejectedValueOnce(new Error('Failed to connect to server'))
 
       const result = await useOrchestrationStore.getState().resumeTask('t1')
       expect(result.success).toBe(false)
@@ -736,10 +710,7 @@ describe('orchestration store', () => {
   describe('cancelSingleTask (error paths)', () => {
     it('handles API failure', async () => {
       useOrchestrationStore.setState({ sessionId: 'sess-1' })
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Cannot cancel' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Cannot cancel'))
 
       const result = await useOrchestrationStore.getState().cancelSingleTask('t1')
       expect(result.success).toBe(false)
@@ -748,7 +719,7 @@ describe('orchestration store', () => {
 
     it('handles network error', async () => {
       useOrchestrationStore.setState({ sessionId: 'sess-1' })
-      mockFetch.mockRejectedValueOnce(new Error('Network'))
+      mockApiClient.post.mockRejectedValueOnce(new Error('Failed to connect to server'))
 
       const result = await useOrchestrationStore.getState().cancelSingleTask('t1')
       expect(result.success).toBe(false)
@@ -761,10 +732,7 @@ describe('orchestration store', () => {
   describe('retryTask (error paths)', () => {
     it('handles API failure', async () => {
       useOrchestrationStore.setState({ sessionId: 'sess-1' })
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Cannot retry' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Cannot retry'))
 
       const result = await useOrchestrationStore.getState().retryTask('t1')
       expect(result.success).toBe(false)
@@ -773,7 +741,7 @@ describe('orchestration store', () => {
 
     it('handles network error', async () => {
       useOrchestrationStore.setState({ sessionId: 'sess-1' })
-      mockFetch.mockRejectedValueOnce(new Error('Network'))
+      mockApiClient.post.mockRejectedValueOnce(new Error('Failed to connect to server'))
 
       const result = await useOrchestrationStore.getState().retryTask('t1')
       expect(result.success).toBe(false)
@@ -786,7 +754,7 @@ describe('orchestration store', () => {
   describe('getTaskDeletionInfo (error paths)', () => {
     it('returns exists:false on API failure', async () => {
       useOrchestrationStore.setState({ sessionId: 'sess-1' })
-      mockFetch.mockResolvedValueOnce({ ok: false })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Not found'))
 
       const result = await useOrchestrationStore.getState().getTaskDeletionInfo('t1')
       expect(result.exists).toBe(false)
@@ -794,7 +762,7 @@ describe('orchestration store', () => {
 
     it('returns exists:false on network error', async () => {
       useOrchestrationStore.setState({ sessionId: 'sess-1' })
-      mockFetch.mockRejectedValueOnce(new Error('Network'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Network'))
 
       const result = await useOrchestrationStore.getState().getTaskDeletionInfo('t1')
       expect(result.exists).toBe(false)
@@ -804,12 +772,9 @@ describe('orchestration store', () => {
   // ── deleteTask (additional) ─────────────────────────────
 
   describe('deleteTask (additional error paths)', () => {
-    it('returns detail.message error when available', async () => {
+    it('returns error message from thrown error', async () => {
       useOrchestrationStore.setState({ sessionId: 'sess-1' })
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: { message: 'Task is in progress' } }),
-      })
+      mockApiClient.delete.mockRejectedValueOnce(new Error('Task is in progress'))
 
       const result = await useOrchestrationStore.getState().deleteTask('t1')
       expect(result.success).toBe(false)
@@ -821,10 +786,7 @@ describe('orchestration store', () => {
         sessionId: 'sess-1',
         tasks: { t1: { id: 't1', isDeleted: false } as any },
       })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      })
+      mockApiClient.delete.mockResolvedValueOnce({})
 
       const result = await useOrchestrationStore.getState().deleteTask('t1')
       expect(result.success).toBe(true)
@@ -844,13 +806,10 @@ describe('orchestration store', () => {
       delete (window as any).location
       window.location = { href: originalHref } as any
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({
-          success: true,
-          open_via_frontend: true,
-          uri: 'warp://open?path=/test',
-        }),
+      mockApiClient.post.mockResolvedValueOnce({
+        success: true,
+        open_via_frontend: true,
+        uri: 'warp://open?path=/test',
       })
 
       const result = await useOrchestrationStore.getState().openInWarp()
@@ -864,10 +823,7 @@ describe('orchestration store', () => {
 
     it('returns default error message when data.error is empty', async () => {
       useOrchestrationStore.setState({ selectedProjectId: 'p1' })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ success: false }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ success: false })
 
       const result = await useOrchestrationStore.getState().openInWarp()
 
@@ -881,9 +837,8 @@ describe('orchestration store', () => {
   describe('refreshSession (additional)', () => {
     it('returns true even when info fetch fails', async () => {
       useOrchestrationStore.setState({ sessionId: 'sess-1' })
-      mockFetch
-        .mockResolvedValueOnce({ ok: true })
-        .mockResolvedValueOnce({ ok: false })
+      mockApiClient.post.mockResolvedValueOnce({})
+      mockApiClient.get.mockRejectedValueOnce(new Error('Not found'))
 
       const result = await useOrchestrationStore.getState().refreshSession()
 
@@ -901,10 +856,7 @@ describe('orchestration store', () => {
         sessionId: 'sess-1',
         tasks: { t1: { id: 't1', status: 'in_progress' } as any },
       })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ paused_at: '2025-01-01T00:00:00Z' }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ paused_at: '2025-01-01T00:00:00Z' })
 
       const result = await useOrchestrationStore.getState().pauseTask('t1')
 
@@ -914,7 +866,7 @@ describe('orchestration store', () => {
 
     it('handles network error', async () => {
       useOrchestrationStore.setState({ sessionId: 'sess-1' })
-      mockFetch.mockRejectedValueOnce(new Error('Network'))
+      mockApiClient.post.mockRejectedValueOnce(new Error('Failed to connect to server'))
 
       const result = await useOrchestrationStore.getState().pauseTask('t1')
       expect(result.success).toBe(false)
@@ -1892,14 +1844,14 @@ describe('orchestration store', () => {
   // ── checkWarpStatus (additional) ────────────────────────
 
   describe('checkWarpStatus (additional)', () => {
-    it('does not update on non-ok response', async () => {
+    it('sets false on non-ok response (apiClient throws)', async () => {
       useOrchestrationStore.setState({ warpInstalled: null })
-      mockFetch.mockResolvedValueOnce({ ok: false })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Unauthorized'))
 
       await useOrchestrationStore.getState().checkWarpStatus()
 
-      // warpInstalled remains null since it only sets on ok or error
-      expect(useOrchestrationStore.getState().warpInstalled).toBeNull()
+      // apiClient throws on non-ok, catch block sets warpInstalled to false
+      expect(useOrchestrationStore.getState().warpInstalled).toBe(false)
     })
   })
 })

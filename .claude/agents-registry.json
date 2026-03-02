@@ -1,68 +1,76 @@
 {
-  "_generated": "2026-03-02T00:00:00.000Z",
+  "_generated": "2026-03-02T02:06:48.729Z",
   "_description": "Auto-generated agent registry. Do not edit manually.",
   "agents": {
     "aos-orchestrator": {
       "file": ".claude/agents/aos-orchestrator.md",
       "description": "Orchestrator agent that coordinates multi-agent workflows. Implements Anthropic's Orchestrator-Worker pattern for parallel execution and effort scaling.",
-      "tools": "Read, Grep, Glob, Task, Bash",
+      "tools": "Edit, Write, Read, Grep, Glob, Bash, Task",
       "model": "opus",
+      "role": "orchestrator",
       "subagent_type": "general-purpose",
       "triggers": null
     },
     "backend-integration-specialist": {
       "file": ".claude/agents/backend-integration-specialist.md",
       "description": "Backend integration specialist for AOS. Expert in FastAPI, PostgreSQL, SQLAlchemy, and LangGraph service patterns.",
-      "tools": "Edit, Write, Read, Grep, Bash",
+      "tools": "Edit, Write, Read, Grep, Glob, Bash",
       "model": "inherit",
+      "role": "specialist",
       "subagent_type": "general-purpose",
       "triggers": null
     },
     "eval-grader": {
       "file": ".claude/agents/eval-grader.md",
       "description": "AI agent evaluation grader. Performs code-based checks and LLM-powered deep analysis using rubrics.",
-      "tools": "Read, Grep, Glob, Bash",
+      "tools": "Edit, Write, Read, Grep, Glob, Bash",
       "model": "inherit",
+      "role": "grader",
       "subagent_type": "general-purpose",
       "triggers": null
     },
     "eval-task-runner": {
       "file": ".claude/agents/eval-task-runner.md",
       "description": "Evaluation task orchestrator. Loads task definitions, executes evaluation runs, records transcripts, and calculates pass@k metrics.",
-      "tools": "Read, Grep, Glob, Bash, Task",
+      "tools": "Edit, Write, Read, Grep, Glob, Bash, Task",
       "model": "inherit",
+      "role": "evaluator",
       "subagent_type": "general-purpose",
       "triggers": null
     },
     "performance-optimizer": {
       "file": ".claude/agents/performance-optimizer.md",
       "description": "React Web performance optimization specialist for AOS Dashboard. Expert in identifying and fixing performance bottlenecks, memory leaks, and bundle size issues.",
-      "tools": "Edit, Read, Grep, Bash",
+      "tools": "Edit, Write, Read, Grep, Glob, Bash",
       "model": "haiku",
+      "role": "specialist",
       "subagent_type": "general-purpose",
       "triggers": null
     },
     "quality-validator": {
       "file": ".claude/agents/quality-validator.md",
       "description": "Final validation agent for multi-agent workflows. Reviews code quality, verifies citations/references, ensures compliance with project standards.",
-      "tools": "Read, Grep, Glob, Bash",
+      "tools": "Edit, Write, Read, Grep, Glob, Bash",
       "model": "haiku",
+      "role": "validator",
       "subagent_type": "general-purpose",
       "triggers": null
     },
     "test-automation-specialist": {
       "file": ".claude/agents/test-automation-specialist.md",
       "description": "Test automation specialist for AOS Dashboard. Expert in Vitest, React Testing Library, coverage analysis, and writing comprehensive test suites. Use PROACTIVELY after writing or modifying code to ensure test coverage >75%.",
-      "tools": "Edit, Write, Read, Grep, Bash",
+      "tools": "Edit, Write, Read, Grep, Glob, Bash",
       "model": "haiku",
+      "role": "specialist",
       "subagent_type": "general-purpose",
       "triggers": null
     },
     "web-ui-specialist": {
       "file": ".claude/agents/web-ui-specialist.md",
       "description": "React Web UI/UX specialist for AOS Dashboard. Expert in web component design, responsive layouts with Tailwind CSS, and user experience optimization.",
-      "tools": "Edit, Write, Read, Grep",
+      "tools": "Edit, Write, Read, Grep, Glob, Bash",
       "model": "inherit",
+      "role": "specialist",
       "subagent_type": "general-purpose",
       "triggers": null
     }

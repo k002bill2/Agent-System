@@ -4,6 +4,8 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from utils.time import utcnow
+
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -103,7 +105,7 @@ class SessionRepository:
             .where(SessionModel.id == session_id)
             .values(
                 state_json=serialized,
-                updated_at=datetime.utcnow(),
+                updated_at=utcnow(),
             )
         )
         return result.rowcount > 0
@@ -121,7 +123,7 @@ class SessionRepository:
             .values(
                 total_tokens=total_tokens,
                 total_cost_usd=total_cost_usd,
-                updated_at=datetime.utcnow(),
+                updated_at=utcnow(),
             )
         )
         return result.rowcount > 0
@@ -152,7 +154,7 @@ class SessionRepository:
 
         from sqlalchemy import func
 
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         result = await self.db.execute(
             select(func.count()).where(
                 SessionModel.organization_id == organization_id,
@@ -316,13 +318,13 @@ class TaskRepository:
         """Update task status."""
         values: dict[str, Any] = {
             "status": status,
-            "updated_at": datetime.utcnow(),
+            "updated_at": utcnow(),
         }
 
         if status == "in_progress":
-            values["started_at"] = datetime.utcnow()
+            values["started_at"] = utcnow()
         elif status in ("completed", "failed"):
-            values["completed_at"] = datetime.utcnow()
+            values["completed_at"] = utcnow()
 
         if result is not None:
             values["result_json"] = result
@@ -462,7 +464,7 @@ class ApprovalRepository:
             .values(
                 status="approved",
                 approved_by=approved_by,
-                resolved_at=datetime.utcnow(),
+                resolved_at=utcnow(),
             )
         )
         return result.rowcount > 0
@@ -479,7 +481,7 @@ class ApprovalRepository:
             .values(
                 status="denied",
                 denial_reason=reason,
-                resolved_at=datetime.utcnow(),
+                resolved_at=utcnow(),
             )
         )
         return result.rowcount > 0
@@ -537,7 +539,7 @@ class MergeRequestRepository:
 
     async def update(self, mr_id: str, **kwargs) -> bool:
         """Update merge request fields."""
-        kwargs["updated_at"] = datetime.utcnow()
+        kwargs["updated_at"] = utcnow()
         result = await self.db.execute(
             update(MergeRequestModel).where(MergeRequestModel.id == mr_id).values(**kwargs)
         )
@@ -602,7 +604,7 @@ class BranchProtectionRepository:
 
     async def update(self, rule_id: str, **kwargs) -> bool:
         """Update rule fields."""
-        kwargs["updated_at"] = datetime.utcnow()
+        kwargs["updated_at"] = utcnow()
         result = await self.db.execute(
             update(BranchProtectionRuleModel)
             .where(BranchProtectionRuleModel.id == rule_id)

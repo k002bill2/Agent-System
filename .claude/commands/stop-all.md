@@ -1,4 +1,5 @@
 ---
+name: stop-all
 description: AOS 전체 서비스 중지
 ---
 

@@ -3,6 +3,7 @@ name: performance-optimizer
 description: React Web performance optimization specialist for AOS Dashboard. Expert in identifying and fixing performance bottlenecks, memory leaks, and bundle size issues.
 tools: Edit, Write, Read, Grep, Glob, Bash
 model: haiku
+role: specialist
 ---
 
 # Performance Optimizer Agent

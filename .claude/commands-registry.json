@@ -1,7 +1,12 @@
 {
-  "_generated": "2026-02-15T16:08:53.545Z",
+  "_generated": "2026-03-02T02:06:48.734Z",
   "_description": "Auto-generated commands registry. Do not edit manually.",
   "commands": {
+    "ace-diagnostic": {
+      "file": ".claude/commands/ace-diagnostic.md",
+      "description": "ACE Framework 거버넌스 상태 진단 - 훅 등록, 참조 무결성, 병렬 상태 확인",
+      "allowedTools": null
+    },
     "check-health": {
       "file": ".claude/commands/check-health.md",
       "description": "Comprehensive project health check including tests, types, linting, and build verification",
@@ -32,6 +37,16 @@
       "description": "Git 변경사항 분석 및 Conventional Commits 형식 커밋 초안 생성",
       "allowedTools": "Bash(git status:*), Bash(git diff:*), Bash(git log:*)"
     },
+    "gemini-review": {
+      "file": ".claude/commands/gemini-review.md",
+      "description": "Gemini CLI로 현재 코드 변경사항 크로스 리뷰 실행",
+      "allowedTools": null
+    },
+    "gemini-scan": {
+      "file": ".claude/commands/gemini-scan.md",
+      "description": "Gemini CLI로 대규모 코드베이스 분석 실행",
+      "allowedTools": null
+    },
     "resume": {
       "file": ".claude/commands/resume.md",
       "description": "dev/active에서 저장된 컨텍스트를 불러와 작업 재개",
@@ -54,7 +69,7 @@
     },
     "simplify-code": {
       "file": ".claude/commands/simplify-code.md",
-      "description": "코드 복잡도 분석 및 단순화 제안 (Boris Cherny code-simplifier 스타일)",
+      "description": "코드 복잡도 분석 및 단순화 제안 (Boris Cherny 스타일)",
       "allowedTools": null
     },
     "start-all": {
@@ -95,21 +110,6 @@
     "view-logs": {
       "file": ".claude/commands/view-logs.md",
       "description": "Vite 개발 서버 또는 테스트 로그 분석",
-      "allowedTools": null
-    },
-    "ace-diagnostic": {
-      "file": ".claude/commands/ace-diagnostic.md",
-      "description": "ACE Framework 거버넌스 상태 진단 - 훅 등록, 참조 무결성, 병렬 상태 확인",
-      "allowedTools": null
-    },
-    "gemini-review": {
-      "file": ".claude/commands/gemini-review.md",
-      "description": "Gemini CLI로 현재 코드 변경사항 크로스 리뷰 실행",
-      "allowedTools": null
-    },
-    "gemini-scan": {
-      "file": ".claude/commands/gemini-scan.md",
-      "description": "Gemini CLI로 대규모 코드베이스 분석 실행",
       "allowedTools": null
     }
   }

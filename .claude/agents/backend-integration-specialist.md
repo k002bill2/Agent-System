@@ -3,6 +3,7 @@ name: backend-integration-specialist
 description: Backend integration specialist for AOS. Expert in FastAPI, PostgreSQL, SQLAlchemy, and LangGraph service patterns.
 tools: Edit, Write, Read, Grep, Glob, Bash
 model: inherit
+role: specialist
 ---
 
 # Backend Integration Specialist

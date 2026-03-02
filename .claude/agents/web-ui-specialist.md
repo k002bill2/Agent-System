@@ -3,6 +3,7 @@ name: web-ui-specialist
 description: React Web UI/UX specialist for AOS Dashboard. Expert in web component design, responsive layouts with Tailwind CSS, and user experience optimization.
 tools: Edit, Write, Read, Grep, Glob, Bash
 model: inherit
+role: specialist
 ---
 
 # Web UI Specialist

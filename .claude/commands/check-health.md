@@ -58,7 +58,7 @@ npm test
 
 ### 4. Build Verification
 ```bash
-npm run build:development
+npm run build
 ```
 
 **What it checks**:
@@ -135,7 +135,7 @@ npm audit fix
 npm test -- --coverage
 
 # Verify build still works
-npm run build:development
+npm run build
 ```
 
 ## Next Steps
@@ -197,7 +197,7 @@ jobs:
       - name: Test Suite
         run: npm test -- --coverage
       - name: Build Verification
-        run: npm run build:development
+        run: npm run build
 ```
 
 ## Detailed Check Descriptions

@@ -1,4 +1,5 @@
 ---
+name: save-and-compact
 description: Save context to Dev Docs and run /compact in one command
 ---
 

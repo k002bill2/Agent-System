@@ -1,4 +1,5 @@
 ---
+name: config-backup
 description: Claude Code 설정 백업/복원 시스템 - backup, restore, verify, diff, list 지원
 argument-hint: backup [name] | restore [name] | verify [name] | diff [b1] [b2] | list
 ---

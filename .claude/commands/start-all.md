@@ -1,4 +1,5 @@
 ---
+name: start-all
 description: AOS 전체 서비스 시작 (인프라 + Backend + Dashboard)
 ---
 

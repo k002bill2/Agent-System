@@ -3,6 +3,7 @@ name: test-automation-specialist
 description: Test automation specialist for AOS Dashboard. Expert in Vitest, React Testing Library, coverage analysis, and writing comprehensive test suites. Use PROACTIVELY after writing or modifying code to ensure test coverage >75%.
 tools: Edit, Write, Read, Grep, Glob, Bash
 model: haiku
+role: specialist
 ---
 
 # Test Automation Specialist

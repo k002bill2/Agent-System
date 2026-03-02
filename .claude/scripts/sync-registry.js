@@ -206,6 +206,8 @@ function syncAgents() {
           description: data.description || '',
           tools: data.tools || '',
           model: data.model || 'sonnet',
+          role: data.role || 'specialist',
+          subagent_type: 'general-purpose',
           triggers: data.triggers || null
         };
         synced++;

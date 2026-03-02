@@ -3,6 +3,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { authFetch } from '../auth'
+import { apiClient } from '../../services/apiClient'
 import type { OrchestrationState, TaskStatus, LLMProvider, ProviderUsage } from './types'
 import { connectWebSocket, reconnectWebSocket, disconnectWebSocket, clearSessionData } from './wsConnection'
 
@@ -126,21 +127,13 @@ export const useOrchestrationStore = create<OrchestrationState>()(
     if (!sessionId) return false
 
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/refresh`, {
-        method: 'POST',
-      })
-
-      if (!res.ok) {
-        // Session refresh failed, may be expired
-        return false
-      }
+      await apiClient.post(`/api/sessions/${sessionId}/refresh`)
 
       // Update session info
-      const infoRes = await fetch(`/api/sessions/${sessionId}/info`)
-      if (infoRes.ok) {
-        const sessionInfo = await infoRes.json()
+      try {
+        const sessionInfo = await apiClient.get<OrchestrationState['sessionInfo']>(`/api/sessions/${sessionId}/info`)
         set({ sessionInfo })
-      }
+      } catch { /* info fetch is best-effort */ }
 
       return true
     } catch (e) {
@@ -259,11 +252,8 @@ export const useOrchestrationStore = create<OrchestrationState>()(
   // Check Warp installation status
   checkWarpStatus: async () => {
     try {
-      const res = await fetch('/api/warp/status')
-      if (res.ok) {
-        const data = await res.json()
-        set({ warpInstalled: data.installed })
-      }
+      const data = await apiClient.get<{ installed: boolean }>('/api/warp/status')
+      set({ warpInstalled: data.installed })
     } catch (e) {
       console.error('Failed to check Warp status:', e)
       set({ warpInstalled: false })
@@ -280,25 +270,19 @@ export const useOrchestrationStore = create<OrchestrationState>()(
     set({ warpLoading: true })
 
     try {
-      const res = await fetch('/api/warp/open', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: selectedProjectId,
-          command: command || undefined,
-          use_claude_cli: true,
-        }),
+      const data = await apiClient.post<{
+        success: boolean; error?: string; open_via_frontend?: boolean; uri?: string
+      }>('/api/warp/open', {
+        project_id: selectedProjectId,
+        command: command || undefined,
+        use_claude_cli: true,
       })
-
-      const data = await res.json()
       set({ warpLoading: false })
 
       if (data.success) {
-        // Docker mode: backend can't open Warp, frontend opens the URI
         if (data.open_via_frontend && data.uri) {
           window.location.href = data.uri
         }
-
         return {
           success: true,
           sessionMonitorHint: 'Claude Sessions 탭에서 진행 상황을 확인하세요.',
@@ -321,19 +305,9 @@ export const useOrchestrationStore = create<OrchestrationState>()(
     }
 
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/tasks/${taskId}`, {
-        method: 'DELETE',
-      })
-
-      if (!res.ok) {
-        const error = await res.json()
-        return {
-          success: false,
-          error: error.detail?.message || error.detail || 'Failed to delete task',
-        }
-      }
-
-      const data = await res.json()
+      const data = await apiClient.delete<{ deleted_task_ids: string[] }>(
+        `/api/sessions/${sessionId}/tasks/${taskId}`
+      )
 
       // Update local state to mark tasks as deleted
       set((state) => {
@@ -357,7 +331,8 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       return { success: true, deletedIds: data.deleted_task_ids }
     } catch (e) {
       console.error('Failed to delete task:', e)
-      return { success: false, error: 'Failed to connect to server' }
+      const msg = e instanceof Error ? e.message : 'Failed to connect to server'
+      return { success: false, error: msg }
     }
   },
 
@@ -369,17 +344,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
     }
 
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/tasks/${taskId}/cancel`, {
-        method: 'POST',
-      })
-
-      if (!res.ok) {
-        const error = await res.json()
-        return {
-          success: false,
-          error: error.detail || 'Failed to cancel task',
-        }
-      }
+      await apiClient.post(`/api/sessions/${sessionId}/tasks/${taskId}/cancel`)
 
       // Update local state
       set((state) => ({
@@ -395,7 +360,8 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       return { success: true }
     } catch (e) {
       console.error('Failed to cancel task:', e)
-      return { success: false, error: 'Failed to connect to server' }
+      const msg = e instanceof Error ? e.message : 'Failed to connect to server'
+      return { success: false, error: msg }
     }
   },
 
@@ -407,13 +373,10 @@ export const useOrchestrationStore = create<OrchestrationState>()(
     }
 
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/tasks/${taskId}/deletion-info`)
-
-      if (!res.ok) {
-        return { exists: false }
-      }
-
-      const data = await res.json()
+      const data = await apiClient.get<{
+        exists: boolean; children_count: number; in_progress_count: number;
+        in_progress_ids: string[]; can_delete: boolean
+      }>(`/api/sessions/${sessionId}/tasks/${taskId}/deletion-info`)
       return {
         exists: data.exists,
         childrenCount: data.children_count,
@@ -440,19 +403,9 @@ export const useOrchestrationStore = create<OrchestrationState>()(
     }
 
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/tasks/${taskId}/retry`, {
-        method: 'POST',
-      })
-
-      if (!res.ok) {
-        const error = await res.json()
-        return {
-          success: false,
-          error: error.detail || 'Failed to retry task',
-        }
-      }
-
-      const data = await res.json()
+      const data = await apiClient.post<{ retry_count: number }>(
+        `/api/sessions/${sessionId}/tasks/${taskId}/retry`
+      )
 
       // Update local state
       set((state) => ({
@@ -469,7 +422,8 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       return { success: true, retryCount: data.retry_count }
     } catch (e) {
       console.error('Failed to retry task:', e)
-      return { success: false, error: 'Failed to connect to server' }
+      const msg = e instanceof Error ? e.message : 'Failed to connect to server'
+      return { success: false, error: msg }
     }
   },
 
@@ -481,21 +435,10 @@ export const useOrchestrationStore = create<OrchestrationState>()(
     }
 
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/tasks/${taskId}/pause`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason }),
-      })
-
-      if (!res.ok) {
-        const error = await res.json()
-        return {
-          success: false,
-          error: error.detail || 'Failed to pause task',
-        }
-      }
-
-      const data = await res.json()
+      const data = await apiClient.post<{ paused_at: string }>(
+        `/api/sessions/${sessionId}/tasks/${taskId}/pause`,
+        { reason }
+      )
 
       // Update local state
       set((state) => ({
@@ -513,7 +456,8 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       return { success: true }
     } catch (e) {
       console.error('Failed to pause task:', e)
-      return { success: false, error: 'Failed to connect to server' }
+      const msg = e instanceof Error ? e.message : 'Failed to connect to server'
+      return { success: false, error: msg }
     }
   },
 
@@ -525,17 +469,7 @@ export const useOrchestrationStore = create<OrchestrationState>()(
     }
 
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/tasks/${taskId}/resume`, {
-        method: 'POST',
-      })
-
-      if (!res.ok) {
-        const error = await res.json()
-        return {
-          success: false,
-          error: error.detail || 'Failed to resume task',
-        }
-      }
+      await apiClient.post(`/api/sessions/${sessionId}/tasks/${taskId}/resume`)
 
       // Update local state
       set((state) => ({
@@ -553,7 +487,8 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       return { success: true }
     } catch (e) {
       console.error('Failed to resume task:', e)
-      return { success: false, error: 'Failed to connect to server' }
+      const msg = e instanceof Error ? e.message : 'Failed to connect to server'
+      return { success: false, error: msg }
     }
   },
 }),

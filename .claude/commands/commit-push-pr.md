@@ -1,4 +1,5 @@
 ---
+name: commit-push-pr
 description: 커밋, 푸시, PR 생성 자동화 워크플로우 (Boris Cherny 스타일)
 ---
 

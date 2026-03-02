@@ -824,10 +824,6 @@ async def save_session(
     if details is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
-    # TODO: Implement database persistence
-    # For now, just acknowledge the request
-    # In a full implementation, this would save to PostgreSQL
-
     # Check if database mode is enabled
     import os
 
@@ -840,15 +836,72 @@ async def save_session(
             saved_at=None,
         )
 
-    # TODO: Actually save to database when enabled
-    # from db.repositories import session_repository
-    # await session_repository.save_claude_session(details, request.notes)
+    # Save session snapshot to database
+    from db.database import get_db
+    from db.models.claude_session import ClaudeSessionSnapshotModel
+    from sqlalchemy import select
 
-    return ClaudeSessionSaveResponse(
-        success=True,
-        message=f"Session {session_id} saved successfully",
-        saved_at=utcnow(),
-    )
+    try:
+        async with get_db() as db:
+            # Upsert: update if exists, create if not
+            existing = await db.execute(
+                select(ClaudeSessionSnapshotModel).where(
+                    ClaudeSessionSnapshotModel.id == session_id
+                )
+            )
+            snapshot = existing.scalar_one_or_none()
+
+            now = utcnow()
+            snapshot_data = {
+                "slug": details.get("slug"),
+                "model": details.get("model"),
+                "project_path": details.get("project_path"),
+                "project_name": details.get("project_name"),
+                "git_branch": details.get("git_branch"),
+                "cwd": details.get("cwd"),
+                "version": details.get("version"),
+                "status": details.get("status"),
+                "source_user": details.get("source_user"),
+                "source_path": details.get("source_path"),
+                "message_count": details.get("message_count", 0),
+                "user_message_count": details.get("user_message_count", 0),
+                "assistant_message_count": details.get("assistant_message_count", 0),
+                "tool_call_count": details.get("tool_call_count", 0),
+                "total_input_tokens": details.get("total_input_tokens", 0),
+                "total_output_tokens": details.get("total_output_tokens", 0),
+                "estimated_cost": details.get("estimated_cost", 0.0),
+                "file_path": details.get("file_path"),
+                "file_size": details.get("file_size", 0),
+                "summary": details.get("summary"),
+                "notes": request.notes or None,
+                "updated_at": now,
+            }
+
+            if snapshot:
+                for key, value in snapshot_data.items():
+                    setattr(snapshot, key, value)
+            else:
+                snapshot = ClaudeSessionSnapshotModel(
+                    id=session_id,
+                    **snapshot_data,
+                    session_created_at=details.get("created_at"),
+                    session_last_activity=details.get("last_activity"),
+                    created_at=now,
+                )
+                db.add(snapshot)
+
+        return ClaudeSessionSaveResponse(
+            success=True,
+            message=f"Session {session_id} saved successfully",
+            saved_at=now,
+        )
+    except Exception as e:
+        logger.error(f"Failed to save session {session_id}: {e}")
+        return ClaudeSessionSaveResponse(
+            success=False,
+            message=f"Failed to save session: {str(e)}",
+            saved_at=None,
+        )
 
 
 @router.get("/{session_id}/transcript")
