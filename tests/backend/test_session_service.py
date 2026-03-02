@@ -1,9 +1,10 @@
 """Tests for session service."""
 
 import pytest
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
+from utils.time import utcnow
 from models.project import Project
 from services.session_service import (
     SessionMetadata,
@@ -48,7 +49,7 @@ class TestSessionMetadata:
     """Tests for the SessionMetadata helper class."""
 
     def setup_method(self):
-        now = datetime.now(timezone.utc)
+        now = utcnow()
         self.meta = SessionMetadata(
             session_id="test-sid",
             created_at=now,
@@ -62,7 +63,7 @@ class TestSessionMetadata:
         assert self.meta.is_expired() is False
 
     def test_is_expired_returns_true_for_past_expiry(self):
-        self.meta.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        self.meta.expires_at = utcnow() - timedelta(seconds=1)
         assert self.meta.is_expired() is True
 
     # -- is_inactive ----------------------------------------------------------
@@ -72,11 +73,11 @@ class TestSessionMetadata:
         assert self.meta.is_inactive(threshold_hours=24) is False
 
     def test_is_inactive_returns_true_for_old_activity(self):
-        self.meta.last_activity = datetime.now(timezone.utc) - timedelta(hours=25)
+        self.meta.last_activity = utcnow() - timedelta(hours=25)
         assert self.meta.is_inactive(threshold_hours=24) is True
 
     def test_is_inactive_custom_threshold(self):
-        self.meta.last_activity = datetime.now(timezone.utc) - timedelta(hours=2)
+        self.meta.last_activity = utcnow() - timedelta(hours=2)
         # 1-hour threshold → inactive
         assert self.meta.is_inactive(threshold_hours=1) is True
         # 3-hour threshold → still active
@@ -117,7 +118,7 @@ class TestSessionMetadata:
         assert abs((restored.expires_at - self.meta.expires_at).total_seconds()) < 0.001
 
     def test_from_dict_preserves_expired_state(self):
-        self.meta.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
+        self.meta.expires_at = utcnow() - timedelta(hours=1)
         restored = SessionMetadata.from_dict(self.meta.to_dict())
         assert restored.is_expired() is True
 
@@ -191,7 +192,7 @@ class TestSessionServiceLifecycle:
         sid = await self.service.create_session()
         # Manually age the last_activity
         meta = self.service._session_metadata[sid]
-        meta.last_activity = datetime.now(timezone.utc) - timedelta(minutes=10)
+        meta.last_activity = utcnow() - timedelta(minutes=10)
         old_activity = meta.last_activity
 
         await self.service.get_session(sid, update_activity=True)
@@ -201,7 +202,7 @@ class TestSessionServiceLifecycle:
     async def test_get_session_skips_activity_update_when_disabled(self):
         sid = await self.service.create_session()
         meta = self.service._session_metadata[sid]
-        meta.last_activity = datetime.now(timezone.utc) - timedelta(minutes=10)
+        meta.last_activity = utcnow() - timedelta(minutes=10)
         frozen = meta.last_activity
 
         await self.service.get_session(sid, update_activity=False)
@@ -277,7 +278,7 @@ class TestSessionServiceExpiration:
     async def test_get_session_returns_none_for_expired_session(self):
         sid = await self.service.create_session(ttl_days=1)
         # Manually expire
-        self.service._session_metadata[sid].expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        self.service._session_metadata[sid].expires_at = utcnow() - timedelta(seconds=1)
 
         result = await self.service.get_session(sid)
         assert result is None
@@ -291,7 +292,7 @@ class TestSessionServiceExpiration:
 
         # Expire sid1
         self.service._session_metadata[sid1].expires_at = (
-            datetime.now(timezone.utc) - timedelta(seconds=1)
+            utcnow() - timedelta(seconds=1)
         )
 
         cleaned = await self.service.cleanup_expired_sessions()
@@ -304,7 +305,7 @@ class TestSessionServiceExpiration:
         sid = await self.service.create_session()
         # Age the last_activity well beyond any reasonable threshold
         self.service._session_metadata[sid].last_activity = (
-            datetime.now(timezone.utc) - timedelta(hours=72)
+            utcnow() - timedelta(hours=72)
         )
 
         cleaned = await self.service.cleanup_expired_sessions()
@@ -328,9 +329,9 @@ class TestSessionServiceExpiration:
         state = create_initial_state(session_id=sid)
         old_meta = SessionMetadata(
             session_id=sid,
-            created_at=datetime.now(timezone.utc) - timedelta(days=10),
-            last_activity=datetime.now(timezone.utc) - timedelta(hours=48),
-            expires_at=datetime.now(timezone.utc) - timedelta(days=3),
+            created_at=utcnow() - timedelta(days=10),
+            last_activity=utcnow() - timedelta(hours=48),
+            expires_at=utcnow() - timedelta(days=3),
         )
         state["_metadata"] = old_meta.to_dict()
         self.service._memory_sessions[sid] = state
@@ -384,7 +385,7 @@ class TestSessionServiceRefreshAndInfo:
     async def test_get_session_info_returns_none_for_expired(self):
         sid = await self.service.create_session()
         self.service._session_metadata[sid].expires_at = (
-            datetime.now(timezone.utc) - timedelta(seconds=1)
+            utcnow() - timedelta(seconds=1)
         )
         info = await self.service.get_session_info(sid)
         assert info is None

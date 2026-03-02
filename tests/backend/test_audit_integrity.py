@@ -1,7 +1,9 @@
 """Tests for audit integrity service."""
 
 import pytest
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+
+from utils.time import utcnow
 
 from models.audit import (
     ComplianceAuditEntry,
@@ -123,8 +125,8 @@ class TestAuditIntegrityService:
             integrity_service.add_entry(entry)
 
         # Generate report
-        start_date = datetime.now(timezone.utc) - timedelta(hours=1)
-        end_date = datetime.now(timezone.utc) + timedelta(hours=1)
+        start_date = utcnow() - timedelta(hours=1)
+        end_date = utcnow() + timedelta(hours=1)
         report = integrity_service.generate_compliance_report(start_date, end_date)
 
         assert report.total_entries == 3
