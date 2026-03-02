@@ -2,6 +2,8 @@
 
 from datetime import datetime
 
+from utils.time import utcnow
+
 from pydantic import BaseModel
 
 from models.agent_state import TaskNode, TaskStatus
@@ -173,7 +175,7 @@ class TaskService:
             )
 
         deleted_ids = []
-        now = datetime.utcnow()
+        now = utcnow()
 
         # Delete the task itself
         task = tasks[task_id]
@@ -233,7 +235,7 @@ class TaskService:
 
         previous_status = task.status.value
         task.status = TaskStatus.CANCELLED
-        task.updated_at = datetime.utcnow()
+        task.updated_at = utcnow()
 
         return TaskCancelResult(
             success=True,
@@ -319,7 +321,7 @@ class TaskService:
             task.error_history.append(task.error)
         task.error = None
         task.retry_count += 1
-        task.updated_at = datetime.utcnow()
+        task.updated_at = utcnow()
 
         return TaskRetryResult(
             success=True,
@@ -365,7 +367,7 @@ class TaskService:
             )
 
         previous_status = task.status.value
-        now = datetime.utcnow()
+        now = utcnow()
 
         # Pause the task
         task.status = TaskStatus.PAUSED
@@ -420,7 +422,7 @@ class TaskService:
         task.status = TaskStatus.PENDING
         task.paused_at = None
         task.pause_reason = None
-        task.updated_at = datetime.utcnow()
+        task.updated_at = utcnow()
 
         return TaskResumeResult(
             success=True,

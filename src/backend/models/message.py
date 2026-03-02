@@ -1,6 +1,8 @@
 """Message models for WebSocket communication."""
 
 from datetime import datetime
+
+from utils.time import utcnow
 from enum import Enum
 from typing import Any
 
@@ -49,7 +51,7 @@ class Message(BaseModel):
 
     type: MessageType
     payload: dict[str, Any] = Field(default_factory=dict)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=utcnow)
     session_id: str | None = None
 
 

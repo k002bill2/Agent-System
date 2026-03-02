@@ -14,6 +14,7 @@ from db.models.base import (
     Text,
     UniqueConstraint,
     datetime,
+    timezone,
 )
 
 
@@ -46,7 +47,7 @@ class FeedbackModel(Base):
     status = Column(String(20), default="pending", index=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     processed_at = Column(DateTime, nullable=True)
 
     __table_args__ = (
@@ -78,7 +79,7 @@ class DatasetEntryModel(Base):
     metadata_json = Column(JSONB, nullable=True, default=dict)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     __table_args__ = (
         Index("ix_dataset_positive", "is_positive"),
@@ -108,7 +109,7 @@ class TaskEvaluationModel(Base):
     effort_level = Column(String(20), nullable=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     __table_args__ = (
         UniqueConstraint("session_id", "task_id", name="uq_task_eval_session_task"),

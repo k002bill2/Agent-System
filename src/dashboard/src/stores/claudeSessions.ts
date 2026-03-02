@@ -7,9 +7,8 @@ import {
   TranscriptEntry,
   TranscriptResponse,
 } from '../types/claudeSession'
-import { authFetch } from './auth'
-
-const API_BASE = '/api'
+import { apiClient } from '../services/apiClient'
+import { getApiUrl } from '../config/api'
 
 export type SortField = 'last_activity' | 'created_at' | 'message_count' | 'estimated_cost' | 'project_name'
 export type SortOrder = 'asc' | 'desc'
@@ -204,12 +203,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       params.set('offset', currentOffset.toString())
       params.set('limit', pageSize.toString())
 
-      const res = await fetch(`${API_BASE}/claude-sessions?${params.toString()}`)
-      if (!res.ok) {
-        throw new Error(`Failed to fetch sessions: ${res.statusText}`)
-      }
-
-      const data: ClaudeSessionResponse = await res.json()
+      const data = await apiClient.get<ClaudeSessionResponse>(`/api/claude-sessions?${params.toString()}`)
       set({
         sessions: data.sessions,
         totalCount: data.total_count,
@@ -255,12 +249,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       params.set('offset', nextOffset.toString())
       params.set('limit', pageSize.toString())
 
-      const res = await fetch(`${API_BASE}/claude-sessions?${params.toString()}`)
-      if (!res.ok) {
-        throw new Error(`Failed to load more sessions: ${res.statusText}`)
-      }
-
-      const data: ClaudeSessionResponse = await res.json()
+      const data = await apiClient.get<ClaudeSessionResponse>(`/api/claude-sessions?${params.toString()}`)
       set((state) => ({
         sessions: [...state.sessions, ...data.sessions],
         hasMore: data.has_more,
@@ -294,12 +283,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       params.set('offset', '0')
       params.set('limit', pageSize.toString())
 
-      const res = await fetch(`${API_BASE}/claude-sessions?${params.toString()}`)
-      if (!res.ok) {
-        throw new Error(`Failed to refresh sessions: ${res.statusText}`)
-      }
-
-      const data: ClaudeSessionResponse = await res.json()
+      const data = await apiClient.get<ClaudeSessionResponse>(`/api/claude-sessions?${params.toString()}`)
 
       // Merge strategy:
       // 1. New sessions (not in current list) go to the top
@@ -353,12 +337,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
   fetchSourceUsers: async () => {
     try {
-      const res = await fetch(`${API_BASE}/claude-sessions/source-users`)
-      if (!res.ok) {
-        return
-      }
-
-      const data = await res.json()
+      const data = await apiClient.get<{ users: string[]; current_user: string }>(`/api/claude-sessions/source-users`)
       set({
         sourceUsers: data.users || [],
         currentUser: data.current_user || '',
@@ -370,12 +349,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
   fetchProjects: async () => {
     try {
-      const res = await authFetch(`${API_BASE}/claude-sessions/projects`)
-      if (!res.ok) {
-        return
-      }
-
-      const data = await res.json()
+      const data = await apiClient.get<{ projects: string[] }>(`/api/claude-sessions/projects`)
       set({
         allProjects: data.projects || [],
       })
@@ -434,12 +408,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
     set({ isLoadingDetails: true, error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/claude-sessions/${sessionId}`)
-      if (!res.ok) {
-        throw new Error(`Failed to fetch session details: ${res.statusText}`)
-      }
-
-      const data: ClaudeSessionDetail = await res.json()
+      const data = await apiClient.get<ClaudeSessionDetail>(`/api/claude-sessions/${sessionId}`)
       set({
         selectedSession: data,
         selectedSessionId: sessionId,
@@ -497,12 +466,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       params.set('offset', offset.toString())
       params.set('limit', limit.toString())
 
-      const res = await fetch(`${API_BASE}/claude-sessions/${sessionId}/transcript?${params.toString()}`)
-      if (!res.ok) {
-        throw new Error(`Failed to fetch transcript: ${res.statusText}`)
-      }
-
-      const data: TranscriptResponse = await res.json()
+      const data = await apiClient.get<TranscriptResponse>(`/api/claude-sessions/${sessionId}/transcript?${params.toString()}`)
       set((state) => ({
         transcriptEntries: append
           ? [...state.transcriptEntries, ...data.entries]
@@ -541,7 +505,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
     }
 
     const eventSource = new EventSource(
-      `${API_BASE}/claude-sessions/${sessionId}/stream`,
+      getApiUrl(`/api/claude-sessions/${sessionId}/stream`),
     )
 
     eventSource.addEventListener('session_update', (event) => {
@@ -613,14 +577,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
     set({ generatingSummaryFor: sessionId })
 
     try {
-      const res = await fetch(`${API_BASE}/claude-sessions/${sessionId}/summary`, {
-        method: 'POST',
-      })
-      if (!res.ok) {
-        throw new Error(`Failed to generate summary: ${res.statusText}`)
-      }
-
-      const data = await res.json()
+      const data = await apiClient.post<{ summary: string }>(`/api/claude-sessions/${sessionId}/summary`)
 
       // Update session in list
       set((state) => ({
@@ -640,15 +597,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
     set({ generatingSummaryFor: sessionId })
 
     try {
-      const res = await fetch(`${API_BASE}/claude-sessions/${sessionId}/summary`, {
-        method: 'POST',
-      })
-      if (!res.ok) {
-        set({ generatingSummaryFor: null })
-        return
-      }
-
-      const data = await res.json()
+      const data = await apiClient.post<{ summary: string }>(`/api/claude-sessions/${sessionId}/summary`)
 
       // Update session in list
       set((state) => ({
@@ -681,10 +630,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       params.set('offset', '0')
       params.set('limit', '200')
 
-      const res = await fetch(`${API_BASE}/claude-sessions?${params.toString()}`)
-      if (!res.ok) return
-
-      const data: ClaudeSessionResponse = await res.json()
+      const data = await apiClient.get<ClaudeSessionResponse>(`/api/claude-sessions?${params.toString()}`)
       const sessionsWithoutSummary = data.sessions.filter(s => !s.summary)
 
       // Generate summaries one by one to avoid overwhelming the LLM
@@ -705,13 +651,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   // Delete a single session
   deleteSession: async (sessionId: string) => {
     try {
-      const res = await fetch(`${API_BASE}/claude-sessions/${sessionId}`, {
-        method: 'DELETE',
-      })
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.detail || 'Failed to delete session')
-      }
+      await apiClient.delete(`/api/claude-sessions/${sessionId}`)
 
       // Remove from local state
       set((state) => ({
@@ -732,15 +672,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   // Delete all empty sessions
   deleteEmptySessions: async () => {
     try {
-      const res = await fetch(`${API_BASE}/claude-sessions`, {
-        method: 'DELETE',
-      })
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.detail || 'Failed to delete empty sessions')
-      }
-
-      const data = await res.json()
+      const data = await apiClient.delete<{ deleted_count: number; deleted_ids: string[] }>(`/api/claude-sessions`)
       const deletedIds: string[] = data.deleted_ids || []
 
       // Remove deleted sessions from local state
@@ -783,15 +715,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   // Delete all ghost sessions
   deleteGhostSessions: async () => {
     try {
-      const res = await fetch(`${API_BASE}/claude-sessions/ghost`, {
-        method: 'DELETE',
-      })
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.detail || 'Failed to delete ghost sessions')
-      }
-
-      const data = await res.json()
+      const data = await apiClient.delete<{ deleted_count: number; deleted_ids: string[] }>(`/api/claude-sessions/ghost`)
       const deletedIds: string[] = data.deleted_ids || []
 
       // Remove deleted sessions from local state
@@ -814,10 +738,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       const { projectFilter } = get()
       const params = new URLSearchParams()
       if (projectFilter) params.set('project', projectFilter)
-      const res = await fetch(`${API_BASE}/claude-sessions/summaries/pending-count?${params.toString()}`)
-      if (!res.ok) return
-
-      const data = await res.json()
+      const data = await apiClient.get<{ pending_count: number }>(`/api/claude-sessions/summaries/pending-count?${params.toString()}`)
       set({ pendingSummaryCount: data.pending_count })
     } catch {
       // Silently ignore errors
@@ -840,15 +761,12 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       params.set('limit', limit.toString())
       params.set('skip_existing', 'true')
 
-      const res = await fetch(`${API_BASE}/claude-sessions/summaries/generate-batch?${params.toString()}`, {
-        method: 'POST',
-      })
-
-      if (!res.ok) {
-        throw new Error(`Failed to generate batch summaries: ${res.statusText}`)
-      }
-
-      const data = await res.json()
+      const data = await apiClient.post<{
+        total_processed: number
+        success_count: number
+        failed_count: number
+        generated_summaries?: { session_id: string; summary: string }[]
+      }>(`/api/claude-sessions/summaries/generate-batch?${params.toString()}`)
 
       // Update progress and immediately reduce pendingSummaryCount
       const currentPendingCount = get().pendingSummaryCount

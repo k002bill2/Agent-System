@@ -17,7 +17,7 @@ vi.mock('lucide-react', () => {
     Terminal: icon, Wrench: icon, Zap: icon, Clock: icon, DollarSign: icon,
     Bot: icon, User: icon, Copy: icon, Check: icon, Loader2: icon,
     FolderOpen: icon, X: icon, Database: icon, ChevronDown: icon,
-    ChevronUp: icon, FileText: icon,
+    ChevronUp: icon, FileText: icon, AlertCircle: icon, CheckCircle2: icon,
   }
 })
 
@@ -293,18 +293,16 @@ describe('PlaygroundPage', () => {
   // ─────────────────────────────────────────────────────────────
 
   it('handles API errors gracefully on initial load', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     mockAuthFetch.mockRejectedValue(new Error('Network error'))
 
     await act(async () => {
       render(<PlaygroundPage />)
     })
 
+    // Component should still render and remain functional after error
     await waitFor(() => {
       expect(screen.getByText('New Session')).toBeInTheDocument()
     })
-    expect(consoleSpy).toHaveBeenCalled()
-    consoleSpy.mockRestore()
   })
 
   // ─────────────────────────────────────────────────────────────
@@ -1257,7 +1255,6 @@ describe('PlaygroundPage', () => {
   // ─────────────────────────────────────────────────────────────
 
   it('handles execute prompt error gracefully', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const session = makeSession()
     setupMockFetch([session])
 
@@ -1291,17 +1288,18 @@ describe('PlaygroundPage', () => {
 
     const textarea = screen.getByPlaceholderText('Enter your prompt... (MD 문서를 드래그하거나 첨부하세요)')
     fireEvent.change(textarea, { target: { value: 'Fail prompt' } })
-    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false })
 
-    await waitFor(() => {
-      expect(consoleSpy).toHaveBeenCalled()
+    await act(async () => {
+      fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false })
     })
 
-    consoleSpy.mockRestore()
+    // Component should remain functional after error (handled by useErrorHandler)
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Enter your prompt... (MD 문서를 드래그하거나 첨부하세요)')).toBeInTheDocument()
+    })
   })
 
   it('handles create session error gracefully', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     setupMockFetch([], [makeModel()])
 
     await act(async () => {
@@ -1342,11 +1340,11 @@ describe('PlaygroundPage', () => {
       fireEvent.click(screen.getByText('Create Session'))
     })
 
+    // Component should remain functional after error (handled by useErrorHandler)
+    // The modal stays open since the creation failed
     await waitFor(() => {
-      expect(consoleSpy).toHaveBeenCalled()
+      expect(screen.getByText('Create Session')).toBeInTheDocument()
     })
-
-    consoleSpy.mockRestore()
   })
 
   // ─────────────────────────────────────────────────────────────

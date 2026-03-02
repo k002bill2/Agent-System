@@ -1,6 +1,8 @@
 """Monitoring models for project health checks."""
 
 from datetime import datetime
+
+from utils.time import utcnow
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -46,7 +48,7 @@ class ProjectHealth(BaseModel):
     project_name: str
     project_path: str
     checks: dict[CheckType, CheckResult] = Field(default_factory=dict)
-    last_updated: datetime = Field(default_factory=datetime.utcnow)
+    last_updated: datetime = Field(default_factory=utcnow)
 
     def get_check(self, check_type: CheckType) -> CheckResult:
         """Get or create a check result."""
@@ -57,7 +59,7 @@ class ProjectHealth(BaseModel):
     def update_check(self, result: CheckResult) -> None:
         """Update a check result."""
         self.checks[result.check_type] = result
-        self.last_updated = datetime.utcnow()
+        self.last_updated = utcnow()
 
 
 class CheckStartedPayload(BaseModel):

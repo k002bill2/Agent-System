@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta
 
+from utils.time import utcnow
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -246,7 +247,7 @@ async def export_audit_logs(
         raise HTTPException(status_code=400, detail=str(e))
 
     media_type = "application/json" if format == "json" else "text/csv"
-    filename = f"audit_logs_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.{format}"
+    filename = f"audit_logs_{utcnow().strftime('%Y%m%d_%H%M%S')}.{format}"
 
     return Response(
         content=content,
@@ -342,7 +343,7 @@ async def get_compliance_report(
 
         # Default to last 30 days if not specified
         if not end_date:
-            end_date = datetime.utcnow()
+            end_date = utcnow()
         if not start_date:
             start_date = end_date - timedelta(days=30)
 
@@ -431,7 +432,7 @@ async def seed_sample_data(db: AsyncSession = Depends(get_db)):
     user_id = None if USE_DATABASE else "demo-user"
 
     # Generate sample entries over the past week
-    now = datetime.utcnow()
+    now = utcnow()
 
     sample_actions = [
         (AuditAction.SESSION_CREATED, ResourceType.SESSION, "success"),

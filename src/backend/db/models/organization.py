@@ -12,6 +12,7 @@ from db.models.base import (
     String,
     Text,
     datetime,
+    timezone,
 )
 
 
@@ -48,8 +49,8 @@ class OrganizationModel(Base):
 
     # Metadata
     settings = Column(JSONB, default=dict)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class OrganizationMemberModel(Base):
@@ -78,7 +79,7 @@ class OrganizationMemberModel(Base):
     joined_at = Column(DateTime, nullable=True)
     last_active_at = Column(DateTime, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (Index("ix_org_member_org_user", "organization_id", "user_id", unique=True),)
 
@@ -100,7 +101,7 @@ class OrganizationInvitationModel(Base):
     expires_at = Column(DateTime, nullable=False)
     accepted = Column(Boolean, default=False)
     accepted_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("ix_invitation_token", "token"),

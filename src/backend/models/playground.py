@@ -2,6 +2,8 @@
 
 import uuid
 from datetime import datetime
+
+from utils.time import utcnow
 from enum import Enum
 from typing import Any
 
@@ -34,7 +36,7 @@ class PlaygroundMessage(BaseModel):
     content: str
     tool_calls: list[dict] | None = None
     tool_results: list[dict] | None = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=utcnow)
     tokens: int = 0
     latency_ms: int = 0
     rag_sources: list[dict] | None = None
@@ -67,7 +69,7 @@ class PlaygroundExecution(BaseModel):
     cost: float = 0.0
 
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
     started_at: datetime | None = None
     completed_at: datetime | None = None
 
@@ -110,8 +112,8 @@ class PlaygroundSession(BaseModel):
     total_cost: float = 0.0
 
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class PlaygroundSessionCreate(BaseModel):

@@ -8,6 +8,8 @@ import json
 import logging
 import os
 from datetime import datetime
+
+from utils.time import utcnow
 from pathlib import Path
 
 from models.project_config import ProjectInfo
@@ -276,7 +278,7 @@ class ProjectDiscovery:
                 agent_count=0,
                 mcp_server_count=0,
                 hook_count=0,
-                last_modified=datetime.utcnow(),
+                last_modified=utcnow(),
             )
 
         # Count resources
@@ -335,7 +337,7 @@ class ProjectDiscovery:
                 pass
 
         # Get last modified time from most recently modified config file
-        last_modified = datetime.utcnow()
+        last_modified = utcnow()
         for check_path in [skills_dir, agents_dir, commands_dir, mcp_file, hooks_file]:
             if check_path.exists():
                 try:

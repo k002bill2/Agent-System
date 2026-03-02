@@ -2,6 +2,8 @@
 
 import re
 from datetime import datetime
+
+from utils.time import utcnow
 from enum import Enum
 from typing import Any
 
@@ -47,7 +49,7 @@ class ApprovalRequest(BaseModel):
     risk_level: RiskLevel
     risk_description: str
     status: ApprovalStatus = ApprovalStatus.PENDING
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
     resolved_at: datetime | None = None
     resolver_note: str | None = None
 

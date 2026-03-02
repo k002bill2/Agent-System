@@ -12,6 +12,7 @@ from db.models.base import (
     String,
     UniqueConstraint,
     datetime,
+    timezone,
     uuid,
 )
 
@@ -31,8 +32,8 @@ class LLMModelConfigModel(Base):
     is_enabled = Column(Boolean, default=True, nullable=False, index=True)
     supports_tools = Column(Boolean, default=True, nullable=False)
     supports_vision = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (Index("ix_llm_model_provider_enabled", "provider", "is_enabled"),)
 
@@ -49,8 +50,8 @@ class UserLLMCredentialModel(Base):
     api_key = Column(EncryptedString(1024), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     last_verified_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         UniqueConstraint("user_id", "provider", "key_name", name="uq_user_provider_key_name"),

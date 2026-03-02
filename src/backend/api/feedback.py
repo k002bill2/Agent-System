@@ -6,6 +6,8 @@ RLHF Feedback API Router
 
 from datetime import datetime
 
+from utils.time import utcnow
+
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import PlainTextResponse, Response
 
@@ -206,7 +208,7 @@ async def export_dataset(
 
     # Content-Type 설정
     media_type = "application/jsonl" if format == "jsonl" else "text/csv"
-    filename = f"dataset_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.{format}"
+    filename = f"dataset_{utcnow().strftime('%Y%m%d_%H%M%S')}.{format}"
 
     return PlainTextResponse(
         content=content,

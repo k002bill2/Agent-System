@@ -1,6 +1,8 @@
 """Analytics models for dashboard metrics."""
 
 from datetime import datetime
+
+from utils.time import utcnow
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -219,4 +221,4 @@ class AnalyticsDashboard(BaseModel):
     costs: CostAnalytics
     activity: ActivityHeatmap
     errors: ErrorAnalytics
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=utcnow)

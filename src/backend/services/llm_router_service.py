@@ -5,6 +5,8 @@ import os
 import time
 from datetime import datetime, timedelta
 
+from utils.time import utcnow
+
 from models.llm_router import (
     LLMHealthCheck,
     LLMProvider,
@@ -103,7 +105,7 @@ class LLMRouterService:
         if data.cost_per_1k_output is not None:
             provider.cost_per_1k_output = data.cost_per_1k_output
 
-        provider.updated_at = datetime.utcnow()
+        provider.updated_at = utcnow()
         return provider
 
     @staticmethod
@@ -152,7 +154,7 @@ class LLMRouterService:
                     status = LLMProviderStatus.DEGRADED
 
             provider.status = status
-            provider.last_health_check = datetime.utcnow()
+            provider.last_health_check = utcnow()
 
             health_check = LLMHealthCheck(
                 provider_id=provider_id,
@@ -165,7 +167,7 @@ class LLMRouterService:
         except Exception as e:
             provider.consecutive_failures += 1
             provider.status = LLMProviderStatus.UNHEALTHY
-            provider.last_health_check = datetime.utcnow()
+            provider.last_health_check = utcnow()
 
             health_check = LLMHealthCheck(
                 provider_id=provider_id,
@@ -385,7 +387,7 @@ class LLMRouterService:
         period_hours: int = 24,
     ) -> LLMRoutingStats:
         """Get routing statistics for a time period."""
-        _stats.period_end = datetime.utcnow()
+        _stats.period_end = utcnow()
         _stats.period_start = _stats.period_end - timedelta(hours=period_hours)
         return _stats
 

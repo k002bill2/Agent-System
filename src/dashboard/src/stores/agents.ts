@@ -5,6 +5,8 @@
  */
 
 import { create } from 'zustand'
+import { apiClient } from '../services/apiClient'
+import { getApiUrl } from '../config/api'
 
 // Types
 export type AgentCategory = 'development' | 'orchestration' | 'quality' | 'research'
@@ -168,7 +170,7 @@ interface AgentsState {
   selectHistoryItem: (item: TaskAnalysisHistory | null) => void
 }
 
-const API_BASE = 'http://localhost:8000/api'
+const API_BASE = getApiUrl('/api')
 
 /**
  * 분석 결과를 Claude Code CLI 프롬프트로 변환.
@@ -314,27 +316,16 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
     set({ isLoading: true, error: null })
 
     try {
-      let url = `${API_BASE}/agents`
       const params = new URLSearchParams()
-
       if (category) {
         params.append('category', category)
       }
       if (availableOnly) {
         params.append('available_only', 'true')
       }
+      const query = params.toString() ? `?${params.toString()}` : ''
 
-      if (params.toString()) {
-        url += `?${params.toString()}`
-      }
-
-      const response = await fetch(url)
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch agents: ${response.statusText}`)
-      }
-
-      const agents: Agent[] = await response.json()
+      const agents = await apiClient.get<Agent[]>(`/api/agents${query}`)
       set({ agents, isLoading: false })
     } catch (error) {
       set({
@@ -346,13 +337,7 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
 
   fetchStats: async () => {
     try {
-      const response = await fetch(`${API_BASE}/agents/stats`)
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch stats: ${response.statusText}`)
-      }
-
-      const stats: AgentRegistryStats = await response.json()
+      const stats = await apiClient.get<AgentRegistryStats>('/api/agents/stats')
       set({ stats })
     } catch (error) {
       console.error('Failed to fetch agent stats:', error)
@@ -363,21 +348,11 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
     set({ isLoading: true, error: null })
 
     try {
-      const response = await fetch(`${API_BASE}/agents/search`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query,
-          category: category || null,
-          limit: 10,
-        }),
+      const results = await apiClient.post<AgentSearchResult[]>('/api/agents/search', {
+        query,
+        category: category || null,
+        limit: 10,
       })
-
-      if (!response.ok) {
-        throw new Error(`Failed to search agents: ${response.statusText}`)
-      }
-
-      const results: AgentSearchResult[] = await response.json()
       set({ searchResults: results, isLoading: false })
     } catch (error) {
       set({
@@ -393,10 +368,11 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
     const attachedImages = images || get().attachedImages
 
     try {
-      let response: Response
+      let result: TaskAnalysisResult
 
       if (attachedImages.length > 0) {
         // Use multipart/form-data endpoint when images are attached
+        // (raw fetch needed for FormData uploads)
         const formData = new FormData()
         formData.append('task', task)
         if (context) {
@@ -406,24 +382,22 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
           formData.append('images', img)
         }
 
-        response = await fetch(`${API_BASE}/agents/orchestrate/analyze-with-images`, {
+        const response = await fetch(`${API_BASE}/agents/orchestrate/analyze-with-images`, {
           method: 'POST',
           body: formData,
         })
+        if (!response.ok) {
+          throw new Error(`Failed to analyze task: ${response.statusText}`)
+        }
+        result = await response.json()
       } else {
         // Use JSON endpoint when no images
-        response = await fetch(`${API_BASE}/agents/orchestrate/analyze`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ task, context: context || null }),
+        result = await apiClient.post<TaskAnalysisResult>('/api/agents/orchestrate/analyze', {
+          task,
+          context: context || null,
         })
       }
 
-      if (!response.ok) {
-        throw new Error(`Failed to analyze task: ${response.statusText}`)
-      }
-
-      const result: TaskAnalysisResult = await response.json()
       set({ lastAnalysis: result, isLoading: false, attachedImages: [], ocrStatuses: {}, attachedMdFiles: [], mdReadStatuses: {} })
 
       // Refresh history after successful analysis
@@ -560,20 +534,10 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
     set({ executingAnalysisId: analysisId, executionError: null })
 
     try {
-      const response = await fetch(`${API_BASE}/agents/orchestrate/execute-analysis`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          analysis_id: analysisId,
-          project_id: projectId || null,
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to execute analysis: ${response.statusText}`)
-      }
-
-      const result = await response.json()
+      const result = await apiClient.post<{ success: boolean; session_id?: string; error?: string }>(
+        '/api/agents/orchestrate/execute-analysis',
+        { analysis_id: analysisId, project_id: projectId || null }
+      )
 
       if (!result.success) {
         set({
@@ -583,7 +547,7 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
         return null
       }
 
-      set({ executionSessionId: result.session_id })
+      set({ executionSessionId: result.session_id ?? null })
       return result.session_id as string
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Failed to execute analysis'
@@ -601,11 +565,12 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
 
     try {
       // 1. 분석 결과 조회
-      const analysisResp = await fetch(`${API_BASE}/agents/orchestrate/analyses/${analysisId}`)
-      if (!analysisResp.ok) {
-        throw new Error(`분석 결과를 찾을 수 없습니다 (${analysisResp.status})`)
-      }
-      const analysisData = await analysisResp.json()
+      const analysisData = await apiClient.get<{
+        analysis: TaskAnalysisResult['analysis']
+        task_input: string
+        project_id?: string
+        image_paths?: string[]
+      }>(`/api/agents/orchestrate/analyses/${analysisId}`)
 
       // 2. 분석 → 프롬프트 텍스트 변환 (프론트엔드에서 수행)
       const prompt = buildClaudePrompt(analysisData.analysis, analysisData.task_input)
@@ -617,25 +582,14 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
       }
 
       // 4. Warp 터미널 열기 (use_claude_cli: true로 expect 스크립트 활용)
-      const warpResp = await fetch(`${API_BASE}/warp/open`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: pid,
-          command: prompt,
-          title: `Task: ${analysisData.task_input?.substring(0, 40) || 'Analysis'}`,
-          new_window: false, // Prefer tab in existing Warp window
-          use_claude_cli: true,
-          image_paths: analysisData.image_paths || null,
-        }),
+      const warpResult = await apiClient.post<{ success: boolean; error?: string }>('/api/warp/open', {
+        project_id: pid,
+        command: prompt,
+        title: `Task: ${analysisData.task_input?.substring(0, 40) || 'Analysis'}`,
+        new_window: false, // Prefer tab in existing Warp window
+        use_claude_cli: true,
+        image_paths: analysisData.image_paths || null,
       })
-
-      if (!warpResp.ok) {
-        const errData = await warpResp.json().catch(() => ({ detail: warpResp.statusText }))
-        throw new Error(errData.detail || errData.error || `Warp 실행 실패 (${warpResp.status})`)
-      }
-
-      const warpResult = await warpResp.json()
 
       if (!warpResult.success) {
         throw new Error(warpResult.error || 'Warp 터미널을 열 수 없습니다')
@@ -685,13 +639,9 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
       params.append('limit', '20')
       params.append('offset', '0')
 
-      const response = await fetch(`${API_BASE}/agents/orchestrate/analyses?${params.toString()}`)
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch analysis history: ${response.statusText}`)
-      }
-
-      const data = await response.json()
+      const data = await apiClient.get<{ items: TaskAnalysisHistory[]; total: number; has_more: boolean }>(
+        `/api/agents/orchestrate/analyses?${params.toString()}`
+      )
       set({
         analysisHistory: data.items,
         historyTotal: data.total,
@@ -718,13 +668,9 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
       params.append('limit', '20')
       params.append('offset', String(state.analysisHistory.length))
 
-      const response = await fetch(`${API_BASE}/agents/orchestrate/analyses?${params.toString()}`)
-
-      if (!response.ok) {
-        throw new Error(`Failed to load more history: ${response.statusText}`)
-      }
-
-      const data = await response.json()
+      const data = await apiClient.get<{ items: TaskAnalysisHistory[]; total: number; has_more: boolean }>(
+        `/api/agents/orchestrate/analyses?${params.toString()}`
+      )
       set({
         analysisHistory: [...state.analysisHistory, ...data.items],
         historyTotal: data.total,
@@ -739,13 +685,7 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
 
   deleteAnalysis: async (id: string) => {
     try {
-      const response = await fetch(`${API_BASE}/agents/orchestrate/analyses/${id}`, {
-        method: 'DELETE',
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to delete analysis: ${response.statusText}`)
-      }
+      await apiClient.delete(`/api/agents/orchestrate/analyses/${id}`)
 
       // Remove from local state and clear selection if deleted item was selected
       set((state) => ({

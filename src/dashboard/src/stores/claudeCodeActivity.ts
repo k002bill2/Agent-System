@@ -7,6 +7,8 @@
 
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
+import { apiClient } from '../services/apiClient'
+import { getApiUrl } from '../config/api'
 import {
   ActivityEvent,
   ActivityResponse,
@@ -14,8 +16,6 @@ import {
   TasksResponse,
   DataSource,
 } from '../types/claudeCodeActivity'
-
-const API_BASE = '/api'
 
 interface ClaudeCodeActivityState {
   // Data source toggle
@@ -128,12 +128,7 @@ export const useClaudeCodeActivityStore = create<ClaudeCodeActivityState>()(
       params.set('offset', offset.toString())
       params.set('limit', '100')
 
-      const res = await fetch(`${API_BASE}/claude-sessions/${sessionId}/activity?${params.toString()}`)
-      if (!res.ok) {
-        throw new Error(`Failed to fetch activity: ${res.statusText}`)
-      }
-
-      const data: ActivityResponse = await res.json()
+      const data = await apiClient.get<ActivityResponse>(`/api/claude-sessions/${sessionId}/activity?${params.toString()}`)
 
       set((state) => ({
         activities: append
@@ -154,12 +149,7 @@ export const useClaudeCodeActivityStore = create<ClaudeCodeActivityState>()(
     set({ isLoadingTasks: true, error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/claude-sessions/${sessionId}/tasks`)
-      if (!res.ok) {
-        throw new Error(`Failed to fetch tasks: ${res.statusText}`)
-      }
-
-      const data: TasksResponse = await res.json()
+      const data = await apiClient.get<TasksResponse>(`/api/claude-sessions/${sessionId}/tasks`)
 
       set({
         tasks: data.tasks,
@@ -181,7 +171,7 @@ export const useClaudeCodeActivityStore = create<ClaudeCodeActivityState>()(
     }
 
     const eventSource = new EventSource(
-      `${API_BASE}/claude-sessions/${sessionId}/activity/stream`
+      getApiUrl(`/api/claude-sessions/${sessionId}/activity/stream`)
     )
 
     // Handle initial batch of activity

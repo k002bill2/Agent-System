@@ -1,24 +1,6 @@
 import { create } from 'zustand'
 import { analytics } from '../services/analytics'
-import { authFetch } from './auth'
-
-const API_BASE = import.meta.env.VITE_API_URL || ''
-
-// Helper to extract error message from API response
-function extractErrorMessage(detail: unknown, fallback: string): string {
-  if (typeof detail === 'string') return detail
-  if (detail && typeof detail === 'object') {
-    const obj = detail as Record<string, unknown>
-    if (obj.message && typeof obj.message === 'string') return obj.message
-    if (obj.msg && typeof obj.msg === 'string') return obj.msg
-    // FastAPI validation errors
-    if (Array.isArray(detail)) {
-      return detail.map((e: { msg?: string }) => e.msg || '').filter(Boolean).join(', ') || fallback
-    }
-    return JSON.stringify(detail)
-  }
-  return fallback
-}
+import { apiClient } from '../services/apiClient'
 
 export interface Project {
   id: string
@@ -121,11 +103,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   fetchProjects: async () => {
     set({ isLoading: true, error: null })
     try {
-      const response = await authFetch(`${API_BASE}/api/projects`)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch projects: ${response.statusText}`)
-      }
-      const projects = await response.json()
+      const projects = await apiClient.get<Project[]>('/api/projects')
       set({ projects, isLoading: false })
 
       // Auto-select first project if none selected
@@ -141,11 +119,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   // Fetch available templates
   fetchTemplates: async () => {
     try {
-      const response = await authFetch(`${API_BASE}/api/projects/templates`)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch templates: ${response.statusText}`)
-      }
-      const templates = await response.json()
+      const templates = await apiClient.get<ProjectTemplate[]>('/api/projects/templates')
       set({ templates })
     } catch (error) {
       console.error('Failed to fetch templates:', error)
@@ -156,15 +130,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   createProject: async (id, name, description, template) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await authFetch(`${API_BASE}/api/projects/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, name, description, template }),
-      })
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to create project'))
-      }
+      await apiClient.post('/api/projects/create', { id, name, description, template })
       await get().fetchProjects()
       set({ isLoading: false, modalMode: null })
       analytics.track('project_created', { project_id: id, name, template })
@@ -179,15 +145,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   linkProject: async (id, sourcePath) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await authFetch(`${API_BASE}/api/projects/link`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, source_path: sourcePath }),
-      })
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to link project'))
-      }
+      await apiClient.post('/api/projects/link', { id, source_path: sourcePath })
       await get().fetchProjects()
       set({ isLoading: false, modalMode: null })
       return true
@@ -201,15 +159,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   updateProject: async (id, name, description, path) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await authFetch(`${API_BASE}/api/projects/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description, path }),
-      })
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to update project'))
-      }
+      await apiClient.put(`/api/projects/${id}`, { name, description, path })
       await get().fetchProjects()
       set({ isLoading: false, modalMode: null, editingProject: null })
       analytics.track('project_updated', { project_id: id })
@@ -224,13 +174,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   deleteProject: async (id) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await authFetch(`${API_BASE}/api/projects/${id}`, {
-        method: 'DELETE',
-      })
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to delete project'))
-      }
+      await apiClient.delete(`/api/projects/${id}`)
       await get().fetchProjects()
       set({ isLoading: false })
       analytics.track('project_deleted', { project_id: id })
@@ -245,15 +189,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   indexProject: async (id) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await authFetch(`${API_BASE}/api/rag/projects/${id}/index`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ force_reindex: false }),
-      })
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to index project'))
-      }
+      await apiClient.post(`/api/rag/projects/${id}/index`, { force_reindex: false })
       await get().fetchProjects()
       set({ isLoading: false })
       return true
@@ -266,12 +202,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   // Fetch deletion preview
   fetchDeletionPreview: async (id) => {
     try {
-      const response = await authFetch(`${API_BASE}/api/projects/${id}/deletion-preview`)
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to fetch deletion preview'))
-      }
-      return await response.json()
+      return await apiClient.get<DeletionPreview>(`/api/projects/${id}/deletion-preview`)
     } catch (error) {
       set({ error: (error as Error).message })
       return null
@@ -282,16 +213,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   reorderProjects: async (projectIds) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await authFetch(`${API_BASE}/api/projects/reorder`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_ids: projectIds }),
-      })
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(extractErrorMessage(data.detail, 'Failed to reorder projects'))
-      }
-      const reorderedProjects = await response.json()
+      const reorderedProjects = await apiClient.post<Project[]>('/api/projects/reorder', { project_ids: projectIds })
       set({ projects: reorderedProjects, isLoading: false })
       return true
     } catch (error) {

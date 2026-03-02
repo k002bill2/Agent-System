@@ -14,6 +14,7 @@ from db.models.base import (
     UniqueConstraint,
     datetime,
     relationship,
+    timezone,
 )
 
 
@@ -34,8 +35,8 @@ class ProjectModel(Base):
     organization_id = Column(String(36), nullable=True, index=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     __table_args__: tuple = ()
@@ -55,8 +56,8 @@ class ProjectInvitationModel(Base):
     status = Column(String(20), nullable=False, default="pending")
 
     expires_at = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         UniqueConstraint("project_id", "email", name="uq_project_invitation_email"),
@@ -82,8 +83,8 @@ class ProjectAccessModel(Base):
     granted_by = Column(String(36), nullable=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         UniqueConstraint("project_id", "user_id", name="uq_project_user"),

@@ -1,6 +1,8 @@
 """Agent state definitions for LangGraph."""
 
 from datetime import datetime
+
+from utils.time import utcnow
 from enum import Enum
 from typing import Annotated, Any, TypedDict
 
@@ -40,7 +42,7 @@ class AgentInfo(BaseModel):
     status: TaskStatus = TaskStatus.PENDING
     current_task: str | None = None
     capabilities: list[str] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 class TaskNode(BaseModel):
@@ -55,8 +57,8 @@ class TaskNode(BaseModel):
     children: list[str] = Field(default_factory=list)
     result: Any | None = None
     error: str | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
     # HITL fields
     pending_approval_id: str | None = None  # ID of pending approval request

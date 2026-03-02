@@ -1,6 +1,8 @@
 """Version service for config version control."""
 
 from datetime import datetime
+
+from utils.time import utcnow
 from typing import Any
 
 from models.config_version import (
@@ -246,7 +248,7 @@ class VersionService:
 
         # Mark as rolled back
         new_version.rolled_back_from = current.id
-        new_version.rolled_back_at = datetime.utcnow()
+        new_version.rolled_back_at = utcnow()
 
         return RollbackResult(
             success=True,

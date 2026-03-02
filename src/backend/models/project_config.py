@@ -1,6 +1,8 @@
 """Project configuration models for Claude Code settings monitoring."""
 
 from datetime import datetime
+
+from utils.time import utcnow
 from enum import Enum
 from typing import Any
 
@@ -47,7 +49,7 @@ class ProjectInfo(BaseModel):
     mcp_server_count: int = Field(default=0, description="Number of MCP servers")
     hook_count: int = Field(default=0, description="Number of hooks")
     command_count: int = Field(default=0, description="Number of commands")
-    last_modified: datetime = Field(default_factory=datetime.utcnow)
+    last_modified: datetime = Field(default_factory=utcnow)
 
 
 class SkillConfig(BaseModel):
@@ -171,7 +173,7 @@ class ConfigChangeEvent(BaseModel):
     project_id: str
     config_type: str = Field(..., description="skills|agents|mcp|hooks")
     item_id: str | None = Field(default=None, description="Changed item ID")
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=utcnow)
     details: dict[str, Any] = Field(default_factory=dict)
 
 

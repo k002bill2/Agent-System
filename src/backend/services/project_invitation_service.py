@@ -4,6 +4,8 @@ import secrets
 import uuid
 from datetime import datetime, timedelta
 
+from utils.time import utcnow
+
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,8 +39,8 @@ class ProjectInvitationService:
         if existing:
             existing.token = secrets.token_urlsafe(48)
             existing.role = role
-            existing.expires_at = datetime.utcnow() + timedelta(days=INVITATION_EXPIRE_DAYS)
-            existing.updated_at = datetime.utcnow()
+            existing.expires_at = utcnow() + timedelta(days=INVITATION_EXPIRE_DAYS)
+            existing.updated_at = utcnow()
             await db.flush()
             return existing
 
@@ -50,7 +52,7 @@ class ProjectInvitationService:
             role=role,
             token=secrets.token_urlsafe(48),
             status="pending",
-            expires_at=datetime.utcnow() + timedelta(days=INVITATION_EXPIRE_DAYS),
+            expires_at=utcnow() + timedelta(days=INVITATION_EXPIRE_DAYS),
         )
         db.add(invitation)
         await db.flush()
@@ -80,7 +82,7 @@ class ProjectInvitationService:
             raise ValueError("유효하지 않은 초대 토큰입니다")
         if inv.status != "pending":
             raise ValueError(f"이미 처리된 초대입니다: {inv.status}")
-        if inv.expires_at < datetime.utcnow():
+        if inv.expires_at < utcnow():
             inv.status = "expired"
             await db.flush()
             raise ValueError("만료된 초대입니다")

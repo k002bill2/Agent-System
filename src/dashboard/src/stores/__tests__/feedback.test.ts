@@ -1,5 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}))
+
 import {
   useFeedbackStore,
   feedbackTypeLabel,
@@ -8,7 +19,11 @@ import {
   feedbackTypeColors,
   feedbackStatusColors,
 } from '../feedback'
+import { apiClient } from '../../services/apiClient'
 
+const mockApiClient = vi.mocked(apiClient)
+
+// Mock global.fetch for exportDataset (only method that still uses raw fetch)
 const mockFetch = vi.fn()
 global.fetch = mockFetch
 
@@ -36,6 +51,7 @@ function resetStore() {
 describe('feedback store', () => {
   beforeEach(() => {
     resetStore()
+    vi.clearAllMocks()
     mockFetch.mockReset()
   })
 
@@ -106,10 +122,7 @@ describe('feedback store', () => {
 
     it('submits feedback and prepends to list', async () => {
       const result = { id: 'fb-1', ...feedback, status: 'pending', created_at: '2025-01-01' }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(result),
-      })
+      mockApiClient.post.mockResolvedValueOnce(result)
 
       const response = await useFeedbackStore.getState().submitFeedback(feedback)
 
@@ -119,19 +132,16 @@ describe('feedback store', () => {
     })
 
     it('appends agent_id as query param', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ id: 'fb-1' }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ id: 'fb-1' })
 
       await useFeedbackStore.getState().submitFeedback(feedback, 'agent-123')
 
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockApiClient.post.mock.calls[0][0] as string
       expect(url).toContain('agent_id=agent-123')
     })
 
     it('adds to pending queue on failure', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+      mockApiClient.post.mockRejectedValueOnce(new Error('Network error'))
 
       const result = await useFeedbackStore.getState().submitFeedback(feedback)
 
@@ -155,10 +165,7 @@ describe('feedback store', () => {
 
     it('submits and stores task evaluation', async () => {
       const result = { id: 'eval-1', ...evaluation, created_at: '2025-01-01' }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(result),
-      })
+      mockApiClient.post.mockResolvedValueOnce(result)
 
       const response = await useFeedbackStore.getState().submitTaskEvaluation(evaluation)
 
@@ -167,7 +174,7 @@ describe('feedback store', () => {
     })
 
     it('adds to pending evaluations on failure', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Error'))
+      mockApiClient.post.mockRejectedValueOnce(new Error('Error'))
 
       const result = await useFeedbackStore.getState().submitTaskEvaluation(evaluation)
 
@@ -181,11 +188,7 @@ describe('feedback store', () => {
   describe('fetchTaskEvaluation', () => {
     it('fetches and stores evaluation', async () => {
       const result = { id: 'eval-1', rating: 5 }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve(result),
-      })
+      mockApiClient.get.mockResolvedValueOnce(result)
 
       const response = await useFeedbackStore.getState().fetchTaskEvaluation('s-1', 't-1')
 
@@ -193,16 +196,16 @@ describe('feedback store', () => {
       expect(useFeedbackStore.getState().taskEvaluations['s-1:t-1']).toEqual(result)
     })
 
-    it('returns null for 204 (no evaluation)', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, status: 204 })
+    it('returns null for undefined response (204)', async () => {
+      mockApiClient.get.mockResolvedValueOnce(undefined)
 
       const result = await useFeedbackStore.getState().fetchTaskEvaluation('s-1', 't-1')
 
       expect(result).toBeNull()
     })
 
-    it('returns null for 404', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, status: 404 })
+    it('returns null on error', async () => {
+      mockApiClient.get.mockRejectedValueOnce(new Error('Not found'))
 
       const result = await useFeedbackStore.getState().fetchTaskEvaluation('s-1', 't-1')
 
@@ -216,25 +219,22 @@ describe('feedback store', () => {
     it('fetches feedbacks with filters', async () => {
       useFeedbackStore.setState({ filterType: 'implicit' })
       const feedbacks = [{ id: 'fb-1' }]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(feedbacks),
-      })
+      mockApiClient.get.mockResolvedValueOnce(feedbacks)
 
       await useFeedbackStore.getState().fetchFeedbacks({ session_id: 's-1' })
 
       expect(useFeedbackStore.getState().feedbacks).toEqual(feedbacks)
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockApiClient.get.mock.calls[0][0] as string
       expect(url).toContain('feedback_type=implicit')
       expect(url).toContain('session_id=s-1')
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Error' })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch feedbacks'))
 
       await useFeedbackStore.getState().fetchFeedbacks()
 
-      expect(useFeedbackStore.getState().error).toContain('Failed to fetch feedbacks')
+      expect(useFeedbackStore.getState().error).toBe('Failed to fetch feedbacks')
     })
   })
 
@@ -243,10 +243,7 @@ describe('feedback store', () => {
   describe('fetchStats', () => {
     it('fetches and stores stats', async () => {
       const stats = { total_count: 100, positive_rate: 0.8 }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(stats),
-      })
+      mockApiClient.get.mockResolvedValueOnce(stats)
 
       await useFeedbackStore.getState().fetchStats()
 
@@ -259,10 +256,7 @@ describe('feedback store', () => {
   describe('fetchDatasetStats', () => {
     it('fetches and stores dataset stats', async () => {
       const dsStats = { total_entries: 50, positive_entries: 40 }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(dsStats),
-      })
+      mockApiClient.get.mockResolvedValueOnce(dsStats)
 
       await useFeedbackStore.getState().fetchDatasetStats()
 
@@ -277,10 +271,7 @@ describe('feedback store', () => {
       useFeedbackStore.setState({
         feedbacks: [{ id: 'fb-1', status: 'pending' } as any],
       })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ total: 1, processed: 1, skipped: 0, errors: 0 }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ total: 1, processed: 1, skipped: 0, errors: 0 })
 
       const result = await useFeedbackStore.getState().processFeedback('fb-1')
 
@@ -289,16 +280,17 @@ describe('feedback store', () => {
     })
 
     it('returns null on error', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Error' })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Failed to process feedback'))
 
       const result = await useFeedbackStore.getState().processFeedback('fb-1')
 
       expect(result).toBeNull()
-      expect(useFeedbackStore.getState().error).toContain('Failed to process feedback')
+      expect(useFeedbackStore.getState().error).toBe('Failed to process feedback')
     })
   })
 
   // ── exportDataset ──────────────────────────────────────
+  // Note: exportDataset still uses raw fetch (not apiClient)
 
   describe('exportDataset', () => {
     it('exports dataset as text', async () => {
@@ -327,16 +319,16 @@ describe('feedback store', () => {
 
   describe('filter actions', () => {
     it('setFilterType triggers fetchFeedbacks', () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) })
+      mockApiClient.get.mockResolvedValueOnce([])
 
       useFeedbackStore.getState().setFilterType('implicit')
 
       expect(useFeedbackStore.getState().filterType).toBe('implicit')
-      expect(mockFetch).toHaveBeenCalled()
+      expect(mockApiClient.get).toHaveBeenCalled()
     })
 
     it('setFilterStatus triggers fetchFeedbacks', () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) })
+      mockApiClient.get.mockResolvedValueOnce([])
 
       useFeedbackStore.getState().setFilterStatus('processed')
 
@@ -344,7 +336,7 @@ describe('feedback store', () => {
     })
 
     it('setFilterAgentId triggers fetchFeedbacks', () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) })
+      mockApiClient.get.mockResolvedValueOnce([])
 
       useFeedbackStore.getState().setFilterAgentId('agent-1')
 
@@ -525,11 +517,7 @@ describe('retryPendingSubmissions', () => {
       pendingEvaluations: [],
     })
 
-    const mockFetch = global.fetch as ReturnType<typeof vi.fn>
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ id: 'f-new', type: 'explicit_positive' }),
-    })
+    mockApiClient.post.mockResolvedValueOnce({ id: 'f-new', type: 'explicit_positive' })
 
     await useFeedbackStore.getState().retryPendingSubmissions()
 
@@ -552,11 +540,7 @@ describe('retryPendingSubmissions', () => {
       ],
     })
 
-    const mockFetch = global.fetch as ReturnType<typeof vi.fn>
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ session_id: 's1', task_id: 't1', rating: 5 }),
-    })
+    mockApiClient.post.mockResolvedValueOnce({ session_id: 's1', task_id: 't1', rating: 5 })
 
     await useFeedbackStore.getState().retryPendingSubmissions()
 

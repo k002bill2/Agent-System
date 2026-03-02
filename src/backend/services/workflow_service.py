@@ -4,6 +4,8 @@ import asyncio
 import os
 import uuid
 from datetime import datetime
+
+from utils.time import utcnow
 from typing import Any
 
 from sqlalchemy import desc, select
@@ -108,7 +110,7 @@ class WorkflowService:
     def create_workflow(self, data: WorkflowCreate, user_id: str | None = None) -> dict:
         """Create a new workflow definition."""
         workflow_id = str(uuid.uuid4())
-        now = datetime.utcnow()
+        now = utcnow()
 
         # Parse YAML if provided
         definition = None
@@ -162,7 +164,7 @@ class WorkflowService:
             workflow["definition"] = data.definition.model_dump()
             workflow["version"] += 1
 
-        workflow["updated_at"] = datetime.utcnow()
+        workflow["updated_at"] = utcnow()
         return workflow
 
     def delete_workflow(self, workflow_id: str) -> bool:
@@ -197,7 +199,7 @@ class WorkflowService:
             raise ValueError(f"Workflow is not active: {workflow['status']}")
 
         run_id = str(uuid.uuid4())
-        now = datetime.utcnow()
+        now = utcnow()
 
         run: dict[str, Any] = {
             "id": run_id,
@@ -248,7 +250,7 @@ class WorkflowService:
             except Exception as e:
                 run["status"] = WorkflowRunStatus.FAILED
                 run["error_summary"] = str(e)
-                run["completed_at"] = datetime.utcnow()
+                run["completed_at"] = utcnow()
 
         task = asyncio.create_task(_run_workflow())
         self._run_tasks[run_id] = task
@@ -268,7 +270,7 @@ class WorkflowService:
             self._run_tasks[run_id].cancel()
 
         run["status"] = WorkflowRunStatus.CANCELLED
-        run["completed_at"] = datetime.utcnow()
+        run["completed_at"] = utcnow()
         return run
 
     def retry_run(self, run_id: str) -> str | None:
@@ -408,7 +410,7 @@ class WorkflowService:
 
             # Parse YAML
             definition = parse_workflow_yaml(seed["yaml_content"])
-            now = datetime.utcnow()
+            now = utcnow()
 
             db_workflow = WorkflowDefinitionModel(
                 id=str(uuid.uuid4()),
@@ -463,7 +465,7 @@ class WorkflowService:
         from db.models import WorkflowDefinitionModel
 
         workflow_id = str(uuid.uuid4())
-        now = datetime.utcnow()
+        now = utcnow()
 
         # Parse YAML if provided
         definition = None
@@ -528,7 +530,7 @@ class WorkflowService:
             row.definition = data.definition.model_dump()
             row.version = (row.version or 1) + 1
 
-        row.updated_at = datetime.utcnow()
+        row.updated_at = utcnow()
         await db.flush()
 
         return WorkflowService._model_to_workflow_dict(row)
@@ -611,7 +613,7 @@ class WorkflowService:
             raise ValueError(f"Workflow is not active: {status_str}")
 
         run_id = str(uuid.uuid4())
-        now = datetime.utcnow()
+        now = utcnow()
 
         trigger_payload = {
             "inputs": trigger.inputs,
@@ -707,7 +709,7 @@ class WorkflowService:
             except Exception as e:
                 run_dict["status"] = WorkflowRunStatus.FAILED
                 run_dict["error_summary"] = str(e)
-                run_dict["completed_at"] = datetime.utcnow()
+                run_dict["completed_at"] = utcnow()
                 await engine.update_run_status_db(
                     run_id,
                     "failed",
@@ -733,7 +735,7 @@ class WorkflowService:
         if run_id in self._run_tasks:
             self._run_tasks[run_id].cancel()
 
-        now = datetime.utcnow()
+        now = utcnow()
 
         # Update DB
         result = await db.execute(select(WorkflowRunModel).where(WorkflowRunModel.id == run_id))

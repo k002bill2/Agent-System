@@ -16,6 +16,8 @@ import shutil
 import subprocess
 import time
 from datetime import datetime
+
+from utils.time import utcnow
 from pathlib import Path
 from typing import Any
 
@@ -454,7 +456,7 @@ class TmuxService:
             analysis_id=analysis_id,
             project_path=project_path,
             active=True,
-            started_at=datetime.utcnow(),
+            started_at=utcnow(),
             task_input=task_input,
         )
         self._sessions[session_name] = info

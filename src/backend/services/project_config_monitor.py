@@ -16,6 +16,8 @@ import logging
 import shutil
 from collections.abc import AsyncIterator
 from datetime import datetime
+
+from utils.time import utcnow
 from pathlib import Path
 
 from models.project_config import (
@@ -869,7 +871,7 @@ class ProjectConfigMonitor:
                                     event_type=ConfigChangeType.MODIFIED,
                                     project_id=project_id,
                                     config_type="mcp",
-                                    timestamp=datetime.utcnow(),
+                                    timestamp=utcnow(),
                                 )
                             )
                     else:
@@ -878,7 +880,7 @@ class ProjectConfigMonitor:
                                 event_type=ConfigChangeType.CREATED,
                                 project_id=project_id,
                                 config_type="mcp",
-                                timestamp=datetime.utcnow(),
+                                timestamp=utcnow(),
                             )
                         )
                 except OSError:
@@ -898,7 +900,7 @@ class ProjectConfigMonitor:
                                 event_type=ConfigChangeType.MODIFIED,
                                 project_id=project_id,
                                 config_type="hooks",
-                                timestamp=datetime.utcnow(),
+                                timestamp=utcnow(),
                             )
                         )
                 except OSError:
@@ -925,7 +927,7 @@ class ProjectConfigMonitor:
                                             project_id=project_id,
                                             config_type="skills",
                                             item_id=skill_dir.name,
-                                            timestamp=datetime.utcnow(),
+                                            timestamp=utcnow(),
                                         )
                                     )
                             else:
@@ -935,7 +937,7 @@ class ProjectConfigMonitor:
                                         project_id=project_id,
                                         config_type="skills",
                                         item_id=skill_dir.name,
-                                        timestamp=datetime.utcnow(),
+                                        timestamp=utcnow(),
                                     )
                                 )
                         except OSError:
@@ -958,7 +960,7 @@ class ProjectConfigMonitor:
                                         project_id=project_id,
                                         config_type="agents",
                                         item_id=agent_file.stem,
-                                        timestamp=datetime.utcnow(),
+                                        timestamp=utcnow(),
                                     )
                                 )
                         else:
@@ -968,7 +970,7 @@ class ProjectConfigMonitor:
                                     project_id=project_id,
                                     config_type="agents",
                                     item_id=agent_file.stem,
-                                    timestamp=datetime.utcnow(),
+                                    timestamp=utcnow(),
                                 )
                             )
                     except OSError:
@@ -991,7 +993,7 @@ class ProjectConfigMonitor:
                                         project_id=project_id,
                                         config_type="commands",
                                         item_id=cmd_file.stem,
-                                        timestamp=datetime.utcnow(),
+                                        timestamp=utcnow(),
                                     )
                                 )
                         else:
@@ -1001,7 +1003,7 @@ class ProjectConfigMonitor:
                                     project_id=project_id,
                                     config_type="commands",
                                     item_id=cmd_file.stem,
-                                    timestamp=datetime.utcnow(),
+                                    timestamp=utcnow(),
                                 )
                             )
                     except OSError:
@@ -1032,7 +1034,7 @@ class ProjectConfigMonitor:
                                 event_type=ConfigChangeType.DELETED,
                                 project_id=self._discovery.encode_path(project_path),
                                 config_type=config_type,
-                                timestamp=datetime.utcnow(),
+                                timestamp=utcnow(),
                             )
                         )
                         break

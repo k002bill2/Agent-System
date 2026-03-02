@@ -2,6 +2,8 @@
 
 import uuid
 from datetime import datetime, timedelta
+
+from utils.time import utcnow
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +36,7 @@ class ArtifactService:
     ) -> dict:
         """Store an artifact for a workflow run."""
         artifact_id = str(uuid.uuid4())
-        now = datetime.utcnow()
+        now = utcnow()
         expires_at = now + timedelta(days=retention_days)
 
         # Store file
@@ -81,7 +83,7 @@ class ArtifactService:
 
     def cleanup_expired(self) -> int:
         """Remove expired artifacts. Returns number of artifacts cleaned."""
-        now = datetime.utcnow()
+        now = utcnow()
         expired_ids = [
             aid
             for aid, a in self._artifacts.items()

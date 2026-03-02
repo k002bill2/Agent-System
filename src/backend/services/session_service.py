@@ -6,6 +6,8 @@ Provides an abstraction layer over storage (in-memory or database).
 import os
 import uuid
 from datetime import datetime, timedelta
+
+from utils.time import utcnow
 from typing import Any
 
 from db.database import async_session_factory
@@ -39,16 +41,16 @@ class SessionMetadata:
 
     def is_expired(self) -> bool:
         """Check if the session has expired."""
-        return datetime.utcnow() > self.expires_at
+        return utcnow() > self.expires_at
 
     def is_inactive(self, threshold_hours: int = SESSION_INACTIVE_HOURS) -> bool:
         """Check if the session is inactive beyond the threshold."""
-        threshold = datetime.utcnow() - timedelta(hours=threshold_hours)
+        threshold = utcnow() - timedelta(hours=threshold_hours)
         return self.last_activity < threshold
 
     def touch(self) -> None:
         """Update last activity timestamp."""
-        self.last_activity = datetime.utcnow()
+        self.last_activity = utcnow()
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
@@ -110,7 +112,7 @@ class SessionService:
                     raise ValueError(check.message)
 
         session_id = session_id or str(uuid.uuid4())
-        now = datetime.utcnow()
+        now = utcnow()
         ttl = ttl_days or SESSION_TTL_DAYS
 
         state = create_initial_state(
@@ -248,7 +250,7 @@ class SessionService:
         metadata = self._session_metadata.get(session_id)
         if metadata:
             extend = extend_days or SESSION_TTL_DAYS
-            metadata.expires_at = datetime.utcnow() + timedelta(days=extend)
+            metadata.expires_at = utcnow() + timedelta(days=extend)
             metadata.touch()
             state["_metadata"] = metadata.to_dict()
             await self.update_session(session_id, state)
@@ -269,7 +271,7 @@ class SessionService:
         if not metadata:
             return None
 
-        now = datetime.utcnow()
+        now = utcnow()
         return {
             "session_id": session_id,
             "created_at": metadata.created_at.isoformat(),
@@ -316,7 +318,7 @@ class SessionService:
 
     def _count_org_sessions_today(self, organization_id: str) -> int:
         """Count sessions created today for an organization (in-memory mode)."""
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         count = 0
         for state in self._memory_sessions.values():
             if state.get("organization_id") == organization_id:

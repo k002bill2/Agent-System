@@ -3,6 +3,8 @@
 import json
 from collections.abc import AsyncIterator
 from datetime import datetime
+
+from utils.time import utcnow
 from pathlib import Path
 from typing import Any
 
@@ -267,7 +269,7 @@ class PlaygroundService:
         if rag_enabled is not None:
             session.rag_enabled = rag_enabled
 
-        session.updated_at = datetime.utcnow()
+        session.updated_at = utcnow()
         _save_sessions()  # Persist to file
         return session
 
@@ -297,7 +299,7 @@ class PlaygroundService:
         )
 
         execution.status = PlaygroundExecutionStatus.RUNNING
-        execution.started_at = datetime.utcnow()
+        execution.started_at = utcnow()
 
         # Add user message
         user_msg = PlaygroundMessage(
@@ -423,14 +425,14 @@ class PlaygroundService:
             execution.messages.append(error_msg)
             session.messages.append(error_msg)
 
-        execution.completed_at = datetime.utcnow()
+        execution.completed_at = utcnow()
 
         # Update session
         session.executions.append(execution)
         session.total_executions += 1
         session.total_tokens += execution.total_tokens
         session.total_cost += execution.cost
-        session.updated_at = datetime.utcnow()
+        session.updated_at = utcnow()
         _save_sessions()  # Persist to file
 
         return execution
@@ -525,7 +527,7 @@ class PlaygroundService:
             session.total_executions += 1
             session.total_tokens += total_tokens
             session.total_cost += cost
-            session.updated_at = datetime.utcnow()
+            session.updated_at = utcnow()
             _save_sessions()  # Persist to file
 
             # Send RAG sources as final metadata event
@@ -647,7 +649,7 @@ class PlaygroundService:
 
         session.messages = []
         session.executions = []
-        session.updated_at = datetime.utcnow()
+        session.updated_at = utcnow()
         _save_sessions()  # Persist to file
         return True
 

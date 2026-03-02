@@ -6,6 +6,8 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { apiClient } from '../services/apiClient'
+import { getApiUrl } from '../config/api'
 
 // ============================================================================
 // Types
@@ -189,12 +191,6 @@ interface FeedbackState {
 }
 
 // ============================================================================
-// API
-// ============================================================================
-
-const API_BASE = 'http://localhost:8000/api/feedback'
-
-// ============================================================================
 // Store Implementation
 // ============================================================================
 
@@ -222,22 +218,12 @@ export const useFeedbackStore = create<FeedbackState>()(
         set({ isSubmitting: true, error: null })
 
         try {
-          let url = API_BASE
+          let url = '/api/feedback'
           if (agentId) {
             url += `?agent_id=${encodeURIComponent(agentId)}`
           }
 
-          const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(feedback),
-          })
-
-          if (!response.ok) {
-            throw new Error(`Failed to submit feedback: ${response.statusText}`)
-          }
-
-          const result = await response.json()
+          const result = await apiClient.post<FeedbackEntry>(url, feedback)
 
           set((state) => ({
             feedbacks: [result, ...state.feedbacks],
@@ -271,17 +257,7 @@ export const useFeedbackStore = create<FeedbackState>()(
         set({ isSubmitting: true, error: null })
 
         try {
-          const response = await fetch(`${API_BASE}/task-evaluation`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(evaluation),
-          })
-
-          if (!response.ok) {
-            throw new Error(`Failed to submit task evaluation: ${response.statusText}`)
-          }
-
-          const result: TaskEvaluationResponse = await response.json()
+          const result = await apiClient.post<TaskEvaluationResponse>('/api/feedback/task-evaluation', evaluation)
           const key = `${evaluation.session_id}:${evaluation.task_id}`
 
           set((state) => ({
@@ -312,17 +288,13 @@ export const useFeedbackStore = create<FeedbackState>()(
 
       fetchTaskEvaluation: async (sessionId: string, taskId: string) => {
         try {
-          const response = await fetch(
-            `${API_BASE}/task-evaluation/${encodeURIComponent(sessionId)}/${encodeURIComponent(taskId)}`
+          const result = await apiClient.get<TaskEvaluationResponse>(
+            `/api/feedback/task-evaluation/${encodeURIComponent(sessionId)}/${encodeURIComponent(taskId)}`
           )
 
-          // 204: 평가 없음, 404: 하위 호환
-          if (response.status === 204 || response.status === 404) return null
-          if (!response.ok) {
-            throw new Error(`Failed to fetch task evaluation: ${response.statusText}`)
-          }
+          // apiClient returns undefined for 204
+          if (!result) return null
 
-          const result: TaskEvaluationResponse = await response.json()
           const key = `${sessionId}:${taskId}`
 
           set((state) => ({
@@ -359,14 +331,8 @@ export const useFeedbackStore = create<FeedbackState>()(
           if (params?.limit) queryParams.append('limit', params.limit.toString())
           if (params?.offset) queryParams.append('offset', params.offset.toString())
 
-          const url = queryParams.toString() ? `${API_BASE}?${queryParams}` : API_BASE
-          const response = await fetch(url)
-
-          if (!response.ok) {
-            throw new Error(`Failed to fetch feedbacks: ${response.statusText}`)
-          }
-
-          const feedbacks = await response.json()
+          const url = queryParams.toString() ? `/api/feedback?${queryParams}` : '/api/feedback'
+          const feedbacks = await apiClient.get<FeedbackEntry[]>(url)
           set({ feedbacks, isLoading: false })
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Failed to fetch feedbacks'
@@ -376,13 +342,7 @@ export const useFeedbackStore = create<FeedbackState>()(
 
       fetchStats: async () => {
         try {
-          const response = await fetch(`${API_BASE}/stats`)
-
-          if (!response.ok) {
-            throw new Error(`Failed to fetch stats: ${response.statusText}`)
-          }
-
-          const stats = await response.json()
+          const stats = await apiClient.get<FeedbackStats>('/api/feedback/stats')
           set({ stats })
         } catch (error) {
           console.error('Failed to fetch feedback stats:', error)
@@ -391,13 +351,7 @@ export const useFeedbackStore = create<FeedbackState>()(
 
       fetchDatasetStats: async () => {
         try {
-          const response = await fetch(`${API_BASE}/dataset/stats`)
-
-          if (!response.ok) {
-            throw new Error(`Failed to fetch dataset stats: ${response.statusText}`)
-          }
-
-          const datasetStats = await response.json()
+          const datasetStats = await apiClient.get<DatasetStats>('/api/feedback/dataset/stats')
           set({ datasetStats })
         } catch (error) {
           console.error('Failed to fetch dataset stats:', error)
@@ -408,15 +362,7 @@ export const useFeedbackStore = create<FeedbackState>()(
         set({ isLoading: true, error: null })
 
         try {
-          const response = await fetch(`${API_BASE}/${feedbackId}/process`, {
-            method: 'POST',
-          })
-
-          if (!response.ok) {
-            throw new Error(`Failed to process feedback: ${response.statusText}`)
-          }
-
-          const result: BatchProcessResult = await response.json()
+          const result = await apiClient.post<BatchProcessResult>(`/api/feedback/${feedbackId}/process`)
 
           // 피드백 상태 업데이트
           if (result.processed > 0) {
@@ -442,15 +388,7 @@ export const useFeedbackStore = create<FeedbackState>()(
         set({ isLoading: true, error: null })
 
         try {
-          const response = await fetch(`${API_BASE}/process-pending?limit=${limit}`, {
-            method: 'POST',
-          })
-
-          if (!response.ok) {
-            throw new Error(`Failed to process pending feedbacks: ${response.statusText}`)
-          }
-
-          const result: BatchProcessResult = await response.json()
+          const result = await apiClient.post<BatchProcessResult>(`/api/feedback/process-pending?limit=${limit}`)
 
           // 목록 새로고침
           await get().fetchFeedbacks()
@@ -483,7 +421,7 @@ export const useFeedbackStore = create<FeedbackState>()(
           if (options?.start_date) queryParams.append('start_date', options.start_date)
           if (options?.end_date) queryParams.append('end_date', options.end_date)
 
-          const url = `${API_BASE}/dataset/export?${queryParams}`
+          const url = getApiUrl(`/api/feedback/dataset/export?${queryParams}`)
           const response = await fetch(url)
 
           if (!response.ok) {
@@ -564,17 +502,11 @@ export const useFeedbackStore = create<FeedbackState>()(
           }))
 
           try {
-            let url = API_BASE
+            let url = '/api/feedback'
             if (item.agentId) {
               url += `?agent_id=${encodeURIComponent(item.agentId)}`
             }
-            const response = await fetch(url, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(item.feedback),
-            })
-            if (!response.ok) throw new Error(response.statusText)
-            const result = await response.json()
+            const result = await apiClient.post<FeedbackEntry>(url, item.feedback)
             set((state) => ({
               feedbacks: [result, ...state.feedbacks],
               pendingFeedbacks: state.pendingFeedbacks.filter((p) => p.id !== item.id),
@@ -609,13 +541,7 @@ export const useFeedbackStore = create<FeedbackState>()(
           }))
 
           try {
-            const response = await fetch(`${API_BASE}/task-evaluation`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(item.evaluation),
-            })
-            if (!response.ok) throw new Error(response.statusText)
-            const result: TaskEvaluationResponse = await response.json()
+            const result = await apiClient.post<TaskEvaluationResponse>('/api/feedback/task-evaluation', item.evaluation)
             const key = `${item.evaluation.session_id}:${item.evaluation.task_id}`
             set((state) => ({
               taskEvaluations: { ...state.taskEvaluations, [key]: result },

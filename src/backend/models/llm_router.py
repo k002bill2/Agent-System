@@ -2,6 +2,8 @@
 
 import uuid
 from datetime import datetime
+
+from utils.time import utcnow
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -48,8 +50,8 @@ class LLMProviderConfig(BaseModel):
     last_health_check: datetime | None = None
     consecutive_failures: int = 0
     # Metadata
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class LLMProviderConfigCreate(BaseModel):
@@ -94,7 +96,7 @@ class LLMHealthCheck(BaseModel):
     status: LLMProviderStatus
     latency_ms: int | None = None
     error: str | None = None
-    checked_at: datetime = Field(default_factory=datetime.utcnow)
+    checked_at: datetime = Field(default_factory=utcnow)
 
 
 class LLMRoutingStrategy(str, Enum):
@@ -144,7 +146,7 @@ class LLMRoutingDecision(BaseModel):
     attempted_providers: list[str] = []
     fallback_used: bool = False
     decision_time_ms: int = 0
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 class LLMRoutingStats(BaseModel):
@@ -157,5 +159,5 @@ class LLMRoutingStats(BaseModel):
     provider_usage: dict[str, int] = {}  # provider_id -> request count
     average_latency_ms: float = 0.0
     total_cost: float = 0.0
-    period_start: datetime = Field(default_factory=datetime.utcnow)
-    period_end: datetime = Field(default_factory=datetime.utcnow)
+    period_start: datetime = Field(default_factory=utcnow)
+    period_end: datetime = Field(default_factory=utcnow)

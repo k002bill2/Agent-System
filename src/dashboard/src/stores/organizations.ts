@@ -1,7 +1,5 @@
 import { create } from 'zustand'
-import { authFetch } from './auth'
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { apiClient } from '../services/apiClient'
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -217,11 +215,7 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
   fetchOrganizations: async () => {
     set({ isLoading: true, error: null })
     try {
-      const response = await authFetch(`${API_BASE_URL}/api/organizations`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch organizations')
-      }
-      const data = await response.json()
+      const data = await apiClient.get<Organization[]>('/api/organizations')
       set({ organizations: data, isLoading: false })
     } catch (error) {
       set({
@@ -234,11 +228,7 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
   fetchOrganization: async (orgId) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await authFetch(`${API_BASE_URL}/api/organizations/${orgId}`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch organization')
-      }
-      const data = await response.json()
+      const data = await apiClient.get<Organization>(`/api/organizations/${orgId}`)
       set({ currentOrganization: data, isLoading: false })
     } catch (error) {
       set({
@@ -251,27 +241,7 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
   createOrganization: async (data) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await authFetch(`${API_BASE_URL}/api/organizations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      if (!response.ok) {
-        const errorData = await response.json()
-        // Handle FastAPI validation errors (array format)
-        let errorMessage = 'Failed to create organization'
-        if (Array.isArray(errorData.detail)) {
-          errorMessage = errorData.detail
-            .map((err: { loc?: string[]; msg?: string }) =>
-              err.msg || JSON.stringify(err)
-            )
-            .join(', ')
-        } else if (typeof errorData.detail === 'string') {
-          errorMessage = errorData.detail
-        }
-        throw new Error(errorMessage)
-      }
-      const newOrg = await response.json()
+      const newOrg = await apiClient.post<Organization>('/api/organizations', data)
       set((state) => ({
         organizations: [...state.organizations, newOrg],
         currentOrganization: newOrg,
@@ -291,26 +261,7 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
   updateOrganization: async (orgId, data) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await authFetch(`${API_BASE_URL}/api/organizations/${orgId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      if (!response.ok) {
-        const errorData = await response.json()
-        let errorMessage = 'Failed to update organization'
-        if (Array.isArray(errorData.detail)) {
-          errorMessage = errorData.detail
-            .map((err: { loc?: string[]; msg?: string }) =>
-              err.msg || JSON.stringify(err)
-            )
-            .join(', ')
-        } else if (typeof errorData.detail === 'string') {
-          errorMessage = errorData.detail
-        }
-        throw new Error(errorMessage)
-      }
-      const updatedOrg = await response.json()
+      const updatedOrg = await apiClient.patch<Organization>(`/api/organizations/${orgId}`, data)
       set((state) => ({
         organizations: state.organizations.map((org) =>
           org.id === orgId ? updatedOrg : org
@@ -333,23 +284,7 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
   deleteOrganization: async (orgId) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await authFetch(`${API_BASE_URL}/api/organizations/${orgId}`, {
-        method: 'DELETE',
-      })
-      if (!response.ok) {
-        const errorData = await response.json()
-        let errorMessage = 'Failed to delete organization'
-        if (Array.isArray(errorData.detail)) {
-          errorMessage = errorData.detail
-            .map((err: { loc?: string[]; msg?: string }) =>
-              err.msg || JSON.stringify(err)
-            )
-            .join(', ')
-        } else if (typeof errorData.detail === 'string') {
-          errorMessage = errorData.detail
-        }
-        throw new Error(errorMessage)
-      }
+      await apiClient.delete(`/api/organizations/${orgId}`)
       set((state) => ({
         organizations: state.organizations.filter((org) => org.id !== orgId),
         currentOrganization:
@@ -373,11 +308,7 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
   fetchMembers: async (orgId) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await authFetch(`${API_BASE_URL}/api/organizations/${orgId}/members`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch members')
-      }
-      const data = await response.json()
+      const data = await apiClient.get<OrganizationMember[]>(`/api/organizations/${orgId}/members`)
       set({ members: data, isLoading: false })
     } catch (error) {
       set({
@@ -390,30 +321,11 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
   inviteMember: async (orgId, data, invitedBy?: string) => {
     set({ isLoading: true, error: null })
     try {
-      // invited_by는 필수 쿼리 파라미터
-      const url = new URL(`${API_BASE_URL}/api/organizations/${orgId}/members/invite`)
-      if (invitedBy) {
-        url.searchParams.set('invited_by', invitedBy)
-      }
-      const response = await authFetch(url.toString(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      if (!response.ok) {
-        const errorData = await response.json()
-        let errorMessage = 'Failed to invite member'
-        if (Array.isArray(errorData.detail)) {
-          errorMessage = errorData.detail
-            .map((err: { loc?: string[]; msg?: string }) =>
-              err.msg || JSON.stringify(err)
-            )
-            .join(', ')
-        } else if (typeof errorData.detail === 'string') {
-          errorMessage = errorData.detail
-        }
-        throw new Error(errorMessage)
-      }
+      const queryParam = invitedBy ? `?invited_by=${encodeURIComponent(invitedBy)}` : ''
+      await apiClient.post(
+        `/api/organizations/${orgId}/members/invite${queryParam}`,
+        data
+      )
       // Refresh members list
       await get().fetchMembers(orgId)
       set({ isLoading: false, modalMode: null })
@@ -430,29 +342,10 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
   updateMemberRole: async (orgId, memberId, role) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await authFetch(
-        `${API_BASE_URL}/api/organizations/${orgId}/members/${memberId}/role`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role }),
-        }
+      const updatedMember = await apiClient.patch<OrganizationMember>(
+        `/api/organizations/${orgId}/members/${memberId}/role`,
+        { role }
       )
-      if (!response.ok) {
-        const errorData = await response.json()
-        let errorMessage = 'Failed to update member role'
-        if (Array.isArray(errorData.detail)) {
-          errorMessage = errorData.detail
-            .map((err: { loc?: string[]; msg?: string }) =>
-              err.msg || JSON.stringify(err)
-            )
-            .join(', ')
-        } else if (typeof errorData.detail === 'string') {
-          errorMessage = errorData.detail
-        }
-        throw new Error(errorMessage)
-      }
-      const updatedMember = await response.json()
       set((state) => ({
         members: state.members.map((m) => (m.id === memberId ? updatedMember : m)),
         isLoading: false,
@@ -470,24 +363,9 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
   removeMember: async (orgId, memberId) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await authFetch(
-        `${API_BASE_URL}/api/organizations/${orgId}/members/${memberId}`,
-        { method: 'DELETE' }
+      await apiClient.delete(
+        `/api/organizations/${orgId}/members/${memberId}`
       )
-      if (!response.ok) {
-        const errorData = await response.json()
-        let errorMessage = 'Failed to remove member'
-        if (Array.isArray(errorData.detail)) {
-          errorMessage = errorData.detail
-            .map((err: { loc?: string[]; msg?: string }) =>
-              err.msg || JSON.stringify(err)
-            )
-            .join(', ')
-        } else if (typeof errorData.detail === 'string') {
-          errorMessage = errorData.detail
-        }
-        throw new Error(errorMessage)
-      }
       set((state) => ({
         members: state.members.filter((m) => m.id !== memberId),
         isLoading: false,
@@ -508,13 +386,9 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
 
   fetchUserMemberships: async (userId) => {
     try {
-      const response = await authFetch(
-        `${API_BASE_URL}/api/organizations/user/${userId}/organizations`
+      const data = await apiClient.get<OrganizationMember[]>(
+        `/api/organizations/user/${userId}/organizations`
       )
-      if (!response.ok) {
-        throw new Error('Failed to fetch user memberships')
-      }
-      const data = await response.json()
       set({ userMemberships: data })
     } catch (error) {
       console.error('Failed to fetch user memberships:', error)
@@ -547,11 +421,7 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
 
   fetchStats: async (orgId) => {
     try {
-      const response = await authFetch(`${API_BASE_URL}/api/organizations/${orgId}/stats`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch organization stats')
-      }
-      const data = await response.json()
+      const data = await apiClient.get<OrganizationStats>(`/api/organizations/${orgId}/stats`)
       set({ stats: data })
     } catch (error) {
       console.error('Failed to fetch organization stats:', error)
@@ -560,11 +430,7 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
 
   fetchQuotaStatus: async (orgId) => {
     try {
-      const response = await authFetch(`${API_BASE_URL}/api/organizations/${orgId}/quota`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch quota status')
-      }
-      const data = await response.json()
+      const data = await apiClient.get<QuotaStatus>(`/api/organizations/${orgId}/quota`)
       set({ quotaStatus: data })
     } catch (error) {
       console.error('Failed to fetch quota status:', error)
@@ -573,13 +439,9 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
 
   fetchMemberUsage: async (orgId, period = 'month') => {
     try {
-      const response = await authFetch(
-        `${API_BASE_URL}/api/organizations/${orgId}/members/usage?period=${period}`
+      const data = await apiClient.get<MemberUsageResponse>(
+        `/api/organizations/${orgId}/members/usage?period=${period}`
       )
-      if (!response.ok) {
-        throw new Error('Failed to fetch member usage')
-      }
-      const data = await response.json()
       set({ memberUsage: data })
     } catch (error) {
       console.error('Failed to fetch member usage:', error)
@@ -593,31 +455,10 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
   acceptInvitation: async (token, userId, userName) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await authFetch(`${API_BASE_URL}/api/organizations/invitations/accept`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token,
-          user_id: userId,
-          user_name: userName,
-        }),
-      })
-      if (!response.ok) {
-        const errorData = await response.json()
-        let errorMessage = 'Failed to accept invitation'
-        if (Array.isArray(errorData.detail)) {
-          errorMessage = errorData.detail
-            .map((err: { loc?: string[]; msg?: string }) =>
-              err.msg || JSON.stringify(err)
-            )
-            .join(', ')
-        } else if (typeof errorData.detail === 'string') {
-          errorMessage = errorData.detail
-        }
-        set({ isLoading: false, error: errorMessage })
-        return { success: false, error: errorMessage }
-      }
-      const member = await response.json()
+      const member = await apiClient.post<OrganizationMember>(
+        '/api/organizations/invitations/accept',
+        { token, user_id: userId, user_name: userName }
+      )
       set({ isLoading: false })
       return { success: true, member }
     } catch (error) {

@@ -16,6 +16,7 @@ from db.models.base import (
     UniqueConstraint,
     datetime,
     relationship,
+    timezone,
 )
 
 
@@ -34,8 +35,8 @@ class WorkflowDefinitionModel(Base):
     env = Column(JSONB, default=dict)
     version = Column(Integer, default=1)
     created_by = Column(String(36), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     last_run_at = Column(DateTime, nullable=True)
     last_run_status = Column(String(20), nullable=True)
 
@@ -59,7 +60,7 @@ class WorkflowRunModel(Base):
     trigger_type = Column(String(20), nullable=False)
     trigger_payload = Column(JSONB, default=dict)
     status = Column(String(20), default="queued", index=True)
-    started_at = Column(DateTime, default=datetime.utcnow, index=True)
+    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     completed_at = Column(DateTime, nullable=True)
     duration_seconds = Column(Float, nullable=True)
     total_cost = Column(Float, default=0.0)
@@ -148,8 +149,8 @@ class WorkflowSecretModel(Base):
     scope = Column(String(20), nullable=False, default="workflow")
     scope_id = Column(String(36), nullable=True, index=True)
     created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         UniqueConstraint("name", "scope", "scope_id", name="uq_secret_name_scope"),
@@ -173,7 +174,7 @@ class WorkflowWebhookModel(Base):
     secret = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
     allowed_events = Column(JSONB, default=lambda: ["push", "pull_request"])
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (Index("ix_workflow_webhooks_workflow", "workflow_id"),)
 
@@ -198,7 +199,7 @@ class WorkflowArtifactModel(Base):
     content_type = Column(String(100), default="application/octet-stream")
     retention_days = Column(Integer, default=30)
     expires_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("ix_workflow_artifacts_run", "run_id"),
@@ -220,8 +221,8 @@ class WorkflowTemplateModel(Base):
     yaml_content = Column(Text, nullable=True)
     icon = Column(String(50), default="zap")
     popularity = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("ix_workflow_templates_category", "category"),

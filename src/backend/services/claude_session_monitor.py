@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+
+from utils.time import utcnow
 from pathlib import Path
 
 import httpx
@@ -421,7 +423,7 @@ class ClaudeSessionMonitor:
                                 tool_call_count += 1
 
         if created_at is None:
-            created_at = datetime.utcnow()
+            created_at = utcnow()
         if last_activity is None:
             last_activity = created_at
 
@@ -430,7 +432,7 @@ class ClaudeSessionMonitor:
         last_activity_naive = (
             last_activity.replace(tzinfo=None) if last_activity.tzinfo else last_activity
         )
-        time_since_activity = datetime.utcnow() - last_activity_naive
+        time_since_activity = utcnow() - last_activity_naive
         if time_since_activity < timedelta(minutes=5):
             status = SessionStatus.ACTIVE
         elif time_since_activity < timedelta(hours=1):
@@ -597,7 +599,7 @@ class ClaudeSessionMonitor:
             try:
                 timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
             except ValueError:
-                timestamp = datetime.utcnow()
+                timestamp = utcnow()
 
             # Map to MessageType enum
             if msg_type_str == "user":
@@ -1121,7 +1123,7 @@ class ClaudeSessionMonitor:
                 try:
                     timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
                 except ValueError:
-                    timestamp = datetime.utcnow()
+                    timestamp = utcnow()
 
                 # Filter by since timestamp
                 if since is not None:
@@ -1282,7 +1284,7 @@ class ClaudeSessionMonitor:
                 try:
                     timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
                 except ValueError:
-                    timestamp = datetime.utcnow()
+                    timestamp = utcnow()
 
                 msg_type = entry.get("type", "")
 
@@ -1407,7 +1409,7 @@ class ClaudeSessionMonitor:
             try:
                 timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
             except ValueError:
-                timestamp = datetime.utcnow()
+                timestamp = utcnow()
 
             msg_type = entry.get("type", "")
             event_id = f"{session_id}_{last_size}_{line_num}"

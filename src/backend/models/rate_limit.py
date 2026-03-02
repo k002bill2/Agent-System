@@ -1,6 +1,8 @@
 """Rate limiting models."""
 
 from datetime import datetime
+
+from utils.time import utcnow
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -116,4 +118,4 @@ class RateLimitOverride(BaseModel):
     expires_at: datetime | None = None  # Temporary override
     reason: str | None = None
     created_by: str | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)

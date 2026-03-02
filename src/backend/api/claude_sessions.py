@@ -5,6 +5,8 @@ import logging
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import UTC, datetime
+
+from utils.time import utcnow
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -845,7 +847,7 @@ async def save_session(
     return ClaudeSessionSaveResponse(
         success=True,
         message=f"Session {session_id} saved successfully",
-        saved_at=datetime.utcnow(),
+        saved_at=utcnow(),
     )
 
 

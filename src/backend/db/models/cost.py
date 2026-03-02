@@ -13,6 +13,7 @@ from db.models.base import (
     String,
     Text,
     datetime,
+    timezone,
 )
 
 
@@ -41,8 +42,8 @@ class CostCenterModel(Base):
 
     # Status
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("ix_cost_centers_org", "organization_id"),
@@ -80,7 +81,7 @@ class CostAllocationModel(Base):
     # Timestamps
     period_start = Column(DateTime, nullable=True)
     period_end = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     __table_args__ = (
         Index("ix_cost_allocations_center", "cost_center_id", "created_at"),

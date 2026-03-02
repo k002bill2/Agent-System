@@ -13,6 +13,7 @@ from db.models.base import (
     Text,
     UniqueConstraint,
     datetime,
+    timezone,
 )
 
 
@@ -42,7 +43,7 @@ class TaskAnalysisModel(Base):
     strategy = Column(String(20), nullable=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     __table_args__ = (
         Index("ix_task_analyses_project_created", "project_id", "created_at"),
@@ -69,7 +70,7 @@ class SessionActivityModel(Base):
     data = Column(JSONB, default=dict)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     __table_args__ = (
         Index("ix_session_activity_session", "session_id", "created_at"),

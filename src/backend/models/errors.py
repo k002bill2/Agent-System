@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import traceback
 from datetime import datetime
+
+from utils.time import utcnow
 from enum import StrEnum
 from typing import Any, ClassVar
 
@@ -148,7 +150,7 @@ class StructuredError(BaseModel):
     context: dict[str, Any] = Field(
         default_factory=dict, description="Additional context (task_id, agent_name, etc.)"
     )
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=utcnow)
     retry_hint: str | None = Field(
         default=None, description="Category-specific retry recommendation"
     )

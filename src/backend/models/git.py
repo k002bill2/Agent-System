@@ -2,6 +2,8 @@
 
 import uuid
 from datetime import datetime
+
+from utils.time import utcnow
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -149,8 +151,8 @@ class MergeRequest(BaseModel):
     reviewers: list[str] = []  # user IDs
     approved_by: list[str] = []  # user IDs
     # Metadata
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
     merged_at: datetime | None = None
     merged_by: str | None = None
     closed_at: datetime | None = None
@@ -197,8 +199,8 @@ class BranchProtectionRule(BaseModel):
     auto_deploy: bool = False
     deploy_workflow: str | None = None
     enabled: bool = True
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class BranchProtectionRuleCreate(BaseModel):
@@ -734,7 +736,7 @@ class GitRepository(BaseModel):
     is_valid: bool = False  # Whether path is a valid Git repo
     default_branch: str | None = None
     remote_url: str | None = None  # e.g., git@github.com:owner/repo.git
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 class GitRepositoryCreate(BaseModel):

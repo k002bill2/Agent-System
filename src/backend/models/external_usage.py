@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+
+from utils.time import utcnow
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -23,7 +25,7 @@ class ProviderHealthStatus(BaseModel):
 
     provider: ExternalProvider
     is_healthy: bool
-    last_checked: datetime = Field(default_factory=datetime.utcnow)
+    last_checked: datetime = Field(default_factory=utcnow)
     error_message: str | None = None
     latency_ms: float | None = None
 
@@ -56,7 +58,7 @@ class UnifiedUsageRecord(BaseModel):
 
     # Metadata
     raw_data: dict = Field(default_factory=dict)
-    collected_at: datetime = Field(default_factory=datetime.utcnow)
+    collected_at: datetime = Field(default_factory=utcnow)
 
 
 class UsageSummary(BaseModel):

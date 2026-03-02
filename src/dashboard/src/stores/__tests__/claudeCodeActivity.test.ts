@@ -1,9 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { useClaudeCodeActivityStore } from '../claudeCodeActivity'
 
-const mockFetch = vi.fn()
-global.fetch = mockFetch
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}))
+
+import { useClaudeCodeActivityStore } from '../claudeCodeActivity'
+import { apiClient } from '../../services/apiClient'
+
+const mockApiClient = vi.mocked(apiClient)
 
 // Mock EventSource
 class MockEventSource {
@@ -39,7 +50,7 @@ function resetStore() {
 describe('claudeCodeActivity store', () => {
   beforeEach(() => {
     resetStore()
-    mockFetch.mockReset()
+    vi.clearAllMocks()
   })
 
   // ── Initial State ──────────────────────────────────────
@@ -139,10 +150,7 @@ describe('claudeCodeActivity store', () => {
         has_more: false,
         offset: 0,
       }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(data),
-      })
+      mockApiClient.get.mockResolvedValueOnce(data)
 
       await useClaudeCodeActivityStore.getState().fetchActivity('s-1')
 
@@ -162,10 +170,7 @@ describe('claudeCodeActivity store', () => {
         has_more: false,
         offset: 1,
       }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(data),
-      })
+      mockApiClient.get.mockResolvedValueOnce(data)
 
       await useClaudeCodeActivityStore.getState().fetchActivity('s-1', 1, true)
 
@@ -173,11 +178,11 @@ describe('claudeCodeActivity store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Not Found' })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch activity'))
 
       await useClaudeCodeActivityStore.getState().fetchActivity('s-1')
 
-      expect(useClaudeCodeActivityStore.getState().error).toContain('Failed to fetch activity')
+      expect(useClaudeCodeActivityStore.getState().error).toBe('Failed to fetch activity')
     })
   })
 
@@ -189,10 +194,7 @@ describe('claudeCodeActivity store', () => {
         tasks: { 't1': { id: 't1', name: 'Task 1' } },
         root_task_ids: ['t1'],
       }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(data),
-      })
+      mockApiClient.get.mockResolvedValueOnce(data)
 
       await useClaudeCodeActivityStore.getState().fetchTasks('s-1')
 
@@ -203,11 +205,11 @@ describe('claudeCodeActivity store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Error' })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch tasks'))
 
       await useClaudeCodeActivityStore.getState().fetchTasks('s-1')
 
-      expect(useClaudeCodeActivityStore.getState().error).toContain('Failed to fetch tasks')
+      expect(useClaudeCodeActivityStore.getState().error).toBe('Failed to fetch tasks')
     })
   })
 

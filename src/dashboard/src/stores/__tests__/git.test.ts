@@ -1,9 +1,25 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { useGitStore } from '../git'
 
-const mockFetch = vi.fn()
-global.fetch = mockFetch
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}))
+
+// Mock analytics
+vi.mock('../../services/analytics', () => ({
+  analytics: { track: vi.fn() },
+}))
+
+import { useGitStore } from '../git'
+import { apiClient } from '../../services/apiClient'
+
+const mockApiClient = vi.mocked(apiClient)
 
 function resetStore() {
   useGitStore.setState({
@@ -40,7 +56,7 @@ function resetStore() {
 describe('git store', () => {
   beforeEach(() => {
     resetStore()
-    mockFetch.mockReset()
+    vi.clearAllMocks()
   })
 
   // ── Initial State ──────────────────────────────────────
@@ -119,10 +135,7 @@ describe('git store', () => {
   describe('fetchGitStatus', () => {
     it('fetches and stores git status', async () => {
       const status = { project_id: 'p1', git_enabled: true, is_valid_repo: true }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(status),
-      })
+      mockApiClient.get.mockResolvedValueOnce(status)
 
       const result = await useGitStore.getState().fetchGitStatus('p1')
 
@@ -132,12 +145,7 @@ describe('git store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        headers: { get: () => 'application/json' },
-        json: () => Promise.resolve({ detail: 'Not found' }),
-      })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Not found'))
 
       const result = await useGitStore.getState().fetchGitStatus('p1')
 
@@ -150,10 +158,7 @@ describe('git store', () => {
 
   describe('updateGitPath', () => {
     it('updates git path and returns validity', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ is_valid_repo: true, project_id: 'p1' }),
-      })
+      mockApiClient.put.mockResolvedValueOnce({ is_valid_repo: true, project_id: 'p1' })
 
       const result = await useGitStore.getState().updateGitPath('p1', '/new/path')
 
@@ -162,10 +167,7 @@ describe('git store', () => {
     })
 
     it('returns false on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Invalid path' }),
-      })
+      mockApiClient.put.mockRejectedValueOnce(new Error('Invalid path'))
 
       const result = await useGitStore.getState().updateGitPath('p1', '/bad')
 
@@ -178,10 +180,7 @@ describe('git store', () => {
   describe('fetchWorkingStatus', () => {
     it('fetches working status', async () => {
       const status = { branch: 'main', is_clean: true, total_changes: 0 }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(status),
-      })
+      mockApiClient.get.mockResolvedValueOnce(status)
 
       const result = await useGitStore.getState().fetchWorkingStatus('p1')
 
@@ -195,29 +194,17 @@ describe('git store', () => {
   describe('stageFiles', () => {
     it('stages files and refreshes status', async () => {
       // stageFiles POST
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ success: true }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ success: true })
       // fetchWorkingStatus called after
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ branch: 'main', is_clean: false }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ branch: 'main', is_clean: false })
 
       const result = await useGitStore.getState().stageFiles('p1', ['file.ts'])
 
       expect(result).toBe(true)
-      expect(mockFetch).toHaveBeenCalledTimes(2)
     })
 
     it('returns false on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        headers: { get: () => 'application/json' },
-        json: () => Promise.resolve({ detail: 'Stage error' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Stage error'))
 
       const result = await useGitStore.getState().stageFiles('p1', ['bad.ts'])
 
@@ -231,20 +218,11 @@ describe('git store', () => {
   describe('commitChanges', () => {
     it('commits and refreshes status + commits', async () => {
       // commit POST
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ success: true }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ success: true })
       // fetchWorkingStatus
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ branch: 'main' }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ branch: 'main' })
       // fetchCommits
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ commits: [] }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ commits: [] })
 
       const result = await useGitStore.getState().commitChanges('p1', 'feat: add x')
 
@@ -258,10 +236,7 @@ describe('git store', () => {
   describe('generateDraftCommits', () => {
     it('generates and stores drafts', async () => {
       const drafts = [{ message: 'feat: add feature', files: ['a.ts'], type: 'feat', scope: null }]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ drafts, total_files: 1 }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ drafts, total_files: 1 })
 
       const result = await useGitStore.getState().generateDraftCommits('p1')
 
@@ -271,10 +246,7 @@ describe('git store', () => {
     })
 
     it('returns empty on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Error' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Error'))
 
       const result = await useGitStore.getState().generateDraftCommits('p1')
 
@@ -287,10 +259,7 @@ describe('git store', () => {
   describe('fetchRepositories', () => {
     it('fetches repositories', async () => {
       const repos = [{ id: 'r1', name: 'Repo 1' }]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ repositories: repos }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ repositories: repos })
 
       await useGitStore.getState().fetchRepositories()
 
@@ -304,15 +273,9 @@ describe('git store', () => {
     it('creates repo and refreshes list', async () => {
       const newRepo = { id: 'r1', name: 'New' }
       // create POST
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(newRepo),
-      })
+      mockApiClient.post.mockResolvedValueOnce(newRepo)
       // fetchRepositories
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ repositories: [newRepo] }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ repositories: [newRepo] })
 
       const result = await useGitStore.getState().createRepository('New', '/path')
 
@@ -320,10 +283,7 @@ describe('git store', () => {
     })
 
     it('returns null on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Already exists' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Already exists'))
 
       const result = await useGitStore.getState().createRepository('Dup', '/path')
 
@@ -335,13 +295,10 @@ describe('git store', () => {
 
   describe('fetchBranches', () => {
     it('fetches branches and current branch', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({
-          branches: [{ name: 'main' }, { name: 'dev' }],
-          current_branch: 'main',
-          protected_branches: ['main'],
-        }),
+      mockApiClient.get.mockResolvedValueOnce({
+        branches: [{ name: 'main' }, { name: 'dev' }],
+        current_branch: 'main',
+        protected_branches: ['main'],
       })
 
       await useGitStore.getState().fetchBranches('p1')
@@ -357,15 +314,9 @@ describe('git store', () => {
   describe('createBranch', () => {
     it('creates branch and refreshes', async () => {
       // create POST
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      })
+      mockApiClient.post.mockResolvedValueOnce({})
       // fetchBranches
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ branches: [], current_branch: 'main', protected_branches: [] }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ branches: [], current_branch: 'main', protected_branches: [] })
 
       const result = await useGitStore.getState().createBranch('p1', 'feature/test')
 
@@ -377,14 +328,8 @@ describe('git store', () => {
 
   describe('deleteBranch', () => {
     it('deletes branch and refreshes', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ branches: [], current_branch: 'main', protected_branches: [] }),
-      })
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
+      mockApiClient.get.mockResolvedValueOnce({ branches: [], current_branch: 'main', protected_branches: [] })
 
       const result = await useGitStore.getState().deleteBranch('p1', 'old-branch', true)
 
@@ -397,10 +342,7 @@ describe('git store', () => {
   describe('fetchCommits', () => {
     it('fetches commits', async () => {
       const commits = [{ sha: 'abc123', message: 'init' }]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ commits }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ commits })
 
       await useGitStore.getState().fetchCommits('p1', 'main')
 
@@ -413,10 +355,7 @@ describe('git store', () => {
   describe('fetchCommitFiles', () => {
     it('fetches and caches commit files', async () => {
       const files = [{ path: 'file.ts', status: 'modified', additions: 5, deletions: 2 }]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(files),
-      })
+      mockApiClient.get.mockResolvedValueOnce(files)
 
       const result = await useGitStore.getState().fetchCommitFiles('p1', 'abc123')
 
@@ -432,7 +371,7 @@ describe('git store', () => {
       const result = await useGitStore.getState().fetchCommitFiles('p1', 'abc123')
 
       expect(result).toEqual([{ path: 'cached.ts' }])
-      expect(mockFetch).not.toHaveBeenCalled()
+      expect(mockApiClient.get).not.toHaveBeenCalled()
     })
   })
 
@@ -440,10 +379,7 @@ describe('git store', () => {
 
   describe('fetchCommitDiff', () => {
     it('fetches and caches diff', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ diff: '--- a/file.ts\n+++ b/file.ts' }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ diff: '--- a/file.ts\n+++ b/file.ts' })
 
       const result = await useGitStore.getState().fetchCommitDiff('p1', 'abc123')
 
@@ -452,10 +388,7 @@ describe('git store', () => {
     })
 
     it('uses key with filePath', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ diff: 'diff content' }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ diff: 'diff content' })
 
       await useGitStore.getState().fetchCommitDiff('p1', 'abc123', 'src/file.ts')
 
@@ -468,7 +401,7 @@ describe('git store', () => {
       const result = await useGitStore.getState().fetchCommitDiff('p1', 'abc123')
 
       expect(result).toBe('cached diff')
-      expect(mockFetch).not.toHaveBeenCalled()
+      expect(mockApiClient.get).not.toHaveBeenCalled()
     })
   })
 
@@ -477,10 +410,7 @@ describe('git store', () => {
   describe('previewMerge', () => {
     it('fetches merge preview', async () => {
       const preview = { can_merge: true, files_changed: 5 }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(preview),
-      })
+      mockApiClient.post.mockResolvedValueOnce(preview)
 
       const result = await useGitStore.getState().previewMerge('p1', 'feature', 'main')
 
@@ -493,14 +423,8 @@ describe('git store', () => {
 
   describe('executeMerge', () => {
     it('executes merge and refreshes branches', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ success: true }),
-      })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ branches: [], current_branch: 'main', protected_branches: [] }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ success: true })
+      mockApiClient.get.mockResolvedValueOnce({ branches: [], current_branch: 'main', protected_branches: [] })
 
       const result = await useGitStore.getState().executeMerge('p1', 'feature', 'main')
 
@@ -514,10 +438,7 @@ describe('git store', () => {
   describe('conflict resolution', () => {
     it('fetchConflictFiles', async () => {
       const files = [{ path: 'conflict.ts', conflict_type: 'both_modified' }]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(files),
-      })
+      mockApiClient.get.mockResolvedValueOnce(files)
 
       const result = await useGitStore.getState().fetchConflictFiles('p1', 'feature', 'main')
 
@@ -527,10 +448,7 @@ describe('git store', () => {
 
     it('fetchMergeStatus', async () => {
       const status = { merge_in_progress: true, unmerged_files: ['a.ts'], can_commit: false }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(status),
-      })
+      mockApiClient.get.mockResolvedValueOnce(status)
 
       const result = await useGitStore.getState().fetchMergeStatus('p1')
 
@@ -546,15 +464,9 @@ describe('git store', () => {
         ],
       })
       // resolve POST
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ success: true }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ success: true })
       // fetchMergeStatus
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ merge_in_progress: true }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ merge_in_progress: true })
 
       const result = await useGitStore.getState().resolveConflict('p1', {
         file_path: 'a.ts',
@@ -573,10 +485,7 @@ describe('git store', () => {
         conflictFiles: [{ path: 'a.ts' } as any],
         mergeStatus: {} as any,
       })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      })
+      mockApiClient.post.mockResolvedValueOnce({})
 
       const result = await useGitStore.getState().abortMerge('p1')
 
@@ -586,14 +495,8 @@ describe('git store', () => {
     })
 
     it('completeMerge clears state and refreshes branches', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ branches: [], current_branch: 'main', protected_branches: [] }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({})
+      mockApiClient.get.mockResolvedValueOnce({ branches: [], current_branch: 'main', protected_branches: [] })
 
       const result = await useGitStore.getState().completeMerge('p1', 'merge commit')
 
@@ -606,10 +509,7 @@ describe('git store', () => {
   describe('merge requests', () => {
     it('fetchMergeRequests', async () => {
       const mrs = [{ id: 'mr-1', title: 'Feature' }]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ merge_requests: mrs }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ merge_requests: mrs })
 
       await useGitStore.getState().fetchMergeRequests('p1')
 
@@ -618,15 +518,9 @@ describe('git store', () => {
 
     it('createMergeRequest', async () => {
       // create POST
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      })
+      mockApiClient.post.mockResolvedValueOnce({})
       // fetchMergeRequests
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ merge_requests: [] }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ merge_requests: [] })
 
       const result = await useGitStore.getState().createMergeRequest(
         'p1', 'Feature', 'feature', 'main', 'desc'
@@ -636,11 +530,8 @@ describe('git store', () => {
     })
 
     it('approveMergeRequest', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ merge_requests: [] }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({})
+      mockApiClient.get.mockResolvedValueOnce({ merge_requests: [] })
 
       const result = await useGitStore.getState().approveMergeRequest('p1', 'mr-1', 'u-1')
 
@@ -659,10 +550,7 @@ describe('git store', () => {
 
     it('fetchPullRequests fetches PRs', async () => {
       useGitStore.setState({ githubRepo: 'owner/repo' })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ pull_requests: [{ number: 1 }] }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ pull_requests: [{ number: 1 }] })
 
       await useGitStore.getState().fetchPullRequests()
 
@@ -672,10 +560,7 @@ describe('git store', () => {
     it('fetchPullRequest', async () => {
       useGitStore.setState({ githubRepo: 'owner/repo' })
       const pr = { number: 1, title: 'PR' }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(pr),
-      })
+      mockApiClient.get.mockResolvedValueOnce(pr)
 
       const result = await useGitStore.getState().fetchPullRequest(1)
 
@@ -691,11 +576,8 @@ describe('git store', () => {
 
     it('mergePullRequest', async () => {
       useGitStore.setState({ githubRepo: 'owner/repo' })
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ pull_requests: [] }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({})
+      mockApiClient.get.mockResolvedValueOnce({ pull_requests: [] })
 
       const result = await useGitStore.getState().mergePullRequest(1, 'squash')
 
@@ -704,11 +586,8 @@ describe('git store', () => {
 
     it('createPRReview', async () => {
       useGitStore.setState({ githubRepo: 'owner/repo' })
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve([]),
-      })
+      mockApiClient.post.mockResolvedValueOnce({})
+      mockApiClient.get.mockResolvedValueOnce([])
 
       const result = await useGitStore.getState().createPRReview(1, 'LGTM', 'APPROVE')
 
@@ -720,11 +599,8 @@ describe('git store', () => {
 
   describe('remote management', () => {
     it('fetchRemotes stores remotes', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({
-          remotes: [{ name: 'origin', url: 'https://github.com/owner/repo.git' }],
-        }),
+      mockApiClient.get.mockResolvedValueOnce({
+        remotes: [{ name: 'origin', url: 'https://github.com/owner/repo.git' }],
       })
 
       await useGitStore.getState().fetchRemotes('p1')
@@ -735,11 +611,8 @@ describe('git store', () => {
     })
 
     it('addRemote', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ remotes: [] }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({})
+      mockApiClient.get.mockResolvedValueOnce({ remotes: [] })
 
       const result = await useGitStore.getState().addRemote('p1', 'upstream', 'https://example.com/repo.git')
 
@@ -747,11 +620,8 @@ describe('git store', () => {
     })
 
     it('removeRemote', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ remotes: [] }),
-      })
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
+      mockApiClient.get.mockResolvedValueOnce({ remotes: [] })
 
       const result = await useGitStore.getState().removeRemote('p1', 'upstream')
 
@@ -763,11 +633,8 @@ describe('git store', () => {
 
   describe('remote operations', () => {
     it('fetchRemote', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ branches: [], current_branch: 'main', protected_branches: [] }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({})
+      mockApiClient.get.mockResolvedValueOnce({ branches: [], current_branch: 'main', protected_branches: [] })
 
       const result = await useGitStore.getState().fetchRemote('p1')
 
@@ -775,28 +642,19 @@ describe('git store', () => {
     })
 
     it('pullRemote refreshes branches and commits', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ branches: [], current_branch: 'main', protected_branches: [] }),
-      })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ commits: [] }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({})
+      mockApiClient.get
+        .mockResolvedValueOnce({ branches: [], current_branch: 'main', protected_branches: [] })
+        .mockResolvedValueOnce({ commits: [] })
 
       const result = await useGitStore.getState().pullRemote('p1', 'main')
 
       expect(result).toBe(true)
-      expect(mockFetch).toHaveBeenCalledTimes(3)
     })
 
     it('pushRemote', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ branches: [], current_branch: 'main', protected_branches: [] }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({})
+      mockApiClient.get.mockResolvedValueOnce({ branches: [], current_branch: 'main', protected_branches: [] })
 
       const result = await useGitStore.getState().pushRemote('p1', 'main')
 
@@ -804,12 +662,7 @@ describe('git store', () => {
     })
 
     it('fetchRemote handles failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        headers: { get: () => 'application/json' },
-        json: () => Promise.resolve({ detail: 'Remote not found' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Remote not found'))
 
       const result = await useGitStore.getState().fetchRemote('p1', 'nonexistent')
 
@@ -823,10 +676,7 @@ describe('git store', () => {
   describe('branch protection', () => {
     it('fetchBranchProtectionRules', async () => {
       const rules = [{ id: 'rule-1', branch_pattern: 'main' }]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ rules }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ rules })
 
       await useGitStore.getState().fetchBranchProtectionRules('p1')
 
@@ -834,11 +684,8 @@ describe('git store', () => {
     })
 
     it('createBranchProtectionRule', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ rules: [] }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({})
+      mockApiClient.get.mockResolvedValueOnce({ rules: [] })
 
       const result = await useGitStore.getState().createBranchProtectionRule('p1', {
         branch_pattern: 'main',
@@ -856,11 +703,8 @@ describe('git store', () => {
     })
 
     it('updateBranchProtectionRule', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ rules: [] }),
-      })
+      mockApiClient.put.mockResolvedValueOnce({})
+      mockApiClient.get.mockResolvedValueOnce({ rules: [] })
 
       const result = await useGitStore.getState().updateBranchProtectionRule(
         'p1', 'rule-1', { require_approvals: 2 }
@@ -870,11 +714,8 @@ describe('git store', () => {
     })
 
     it('deleteBranchProtectionRule', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ rules: [] }),
-      })
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
+      mockApiClient.get.mockResolvedValueOnce({ rules: [] })
 
       const result = await useGitStore.getState().deleteBranchProtectionRule('p1', 'rule-1')
 

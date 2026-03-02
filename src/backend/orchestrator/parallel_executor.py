@@ -2,6 +2,8 @@
 
 import asyncio
 from datetime import datetime
+
+from utils.time import utcnow
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
@@ -156,13 +158,13 @@ class ParallelExecutorNode(BaseNode):
         # Add summary message
         all_messages.append(
             {
-                "id": f"batch-{datetime.utcnow().isoformat()}",
+                "id": f"batch-{utcnow().isoformat()}",
                 "role": "system",
                 "content": (
                     f"Parallel execution completed: {completed_count} succeeded, "
                     f"{failed_count} failed out of {len(results)} tasks"
                 ),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": utcnow().isoformat(),
             }
         )
 
@@ -228,7 +230,7 @@ class ParallelExecutorNode(BaseNode):
                 task = tasks[task_id]
                 task.status = TaskStatus.FAILED
                 task.error = str(result)
-                task.updated_at = datetime.utcnow()
+                task.updated_at = utcnow()
 
                 processed_results.append(
                     {

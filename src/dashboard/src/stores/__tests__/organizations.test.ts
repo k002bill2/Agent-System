@@ -1,12 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-vi.mock('../auth', () => ({
-  authFetch: vi.fn(),
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
 }))
 
 import { useOrganizationsStore } from '../organizations'
-import { authFetch } from '../auth'
+import { apiClient } from '../../services/apiClient'
+
+const mockApiClient = vi.mocked(apiClient)
 
 function resetStore() {
   useOrganizationsStore.setState({
@@ -63,24 +71,10 @@ const mockMember = (id: string, userId: string, orgId: string, role: string) => 
   created_at: '2024-01-01T00:00:00Z',
 })
 
-function mockOkResponse(data: any): Response {
-  return {
-    ok: true,
-    json: () => Promise.resolve(data),
-  } as Response
-}
-
-function mockErrorResponse(detail: any): Response {
-  return {
-    ok: false,
-    json: () => Promise.resolve({ detail }),
-  } as any
-}
-
 describe('organizations store', () => {
   beforeEach(() => {
     resetStore()
-    vi.mocked(authFetch).mockReset()
+    vi.clearAllMocks()
   })
 
   // ── Initial State ──────────────────────────────────────
@@ -187,7 +181,7 @@ describe('organizations store', () => {
   describe('fetchOrganizations', () => {
     it('sets isLoading true during fetch', async () => {
       let resolvePromise: (v: any) => void
-      vi.mocked(authFetch).mockReturnValueOnce(
+      mockApiClient.get.mockReturnValueOnce(
         new Promise((resolve) => {
           resolvePromise = resolve
         })
@@ -197,7 +191,7 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().isLoading).toBe(true)
       expect(useOrganizationsStore.getState().error).toBeNull()
 
-      resolvePromise!({ ok: true, json: () => Promise.resolve([]) })
+      resolvePromise!([])
       await fetchPromise
 
       expect(useOrganizationsStore.getState().isLoading).toBe(false)
@@ -205,7 +199,7 @@ describe('organizations store', () => {
 
     it('fetches and stores organizations', async () => {
       const orgs = [mockOrg('org-1', 'Org 1'), mockOrg('org-2', 'Org 2')]
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse(orgs))
+      mockApiClient.get.mockResolvedValueOnce(orgs)
 
       await useOrganizationsStore.getState().fetchOrganizations()
 
@@ -214,17 +208,8 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().error).toBeNull()
     })
 
-    it('sets error on non-ok response', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce({ ok: false } as Response)
-
-      await useOrganizationsStore.getState().fetchOrganizations()
-
-      expect(useOrganizationsStore.getState().error).toBe('Failed to fetch organizations')
-      expect(useOrganizationsStore.getState().isLoading).toBe(false)
-    })
-
-    it('handles network exception with Error object', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce(new Error('Network error'))
+    it('handles exception with Error object', async () => {
+      mockApiClient.get.mockRejectedValueOnce(new Error('Network error'))
 
       await useOrganizationsStore.getState().fetchOrganizations()
 
@@ -232,8 +217,8 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().isLoading).toBe(false)
     })
 
-    it('handles network exception with non-Error value', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce('some string error')
+    it('handles exception with non-Error value', async () => {
+      mockApiClient.get.mockRejectedValueOnce('some string error')
 
       await useOrganizationsStore.getState().fetchOrganizations()
 
@@ -243,7 +228,7 @@ describe('organizations store', () => {
 
     it('clears previous error on new fetch', async () => {
       useOrganizationsStore.setState({ error: 'old error' })
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse([]))
+      mockApiClient.get.mockResolvedValueOnce([])
 
       await useOrganizationsStore.getState().fetchOrganizations()
 
@@ -256,7 +241,7 @@ describe('organizations store', () => {
   describe('fetchOrganization', () => {
     it('fetches and sets currentOrganization', async () => {
       const org = mockOrg('org-1', 'Test Org')
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse(org))
+      mockApiClient.get.mockResolvedValueOnce(org)
 
       await useOrganizationsStore.getState().fetchOrganization('org-1')
 
@@ -266,7 +251,7 @@ describe('organizations store', () => {
 
     it('sets isLoading true during fetch', async () => {
       let resolvePromise: (v: any) => void
-      vi.mocked(authFetch).mockReturnValueOnce(
+      mockApiClient.get.mockReturnValueOnce(
         new Promise((resolve) => {
           resolvePromise = resolve
         })
@@ -275,21 +260,12 @@ describe('organizations store', () => {
       const fetchPromise = useOrganizationsStore.getState().fetchOrganization('org-1')
       expect(useOrganizationsStore.getState().isLoading).toBe(true)
 
-      resolvePromise!({ ok: true, json: () => Promise.resolve(mockOrg('org-1', 'Test')) })
+      resolvePromise!(mockOrg('org-1', 'Test'))
       await fetchPromise
     })
 
-    it('sets error on non-ok response', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce({ ok: false } as Response)
-
-      await useOrganizationsStore.getState().fetchOrganization('org-1')
-
-      expect(useOrganizationsStore.getState().error).toBe('Failed to fetch organization')
-      expect(useOrganizationsStore.getState().isLoading).toBe(false)
-    })
-
-    it('handles network exception with Error object', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce(new Error('Connection refused'))
+    it('handles exception with Error object', async () => {
+      mockApiClient.get.mockRejectedValueOnce(new Error('Connection refused'))
 
       await useOrganizationsStore.getState().fetchOrganization('org-1')
 
@@ -297,8 +273,8 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().isLoading).toBe(false)
     })
 
-    it('handles network exception with non-Error value', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce(42)
+    it('handles exception with non-Error value', async () => {
+      mockApiClient.get.mockRejectedValueOnce(42)
 
       await useOrganizationsStore.getState().fetchOrganization('org-1')
 
@@ -318,7 +294,7 @@ describe('organizations store', () => {
     it('creates org, adds to list, sets current, closes modal', async () => {
       useOrganizationsStore.setState({ modalMode: 'create' })
       const newOrg = mockOrg('org-new', 'New Org')
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse(newOrg))
+      mockApiClient.post.mockResolvedValueOnce(newOrg)
 
       const result = await useOrganizationsStore.getState().createOrganization(createPayload)
 
@@ -333,63 +309,15 @@ describe('organizations store', () => {
       const existing = mockOrg('org-existing', 'Existing')
       useOrganizationsStore.setState({ organizations: [existing] })
       const newOrg = mockOrg('org-new', 'New')
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse(newOrg))
+      mockApiClient.post.mockResolvedValueOnce(newOrg)
 
       await useOrganizationsStore.getState().createOrganization(createPayload)
 
       expect(useOrganizationsStore.getState().organizations).toHaveLength(2)
     })
 
-    it('handles string error detail', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockErrorResponse('Slug already exists'))
-
-      const result = await useOrganizationsStore.getState().createOrganization(createPayload)
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toBe('Slug already exists')
-      expect(useOrganizationsStore.getState().isLoading).toBe(false)
-    })
-
-    it('handles array error detail with msg fields', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(
-        mockErrorResponse([
-          { loc: ['body', 'name'], msg: 'field required' },
-          { loc: ['body', 'slug'], msg: 'invalid slug' },
-        ])
-      )
-
-      const result = await useOrganizationsStore.getState().createOrganization(createPayload)
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toContain('field required')
-      expect(useOrganizationsStore.getState().error).toContain('invalid slug')
-    })
-
-    it('handles array error detail without msg (falls back to JSON.stringify)', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(
-        mockErrorResponse([{ loc: ['body', 'name'], type: 'missing' }])
-      )
-
-      const result = await useOrganizationsStore.getState().createOrganization(createPayload)
-
-      expect(result).toBe(false)
-      // When msg is undefined, JSON.stringify is used
-      expect(useOrganizationsStore.getState().error).toContain('missing')
-    })
-
-    it('handles non-array non-string error detail (default message)', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(
-        mockErrorResponse({ unexpected: 'format' })
-      )
-
-      const result = await useOrganizationsStore.getState().createOrganization(createPayload)
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toBe('Failed to create organization')
-    })
-
-    it('handles network exception with Error object', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce(new Error('Network failure'))
+    it('handles exception with Error object', async () => {
+      mockApiClient.post.mockRejectedValueOnce(new Error('Network failure'))
 
       const result = await useOrganizationsStore.getState().createOrganization(createPayload)
 
@@ -397,8 +325,8 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().error).toBe('Network failure')
     })
 
-    it('handles network exception with non-Error value', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce(undefined)
+    it('handles exception with non-Error value', async () => {
+      mockApiClient.post.mockRejectedValueOnce(undefined)
 
       const result = await useOrganizationsStore.getState().createOrganization(createPayload)
 
@@ -408,7 +336,7 @@ describe('organizations store', () => {
 
     it('sets isLoading true during creation', async () => {
       let resolvePromise: (v: any) => void
-      vi.mocked(authFetch).mockReturnValueOnce(
+      mockApiClient.post.mockReturnValueOnce(
         new Promise((resolve) => {
           resolvePromise = resolve
         })
@@ -417,22 +345,18 @@ describe('organizations store', () => {
       const promise = useOrganizationsStore.getState().createOrganization(createPayload)
       expect(useOrganizationsStore.getState().isLoading).toBe(true)
 
-      resolvePromise!(mockOkResponse(mockOrg('org-1', 'Test')))
+      resolvePromise!(mockOrg('org-1', 'Test'))
       await promise
     })
 
-    it('sends correct request body', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse(mockOrg('org-1', 'Test')))
+    it('calls apiClient.post with correct args', async () => {
+      mockApiClient.post.mockResolvedValueOnce(mockOrg('org-1', 'Test'))
 
       await useOrganizationsStore.getState().createOrganization(createPayload)
 
-      expect(vi.mocked(authFetch)).toHaveBeenCalledWith(
-        expect.stringContaining('/api/organizations'),
-        expect.objectContaining({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(createPayload),
-        })
+      expect(mockApiClient.post).toHaveBeenCalledWith(
+        '/api/organizations',
+        createPayload
       )
     })
   })
@@ -447,7 +371,7 @@ describe('organizations store', () => {
         modalMode: 'edit',
       })
       const updated = { ...mockOrg('org-1', 'Updated'), name: 'Updated' }
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse(updated))
+      mockApiClient.patch.mockResolvedValueOnce(updated)
 
       const result = await useOrganizationsStore.getState().updateOrganization('org-1', { name: 'Updated' })
 
@@ -466,7 +390,7 @@ describe('organizations store', () => {
         currentOrganization: currentOrg,
       })
       const updated = { ...mockOrg('org-1', 'Updated') }
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse(updated))
+      mockApiClient.patch.mockResolvedValueOnce(updated)
 
       await useOrganizationsStore.getState().updateOrganization('org-1', { name: 'Updated' })
 
@@ -479,7 +403,7 @@ describe('organizations store', () => {
         currentOrganization: null,
       })
       const updated = mockOrg('org-1', 'Updated')
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse(updated))
+      mockApiClient.patch.mockResolvedValueOnce(updated)
 
       const result = await useOrganizationsStore.getState().updateOrganization('org-1', { name: 'Updated' })
 
@@ -487,48 +411,8 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().currentOrganization).toBeNull()
     })
 
-    it('handles string error detail', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockErrorResponse('Name too long'))
-
-      const result = await useOrganizationsStore.getState().updateOrganization('org-1', { name: 'x'.repeat(500) })
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toBe('Name too long')
-    })
-
-    it('handles array error detail', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(
-        mockErrorResponse([{ loc: ['body', 'name'], msg: 'too long' }])
-      )
-
-      const result = await useOrganizationsStore.getState().updateOrganization('org-1', { name: 'x' })
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toContain('too long')
-    })
-
-    it('handles array error detail without msg field', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(
-        mockErrorResponse([{ loc: ['body', 'name'], type: 'value_error' }])
-      )
-
-      const result = await useOrganizationsStore.getState().updateOrganization('org-1', { name: 'x' })
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toContain('value_error')
-    })
-
-    it('handles non-array non-string error detail', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockErrorResponse(123))
-
-      const result = await useOrganizationsStore.getState().updateOrganization('org-1', { name: 'x' })
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toBe('Failed to update organization')
-    })
-
-    it('handles network exception with Error object', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce(new Error('Timeout'))
+    it('handles exception with Error object', async () => {
+      mockApiClient.patch.mockRejectedValueOnce(new Error('Timeout'))
 
       const result = await useOrganizationsStore.getState().updateOrganization('org-1', { name: 'x' })
 
@@ -536,8 +420,8 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().error).toBe('Timeout')
     })
 
-    it('handles network exception with non-Error value', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce(null)
+    it('handles exception with non-Error value', async () => {
+      mockApiClient.patch.mockRejectedValueOnce(null)
 
       const result = await useOrganizationsStore.getState().updateOrganization('org-1', { name: 'x' })
 
@@ -545,18 +429,14 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().error).toBe('Failed to update organization')
     })
 
-    it('sends correct PATCH request', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse(mockOrg('org-1', 'Updated')))
+    it('calls apiClient.patch with correct args', async () => {
+      mockApiClient.patch.mockResolvedValueOnce(mockOrg('org-1', 'Updated'))
 
       await useOrganizationsStore.getState().updateOrganization('org-1', { name: 'Updated', description: 'New desc' })
 
-      expect(vi.mocked(authFetch)).toHaveBeenCalledWith(
-        expect.stringContaining('/api/organizations/org-1'),
-        expect.objectContaining({
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: 'Updated', description: 'New desc' }),
-        })
+      expect(mockApiClient.patch).toHaveBeenCalledWith(
+        '/api/organizations/org-1',
+        { name: 'Updated', description: 'New desc' }
       )
     })
   })
@@ -569,7 +449,7 @@ describe('organizations store', () => {
         organizations: [mockOrg('org-1', 'First'), mockOrg('org-2', 'Second')],
         currentOrganization: mockOrg('org-1', 'First'),
       })
-      vi.mocked(authFetch).mockResolvedValueOnce({ ok: true } as Response)
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
 
       const result = await useOrganizationsStore.getState().deleteOrganization('org-1')
 
@@ -586,7 +466,7 @@ describe('organizations store', () => {
         organizations: [mockOrg('org-1', 'First'), currentOrg],
         currentOrganization: currentOrg,
       })
-      vi.mocked(authFetch).mockResolvedValueOnce({ ok: true } as Response)
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
 
       const result = await useOrganizationsStore.getState().deleteOrganization('org-1')
 
@@ -594,48 +474,8 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().currentOrganization).toEqual(currentOrg)
     })
 
-    it('handles string error detail', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockErrorResponse('Cannot delete active org'))
-
-      const result = await useOrganizationsStore.getState().deleteOrganization('org-1')
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toBe('Cannot delete active org')
-    })
-
-    it('handles array error detail with msg', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(
-        mockErrorResponse([{ msg: 'has active members' }])
-      )
-
-      const result = await useOrganizationsStore.getState().deleteOrganization('org-1')
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toContain('has active members')
-    })
-
-    it('handles array error detail without msg', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(
-        mockErrorResponse([{ type: 'constraint_violation' }])
-      )
-
-      const result = await useOrganizationsStore.getState().deleteOrganization('org-1')
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toContain('constraint_violation')
-    })
-
-    it('handles non-array non-string error detail', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockErrorResponse({ code: 403 }))
-
-      const result = await useOrganizationsStore.getState().deleteOrganization('org-1')
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toBe('Failed to delete organization')
-    })
-
-    it('handles network exception with Error object', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce(new Error('Server down'))
+    it('handles exception with Error object', async () => {
+      mockApiClient.delete.mockRejectedValueOnce(new Error('Server down'))
 
       const result = await useOrganizationsStore.getState().deleteOrganization('org-1')
 
@@ -643,8 +483,8 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().error).toBe('Server down')
     })
 
-    it('handles network exception with non-Error value', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce('unknown')
+    it('handles exception with non-Error value', async () => {
+      mockApiClient.delete.mockRejectedValueOnce('unknown')
 
       const result = await useOrganizationsStore.getState().deleteOrganization('org-1')
 
@@ -652,15 +492,12 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().error).toBe('Failed to delete organization')
     })
 
-    it('sends correct DELETE request', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce({ ok: true } as Response)
+    it('calls apiClient.delete with correct URL', async () => {
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
 
       await useOrganizationsStore.getState().deleteOrganization('org-1')
 
-      expect(vi.mocked(authFetch)).toHaveBeenCalledWith(
-        expect.stringContaining('/api/organizations/org-1'),
-        expect.objectContaining({ method: 'DELETE' })
-      )
+      expect(mockApiClient.delete).toHaveBeenCalledWith('/api/organizations/org-1')
     })
   })
 
@@ -669,7 +506,7 @@ describe('organizations store', () => {
   describe('fetchMembers', () => {
     it('fetches and stores members', async () => {
       const members = [mockMember('m-1', 'u-1', 'org-1', 'owner')]
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse(members))
+      mockApiClient.get.mockResolvedValueOnce(members)
 
       await useOrganizationsStore.getState().fetchMembers('org-1')
 
@@ -677,25 +514,16 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().isLoading).toBe(false)
     })
 
-    it('sets error on non-ok response', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce({ ok: false } as Response)
-
-      await useOrganizationsStore.getState().fetchMembers('org-1')
-
-      expect(useOrganizationsStore.getState().error).toBe('Failed to fetch members')
-      expect(useOrganizationsStore.getState().isLoading).toBe(false)
-    })
-
-    it('handles network exception with Error object', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce(new Error('Connection lost'))
+    it('handles exception with Error object', async () => {
+      mockApiClient.get.mockRejectedValueOnce(new Error('Connection lost'))
 
       await useOrganizationsStore.getState().fetchMembers('org-1')
 
       expect(useOrganizationsStore.getState().error).toBe('Connection lost')
     })
 
-    it('handles network exception with non-Error value', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce(0)
+    it('handles exception with non-Error value', async () => {
+      mockApiClient.get.mockRejectedValueOnce(0)
 
       await useOrganizationsStore.getState().fetchMembers('org-1')
 
@@ -704,7 +532,7 @@ describe('organizations store', () => {
 
     it('sets isLoading true during fetch', async () => {
       let resolvePromise: (v: any) => void
-      vi.mocked(authFetch).mockReturnValueOnce(
+      mockApiClient.get.mockReturnValueOnce(
         new Promise((resolve) => {
           resolvePromise = resolve
         })
@@ -713,7 +541,7 @@ describe('organizations store', () => {
       const promise = useOrganizationsStore.getState().fetchMembers('org-1')
       expect(useOrganizationsStore.getState().isLoading).toBe(true)
 
-      resolvePromise!(mockOkResponse([]))
+      resolvePromise!([])
       await promise
     })
   })
@@ -722,11 +550,10 @@ describe('organizations store', () => {
     const invitePayload = { email: 'newuser@test.com', role: 'member' as const }
 
     it('invites member, refreshes members list, closes modal', async () => {
-      // First call: invite succeeds
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse({ id: 'm-new' }))
-      // Second call: fetchMembers refresh
+      // First call: post (invite). Second call: get (fetchMembers refresh)
+      mockApiClient.post.mockResolvedValueOnce({ id: 'm-new' })
       const members = [mockMember('m-1', 'u-1', 'org-1', 'owner')]
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse(members))
+      mockApiClient.get.mockResolvedValueOnce(members)
 
       const result = await useOrganizationsStore.getState().inviteMember('org-1', invitePayload, 'u-owner')
 
@@ -736,67 +563,27 @@ describe('organizations store', () => {
     })
 
     it('includes invitedBy as query parameter when provided', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse({}))
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse([]))
+      mockApiClient.post.mockResolvedValueOnce({})
+      mockApiClient.get.mockResolvedValueOnce([])
 
       await useOrganizationsStore.getState().inviteMember('org-1', invitePayload, 'user-123')
 
-      const firstCallUrl = vi.mocked(authFetch).mock.calls[0][0]
+      const firstCallUrl = mockApiClient.post.mock.calls[0][0]
       expect(firstCallUrl).toContain('invited_by=user-123')
     })
 
     it('does not include invitedBy when not provided', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse({}))
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse([]))
+      mockApiClient.post.mockResolvedValueOnce({})
+      mockApiClient.get.mockResolvedValueOnce([])
 
       await useOrganizationsStore.getState().inviteMember('org-1', invitePayload)
 
-      const firstCallUrl = vi.mocked(authFetch).mock.calls[0][0]
+      const firstCallUrl = mockApiClient.post.mock.calls[0][0]
       expect(firstCallUrl).not.toContain('invited_by')
     })
 
-    it('handles string error detail', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockErrorResponse('User already a member'))
-
-      const result = await useOrganizationsStore.getState().inviteMember('org-1', invitePayload)
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toBe('User already a member')
-    })
-
-    it('handles array error detail', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(
-        mockErrorResponse([{ msg: 'invalid email format' }])
-      )
-
-      const result = await useOrganizationsStore.getState().inviteMember('org-1', invitePayload)
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toContain('invalid email format')
-    })
-
-    it('handles array error detail without msg field', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(
-        mockErrorResponse([{ type: 'email_invalid' }])
-      )
-
-      const result = await useOrganizationsStore.getState().inviteMember('org-1', invitePayload)
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toContain('email_invalid')
-    })
-
-    it('handles non-array non-string error detail', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockErrorResponse(false))
-
-      const result = await useOrganizationsStore.getState().inviteMember('org-1', invitePayload)
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toBe('Failed to invite member')
-    })
-
-    it('handles network exception with Error', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce(new Error('CORS error'))
+    it('handles exception with Error', async () => {
+      mockApiClient.post.mockRejectedValueOnce(new Error('CORS error'))
 
       const result = await useOrganizationsStore.getState().inviteMember('org-1', invitePayload)
 
@@ -804,8 +591,8 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().error).toBe('CORS error')
     })
 
-    it('handles network exception with non-Error', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce({ code: 500 })
+    it('handles exception with non-Error', async () => {
+      mockApiClient.post.mockRejectedValueOnce({ code: 500 })
 
       const result = await useOrganizationsStore.getState().inviteMember('org-1', invitePayload)
 
@@ -813,19 +600,15 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().error).toBe('Failed to invite member')
     })
 
-    it('sends correct POST request', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse({}))
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse([]))
+    it('calls apiClient.post with correct args', async () => {
+      mockApiClient.post.mockResolvedValueOnce({})
+      mockApiClient.get.mockResolvedValueOnce([])
 
       await useOrganizationsStore.getState().inviteMember('org-1', invitePayload, 'u-owner')
 
-      expect(vi.mocked(authFetch)).toHaveBeenCalledWith(
+      expect(mockApiClient.post).toHaveBeenCalledWith(
         expect.stringContaining('/api/organizations/org-1/members/invite'),
-        expect.objectContaining({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(invitePayload),
-        })
+        invitePayload
       )
     })
   })
@@ -836,7 +619,7 @@ describe('organizations store', () => {
         members: [mockMember('m-1', 'u-1', 'org-1', 'member') as any],
       })
       const updated = { ...mockMember('m-1', 'u-1', 'org-1', 'admin') }
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse(updated))
+      mockApiClient.patch.mockResolvedValueOnce(updated)
 
       const result = await useOrganizationsStore.getState().updateMemberRole('org-1', 'm-1', 'admin')
 
@@ -853,55 +636,15 @@ describe('organizations store', () => {
         ],
       })
       const updated = { ...mockMember('m-1', 'u-1', 'org-1', 'admin') }
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse(updated))
+      mockApiClient.patch.mockResolvedValueOnce(updated)
 
       await useOrganizationsStore.getState().updateMemberRole('org-1', 'm-1', 'admin')
 
       expect(useOrganizationsStore.getState().members[1].role).toBe('viewer')
     })
 
-    it('handles string error detail', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockErrorResponse('Cannot change owner role'))
-
-      const result = await useOrganizationsStore.getState().updateMemberRole('org-1', 'm-1', 'admin')
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toBe('Cannot change owner role')
-    })
-
-    it('handles array error detail', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(
-        mockErrorResponse([{ msg: 'invalid role' }])
-      )
-
-      const result = await useOrganizationsStore.getState().updateMemberRole('org-1', 'm-1', 'admin')
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toContain('invalid role')
-    })
-
-    it('handles array error detail without msg', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(
-        mockErrorResponse([{ type: 'permission_denied' }])
-      )
-
-      const result = await useOrganizationsStore.getState().updateMemberRole('org-1', 'm-1', 'admin')
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toContain('permission_denied')
-    })
-
-    it('handles non-array non-string error detail', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockErrorResponse(null))
-
-      const result = await useOrganizationsStore.getState().updateMemberRole('org-1', 'm-1', 'admin')
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toBe('Failed to update member role')
-    })
-
-    it('handles network exception with Error', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce(new Error('Server error'))
+    it('handles exception with Error', async () => {
+      mockApiClient.patch.mockRejectedValueOnce(new Error('Server error'))
 
       const result = await useOrganizationsStore.getState().updateMemberRole('org-1', 'm-1', 'admin')
 
@@ -909,8 +652,8 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().error).toBe('Server error')
     })
 
-    it('handles network exception with non-Error', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce(false)
+    it('handles exception with non-Error', async () => {
+      mockApiClient.patch.mockRejectedValueOnce(false)
 
       const result = await useOrganizationsStore.getState().updateMemberRole('org-1', 'm-1', 'admin')
 
@@ -918,18 +661,14 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().error).toBe('Failed to update member role')
     })
 
-    it('sends correct PATCH request', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse(mockMember('m-1', 'u-1', 'org-1', 'admin')))
+    it('calls apiClient.patch with correct args', async () => {
+      mockApiClient.patch.mockResolvedValueOnce(mockMember('m-1', 'u-1', 'org-1', 'admin'))
 
       await useOrganizationsStore.getState().updateMemberRole('org-1', 'm-1', 'admin')
 
-      expect(vi.mocked(authFetch)).toHaveBeenCalledWith(
-        expect.stringContaining('/api/organizations/org-1/members/m-1/role'),
-        expect.objectContaining({
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role: 'admin' }),
-        })
+      expect(mockApiClient.patch).toHaveBeenCalledWith(
+        '/api/organizations/org-1/members/m-1/role',
+        { role: 'admin' }
       )
     })
   })
@@ -942,7 +681,7 @@ describe('organizations store', () => {
           mockMember('m-2', 'u-2', 'org-1', 'viewer') as any,
         ],
       })
-      vi.mocked(authFetch).mockResolvedValueOnce({ ok: true } as Response)
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
 
       const result = await useOrganizationsStore.getState().removeMember('org-1', 'm-1')
 
@@ -952,48 +691,8 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().isLoading).toBe(false)
     })
 
-    it('handles string error detail', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockErrorResponse('Cannot remove owner'))
-
-      const result = await useOrganizationsStore.getState().removeMember('org-1', 'm-1')
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toBe('Cannot remove owner')
-    })
-
-    it('handles array error detail', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(
-        mockErrorResponse([{ msg: 'last admin cannot be removed' }])
-      )
-
-      const result = await useOrganizationsStore.getState().removeMember('org-1', 'm-1')
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toContain('last admin cannot be removed')
-    })
-
-    it('handles array error detail without msg', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(
-        mockErrorResponse([{ code: 'LAST_OWNER' }])
-      )
-
-      const result = await useOrganizationsStore.getState().removeMember('org-1', 'm-1')
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toContain('LAST_OWNER')
-    })
-
-    it('handles non-array non-string error detail', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockErrorResponse(true))
-
-      const result = await useOrganizationsStore.getState().removeMember('org-1', 'm-1')
-
-      expect(result).toBe(false)
-      expect(useOrganizationsStore.getState().error).toBe('Failed to remove member')
-    })
-
-    it('handles network exception with Error', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce(new Error('Request aborted'))
+    it('handles exception with Error', async () => {
+      mockApiClient.delete.mockRejectedValueOnce(new Error('Request aborted'))
 
       const result = await useOrganizationsStore.getState().removeMember('org-1', 'm-1')
 
@@ -1001,8 +700,8 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().error).toBe('Request aborted')
     })
 
-    it('handles network exception with non-Error', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce('string error')
+    it('handles exception with non-Error', async () => {
+      mockApiClient.delete.mockRejectedValueOnce('string error')
 
       const result = await useOrganizationsStore.getState().removeMember('org-1', 'm-1')
 
@@ -1010,14 +709,13 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().error).toBe('Failed to remove member')
     })
 
-    it('sends correct DELETE request', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce({ ok: true } as Response)
+    it('calls apiClient.delete with correct URL', async () => {
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
 
       await useOrganizationsStore.getState().removeMember('org-1', 'm-1')
 
-      expect(vi.mocked(authFetch)).toHaveBeenCalledWith(
-        expect.stringContaining('/api/organizations/org-1/members/m-1'),
-        expect.objectContaining({ method: 'DELETE' })
+      expect(mockApiClient.delete).toHaveBeenCalledWith(
+        '/api/organizations/org-1/members/m-1'
       )
     })
   })
@@ -1030,28 +728,16 @@ describe('organizations store', () => {
         mockMember('m-1', 'u-1', 'org-1', 'admin'),
         mockMember('m-2', 'u-1', 'org-2', 'member'),
       ]
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse(memberships))
+      mockApiClient.get.mockResolvedValueOnce(memberships)
 
       await useOrganizationsStore.getState().fetchUserMemberships('u-1')
 
       expect(useOrganizationsStore.getState().userMemberships).toEqual(memberships)
     })
 
-    it('handles non-ok response silently (console.error)', async () => {
+    it('handles exception silently (console.error)', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      vi.mocked(authFetch).mockResolvedValueOnce({ ok: false } as Response)
-
-      await useOrganizationsStore.getState().fetchUserMemberships('u-1')
-
-      expect(consoleSpy).toHaveBeenCalled()
-      // userMemberships should remain unchanged (empty)
-      expect(useOrganizationsStore.getState().userMemberships).toEqual([])
-      consoleSpy.mockRestore()
-    })
-
-    it('handles network exception silently (console.error)', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      vi.mocked(authFetch).mockRejectedValueOnce(new Error('Network error'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Network error'))
 
       await useOrganizationsStore.getState().fetchUserMemberships('u-1')
 
@@ -1063,12 +749,12 @@ describe('organizations store', () => {
     })
 
     it('calls correct API endpoint', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse([]))
+      mockApiClient.get.mockResolvedValueOnce([])
 
       await useOrganizationsStore.getState().fetchUserMemberships('user-abc')
 
-      expect(vi.mocked(authFetch)).toHaveBeenCalledWith(
-        expect.stringContaining('/api/organizations/user/user-abc/organizations')
+      expect(mockApiClient.get).toHaveBeenCalledWith(
+        '/api/organizations/user/user-abc/organizations'
       )
     })
   })
@@ -1153,27 +839,16 @@ describe('organizations store', () => {
   describe('fetchStats', () => {
     it('fetches and stores stats', async () => {
       const stats = { organization_id: 'org-1', total_members: 10, active_members: 8 }
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse(stats))
+      mockApiClient.get.mockResolvedValueOnce(stats)
 
       await useOrganizationsStore.getState().fetchStats('org-1')
 
       expect(useOrganizationsStore.getState().stats).toEqual(stats)
     })
 
-    it('handles non-ok response silently', async () => {
+    it('handles exception silently', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      vi.mocked(authFetch).mockResolvedValueOnce({ ok: false } as Response)
-
-      await useOrganizationsStore.getState().fetchStats('org-1')
-
-      expect(consoleSpy).toHaveBeenCalled()
-      expect(useOrganizationsStore.getState().stats).toBeNull()
-      consoleSpy.mockRestore()
-    })
-
-    it('handles network exception silently', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      vi.mocked(authFetch).mockRejectedValueOnce(new Error('Timeout'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Timeout'))
 
       await useOrganizationsStore.getState().fetchStats('org-1')
 
@@ -1185,12 +860,12 @@ describe('organizations store', () => {
     })
 
     it('calls correct API endpoint', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse({}))
+      mockApiClient.get.mockResolvedValueOnce({})
 
       await useOrganizationsStore.getState().fetchStats('org-abc')
 
-      expect(vi.mocked(authFetch)).toHaveBeenCalledWith(
-        expect.stringContaining('/api/organizations/org-abc/stats')
+      expect(mockApiClient.get).toHaveBeenCalledWith(
+        '/api/organizations/org-abc/stats'
       )
     })
   })
@@ -1202,27 +877,16 @@ describe('organizations store', () => {
         plan: 'professional',
         members: { allowed: true, current: 5, limit: 50, message: 'OK' },
       }
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse(quota))
+      mockApiClient.get.mockResolvedValueOnce(quota)
 
       await useOrganizationsStore.getState().fetchQuotaStatus('org-1')
 
       expect(useOrganizationsStore.getState().quotaStatus).toEqual(quota)
     })
 
-    it('handles non-ok response silently', async () => {
+    it('handles exception silently', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      vi.mocked(authFetch).mockResolvedValueOnce({ ok: false } as Response)
-
-      await useOrganizationsStore.getState().fetchQuotaStatus('org-1')
-
-      expect(consoleSpy).toHaveBeenCalled()
-      expect(useOrganizationsStore.getState().quotaStatus).toBeNull()
-      consoleSpy.mockRestore()
-    })
-
-    it('handles network exception silently', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      vi.mocked(authFetch).mockRejectedValueOnce(new Error('Fetch failed'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Fetch failed'))
 
       await useOrganizationsStore.getState().fetchQuotaStatus('org-1')
 
@@ -1234,12 +898,12 @@ describe('organizations store', () => {
     })
 
     it('calls correct API endpoint', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse({}))
+      mockApiClient.get.mockResolvedValueOnce({})
 
       await useOrganizationsStore.getState().fetchQuotaStatus('org-xyz')
 
-      expect(vi.mocked(authFetch)).toHaveBeenCalledWith(
-        expect.stringContaining('/api/organizations/org-xyz/quota')
+      expect(mockApiClient.get).toHaveBeenCalledWith(
+        '/api/organizations/org-xyz/quota'
       )
     })
   })
@@ -1247,7 +911,7 @@ describe('organizations store', () => {
   describe('fetchMemberUsage', () => {
     it('fetches and stores member usage', async () => {
       const usage = { organization_id: 'org-1', period: 'month', total_tokens: 5000, members: [] }
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse(usage))
+      mockApiClient.get.mockResolvedValueOnce(usage)
 
       await useOrganizationsStore.getState().fetchMemberUsage('org-1', 'month')
 
@@ -1255,39 +919,28 @@ describe('organizations store', () => {
     })
 
     it('uses default period "month" when not specified', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse({ members: [] }))
+      mockApiClient.get.mockResolvedValueOnce({ members: [] })
 
       await useOrganizationsStore.getState().fetchMemberUsage('org-1')
 
-      expect(vi.mocked(authFetch)).toHaveBeenCalledWith(
+      expect(mockApiClient.get).toHaveBeenCalledWith(
         expect.stringContaining('period=month')
       )
     })
 
     it('uses custom period when specified', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse({ members: [] }))
+      mockApiClient.get.mockResolvedValueOnce({ members: [] })
 
       await useOrganizationsStore.getState().fetchMemberUsage('org-1', 'week')
 
-      expect(vi.mocked(authFetch)).toHaveBeenCalledWith(
+      expect(mockApiClient.get).toHaveBeenCalledWith(
         expect.stringContaining('period=week')
       )
     })
 
-    it('handles non-ok response silently', async () => {
+    it('handles exception silently', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      vi.mocked(authFetch).mockResolvedValueOnce({ ok: false } as Response)
-
-      await useOrganizationsStore.getState().fetchMemberUsage('org-1')
-
-      expect(consoleSpy).toHaveBeenCalled()
-      expect(useOrganizationsStore.getState().memberUsage).toBeNull()
-      consoleSpy.mockRestore()
-    })
-
-    it('handles network exception silently', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      vi.mocked(authFetch).mockRejectedValueOnce(new Error('Network error'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Network error'))
 
       await useOrganizationsStore.getState().fetchMemberUsage('org-1')
 
@@ -1299,12 +952,12 @@ describe('organizations store', () => {
     })
 
     it('calls correct API endpoint', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse({ members: [] }))
+      mockApiClient.get.mockResolvedValueOnce({ members: [] })
 
       await useOrganizationsStore.getState().fetchMemberUsage('org-abc', 'day')
 
-      expect(vi.mocked(authFetch)).toHaveBeenCalledWith(
-        expect.stringContaining('/api/organizations/org-abc/members/usage?period=day')
+      expect(mockApiClient.get).toHaveBeenCalledWith(
+        '/api/organizations/org-abc/members/usage?period=day'
       )
     })
   })
@@ -1312,9 +965,9 @@ describe('organizations store', () => {
   // ── acceptInvitation ───────────────────────────────────
 
   describe('acceptInvitation', () => {
-    it('returns success with member on ok response', async () => {
+    it('returns success with member on success', async () => {
       const member = { id: 'm-1', role: 'member', organization_id: 'org-1' }
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse(member))
+      mockApiClient.post.mockResolvedValueOnce(member)
 
       const result = await useOrganizationsStore.getState().acceptInvitation('token-123', 'u-1', 'Test User')
 
@@ -1326,7 +979,7 @@ describe('organizations store', () => {
 
     it('returns success without userName parameter', async () => {
       const member = { id: 'm-1', role: 'member' }
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse(member))
+      mockApiClient.post.mockResolvedValueOnce(member)
 
       const result = await useOrganizationsStore.getState().acceptInvitation('token-123', 'u-1')
 
@@ -1334,55 +987,8 @@ describe('organizations store', () => {
       expect(result.member).toEqual(member)
     })
 
-    it('returns error with string detail', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockErrorResponse('Token expired'))
-
-      const result = await useOrganizationsStore.getState().acceptInvitation('bad-token', 'u-1')
-
-      expect(result.success).toBe(false)
-      expect(result.error).toBe('Token expired')
-      expect(useOrganizationsStore.getState().error).toBe('Token expired')
-      expect(useOrganizationsStore.getState().isLoading).toBe(false)
-    })
-
-    it('returns error with array detail', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(
-        mockErrorResponse([
-          { msg: 'token is invalid' },
-          { msg: 'user not found' },
-        ])
-      )
-
-      const result = await useOrganizationsStore.getState().acceptInvitation('bad-token', 'u-1')
-
-      expect(result.success).toBe(false)
-      expect(result.error).toContain('token is invalid')
-      expect(result.error).toContain('user not found')
-      expect(useOrganizationsStore.getState().error).toContain('token is invalid')
-    })
-
-    it('returns error with array detail without msg', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(
-        mockErrorResponse([{ type: 'expired_token' }])
-      )
-
-      const result = await useOrganizationsStore.getState().acceptInvitation('bad-token', 'u-1')
-
-      expect(result.success).toBe(false)
-      expect(result.error).toContain('expired_token')
-    })
-
-    it('returns error with non-array non-string detail', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockErrorResponse({ code: 'EXPIRED' }))
-
-      const result = await useOrganizationsStore.getState().acceptInvitation('bad-token', 'u-1')
-
-      expect(result.success).toBe(false)
-      expect(result.error).toBe('Failed to accept invitation')
-    })
-
-    it('handles network exception with Error', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce(new Error('Connection refused'))
+    it('handles exception with Error', async () => {
+      mockApiClient.post.mockRejectedValueOnce(new Error('Connection refused'))
 
       const result = await useOrganizationsStore.getState().acceptInvitation('token', 'u-1')
 
@@ -1392,8 +998,8 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().isLoading).toBe(false)
     })
 
-    it('handles network exception with non-Error', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce(undefined)
+    it('handles exception with non-Error', async () => {
+      mockApiClient.post.mockRejectedValueOnce(undefined)
 
       const result = await useOrganizationsStore.getState().acceptInvitation('token', 'u-1')
 
@@ -1404,7 +1010,7 @@ describe('organizations store', () => {
 
     it('sets isLoading true during request', async () => {
       let resolvePromise: (v: any) => void
-      vi.mocked(authFetch).mockReturnValueOnce(
+      mockApiClient.post.mockReturnValueOnce(
         new Promise((resolve) => {
           resolvePromise = resolve
         })
@@ -1414,35 +1020,31 @@ describe('organizations store', () => {
       expect(useOrganizationsStore.getState().isLoading).toBe(true)
       expect(useOrganizationsStore.getState().error).toBeNull()
 
-      resolvePromise!(mockOkResponse({ id: 'm-1' }))
+      resolvePromise!({ id: 'm-1' })
       await promise
     })
 
-    it('sends correct POST request with userName', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse({ id: 'm-1' }))
+    it('calls apiClient.post with correct args', async () => {
+      mockApiClient.post.mockResolvedValueOnce({ id: 'm-1' })
 
       await useOrganizationsStore.getState().acceptInvitation('token-abc', 'u-1', 'John Doe')
 
-      expect(vi.mocked(authFetch)).toHaveBeenCalledWith(
-        expect.stringContaining('/api/organizations/invitations/accept'),
-        expect.objectContaining({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            token: 'token-abc',
-            user_id: 'u-1',
-            user_name: 'John Doe',
-          }),
-        })
+      expect(mockApiClient.post).toHaveBeenCalledWith(
+        '/api/organizations/invitations/accept',
+        {
+          token: 'token-abc',
+          user_id: 'u-1',
+          user_name: 'John Doe',
+        }
       )
     })
 
-    it('sends correct POST request without userName', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce(mockOkResponse({ id: 'm-1' }))
+    it('calls apiClient.post without userName', async () => {
+      mockApiClient.post.mockResolvedValueOnce({ id: 'm-1' })
 
       await useOrganizationsStore.getState().acceptInvitation('token-abc', 'u-1')
 
-      const callBody = JSON.parse(vi.mocked(authFetch).mock.calls[0][1]?.body as string)
+      const callBody = mockApiClient.post.mock.calls[0][1] as any
       expect(callBody).toEqual({
         token: 'token-abc',
         user_id: 'u-1',

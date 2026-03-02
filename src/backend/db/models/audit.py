@@ -11,6 +11,7 @@ from db.models.base import (
     String,
     Text,
     datetime,
+    timezone,
 )
 
 
@@ -68,7 +69,7 @@ class AuditLogModel(Base):
     expires_at = Column(DateTime, nullable=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     __table_args__ = (
         Index("ix_audit_session_action", "session_id", "action"),

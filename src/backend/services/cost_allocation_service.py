@@ -4,6 +4,8 @@ import os
 import uuid
 from datetime import datetime, timedelta
 
+from utils.time import utcnow
+
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -121,7 +123,7 @@ class CostAllocationService:
             if hasattr(cc, key):
                 setattr(cc, key, value)
 
-        cc.updated_at = datetime.utcnow()
+        cc.updated_at = utcnow()
         return cc
 
     def delete_cost_center(self, cost_center_id: str) -> bool:
@@ -131,7 +133,7 @@ class CostAllocationService:
             return False
 
         cc.is_active = False
-        cc.updated_at = datetime.utcnow()
+        cc.updated_at = utcnow()
         return True
 
     # ─────────────────────────────────────────────────────────────
@@ -217,7 +219,7 @@ class CostAllocationService:
         """Generate a cost report for the specified period."""
         # Default to current month
         if not end_date:
-            end_date = datetime.utcnow()
+            end_date = utcnow()
         if not start_date:
             if period == "monthly":
                 start_date = end_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -303,7 +305,7 @@ class CostAllocationService:
     ) -> CostForecast:
         """Generate cost forecast based on historical data."""
         # Get last 30 days of data
-        end_date = datetime.utcnow()
+        end_date = utcnow()
         start_date = end_date - timedelta(days=30)
 
         allocations = self.get_allocations(
@@ -424,7 +426,7 @@ class CostAllocationService:
             return None
 
         # Get current period spend
-        now = datetime.utcnow()
+        now = utcnow()
         if cc.budget_period == "monthly":
             start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         elif cc.budget_period == "quarterly":
@@ -724,7 +726,7 @@ class CostAllocationService:
         """Generate a cost report for the specified period from database."""
         # Default to current month
         if not end_date:
-            end_date = datetime.utcnow()
+            end_date = utcnow()
         if not start_date:
             if period == "monthly":
                 start_date = end_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)

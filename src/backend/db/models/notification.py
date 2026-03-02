@@ -13,6 +13,7 @@ from db.models.base import (
     String,
     Text,
     datetime,
+    timezone,
 )
 
 
@@ -40,8 +41,8 @@ class NotificationRuleModel(Base):
     priority = Column(String(20), default="medium")
     message_template = Column(Text, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class NotificationHistoryModel(Base):
@@ -66,7 +67,7 @@ class NotificationHistoryModel(Base):
     sent_at = Column(DateTime, nullable=True)
     delivery_status = Column(JSONB, default=dict)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (Index("ix_notification_history_sent", "sent_at"),)
 
@@ -98,5 +99,5 @@ class ChannelConfigModel(Base):
     last_sent = Column(DateTime, nullable=True)
     sent_this_hour = Column(Integer, default=0)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

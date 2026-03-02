@@ -9,6 +9,8 @@ import json
 import subprocess
 from collections.abc import Callable
 from datetime import datetime
+
+from utils.time import utcnow
 from enum import Enum
 from typing import Any
 
@@ -277,7 +279,7 @@ class MCPManager:
             self._processes[server_id] = process
             info.pid = process.pid
             info.status = MCPServerStatus.RUNNING
-            info.started_at = datetime.utcnow()
+            info.started_at = utcnow()
 
             # 도구 목록 가져오기
             await self._fetch_tools(server_id)

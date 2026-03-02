@@ -2,6 +2,8 @@
 
 import uuid
 from datetime import datetime
+
+from utils.time import utcnow
 from enum import Enum
 from typing import Any
 
@@ -95,8 +97,8 @@ class NotificationRule(BaseModel):
     message_template: str | None = None  # Custom message template
 
     # Metadata
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class NotificationMessage(BaseModel):

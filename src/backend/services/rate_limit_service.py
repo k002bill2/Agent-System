@@ -2,6 +2,8 @@
 
 import time
 from datetime import datetime, timedelta
+
+from utils.time import utcnow
 from typing import Any
 
 from models.rate_limit import (
@@ -64,7 +66,7 @@ class RateLimitService:
         # Check for custom override
         override = self._overrides.get(identifier)
         if override:
-            if override.expires_at and override.expires_at < datetime.utcnow():
+            if override.expires_at and override.expires_at < utcnow():
                 # Override expired, remove it
                 del self._overrides[identifier]
             elif override.tier:
@@ -80,7 +82,7 @@ class RateLimitService:
                 tier=tier,
                 limit=-1,
                 remaining=-1,
-                reset_at=datetime.utcnow(),
+                reset_at=utcnow(),
                 minute_limit=-1,
                 minute_remaining=-1,
                 hour_limit=-1,
@@ -88,7 +90,7 @@ class RateLimitService:
             )
 
         now = time.time()
-        now_dt = datetime.utcnow()
+        now_dt = utcnow()
 
         # Check all time windows
         minute_key = f"{self._key_prefix}{identifier}:minute"
@@ -230,7 +232,7 @@ class RateLimitService:
         """Get current rate limit status for an identifier."""
         config = RATE_LIMIT_TIERS.get(tier, RATE_LIMIT_TIERS[RateLimitTier.FREE.value])
         now = time.time()
-        now_dt = datetime.utcnow()
+        now_dt = utcnow()
 
         minute_key = f"{self._key_prefix}{identifier}:minute"
         hour_key = f"{self._key_prefix}{identifier}:hour"
@@ -292,7 +294,7 @@ class RateLimitService:
 
     def list_overrides(self) -> list[RateLimitOverride]:
         """List all active overrides."""
-        now = datetime.utcnow()
+        now = utcnow()
         # Clean up expired overrides
         expired = [k for k, v in self._overrides.items() if v.expires_at and v.expires_at < now]
         for k in expired:

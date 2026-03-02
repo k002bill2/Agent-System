@@ -1,12 +1,20 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-// Mock authFetch before importing the store
-vi.mock('../auth', () => ({
-  authFetch: vi.fn(),
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
 }))
 
 import { useMenuVisibilityStore } from '../menuVisibility'
-import { authFetch } from '../auth'
+import { apiClient } from '../../services/apiClient'
+
+const mockApiClient = vi.mocked(apiClient)
 
 function resetStore() {
   useMenuVisibilityStore.setState({
@@ -19,7 +27,7 @@ function resetStore() {
 describe('menuVisibility store', () => {
   beforeEach(() => {
     resetStore()
-    vi.mocked(authFetch).mockReset()
+    vi.clearAllMocks()
   })
 
   // ── Initial State ──────────────────────────────────────
@@ -46,10 +54,7 @@ describe('menuVisibility store', () => {
         visibility: { admin: { users: true, settings: false } },
         menu_order: ['dashboard', 'admin'],
       }
-      vi.mocked(authFetch).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(data),
-      } as Response)
+      mockApiClient.get.mockResolvedValueOnce(data)
 
       await useMenuVisibilityStore.getState().fetchVisibility()
 
@@ -64,13 +69,11 @@ describe('menuVisibility store', () => {
 
       await useMenuVisibilityStore.getState().fetchVisibility()
 
-      expect(authFetch).not.toHaveBeenCalled()
+      expect(mockApiClient.get).not.toHaveBeenCalled()
     })
 
     it('keeps defaults on fetch failure', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce({
-        ok: false,
-      } as Response)
+      mockApiClient.get.mockRejectedValueOnce(new Error('Fetch failed'))
 
       await useMenuVisibilityStore.getState().fetchVisibility()
 
@@ -80,7 +83,7 @@ describe('menuVisibility store', () => {
     })
 
     it('keeps defaults on network error', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce(new Error('Network error'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Network error'))
 
       await useMenuVisibilityStore.getState().fetchVisibility()
 
@@ -89,10 +92,7 @@ describe('menuVisibility store', () => {
     })
 
     it('handles missing menu_order in response', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ visibility: { nav: { home: true } } }),
-      } as Response)
+      mockApiClient.get.mockResolvedValueOnce({ visibility: { nav: { home: true } } })
 
       await useMenuVisibilityStore.getState().fetchVisibility()
 

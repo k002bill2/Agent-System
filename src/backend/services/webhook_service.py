@@ -4,6 +4,8 @@ import hashlib
 import hmac
 import uuid
 from datetime import datetime
+
+from utils.time import utcnow
 from fnmatch import fnmatch
 from typing import Any
 
@@ -20,7 +22,7 @@ class WebhookService:
         """Create a new webhook for a workflow."""
         webhook_id = str(uuid.uuid4())
         secret = uuid.uuid4().hex
-        now = datetime.utcnow()
+        now = utcnow()
 
         webhook = {
             "id": webhook_id,

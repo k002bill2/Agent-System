@@ -2,6 +2,8 @@
 
 import uuid
 from datetime import datetime
+
+from utils.time import utcnow
 from enum import Enum
 from typing import Any
 
@@ -62,8 +64,8 @@ class Organization(BaseModel):
     sessions_today: int = 0
     # Metadata
     settings: dict[str, Any] = {}
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class OrganizationCreate(BaseModel):
@@ -107,7 +109,7 @@ class OrganizationMember(BaseModel):
     joined_at: datetime | None = None
     last_active_at: datetime | None = None
     # Metadata
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 class InviteMemberRequest(BaseModel):
@@ -132,7 +134,7 @@ class OrganizationInvitation(BaseModel):
     expires_at: datetime
     accepted: bool = False
     accepted_at: datetime | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 class OrganizationStats(BaseModel):
@@ -171,7 +173,7 @@ class MemberUsageRecord(BaseModel):
     tokens: int = 0
     session_id: str | None = None
     model: str | None = None  # LLM model used
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=utcnow)
 
 
 class MemberUsageSummary(BaseModel):

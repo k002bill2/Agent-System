@@ -3,6 +3,8 @@
 import hashlib
 import uuid
 from datetime import datetime, timedelta
+
+from utils.time import utcnow
 from typing import Any
 
 import httpx
@@ -48,13 +50,13 @@ class AuthService:
     def create_access_token(self, user_id: str, additional_claims: dict | None = None) -> str:
         """Create a short-lived access token (15 minutes)."""
         expires_delta = timedelta(minutes=self.settings.access_token_expire_minutes)
-        expire = datetime.utcnow() + expires_delta
+        expire = utcnow() + expires_delta
 
         payload = {
             "sub": user_id,
             "type": "access",
             "exp": expire,
-            "iat": datetime.utcnow(),
+            "iat": utcnow(),
         }
 
         if additional_claims:
@@ -69,13 +71,13 @@ class AuthService:
     def create_refresh_token(self, user_id: str) -> str:
         """Create a long-lived refresh token (7 days)."""
         expires_delta = timedelta(days=self.settings.refresh_token_expire_days)
-        expire = datetime.utcnow() + expires_delta
+        expire = utcnow() + expires_delta
 
         payload = {
             "sub": user_id,
             "type": "refresh",
             "exp": expire,
-            "iat": datetime.utcnow(),
+            "iat": utcnow(),
             "jti": str(uuid.uuid4()),  # Unique token ID for revocation
         }
 
@@ -282,7 +284,7 @@ class AuthService:
 
         if user:
             # Update last login and any changed info
-            user.last_login_at = datetime.utcnow()
+            user.last_login_at = utcnow()
             if user_info.name:
                 user.name = user_info.name
             if user_info.avatar_url:
@@ -302,7 +304,7 @@ class AuthService:
             # For now, we'll just update the provider info (could also track multiple providers)
             existing_user.oauth_provider = user_info.provider
             existing_user.oauth_provider_id = user_info.id
-            existing_user.last_login_at = datetime.utcnow()
+            existing_user.last_login_at = utcnow()
             if user_info.name:
                 existing_user.name = user_info.name
             if user_info.avatar_url:
@@ -322,8 +324,8 @@ class AuthService:
             oauth_provider_id=user_info.id,
             is_active=True,
             is_admin=False,
-            created_at=datetime.utcnow(),
-            last_login_at=datetime.utcnow(),
+            created_at=utcnow(),
+            last_login_at=utcnow(),
         )
         self.db.add(new_user)
         await self.db.commit()
@@ -470,8 +472,8 @@ class AuthService:
             oauth_provider_id=f"email_{email}",
             is_active=True,
             is_admin=False,
-            created_at=datetime.utcnow(),
-            last_login_at=datetime.utcnow(),
+            created_at=utcnow(),
+            last_login_at=utcnow(),
         )
         self.db.add(new_user)
         await self.db.commit()
@@ -502,7 +504,7 @@ class AuthService:
             raise ValueError("비활성화된 계정입니다")
 
         # Update last login
-        user.last_login_at = datetime.utcnow()
+        user.last_login_at = utcnow()
         await self.db.commit()
 
         # Sync user role from organization membership

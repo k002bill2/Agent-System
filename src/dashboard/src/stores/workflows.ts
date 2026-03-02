@@ -11,7 +11,8 @@ import type {
   Template,
 } from '../types/workflow'
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api'
+import { apiClient } from '../services/apiClient'
+import { getApiUrl } from '../config/api'
 
 interface WorkflowState {
   // Data
@@ -99,9 +100,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const params = projectId ? `?project_id=${projectId}` : ''
-      const res = await fetch(`${API_BASE}/workflows${params}`)
-      if (!res.ok) throw new Error('Failed to fetch workflows')
-      const data = await res.json()
+      const data = await apiClient.get<{ workflows: Workflow[] }>(`/api/workflows${params}`)
       set({ workflows: data.workflows, isLoading: false })
     } catch (e) {
       set({ error: (e as Error).message, isLoading: false })
@@ -110,9 +109,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   fetchRuns: async (workflowId: string) => {
     try {
-      const res = await fetch(`${API_BASE}/workflows/${workflowId}/runs`)
-      if (!res.ok) throw new Error('Failed to fetch runs')
-      const data = await res.json()
+      const data = await apiClient.get<{ runs: WorkflowRun[] }>(`/api/workflows/${workflowId}/runs`)
       set(state => ({
         runs: { ...state.runs, [workflowId]: data.runs },
       }))
@@ -123,9 +120,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   fetchRun: async (runId: string) => {
     try {
-      const res = await fetch(`${API_BASE}/workflows/runs/${runId}`)
-      if (!res.ok) throw new Error('Failed to fetch run')
-      const run = await res.json()
+      const run = await apiClient.get<WorkflowRun>(`/api/workflows/runs/${runId}`)
       set({ activeRun: run })
     } catch (e) {
       set({ error: (e as Error).message })
@@ -135,16 +130,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   createWorkflow: async (data) => {
     set({ isLoading: true, error: null })
     try {
-      const res = await fetch(`${API_BASE}/workflows`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.detail || 'Failed to create workflow')
-      }
-      const workflow = await res.json()
+      const workflow = await apiClient.post<Workflow>('/api/workflows', data)
       set(state => ({
         workflows: [workflow, ...state.workflows],
         isLoading: false,
@@ -159,13 +145,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   updateWorkflow: async (id, data) => {
     try {
-      const res = await fetch(`${API_BASE}/workflows/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      if (!res.ok) throw new Error('Failed to update workflow')
-      const updated = await res.json()
+      const updated = await apiClient.put<Workflow>(`/api/workflows/${id}`, data)
       set(state => ({
         workflows: state.workflows.map(w => w.id === id ? updated : w),
       }))
@@ -176,8 +156,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   deleteWorkflow: async (id) => {
     try {
-      const res = await fetch(`${API_BASE}/workflows/${id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('Failed to delete workflow')
+      await apiClient.delete(`/api/workflows/${id}`)
       set(state => ({
         workflows: state.workflows.filter(w => w.id !== id),
         selectedWorkflowId: state.selectedWorkflowId === id ? null : state.selectedWorkflowId,
@@ -190,16 +169,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   triggerRun: async (workflowId, triggerType = 'manual', inputs = {}) => {
     set({ isRunning: true, error: null })
     try {
-      const res = await fetch(`${API_BASE}/workflows/${workflowId}/runs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trigger_type: triggerType, inputs }),
-      })
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.detail || 'Failed to trigger run')
-      }
-      const run = await res.json()
+      const run = await apiClient.post<WorkflowRun>(`/api/workflows/${workflowId}/runs`, { trigger_type: triggerType, inputs })
       set(state => {
         const existing = state.runs[workflowId] || []
         return {
@@ -219,9 +189,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   cancelRun: async (runId) => {
     try {
-      const res = await fetch(`${API_BASE}/workflows/runs/${runId}/cancel`, { method: 'POST' })
-      if (!res.ok) throw new Error('Failed to cancel run')
-      const run = await res.json()
+      const run = await apiClient.post<WorkflowRun>(`/api/workflows/runs/${runId}/cancel`)
       set({ activeRun: run })
     } catch (e) {
       set({ error: (e as Error).message })
@@ -230,9 +198,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   retryRun: async (runId) => {
     try {
-      const res = await fetch(`${API_BASE}/workflows/runs/${runId}/retry`, { method: 'POST' })
-      if (!res.ok) throw new Error('Failed to retry run')
-      const run = await res.json()
+      const run = await apiClient.post<WorkflowRun>(`/api/workflows/runs/${runId}/retry`)
       set({ activeRun: run })
       get().streamRunLogs(run.id)
     } catch (e) {
@@ -247,7 +213,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       currentEventSource = null
     }
 
-    const eventSource = new EventSource(`${API_BASE}/workflows/runs/${runId}/stream`)
+    const eventSource = new EventSource(getApiUrl(`/api/workflows/runs/${runId}/stream`))
     currentEventSource = eventSource
 
     eventSource.addEventListener('log', (event) => {
@@ -293,11 +259,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   // Phase 2: Secrets
   fetchSecrets: async () => {
     try {
-      const res = await fetch(`${API_BASE}/secrets`)
-      if (res.ok) {
-        const data = await res.json()
-        set({ secrets: data.secrets || [] })
-      }
+      const data = await apiClient.get<{ secrets: SecretVariable[] }>('/api/secrets')
+      set({ secrets: data.secrets || [] })
     } catch (e) {
       set({ error: (e as Error).message })
     }
@@ -305,14 +268,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   createSecret: async (data) => {
     try {
-      const res = await fetch(`${API_BASE}/secrets`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      if (res.ok) {
-        get().fetchSecrets()
-      }
+      await apiClient.post('/api/secrets', data)
+      get().fetchSecrets()
     } catch (e) {
       set({ error: (e as Error).message })
     }
@@ -320,7 +277,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   deleteSecret: async (id) => {
     try {
-      await fetch(`${API_BASE}/secrets/${id}`, { method: 'DELETE' })
+      await apiClient.delete(`/api/secrets/${id}`)
       set(state => ({ secrets: state.secrets.filter(s => s.id !== id) }))
     } catch (e) {
       set({ error: (e as Error).message })
@@ -330,13 +287,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   // Phase 2: Schedule
   fetchSchedule: async (workflowId) => {
     try {
-      const res = await fetch(`${API_BASE}/workflows/${workflowId}/schedule`)
-      if (res.ok) {
-        const data = await res.json()
-        set({ schedule: data })
-      } else {
-        set({ schedule: null })
-      }
+      const data = await apiClient.get<CronSchedule>(`/api/workflows/${workflowId}/schedule`)
+      set({ schedule: data })
     } catch {
       set({ schedule: null })
     }
@@ -344,15 +296,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   updateSchedule: async (workflowId, cron, timezone = 'UTC') => {
     try {
-      const res = await fetch(`${API_BASE}/workflows/${workflowId}/schedule`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cron, timezone }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        set({ schedule: data })
-      }
+      const data = await apiClient.put<CronSchedule>(`/api/workflows/${workflowId}/schedule`, { cron, timezone })
+      set({ schedule: data })
     } catch (e) {
       set({ error: (e as Error).message })
     }
@@ -360,7 +305,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   removeSchedule: async (workflowId) => {
     try {
-      await fetch(`${API_BASE}/workflows/${workflowId}/schedule`, { method: 'DELETE' })
+      await apiClient.delete(`/api/workflows/${workflowId}/schedule`)
       set({ schedule: null })
     } catch (e) {
       set({ error: (e as Error).message })
@@ -370,11 +315,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   // Phase 2: Webhooks
   fetchWebhooks: async (workflowId) => {
     try {
-      const res = await fetch(`${API_BASE}/workflows/${workflowId}/webhooks`)
-      if (res.ok) {
-        const data = await res.json()
-        set({ webhooks: data.webhooks || [] })
-      }
+      const data = await apiClient.get<{ webhooks: WebhookConfig[] }>(`/api/workflows/${workflowId}/webhooks`)
+      set({ webhooks: data.webhooks || [] })
     } catch (e) {
       set({ error: (e as Error).message })
     }
@@ -382,10 +324,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   createWebhook: async (workflowId) => {
     try {
-      const res = await fetch(`${API_BASE}/workflows/${workflowId}/webhooks`, { method: 'POST' })
-      if (res.ok) {
-        get().fetchWebhooks(workflowId)
-      }
+      await apiClient.post(`/api/workflows/${workflowId}/webhooks`)
+      get().fetchWebhooks(workflowId)
     } catch (e) {
       set({ error: (e as Error).message })
     }
@@ -393,7 +333,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   deleteWebhook: async (workflowId, webhookId) => {
     try {
-      await fetch(`${API_BASE}/workflows/${workflowId}/webhooks/${webhookId}`, { method: 'DELETE' })
+      await apiClient.delete(`/api/workflows/${workflowId}/webhooks/${webhookId}`)
       set(state => ({ webhooks: state.webhooks.filter(w => w.id !== webhookId) }))
     } catch (e) {
       set({ error: (e as Error).message })
@@ -403,13 +343,10 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   // Phase 3: Artifacts
   fetchArtifacts: async (runId) => {
     try {
-      const res = await fetch(`${API_BASE}/workflows/runs/${runId}/artifacts`)
-      if (res.ok) {
-        const data = await res.json()
-        set(state => ({
-          artifacts: { ...state.artifacts, [runId]: data.artifacts || [] },
-        }))
-      }
+      const data = await apiClient.get<{ artifacts: Artifact[] }>(`/api/workflows/runs/${runId}/artifacts`)
+      set(state => ({
+        artifacts: { ...state.artifacts, [runId]: data.artifacts || [] },
+      }))
     } catch (e) {
       set({ error: (e as Error).message })
     }
@@ -419,11 +356,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   fetchTemplates: async (category) => {
     try {
       const params = category ? `?category=${category}` : ''
-      const res = await fetch(`${API_BASE}/workflows/templates${params}`)
-      if (res.ok) {
-        const data = await res.json()
-        set({ templates: data.templates || [] })
-      }
+      const data = await apiClient.get<{ templates: Template[] }>(`/api/workflows/templates${params}`)
+      set({ templates: data.templates || [] })
     } catch (e) {
       set({ error: (e as Error).message })
     }

@@ -1,6 +1,8 @@
 """Enhanced audit models for compliance and integrity."""
 
 from datetime import datetime
+
+from utils.time import utcnow
 from enum import Enum
 from typing import Any
 
@@ -75,7 +77,7 @@ class ComplianceAuditEntry(BaseModel):
     expires_at: datetime | None = None
 
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 class IntegrityVerificationResult(BaseModel):
@@ -94,7 +96,7 @@ class IntegrityVerificationResult(BaseModel):
 class ComplianceReport(BaseModel):
     """Compliance report for audit logs."""
 
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=utcnow)
     report_period_start: datetime
     report_period_end: datetime
 

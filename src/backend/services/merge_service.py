@@ -3,6 +3,8 @@
 import logging
 import subprocess
 from datetime import datetime
+
+from utils.time import utcnow
 from pathlib import Path
 from typing import Any
 
@@ -733,8 +735,8 @@ class MergeRequestService:
             auto_merge=model.auto_merge if model.auto_merge is not None else False,
             reviewers=model.reviewers or [],
             approved_by=model.approved_by or [],
-            created_at=model.created_at or datetime.utcnow(),
-            updated_at=model.updated_at or datetime.utcnow(),
+            created_at=model.created_at or utcnow(),
+            updated_at=model.updated_at or utcnow(),
             merged_at=model.merged_at,
             merged_by=model.merged_by,
             closed_at=model.closed_at,
@@ -931,7 +933,7 @@ class MergeRequestService:
             mr.status = status
         if reviewers is not None:
             mr.reviewers = reviewers
-        mr.updated_at = datetime.utcnow()
+        mr.updated_at = utcnow()
         return mr
 
     # ── Approve (with auto-merge check) ──
@@ -965,7 +967,7 @@ class MergeRequestService:
             return None
         if user_id not in mr.approved_by:
             mr.approved_by.append(user_id)
-            mr.updated_at = datetime.utcnow()
+            mr.updated_at = utcnow()
         return mr
 
     async def _try_auto_merge(self, mr: MergeRequest) -> None:
@@ -1095,7 +1097,7 @@ class MergeRequestService:
                 await repo.update(
                     mr_id,
                     status="merged",
-                    merged_at=datetime.utcnow(),
+                    merged_at=utcnow(),
                     merged_by=merged_by,
                 )
 
@@ -1137,10 +1139,10 @@ class MergeRequestService:
 
         if result.success:
             mr.status = MergeRequestStatus.MERGED
-            mr.merged_at = datetime.utcnow()
+            mr.merged_at = utcnow()
             mr.merged_by = merged_by
 
-        mr.updated_at = datetime.utcnow()
+        mr.updated_at = utcnow()
         return mr, result
 
     # ── Close ──
@@ -1151,7 +1153,7 @@ class MergeRequestService:
             await repo.update(
                 mr_id,
                 status="closed",
-                closed_at=datetime.utcnow(),
+                closed_at=utcnow(),
                 closed_by=closed_by,
             )
             return await self.get_merge_request_async(mr_id)
@@ -1162,9 +1164,9 @@ class MergeRequestService:
         if not mr:
             return None
         mr.status = MergeRequestStatus.CLOSED
-        mr.closed_at = datetime.utcnow()
+        mr.closed_at = utcnow()
         mr.closed_by = closed_by
-        mr.updated_at = datetime.utcnow()
+        mr.updated_at = utcnow()
         return mr
 
     # ── Refresh conflict status ──
@@ -1193,7 +1195,7 @@ class MergeRequestService:
         try:
             preview = self.merge_service.check_merge_conflicts(mr.source_branch, mr.target_branch)
             mr.conflict_status = preview.conflict_status
-            mr.updated_at = datetime.utcnow()
+            mr.updated_at = utcnow()
         except Exception as e:
             logger.warning(f"Failed to refresh conflict status: {e}")
         return mr

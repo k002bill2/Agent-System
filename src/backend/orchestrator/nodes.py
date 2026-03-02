@@ -4,6 +4,8 @@ import json
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime
+
+from utils.time import utcnow
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
@@ -74,7 +76,7 @@ class BaseNode(ABC):
             "id": str(uuid.uuid4()),
             "role": role,
             "content": content,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": utcnow().isoformat(),
         }
 
     def _extract_and_update_tokens(
@@ -767,7 +769,7 @@ After completing all necessary tool calls, provide a final summary."""
             "risk_level": risk_level.value,
             "risk_description": risk_description,
             "status": ApprovalStatus.PENDING.value,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": utcnow().isoformat(),
         }
 
         return True, approval_request
@@ -802,7 +804,7 @@ After completing all necessary tool calls, provide a final summary."""
                     task.status = TaskStatus.FAILED
                     task.error = f"Operation denied by user: {approval.get('resolver_note', 'No reason provided')}"
                     task.pending_approval_id = None
-                    task.updated_at = datetime.utcnow()
+                    task.updated_at = utcnow()
 
                     return {
                         "tasks": {current_task_id: task},
@@ -813,7 +815,7 @@ After completing all necessary tool calls, provide a final summary."""
 
         # Mark task as in progress
         task.status = TaskStatus.IN_PROGRESS
-        task.updated_at = datetime.utcnow()
+        task.updated_at = utcnow()
 
         # Create/update agent for this task
         agent_id = f"executor-{current_task_id[:8]}"
@@ -910,7 +912,7 @@ After completing all necessary tool calls, provide a final summary."""
                             # Need approval - pause execution
                             task.status = TaskStatus.WAITING
                             task.pending_approval_id = approval_id
-                            task.updated_at = datetime.utcnow()
+                            task.updated_at = utcnow()
 
                             pending_approvals[approval_id] = approval_request
 
@@ -986,7 +988,7 @@ After completing all necessary tool calls, provide a final summary."""
 
             task.status = TaskStatus.COMPLETED
             task.pending_approval_id = None
-            task.updated_at = datetime.utcnow()
+            task.updated_at = utcnow()
 
             # Audit: Log task completion
             audit_task_status_change(
@@ -1028,7 +1030,7 @@ After completing all necessary tool calls, provide a final summary."""
         except Exception as e:
             task.status = TaskStatus.FAILED
             task.error = str(e)
-            task.updated_at = datetime.utcnow()
+            task.updated_at = utcnow()
 
             # Audit: Log task failure
             audit_task_status_change(
@@ -1115,7 +1117,7 @@ Respond with a JSON object containing:
                 "summary": "All subtasks completed successfully",
                 "child_results": child_results,
             }
-            task.updated_at = datetime.utcnow()
+            task.updated_at = utcnow()
 
             return {
                 "tasks": {current_task_id: task},
@@ -1205,7 +1207,7 @@ Be specific about what changes are needed. If the error suggests the task is imp
                     f"Permanent error (no retry): [{structured_error.original_type}] "
                     f"{structured_error.message}"
                 )
-                task.updated_at = datetime.utcnow()
+                task.updated_at = utcnow()
                 return {
                     "tasks": {current_task_id: task},
                     "messages": [
@@ -1223,7 +1225,7 @@ Be specific about what changes are needed. If the error suggests the task is imp
                 task.retry_count += 1
                 task.status = TaskStatus.PENDING
                 task.error = None
-                task.updated_at = datetime.utcnow()
+                task.updated_at = utcnow()
                 return {
                     "tasks": {current_task_id: task},
                     "messages": [
@@ -1243,7 +1245,7 @@ Be specific about what changes are needed. If the error suggests the task is imp
                         f"Resource error persists after retry: [{structured_error.original_type}] "
                         f"{structured_error.message}"
                     )
-                    task.updated_at = datetime.utcnow()
+                    task.updated_at = utcnow()
                     return {
                         "tasks": {current_task_id: task},
                         "messages": [
@@ -1258,7 +1260,7 @@ Be specific about what changes are needed. If the error suggests the task is imp
                 task.retry_count += 1
                 task.status = TaskStatus.PENDING
                 task.error = None
-                task.updated_at = datetime.utcnow()
+                task.updated_at = utcnow()
                 return {
                     "tasks": {current_task_id: task},
                     "messages": [
@@ -1277,7 +1279,7 @@ Be specific about what changes are needed. If the error suggests the task is imp
                 task.retry_count += 1
                 task.status = TaskStatus.PENDING
                 task.error = None
-                task.updated_at = datetime.utcnow()
+                task.updated_at = utcnow()
                 return {
                     "tasks": {current_task_id: task},
                     "messages": [
@@ -1395,7 +1397,7 @@ Error History: {task.error_history}
                     f"confidence ({confidence}). "
                     f"Analysis: {correction.get('error_analysis', 'N/A')}"
                 )
-                task.updated_at = datetime.utcnow()
+                task.updated_at = utcnow()
                 result = {
                     "tasks": {current_task_id: task},
                     "messages": [
@@ -1434,7 +1436,7 @@ Error History: {task.error_history}
             ):
                 task.description = correction["updated_description"]
 
-            task.updated_at = datetime.utcnow()
+            task.updated_at = utcnow()
 
             result = {
                 "tasks": {current_task_id: task},
@@ -1454,7 +1456,7 @@ Error History: {task.error_history}
                 f"Final analysis: {correction.get('error_analysis', task.error)}"
             )
             task.error = final_error
-            task.updated_at = datetime.utcnow()
+            task.updated_at = utcnow()
 
             result = {
                 "tasks": {current_task_id: task},

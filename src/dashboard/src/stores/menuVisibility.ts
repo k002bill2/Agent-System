@@ -1,7 +1,5 @@
 import { create } from 'zustand'
-import { authFetch } from './auth'
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
+import { apiClient } from '../services/apiClient'
 
 type MenuVisibility = Record<string, Record<string, boolean>>
 
@@ -22,16 +20,12 @@ export const useMenuVisibilityStore = create<MenuVisibilityState>((set, get) => 
     if (get().isLoaded) return
 
     try {
-      const res = await authFetch(`${API_BASE_URL}/admin/menu-visibility`)
-
-      if (res.ok) {
-        const data = await res.json()
-        set({
-          visibility: data.visibility,
-          menuOrder: data.menu_order || [],
-          isLoaded: true,
-        })
-      }
+      const data = await apiClient.get<{ visibility: MenuVisibility; menu_order?: string[] }>('/api/admin/menu-visibility')
+      set({
+        visibility: data.visibility,
+        menuOrder: data.menu_order || [],
+        isLoaded: true,
+      })
     } catch {
       // 실패 시 기본값 유지 (모든 메뉴 표시)
     }

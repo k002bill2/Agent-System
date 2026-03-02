@@ -5,6 +5,8 @@ GET, POST, PUT, DELETE 엔드포인트를 제공합니다.
 """
 
 from datetime import datetime
+
+from utils.time import utcnow
 from typing import Any
 from uuid import uuid4
 
@@ -152,7 +154,7 @@ async def create_station(request: StationCreate) -> StationResponse:
         )
 
     station_id = str(uuid4())
-    now = datetime.utcnow().isoformat()
+    now = utcnow().isoformat()
 
     station_data = {
         "id": station_id,
@@ -187,7 +189,7 @@ async def update_station(station_id: str, request: StationUpdate) -> StationResp
         )
 
     station.update(update_data)
-    station["updated_at"] = datetime.utcnow().isoformat()
+    station["updated_at"] = utcnow().isoformat()
 
     return StationResponse(**station)
 

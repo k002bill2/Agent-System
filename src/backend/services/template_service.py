@@ -2,6 +2,8 @@
 
 import uuid
 from datetime import datetime
+
+from utils.time import utcnow
 from typing import Any
 
 from models.template import TemplateCategory, TemplateCreate, TemplateUpdate
@@ -614,7 +616,7 @@ class TemplateService:
         """Seed built-in templates."""
         for tpl in BUILTIN_TEMPLATES:
             template_id = str(uuid.uuid4())
-            now = datetime.utcnow()
+            now = utcnow()
             self._templates[template_id] = {
                 "id": template_id,
                 "name": tpl["name"],
@@ -659,7 +661,7 @@ class TemplateService:
         parse_workflow_yaml(data.yaml_content)
 
         template_id = str(uuid.uuid4())
-        now = datetime.utcnow()
+        now = utcnow()
         template = {
             "id": template_id,
             "name": data.name,
@@ -696,7 +698,7 @@ class TemplateService:
         if data.icon is not None:
             template["icon"] = data.icon
 
-        template["updated_at"] = datetime.utcnow()
+        template["updated_at"] = utcnow()
         return template
 
     def delete_template(self, template_id: str) -> bool:
