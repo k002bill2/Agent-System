@@ -1,7 +1,7 @@
 """Unit tests for notification_service.py."""
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from models.notification import (
@@ -302,7 +302,7 @@ class TestCheckRateLimit:
 
     def test_resets_counter_after_one_hour(self):
         """Resets sent_this_hour to 0 when more than one hour has elapsed."""
-        old_time = datetime.utcnow() - timedelta(hours=2)
+        old_time = datetime.now(timezone.utc) - timedelta(hours=2)
         config = _make_channel_config(
             rate_limit_per_hour=5,
             sent_this_hour=5,
@@ -315,7 +315,7 @@ class TestCheckRateLimit:
 
     def test_does_not_reset_within_one_hour(self):
         """Does not reset sent_this_hour when last_sent is within the hour."""
-        recent = datetime.utcnow() - timedelta(minutes=30)
+        recent = datetime.now(timezone.utc) - timedelta(minutes=30)
         config = _make_channel_config(
             rate_limit_per_hour=5,
             sent_this_hour=5,
