@@ -1,15 +1,5 @@
 {
-  "activeAgents": [
-    {
-      "taskId": "task_1772435232836_oc4pwi",
-      "subagentType": "Explore",
-      "description": "Dashboard auth token refresh 조사",
-      "startTime": 1772435232836,
-      "status": "running",
-      "targetFiles": [],
-      "lockIds": []
-    }
-  ],
+  "activeAgents": [],
   "completedAgents": [
     {
       "taskId": "task_1772429347926_modt32",
@@ -28,8 +18,17 @@
       "endTime": 1772430164733,
       "duration_ms": 45912,
       "status": "completed"
+    },
+    {
+      "taskId": "task_1772435232836_oc4pwi",
+      "subagentType": "Explore",
+      "description": "Dashboard auth token refresh 조사",
+      "startTime": 1772435232836,
+      "endTime": 1772435288100,
+      "duration_ms": 55264,
+      "status": "completed"
     }
   ],
-  "lastUpdated": "2026-03-02T07:07:12.836Z",
+  "lastUpdated": "2026-03-02T07:08:08.100Z",
   "sessionId": null
 }
