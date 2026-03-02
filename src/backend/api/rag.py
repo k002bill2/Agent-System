@@ -7,6 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
 from models.project import PROJECTS_REGISTRY, get_project
+from services.code_entity_extractor import extract_dependencies, extract_entities
 from services.rag_service import (
     QDRANT_AVAILABLE,
     QueryResult,
@@ -352,3 +353,140 @@ async def list_collections() -> dict:
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list collections: {str(e)}")
+
+
+# ── Code Entity Endpoints ────────────────────────────────────────────────────
+
+
+@router.get("/projects/{project_id}/entities")
+async def get_project_entities(
+    project_id: str,
+    entity_type: str | None = None,
+) -> dict:
+    """
+    Get code entities extracted from a project's indexed files.
+
+    Scans project files and extracts functions, classes, interfaces, etc.
+    Optionally filter by entity_type (function, class, method, interface, etc.).
+    """
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+
+    from pathlib import Path
+
+    project_root = Path(project["path"]).resolve()
+    if not project_root.is_dir():
+        raise HTTPException(status_code=404, detail=f"Project path not found: {project_root}")
+
+    all_entities = []
+    indexable_exts = {".py", ".ts", ".tsx", ".js", ".jsx"}
+    skip_dirs = {"node_modules", ".git", "__pycache__", ".venv", "venv", "dist", "build"}
+
+    for item in project_root.rglob("*"):
+        if not item.is_file():
+            continue
+        if item.suffix.lower() not in indexable_exts:
+            continue
+        try:
+            rel_parts = item.relative_to(project_root).parts
+        except ValueError:
+            continue
+        if any(part in skip_dirs for part in rel_parts[:-1]):
+            continue
+
+        try:
+            content = item.read_text(encoding="utf-8", errors="ignore")
+            entities = extract_entities(str(item), content)
+            for e in entities:
+                e.file_path = str(item.relative_to(project_root))
+            all_entities.extend(entities)
+        except Exception:
+            continue
+
+    if entity_type:
+        all_entities = [e for e in all_entities if e.entity_type.value == entity_type]
+
+    return {
+        "project_id": project_id,
+        "total": len(all_entities),
+        "entities": [
+            {
+                "name": e.name,
+                "type": e.entity_type.value,
+                "file_path": e.file_path,
+                "line_number": e.line_number,
+                "signature": e.signature,
+                "docstring": e.docstring,
+                "parent": e.parent,
+            }
+            for e in all_entities
+        ],
+    }
+
+
+@router.get("/projects/{project_id}/dependencies")
+async def get_project_dependencies(
+    project_id: str,
+    entity_name: str | None = None,
+) -> dict:
+    """
+    Get code dependency relationships for a project.
+
+    Extracts import and inheritance relationships between code entities.
+    Optionally filter by entity_name to see deps for a specific entity.
+    """
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+
+    from pathlib import Path
+
+    project_root = Path(project["path"]).resolve()
+    if not project_root.is_dir():
+        raise HTTPException(status_code=404, detail=f"Project path not found: {project_root}")
+
+    all_deps = []
+    indexable_exts = {".py", ".ts", ".tsx", ".js", ".jsx"}
+    skip_dirs = {"node_modules", ".git", "__pycache__", ".venv", "venv", "dist", "build"}
+
+    for item in project_root.rglob("*"):
+        if not item.is_file():
+            continue
+        if item.suffix.lower() not in indexable_exts:
+            continue
+        try:
+            rel_parts = item.relative_to(project_root).parts
+        except ValueError:
+            continue
+        if any(part in skip_dirs for part in rel_parts[:-1]):
+            continue
+
+        try:
+            content = item.read_text(encoding="utf-8", errors="ignore")
+            deps = extract_dependencies(str(item), content)
+            for d in deps:
+                d.file_path = str(item.relative_to(project_root))
+            all_deps.extend(deps)
+        except Exception:
+            continue
+
+    if entity_name:
+        all_deps = [
+            d for d in all_deps if d.source_entity == entity_name or d.target_entity == entity_name
+        ]
+
+    return {
+        "project_id": project_id,
+        "total": len(all_deps),
+        "dependencies": [
+            {
+                "source": d.source_entity,
+                "target": d.target_entity,
+                "type": d.dependency_type,
+                "file_path": d.file_path,
+                "line_number": d.line_number,
+            }
+            for d in all_deps
+        ],
+    }

@@ -116,8 +116,13 @@ describe('ApiClient', () => {
     let callCount = 0
     mockFetch(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString()
+      // Handle the refresh call made by authStore.refreshAccessToken
       if (url.includes('/api/auth/refresh')) {
-        return jsonResponse({ token: 'new-token' })
+        return jsonResponse({
+          access_token: 'new-token',
+          refresh_token: 'new-refresh',
+          expires_in: 3600,
+        })
       }
       callCount++
       if (callCount === 1) {
@@ -126,9 +131,13 @@ describe('ApiClient', () => {
       return jsonResponse({ data: 'protected' })
     })
 
+    // Set a refresh token so authStore.refreshAccessToken can work
+    const { useAuthStore } = await import('../../stores/auth')
+    useAuthStore.setState({ refreshToken: 'old-refresh' })
+
     const result = await client.get<{ data: string }>('/api/protected')
     expect(result).toEqual({ data: 'protected' })
-    // 1st call (401) + refresh call + retry call = 3 total
+    // 1st call (401) + refresh call (by authStore) + retry call = 3 total
     expect(globalThis.fetch).toHaveBeenCalledTimes(3)
   })
 

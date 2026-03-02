@@ -26,6 +26,7 @@ from models.feedback import (
     TaskEvaluationSubmit,
 )
 from services.feedback_service import get_feedback_service
+from utils.time import utcnow
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 
@@ -206,7 +207,7 @@ async def export_dataset(
 
     # Content-Type 설정
     media_type = "application/jsonl" if format == "jsonl" else "text/csv"
-    filename = f"dataset_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.{format}"
+    filename = f"dataset_{utcnow().strftime('%Y%m%d_%H%M%S')}.{format}"
 
     return PlainTextResponse(
         content=content,

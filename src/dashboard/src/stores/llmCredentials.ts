@@ -1,7 +1,5 @@
 import { create } from 'zustand'
-import { authFetch } from './auth'
-
-const API_BASE = '/api'
+import { apiClient } from '../services/apiClient'
 
 export interface LLMCredential {
   id: string
@@ -51,9 +49,7 @@ export const useLLMCredentialStore = create<LLMCredentialStore>((set) => ({
   fetchCredentials: async () => {
     set({ isLoading: true, error: null })
     try {
-      const resp = await authFetch(`${API_BASE}/users/me/llm-credentials`)
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const data: LLMCredential[] = await resp.json()
+      const data = await apiClient.get<LLMCredential[]>('/api/users/me/llm-credentials')
       set({ credentials: data, isLoading: false })
     } catch (err) {
       set({ error: (err as Error).message, isLoading: false })
@@ -62,17 +58,7 @@ export const useLLMCredentialStore = create<LLMCredentialStore>((set) => ({
 
   addCredential: async (data: LLMCredentialCreate) => {
     try {
-      const resp = await authFetch(`${API_BASE}/users/me/llm-credentials`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      if (!resp.ok) {
-        const errJson = await resp.json().catch(() => ({}))
-        set({ error: (errJson as { detail?: string }).detail || 'Failed to add credential' })
-        return null
-      }
-      const cred: LLMCredential = await resp.json()
+      const cred = await apiClient.post<LLMCredential>('/api/users/me/llm-credentials', data)
       set(s => ({ credentials: [cred, ...s.credentials] }))
       return cred
     } catch (err) {
@@ -83,17 +69,7 @@ export const useLLMCredentialStore = create<LLMCredentialStore>((set) => ({
 
   updateCredential: async (id: string, data: LLMCredentialUpdate) => {
     try {
-      const resp = await authFetch(`${API_BASE}/users/me/llm-credentials/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      if (!resp.ok) {
-        const errJson = await resp.json().catch(() => ({}))
-        set({ error: (errJson as { detail?: string }).detail || 'Failed to update credential' })
-        return null
-      }
-      const updated: LLMCredential = await resp.json()
+      const updated = await apiClient.put<LLMCredential>(`/api/users/me/llm-credentials/${id}`, data)
       set(s => ({
         credentials: s.credentials.map(c => (c.id === id ? updated : c)),
       }))
@@ -106,10 +82,7 @@ export const useLLMCredentialStore = create<LLMCredentialStore>((set) => ({
 
   removeCredential: async (id: string) => {
     try {
-      const resp = await authFetch(`${API_BASE}/users/me/llm-credentials/${id}`, {
-        method: 'DELETE',
-      })
-      if (!resp.ok) return false
+      await apiClient.delete(`/api/users/me/llm-credentials/${id}`)
       set(s => ({ credentials: s.credentials.filter(c => c.id !== id) }))
       return true
     } catch {
@@ -119,11 +92,7 @@ export const useLLMCredentialStore = create<LLMCredentialStore>((set) => ({
 
   verifyCredential: async (id: string) => {
     try {
-      const resp = await authFetch(`${API_BASE}/users/me/llm-credentials/${id}/verify`, {
-        method: 'POST',
-      })
-      if (!resp.ok) return null
-      const result: VerifyResult = await resp.json()
+      const result = await apiClient.post<VerifyResult>(`/api/users/me/llm-credentials/${id}/verify`)
       if (result.is_valid) {
         set(s => ({
           credentials: s.credentials.map(c =>

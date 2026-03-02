@@ -1,4 +1,5 @@
 ---
+name: update-dev-docs
 description: Context Compaction 전 Dev Docs 업데이트
 ---
 

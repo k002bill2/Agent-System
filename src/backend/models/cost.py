@@ -6,6 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from models.llm_models import LLMModelRegistry
+from utils.time import utcnow
 
 # Default cost for unknown models
 DEFAULT_COST = {"input": 0.001, "output": 0.002}
@@ -50,7 +51,7 @@ class TokenUsage(BaseModel):
     total_tokens: int = 0
     model: str = ""
     cost_usd: float = 0.0
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=utcnow)
 
 
 class AgentTokenUsage(BaseModel):
@@ -152,8 +153,8 @@ class CostCenter(BaseModel):
 
     # Status
     is_active: bool = True
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class CostAllocation(BaseModel):
@@ -178,7 +179,7 @@ class CostAllocation(BaseModel):
     # Timestamps
     period_start: datetime | None = None
     period_end: datetime | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 class CostReport(BaseModel):
@@ -187,7 +188,7 @@ class CostReport(BaseModel):
     period: str
     start_date: datetime
     end_date: datetime
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=utcnow)
 
     # Totals
     total_cost_usd: float = 0.0
@@ -231,7 +232,7 @@ class ChargebackExport(BaseModel):
     export_id: str = Field(default_factory=lambda: str(__import__("uuid").uuid4()))
     period_start: datetime
     period_end: datetime
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=utcnow)
     format: str = "csv"  # csv, json, xlsx
 
     # Summary
@@ -251,7 +252,7 @@ class BudgetAlert(BaseModel):
     budget_usd: float
     spent_usd: float
     message: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 def extract_token_usage(response: Any, model: str = "") -> TokenUsage | None:

@@ -22,6 +22,7 @@ from models.workflow import (
     WorkflowStepDef,
 )
 from services.variable_expander import expand_variables, mask_secrets, parse_step_outputs
+from utils.time import utcnow
 
 
 class WorkflowEngine:
@@ -120,7 +121,7 @@ class WorkflowEngine:
         run_state: dict[str, Any] = {
             "id": run_id,
             "status": WorkflowRunStatus.RUNNING,
-            "started_at": datetime.utcnow(),
+            "started_at": utcnow(),
             "completed_at": None,
             "jobs": {},
             "total_cost": 0.0,
@@ -216,7 +217,7 @@ class WorkflowEngine:
             run_state["error_summary"] = str(e)
             self._emit_log(run_id, "error", f"Workflow run failed: {e}")
 
-        run_state["completed_at"] = datetime.utcnow()
+        run_state["completed_at"] = utcnow()
         if run_state["started_at"] and run_state["completed_at"]:
             run_state["duration_seconds"] = (
                 run_state["completed_at"] - run_state["started_at"]
@@ -245,7 +246,7 @@ class WorkflowEngine:
             "runner": job_def.runs_on,
             "matrix_values": matrix_values,
             "steps": [],
-            "started_at": datetime.utcnow(),
+            "started_at": utcnow(),
             "completed_at": None,
         }
 
@@ -289,7 +290,7 @@ class WorkflowEngine:
             job_state["status"] = JobStatus.FAILURE
             self._emit_log(run_id, "error", f"Job '{job_name}' failed: {e}")
 
-        job_state["completed_at"] = datetime.utcnow()
+        job_state["completed_at"] = utcnow()
         if job_state["started_at"] and job_state["completed_at"]:
             job_state["duration_seconds"] = (
                 job_state["completed_at"] - job_state["started_at"]
@@ -320,7 +321,7 @@ class WorkflowEngine:
             "error": None,
             "exit_code": None,
             "duration_ms": None,
-            "started_at": datetime.utcnow(),
+            "started_at": utcnow(),
             "completed_at": None,
             "parsed_outputs": {},
         }
@@ -413,7 +414,7 @@ class WorkflowEngine:
                 break
 
         step_state["duration_ms"] = int((time.time() - start_time) * 1000)
-        step_state["completed_at"] = datetime.utcnow()
+        step_state["completed_at"] = utcnow()
 
         status_icon = "+" if step_state["status"] == StepStatus.SUCCESS else "x"
         self._emit_log(
@@ -624,7 +625,7 @@ class WorkflowEngine:
         """Emit a log entry for a run (with secret masking)."""
         masked_message = mask_secrets(message, self._secrets) if self._secrets else message
         entry = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": utcnow().isoformat(),
             "level": level,
             "message": masked_message,
         }

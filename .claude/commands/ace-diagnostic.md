@@ -1,4 +1,5 @@
 ---
+name: ace-diagnostic
 description: ACE Framework 거버넌스 상태 진단 - 훅 등록, 참조 무결성, 병렬 상태 확인
 ---
 

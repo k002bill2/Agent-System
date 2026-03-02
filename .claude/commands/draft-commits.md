@@ -1,4 +1,5 @@
 ---
+name: draft-commits
 description: Git 변경사항 분석 및 Conventional Commits 형식 커밋 초안 생성
 allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*)
 argument-hint: [--staged | --all]

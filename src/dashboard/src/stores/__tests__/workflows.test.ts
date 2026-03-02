@@ -1,10 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { useWorkflowStore } from '../workflows'
 
-// Mock fetch globally
-const mockFetch = vi.fn()
-global.fetch = mockFetch
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}))
+
+import { useWorkflowStore } from '../workflows'
+import { apiClient } from '../../services/apiClient'
+
+const mockApiClient = vi.mocked(apiClient)
 
 // Mock EventSource
 class MockEventSource {
@@ -51,7 +61,7 @@ function resetStore() {
 describe('workflow store', () => {
   beforeEach(() => {
     resetStore()
-    mockFetch.mockReset()
+    vi.clearAllMocks()
   })
 
   // ── Initial State ──────────────────────────────────────
@@ -131,10 +141,7 @@ describe('workflow store', () => {
         { id: 'wf-1', name: 'CI Pipeline' },
         { id: 'wf-2', name: 'Deploy' },
       ]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ workflows }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ workflows })
 
       await useWorkflowStore.getState().fetchWorkflows()
 
@@ -145,20 +152,17 @@ describe('workflow store', () => {
     })
 
     it('passes projectId as query param', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ workflows: [] }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ workflows: [] })
 
       await useWorkflowStore.getState().fetchWorkflows('proj-1')
 
-      expect(mockFetch).toHaveBeenCalledWith(
+      expect(mockApiClient.get).toHaveBeenCalledWith(
         expect.stringContaining('?project_id=proj-1')
       )
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch workflows'))
 
       await useWorkflowStore.getState().fetchWorkflows()
 
@@ -169,17 +173,14 @@ describe('workflow store', () => {
 
     it('sets isLoading during fetch', async () => {
       let resolvePromise: (v: unknown) => void
-      mockFetch.mockReturnValueOnce(
+      mockApiClient.get.mockReturnValueOnce(
         new Promise(resolve => { resolvePromise = resolve })
       )
 
       const promise = useWorkflowStore.getState().fetchWorkflows()
       expect(useWorkflowStore.getState().isLoading).toBe(true)
 
-      resolvePromise!({
-        ok: true,
-        json: () => Promise.resolve({ workflows: [] }),
-      })
+      resolvePromise!({ workflows: [] })
       await promise
 
       expect(useWorkflowStore.getState().isLoading).toBe(false)
@@ -191,10 +192,7 @@ describe('workflow store', () => {
   describe('createWorkflow', () => {
     it('creates workflow and adds to list', async () => {
       const newWorkflow = { id: 'wf-new', name: 'New WF' }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(newWorkflow),
-      })
+      mockApiClient.post.mockResolvedValueOnce(newWorkflow)
 
       const result = await useWorkflowStore.getState().createWorkflow({
         name: 'New WF',
@@ -207,25 +205,19 @@ describe('workflow store', () => {
     })
 
     it('sends project_id in request body', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ id: 'wf-1' }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ id: 'wf-1' })
 
       await useWorkflowStore.getState().createWorkflow({
         name: 'Test',
         project_id: 'proj-1',
       })
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body)
+      const body = mockApiClient.post.mock.calls[0][1]
       expect(body.project_id).toBe('proj-1')
     })
 
     it('returns null on error', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Invalid YAML' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Invalid YAML'))
 
       const result = await useWorkflowStore.getState().createWorkflow({
         name: 'Bad WF',
@@ -243,10 +235,7 @@ describe('workflow store', () => {
       useWorkflowStore.setState({
         workflows: [{ id: 'wf-1', name: 'Old Name' } as any],
       })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ id: 'wf-1', name: 'New Name' }),
-      })
+      mockApiClient.put.mockResolvedValueOnce({ id: 'wf-1', name: 'New Name' })
 
       await useWorkflowStore.getState().updateWorkflow('wf-1', { name: 'New Name' } as any)
 
@@ -254,7 +243,7 @@ describe('workflow store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false })
+      mockApiClient.put.mockRejectedValueOnce(new Error('Failed to update workflow'))
 
       await useWorkflowStore.getState().updateWorkflow('wf-1', {} as any)
 
@@ -272,7 +261,7 @@ describe('workflow store', () => {
           { id: 'wf-2', name: 'WF 2' } as any,
         ],
       })
-      mockFetch.mockResolvedValueOnce({ ok: true })
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
 
       await useWorkflowStore.getState().deleteWorkflow('wf-1')
 
@@ -285,7 +274,7 @@ describe('workflow store', () => {
         workflows: [{ id: 'wf-1' } as any],
         selectedWorkflowId: 'wf-1',
       })
-      mockFetch.mockResolvedValueOnce({ ok: true })
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
 
       await useWorkflowStore.getState().deleteWorkflow('wf-1')
 
@@ -297,7 +286,7 @@ describe('workflow store', () => {
         workflows: [{ id: 'wf-1' } as any, { id: 'wf-2' } as any],
         selectedWorkflowId: 'wf-1',
       })
-      mockFetch.mockResolvedValueOnce({ ok: true })
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
 
       await useWorkflowStore.getState().deleteWorkflow('wf-2')
 
@@ -310,10 +299,7 @@ describe('workflow store', () => {
   describe('fetchRuns', () => {
     it('stores runs by workflow ID', async () => {
       const runs = [{ id: 'run-1', status: 'completed' }]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ runs }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ runs })
 
       await useWorkflowStore.getState().fetchRuns('wf-1')
 
@@ -321,7 +307,7 @@ describe('workflow store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch runs'))
 
       await useWorkflowStore.getState().fetchRuns('wf-1')
 
@@ -334,10 +320,7 @@ describe('workflow store', () => {
   describe('triggerRun', () => {
     it('triggers a run and adds to runs list', async () => {
       const run = { id: 'run-1', workflow_id: 'wf-1', status: 'running' }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(run),
-      })
+      mockApiClient.post.mockResolvedValueOnce(run)
 
       const result = await useWorkflowStore.getState().triggerRun('wf-1')
 
@@ -348,10 +331,7 @@ describe('workflow store', () => {
     })
 
     it('returns null on error', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Workflow inactive' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Workflow inactive'))
 
       const result = await useWorkflowStore.getState().triggerRun('wf-1')
 
@@ -364,10 +344,7 @@ describe('workflow store', () => {
 
   describe('secrets', () => {
     it('fetchSecrets stores secrets', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ secrets: [{ id: 's-1', name: 'API_KEY' }] }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ secrets: [{ id: 's-1', name: 'API_KEY' }] })
 
       await useWorkflowStore.getState().fetchSecrets()
 
@@ -381,7 +358,7 @@ describe('workflow store', () => {
           { id: 's-2', name: 'B' } as any,
         ],
       })
-      mockFetch.mockResolvedValueOnce({ ok: true })
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
 
       await useWorkflowStore.getState().deleteSecret('s-1')
 
@@ -395,10 +372,7 @@ describe('workflow store', () => {
   describe('schedule', () => {
     it('fetchSchedule stores schedule', async () => {
       const schedule = { cron: '0 * * * *', timezone: 'UTC', is_active: true }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(schedule),
-      })
+      mockApiClient.get.mockResolvedValueOnce(schedule)
 
       await useWorkflowStore.getState().fetchSchedule('wf-1')
 
@@ -407,7 +381,7 @@ describe('workflow store', () => {
 
     it('fetchSchedule sets null on not found', async () => {
       useWorkflowStore.setState({ schedule: { cron: '0 * * * *' } as any })
-      mockFetch.mockResolvedValueOnce({ ok: false })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Not found'))
 
       await useWorkflowStore.getState().fetchSchedule('wf-1')
 
@@ -416,7 +390,7 @@ describe('workflow store', () => {
 
     it('removeSchedule clears schedule', async () => {
       useWorkflowStore.setState({ schedule: { cron: '0 * * * *' } as any })
-      mockFetch.mockResolvedValueOnce({ ok: true })
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
 
       await useWorkflowStore.getState().removeSchedule('wf-1')
 
@@ -434,7 +408,7 @@ describe('workflow store', () => {
           { id: 'wh-2', workflow_id: 'wf-1' } as any,
         ],
       })
-      mockFetch.mockResolvedValueOnce({ ok: true })
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
 
       await useWorkflowStore.getState().deleteWebhook('wf-1', 'wh-1')
 
@@ -447,10 +421,7 @@ describe('workflow store', () => {
   describe('templates', () => {
     it('fetchTemplates stores templates', async () => {
       const templates = [{ id: 't-1', name: 'CI' }]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ templates }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ templates })
 
       await useWorkflowStore.getState().fetchTemplates()
 
@@ -458,20 +429,17 @@ describe('workflow store', () => {
     })
 
     it('fetchTemplates passes category param', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ templates: [] }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ templates: [] })
 
       await useWorkflowStore.getState().fetchTemplates('ci')
 
-      expect(mockFetch).toHaveBeenCalledWith(
+      expect(mockApiClient.get).toHaveBeenCalledWith(
         expect.stringContaining('?category=ci')
       )
     })
 
     it('fetchTemplates handles error', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Network error'))
 
       await useWorkflowStore.getState().fetchTemplates()
 
@@ -484,10 +452,7 @@ describe('workflow store', () => {
   describe('fetchRun', () => {
     it('fetches a single run and sets activeRun', async () => {
       const run = { id: 'run-1', status: 'completed', workflow_id: 'wf-1' }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(run),
-      })
+      mockApiClient.get.mockResolvedValueOnce(run)
 
       await useWorkflowStore.getState().fetchRun('run-1')
 
@@ -495,7 +460,7 @@ describe('workflow store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Not found'))
 
       await useWorkflowStore.getState().fetchRun('run-1')
 
@@ -508,10 +473,7 @@ describe('workflow store', () => {
   describe('cancelRun', () => {
     it('cancels run and updates activeRun', async () => {
       const run = { id: 'run-1', status: 'cancelled', workflow_id: 'wf-1' }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(run),
-      })
+      mockApiClient.post.mockResolvedValueOnce(run)
 
       await useWorkflowStore.getState().cancelRun('run-1')
 
@@ -519,7 +481,7 @@ describe('workflow store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Cannot cancel'))
 
       await useWorkflowStore.getState().cancelRun('run-1')
 
@@ -532,10 +494,7 @@ describe('workflow store', () => {
   describe('retryRun', () => {
     it('retries run and updates activeRun', async () => {
       const run = { id: 'run-2', status: 'running', workflow_id: 'wf-1' }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(run),
-      })
+      mockApiClient.post.mockResolvedValueOnce(run)
 
       await useWorkflowStore.getState().retryRun('run-1')
 
@@ -543,7 +502,7 @@ describe('workflow store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Cannot retry'))
 
       await useWorkflowStore.getState().retryRun('run-1')
 
@@ -556,10 +515,7 @@ describe('workflow store', () => {
   describe('fetchArtifacts', () => {
     it('fetches and stores artifacts for a run', async () => {
       const artifacts = [{ id: 'a-1', name: 'output.txt', type: 'file' }]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ artifacts }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ artifacts })
 
       await useWorkflowStore.getState().fetchArtifacts('run-1')
 
@@ -567,7 +523,7 @@ describe('workflow store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Network error'))
 
       await useWorkflowStore.getState().fetchArtifacts('run-1')
 
@@ -592,17 +548,16 @@ describe('workflow store', () => {
 
   describe('createSecret', () => {
     it('creates secret via POST and calls fetchSecrets', async () => {
-      const fetchSpy = mockFetch
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ secrets: [] }) })
+      mockApiClient.post.mockResolvedValueOnce({})
+      mockApiClient.get.mockResolvedValueOnce({ secrets: [] })
 
       await useWorkflowStore.getState().createSecret({ name: 'API_KEY', value: 'secret', scope: 'project' })
       // Give the non-awaited fetchSecrets call a tick to settle
       await new Promise(resolve => setTimeout(resolve, 0))
 
-      expect(fetchSpy).toHaveBeenCalledWith(
+      expect(mockApiClient.post).toHaveBeenCalledWith(
         expect.stringContaining('/secrets'),
-        expect.objectContaining({ method: 'POST' })
+        expect.any(Object)
       )
     })
   })
@@ -610,7 +565,7 @@ describe('workflow store', () => {
   describe('deleteSecret', () => {
     it('deletes secret and removes from local state', async () => {
       useWorkflowStore.setState({ secrets: [{ id: 's-1', name: 'API_KEY' } as any] })
-      mockFetch.mockResolvedValueOnce({ ok: true })
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
 
       await useWorkflowStore.getState().deleteSecret('s-1')
 
@@ -623,10 +578,7 @@ describe('workflow store', () => {
   describe('fetchSchedule', () => {
     it('fetches schedule and stores it', async () => {
       const schedule = { id: 'sch-1', cron: '0 * * * *', is_active: true }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(schedule),
-      })
+      mockApiClient.get.mockResolvedValueOnce(schedule)
 
       await useWorkflowStore.getState().fetchSchedule('wf-1')
 
@@ -634,7 +586,7 @@ describe('workflow store', () => {
     })
 
     it('sets null when not found', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Not found'))
 
       await useWorkflowStore.getState().fetchSchedule('wf-1')
 
@@ -646,21 +598,19 @@ describe('workflow store', () => {
 
   describe('createWebhook', () => {
     it('creates webhook via POST and triggers fetchWebhooks', async () => {
-      const fetchSpy = mockFetch
-        .mockResolvedValueOnce({ ok: true })
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ webhooks: [] }) })
+      mockApiClient.post.mockResolvedValueOnce(undefined)
+      mockApiClient.get.mockResolvedValueOnce({ webhooks: [] })
 
       await useWorkflowStore.getState().createWebhook('wf-1')
       await new Promise(resolve => setTimeout(resolve, 0))
 
-      expect(fetchSpy).toHaveBeenCalledWith(
+      expect(mockApiClient.post).toHaveBeenCalledWith(
         expect.stringContaining('/webhooks'),
-        expect.objectContaining({ method: 'POST' })
       )
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+      mockApiClient.post.mockRejectedValueOnce(new Error('Network error'))
 
       await useWorkflowStore.getState().createWebhook('wf-1')
 

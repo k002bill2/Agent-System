@@ -6,17 +6,26 @@
     },
     "codex-cli": {
       "command": "npx",
-      "args": ["-y", "codex-mcp-server"],
-      "disabled": false
+      "args": [
+        "-y",
+        "codex-mcp-server"
+      ],
+      "disabled": true
     },
     "context7": {
       "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp@latest"],
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ],
       "disabled": false
     },
     "magic": {
       "command": "npx",
-      "args": ["-y", "@21st-dev/magic"],
+      "args": [
+        "-y",
+        "@21st-dev/magic"
+      ],
       "env": {
         "TWENTYFIRST_API_KEY": "${TWENTYFIRST_API_KEY}"
       },
@@ -25,7 +34,10 @@
     },
     "tavily": {
       "command": "npx",
-      "args": ["-y", "tavily-mcp@latest"],
+      "args": [
+        "-y",
+        "tavily-mcp@latest"
+      ],
       "env": {
         "TAVILY_API_KEY": "${TAVILY_API_KEY}"
       },
@@ -33,25 +45,42 @@
     },
     "playwright": {
       "command": "npx",
-      "args": ["-y", "@playwright/mcp@latest"],
+      "args": [
+        "-y",
+        "@playwright/mcp@latest"
+      ],
       "disabled": true,
       "_note": "Disabled to save ~14K tokens. Enable when needed for browser automation."
     },
     "shadcn": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-shadcn"],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-shadcn"
+      ],
       "disabled": true,
       "_note": "Enable when working with shadcn components"
     },
     "serena": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server", "--context", "ide-assistant"],
+      "args": [
+        "--from",
+        "git+https://github.com/oraios/serena",
+        "serena",
+        "start-mcp-server",
+        "--context",
+        "ide-assistant"
+      ],
       "disabled": true,
       "_note": "Enable for IDE assistant features"
     },
     "morphllm-fast-apply": {
       "command": "npx",
-      "args": ["-y", "@morph-llm/morph-fast-apply", "/Users/younghwankang/Work/liveMetro"],
+      "args": [
+        "-y",
+        "@morph-llm/morph-fast-apply",
+        "/Users/younghwankang/Work/liveMetro"
+      ],
       "env": {
         "MORPH_API_KEY": "${MORPH_API_KEY}"
       },
@@ -60,7 +89,10 @@
     },
     "github": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
       },
@@ -69,7 +101,10 @@
     },
     "claude-context": {
       "command": "npx",
-      "args": ["-y", "@zilliz/claude-context-mcp@latest"],
+      "args": [
+        "-y",
+        "@zilliz/claude-context-mcp@latest"
+      ],
       "env": {
         "OPENAI_API_KEY": "${OPENAI_API_KEY}",
         "MILVUS_ADDRESS": "${MILVUS_ADDRESS}",

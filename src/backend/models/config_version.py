@@ -7,6 +7,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from utils.time import utcnow
+
 
 class ConfigType(str, Enum):
     """Type of configuration being versioned."""
@@ -46,7 +48,7 @@ class ConfigVersion(BaseModel):
     diff_from_previous: dict[str, Any] | None = None  # JSON diff
     # Metadata
     created_by: str | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
     # Rollback tracking
     rolled_back_from: str | None = None  # Version ID this was rolled back from
     rolled_back_at: datetime | None = None

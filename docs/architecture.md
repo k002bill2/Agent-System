@@ -63,47 +63,98 @@ src/backend/
 │   ├── nodes.py             # 6가지 노드 구현
 │   ├── parallel_executor.py # 병렬 실행
 │   └── tools.py             # MCP 도구 실행자
-├── services/
-│   ├── agent_registry.py        # 에이전트 등록소
-│   ├── analytics_service.py     # 분석 서비스 (세션 파일 + DB 이중 지원)
-│   ├── auth_service.py          # OAuth/JWT/Email 인증
-│   ├── claude_session_monitor.py # Claude 세션 파일 스캔/파싱
-│   ├── mcp_service.py           # MCP 서버 관리
-│   ├── feedback_service.py      # RLHF 피드백
-│   ├── rag_service.py           # Vector DB + RAG
-│   ├── sandbox_manager.py       # Docker 격리 실행
-│   ├── warp_service.py          # Warp 터미널 + MCP 에이전트
-│   ├── notification_service.py    # 알림 서비스 (Slack, Discord, Email, Webhook)
+├── services/                    # 63개 서비스 모듈
+│   ├── agent_manager.py           # 에이전트 인스턴스 관리
+│   ├── agent_registry.py          # 에이전트 등록소
+│   ├── alerting_service.py        # 알림/경고 서비스
+│   ├── analytics_service.py       # 분석 서비스 (세션 파일 + DB 이중 지원)
+│   ├── artifact_service.py        # 워크플로우 아티팩트 관리
+│   ├── audit_integrity.py         # 감사 로그 무결성 검증
 │   ├── audit_service.py           # 감사 로그 서비스
+│   ├── auth_service.py            # OAuth/JWT/Email 인증
+│   ├── claude_config_service.py   # Claude OAuth 토큰 관리 (Keychain/env/파일)
+│   ├── claude_session_monitor.py  # Claude 세션 파일 스캔/파싱
+│   ├── code_entity_extractor.py   # RAG 메타데이터용 코드 엔티티 추출 (AST/Regex)
 │   ├── cost_allocation_service.py # 비용 추적/할당 서비스
-│   ├── organization_service.py    # 조직/멀티테넌트 서비스
-│   ├── workflow_service.py        # 워크플로우 실행 엔진
-│   ├── rate_limit_service.py      # API 속도 제한 서비스
-│   ├── health_service.py          # 시스템 헬스체크 서비스
+│   ├── credential_service.py      # 자격증명 암호화/저장
 │   ├── encryption_service.py      # AES-256-GCM 암호화 서비스
+│   ├── external_usage_service.py  # 외부 LLM 사용량 추적
+│   ├── feedback_service.py        # RLHF 피드백
+│   ├── frontmatter_parser.py      # YAML Frontmatter 파싱 (SKILL.md, agent .md)
 │   ├── git_service.py             # Git 작업 관리 서비스
 │   ├── github_service.py          # GitHub API 통합
-│   ├── project_access_service.py  # RBAC 접근제어 서비스
-│   ├── quota_service.py           # 사용량 쿼터 서비스
-│   ├── template_service.py        # 프로젝트/워크플로우 템플릿
+│   ├── health_service.py          # 시스템 헬스체크 서비스
+│   ├── key_management.py          # HKDF 기반 암호화 키 관리
 │   ├── llm_router_service.py      # LLM 라우팅/Failover
-│   ├── session_service.py         # 세션 생명주기 관리
-│   ├── task_service.py            # 태스크 CRUD/상태 관리
-│   ├── merge_service.py           # Git 머지/충돌 해결
+│   ├── llm_service.py             # LLM 프로바이더 팩토리
+│   ├── logging_service.py         # 구조화된 로깅
+│   ├── mcp_config_manager.py      # MCP 설정 파일 관리
 │   ├── mcp_manager.py             # MCP 서버 생명주기 관리
-│   ├── project_config_monitor.py  # 프로젝트 설정 파일 모니터링
-│   ├── tmux_service.py            # Tmux 세션 관리
+│   ├── mcp_service.py             # MCP 서버 관리
+│   ├── merge_service.py           # Git 머지/충돌 해결
+│   ├── notification_service.py    # 알림 서비스 (Slack, Discord, Email, Webhook)
+│   ├── organization_service.py    # 조직/멀티테넌트 서비스
 │   ├── playground_service.py      # 에이전트 플레이그라운드
-│   ├── credential_service.py      # 자격증명 암호화/저장
-│   ├── secret_service.py          # 시크릿 관리
-│   ├── webhook_service.py         # Webhook 딜리버리
-│   ├── external_usage_service.py  # 외부 LLM 사용량 추적
-│   ├── task_analysis_service.py   # 태스크 분석
+│   ├── playground_tools.py        # 플레이그라운드 도구 정의
+│   ├── project_access_service.py  # RBAC 접근제어 서비스
 │   ├── project_cleanup_service.py # 프로젝트 삭제/정리
-│   └── ...
-├── api/                     # FastAPI 라우터
+│   ├── project_config_monitor.py  # 프로젝트 설정 파일 모니터링
+│   ├── project_discovery.py       # 프로젝트 자동 발견
+│   ├── project_invitation_service.py # 프로젝트 멤버 초대 (이메일, 7일 만료)
+│   ├── project_runner.py          # 프로젝트 체크 실행 (test/lint/build/typecheck)
+│   ├── project_template_service.py # 프로젝트 템플릿 관리
+│   ├── quota_service.py           # 사용량 쿼터 서비스
+│   ├── rag_service.py             # Vector DB + RAG
+│   ├── rate_limit_service.py      # API 속도 제한 서비스
+│   ├── sandbox_manager.py         # Docker 격리 실행
+│   ├── scheduler_service.py       # APScheduler 기반 Cron 스케줄링
+│   ├── secret_service.py          # Fernet 암호화 시크릿 관리
+│   ├── session_service.py         # 세션 생명주기 관리
+│   ├── skill_manager.py           # SKILL.md 파일 CRUD 관리
+│   ├── task_analysis_service.py   # 태스크 복잡도 분석
+│   ├── task_service.py            # 태스크 CRUD/상태 관리
+│   ├── template_service.py        # 워크플로우 템플릿 관리
+│   ├── tmux_service.py            # Tmux 세션 관리
+│   ├── variable_expander.py       # ${{ }} 변수 치환 (steps/env/matrix/secrets)
+│   ├── version_service.py         # 설정 버전 관리/롤백
+│   ├── warp_service.py            # Warp 터미널 + MCP 에이전트
+│   ├── webhook_service.py         # Webhook 딜리버리 (HMAC-SHA256)
+│   ├── workflow_engine.py         # 워크플로우 DAG 실행 엔진
+│   ├── workflow_service.py        # 워크플로우 CRUD 서비스
+│   └── workflow_yaml_parser.py    # 워크플로우 YAML 파싱
+├── api/                     # FastAPI 라우터 (55개 모듈)
+├── auth/                    # 인증 프로바이더
+│   └── providers/
+│       ├── base.py          # AuthProvider ABC, UserInfo
+│       ├── google.py        # Google OAuth
+│       ├── github.py        # GitHub OAuth
+│       ├── oidc.py          # OpenID Connect (httpx 기반)
+│       └── saml.py          # SAML 2.0 (stdlib XML 기반)
 ├── db/                      # SQLAlchemy ORM
-└── models/                  # 데이터 모델
+│   └── models/
+│       ├── session.py       # SessionModel, TaskModel, MessageModel, ApprovalModel
+│       ├── auth.py          # UserModel, RefreshTokenModel
+│       ├── claude_session.py # ClaudeSessionSnapshotModel (세션 스냅샷)
+│       ├── feedback.py      # FeedbackModel, TaskEvaluationModel
+│       ├── organization.py  # OrganizationModel, OrganizationMemberModel
+│       ├── notification.py  # NotificationRuleModel (project_ids JSONB)
+│       ├── workflow.py      # WorkflowModel, WorkflowRunModel
+│       ├── git.py           # MergeRequestModel, BranchProtectionRuleModel
+│       ├── cost.py          # CostAllocationModel
+│       ├── llm.py           # LLMModelConfigModel
+│       ├── project.py       # ProjectModel
+│       ├── activity.py      # SessionActivityModel
+│       └── base.py          # Base, TimestampMixin
+├── models/                  # Pydantic 데이터 모델 (32개)
+├── middleware/
+│   └── rate_limit.py        # RateLimitMiddleware (per-user/IP, tier-based)
+├── utils/
+│   └── time.py              # utcnow() - timezone-aware UTC (datetime.utcnow() 대체)
+└── tools/                   # MCP 도구 구현
+    ├── bash_tools.py
+    ├── code_tools.py
+    ├── file_tools.py
+    └── warp_tools.py
 ```
 
 ## Agent Registry
@@ -121,7 +172,7 @@ class AgentRegistry:
 | Agent ID | 카테고리 | 설명 |
 |----------|----------|------|
 | `web-ui-specialist` | development | React Web UI/UX |
-| `backend-integration-specialist` | development | Firebase, API 통합 |
+| `backend-integration-specialist` | development | FastAPI, SQLAlchemy, LangGraph 통합 |
 | `test-automation-specialist` | quality | Vitest 테스트 자동화 |
 | `aos-orchestrator` | orchestration | 멀티 에이전트 조정 |
 | `quality-validator` | quality | 코드 품질 검증 |
@@ -227,7 +278,7 @@ USE_DATABASE=false
 - **AWS RDS** - 엔터프라이즈급
 - **Neon** - 서버리스 PostgreSQL
 
-### Schema (주요 테이블)
+### Schema (주요 테이블 - 34개)
 
 | 테이블 | 용도 |
 |--------|------|
@@ -245,6 +296,7 @@ USE_DATABASE=false
 | `notification_rules` | 알림 규칙 |
 | `secrets` | 암호화된 시크릿 |
 | `rate_limits` | API 속도 제한 |
+| `claude_session_snapshots` | Claude 세션 스냅샷 (모델, 토큰, 비용, 프로젝트별) |
 | `workflow_definitions` | 워크플로우 정의 |
 | `workflow_runs` | 워크플로우 실행 이력 |
 | `workflow_jobs` | 워크플로우 잡 |

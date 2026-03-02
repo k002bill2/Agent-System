@@ -1,7 +1,6 @@
 import { create } from 'zustand'
-import { authFetch } from './auth'
-
-const API_BASE = '/api'
+import { apiClient } from '../services/apiClient'
+import { getApiUrl } from '../config/api'
 
 // Types matching backend models
 export interface ProjectInfo {
@@ -334,12 +333,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ isLoading: true, error: null })
 
     try {
-      const res = await authFetch(`${API_BASE}/project-configs`)
-      if (!res.ok) {
-        throw new Error(`Failed to fetch projects: ${res.statusText}`)
-      }
-
-      const data = await res.json()
+      const data = await apiClient.get<{ projects: ProjectInfo[] }>('/api/project-configs')
       set({
         projects: data.projects,
         isLoading: false,
@@ -367,12 +361,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ isLoadingProject: true, error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${projectId}`)
-      if (!res.ok) {
-        throw new Error(`Failed to fetch project: ${res.statusText}`)
-      }
-
-      const data: ProjectConfigSummary = await res.json()
+      const data = await apiClient.get<ProjectConfigSummary>(`/api/project-configs/${projectId}`)
       set({
         selectedProject: data,
         isLoadingProject: false,
@@ -387,12 +376,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ isLoadingAll: true, error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/skills/all`)
-      if (!res.ok) {
-        throw new Error(`Failed to fetch skills: ${res.statusText}`)
-      }
-
-      const data: SkillConfig[] = await res.json()
+      const data = await apiClient.get<SkillConfig[]>('/api/project-configs/skills/all')
       set({
         allSkills: data,
         isLoadingAll: false,
@@ -407,12 +391,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ isLoadingAll: true, error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/agents/all`)
-      if (!res.ok) {
-        throw new Error(`Failed to fetch agents: ${res.statusText}`)
-      }
-
-      const data: AgentConfig[] = await res.json()
+      const data = await apiClient.get<AgentConfig[]>('/api/project-configs/agents/all')
       set({
         allAgents: data,
         isLoadingAll: false,
@@ -427,12 +406,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ isLoadingContent: true, skillContent: null, skillReferences: [] })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${projectId}/skills/${skillId}/content`)
-      if (!res.ok) {
-        throw new Error(`Failed to fetch skill content: ${res.statusText}`)
-      }
-
-      const data = await res.json()
+      const data = await apiClient.get<{ content: string; references: string[] }>(`/api/project-configs/${projectId}/skills/${skillId}/content`)
       set({
         skillContent: data.content,
         skillReferences: data.references,
@@ -455,14 +429,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
 
     try {
       const endpoint = enabled ? 'enable' : 'disable'
-      const res = await fetch(`${API_BASE}/project-configs/${projectId}/mcp/${serverId}/${endpoint}`, {
-        method: 'POST',
-      })
-
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.detail || `Failed to ${endpoint} server`)
-      }
+      await apiClient.post(`/api/project-configs/${projectId}/mcp/${serverId}/${endpoint}`)
 
       // Update local state
       set((state) => {
@@ -491,16 +458,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
 
   addExternalPath: async (path: string) => {
     try {
-      const res = await fetch(`${API_BASE}/project-configs/external-paths`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path }),
-      })
-
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.detail || 'Failed to add path')
-      }
+      await apiClient.post('/api/project-configs/external-paths', { path })
 
       // Refresh projects list
       await get().fetchProjects()
@@ -515,14 +473,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
   removeExternalPath: async (path: string) => {
     try {
       const encodedPath = encodeURIComponent(path)
-      const res = await fetch(`${API_BASE}/project-configs/external-paths/${encodedPath}`, {
-        method: 'DELETE',
-      })
-
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.detail || 'Failed to remove path')
-      }
+      await apiClient.delete(`/api/project-configs/external-paths/${encodedPath}`)
 
       // Refresh projects list
       await get().fetchProjects()
@@ -536,14 +487,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
 
   removeProject: async (projectId: string) => {
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${projectId}/remove`, {
-        method: 'DELETE',
-      })
-
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.detail || 'Failed to remove project')
-      }
+      await apiClient.delete(`/api/project-configs/${projectId}/remove`)
 
       // Refresh projects list
       await get().fetchProjects()
@@ -562,7 +506,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
       stopStreaming()
     }
 
-    const eventSource = new EventSource(`${API_BASE}/project-configs/stream`)
+    const eventSource = new EventSource(getApiUrl('/api/project-configs/stream'))
 
     eventSource.addEventListener('config_change', (event) => {
       try {
@@ -642,16 +586,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ savingMCP: true, error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${projectId}/mcp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to create MCP server')
-      }
+      await apiClient.post(`/api/project-configs/${projectId}/mcp`, data)
 
       // Refresh project data
       await get().fetchProjectSummary(projectId)
@@ -670,16 +605,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ savingMCP: true, error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${projectId}/mcp/${serverId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to update MCP server')
-      }
+      await apiClient.put(`/api/project-configs/${projectId}/mcp/${serverId}`, data)
 
       // Refresh project data
       await get().fetchProjectSummary(projectId)
@@ -699,14 +625,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set((state) => ({ deletingMCP: new Set([...state.deletingMCP, key]) }))
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${projectId}/mcp/${serverId}`, {
-        method: 'DELETE',
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to delete MCP server')
-      }
+      await apiClient.delete(`/api/project-configs/${projectId}/mcp/${serverId}`)
 
       // Refresh project data
       await get().fetchProjectSummary(projectId)
@@ -749,16 +668,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ savingSkill: true, error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${projectId}/skills`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ skill_id: skillId, content }),
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to create skill')
-      }
+      await apiClient.post(`/api/project-configs/${projectId}/skills`, { skill_id: skillId, content })
 
       await get().fetchProjectSummary(projectId)
       set({ skillModalMode: null, editingSkill: null })
@@ -776,16 +686,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ savingSkill: true, error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${projectId}/skills/${skillId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to update skill')
-      }
+      await apiClient.put(`/api/project-configs/${projectId}/skills/${skillId}`, { content })
 
       await get().fetchProjectSummary(projectId)
       set({ skillModalMode: null, editingSkill: null })
@@ -804,14 +705,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set((state) => ({ deletingSkills: new Set([...state.deletingSkills, key]) }))
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${projectId}/skills/${skillId}`, {
-        method: 'DELETE',
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to delete skill')
-      }
+      await apiClient.delete(`/api/project-configs/${projectId}/skills/${skillId}`)
 
       await get().fetchProjectSummary(projectId)
       return true
@@ -853,12 +747,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ isLoadingContent: true })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${projectId}/agents/${agentId}/content`)
-      if (!res.ok) {
-        throw new Error('Failed to fetch agent content')
-      }
-
-      const data = await res.json()
+      const data = await apiClient.get<{ content: string }>(`/api/project-configs/${projectId}/agents/${agentId}/content`)
       set({ agentContent: data.content, isLoadingContent: false })
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
@@ -870,16 +759,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ savingAgent: true, error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${projectId}/agents`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agent_id: agentId, content, is_shared: isShared }),
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to create agent')
-      }
+      await apiClient.post(`/api/project-configs/${projectId}/agents`, { agent_id: agentId, content, is_shared: isShared })
 
       await get().fetchProjectSummary(projectId)
       set({ agentModalMode: null, editingAgent: null })
@@ -897,16 +777,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ savingAgent: true, error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${projectId}/agents/${agentId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to update agent')
-      }
+      await apiClient.put(`/api/project-configs/${projectId}/agents/${agentId}`, { content })
 
       await get().fetchProjectSummary(projectId)
       set({ agentModalMode: null, editingAgent: null })
@@ -925,14 +796,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set((state) => ({ deletingAgents: new Set([...state.deletingAgents, key]) }))
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${projectId}/agents/${agentId}`, {
-        method: 'DELETE',
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to delete agent')
-      }
+      await apiClient.delete(`/api/project-configs/${projectId}/agents/${agentId}`)
 
       await get().fetchProjectSummary(projectId)
       return true
@@ -954,16 +818,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${projectId}/hooks/events/${event}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matcher, hooks }),
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to add hook')
-      }
+      await apiClient.post(`/api/project-configs/${projectId}/hooks/events/${event}`, { matcher, hooks })
 
       await get().fetchProjectSummary(projectId)
       return true
@@ -978,14 +833,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${projectId}/hooks/${event}/${index}`, {
-        method: 'DELETE',
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to delete hook')
-      }
+      await apiClient.delete(`/api/project-configs/${projectId}/hooks/${event}/${index}`)
 
       await get().fetchProjectSummary(projectId)
       return true
@@ -1001,18 +849,8 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${sourceProjectId}/skills/${skillId}/copy`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ skill_id: skillId, target_project_id: targetProjectId }),
-      })
+      await apiClient.post(`/api/project-configs/${sourceProjectId}/skills/${skillId}/copy`, { skill_id: skillId, target_project_id: targetProjectId })
 
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to copy skill')
-      }
-
-      // Refresh both projects
       await get().fetchProjects()
       await get().fetchProjectSummary(targetProjectId)
       return true
@@ -1027,16 +865,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${sourceProjectId}/agents/${agentId}/copy`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agent_id: agentId, target_project_id: targetProjectId }),
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to copy agent')
-      }
+      await apiClient.post(`/api/project-configs/${sourceProjectId}/agents/${agentId}/copy`, { agent_id: agentId, target_project_id: targetProjectId })
 
       await get().fetchProjects()
       await get().fetchProjectSummary(targetProjectId)
@@ -1052,16 +881,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${sourceProjectId}/mcp/${serverId}/copy`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ server_id: serverId, target_project_id: targetProjectId }),
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to copy MCP server')
-      }
+      await apiClient.post(`/api/project-configs/${sourceProjectId}/mcp/${serverId}/copy`, { server_id: serverId, target_project_id: targetProjectId })
 
       await get().fetchProjects()
       await get().fetchProjectSummary(targetProjectId)
@@ -1077,16 +897,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${sourceProjectId}/hooks/${event}/${index}/copy`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event, index, target_project_id: targetProjectId }),
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to copy hook')
-      }
+      await apiClient.post(`/api/project-configs/${sourceProjectId}/hooks/${event}/${index}/copy`, { event, index, target_project_id: targetProjectId })
 
       await get().fetchProjects()
       await get().fetchProjectSummary(targetProjectId)
@@ -1122,12 +933,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ isLoadingContent: true })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${projectId}/commands/${commandId}/content`)
-      if (!res.ok) {
-        throw new Error('Failed to fetch command content')
-      }
-
-      const data = await res.json()
+      const data = await apiClient.get<{ content: string }>(`/api/project-configs/${projectId}/commands/${commandId}/content`)
       set({ commandContent: data.content, isLoadingContent: false })
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
@@ -1139,16 +945,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ savingCommand: true, error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${projectId}/commands`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command_id: commandId, content }),
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to create command')
-      }
+      await apiClient.post(`/api/project-configs/${projectId}/commands`, { command_id: commandId, content })
 
       await get().fetchProjectSummary(projectId)
       set({ commandModalMode: null, editingCommand: null })
@@ -1166,16 +963,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ savingCommand: true, error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${projectId}/commands/${commandId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to update command')
-      }
+      await apiClient.put(`/api/project-configs/${projectId}/commands/${commandId}`, { content })
 
       await get().fetchProjectSummary(projectId)
       set({ commandModalMode: null, editingCommand: null })
@@ -1194,14 +982,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set((state) => ({ deletingCommands: new Set([...state.deletingCommands, key]) }))
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${projectId}/commands/${commandId}`, {
-        method: 'DELETE',
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to delete command')
-      }
+      await apiClient.delete(`/api/project-configs/${projectId}/commands/${commandId}`)
 
       await get().fetchProjectSummary(projectId)
       return true
@@ -1222,16 +1003,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/project-configs/${sourceProjectId}/commands/${commandId}/copy`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command_id: commandId, target_project_id: targetProjectId }),
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to copy command')
-      }
+      await apiClient.post(`/api/project-configs/${sourceProjectId}/commands/${commandId}/copy`, { command_id: commandId, target_project_id: targetProjectId })
 
       await get().fetchProjects()
       await get().fetchProjectSummary(targetProjectId)
@@ -1248,12 +1020,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ isLoadingDBProjects: true, error: null })
 
     try {
-      const res = await authFetch(`${API_BASE}/project-registry`)
-      if (!res.ok) {
-        throw new Error(`Failed to fetch DB projects: ${res.statusText}`)
-      }
-
-      const data = await res.json()
+      const data = await apiClient.get<{ projects: DBProject[] }>('/api/project-registry')
       set({
         dbProjects: data.projects,
         isLoadingDBProjects: false,
@@ -1268,12 +1035,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ isLoadingDBProjects: true, error: null })
 
     try {
-      const res = await authFetch(`${API_BASE}/project-registry/all`)
-      if (!res.ok) {
-        throw new Error(`Failed to fetch all DB projects: ${res.statusText}`)
-      }
-
-      const data = await res.json()
+      const data = await apiClient.get<{ projects: DBProject[] }>('/api/project-registry/all')
       set({
         dbProjects: data.projects,
         isLoadingDBProjects: false,
@@ -1288,16 +1050,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ error: null })
 
     try {
-      const res = await authFetch(`${API_BASE}/project-registry`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to create project')
-      }
+      await apiClient.post('/api/project-registry', data)
 
       // Refresh both DB projects and config projects
       await get().fetchAllDBProjects()
@@ -1314,16 +1067,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ error: null })
 
     try {
-      const res = await authFetch(`${API_BASE}/project-registry/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to update project')
-      }
+      await apiClient.put(`/api/project-registry/${id}`, data)
 
       await get().fetchAllDBProjects()
       await get().fetchProjects()
@@ -1339,14 +1083,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ error: null })
 
     try {
-      const res = await authFetch(`${API_BASE}/project-registry/${id}`, {
-        method: 'DELETE',
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to delete project')
-      }
+      await apiClient.delete(`/api/project-registry/${id}`)
 
       await get().fetchAllDBProjects()
       await get().fetchProjects()
@@ -1362,14 +1099,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ error: null })
 
     try {
-      const res = await authFetch(`${API_BASE}/project-registry/${id}/restore`, {
-        method: 'POST',
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to restore project')
-      }
+      await apiClient.post(`/api/project-registry/${id}/restore`)
 
       await get().fetchAllDBProjects()
       await get().fetchProjects()
@@ -1385,14 +1115,7 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     set({ error: null })
 
     try {
-      const res = await authFetch(`${API_BASE}/project-registry/${id}/toggle-active`, {
-        method: 'PATCH',
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || 'Failed to toggle project active status')
-      }
+      await apiClient.patch(`/api/project-registry/${id}/toggle-active`)
 
       await get().fetchAllDBProjects()
       await get().fetchProjects()

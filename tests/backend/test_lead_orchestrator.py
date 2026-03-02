@@ -18,7 +18,7 @@ class TestLeadOrchestratorAgent:
 
     def setup_method(self):
         """테스트 전 오케스트레이터 생성 (LLM mock)."""
-        with patch("agents.base.ChatGoogleGenerativeAI"):
+        with patch("agents.base.BaseAgent._create_llm", return_value=MagicMock()):
             self.orchestrator = LeadOrchestratorAgent()
 
     def test_initialization(self):
@@ -286,7 +286,7 @@ class TestAnalyzeTaskParsing:
 
     def setup_method(self):
         """테스트 전 오케스트레이터 생성 (LLM mock)."""
-        with patch("agents.base.ChatGoogleGenerativeAI"):
+        with patch("agents.base.BaseAgent._create_llm", return_value=MagicMock()):
             self.orchestrator = LeadOrchestratorAgent()
 
     @pytest.mark.asyncio

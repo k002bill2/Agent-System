@@ -7,7 +7,7 @@ Firebase Auth, Firestore, Cloud Functions, REST API 연동,
 import time
 from typing import Any
 
-from agents.base import AgentConfig, AgentResult, BaseAgent
+from agents.base import SPECIALIST_AGENT_MODEL, AgentConfig, AgentResult, BaseAgent
 
 BACKEND_SYSTEM_PROMPT = """You are a Backend Integration Specialist Agent, an expert in Firebase services and API integration for React Native applications.
 
@@ -147,7 +147,7 @@ class BackendIntegrationAgent(BaseAgent):
             name="BackendIntegrationSpecialist",
             description="Firebase and API integration expert specializing in data sync, auth, and security",
             system_prompt=BACKEND_SYSTEM_PROMPT,
-            model_name="claude-sonnet-4-6",
+            model_name=SPECIALIST_AGENT_MODEL,
             temperature=0.4,  # 정확한 코드 생성을 위해 낮은 temperature
             max_tokens=8192,
             tools=["file_read", "file_write", "code_search", "api_test"],

@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/ethicalValidator.js 2>/dev/null || true",
+            "command": "node .claude/hooks/ethicalValidator.js",
             "timeout": 5,
             "statusMessage": "Safety check..."
           }
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/parallelCoordinator.js pre 2>/dev/null || true",
+            "command": "node .claude/hooks/parallelCoordinator.js pre",
             "timeout": 5,
             "statusMessage": "Parallel coordination..."
           }
@@ -76,7 +76,7 @@
           },
           {
             "type": "command",
-            "command": "node .claude/hooks/parallelCoordinator.js post 2>/dev/null || true",
+            "command": "node .claude/hooks/parallelCoordinator.js post",
             "timeout": 5,
             "statusMessage": "Parallel cleanup..."
           }
@@ -124,6 +124,19 @@
             "command": "node .claude/hooks/userPromptSubmit.js 2>/dev/null || true",
             "timeout": 5,
             "statusMessage": "Context activation..."
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{}' > .claude/coordination/active-locks.json && echo '{\"activeAgents\":[],\"completedAgents\":[],\"lastUpdated\":null,\"sessionId\":null}' > .claude/coordination/parallel-state.json",
+            "timeout": 5,
+            "statusMessage": "Session cleanup..."
           }
         ]
       }

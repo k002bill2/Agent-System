@@ -1,7 +1,6 @@
 import { create } from 'zustand'
+import { apiClient } from '../services/apiClient'
 import type { ClaudeUsageResponse } from '../types/claudeUsage'
-
-const API_BASE = 'http://localhost:8000/api'
 
 interface ClaudeUsageState {
   // Data
@@ -30,14 +29,7 @@ export const useClaudeUsageStore = create<ClaudeUsageState>((set, get) => ({
     set({ isLoading: true, error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/usage`)
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}))
-        throw new Error(errorData.detail || `Failed to fetch usage: ${res.statusText}`)
-      }
-
-      const data: ClaudeUsageResponse = await res.json()
+      const data = await apiClient.get<ClaudeUsageResponse>('/api/usage')
       set({
         usage: data,
         isLoading: false,

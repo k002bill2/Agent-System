@@ -6,6 +6,10 @@ from typing import Annotated, Any, TypedDict
 
 from pydantic import BaseModel, Field
 
+from utils.time import utcnow
+
+from .errors import StructuredError
+
 
 class TaskStatus(str, Enum):
     """Task execution status."""
@@ -38,7 +42,7 @@ class AgentInfo(BaseModel):
     status: TaskStatus = TaskStatus.PENDING
     current_task: str | None = None
     capabilities: list[str] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 class TaskNode(BaseModel):
@@ -53,8 +57,8 @@ class TaskNode(BaseModel):
     children: list[str] = Field(default_factory=list)
     result: Any | None = None
     error: str | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
     # HITL fields
     pending_approval_id: str | None = None  # ID of pending approval request
@@ -63,6 +67,7 @@ class TaskNode(BaseModel):
     retry_count: int = 0
     max_retries: int = 3
     error_history: list[str] = Field(default_factory=list)
+    structured_errors: list[StructuredError] = Field(default_factory=list)
 
     # Pause/Resume fields
     paused_at: datetime | None = None

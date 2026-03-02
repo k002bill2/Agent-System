@@ -5,7 +5,7 @@
  */
 
 import { create } from 'zustand'
-import { API_BASE_URL } from '../config/api'
+import { apiClient } from '../services/apiClient'
 
 // Types
 export interface AuditLogEntry {
@@ -109,13 +109,7 @@ export const useAuditStore = create<AuditState>((set, get) => ({
       params.set('limit', String(pageSize))
       params.set('offset', String(page * pageSize))
 
-      const response = await fetch(`${API_BASE_URL}/api/audit?${params}`)
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch audit logs')
-      }
-
-      const data = await response.json()
+      const data = await apiClient.get<{ logs: AuditLogEntry[]; total: number }>(`/api/audit?${params}`)
 
       set({
         logs: data.logs,
@@ -140,31 +134,7 @@ export const useAuditStore = create<AuditState>((set, get) => ({
       const { filter } = get()
       if (filter.project_id) params.set('project_id', filter.project_id)
 
-      const response = await fetch(`${API_BASE_URL}/api/audit/stats?${params}`)
-
-      if (!response.ok) {
-        // If stats endpoint doesn't exist, calculate from logs
-        const { logs, total } = get()
-        const toolExecutions = logs.filter(l => l.action.includes('tool_executed')).length
-        const approvals = logs.filter(l => l.action.includes('approval')).length
-        const errors = logs.filter(l => l.status === 'failed').length
-
-        set({
-          stats: {
-            total_actions: total,
-            tool_executions: toolExecutions,
-            approvals: approvals,
-            errors: errors,
-            actions_by_type: {},
-            actions_by_status: {},
-            recent_trend: [],
-          },
-          isLoadingStats: false,
-        })
-        return
-      }
-
-      const data = await response.json()
+      const data = await apiClient.get<AuditStats>(`/api/audit/stats?${params}`)
       set({ stats: data, isLoadingStats: false })
     } catch {
       // Fallback: calculate stats locally

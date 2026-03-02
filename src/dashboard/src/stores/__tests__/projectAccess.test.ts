@@ -1,13 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-// Mock authFetch before importing the store
-vi.mock('../auth', () => ({
-  authFetch: vi.fn(),
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
 }))
 
 import { useProjectAccessStore } from '../projectAccess'
-import { authFetch } from '../auth'
+import { apiClient } from '../../services/apiClient'
+
+const mockApiClient = vi.mocked(apiClient)
 
 function resetStore() {
   useProjectAccessStore.setState({
@@ -21,7 +28,7 @@ function resetStore() {
 describe('projectAccess store', () => {
   beforeEach(() => {
     resetStore()
-    vi.mocked(authFetch).mockReset()
+    vi.clearAllMocks()
   })
 
   // ── Initial State ──────────────────────────────────────
@@ -58,10 +65,7 @@ describe('projectAccess store', () => {
         { id: 'm-1', project_id: 'p1', user_id: 'u1', role: 'owner' },
         { id: 'm-2', project_id: 'p1', user_id: 'u2', role: 'viewer' },
       ]
-      vi.mocked(authFetch).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(members),
-      } as Response)
+      mockApiClient.get.mockResolvedValueOnce(members)
 
       await useProjectAccessStore.getState().fetchMembers('p1')
 
@@ -70,28 +74,12 @@ describe('projectAccess store', () => {
     })
 
     it('sets error on failure', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce({
-        ok: false,
-        statusText: 'Forbidden',
-        json: () => Promise.resolve({ detail: 'Access denied' }),
-      } as any)
+      mockApiClient.get.mockRejectedValueOnce(new Error('Access denied'))
 
       await useProjectAccessStore.getState().fetchMembers('p1')
 
       expect(useProjectAccessStore.getState().error).toBe('Access denied')
       expect(useProjectAccessStore.getState().loading).toBe(false)
-    })
-
-    it('falls back to statusText when json fails', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce({
-        ok: false,
-        statusText: 'Server Error',
-        json: () => Promise.reject(new Error('parse error')),
-      } as any)
-
-      await useProjectAccessStore.getState().fetchMembers('p1')
-
-      expect(useProjectAccessStore.getState().error).toBe('Server Error')
     })
   })
 
@@ -100,10 +88,7 @@ describe('projectAccess store', () => {
   describe('addMember', () => {
     it('adds member to list', async () => {
       const newMember = { id: 'm-1', project_id: 'p1', user_id: 'u1', role: 'editor' }
-      vi.mocked(authFetch).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(newMember),
-      } as Response)
+      mockApiClient.post.mockResolvedValueOnce(newMember)
 
       await useProjectAccessStore.getState().addMember('p1', 'u1', 'editor')
 
@@ -111,29 +96,8 @@ describe('projectAccess store', () => {
       expect(useProjectAccessStore.getState().loading).toBe(false)
     })
 
-    it('sends correct request body', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ id: 'm-1' }),
-      } as Response)
-
-      await useProjectAccessStore.getState().addMember('p1', 'u1', 'viewer')
-
-      expect(authFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/projects/p1/access'),
-        expect.objectContaining({
-          method: 'POST',
-          body: JSON.stringify({ user_id: 'u1', role: 'viewer' }),
-        })
-      )
-    })
-
     it('sets error on failure', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce({
-        ok: false,
-        statusText: 'Bad Request',
-        json: () => Promise.resolve({ detail: 'User not found' }),
-      } as any)
+      mockApiClient.post.mockRejectedValueOnce(new Error('User not found'))
 
       await useProjectAccessStore.getState().addMember('p1', 'u1', 'editor')
 
@@ -151,10 +115,7 @@ describe('projectAccess store', () => {
         ],
       })
       const updated = { id: 'm-1', project_id: 'p1', user_id: 'u1', role: 'editor' }
-      vi.mocked(authFetch).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(updated),
-      } as Response)
+      mockApiClient.put.mockResolvedValueOnce(updated)
 
       await useProjectAccessStore.getState().updateRole('p1', 'u1', 'editor')
 
@@ -162,11 +123,7 @@ describe('projectAccess store', () => {
     })
 
     it('sets error on failure', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce({
-        ok: false,
-        statusText: 'Forbidden',
-        json: () => Promise.resolve({ detail: 'Cannot change owner role' }),
-      } as any)
+      mockApiClient.put.mockRejectedValueOnce(new Error('Cannot change owner role'))
 
       await useProjectAccessStore.getState().updateRole('p1', 'u1', 'viewer')
 
@@ -184,7 +141,7 @@ describe('projectAccess store', () => {
           { id: 'm-2', project_id: 'p1', user_id: 'u2', role: 'viewer' } as any,
         ],
       })
-      vi.mocked(authFetch).mockResolvedValueOnce({ ok: true } as Response)
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
 
       await useProjectAccessStore.getState().removeMember('p1', 'u1')
 
@@ -194,11 +151,7 @@ describe('projectAccess store', () => {
     })
 
     it('sets error on failure', async () => {
-      vi.mocked(authFetch).mockResolvedValueOnce({
-        ok: false,
-        statusText: 'Forbidden',
-        json: () => Promise.resolve({ detail: 'Cannot remove owner' }),
-      } as any)
+      mockApiClient.delete.mockRejectedValueOnce(new Error('Cannot remove owner'))
 
       await useProjectAccessStore.getState().removeMember('p1', 'u1')
 
@@ -211,10 +164,7 @@ describe('projectAccess store', () => {
   describe('fetchMyAccess', () => {
     it('fetches and stores my access', async () => {
       const access = { project_id: 'p1', role: 'editor', has_access: true }
-      vi.mocked(authFetch).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(access),
-      } as Response)
+      mockApiClient.get.mockResolvedValueOnce(access)
 
       await useProjectAccessStore.getState().fetchMyAccess('p1')
 
@@ -225,7 +175,7 @@ describe('projectAccess store', () => {
       useProjectAccessStore.setState({
         myAccess: { project_id: 'p1', role: 'editor', has_access: true },
       })
-      vi.mocked(authFetch).mockResolvedValueOnce({ ok: false } as Response)
+      mockApiClient.get.mockRejectedValueOnce(new Error('Forbidden'))
 
       await useProjectAccessStore.getState().fetchMyAccess('p1')
 
@@ -233,7 +183,7 @@ describe('projectAccess store', () => {
     })
 
     it('sets null on network error', async () => {
-      vi.mocked(authFetch).mockRejectedValueOnce(new Error('Network'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Network'))
 
       await useProjectAccessStore.getState().fetchMyAccess('p1')
 

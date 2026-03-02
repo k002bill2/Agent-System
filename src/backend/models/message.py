@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from utils.time import utcnow
+
 
 class MessageType(str, Enum):
     """WebSocket message types."""
@@ -49,7 +51,7 @@ class Message(BaseModel):
 
     type: MessageType
     payload: dict[str, Any] = Field(default_factory=dict)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=utcnow)
     session_id: str | None = None
 
 

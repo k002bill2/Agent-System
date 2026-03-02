@@ -2,6 +2,8 @@
 import pytest
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
+
+from utils.time import utcnow
 import sys
 from pathlib import Path
 
@@ -40,7 +42,7 @@ async def test_accept_invitation_wrong_email_raises():
     inv = MagicMock()
     inv.email = "other@example.com"
     inv.status = "pending"
-    inv.expires_at = datetime.utcnow() + timedelta(days=1)
+    inv.expires_at = utcnow() + timedelta(days=1)
 
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = inv

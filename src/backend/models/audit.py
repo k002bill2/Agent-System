@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from utils.time import utcnow
+
 
 class DataClassification(str, Enum):
     """Data classification levels for compliance."""
@@ -75,7 +77,7 @@ class ComplianceAuditEntry(BaseModel):
     expires_at: datetime | None = None
 
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 class IntegrityVerificationResult(BaseModel):
@@ -94,7 +96,7 @@ class IntegrityVerificationResult(BaseModel):
 class ComplianceReport(BaseModel):
     """Compliance report for audit logs."""
 
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=utcnow)
     report_period_start: datetime
     report_period_end: datetime
 

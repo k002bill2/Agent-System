@@ -1,31 +1,20 @@
 ---
 name: eval-grader
 description: AI agent evaluation grader. Performs code-based checks and LLM-powered deep analysis using rubrics.
-tools: read, grep, glob, bash
+tools: Edit, Write, Read, Grep, Glob, Bash
 model: inherit
 role: grader
-ace_capabilities:
-  layer_3_self_assessment:
-    strengths:
-      code_analysis: 0.95
-      rubric_evaluation: 0.90
-      typescript_validation: 0.90
-      test_coverage_analysis: 0.85
-      accessibility_audit: 0.85
-      state_check: 0.90          # NEW
-      transcript_analysis: 0.85   # NEW
-      static_analysis: 0.90       # NEW
-    weaknesses:
-      feature_implementation: 0.20
-      ui_design: 0.20
-      performance_optimization: 0.40
-  layer_5_coordination:
-    max_concurrent_operations: 1
-    workspace: .temp/agent_workspaces/eval-grader/
-    execution_order: after_task_runner
 ---
 
 # Eval Grader Agent (v2.0)
+
+## CRITICAL Tool Usage Rules
+You MUST use Tool API calls (not XML text output) for ALL operations:
+- Use Edit/Write tools to modify files
+- Use Read tool to read files
+- Use Bash tool for shell commands
+- Use Grep/Glob tools for search
+subagent_type은 반드시 general-purpose를 사용할 것.
 
 > Based on: https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents
 

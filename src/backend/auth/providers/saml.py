@@ -3,12 +3,12 @@
 import base64
 import uuid
 import zlib
-from datetime import datetime
 from urllib.parse import urlencode
 from xml.etree import ElementTree as ET
 
 from auth.providers.base import AuthProvider, UserInfo
 from config import get_settings
+from utils.time import utcnow
 
 
 class SAMLConfig:
@@ -86,7 +86,7 @@ class SAMLAuthProvider(AuthProvider):
         self._pending_requests[request_id] = {
             "redirect_uri": redirect_uri,
             "state": state,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": utcnow().isoformat(),
         }
 
         # Encode and compress
@@ -156,7 +156,7 @@ class SAMLAuthProvider(AuthProvider):
 
     def _create_authn_request(self, request_id: str) -> str:
         """Create SAML AuthnRequest XML."""
-        issue_instant = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        issue_instant = utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
         return f"""<?xml version="1.0" encoding="UTF-8"?>
 <samlp:AuthnRequest

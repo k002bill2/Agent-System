@@ -16,6 +16,7 @@ from models.audit import (
     DataClassification,
     RetentionPolicy,
 )
+from utils.time import utcnow
 
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 
@@ -123,7 +124,7 @@ class AuditLogEntry(BaseModel):
     status: str = "success"
     error_message: str | None = None
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
 
     # Compliance fields (optional for backward compatibility)
     data_classification: DataClassification | None = None
@@ -371,7 +372,7 @@ class AuditService:
             changes = AuditService._calculate_changes(old_value, new_value)
 
         entry_id = str(uuid.uuid4())
-        now = datetime.utcnow()
+        now = utcnow()
 
         # Create DB model
         db_entry = AuditLogModel(
@@ -624,7 +625,7 @@ class AuditService:
     def cleanup_old_logs(days: int = 30) -> int:
         """Remove audit logs older than specified days (in-memory)."""
         global _audit_logs
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = utcnow() - timedelta(days=days)
         original_count = len(_audit_logs)
         _audit_logs = [log for log in _audit_logs if log.created_at >= cutoff]
         return original_count - len(_audit_logs)
@@ -636,7 +637,7 @@ class AuditService:
 
         from db.models import AuditLogModel
 
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = utcnow() - timedelta(days=days)
         stmt = delete(AuditLogModel).where(AuditLogModel.created_at < cutoff)
         result = await db.execute(stmt)
         await db.commit()

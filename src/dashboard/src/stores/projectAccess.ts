@@ -1,7 +1,5 @@
 import { create } from 'zustand'
-import { authFetch } from './auth'
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { apiClient } from '../services/apiClient'
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -85,14 +83,9 @@ export const useProjectAccessStore = create<ProjectAccessState>((set, get) => ({
   fetchMembers: async (projectId: string) => {
     set({ loading: true, error: null, members: [] })  // 프로젝트 전환 시 이전 멤버 즉시 초기화
     try {
-      const res = await authFetch(
-        `${API_BASE_URL}/api/projects/${projectId}/access`
+      const data = await apiClient.get<ProjectAccessMember[]>(
+        `/api/projects/${projectId}/access`
       )
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail || 'Failed to fetch members')
-      }
-      const data = await res.json()
       set({ members: data, loading: false })
     } catch (e: unknown) {
       set({ error: (e as Error).message, loading: false })
@@ -102,19 +95,10 @@ export const useProjectAccessStore = create<ProjectAccessState>((set, get) => ({
   addMember: async (projectId: string, userId: string, role: ProjectRole) => {
     set({ loading: true, error: null })
     try {
-      const res = await authFetch(
-        `${API_BASE_URL}/api/projects/${projectId}/access`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: userId, role }),
-        }
+      const newMember = await apiClient.post<ProjectAccessMember>(
+        `/api/projects/${projectId}/access`,
+        { user_id: userId, role }
       )
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail || 'Failed to add member')
-      }
-      const newMember = await res.json()
       set((state) => ({
         members: [...state.members, newMember],
         loading: false,
@@ -127,19 +111,10 @@ export const useProjectAccessStore = create<ProjectAccessState>((set, get) => ({
   updateRole: async (projectId: string, userId: string, role: ProjectRole) => {
     set({ loading: true, error: null })
     try {
-      const res = await authFetch(
-        `${API_BASE_URL}/api/projects/${projectId}/access/${userId}`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role }),
-        }
+      const updated = await apiClient.put<ProjectAccessMember>(
+        `/api/projects/${projectId}/access/${userId}`,
+        { role }
       )
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail || 'Failed to update role')
-      }
-      const updated = await res.json()
       set((state) => ({
         members: state.members.map((m) =>
           m.user_id === userId ? updated : m
@@ -154,14 +129,9 @@ export const useProjectAccessStore = create<ProjectAccessState>((set, get) => ({
   removeMember: async (projectId: string, userId: string) => {
     set({ loading: true, error: null })
     try {
-      const res = await authFetch(
-        `${API_BASE_URL}/api/projects/${projectId}/access/${userId}`,
-        { method: 'DELETE' }
+      await apiClient.delete(
+        `/api/projects/${projectId}/access/${userId}`
       )
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail || 'Failed to remove member')
-      }
       set((state) => ({
         members: state.members.filter((m) => m.user_id !== userId),
         loading: false,
@@ -174,13 +144,9 @@ export const useProjectAccessStore = create<ProjectAccessState>((set, get) => ({
   fetchMyAccess: async (projectId: string) => {
     set({ myAccess: null })  // 프로젝트 전환 시 이전 값 초기화
     try {
-      const res = await authFetch(
-        `${API_BASE_URL}/api/projects/${projectId}/access/me`
+      const data = await apiClient.get<MyAccess>(
+        `/api/projects/${projectId}/access/me`
       )
-      if (!res.ok) {
-        return
-      }
-      const data = await res.json()
       set({ myAccess: data })
     } catch {
       // 접근 권한 없으면 null 유지
@@ -192,68 +158,43 @@ export const useProjectAccessStore = create<ProjectAccessState>((set, get) => ({
   fetchInvitations: async (projectId: string) => {
     set({ isLoadingInvitations: true })
     try {
-      const res = await authFetch(
-        `${API_BASE_URL}/api/v1/projects/${projectId}/invitations`
+      const data = await apiClient.get<ProjectInvitation[]>(
+        `/api/v1/projects/${projectId}/invitations`
       )
-      if (res.ok) {
-        const data = await res.json()
-        set({ invitations: data, isLoadingInvitations: false })
-      } else {
-        set({ isLoadingInvitations: false })
-      }
+      set({ invitations: data, isLoadingInvitations: false })
     } catch {
       set({ isLoadingInvitations: false })
     }
   },
 
   inviteByEmail: async (projectId: string, email: string, role: string) => {
-    const res = await authFetch(
-      `${API_BASE_URL}/api/v1/projects/${projectId}/invitations`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, role }),
-      }
+    await apiClient.post(
+      `/api/v1/projects/${projectId}/invitations`,
+      { email, role }
     )
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: '초대 실패' }))
-      throw new Error(err.detail || '초대 실패')
-    }
     await get().fetchInvitations(projectId)
   },
 
   cancelInvitation: async (projectId: string, invitationId: string) => {
-    await authFetch(
-      `${API_BASE_URL}/api/v1/projects/${projectId}/invitations/${invitationId}`,
-      { method: 'DELETE' }
+    await apiClient.delete(
+      `/api/v1/projects/${projectId}/invitations/${invitationId}`
     )
     await get().fetchInvitations(projectId)
   },
 
   acceptInvitation: async (token: string) => {
-    const res = await authFetch(
-      `${API_BASE_URL}/api/v1/invitations/${token}/accept`,
-      { method: 'POST' }
+    return apiClient.post<{ project_id: string; role: string }>(
+      `/api/v1/invitations/${token}/accept`
     )
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: '수락 실패' }))
-      throw new Error(err.detail || '수락 실패')
-    }
-    return res.json()
   },
 
   fetchAvailableOrgMembers: async (projectId: string) => {
     set({ isLoadingAvailableMembers: true })
     try {
-      const res = await authFetch(
-        `${API_BASE_URL}/api/project-registry/${projectId}/available-members`
+      const data = await apiClient.get<{ members: OrgMemberForProject[] }>(
+        `/api/project-registry/${projectId}/available-members`
       )
-      if (res.ok) {
-        const data = await res.json()
-        set({ availableOrgMembers: data.members, isLoadingAvailableMembers: false })
-      } else {
-        set({ availableOrgMembers: [], isLoadingAvailableMembers: false })
-      }
+      set({ availableOrgMembers: data.members, isLoadingAvailableMembers: false })
     } catch {
       set({ availableOrgMembers: [], isLoadingAvailableMembers: false })
     }

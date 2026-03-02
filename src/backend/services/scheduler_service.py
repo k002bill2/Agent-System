@@ -8,6 +8,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from croniter import croniter
 
+from utils.time import utcnow
+
 logger = logging.getLogger(__name__)
 
 
@@ -75,7 +77,7 @@ class SchedulerService:
             "timezone": timezone,
             "is_active": True,
             "next_run": job.next_run_time.isoformat() if job.next_run_time else None,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": utcnow().isoformat(),
         }
         self._schedules[workflow_id] = schedule
         return schedule
@@ -125,7 +127,7 @@ class SchedulerService:
         """Get next N run times for a cron expression (for preview)."""
         if not croniter.is_valid(cron_expression):
             raise ValueError(f"Invalid cron expression: {cron_expression}")
-        cron = croniter(cron_expression, datetime.utcnow())
+        cron = croniter(cron_expression, utcnow())
         return [cron.get_next(datetime).isoformat() for _ in range(count)]
 
     def _trigger_workflow(self, workflow_id: str):

@@ -7,6 +7,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from utils.time import utcnow
+
 
 class RiskLevel(str, Enum):
     """Risk level for operations."""
@@ -47,7 +49,7 @@ class ApprovalRequest(BaseModel):
     risk_level: RiskLevel
     risk_description: str
     status: ApprovalStatus = ApprovalStatus.PENDING
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
     resolved_at: datetime | None = None
     resolver_note: str | None = None
 

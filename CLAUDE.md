@@ -60,6 +60,8 @@ cd src/dashboard && npm install && npm run dev
 | `/save-and-compact` | 컨텍스트 저장 후 /compact |
 | `/resume` | 이전 세션 컨텍스트 복원 |
 
+전체 명령어 목록은 `.claude/commands/` 디렉토리 참조. `/sync-registry`로 레지스트리 동기화.
+
 ## Code Patterns
 
 **Backend** (Python):
@@ -135,9 +137,9 @@ cd src/dashboard && npm test
 | Moderate | 2-3 | UI+API 또는 크로스 영역 |
 | Complex | 3+ | 풀스택, 아키텍처 변경 |
 
-**에이전트**: web-ui-specialist(sonnet), backend-integration-specialist(sonnet),
+**에이전트**: aos-orchestrator(opus), web-ui-specialist(inherit), backend-integration-specialist(inherit),
 test-automation-specialist(haiku), performance-optimizer(haiku), quality-validator(haiku)
-**평가**: eval-task-runner(sonnet), eval-grader(sonnet)
+**평가**: eval-task-runner(inherit), eval-grader(inherit)
 **품질 기준**: `.claude/agents/shared/quality-reference.md`
 
 ## Dev Docs System
@@ -175,6 +177,8 @@ dev/active/[task-name]/
 | 테스트/커버리지 | `test-automation` | 구현 후 자동 실행 |
 | 병렬 에이전트 (3+ 작업) | `parallel-coordinator` | ACE Framework |
 | 구현 완료 검증 | `verification-loop` | tsc+lint+test+build |
+| 스킬/에이전트/커맨드 생성 | `skill-creator`, `subagent-creator`, `hook-creator`, `slash-command-creator` | meta 스킬 |
+| ACE 거버넌스 | `ace-framework` | 멀티에이전트 거버넌스 |
 
 ## Coding Guidelines
 

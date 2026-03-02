@@ -1,6 +1,6 @@
 # AOS Database ERD
 
-> 33개 테이블 · `src/backend/db/models.py` 기준 · 2026-02-16
+> 34개 테이블 · `src/backend/db/models/` 기준 · 2026-03-02
 
 ```mermaid
 erDiagram
@@ -268,6 +268,39 @@ erDiagram
         string smtp_host
         int rate_limit_per_hour
         datetime created_at
+    }
+
+    %% ═══════════════════════════════════════════
+    %% Claude Session Domain
+    %% ═══════════════════════════════════════════
+
+    claude_session_snapshots {
+        string id PK
+        string slug
+        string model
+        string project_path
+        string project_name
+        string git_branch
+        string cwd
+        string version
+        string status
+        string source_user
+        string source_path
+        int message_count
+        int user_message_count
+        int assistant_message_count
+        int tool_call_count
+        int total_input_tokens
+        int total_output_tokens
+        float estimated_cost
+        string file_path
+        int file_size
+        text summary
+        text notes
+        datetime session_created_at
+        datetime session_last_activity
+        datetime created_at
+        datetime updated_at
     }
 
     %% ═══════════════════════════════════════════
@@ -545,12 +578,13 @@ erDiagram
 | Organization | 3 | organizations, organization_members, organization_invitations |
 | Cost | 2 | cost_centers, cost_allocations |
 | Notification | 3 | notification_rules, notification_history, channel_configs |
+| Claude Session | 1 | claude_session_snapshots |
 | Activity | 2 | task_analyses, session_activities |
 | Audit | 1 | audit_logs |
 | RBAC | 2 | project_access, menu_visibility |
 | Git | 2 | merge_requests, branch_protection_rules |
 | Workflow | 8 | workflow_definitions, workflow_runs, workflow_jobs, workflow_steps, workflow_secrets, workflow_webhooks, workflow_artifacts, workflow_templates |
-| **합계** | **33** | |
+| **합계** | **34** | |
 
 ## 관계 범례
 

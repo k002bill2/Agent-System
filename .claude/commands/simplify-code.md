@@ -1,4 +1,5 @@
 ---
+name: simplify-code
 description: 코드 복잡도 분석 및 단순화 제안 (Boris Cherny 스타일)
 ---
 

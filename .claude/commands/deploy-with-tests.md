@@ -1,4 +1,5 @@
 ---
+name: deploy-with-tests
 description: 테스트 검증 후 빌드/배포 실행
 ---
 
@@ -53,10 +54,10 @@ npm test -- --coverage
 
 ```bash
 # Preview 빌드 예시
-npm run build:preview
+npm run build
 
 # Production 빌드 예시 (주의 필요)
-npm run build:production
+npm run build
 ```
 
 ### 6. 빌드 상태 확인

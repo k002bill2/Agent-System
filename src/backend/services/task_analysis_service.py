@@ -7,7 +7,6 @@ In-memory와 Database 모드 모두 지원합니다.
 
 import os
 import uuid
-from datetime import datetime
 from typing import Any
 
 from models.task_analysis import (
@@ -16,6 +15,7 @@ from models.task_analysis import (
     TaskAnalysisQueryParams,
     TaskAnalysisSaveRequest,
 )
+from utils.time import utcnow
 
 # Environment variable to control storage mode
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
@@ -42,7 +42,7 @@ class TaskAnalysisService:
     ) -> TaskAnalysisEntry:
         """분석 결과 저장"""
         analysis_id = str(uuid.uuid4())
-        now = datetime.utcnow()
+        now = utcnow()
 
         # Extract summary fields from analysis
         complexity_score = None

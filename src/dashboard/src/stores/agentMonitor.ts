@@ -6,6 +6,7 @@
  */
 
 import { create } from 'zustand'
+import { apiClient } from '../services/apiClient'
 import { getApiUrl } from '../config/api'
 
 // ─────────────────────────────────────────────────────────────
@@ -295,17 +296,9 @@ export const useAgentMonitorStore = create<AgentMonitorState>((set, get) => ({
     const effectiveBucket = bucket ?? (effectivePeriod === '1h' ? '5m' : effectivePeriod === '6h' ? '15m' : '1h')
 
     try {
-      const url = getApiUrl(
-        `/api/v1/agents/metrics?agent_id=${encodeURIComponent(agentId)}&period=${effectivePeriod}&bucket=${effectiveBucket}`,
+      const data = await apiClient.get<AgentMetricsData>(
+        `/api/v1/agents/metrics?agent_id=${encodeURIComponent(agentId)}&period=${effectivePeriod}&bucket=${effectiveBucket}`
       )
-      const res = await fetch(url)
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(errorData.detail || `HTTP ${res.status}`)
-      }
-
-      const data: AgentMetricsData = await res.json()
       set({ agentMetrics: data, isLoadingMetrics: false })
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Failed to fetch metrics'
@@ -319,15 +312,7 @@ export const useAgentMonitorStore = create<AgentMonitorState>((set, get) => ({
     set({ isLoadingSummary: true, error: null })
 
     try {
-      const url = getApiUrl('/api/v1/agents/metrics/summary')
-      const res = await fetch(url)
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(errorData.detail || `HTTP ${res.status}`)
-      }
-
-      const data: MetricsSummary = await res.json()
+      const data = await apiClient.get<MetricsSummary>('/api/v1/agents/metrics/summary')
       set({ metricsSummary: data, isLoadingSummary: false })
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Failed to fetch summary'

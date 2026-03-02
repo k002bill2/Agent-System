@@ -184,7 +184,7 @@ class ClaudeSessionMonitor:
 
 ## 12. 인증 시스템
 
-Google/GitHub OAuth + 이메일/비밀번호 인증 지원:
+Google/GitHub OAuth + 이메일/비밀번호 + OIDC/SAML 엔터프라이즈 인증 지원:
 
 ```python
 class AuthService:
@@ -194,10 +194,23 @@ class AuthService:
     async def login_with_email(self, email: str, password: str) -> TokenResponse
 ```
 
+**인증 프로바이더** (4종):
+
+| Provider | 파일 | 설명 |
+|----------|------|------|
+| Google | `auth/providers/google.py` | Google OAuth 2.0 |
+| GitHub | `auth/providers/github.py` | GitHub OAuth |
+| OIDC | `auth/providers/oidc.py` | OpenID Connect (httpx 기반, 자동 discovery) |
+| SAML | `auth/providers/saml.py` | SAML 2.0 (stdlib XML, python3-saml 불필요) |
+
 **토큰 설정**:
 - Access Token: 60분 유효
 - Refresh Token: 7일 유효
 - `authFetch` 래퍼를 통한 자동 토큰 갱신 (401 시 refresh 자동 수행)
+
+**엔터프라이즈 SSO**:
+- OIDC: `issuer_url`에서 endpoint 자동 discovery, 커스텀 scopes 지원
+- SAML: `SAMLConfig`로 SP/IdP 설정, assertion 서명 검증, attribute mapping
 
 ---
 
@@ -911,3 +924,107 @@ class WorkflowEngine:
 - `ArtifactBrowser`: 파일 아이콘/크기, 다운로드
 - `SecretsManager`: 시크릿 CRUD 모달, 마스킹 표시
 - `ExecutionTimeline`: Gantt 차트 스타일 실행 타임라인
+
+---
+
+## 40. Code Entity Extractor
+
+RAG 메타데이터 enrichment를 위한 코드 엔티티 추출:
+
+```python
+class CodeEntityType(StrEnum):
+    FUNCTION = "function"
+    CLASS = "class"
+    METHOD = "method"
+    VARIABLE = "variable"
+    IMPORT = "import"
+    MODULE = "module"
+    INTERFACE = "interface"
+    TYPE_ALIAS = "type_alias"
+```
+
+**지원 언어**:
+- **Python**: `ast` 모듈 기반 정확한 AST 파싱
+- **TypeScript/JavaScript**: 정규식 기반 추출
+
+**용도**: RAG 인덱싱 시 코드 구조 메타데이터 추출 → 검색 품질 향상
+
+---
+
+## 41. Claude Session Snapshots
+
+Claude Code 세션을 DB에 스냅샷으로 저장:
+
+```python
+class ClaudeSessionSnapshotModel(Base):
+    __tablename__ = "claude_session_snapshots"
+    # Identity
+    id, slug, model, project_path, project_name, git_branch, status
+    # Metrics
+    message_count, tool_call_count, total_input_tokens, total_output_tokens, estimated_cost
+    # Content
+    summary, notes
+    # Source tracking
+    source_user, source_path
+```
+
+**기능**:
+- 세션 파일 기반 데이터를 DB에 영속화
+- 프로젝트/사용자별 복합 인덱스로 빠른 조회
+- 세션 메타데이터 (모델, 토큰, 비용) 추적
+- 요약/메모 첨부 가능
+
+---
+
+## 42. Claude Config Service
+
+Claude Code OAuth 토큰 관리 우선순위 체인:
+
+```python
+class ClaudeConfigService:
+    # 토큰 조회 우선순위:
+    # 1. ~/.claude/aos-claude-config.json (대시보드 관리)
+    # 2. CLAUDE_OAUTH_TOKEN 환경변수
+    # 3. macOS Keychain (로컬 개발)
+```
+
+**기능**:
+- 대시보드에서 OAuth 토큰 설정/업데이트
+- 환경별 자동 폴백 (배포 시 env var, 로컬 시 Keychain)
+- 토큰 갱신 상태 모니터링
+
+---
+
+## 43. Timezone-aware UTC Helpers
+
+`datetime.utcnow()` deprecated 대응:
+
+```python
+# src/backend/utils/time.py
+from datetime import UTC, datetime
+
+def utcnow() -> datetime:
+    """Return timezone-aware UTC now."""
+    return datetime.now(UTC)
+```
+
+**적용 범위**: `repository.py`, `scheduler_service.py`, `project_runner.py`, `project_invitation_service.py`, `saml.py` 등 전체 백엔드에서 `datetime.utcnow()` → `utcnow()` 마이그레이션 완료
+
+---
+
+## 44. Skill Manager
+
+SKILL.md 파일 CRUD 관리:
+
+```python
+class SkillManager:
+    def __init__(self, discovery: ProjectDiscovery)
+    def get_all_skills() -> list[SkillConfig]
+    # YAML Frontmatter + 마크다운 본문 파싱/생성
+```
+
+**기능**:
+- `.claude/skills/` 디렉토리 스캔
+- FrontmatterParser를 통한 YAML 메타데이터 파싱
+- 스킬 생성/수정/삭제 (파일시스템 기반)
+- ProjectDiscovery 연동으로 프로젝트별 스킬 관리

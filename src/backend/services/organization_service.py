@@ -24,6 +24,7 @@ from models.organization import (
     OrganizationUpdate,
     TenantContext,
 )
+from utils.time import utcnow
 
 # ─────────────────────────────────────────────────────────────
 # Database Toggle
@@ -227,7 +228,7 @@ class OrganizationService:
             email=owner_email,
             name=owner_name,
             role=MemberRole.OWNER,
-            joined_at=datetime.utcnow(),
+            joined_at=utcnow(),
         )
         _members[owner_member.id] = owner_member
 
@@ -303,7 +304,7 @@ class OrganizationService:
         if data.settings is not None:
             org.settings.update(data.settings)
 
-        org.updated_at = datetime.utcnow()
+        org.updated_at = utcnow()
         _save_organizations(_organizations)
         return org
 
@@ -315,7 +316,7 @@ class OrganizationService:
             return False
 
         org.status = OrganizationStatus.DELETED
-        org.updated_at = datetime.utcnow()
+        org.updated_at = utcnow()
 
         # Remove slug from index so it can be reused
         _slug_to_id.pop(org.slug, None)
@@ -336,7 +337,7 @@ class OrganizationService:
         org.max_projects = limits["max_projects"]
         org.max_sessions_per_day = limits["max_sessions_per_day"]
         org.max_tokens_per_month = limits["max_tokens_per_month"]
-        org.updated_at = datetime.utcnow()
+        org.updated_at = utcnow()
         _save_organizations(_organizations)
         return org
 
@@ -391,7 +392,7 @@ class OrganizationService:
                 inv.organization_id == org_id
                 and inv.email == request.email
                 and not inv.accepted
-                and inv.expires_at > datetime.utcnow()
+                and inv.expires_at > utcnow()
             ):
                 raise ValueError("Invitation already pending")
 
@@ -402,7 +403,7 @@ class OrganizationService:
             role=request.role,
             invited_by=invited_by,
             message=request.message,
-            expires_at=datetime.utcnow() + timedelta(days=7),
+            expires_at=utcnow() + timedelta(days=7),
         )
         _invitations[invitation.id] = invitation
         _save_invitations(_invitations)
@@ -424,7 +425,7 @@ class OrganizationService:
         if not invitation:
             raise ValueError("Invalid or expired invitation")
 
-        if invitation.expires_at < datetime.utcnow():
+        if invitation.expires_at < utcnow():
             raise ValueError("Invitation has expired")
 
         org = _organizations.get(invitation.organization_id)
@@ -440,13 +441,13 @@ class OrganizationService:
             role=invitation.role,
             invited_by=invitation.invited_by,
             invited_at=invitation.created_at,
-            joined_at=datetime.utcnow(),
+            joined_at=utcnow(),
         )
         _members[member.id] = member
 
         # Update invitation
         invitation.accepted = True
-        invitation.accepted_at = datetime.utcnow()
+        invitation.accepted_at = utcnow()
 
         # Update user orgs index
         if user_id not in _user_orgs:
@@ -469,9 +470,7 @@ class OrganizationService:
         return [
             inv
             for inv in _invitations.values()
-            if inv.organization_id == org_id
-            and not inv.accepted
-            and inv.expires_at > datetime.utcnow()
+            if inv.organization_id == org_id and not inv.accepted and inv.expires_at > utcnow()
         ]
 
     @staticmethod
@@ -668,7 +667,7 @@ class OrganizationService:
             org_id: Organization ID
             period: 'day', 'week', or 'month'
         """
-        now = datetime.utcnow()
+        now = utcnow()
         if period == "day":
             cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0)
         elif period == "week":
@@ -846,7 +845,7 @@ class OrganizationService:
 
         # Create organization
         org_id = str(uuid.uuid4())
-        now = datetime.utcnow()
+        now = utcnow()
         org_model = OrganizationModel(
             id=org_id,
             name=data.name,
@@ -950,7 +949,7 @@ class OrganizationService:
         if data.settings is not None:
             model.settings = {**(model.settings or {}), **data.settings}
 
-        model.updated_at = datetime.utcnow()
+        model.updated_at = utcnow()
         await db.commit()
         await db.refresh(model)
 
@@ -965,7 +964,7 @@ class OrganizationService:
             return False
 
         model.status = OrganizationStatus.DELETED.value
-        model.updated_at = datetime.utcnow()
+        model.updated_at = utcnow()
         await db.commit()
         return True
 
@@ -1051,7 +1050,7 @@ class OrganizationService:
                     OrganizationInvitationModel.organization_id == org_id,
                     OrganizationInvitationModel.email == request.email,
                     OrganizationInvitationModel.accepted == False,  # noqa: E712
-                    OrganizationInvitationModel.expires_at > datetime.utcnow(),
+                    OrganizationInvitationModel.expires_at > utcnow(),
                 )
             )
         )
@@ -1059,7 +1058,7 @@ class OrganizationService:
             raise ValueError("Invitation already pending")
 
         # Create invitation
-        now = datetime.utcnow()
+        now = utcnow()
         invitation = OrganizationInvitationModel(
             id=str(uuid.uuid4()),
             organization_id=org_id,
@@ -1100,7 +1099,7 @@ class OrganizationService:
         if not invitation:
             raise ValueError("Invalid or expired invitation")
 
-        if invitation.expires_at < datetime.utcnow():
+        if invitation.expires_at < utcnow():
             raise ValueError("Invitation has expired")
 
         # Get org
@@ -1112,7 +1111,7 @@ class OrganizationService:
             raise ValueError("Organization not found")
 
         # Create member
-        now = datetime.utcnow()
+        now = utcnow()
         member = OrganizationMemberModel(
             id=str(uuid.uuid4()),
             organization_id=invitation.organization_id,

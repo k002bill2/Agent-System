@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useState, useRef, useCallback } from 'react'
+import { useErrorHandler } from '../hooks/useErrorHandler'
 import {
   Settings,
   Trash2,
@@ -248,6 +249,7 @@ export function PlaygroundPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const isAdmin = useAuthStore((s) => s.user?.is_admin ?? false)
   const { projectFilter } = useNavigationStore()
+  const { handleError, toasts, dismissToast } = useErrorHandler()
   const [loading, setLoading] = useState(true)
   const [executing, setExecuting] = useState(false)
   const [prompt, setPrompt] = useState('')
@@ -273,6 +275,7 @@ export function PlaygroundPage() {
 
   useEffect(() => {
     loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -323,7 +326,7 @@ export function PlaygroundPage() {
         setCurrentSession(sessionsData[0])
       }
     } catch (e) {
-      console.error(e)
+      handleError(e)
     } finally {
       setLoading(false)
     }
@@ -350,7 +353,7 @@ export function PlaygroundPage() {
       setCurrentSession(session)
       setShowNewSessionDialog(false)
     } catch (e) {
-      console.error(e)
+      handleError(e)
     }
   }
 
@@ -362,7 +365,7 @@ export function PlaygroundPage() {
         setCurrentSession(sessions.find((s) => s.id !== sessionId) || null)
       }
     } catch (e) {
-      console.error(e)
+      handleError(e)
     }
   }
 
@@ -381,7 +384,7 @@ export function PlaygroundPage() {
       setMdFiles([])
       setMdReadStatuses({})
     } catch (e) {
-      console.error(e)
+      handleError(e)
     } finally {
       setExecuting(false)
     }
@@ -394,7 +397,7 @@ export function PlaygroundPage() {
       setCurrentSession(updated)
       setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
     } catch (e) {
-      console.error(e)
+      handleError(e)
     }
   }
 
@@ -404,7 +407,7 @@ export function PlaygroundPage() {
       await clearHistory(currentSession.id)
       setCurrentSession({ ...currentSession, messages: [], total_tokens: 0, total_cost: 0 })
     } catch (e) {
-      console.error(e)
+      handleError(e)
     }
   }
 
@@ -501,7 +504,30 @@ export function PlaygroundPage() {
   }
 
   return (
-    <div className="flex-1 flex overflow-hidden">
+    <div className="flex-1 flex overflow-hidden relative">
+      {/* Toast notifications */}
+      {toasts.length > 0 && (
+        <div className="fixed top-4 right-4 z-50 space-y-2">
+          {toasts.map((toast) => (
+            <div
+              key={toast.id}
+              className={`flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg text-sm ${
+                toast.severity === 'error'
+                  ? 'bg-red-50 text-red-800 dark:bg-red-900/80 dark:text-red-200'
+                  : toast.severity === 'warning'
+                    ? 'bg-yellow-50 text-yellow-800 dark:bg-yellow-900/80 dark:text-yellow-200'
+                    : 'bg-blue-50 text-blue-800 dark:bg-blue-900/80 dark:text-blue-200'
+              }`}
+            >
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span className="flex-1">{toast.message}</span>
+              <button onClick={() => dismissToast(toast.id)} className="shrink-0">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       {/* Sidebar - Sessions */}
       <div className="w-64 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col">
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">

@@ -4,6 +4,8 @@ import pytest
 from unittest.mock import patch, MagicMock
 from datetime import datetime, timedelta
 
+from utils.time import utcnow
+
 import services.organization_service as org_module
 from services.organization_service import OrganizationService
 from models.organization import (
@@ -387,7 +389,7 @@ class TestOrganizationService:
             email="invited@example.com",
             role=MemberRole.ADMIN,
             invited_by="user-owner",
-            expires_at=datetime.utcnow() + timedelta(days=7),
+            expires_at=utcnow() + timedelta(days=7),
         )
         org_module._invitations[inv.id] = inv
 
@@ -415,7 +417,7 @@ class TestOrganizationService:
             email="late@example.com",
             role=MemberRole.MEMBER,
             invited_by="user-owner",
-            expires_at=datetime.utcnow() - timedelta(days=1),  # already expired
+            expires_at=utcnow() - timedelta(days=1),  # already expired
         )
         org_module._invitations[inv.id] = inv
 
@@ -444,7 +446,7 @@ class TestOrganizationService:
             user_id="user-2",
             email="member2@example.com",
             role=MemberRole.MEMBER,
-            joined_at=datetime.utcnow(),
+            joined_at=utcnow(),
         )
         org_module._members[second.id] = second
 
@@ -479,7 +481,7 @@ class TestOrganizationService:
             user_id="user-2",
             email="second@example.com",
             role=MemberRole.MEMBER,
-            joined_at=datetime.utcnow(),
+            joined_at=utcnow(),
         )
         org_module._members[second.id] = second
         org.current_members = 2
@@ -520,7 +522,7 @@ class TestOrganizationService:
             email="active@example.com",
             role=MemberRole.MEMBER,
             invited_by="owner",
-            expires_at=datetime.utcnow() + timedelta(days=5),
+            expires_at=utcnow() + timedelta(days=5),
         )
         # Expired
         expired = OrganizationInvitation(
@@ -528,7 +530,7 @@ class TestOrganizationService:
             email="expired@example.com",
             role=MemberRole.MEMBER,
             invited_by="owner",
-            expires_at=datetime.utcnow() - timedelta(days=1),
+            expires_at=utcnow() - timedelta(days=1),
         )
         # Accepted
         accepted = OrganizationInvitation(
@@ -536,7 +538,7 @@ class TestOrganizationService:
             email="accepted@example.com",
             role=MemberRole.MEMBER,
             invited_by="owner",
-            expires_at=datetime.utcnow() + timedelta(days=5),
+            expires_at=utcnow() + timedelta(days=5),
             accepted=True,
         )
         org_module._invitations[active.id] = active
@@ -558,7 +560,7 @@ class TestOrganizationService:
             email="cancel@example.com",
             role=MemberRole.MEMBER,
             invited_by="owner",
-            expires_at=datetime.utcnow() + timedelta(days=5),
+            expires_at=utcnow() + timedelta(days=5),
         )
         org_module._invitations[inv.id] = inv
 
@@ -576,7 +578,7 @@ class TestOrganizationService:
             email="done@example.com",
             role=MemberRole.MEMBER,
             invited_by="owner",
-            expires_at=datetime.utcnow() + timedelta(days=5),
+            expires_at=utcnow() + timedelta(days=5),
             accepted=True,
         )
         org_module._invitations[inv.id] = inv
@@ -712,7 +714,7 @@ class TestOrganizationService:
             tokens=300,
             session_id="sess-1",
             model="gpt-4",
-            timestamp=datetime.utcnow(),
+            timestamp=utcnow(),
         )
         org_module._member_usage[record.id] = record
 

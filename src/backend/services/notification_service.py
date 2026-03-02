@@ -5,7 +5,7 @@ import os
 import ssl
 import uuid
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta
+from datetime import timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -28,6 +28,7 @@ from models.notification import (
     NotificationRuleUpdate,
     format_notification,
 )
+from utils.time import utcnow
 
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 
@@ -166,7 +167,7 @@ class DiscordAdapter(NotificationAdapter):
                     "title": message.title,
                     "description": message.body,
                     "color": color_map.get(message.priority, 0x95A5A6),
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": utcnow().isoformat(),
                 }
             ]
         }
@@ -271,7 +272,7 @@ class WebhookAdapter(NotificationAdapter):
             "title": message.title,
             "body": message.body,
             "data": message.data,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": utcnow().isoformat(),
         }
 
         try:
@@ -365,7 +366,7 @@ class NotificationService:
         if data.message_template is not None:
             rule.message_template = data.message_template
 
-        rule.updated_at = datetime.utcnow()
+        rule.updated_at = utcnow()
         return rule
 
     @staticmethod
@@ -440,7 +441,7 @@ class NotificationService:
         from db.models import NotificationRuleModel
 
         rule_id = str(uuid.uuid4())
-        now = datetime.utcnow()
+        now = utcnow()
 
         db_rule = NotificationRuleModel(
             id=rule_id,
@@ -509,7 +510,7 @@ class NotificationService:
         if data.message_template is not None:
             row.message_template = data.message_template
 
-        row.updated_at = datetime.utcnow()
+        row.updated_at = utcnow()
         await db.commit()
 
         return await NotificationService.get_rule_async(db, rule_id)
@@ -613,7 +614,7 @@ class NotificationService:
             row.rate_limit_per_hour = config.rate_limit_per_hour
             row.last_sent = config.last_sent
             row.sent_this_hour = config.sent_this_hour
-            row.updated_at = datetime.utcnow()
+            row.updated_at = utcnow()
         else:
             config_id = str(uuid.uuid4())
             row = ChannelConfigModel(
@@ -644,7 +645,7 @@ class NotificationService:
     @staticmethod
     def _check_rate_limit(config: ChannelConfig) -> bool:
         """Check if sending is allowed under rate limit."""
-        now = datetime.utcnow()
+        now = utcnow()
 
         # Reset counter if hour has passed
         if config.last_sent and (now - config.last_sent) > timedelta(hours=1):
@@ -760,11 +761,11 @@ class NotificationService:
             if success:
                 message.delivery_status[channel.value] = "sent"
                 config.sent_this_hour += 1
-                config.last_sent = datetime.utcnow()
+                config.last_sent = utcnow()
             else:
                 message.delivery_status[channel.value] = f"failed: {error}"
 
-        message.sent_at = datetime.utcnow()
+        message.sent_at = utcnow()
         _notification_history.append(message)
 
         return message
@@ -865,12 +866,12 @@ class NotificationService:
             if success:
                 message.delivery_status[channel.value] = "sent"
                 config.sent_this_hour += 1
-                config.last_sent = datetime.utcnow()
+                config.last_sent = utcnow()
                 await NotificationService.set_channel_config_async(db, channel, config)
             else:
                 message.delivery_status[channel.value] = f"failed: {error}"
 
-        message.sent_at = datetime.utcnow()
+        message.sent_at = utcnow()
 
         # Save to history
         history_entry = NotificationHistoryModel(

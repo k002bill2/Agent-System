@@ -1,4 +1,5 @@
 ---
+name: verify-app
 description: 앱 종합 검증 - 타입체크, 린트, 테스트, 빌드를 한번에 실행 (Boris Cherny 피드백 루프)
 ---
 
@@ -33,7 +34,7 @@ npm test -- --coverage --coverageReporters="text-summary"
 
 ### 4. 개발 빌드 검증
 ```bash
-npm run build:development
+npm run build
 ```
 **통과 기준**: 빌드 성공
 

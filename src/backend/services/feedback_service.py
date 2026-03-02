@@ -30,6 +30,7 @@ from models.feedback import (
     TaskEvaluationStats,
     TaskEvaluationSubmit,
 )
+from utils.time import utcnow
 
 # Environment variable to control storage mode
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
@@ -65,7 +66,7 @@ class FeedbackService:
     ) -> FeedbackResponse:
         """피드백 제출"""
         feedback_id = str(uuid.uuid4())
-        now = datetime.utcnow()
+        now = utcnow()
 
         feedback_data = {
             "id": feedback_id,
@@ -138,7 +139,7 @@ class FeedbackService:
             if feedback_id in self._feedbacks:
                 self._feedbacks[feedback_id]["status"] = status.value
                 if status == FeedbackStatus.PROCESSED:
-                    self._feedbacks[feedback_id]["processed_at"] = datetime.utcnow()
+                    self._feedbacks[feedback_id]["processed_at"] = utcnow()
                 return True
             return False
 
@@ -716,7 +717,7 @@ class FeedbackService:
     async def _create_dataset_entry(self, feedback: FeedbackEntry) -> DatasetEntry:
         """피드백을 데이터셋 엔트리로 변환"""
         entry_id = str(uuid.uuid4())
-        now = datetime.utcnow()
+        now = utcnow()
 
         # 긍정/부정 샘플 결정
         is_positive = feedback.feedback_type == FeedbackType.EXPLICIT_POSITIVE
@@ -989,7 +990,7 @@ class FeedbackService:
         async with async_session_factory() as db:
             values = {"status": status.value}
             if status == FeedbackStatus.PROCESSED:
-                values["processed_at"] = datetime.utcnow()
+                values["processed_at"] = utcnow()
 
             result = await db.execute(
                 update(FeedbackModel).where(FeedbackModel.id == feedback_id).values(**values)

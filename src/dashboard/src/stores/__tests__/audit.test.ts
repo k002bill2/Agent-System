@@ -1,9 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { useAuditStore } from '../audit'
 
-const mockFetch = vi.fn()
-global.fetch = mockFetch
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}))
+
+import { useAuditStore } from '../audit'
+import { apiClient } from '../../services/apiClient'
+
+const mockApiClient = vi.mocked(apiClient)
 
 function resetStore() {
   useAuditStore.setState({
@@ -22,7 +33,7 @@ function resetStore() {
 describe('audit store', () => {
   beforeEach(() => {
     resetStore()
-    mockFetch.mockReset()
+    vi.clearAllMocks()
   })
 
   // ── Initial State ──────────────────────────────────────
@@ -58,10 +69,7 @@ describe('audit store', () => {
         logs: [{ id: 'log-1', action: 'create', status: 'success' }],
         total: 1,
       }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(data),
-      })
+      mockApiClient.get.mockResolvedValueOnce(data)
 
       await useAuditStore.getState().fetchLogs()
 
@@ -75,14 +83,11 @@ describe('audit store', () => {
       useAuditStore.setState({
         filter: { session_id: 's-1', action: 'tool_executed', status: 'success' },
       })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ logs: [], total: 0 }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ logs: [], total: 0 })
 
       await useAuditStore.getState().fetchLogs()
 
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockApiClient.get.mock.calls[0][0] as string
       expect(url).toContain('session_id=s-1')
       expect(url).toContain('action=tool_executed')
       expect(url).toContain('status=success')
@@ -90,20 +95,17 @@ describe('audit store', () => {
 
     it('includes pagination params', async () => {
       useAuditStore.setState({ page: 2, pageSize: 10 })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ logs: [], total: 0 }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ logs: [], total: 0 })
 
       await useAuditStore.getState().fetchLogs()
 
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockApiClient.get.mock.calls[0][0] as string
       expect(url).toContain('limit=10')
       expect(url).toContain('offset=20')
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch audit logs'))
 
       await useAuditStore.getState().fetchLogs()
 
@@ -112,7 +114,7 @@ describe('audit store', () => {
     })
 
     it('handles network error', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network failed'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Network failed'))
 
       await useAuditStore.getState().fetchLogs()
 
@@ -133,10 +135,7 @@ describe('audit store', () => {
         actions_by_status: {},
         recent_trend: [],
       }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(statsData),
-      })
+      mockApiClient.get.mockResolvedValueOnce(statsData)
 
       await useAuditStore.getState().fetchStats()
 
@@ -145,14 +144,11 @@ describe('audit store', () => {
     })
 
     it('passes sessionId as query param', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      })
+      mockApiClient.get.mockResolvedValueOnce({})
 
       await useAuditStore.getState().fetchStats('session-123')
 
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockApiClient.get.mock.calls[0][0] as string
       expect(url).toContain('session_id=session-123')
     })
 
@@ -165,7 +161,7 @@ describe('audit store', () => {
         ],
         total: 3,
       })
-      mockFetch.mockResolvedValueOnce({ ok: false })
+      mockApiClient.get.mockRejectedValueOnce(new Error('API error'))
 
       await useAuditStore.getState().fetchStats()
 
@@ -179,7 +175,7 @@ describe('audit store', () => {
 
     it('calculates fallback stats on network error', async () => {
       useAuditStore.setState({ logs: [], total: 0 })
-      mockFetch.mockRejectedValueOnce(new Error('Network'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Network'))
 
       await useAuditStore.getState().fetchStats()
 
@@ -194,10 +190,7 @@ describe('audit store', () => {
   describe('setFilter', () => {
     it('merges filter and resets page to 0', async () => {
       useAuditStore.setState({ page: 5 })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ logs: [], total: 0 }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ logs: [], total: 0 })
 
       useAuditStore.getState().setFilter({ action: 'create' })
 
@@ -207,10 +200,7 @@ describe('audit store', () => {
 
     it('merges with existing filter', async () => {
       useAuditStore.setState({ filter: { action: 'create' } })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ logs: [], total: 0 }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ logs: [], total: 0 })
 
       useAuditStore.getState().setFilter({ status: 'success' })
 
@@ -225,10 +215,7 @@ describe('audit store', () => {
   describe('clearFilter', () => {
     it('clears all filters and resets page', async () => {
       useAuditStore.setState({ filter: { action: 'create', status: 'success' }, page: 3 })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ logs: [], total: 0 }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ logs: [], total: 0 })
 
       useAuditStore.getState().clearFilter()
 
@@ -241,15 +228,12 @@ describe('audit store', () => {
 
   describe('setPage', () => {
     it('sets page and triggers fetchLogs', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ logs: [], total: 0 }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ logs: [], total: 0 })
 
       useAuditStore.getState().setPage(3)
 
       expect(useAuditStore.getState().page).toBe(3)
-      expect(mockFetch).toHaveBeenCalled()
+      expect(mockApiClient.get).toHaveBeenCalled()
     })
   })
 
@@ -257,13 +241,13 @@ describe('audit store', () => {
 
   describe('refresh', () => {
     it('calls fetchLogs and fetchStats', async () => {
-      mockFetch
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ logs: [], total: 0 }) })
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+      mockApiClient.get
+        .mockResolvedValueOnce({ logs: [], total: 0 })
+        .mockResolvedValueOnce({})
 
       await useAuditStore.getState().refresh()
 
-      expect(mockFetch).toHaveBeenCalledTimes(2)
+      expect(mockApiClient.get).toHaveBeenCalledTimes(2)
     })
   })
 })

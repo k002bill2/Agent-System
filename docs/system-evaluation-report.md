@@ -30,12 +30,13 @@
 src/backend/
 ├── agents/          5 files   에이전트 정의 (Base, Lead, Specialists)
 ├── orchestrator/    5 files   LangGraph 6-node 상태 그래프
-├── services/       55 files   비즈니스 로직 (~29.5K LoC)
+├── services/       63 files   비즈니스 로직 (~32K LoC)
 ├── api/            55 files   FastAPI 라우터 (~17K LoC)
 ├── db/              4 files   SQLAlchemy ORM (20+ 모델)
-├── models/         25 files   Pydantic 데이터 모델
-├── auth/            7 files   OAuth (Google/GitHub) + JWT
-└── middleware/      1 file    Rate limiting
+├── models/         32 files   Pydantic 데이터 모델
+├── auth/            7 files   OAuth (Google/GitHub/OIDC/SAML) + JWT
+├── middleware/      1 file    Rate limiting
+└── utils/           1 file    utcnow() timezone-aware UTC
 ```
 
 ### 2.2 핵심 서비스 상태
@@ -67,8 +68,8 @@ pytest: 460 passed, 2 skipped, 0 failed
 | # | 심각도 | 이슈 | 상세 |
 |---|--------|------|------|
 | B1 | CRITICAL | Python 3.10+ 필요 | `str \| None` 구문 사용, 3.9에서 import 실패 |
-| B2 | HIGH | 테스트 갭 | 55개 서비스 중 37개 직접 유닛 테스트 없음 |
-| B3 | MEDIUM | BaseAgent 하드코딩 | `ChatGoogleGenerativeAI` 직접 참조, 멀티 프로바이더 미지원 |
+| B2 | HIGH | 테스트 갭 | 63개 서비스 중 상당수 직접 유닛 테스트 없음 |
+| B3 | ~~MEDIUM~~ RESOLVED | ~~BaseAgent 하드코딩~~ | `LLMModelRegistry.get_default()` 사용으로 수정됨 (Phase 5) |
 | B4 | LOW | Alembic 마이그레이션 | 4개만 존재, 최신 스키마 변경 미반영 가능성 |
 
 ---
@@ -120,7 +121,7 @@ tsc --noEmit: 0 errors
 | # | 심각도 | 이슈 | 상세 |
 |---|--------|------|------|
 | F1 | MEDIUM | 중복 파일 | Dashboard.tsx / DashboardPage.tsx 공존 |
-| F2 | MEDIUM | 중복 스토어 | auth.ts/authStore.ts, agents.ts/agentStore.ts |
+| F2 | ~~MEDIUM~~ RESOLVED | ~~중복 스토어~~ | auth.ts, agents.ts로 통합 완료 (Phase 5) |
 | F3 | LOW | 테스트 4건 실패 | 에이전트명, 에러 메시지 포맷 불일치 |
 
 ---
@@ -256,7 +257,7 @@ Qdrant:      Unhealthy (port 6333) - 점검 필요
 | # | 항목 | 작업량 | 영향 |
 |---|------|--------|------|
 | 7 | 백엔드 유닛 테스트 확충 | 2-3주 | 커버리지 45% -> 75%+ |
-| 8 | BaseAgent 멀티 프로바이더 | 3일 | 에이전트 레벨 LLM 유연성 |
+| 8 | ~~BaseAgent 멀티 프로바이더~~ | ~~3일~~ | ✅ Phase 5에서 LLMModelRegistry 기반으로 해결됨 |
 | 9 | Alembic 마이그레이션 정비 | 2일 | DB 스키마 관리 |
 
 ---
@@ -297,3 +298,18 @@ Qdrant:      Unhealthy (port 6333) - 점검 필요
 
 *이 보고서는 2026-02-28 시점의 main 브랜치 기준으로 작성되었습니다.*
 *Backend 460 tests, Frontend 3,800 tests 실행 결과를 포함합니다.*
+
+---
+
+## 부록: Phase 5 개선사항 (2026-03-02 feat/aos-system-improvements)
+
+| 항목 | 변경 | 영향 |
+|------|------|------|
+| `datetime.utcnow()` 제거 | `utils/time.py` `utcnow()` 전면 마이그레이션 | Python 3.12+ deprecation 대응 |
+| `apiClient` 마이그레이션 | Dashboard 전체 API 호출 `apiClient.ts` 통합 | 인증 자동화, 중복 코드 제거 |
+| `BaseAgent` LLM 프로바이더 | `LLMModelRegistry.get_default()` 사용 | B3 이슈 해결 |
+| 중복 스토어 정리 | `authStore.ts`, `agentStore.ts` 제거 | F2 이슈 해결 |
+| 테스트 정비 | 6개 스토어 테스트 파일 업데이트 | 테스트 안정성 향상 |
+| God File 분할 | `orchestration/` 하위 모듈로 리팩토링 | 유지보수성 향상 |
+| `ClaudeSessionSnapshotModel` 추가 | 새 DB 모델 (`claude_session_snapshots`) | 세션 데이터 영속화 |
+| 서비스 확장 | 63개 서비스 모듈 (55→63) | 코드 엔티티 추출, 스킬 관리 등 |

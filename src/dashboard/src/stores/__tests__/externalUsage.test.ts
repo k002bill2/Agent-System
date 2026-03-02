@@ -1,8 +1,7 @@
 /**
  * External Usage Store Tests
  *
- * ExternalProviderConfig, UnifiedUsageRecord, UsageSummary 등
- * 외부 LLM 사용량 데이터를 관리하는 스토어 테스트.
+ * Uses apiClient mock instead of raw fetch mock.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -16,19 +15,15 @@ import {
 // Mock Setup
 // ─────────────────────────────────────────────────────────────
 
-const mockFetch = vi.fn()
-global.fetch = mockFetch
+const mockGet = vi.fn()
+const mockPost = vi.fn()
 
-// authFetch는 내부적으로 global.fetch 호출
-vi.mock('../auth', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../auth')>()
-  return {
-    ...actual,
-    authFetch: vi.fn(async (url: string, options?: RequestInit) => {
-      return mockFetch(url, options)
-    }),
-  }
-})
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    get: (...args: unknown[]) => mockGet(...args),
+    post: (...args: unknown[]) => mockPost(...args),
+  },
+}))
 
 // ─────────────────────────────────────────────────────────────
 // Test Fixtures
@@ -84,7 +79,8 @@ function resetStore() {
 describe('externalUsage store', () => {
   beforeEach(() => {
     resetStore()
-    mockFetch.mockReset()
+    mockGet.mockReset()
+    mockPost.mockReset()
   })
 
   // ── Initial State ──────────────────────────────────────
@@ -115,10 +111,7 @@ describe('externalUsage store', () => {
 
   describe('fetchSummary', () => {
     it('fetches summary without parameters', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockSummaryResponse),
-      })
+      mockGet.mockResolvedValueOnce(mockSummaryResponse)
 
       await useExternalUsageStore.getState().fetchSummary()
 
@@ -131,7 +124,7 @@ describe('externalUsage store', () => {
 
     it('sets isLoading to true during fetch', async () => {
       let resolvePromise!: (value: unknown) => void
-      mockFetch.mockReturnValueOnce(
+      mockGet.mockReturnValueOnce(
         new Promise((resolve) => {
           resolvePromise = resolve
         })
@@ -140,92 +133,64 @@ describe('externalUsage store', () => {
       const fetchPromise = useExternalUsageStore.getState().fetchSummary()
       expect(useExternalUsageStore.getState().isLoading).toBe(true)
 
-      resolvePromise({ ok: true, json: () => Promise.resolve(mockSummaryResponse) })
+      resolvePromise(mockSummaryResponse)
       await fetchPromise
       expect(useExternalUsageStore.getState().isLoading).toBe(false)
     })
 
     it('builds URL with startTime parameter', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockSummaryResponse),
-      })
+      mockGet.mockResolvedValueOnce(mockSummaryResponse)
 
       await useExternalUsageStore.getState().fetchSummary('2025-01-01')
 
-      const calledUrl = mockFetch.mock.calls[0][0] as string
+      const calledUrl = mockGet.mock.calls[0][0] as string
       expect(calledUrl).toContain('start_time=2025-01-01')
     })
 
     it('builds URL with endTime parameter', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockSummaryResponse),
-      })
+      mockGet.mockResolvedValueOnce(mockSummaryResponse)
 
       await useExternalUsageStore.getState().fetchSummary(undefined, '2025-01-31')
 
-      const calledUrl = mockFetch.mock.calls[0][0] as string
+      const calledUrl = mockGet.mock.calls[0][0] as string
       expect(calledUrl).toContain('end_time=2025-01-31')
     })
 
     it('builds URL with provider list', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockSummaryResponse),
-      })
+      mockGet.mockResolvedValueOnce(mockSummaryResponse)
 
       await useExternalUsageStore.getState().fetchSummary(undefined, undefined, ['openai', 'anthropic'])
 
-      const calledUrl = mockFetch.mock.calls[0][0] as string
+      const calledUrl = mockGet.mock.calls[0][0] as string
       expect(calledUrl).toContain('providers=openai')
       expect(calledUrl).toContain('providers=anthropic')
     })
 
     it('builds URL with all parameters', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockSummaryResponse),
-      })
+      mockGet.mockResolvedValueOnce(mockSummaryResponse)
 
       await useExternalUsageStore.getState().fetchSummary('2025-01-01', '2025-01-31', ['openai'])
 
-      const calledUrl = mockFetch.mock.calls[0][0] as string
+      const calledUrl = mockGet.mock.calls[0][0] as string
       expect(calledUrl).toContain('start_time=2025-01-01')
       expect(calledUrl).toContain('end_time=2025-01-31')
       expect(calledUrl).toContain('providers=openai')
     })
 
-    it('sets error on HTTP failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-      })
+    it('sets error on failure', async () => {
+      mockGet.mockRejectedValueOnce(new Error('Request failed'))
 
       await useExternalUsageStore.getState().fetchSummary()
 
       const state = useExternalUsageStore.getState()
-      expect(state.error).toContain('HTTP 500')
+      expect(state.error).toBe('Request failed')
       expect(state.isLoading).toBe(false)
       expect(state.summary).toBeNull()
     })
 
-    it('sets error on network failure', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
-
-      await useExternalUsageStore.getState().fetchSummary()
-
-      const state = useExternalUsageStore.getState()
-      expect(state.error).toBe('Network error')
-      expect(state.isLoading).toBe(false)
-    })
-
     it('clears error on successful fetch', async () => {
       useExternalUsageStore.setState({ error: 'previous error' })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockSummaryResponse),
-      })
+      mockGet.mockResolvedValueOnce(mockSummaryResponse)
 
       await useExternalUsageStore.getState().fetchSummary()
 
@@ -237,10 +202,7 @@ describe('externalUsage store', () => {
 
   describe('fetchProviders', () => {
     it('fetches and stores providers', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve([mockProvider]),
-      })
+      mockGet.mockResolvedValueOnce([mockProvider])
 
       await useExternalUsageStore.getState().fetchProviders()
 
@@ -254,33 +216,19 @@ describe('externalUsage store', () => {
         mockProvider,
         { ...mockProvider, provider: 'anthropic', enabled: false },
       ]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(providers),
-      })
+      mockGet.mockResolvedValueOnce(providers)
 
       await useExternalUsageStore.getState().fetchProviders()
 
       expect(useExternalUsageStore.getState().providers).toHaveLength(2)
     })
 
-    it('sets error on HTTP failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 403,
-      })
+    it('sets error on failure', async () => {
+      mockGet.mockRejectedValueOnce(new Error('Forbidden'))
 
       await useExternalUsageStore.getState().fetchProviders()
 
-      expect(useExternalUsageStore.getState().error).toContain('HTTP 403')
-    })
-
-    it('sets error on network failure', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Connection refused'))
-
-      await useExternalUsageStore.getState().fetchProviders()
-
-      expect(useExternalUsageStore.getState().error).toBe('Connection refused')
+      expect(useExternalUsageStore.getState().error).toBe('Forbidden')
     })
   })
 
@@ -289,15 +237,8 @@ describe('externalUsage store', () => {
   describe('syncProvider', () => {
     it('syncs all providers and refreshes summary', async () => {
       const syncResult = { synced_records: 42 }
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve(syncResult),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve(mockSummaryResponse),
-        })
+      mockPost.mockResolvedValueOnce(syncResult)
+      mockGet.mockResolvedValueOnce(mockSummaryResponse)
 
       const result = await useExternalUsageStore.getState().syncProvider()
 
@@ -306,68 +247,41 @@ describe('externalUsage store', () => {
     })
 
     it('syncs specific provider', async () => {
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ synced_records: 10 }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve(mockSummaryResponse),
-        })
+      mockPost.mockResolvedValueOnce({ synced_records: 10 })
+      mockGet.mockResolvedValueOnce(mockSummaryResponse)
 
       const result = await useExternalUsageStore.getState().syncProvider('openai')
 
       expect(result.synced_records).toBe(10)
 
       // POST body should have provider
-      const postBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string)
+      const postBody = mockPost.mock.calls[0][1]
       expect(postBody.provider).toBe('openai')
     })
 
     it('posts empty body when no provider specified', async () => {
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ synced_records: 0 }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve(mockSummaryResponse),
-        })
+      mockPost.mockResolvedValueOnce({ synced_records: 0 })
+      mockGet.mockResolvedValueOnce(mockSummaryResponse)
 
       await useExternalUsageStore.getState().syncProvider()
 
-      const postBody = JSON.parse(mockFetch.mock.calls[0][1]?.body as string)
+      const postBody = mockPost.mock.calls[0][1]
       expect(postBody).toEqual({})
     })
 
-    it('sets error and returns 0 on HTTP failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 503,
-      })
+    it('sets error and returns 0 on failure', async () => {
+      mockPost.mockRejectedValueOnce(new Error('Service unavailable'))
 
       const result = await useExternalUsageStore.getState().syncProvider()
 
       expect(result.synced_records).toBe(0)
-      expect(useExternalUsageStore.getState().error).toContain('HTTP 503')
-      expect(useExternalUsageStore.getState().isLoading).toBe(false)
-    })
-
-    it('sets error and returns 0 on network failure', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Timeout'))
-
-      const result = await useExternalUsageStore.getState().syncProvider()
-
-      expect(result.synced_records).toBe(0)
-      expect(useExternalUsageStore.getState().error).toBe('Timeout')
+      expect(useExternalUsageStore.getState().error).toBe('Service unavailable')
       expect(useExternalUsageStore.getState().isLoading).toBe(false)
     })
 
     it('sets isLoading to true during sync', async () => {
       let resolvePromise!: (value: unknown) => void
-      mockFetch.mockReturnValueOnce(
+      mockPost.mockReturnValueOnce(
         new Promise((resolve) => {
           resolvePromise = resolve
         })
@@ -376,7 +290,9 @@ describe('externalUsage store', () => {
       const syncPromise = useExternalUsageStore.getState().syncProvider()
       expect(useExternalUsageStore.getState().isLoading).toBe(true)
 
-      resolvePromise({ ok: false, status: 500 })
+      resolvePromise({ synced_records: 0 })
+      // Need to also mock the fetchSummary call that happens after sync
+      mockGet.mockResolvedValueOnce(mockSummaryResponse)
       await syncPromise
       expect(useExternalUsageStore.getState().isLoading).toBe(false)
     })

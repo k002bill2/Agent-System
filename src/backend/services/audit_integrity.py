@@ -15,6 +15,7 @@ from models.audit import (
     RetentionApplyResult,
     RetentionPolicy,
 )
+from utils.time import utcnow
 
 
 class AuditIntegrityService:
@@ -233,7 +234,7 @@ class AuditIntegrityService:
                 )
 
         # Retention statistics
-        now = datetime.utcnow()
+        now = utcnow()
         expiry_warning_days = 30
 
         approaching_expiry = sum(
@@ -284,7 +285,7 @@ class AuditIntegrityService:
         errors = []
 
         retention_days = RETENTION_DAYS.get(policy, 2555)
-        now = datetime.utcnow()
+        now = utcnow()
 
         for entry in self._entries:
             # Filter by classification if specified
@@ -327,7 +328,7 @@ class AuditIntegrityService:
 
     def get_expired_entries(self) -> list[ComplianceAuditEntry]:
         """Get all entries that have passed their retention period."""
-        now = datetime.utcnow()
+        now = utcnow()
         return [e for e in self._entries if e.expires_at and e.expires_at <= now]
 
     def cleanup_expired(self, dry_run: bool = True) -> int:
@@ -346,7 +347,7 @@ class AuditIntegrityService:
         if not dry_run:
             # Note: This breaks the hash chain - should archive first
             self._entries = [
-                e for e in self._entries if not (e.expires_at and e.expires_at <= datetime.utcnow())
+                e for e in self._entries if not (e.expires_at and e.expires_at <= utcnow())
             ]
 
         return count

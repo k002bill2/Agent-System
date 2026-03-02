@@ -6,7 +6,6 @@ Replaces filesystem-based project discovery with explicit DB registration.
 import logging
 import re
 import uuid
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -26,6 +25,7 @@ from models.project import (
     ProjectMemberResponse,
     ProjectMemberUpdate,
 )
+from utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -378,7 +378,7 @@ async def update_project(project_id: str, request: DBProjectUpdate) -> DBProject
         if request.settings is not None:
             project.settings = request.settings
 
-        project.updated_at = datetime.utcnow()
+        project.updated_at = utcnow()
 
         await session.commit()
         await session.refresh(project)
@@ -413,7 +413,7 @@ async def toggle_project_active(project_id: str) -> DBProjectResponse:
             raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
 
         project.is_active = not project.is_active
-        project.updated_at = datetime.utcnow()
+        project.updated_at = utcnow()
 
         await session.commit()
         await session.refresh(project)
@@ -448,7 +448,7 @@ async def delete_project(project_id: str) -> dict:
             raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
 
         project.is_active = False
-        project.updated_at = datetime.utcnow()
+        project.updated_at = utcnow()
 
         await session.commit()
 
@@ -486,7 +486,7 @@ async def restore_project(project_id: str) -> DBProjectResponse:
             raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
 
         project.is_active = True
-        project.updated_at = datetime.utcnow()
+        project.updated_at = utcnow()
 
         await session.commit()
         await session.refresh(project)

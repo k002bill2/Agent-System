@@ -71,10 +71,11 @@ import { cn } from '@/lib/utils';
 | `WorkflowsPage` | `/workflows` | 워크플로우 자동화 (CI/CD 파이프라인 관리) |
 | `ExternalUsagePage` | `/external-usage` | 외부 LLM 프로바이더 사용량 모니터링 (비용, 토큰, 프로바이더별 현황) |
 | `AdminPage` | `/admin` | 관리자 페이지 (사용자 관리, 메뉴 설정, 시스템 정보) |
+| `SessionsPage` | `/sessions` | 세션 활동 뷰 (ClaudeCodeActivity 래핑) |
 | `SettingsPage` | `/settings` | 시스템 설정 |
 | `LoginPage` | `/login` | OAuth/Email 로그인 |
 | `RegisterPage` | `/register` | 이메일/비밀번호 회원가입 |
-| `AuthCallbackPage` | `/auth/callback` | OAuth 콜백 처리 |
+| `AuthCallbackPage` | `/auth/callback` | OAuth 콜백 처리 (App.tsx에서 eager 로딩) |
 | `InvitationAcceptPage` | `/invitations/accept` | 조직 초대 수락 페이지 |
 
 ---
@@ -336,7 +337,6 @@ import { cn } from '@/lib/utils';
 | `useOrchestration` | `orchestration.ts` | 세션/태스크 관리, WebSocket 연결 |
 | `useProjects` | `projects.ts` | 프로젝트 목록 및 상태 |
 | `useProjectConfigs` | `projectConfigs.ts` | 프로젝트 설정 (Skills, Agents, MCP, Hooks) + DB 프로젝트 CRUD |
-| `useAgentStore` | `agentStore.ts` | 에이전트 CRUD 관리 |
 | `useAgents` | `agents.ts` | 에이전트 레지스트리 |
 | `useAgentMonitor` | `agentMonitor.ts` | 에이전트 모니터링 메트릭 |
 | `useTaskStore` | `taskStore.ts` | 태스크 CRUD 관리 |
@@ -345,8 +345,7 @@ import { cn } from '@/lib/utils';
 | `useClaudeCodeActivity` | `claudeCodeActivity.ts` | Claude Code 실시간 활동 |
 | `useClaudeUsage` | `claudeUsage.ts` | Context Window 사용량 |
 | `useMCP` | `mcp.ts` | MCP 서버 관리 |
-| `useAuthStore` | `authStore.ts` | 인증 상태 (토큰 관리) |
-| `useAuth` | `auth.ts` | 인증 상태 (OAuth/Email) |
+| `useAuth` | `auth.ts` | 인증 상태 (OAuth/Email, 토큰 관리) |
 | `useDiff` | `diff.ts` | 파일 변경 비교 |
 | `usePermissions` | `permissions.ts` | 세션 권한 상태 |
 | `useNavigation` | `navigation.ts` | 네비게이션 상태 |
@@ -406,11 +405,12 @@ export const useStore = create<State>((set, get) => ({
 ```
 src/dashboard/
 ├── src/
-│   ├── pages/                  # 페이지 컴포넌트 (23개)
+│   ├── pages/                  # 페이지 컴포넌트 (24개)
 │   │   ├── DashboardPage.tsx
 │   │   ├── ProjectsPage.tsx
 │   │   ├── ProjectConfigsPage.tsx
 │   │   ├── TasksPage.tsx
+│   │   ├── SessionsPage.tsx       # ClaudeCodeActivity 래핑
 │   │   ├── AgentsPage.tsx
 │   │   ├── ActivityPage.tsx
 │   │   ├── MonitorPage.tsx
@@ -520,11 +520,11 @@ src/dashboard/
 │   │   └── analytics/          # Analytics
 │   │       └── ProjectMultiSelect.tsx
 │   ├── services/               # API 서비스 레이어
-│   ├── stores/                 # Zustand 스토어 (29개)
-│   │   ├── orchestration.ts
+│   ├── stores/                 # Zustand 스토어 (27개)
+│   │   ├── orchestration/      # 리팩토링: index.ts, types.ts, wsConnection.ts, wsHandler.ts
+│   │   ├── orchestration.ts    # 재export
 │   │   ├── projects.ts
 │   │   ├── projectConfigs.ts
-│   │   ├── agentStore.ts
 │   │   ├── agents.ts
 │   │   ├── agentMonitor.ts
 │   │   ├── taskStore.ts
@@ -533,7 +533,6 @@ src/dashboard/
 │   │   ├── claudeCodeActivity.ts
 │   │   ├── claudeUsage.ts
 │   │   ├── mcp.ts
-│   │   ├── authStore.ts
 │   │   ├── auth.ts
 │   │   ├── diff.ts
 │   │   ├── permissions.ts
@@ -552,10 +551,29 @@ src/dashboard/
 │   ├── hooks/                  # 커스텀 훅
 │   │   ├── useErrorHandler.ts
 │   │   └── useRealtimeMonitor.ts
+│   ├── services/               # API 서비스 레이어
+│   │   ├── apiClient.ts        # 중앙 HTTP 클라이언트 (인증 자동화)
+│   │   ├── agentService.ts     # Agent API 호출
+│   │   ├── analytics.ts        # PostHog 분석 통합
+│   │   ├── errors.ts           # 에러 타입/핸들링
+│   │   └── notificationService.ts # 알림 API
 │   ├── lib/                    # 유틸리티
 │   │   ├── utils.ts            # cn() 등 헬퍼 함수
-│   │   └── cookieStorage.ts    # 쿠키 기반 스토리지
+│   │   ├── cookieStorage.ts    # 쿠키 기반 스토리지
+│   │   └── fileAttachment.ts   # 파일 첨부 유틸리티
+│   ├── utils/                  # 도메인 유틸리티
+│   │   ├── diffParser.ts       # diff 파싱
+│   │   ├── gitErrorMessages.ts # Git 에러 메시지 매핑
+│   │   ├── gitGrouping.ts      # Git 파일 그룹화
+│   │   ├── gitSafetyPatterns.ts # Git 안전 패턴 검증
+│   │   └── gitUtils.ts         # Git 유틸리티
 │   └── types/                  # TypeScript 타입
+│       ├── branded.ts          # Branded types
+│       ├── claudeCodeActivity.ts
+│       ├── claudeSession.ts
+│       ├── claudeUsage.ts
+│       ├── monitoring.ts
+│       └── workflow.ts
 ├── public/
 ├── index.html
 ├── vite.config.ts
@@ -572,6 +590,16 @@ src/dashboard/
 |------|------|------|
 | `useErrorHandler` | `useErrorHandler.ts` | 에러 핸들링 유틸리티 훅 |
 | `useRealtimeMonitor` | `useRealtimeMonitor.ts` | 실시간 모니터링 WebSocket 훅 |
+
+---
+
+## Routing
+
+`routes.tsx`에서 `lazyWithBoundary`를 통한 Lazy Loading + ErrorBoundary 적용:
+- 모든 protected 페이지는 `Suspense`로 감싸져 로딩 중 스켈레톤 표시
+- `useNavigationStore` (Zustand)로 SPA 라우팅 (React Router 미사용)
+- `AuthCallbackPage`만 App.tsx에서 eager 로딩 (OAuth 콜백 처리)
+- 인증 게이트 + 역할 기반 접근 제어 적용
 
 ---
 

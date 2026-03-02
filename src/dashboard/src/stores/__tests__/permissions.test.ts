@@ -1,8 +1,19 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { usePermissionsStore } from '../permissions'
 
-const mockFetch = vi.fn()
-global.fetch = mockFetch
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}))
+
+import { usePermissionsStore } from '../permissions'
+import { apiClient } from '../../services/apiClient'
+
+const mockApiClient = vi.mocked(apiClient)
 
 function resetStore() {
   usePermissionsStore.setState({
@@ -17,7 +28,7 @@ function resetStore() {
 describe('permissions store', () => {
   beforeEach(() => {
     resetStore()
-    mockFetch.mockReset()
+    vi.clearAllMocks()
   })
 
   // ── Initial State ──────────────────────────────────────
@@ -70,10 +81,7 @@ describe('permissions store', () => {
         disabled_agents: ['agent-x'],
         agent_overrides: { 'agent-1': ['read_file'] },
       }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(data),
-      })
+      mockApiClient.get.mockResolvedValueOnce(data)
 
       await usePermissionsStore.getState().fetchPermissions('s-1')
 
@@ -85,7 +93,7 @@ describe('permissions store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch permissions'))
 
       await usePermissionsStore.getState().fetchPermissions('s-1')
 
@@ -105,10 +113,7 @@ describe('permissions store', () => {
         ],
       })
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ enabled: false }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ enabled: false })
 
       const result = await usePermissionsStore.getState().togglePermission('s-1', 'read_file')
 
@@ -119,7 +124,7 @@ describe('permissions store', () => {
     })
 
     it('returns false on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Failed'))
 
       const result = await usePermissionsStore.getState().togglePermission('s-1', 'read_file')
 
@@ -135,10 +140,7 @@ describe('permissions store', () => {
         disabledAgents: ['agent-1', 'agent-2'],
       })
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ enabled: true }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ enabled: true })
 
       const result = await usePermissionsStore.getState().toggleAgent('s-1', 'agent-1')
 
@@ -151,10 +153,7 @@ describe('permissions store', () => {
         disabledAgents: [],
       })
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ enabled: false }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ enabled: false })
 
       const result = await usePermissionsStore.getState().toggleAgent('s-1', 'agent-1')
 
@@ -163,7 +162,7 @@ describe('permissions store', () => {
     })
 
     it('returns false on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Failed'))
 
       const result = await usePermissionsStore.getState().toggleAgent('s-1', 'agent-1')
 
@@ -182,10 +181,7 @@ describe('permissions store', () => {
         disabled_agents: [],
         agent_overrides: {},
       }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(responseData),
-      })
+      mockApiClient.put.mockResolvedValueOnce(responseData)
 
       const result = await usePermissionsStore.getState().updatePermissions('s-1', ['read_file'])
 
@@ -194,7 +190,7 @@ describe('permissions store', () => {
     })
 
     it('returns false on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false })
+      mockApiClient.put.mockRejectedValueOnce(new Error('Failed'))
 
       const result = await usePermissionsStore.getState().updatePermissions('s-1', [])
 

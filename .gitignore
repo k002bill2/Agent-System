@@ -54,4 +54,5 @@ src/dashboard/coverage/
 .claude/plans/
 .claude/hooks/.context-state.json
 .claude/gemini-bridge/reviews/
+.claude/gemini-bridge/.review-lock
 .temp/

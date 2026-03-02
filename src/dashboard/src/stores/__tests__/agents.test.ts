@@ -1,5 +1,19 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
+
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}))
+
 import { useAgentsStore, Agent, AgentRegistryStats, TaskAnalysisHistory, TaskAnalysisResult } from '../agents'
+import { apiClient } from '../../services/apiClient'
+
+const mockApiClient = vi.mocked(apiClient)
 
 const mockAgent: Agent = {
   id: 'agent-1',
@@ -27,7 +41,7 @@ const mockStats: AgentRegistryStats = {
 
 describe('agents store', () => {
   beforeEach(() => {
-    // Reset store
+    // Reset store - all fields
     useAgentsStore.setState({
       agents: [],
       stats: null,
@@ -37,6 +51,22 @@ describe('agents store', () => {
       error: null,
       selectedAgentId: null,
       categoryFilter: null,
+      // History state
+      analysisHistory: [],
+      historyLoading: false,
+      historyTotal: 0,
+      historyHasMore: false,
+      historyProjectFilter: null,
+      selectedHistoryId: null,
+      // Execution state
+      executingAnalysisId: null,
+      executionSessionId: null,
+      executionError: null,
+      // Image/OCR state
+      attachedImages: [],
+      ocrStatuses: {},
+      attachedMdFiles: [],
+      mdReadStatuses: {},
     })
     vi.clearAllMocks()
   })
@@ -93,10 +123,11 @@ describe('agents store', () => {
 
   describe('fetchAgents', () => {
     it('sets loading state during fetch', async () => {
-      vi.spyOn(global, 'fetch').mockImplementation(() =>
-        new Promise((resolve) =>
-          setTimeout(() => resolve(new Response(JSON.stringify([mockAgent]))), 50)
-        )
+      let resolvePromise: (v: unknown) => void
+      mockApiClient.get.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolvePromise = resolve
+        })
       )
 
       const { fetchAgents } = useAgentsStore.getState()
@@ -104,14 +135,13 @@ describe('agents store', () => {
 
       expect(useAgentsStore.getState().isLoading).toBe(true)
 
+      resolvePromise!([mockAgent])
       await promise
       expect(useAgentsStore.getState().isLoading).toBe(false)
     })
 
     it('updates agents on successful fetch', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify([mockAgent]))
-      )
+      mockApiClient.get.mockResolvedValueOnce([mockAgent])
 
       const { fetchAgents } = useAgentsStore.getState()
       await fetchAgents()
@@ -121,9 +151,7 @@ describe('agents store', () => {
     })
 
     it('sets error on fetch failure', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(null, { status: 500, statusText: 'Server Error' })
-      )
+      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch agents'))
 
       const { fetchAgents } = useAgentsStore.getState()
       await fetchAgents()
@@ -132,7 +160,7 @@ describe('agents store', () => {
     })
 
     it('handles network error', async () => {
-      vi.spyOn(global, 'fetch').mockRejectedValue(new Error('Network error'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Network error'))
 
       const { fetchAgents } = useAgentsStore.getState()
       await fetchAgents()
@@ -141,27 +169,23 @@ describe('agents store', () => {
     })
 
     it('adds category filter to URL', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify([]))
-      )
+      mockApiClient.get.mockResolvedValueOnce([])
 
       const { fetchAgents } = useAgentsStore.getState()
       await fetchAgents('development')
 
-      expect(fetchSpy).toHaveBeenCalledWith(
+      expect(mockApiClient.get).toHaveBeenCalledWith(
         expect.stringContaining('category=development')
       )
     })
 
     it('adds available_only filter to URL', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify([]))
-      )
+      mockApiClient.get.mockResolvedValueOnce([])
 
       const { fetchAgents } = useAgentsStore.getState()
       await fetchAgents(undefined, true)
 
-      expect(fetchSpy).toHaveBeenCalledWith(
+      expect(mockApiClient.get).toHaveBeenCalledWith(
         expect.stringContaining('available_only=true')
       )
     })
@@ -169,9 +193,7 @@ describe('agents store', () => {
 
   describe('fetchStats', () => {
     it('updates stats on successful fetch', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify(mockStats))
-      )
+      mockApiClient.get.mockResolvedValueOnce(mockStats)
 
       const { fetchStats } = useAgentsStore.getState()
       await fetchStats()
@@ -181,7 +203,7 @@ describe('agents store', () => {
 
     it('logs error on failure', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      vi.spyOn(global, 'fetch').mockRejectedValue(new Error('Network error'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Network error'))
 
       const { fetchStats } = useAgentsStore.getState()
       await fetchStats()
@@ -191,27 +213,22 @@ describe('agents store', () => {
   })
 
   describe('searchAgents', () => {
-    it('sends POST request with query', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify([{ agent: mockAgent, score: 0.9 }]))
-      )
+    it('calls apiClient.post with query', async () => {
+      mockApiClient.post.mockResolvedValueOnce([{ agent: mockAgent, score: 0.9 }])
 
       const { searchAgents } = useAgentsStore.getState()
       await searchAgents('react developer')
 
-      expect(fetchSpy).toHaveBeenCalledWith(
+      expect(mockApiClient.post).toHaveBeenCalledWith(
         expect.stringContaining('/agents/search'),
         expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining('react developer'),
+          query: 'react developer',
         })
       )
     })
 
     it('updates searchResults on success', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify([{ agent: mockAgent, score: 0.9 }]))
-      )
+      mockApiClient.post.mockResolvedValueOnce([{ agent: mockAgent, score: 0.9 }])
 
       const { searchAgents } = useAgentsStore.getState()
       await searchAgents('test')
@@ -244,27 +261,25 @@ describe('agents store', () => {
       execution_time_ms: 100,
     }
 
-    it('sends POST request with task', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify(mockAnalysisResult))
-      )
+    it('calls apiClient.post with task (no images)', async () => {
+      // analyzeTask -> apiClient.post, then fetchAnalysisHistory -> apiClient.get
+      mockApiClient.post.mockResolvedValueOnce(mockAnalysisResult)
+      mockApiClient.get.mockResolvedValueOnce({ items: [], total: 0, has_more: false })
 
       const { analyzeTask } = useAgentsStore.getState()
       await analyzeTask('Build a React component')
 
-      expect(fetchSpy).toHaveBeenCalledWith(
+      expect(mockApiClient.post).toHaveBeenCalledWith(
         expect.stringContaining('/agents/orchestrate/analyze'),
         expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining('Build a React component'),
+          task: 'Build a React component',
         })
       )
     })
 
     it('returns analysis result', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify(mockAnalysisResult))
-      )
+      mockApiClient.post.mockResolvedValueOnce(mockAnalysisResult)
+      mockApiClient.get.mockResolvedValueOnce({ items: [], total: 0, has_more: false })
 
       const { analyzeTask } = useAgentsStore.getState()
       const result = await analyzeTask('Test task')
@@ -274,7 +289,7 @@ describe('agents store', () => {
     })
 
     it('returns null and sets error on failure', async () => {
-      vi.spyOn(global, 'fetch').mockRejectedValue(new Error('API error'))
+      mockApiClient.post.mockRejectedValueOnce(new Error('API error'))
 
       const { analyzeTask } = useAgentsStore.getState()
       const result = await analyzeTask('Test task')
@@ -286,9 +301,7 @@ describe('agents store', () => {
 
   describe('setCategoryFilter', () => {
     it('sets category filter and triggers fetch', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify([]))
-      )
+      mockApiClient.get.mockResolvedValueOnce([])
 
       const { setCategoryFilter } = useAgentsStore.getState()
       await setCategoryFilter('quality')
@@ -297,9 +310,7 @@ describe('agents store', () => {
     })
 
     it('clears filter when null', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify([]))
-      )
+      mockApiClient.get.mockResolvedValueOnce([])
 
       useAgentsStore.setState({ categoryFilter: 'development' })
 
@@ -412,7 +423,7 @@ describe('agents store', () => {
     }
 
     it('fetches history and updates state', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify(mockHistoryData)))
+      mockApiClient.get.mockResolvedValueOnce(mockHistoryData)
       await useAgentsStore.getState().fetchAnalysisHistory()
       expect(useAgentsStore.getState().analysisHistory).toHaveLength(1)
       expect(useAgentsStore.getState().historyTotal).toBe(1)
@@ -421,22 +432,20 @@ describe('agents store', () => {
 
     it('resets history when reset=true', async () => {
       useAgentsStore.setState({ analysisHistory: [{ id: 'old' } as unknown as TaskAnalysisHistory] })
-      vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify(mockHistoryData)))
+      mockApiClient.get.mockResolvedValueOnce(mockHistoryData)
       await useAgentsStore.getState().fetchAnalysisHistory(undefined, true)
       expect(useAgentsStore.getState().analysisHistory).toHaveLength(1)
       expect(useAgentsStore.getState().analysisHistory[0].id).toBe('h1')
     })
 
     it('filters by projectId', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify(mockHistoryData))
-      )
+      mockApiClient.get.mockResolvedValueOnce(mockHistoryData)
       await useAgentsStore.getState().fetchAnalysisHistory('proj-1')
-      expect(fetchSpy).toHaveBeenCalledWith(expect.stringContaining('project_id=proj-1'))
+      expect(mockApiClient.get).toHaveBeenCalledWith(expect.stringContaining('project_id=proj-1'))
     })
 
     it('handles fetch failure gracefully', async () => {
-      vi.spyOn(global, 'fetch').mockRejectedValue(new Error('Network error'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Network error'))
       await useAgentsStore.getState().fetchAnalysisHistory()
       expect(useAgentsStore.getState().historyLoading).toBe(false)
     })
@@ -444,17 +453,15 @@ describe('agents store', () => {
 
   describe('loadMoreHistory', () => {
     it('does nothing when historyHasMore is false', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch')
       useAgentsStore.setState({ historyHasMore: false })
       await useAgentsStore.getState().loadMoreHistory()
-      expect(fetchSpy).not.toHaveBeenCalled()
+      expect(mockApiClient.get).not.toHaveBeenCalled()
     })
 
     it('does nothing when historyLoading is true', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch')
       useAgentsStore.setState({ historyLoading: true, historyHasMore: true })
       await useAgentsStore.getState().loadMoreHistory()
-      expect(fetchSpy).not.toHaveBeenCalled()
+      expect(mockApiClient.get).not.toHaveBeenCalled()
     })
 
     it('appends items to existing history', async () => {
@@ -464,9 +471,7 @@ describe('agents store', () => {
         analysisHistory: [{ id: 'h1' } as unknown as TaskAnalysisHistory],
         historyProjectFilter: null,
       })
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify({ items: [{ id: 'h2' }], total: 2, has_more: false }))
-      )
+      mockApiClient.get.mockResolvedValueOnce({ items: [{ id: 'h2' }], total: 2, has_more: false })
       await useAgentsStore.getState().loadMoreHistory()
       expect(useAgentsStore.getState().analysisHistory).toHaveLength(2)
       expect(useAgentsStore.getState().historyHasMore).toBe(false)
@@ -480,7 +485,7 @@ describe('agents store', () => {
         historyTotal: 2,
         selectedHistoryId: null,
       })
-      vi.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 200 }))
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
       const result = await useAgentsStore.getState().deleteAnalysis('h1')
       expect(result).toBe(true)
       expect(useAgentsStore.getState().analysisHistory).toHaveLength(1)
@@ -494,14 +499,14 @@ describe('agents store', () => {
         selectedHistoryId: 'h1',
         lastAnalysis: { success: true } as unknown as TaskAnalysisResult,
       })
-      vi.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 200 }))
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
       await useAgentsStore.getState().deleteAnalysis('h1')
       expect(useAgentsStore.getState().selectedHistoryId).toBeNull()
       expect(useAgentsStore.getState().lastAnalysis).toBeNull()
     })
 
     it('returns false on failure', async () => {
-      vi.spyOn(global, 'fetch').mockRejectedValue(new Error('Network error'))
+      mockApiClient.delete.mockRejectedValueOnce(new Error('Network error'))
       const result = await useAgentsStore.getState().deleteAnalysis('h1')
       expect(result).toBe(false)
     })
@@ -543,25 +548,21 @@ describe('agents store', () => {
 
   describe('executeAnalysis', () => {
     it('returns session_id on success', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify({ success: true, session_id: 'sess-1' }))
-      )
+      mockApiClient.post.mockResolvedValueOnce({ success: true, session_id: 'sess-1' })
       const result = await useAgentsStore.getState().executeAnalysis('analysis-1')
       expect(result).toBe('sess-1')
       expect(useAgentsStore.getState().executionSessionId).toBe('sess-1')
     })
 
     it('returns null when success=false', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify({ success: false, error: 'Execution failed' }))
-      )
+      mockApiClient.post.mockResolvedValueOnce({ success: false, error: 'Execution failed' })
       const result = await useAgentsStore.getState().executeAnalysis('analysis-1')
       expect(result).toBeNull()
       expect(useAgentsStore.getState().executionError).toBe('Execution failed')
     })
 
     it('returns null on network error', async () => {
-      vi.spyOn(global, 'fetch').mockRejectedValue(new Error('Network error'))
+      mockApiClient.post.mockRejectedValueOnce(new Error('Network error'))
       const result = await useAgentsStore.getState().executeAnalysis('analysis-1')
       expect(result).toBeNull()
       expect(useAgentsStore.getState().executionError).toBe('Network error')
@@ -586,7 +587,7 @@ describe('agents store', () => {
 
   describe('fetchAgents - additional branches', () => {
     it('handles non-Error thrown objects in catch', async () => {
-      vi.spyOn(global, 'fetch').mockRejectedValue('string error')
+      mockApiClient.get.mockRejectedValueOnce('string error')
 
       await useAgentsStore.getState().fetchAgents()
 
@@ -595,34 +596,28 @@ describe('agents store', () => {
     })
 
     it('fetches without query params when no filters provided', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify([]))
-      )
+      mockApiClient.get.mockResolvedValueOnce([])
 
       await useAgentsStore.getState().fetchAgents()
 
-      expect(fetchSpy).toHaveBeenCalledWith('http://localhost:8000/api/agents')
+      expect(mockApiClient.get).toHaveBeenCalledWith('/api/agents')
     })
 
     it('combines category and availableOnly params', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify([]))
-      )
+      mockApiClient.get.mockResolvedValueOnce([])
 
       await useAgentsStore.getState().fetchAgents('research', true)
 
-      const url = fetchSpy.mock.calls[0][0] as string
+      const url = mockApiClient.get.mock.calls[0][0] as string
       expect(url).toContain('category=research')
       expect(url).toContain('available_only=true')
     })
   })
 
   describe('fetchStats - additional branches', () => {
-    it('handles HTTP error response', async () => {
+    it('handles error response', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(null, { status: 500, statusText: 'Internal Server Error' })
-      )
+      mockApiClient.get.mockRejectedValueOnce(new Error('Internal Server Error'))
 
       await useAgentsStore.getState().fetchStats()
 
@@ -633,10 +628,8 @@ describe('agents store', () => {
   })
 
   describe('searchAgents - additional branches', () => {
-    it('handles HTTP error response', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(null, { status: 400, statusText: 'Bad Request' })
-      )
+    it('handles error on search', async () => {
+      mockApiClient.post.mockRejectedValueOnce(new Error('Failed to search agents'))
 
       await useAgentsStore.getState().searchAgents('test query')
 
@@ -645,7 +638,7 @@ describe('agents store', () => {
     })
 
     it('handles non-Error thrown objects in catch', async () => {
-      vi.spyOn(global, 'fetch').mockRejectedValue('some string error')
+      mockApiClient.post.mockRejectedValueOnce('some string error')
 
       await useAgentsStore.getState().searchAgents('test query')
 
@@ -654,13 +647,11 @@ describe('agents store', () => {
     })
 
     it('includes category in search body when provided', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify([]))
-      )
+      mockApiClient.post.mockResolvedValueOnce([])
 
       await useAgentsStore.getState().searchAgents('query', 'quality')
 
-      const body = JSON.parse(fetchSpy.mock.calls[0][1]?.body as string)
+      const body = mockApiClient.post.mock.calls[0][1] as Record<string, unknown>
       expect(body.category).toBe('quality')
     })
   })
@@ -690,9 +681,13 @@ describe('agents store', () => {
     }
 
     it('uses multipart/form-data when images are attached via store state', async () => {
+      // analyzeTask with images uses raw fetch, not apiClient
       const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
         new Response(JSON.stringify(mockAnalysisResult))
       )
+      // fetchAnalysisHistory after success uses apiClient.get
+      mockApiClient.get.mockResolvedValueOnce({ items: [], total: 0, has_more: false })
+
       const images = [new File(['imgdata'], 'screenshot.png', { type: 'image/png' })]
       useAgentsStore.setState({ attachedImages: images })
 
@@ -708,6 +703,8 @@ describe('agents store', () => {
       const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
         new Response(JSON.stringify(mockAnalysisResult))
       )
+      mockApiClient.get.mockResolvedValueOnce({ items: [], total: 0, has_more: false })
+
       const images = [new File(['imgdata'], 'test.png', { type: 'image/png' })]
 
       await useAgentsStore.getState().analyzeTask('Test task', undefined, images)
@@ -720,6 +717,8 @@ describe('agents store', () => {
       const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
         new Response(JSON.stringify(mockAnalysisResult))
       )
+      mockApiClient.get.mockResolvedValueOnce({ items: [], total: 0, has_more: false })
+
       const images = [new File(['imgdata'], 'test.png', { type: 'image/png' })]
 
       await useAgentsStore.getState().analyzeTask('Test', { project_id: 'p1' }, images)
@@ -729,19 +728,8 @@ describe('agents store', () => {
       expect(formData.get('context')).toBe(JSON.stringify({ project_id: 'p1' }))
     })
 
-    it('handles HTTP error response', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(null, { status: 500, statusText: 'Server Error' })
-      )
-
-      const result = await useAgentsStore.getState().analyzeTask('Test task')
-
-      expect(result).toBeNull()
-      expect(useAgentsStore.getState().error).toContain('Failed to analyze task')
-    })
-
     it('handles non-Error thrown objects in catch', async () => {
-      vi.spyOn(global, 'fetch').mockRejectedValue('unknown error')
+      mockApiClient.post.mockRejectedValueOnce('unknown error')
 
       const result = await useAgentsStore.getState().analyzeTask('Test task')
 
@@ -754,9 +742,13 @@ describe('agents store', () => {
     })
 
     it('clears attachedImages and ocrStatuses on success', async () => {
+      // analyzeTask with images uses raw fetch, not apiClient.post
       vi.spyOn(global, 'fetch').mockResolvedValue(
         new Response(JSON.stringify(mockAnalysisResult))
       )
+      // fetchAnalysisHistory after success uses apiClient.get
+      mockApiClient.get.mockResolvedValueOnce({ items: [], total: 0, has_more: false })
+
       useAgentsStore.setState({
         attachedImages: [new File(['a'], 'a.png')],
         ocrStatuses: { 'a.png_1_0': 'done' },
@@ -769,20 +761,22 @@ describe('agents store', () => {
     })
 
     it('refreshes history with project_id from context after success', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify(mockAnalysisResult))
-      )
+      mockApiClient.post.mockResolvedValueOnce(mockAnalysisResult)
+      mockApiClient.get.mockResolvedValueOnce({ items: [], total: 0, has_more: false })
 
       await useAgentsStore.getState().analyzeTask('Test', { project_id: 'proj-99' })
 
-      // First call is the analyze endpoint, second call is fetchAnalysisHistory
-      expect(fetchSpy.mock.calls.length).toBeGreaterThanOrEqual(2)
-      const historyUrl = fetchSpy.mock.calls[1][0] as string
-      expect(historyUrl).toContain('project_id=proj-99')
+      // fetchAnalysisHistory is fire-and-forget, so wait for it to settle
+      await vi.waitFor(() => {
+        expect(mockApiClient.get).toHaveBeenCalledWith(
+          expect.stringContaining('project_id=proj-99')
+        )
+      })
     })
   })
 
   // ── extractTextFromImage ──────────────────────────────
+  // Note: extractTextFromImage uses raw fetch, not apiClient
 
   describe('extractTextFromImage', () => {
     it('returns extracted text on success', async () => {
@@ -852,53 +846,39 @@ describe('agents store', () => {
 
   describe('executeAnalysis - additional branches', () => {
     it('sets executingAnalysisId on start', async () => {
-      vi.spyOn(global, 'fetch').mockImplementation(() =>
-        new Promise((resolve) =>
-          setTimeout(() => resolve(new Response(JSON.stringify({ success: true, session_id: 'sess-1' }))), 50)
-        )
+      let resolvePromise: (v: unknown) => void
+      mockApiClient.post.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolvePromise = resolve
+        })
       )
 
       const promise = useAgentsStore.getState().executeAnalysis('a-1')
       expect(useAgentsStore.getState().executingAnalysisId).toBe('a-1')
+      resolvePromise!({ success: true, session_id: 'sess-1' })
       await promise
     })
 
-    it('handles HTTP error response', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(null, { status: 500, statusText: 'Server Error' })
-      )
-
-      const result = await useAgentsStore.getState().executeAnalysis('a-1')
-
-      expect(result).toBeNull()
-      expect(useAgentsStore.getState().executionError).toContain('Failed to execute analysis')
-      expect(useAgentsStore.getState().executingAnalysisId).toBeNull()
-    })
-
     it('passes projectId in request body', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify({ success: true, session_id: 'sess-1' }))
-      )
+      mockApiClient.post.mockResolvedValueOnce({ success: true, session_id: 'sess-1' })
 
       await useAgentsStore.getState().executeAnalysis('a-1', 'proj-5')
 
-      const body = JSON.parse(fetchSpy.mock.calls[0][1]?.body as string)
+      const body = mockApiClient.post.mock.calls[0][1] as Record<string, unknown>
       expect(body.project_id).toBe('proj-5')
     })
 
     it('sends null project_id when not provided', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify({ success: true, session_id: 'sess-1' }))
-      )
+      mockApiClient.post.mockResolvedValueOnce({ success: true, session_id: 'sess-1' })
 
       await useAgentsStore.getState().executeAnalysis('a-1')
 
-      const body = JSON.parse(fetchSpy.mock.calls[0][1]?.body as string)
+      const body = mockApiClient.post.mock.calls[0][1] as Record<string, unknown>
       expect(body.project_id).toBeNull()
     })
 
     it('handles non-Error thrown objects in catch', async () => {
-      vi.spyOn(global, 'fetch').mockRejectedValue('string error')
+      mockApiClient.post.mockRejectedValueOnce('string error')
 
       const result = await useAgentsStore.getState().executeAnalysis('a-1')
 
@@ -907,9 +887,7 @@ describe('agents store', () => {
     })
 
     it('uses fallback error message when success is false without error', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify({ success: false }))
-      )
+      mockApiClient.post.mockResolvedValueOnce({ success: false })
 
       const result = await useAgentsStore.getState().executeAnalysis('a-1')
 
@@ -919,6 +897,7 @@ describe('agents store', () => {
   })
 
   // ── executeWithWarp ───────────────────────────────────
+  // executeWithWarp uses apiClient.get (analysis) + apiClient.post (warp)
 
   describe('executeWithWarp', () => {
     const mockAnalysisData = {
@@ -949,9 +928,8 @@ describe('agents store', () => {
     }
 
     it('returns true on successful warp execution', async () => {
-      vi.spyOn(global, 'fetch')
-        .mockResolvedValueOnce(new Response(JSON.stringify(mockAnalysisData))) // analysis fetch
-        .mockResolvedValueOnce(new Response(JSON.stringify({ success: true }))) // warp open
+      mockApiClient.get.mockResolvedValueOnce(mockAnalysisData) // analysis fetch
+      mockApiClient.post.mockResolvedValueOnce({ success: true }) // warp open
 
       const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
 
@@ -960,35 +938,33 @@ describe('agents store', () => {
     })
 
     it('sets executingAnalysisId at start', async () => {
-      vi.spyOn(global, 'fetch').mockImplementation(() =>
-        new Promise((resolve) =>
-          setTimeout(() => resolve(new Response(JSON.stringify(mockAnalysisData))), 50)
-        )
+      let resolvePromise: (v: unknown) => void
+      mockApiClient.get.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolvePromise = resolve
+        })
       )
 
       const promise = useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
       expect(useAgentsStore.getState().executingAnalysisId).toBe('a-1')
-      // Clean up
-      vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({ success: true })))
+
+      resolvePromise!(mockAnalysisData)
+      mockApiClient.post.mockResolvedValueOnce({ success: true })
       await promise.catch(() => {})
     })
 
     it('returns false when analysis fetch fails', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(null, { status: 404, statusText: 'Not Found' })
-      )
+      mockApiClient.get.mockRejectedValueOnce(new Error('Not Found'))
 
       const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
 
       expect(result).toBe(false)
-      expect(useAgentsStore.getState().executionError).toContain('404')
+      expect(useAgentsStore.getState().executionError).toBe('Not Found')
     })
 
     it('returns false when no project id available', async () => {
       const dataWithoutProject = { ...mockAnalysisData, project_id: null }
-      vi.spyOn(global, 'fetch').mockResolvedValueOnce(
-        new Response(JSON.stringify(dataWithoutProject))
-      )
+      mockApiClient.get.mockResolvedValueOnce(dataWithoutProject)
 
       const result = await useAgentsStore.getState().executeWithWarp('a-1')
 
@@ -997,42 +973,18 @@ describe('agents store', () => {
     })
 
     it('uses analysis project_id when projectId argument is not provided', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch')
-        .mockResolvedValueOnce(new Response(JSON.stringify(mockAnalysisData)))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ success: true })))
+      mockApiClient.get.mockResolvedValueOnce(mockAnalysisData)
+      mockApiClient.post.mockResolvedValueOnce({ success: true })
 
       await useAgentsStore.getState().executeWithWarp('a-1')
 
-      const warpBody = JSON.parse(fetchSpy.mock.calls[1][1]?.body as string)
+      const warpBody = mockApiClient.post.mock.calls[0][1] as Record<string, unknown>
       expect(warpBody.project_id).toBe('proj-1')
     })
 
-    it('returns false when warp response is not ok', async () => {
-      vi.spyOn(global, 'fetch')
-        .mockResolvedValueOnce(new Response(JSON.stringify(mockAnalysisData)))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Warp not found' }), { status: 500 }))
-
-      const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
-
-      expect(result).toBe(false)
-      expect(useAgentsStore.getState().executionError).toContain('Warp not found')
-    })
-
-    it('handles warp error response that is not JSON', async () => {
-      vi.spyOn(global, 'fetch')
-        .mockResolvedValueOnce(new Response(JSON.stringify(mockAnalysisData)))
-        .mockResolvedValueOnce(new Response('not json', { status: 500, statusText: 'Error' }))
-
-      const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
-
-      expect(result).toBe(false)
-      expect(useAgentsStore.getState().executionError).toBeTruthy()
-    })
-
     it('returns false when warp result.success is false', async () => {
-      vi.spyOn(global, 'fetch')
-        .mockResolvedValueOnce(new Response(JSON.stringify(mockAnalysisData)))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ success: false, error: 'Warp error' })))
+      mockApiClient.get.mockResolvedValueOnce(mockAnalysisData)
+      mockApiClient.post.mockResolvedValueOnce({ success: false, error: 'Warp error' })
 
       const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
 
@@ -1041,7 +993,7 @@ describe('agents store', () => {
     })
 
     it('handles network error', async () => {
-      vi.spyOn(global, 'fetch').mockRejectedValue(new Error('Network error'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Network error'))
 
       const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
 
@@ -1050,7 +1002,7 @@ describe('agents store', () => {
     })
 
     it('handles non-Error thrown objects in catch', async () => {
-      vi.spyOn(global, 'fetch').mockRejectedValue('string error')
+      mockApiClient.get.mockRejectedValueOnce('string error')
 
       const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
 
@@ -1059,13 +1011,12 @@ describe('agents store', () => {
     })
 
     it('sends correct warp request body with image_paths', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch')
-        .mockResolvedValueOnce(new Response(JSON.stringify(mockAnalysisData)))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ success: true })))
+      mockApiClient.get.mockResolvedValueOnce(mockAnalysisData)
+      mockApiClient.post.mockResolvedValueOnce({ success: true })
 
       await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
 
-      const warpBody = JSON.parse(fetchSpy.mock.calls[1][1]?.body as string)
+      const warpBody = mockApiClient.post.mock.calls[0][1] as Record<string, unknown>
       expect(warpBody.image_paths).toEqual(['/tmp/img.png'])
       expect(warpBody.use_claude_cli).toBe(true)
       expect(warpBody.new_window).toBe(false)
@@ -1073,42 +1024,18 @@ describe('agents store', () => {
 
     it('sends null image_paths when not present in analysis', async () => {
       const dataNoImages = { ...mockAnalysisData, image_paths: null }
-      const fetchSpy = vi.spyOn(global, 'fetch')
-        .mockResolvedValueOnce(new Response(JSON.stringify(dataNoImages)))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ success: true })))
+      mockApiClient.get.mockResolvedValueOnce(dataNoImages)
+      mockApiClient.post.mockResolvedValueOnce({ success: true })
 
       await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
 
-      const warpBody = JSON.parse(fetchSpy.mock.calls[1][1]?.body as string)
+      const warpBody = mockApiClient.post.mock.calls[0][1] as Record<string, unknown>
       expect(warpBody.image_paths).toBeNull()
     })
 
-    it('uses warp error field when detail is not present', async () => {
-      vi.spyOn(global, 'fetch')
-        .mockResolvedValueOnce(new Response(JSON.stringify(mockAnalysisData)))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Custom error' }), { status: 500 }))
-
-      const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
-
-      expect(result).toBe(false)
-      expect(useAgentsStore.getState().executionError).toBe('Custom error')
-    })
-
-    it('falls back to warp statusText when no detail or error in response', async () => {
-      vi.spyOn(global, 'fetch')
-        .mockResolvedValueOnce(new Response(JSON.stringify(mockAnalysisData)))
-        .mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 502, statusText: 'Bad Gateway' }))
-
-      const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
-
-      expect(result).toBe(false)
-      expect(useAgentsStore.getState().executionError).toContain('502')
-    })
-
     it('uses default error when warp result success is false without error field', async () => {
-      vi.spyOn(global, 'fetch')
-        .mockResolvedValueOnce(new Response(JSON.stringify(mockAnalysisData)))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ success: false })))
+      mockApiClient.get.mockResolvedValueOnce(mockAnalysisData)
+      mockApiClient.post.mockResolvedValueOnce({ success: false })
 
       const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
 
@@ -1128,9 +1055,8 @@ describe('agents store', () => {
           },
         },
       }
-      vi.spyOn(global, 'fetch')
-        .mockResolvedValueOnce(new Response(JSON.stringify(dataNoGroups)))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ success: true })))
+      mockApiClient.get.mockResolvedValueOnce(dataNoGroups)
+      mockApiClient.post.mockResolvedValueOnce({ success: true })
 
       const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
       expect(result).toBe(true)
@@ -1150,9 +1076,8 @@ describe('agents store', () => {
           },
         },
       }
-      vi.spyOn(global, 'fetch')
-        .mockResolvedValueOnce(new Response(JSON.stringify(dataSingleGroup)))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ success: true })))
+      mockApiClient.get.mockResolvedValueOnce(dataSingleGroup)
+      mockApiClient.post.mockResolvedValueOnce({ success: true })
 
       const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
       expect(result).toBe(true)
@@ -1173,9 +1098,8 @@ describe('agents store', () => {
           },
         },
       }
-      vi.spyOn(global, 'fetch')
-        .mockResolvedValueOnce(new Response(JSON.stringify(dataEdgeCases)))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ success: true })))
+      mockApiClient.get.mockResolvedValueOnce(dataEdgeCases)
+      mockApiClient.post.mockResolvedValueOnce({ success: true })
 
       const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
       expect(result).toBe(true)
@@ -1195,9 +1119,8 @@ describe('agents store', () => {
           },
         },
       }
-      vi.spyOn(global, 'fetch')
-        .mockResolvedValueOnce(new Response(JSON.stringify(dataMissing)))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ success: true })))
+      mockApiClient.get.mockResolvedValueOnce(dataMissing)
+      mockApiClient.post.mockResolvedValueOnce({ success: true })
 
       const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
       expect(result).toBe(true)
@@ -1211,9 +1134,8 @@ describe('agents store', () => {
           execution_plan: null as unknown,
         },
       }
-      vi.spyOn(global, 'fetch')
-        .mockResolvedValueOnce(new Response(JSON.stringify(dataNoExecPlan)))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ success: true })))
+      mockApiClient.get.mockResolvedValueOnce(dataNoExecPlan)
+      mockApiClient.post.mockResolvedValueOnce({ success: true })
 
       const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
       expect(result).toBe(true)
@@ -1224,9 +1146,8 @@ describe('agents store', () => {
         ...mockAnalysisData,
         analysis: null,
       }
-      vi.spyOn(global, 'fetch')
-        .mockResolvedValueOnce(new Response(JSON.stringify(dataNoAnalysis)))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ success: true })))
+      mockApiClient.get.mockResolvedValueOnce(dataNoAnalysis)
+      mockApiClient.post.mockResolvedValueOnce({ success: true })
 
       const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
       expect(result).toBe(true)
@@ -1246,9 +1167,8 @@ describe('agents store', () => {
           },
         },
       }
-      vi.spyOn(global, 'fetch')
-        .mockResolvedValueOnce(new Response(JSON.stringify(dataNoDepsProp)))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ success: true })))
+      mockApiClient.get.mockResolvedValueOnce(dataNoDepsProp)
+      mockApiClient.post.mockResolvedValueOnce({ success: true })
 
       const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
       expect(result).toBe(true)
@@ -1259,14 +1179,13 @@ describe('agents store', () => {
         ...mockAnalysisData,
         task_input: null,
       }
-      const fetchSpy = vi.spyOn(global, 'fetch')
-        .mockResolvedValueOnce(new Response(JSON.stringify(dataNoTaskInput)))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ success: true })))
+      mockApiClient.get.mockResolvedValueOnce(dataNoTaskInput)
+      mockApiClient.post.mockResolvedValueOnce({ success: true })
 
       const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
       expect(result).toBe(true)
 
-      const warpBody = JSON.parse(fetchSpy.mock.calls[1][1]?.body as string)
+      const warpBody = mockApiClient.post.mock.calls[0][1] as Record<string, unknown>
       expect(warpBody.title).toContain('Analysis')
     })
   })
@@ -1286,9 +1205,7 @@ describe('agents store', () => {
         historyTotal: 5,
         historyProjectFilter: 'proj-old',
       })
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify(mockHistoryData))
-      )
+      mockApiClient.get.mockResolvedValueOnce(mockHistoryData)
 
       await useAgentsStore.getState().fetchAnalysisHistory('proj-new')
 
@@ -1303,21 +1220,16 @@ describe('agents store', () => {
         historyTotal: 1,
         historyHasMore: false,
       })
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify(mockHistoryData))
-      )
+      mockApiClient.get.mockResolvedValueOnce(mockHistoryData)
 
       await useAgentsStore.getState().fetchAnalysisHistory('proj-1')
 
-      // The fetch still returns its data but the key is that no reset happened before the fetch
       expect(useAgentsStore.getState().historyProjectFilter).toBe('proj-1')
     })
 
-    it('handles HTTP error response', async () => {
+    it('handles error response', async () => {
       vi.spyOn(console, 'error').mockImplementation(() => {})
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(null, { status: 500, statusText: 'Server Error' })
-      )
+      mockApiClient.get.mockRejectedValueOnce(new Error('Server Error'))
 
       await useAgentsStore.getState().fetchAnalysisHistory()
 
@@ -1326,9 +1238,7 @@ describe('agents store', () => {
 
     it('sets historyProjectFilter to null when projectId is undefined', async () => {
       useAgentsStore.setState({ historyProjectFilter: 'some-proj' })
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify(mockHistoryData))
-      )
+      mockApiClient.get.mockResolvedValueOnce(mockHistoryData)
 
       await useAgentsStore.getState().fetchAnalysisHistory(undefined, true)
 
@@ -1346,13 +1256,11 @@ describe('agents store', () => {
         analysisHistory: [{ id: 'h1' } as unknown as TaskAnalysisHistory],
         historyProjectFilter: 'proj-filter',
       })
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify({ items: [], total: 1, has_more: false }))
-      )
+      mockApiClient.get.mockResolvedValueOnce({ items: [], total: 1, has_more: false })
 
       await useAgentsStore.getState().loadMoreHistory()
 
-      expect(fetchSpy).toHaveBeenCalledWith(expect.stringContaining('project_id=proj-filter'))
+      expect(mockApiClient.get).toHaveBeenCalledWith(expect.stringContaining('project_id=proj-filter'))
     })
 
     it('sets correct offset based on existing history length', async () => {
@@ -1362,16 +1270,14 @@ describe('agents store', () => {
         analysisHistory: [{ id: 'h1' } as unknown as TaskAnalysisHistory, { id: 'h2' } as unknown as TaskAnalysisHistory, { id: 'h3' } as unknown as TaskAnalysisHistory],
         historyProjectFilter: null,
       })
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify({ items: [], total: 3, has_more: false }))
-      )
+      mockApiClient.get.mockResolvedValueOnce({ items: [], total: 3, has_more: false })
 
       await useAgentsStore.getState().loadMoreHistory()
 
-      expect(fetchSpy).toHaveBeenCalledWith(expect.stringContaining('offset=3'))
+      expect(mockApiClient.get).toHaveBeenCalledWith(expect.stringContaining('offset=3'))
     })
 
-    it('handles HTTP error response gracefully', async () => {
+    it('handles error response gracefully', async () => {
       vi.spyOn(console, 'error').mockImplementation(() => {})
       useAgentsStore.setState({
         historyHasMore: true,
@@ -1379,9 +1285,7 @@ describe('agents store', () => {
         analysisHistory: [],
         historyProjectFilter: null,
       })
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(null, { status: 500, statusText: 'Server Error' })
-      )
+      mockApiClient.get.mockRejectedValueOnce(new Error('Server Error'))
 
       await useAgentsStore.getState().loadMoreHistory()
 
@@ -1396,7 +1300,7 @@ describe('agents store', () => {
         analysisHistory: [],
         historyProjectFilter: null,
       })
-      vi.spyOn(global, 'fetch').mockRejectedValue(new Error('Connection refused'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Connection refused'))
 
       await useAgentsStore.getState().loadMoreHistory()
 
@@ -1414,7 +1318,7 @@ describe('agents store', () => {
         selectedHistoryId: 'h2',
         lastAnalysis: { success: true } as unknown as TaskAnalysisResult,
       })
-      vi.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 200 }))
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
 
       await useAgentsStore.getState().deleteAnalysis('h1')
 
@@ -1422,11 +1326,9 @@ describe('agents store', () => {
       expect(useAgentsStore.getState().lastAnalysis).toMatchObject({ success: true })
     })
 
-    it('handles HTTP error response', async () => {
+    it('handles error response', async () => {
       vi.spyOn(console, 'error').mockImplementation(() => {})
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(null, { status: 500, statusText: 'Server Error' })
-      )
+      mockApiClient.delete.mockRejectedValueOnce(new Error('Server Error'))
 
       const result = await useAgentsStore.getState().deleteAnalysis('h1')
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime
 
 import httpx
 from sqlalchemy import and_, select
@@ -17,6 +16,7 @@ from models.external_usage import (
     LLMCredentialUpdate,
     LLMCredentialVerifyResponse,
 )
+from utils.time import utcnow
 
 
 def _mask_key(key: str) -> str:
@@ -98,7 +98,7 @@ async def update_credential(
         row.key_name = data.key_name
     if data.api_key is not None:
         row.api_key = data.api_key
-    row.updated_at = datetime.utcnow()
+    row.updated_at = utcnow()
     await db.commit()
     await db.refresh(row)
 
@@ -160,7 +160,7 @@ async def verify_credential(
         is_valid, error = await _test_key(provider, api_key)
         latency = (time.monotonic() - t0) * 1000
         if is_valid:
-            row.last_verified_at = datetime.utcnow()
+            row.last_verified_at = utcnow()
             await db.commit()
         return LLMCredentialVerifyResponse(
             is_valid=is_valid,

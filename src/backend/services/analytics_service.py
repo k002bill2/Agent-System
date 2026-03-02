@@ -3,7 +3,7 @@
 import logging
 import random
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import UTC, timedelta
 
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +27,7 @@ from models.analytics import (
     TrendDataPoint,
 )
 from models.project import get_project
+from utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +96,7 @@ class AnalyticsService:
         """Get trend data over time."""
         delta = _get_time_delta(time_range)
         interval = _get_interval(time_range)
-        now = datetime.utcnow()
+        now = utcnow()
         start = now - delta
 
         # Generate data points
@@ -341,28 +342,28 @@ class AnalyticsService:
                 error_type="timeout",
                 count=5,
                 percentage=41.7,
-                last_occurred=datetime.utcnow() - timedelta(hours=2),
+                last_occurred=utcnow() - timedelta(hours=2),
                 sample_message="Task execution timed out after 30 seconds",
             ),
             ErrorBreakdown(
                 error_type="api_error",
                 count=3,
                 percentage=25.0,
-                last_occurred=datetime.utcnow() - timedelta(hours=8),
+                last_occurred=utcnow() - timedelta(hours=8),
                 sample_message="API rate limit exceeded",
             ),
             ErrorBreakdown(
                 error_type="validation_error",
                 count=2,
                 percentage=16.7,
-                last_occurred=datetime.utcnow() - timedelta(days=1),
+                last_occurred=utcnow() - timedelta(days=1),
                 sample_message="Invalid input format",
             ),
             ErrorBreakdown(
                 error_type="permission_denied",
                 count=2,
                 percentage=16.6,
-                last_occurred=datetime.utcnow() - timedelta(days=2),
+                last_occurred=utcnow() - timedelta(days=2),
                 sample_message="HITL approval denied",
             ),
         ]
@@ -446,13 +447,13 @@ class AnalyticsService:
         # Filter by time range
         if time_range != TimeRange.ALL:
             delta = _get_time_delta(time_range)
-            now = datetime.now()
+            now = utcnow()
             start = now - delta
 
             def _normalize_dt(dt):
-                """Convert to naive local time for consistent filtering."""
-                if dt.tzinfo:
-                    return dt.astimezone().replace(tzinfo=None)
+                """Convert to naive UTC for consistent comparison."""
+                if dt.tzinfo is not None:
+                    return dt.astimezone(UTC).replace(tzinfo=None)
                 return dt
 
             sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
@@ -503,15 +504,14 @@ class AnalyticsService:
         sessions = AnalyticsService._get_sessions(project_name)
         delta = _get_time_delta(time_range)
         interval = _get_interval(time_range)
-        # Use local time for bucket boundaries (session timestamps are converted to local)
-        now = datetime.now()
+        now = utcnow()
         start = now - delta
 
         # Filter sessions in time range
         def _normalize_dt(dt):
-            """Convert to naive local time for consistent bucketing."""
-            if dt.tzinfo:
-                return dt.astimezone().replace(tzinfo=None)
+            """Convert to naive UTC for consistent comparison."""
+            if dt.tzinfo is not None:
+                return dt.astimezone(UTC).replace(tzinfo=None)
             return dt
 
         range_sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
@@ -572,10 +572,13 @@ class AnalyticsService:
         """Get model-level performance from Claude Code sessions."""
         sessions = AnalyticsService._get_sessions(project_name)
         delta = _get_time_delta(time_range)
-        start = datetime.utcnow() - delta
+        start = utcnow() - delta
 
         def _normalize_dt(dt):
-            return dt.replace(tzinfo=None) if dt.tzinfo else dt
+            """Convert to naive UTC for consistent comparison."""
+            if dt.tzinfo is not None:
+                return dt.astimezone(UTC).replace(tzinfo=None)
+            return dt
 
         range_sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
 
@@ -627,10 +630,13 @@ class AnalyticsService:
         """Get cost analytics from Claude Code sessions."""
         sessions = AnalyticsService._get_sessions(project_name)
         delta = _get_time_delta(time_range)
-        start = datetime.utcnow() - delta
+        start = utcnow() - delta
 
         def _normalize_dt(dt):
-            return dt.replace(tzinfo=None) if dt.tzinfo else dt
+            """Convert to naive UTC for consistent comparison."""
+            if dt.tzinfo is not None:
+                return dt.astimezone(UTC).replace(tzinfo=None)
+            return dt
 
         range_sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
 
@@ -705,11 +711,15 @@ class AnalyticsService:
         """Get activity heatmap from Claude Code sessions."""
         sessions = AnalyticsService._get_sessions(project_name)
         delta = _get_time_delta(time_range)
-        start = datetime.utcnow() - delta
+        start = utcnow() - delta
 
         def _normalize_dt(dt):
-            return dt.replace(tzinfo=None) if dt.tzinfo else dt
+            """Convert to naive UTC for consistent comparison."""
+            if dt.tzinfo is not None:
+                return dt.astimezone(UTC).replace(tzinfo=None)
+            return dt
 
+        start = _normalize_dt(start)
         range_sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
 
         heatmap: dict[tuple[int, int], int] = {}
@@ -772,7 +782,7 @@ class AnalyticsService:
         project_id: str | None = None,
     ) -> OverviewMetrics:
         """Get high-level overview metrics from database."""
-        now = datetime.utcnow()
+        now = utcnow()
 
         # Build base session filter
         session_filter = []
@@ -906,7 +916,7 @@ class AnalyticsService:
         """Get trend data over time from database."""
         delta = _get_time_delta(time_range)
         interval = _get_interval(time_range)
-        now = datetime.utcnow()
+        now = utcnow()
         start = now - delta
 
         # Get all tasks in the time range (with project filter via session join)
@@ -1001,7 +1011,7 @@ class AnalyticsService:
     ) -> AgentPerformanceList:
         """Get performance metrics for all agents from database."""
         delta = _get_time_delta(time_range)
-        start = datetime.utcnow() - delta
+        start = utcnow() - delta
 
         # Build query with optional project filter
         base_filters = [TaskModel.created_at >= start, TaskModel.agent_id.isnot(None)]
@@ -1068,7 +1078,7 @@ class AnalyticsService:
     ) -> ActivityHeatmap:
         """Get activity heatmap data from database."""
         delta = _get_time_delta(time_range)
-        start = datetime.utcnow() - delta
+        start = utcnow() - delta
 
         # Get activities grouped by day of week and hour (with project filter via session)
         activity_query = select(SessionActivityModel).where(
@@ -1114,7 +1124,7 @@ class AnalyticsService:
     ) -> ErrorAnalytics:
         """Get error analytics breakdown from database."""
         delta = _get_time_delta(time_range)
-        start = datetime.utcnow() - delta
+        start = utcnow() - delta
 
         # Get failed tasks (with project filter via session)
         failed_query = select(TaskModel).where(
@@ -1239,7 +1249,7 @@ class AnalyticsService:
     ) -> CostAnalytics:
         """Get cost analytics breakdown from database."""
         delta = _get_time_delta(time_range)
-        start = datetime.utcnow() - delta
+        start = utcnow() - delta
 
         # Get sessions with cost data
         session_filters = [SessionModel.created_at >= start, SessionModel.total_cost_usd > 0]
@@ -1345,7 +1355,7 @@ class AnalyticsService:
         """Get trend data for multiple projects (mock data)."""
         delta = _get_time_delta(time_range)
         interval = _get_interval(time_range)
-        now = datetime.utcnow()
+        now = utcnow()
         start = now - delta
 
         series = []
@@ -1408,7 +1418,7 @@ class AnalyticsService:
         """Get trend data for multiple projects from database."""
         delta = _get_time_delta(time_range)
         interval = _get_interval(time_range)
-        now = datetime.utcnow()
+        now = utcnow()
         start = now - delta
 
         series = []

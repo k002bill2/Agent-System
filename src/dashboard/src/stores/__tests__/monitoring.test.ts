@@ -1,9 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { useMonitoringStore } from '../monitoring'
 
-const mockFetch = vi.fn()
-global.fetch = mockFetch
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}))
+
+import { useMonitoringStore } from '../monitoring'
+import { apiClient } from '../../services/apiClient'
+
+const mockApiClient = vi.mocked(apiClient)
 
 // Mock EventSource - tracks created instances for test assertions
 const eventSourceInstances: MockEventSource[] = []
@@ -51,7 +62,7 @@ function resetStore() {
 describe('monitoring store', () => {
   beforeEach(() => {
     resetStore()
-    mockFetch.mockReset()
+    vi.clearAllMocks()
   })
 
   // ── Initial State ──────────────────────────────────────
@@ -180,10 +191,7 @@ describe('monitoring store', () => {
         checks: { test: { status: 'success' } },
         last_updated: '2025-01-01T00:00:00Z',
       }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(healthData),
-      })
+      mockApiClient.get.mockResolvedValueOnce(healthData)
 
       await useMonitoringStore.getState().fetchProjectHealth('p1')
 
@@ -193,10 +201,7 @@ describe('monitoring store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        statusText: 'Not Found',
-      })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch health'))
 
       await useMonitoringStore.getState().fetchProjectHealth('p1')
 
@@ -209,10 +214,7 @@ describe('monitoring store', () => {
   describe('fetchProjectContext', () => {
     it('fetches and stores context', async () => {
       const contextData = { claude_md: '# Test', dev_docs: null }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(contextData),
-      })
+      mockApiClient.get.mockResolvedValueOnce(contextData)
 
       await useMonitoringStore.getState().fetchProjectContext('p1')
 
@@ -221,10 +223,7 @@ describe('monitoring store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        statusText: 'Server Error',
-      })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch context'))
 
       await useMonitoringStore.getState().fetchProjectContext('p1')
 
@@ -236,15 +235,12 @@ describe('monitoring store', () => {
 
   describe('fetchWorkflowChecks', () => {
     it('fetches workflows and maps to checks', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({
-          workflows: [
-            { id: 'wf-1', name: 'CI', description: 'CI Pipeline', last_run_status: 'completed', last_run_at: '2025-01-01' },
-            { id: 'wf-2', name: 'Deploy', description: '', last_run_status: 'failed', last_run_at: null },
-            { id: 'wf-3', name: 'Test', description: '', last_run_status: null, last_run_at: null },
-          ],
-        }),
+      mockApiClient.get.mockResolvedValueOnce({
+        workflows: [
+          { id: 'wf-1', name: 'CI', description: 'CI Pipeline', last_run_status: 'completed', last_run_at: '2025-01-01' },
+          { id: 'wf-2', name: 'Deploy', description: '', last_run_status: 'failed', last_run_at: null },
+          { id: 'wf-3', name: 'Test', description: '', last_run_status: null, last_run_at: null },
+        ],
       })
 
       await useMonitoringStore.getState().fetchWorkflowChecks('p1')
@@ -257,10 +253,7 @@ describe('monitoring store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        statusText: 'Bad Request',
-      })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch workflows'))
 
       await useMonitoringStore.getState().fetchWorkflowChecks('p1')
 
@@ -494,10 +487,7 @@ describe('monitoring store', () => {
     })
 
     it('marks workflow as running and adds start log', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ id: 'run-1' }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ id: 'run-1' })
 
       const promise = useMonitoringStore.getState().runWorkflowCheck('wf-1')
 
@@ -516,14 +506,11 @@ describe('monitoring store', () => {
 
       await useMonitoringStore.getState().runWorkflowCheck('wf-1')
 
-      expect(mockFetch).not.toHaveBeenCalled()
+      expect(mockApiClient.post).not.toHaveBeenCalled()
     })
 
     it('sets error when trigger fails', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        statusText: 'Bad Request',
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Failed to trigger workflow'))
 
       await useMonitoringStore.getState().runWorkflowCheck('wf-1')
 
@@ -535,10 +522,7 @@ describe('monitoring store', () => {
     })
 
     it('handles SSE log event', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ id: 'run-1' }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ id: 'run-1' })
 
       await useMonitoringStore.getState().runWorkflowCheck('wf-1')
 
@@ -551,10 +535,7 @@ describe('monitoring store', () => {
     })
 
     it('handles SSE done event and marks success', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ id: 'run-1' }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ id: 'run-1' })
 
       await useMonitoringStore.getState().runWorkflowCheck('wf-1')
 
@@ -573,10 +554,7 @@ describe('monitoring store', () => {
     })
 
     it('handles SSE error event and marks failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ id: 'run-1' }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ id: 'run-1' })
 
       await useMonitoringStore.getState().runWorkflowCheck('wf-1')
 
@@ -591,7 +569,7 @@ describe('monitoring store', () => {
     })
 
     it('handles network error gracefully', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Connection refused'))
+      mockApiClient.post.mockRejectedValueOnce(new Error('Connection refused'))
 
       await useMonitoringStore.getState().runWorkflowCheck('wf-1')
 

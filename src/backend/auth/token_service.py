@@ -8,6 +8,7 @@ import jwt
 from pydantic import BaseModel
 
 from config import get_settings
+from utils.time import utcnow
 
 
 class TokenPayload(BaseModel):
@@ -77,7 +78,7 @@ class TokenService:
             Encoded JWT access token
         """
         expires_delta = timedelta(minutes=self.settings.access_token_expire_minutes)
-        now = datetime.utcnow()
+        now = utcnow()
 
         payload = {
             "sub": user_id,
@@ -106,7 +107,7 @@ class TokenService:
             Encoded JWT refresh token with unique ID for revocation
         """
         expires_delta = timedelta(days=self.settings.refresh_token_expire_days)
-        now = datetime.utcnow()
+        now = utcnow()
 
         payload = {
             "sub": user_id,
@@ -284,7 +285,7 @@ class TokenService:
             # Calculate TTL
             ttl = None
             if expires_at:
-                ttl = int((expires_at - datetime.utcnow()).total_seconds())
+                ttl = int((expires_at - utcnow()).total_seconds())
                 if ttl <= 0:
                     return True  # Already expired
 

@@ -11,7 +11,7 @@ cd infra/scripts && ./dev.sh
 ### 1. Backend 실행
 ```bash
 cd src/backend
-source .venv/bin/activate
+uv pip install -e .    # 또는 source .venv/bin/activate
 uvicorn api.app:app --reload --port 8000
 ```
 

@@ -1,9 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { useMCPStore } from '../mcp'
 
-const mockFetch = vi.fn()
-global.fetch = mockFetch
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}))
+
+import { useMCPStore } from '../mcp'
+import { apiClient } from '../../services/apiClient'
+
+const mockApiClient = vi.mocked(apiClient)
 
 function resetStore() {
   useMCPStore.setState({
@@ -24,7 +35,7 @@ function resetStore() {
 describe('mcp store', () => {
   beforeEach(() => {
     resetStore()
-    mockFetch.mockReset()
+    vi.clearAllMocks()
   })
 
   // ── Initial State ──────────────────────────────────────
@@ -88,10 +99,7 @@ describe('mcp store', () => {
       const servers = [
         { id: 'srv-1', name: 'filesystem', type: 'filesystem', status: 'running' },
       ]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(servers),
-      })
+      mockApiClient.get.mockResolvedValueOnce(servers)
 
       await useMCPStore.getState().fetchServers()
 
@@ -100,11 +108,11 @@ describe('mcp store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Server Error' })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Server Error'))
 
       await useMCPStore.getState().fetchServers()
 
-      expect(useMCPStore.getState().error).toContain('Failed to fetch MCP servers')
+      expect(useMCPStore.getState().error).toBe('Server Error')
       expect(useMCPStore.getState().isLoading).toBe(false)
     })
   })
@@ -114,10 +122,7 @@ describe('mcp store', () => {
   describe('fetchStats', () => {
     it('fetches and stores stats', async () => {
       const stats = { total_servers: 3, running_servers: 2, total_tools: 10 }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(stats),
-      })
+      mockApiClient.get.mockResolvedValueOnce(stats)
 
       await useMCPStore.getState().fetchStats()
 
@@ -126,7 +131,7 @@ describe('mcp store', () => {
 
     it('logs error on failure', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Error' })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Error'))
 
       await useMCPStore.getState().fetchStats()
 
@@ -143,10 +148,7 @@ describe('mcp store', () => {
         servers: [{ id: 'srv-1', name: 'fs', tools: [] } as any],
       })
       const tools = [{ name: 'read_file', description: 'Read a file' }]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(tools),
-      })
+      mockApiClient.get.mockResolvedValueOnce(tools)
 
       const result = await useMCPStore.getState().fetchServerTools('srv-1')
 
@@ -156,7 +158,7 @@ describe('mcp store', () => {
 
     it('returns empty array on failure', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Error' })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Error'))
 
       const result = await useMCPStore.getState().fetchServerTools('srv-1')
 
@@ -172,10 +174,10 @@ describe('mcp store', () => {
       useMCPStore.setState({
         servers: [{ id: 'srv-1', name: 'fs', status: 'stopped' } as any],
       })
-      mockFetch
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ success: true }) }) // start
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) }) // fetchServers
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) }) // fetchStats
+      mockApiClient.post.mockResolvedValueOnce({ success: true }) // start
+      mockApiClient.get
+        .mockResolvedValueOnce([]) // fetchServers
+        .mockResolvedValueOnce({}) // fetchStats
 
       const result = await useMCPStore.getState().startServer('srv-1')
 
@@ -186,7 +188,7 @@ describe('mcp store', () => {
       useMCPStore.setState({
         servers: [{ id: 'srv-1', name: 'fs', status: 'stopped' } as any],
       })
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Error' })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Start failed'))
 
       const result = await useMCPStore.getState().startServer('srv-1')
 
@@ -199,10 +201,10 @@ describe('mcp store', () => {
 
   describe('stopServer', () => {
     it('stops server and refreshes', async () => {
-      mockFetch
-        .mockResolvedValueOnce({ ok: true }) // stop
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) }) // fetchServers
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) }) // fetchStats
+      mockApiClient.post.mockResolvedValueOnce(undefined) // stop
+      mockApiClient.get
+        .mockResolvedValueOnce([]) // fetchServers
+        .mockResolvedValueOnce({}) // fetchStats
 
       const result = await useMCPStore.getState().stopServer('srv-1')
 
@@ -210,7 +212,7 @@ describe('mcp store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Error' })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Failed to stop server'))
 
       const result = await useMCPStore.getState().stopServer('srv-1')
 
@@ -223,10 +225,7 @@ describe('mcp store', () => {
 
   describe('callTool', () => {
     it('calls tool and returns result', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ success: true, result: 'file content' }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ success: true, result: 'file content' })
 
       const result = await useMCPStore.getState().callTool('srv-1', 'read_file', { path: '/test' })
 
@@ -237,7 +236,7 @@ describe('mcp store', () => {
     })
 
     it('returns error result on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Bad Request' })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Failed to call tool'))
 
       const result = await useMCPStore.getState().callTool('srv-1', 'bad_tool', {})
 
@@ -299,7 +298,7 @@ describe('mcp store', () => {
       const result = await useMCPStore.getState().callToolsBatch()
 
       expect(result).toBeNull()
-      expect(mockFetch).not.toHaveBeenCalled()
+      expect(mockApiClient.post).not.toHaveBeenCalled()
     })
 
     it('calls batch API and returns result', async () => {
@@ -313,10 +312,7 @@ describe('mcp store', () => {
         success_count: 1,
         failure_count: 0,
       }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(batchResult),
-      })
+      mockApiClient.post.mockResolvedValueOnce(batchResult)
 
       const result = await useMCPStore.getState().callToolsBatch(5)
 
@@ -330,7 +326,7 @@ describe('mcp store', () => {
         serverId: 'srv-1', serverName: 'fs', toolName: 'tool',
         toolDescription: '', arguments: {},
       })
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Error' })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Failed to call tools batch'))
 
       const result = await useMCPStore.getState().callToolsBatch()
 

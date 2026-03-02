@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { apiClient } from '../services/apiClient'
 
 // Permission types matching backend
 export type AgentPermission =
@@ -59,12 +60,7 @@ export const usePermissionsStore = create<PermissionsState>((set) => ({
     set({ loading: true, error: null })
 
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/permissions`)
-      if (!res.ok) {
-        throw new Error('Failed to fetch permissions')
-      }
-
-      const data: SessionPermissions = await res.json()
+      const data = await apiClient.get<SessionPermissions>(`/api/sessions/${sessionId}/permissions`)
       set({
         permissions: data.permissions,
         disabledAgents: data.disabled_agents,
@@ -82,16 +78,9 @@ export const usePermissionsStore = create<PermissionsState>((set) => ({
   // Toggle a single permission
   togglePermission: async (sessionId: string, permission: AgentPermission) => {
     try {
-      const res = await fetch(
-        `/api/sessions/${sessionId}/permissions/toggle/${permission}`,
-        { method: 'POST' }
+      const data = await apiClient.post<{ enabled: boolean }>(
+        `/api/sessions/${sessionId}/permissions/toggle/${permission}`
       )
-
-      if (!res.ok) {
-        throw new Error('Failed to toggle permission')
-      }
-
-      const data = await res.json()
 
       // Update local state
       set((state) => ({
@@ -110,16 +99,9 @@ export const usePermissionsStore = create<PermissionsState>((set) => ({
   // Toggle an agent enabled/disabled
   toggleAgent: async (sessionId: string, agentId: string) => {
     try {
-      const res = await fetch(
-        `/api/sessions/${sessionId}/permissions/agents/${agentId}/toggle`,
-        { method: 'POST' }
+      const data = await apiClient.post<{ enabled: boolean }>(
+        `/api/sessions/${sessionId}/permissions/agents/${agentId}/toggle`
       )
-
-      if (!res.ok) {
-        throw new Error('Failed to toggle agent')
-      }
-
-      const data = await res.json()
 
       // Update local state
       set((state) => ({
@@ -141,17 +123,10 @@ export const usePermissionsStore = create<PermissionsState>((set) => ({
     enabledPermissions: AgentPermission[]
   ) => {
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/permissions`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled_permissions: enabledPermissions }),
-      })
-
-      if (!res.ok) {
-        throw new Error('Failed to update permissions')
-      }
-
-      const data: SessionPermissions = await res.json()
+      const data = await apiClient.put<SessionPermissions>(
+        `/api/sessions/${sessionId}/permissions`,
+        { enabled_permissions: enabledPermissions }
+      )
       set({
         permissions: data.permissions,
         disabledAgents: data.disabled_agents,

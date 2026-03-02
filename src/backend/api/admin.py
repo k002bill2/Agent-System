@@ -28,7 +28,6 @@ DEFAULT_MENU_ORDER: list[str] = [
     "agents",
     "activity",
     "monitor",
-    "claude-sessions",
     "project-configs",
     "project-management",
     "git",
@@ -49,7 +48,6 @@ DEFAULT_MENU_VISIBILITY: dict[str, dict[str, bool]] = {
     "agents": {"user": False, "manager": True, "admin": True},
     "activity": {"user": True, "manager": True, "admin": True},
     "monitor": {"user": False, "manager": True, "admin": True},
-    "claude-sessions": {"user": False, "manager": True, "admin": True},
     "project-configs": {"user": False, "manager": True, "admin": True},
     "project-management": {"user": False, "manager": True, "admin": True},
     "git": {"user": False, "manager": True, "admin": True},
@@ -452,15 +450,9 @@ async def get_system_info(
                 )
             ).scalar() or 0
 
-            # Sync: is_admin=True but role!='admin' → fix role
-            from sqlalchemy import update
-
-            await session.execute(
-                update(UserModel)
-                .where(UserModel.is_admin == True, UserModel.role != "admin")  # noqa: E712
-                .values(role="admin")
-            )
-            await session.commit()
+            # NOTE: role 동기화 로직은 별도 유지보수 태스크로 분리됨.
+            # GET 엔드포인트에서 DB update를 수행하면 REST 원칙 위반이므로 제거.
+            # 필요 시 POST /admin/sync-roles 또는 마이그레이션 스크립트 사용.
 
             # Role distribution based on role column
             role_counts = (

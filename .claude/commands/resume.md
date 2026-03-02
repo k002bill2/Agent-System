@@ -1,4 +1,5 @@
 ---
+name: resume
 description: dev/active에서 저장된 컨텍스트를 불러와 작업 재개
 ---
 

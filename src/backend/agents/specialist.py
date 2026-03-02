@@ -1,4 +1,9 @@
-"""Specialized agent implementations."""
+"""Legacy specialized agent implementations.
+
+DEPRECATED: These agents (CodeAnalystAgent, ResearcherAgent, WriterAgent) are
+superseded by the new specialist agents in agents/specialists/.
+They are retained for backward compatibility with playground sessions.
+"""
 
 import time
 from typing import Any

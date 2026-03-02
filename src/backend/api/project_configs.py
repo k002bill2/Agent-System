@@ -99,13 +99,12 @@ async def _get_db_filtered_projects(monitor, current_user=None) -> list:
     """
     from pathlib import Path as PathLib
 
-    from datetime import datetime
-
     from sqlalchemy import or_, select
 
     from db.database import async_session_factory
     from db.models import ProjectAccessModel, ProjectModel
     from models.project_config import ProjectInfo
+    from utils.time import utcnow
 
     async with async_session_factory() as session:
         is_admin = False
@@ -208,7 +207,7 @@ async def _get_db_filtered_projects(monitor, current_user=None) -> list:
                 project_name=db_proj.name,
                 project_path=db_proj.path or "",
                 claude_dir="",
-                last_modified=db_proj.updated_at or db_proj.created_at or datetime.utcnow(),
+                last_modified=db_proj.updated_at or db_proj.created_at or utcnow(),
             )
         )
 

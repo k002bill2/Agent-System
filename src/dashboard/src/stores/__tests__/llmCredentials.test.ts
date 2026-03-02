@@ -1,7 +1,7 @@
 /**
  * LLM Credentials Store Tests
  *
- * OpenAI, Google Gemini, Anthropic LLM 자격증명 관리 스토어 테스트.
+ * Uses apiClient mock instead of raw fetch/authFetch mock.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -15,18 +15,19 @@ import {
 // Mock Setup
 // ─────────────────────────────────────────────────────────────
 
-const mockFetch = vi.fn()
-global.fetch = mockFetch
+const mockGet = vi.fn()
+const mockPost = vi.fn()
+const mockPut = vi.fn()
+const mockDelete = vi.fn()
 
-vi.mock('../auth', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../auth')>()
-  return {
-    ...actual,
-    authFetch: vi.fn(async (url: string, options?: RequestInit) => {
-      return mockFetch(url, options)
-    }),
-  }
-})
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    get: (...args: unknown[]) => mockGet(...args),
+    post: (...args: unknown[]) => mockPost(...args),
+    put: (...args: unknown[]) => mockPut(...args),
+    delete: (...args: unknown[]) => mockDelete(...args),
+  },
+}))
 
 // ─────────────────────────────────────────────────────────────
 // Test Fixtures
@@ -77,7 +78,10 @@ function resetStore() {
 describe('llmCredentials store', () => {
   beforeEach(() => {
     resetStore()
-    mockFetch.mockReset()
+    mockGet.mockReset()
+    mockPost.mockReset()
+    mockPut.mockReset()
+    mockDelete.mockReset()
   })
 
   // ── Initial State ──────────────────────────────────────
@@ -100,10 +104,7 @@ describe('llmCredentials store', () => {
 
   describe('fetchCredentials', () => {
     it('fetches and stores credentials', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve([mockCredential, mockCredential2]),
-      })
+      mockGet.mockResolvedValueOnce([mockCredential, mockCredential2])
 
       await useLLMCredentialStore.getState().fetchCredentials()
 
@@ -117,44 +118,32 @@ describe('llmCredentials store', () => {
 
     it('sets isLoading true during fetch', async () => {
       let resolve!: (v: unknown) => void
-      mockFetch.mockReturnValueOnce(new Promise((r) => { resolve = r }))
+      mockGet.mockReturnValueOnce(new Promise((r) => { resolve = r }))
 
       const promise = useLLMCredentialStore.getState().fetchCredentials()
       expect(useLLMCredentialStore.getState().isLoading).toBe(true)
 
-      resolve({ ok: true, json: () => Promise.resolve([]) })
+      resolve([])
       await promise
       expect(useLLMCredentialStore.getState().isLoading).toBe(false)
     })
 
-    it('sets error on HTTP failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, status: 403 })
+    it('sets error on failure', async () => {
+      mockGet.mockRejectedValueOnce(new Error('Forbidden'))
 
       await useLLMCredentialStore.getState().fetchCredentials()
 
       const state = useLLMCredentialStore.getState()
-      expect(state.error).toContain('HTTP 403')
+      expect(state.error).toBe('Forbidden')
       expect(state.isLoading).toBe(false)
     })
 
-    it('sets error on network failure', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
-
-      await useLLMCredentialStore.getState().fetchCredentials()
-
-      expect(useLLMCredentialStore.getState().error).toBe('Network error')
-      expect(useLLMCredentialStore.getState().isLoading).toBe(false)
-    })
-
     it('fetches with correct API endpoint', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve([]),
-      })
+      mockGet.mockResolvedValueOnce([])
 
       await useLLMCredentialStore.getState().fetchCredentials()
 
-      const calledUrl = mockFetch.mock.calls[0][0] as string
+      const calledUrl = mockGet.mock.calls[0][0] as string
       expect(calledUrl).toContain('/api/users/me/llm-credentials')
     })
   })
@@ -164,10 +153,7 @@ describe('llmCredentials store', () => {
   describe('addCredential', () => {
     it('adds credential and prepends to list', async () => {
       useLLMCredentialStore.setState({ credentials: [mockCredential2] })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockCredential),
-      })
+      mockPost.mockResolvedValueOnce(mockCredential)
 
       const result = await useLLMCredentialStore.getState().addCredential(mockCreateData)
 
@@ -179,66 +165,51 @@ describe('llmCredentials store', () => {
     })
 
     it('sends POST request with credential data', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockCredential),
-      })
+      mockPost.mockResolvedValueOnce(mockCredential)
 
       await useLLMCredentialStore.getState().addCredential(mockCreateData)
 
-      const [url, options] = mockFetch.mock.calls[0]
+      const [url, data] = mockPost.mock.calls[0]
       expect(url).toContain('/api/users/me/llm-credentials')
-      expect(options.method).toBe('POST')
-      expect(JSON.parse(options.body)).toEqual(mockCreateData)
-      expect(options.headers['Content-Type']).toBe('application/json')
+      expect(data).toEqual(mockCreateData)
     })
 
-    it('sets error and returns null on HTTP failure with detail', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        json: () => Promise.resolve({ detail: 'Invalid API key format' }),
-      })
+    it('returns null on failure', async () => {
+      mockPost.mockRejectedValueOnce(new Error('Invalid API key format'))
 
       const result = await useLLMCredentialStore.getState().addCredential(mockCreateData)
 
       expect(result).toBeNull()
       expect(useLLMCredentialStore.getState().error).toBe('Invalid API key format')
     })
+  })
 
-    it('sets default error when detail is missing', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        json: () => Promise.resolve({}),
-      })
+  // ── updateCredential ─────────────────────────────────
 
-      const result = await useLLMCredentialStore.getState().addCredential(mockCreateData)
-
-      expect(result).toBeNull()
-      expect(useLLMCredentialStore.getState().error).toBe('Failed to add credential')
+  describe('updateCredential', () => {
+    beforeEach(() => {
+      useLLMCredentialStore.setState({ credentials: [mockCredential, mockCredential2] })
     })
 
-    it('returns null on network failure', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+    it('updates credential in list', async () => {
+      const updated = { ...mockCredential, key_name: 'Updated Key' }
+      mockPut.mockResolvedValueOnce(updated)
 
-      const result = await useLLMCredentialStore.getState().addCredential(mockCreateData)
+      const result = await useLLMCredentialStore.getState().updateCredential('cred-1', { key_name: 'Updated Key' })
 
-      expect(result).toBeNull()
-      expect(useLLMCredentialStore.getState().error).toBe('Network error')
+      expect(result).toEqual(updated)
+      const { credentials } = useLLMCredentialStore.getState()
+      expect(credentials[0].key_name).toBe('Updated Key')
+      expect(credentials[1]).toEqual(mockCredential2) // unchanged
     })
 
-    it('returns null when json parse fails on error response', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 422,
-        json: () => Promise.reject(new Error('parse error')),
-      })
+    it('returns null on failure', async () => {
+      mockPut.mockRejectedValueOnce(new Error('Not found'))
 
-      const result = await useLLMCredentialStore.getState().addCredential(mockCreateData)
+      const result = await useLLMCredentialStore.getState().updateCredential('cred-1', { key_name: 'x' })
 
       expect(result).toBeNull()
-      expect(useLLMCredentialStore.getState().error).toBe('Failed to add credential')
+      expect(useLLMCredentialStore.getState().error).toBe('Not found')
     })
   })
 
@@ -252,7 +223,7 @@ describe('llmCredentials store', () => {
     })
 
     it('removes credential from list', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true })
+      mockDelete.mockResolvedValueOnce(undefined)
 
       const result = await useLLMCredentialStore.getState().removeCredential('cred-1')
 
@@ -263,30 +234,21 @@ describe('llmCredentials store', () => {
     })
 
     it('sends DELETE request with correct URL', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true })
+      mockDelete.mockResolvedValueOnce(undefined)
 
       await useLLMCredentialStore.getState().removeCredential('cred-1')
 
-      const [url, options] = mockFetch.mock.calls[0]
-      expect(url).toContain('/api/users/me/llm-credentials/cred-1')
-      expect(options.method).toBe('DELETE')
+      const calledUrl = mockDelete.mock.calls[0][0] as string
+      expect(calledUrl).toContain('/api/users/me/llm-credentials/cred-1')
     })
 
-    it('returns false on HTTP failure and keeps credential', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, status: 404 })
+    it('returns false on failure', async () => {
+      mockDelete.mockRejectedValueOnce(new Error('Not found'))
 
       const result = await useLLMCredentialStore.getState().removeCredential('cred-1')
 
       expect(result).toBe(false)
       expect(useLLMCredentialStore.getState().credentials).toHaveLength(2)
-    })
-
-    it('returns false on network failure', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
-
-      const result = await useLLMCredentialStore.getState().removeCredential('cred-1')
-
-      expect(result).toBe(false)
     })
   })
 
@@ -304,10 +266,7 @@ describe('llmCredentials store', () => {
         error_message: null,
         latency_ms: 120,
       }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(verifyResult),
-      })
+      mockPost.mockResolvedValueOnce(verifyResult)
 
       const result = await useLLMCredentialStore.getState().verifyCredential('cred-1')
 
@@ -323,10 +282,7 @@ describe('llmCredentials store', () => {
         error_message: 'Invalid API key',
         latency_ms: null,
       }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(verifyResult),
-      })
+      mockPost.mockResolvedValueOnce(verifyResult)
 
       const result = await useLLMCredentialStore.getState().verifyCredential('cred-1')
 
@@ -336,28 +292,16 @@ describe('llmCredentials store', () => {
     })
 
     it('sends POST request to verify endpoint', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ is_valid: true, provider: 'openai', error_message: null, latency_ms: 100 }),
-      })
+      mockPost.mockResolvedValueOnce({ is_valid: true, provider: 'openai', error_message: null, latency_ms: 100 })
 
       await useLLMCredentialStore.getState().verifyCredential('cred-1')
 
-      const [url, options] = mockFetch.mock.calls[0]
-      expect(url).toContain('/api/users/me/llm-credentials/cred-1/verify')
-      expect(options.method).toBe('POST')
+      const calledUrl = mockPost.mock.calls[0][0] as string
+      expect(calledUrl).toContain('/api/users/me/llm-credentials/cred-1/verify')
     })
 
-    it('returns null on HTTP failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, status: 404 })
-
-      const result = await useLLMCredentialStore.getState().verifyCredential('cred-1')
-
-      expect(result).toBeNull()
-    })
-
-    it('returns null on network failure', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+    it('returns null on failure', async () => {
+      mockPost.mockRejectedValueOnce(new Error('Not found'))
 
       const result = await useLLMCredentialStore.getState().verifyCredential('cred-1')
 
@@ -366,14 +310,11 @@ describe('llmCredentials store', () => {
 
     it('only updates matching credential last_verified_at', async () => {
       useLLMCredentialStore.setState({ credentials: [mockCredential, mockCredential2] })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({
-          is_valid: true,
-          provider: 'openai',
-          error_message: null,
-          latency_ms: 100,
-        }),
+      mockPost.mockResolvedValueOnce({
+        is_valid: true,
+        provider: 'openai',
+        error_message: null,
+        latency_ms: 100,
       })
 
       await useLLMCredentialStore.getState().verifyCredential('cred-1')

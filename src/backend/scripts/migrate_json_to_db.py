@@ -7,6 +7,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from utils.time import utcnow
+
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -83,8 +85,8 @@ async def migrate_organizations():
                 current_projects=org.get("current_projects", 0),
                 tokens_used_this_month=org.get("tokens_used_this_month", 0),
                 settings=org.get("settings", {}),
-                created_at=parse_datetime(org.get("created_at")) or datetime.utcnow(),
-                updated_at=parse_datetime(org.get("updated_at")) or datetime.utcnow(),
+                created_at=parse_datetime(org.get("created_at")) or utcnow(),
+                updated_at=parse_datetime(org.get("updated_at")) or utcnow(),
             )
             session.add(model)
             count += 1
@@ -172,7 +174,7 @@ async def migrate_members():
                 invited_at=parse_datetime(member.get("invited_at")),
                 joined_at=parse_datetime(member.get("joined_at")),
                 last_active_at=parse_datetime(member.get("last_active_at")),
-                created_at=parse_datetime(member.get("created_at")) or datetime.utcnow(),
+                created_at=parse_datetime(member.get("created_at")) or utcnow(),
             )
             session.add(model)
             count += 1
@@ -210,10 +212,10 @@ async def migrate_invitations():
                 invited_by=inv["invited_by"],
                 token=inv["token"],
                 message=inv.get("message"),
-                expires_at=parse_datetime(inv["expires_at"]) or datetime.utcnow(),
+                expires_at=parse_datetime(inv["expires_at"]) or utcnow(),
                 accepted=inv.get("accepted", False),
                 accepted_at=parse_datetime(inv.get("accepted_at")),
-                created_at=parse_datetime(inv.get("created_at")) or datetime.utcnow(),
+                created_at=parse_datetime(inv.get("created_at")) or utcnow(),
             )
             session.add(model)
             count += 1

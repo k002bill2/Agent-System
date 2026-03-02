@@ -14,6 +14,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from utils.time import utcnow
+
 
 class MCPServerType(str, Enum):
     """MCP 서버 타입."""
@@ -277,7 +279,7 @@ class MCPManager:
             self._processes[server_id] = process
             info.pid = process.pid
             info.status = MCPServerStatus.RUNNING
-            info.started_at = datetime.utcnow()
+            info.started_at = utcnow()
 
             # 도구 목록 가져오기
             await self._fetch_tools(server_id)

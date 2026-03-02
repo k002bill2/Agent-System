@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import { apiClient } from '../services/apiClient'
+import { getApiUrl } from '../config/api'
 import {
   CheckType,
   ProjectHealth,
@@ -65,8 +67,6 @@ interface MonitoringState {
   clearWorkflowLogs: (workflowId?: string) => void
 }
 
-const API_BASE = 'http://localhost:8000/api'
-
 export const useMonitoringStore = create<MonitoringState>((set, get) => ({
   projectHealthMap: {},
   isLoadingHealth: false,
@@ -99,12 +99,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
     set({ isLoadingHealth: true, error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/projects/${projectId}/health`)
-      if (!res.ok) {
-        throw new Error(`Failed to fetch health: ${res.statusText}`)
-      }
-
-      const data = await res.json()
+      const data = await apiClient.get<ProjectHealth>(`/api/projects/${projectId}/health`)
       set((state) => ({
         projectHealthMap: {
           ...state.projectHealthMap,
@@ -122,12 +117,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
     set({ isLoadingContext: true, error: null })
 
     try {
-      const res = await fetch(`${API_BASE}/projects/${projectId}/context`)
-      if (!res.ok) {
-        throw new Error(`Failed to fetch context: ${res.statusText}`)
-      }
-
-      const data = await res.json()
+      const data = await apiClient.get<ProjectContext>(`/api/projects/${projectId}/context`)
       set({ projectContext: data, isLoadingContext: false })
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
@@ -156,7 +146,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
 
     // Start SSE connection
     const eventSource = new EventSource(
-      `${API_BASE}/projects/${projectId}/checks/${checkType}`,
+      `${getApiUrl('/api')}/projects/${projectId}/checks/${checkType}`,
     )
 
     eventSource.addEventListener('check_started', (event) => {
@@ -322,7 +312,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
 
     // Start SSE connection for all checks
     const eventSource = new EventSource(
-      `${API_BASE}/projects/${projectId}/checks/run-all`,
+      `${getApiUrl('/api')}/projects/${projectId}/checks/run-all`,
     )
 
     eventSource.addEventListener('check_started', (event) => {
@@ -524,12 +514,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
     set({ isLoadingWorkflows: true })
 
     try {
-      const res = await fetch(`${API_BASE}/workflows?project_id=${projectId}`)
-      if (!res.ok) {
-        throw new Error(`Failed to fetch workflows: ${res.statusText}`)
-      }
-
-      const data = await res.json()
+      const data = await apiClient.get<{ workflows: Record<string, unknown>[] }>(`/api/workflows?project_id=${projectId}`)
       const workflows = data.workflows || []
 
       const checks: WorkflowCheck[] = workflows.map((w: Record<string, unknown>) => {
@@ -590,21 +575,11 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
 
     try {
       // Trigger the run
-      const triggerRes = await fetch(`${API_BASE}/workflows/${workflowId}/runs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-
-      if (!triggerRes.ok) {
-        throw new Error(`Failed to trigger workflow: ${triggerRes.statusText}`)
-      }
-
-      const runData = await triggerRes.json()
+      const runData = await apiClient.post<{ id: string }>(`/api/workflows/${workflowId}/runs`, {})
       const runId = runData.id
 
       // Stream logs via SSE
-      const eventSource = new EventSource(`${API_BASE}/workflows/runs/${runId}/stream`)
+      const eventSource = new EventSource(getApiUrl(`/api/workflows/runs/${runId}/stream`))
 
       eventSource.addEventListener('log', (event) => {
         const logData = JSON.parse(event.data)

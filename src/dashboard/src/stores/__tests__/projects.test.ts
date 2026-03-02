@@ -1,9 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { useProjectsStore } from '../projects'
 
-const mockFetch = vi.fn()
-global.fetch = mockFetch
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}))
+
+import { useProjectsStore } from '../projects'
+import { apiClient } from '../../services/apiClient'
+
+const mockApiClient = vi.mocked(apiClient)
 
 function resetStore() {
   useProjectsStore.setState({
@@ -34,7 +45,7 @@ const mockProject = (id: string, name: string) => ({
 describe('projects store', () => {
   beforeEach(() => {
     resetStore()
-    mockFetch.mockReset()
+    vi.clearAllMocks()
   })
 
   // ── Initial State ──────────────────────────────────────
@@ -192,10 +203,7 @@ describe('projects store', () => {
   describe('fetchProjects', () => {
     it('fetches and stores projects', async () => {
       const projects = [mockProject('p-1', 'Test')]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(projects),
-      })
+      mockApiClient.get.mockResolvedValueOnce(projects)
 
       await useProjectsStore.getState().fetchProjects()
 
@@ -205,10 +213,7 @@ describe('projects store', () => {
     })
 
     it('auto-selects first project if none selected', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve([mockProject('p-1', 'Test')]),
-      })
+      mockApiClient.get.mockResolvedValueOnce([mockProject('p-1', 'Test')])
 
       await useProjectsStore.getState().fetchProjects()
 
@@ -217,10 +222,7 @@ describe('projects store', () => {
 
     it('preserves existing selection', async () => {
       useProjectsStore.setState({ selectedProjectId: 'p-2' })
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve([mockProject('p-1', 'Test'), mockProject('p-2', 'Other')]),
-      })
+      mockApiClient.get.mockResolvedValueOnce([mockProject('p-1', 'Test'), mockProject('p-2', 'Other')])
 
       await useProjectsStore.getState().fetchProjects()
 
@@ -228,10 +230,7 @@ describe('projects store', () => {
     })
 
     it('sets error on fetch failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        statusText: 'Internal Server Error',
-      })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch projects'))
 
       await useProjectsStore.getState().fetchProjects()
 
@@ -243,16 +242,9 @@ describe('projects store', () => {
 
   describe('createProject', () => {
     it('creates project and refreshes list', async () => {
-      // First call: create. Second call: fetchProjects
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ id: 'new-proj' }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve([mockProject('new-proj', 'New')]),
-        })
+      // First call: post (create). Second call: get (fetchProjects)
+      mockApiClient.post.mockResolvedValueOnce({ id: 'new-proj' })
+      mockApiClient.get.mockResolvedValueOnce([mockProject('new-proj', 'New')])
 
       const result = await useProjectsStore.getState().createProject(
         'new-proj', 'New', 'desc', 'default'
@@ -263,10 +255,7 @@ describe('projects store', () => {
     })
 
     it('returns false on error', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Project already exists' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Project already exists'))
 
       const result = await useProjectsStore.getState().createProject(
         'dup', 'Dup', 'desc', 'default'
@@ -281,12 +270,8 @@ describe('projects store', () => {
 
   describe('deleteProject', () => {
     it('deletes project and refreshes list', async () => {
-      mockFetch
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve([]),
-        })
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
+      mockApiClient.get.mockResolvedValueOnce([])
 
       const result = await useProjectsStore.getState().deleteProject('p-1')
 
@@ -294,10 +279,7 @@ describe('projects store', () => {
     })
 
     it('returns false on error', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Not found' }),
-      })
+      mockApiClient.delete.mockRejectedValueOnce(new Error('Not found'))
 
       const result = await useProjectsStore.getState().deleteProject('p-x')
 
@@ -311,10 +293,7 @@ describe('projects store', () => {
   describe('reorderProjects', () => {
     it('reorders and updates projects list', async () => {
       const reordered = [mockProject('p-2', 'B'), mockProject('p-1', 'A')]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(reordered),
-      })
+      mockApiClient.post.mockResolvedValueOnce(reordered)
 
       const result = await useProjectsStore.getState().reorderProjects(['p-2', 'p-1'])
 
@@ -323,10 +302,7 @@ describe('projects store', () => {
     })
 
     it('returns false and sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Reorder failed' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Reorder failed'))
 
       const result = await useProjectsStore.getState().reorderProjects(['p-1', 'p-2'])
 
@@ -340,10 +316,7 @@ describe('projects store', () => {
   describe('fetchTemplates', () => {
     it('fetches and stores templates', async () => {
       const templates = [{ id: 't-1', name: 'Python', description: 'Python project' }]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(templates),
-      })
+      mockApiClient.get.mockResolvedValueOnce(templates)
 
       await useProjectsStore.getState().fetchTemplates()
 
@@ -351,7 +324,7 @@ describe('projects store', () => {
     })
 
     it('handles fetch failure gracefully', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Network error'))
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
       await useProjectsStore.getState().fetchTemplates()
@@ -365,8 +338,8 @@ describe('projects store', () => {
 
   describe('linkProject', () => {
     it('links project and refreshes list', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) })
+      mockApiClient.post.mockResolvedValueOnce({})
+      mockApiClient.get.mockResolvedValueOnce([])
 
       const result = await useProjectsStore.getState().linkProject('p-link', '/path/to/project')
 
@@ -374,10 +347,7 @@ describe('projects store', () => {
     })
 
     it('returns false on error', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Path not found' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Path not found'))
 
       const result = await useProjectsStore.getState().linkProject('p-link', '/bad/path')
 
@@ -390,8 +360,8 @@ describe('projects store', () => {
 
   describe('updateProject', () => {
     it('updates project and refreshes list', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([mockProject('p-1', 'Updated')]) })
+      mockApiClient.put.mockResolvedValueOnce({})
+      mockApiClient.get.mockResolvedValueOnce([mockProject('p-1', 'Updated')])
 
       const result = await useProjectsStore.getState().updateProject('p-1', 'Updated', 'New desc', '/new/path')
 
@@ -400,10 +370,7 @@ describe('projects store', () => {
     })
 
     it('returns false on error', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Not found' }),
-      })
+      mockApiClient.put.mockRejectedValueOnce(new Error('Not found'))
 
       const result = await useProjectsStore.getState().updateProject('p-1', 'Name', 'Desc', '/path')
 
@@ -415,8 +382,8 @@ describe('projects store', () => {
 
   describe('indexProject', () => {
     it('indexes project and refreshes list', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) })
+      mockApiClient.post.mockResolvedValueOnce({})
+      mockApiClient.get.mockResolvedValueOnce([])
 
       const result = await useProjectsStore.getState().indexProject('p-1')
 
@@ -424,10 +391,7 @@ describe('projects store', () => {
     })
 
     it('returns false on error', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Index failed' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Index failed'))
 
       const result = await useProjectsStore.getState().indexProject('p-1')
 
@@ -440,10 +404,7 @@ describe('projects store', () => {
   describe('fetchDeletionPreview', () => {
     it('returns deletion preview data', async () => {
       const preview = { tasks_count: 5, agents_count: 2 }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(preview),
-      })
+      mockApiClient.get.mockResolvedValueOnce(preview)
 
       const result = await useProjectsStore.getState().fetchDeletionPreview('p-1')
 
@@ -451,10 +412,7 @@ describe('projects store', () => {
     })
 
     it('returns null on error', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Not found' }),
-      })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Not found'))
 
       const result = await useProjectsStore.getState().fetchDeletionPreview('p-1')
 

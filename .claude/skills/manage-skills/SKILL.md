@@ -1,6 +1,16 @@
 ---
 name: manage-skills
 description: 세션 변경사항을 분석하여 검증 스킬 누락을 탐지합니다. 기존 스킬을 동적으로 탐색하고, 새 스킬을 생성하거나 기존 스킬을 업데이트한 뒤 CLAUDE.md를 관리합니다.
+type: meta
+priority: medium
+triggers:
+  keywords:
+    - manage skills
+    - skill management
+    - 스킬 관리
+  patterns:
+    - "manage.*skill"
+    - "skill.*create"
 disable-model-invocation: true
 argument-hint: "[선택사항: 특정 스킬 이름 또는 집중할 영역]"
 ---

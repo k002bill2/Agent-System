@@ -1,16 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { useClaudeSessionsStore } from '../claudeSessions'
 
-// Mock authFetch (used by fetchProjects)
-vi.mock('../auth', () => ({
-  authFetch: vi.fn(),
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
 }))
-import { authFetch } from '../auth'
-const mockAuthFetch = vi.mocked(authFetch)
 
-const mockFetch = vi.fn()
-global.fetch = mockFetch
+import { useClaudeSessionsStore } from '../claudeSessions'
+import { apiClient } from '../../services/apiClient'
+
+const mockApiClient = vi.mocked(apiClient)
 
 // Mock EventSource
 class MockEventSource {
@@ -38,10 +42,6 @@ const emptyResponse = {
   active_count: 0,
   has_more: false,
   offset: 0,
-}
-
-function okJson(data: any) {
-  return { ok: true, json: () => Promise.resolve(data) }
 }
 
 function resetStore() {
@@ -87,8 +87,7 @@ function resetStore() {
 describe('claudeSessions store', () => {
   beforeEach(() => {
     resetStore()
-    mockFetch.mockReset()
-    mockAuthFetch.mockReset()
+    vi.clearAllMocks()
   })
 
   // ── Initial State ──────────────────────────────────────
@@ -190,7 +189,7 @@ describe('claudeSessions store', () => {
         has_more: false,
         offset: 0,
       }
-      mockFetch.mockResolvedValueOnce(okJson(data))
+      mockApiClient.get.mockResolvedValueOnce(data)
 
       await useClaudeSessionsStore.getState().fetchSessions()
 
@@ -208,49 +207,49 @@ describe('claudeSessions store', () => {
         projectFilter: 'MyProject',
         sourceUserFilter: 'user1',
       })
-      mockFetch.mockResolvedValueOnce(okJson(emptyResponse))
+      mockApiClient.get.mockResolvedValueOnce(emptyResponse)
 
       await useClaudeSessionsStore.getState().fetchSessions('active')
 
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockApiClient.get.mock.calls[0][0] as string
       expect(url).toContain('project=MyProject')
       expect(url).toContain('source_user=user1')
       expect(url).toContain('status=active')
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Error' })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch sessions'))
 
       await useClaudeSessionsStore.getState().fetchSessions()
 
-      expect(useClaudeSessionsStore.getState().error).toContain('Failed to fetch sessions')
+      expect(useClaudeSessionsStore.getState().error).toBe('Failed to fetch sessions')
       expect(useClaudeSessionsStore.getState().isLoading).toBe(false)
     })
 
     it('resets offset when reset=true (default)', async () => {
       useClaudeSessionsStore.setState({ offset: 30 })
-      mockFetch.mockResolvedValueOnce(okJson(emptyResponse))
+      mockApiClient.get.mockResolvedValueOnce(emptyResponse)
 
       await useClaudeSessionsStore.getState().fetchSessions()
 
       // offset param in URL should be 0
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockApiClient.get.mock.calls[0][0] as string
       expect(url).toContain('offset=0')
     })
 
     it('preserves offset when reset=false', async () => {
       useClaudeSessionsStore.setState({ offset: 30 })
-      mockFetch.mockResolvedValueOnce(okJson(emptyResponse))
+      mockApiClient.get.mockResolvedValueOnce(emptyResponse)
 
       await useClaudeSessionsStore.getState().fetchSessions(undefined, false)
 
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockApiClient.get.mock.calls[0][0] as string
       expect(url).toContain('offset=30')
     })
 
     it('clears batchJustCompleted on fetch', async () => {
       useClaudeSessionsStore.setState({ batchJustCompleted: true })
-      mockFetch.mockResolvedValueOnce(okJson(emptyResponse))
+      mockApiClient.get.mockResolvedValueOnce(emptyResponse)
 
       await useClaudeSessionsStore.getState().fetchSessions()
 
@@ -258,7 +257,7 @@ describe('claudeSessions store', () => {
     })
 
     it('handles non-Error thrown values', async () => {
-      mockFetch.mockRejectedValueOnce('string error')
+      mockApiClient.get.mockRejectedValueOnce('string error')
 
       await useClaudeSessionsStore.getState().fetchSessions()
 
@@ -269,52 +268,52 @@ describe('claudeSessions store', () => {
     it('triggers autoGenerateMissingSummaries when enabled', async () => {
       useClaudeSessionsStore.setState({ autoGenerateSummaries: true })
       // First call: fetchSessions
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.get.mockResolvedValueOnce({
         ...emptyResponse,
         sessions: [{ session_id: 's-1', summary: null }],
-      }))
+      })
       // Second call: autoGenerateMissingSummaries internal fetch
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.get.mockResolvedValueOnce({
         ...emptyResponse,
         sessions: [{ session_id: 's-1', summary: null }],
-      }))
+      })
       // Third call: generateSummaryQuiet
-      mockFetch.mockResolvedValueOnce(okJson({ summary: 'Auto' }))
+      mockApiClient.post.mockResolvedValueOnce({ summary: 'Auto' })
       // Fourth call: fetchPendingSummaryCount
-      mockFetch.mockResolvedValueOnce(okJson({ pending_count: 0 }))
+      mockApiClient.get.mockResolvedValueOnce({ pending_count: 0 })
 
       await useClaudeSessionsStore.getState().fetchSessions()
 
       // Wait for non-blocking auto-generate
       await vi.waitFor(() => {
-        expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(2)
+        expect(mockApiClient.get.mock.calls.length).toBeGreaterThanOrEqual(2)
       })
     })
 
     it('does not include status param when not provided', async () => {
-      mockFetch.mockResolvedValueOnce(okJson(emptyResponse))
+      mockApiClient.get.mockResolvedValueOnce(emptyResponse)
 
       await useClaudeSessionsStore.getState().fetchSessions()
 
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockApiClient.get.mock.calls[0][0] as string
       expect(url).not.toContain('status=')
     })
 
     it('does not include project param when projectFilter is null', async () => {
-      mockFetch.mockResolvedValueOnce(okJson(emptyResponse))
+      mockApiClient.get.mockResolvedValueOnce(emptyResponse)
 
       await useClaudeSessionsStore.getState().fetchSessions()
 
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockApiClient.get.mock.calls[0][0] as string
       expect(url).not.toContain('project=')
     })
 
     it('does not include source_user param when sourceUserFilter is null', async () => {
-      mockFetch.mockResolvedValueOnce(okJson(emptyResponse))
+      mockApiClient.get.mockResolvedValueOnce(emptyResponse)
 
       await useClaudeSessionsStore.getState().fetchSessions()
 
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockApiClient.get.mock.calls[0][0] as string
       expect(url).not.toContain('source_user=')
     })
   })
@@ -327,7 +326,7 @@ describe('claudeSessions store', () => {
 
       await useClaudeSessionsStore.getState().loadMoreSessions()
 
-      expect(mockFetch).not.toHaveBeenCalled()
+      expect(mockApiClient.get).not.toHaveBeenCalled()
     })
 
     it('skips if already loading', async () => {
@@ -335,7 +334,7 @@ describe('claudeSessions store', () => {
 
       await useClaudeSessionsStore.getState().loadMoreSessions()
 
-      expect(mockFetch).not.toHaveBeenCalled()
+      expect(mockApiClient.get).not.toHaveBeenCalled()
     })
 
     it('appends new sessions', async () => {
@@ -343,11 +342,11 @@ describe('claudeSessions store', () => {
         sessions: [{ session_id: 's-1' } as any],
         hasMore: true,
       })
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.get.mockResolvedValueOnce({
         sessions: [{ session_id: 's-2' }],
         has_more: false,
         offset: 1,
-      }))
+      })
 
       await useClaudeSessionsStore.getState().loadMoreSessions()
 
@@ -357,17 +356,17 @@ describe('claudeSessions store', () => {
 
     it('sets error on failure', async () => {
       useClaudeSessionsStore.setState({ hasMore: true })
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Server Error' })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to load more sessions'))
 
       await useClaudeSessionsStore.getState().loadMoreSessions()
 
-      expect(useClaudeSessionsStore.getState().error).toContain('Failed to load more sessions')
+      expect(useClaudeSessionsStore.getState().error).toBe('Failed to load more sessions')
       expect(useClaudeSessionsStore.getState().isLoadingMore).toBe(false)
     })
 
     it('handles non-Error thrown values', async () => {
       useClaudeSessionsStore.setState({ hasMore: true })
-      mockFetch.mockRejectedValueOnce(42)
+      mockApiClient.get.mockRejectedValueOnce(42)
 
       await useClaudeSessionsStore.getState().loadMoreSessions()
 
@@ -382,15 +381,15 @@ describe('claudeSessions store', () => {
         sourceUserFilter: 'admin',
         sessions: [{ session_id: 's-1' } as any],
       })
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.get.mockResolvedValueOnce({
         sessions: [],
         has_more: false,
         offset: 1,
-      }))
+      })
 
       await useClaudeSessionsStore.getState().loadMoreSessions('active')
 
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockApiClient.get.mock.calls[0][0] as string
       expect(url).toContain('project=Proj')
       expect(url).toContain('source_user=admin')
       expect(url).toContain('status=active')
@@ -407,7 +406,7 @@ describe('claudeSessions store', () => {
           { session_id: 's-1', status: 'idle' } as any,
         ],
       })
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.get.mockResolvedValueOnce({
         sessions: [
           { session_id: 's-2', status: 'active' },
           { session_id: 's-1', status: 'active' },
@@ -417,7 +416,7 @@ describe('claudeSessions store', () => {
         active_count: 2,
         has_more: false,
         offset: 0,
-      }))
+      })
 
       await useClaudeSessionsStore.getState().refreshSessions()
 
@@ -439,14 +438,14 @@ describe('claudeSessions store', () => {
         ],
       })
       // API returns only s-1 (first page)
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.get.mockResolvedValueOnce({
         sessions: [{ session_id: 's-1', status: 'active' }],
         total_count: 2,
         filtered_count: 2,
         active_count: 1,
         has_more: true,
         offset: 0,
-      }))
+      })
 
       await useClaudeSessionsStore.getState().refreshSessions()
 
@@ -459,7 +458,7 @@ describe('claudeSessions store', () => {
     })
 
     it('silently fails on error', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('network down'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('network down'))
 
       await useClaudeSessionsStore.getState().refreshSessions()
 
@@ -467,19 +466,11 @@ describe('claudeSessions store', () => {
       expect(useClaudeSessionsStore.getState().error).toBeNull()
     })
 
-    it('silently fails on non-ok response', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Internal' })
-
-      await useClaudeSessionsStore.getState().refreshSessions()
-
-      expect(useClaudeSessionsStore.getState().error).toBeNull()
-    })
-
     it('clears batchJustCompleted', async () => {
       useClaudeSessionsStore.setState({ batchJustCompleted: true })
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.get.mockResolvedValueOnce({
         ...emptyResponse,
-      }))
+      })
 
       await useClaudeSessionsStore.getState().refreshSessions()
 
@@ -491,11 +482,11 @@ describe('claudeSessions store', () => {
         projectFilter: 'ProjX',
         sourceUserFilter: 'user1',
       })
-      mockFetch.mockResolvedValueOnce(okJson(emptyResponse))
+      mockApiClient.get.mockResolvedValueOnce(emptyResponse)
 
       await useClaudeSessionsStore.getState().refreshSessions('active')
 
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockApiClient.get.mock.calls[0][0] as string
       expect(url).toContain('project=ProjX')
       expect(url).toContain('source_user=user1')
       expect(url).toContain('status=active')
@@ -507,53 +498,53 @@ describe('claudeSessions store', () => {
 
   describe('sort and filter actions', () => {
     it('setSortBy sets field and triggers fetchSessions', async () => {
-      mockFetch.mockResolvedValueOnce(okJson(emptyResponse))
+      mockApiClient.get.mockResolvedValueOnce(emptyResponse)
 
       useClaudeSessionsStore.getState().setSortBy('created_at')
 
       expect(useClaudeSessionsStore.getState().sortBy).toBe('created_at')
       // fetchSessions was called
       await vi.waitFor(() => {
-        expect(mockFetch).toHaveBeenCalled()
+        expect(mockApiClient.get).toHaveBeenCalled()
       })
     })
 
     it('setSortOrder sets order and triggers fetchSessions', async () => {
-      mockFetch.mockResolvedValueOnce(okJson(emptyResponse))
+      mockApiClient.get.mockResolvedValueOnce(emptyResponse)
 
       useClaudeSessionsStore.getState().setSortOrder('asc')
 
       expect(useClaudeSessionsStore.getState().sortOrder).toBe('asc')
       await vi.waitFor(() => {
-        expect(mockFetch).toHaveBeenCalled()
+        expect(mockApiClient.get).toHaveBeenCalled()
       })
     })
 
     it('setProjectFilter sets filter and triggers fetchSessions', async () => {
-      mockFetch.mockResolvedValueOnce(okJson(emptyResponse))
+      mockApiClient.get.mockResolvedValueOnce(emptyResponse)
 
       useClaudeSessionsStore.getState().setProjectFilter('MyProj')
 
       expect(useClaudeSessionsStore.getState().projectFilter).toBe('MyProj')
       await vi.waitFor(() => {
-        expect(mockFetch).toHaveBeenCalled()
+        expect(mockApiClient.get).toHaveBeenCalled()
       })
     })
 
     it('setSourceUserFilter sets filter and triggers fetchSessions', async () => {
-      mockFetch.mockResolvedValueOnce(okJson(emptyResponse))
+      mockApiClient.get.mockResolvedValueOnce(emptyResponse)
 
       useClaudeSessionsStore.getState().setSourceUserFilter('admin')
 
       expect(useClaudeSessionsStore.getState().sourceUserFilter).toBe('admin')
       await vi.waitFor(() => {
-        expect(mockFetch).toHaveBeenCalled()
+        expect(mockApiClient.get).toHaveBeenCalled()
       })
     })
 
     it('setProjectFilter can clear filter with null', async () => {
       useClaudeSessionsStore.setState({ projectFilter: 'Something' })
-      mockFetch.mockResolvedValueOnce(okJson(emptyResponse))
+      mockApiClient.get.mockResolvedValueOnce(emptyResponse)
 
       useClaudeSessionsStore.getState().setProjectFilter(null)
 
@@ -562,7 +553,7 @@ describe('claudeSessions store', () => {
 
     it('setSourceUserFilter can clear filter with null', async () => {
       useClaudeSessionsStore.setState({ sourceUserFilter: 'someone' })
-      mockFetch.mockResolvedValueOnce(okJson(emptyResponse))
+      mockApiClient.get.mockResolvedValueOnce(emptyResponse)
 
       useClaudeSessionsStore.getState().setSourceUserFilter(null)
 
@@ -769,7 +760,7 @@ describe('claudeSessions store', () => {
   describe('fetchSessionDetails', () => {
     it('fetches and stores session details', async () => {
       const detail = { session_id: 's-1', status: 'active', message_count: 10 }
-      mockFetch.mockResolvedValueOnce(okJson(detail))
+      mockApiClient.get.mockResolvedValueOnce(detail)
 
       await useClaudeSessionsStore.getState().fetchSessionDetails('s-1')
 
@@ -779,16 +770,16 @@ describe('claudeSessions store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Not Found' })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch session details'))
 
       await useClaudeSessionsStore.getState().fetchSessionDetails('s-1')
 
-      expect(useClaudeSessionsStore.getState().error).toContain('Failed to fetch session details')
+      expect(useClaudeSessionsStore.getState().error).toBe('Failed to fetch session details')
       expect(useClaudeSessionsStore.getState().isLoadingDetails).toBe(false)
     })
 
     it('handles non-Error thrown values', async () => {
-      mockFetch.mockRejectedValueOnce(null)
+      mockApiClient.get.mockRejectedValueOnce(null)
 
       await useClaudeSessionsStore.getState().fetchSessionDetails('s-1')
 
@@ -798,9 +789,9 @@ describe('claudeSessions store', () => {
 
     it('sets isLoadingDetails to true during fetch', async () => {
       let loadingDuringFetch = false
-      mockFetch.mockImplementationOnce(() => {
+      mockApiClient.get.mockImplementationOnce(() => {
         loadingDuringFetch = useClaudeSessionsStore.getState().isLoadingDetails
-        return Promise.resolve(okJson({ session_id: 's-1' }))
+        return Promise.resolve({ session_id: 's-1' })
       })
 
       await useClaudeSessionsStore.getState().fetchSessionDetails('s-1')
@@ -835,7 +826,7 @@ describe('claudeSessions store', () => {
 
     it('fetches details and starts streaming when autoRefresh is on', async () => {
       const detail = { session_id: 's-1', status: 'active' }
-      mockFetch.mockResolvedValueOnce(okJson(detail))
+      mockApiClient.get.mockResolvedValueOnce(detail)
 
       useClaudeSessionsStore.getState().selectSession('s-1')
 
@@ -849,7 +840,7 @@ describe('claudeSessions store', () => {
     it('fetches details but does not start streaming when autoRefresh is off', async () => {
       useClaudeSessionsStore.setState({ autoRefresh: false })
       const detail = { session_id: 's-1', status: 'active' }
-      mockFetch.mockResolvedValueOnce(okJson(detail))
+      mockApiClient.get.mockResolvedValueOnce(detail)
 
       useClaudeSessionsStore.getState().selectSession('s-1')
 
@@ -907,7 +898,7 @@ describe('claudeSessions store', () => {
         has_more: false,
         offset: 0,
       }
-      mockFetch.mockResolvedValueOnce(okJson(data))
+      mockApiClient.get.mockResolvedValueOnce(data)
 
       await useClaudeSessionsStore.getState().fetchTranscript('s-1')
 
@@ -920,12 +911,12 @@ describe('claudeSessions store', () => {
       useClaudeSessionsStore.setState({
         transcriptEntries: [{ id: 'e-1' } as any],
       })
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.get.mockResolvedValueOnce({
         entries: [{ id: 'e-2' }],
         total_count: 2,
         has_more: false,
         offset: 1,
-      }))
+      })
 
       await useClaudeSessionsStore.getState().fetchTranscript('s-1', 1, 50, true)
 
@@ -936,12 +927,12 @@ describe('claudeSessions store', () => {
       useClaudeSessionsStore.setState({
         transcriptEntries: [{ id: 'e-old' } as any],
       })
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.get.mockResolvedValueOnce({
         entries: [{ id: 'e-new' }],
         total_count: 1,
         has_more: false,
         offset: 0,
-      }))
+      })
 
       await useClaudeSessionsStore.getState().fetchTranscript('s-1')
 
@@ -950,16 +941,16 @@ describe('claudeSessions store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Error' })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch transcript'))
 
       await useClaudeSessionsStore.getState().fetchTranscript('s-1')
 
-      expect(useClaudeSessionsStore.getState().error).toContain('Failed to fetch transcript')
+      expect(useClaudeSessionsStore.getState().error).toBe('Failed to fetch transcript')
       expect(useClaudeSessionsStore.getState().isLoadingTranscript).toBe(false)
     })
 
     it('handles non-Error thrown values', async () => {
-      mockFetch.mockRejectedValueOnce(undefined)
+      mockApiClient.get.mockRejectedValueOnce(undefined)
 
       await useClaudeSessionsStore.getState().fetchTranscript('s-1')
 
@@ -968,16 +959,16 @@ describe('claudeSessions store', () => {
     })
 
     it('passes offset and limit params', async () => {
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.get.mockResolvedValueOnce({
         entries: [],
         total_count: 0,
         has_more: false,
         offset: 10,
-      }))
+      })
 
       await useClaudeSessionsStore.getState().fetchTranscript('s-1', 10, 25)
 
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockApiClient.get.mock.calls[0][0] as string
       expect(url).toContain('offset=10')
       expect(url).toContain('limit=25')
     })
@@ -991,7 +982,7 @@ describe('claudeSessions store', () => {
         sessions: [{ session_id: 's-1' } as any, { session_id: 's-2' } as any],
         totalCount: 2,
       })
-      mockFetch.mockResolvedValueOnce({ ok: true })
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
 
       const result = await useClaudeSessionsStore.getState().deleteSession('s-1')
 
@@ -1007,7 +998,7 @@ describe('claudeSessions store', () => {
         selectedSession: {} as any,
         totalCount: 1,
       })
-      mockFetch.mockResolvedValueOnce({ ok: true })
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
 
       await useClaudeSessionsStore.getState().deleteSession('s-1')
 
@@ -1022,7 +1013,7 @@ describe('claudeSessions store', () => {
         selectedSession: { session_id: 's-2' } as any,
         totalCount: 2,
       })
-      mockFetch.mockResolvedValueOnce({ ok: true })
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
 
       await useClaudeSessionsStore.getState().deleteSession('s-1')
 
@@ -1031,10 +1022,7 @@ describe('claudeSessions store', () => {
     })
 
     it('deleteSession returns false on error', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Not found' }),
-      })
+      mockApiClient.delete.mockRejectedValueOnce(new Error('Not found'))
 
       const result = await useClaudeSessionsStore.getState().deleteSession('s-1')
 
@@ -1043,7 +1031,7 @@ describe('claudeSessions store', () => {
     })
 
     it('deleteSession handles non-Error thrown values', async () => {
-      mockFetch.mockRejectedValueOnce('crash')
+      mockApiClient.delete.mockRejectedValueOnce('crash')
 
       const result = await useClaudeSessionsStore.getState().deleteSession('s-1')
 
@@ -1059,7 +1047,7 @@ describe('claudeSessions store', () => {
         ],
         totalCount: 2,
       })
-      mockFetch.mockResolvedValueOnce(okJson({ deleted_count: 1, deleted_ids: ['s-1'] }))
+      mockApiClient.delete.mockResolvedValueOnce({ deleted_count: 1, deleted_ids: ['s-1'] })
 
       const result = await useClaudeSessionsStore.getState().deleteEmptySessions()
 
@@ -1068,10 +1056,7 @@ describe('claudeSessions store', () => {
     })
 
     it('deleteEmptySessions handles error response', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Delete failed' }),
-      })
+      mockApiClient.delete.mockRejectedValueOnce(new Error('Delete failed'))
 
       const result = await useClaudeSessionsStore.getState().deleteEmptySessions()
 
@@ -1081,7 +1066,7 @@ describe('claudeSessions store', () => {
     })
 
     it('deleteEmptySessions handles network error', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('network'))
+      mockApiClient.delete.mockRejectedValueOnce(new Error('network'))
 
       const result = await useClaudeSessionsStore.getState().deleteEmptySessions()
 
@@ -1138,10 +1123,10 @@ describe('claudeSessions store', () => {
         ],
         totalCount: 2,
       })
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.delete.mockResolvedValueOnce({
         deleted_count: 1,
         deleted_ids: ['s-1'],
-      }))
+      })
 
       const result = await useClaudeSessionsStore.getState().deleteGhostSessions()
 
@@ -1152,10 +1137,7 @@ describe('claudeSessions store', () => {
     })
 
     it('deleteGhostSessions handles error response', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Ghost delete failed' }),
-      })
+      mockApiClient.delete.mockRejectedValueOnce(new Error('Ghost delete failed'))
 
       const result = await useClaudeSessionsStore.getState().deleteGhostSessions()
 
@@ -1165,7 +1147,7 @@ describe('claudeSessions store', () => {
     })
 
     it('deleteGhostSessions handles network error', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('timeout'))
+      mockApiClient.delete.mockRejectedValueOnce(new Error('timeout'))
 
       const result = await useClaudeSessionsStore.getState().deleteGhostSessions()
 
@@ -1175,7 +1157,7 @@ describe('claudeSessions store', () => {
     })
 
     it('deleteGhostSessions handles non-Error thrown values', async () => {
-      mockFetch.mockRejectedValueOnce(123)
+      mockApiClient.delete.mockRejectedValueOnce(123)
 
       const result = await useClaudeSessionsStore.getState().deleteGhostSessions()
 
@@ -1191,7 +1173,7 @@ describe('claudeSessions store', () => {
       useClaudeSessionsStore.setState({
         sessions: [{ session_id: 's-1', summary: null } as any],
       })
-      mockFetch.mockResolvedValueOnce(okJson({ summary: 'This session fixed a bug' }))
+      mockApiClient.post.mockResolvedValueOnce({ summary: 'This session fixed a bug' })
 
       await useClaudeSessionsStore.getState().generateSummary('s-1')
 
@@ -1201,9 +1183,9 @@ describe('claudeSessions store', () => {
 
     it('sets generatingSummaryFor during generation', async () => {
       let generating: string | null = null
-      mockFetch.mockImplementationOnce(() => {
+      mockApiClient.post.mockImplementationOnce(() => {
         generating = useClaudeSessionsStore.getState().generatingSummaryFor
-        return Promise.resolve(okJson({ summary: 'done' }))
+        return Promise.resolve({ summary: 'done' })
       })
       useClaudeSessionsStore.setState({
         sessions: [{ session_id: 's-1', summary: null } as any],
@@ -1215,16 +1197,16 @@ describe('claudeSessions store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Error' })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Failed to generate summary'))
 
       await useClaudeSessionsStore.getState().generateSummary('s-1')
 
-      expect(useClaudeSessionsStore.getState().error).toContain('Failed to generate summary')
+      expect(useClaudeSessionsStore.getState().error).toBe('Failed to generate summary')
       expect(useClaudeSessionsStore.getState().generatingSummaryFor).toBeNull()
     })
 
     it('handles non-Error thrown values', async () => {
-      mockFetch.mockRejectedValueOnce(undefined)
+      mockApiClient.post.mockRejectedValueOnce(undefined)
 
       await useClaudeSessionsStore.getState().generateSummary('s-1')
 
@@ -1239,7 +1221,7 @@ describe('claudeSessions store', () => {
           { session_id: 's-2', summary: 'existing' } as any,
         ],
       })
-      mockFetch.mockResolvedValueOnce(okJson({ summary: 'New summary' }))
+      mockApiClient.post.mockResolvedValueOnce({ summary: 'New summary' })
 
       await useClaudeSessionsStore.getState().generateSummary('s-1')
 
@@ -1254,7 +1236,7 @@ describe('claudeSessions store', () => {
       useClaudeSessionsStore.setState({
         sessions: [{ session_id: 's-1', summary: null } as any],
       })
-      mockFetch.mockResolvedValueOnce(okJson({ summary: 'Quiet summary' }))
+      mockApiClient.post.mockResolvedValueOnce({ summary: 'Quiet summary' })
 
       await useClaudeSessionsStore.getState().generateSummaryQuiet('s-1')
 
@@ -1262,8 +1244,8 @@ describe('claudeSessions store', () => {
       expect(useClaudeSessionsStore.getState().generatingSummaryFor).toBeNull()
     })
 
-    it('silently handles non-ok response without setting error', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Error' })
+    it('silently handles error without setting error', async () => {
+      mockApiClient.post.mockRejectedValueOnce(new Error('Error'))
 
       await useClaudeSessionsStore.getState().generateSummaryQuiet('s-1')
 
@@ -1273,7 +1255,7 @@ describe('claudeSessions store', () => {
     })
 
     it('silently handles network error without setting error', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('network'))
+      mockApiClient.post.mockRejectedValueOnce(new Error('network'))
 
       await useClaudeSessionsStore.getState().generateSummaryQuiet('s-1')
 
@@ -1283,9 +1265,9 @@ describe('claudeSessions store', () => {
 
     it('sets generatingSummaryFor during generation', async () => {
       let generating: string | null = null
-      mockFetch.mockImplementationOnce(() => {
+      mockApiClient.post.mockImplementationOnce(() => {
         generating = useClaudeSessionsStore.getState().generatingSummaryFor
-        return Promise.resolve(okJson({ summary: 'done' }))
+        return Promise.resolve({ summary: 'done' })
       })
       useClaudeSessionsStore.setState({
         sessions: [{ session_id: 's-1', summary: null } as any],
@@ -1305,7 +1287,7 @@ describe('claudeSessions store', () => {
 
       await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
 
-      expect(mockFetch).not.toHaveBeenCalled()
+      expect(mockApiClient.get).not.toHaveBeenCalled()
     })
 
     it('skips when already generating a summary', async () => {
@@ -1316,7 +1298,7 @@ describe('claudeSessions store', () => {
 
       await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
 
-      expect(mockFetch).not.toHaveBeenCalled()
+      expect(mockApiClient.get).not.toHaveBeenCalled()
     })
 
     it('generates summaries for sessions without one', async () => {
@@ -1325,7 +1307,7 @@ describe('claudeSessions store', () => {
         sessions: [{ session_id: 's-1', summary: null } as any],
       })
       // First call: fetch sessions to find those without summary
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.get.mockResolvedValueOnce({
         sessions: [
           { session_id: 's-1', summary: null },
           { session_id: 's-2', summary: 'has one' },
@@ -1335,30 +1317,22 @@ describe('claudeSessions store', () => {
         active_count: 0,
         has_more: false,
         offset: 0,
-      }))
+      })
       // Second call: generateSummaryQuiet for s-1
-      mockFetch.mockResolvedValueOnce(okJson({ summary: 'Auto generated' }))
+      mockApiClient.post.mockResolvedValueOnce({ summary: 'Auto generated' })
       // Third call: fetchPendingSummaryCount
-      mockFetch.mockResolvedValueOnce(okJson({ pending_count: 0 }))
+      mockApiClient.get.mockResolvedValueOnce({ pending_count: 0 })
 
       await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
 
       // generateSummaryQuiet was called
-      expect(mockFetch).toHaveBeenCalledTimes(3)
+      expect(mockApiClient.get).toHaveBeenCalledTimes(2) // sessions fetch + pending count
+      expect(mockApiClient.post).toHaveBeenCalledTimes(1) // summary generation
     })
 
     it('silently handles fetch error', async () => {
       useClaudeSessionsStore.setState({ autoGenerateSummaries: true })
-      mockFetch.mockRejectedValueOnce(new Error('fail'))
-
-      await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
-
-      expect(useClaudeSessionsStore.getState().error).toBeNull()
-    })
-
-    it('silently handles non-ok fetch', async () => {
-      useClaudeSessionsStore.setState({ autoGenerateSummaries: true })
-      mockFetch.mockResolvedValueOnce({ ok: false })
+      mockApiClient.get.mockRejectedValueOnce(new Error('fail'))
 
       await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
 
@@ -1368,7 +1342,7 @@ describe('claudeSessions store', () => {
     it('stops generating if autoGenerateSummaries is disabled mid-loop', async () => {
       useClaudeSessionsStore.setState({ autoGenerateSummaries: true })
       // Return 2 sessions without summaries
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.get.mockResolvedValueOnce({
         sessions: [
           { session_id: 's-1', summary: null },
           { session_id: 's-2', summary: null },
@@ -1378,42 +1352,37 @@ describe('claudeSessions store', () => {
         active_count: 0,
         has_more: false,
         offset: 0,
-      }))
+      })
       // For the first generateSummaryQuiet call, disable auto-generate
-      mockFetch.mockImplementationOnce(() => {
+      mockApiClient.post.mockImplementationOnce(() => {
         useClaudeSessionsStore.setState({ autoGenerateSummaries: false })
-        return Promise.resolve(okJson({ summary: 'first' }))
+        return Promise.resolve({ summary: 'first' })
       })
       // fetchPendingSummaryCount is still called because sessionsWithoutSummary.length > 0
-      mockFetch.mockResolvedValueOnce(okJson({ pending_count: 1 }))
+      mockApiClient.get.mockResolvedValueOnce({ pending_count: 1 })
 
       await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
 
-      // 1: fetch sessions, 2: generateSummaryQuiet for s-1, 3: fetchPendingSummaryCount
       // s-2 was skipped because autoGenerateSummaries was disabled mid-loop
-      expect(mockFetch).toHaveBeenCalledTimes(3)
-      // Verify s-2 was NOT generated (only 1 summary POST, not 2)
-      const summaryPosts = mockFetch.mock.calls.filter(
-        (c) => typeof c[0] === 'string' && c[0].includes('/summary') && c[1]?.method === 'POST'
-      )
-      expect(summaryPosts).toHaveLength(1)
+      // Only 1 POST call (for s-1), not 2
+      expect(mockApiClient.post).toHaveBeenCalledTimes(1)
     })
 
     it('does not call fetchPendingSummaryCount when no sessions without summaries', async () => {
       useClaudeSessionsStore.setState({ autoGenerateSummaries: true })
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.get.mockResolvedValueOnce({
         sessions: [{ session_id: 's-1', summary: 'already has one' }],
         total_count: 1,
         filtered_count: 1,
         active_count: 0,
         has_more: false,
         offset: 0,
-      }))
+      })
 
       await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
 
       // Only the sessions fetch, no pending count fetch
-      expect(mockFetch).toHaveBeenCalledTimes(1)
+      expect(mockApiClient.get).toHaveBeenCalledTimes(1)
     })
 
     it('includes filter params', async () => {
@@ -1422,18 +1391,18 @@ describe('claudeSessions store', () => {
         projectFilter: 'MyProject',
         sourceUserFilter: 'admin',
       })
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.get.mockResolvedValueOnce({
         sessions: [],
         total_count: 0,
         filtered_count: 0,
         active_count: 0,
         has_more: false,
         offset: 0,
-      }))
+      })
 
       await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
 
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockApiClient.get.mock.calls[0][0] as string
       expect(url).toContain('project=MyProject')
       expect(url).toContain('source_user=admin')
       expect(url).toContain('limit=200')
@@ -1699,7 +1668,7 @@ describe('claudeSessions store', () => {
 
   describe('fetchSourceUsers', () => {
     it('fetches and stores source users', async () => {
-      mockFetch.mockResolvedValueOnce(okJson({ users: ['user1', 'user2'], current_user: 'user1' }))
+      mockApiClient.get.mockResolvedValueOnce({ users: ['user1', 'user2'], current_user: 'user1' })
 
       await useClaudeSessionsStore.getState().fetchSourceUsers()
 
@@ -1707,8 +1676,8 @@ describe('claudeSessions store', () => {
       expect(useClaudeSessionsStore.getState().currentUser).toBe('user1')
     })
 
-    it('silently handles non-ok response', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false })
+    it('silently handles error', async () => {
+      mockApiClient.get.mockRejectedValueOnce(new Error('fail'))
 
       await useClaudeSessionsStore.getState().fetchSourceUsers()
 
@@ -1717,7 +1686,7 @@ describe('claudeSessions store', () => {
     })
 
     it('silently handles network error', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('network'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('network'))
 
       await useClaudeSessionsStore.getState().fetchSourceUsers()
 
@@ -1725,7 +1694,7 @@ describe('claudeSessions store', () => {
     })
 
     it('handles missing fields in response', async () => {
-      mockFetch.mockResolvedValueOnce(okJson({}))
+      mockApiClient.get.mockResolvedValueOnce({})
 
       await useClaudeSessionsStore.getState().fetchSourceUsers()
 
@@ -1738,15 +1707,15 @@ describe('claudeSessions store', () => {
 
   describe('fetchProjects', () => {
     it('fetches and stores projects', async () => {
-      mockAuthFetch.mockResolvedValueOnce(okJson({ projects: ['Project-A', 'Project-B'] }) as any)
+      mockApiClient.get.mockResolvedValueOnce({ projects: ['Project-A', 'Project-B'] })
 
       await useClaudeSessionsStore.getState().fetchProjects()
 
       expect(useClaudeSessionsStore.getState().allProjects).toEqual(['Project-A', 'Project-B'])
     })
 
-    it('silently handles non-ok response', async () => {
-      mockAuthFetch.mockResolvedValueOnce({ ok: false } as any)
+    it('silently handles error', async () => {
+      mockApiClient.get.mockRejectedValueOnce(new Error('fail'))
 
       await useClaudeSessionsStore.getState().fetchProjects()
 
@@ -1755,7 +1724,7 @@ describe('claudeSessions store', () => {
     })
 
     it('silently handles network error', async () => {
-      mockAuthFetch.mockRejectedValueOnce(new Error('auth error'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('auth error'))
 
       await useClaudeSessionsStore.getState().fetchProjects()
 
@@ -1764,7 +1733,7 @@ describe('claudeSessions store', () => {
     })
 
     it('handles missing projects field in response', async () => {
-      mockAuthFetch.mockResolvedValueOnce(okJson({}) as any)
+      mockApiClient.get.mockResolvedValueOnce({})
 
       await useClaudeSessionsStore.getState().fetchProjects()
 
@@ -1776,7 +1745,7 @@ describe('claudeSessions store', () => {
 
   describe('fetchPendingSummaryCount', () => {
     it('fetches and stores pending count', async () => {
-      mockFetch.mockResolvedValueOnce(okJson({ pending_count: 42 }))
+      mockApiClient.get.mockResolvedValueOnce({ pending_count: 42 })
 
       await useClaudeSessionsStore.getState().fetchPendingSummaryCount()
 
@@ -1785,16 +1754,16 @@ describe('claudeSessions store', () => {
 
     it('includes projectFilter in URL', async () => {
       useClaudeSessionsStore.setState({ projectFilter: 'TestProj' })
-      mockFetch.mockResolvedValueOnce(okJson({ pending_count: 0 }))
+      mockApiClient.get.mockResolvedValueOnce({ pending_count: 0 })
 
       await useClaudeSessionsStore.getState().fetchPendingSummaryCount()
 
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockApiClient.get.mock.calls[0][0] as string
       expect(url).toContain('project=TestProj')
     })
 
-    it('silently handles non-ok response', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false })
+    it('silently handles error', async () => {
+      mockApiClient.get.mockRejectedValueOnce(new Error('fail'))
 
       await useClaudeSessionsStore.getState().fetchPendingSummaryCount()
 
@@ -1803,7 +1772,7 @@ describe('claudeSessions store', () => {
     })
 
     it('silently handles network error', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('fail'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('fail'))
 
       await useClaudeSessionsStore.getState().fetchPendingSummaryCount()
 
@@ -1819,14 +1788,14 @@ describe('claudeSessions store', () => {
         sessions: [{ session_id: 's-1', summary: null } as any],
         pendingSummaryCount: 5,
       })
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.post.mockResolvedValueOnce({
         total_processed: 3,
         success_count: 2,
         failed_count: 1,
         generated_summaries: [
           { session_id: 's-1', summary: 'Generated summary' },
         ],
-      }))
+      })
 
       await useClaudeSessionsStore.getState().generateBatchSummaries(10)
 
@@ -1846,7 +1815,7 @@ describe('claudeSessions store', () => {
 
       await useClaudeSessionsStore.getState().generateBatchSummaries()
 
-      expect(mockFetch).not.toHaveBeenCalled()
+      expect(mockApiClient.post).not.toHaveBeenCalled()
     })
 
     it('handles response with no generated_summaries', async () => {
@@ -1854,11 +1823,11 @@ describe('claudeSessions store', () => {
         sessions: [{ session_id: 's-1', summary: null } as any],
         pendingSummaryCount: 1,
       })
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.post.mockResolvedValueOnce({
         total_processed: 0,
         success_count: 0,
         failed_count: 0,
-      }))
+      })
 
       await useClaudeSessionsStore.getState().generateBatchSummaries()
 
@@ -1873,12 +1842,12 @@ describe('claudeSessions store', () => {
       useClaudeSessionsStore.setState({
         sessions: [{ session_id: 's-1', summary: null } as any],
       })
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.post.mockResolvedValueOnce({
         total_processed: 0,
         success_count: 0,
         failed_count: 0,
         generated_summaries: [],
-      }))
+      })
 
       await useClaudeSessionsStore.getState().generateBatchSummaries()
 
@@ -1886,22 +1855,20 @@ describe('claudeSessions store', () => {
     })
 
     it('sets error on failure and re-fetches pending count', async () => {
-      mockFetch
-        .mockResolvedValueOnce({ ok: false, statusText: 'Server Error' })
-        // fetchPendingSummaryCount called after error
-        .mockResolvedValueOnce(okJson({ pending_count: 10 }))
+      mockApiClient.post.mockRejectedValueOnce(new Error('Failed to generate batch summaries'))
+      // fetchPendingSummaryCount called after error
+      mockApiClient.get.mockResolvedValueOnce({ pending_count: 10 })
 
       await useClaudeSessionsStore.getState().generateBatchSummaries()
 
-      expect(useClaudeSessionsStore.getState().error).toContain('Failed to generate batch summaries')
+      expect(useClaudeSessionsStore.getState().error).toBe('Failed to generate batch summaries')
       expect(useClaudeSessionsStore.getState().isBatchGenerating).toBe(false)
     })
 
     it('handles non-Error thrown values on failure', async () => {
-      mockFetch
-        .mockRejectedValueOnce('crash')
-        // fetchPendingSummaryCount called after error
-        .mockResolvedValueOnce(okJson({ pending_count: 0 }))
+      mockApiClient.post.mockRejectedValueOnce('crash')
+      // fetchPendingSummaryCount called after error
+      mockApiClient.get.mockResolvedValueOnce({ pending_count: 0 })
 
       await useClaudeSessionsStore.getState().generateBatchSummaries()
 
@@ -1911,12 +1878,12 @@ describe('claudeSessions store', () => {
 
     it('pendingSummaryCount does not go below 0', async () => {
       useClaudeSessionsStore.setState({ pendingSummaryCount: 1 })
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.post.mockResolvedValueOnce({
         total_processed: 5,
         success_count: 5,
         failed_count: 0,
         generated_summaries: [],
-      }))
+      })
 
       await useClaudeSessionsStore.getState().generateBatchSummaries()
 
@@ -1924,15 +1891,15 @@ describe('claudeSessions store', () => {
     })
 
     it('uses default limit of 50', async () => {
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.post.mockResolvedValueOnce({
         total_processed: 0,
         success_count: 0,
         failed_count: 0,
-      }))
+      })
 
       await useClaudeSessionsStore.getState().generateBatchSummaries()
 
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockApiClient.post.mock.calls[0][0] as string
       expect(url).toContain('limit=50')
       expect(url).toContain('skip_existing=true')
     })
@@ -1944,14 +1911,14 @@ describe('claudeSessions store', () => {
           { session_id: 's-2', summary: 'keep' } as any,
         ],
       })
-      mockFetch.mockResolvedValueOnce(okJson({
+      mockApiClient.post.mockResolvedValueOnce({
         total_processed: 1,
         success_count: 1,
         failed_count: 0,
         generated_summaries: [
           { session_id: 's-1', summary: 'New' },
         ],
-      }))
+      })
 
       await useClaudeSessionsStore.getState().generateBatchSummaries()
 

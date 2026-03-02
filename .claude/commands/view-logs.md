@@ -1,4 +1,5 @@
 ---
+name: view-logs
 description: Vite 개발 서버 또는 테스트 로그 분석
 ---
 

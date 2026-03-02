@@ -1,13 +1,13 @@
 """Workflow secret management service — DB-backed with AES-256-GCM encryption."""
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import WorkflowSecretModel
 from models.secret import SecretCreate, SecretScope, SecretUpdate
+from utils.time import utcnow
 
 
 class SecretService:
@@ -95,7 +95,7 @@ class SecretService:
         if existing.scalar_one_or_none():
             raise ValueError(f"Secret '{data.name}' already exists in this scope")
 
-        now = datetime.utcnow()
+        now = utcnow()
         row = WorkflowSecretModel(
             id=str(uuid.uuid4()),
             name=data.name,
@@ -123,7 +123,7 @@ class SecretService:
             row.scope = data.scope.value
         if data.scope_id is not None:
             row.scope_id = data.scope_id
-        row.updated_at = datetime.utcnow()
+        row.updated_at = utcnow()
         await self._db.flush()
         return self._to_response(row)
 

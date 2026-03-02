@@ -9,6 +9,7 @@
 import { ApiError, ApiErrorCode, errorCodeFromStatus } from './errors'
 import { getApiUrl } from '../config/api'
 import { analytics } from './analytics'
+import { useAuthStore } from '../stores/auth'
 
 // ---------------------------------------------------------------------------
 // Config & interceptor types
@@ -189,10 +190,14 @@ class ApiClient {
       if (!processed.ok) {
         const apiError = await this.buildApiError(processed)
 
-        // 401 → attempt token refresh then retry once
+        // 401 → attempt token refresh then retry once with updated token
         if (processed.status === 401 && attempt === 0) {
           await this.refreshToken()
-          return this.executeWithRetry<T>(config, attempt + 1)
+          const { accessToken } = useAuthStore.getState()
+          if (accessToken) {
+            const updatedHeaders = { ...config.headers, Authorization: `Bearer ${accessToken}` }
+            return this.executeWithRetry<T>({ ...config, headers: updatedHeaders }, attempt + 1)
+          }
         }
 
         // Run response error interceptors
@@ -262,16 +267,11 @@ class ApiClient {
 
     this.refreshPromise = (async () => {
       try {
-        const response = await fetch(`${this.config.baseURL}/api/auth/refresh`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-        })
-
-        if (!response.ok) {
+        const success = await useAuthStore.getState().refreshAccessToken()
+        if (!success) {
           throw new ApiError({
             message: 'Token refresh failed',
-            status: response.status,
+            status: 401,
             code: ApiErrorCode.TOKEN_EXPIRED,
           })
         }

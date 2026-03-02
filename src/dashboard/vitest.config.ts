@@ -25,13 +25,12 @@ export default defineConfig({
         'src/main.tsx',
         'src/vite-env.d.ts',
       ],
-      // TODO: 커버리지 확대 후 threshold 점진적 상향
-      /* thresholds: {
-        statements: 75,
-        branches: 60,
-        functions: 70,
-        lines: 75,
-      }, */
+      thresholds: {
+        statements: 60,
+        branches: 50,
+        functions: 55,
+        lines: 60,
+      },
     },
   },
   resolve: {

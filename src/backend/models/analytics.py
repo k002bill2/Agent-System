@@ -5,6 +5,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+from utils.time import utcnow
+
 
 class TimeRange(str, Enum):
     """Time range for analytics queries."""
@@ -219,4 +221,4 @@ class AnalyticsDashboard(BaseModel):
     costs: CostAnalytics
     activity: ActivityHeatmap
     errors: ErrorAnalytics
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=utcnow)

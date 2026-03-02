@@ -11,6 +11,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from utils.time import utcnow
+
 
 class AgentCategory(str, Enum):
     """에이전트 카테고리."""
@@ -71,7 +73,7 @@ class AgentMetadata(BaseModel):
     current_tasks: list[str] = Field(default_factory=list)
 
     # 메타
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
     last_used_at: datetime | None = None
 
     # 통계
@@ -459,7 +461,7 @@ class AgentRegistry:
         if agent and task_id in agent.current_tasks:
             agent.current_tasks.remove(task_id)
             agent.total_tasks_completed += 1
-            agent.last_used_at = datetime.utcnow()
+            agent.last_used_at = utcnow()
 
             # 성공률 업데이트 (이동 평균)
             alpha = 0.1

@@ -5,6 +5,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+from utils.time import utcnow
+
 
 class SessionStatus(str, Enum):
     """Session status enum."""
@@ -63,8 +65,8 @@ class ClaudeSessionInfo(BaseModel):
     version: str = Field(default="", description="Claude Code version")
 
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    last_activity: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    last_activity: datetime = Field(default_factory=utcnow)
 
     # Counts
     message_count: int = Field(default=0, description="Total messages in session")
@@ -173,8 +175,8 @@ class ClaudeCodeTask(BaseModel):
     status: ClaudeCodeTaskStatus = Field(
         default=ClaudeCodeTaskStatus.PENDING, description="Task status"
     )
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
     parent_id: str | None = Field(default=None, description="Parent task ID")
     children: list[str] = Field(default_factory=list, description="Child task IDs")
     active_form: str | None = Field(default=None, description="Active form text for spinner")

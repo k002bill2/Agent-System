@@ -1,9 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { useProjectConfigsStore } from '../projectConfigs'
 
-const mockFetch = vi.fn()
-global.fetch = mockFetch
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}))
+
+import { useProjectConfigsStore } from '../projectConfigs'
+import { apiClient } from '../../services/apiClient'
+
+const mockApiClient = vi.mocked(apiClient)
 
 // Mock EventSource
 class MockEventSource {
@@ -57,7 +68,7 @@ function resetStore() {
 describe('projectConfigs store', () => {
   beforeEach(() => {
     resetStore()
-    mockFetch.mockReset()
+    vi.clearAllMocks()
   })
 
   // ── Initial State ──────────────────────────────────────
@@ -141,14 +152,10 @@ describe('projectConfigs store', () => {
         { project_id: 'p1', project_name: 'App' },
         { project_id: 'p2', project_name: 'Lib' },
       ]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ projects }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ projects })
       // selectProject will trigger fetchProjectSummary
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ project: projects[0], skills: [], agents: [], mcp_servers: [], user_mcp_servers: [], hooks: [] }),
+      mockApiClient.get.mockResolvedValueOnce({
+        project: projects[0], skills: [], agents: [], mcp_servers: [], user_mcp_servers: [], hooks: [],
       })
 
       await useProjectConfigsStore.getState().fetchProjects()
@@ -160,11 +167,11 @@ describe('projectConfigs store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Error' })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch projects'))
 
       await useProjectConfigsStore.getState().fetchProjects()
 
-      expect(useProjectConfigsStore.getState().error).toContain('Failed to fetch projects')
+      expect(useProjectConfigsStore.getState().error).toBe('Failed to fetch projects')
     })
   })
 
@@ -172,10 +179,7 @@ describe('projectConfigs store', () => {
 
   describe('selectProject', () => {
     it('selects project and fetches summary', () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      })
+      mockApiClient.get.mockResolvedValueOnce({})
 
       useProjectConfigsStore.getState().selectProject('p1')
 
@@ -203,10 +207,7 @@ describe('projectConfigs store', () => {
         user_mcp_servers: [],
         hooks: [],
       }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(summary),
-      })
+      mockApiClient.get.mockResolvedValueOnce(summary)
 
       await useProjectConfigsStore.getState().fetchProjectSummary('p1')
 
@@ -215,11 +216,11 @@ describe('projectConfigs store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Not Found' })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch project'))
 
       await useProjectConfigsStore.getState().fetchProjectSummary('p1')
 
-      expect(useProjectConfigsStore.getState().error).toContain('Failed to fetch project')
+      expect(useProjectConfigsStore.getState().error).toBe('Failed to fetch project')
     })
   })
 
@@ -228,10 +229,7 @@ describe('projectConfigs store', () => {
   describe('fetchAllSkills', () => {
     it('fetches all skills', async () => {
       const skills = [{ skill_id: 'sk-1', name: 'Skill 1' }]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(skills),
-      })
+      mockApiClient.get.mockResolvedValueOnce(skills)
 
       await useProjectConfigsStore.getState().fetchAllSkills()
 
@@ -244,10 +242,7 @@ describe('projectConfigs store', () => {
   describe('fetchAllAgents', () => {
     it('fetches all agents', async () => {
       const agents = [{ agent_id: 'ag-1', name: 'Agent 1' }]
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(agents),
-      })
+      mockApiClient.get.mockResolvedValueOnce(agents)
 
       await useProjectConfigsStore.getState().fetchAllAgents()
 
@@ -259,10 +254,7 @@ describe('projectConfigs store', () => {
 
   describe('fetchSkillContent', () => {
     it('fetches skill content and references', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ content: '# Skill', references: ['ref1.md'] }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ content: '# Skill', references: ['ref1.md'] })
 
       await useProjectConfigsStore.getState().fetchSkillContent('p1', 'sk-1')
 
@@ -298,21 +290,20 @@ describe('projectConfigs store', () => {
   describe('refresh', () => {
     it('calls fetchProjects and fetchProjectSummary if project selected', async () => {
       useProjectConfigsStore.setState({ selectedProjectId: 'p1' })
-      mockFetch
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ projects: [] }) })
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+      mockApiClient.get
+        .mockResolvedValueOnce({ projects: [] })
+        .mockResolvedValueOnce({})
 
       await useProjectConfigsStore.getState().refresh()
 
-      expect(mockFetch).toHaveBeenCalledTimes(2)
+      expect(mockApiClient.get).toHaveBeenCalledTimes(2)
     })
   })
 
   // Helper for successful project summary mock
   function mockProjectSummaryOk() {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ project: { project_id: 'p1' }, skills: [], agents: [], mcp_servers: [], user_mcp_servers: [], hooks: [] }),
+    mockApiClient.get.mockResolvedValueOnce({
+      project: { project_id: 'p1' }, skills: [], agents: [], mcp_servers: [], user_mcp_servers: [], hooks: [],
     })
   }
 
@@ -328,7 +319,7 @@ describe('projectConfigs store', () => {
           user_mcp_servers: [], hooks: [],
         },
       })
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+      mockApiClient.post.mockResolvedValueOnce({})
 
       await useProjectConfigsStore.getState().toggleMCPServer('p1', 'srv-1', true)
 
@@ -344,15 +335,12 @@ describe('projectConfigs store', () => {
 
       await useProjectConfigsStore.getState().toggleMCPServer('p1', 'srv-1', true)
 
-      expect(mockFetch).not.toHaveBeenCalled()
+      expect(mockApiClient.post).not.toHaveBeenCalled()
     })
 
     it('sets error on failure', async () => {
       useProjectConfigsStore.setState({ selectedProject: null })
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Server error' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Server error'))
 
       await useProjectConfigsStore.getState().toggleMCPServer('p1', 'srv-1', true)
 
@@ -364,8 +352,8 @@ describe('projectConfigs store', () => {
 
   describe('addExternalPath', () => {
     it('returns true on success', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ projects: [] }) })
+      mockApiClient.post.mockResolvedValueOnce({})
+      mockApiClient.get.mockResolvedValueOnce({ projects: [] })
 
       const result = await useProjectConfigsStore.getState().addExternalPath('/some/path')
 
@@ -373,10 +361,7 @@ describe('projectConfigs store', () => {
     })
 
     it('returns false and sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Invalid path' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Invalid path'))
 
       const result = await useProjectConfigsStore.getState().addExternalPath('/bad/path')
 
@@ -389,8 +374,8 @@ describe('projectConfigs store', () => {
 
   describe('removeExternalPath', () => {
     it('returns true on success', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ projects: [] }) })
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
+      mockApiClient.get.mockResolvedValueOnce({ projects: [] })
 
       const result = await useProjectConfigsStore.getState().removeExternalPath('/some/path')
 
@@ -398,10 +383,7 @@ describe('projectConfigs store', () => {
     })
 
     it('returns false and sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Not found' }),
-      })
+      mockApiClient.delete.mockRejectedValueOnce(new Error('Not found'))
 
       const result = await useProjectConfigsStore.getState().removeExternalPath('/some/path')
 
@@ -413,8 +395,8 @@ describe('projectConfigs store', () => {
 
   describe('removeProject', () => {
     it('returns true on success and refreshes', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ projects: [] }) })
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
+      mockApiClient.get.mockResolvedValueOnce({ projects: [] })
 
       const result = await useProjectConfigsStore.getState().removeProject('p1')
 
@@ -422,10 +404,7 @@ describe('projectConfigs store', () => {
     })
 
     it('returns false on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Remove failed' }),
-      })
+      mockApiClient.delete.mockRejectedValueOnce(new Error('Remove failed'))
 
       const result = await useProjectConfigsStore.getState().removeProject('p1')
 
@@ -437,26 +416,23 @@ describe('projectConfigs store', () => {
 
   describe('createMCPServer', () => {
     it('returns true and refreshes on success', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+      mockApiClient.post.mockResolvedValueOnce({})
       mockProjectSummaryOk()
 
       const result = await useProjectConfigsStore.getState().createMCPServer('p1', {
         command: 'npx', args: [], env: {},
-      })
+      } as any)
 
       expect(result).toBe(true)
       expect(useProjectConfigsStore.getState().mcpModalMode).toBeNull()
     })
 
     it('returns false and sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Conflict' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Conflict'))
 
       const result = await useProjectConfigsStore.getState().createMCPServer('p1', {
         command: 'npx', args: [], env: {},
-      })
+      } as any)
 
       expect(result).toBe(false)
       expect(useProjectConfigsStore.getState().error).toBe('Conflict')
@@ -465,7 +441,7 @@ describe('projectConfigs store', () => {
 
   describe('updateMCPServer', () => {
     it('returns true on success', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+      mockApiClient.put.mockResolvedValueOnce({})
       mockProjectSummaryOk()
 
       const result = await useProjectConfigsStore.getState().updateMCPServer('p1', 'srv-1', {
@@ -476,10 +452,7 @@ describe('projectConfigs store', () => {
     })
 
     it('returns false on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Not found' }),
-      })
+      mockApiClient.put.mockRejectedValueOnce(new Error('Not found'))
 
       const result = await useProjectConfigsStore.getState().updateMCPServer('p1', 'srv-1', {})
 
@@ -489,7 +462,7 @@ describe('projectConfigs store', () => {
 
   describe('deleteMCPServer', () => {
     it('returns true on success', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
       mockProjectSummaryOk()
 
       const result = await useProjectConfigsStore.getState().deleteMCPServer('p1', 'srv-1')
@@ -498,10 +471,7 @@ describe('projectConfigs store', () => {
     })
 
     it('returns false on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Server busy' }),
-      })
+      mockApiClient.delete.mockRejectedValueOnce(new Error('Server busy'))
 
       const result = await useProjectConfigsStore.getState().deleteMCPServer('p1', 'srv-1')
 
@@ -513,7 +483,7 @@ describe('projectConfigs store', () => {
 
   describe('createSkill', () => {
     it('returns true and closes modal on success', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+      mockApiClient.post.mockResolvedValueOnce({})
       mockProjectSummaryOk()
 
       const result = await useProjectConfigsStore.getState().createSkill('p1', 'my-skill', '# Skill')
@@ -523,10 +493,7 @@ describe('projectConfigs store', () => {
     })
 
     it('returns false on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Already exists' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Already exists'))
 
       const result = await useProjectConfigsStore.getState().createSkill('p1', 'my-skill', '# Skill')
 
@@ -536,7 +503,7 @@ describe('projectConfigs store', () => {
 
   describe('updateSkill', () => {
     it('returns true on success', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+      mockApiClient.put.mockResolvedValueOnce({})
       mockProjectSummaryOk()
 
       const result = await useProjectConfigsStore.getState().updateSkill('p1', 'sk-1', 'new content')
@@ -545,10 +512,7 @@ describe('projectConfigs store', () => {
     })
 
     it('returns false on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Not found' }),
-      })
+      mockApiClient.put.mockRejectedValueOnce(new Error('Not found'))
 
       const result = await useProjectConfigsStore.getState().updateSkill('p1', 'sk-1', 'content')
 
@@ -558,7 +522,7 @@ describe('projectConfigs store', () => {
 
   describe('deleteSkill', () => {
     it('returns true on success', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
       mockProjectSummaryOk()
 
       const result = await useProjectConfigsStore.getState().deleteSkill('p1', 'sk-1')
@@ -567,10 +531,7 @@ describe('projectConfigs store', () => {
     })
 
     it('returns false on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Not found' }),
-      })
+      mockApiClient.delete.mockRejectedValueOnce(new Error('Not found'))
 
       const result = await useProjectConfigsStore.getState().deleteSkill('p1', 'sk-1')
 
@@ -582,10 +543,7 @@ describe('projectConfigs store', () => {
 
   describe('fetchAgentContent', () => {
     it('fetches and stores agent content', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ content: '# Agent' }),
-      })
+      mockApiClient.get.mockResolvedValueOnce({ content: '# Agent' })
 
       await useProjectConfigsStore.getState().fetchAgentContent('p1', 'ag-1')
 
@@ -594,17 +552,17 @@ describe('projectConfigs store', () => {
     })
 
     it('sets error on failure', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Not Found' })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch agent content'))
 
       await useProjectConfigsStore.getState().fetchAgentContent('p1', 'ag-1')
 
-      expect(useProjectConfigsStore.getState().error).toContain('Failed to fetch agent content')
+      expect(useProjectConfigsStore.getState().error).toBe('Failed to fetch agent content')
     })
   })
 
   describe('createAgent', () => {
     it('returns true and closes modal on success', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+      mockApiClient.post.mockResolvedValueOnce({})
       mockProjectSummaryOk()
 
       const result = await useProjectConfigsStore.getState().createAgent('p1', 'my-agent', '# Agent', false)
@@ -614,10 +572,7 @@ describe('projectConfigs store', () => {
     })
 
     it('returns false on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Conflict' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Conflict'))
 
       const result = await useProjectConfigsStore.getState().createAgent('p1', 'my-agent', '# Agent', false)
 
@@ -627,7 +582,7 @@ describe('projectConfigs store', () => {
 
   describe('updateAgent', () => {
     it('returns true on success', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+      mockApiClient.put.mockResolvedValueOnce({})
       mockProjectSummaryOk()
 
       const result = await useProjectConfigsStore.getState().updateAgent('p1', 'ag-1', 'new content')
@@ -636,10 +591,7 @@ describe('projectConfigs store', () => {
     })
 
     it('returns false on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Not found' }),
-      })
+      mockApiClient.put.mockRejectedValueOnce(new Error('Not found'))
 
       const result = await useProjectConfigsStore.getState().updateAgent('p1', 'ag-1', 'content')
 
@@ -649,7 +601,7 @@ describe('projectConfigs store', () => {
 
   describe('deleteAgent', () => {
     it('returns true on success', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
       mockProjectSummaryOk()
 
       const result = await useProjectConfigsStore.getState().deleteAgent('p1', 'ag-1')
@@ -658,10 +610,7 @@ describe('projectConfigs store', () => {
     })
 
     it('returns false on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Not found' }),
-      })
+      mockApiClient.delete.mockRejectedValueOnce(new Error('Not found'))
 
       const result = await useProjectConfigsStore.getState().deleteAgent('p1', 'ag-1')
 
@@ -673,7 +622,7 @@ describe('projectConfigs store', () => {
 
   describe('addHookEntry', () => {
     it('returns true and refreshes on success', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+      mockApiClient.post.mockResolvedValueOnce({})
       mockProjectSummaryOk()
 
       const result = await useProjectConfigsStore.getState().addHookEntry(
@@ -684,10 +633,7 @@ describe('projectConfigs store', () => {
     })
 
     it('returns false on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Invalid event' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Invalid event'))
 
       const result = await useProjectConfigsStore.getState().addHookEntry(
         'p1', 'BadEvent', 'Edit', []
@@ -700,7 +646,7 @@ describe('projectConfigs store', () => {
 
   describe('deleteHook', () => {
     it('returns true and refreshes on success', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+      mockApiClient.delete.mockResolvedValueOnce(undefined)
       mockProjectSummaryOk()
 
       const result = await useProjectConfigsStore.getState().deleteHook('p1', 'PostToolUse', 0)
@@ -709,10 +655,7 @@ describe('projectConfigs store', () => {
     })
 
     it('returns false on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Index out of range' }),
-      })
+      mockApiClient.delete.mockRejectedValueOnce(new Error('Index out of range'))
 
       const result = await useProjectConfigsStore.getState().deleteHook('p1', 'PostToolUse', 99)
 
@@ -724,8 +667,8 @@ describe('projectConfigs store', () => {
 
   describe('copySkill', () => {
     it('returns true and refreshes on success', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ projects: [] }) })
+      mockApiClient.post.mockResolvedValueOnce({})
+      mockApiClient.get.mockResolvedValueOnce({ projects: [] })
       mockProjectSummaryOk()
 
       const result = await useProjectConfigsStore.getState().copySkill('p1', 'sk-1', 'p2')
@@ -734,10 +677,7 @@ describe('projectConfigs store', () => {
     })
 
     it('returns false on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Copy failed' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Copy failed'))
 
       const result = await useProjectConfigsStore.getState().copySkill('p1', 'sk-1', 'p2')
 
@@ -747,8 +687,8 @@ describe('projectConfigs store', () => {
 
   describe('copyAgent', () => {
     it('returns true on success', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ projects: [] }) })
+      mockApiClient.post.mockResolvedValueOnce({})
+      mockApiClient.get.mockResolvedValueOnce({ projects: [] })
       mockProjectSummaryOk()
 
       const result = await useProjectConfigsStore.getState().copyAgent('p1', 'ag-1', 'p2')
@@ -757,10 +697,7 @@ describe('projectConfigs store', () => {
     })
 
     it('returns false on failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Not found' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Not found'))
 
       const result = await useProjectConfigsStore.getState().copyAgent('p1', 'ag-1', 'p2')
 

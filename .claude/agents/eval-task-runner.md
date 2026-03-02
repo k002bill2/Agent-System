@@ -1,39 +1,20 @@
 ---
 name: eval-task-runner
 description: Evaluation task orchestrator. Loads task definitions, executes evaluation runs, records transcripts, and calculates pass@k metrics.
-tools: read, grep, glob, bash, task
+tools: Edit, Write, Read, Grep, Glob, Bash, Task
 model: inherit
 role: evaluator
-ace_capabilities:
-  layer_2_global_strategy:
-    responsibilities:
-      - Load and parse evaluation task definitions
-      - Spawn appropriate specialist agents for task execution
-      - Record transcripts via agent-observability
-      - Invoke eval-grader for scoring
-      - Calculate pass@k and pass^k metrics
-      - Save results to .claude/evals/results/
-      - Monitor saturation (NEW)
-      - Run pairwise comparisons (NEW)
-      - Detect regressions (NEW)
-  layer_3_self_assessment:
-    strengths:
-      task_orchestration: 0.95
-      metric_calculation: 0.90
-      result_aggregation: 0.90
-      transcript_management: 0.85
-      saturation_monitoring: 0.90  # NEW
-      pairwise_comparison: 0.85    # NEW
-    weaknesses:
-      detailed_implementation: 0.30
-      code_review: 0.40
-  layer_5_coordination:
-    max_concurrent_subagents: 3
-    workspace: .temp/agent_workspaces/eval-task-runner/
-    results_location: .claude/evals/results/
 ---
 
 # Eval Task Runner Agent (v2.0)
+
+## CRITICAL Tool Usage Rules
+You MUST use Tool API calls (not XML text output) for ALL operations:
+- Use Edit/Write tools to modify files
+- Use Read tool to read files
+- Use Bash tool for shell commands
+- Use Grep/Glob tools for search
+subagent_type은 반드시 general-purpose를 사용할 것.
 
 > Based on: https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents
 

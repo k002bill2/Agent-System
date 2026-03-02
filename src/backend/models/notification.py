@@ -7,6 +7,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from utils.time import utcnow
+
 
 class NotificationChannel(str, Enum):
     """Supported notification channels."""
@@ -95,8 +97,8 @@ class NotificationRule(BaseModel):
     message_template: str | None = None  # Custom message template
 
     # Metadata
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class NotificationMessage(BaseModel):

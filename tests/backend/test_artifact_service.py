@@ -2,6 +2,7 @@
 
 import pytest
 
+from utils.time import utcnow
 from services.artifact_service import ArtifactService
 
 
@@ -54,12 +55,12 @@ class TestArtifactService:
         assert self.svc.get_run_artifacts_size("run1") == 8
 
     def test_cleanup_expired(self):
-        from datetime import datetime, timedelta
+        from datetime import timedelta
         artifact = self.svc.create_artifact(
             run_id="run1", name="old.txt", data=b"old", retention_days=0
         )
         # Manually set expires_at to past
-        self.svc._artifacts[artifact["id"]]["expires_at"] = datetime.utcnow() - timedelta(days=1)
+        self.svc._artifacts[artifact["id"]]["expires_at"] = utcnow() - timedelta(days=1)
         cleaned = self.svc.cleanup_expired()
         assert cleaned == 1
         assert len(self.svc.list_artifacts("run1")) == 0

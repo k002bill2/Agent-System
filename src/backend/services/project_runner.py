@@ -3,7 +3,6 @@
 import asyncio
 import time
 from collections.abc import AsyncIterator, Callable
-from datetime import datetime
 from pathlib import Path
 
 from models.monitoring import (
@@ -14,6 +13,7 @@ from models.monitoring import (
     CheckStatus,
     CheckType,
 )
+from utils.time import utcnow
 
 # Allowed npm commands (whitelist for security)
 # Commands are run from the project root with npm scripts defined in package.json
@@ -56,7 +56,7 @@ class ProjectRunner:
             CheckResult with status and output
         """
         command = self._get_command(check_type)
-        started_at = datetime.utcnow()
+        started_at = utcnow()
         start_time = time.time()
 
         stdout_lines: list[str] = []
@@ -105,7 +105,7 @@ class ProjectRunner:
                 stderr="\n".join(stderr_lines),
                 duration_ms=duration_ms,
                 started_at=started_at,
-                completed_at=datetime.utcnow(),
+                completed_at=utcnow(),
             )
 
         except Exception as e:
@@ -118,7 +118,7 @@ class ProjectRunner:
                 stderr=f"Error running command: {str(e)}\n" + "\n".join(stderr_lines),
                 duration_ms=duration_ms,
                 started_at=started_at,
-                completed_at=datetime.utcnow(),
+                completed_at=utcnow(),
             )
 
     async def stream_check(
@@ -131,7 +131,7 @@ class ProjectRunner:
 
         Yields events for started, progress, and completed.
         """
-        started_at = datetime.utcnow()
+        started_at = utcnow()
 
         # Yield started event
         yield CheckStartedPayload(

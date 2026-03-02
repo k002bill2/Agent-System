@@ -21,6 +21,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from utils.time import utcnow
+
 logger = logging.getLogger(__name__)
 
 
@@ -454,7 +456,7 @@ class TmuxService:
             analysis_id=analysis_id,
             project_path=project_path,
             active=True,
-            started_at=datetime.utcnow(),
+            started_at=utcnow(),
             task_input=task_input,
         )
         self._sessions[session_name] = info

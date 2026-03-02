@@ -9,6 +9,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from utils.time import utcnow
+
 
 class HealthStatus(str, Enum):
     """Health check status levels."""
@@ -26,7 +28,7 @@ class ComponentHealth(BaseModel):
     latency_ms: float | None = None
     message: str | None = None
     details: dict[str, Any] = Field(default_factory=dict)
-    last_check: datetime = Field(default_factory=datetime.utcnow)
+    last_check: datetime = Field(default_factory=utcnow)
 
 
 class SystemHealth(BaseModel):
@@ -35,7 +37,7 @@ class SystemHealth(BaseModel):
     status: HealthStatus
     version: str = "0.1.0"
     uptime_seconds: float = 0
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=utcnow)
 
     # Component statuses
     components: dict[str, ComponentHealth] = Field(default_factory=dict)

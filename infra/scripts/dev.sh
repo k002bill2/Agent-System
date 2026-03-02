@@ -40,9 +40,9 @@ if ! command_exists docker-compose; then
 fi
 
 # Start infrastructure services
-echo -e "${GREEN}🐳 Starting infrastructure (PostgreSQL, Redis)...${NC}"
+echo -e "${GREEN}🐳 Starting infrastructure (PostgreSQL, Redis, Qdrant)...${NC}"
 cd "$PROJECT_ROOT/infra/docker"
-docker-compose up -d postgres redis
+docker-compose up -d postgres redis qdrant
 
 # Wait for services
 echo -e "${GREEN}⏳ Waiting for services to be ready...${NC}"
@@ -68,6 +68,7 @@ echo ""
 echo -e "${YELLOW}Service URLs:${NC}"
 echo "  Backend API:  http://localhost:8000"
 echo "  Dashboard:    http://localhost:5173"
-echo "  PostgreSQL:   postgresql://postgres:postgres@localhost:5432/agent_orchestrator"
+echo "  PostgreSQL:   postgresql://aos:aos@localhost:5432/aos"
 echo "  Redis:        redis://localhost:6379"
+echo "  Qdrant:       http://localhost:6333"
 echo ""

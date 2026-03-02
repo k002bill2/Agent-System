@@ -5,10 +5,12 @@
  */
 
 import { create } from 'zustand'
+import { apiClient } from '../services/apiClient'
 
 // Types
 export type MCPServerType = 'filesystem' | 'github' | 'playwright' | 'sqlite' | 'custom'
 export type MCPServerStatus = 'stopped' | 'starting' | 'running' | 'error'
+
 
 export interface MCPToolSchema {
   name: string
@@ -104,8 +106,6 @@ interface MCPState {
   clearBatchResult: () => void
 }
 
-const API_BASE = 'http://localhost:8000/api'
-
 export const useMCPStore = create<MCPState>((set, get) => ({
   // Initial state
   servers: [],
@@ -128,13 +128,7 @@ export const useMCPStore = create<MCPState>((set, get) => ({
     set({ isLoading: true, error: null })
 
     try {
-      const response = await fetch(`${API_BASE}/agents/mcp/servers`)
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch MCP servers: ${response.statusText}`)
-      }
-
-      const servers: MCPServer[] = await response.json()
+      const servers = await apiClient.get<MCPServer[]>('/api/agents/mcp/servers')
       set({ servers, isLoading: false })
     } catch (error) {
       set({
@@ -146,13 +140,7 @@ export const useMCPStore = create<MCPState>((set, get) => ({
 
   fetchStats: async () => {
     try {
-      const response = await fetch(`${API_BASE}/agents/mcp/stats`)
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch MCP stats: ${response.statusText}`)
-      }
-
-      const stats: MCPManagerStats = await response.json()
+      const stats = await apiClient.get<MCPManagerStats>('/api/agents/mcp/stats')
       set({ stats })
     } catch (error) {
       console.error('Failed to fetch MCP stats:', error)
@@ -161,13 +149,7 @@ export const useMCPStore = create<MCPState>((set, get) => ({
 
   fetchServerTools: async (serverId: string) => {
     try {
-      const response = await fetch(`${API_BASE}/agents/mcp/servers/${serverId}/tools`)
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch server tools: ${response.statusText}`)
-      }
-
-      const tools: MCPToolSchema[] = await response.json()
+      const tools = await apiClient.get<MCPToolSchema[]>(`/api/agents/mcp/servers/${serverId}/tools`)
 
       // 해당 서버의 tools 업데이트
       const servers = get().servers.map((server) =>
@@ -190,15 +172,7 @@ export const useMCPStore = create<MCPState>((set, get) => ({
     set({ servers })
 
     try {
-      const response = await fetch(`${API_BASE}/agents/mcp/servers/${serverId}/start`, {
-        method: 'POST',
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to start server: ${response.statusText}`)
-      }
-
-      const result = await response.json()
+      const result = await apiClient.post<{ success?: boolean }>(`/api/agents/mcp/servers/${serverId}/start`)
 
       // 서버 목록 새로고침
       await get().fetchServers()
@@ -219,13 +193,7 @@ export const useMCPStore = create<MCPState>((set, get) => ({
 
   stopServer: async (serverId: string) => {
     try {
-      const response = await fetch(`${API_BASE}/agents/mcp/servers/${serverId}/stop`, {
-        method: 'POST',
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to stop server: ${response.statusText}`)
-      }
+      await apiClient.post(`/api/agents/mcp/servers/${serverId}/stop`)
 
       // 서버 목록 새로고침
       await get().fetchServers()
@@ -251,21 +219,11 @@ export const useMCPStore = create<MCPState>((set, get) => ({
     const startTime = Date.now()
 
     try {
-      const response = await fetch(`${API_BASE}/agents/mcp/tools/call`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          server_id: serverId,
-          tool_name: toolName,
-          arguments: args,
-        }),
+      const result = await apiClient.post<{ success?: boolean; result?: unknown; error?: string }>('/api/agents/mcp/tools/call', {
+        server_id: serverId,
+        tool_name: toolName,
+        arguments: args,
       })
-
-      if (!response.ok) {
-        throw new Error(`Failed to call tool: ${response.statusText}`)
-      }
-
-      const result = await response.json()
       const executionTime = Date.now() - startTime
 
       const toolResult: MCPToolCallResult = {
@@ -350,24 +308,14 @@ export const useMCPStore = create<MCPState>((set, get) => ({
     set({ isCallingBatch: true, error: null, lastBatchResult: null })
 
     try {
-      const response = await fetch(`${API_BASE}/agents/mcp/tools/batch-call`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          calls: selectedTools.map((t) => ({
-            server_id: t.serverId,
-            tool_name: t.toolName,
-            arguments: t.arguments,
-          })),
-          max_concurrent: maxConcurrent,
-        }),
+      const result = await apiClient.post<MCPBatchToolCallResult>('/api/agents/mcp/tools/batch-call', {
+        calls: selectedTools.map((t) => ({
+          server_id: t.serverId,
+          tool_name: t.toolName,
+          arguments: t.arguments,
+        })),
+        max_concurrent: maxConcurrent,
       })
-
-      if (!response.ok) {
-        throw new Error(`Failed to call tools batch: ${response.statusText}`)
-      }
-
-      const result: MCPBatchToolCallResult = await response.json()
       set({ lastBatchResult: result, isCallingBatch: false })
       return result
     } catch (error) {

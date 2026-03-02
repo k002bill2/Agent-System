@@ -1,4 +1,5 @@
 ---
+name: gemini-scan
 description: Gemini CLI로 대규모 코드베이스 분석 실행
 ---
 

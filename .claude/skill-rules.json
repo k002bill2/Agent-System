@@ -1,120 +1,77 @@
 {
-  "react-web-patterns": {
-    "type": "guideline",
+  "react-web-development": {
+    "type": "skill",
     "enforcement": "require",
-    "priority": "critical",
-    "description": "React Web/Tailwind CSS 핵심 패턴 가이드",
+    "priority": "high",
+    "description": "React Web component development with TypeScript, Vite, Tailwind CSS, and Zustand. Use when creating UI components, pages, or implementing routing flows.",
     "promptTriggers": {
       "keywords": [
-        "useEffect",
+        "react",
         "component",
-        "page",
-        "hook",
         "tailwind",
+        "zustand",
+        "vite",
         "컴포넌트",
         "페이지"
       ],
       "intentPatterns": [
         "(create|add|make).*?(component|page|hook)",
-        "(fix|debug).*?(useEffect|hook)",
-        "(생성|만들|추가).*?(컴포넌트|페이지|훅)"
+        "(react|리액트).*?(개발|구현)"
       ]
     },
     "fileTriggers": {
       "pathPatterns": [
-        "**/components/**/*.tsx",
-        "**/pages/**/*.tsx",
-        "**/hooks/**/*.ts"
-      ],
-      "contentPatterns": [
-        "useEffect",
-        "useState",
-        "React.FC",
-        "className"
+        "src/dashboard/**/*.tsx",
+        "src/dashboard/**/*.ts"
       ]
     }
   },
-  "useeffect-cleanup": {
-    "type": "guardrail",
+  "backend-development": {
+    "type": "domain",
     "enforcement": "require",
     "priority": "critical",
-    "description": "useEffect cleanup 함수 필수 확인",
+    "description": "AOS Backend 개발 (FastAPI + LangGraph + Python async). AgentState TypedDict 준수, 노드 함수 async 필수.",
     "promptTriggers": {
       "keywords": [
-        "useEffect",
-        "subscription",
-        "interval",
-        "listener",
-        "구독",
-        "타이머"
+        "api",
+        "endpoint",
+        "fastapi",
+        "langgraph",
+        "agent",
+        "service",
+        "async",
+        "await",
+        "orchestrator",
+        "백엔드",
+        "비동기"
       ],
       "intentPatterns": [
-        "useEffect.*?(subscribe|interval|timer|listener)",
-        "(add|remove).*?(subscription|listener)"
-      ]
-    },
-    "reminder": "useEffect에서 구독/타이머는 반드시 cleanup 함수에서 정리하세요"
-  },
-  "routing-patterns": {
-    "type": "guideline",
-    "enforcement": "suggest",
-    "priority": "high",
-    "description": "React Router 패턴",
-    "promptTriggers": {
-      "keywords": [
-        "router",
-        "navigate",
-        "page",
-        "route",
-        "link",
-        "라우팅"
-      ],
-      "intentPatterns": [
-        "(navigation|navigate).*?(page|route)",
-        "(add|create).*?(page|route)"
+        "(create|add|implement).*?(api|endpoint|service)",
+        "(langgraph|orchestrat).*?(node|graph|agent)",
+        "(async|비동기).*?(function|함수)"
       ]
     },
     "fileTriggers": {
       "pathPatterns": [
-        "**/pages/**",
-        "**/App.tsx"
+        "src/backend/**/*.py"
       ],
       "contentPatterns": [
-        "useNavigate",
-        "useParams",
-        "Route",
-        "BrowserRouter"
-      ]
-    }
-  },
-  "typescript-strict": {
-    "type": "guardrail",
-    "enforcement": "block",
-    "priority": "critical",
-    "description": "TypeScript strict mode 준수",
-    "promptTriggers": {
-      "keywords": [
-        "any",
-        "타입",
-        "type",
-        "interface"
-      ],
-      "intentPatterns": [
-        ".*?:\\s*any\\b",
-        "(add|define).*?(type|interface)"
+        "FastAPI",
+        "LangGraph",
+        "BaseNode",
+        "AgentState",
+        "async def",
+        "await",
+        "asyncio"
       ]
     },
-    "blockedPatterns": [
-      ": any",
-      "as any"
-    ],
-    "reminder": "any 타입 대신 구체적인 타입이나 unknown을 사용하세요"
+    "reminder": "비동기 패턴 사용, 타입 힌트 필수, pytest 테스트 작성, async def에는 반드시 await 포함"
   },
   "error-handling": {
     "type": "guideline",
     "enforcement": "require",
     "priority": "high",
-    "description": "에러 처리 및 Sentry 통합",
+    "description": "에러 처리 패턴 (Frontend: ErrorBoundary + useErrorHandler, Backend: HTTPException)",
     "promptTriggers": {
       "keywords": [
         "error",
@@ -143,392 +100,10 @@
     },
     "reminder": "에러는 logger 사용, FastAPI는 HTTPException으로 반환"
   },
-  "test-coverage": {
-    "type": "validation",
-    "enforcement": "require",
-    "priority": "high",
-    "description": "Vitest 테스트 커버리지 (75% statements)",
-    "promptTriggers": {
-      "keywords": [
-        "test",
-        "vitest",
-        "coverage",
-        "테스트",
-        "커버리지"
-      ],
-      "intentPatterns": [
-        "(write|add).*?test",
-        "(run|check).*?coverage"
-      ]
-    },
-    "fileTriggers": {
-      "pathPatterns": [
-        "**/__tests__/**",
-        "**/*.test.ts",
-        "**/*.test.tsx"
-      ],
-      "contentPatterns": [
-        "describe",
-        "it",
-        "expect",
-        "vi.fn"
-      ]
-    },
-    "thresholds": {
-      "statements": 75,
-      "functions": 70,
-      "branches": 60
-    }
-  },
-  "performance-optimization": {
-    "type": "guideline",
-    "enforcement": "suggest",
-    "priority": "normal",
-    "description": "React Web 성능 최적화",
-    "promptTriggers": {
-      "keywords": [
-        "performance",
-        "optimize",
-        "memo",
-        "callback",
-        "성능",
-        "최적화"
-      ],
-      "intentPatterns": [
-        "(optimize|improve).*?(performance|speed)",
-        "(use)?memo.*?(component|function)"
-      ]
-    },
-    "fileTriggers": {
-      "pathPatterns": [
-        "**/components/**"
-      ],
-      "contentPatterns": [
-        "React.memo",
-        "useMemo",
-        "useCallback",
-        "React.lazy"
-      ]
-    }
-  },
-  "checklist-generator": {
-    "type": "tool",
-    "enforcement": "suggest",
-    "priority": "normal",
-    "description": "자동 체크리스트 생성",
-    "promptTriggers": {
-      "keywords": [
-        "checklist",
-        "체크리스트",
-        "TODO",
-        "확인사항"
-      ],
-      "intentPatterns": [
-        "(create|generate).*?(checklist|todo)",
-        "(verify|check).*?list"
-      ]
-    }
-  },
-  "parallel-coordinator": {
-    "type": "workflow",
-    "enforcement": "suggest",
-    "priority": "high",
-    "skillFile": ".claude/skills/parallel-coordinator/SKILL.md",
-    "description": "Coordinate parallel agent execution using ACE Framework for AOS development. Use when implementing features with 3+ independent subtasks (UI + API + Tests).",
-    "promptTriggers": {
-      "keywords": [
-        "parallel",
-        "concurrent",
-        "multi-agent",
-        "coordinate",
-        "ACE"
-      ],
-      "intentPatterns": [
-        "(parallel|concurrent).*?(agent|task|execution)",
-        "(coordinate|orchestrate).*?(agent|worker)",
-        "multi.?agent"
-      ]
-    }
-  },
-  "backend-development": {
-    "type": "domain",
-    "enforcement": "require",
-    "priority": "high",
-    "description": "AOS Backend 개발 (FastAPI + LangGraph)",
-    "promptTriggers": {
-      "keywords": [
-        "api",
-        "endpoint",
-        "fastapi",
-        "langgraph",
-        "agent",
-        "service",
-        "백엔드",
-        "orchestrator"
-      ],
-      "intentPatterns": [
-        "(create|add|implement).*?(api|endpoint|service)",
-        "(langgraph|orchestrat).*?(node|graph|agent)",
-        "(backend|서버).*?(개발|구현)"
-      ]
-    },
-    "fileTriggers": {
-      "pathPatterns": [
-        "src/backend/**/*.py"
-      ],
-      "contentPatterns": [
-        "FastAPI",
-        "LangGraph",
-        "BaseNode",
-        "AgentState"
-      ]
-    },
-    "reminder": "비동기 패턴 사용, 타입 힌트 필수, pytest 테스트 작성"
-  },
-  "langgraph-patterns": {
-    "type": "guideline",
-    "enforcement": "require",
-    "priority": "critical",
-    "description": "LangGraph 오케스트레이션 패턴",
-    "promptTriggers": {
-      "keywords": [
-        "langgraph",
-        "node",
-        "graph",
-        "state",
-        "orchestrator",
-        "오케스트레이션"
-      ],
-      "intentPatterns": [
-        "(create|add).*?(node|graph)",
-        "(implement|구현).*?(orchestrat|오케스트레이션)"
-      ]
-    },
-    "fileTriggers": {
-      "pathPatterns": [
-        "src/backend/orchestrator/**/*.py",
-        "src/backend/agents/**/*.py"
-      ],
-      "contentPatterns": [
-        "StateGraph",
-        "add_node",
-        "add_edge",
-        "AgentState"
-      ]
-    },
-    "reminder": "AgentState TypedDict 준수, 노드 함수 async 필수, 에러 핸들링 철저히"
-  },
-  "python-async-patterns": {
-    "type": "guardrail",
-    "enforcement": "require",
-    "priority": "critical",
-    "description": "Python 비동기 패턴 가이드",
-    "promptTriggers": {
-      "keywords": [
-        "async",
-        "await",
-        "asyncio",
-        "비동기",
-        "concurrent"
-      ],
-      "intentPatterns": [
-        "(async|비동기).*?(function|함수)",
-        "asyncio.*?(gather|create_task)"
-      ]
-    },
-    "fileTriggers": {
-      "pathPatterns": [
-        "src/backend/**/*.py"
-      ],
-      "contentPatterns": [
-        "async def",
-        "await",
-        "asyncio"
-      ]
-    },
-    "reminder": "async def에는 반드시 await 포함, 동기 함수 혼용 금지, try-except로 에러 처리"
-  },
-  "mcp-integration": {
-    "type": "domain",
-    "enforcement": "require",
-    "priority": "high",
-    "description": "MCP (Model Context Protocol) 통합",
-    "promptTriggers": {
-      "keywords": [
-        "mcp",
-        "tool",
-        "server",
-        "protocol"
-      ],
-      "intentPatterns": [
-        "(mcp|model context).*?(server|tool)",
-        "(add|create).*?(mcp|tool)"
-      ]
-    },
-    "fileTriggers": {
-      "pathPatterns": [
-        "src/backend/services/mcp_manager.py",
-        "**/*.mcp.json"
-      ],
-      "contentPatterns": [
-        "MCPManager",
-        "MCPToolCall",
-        "call_tool"
-      ]
-    }
-  },
-  "hitl-approval": {
-    "type": "guardrail",
-    "enforcement": "require",
-    "priority": "critical",
-    "description": "Human-in-the-Loop 승인 시스템",
-    "promptTriggers": {
-      "keywords": [
-        "hitl",
-        "approval",
-        "승인",
-        "human-in-the-loop",
-        "dangerous",
-        "위험"
-      ],
-      "intentPatterns": [
-        "(hitl|human.in.the.loop).*?(approval|check)",
-        "(dangerous|risky).*?(operation|action)"
-      ]
-    },
-    "fileTriggers": {
-      "pathPatterns": [
-        "src/backend/models/hitl.py",
-        "src/backend/orchestrator/nodes.py"
-      ],
-      "contentPatterns": [
-        "TOOL_RISK_CONFIG",
-        "requires_approval",
-        "pending_approvals"
-      ]
-    },
-    "reminder": "HIGH 리스크 도구는 반드시 승인 필요, approval_id 추적 필수"
-  },
-  "zustand-store-patterns": {
-    "type": "guideline",
-    "enforcement": "require",
-    "priority": "high",
-    "description": "Zustand 상태 관리 패턴",
-    "promptTriggers": {
-      "keywords": [
-        "zustand",
-        "store",
-        "상태 관리",
-        "state management"
-      ],
-      "intentPatterns": [
-        "(create|add).*?(store|zustand)",
-        "(state|상태).*?(management|관리)"
-      ]
-    },
-    "fileTriggers": {
-      "pathPatterns": [
-        "src/dashboard/src/stores/**/*.ts"
-      ],
-      "contentPatterns": [
-        "create<",
-        "useStore",
-        "set(",
-        "get()"
-      ]
-    },
-    "reminder": "immer 미들웨어 권장, 액션과 상태 분리, 셀렉터 사용으로 리렌더링 최적화"
-  },
-  "rag-vector-db": {
-    "type": "domain",
-    "enforcement": "suggest",
-    "priority": "normal",
-    "description": "RAG + Vector DB 통합",
-    "promptTriggers": {
-      "keywords": [
-        "rag",
-        "vector",
-        "chromadb",
-        "embedding",
-        "semantic search"
-      ],
-      "intentPatterns": [
-        "(rag|vector).*?(search|query)",
-        "(semantic|의미론적).*?(search|검색)"
-      ]
-    },
-    "fileTriggers": {
-      "pathPatterns": [
-        "src/backend/services/rag_service.py"
-      ],
-      "contentPatterns": [
-        "ChromaDB",
-        "embedding",
-        "query",
-        "index_project"
-      ]
-    }
-  },
-  "dev-docs-workflow": {
-    "type": "workflow",
-    "enforcement": "suggest",
-    "priority": "high",
-    "description": "Dev Docs 3-파일 시스템 워크플로우",
-    "promptTriggers": {
-      "keywords": [
-        "dev docs",
-        "plan",
-        "context",
-        "대규모 작업",
-        "큰 작업"
-      ],
-      "intentPatterns": [
-        "(create|make).*?(dev docs|plan)",
-        "(large|big|대규모).*?(task|작업|feature)"
-      ]
-    },
-    "reminder": "대규모 작업 전 /dev-docs 실행 권장, context 20% 이하시 /update-dev-docs"
-  },
-  "external-memory": {
-    "type": "workflow",
-    "enforcement": "suggest",
-    "priority": "high",
-    "description": "Context persistence system for long-running multi-agent tasks. Saves research plans, findings, and checkpoints to prevent context loss at token limits.",
-    "promptTriggers": {}
-  },
-  "react-web-development": {
-    "type": "skill",
-    "enforcement": "require",
-    "priority": "high",
-    "skillFile": ".claude/skills/react-web-development/SKILL.md",
-    "description": "React Web component development with TypeScript, Vite, Tailwind CSS, and Zustand. Use when creating UI components, pages, or implementing routing flows.",
-    "promptTriggers": {
-      "keywords": [
-        "react",
-        "component",
-        "tailwind",
-        "zustand",
-        "vite",
-        "컴포넌트",
-        "페이지"
-      ],
-      "intentPatterns": [
-        "(create|add|make).*?(component|page|hook)",
-        "(react|리액트).*?(개발|구현)"
-      ]
-    },
-    "fileTriggers": {
-      "pathPatterns": [
-        "src/dashboard/**/*.tsx",
-        "src/dashboard/**/*.ts"
-      ]
-    }
-  },
   "test-automation": {
     "type": "skill",
     "enforcement": "suggest",
     "priority": "high",
-    "skillFile": ".claude/skills/test-automation/SKILL.md",
     "description": "Generate comprehensive Vitest tests for React Web components, hooks, and stores. Use when writing tests, improving coverage, or test-driven development.",
     "promptTriggers": {
       "keywords": [
@@ -552,62 +127,174 @@
       ]
     }
   },
-  "agent-improvement": {
-    "type": "meta",
-    "enforcement": "suggest",
-    "priority": "low",
-    "description": "Self-improvement loop for multi-agent workflows. Diagnose failures, improve tool descriptions, and learn from success/failure patterns.",
+  "zustand-store-patterns": {
+    "type": "guideline",
+    "enforcement": "require",
+    "priority": "high",
+    "description": "Zustand 상태 관리 패턴",
     "promptTriggers": {
       "keywords": [
-        "improvement",
-        "failure",
-        "diagnose",
-        "optimize",
-        "benchmark"
+        "zustand",
+        "store",
+        "상태 관리"
       ],
       "intentPatterns": [
-        "(improve|optimize).*?(agent|workflow)",
-        "(diagnose|analyze).*?(failure|error)"
+        "(create|add).*?(store|zustand)",
+        "(state|상태).*?(management|관리)"
+      ]
+    },
+    "fileTriggers": {
+      "pathPatterns": [
+        "src/dashboard/src/stores/**/*.ts"
+      ],
+      "contentPatterns": [
+        "create<",
+        "useStore",
+        "set(",
+        "get()"
+      ]
+    },
+    "reminder": "액션과 상태 분리, 셀렉터 사용으로 리렌더링 최적화"
+  },
+  "mcp-integration": {
+    "type": "domain",
+    "enforcement": "require",
+    "priority": "high",
+    "description": "MCP (Model Context Protocol) 통합",
+    "promptTriggers": {
+      "keywords": [
+        "mcp",
+        "tool",
+        "protocol"
+      ],
+      "intentPatterns": [
+        "(mcp|model context).*?(server|tool)",
+        "(add|create).*?(mcp|tool)"
+      ]
+    },
+    "fileTriggers": {
+      "pathPatterns": [
+        "src/backend/services/mcp_manager.py"
+      ],
+      "contentPatterns": [
+        "MCPManager",
+        "MCPToolCall",
+        "call_tool"
       ]
     }
   },
-  "agent-observability": {
-    "type": "infrastructure",
-    "enforcement": "suggest",
-    "priority": "medium",
-    "description": "Production tracing and metrics for multi-agent workflows. Track agent decisions, tool calls, and performance without monitoring conversation content.",
+  "hitl-approval": {
+    "type": "guardrail",
+    "enforcement": "require",
+    "priority": "critical",
+    "description": "Human-in-the-Loop 승인 시스템",
     "promptTriggers": {
       "keywords": [
-        "trace",
-        "metrics",
-        "observability",
-        "monitoring",
-        "performance"
+        "hitl",
+        "approval",
+        "승인",
+        "dangerous"
       ],
       "intentPatterns": [
-        "(trace|track).*?(agent|workflow)",
-        "(monitor|observe).*?(performance|decision)"
+        "(hitl|human.in.the.loop).*?(approval|check)",
+        "(dangerous|risky).*?(operation|action)"
+      ]
+    },
+    "fileTriggers": {
+      "pathPatterns": [
+        "src/backend/models/hitl.py",
+        "src/backend/orchestrator/nodes.py"
+      ],
+      "contentPatterns": [
+        "TOOL_RISK_CONFIG",
+        "requires_approval",
+        "pending_approvals"
+      ]
+    },
+    "reminder": "HIGH 리스크 도구는 반드시 승인 필요, approval_id 추적 필수"
+  },
+  "rag-vector-db": {
+    "type": "domain",
+    "enforcement": "suggest",
+    "priority": "normal",
+    "description": "RAG + Vector DB 통합",
+    "promptTriggers": {
+      "keywords": [
+        "rag",
+        "vector",
+        "embedding",
+        "semantic search"
+      ],
+      "intentPatterns": [
+        "(rag|vector).*?(search|query)"
+      ]
+    },
+    "fileTriggers": {
+      "pathPatterns": [
+        "src/backend/services/rag_service.py"
+      ],
+      "contentPatterns": [
+        "embedding",
+        "query",
+        "index_project"
       ]
     }
   },
-  "cc-feature-implementer-main": {
+  "parallel-coordinator": {
     "type": "workflow",
     "enforcement": "suggest",
     "priority": "high",
-    "description": "Creates phase-based feature plans with quality gates and incremental delivery structure. Use when planning features, organizing work, breaking down tasks, creating roadmaps, or structuring development strategy. Keywords: plan, planning, phases, breakdown, strategy, roadmap, organize, structure, outline.",
+    "description": "Coordinate parallel agent execution using ACE Framework for AOS development. Use when implementing features with 3+ independent subtasks (UI + API + Tests).",
     "promptTriggers": {
       "keywords": [
-        "plan",
-        "planning",
-        "phases",
-        "roadmap",
-        "breakdown"
+        "parallel",
+        "concurrent",
+        "multi-agent",
+        "coordinate",
+        "ACE"
       ],
       "intentPatterns": [
-        "(create|make).*?plan",
-        "(break.*?down|structure).*?(task|feature)"
+        "(parallel|concurrent).*?(agent|task|execution)",
+        "(coordinate|orchestrate).*?(agent|worker)",
+        "multi.?agent"
       ]
     }
+  },
+  "verification-loop": {
+    "type": "workflow",
+    "enforcement": "suggest",
+    "priority": "high",
+    "description": "Boris Cherny style verification feedback loop automation. Run type check, lint, test, and build verification.",
+    "promptTriggers": {
+      "keywords": [
+        "verify",
+        "verification",
+        "feedback loop",
+        "check",
+        "validate"
+      ],
+      "intentPatterns": [
+        "(verify|validate).*?(code|app)",
+        "(feedback|verification).*?loop"
+      ]
+    }
+  },
+  "dev-docs-workflow": {
+    "type": "workflow",
+    "enforcement": "suggest",
+    "priority": "high",
+    "description": "Dev Docs 3-파일 시스템 워크플로우",
+    "promptTriggers": {
+      "keywords": [
+        "dev docs",
+        "plan",
+        "대규모 작업"
+      ],
+      "intentPatterns": [
+        "(create|make).*?(dev docs|plan)"
+      ]
+    },
+    "reminder": "대규모 작업 전 /dev-docs 실행 권장, context 20% 이하시 /update-dev-docs"
   },
   "hook-creator": {
     "type": "meta",
@@ -701,63 +388,88 @@
       ]
     }
   },
-  "verification-loop": {
-    "type": "workflow",
+  "ace-framework": {
+    "type": "governance",
     "enforcement": "suggest",
-    "priority": "high",
-    "skillFile": ".claude/skills/verification-loop/SKILL.md",
-    "description": "Boris Cherny style verification feedback loop automation. Run type check, lint, test, and build verification.",
+    "priority": "critical",
+    "description": "ACE (Autonomous Cognitive Entity) Framework - 4-Pillar governance model for safe, coordinated multi-agent execution. Defines soft constraints (prompts), hard constraints (hooks), boundaries (workspace isolation), and optimization (analytics).",
     "promptTriggers": {
       "keywords": [
-        "verify",
-        "verification",
-        "feedback loop",
-        "check",
-        "validate"
+        "ACE",
+        "governance",
+        "constraint",
+        "safety",
+        "boundary"
       ],
       "intentPatterns": [
-        "(verify|validate).*?(code|app)",
-        "(feedback|verification).*?loop"
+        "(ACE|governance).*?(framework|model|pillar)",
+        "(soft|hard).*?constraint",
+        "(boundary|isolation).*?(agent|workspace)"
       ]
     }
   },
-  "verify-implementation": {
-    "type": "workflow",
-    "enforcement": "suggest",
-    "priority": "high",
-    "description": "등록된 verify 스킬 통합 실행. 기능 구현 후, PR 전 사용.",
-    "promptTriggers": {
-      "keywords": [
-        "verify",
-        "검증",
-        "PR",
-        "리뷰",
-        "코드 리뷰",
-        "구현 검증"
-      ],
-      "intentPatterns": [
-        "(verify|검증|확인).*?(implementation|구현|코드)",
-        "(PR|pull request).*?(전|before|준비)",
-        "(code|코드).*?(review|리뷰)"
-      ]
-    }
-  },
-  "manage-skills": {
+  "agent-improvement": {
     "type": "meta",
     "enforcement": "suggest",
-    "priority": "normal",
-    "description": "검증 스킬 유지보수. 스킬 드리프트 탐지 및 수정.",
+    "priority": "low",
+    "description": "Self-improvement loop for multi-agent workflows. Diagnose failures, improve tool descriptions, and learn from success/failure patterns.",
     "promptTriggers": {
       "keywords": [
-        "manage skill",
-        "스킬 관리",
-        "스킬 유지보수",
-        "verify skill"
+        "improvement",
+        "failure",
+        "diagnose",
+        "optimize",
+        "benchmark"
       ],
       "intentPatterns": [
-        "(manage|관리|유지보수).*?(skill|스킬)",
-        "(create|update).*?verify.*?skill"
+        "(improve|optimize).*?(agent|workflow)",
+        "(diagnose|analyze).*?(failure|error)"
       ]
     }
+  },
+  "agent-observability": {
+    "type": "infrastructure",
+    "enforcement": "suggest",
+    "priority": "medium",
+    "description": "Production tracing and metrics for multi-agent workflows. Track agent decisions, tool calls, and performance without monitoring conversation content.",
+    "promptTriggers": {
+      "keywords": [
+        "trace",
+        "metrics",
+        "observability",
+        "monitoring",
+        "performance"
+      ],
+      "intentPatterns": [
+        "(trace|track).*?(agent|workflow)",
+        "(monitor|observe).*?(performance|decision)"
+      ]
+    }
+  },
+  "cc-feature-implementer-main": {
+    "type": "workflow",
+    "enforcement": "suggest",
+    "priority": "high",
+    "description": "Creates phase-based feature plans with quality gates and incremental delivery structure. Use when planning features, organizing work, breaking down tasks, creating roadmaps, or structuring development strategy. Keywords: plan, planning, phases, breakdown, strategy, roadmap, organize, structure, outline.",
+    "promptTriggers": {
+      "keywords": [
+        "plan",
+        "planning",
+        "phases",
+        "roadmap",
+        "breakdown"
+      ],
+      "intentPatterns": [
+        "(create|make).*?plan",
+        "(break.*?down|structure).*?(task|feature)"
+      ]
+    }
+  },
+  "external-memory": {
+    "type": "workflow",
+    "enforcement": "suggest",
+    "priority": "high",
+    "description": "Context persistence system for long-running multi-agent tasks. Saves research plans, findings, and checkpoints to prevent context loss at token limits.",
+    "promptTriggers": {}
   }
 }
