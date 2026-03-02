@@ -908,6 +908,64 @@ AOS Backend API 엔드포인트 문서입니다.
 
 ---
 
+## HITL (Human-in-the-Loop)
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/hitl/pending` | 대기 중인 승인 요청 목록 |
+| POST | `/api/hitl/approve/{approval_id}` | 작업 승인 |
+| POST | `/api/hitl/deny/{approval_id}` | 작업 거부 |
+| GET | `/api/hitl/history` | 승인 이력 조회 |
+
+---
+
+## LLM Credentials
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/llm-credentials` | LLM 자격증명 목록 조회 |
+| POST | `/api/llm-credentials` | LLM 자격증명 추가 |
+| PUT | `/api/llm-credentials/{id}` | LLM 자격증명 수정 |
+| DELETE | `/api/llm-credentials/{id}` | LLM 자격증명 삭제 |
+| POST | `/api/llm-credentials/{id}/test` | 자격증명 연결 테스트 |
+
+---
+
+## LLM Proxy
+
+| Method | Path | 설명 |
+|--------|------|------|
+| POST | `/api/llm/chat/completions` | LLM 채팅 완료 프록시 (OpenAI 호환) |
+
+---
+
+## RAG Extended
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/rag/status/{project_id}` | RAG 인덱스 상태 |
+| POST | `/api/rag/query` | 일반 RAG 쿼리 |
+| GET | `/api/rag/collections` | 벡터 컬렉션 목록 |
+| GET | `/api/rag/projects/{project_id}/entities` | 코드 엔티티 추출 |
+| GET | `/api/rag/projects/{project_id}/dependencies` | 의존성 맵핑 |
+
+---
+
+## Playground Extended
+
+| Method | Path | 설명 |
+|--------|------|------|
+| PATCH | `/api/playground/sessions/{id}/settings` | 세션 설정 변경 |
+| POST | `/api/playground/sessions/{id}/clear` | 대화 이력 초기화 |
+| POST | `/api/playground/sessions/{id}/execute/stream` | 스트리밍 실행 |
+| GET | `/api/playground/sessions/{id}/history` | 대화 이력 조회 |
+| GET | `/api/playground/tools` | 사용 가능 도구 목록 |
+| POST | `/api/playground/tools/test` | 도구 테스트 실행 |
+| POST | `/api/playground/compare` | 에이전트 비교 실행 |
+| GET | `/api/playground/models` | 사용 가능 모델 목록 |
+
+---
+
 ## WebSocket Events
 
 ### 클라이언트 → 서버
