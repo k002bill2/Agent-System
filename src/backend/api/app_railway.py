@@ -62,7 +62,9 @@ if _extra:
         try:
             _cors_origins.extend(json.loads(_extra))
         except json.JSONDecodeError:
-            _cors_origins.extend(o.strip().strip("'\"") for o in _extra.strip("[]").split(",") if o.strip())
+            _cors_origins.extend(
+                o.strip().strip("'\"") for o in _extra.strip("[]").split(",") if o.strip()
+            )
     else:
         _cors_origins.extend(o.strip() for o in _extra.split(",") if o.strip())
 
