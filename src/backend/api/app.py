@@ -274,8 +274,14 @@ else:
             lifespan=lifespan,
         )
 
-        # Configure CORS
-        cors_origins = [
+        # Configure CORS - use Settings for robust parsing (JSON array, comma-separated)
+        from config import get_settings
+
+        settings = get_settings()
+        cors_origins = list(settings.cors_origins)
+
+        # Ensure common dev origins are included
+        dev_origins = [
             "http://localhost:3000",
             "http://localhost:5173",
             "http://localhost:5174",
@@ -283,16 +289,14 @@ else:
             "http://127.0.0.1:5173",
             "http://127.0.0.1:5174",
         ]
+        for origin in dev_origins:
+            if origin not in cors_origins:
+                cors_origins.append(origin)
 
         # Add frontend URL from environment (for production)
         frontend_url = os.getenv("FRONTEND_URL")
-        if frontend_url:
+        if frontend_url and frontend_url not in cors_origins:
             cors_origins.append(frontend_url)
-
-        # Add extra origins from environment
-        extra_origins = os.getenv("CORS_ORIGINS", "")
-        if extra_origins:
-            cors_origins.extend([o.strip() for o in extra_origins.split(",") if o.strip()])
 
         app.add_middleware(
             CORSMiddleware,

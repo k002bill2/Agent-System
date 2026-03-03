@@ -170,7 +170,7 @@ GOOGLE_API_KEY=<your-api-key>
 | `GOOGLE_CLIENT_SECRET` | Google OAuth 시크릿 | - |
 | `GITHUB_CLIENT_ID` | GitHub OAuth 클라이언트 ID | - |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth 시크릿 | - |
-| `CORS_ORIGINS` | 추가 CORS 허용 오리진 | - |
+| `CORS_ORIGINS` | 추가 CORS 허용 오리진 (쉼표 구분 또는 JSON 배열) | - |
 | `LOG_LEVEL` | 로그 레벨 | `INFO` |
 | `ENV` | 환경 (production/staging) | `production` |
 
@@ -315,7 +315,8 @@ CORS policy: No 'Access-Control-Allow-Origin'
 
 **해결책**:
 - `FRONTEND_URL` 설정 확인
-- `CORS_ORIGINS`에 추가 도메인 설정
+- `CORS_ORIGINS`에 추가 도메인 설정 (쉼표 구분: `http://a.com,http://b.com` 또는 JSON 배열: `'["http://a.com","http://b.com"]'`)
+- `source .env` 사용 시 JSON 배열 값은 반드시 single-quote로 감싸야 셸이 내부 따옴표를 보존함
 
 ### 로그 확인
 

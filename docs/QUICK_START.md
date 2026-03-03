@@ -83,7 +83,8 @@ DATABASE_URL=postgresql+asyncpg://aos:aos@localhost:5432/aos
 
 1. **연결 안됨**: Backend 서버 실행 확인
 2. **API 에러**: `.env` 파일의 LLM API 키 확인 (GOOGLE_API_KEY 또는 ANTHROPIC_API_KEY)
-3. **UI 에러**: `npm install` 후 재시작
-4. **DB 에러**: `USE_DATABASE=false`로 설정하거나 `./infra/scripts/dev.sh` 실행
+3. **CORS 에러**: `CORS_ORIGINS` 형식 확인 (쉼표 구분: `a.com,b.com` 또는 JSON 배열)
+4. **UI 에러**: `npm install` 후 재시작
+5. **DB 에러**: `USE_DATABASE=false`로 설정하거나 `./infra/scripts/dev.sh` 실행
 
 자세한 내용은 [USER_GUIDE.md](./USER_GUIDE.md) 참조
