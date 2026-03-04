@@ -47,13 +47,30 @@ app = FastAPI(
     version="0.1.0",
 )
 
+# CORS - parse CORS_ORIGINS env var (JSON array or comma-separated)
+import json
+
+_cors_origins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    FRONTEND_URL,
+]
+_extra = os.getenv("CORS_ORIGINS", "")
+if _extra:
+    _extra = _extra.strip()
+    if _extra.startswith("["):
+        try:
+            _cors_origins.extend(json.loads(_extra))
+        except json.JSONDecodeError:
+            _cors_origins.extend(
+                o.strip().strip("'\"") for o in _extra.strip("[]").split(",") if o.strip()
+            )
+    else:
+        _cors_origins.extend(o.strip() for o in _extra.split(",") if o.strip())
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        FRONTEND_URL,
-    ],
+    allow_origins=list(set(_cors_origins)),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

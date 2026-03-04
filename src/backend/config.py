@@ -1,9 +1,11 @@
 """Application configuration."""
 
+import json
 from functools import lru_cache
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 if TYPE_CHECKING:
     pass
@@ -43,11 +45,27 @@ class Settings(BaseSettings):
     max_iterations: int = 100
     default_model: str = ""  # If empty, uses LLMModelRegistry.get_default()
 
-    # CORS
-    cors_origins: list[str] = [
+    # CORS - NoDecode prevents EnvSettingsSource from JSON-parsing before validator runs
+    cors_origins: Annotated[list[str], NoDecode] = [
         "http://localhost:3000",
         "http://localhost:5173",
     ]
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v: object) -> list[str] | object:
+        """Handle JSON array, bracket-wrapped, comma-separated string, or list."""
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("["):
+                try:
+                    return json.loads(v)
+                except json.JSONDecodeError:
+                    # Shell source strips inner quotes: ["a","b"] → [a,b]
+                    inner = v.strip("[]")
+                    return [o.strip().strip("'\"") for o in inner.split(",") if o.strip()]
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
     # OAuth/JWT Settings
     session_secret_key: str = ""  # JWT signing key

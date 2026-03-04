@@ -776,7 +776,7 @@ ws.onmessage = (event) => {
 해결:
 1. Backend 서버가 실행 중인지 확인
 2. 포트 8000이 사용 중인지 확인
-3. CORS 설정 확인
+3. CORS 설정 확인 (CORS_ORIGINS 환경변수 형식: 쉼표 구분 또는 JSON 배열)
 ```
 
 #### 2. API Key 에러
