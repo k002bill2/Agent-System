@@ -92,7 +92,7 @@ describe('settings store', () => {
 
       const state = useSettingsStore.getState()
       expect(state.llmProvider).toBe('local')
-      expect(state.model).toBe('qwen2.5:7b')
+      expect(state.model).toBe('exaone3.5:7.8b')
     })
   })
 
@@ -219,7 +219,7 @@ describe('settings store', () => {
       const models: LLMModel[] = [
         makeModel({ id: 'gemini-3-flash-preview', provider: 'google', is_default: true }),
         makeModel({ id: 'gemini-2.5-pro-preview-05-06', provider: 'google' }),
-        makeModel({ id: 'qwen2.5:7b', provider: 'ollama' }),
+        makeModel({ id: 'exaone3.5:7.8b', provider: 'ollama' }),
       ]
 
       mockFetch.mockResolvedValueOnce(
@@ -234,7 +234,7 @@ describe('settings store', () => {
       const state = useSettingsStore.getState()
       expect(state.availableModels).toHaveLength(3)
       expect(state.availableModels.map((m) => m.id)).toContain('gemini-3-flash-preview')
-      expect(state.availableModels.map((m) => m.id)).toContain('qwen2.5:7b')
+      expect(state.availableModels.map((m) => m.id)).toContain('exaone3.5:7.8b')
     })
 
     it('handles API response with empty models array', async () => {
@@ -348,7 +348,7 @@ describe('settings store', () => {
       provider: 'google',
       is_default: true,
     })
-    const ollamaModel = makeModel({ id: 'qwen2.5:7b', provider: 'ollama' })
+    const ollamaModel = makeModel({ id: 'exaone3.5:7.8b', provider: 'ollama' })
 
     beforeEach(() => {
       useSettingsStore.setState({
@@ -375,7 +375,7 @@ describe('settings store', () => {
     it("maps provider 'local' to 'ollama' internally so ollama models are returned", () => {
       const result = useSettingsStore.getState().getModelsForProvider('local')
       expect(result).toHaveLength(1)
-      expect(result[0].id).toBe('qwen2.5:7b')
+      expect(result[0].id).toBe('exaone3.5:7.8b')
       expect(result[0].provider).toBe('ollama')
     })
 
@@ -441,7 +441,7 @@ describe('settings store', () => {
 
     it("maps 'local' provider to 'ollama' when selecting from availableModels", () => {
       const ollamaDefault = makeModel({
-        id: 'qwen2.5:7b',
+        id: 'exaone3.5:7.8b',
         provider: 'ollama',
         is_default: true,
       })
@@ -450,7 +450,7 @@ describe('settings store', () => {
       useSettingsStore.getState().setLLMProvider('local')
 
       expect(useSettingsStore.getState().llmProvider).toBe('local')
-      expect(useSettingsStore.getState().model).toBe('qwen2.5:7b')
+      expect(useSettingsStore.getState().model).toBe('exaone3.5:7.8b')
     })
   })
 })
@@ -476,7 +476,7 @@ describe('getModelsForProvider (legacy exported function)', () => {
 
   it('returns local models', () => {
     const models = getModelsForProvider('local')
-    expect(models).toContain('qwen2.5:7b')
+    expect(models).toContain('exaone3.5:7.8b')
     expect(models).toContain('llama3:8b')
   })
 })

@@ -153,19 +153,9 @@ AOS Backend API 엔드포인트 문서입니다.
 - `sort_by`: `last_activity` | `created_at` | `message_count` | `estimated_cost` | `project_name`
 - `sort_order`: `asc` | `desc` (기본: `desc`)
 - `limit`: 최대 반환 개수 (기본: 50)
-
----
-
-## Claude Code Activity
-
-| Method | Path | 설명 |
-|--------|------|------|
-| GET | `/api/claude-code/activity` | 실시간 활동 목록 |
-| GET | `/api/claude-code/activity/{session_id}` | 세션별 활동 상세 |
-| GET | `/api/claude-code/tasks` | 태스크 목록 |
-| GET | `/api/claude-code/tasks/{session_id}` | 세션별 태스크 |
-| GET | `/api/claude-code/sessions` | 활성 세션 목록 |
-| GET | `/api/claude-code/sessions/{session_id}/stream` | SSE 스트리밍 |
+- `offset`: 시작 오프셋 (기본: 0)
+- `project`: 프로젝트 이름 필터 (선택)
+- `source_user`: 소스 사용자 필터 (선택)
 
 ---
 
@@ -446,8 +436,8 @@ AOS Backend API 엔드포인트 문서입니다.
 {
   "models": [
     {
-      "id": "claude-sonnet-4-20250514",
-      "display_name": "Claude Sonnet 4",
+      "id": "claude-sonnet-4-6",
+      "display_name": "Claude Sonnet 4.6",
       "provider": "anthropic",
       "context_window": 200000,
       "pricing": {"input": 0.003, "output": 0.015},
@@ -715,6 +705,43 @@ AOS Backend API 엔드포인트 문서입니다.
 
 ---
 
+## Project Invitations
+
+이메일 기반 프로젝트 초대 시스템입니다.
+
+| Method | Path | 설명 |
+|--------|------|------|
+| POST | `/api/v1/projects/{project_id}/invitations` | 이메일로 프로젝트 초대 생성 (owner 필요) |
+| GET | `/api/v1/projects/{project_id}/invitations` | pending 초대 목록 조회 (owner 필요) |
+| DELETE | `/api/v1/projects/{project_id}/invitations/{invitation_id}` | 초대 취소 (owner 필요) |
+| GET | `/api/v1/invitations/{token}` | 토큰으로 초대 미리보기 (인증 불필요) |
+| POST | `/api/v1/invitations/{token}/accept` | 초대 수락 (로그인 필요) |
+
+**초대 생성 요청 본문** (`POST /api/v1/projects/{project_id}/invitations`):
+```json
+{
+  "email": "user@example.com",
+  "role": "editor"
+}
+```
+
+**초대 응답 필드**: `id`, `project_id`, `email`, `role`, `status`, `expires_at`, `created_at`
+
+**초대 미리보기 응답 필드**: `project_id`, `project_name`, `email`, `role`, `expires_at`, `valid`
+
+**초대 수락 응답**:
+```json
+{
+  "message": "초대를 수락했습니다",
+  "project_id": "...",
+  "role": "editor"
+}
+```
+
+**역할**: `owner`, `editor`, `viewer`
+
+---
+
 ## Admin
 
 | Method | Path | 설명 |
@@ -910,12 +937,22 @@ AOS Backend API 엔드포인트 문서입니다.
 
 ## HITL (Human-in-the-Loop)
 
+HITL 엔드포인트는 세션 컨텍스트 하에 동작합니다. 승인 요청은 Sessions & Tasks 섹션 내에 포함됩니다.
+
 | Method | Path | 설명 |
 |--------|------|------|
-| GET | `/api/hitl/pending` | 대기 중인 승인 요청 목록 |
-| POST | `/api/hitl/approve/{approval_id}` | 작업 승인 |
-| POST | `/api/hitl/deny/{approval_id}` | 작업 거부 |
-| GET | `/api/hitl/history` | 승인 이력 조회 |
+| GET | `/api/sessions/{session_id}/approvals` | 세션의 대기 중인 승인 요청 목록 |
+| POST | `/api/sessions/{session_id}/approve/{approval_id}` | 작업 승인 및 실행 재개 |
+| POST | `/api/sessions/{session_id}/deny/{approval_id}` | 작업 거부 및 태스크 실패 처리 |
+
+**승인 요청 응답 필드**: `approval_id`, `task_id`, `tool_name`, `tool_args`, `risk_level`, `risk_description`, `created_at`, `status`
+
+**승인/거부 요청 본문** (선택 사항):
+```json
+{
+  "note": "승인/거부 사유"
+}
+```
 
 ---
 

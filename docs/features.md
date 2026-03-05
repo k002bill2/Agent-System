@@ -36,14 +36,15 @@ TOOL_RISK_CONFIG = {
 
 ```python
 COST_PER_1K_TOKENS = {
-    # Claude 4 series
-    "claude-opus-4-5-20250514": {"input": 0.015, "output": 0.075},
-    "claude-sonnet-4-20250514": {"input": 0.003, "output": 0.015},
-    "claude-3-5-sonnet-20241022": {"input": 0.003, "output": 0.015},
-    "claude-3-5-haiku-20241022": {"input": 0.0008, "output": 0.004},
-    # Gemini 2.0 series
-    "gemini-2.0-flash": {"input": 0.00025, "output": 0.001},
-    "gemini-1.5-pro": {"input": 0.00125, "output": 0.005},
+    # Anthropic Claude 4 series
+    "claude-opus-4-6": {"input": 0.015, "output": 0.075},
+    "claude-sonnet-4-6": {"input": 0.003, "output": 0.015},
+    "claude-haiku-4-5-20251001": {"input": 0.001, "output": 0.005},
+    # Google Gemini series
+    "gemini-3-flash-preview": {"input": 0.0005, "output": 0.003},
+    "gemini-3-pro-preview": {"input": 0.002, "output": 0.012},
+    "gemini-2.5-pro-preview-05-06": {"input": 0.00125, "output": 0.01},
+    "gemini-2.5-flash-preview-05-20": {"input": 0.0001, "output": 0.0004},
     # OpenAI GPT-4o / o1 series
     "gpt-4o": {"input": 0.0025, "output": 0.01},
     "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},
@@ -53,10 +54,10 @@ COST_PER_1K_TOKENS = {
 ```
 
 **Provider별 Context 한도**:
-- Claude 4/3.5: 200K tokens
-- Gemini 2.0: 1M tokens (1.5-pro: 2M)
-- GPT-4o: 128K tokens
-- o1: 200K tokens
+- Claude 4 (Opus/Sonnet/Haiku): 200K tokens
+- Gemini 3/2.5: 1M tokens
+- GPT-4o / GPT-4o Mini: 128K tokens
+- o1: 200K tokens / o1-mini: 128K tokens
 
 ---
 

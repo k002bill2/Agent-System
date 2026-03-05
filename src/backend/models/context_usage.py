@@ -38,7 +38,7 @@ PROVIDER_CONTEXT_LIMITS = {
         "default": 128_000,
     },
     LLMProvider.OLLAMA: {
-        "qwen2.5:7b": 32_000,
+        "exaone3.5:7.8b": 32_000,
         "llama3:8b": 8_000,
         "mistral:7b": 32_000,
         "codellama": 16_000,

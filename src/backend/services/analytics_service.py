@@ -282,7 +282,7 @@ class AnalyticsService:
             ),
             CostBreakdown(
                 category="model",
-                value="qwen2.5:7b",
+                value="exaone3.5:7.8b",
                 cost=2.00,
                 tokens=100000,
                 percentage=10.6,

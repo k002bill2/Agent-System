@@ -229,7 +229,7 @@ async def get_context_usage(
     elif provider == "openai":
         model = os.getenv("OPENAI_MODEL", "gpt-4o")
     elif provider == "ollama":
-        model = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+        model = os.getenv("OLLAMA_MODEL", "exaone3.5:7.8b")
     else:
         model = "unknown"
 

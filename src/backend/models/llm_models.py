@@ -175,8 +175,8 @@ _MODELS: list[LLMModelConfig] = [
     # Ollama (Local) Models
     # ─────────────────────────────────────────────────────────
     LLMModelConfig(
-        id="qwen2.5:7b",
-        display_name="Qwen 2.5 7B",
+        id="exaone3.5:7.8b",
+        display_name="EXAONE 3.5 7.8B",
         provider=LLMProvider.OLLAMA,
         context_window=32768,
         input_price=0.0,  # Local - free

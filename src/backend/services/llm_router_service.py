@@ -458,7 +458,7 @@ class LLMRouterService:
             LLMRouterService.create_provider(
                 LLMProviderConfigCreate(
                     provider=LLMProvider.OLLAMA,
-                    model=os.getenv("OLLAMA_MODEL", "qwen2.5:7b"),
+                    model=os.getenv("OLLAMA_MODEL", "exaone3.5:7.8b"),
                     base_url=ollama_url,
                     priority=50,
                     cost_per_1k_input=0.0,

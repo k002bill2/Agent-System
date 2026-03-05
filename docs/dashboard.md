@@ -88,6 +88,8 @@ import { cn } from '@/lib/utils';
 |----------|------|
 | `Sidebar` | 메인 네비게이션 사이드바 |
 | `TaskPanel` | 태스크 카드 (상태, 진행률, 액션) |
+| `TaskBoard` | 태스크 보드 뷰 (칸반/리스트 레이아웃) |
+| `AgentPanel` | 에이전트 패널 (레지스트리 목록, 상태 표시) |
 | `ChatInput` | 메시지 입력 인터페이스 |
 | `ApprovalModal` | HITL 승인/거부 모달 |
 | `DiffViewer` | 파일 변경 비교 뷰 (Split/Unified) |
@@ -101,6 +103,12 @@ import { cn } from '@/lib/utils';
 | `ErrorBoundary` | React 에러 바운더리 |
 | `DeleteTaskDialog` | 태스크 삭제 확인 다이얼로그 |
 | `ExecutionProgress` | 워크플로우 실행 진행 트래커 |
+
+### Agents Subdirectory Components
+
+| 컴포넌트 | 경로 | 설명 |
+|----------|------|------|
+| `AgentCard` | `components/agents/` | 에이전트 카드 (이름, 상태 배지, 도구 수, 엔드포인트 표시) |
 
 ### Claude Code Components
 
@@ -123,24 +131,30 @@ import { cn } from '@/lib/utils';
 
 ### Project Config Components
 
-| 컴포넌트 | 설명 |
-|----------|------|
-| `ProjectConfigStats` | 프로젝트 통계 |
-| `ProjectList` | 프로젝트 목록 |
-| `OverviewTab` | 설정 개요 탭 |
-| `SkillsTab` | 스킬 목록 탭 |
-| `SkillEditModal` | 스킬 편집 모달 |
-| `AgentsTab` | 에이전트 목록 탭 |
-| `AgentEditModal` | 에이전트 편집 모달 |
-| `MCPTab` | MCP 서버 목록 탭 |
-| `MCPServerModal` | MCP 서버 편집 모달 |
-| `HooksTab` | Hook 목록 탭 |
-| `HookEditModal` | Hook 편집 모달 |
-| `CommandsTab` | 커맨드 목록 탭 |
-| `CommandEditModal` | 커맨드 편집 모달 |
-| `ConfirmDeleteModal` | 삭제 확인 범용 모달 |
-| `DeleteProjectModal` | 프로젝트 삭제 확인 모달 |
-| `ProjectClaudeConfigPanel` | 프로젝트 Claude 설정 패널 |
+| 컴포넌트 | 경로 | 설명 |
+|----------|------|------|
+| `ProjectConfigStats` | `components/` | 프로젝트 통계 |
+| `ProjectList` | `components/project-configs/` | 프로젝트 목록 |
+| `OverviewTab` | `components/project-configs/` | 설정 개요 탭 |
+| `SkillsTab` | `components/project-configs/` | 스킬 목록 탭 |
+| `SkillEditModal` | `components/project-configs/` | 스킬 편집 모달 |
+| `AgentsTab` | `components/project-configs/` | 에이전트 목록 탭 |
+| `AgentEditModal` | `components/project-configs/` | 에이전트 편집 모달 |
+| `MCPTab` | `components/project-configs/` | MCP 서버 목록 탭 |
+| `MCPServerModal` | `components/project-configs/` | MCP 서버 편집 모달 |
+| `HooksTab` | `components/project-configs/` | Hook 목록 탭 |
+| `HookEditModal` | `components/project-configs/` | Hook 편집 모달 |
+| `CommandsTab` | `components/project-configs/` | 커맨드 목록 탭 |
+| `CommandEditModal` | `components/project-configs/` | 커맨드 편집 모달 |
+| `ConfirmDeleteModal` | `components/project-configs/` | 삭제 확인 범용 모달 |
+| `CopyToProjectModal` | `components/project-configs/` | 프로젝트 간 복사 모달 |
+
+### Projects Components
+
+| 컴포넌트 | 경로 | 설명 |
+|----------|------|------|
+| `DeleteProjectModal` | `components/projects/` | 프로젝트 삭제 확인 모달 |
+| `ProjectClaudeConfigPanel` | `components/projects/` | 프로젝트 Claude 설정 패널 |
 
 ### Workflow Components
 
@@ -152,7 +166,6 @@ import { cn } from '@/lib/utils';
 | `WorkflowRunsTable` | 실행 이력 테이블 |
 | `WorkflowRunLogs` | 실시간 로그 뷰어 (SSE) |
 | `WorkflowCreateModal` | 워크플로우 생성 모달 (YAML 에디터) |
-| `CopyToProjectModal` | 프로젝트 간 복사 모달 |
 | `YamlEditor` | YAML 편집기 (js-yaml 검증, 라인번호, Preview) |
 | `EnhancedRunLogs` | 향상된 로그 뷰어 (레벨 필터, 검색, job 접기) |
 | `InteractiveDAG` | 확장 가능한 DAG 시각화 (step 펼침, 상태 아이콘) |
@@ -215,12 +228,11 @@ import { cn } from '@/lib/utils';
 | `MemberCard` | 멤버 카드 (역할 변경, 제거) |
 | `InviteMemberModal` | 멤버 초대 모달 |
 
-### Project Access Components
+### Project Management Components
 
-| 컴포넌트 | 설명 |
-|----------|------|
-| `ProjectMembersPanel` | 프로젝트 멤버 관리 (목록, 추가, 역할 변경, 제거) |
-| `ProjectMembersContent` | 프로젝트 멤버 관리 콘텐츠 (멤버십 목록, 관리) |
+| 컴포넌트 | 경로 | 설명 |
+|----------|------|------|
+| `ProjectMembersContent` | `components/project-management/` | 프로젝트 멤버 관리 콘텐츠 (멤버십 목록, 관리) |
 
 ### Monitor Components
 
@@ -430,7 +442,9 @@ src/dashboard/
 │   │   ├── RegisterPage.tsx
 │   │   ├── AuthCallbackPage.tsx
 │   │   └── InvitationAcceptPage.tsx
-│   ├── components/
+│   ├── components/             # 상위 직접 파일 (Sidebar, TaskPanel, TaskBoard, AgentPanel, 등)
+│   │   ├── agents/             # 에이전트 서브디렉토리
+│   │   │   └── AgentCard.tsx
 │   │   ├── ui/                 # 공통 UI 컴포넌트
 │   │   ├── common/             # 범용 컴포넌트
 │   │   │   ├── Pagination.tsx
@@ -488,8 +502,11 @@ src/dashboard/
 │   │   │   ├── BranchProtectionSettings.tsx
 │   │   │   ├── FileGroup.tsx
 │   │   │   └── GitAlert.tsx
-│   │   ├── projects/            # 프로젝트 접근제어
-│   │   │   └── ProjectMembersPanel.tsx
+│   │   ├── projects/            # 프로젝트 관련 모달/패널
+│   │   │   ├── DeleteProjectModal.tsx
+│   │   │   └── ProjectClaudeConfigPanel.tsx
+│   │   ├── project-management/  # 프로젝트 멤버 관리
+│   │   │   └── ProjectMembersContent.tsx
 │   │   ├── organizations/      # 조직 관리
 │   │   │   ├── OrganizationCard.tsx
 │   │   │   ├── OrganizationFormModal.tsx
@@ -520,7 +537,7 @@ src/dashboard/
 │   │   └── analytics/          # Analytics
 │   │       └── ProjectMultiSelect.tsx
 │   ├── services/               # API 서비스 레이어
-│   ├── stores/                 # Zustand 스토어 (27개)
+│   ├── stores/                 # Zustand 스토어 (26개 + index.ts)
 │   │   ├── orchestration/      # 리팩토링: index.ts, types.ts, wsConnection.ts, wsHandler.ts
 │   │   ├── orchestration.ts    # 재export
 │   │   ├── projects.ts

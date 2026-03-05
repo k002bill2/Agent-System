@@ -1,6 +1,6 @@
 # AOS Database ERD
 
-> 34개 테이블 · `src/backend/db/models/` 기준 · 2026-03-02
+> 38개 테이블 · `src/backend/db/models/` 기준 · 2026-03-05
 
 ```mermaid
 erDiagram
@@ -357,6 +357,37 @@ erDiagram
     }
 
     %% ═══════════════════════════════════════════
+    %% Project Domain
+    %% ═══════════════════════════════════════════
+
+    projects {
+        string id PK
+        string name UK
+        string slug UK
+        text description
+        string path
+        boolean is_active
+        jsonb settings
+        string organization_id
+        datetime created_at
+        datetime updated_at
+        string created_by FK
+    }
+
+    project_invitations {
+        string id PK
+        string project_id
+        string invited_by FK
+        string email
+        string role
+        string token UK
+        string status
+        datetime expires_at
+        datetime created_at
+        datetime updated_at
+    }
+
+    %% ═══════════════════════════════════════════
     %% RBAC Domain
     %% ═══════════════════════════════════════════
 
@@ -367,6 +398,7 @@ erDiagram
         string role
         string granted_by
         datetime created_at
+        datetime updated_at
     }
 
     menu_visibility {
@@ -406,8 +438,42 @@ erDiagram
         jsonb allowed_merge_roles
         boolean allow_force_push
         boolean allow_deletion
+        boolean auto_deploy
+        string deploy_workflow
         boolean enabled
         datetime created_at
+        datetime updated_at
+    }
+
+    %% ═══════════════════════════════════════════
+    %% LLM Domain
+    %% ═══════════════════════════════════════════
+
+    llm_model_configs {
+        string id PK
+        string display_name
+        string provider
+        int context_window
+        float input_price
+        float output_price
+        boolean is_default
+        boolean is_enabled
+        boolean supports_tools
+        boolean supports_vision
+        datetime created_at
+        datetime updated_at
+    }
+
+    user_llm_credentials {
+        string id PK
+        string user_id
+        string provider
+        string key_name
+        string api_key "encrypted"
+        boolean is_active
+        datetime last_verified_at
+        datetime created_at
+        datetime updated_at
     }
 
     %% ═══════════════════════════════════════════
@@ -556,6 +622,11 @@ erDiagram
     sessions ||--o{ audit_logs : "audits"
     users ||--o{ audit_logs : "performs"
 
+    %% Project
+    users ||--o{ projects : "creates"
+    users ||--o{ project_invitations : "invites"
+    projects ||--o{ project_invitations : "has"
+
     %% RBAC
     users ||--o{ project_access : "granted"
 
@@ -576,15 +647,17 @@ erDiagram
 | Feedback | 3 | feedbacks, dataset_entries, task_evaluations |
 | Auth | 3 | users, token_blacklist, saml_configs |
 | Organization | 3 | organizations, organization_members, organization_invitations |
+| Project | 3 | projects, project_invitations, project_access |
 | Cost | 2 | cost_centers, cost_allocations |
 | Notification | 3 | notification_rules, notification_history, channel_configs |
 | Claude Session | 1 | claude_session_snapshots |
 | Activity | 2 | task_analyses, session_activities |
 | Audit | 1 | audit_logs |
-| RBAC | 2 | project_access, menu_visibility |
+| RBAC | 1 | menu_visibility |
+| LLM | 2 | llm_model_configs, user_llm_credentials |
 | Git | 2 | merge_requests, branch_protection_rules |
 | Workflow | 8 | workflow_definitions, workflow_runs, workflow_jobs, workflow_steps, workflow_secrets, workflow_webhooks, workflow_artifacts, workflow_templates |
-| **합계** | **34** | |
+| **합계** | **38** | |
 
 ## 관계 범례
 

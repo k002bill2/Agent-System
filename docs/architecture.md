@@ -63,7 +63,7 @@ src/backend/
 │   ├── nodes.py             # 6가지 노드 구현
 │   ├── parallel_executor.py # 병렬 실행
 │   └── tools.py             # MCP 도구 실행자
-├── services/                    # 63개 서비스 모듈
+├── services/                    # 59개 서비스 모듈
 │   ├── agent_manager.py           # 에이전트 인스턴스 관리
 │   ├── agent_registry.py          # 에이전트 등록소
 │   ├── alerting_service.py        # 알림/경고 서비스
@@ -122,7 +122,7 @@ src/backend/
 │   ├── workflow_engine.py         # 워크플로우 DAG 실행 엔진
 │   ├── workflow_service.py        # 워크플로우 CRUD 서비스
 │   └── workflow_yaml_parser.py    # 워크플로우 YAML 파싱
-├── api/                     # FastAPI 라우터 (55개 모듈)
+├── api/                     # FastAPI 라우터 (42개 모듈)
 ├── auth/                    # 인증 프로바이더
 │   └── providers/
 │       ├── base.py          # AuthProvider ABC, UserInfo
@@ -278,7 +278,7 @@ USE_DATABASE=false
 - **AWS RDS** - 엔터프라이즈급
 - **Neon** - 서버리스 PostgreSQL
 
-### Schema (주요 테이블 - 34개)
+### Schema (주요 테이블 - 38개)
 
 | 테이블 | 용도 |
 |--------|------|
@@ -289,13 +289,17 @@ USE_DATABASE=false
 | `users` | 사용자 (OAuth + Email) |
 | `organizations` | 멀티테넌트 조직 |
 | `organization_members` | 조직 멤버 |
+| `organization_invitations` | 조직 멤버 초대 |
 | `projects` | DB 기반 프로젝트 레지스트리 |
+| `project_access` | 프로젝트 접근 제어 |
+| `project_invitations` | 프로젝트 초대 |
 | `audit_logs` | 감사 로그 |
-| `feedback` | RLHF 피드백 |
-| `config_versions` | 설정 버전 관리 |
+| `feedbacks` | RLHF 피드백 |
 | `notification_rules` | 알림 규칙 |
-| `secrets` | 암호화된 시크릿 |
-| `rate_limits` | API 속도 제한 |
+| `notification_history` | 알림 발송 이력 |
+| `channel_configs` | 알림 채널 설정 |
+| `token_blacklist` | 무효화된 JWT 토큰 |
+| `saml_configs` | SAML 2.0 SSO 설정 |
 | `claude_session_snapshots` | Claude 세션 스냅샷 (모델, 토큰, 비용, 프로젝트별) |
 | `workflow_definitions` | 워크플로우 정의 |
 | `workflow_runs` | 워크플로우 실행 이력 |
@@ -311,8 +315,7 @@ USE_DATABASE=false
 | `cost_allocations` | 비용 할당 |
 | `llm_model_configs` | LLM 모델 설정 |
 | `user_llm_credentials` | 사용자 LLM 자격증명 |
-| `project_access` | 프로젝트 접근 제어 |
-| `project_invitations` | 프로젝트 초대 |
+| `dataset_entries` | 데이터셋 항목 (RAG/Eval용) |
 | `menu_visibility` | UI 메뉴 가시성 |
 | `task_evaluations` | 태스크 평가 |
 | `session_activities` | 세션 활동 |
