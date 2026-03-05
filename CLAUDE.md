@@ -197,3 +197,4 @@ dev/active/[task-name]/
 | 핵심 기능 구현/수정 | `docs/features.md` |
 | Dashboard 컴포넌트 작업 | `docs/dashboard.md` |
 | Agent/Task 개념 이해 | `docs/ontology.md` |
+| Claude Code 통합 아키텍처 | `docs/architecture/claude-code-integration.md` |
