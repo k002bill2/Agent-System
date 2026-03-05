@@ -177,6 +177,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
                     if state:
                         pending_approvals = state.get("pending_approvals", {})
+                        project_id = state.get("project", {}).get("id")
                         if payload.approval_id in pending_approvals:
                             approval = pending_approvals[payload.approval_id]
 
@@ -192,6 +193,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                                     resource_type=ResourceType.APPROVAL,
                                     resource_id=payload.approval_id,
                                     session_id=session_id,
+                                    project_id=project_id,
                                     metadata={
                                         "task_id": approval["task_id"],
                                         "tool_name": approval.get("tool_name"),
@@ -228,6 +230,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                                     resource_type=ResourceType.APPROVAL,
                                     resource_id=payload.approval_id,
                                     session_id=session_id,
+                                    project_id=project_id,
                                     metadata={
                                         "task_id": approval["task_id"],
                                         "tool_name": approval.get("tool_name"),

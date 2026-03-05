@@ -173,6 +173,7 @@ class OrchestrationEngine:
             resource_id=session_id,
             session_id=session_id,
             user_id=user_id,
+            project_id=project.id if project else None,
             new_value={
                 "max_iterations": max_iterations,
                 "project_id": project.id if project else None,
@@ -196,6 +197,10 @@ class OrchestrationEngine:
 
     async def delete_session(self, session_id: str) -> bool:
         """Delete a session."""
+        # Get project_id before deletion
+        state = self._sessions.get(session_id) or await self.session_service.get_session(session_id)
+        project_id = state.get("project", {}).get("id") if state else None
+
         # Delete from service
         result = await self.session_service.delete_session(session_id)
 
@@ -210,6 +215,7 @@ class OrchestrationEngine:
                 resource_type=ResourceType.SESSION,
                 resource_id=session_id,
                 session_id=session_id,
+                project_id=project_id,
             )
 
         return result
