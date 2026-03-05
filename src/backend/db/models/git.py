@@ -44,14 +44,14 @@ class MergeRequestModel(Base):
     closed_by = Column(String(100), nullable=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
-    merged_at = Column(DateTime, nullable=True)
-    closed_at = Column(DateTime, nullable=True)
+    merged_at = Column(DateTime(timezone=True), nullable=True)
+    closed_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index("ix_merge_requests_project_status", "project_id", "status"),
@@ -77,9 +77,9 @@ class BranchProtectionRuleModel(Base):
     enabled = Column(Boolean, default=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )

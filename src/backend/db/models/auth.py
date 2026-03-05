@@ -39,8 +39,8 @@ class UserModel(Base):
     role = Column(String(20), default="user")
 
     # Timestamps
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
-    last_login_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (Index("ix_users_provider_id", "oauth_provider", "oauth_provider_id"),)
 
@@ -54,8 +54,8 @@ class TokenBlacklistModel(Base):
     jti = Column(String(36), nullable=False, unique=True, index=True)
     user_id = Column(String(36), nullable=True, index=True)
     token_type = Column(String(20), nullable=False)
-    expires_at = Column(DateTime, nullable=False, index=True)
-    revoked_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    revoked_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     reason = Column(String(100), nullable=True)
 
     __table_args__ = (Index("ix_token_blacklist_expires", "expires_at"),)
@@ -85,9 +85,9 @@ class SAMLConfigModel(Base):
 
     # Status
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )

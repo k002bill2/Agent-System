@@ -105,6 +105,13 @@ async def get_auth_status():
 async def google_auth_redirect():
     """Redirect to Google OAuth authorization page."""
     settings = get_settings()
+
+    if not settings.google_client_id or not settings.google_client_secret:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.",
+        )
+
     auth_service = AuthService()
 
     redirect_uri = f"{settings.frontend_url}/auth/callback/google"
@@ -177,6 +184,13 @@ async def google_callback(
 async def github_auth_redirect():
     """Redirect to GitHub OAuth authorization page."""
     settings = get_settings()
+
+    if not settings.github_client_id or not settings.github_client_secret:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="GitHub OAuth is not configured. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.",
+        )
+
     auth_service = AuthService()
 
     redirect_uri = f"{settings.frontend_url}/auth/callback/github"

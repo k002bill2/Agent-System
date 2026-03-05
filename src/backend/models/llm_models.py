@@ -218,6 +218,17 @@ _MODELS: list[LLMModelConfig] = [
         supports_tools=False,
         supports_vision=False,
     ),
+    LLMModelConfig(
+        id="exaone3.5:7.8b",
+        display_name="EXAONE 3.5 7.8B",
+        provider=LLMProvider.OLLAMA,
+        context_window=32768,
+        input_price=0.0,
+        output_price=0.0,
+        is_default=False,
+        supports_tools=True,
+        supports_vision=False,
+    ),
 ]
 
 # Index by model ID for fast lookup

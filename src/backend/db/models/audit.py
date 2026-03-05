@@ -66,10 +66,10 @@ class AuditLogModel(Base):
     # Retention
     retention_days = Column(Integer, default=2555)
     retention_policy = Column(String(20), default="standard")
-    expires_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 
     __table_args__ = (
         Index("ix_audit_session_action", "session_id", "action"),

@@ -49,9 +49,9 @@ class OrganizationModel(Base):
 
     # Metadata
     settings = Column(JSONB, default=dict)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
@@ -79,11 +79,11 @@ class OrganizationMemberModel(Base):
     # Status
     is_active = Column(Boolean, default=True)
     invited_by = Column(String(36), nullable=True)
-    invited_at = Column(DateTime, nullable=True)
-    joined_at = Column(DateTime, nullable=True)
-    last_active_at = Column(DateTime, nullable=True)
+    invited_at = Column(DateTime(timezone=True), nullable=True)
+    joined_at = Column(DateTime(timezone=True), nullable=True)
+    last_active_at = Column(DateTime(timezone=True), nullable=True)
 
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (Index("ix_org_member_org_user", "organization_id", "user_id", unique=True),)
 
@@ -102,10 +102,10 @@ class OrganizationInvitationModel(Base):
     invited_by = Column(String(36), nullable=False)
     token = Column(String(36), nullable=False, unique=True)
     message = Column(Text, nullable=True)
-    expires_at = Column(DateTime, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
     accepted = Column(Boolean, default=False)
-    accepted_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    accepted_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("ix_invitation_token", "token"),
