@@ -12,7 +12,7 @@ services:
       dockerfile: Dockerfile.prod
     container_name: aos-dashboard
     ports:
-      - "5173:80"
+      - "${DASHBOARD_PORT:-5173}:80"
     depends_on:
       backend:
         condition: service_healthy
@@ -28,13 +28,15 @@ services:
       dockerfile: Dockerfile.full
     container_name: aos-backend
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     environment:
       # Database
       - DATABASE_URL=postgresql+asyncpg://aos:aos@postgres:5432/aos
       - USE_DATABASE=true
       # Redis
       - REDIS_URL=redis://redis:6379/0
+      # Qdrant
+      - QDRANT_URL=http://qdrant:6333
       # LLM Provider (set in .env)
       - LLM_PROVIDER=${LLM_PROVIDER:-google}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
@@ -66,6 +68,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      qdrant:
+        condition: service_healthy
     networks:
       - aos-network
     healthcheck:
@@ -89,7 +93,7 @@ services:
       # Note: SQLAlchemy auto-creates tables on startup
       # - ./infra/docker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
-      - "5432:5432"
+      - "${PG_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U aos -d aos"]
       interval: 10s
@@ -107,9 +111,27 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aos-network
+    restart: unless-stopped
+
+  # Qdrant Vector Database (for RAG)
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: aos-qdrant
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -134,6 +156,8 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  qdrant_data:
     driver: local
   chromadb_data:
     driver: local

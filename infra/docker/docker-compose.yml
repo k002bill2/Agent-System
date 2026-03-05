@@ -10,7 +10,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "${PG_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U aos"]
       interval: 10s
@@ -27,7 +27,7 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -49,7 +49,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - DEBUG=true
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ../../src/backend:/app
     depends_on:
@@ -69,7 +69,7 @@ services:
       dockerfile: ../../infra/docker/Dockerfile.dashboard
     container_name: aos-dashboard
     ports:
-      - "5173:5173"
+      - "${DASHBOARD_PORT:-5173}:5173"
     volumes:
       - ../../src/dashboard:/app
       - /app/node_modules
@@ -102,8 +102,8 @@ services:
     image: qdrant/qdrant:latest
     container_name: aos-qdrant
     ports:
-      - "6333:6333"   # REST API
-      - "6334:6334"   # gRPC
+      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
