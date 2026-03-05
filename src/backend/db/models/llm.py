@@ -32,7 +32,9 @@ class LLMModelConfigModel(Base):
     is_enabled = Column(Boolean, default=True, nullable=False, index=True)
     supports_tools = Column(Boolean, default=True, nullable=False)
     supports_vision = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -54,7 +56,9 @@ class UserLLMCredentialModel(Base):
     api_key = Column(EncryptedString(1024), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     last_verified_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

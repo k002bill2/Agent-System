@@ -39,7 +39,9 @@ class UserModel(Base):
     role = Column(String(20), default="user")
 
     # Timestamps
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
     last_login_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (Index("ix_users_provider_id", "oauth_provider", "oauth_provider_id"),)

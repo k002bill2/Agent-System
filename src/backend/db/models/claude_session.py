@@ -67,7 +67,9 @@ class ClaudeSessionSnapshotModel(Base):
     session_last_activity = Column(DateTime(timezone=True), nullable=True)
 
     # Snapshot timestamps
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

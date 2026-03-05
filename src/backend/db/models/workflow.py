@@ -35,7 +35,9 @@ class WorkflowDefinitionModel(Base):
     env = Column(JSONB, default=dict)
     version = Column(Integer, default=1)
     created_by = Column(String(36), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -64,7 +66,9 @@ class WorkflowRunModel(Base):
     trigger_type = Column(String(20), nullable=False)
     trigger_payload = Column(JSONB, default=dict)
     status = Column(String(20), default="queued", index=True)
-    started_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    started_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
     completed_at = Column(DateTime(timezone=True), nullable=True)
     duration_seconds = Column(Float, nullable=True)
     total_cost = Column(Float, default=0.0)

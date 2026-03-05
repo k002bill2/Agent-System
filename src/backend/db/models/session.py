@@ -32,7 +32,9 @@ class SessionModel(Base):
 
     # Metadata
     status = Column(String(50), default="active", index=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -93,7 +95,9 @@ class TaskModel(Base):
     dependencies = Column(JSONB, default=list)
 
     # Timestamps
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -139,7 +143,9 @@ class MessageModel(Base):
     output_tokens = Column(Integer, nullable=True)
 
     # Timestamps
-    timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    timestamp = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
 
     # Relationships
     session = relationship("SessionModel", back_populates="messages")
@@ -170,7 +176,9 @@ class ApprovalModel(Base):
     denial_reason = Column(Text, nullable=True)
 
     # Timestamps
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
     resolved_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (Index("ix_approvals_session_status", "session_id", "status"),)

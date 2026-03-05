@@ -85,7 +85,9 @@ class CostAllocationModel(Base):
     # Timestamps
     period_start = Column(DateTime(timezone=True), nullable=True)
     period_end = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
 
     __table_args__ = (
         Index("ix_cost_allocations_center", "cost_center_id", "created_at"),
