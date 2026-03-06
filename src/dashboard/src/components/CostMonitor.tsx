@@ -1,19 +1,47 @@
+import { useState, useEffect, useCallback } from 'react'
+
 import {
-  useOrchestrationStore,
   ProviderUsage,
   LLMProvider,
   PROVIDER_CONFIG,
+  identifyProvider,
 } from '../stores/orchestration'
 
+const API_BASE = import.meta.env.VITE_API_URL || '/api'
+
+// ─────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────
+
+interface CostBreakdown {
+  category: string
+  value: string
+  cost: number
+  tokens: number
+  percentage: number
+}
+
+interface CostAnalytics {
+  total_cost: number
+  total_tokens: number
+  avg_cost_per_task: number
+  by_agent: CostBreakdown[]
+  by_model: CostBreakdown[]
+  projected_monthly: number
+}
+
+// ─────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────
 
 function formatCost(cost: number): string {
   if (cost === 0) {
     return 'FREE'
   }
-  if (cost < 0.001) {
-    return `$${(cost * 1000).toFixed(4)}m`
+  if (cost < 0.01) {
+    return `$${cost.toFixed(4)}`
   }
-  return `$${cost.toFixed(4)}`
+  return `$${cost.toFixed(2)}`
 }
 
 function formatTokens(tokens: number): string {
@@ -26,7 +54,44 @@ function formatTokens(tokens: number): string {
   return tokens.toString()
 }
 
+/** Group by_model entries into provider-level usage */
+function groupByProvider(byModel: CostBreakdown[]): Record<LLMProvider, ProviderUsage> {
+  const result: Partial<Record<LLMProvider, ProviderUsage>> = {}
+
+  for (const entry of byModel) {
+    const provider = identifyProvider(entry.value)
+    const existing = result[provider]
+
+    if (existing) {
+      existing.totalTokens += entry.tokens
+      existing.costUsd += entry.cost
+      existing.callCount += 1
+    } else {
+      result[provider] = {
+        provider,
+        displayName: PROVIDER_CONFIG[provider].displayName,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: entry.tokens,
+        costUsd: entry.cost,
+        callCount: 1,
+      }
+    }
+  }
+
+  return result as Record<LLMProvider, ProviderUsage>
+}
+
+async function fetchCostAnalytics(): Promise<CostAnalytics> {
+  const res = await fetch(`${API_BASE}/analytics/costs?time_range=all`)
+  if (!res.ok) throw new Error('Failed to fetch cost analytics')
+  return res.json()
+}
+
+// ─────────────────────────────────────────────────────────────
 // Provider color mapping for Tailwind classes
+// ─────────────────────────────────────────────────────────────
+
 const PROVIDER_COLORS: Record<LLMProvider, { bg: string; border: string; text: string; bar: string }> = {
   google: {
     bg: 'bg-blue-50 dark:bg-blue-900/20',
@@ -60,6 +125,10 @@ const PROVIDER_COLORS: Record<LLMProvider, { bg: string; border: string; text: s
   },
 }
 
+// ─────────────────────────────────────────────────────────────
+// Components
+// ─────────────────────────────────────────────────────────────
+
 interface ProviderCardProps {
   usage: ProviderUsage
 }
@@ -86,7 +155,7 @@ function ProviderCard({ usage }: ProviderCardProps) {
           {formatCost(usage.costUsd)}
         </div>
         <div className="text-xs text-gray-500 dark:text-gray-400">
-          {usage.callCount} call{usage.callCount !== 1 ? 's' : ''}
+          {usage.callCount} model{usage.callCount !== 1 ? 's' : ''}
         </div>
       </div>
     </div>
@@ -95,14 +164,33 @@ function ProviderCard({ usage }: ProviderCardProps) {
 
 
 export function CostMonitor() {
-  const { providerUsage, totalCost } = useOrchestrationStore()
+  const [data, setData] = useState<CostAnalytics | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  // 실제 데이터만 표시 (데모 데이터 없음)
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const result = await fetchCostAnalytics()
+      setData(result)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  const providerUsage = data ? groupByProvider(data.by_model) : {}
   const providers = Object.entries(providerUsage) as [LLMProvider, ProviderUsage][]
-  const totalTokens = providers.reduce((sum, [, usage]) => sum + usage.totalTokens, 0)
-
-  // Sort providers by total tokens (descending)
   const sortedProviders = [...providers].sort((a, b) => b[1].totalTokens - a[1].totalTokens)
+
+  const totalTokens = data?.total_tokens ?? 0
+  const totalCost = data?.total_cost ?? 0
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
@@ -110,7 +198,21 @@ export function CostMonitor() {
         <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
           LLM Provider Usage
         </h3>
+        <button
+          onClick={loadData}
+          disabled={loading}
+          className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-50"
+          aria-label="Refresh LLM usage data"
+        >
+          {loading ? '...' : '↻'}
+        </button>
       </div>
+
+      {error && (
+        <div className="text-xs text-red-500 dark:text-red-400 mb-3">
+          {error}
+        </div>
+      )}
 
       {/* Total Summary */}
       <div className="grid grid-cols-2 gap-4 mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
@@ -145,7 +247,7 @@ export function CostMonitor() {
           </div>
         ) : (
           <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
-            No provider usage data yet
+            {loading ? 'Loading...' : 'No provider usage data yet'}
           </div>
         )}
       </div>
@@ -155,17 +257,18 @@ export function CostMonitor() {
 }
 
 export function CostBadge() {
-  const { totalCost, tokenUsage, providerUsage } = useOrchestrationStore()
+  const [data, setData] = useState<CostAnalytics | null>(null)
 
-  const totalTokens = Object.values(tokenUsage).reduce(
-    (sum, usage) => sum + usage.total_tokens,
-    0
-  )
+  useEffect(() => {
+    fetchCostAnalytics()
+      .then(setData)
+      .catch(() => {/* silent fail for badge */})
+  }, [])
 
-  // Get active provider icons
+  if (!data || data.total_tokens === 0) return null
+
+  const providerUsage = groupByProvider(data.by_model)
   const activeProviders = Object.keys(providerUsage) as LLMProvider[]
-
-  if (totalTokens === 0) return null
 
   return (
     <div className="flex items-center gap-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-md text-xs">
@@ -183,11 +286,11 @@ export function CostBadge() {
         </span>
       )}
       <span className="text-gray-600 dark:text-gray-400">
-        {formatTokens(totalTokens)} tokens
+        {formatTokens(data.total_tokens)} tokens
       </span>
       <span className="text-gray-400 dark:text-gray-500">|</span>
       <span className="text-green-600 dark:text-green-400 font-medium">
-        {formatCost(totalCost)}
+        {formatCost(data.total_cost)}
       </span>
     </div>
   )
