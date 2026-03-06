@@ -235,7 +235,7 @@ describe('ProjectManagementPage', () => {
       mockError = 'Something failed'
       render(<ProjectManagementPage />)
       // The error banner has a close X button. Find the error text first, then the nearby button.
-      const errorDiv = screen.getByText('Something failed').closest('div.mb-4, [class*="mb-4"]')
+      const errorDiv = screen.getByText('Something failed').closest('div.mb-3, [class*="mb-3"]')
       // The dismiss button is a sibling button inside the error container
       const buttons = errorDiv ? errorDiv.querySelectorAll('button') : []
       expect(buttons.length).toBeGreaterThanOrEqual(1)
