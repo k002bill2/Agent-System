@@ -96,8 +96,8 @@ export function TaskEvaluationCard({ sessionId, taskId, agentId, contextSummary,
         className={cn(
           'p-1.5 rounded-lg transition-colors',
           selected === 'up'
-            ? 'text-white bg-white/10'
-            : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+            ? 'text-green-600 bg-green-100 dark:text-white dark:bg-white/10'
+            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-300 dark:hover:bg-white/5'
         )}
         title="도움이 됐어요"
       >
@@ -110,8 +110,8 @@ export function TaskEvaluationCard({ sessionId, taskId, agentId, contextSummary,
         className={cn(
           'p-1.5 rounded-lg transition-colors',
           selected === 'down'
-            ? 'text-white bg-white/10'
-            : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+            ? 'text-red-600 bg-red-100 dark:text-white dark:bg-white/10'
+            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-300 dark:hover:bg-white/5'
         )}
         title="대답이 마음에 들지 않아요"
       >
@@ -123,8 +123,8 @@ export function TaskEvaluationCard({ sessionId, taskId, agentId, contextSummary,
         className={cn(
           'p-1.5 rounded-lg transition-colors',
           showComment
-            ? 'text-white bg-white/10'
-            : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+            ? 'text-blue-600 bg-blue-100 dark:text-white dark:bg-white/10'
+            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-300 dark:hover:bg-white/5'
         )}
         title="코멘트"
       >
@@ -139,19 +139,19 @@ export function TaskEvaluationCard({ sessionId, taskId, agentId, contextSummary,
             onChange={(e) => setComment(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleCommentSubmit()}
             placeholder="의견을 남겨주세요..."
-            className="text-xs px-2 py-1 border border-gray-600 rounded-md bg-gray-700 text-white focus:outline-none focus:ring-1 focus:ring-blue-400 w-48"
+            className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-400 w-48"
             autoFocus
           />
           <button
             onClick={handleCommentSubmit}
             disabled={!comment.trim() || isSubmitting}
-            className="p-1 text-green-400 hover:bg-white/5 rounded disabled:opacity-30"
+            className="p-1 text-green-600 dark:text-green-400 hover:bg-gray-100 dark:hover:bg-white/5 rounded disabled:opacity-30"
           >
             <Check className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => { setShowComment(false); setComment('') }}
-            className="p-1 text-gray-500 hover:bg-white/5 rounded"
+            className="p-1 text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5 rounded"
           >
             <X className="w-3.5 h-3.5" />
           </button>
