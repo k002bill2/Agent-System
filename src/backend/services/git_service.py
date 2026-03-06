@@ -241,8 +241,15 @@ class GitService:
                 try:
                     remote_obj = self.repo.remotes[remote_name]
                     remote_obj.push(refspec=f":refs/heads/{remote_branch}")
-                except GitCommandError as e:
-                    raise GitServiceError(f"Failed to delete remote branch: {e}")
+                except GitCommandError:
+                    # Remote branch may already be deleted; prune stale ref
+                    pass
+                finally:
+                    # Always prune to clean up stale remote-tracking refs
+                    try:
+                        self.repo.remotes[remote_name].fetch(prune=True)
+                    except GitCommandError:
+                        pass
             else:
                 # Delete local branch
                 self.repo.delete_head(name, force=force)
@@ -270,10 +277,14 @@ class GitService:
             if remote_ref in refs:
                 try:
                     remote.push(refspec=f":refs/heads/{branch_name}")
-                except GitCommandError as e:
-                    raise GitServiceError(
-                        f"Local branch deleted but failed to delete remote '{remote.name}/{branch_name}': {e}"
-                    )
+                except GitCommandError:
+                    # Remote branch may already be deleted; prune stale ref
+                    try:
+                        remote.fetch(prune=True)
+                    except GitCommandError as prune_err:
+                        raise GitServiceError(
+                            f"Failed to clean up stale remote ref '{remote_ref}': {prune_err}"
+                        )
 
     def checkout_branch(self, name: str, create: bool = False) -> GitBranch:
         """Checkout a branch.
@@ -1185,18 +1196,19 @@ class GitService:
     # Remote Operations
     # =========================================================================
 
-    def fetch(self, remote: str = "origin") -> FetchResult:
+    def fetch(self, remote: str = "origin", prune: bool = True) -> FetchResult:
         """Fetch from remote.
 
         Args:
             remote: Remote name
+            prune: Remove stale remote-tracking refs (default True)
 
         Returns:
             Fetch result
         """
         try:
             remote_obj = self.repo.remotes[remote]
-            info = remote_obj.fetch()
+            info = remote_obj.fetch(prune=prune)
 
             return FetchResult(
                 success=True,
