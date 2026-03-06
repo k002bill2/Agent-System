@@ -1,16 +1,22 @@
-import { useState } from 'react'
-import { Webhook, Zap, Filter, Code, Plus, Trash2, Copy } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Webhook, Zap, Globe, Filter, Code, Plus, Trash2, Copy } from 'lucide-react'
 import { useProjectConfigsStore, HookConfig } from '../../stores/projectConfigs'
 import { HookEditModal } from './HookEditModal'
 import { ConfirmDeleteModal } from './ConfirmDeleteModal'
 import { CopyToProjectModal, CopyItemType } from './CopyToProjectModal'
 
 export function HooksTab() {
-  const { selectedProject, isLoadingProject, addHookEntry, deleteHook, copyHook } = useProjectConfigsStore()
+  const { selectedProject, isLoadingProject, addHookEntry, deleteHook, copyHook, globalConfigs, fetchGlobalConfigs } = useProjectConfigsStore()
   const [showAddModal, setShowAddModal] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ event: string; index: number; command: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [copyTarget, setCopyTarget] = useState<{ event: string; index: number; command: string } | null>(null)
+
+  useEffect(() => {
+    if (!globalConfigs) {
+      fetchGlobalConfigs()
+    }
+  }, [globalConfigs, fetchGlobalConfigs])
 
   if (isLoadingProject) {
     return (
@@ -151,6 +157,72 @@ export function HooksTab() {
             ))}
           </div>
         )}
+
+        {/* Global Hooks */}
+        {(() => {
+          if (!globalConfigs || globalConfigs.hooks.length === 0) return null
+
+          const globalHooksByEvent: Record<string, HookConfig[]> = {}
+          globalConfigs.hooks.forEach((hook) => {
+            if (!globalHooksByEvent[hook.event]) {
+              globalHooksByEvent[hook.event] = []
+            }
+            globalHooksByEvent[hook.event].push(hook)
+          })
+
+          return (
+            <div className="mt-6">
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                <Globe className="w-4 h-4 text-teal-500" />
+                Global Hooks ({globalConfigs.hooks.length})
+              </h4>
+              <div className="space-y-6">
+                {Object.entries(globalHooksByEvent).map(([event, eventHooks]) => (
+                  <div key={`global-${event}`}>
+                    <h5 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-2">
+                      <Zap className="w-3 h-3 text-teal-400" />
+                      {event}
+                      <span className="text-xs text-gray-400">({eventHooks.length})</span>
+                    </h5>
+                    <div className="space-y-2">
+                      {eventHooks.map((hook) => (
+                        <div
+                          key={hook.hook_id}
+                          className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 opacity-80"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="p-1.5 bg-teal-100 dark:bg-teal-900/30 rounded">
+                              <Filter className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-gray-900 dark:text-white">Matcher:</span>
+                                <code className="text-sm px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-gray-700 dark:text-gray-300">
+                                  {hook.matcher}
+                                </code>
+                                <span className="text-xs px-1.5 py-0.5 bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 rounded">
+                                  global
+                                </span>
+                              </div>
+                              {hook.command && (
+                                <div className="mt-2 flex items-start gap-2">
+                                  <Code className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                                  <code className="text-xs text-gray-600 dark:text-gray-400 font-mono break-all">
+                                    {hook.command}
+                                  </code>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
       </div>
 
       {/* Modals */}

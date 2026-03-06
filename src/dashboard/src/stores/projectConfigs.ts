@@ -98,6 +98,13 @@ export interface ProjectConfigSummary {
   commands: CommandConfig[]
 }
 
+export interface GlobalConfigSummary {
+  agents: AgentConfig[]
+  skills: SkillConfig[]
+  hooks: HookConfig[]
+  mcp_servers: MCPServerConfig[]
+}
+
 export interface ConfigChangeEvent {
   event_type: 'created' | 'modified' | 'deleted'
   project_id: string
@@ -144,6 +151,10 @@ interface ProjectConfigsState {
   allSkills: SkillConfig[]
   allAgents: AgentConfig[]
   isLoadingAll: boolean
+
+  // Global configs (~/.claude/)
+  globalConfigs: GlobalConfigSummary | null
+  isLoadingGlobal: boolean
 
   // Active tab
   activeTab: TabType
@@ -195,6 +206,7 @@ interface ProjectConfigsState {
   fetchProjectSummary: (projectId: string) => Promise<void>
   fetchAllSkills: () => Promise<void>
   fetchAllAgents: () => Promise<void>
+  fetchGlobalConfigs: () => Promise<void>
   fetchSkillContent: (projectId: string, skillId: string) => Promise<void>
   toggleMCPServer: (projectId: string, serverId: string, enabled: boolean) => Promise<void>
   addExternalPath: (path: string) => Promise<boolean>
@@ -284,6 +296,9 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
   allSkills: [],
   allAgents: [],
   isLoadingAll: false,
+
+  globalConfigs: null,
+  isLoadingGlobal: false,
 
   activeTab: 'overview',
 
@@ -399,6 +414,18 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
       set({ error: errorMessage, isLoadingAll: false })
+    }
+  },
+
+  fetchGlobalConfigs: async () => {
+    set({ isLoadingGlobal: true })
+
+    try {
+      const data = await apiClient.get<GlobalConfigSummary>('/api/project-configs/global')
+      set({ globalConfigs: data, isLoadingGlobal: false })
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage, isLoadingGlobal: false })
     }
   },
 

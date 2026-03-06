@@ -166,6 +166,15 @@ class ProjectConfigSummary(BaseModel):
     commands: list[CommandConfig] = Field(default_factory=list)
 
 
+class GlobalConfigSummary(BaseModel):
+    """Summary of global (~/.claude/) configurations."""
+
+    agents: list[AgentConfig] = Field(default_factory=list)
+    skills: list[SkillConfig] = Field(default_factory=list)
+    hooks: list[HookConfig] = Field(default_factory=list)
+    mcp_servers: list[MCPServerConfig] = Field(default_factory=list)
+
+
 class ConfigChangeEvent(BaseModel):
     """Event emitted when configuration changes."""
 

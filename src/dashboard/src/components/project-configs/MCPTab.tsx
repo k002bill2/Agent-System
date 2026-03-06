@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { cn } from '../../lib/utils'
-import { Server, Power, PowerOff, Package, Terminal, Info, Plus, Pencil, Trash2, User, FolderCode, Copy } from 'lucide-react'
+import { Server, Power, PowerOff, Package, Terminal, Info, Plus, Pencil, Trash2, Globe, FolderCode, Copy } from 'lucide-react'
 import { useProjectConfigsStore, MCPServerConfig } from '../../stores/projectConfigs'
 import { MCPServerModal } from './MCPServerModal'
 import { ConfirmDeleteModal } from './ConfirmDeleteModal'
@@ -16,10 +16,18 @@ export function MCPTab() {
     deleteMCPServer,
     deletingMCP,
     copyMCPServer,
+    globalConfigs,
+    fetchGlobalConfigs,
   } = useProjectConfigsStore()
 
   const [deleteTarget, setDeleteTarget] = useState<MCPServerConfig | null>(null)
   const [copyTarget, setCopyTarget] = useState<MCPServerConfig | null>(null)
+
+  useEffect(() => {
+    if (!globalConfigs) {
+      fetchGlobalConfigs()
+    }
+  }, [globalConfigs, fetchGlobalConfigs])
 
   if (isLoadingProject) {
     return (
@@ -85,27 +93,28 @@ export function MCPTab() {
           </div>
         </div>
 
-        {/* User MCP Servers Section */}
-        {user_mcp_servers && user_mcp_servers.length > 0 && (
+        {/* Global MCP Servers Section */}
+        {globalConfigs && globalConfigs.mcp_servers.length > 0 && (
           <div className="mb-6">
             <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
-              <User className="w-4 h-4 text-blue-500" />
-              User MCPs
+              <Globe className="w-4 h-4 text-teal-500" />
+              Global MCPs
               <span className="text-xs text-gray-500 dark:text-gray-400">
                 (~/.claude.json)
               </span>
-              <span className="text-xs px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded">
-                {user_mcp_servers.length}
+              <span className="text-xs px-1.5 py-0.5 bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 rounded">
+                {globalConfigs.mcp_servers.length}
               </span>
             </h4>
             <div className="space-y-3">
-              {user_mcp_servers.map((server) => (
+              {globalConfigs.mcp_servers.map((server) => (
                 <MCPServerCard
-                  key={`user-${server.server_id}`}
+                  key={`global-${server.server_id}`}
                   server={server}
                   isToggling={false}
                   isDeleting={false}
                   isReadOnly={true}
+                  isGlobal={true}
                   onToggle={() => {}}
                   onEdit={() => {}}
                   onDelete={() => {}}
@@ -185,13 +194,14 @@ interface MCPServerCardProps {
   isToggling: boolean
   isDeleting: boolean
   isReadOnly?: boolean
+  isGlobal?: boolean
   onToggle: () => void
   onEdit: () => void
   onDelete: () => void
   onCopy?: () => void
 }
 
-function MCPServerCard({ server, isToggling, isDeleting, isReadOnly = false, onToggle, onEdit, onDelete, onCopy }: MCPServerCardProps) {
+function MCPServerCard({ server, isToggling, isDeleting, isReadOnly = false, isGlobal = false, onToggle, onEdit, onDelete, onCopy }: MCPServerCardProps) {
   const typeIcons: Record<string, typeof Package> = {
     npx: Package,
     uvx: Package,
@@ -207,9 +217,11 @@ function MCPServerCard({ server, isToggling, isDeleting, isReadOnly = false, onT
         'bg-white dark:bg-gray-800 rounded-lg border overflow-hidden transition-colors',
         server.disabled
           ? 'border-gray-200 dark:border-gray-700 opacity-60'
-          : isUserMCP
-            ? 'border-blue-200 dark:border-blue-800'
-            : 'border-green-200 dark:border-green-800'
+          : isGlobal
+            ? 'border-teal-200 dark:border-teal-800 opacity-80'
+            : isUserMCP
+              ? 'border-blue-200 dark:border-blue-800'
+              : 'border-green-200 dark:border-green-800'
       )}
     >
       <div className="p-4 flex items-start gap-4">
@@ -218,9 +230,11 @@ function MCPServerCard({ server, isToggling, isDeleting, isReadOnly = false, onT
             'p-2 rounded-lg',
             server.disabled
               ? 'bg-gray-100 dark:bg-gray-700'
-              : isUserMCP
-                ? 'bg-blue-100 dark:bg-blue-900/30'
-                : 'bg-green-100 dark:bg-green-900/30'
+              : isGlobal
+                ? 'bg-teal-100 dark:bg-teal-900/30'
+                : isUserMCP
+                  ? 'bg-blue-100 dark:bg-blue-900/30'
+                  : 'bg-green-100 dark:bg-green-900/30'
           )}
         >
           <TypeIcon
@@ -228,9 +242,11 @@ function MCPServerCard({ server, isToggling, isDeleting, isReadOnly = false, onT
               'w-5 h-5',
               server.disabled
                 ? 'text-gray-500 dark:text-gray-400'
-                : isUserMCP
-                  ? 'text-blue-600 dark:text-blue-400'
-                  : 'text-green-600 dark:text-green-400'
+                : isGlobal
+                  ? 'text-teal-600 dark:text-teal-400'
+                  : isUserMCP
+                    ? 'text-blue-600 dark:text-blue-400'
+                    : 'text-green-600 dark:text-green-400'
             )}
           />
         </div>
@@ -243,13 +259,20 @@ function MCPServerCard({ server, isToggling, isDeleting, isReadOnly = false, onT
                 'text-xs px-1.5 py-0.5 rounded font-medium',
                 server.disabled
                   ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
-                  : isUserMCP
-                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
-                    : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                  : isGlobal
+                    ? 'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400'
+                    : isUserMCP
+                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                      : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
               )}
             >
               {server.disabled ? 'disabled' : 'enabled'}
             </span>
+            {isGlobal && (
+              <span className="text-xs px-1.5 py-0.5 bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 rounded">
+                global
+              </span>
+            )}
             <span className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-400">
               {server.server_type}
             </span>
