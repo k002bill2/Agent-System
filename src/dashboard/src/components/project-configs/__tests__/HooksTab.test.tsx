@@ -56,6 +56,8 @@ describe('HooksTab', () => {
       addHookEntry: mockAddHookEntry,
       deleteHook: mockDeleteHook,
       copyHook: mockCopyHook,
+      globalConfigs: null,
+      fetchGlobalConfigs: vi.fn(),
     }
   })
 

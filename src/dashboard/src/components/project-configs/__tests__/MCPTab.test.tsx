@@ -82,6 +82,13 @@ describe('MCPTab', () => {
       deleteMCPServer: mockDeleteMCPServer,
       deletingMCP: new Set(),
       copyMCPServer: mockCopyMCPServer,
+      globalConfigs: {
+        agents: [],
+        skills: [],
+        hooks: [],
+        mcp_servers: mockUserMCPServers,
+      },
+      fetchGlobalConfigs: vi.fn(),
     }
   })
 
@@ -138,13 +145,13 @@ describe('MCPTab', () => {
     expect(mockOpenMCPModal).toHaveBeenCalledWith('create')
   })
 
-  it('shows Project MCPs and User MCPs sections', () => {
+  it('shows Project MCPs and Global MCPs sections', () => {
     render(<MCPTab />)
     expect(screen.getByText('Project MCPs')).toBeInTheDocument()
-    expect(screen.getByText('User MCPs')).toBeInTheDocument()
+    expect(screen.getByText(/Global MCPs/)).toBeInTheDocument()
   })
 
-  it('shows Read-only badge for user MCP servers', () => {
+  it('shows Read-only badge for global MCP servers', () => {
     render(<MCPTab />)
     expect(screen.getByText('Read-only')).toBeInTheDocument()
   })
@@ -155,6 +162,7 @@ describe('MCPTab', () => {
       mcp_servers: [],
       user_mcp_servers: [],
     }
+    mockStoreState.globalConfigs = { agents: [], skills: [], hooks: [], mcp_servers: [] }
     render(<MCPTab />)
     expect(screen.getByText('No project MCP servers configured')).toBeInTheDocument()
   })

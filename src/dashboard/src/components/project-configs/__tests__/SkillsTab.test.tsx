@@ -75,6 +75,8 @@ describe('SkillsTab', () => {
       deleteSkill: mockDeleteSkill,
       deletingSkills: new Set(),
       copySkill: mockCopySkill,
+      globalConfigs: null,
+      fetchGlobalConfigs: vi.fn(),
     }
   })
 

@@ -440,7 +440,9 @@ class AuditService:
 
         if filter.project_id:
             if filter.include_global:
-                results = [r for r in results if r.project_id == filter.project_id or r.project_id is None]
+                results = [
+                    r for r in results if r.project_id == filter.project_id or r.project_id is None
+                ]
             else:
                 results = [r for r in results if r.project_id == filter.project_id]
 

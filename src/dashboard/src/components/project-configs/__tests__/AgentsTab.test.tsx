@@ -65,6 +65,8 @@ describe('AgentsTab', () => {
       deleteAgent: mockDeleteAgent,
       deletingAgents: new Set(),
       copyAgent: mockCopyAgent,
+      globalConfigs: null,
+      fetchGlobalConfigs: vi.fn(),
     }
   })
 
