@@ -62,24 +62,18 @@ cd src/dashboard && npm install && npm run dev
 
 전체 명령어 목록은 `.claude/commands/` 디렉토리 참조. `/sync-registry`로 레지스트리 동기화.
 
-## Code Patterns
+## Rules
 
-**Backend** (Python):
-```python
-class MyAgent(BaseAgent):
-    async def execute(self, task: str, context: dict) -> AgentResult:
-        return AgentResult(success=True, output=await self._invoke_llm(task, context))
-```
+프로젝트 규칙은 `.claude/rules/`에서 자동 로드됩니다:
+- `aos-backend.md` - FastAPI, SQLAlchemy, LangGraph 패턴
+- `aos-frontend.md` - React, Tailwind, Zustand 패턴
+- `aos-workflow.md` - 스킬 라우팅, 검증 체크리스트
 
-**Frontend** (React/TypeScript):
-```tsx
-export const useStore = create<State>((set) => ({
-  data: null,
-  fetchData: async () => { /* ... */ },
-}))
-```
-
-**경로 별칭**: Backend `from ..models import ...` / Dashboard `@/components/...`
+글로벌 규칙 (`~/.claude/rules/`):
+- `golden-principles.md` - 코드 원칙 (DRY, KISS, YAGNI)
+- `security.md` - 보안 규칙
+- `verification.md` - 검증 규칙
+- `interaction.md` - 소통 규칙
 
 ## Environment Variables
 
@@ -165,28 +159,6 @@ dev/active/[task-name]/
 - CLAUDE.md에는 핵심 개요만 유지
 
 **문서 업데이트**: 기능 구현 후 `docs/` 관련 문서 업데이트 필수 (상세: `docs/doc-update-rules.md` 참조)
-
-## Skill Routing (필수)
-
-구현 전 반드시 해당 스킬을 Skill 도구로 호출할 것:
-
-| 작업 유형 | 스킬 | 비고 |
-|-----------|------|------|
-| React/UI/컴포넌트/페이지 | `react-web-development` | Tailwind/Zustand 포함 |
-| FastAPI/LangGraph/DB | 아래 Backend 패턴 참조 | CLAUDE.md Code Patterns |
-| 테스트/커버리지 | `test-automation` | 구현 후 자동 실행 |
-| 병렬 에이전트 (3+ 작업) | `parallel-coordinator` | ACE Framework |
-| 구현 완료 검증 | `verification-loop` | tsc+lint+test+build |
-| 스킬/에이전트/커맨드 생성 | `skill-creator`, `subagent-creator`, `hook-creator`, `slash-command-creator` | meta 스킬 |
-| ACE 거버넌스 | `ace-framework` | 멀티에이전트 거버넌스 |
-
-## Coding Guidelines
-
-- **배포 전 검증**: 배포 전 반드시 `tsc --noEmit` + `pytest --tb=short` 실행 후 에러 0 확인
-- **타입 안전성**: TypeScript/Python 모두 타입 힌트 일관 사용, 편집 후 타입 체크 실행
-- **디버깅 규칙**: 같은 수정을 2회 시도 후 실패하면 멈추고, 근본 원인 분석 후 다른 접근 제안 (같은 전략 3회 재시도 금지)
-- **분석 요청 대응**: 값을 요약하지 말고 분석과 구체적 개선 제안을 제공
-- **DB 디버깅**: asyncpg/PostgreSQL 이슈 시 prepared statement 캐시 충돌 우선 확인
 
 ## 상세 문서 (필요시 Read)
 
