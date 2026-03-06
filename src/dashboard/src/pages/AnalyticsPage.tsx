@@ -1318,6 +1318,8 @@ function EvalDetailView({ detail }: { detail: TaskAnalysisHistory }) {
 
 function ActivityHeatmapChart({ data }: { data: ActivityHeatmap }) {
   const cellHeight = 16
+  const isDark = document.documentElement.classList.contains('dark')
+  const emptyColor = isDark ? '#171f2a' : '#e5e7eb'
 
   return (
     <div className="w-full overflow-hidden">
@@ -1349,7 +1351,7 @@ function ActivityHeatmapChart({ data }: { data: ActivityHeatmap }) {
                   style={{
                     height: cellHeight,
                     backgroundColor: intensity === 0
-                      ? 'var(--heatmap-empty, #171f2aff)'
+                      ? emptyColor
                       : `rgba(59, 130, 246, ${0.2 + intensity * 0.8})`,
                   }}
                   className="w-full rounded-sm cursor-pointer hover:ring-2 hover:ring-blue-400"
@@ -1374,7 +1376,7 @@ function ActivityHeatmapChart({ data }: { data: ActivityHeatmap }) {
               width: 12,
               height: 12,
               backgroundColor: intensity === 0
-                ? 'var(--heatmap-empty, #e5e7eb)'
+                ? emptyColor
                 : `rgba(59, 130, 246, ${0.2 + intensity * 0.8})`,
             }}
             className="rounded-sm"
