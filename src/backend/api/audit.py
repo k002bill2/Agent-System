@@ -49,6 +49,7 @@ async def get_audit_logs(
     session_id: str | None = Query(None),
     user_id: str | None = Query(None),
     project_id: str | None = Query(None),
+    include_global: bool = Query(True, description="Include global events (project_id=NULL) when filtering by project"),
     action: str | None = Query(None),
     resource_type: str | None = Query(None),
     resource_id: str | None = Query(None),
@@ -91,6 +92,7 @@ async def get_audit_logs(
         session_id=session_id,
         user_id=user_id,
         project_id=project_id,
+        include_global=include_global,
         action=action_enum,
         resource_type=resource_type_enum,
         resource_id=resource_id,
@@ -110,6 +112,7 @@ async def get_audit_logs(
 async def get_audit_stats(
     session_id: str | None = Query(None),
     project_id: str | None = Query(None),
+    include_global: bool = Query(True),
     start_date: datetime | None = Query(None),
     end_date: datetime | None = Query(None),
     db: AsyncSession = Depends(get_db),
@@ -128,6 +131,7 @@ async def get_audit_stats(
     filter = AuditLogFilter(
         session_id=session_id,
         project_id=project_id,
+        include_global=include_global,
         start_date=start_date,
         end_date=end_date,
         limit=10000,  # Get enough for accurate stats

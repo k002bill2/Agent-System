@@ -141,6 +141,7 @@ class AuditLogFilter(BaseModel):
     session_id: str | None = None
     user_id: str | None = None
     project_id: str | None = None
+    include_global: bool = True  # Include project_id IS NULL events when filtering by project
     action: AuditAction | None = None
     resource_type: ResourceType | None = None
     resource_id: str | None = None
@@ -438,7 +439,10 @@ class AuditService:
             results = [r for r in results if r.user_id == filter.user_id]
 
         if filter.project_id:
-            results = [r for r in results if r.project_id == filter.project_id or r.project_id is None]
+            if filter.include_global:
+                results = [r for r in results if r.project_id == filter.project_id or r.project_id is None]
+            else:
+                results = [r for r in results if r.project_id == filter.project_id]
 
         if filter.action:
             results = [r for r in results if r.action == filter.action]
@@ -488,12 +492,15 @@ class AuditService:
             conditions.append(AuditLogModel.user_id == filter.user_id)
 
         if filter.project_id:
-            conditions.append(
-                or_(
-                    AuditLogModel.project_id == filter.project_id,
-                    AuditLogModel.project_id.is_(None),
+            if filter.include_global:
+                conditions.append(
+                    or_(
+                        AuditLogModel.project_id == filter.project_id,
+                        AuditLogModel.project_id.is_(None),
+                    )
                 )
-            )
+            else:
+                conditions.append(AuditLogModel.project_id == filter.project_id)
 
         if filter.action:
             conditions.append(AuditLogModel.action == filter.action.value)

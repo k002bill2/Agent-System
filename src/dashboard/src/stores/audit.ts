@@ -32,6 +32,7 @@ export interface AuditLogFilter {
   session_id?: string
   user_id?: string
   project_id?: string
+  include_global?: boolean
   action?: string
   resource_type?: string
   status?: string
@@ -100,6 +101,7 @@ export const useAuditStore = create<AuditState>((set, get) => ({
       if (filter.session_id) params.set('session_id', filter.session_id)
       if (filter.user_id) params.set('user_id', filter.user_id)
       if (filter.project_id) params.set('project_id', filter.project_id)
+      if (filter.include_global !== undefined) params.set('include_global', String(filter.include_global))
       if (filter.action) params.set('action', filter.action)
       if (filter.resource_type) params.set('resource_type', filter.resource_type)
       if (filter.status) params.set('status', filter.status)
@@ -133,6 +135,7 @@ export const useAuditStore = create<AuditState>((set, get) => ({
       if (sessionId) params.set('session_id', sessionId)
       const { filter } = get()
       if (filter.project_id) params.set('project_id', filter.project_id)
+      if (filter.include_global !== undefined) params.set('include_global', String(filter.include_global))
 
       const data = await apiClient.get<AuditStats>(`/api/audit/stats?${params}`)
       set({ stats: data, isLoadingStats: false })

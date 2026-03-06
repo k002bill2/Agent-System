@@ -26,6 +26,7 @@ export function AuditPage() {
     : projects.filter((p) => p.is_active !== false)
   const [filterBySession, setFilterBySession] = useState(false)
   const [selectedProjectId, setSelectedProjectId] = useState<string>('')
+  const [includeGlobal, setIncludeGlobal] = useState(true)
   const isFirstMount = useRef(true)
 
   const {
@@ -53,12 +54,13 @@ export function AuditPage() {
       return
     }
 
-    const newFilter: Record<string, string> = {}
+    const newFilter: Record<string, string | boolean> = {}
     if (filterBySession && sessionId) {
       newFilter.session_id = sessionId
     }
     if (selectedProjectId) {
       newFilter.project_id = selectedProjectId
+      newFilter.include_global = includeGlobal
     }
 
     if (Object.keys(newFilter).length > 0) {
@@ -69,7 +71,7 @@ export function AuditPage() {
       fetchStats()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterBySession, sessionId, selectedProjectId])
+  }, [filterBySession, sessionId, selectedProjectId, includeGlobal])
 
   const handleRefresh = () => {
     refresh()
@@ -112,6 +114,19 @@ export function AuditPage() {
               isLoadingStats && 'animate-spin'
             )} />
           </button>
+
+          {/* Global events toggle - only show when project is selected */}
+          {selectedProjectId && (
+            <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+              <input
+                type="checkbox"
+                checked={includeGlobal}
+                onChange={(e) => setIncludeGlobal(e.target.checked)}
+                className="rounded border-gray-300 dark:border-gray-600"
+              />
+              Include global
+            </label>
+          )}
 
           {/* Session filter toggle */}
           {sessionId && (
@@ -226,6 +241,7 @@ export function AuditPage() {
       <AuditLogTable
         sessionId={filterBySession ? sessionId || undefined : undefined}
         projectId={selectedProjectId || undefined}
+        includeGlobal={includeGlobal}
         className="shadow-sm"
       />
     </div>
