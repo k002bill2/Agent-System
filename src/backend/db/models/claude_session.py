@@ -63,13 +63,15 @@ class ClaudeSessionSnapshotModel(Base):
     notes = Column(Text, nullable=True)
 
     # Original timestamps from the Claude Code session
-    session_created_at = Column(DateTime, nullable=True)
-    session_last_activity = Column(DateTime, nullable=True)
+    session_created_at = Column(DateTime(timezone=True), nullable=True)
+    session_last_activity = Column(DateTime(timezone=True), nullable=True)
 
     # Snapshot timestamps
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )

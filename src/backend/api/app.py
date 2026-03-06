@@ -426,6 +426,7 @@ else:
             app.include_router(cost_allocation_router, prefix="/api")
         if health_router:
             app.include_router(health_router)
+            app.include_router(health_router, prefix="/api")
         if git_router:
             app.include_router(git_router, prefix="/api")
         if llm_models_router:

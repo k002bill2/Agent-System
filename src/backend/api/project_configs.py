@@ -27,6 +27,7 @@ from models.project_config import (
     CopyMCPRequest,
     CopySkillRequest,
     ExternalPathRequest,
+    GlobalConfigSummary,
     HookEntryRequest,
     HooksUpdateRequest,
     MCPServerConfig,
@@ -88,6 +89,18 @@ async def list_projects(
         total_agents=total_agents,
         total_mcp_servers=total_mcp_servers,
     )
+
+
+@router.get("/global", response_model=GlobalConfigSummary)
+async def get_global_configs(
+    current_user=Depends(get_current_user_optional),
+) -> GlobalConfigSummary:
+    """Get global configurations from ~/.claude/ directory.
+
+    Returns global agents, skills, and hooks that apply across all projects.
+    """
+    monitor = get_project_config_monitor()
+    return monitor.get_global_configs()
 
 
 async def _get_db_filtered_projects(monitor, current_user=None) -> list:

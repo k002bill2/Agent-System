@@ -1,0 +1,16 @@
+# Dashboard Dockerfile (Development)
+# Vite dev server with HMR
+
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies first for layer caching
+COPY package.json package-lock.json* ./
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+
+# Source code is mounted as volume — no COPY needed
+
+EXPOSE 5173
+
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

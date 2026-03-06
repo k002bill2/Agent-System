@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, desc, func, select
+from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.audit import (
@@ -141,6 +141,7 @@ class AuditLogFilter(BaseModel):
     session_id: str | None = None
     user_id: str | None = None
     project_id: str | None = None
+    include_global: bool = True  # Include project_id IS NULL events when filtering by project
     action: AuditAction | None = None
     resource_type: ResourceType | None = None
     resource_id: str | None = None
@@ -438,7 +439,12 @@ class AuditService:
             results = [r for r in results if r.user_id == filter.user_id]
 
         if filter.project_id:
-            results = [r for r in results if r.project_id == filter.project_id]
+            if filter.include_global:
+                results = [
+                    r for r in results if r.project_id == filter.project_id or r.project_id is None
+                ]
+            else:
+                results = [r for r in results if r.project_id == filter.project_id]
 
         if filter.action:
             results = [r for r in results if r.action == filter.action]
@@ -488,7 +494,15 @@ class AuditService:
             conditions.append(AuditLogModel.user_id == filter.user_id)
 
         if filter.project_id:
-            conditions.append(AuditLogModel.project_id == filter.project_id)
+            if filter.include_global:
+                conditions.append(
+                    or_(
+                        AuditLogModel.project_id == filter.project_id,
+                        AuditLogModel.project_id.is_(None),
+                    )
+                )
+            else:
+                conditions.append(AuditLogModel.project_id == filter.project_id)
 
         if filter.action:
             conditions.append(AuditLogModel.action == filter.action.value)
@@ -711,6 +725,7 @@ def audit_task_created(
     task_id: str,
     task_data: dict,
     user_id: str | None = None,
+    project_id: str | None = None,
 ) -> AuditLogEntry:
     """Log task creation."""
     return AuditService.log(
@@ -719,6 +734,7 @@ def audit_task_created(
         resource_id=task_id,
         session_id=session_id,
         user_id=user_id,
+        project_id=project_id,
         new_value=task_data,
     )
 
@@ -729,6 +745,7 @@ def audit_task_status_change(
     old_status: str,
     new_status: str,
     agent_id: str | None = None,
+    project_id: str | None = None,
 ) -> AuditLogEntry:
     """Log task status change."""
     action_map = {
@@ -746,6 +763,7 @@ def audit_task_status_change(
         resource_id=task_id,
         session_id=session_id,
         agent_id=agent_id,
+        project_id=project_id,
         old_value={"status": old_status},
         new_value={"status": new_status},
     )
@@ -758,6 +776,7 @@ def audit_tool_executed(
     result: Any,
     agent_id: str | None = None,
     task_id: str | None = None,
+    project_id: str | None = None,
 ) -> AuditLogEntry:
     """Log tool execution."""
     return AuditService.log(
@@ -766,6 +785,7 @@ def audit_tool_executed(
         resource_id=tool_name,
         session_id=session_id,
         agent_id=agent_id,
+        project_id=project_id,
         new_value={"args": tool_args, "result": str(result)[:1000]},
         metadata={"task_id": task_id} if task_id else None,
     )

@@ -20,15 +20,6 @@
         ]
       },
       {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/linkValidator.js 2>/dev/null || true"
-          }
-        ]
-      },
-      {
         "matcher": "Task",
         "hooks": [
           {
@@ -36,47 +27,9 @@
             "command": "node .claude/hooks/parallelCoordinator.js post 2>/dev/null || true"
           }
         ]
-      },
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/workspaceGuard.js 2>/dev/null || true"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/contextMonitor.js 2>/dev/null || true"
-          }
-        ]
-      },
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/stopEvent.js 2>/dev/null || true"
-          }
-        ]
       }
     ],
     "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/ethicalValidator.js 2>/dev/null || true"
-          }
-        ]
-      },
       {
         "matcher": "Task",
         "hooks": [

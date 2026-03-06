@@ -438,10 +438,12 @@ class PlannerNode(BaseNode):
 
         # Audit: Log task creation
         session_id = state.get("session_id", "")
+        project_id = state.get("project", {}).get("id")
         audit_task_created(
             session_id=session_id,
             task_id=root_task_id,
             task_data={"title": root_task.title, "description": task_description},
+            project_id=project_id,
         )
         for subtask_id in subtask_ids:
             subtask = tasks[subtask_id]
@@ -453,6 +455,7 @@ class PlannerNode(BaseNode):
                     "description": subtask.description,
                     "parent_id": root_task_id,
                 },
+                project_id=project_id,
             )
 
         return {
@@ -604,10 +607,12 @@ class PlannerNode(BaseNode):
 
         # Audit: Log task creation for all tasks
         session_id = state.get("session_id", "")
+        project_id = state.get("project", {}).get("id")
         audit_task_created(
             session_id=session_id,
             task_id=root_task_id,
             task_data={"title": root_task.title, "description": task_description},
+            project_id=project_id,
         )
         for subtask_id in subtask_ids:
             subtask = tasks[subtask_id]
@@ -619,6 +624,7 @@ class PlannerNode(BaseNode):
                     "description": subtask.description,
                     "parent_id": root_task_id,
                 },
+                project_id=project_id,
             )
 
         return {
@@ -777,6 +783,7 @@ After completing all necessary tool calls, provide a final summary."""
         current_task_id = state.get("current_task_id")
         tasks = state.get("tasks", {})
         session_id = state.get("session_id", "")
+        project_id = state.get("project", {}).get("id")
 
         if not current_task_id or current_task_id not in tasks:
             return {
@@ -833,6 +840,7 @@ After completing all necessary tool calls, provide a final summary."""
             resource_type=ResourceType.AGENT,
             resource_id=agent_id,
             session_id=session_id,
+            project_id=project_id,
             agent_id=agent_id,
             metadata={"task_id": current_task_id, "role": AgentRole.EXECUTOR.value},
         )
@@ -920,6 +928,7 @@ After completing all necessary tool calls, provide a final summary."""
                                 resource_type=ResourceType.APPROVAL,
                                 resource_id=approval_id,
                                 session_id=session_id,
+                                project_id=project_id,
                                 agent_id=agent_id,
                                 metadata={
                                     "task_id": current_task_id,
@@ -965,6 +974,7 @@ After completing all necessary tool calls, provide a final summary."""
                         result=result,
                         agent_id=agent_id,
                         task_id=current_task_id,
+                        project_id=project_id,
                     )
 
                     # Add tool result to messages
@@ -995,6 +1005,7 @@ After completing all necessary tool calls, provide a final summary."""
                 old_status=TaskStatus.IN_PROGRESS.value,
                 new_status=TaskStatus.COMPLETED.value,
                 agent_id=agent_id,
+                project_id=project_id,
             )
 
             # Update agent status to completed
@@ -1008,6 +1019,7 @@ After completing all necessary tool calls, provide a final summary."""
                     resource_type=ResourceType.AGENT,
                     resource_id=agent_id,
                     session_id=session_id,
+                    project_id=project_id,
                     agent_id=agent_id,
                     metadata={"task_id": current_task_id},
                 )
@@ -1037,6 +1049,7 @@ After completing all necessary tool calls, provide a final summary."""
                 old_status=TaskStatus.IN_PROGRESS.value,
                 new_status=TaskStatus.FAILED.value,
                 agent_id=agent_id,
+                project_id=project_id,
             )
 
             # Update agent status to failed

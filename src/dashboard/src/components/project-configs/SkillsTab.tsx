@@ -1,6 +1,6 @@
 import { cn } from '../../lib/utils'
-import { Sparkles, FileText, Code, FolderOpen, ChevronRight, Plus, Pencil, Trash2, Copy } from 'lucide-react'
-import { useState } from 'react'
+import { Sparkles, FileText, Code, FolderOpen, Globe, ChevronRight, Plus, Pencil, Trash2, Copy } from 'lucide-react'
+import { useState, useEffect } from 'react'
 import { useProjectConfigsStore, SkillConfig } from '../../stores/projectConfigs'
 import { SkillEditModal } from './SkillEditModal'
 import { ConfirmDeleteModal } from './ConfirmDeleteModal'
@@ -17,10 +17,18 @@ export function SkillsTab() {
     deleteSkill,
     deletingSkills,
     copySkill,
+    globalConfigs,
+    fetchGlobalConfigs,
   } = useProjectConfigsStore()
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<SkillConfig | null>(null)
   const [copyTarget, setCopyTarget] = useState<SkillConfig | null>(null)
+
+  useEffect(() => {
+    if (!globalConfigs) {
+      fetchGlobalConfigs()
+    }
+  }, [globalConfigs, fetchGlobalConfigs])
 
   if (isLoadingProject) {
     return (
@@ -107,6 +115,21 @@ export function SkillsTab() {
             ))}
           </div>
         )}
+
+        {/* Global Skills */}
+        {globalConfigs && globalConfigs.skills.length > 0 && (
+          <div className="mt-6">
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+              <Globe className="w-4 h-4 text-teal-500" />
+              Global Skills ({globalConfigs.skills.length})
+            </h4>
+            <div className="space-y-3">
+              {globalConfigs.skills.map((skill) => (
+                <GlobalSkillCard key={`global-${skill.skill_id}`} skill={skill} />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modals */}
@@ -132,6 +155,49 @@ export function SkillsTab() {
         onCopy={handleCopy}
       />
     </>
+  )
+}
+
+function GlobalSkillCard({ skill }: { skill: SkillConfig }) {
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden opacity-80">
+      <div className="p-4 flex items-start gap-4">
+        <div className="p-2 bg-teal-100 dark:bg-teal-900/30 rounded-lg">
+          <Sparkles className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h4 className="font-medium text-gray-900 dark:text-white">{skill.name}</h4>
+            <span className="text-xs px-1.5 py-0.5 bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 rounded">
+              global
+            </span>
+          </div>
+          {skill.description && (
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{skill.description}</p>
+          )}
+          <div className="flex items-center gap-3 mt-2 text-xs text-gray-500 dark:text-gray-400">
+            {skill.tools.length > 0 && (
+              <span className="flex items-center gap-1">
+                <Code className="w-3 h-3" />
+                {skill.tools.length} tools
+              </span>
+            )}
+            {skill.has_references && (
+              <span className="flex items-center gap-1">
+                <FileText className="w-3 h-3" />
+                references
+              </span>
+            )}
+            {skill.has_scripts && (
+              <span className="flex items-center gap-1">
+                <FolderOpen className="w-3 h-3" />
+                scripts
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 

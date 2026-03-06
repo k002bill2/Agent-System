@@ -1,6 +1,6 @@
 import { cn } from '../../lib/utils'
-import { Bot, Code, Shield, ChevronDown, ChevronUp, Plus, Pencil, Trash2, Copy, FileText, Clock } from 'lucide-react'
-import { useState } from 'react'
+import { Bot, Code, Shield, Globe, ChevronDown, ChevronUp, Plus, Pencil, Trash2, Copy, FileText, Clock } from 'lucide-react'
+import { useState, useEffect } from 'react'
 import { useProjectConfigsStore, AgentConfig } from '../../stores/projectConfigs'
 import { AgentEditModal } from './AgentEditModal'
 import { ConfirmDeleteModal } from './ConfirmDeleteModal'
@@ -14,10 +14,18 @@ export function AgentsTab() {
     deleteAgent,
     deletingAgents,
     copyAgent,
+    globalConfigs,
+    fetchGlobalConfigs,
   } = useProjectConfigsStore()
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AgentConfig | null>(null)
   const [copyTarget, setCopyTarget] = useState<AgentConfig | null>(null)
+
+  useEffect(() => {
+    if (!globalConfigs) {
+      fetchGlobalConfigs()
+    }
+  }, [globalConfigs, fetchGlobalConfigs])
 
   if (isLoadingProject) {
     return (
@@ -133,6 +141,28 @@ export function AgentsTab() {
                 </div>
               </div>
             )}
+
+            {/* Global Agents */}
+            {globalConfigs && globalConfigs.agents.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-teal-500" />
+                  Global Agents ({globalConfigs.agents.length})
+                </h4>
+                <div className="space-y-3">
+                  {globalConfigs.agents.map((agent) => (
+                    <GlobalAgentCard
+                      key={`global-${agent.agent_id}`}
+                      agent={agent}
+                      isExpanded={expandedAgent === `global-${agent.agent_id}`}
+                      onToggle={() =>
+                        setExpandedAgent(expandedAgent === `global-${agent.agent_id}` ? null : `global-${agent.agent_id}`)
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -171,6 +201,96 @@ interface AgentCardProps {
   onEdit: () => void
   onDelete: () => void
   onCopy: () => void
+}
+
+interface GlobalAgentCardProps {
+  agent: AgentConfig
+  isExpanded: boolean
+  onToggle: () => void
+}
+
+function GlobalAgentCard({ agent, isExpanded, onToggle }: GlobalAgentCardProps) {
+  const modelColors: Record<string, string> = {
+    opus: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    sonnet: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    haiku: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  }
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden opacity-80">
+      <div className="p-4 flex items-start gap-4">
+        <button
+          onClick={onToggle}
+          className="p-2 rounded-lg transition-colors bg-teal-100 dark:bg-teal-900/30 hover:bg-teal-200 dark:hover:bg-teal-900/50"
+        >
+          <Bot className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+        </button>
+        <div className="flex-1 min-w-0 cursor-pointer" onClick={onToggle}>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h4 className="font-medium text-gray-900 dark:text-white">{agent.name}</h4>
+            {agent.model && (
+              <span className={cn('text-xs px-1.5 py-0.5 rounded font-medium', modelColors[agent.model] || 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400')}>
+                {agent.model}
+              </span>
+            )}
+            {agent.role && (
+              <span className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-400">
+                {agent.role}
+              </span>
+            )}
+            <span className="text-xs px-1.5 py-0.5 bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 rounded">
+              global
+            </span>
+          </div>
+          {agent.description && (
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{agent.description}</p>
+          )}
+          {agent.tools.length > 0 && (
+            <div className="flex items-center gap-1 mt-2 text-xs text-gray-500 dark:text-gray-400">
+              <Code className="w-3 h-3" />
+              <span>{agent.tools.join(', ')}</span>
+            </div>
+          )}
+        </div>
+        <button onClick={onToggle} className="p-2">
+          {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+        </button>
+      </div>
+
+      {isExpanded && (
+        <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-4 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {agent.file_path && (
+              <div className="flex items-start gap-2">
+                <FileText className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 block">File Path</span>
+                  <span className="text-xs text-gray-700 dark:text-gray-300 break-all">{agent.file_path}</span>
+                </div>
+              </div>
+            )}
+            {agent.modified_at && (
+              <div className="flex items-start gap-2">
+                <Clock className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
+                <div>
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 block">Modified</span>
+                  <span className="text-xs text-gray-700 dark:text-gray-300">{new Date(agent.modified_at).toLocaleString()}</span>
+                </div>
+              </div>
+            )}
+          </div>
+          {agent.ace_capabilities && (
+            <div>
+              <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ACE Capabilities</h5>
+              <pre className="text-xs text-gray-600 dark:text-gray-400 overflow-x-auto bg-white dark:bg-gray-800 rounded p-3 border border-gray-200 dark:border-gray-700">
+                {JSON.stringify(agent.ace_capabilities, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function AgentCard({ agent, isExpanded, isDeleting, onToggle, onEdit, onDelete, onCopy }: AgentCardProps) {

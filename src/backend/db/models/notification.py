@@ -41,9 +41,9 @@ class NotificationRuleModel(Base):
     priority = Column(String(20), default="medium")
     message_template = Column(Text, nullable=True)
 
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
@@ -68,10 +68,10 @@ class NotificationHistoryModel(Base):
 
     # Delivery
     channels = Column(JSONB, default=list)
-    sent_at = Column(DateTime, nullable=True)
+    sent_at = Column(DateTime(timezone=True), nullable=True)
     delivery_status = Column(JSONB, default=dict)
 
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (Index("ix_notification_history_sent", "sent_at"),)
 
@@ -100,12 +100,12 @@ class ChannelConfigModel(Base):
 
     # Rate limiting
     rate_limit_per_hour = Column(Integer, default=60)
-    last_sent = Column(DateTime, nullable=True)
+    last_sent = Column(DateTime(timezone=True), nullable=True)
     sent_this_hour = Column(Integer, default=0)
 
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )

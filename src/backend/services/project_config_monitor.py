@@ -23,6 +23,7 @@ from models.project_config import (
     CommandConfig,
     ConfigChangeEvent,
     ConfigChangeType,
+    GlobalConfigSummary,
     HookConfig,
     MCPServerConfig,
     ProjectConfigSummary,
@@ -732,6 +733,146 @@ class ProjectConfigMonitor:
         except OSError as e:
             logger.error(f"Error copying command: {e}")
             return False
+
+    # ========================================
+    # Global Configs (~/.claude/)
+    # ========================================
+
+    def get_global_configs(self) -> GlobalConfigSummary:
+        """Get global configurations from ~/.claude/ directory.
+
+        Scans:
+        - ~/.claude/agents/*.md for global agents
+        - ~/.claude/skills/*/SKILL.md for global skills
+        - ~/.claude/settings.json hooks for global hooks
+
+        Returns:
+            GlobalConfigSummary with agents, skills, hooks
+        """
+        home_claude = Path.home() / ".claude"
+        global_project_id = "__global__"
+        agents: list[AgentConfig] = []
+        skills: list[SkillConfig] = []
+        hooks: list[HookConfig] = []
+
+        # --- Global Agents ---
+        agents_dir = home_claude / "agents"
+        if agents_dir.exists():
+            for agent_file in sorted(agents_dir.glob("*.md")):
+                if not agent_file.is_file():
+                    continue
+                try:
+                    frontmatter, body = FrontmatterParser.parse_file(str(agent_file))
+                    if not frontmatter:
+                        frontmatter = {"name": agent_file.stem}
+
+                    stat = agent_file.stat()
+                    agents.append(
+                        AgentConfig(
+                            agent_id=agent_file.stem,
+                            project_id=global_project_id,
+                            name=FrontmatterParser.get_string_field(
+                                frontmatter, "name", agent_file.stem
+                            ),
+                            description=FrontmatterParser.get_string_field(
+                                frontmatter, "description"
+                            ),
+                            file_path=str(agent_file),
+                            tools=FrontmatterParser.extract_tools(frontmatter),
+                            model=frontmatter.get("model"),
+                            role=frontmatter.get("role"),
+                            ace_capabilities=FrontmatterParser.get_nested_dict(
+                                frontmatter, "ace_capabilities"
+                            ),
+                            is_shared=False,
+                            modified_at=datetime.fromtimestamp(stat.st_mtime),
+                        )
+                    )
+                except Exception as e:
+                    logger.error(f"Error parsing global agent {agent_file}: {e}")
+
+        # --- Global Skills ---
+        skills_dir = home_claude / "skills"
+        if skills_dir.exists():
+            for skill_dir in sorted(skills_dir.iterdir()):
+                if not skill_dir.is_dir():
+                    continue
+                skill_file = skill_dir / "SKILL.md"
+                if not skill_file.exists():
+                    continue
+                try:
+                    frontmatter, body = FrontmatterParser.parse_file(str(skill_file))
+                    if not frontmatter:
+                        frontmatter = {"name": skill_dir.name}
+
+                    stat = skill_file.stat()
+                    has_references = (skill_dir / "references").exists()
+                    has_scripts = (skill_dir / "scripts").exists()
+                    has_assets = (skill_dir / "assets").exists()
+
+                    skills.append(
+                        SkillConfig(
+                            skill_id=skill_dir.name,
+                            project_id=global_project_id,
+                            name=FrontmatterParser.get_string_field(
+                                frontmatter, "name", skill_dir.name
+                            ),
+                            description=FrontmatterParser.get_string_field(
+                                frontmatter, "description"
+                            ),
+                            file_path=str(skill_file),
+                            tools=FrontmatterParser.extract_tools(frontmatter),
+                            model=frontmatter.get("model"),
+                            version=frontmatter.get("version"),
+                            author=frontmatter.get("author"),
+                            has_references=has_references,
+                            has_scripts=has_scripts,
+                            has_assets=has_assets,
+                            created_at=datetime.fromtimestamp(stat.st_ctime),
+                            modified_at=datetime.fromtimestamp(stat.st_mtime),
+                        )
+                    )
+                except Exception as e:
+                    logger.error(f"Error parsing global skill {skill_dir.name}: {e}")
+
+        # --- Global Hooks (from ~/.claude/settings.json) ---
+        settings_file = home_claude / "settings.json"
+        if settings_file.exists():
+            try:
+                with open(settings_file, encoding="utf-8") as f:
+                    settings = json.load(f)
+
+                hooks_data = settings.get("hooks", {})
+                for event, event_hooks in hooks_data.items():
+                    if not isinstance(event_hooks, list):
+                        continue
+                    for i, hook_entry in enumerate(event_hooks):
+                        if not isinstance(hook_entry, dict):
+                            continue
+                        matcher = hook_entry.get("matcher", "*")
+                        inner_hooks = hook_entry.get("hooks", [])
+                        for j, hook in enumerate(inner_hooks):
+                            if not isinstance(hook, dict):
+                                continue
+                            hooks.append(
+                                HookConfig(
+                                    hook_id=f"global_{event}_{i}_{j}",
+                                    project_id=global_project_id,
+                                    event=event,
+                                    matcher=matcher,
+                                    command=hook.get("command", ""),
+                                    hook_type=hook.get("type", "command"),
+                                )
+                            )
+            except (json.JSONDecodeError, OSError) as e:
+                logger.error(f"Error reading global settings.json: {e}")
+
+        # --- Global MCP Servers (from ~/.claude.json) ---
+        mcp_servers = self._mcp_manager.get_user_mcp_config(global_project_id)
+
+        return GlobalConfigSummary(
+            agents=agents, skills=skills, hooks=hooks, mcp_servers=mcp_servers
+        )
 
     # ========================================
     # Summary

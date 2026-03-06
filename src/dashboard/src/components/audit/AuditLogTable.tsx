@@ -55,6 +55,7 @@ export interface AuditLogFilter {
 interface AuditLogTableProps {
   sessionId?: string
   projectId?: string
+  includeGlobal?: boolean
   className?: string
 }
 
@@ -98,7 +99,7 @@ interface FilterOption {
   label: string
 }
 
-export function AuditLogTable({ sessionId, projectId, className }: AuditLogTableProps) {
+export function AuditLogTable({ sessionId, projectId, includeGlobal = true, className }: AuditLogTableProps) {
   const [logs, setLogs] = useState<AuditLogEntry[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -131,6 +132,7 @@ export function AuditLogTable({ sessionId, projectId, className }: AuditLogTable
       const params = new URLSearchParams()
       if (sessionId) params.set('session_id', sessionId)
       if (projectId) params.set('project_id', projectId)
+      if (projectId) params.set('include_global', String(includeGlobal))
       if (filter.action) params.set('action', filter.action)
       if (filter.resource_type) params.set('resource_type', filter.resource_type)
       if (filter.status) params.set('status', filter.status)
@@ -150,7 +152,7 @@ export function AuditLogTable({ sessionId, projectId, className }: AuditLogTable
     } finally {
       setLoading(false)
     }
-  }, [sessionId, projectId, filter, page])
+  }, [sessionId, projectId, includeGlobal, filter, page])
 
   useEffect(() => {
     fetchLogs()

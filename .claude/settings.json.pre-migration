@@ -13,6 +13,17 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/ethicalValidator.js",
+            "timeout": 5,
+            "statusMessage": "Safety check..."
+          }
+        ]
+      },
+      {
         "matcher": "Task",
         "hooks": [
           {
@@ -36,9 +47,21 @@
           },
           {
             "type": "command",
+            "command": "node .claude/hooks/workspaceGuard.js 2>/dev/null || true",
+            "timeout": 3,
+            "statusMessage": "Workspace guard..."
+          },
+          {
+            "type": "command",
             "command": "node .claude/hooks/aceMatrixSync.js 2>/dev/null || true",
             "timeout": 3,
             "statusMessage": "ACE matrix sync..."
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/linkValidator.js 2>/dev/null || true",
+            "timeout": 3,
+            "statusMessage": "Link validation..."
           }
         ]
       },
@@ -69,6 +92,25 @@
             "command": "jq -r '.message' | xargs -I{} osascript -e 'display notification \"{}\" with title \"Claude Code\"'",
             "timeout": 5,
             "statusMessage": "Notifying..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/contextMonitor.js 2>/dev/null || true",
+            "timeout": 5,
+            "statusMessage": "Context monitoring..."
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/stopEvent.js 2>/dev/null || true",
+            "timeout": 10,
+            "statusMessage": "Session metrics..."
           }
         ]
       }

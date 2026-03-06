@@ -35,13 +35,15 @@ class WorkflowDefinitionModel(Base):
     env = Column(JSONB, default=dict)
     version = Column(Integer, default=1)
     created_by = Column(String(36), nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
-    last_run_at = Column(DateTime, nullable=True)
+    last_run_at = Column(DateTime(timezone=True), nullable=True)
     last_run_status = Column(String(20), nullable=True)
 
     runs = relationship("WorkflowRunModel", back_populates="workflow", cascade="all, delete-orphan")
@@ -64,8 +66,10 @@ class WorkflowRunModel(Base):
     trigger_type = Column(String(20), nullable=False)
     trigger_payload = Column(JSONB, default=dict)
     status = Column(String(20), default="queued", index=True)
-    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
-    completed_at = Column(DateTime, nullable=True)
+    started_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
+    completed_at = Column(DateTime(timezone=True), nullable=True)
     duration_seconds = Column(Float, nullable=True)
     total_cost = Column(Float, default=0.0)
     error_summary = Column(Text, nullable=True)
@@ -99,8 +103,8 @@ class WorkflowJobModel(Base):
     environment = Column(String(100), nullable=True)
     outputs = Column(JSONB, default=dict)
     error = Column(Text, nullable=True)
-    started_at = Column(DateTime, nullable=True)
-    completed_at = Column(DateTime, nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
     duration_seconds = Column(Float, nullable=True)
 
     run = relationship("WorkflowRunModel", back_populates="jobs")
@@ -134,8 +138,8 @@ class WorkflowStepModel(Base):
     error = Column(Text, nullable=True)
     exit_code = Column(Integer, nullable=True)
     duration_ms = Column(Integer, nullable=True)
-    started_at = Column(DateTime, nullable=True)
-    completed_at = Column(DateTime, nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
 
     job = relationship("WorkflowJobModel", back_populates="steps")
 
@@ -153,9 +157,9 @@ class WorkflowSecretModel(Base):
     scope = Column(String(20), nullable=False, default="workflow")
     scope_id = Column(String(36), nullable=True, index=True)
     created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
@@ -182,7 +186,7 @@ class WorkflowWebhookModel(Base):
     secret = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
     allowed_events = Column(JSONB, default=lambda: ["push", "pull_request"])
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (Index("ix_workflow_webhooks_workflow", "workflow_id"),)
 
@@ -206,8 +210,8 @@ class WorkflowArtifactModel(Base):
     size_bytes = Column(Integer, default=0)
     content_type = Column(String(100), default="application/octet-stream")
     retention_days = Column(Integer, default=30)
-    expires_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("ix_workflow_artifacts_run", "run_id"),
@@ -229,9 +233,9 @@ class WorkflowTemplateModel(Base):
     yaml_content = Column(Text, nullable=True)
     icon = Column(String(50), default="zap")
     popularity = Column(Integer, default=0)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )

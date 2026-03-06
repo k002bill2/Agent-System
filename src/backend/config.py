@@ -2,6 +2,7 @@
 
 import json
 from functools import lru_cache
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 from pydantic import field_validator
@@ -9,6 +10,9 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 if TYPE_CHECKING:
     pass
+
+# Project root .env (two levels up from src/backend/)
+_PROJECT_ROOT_ENV = Path(__file__).resolve().parent.parent.parent / ".env"
 
 
 class Settings(BaseSettings):
@@ -30,7 +34,7 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "postgresql+asyncpg://aos:aos@localhost:5432/aos"
-    use_database: bool = False
+    use_database: bool = True
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
@@ -135,7 +139,11 @@ class Settings(BaseSettings):
     rag_full_context_threshold: int = 3000
     rag_candidate_multiplier: int = 3
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=str(_PROJECT_ROOT_ENV),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 @lru_cache

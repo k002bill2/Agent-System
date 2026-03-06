@@ -57,9 +57,9 @@ describe('LoginPage', () => {
     expect(screen.getByText('Agent Orchestration Service')).toBeInTheDocument()
   })
 
-  it('renders OAuth buttons', () => {
+  it('renders OAuth buttons', async () => {
     render(<LoginPage />)
-    expect(screen.getByText('Google로 계속하기')).toBeInTheDocument()
+    expect(await screen.findByText('Google로 계속하기')).toBeInTheDocument()
     expect(screen.getByText('GitHub로 계속하기')).toBeInTheDocument()
   })
 
