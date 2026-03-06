@@ -49,7 +49,9 @@ async def get_audit_logs(
     session_id: str | None = Query(None),
     user_id: str | None = Query(None),
     project_id: str | None = Query(None),
-    include_global: bool = Query(True, description="Include global events (project_id=NULL) when filtering by project"),
+    include_global: bool = Query(
+        True, description="Include global events (project_id=NULL) when filtering by project"
+    ),
     action: str | None = Query(None),
     resource_type: str | None = Query(None),
     resource_id: str | None = Query(None),

@@ -14,6 +14,7 @@ import { useProjectConfigsStore, DBProject } from '../stores/projectConfigs'
 import { useProjectAccessStore } from '@/stores/projectAccess'
 import { useAuthStore } from '../stores/auth'
 import { ProjectMembersContent } from '@/components/project-management/ProjectMembersContent'
+import { ServiceStatusBar } from '@/components/project-management/ServiceStatusBar'
 
 type DetailTab = 'info' | 'members'
 
@@ -227,70 +228,84 @@ export function ProjectManagementPage() {
 
   return (
     <div className="flex-1 flex overflow-hidden">
-    <div className="flex-1 overflow-auto p-6">
-      {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Project Registry
-          </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            DB 등록 프로젝트를 관리합니다. Claude Sessions, Project Configs에서 이 목록을 참조합니다.
-          </p>
-        </div>
-        {canCreateProject && (
-          <button
-            onClick={() => setShowCreateForm(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700"
-          >
-            <Plus className="w-4 h-4" />
-            Add Project
-          </button>
-        )}
-      </div>
-
-      {/* Error */}
-      {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4" />
-            {error}
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Sticky top section */}
+      <div className="flex-shrink-0 px-6 pt-6 pb-2 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+        {/* Header */}
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+              Project Registry
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              DB 등록 프로젝트를 관리합니다. Claude Sessions, Project Configs에서 이 목록을 참조합니다.
+            </p>
           </div>
-          <button onClick={clearError} className="text-red-500 hover:text-red-700">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Search + Filter */}
-      <div className="mb-6 flex items-center gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search projects..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
-          />
-        </div>
-        <div className="flex items-center gap-3 text-sm">
-          <span className="text-gray-500 dark:text-gray-400">
-            Active: <span className="font-medium text-gray-900 dark:text-white">{activeCount}</span>
-          </span>
-          {inactiveCount > 0 && (
-            <label className="flex items-center gap-2 text-gray-500 dark:text-gray-400 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showInactive}
-                onChange={(e) => setShowInactive(e.target.checked)}
-                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-              />
-              Show inactive ({inactiveCount})
-            </label>
+          {canCreateProject && (
+            <button
+              onClick={() => setShowCreateForm(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700"
+            >
+              <Plus className="w-4 h-4" />
+              Add Project
+            </button>
           )}
         </div>
+
+        {/* Infrastructure Status */}
+        <div className="mb-3">
+          <ServiceStatusBar
+            projectPath={selectedProject?.path}
+            projectName={selectedProject?.name}
+          />
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className="mb-3 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4" />
+              {error}
+            </div>
+            <button onClick={clearError} className="text-red-500 hover:text-red-700">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Search + Filter */}
+        <div className="mb-2 flex items-center gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search projects..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+            />
+          </div>
+          <div className="flex items-center gap-3 text-sm">
+            <span className="text-gray-500 dark:text-gray-400">
+              Active: <span className="font-medium text-gray-900 dark:text-white">{activeCount}</span>
+            </span>
+            {inactiveCount > 0 && (
+              <label className="flex items-center gap-2 text-gray-500 dark:text-gray-400 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showInactive}
+                  onChange={(e) => setShowInactive(e.target.checked)}
+                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                Show inactive ({inactiveCount})
+              </label>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Scrollable project list */}
+      <div className="flex-1 overflow-auto px-6 py-4">
 
       {/* Create Form */}
       {canCreateProject && showCreateForm && (
@@ -564,6 +579,7 @@ export function ProjectManagementPage() {
           <p className="text-sm">No matching projects</p>
         </div>
       )}
+      </div>
     </div>
     {renderDetailPanel()}
     </div>
