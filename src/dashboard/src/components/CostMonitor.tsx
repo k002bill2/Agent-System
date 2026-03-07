@@ -63,21 +63,40 @@ function isIgnoredModel(value: string): boolean {
   return IGNORED_MODELS.some((m) => lower.includes(m))
 }
 
+/** Extract model family: claude-opus-4-6 → opus, gemini-2.0-flash → flash */
+function getModelFamily(model: string): string {
+  const lower = model.toLowerCase()
+  // Claude: claude-{family}-{version}
+  const claudeMatch = lower.match(/claude-(\w+)/)
+  if (claudeMatch) return claudeMatch[1]
+  // Gemini: gemini-{version}-{family}
+  const geminiMatch = lower.match(/gemini-[\d.]+-(\w+)/)
+  if (geminiMatch) return geminiMatch[1]
+  // GPT: gpt-{family}
+  const gptMatch = lower.match(/gpt-(\w+)/)
+  if (gptMatch) return gptMatch[1]
+  return lower
+}
+
 /** Group by_model entries into provider-level usage. */
 function groupByProvider(byModel: CostBreakdown[]): Record<string, ProviderUsage> {
   const result: Record<string, ProviderUsage> = {}
+  const families: Record<string, Set<string>> = {}
 
   for (const entry of byModel) {
     if (isIgnoredModel(entry.value)) continue
 
     const provider = identifyProvider(entry.value)
     const key = provider === 'unknown' ? `unknown:${entry.value}` : provider
+    const family = getModelFamily(entry.value)
     const existing = result[key]
+
+    if (!families[key]) families[key] = new Set()
+    families[key].add(family)
 
     if (existing) {
       existing.totalTokens += entry.tokens
       existing.costUsd += entry.cost
-      existing.callCount += 1
     } else {
       result[key] = {
         provider,
@@ -89,6 +108,11 @@ function groupByProvider(byModel: CostBreakdown[]): Record<string, ProviderUsage
         callCount: 1,
       }
     }
+  }
+
+  // Set callCount to number of unique model families
+  for (const [key, usage] of Object.entries(result)) {
+    usage.callCount = families[key]?.size ?? 1
   }
 
   return result
