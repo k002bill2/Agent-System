@@ -2,9 +2,19 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { CostMonitor, CostBadge } from '../CostMonitor'
 
-// Mock fetch
+// Mock fetch (CLI session analytics)
 const mockFetch = vi.fn()
 global.fetch = mockFetch
+
+// Mock external usage store
+const mockFetchExternalSummary = vi.fn()
+
+vi.mock('../../stores/externalUsage', () => ({
+  useExternalUsageStore: vi.fn(() => ({
+    summary: null,
+    fetchSummary: mockFetchExternalSummary,
+  })),
+}))
 
 function mockCostResponse(overrides: Record<string, unknown> = {}) {
   return {
@@ -35,7 +45,6 @@ describe('CostMonitor', () => {
     await waitFor(() => {
       expect(screen.getByText('LLM Provider Usage')).toBeInTheDocument()
       expect(screen.getByText('Total Tokens')).toBeInTheDocument()
-      expect(screen.getByText('Total Cost')).toBeInTheDocument()
       expect(screen.getByText('No provider usage data yet')).toBeInTheDocument()
     })
   })

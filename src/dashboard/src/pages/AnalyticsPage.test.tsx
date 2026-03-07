@@ -51,6 +51,15 @@ vi.mock('../stores/claudeUsage', () => ({
   })),
 }))
 
+const mockFetchExternalSummary = vi.fn()
+
+vi.mock('../stores/externalUsage', () => ({
+  useExternalUsageStore: vi.fn(() => ({
+    summary: { total_cost_usd: 5.25, providers: [], records: [], period_start: '', period_end: '' },
+    fetchSummary: mockFetchExternalSummary,
+  })),
+}))
+
 vi.mock('../stores/auth', () => ({
   useAuthStore: vi.fn((selector?: (s: unknown) => unknown) => {
     const state = { user: { id: 'u1', is_admin: false } }
@@ -986,8 +995,8 @@ describe('AnalyticsPage', () => {
     })
 
     await waitFor(() => {
-      // 500000 tokens → "500.0K tokens" in subtitle
-      expect(screen.getByText('500.0K tokens')).toBeInTheDocument()
+      // 500000 tokens → "500.0K tokens" in cost card subtitle
+      expect(screen.getByText(/500\.0K tokens/)).toBeInTheDocument()
     })
   })
 
@@ -1068,8 +1077,8 @@ describe('AnalyticsPage', () => {
     })
 
     await waitFor(() => {
-      // 2500000 tokens → "2.5M tokens" in subtitle
-      expect(screen.getByText('2.5M tokens')).toBeInTheDocument()
+      // 2500000 tokens → "2.5M tokens" in cost card subtitle
+      expect(screen.getByText(/2\.5M tokens/)).toBeInTheDocument()
     })
   })
 
@@ -1085,8 +1094,8 @@ describe('AnalyticsPage', () => {
     })
 
     await waitFor(() => {
-      // 500 tokens → "500 tokens" in subtitle
-      expect(screen.getByText('500 tokens')).toBeInTheDocument()
+      // 500 tokens → "500 tokens" in cost card subtitle
+      expect(screen.getByText(/500 tokens/)).toBeInTheDocument()
     })
   })
 

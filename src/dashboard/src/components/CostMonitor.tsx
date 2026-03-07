@@ -6,6 +6,7 @@ import {
   PROVIDER_CONFIG,
   identifyProvider,
 } from '../stores/orchestration'
+import { useExternalUsageStore } from '../stores/externalUsage'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
@@ -54,22 +55,33 @@ function formatTokens(tokens: number): string {
   return tokens.toString()
 }
 
-/** Group by_model entries into provider-level usage */
-function groupByProvider(byModel: CostBreakdown[]): Record<LLMProvider, ProviderUsage> {
-  const result: Partial<Record<LLMProvider, ProviderUsage>> = {}
+/** Skip system/synthetic models that aren't real LLM calls */
+const IGNORED_MODELS = ['unknown', 'synthetic', 'default', 'no model info', 'system-generated']
+
+function isIgnoredModel(value: string): boolean {
+  const lower = value.toLowerCase()
+  return IGNORED_MODELS.some((m) => lower.includes(m))
+}
+
+/** Group by_model entries into provider-level usage. */
+function groupByProvider(byModel: CostBreakdown[]): Record<string, ProviderUsage> {
+  const result: Record<string, ProviderUsage> = {}
 
   for (const entry of byModel) {
+    if (isIgnoredModel(entry.value)) continue
+
     const provider = identifyProvider(entry.value)
-    const existing = result[provider]
+    const key = provider === 'unknown' ? `unknown:${entry.value}` : provider
+    const existing = result[key]
 
     if (existing) {
       existing.totalTokens += entry.tokens
       existing.costUsd += entry.cost
       existing.callCount += 1
     } else {
-      result[provider] = {
+      result[key] = {
         provider,
-        displayName: PROVIDER_CONFIG[provider].displayName,
+        displayName: provider === 'unknown' ? entry.value : PROVIDER_CONFIG[provider].displayName,
         inputTokens: 0,
         outputTokens: 0,
         totalTokens: entry.tokens,
@@ -79,7 +91,7 @@ function groupByProvider(byModel: CostBreakdown[]): Record<LLMProvider, Provider
     }
   }
 
-  return result as Record<LLMProvider, ProviderUsage>
+  return result
 }
 
 async function fetchCostAnalytics(): Promise<CostAnalytics> {
@@ -144,7 +156,7 @@ function ProviderCard({ usage }: ProviderCardProps) {
       <div className="flex items-center gap-2 mb-2">
         <span className="text-lg">{config.icon}</span>
         <span className={`text-sm font-medium ${colors.text}`}>
-          {config.displayName}
+          {usage.displayName}
         </span>
       </div>
       <div className="space-y-1">
@@ -168,6 +180,9 @@ export function CostMonitor() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // External usage (actual API billing)
+  const { summary: externalSummary, fetchSummary: fetchExternalSummary } = useExternalUsageStore()
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
@@ -183,14 +198,18 @@ export function CostMonitor() {
 
   useEffect(() => {
     loadData()
-  }, [loadData])
+    fetchExternalSummary()
+  }, [loadData, fetchExternalSummary])
 
   const providerUsage = data ? groupByProvider(data.by_model) : {}
-  const providers = Object.entries(providerUsage) as [LLMProvider, ProviderUsage][]
-  const sortedProviders = [...providers].sort((a, b) => b[1].totalTokens - a[1].totalTokens)
+  const providers = Object.entries(providerUsage) as [string, ProviderUsage][]
+  const sortedProviders = [...providers]
+    .filter(([, u]) => u.totalTokens > 0 || u.costUsd > 0)
+    .sort((a, b) => b[1].totalTokens - a[1].totalTokens)
 
   const totalTokens = data?.total_tokens ?? 0
   const totalCost = data?.total_cost ?? 0
+  const actualCost = externalSummary?.total_cost_usd ?? null
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
@@ -230,6 +249,11 @@ export function CostMonitor() {
           </div>
           <div className="text-xs text-gray-500 dark:text-gray-400">
             Total Cost
+            {actualCost !== null && (
+              <span className="ml-1 text-amber-600 dark:text-amber-400">
+                (실제: {formatCost(actualCost)})
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -258,30 +282,33 @@ export function CostMonitor() {
 
 export function CostBadge() {
   const [data, setData] = useState<CostAnalytics | null>(null)
+  const { summary: externalSummary, fetchSummary: fetchExternalSummary } = useExternalUsageStore()
 
   useEffect(() => {
     fetchCostAnalytics()
       .then(setData)
       .catch(() => {/* silent fail for badge */})
-  }, [])
+    fetchExternalSummary()
+  }, [fetchExternalSummary])
 
   if (!data || data.total_tokens === 0) return null
 
   const providerUsage = groupByProvider(data.by_model)
-  const activeProviders = Object.keys(providerUsage) as LLMProvider[]
+  const providerEntries = Object.values(providerUsage)
+  const actualCost = externalSummary?.total_cost_usd ?? null
 
   return (
     <div className="flex items-center gap-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-md text-xs">
       {/* Provider icons */}
-      {activeProviders.length > 0 && (
+      {providerEntries.length > 0 && (
         <span className="flex items-center gap-0.5">
-          {activeProviders.slice(0, 3).map((provider) => (
-            <span key={provider} title={PROVIDER_CONFIG[provider].displayName}>
-              {PROVIDER_CONFIG[provider].icon}
+          {providerEntries.slice(0, 3).map((usage) => (
+            <span key={usage.displayName} title={usage.displayName}>
+              {PROVIDER_CONFIG[usage.provider].icon}
             </span>
           ))}
-          {activeProviders.length > 3 && (
-            <span className="text-gray-500">+{activeProviders.length - 3}</span>
+          {providerEntries.length > 3 && (
+            <span className="text-gray-500">+{providerEntries.length - 3}</span>
           )}
         </span>
       )}
@@ -292,6 +319,13 @@ export function CostBadge() {
       <span className="text-green-600 dark:text-green-400 font-medium">
         {formatCost(data.total_cost)}
       </span>
+      {actualCost !== null && actualCost > 0 && (
+        <>
+          <span className="text-amber-600 dark:text-amber-400 font-medium">
+            (실제: {formatCost(actualCost)})
+          </span>
+        </>
+      )}
     </div>
   )
 }

@@ -48,6 +48,7 @@ import {
 import { cn } from '../lib/utils'
 import { useProjectsStore, Project } from '../stores/projects'
 import { useClaudeUsageStore } from '../stores/claudeUsage'
+import { useExternalUsageStore } from '../stores/externalUsage'
 import { useAuthStore } from '../stores/auth'
 import { ProjectMultiSelect } from '../components/analytics/ProjectMultiSelect'
 import type { TaskAnalysisHistory } from '../stores/agents'
@@ -315,6 +316,9 @@ export function AnalyticsPage() {
   // Get Claude usage data from store
   const { usage: claudeUsage, fetchUsage } = useClaudeUsageStore()
 
+  // Get external (actual API billing) usage data
+  const { summary: externalSummary, fetchSummary: fetchExternalSummary } = useExternalUsageStore()
+
   // Fetch projects on mount
   useEffect(() => {
     fetchProjects()
@@ -324,6 +328,11 @@ export function AnalyticsPage() {
   useEffect(() => {
     fetchUsage()
   }, [fetchUsage])
+
+  // Fetch external usage on mount
+  useEffect(() => {
+    fetchExternalSummary()
+  }, [fetchExternalSummary])
 
   useEffect(() => {
     loadData()
@@ -473,12 +482,10 @@ export function AnalyticsPage() {
           color={data.overview.success_rate >= 90 ? 'green' : 'red'}
           subtitle={`${data.overview.failed_tasks} failed`}
         />
-        <MetricCard
-          title="Total Cost"
-          value={`$${data.overview.total_cost.toFixed(2)}`}
-          icon={DollarSign}
-          color="amber"
-          subtitle={`${formatNumber(data.overview.total_tokens)} tokens`}
+        <CostComparisonCard
+          estimatedCost={data.overview.total_cost}
+          estimatedTokens={data.overview.total_tokens}
+          actualCost={externalSummary?.total_cost_usd ?? null}
         />
         <MetricCard
           title="Avg Duration"
@@ -1132,6 +1139,42 @@ function MetricCard({ title, value, icon: Icon, color, subtitle }: MetricCardPro
       {subtitle && (
         <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{subtitle}</div>
       )}
+    </div>
+  )
+}
+
+interface CostComparisonCardProps {
+  estimatedCost: number
+  estimatedTokens: number
+  actualCost: number | null
+}
+
+function CostComparisonCard({ estimatedCost, estimatedTokens, actualCost }: CostComparisonCardProps) {
+  const formatCostValue = (cost: number): string => {
+    if (cost === 0) return 'FREE'
+    if (cost < 0.01) return `$${cost.toFixed(4)}`
+    return `$${cost.toFixed(2)}`
+  }
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm text-gray-500 dark:text-gray-400">Total Cost</span>
+        <div className={cn('p-2 rounded-lg', 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400')}>
+          <DollarSign className="w-4 h-4" />
+        </div>
+      </div>
+      <div className="text-2xl font-bold text-gray-900 dark:text-white">
+        {formatCostValue(estimatedCost)}
+      </div>
+      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+        {formatNumber(estimatedTokens)} tokens
+        {actualCost !== null && (
+          <span className="ml-1 text-amber-600 dark:text-amber-400">
+            (실제 과금: {formatCostValue(actualCost)})
+          </span>
+        )}
+      </div>
     </div>
   )
 }
