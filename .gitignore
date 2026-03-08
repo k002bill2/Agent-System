@@ -47,6 +47,7 @@ src/dashboard/coverage/
 
 # Git worktrees
 .worktrees/
+.claude/worktrees/
 
 # Claude Code transient files
 .claude/evals/results/
