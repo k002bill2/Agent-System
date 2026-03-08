@@ -1029,3 +1029,86 @@ class SkillManager:
 - FrontmatterParser를 통한 YAML 메타데이터 파싱
 - 스킬 생성/수정/삭제 (파일시스템 기반)
 - ProjectDiscovery 연동으로 프로젝트별 스킬 관리
+
+---
+
+## 45. External Usage Tracking (외부 LLM 사용량)
+
+외부 LLM 프로바이더(OpenAI, GitHub Copilot, Google Gemini, Anthropic) 사용량 통합 추적:
+
+```python
+class ExternalUsageService:
+    def get_usage_summary(start_time, end_time, providers) -> ExternalUsageSummary
+    def get_provider_health(provider_id) -> ProviderHealth
+    def sync_usage() -> SyncResult
+```
+
+**기능**:
+- 멀티 프로바이더 비용 집계 (OpenAI, GitHub Copilot, Google Gemini, Anthropic)
+- 프로바이더별 비용 분석 및 트렌드
+- 멤버별 사용량 분석
+- 7/30/90일 기간 선택
+- 프로바이더 연결 상태 헬스체크
+
+**Dashboard UI**: `ExternalUsagePage` - 프로바이더별 비용/토큰 현황, 트렌드 차트
+
+---
+
+## 46. Cost Center Management (비용 센터)
+
+조직 단위 비용 센터 관리 및 예산 할당:
+
+```python
+class CostCenterModel(Base):
+    __tablename__ = "cost_centers"
+    id, organization_id, name, code, description
+    budget_usd, budget_period, alert_threshold_percent
+    owner_id, parent_id, tags, is_active
+```
+
+**기능**:
+- 계층적 비용 센터 (parent_id self-ref)
+- 예산 설정 및 임계값 알림
+- 비용 할당 리포트 및 예측
+- 차지백 내보내기
+- 비용 알림
+
+**API**: `/api/cost-allocation/cost-centers` (CRUD), `/api/cost-allocation/report`, `/api/cost-allocation/forecast`
+
+---
+
+## 47. Admin User Management (사용자 관리)
+
+관리자 페이지에서 시스템 사용자 관리:
+
+**기능**:
+- 사용자 검색/필터 (이름, 활성 상태, 역할)
+- 배치 사용자 작업
+- 활성/비활성 토글
+- 역할 변경 (user/manager/admin)
+- 페이지네이션 (20건/페이지)
+
+**Dashboard UI**: `UserManagementTab` (AdminPage 내), `SystemInfoTab` (시스템 정보 조회)
+
+**API**: `GET /api/admin/users`, `PATCH /api/admin/users/{user_id}`, `GET /api/admin/system-info`
+
+---
+
+## 48. Project Invitations (프로젝트 초대)
+
+이메일 기반 프로젝트 멤버 초대 시스템:
+
+```python
+class ProjectInvitationService:
+    async def create_invitation(db, project_id, email, role, invited_by) -> ProjectInvitation
+    async def accept_invitation(db, token, user_id) -> ProjectAccess
+```
+
+**기능**:
+- 이메일로 프로젝트 초대 생성
+- 7일 만료 토큰
+- 초대 미리보기 (인증 불필요)
+- 초대 수락 시 자동 project_access 생성
+- pending 초대 목록 조회/취소
+
+**API**: `/api/v1/projects/{project_id}/invitations` (CRUD), `/api/v1/invitations/{token}` (수락)

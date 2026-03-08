@@ -18,12 +18,20 @@ AOS 백엔드 아키텍처 문서입니다.
 ```python
 class AgentState(TypedDict):
     session_id: str
+    user_id: str | None
+    organization_id: str | None
     messages: list[dict]
     tasks: dict[str, TaskNode]
     root_task_id: str | None
+    current_task_id: str | None
+    active_agent_id: str | None
     agents: dict[str, AgentInfo]
     next_action: str | None
     iteration_count: int
+    context: dict[str, Any]
+    artifacts: dict[str, Any]
+    errors: list[dict]
+    last_error: str | None
     # HITL (Human-in-the-Loop)
     pending_approvals: dict[str, dict]
     waiting_for_approval: bool
@@ -43,6 +51,7 @@ pending → in_progress → completed
                      ↘ failed → (retry) → pending
                      ↘ cancelled
                      ↘ paused → (resume) → in_progress
+                     ↘ waiting → (unblock) → in_progress
 ```
 
 ## Directory Structure (Backend)
@@ -63,7 +72,9 @@ src/backend/
 │   ├── nodes.py             # 6가지 노드 구현
 │   ├── parallel_executor.py # 병렬 실행
 │   └── tools.py             # MCP 도구 실행자
-├── services/                    # 59개 서비스 모듈
+├── services/                    # 46개 서비스/매니저 모듈
+│   ├── adapters/               # 어댑터 패턴 구현
+│   ├── cache/                  # 캐싱 레이어
 │   ├── agent_manager.py           # 에이전트 인스턴스 관리
 │   ├── agent_registry.py          # 에이전트 등록소
 │   ├── alerting_service.py        # 알림/경고 서비스
@@ -122,7 +133,8 @@ src/backend/
 │   ├── workflow_engine.py         # 워크플로우 DAG 실행 엔진
 │   ├── workflow_service.py        # 워크플로우 CRUD 서비스
 │   └── workflow_yaml_parser.py    # 워크플로우 YAML 파싱
-├── api/                     # FastAPI 라우터 (42개 모듈)
+├── api/                     # FastAPI 라우터 (43개 모듈)
+│   └── v1/                  # v1 API (agent_monitor, agent_registry, auth_middleware 등 6개)
 ├── auth/                    # 인증 프로바이더
 │   └── providers/
 │       ├── base.py          # AuthProvider ABC, UserInfo
@@ -145,7 +157,7 @@ src/backend/
 │       ├── project.py       # ProjectModel
 │       ├── activity.py      # SessionActivityModel
 │       └── base.py          # Base, TimestampMixin
-├── models/                  # Pydantic 데이터 모델 (32개)
+├── models/                  # Pydantic 데이터 모델 (33개)
 ├── middleware/
 │   └── rate_limit.py        # RateLimitMiddleware (per-user/IP, tier-based)
 ├── utils/

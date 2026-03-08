@@ -195,6 +195,17 @@ AOS Backend API 엔드포인트 문서입니다.
 | DELETE | `/api/project-registry/{id}` | 프로젝트 비활성화 (soft-delete) |
 | POST | `/api/project-registry/{id}/restore` | 프로젝트 복원 |
 
+### Project Members
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/project-registry/{id}/members` | 프로젝트 멤버 목록 |
+| POST | `/api/project-registry/{id}/members` | 멤버 추가 |
+| PATCH | `/api/project-registry/{id}/members/{user_id}` | 멤버 역할 변경 |
+| DELETE | `/api/project-registry/{id}/members/{user_id}` | 멤버 제거 |
+| GET | `/api/project-registry/{id}/available-members` | 추가 가능 멤버 목록 |
+| PATCH | `/api/project-registry/{id}/toggle-active` | 프로젝트 활성 토글 |
+
 **요청 본문** (`POST /api/project-registry`):
 ```json
 {
@@ -280,7 +291,7 @@ AOS Backend API 엔드포인트 문서입니다.
 | DELETE | `/api/project-configs/{project_id}/hooks/{hook_id}` | Hook 삭제 |
 | POST | `/api/project-configs/{project_id}/hooks/copy` | Hook 복사 |
 
-**Hook 이벤트 타입**: `PreToolUse`, `PostToolUse`, `Notification`, `Stop`
+**Hook 이벤트 타입**: `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Notification`, `UserPromptSubmit`, `SessionStart`, `SessionEnd`, `Stop`, `SubagentStart`, `SubagentStop`, `PreCompact`, `PermissionRequest`, `Setup`
 
 ### Commands
 
@@ -292,6 +303,22 @@ AOS Backend API 엔드포인트 문서입니다.
 | PUT | `/api/project-configs/{project_id}/commands/{command_id}` | 커맨드 수정 |
 | DELETE | `/api/project-configs/{project_id}/commands/{command_id}` | 커맨드 삭제 |
 | POST | `/api/project-configs/{project_id}/commands/{command_id}/copy` | 커맨드 복사 |
+
+### Additional Config Endpoints
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/project-configs/global` | 글로벌 설정 조회 |
+| GET | `/api/project-configs/paths` | 프로젝트 경로 목록 |
+| POST | `/api/project-configs/external-paths` | 외부 경로 추가 |
+| DELETE | `/api/project-configs/external-paths/{path}` | 외부 경로 삭제 |
+| DELETE | `/api/project-configs/{project_id}/remove` | 프로젝트 설정 삭제 |
+| GET | `/api/project-configs/stream` | 설정 변경 SSE 스트림 |
+| GET | `/api/project-configs/by-path` | 경로로 프로젝트 조회 |
+| GET | `/api/project-configs/skills/all` | 전체 스킬 목록 |
+| GET | `/api/project-configs/{project_id}/skills/{skill_id}/content` | 스킬 내용 조회 |
+| GET | `/api/project-configs/agents/all` | 전체 에이전트 목록 |
+| GET | `/api/project-configs/{project_id}/agents/{agent_id}/content` | 에이전트 내용 조회 |
 
 ---
 
@@ -429,6 +456,7 @@ AOS Backend API 엔드포인트 문서입니다.
 | GET | `/api/llm/models?available_only=true` | 사용 가능한 모델만 |
 | GET | `/api/llm/models/default` | 기본 모델 조회 |
 | GET | `/api/llm/models/{model_id}` | 특정 모델 상세 |
+| PATCH | `/api/llm/models/{model_id}` | 모델 설정 수정 |
 | GET | `/api/llm/providers` | 지원 프로바이더 목록 |
 
 **응답 형식** (GET /api/llm/models):
@@ -808,6 +836,20 @@ AOS Backend API 엔드포인트 문서입니다.
 | GET | `/api/cost-allocation/trends` | 비용 트렌드 |
 | POST | `/api/cost-allocation/track` | 사용량 기록 |
 
+### Cost Centers
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/cost-allocation/cost-centers` | 비용 센터 목록 |
+| POST | `/api/cost-allocation/cost-centers` | 비용 센터 생성 |
+| GET | `/api/cost-allocation/cost-centers/{id}` | 비용 센터 상세 |
+| PATCH | `/api/cost-allocation/cost-centers/{id}` | 비용 센터 수정 |
+| DELETE | `/api/cost-allocation/cost-centers/{id}` | 비용 센터 삭제 |
+| GET | `/api/cost-allocation/report` | 비용 리포트 |
+| GET | `/api/cost-allocation/forecast` | 비용 예측 |
+| GET | `/api/cost-allocation/chargeback/export` | 차지백 내보내기 |
+| GET | `/api/cost-allocation/alerts` | 비용 알림 |
+
 ---
 
 ## Health
@@ -821,6 +863,8 @@ AOS Backend API 엔드포인트 문서입니다.
 | GET | `/api/health/database` | 데이터베이스 헬스 |
 | GET | `/api/health/redis` | Redis 헬스 |
 | GET | `/api/health/llm` | LLM 프로바이더 헬스 |
+| GET | `/api/health/services` | 서비스 상태 조회 |
+| GET | `/api/health/services/conflicts` | 포트 충돌 조회 |
 
 ---
 

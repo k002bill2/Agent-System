@@ -1,6 +1,6 @@
 # AOS Database ERD
 
-> 38개 테이블 · `src/backend/db/models/` 기준 · 2026-03-05
+> 38개 테이블 · `src/backend/db/models/` 기준 · 2026-03-08
 
 ```mermaid
 erDiagram
@@ -36,11 +36,15 @@ erDiagram
         int duration_ms
         int tokens_used
         float cost
+        text error
+        text error_message
         int retry_count
+        int max_retries
         jsonb dependencies
         datetime created_at
         datetime started_at
         datetime completed_at
+        datetime updated_at
     }
 
     messages {
@@ -65,8 +69,10 @@ erDiagram
         string tool_name
         jsonb tool_args
         string risk_level
+        text risk_description
         string status
         string approved_by
+        text denial_reason
         datetime created_at
         datetime resolved_at
     }
@@ -82,12 +88,16 @@ erDiagram
         string message_id
         string feedback_type
         string reason
+        text reason_detail
         text original_output
         text corrected_output
         jsonb context_json
         string agent_id
+        string project_name
+        string effort_level
         string status
         datetime created_at
+        datetime processed_at
     }
 
     dataset_entries {
@@ -109,7 +119,10 @@ erDiagram
         boolean result_accuracy
         boolean speed_satisfaction
         text comment
+        text context_summary
         string agent_id
+        string project_name
+        string effort_level
         datetime created_at
     }
 
@@ -127,6 +140,7 @@ erDiagram
         boolean is_active
         boolean is_admin
         string role
+        string avatar_url
         datetime created_at
         datetime last_login_at
     }
@@ -150,8 +164,11 @@ erDiagram
         string idp_slo_url
         text idp_certificate
         jsonb attribute_mapping
+        string sp_entity_id
+        string sp_acs_url
         boolean is_active
         datetime created_at
+        datetime updated_at
     }
 
     %% ═══════════════════════════════════════════
@@ -162,13 +179,23 @@ erDiagram
         string id PK
         string name
         string slug UK
+        text description
         string status
         string plan
         string contact_email
+        string contact_name
+        string logo_url
+        string primary_color
         int max_members
         int max_projects
+        int max_sessions_per_day
+        int max_tokens_per_month
+        int current_members
+        int current_projects
+        int tokens_used_this_month
         jsonb settings
         datetime created_at
+        datetime updated_at
     }
 
     organization_members {
@@ -176,10 +203,15 @@ erDiagram
         string organization_id FK
         string user_id FK
         string email
+        string name
         string role
         jsonb permissions
         boolean is_active
+        string invited_by
+        datetime invited_at
+        datetime last_active_at
         datetime joined_at
+        datetime created_at
     }
 
     organization_invitations {
@@ -203,13 +235,16 @@ erDiagram
         string organization_id
         string name
         string code UK
+        text description
         float budget_usd
         string budget_period
         float alert_threshold_percent
         string owner_id
         string parent_id FK "self-ref"
         boolean is_active
+        jsonb tags
         datetime created_at
+        datetime updated_at
     }
 
     cost_allocations {
@@ -222,7 +257,10 @@ erDiagram
         int input_tokens
         int output_tokens
         jsonb model_costs
+        jsonb allocation_tags
         float allocation_percent
+        datetime period_start
+        datetime period_end
         datetime created_at
     }
 
@@ -233,6 +271,7 @@ erDiagram
     notification_rules {
         string id PK
         string name
+        text description
         boolean enabled
         string event_type
         jsonb conditions
@@ -241,6 +280,7 @@ erDiagram
         string priority
         text message_template
         datetime created_at
+        datetime updated_at
     }
 
     notification_history {
@@ -266,8 +306,15 @@ erDiagram
         string bot_token
         string email_address
         string smtp_host
+        int smtp_port
+        string smtp_username
+        string smtp_password
+        boolean smtp_use_tls
         int rate_limit_per_hour
+        datetime last_sent
+        int sent_this_hour
         datetime created_at
+        datetime updated_at
     }
 
     %% ═══════════════════════════════════════════
@@ -314,9 +361,11 @@ erDiagram
         text task_input
         jsonb context_json
         boolean success
+        text error
         jsonb analysis_json
         int execution_time_ms
         int complexity_score
+        int subtask_count
         string effort_level
         string strategy
         datetime created_at
@@ -340,6 +389,7 @@ erDiagram
         string id PK
         string session_id FK
         string user_id FK
+        string project_id
         string action
         string resource_type
         string resource_id
@@ -348,12 +398,20 @@ erDiagram
         jsonb changes
         string agent_id
         string ip_address
+        string user_agent
+        jsonb metadata_json
+        text error_message
+        text change_reason
         string status
         string data_classification
+        jsonb compliance_flags
         string previous_hash
         string hash
+        string signature
+        string retention_policy
         int retention_days
         datetime created_at
+        datetime expires_at
     }
 
     %% ═══════════════════════════════════════════
@@ -417,16 +475,22 @@ erDiagram
         string id PK
         string project_id
         string title
+        text description
         string source_branch
         string target_branch
         string status
         string conflict_status
         boolean auto_merge
         string author_id
+        string author_name
+        string author_email
         jsonb reviewers
         jsonb approved_by
+        string merged_by
+        string closed_by
         datetime created_at
         datetime merged_at
+        datetime closed_at
     }
 
     branch_protection_rules {
@@ -517,6 +581,8 @@ erDiagram
         jsonb matrix_values
         string environment
         jsonb outputs
+        text error
+        float duration_seconds
         datetime started_at
         datetime completed_at
     }
@@ -529,13 +595,16 @@ erDiagram
         string uses
         text run_command
         jsonb with_args
+        jsonb env
         string if_condition
         boolean continue_on_error
         string status
         text output
+        text error
         int exit_code
         int duration_ms
         datetime started_at
+        datetime completed_at
     }
 
     workflow_secrets {

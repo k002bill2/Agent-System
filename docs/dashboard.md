@@ -56,9 +56,9 @@ import { cn } from '@/lib/utils';
 | `DashboardPage` | `/` | 메인 대시보드 (세션 상태, 태스크 요약) |
 | `ProjectsPage` | `/projects` | 프로젝트 목록 및 관리, RAG 검색 |
 | `ProjectConfigsPage` | `/project-configs` | 프로젝트 설정 관리 (Skills, Agents, MCP, Hooks) |
-| `TasksPage` | `/tasks` | 태스크 트리 뷰, 상세 정보 |
+| `TasksPage` | `/tasks` | 태스크 트리 뷰, 상세 정보 (라우트 미등록) |
 | `AgentsPage` | `/agents` | 에이전트 레지스트리 (글로벌+프로젝트 통합), MCP, RLHF |
-| `ActivityPage` | `/activity` | 실시간 활동 로그 |
+| `ActivityPage` | `/activity` | ~~실시간 활동 로그~~ (deprecated → SessionsPage로 대체) |
 | `MonitorPage` | `/monitor` | 프로젝트 헬스 체크 모니터링 |
 | `ClaudeSessionsPage` | `/claude-sessions` | Claude Code 세션 모니터링 |
 | `GitPage` | `/git` | Git 브랜치/머지/PR 관리 |
@@ -233,6 +233,7 @@ import { cn } from '@/lib/utils';
 | 컴포넌트 | 경로 | 설명 |
 |----------|------|------|
 | `ProjectMembersContent` | `components/project-management/` | 프로젝트 멤버 관리 콘텐츠 (멤버십 목록, 관리) |
+| `ServiceStatusBar` | `components/project-management/` | 인프라 서비스 상태 바 (실행/중지/충돌 표시) |
 
 ### Monitor Components
 
@@ -372,6 +373,7 @@ import { cn } from '@/lib/utils';
 | `useWorkflowStore` | `workflows.ts` | 워크플로우 CRUD, 실행, 시크릿, 스케줄 |
 | `useExternalUsage` | `externalUsage.ts` | 외부 LLM 프로바이더 사용량 추적 |
 | `useLLMCredentials` | `llmCredentials.ts` | LLM 프로바이더 자격증명/API 키 관리 |
+| `useInfraStatus` | `infraStatus.ts` | 인프라 서비스 상태 관리 (Docker, 포트 체크) |
 
 ### Store Pattern
 
@@ -506,7 +508,8 @@ src/dashboard/
 │   │   │   ├── DeleteProjectModal.tsx
 │   │   │   └── ProjectClaudeConfigPanel.tsx
 │   │   ├── project-management/  # 프로젝트 멤버 관리
-│   │   │   └── ProjectMembersContent.tsx
+│   │   │   ├── ProjectMembersContent.tsx
+│   │   │   └── ServiceStatusBar.tsx
 │   │   ├── organizations/      # 조직 관리
 │   │   │   ├── OrganizationCard.tsx
 │   │   │   ├── OrganizationFormModal.tsx
@@ -537,7 +540,7 @@ src/dashboard/
 │   │   └── analytics/          # Analytics
 │   │       └── ProjectMultiSelect.tsx
 │   ├── services/               # API 서비스 레이어
-│   ├── stores/                 # Zustand 스토어 (26개 + index.ts)
+│   ├── stores/                 # Zustand 스토어 (28개 + index.ts)
 │   │   ├── orchestration/      # 리팩토링: index.ts, types.ts, wsConnection.ts, wsHandler.ts
 │   │   ├── orchestration.ts    # 재export
 │   │   ├── projects.ts
@@ -564,6 +567,7 @@ src/dashboard/
 │   │   ├── projectAccess.ts
 │   │   ├── externalUsage.ts
 │   │   ├── llmCredentials.ts
+│   │   ├── infraStatus.ts
 │   │   └── workflows.ts
 │   ├── hooks/                  # 커스텀 훅
 │   │   ├── useErrorHandler.ts
