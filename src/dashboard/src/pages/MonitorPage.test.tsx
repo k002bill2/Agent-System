@@ -21,6 +21,7 @@ vi.mock('../components/monitor', () => ({
 
 // Store mocks - need to match actual selector pattern
 const mockFetchProjects = vi.fn()
+const mockFetchCheckConfig = vi.fn()
 const mockFetchProjectHealth = vi.fn()
 const mockFetchWorkflowChecks = vi.fn()
 const mockRunAllChecks = vi.fn()
@@ -50,6 +51,7 @@ vi.mock('../stores/monitoring', () => ({
       getRunningChecks: () => new Set(),
       isLoadingHealth: mockIsLoadingHealth,
       error: mockError,
+      fetchCheckConfig: mockFetchCheckConfig,
       fetchProjectHealth: mockFetchProjectHealth,
       fetchWorkflowChecks: mockFetchWorkflowChecks,
       runAllChecks: mockRunAllChecks,

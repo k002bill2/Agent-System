@@ -13,6 +13,7 @@ vi.mock('lucide-react', () => ({
 
 const defaultProps = {
   checkType: 'test' as const,
+  label: 'Test',
   status: 'idle' as const,
   exitCode: null,
   durationMs: null,
@@ -87,13 +88,13 @@ describe('CheckCard', () => {
   })
 
   it('renders different check types', () => {
-    const { rerender } = render(<CheckCard {...defaultProps} checkType="lint" />)
+    const { rerender } = render(<CheckCard {...defaultProps} checkType="lint" label="Lint" />)
     expect(screen.getByText('Lint')).toBeInTheDocument()
 
-    rerender(<CheckCard {...defaultProps} checkType="typecheck" />)
+    rerender(<CheckCard {...defaultProps} checkType="typecheck" label="TypeCheck" />)
     expect(screen.getByText('TypeCheck')).toBeInTheDocument()
 
-    rerender(<CheckCard {...defaultProps} checkType="build" />)
+    rerender(<CheckCard {...defaultProps} checkType="build" label="Build" />)
     expect(screen.getByText('Build')).toBeInTheDocument()
   })
 })

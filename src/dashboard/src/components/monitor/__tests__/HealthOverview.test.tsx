@@ -26,6 +26,10 @@ let mockRunningWorkflowIds = new Set<string>()
 vi.mock('../../../stores/monitoring', () => ({
   useMonitoringStore: () => ({
     getRunningChecks: () => mockRunningChecks,
+    getCheckLabel: (_projectId: string, checkType: string) => {
+      const labels: Record<string, string> = { test: 'Test', lint: 'Lint', typecheck: 'TypeCheck', build: 'Build' }
+      return labels[checkType] ?? checkType
+    },
     runCheck: mockRunCheck,
     activeLogView: mockActiveLogView,
     setActiveLogView: mockSetActiveLogView,

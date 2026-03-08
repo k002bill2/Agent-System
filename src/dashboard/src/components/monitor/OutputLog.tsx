@@ -1,11 +1,22 @@
 import { useEffect, useRef } from 'react'
 import { cn } from '../../lib/utils'
 import { Terminal, Trash2 } from 'lucide-react'
-import { ALL_CHECK_TYPES, CHECK_TYPE_LABELS, CheckType } from '../../types/monitoring'
+import { ALL_CHECK_TYPES, CheckType } from '../../types/monitoring'
 import { useMonitoringStore } from '../../stores/monitoring'
 
 interface OutputLogProps {
   projectId: string
+}
+
+/** Get label for a check type, using dynamic config or defaults */
+function useCheckLabels(projectId: string): Record<CheckType, string> {
+  const { getCheckLabel } = useMonitoringStore()
+  return {
+    test: getCheckLabel(projectId, 'test'),
+    lint: getCheckLabel(projectId, 'lint'),
+    typecheck: getCheckLabel(projectId, 'typecheck'),
+    build: getCheckLabel(projectId, 'build'),
+  }
 }
 
 /** Check if view is a standard CheckType */
@@ -23,6 +34,7 @@ export function OutputLog({ projectId }: OutputLogProps) {
     workflowLogs,
     clearWorkflowLogs,
   } = useMonitoringStore()
+  const checkLabels = useCheckLabels(projectId)
   const logContainerRef = useRef<HTMLDivElement>(null)
 
   // Check if current view is a workflow ID
@@ -35,7 +47,7 @@ export function OutputLog({ projectId }: OutputLogProps) {
       const allCheckLogs = ALL_CHECK_TYPES.flatMap((ct) =>
         checkLogs[ct]
           .filter((log) => log.projectId === projectId)
-          .map((log) => ({ ...log, label: CHECK_TYPE_LABELS[ct] }))
+          .map((log) => ({ ...log, label: checkLabels[ct] }))
       )
       const allWfLogs = Object.entries(workflowLogs).flatMap(([wfId, logs]) => {
         const wf = workflowChecks.find((w) => w.id === wfId)
@@ -57,7 +69,7 @@ export function OutputLog({ projectId }: OutputLogProps) {
     // Standard check type logs
     return checkLogs[activeLogView as CheckType]
       .filter((log) => log.projectId === projectId)
-      .map((log) => ({ ...log, label: CHECK_TYPE_LABELS[activeLogView as CheckType] }))
+      .map((log) => ({ ...log, label: checkLabels[activeLogView as CheckType] }))
   }
 
   const displayLogs = getDisplayLogs()
@@ -128,7 +140,7 @@ export function OutputLog({ projectId }: OutputLogProps) {
                     : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                 )}
               >
-                {CHECK_TYPE_LABELS[ct]}
+                {checkLabels[ct]}
               </button>
             ))}
 

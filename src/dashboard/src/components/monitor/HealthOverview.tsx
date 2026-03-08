@@ -12,6 +12,7 @@ interface HealthOverviewProps {
 export function HealthOverview({ health, projectId }: HealthOverviewProps) {
   const {
     getRunningChecks,
+    getCheckLabel,
     runCheck,
     activeLogView,
     setActiveLogView,
@@ -36,6 +37,7 @@ export function HealthOverview({ health, projectId }: HealthOverviewProps) {
             <CheckCard
               key={checkType}
               checkType={checkType}
+              label={getCheckLabel(projectId, checkType)}
               status={check?.status || 'idle'}
               exitCode={check?.exit_code ?? null}
               durationMs={check?.duration_ms ?? null}

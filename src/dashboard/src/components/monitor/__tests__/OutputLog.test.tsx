@@ -32,6 +32,10 @@ vi.mock('../../../stores/monitoring', () => ({
     workflowChecks: mockWorkflowChecks,
     workflowLogs: mockWorkflowLogs,
     clearWorkflowLogs: mockClearWorkflowLogs,
+    getCheckLabel: (_projectId: string, checkType: string) => {
+      const labels: Record<string, string> = { test: 'Test', lint: 'Lint', typecheck: 'TypeCheck', build: 'Build' }
+      return labels[checkType] ?? checkType
+    },
   }),
 }))
 

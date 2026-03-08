@@ -6,10 +6,11 @@ import {
   Clock,
   Play,
 } from 'lucide-react'
-import { CheckType, CheckStatus, CHECK_TYPE_LABELS } from '../../types/monitoring'
+import { CheckType, CheckStatus } from '../../types/monitoring'
 
 interface CheckCardProps {
   checkType: CheckType
+  label: string
   status: CheckStatus
   exitCode: number | null
   durationMs: number | null
@@ -20,7 +21,9 @@ interface CheckCardProps {
 }
 
 export function CheckCard({
-  checkType,
+  // checkType used as key by parent
+  checkType: _checkType,
+  label,
   status,
   exitCode,
   durationMs,
@@ -93,7 +96,7 @@ export function CheckCard({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
-            {CHECK_TYPE_LABELS[checkType]}
+            {label}
           </span>
           <span className="text-xs text-gray-400 dark:text-gray-500">
             {getStatusText()}
@@ -118,7 +121,7 @@ export function CheckCard({
             ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
             : 'text-primary-500 hover:bg-primary-50 dark:hover:bg-gray-600'
         )}
-        title={`Run ${CHECK_TYPE_LABELS[checkType]}`}
+        title={`Run ${label}`}
       >
         <Play className="w-3.5 h-3.5" />
       </button>

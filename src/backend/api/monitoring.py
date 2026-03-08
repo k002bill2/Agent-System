@@ -19,7 +19,7 @@ from models.monitoring import (
     ProjectHealth,
 )
 from models.project import get_project
-from services.project_runner import get_runner
+from services.project_runner import get_check_config, get_runner
 
 router = APIRouter(tags=["orchestration"])
 
@@ -47,6 +47,34 @@ class ProjectHealthResponse(BaseModel):
     project_path: str
     checks: dict[str, CheckResponse]
     last_updated: str
+
+
+class CheckConfigEntry(BaseModel):
+    """Config for a single check type."""
+
+    label: str
+    command: str
+
+
+class CheckConfigResponse(BaseModel):
+    """Response for project health check config."""
+
+    project_id: str
+    checks: dict[str, CheckConfigEntry]
+
+
+@router.get("/projects/{project_id}/health-config", response_model=CheckConfigResponse)
+async def get_health_config(project_id: str):
+    """Get the health check configuration (labels & commands) for a project."""
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    config = get_check_config(project.path)
+    return CheckConfigResponse(
+        project_id=project_id,
+        checks={k: CheckConfigEntry(**v) for k, v in config.items()},
+    )
 
 
 @router.get("/projects/{project_id}/health", response_model=ProjectHealthResponse)

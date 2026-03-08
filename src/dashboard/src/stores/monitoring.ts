@@ -3,6 +3,9 @@ import { apiClient } from '../services/apiClient'
 import { getApiUrl } from '../config/api'
 import {
   CheckType,
+  CheckConfig,
+  CheckConfigEntry,
+  DEFAULT_CHECK_TYPE_LABELS,
   ProjectHealth,
   ProjectContext,
   CheckStartedPayload,
@@ -23,6 +26,9 @@ interface MonitoringState {
   // Project health data (per project)
   projectHealthMap: Record<string, ProjectHealth>
   isLoadingHealth: boolean
+
+  // Per-project check config (labels & commands)
+  checkConfigMap: Record<string, CheckConfig>
 
   // Project context data
   projectContext: ProjectContext | null
@@ -52,6 +58,9 @@ interface MonitoringState {
   // Actions
   getProjectHealth: (projectId: string) => ProjectHealth | null
   getRunningChecks: (projectId: string) => Set<CheckType>
+  getCheckLabel: (projectId: string, checkType: CheckType) => string
+  getCheckConfig: (projectId: string) => Record<CheckType, CheckConfigEntry> | null
+  fetchCheckConfig: (projectId: string) => Promise<void>
   fetchProjectHealth: (projectId: string) => Promise<void>
   fetchProjectContext: (projectId: string) => Promise<void>
   runCheck: (projectId: string, checkType: CheckType) => void
@@ -70,6 +79,7 @@ interface MonitoringState {
 export const useMonitoringStore = create<MonitoringState>((set, get) => ({
   projectHealthMap: {},
   isLoadingHealth: false,
+  checkConfigMap: {},
   projectContext: null,
   isLoadingContext: false,
   runningChecksMap: {},
@@ -93,6 +103,30 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
 
   getRunningChecks: (projectId: string) => {
     return get().runningChecksMap[projectId] || new Set()
+  },
+
+  getCheckLabel: (projectId: string, checkType: CheckType) => {
+    const config = get().checkConfigMap[projectId]
+    return config?.checks?.[checkType]?.label ?? DEFAULT_CHECK_TYPE_LABELS[checkType]
+  },
+
+  getCheckConfig: (projectId: string) => {
+    return get().checkConfigMap[projectId]?.checks ?? null
+  },
+
+  fetchCheckConfig: async (projectId: string) => {
+    try {
+      const data = await apiClient.get<CheckConfig>(`/api/projects/${projectId}/health-config`)
+      set((state) => ({
+        checkConfigMap: {
+          ...state.checkConfigMap,
+          [projectId]: data,
+        },
+      }))
+    } catch (e) {
+      // Non-critical: fall back to defaults
+      console.warn('Failed to fetch check config:', e)
+    }
   },
 
   fetchProjectHealth: async (projectId: string) => {

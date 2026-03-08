@@ -48,19 +48,35 @@ export interface CheckCompletedPayload {
   stderr: string
 }
 
-// Check type metadata for display
-export const CHECK_TYPE_LABELS: Record<CheckType, string> = {
+// Default check type labels (overridden by project health-config)
+export const DEFAULT_CHECK_TYPE_LABELS: Record<CheckType, string> = {
   test: 'Test',
   lint: 'Lint',
   typecheck: 'TypeCheck',
   build: 'Build',
 }
 
-export const CHECK_TYPE_COMMANDS: Record<CheckType, string> = {
+/** @deprecated Use dynamic labels from health-config API */
+export const CHECK_TYPE_LABELS = DEFAULT_CHECK_TYPE_LABELS
+
+export const DEFAULT_CHECK_TYPE_COMMANDS: Record<CheckType, string> = {
   test: 'npm test',
   lint: 'npm run lint',
   typecheck: 'npm run type-check',
   build: 'npm run build:preview',
+}
+
+export const CHECK_TYPE_COMMANDS = DEFAULT_CHECK_TYPE_COMMANDS
+
+// Per-project health check config from API
+export interface CheckConfigEntry {
+  label: string
+  command: string
+}
+
+export interface CheckConfig {
+  project_id: string
+  checks: Record<CheckType, CheckConfigEntry>
 }
 
 export const ALL_CHECK_TYPES: CheckType[] = ['test', 'lint', 'typecheck', 'build']

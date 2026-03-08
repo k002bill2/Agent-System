@@ -12,6 +12,7 @@ export function MonitorPage() {
     getRunningChecks,
     isLoadingHealth,
     error,
+    fetchCheckConfig,
     fetchProjectHealth,
     fetchWorkflowChecks,
     runAllChecks,
@@ -31,13 +32,14 @@ export function MonitorPage() {
     fetchProjects()
   }, [fetchProjects])
 
-  // Fetch health and workflow checks when project changes
+  // Fetch health config, health, and workflow checks when project changes
   useEffect(() => {
     if (selectedProjectId) {
+      fetchCheckConfig(selectedProjectId)
       fetchProjectHealth(selectedProjectId)
       fetchWorkflowChecks(selectedProjectId)
     }
-  }, [selectedProjectId, fetchProjectHealth, fetchWorkflowChecks])
+  }, [selectedProjectId, fetchCheckConfig, fetchProjectHealth, fetchWorkflowChecks])
 
   // No project selected - show projects panel for selection
   if (!selectedProjectId || !selectedProject) {

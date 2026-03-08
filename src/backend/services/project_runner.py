@@ -1,6 +1,8 @@
 """Project command runner service."""
 
 import asyncio
+import json
+import logging
 import time
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
@@ -15,14 +17,67 @@ from models.monitoring import (
 )
 from utils.time import utcnow
 
-# Allowed npm commands (whitelist for security)
-# Commands are run from the project root with npm scripts defined in package.json
-ALLOWED_COMMANDS: dict[CheckType, list[str]] = {
+logger = logging.getLogger(__name__)
+
+# Default npm commands (used when no custom config exists)
+DEFAULT_COMMANDS: dict[CheckType, list[str]] = {
     CheckType.TEST: ["npm", "test"],
     CheckType.LINT: ["npm", "run", "lint"],
     CheckType.TYPECHECK: ["npm", "run", "type-check"],
     CheckType.BUILD: ["npm", "run", "build"],
 }
+
+# Default labels per check type
+DEFAULT_LABELS: dict[CheckType, str] = {
+    CheckType.TEST: "Test",
+    CheckType.LINT: "Lint",
+    CheckType.TYPECHECK: "TypeCheck",
+    CheckType.BUILD: "Build",
+}
+
+
+def _load_health_checks_config(project_path: Path) -> dict | None:
+    """Load health_checks config from .aos-project.json if present."""
+    config_file = project_path / ".aos-project.json"
+    if not config_file.exists():
+        return None
+    try:
+        data = json.loads(config_file.read_text(encoding="utf-8"))
+        return data.get("health_checks")
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning(f"Failed to load health_checks from {config_file}: {e}")
+        return None
+
+
+def get_check_config(project_path: str) -> dict[str, dict[str, str]]:
+    """Get check labels and commands for a project.
+
+    Returns dict like:
+        {"test": {"label": "Links", "command": "bash -c '...'"}, ...}
+    """
+    path = Path(project_path)
+    custom = _load_health_checks_config(path)
+    result: dict[str, dict[str, str]] = {}
+
+    for ct in CheckType:
+        if custom and ct.value in custom:
+            entry = custom[ct.value]
+            cmd = entry.get("command", DEFAULT_COMMANDS[ct])
+            if isinstance(cmd, list):
+                cmd_str = " ".join(cmd)
+            else:
+                cmd_str = str(cmd)
+            result[ct.value] = {
+                "label": entry.get("label", DEFAULT_LABELS[ct]),
+                "command": cmd_str,
+            }
+        else:
+            result[ct.value] = {
+                "label": DEFAULT_LABELS[ct],
+                "command": " ".join(DEFAULT_COMMANDS[ct]),
+            }
+
+    return result
 
 
 class ProjectRunner:
@@ -33,12 +88,18 @@ class ProjectRunner:
         self.project_path = Path(project_path)
         if not self.project_path.exists():
             raise ValueError(f"Project path does not exist: {project_path}")
+        self._custom_config = _load_health_checks_config(self.project_path)
 
     def _get_command(self, check_type: CheckType) -> list[str]:
-        """Get the command for a check type."""
-        if check_type not in ALLOWED_COMMANDS:
-            raise ValueError(f"Unknown check type: {check_type}")
-        return ALLOWED_COMMANDS[check_type].copy()
+        """Get the command for a check type, using custom config if available."""
+        if self._custom_config and check_type.value in self._custom_config:
+            entry = self._custom_config[check_type.value]
+            cmd = entry.get("command", DEFAULT_COMMANDS[check_type])
+            if isinstance(cmd, str):
+                # Shell string → run via bash -c
+                return ["bash", "-c", cmd]
+            return list(cmd)
+        return DEFAULT_COMMANDS[check_type].copy()
 
     async def run_check(
         self,
@@ -258,7 +319,9 @@ _runners: dict[str, ProjectRunner] = {}
 
 
 def get_runner(project_path: str) -> ProjectRunner:
-    """Get or create a project runner."""
-    if project_path not in _runners:
-        _runners[project_path] = ProjectRunner(project_path)
+    """Get or create a project runner.
+
+    Always creates a new runner to pick up config changes in .aos-project.json.
+    """
+    _runners[project_path] = ProjectRunner(project_path)
     return _runners[project_path]
