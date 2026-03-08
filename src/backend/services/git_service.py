@@ -583,9 +583,21 @@ class GitService:
                 status = self.status()
                 staged_files = [f.path for f in status.staged_files]
             elif paths and len(paths) > 0:
-                # Add specific paths
+                # Detect deleted files from unstaged diff (scoped to target paths)
+                deleted_paths: set[str] = set()
+                try:
+                    for d in self.repo.index.diff(None, paths=paths):
+                        if d.deleted_file:
+                            deleted_paths.add(d.b_path or d.a_path)
+                except Exception as e:
+                    logger.debug(f"Error detecting deleted files: {e}")
+
+                # Add specific paths, using git rm for deleted files
                 for path in paths:
-                    self.repo.index.add([path])
+                    if path in deleted_paths:
+                        self.repo.index.remove([path])
+                    else:
+                        self.repo.index.add([path])
                     staged_files.append(path)
             else:
                 # git add . (current directory)
