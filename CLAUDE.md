@@ -54,11 +54,13 @@ cd src/dashboard && npm install && npm run dev
 | 명령어 | 설명 |
 |--------|------|
 | `/check-health` | 타입체크, 린트, 테스트, 빌드 종합 검증 |
-| `/verify-app` | Boris Cherny 스타일 검증 루프 |
-| `/test-coverage` | 테스트 커버리지 분석 |
-| `/commit-push-pr` | Git 워크플로우 자동화 |
-| `/save-and-compact` | 컨텍스트 저장 후 /compact |
-| `/resume` | 이전 세션 컨텍스트 복원 |
+| `/verify-app` | Boris Cherny 스타일 종합 검증 루프 |
+| `/test-coverage` | 테스트 커버리지 분석 및 미흡 영역 식별 |
+| `/auto` | E2E 자동화 파이프라인 (feature/bugfix/refactor 자동 감지) |
+| `/start-all` | 전체 서비스 시작 (인프라 + Backend + Dashboard) |
+| `/stop-all` | 전체 서비스 중지 |
+| `/run-eval` | AI 에이전트 평가 태스크 실행 및 pass@k 지표 계산 |
+| `/gemini-review` | Gemini CLI로 코드 변경사항 크로스 리뷰 |
 
 전체 명령어 목록은 `.claude/commands/` 디렉토리 참조. `/sync-registry`로 레지스트리 동기화.
 
