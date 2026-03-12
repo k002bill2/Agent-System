@@ -1,18 +1,8 @@
 ---
 name: verify-implementation
 description: 프로젝트의 모든 verify 스킬을 순차 실행하여 통합 검증 보고서를 생성합니다. 기능 구현 후, PR 전, 코드 리뷰 시 사용.
-type: workflow
-priority: medium
-triggers:
-  keywords:
-    - verify
-    - 검증
-    - implementation check
-  patterns:
-    - "verify.*implementation"
-    - "구현.*검증"
 disable-model-invocation: true
-argument-hint: "[선택사항: 특정 verify 스킬 이름]"
+argument-hint: "[verify 스킬 이름]"
 ---
 
 # 구현 검증

@@ -1,6 +1,8 @@
 ---
 name: gemini-scan
-description: Gemini CLI로 대규모 코드베이스 분석 실행
+description: Gemini CLI로 대규모 코드베이스 분석 실행.
+disable-model-invocation: true
+argument-hint: "[scope] [analysis-type]"
 ---
 
 # Gemini Codebase Scan

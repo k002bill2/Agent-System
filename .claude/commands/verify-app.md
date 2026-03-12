@@ -1,6 +1,7 @@
 ---
 name: verify-app
-description: 앱 종합 검증 - 타입체크, 린트, 테스트, 빌드를 한번에 실행 (Boris Cherny 피드백 루프)
+description: 앱 종합 검증 - 타입체크, 린트, 테스트, 빌드를 한번에 실행 (Boris Cherny 피드백 루프).
+disable-model-invocation: true
 ---
 
 # 앱 종합 검증 워크플로우

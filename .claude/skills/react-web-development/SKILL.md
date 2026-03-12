@@ -1,24 +1,6 @@
 ---
 name: react-web-development
-description: React Web component development with TypeScript, Vite, Tailwind CSS, and Zustand. Use when creating UI components, pages, or implementing routing flows.
-type: skill
-enforcement: require
-priority: high
-triggers:
-  keywords:
-    - react
-    - component
-    - tailwind
-    - zustand
-    - vite
-    - 컴포넌트
-    - 페이지
-  patterns:
-    - "(create|add|make).*?(component|page|hook)"
-    - "(react|리액트).*?(개발|구현)"
-  files:
-    - "src/dashboard/**/*.tsx"
-    - "src/dashboard/**/*.ts"
+description: React Web component development with TypeScript, Vite, Tailwind CSS, and Zustand. Use when creating UI components, pages, implementing routing flows, or working with React/Tailwind/Zustand code.
 ---
 
 # React Web Development Guidelines

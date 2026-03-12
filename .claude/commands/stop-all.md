@@ -1,6 +1,7 @@
 ---
 name: stop-all
-description: AOS 전체 서비스 중지
+description: AOS 전체 서비스 중지.
+disable-model-invocation: true
 ---
 
 # Stop All Services

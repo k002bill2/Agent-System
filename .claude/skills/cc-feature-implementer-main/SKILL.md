@@ -1,18 +1,7 @@
 ---
 name: feature-planner
-description: Creates phase-based feature plans with quality gates and incremental delivery structure. Use when planning features, organizing work, breaking down tasks, creating roadmaps, or structuring development strategy. Keywords: plan, planning, phases, breakdown, strategy, roadmap, organize, structure, outline.
-type: workflow
-priority: high
-triggers:
-  keywords:
-    - plan
-    - planning
-    - phases
-    - roadmap
-    - breakdown
-  patterns:
-    - "(create|make).*?plan"
-    - "(break.*?down|structure).*?(task|feature)"
+description: Creates phase-based feature plans with quality gates and incremental delivery structure. Use when planning features, organizing work, breaking down tasks, creating roadmaps, or structuring development strategy.
+disable-model-invocation: true
 ---
 
 # Feature Planner

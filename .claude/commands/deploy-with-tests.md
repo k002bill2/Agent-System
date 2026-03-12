@@ -1,6 +1,7 @@
 ---
 name: deploy-with-tests
-description: 테스트 검증 후 빌드/배포 실행
+description: 테스트 검증 후 빌드/배포 실행.
+disable-model-invocation: true
 ---
 
 # Deploy with Tests

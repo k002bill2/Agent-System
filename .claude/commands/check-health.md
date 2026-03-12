@@ -1,6 +1,7 @@
 ---
 name: check-health
-description: Comprehensive project health check including tests, types, linting, and build verification
+description: Comprehensive project health check including tests, types, linting, and build verification.
+disable-model-invocation: true
 ---
 
 # Project Health Check

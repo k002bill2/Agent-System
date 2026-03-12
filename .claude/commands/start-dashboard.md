@@ -1,6 +1,7 @@
 ---
 name: start-dashboard
-description: React 대시보드 개발 서버 실행 워크플로우
+description: React 대시보드 개발 서버 실행 워크플로우.
+disable-model-invocation: true
 ---
 
 # Start Dashboard

@@ -1,18 +1,6 @@
 ---
 name: verification-loop
-description: Boris Cherny style verification feedback loop automation. Run type check, lint, test, and build verification.
-type: workflow
-priority: high
-triggers:
-  keywords:
-    - verify
-    - verification
-    - feedback loop
-    - check
-    - validate
-  patterns:
-    - "(verify|validate).*?(code|app)"
-    - "(feedback|verification).*?loop"
+description: Boris Cherny style verification feedback loop automation. Run type check, lint, test, and build verification. Use after code changes to ensure quality.
 ---
 
 # Verification Loop Skill

@@ -1,6 +1,8 @@
 ---
 name: view-logs
-description: Vite 개발 서버 또는 테스트 로그 분석
+description: Vite 개발 서버 또는 테스트 로그 분석.
+disable-model-invocation: true
+argument-hint: "[vite | build | test | crash]"
 ---
 
 # View Logs

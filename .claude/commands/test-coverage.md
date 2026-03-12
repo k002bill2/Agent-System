@@ -1,6 +1,7 @@
 ---
 name: test-coverage
-description: Run tests with coverage report and identify areas needing more tests
+description: Run tests with coverage report and identify areas needing more tests.
+disable-model-invocation: true
 ---
 
 # Test Coverage Analysis

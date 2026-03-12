@@ -1,6 +1,7 @@
 ---
 name: start-all
-description: AOS 전체 서비스 시작 (인프라 + Backend + Dashboard)
+description: AOS 전체 서비스 시작 (인프라 + Backend + Dashboard).
+disable-model-invocation: true
 ---
 
 # Start All Services

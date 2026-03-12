@@ -1,7 +1,9 @@
 ---
 name: run-eval
-description: AI 에이전트 평가 태스크 실행 및 pass@k 지표 계산
-allowed-tools: read, grep, glob, bash, task
+description: AI 에이전트 평가 태스크 실행 및 pass@k 지표 계산.
+disable-model-invocation: true
+allowed-tools: Read, Grep, Glob, Bash
+argument-hint: "[task_id | --category <type> | --all] [--k=N]"
 ---
 
 # AI Agent Evaluation Runner

@@ -1,6 +1,7 @@
 ---
 name: sync-registry
-description: 스킬, 에이전트, 훅, 커맨드 레지스트리 자동 동기화
+description: 스킬, 에이전트, 훅, 커맨드 레지스트리 자동 동기화.
+disable-model-invocation: true
 ---
 
 # Registry Sync
@@ -42,18 +43,8 @@ node .claude/scripts/sync-registry.js --all
 # .claude/skills/my-skill/SKILL.md
 ---
 name: my-skill
-description: My skill description
-type: skill
-enforcement: suggest
-priority: normal
-triggers:
-  keywords:
-    - keyword1
-    - keyword2
-  patterns:
-    - "(create|add).*?something"
-  files:
-    - "src/**/*.ts"
+description: My skill description. Use when doing X or Y.
+disable-model-invocation: true
 ---
 ```
 
@@ -63,10 +54,8 @@ triggers:
 ---
 name: my-agent
 description: My agent description
-tools: read, edit, grep
+tools: Read, Edit, Grep
 model: sonnet
-triggers:
-  keywords: [keyword1, keyword2]
 ---
 ```
 
@@ -75,8 +64,9 @@ triggers:
 # .claude/commands/my-command.md
 ---
 name: my-command
-description: My command description
-allowed-tools: read, bash
+description: My command description.
+disable-model-invocation: true
+allowed-tools: Read, Bash
 ---
 ```
 

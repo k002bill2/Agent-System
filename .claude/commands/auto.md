@@ -1,5 +1,8 @@
 ---
-description: "E2E 자동화 파이프라인 - feature/bugfix/refactor 모드 자동 감지"
+name: auto
+description: E2E 자동화 파이프라인 - feature/bugfix/refactor 모드 자동 감지.
+disable-model-invocation: true
+argument-hint: "[작업 설명]"
 ---
 
 # /auto Pipeline

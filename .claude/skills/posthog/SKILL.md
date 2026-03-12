@@ -1,17 +1,6 @@
 ---
 name: posthog
-description: PostHog 또는 커스텀 분석 이벤트 트래킹이 올바르게 구현되었는지 검증합니다.
-type: workflow
-priority: low
-triggers:
-  keywords:
-    - posthog
-    - analytics
-    - event tracking
-    - 분석 이벤트
-  patterns:
-    - "track.*event"
-    - "posthog\\.capture"
+description: PostHog 또는 커스텀 분석 이벤트 트래킹이 올바르게 구현되었는지 검증합니다. Use when adding analytics events or verifying event tracking implementation.
 ---
 
 # Analytics 이벤트 트래킹 검증

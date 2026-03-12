@@ -1,6 +1,7 @@
 ---
 name: gemini-review
-description: Gemini CLI로 현재 코드 변경사항 크로스 리뷰 실행
+description: Gemini CLI로 현재 코드 변경사항 크로스 리뷰 실행.
+disable-model-invocation: true
 ---
 
 # Gemini Cross-Review

@@ -1,6 +1,7 @@
 ---
 name: ace-diagnostic
-description: ACE Framework 거버넌스 상태 진단 - 훅 등록, 참조 무결성, 병렬 상태 확인
+description: ACE Framework 거버넌스 상태 진단 - 훅 등록, 참조 무결성, 병렬 상태 확인.
+disable-model-invocation: true
 ---
 
 # ACE Framework 진단

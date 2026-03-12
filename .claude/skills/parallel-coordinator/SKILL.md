@@ -1,21 +1,7 @@
 ---
 name: parallel-coordinator
-description: Coordinate parallel agent execution using ACE Framework for AOS development. Use when implementing features with 3+ independent subtasks (UI + API + Tests).
-type: workflow
-priority: high
-version: 2.0
-based_on: Anthropic Multi-Agent Research System (https://www.anthropic.com/engineering/multi-agent-research-system)
-triggers:
-  keywords:
-    - parallel
-    - concurrent
-    - multi-agent
-    - coordinate
-    - ACE
-  patterns:
-    - "(parallel|concurrent).*?(agent|task|execution)"
-    - "(coordinate|orchestrate).*?(agent|worker)"
-    - "multi.?agent"
+description: Coordinate parallel agent execution using ACE Framework for AOS development. Use when implementing features with 3+ independent subtasks (UI + API + Tests) or orchestrating multi-agent workflows.
+disable-model-invocation: true
 ---
 
 # Parallel Agent Coordinator
