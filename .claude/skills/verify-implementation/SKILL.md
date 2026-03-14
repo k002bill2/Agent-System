@@ -29,8 +29,8 @@ argument-hint: "[verify 스킬 이름]"
 
 | # | 스킬 | 설명 |
 |---|------|------|
-
-(아직 등록된 검증 스킬이 없습니다. `/manage-skills`로 프로젝트에 맞는 스킬을 생성하세요.)
+| 1 | verify-frontend | React/TypeScript/Tailwind 프론트엔드 패턴 검증 |
+| 2 | verify-backend | Python/FastAPI/LangGraph 백엔드 패턴 검증 |
 
 ## 워크플로우
 

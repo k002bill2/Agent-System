@@ -41,13 +41,8 @@ process.stdin.on('end', () => {
     const geminiMsg = checkPendingGeminiReviews();
     if (geminiMsg) messages.push(geminiMsg);
 
-    // 1. React Web 패턴 감지
-    const reactMsg = detectReactWebPatterns(prompt);
-    if (reactMsg) messages.push(reactMsg);
-
-    // 2. Python/Backend 패턴 감지
-    const backendMsg = detectBackendPatterns(prompt);
-    if (backendMsg) messages.push(backendMsg);
+    // 1-2. 패턴 감지는 skill-rules.json으로 통합 (하드코딩 제거)
+    //       skill-rules.json의 reminder 필드가 React/Backend 리마인더를 대체
 
     // 3. skill-rules.json 기반 스킬 활성화
     const skillMsg = activateSkills(prompt);
@@ -71,75 +66,6 @@ process.stdin.on('end', () => {
     process.exit(0);
   }
 });
-
-// ─── React Web 패턴 감지 ────────────────────────────────────
-function detectReactWebPatterns(prompt) {
-  const lowerPrompt = prompt.toLowerCase();
-  const detectedPatterns = [];
-
-  const patterns = [
-    { keywords: ['useeffect', 'cleanup', '구독', 'subscription'], pattern: 'useEffect Cleanup' },
-    { keywords: ['zustand', 'store', '상태 관리', 'state management'], pattern: 'Zustand Store' },
-    { keywords: ['tailwind', 'classname', 'cn(', '스타일'], pattern: 'Tailwind CSS' },
-    { keywords: ['router', 'navigate', 'page', 'route', '라우팅'], pattern: 'React Router' },
-    { keywords: ['component', 'tsx', 'jsx', '컴포넌트'], pattern: 'React Component' },
-    { keywords: ['hook', 'custom hook', '커스텀 훅', 'usememo', 'usecallback'], pattern: 'Custom Hooks' },
-    { keywords: ['vite', 'build', '빌드'], pattern: 'Vite Build' },
-    { keywords: ['vitest', 'test', '테스트', 'coverage'], pattern: 'Vitest Testing' }
-  ];
-
-  for (const { keywords, pattern } of patterns) {
-    if (keywords.some(kw => lowerPrompt.includes(kw))) {
-      detectedPatterns.push(pattern);
-    }
-  }
-
-  if (detectedPatterns.length === 0) return null;
-
-  let msg = '[REACT WEB] Detected: ' + detectedPatterns.join(', ');
-
-  const reminders = [];
-  if (detectedPatterns.includes('useEffect Cleanup')) {
-    reminders.push('useEffect cleanup 함수 필수');
-  }
-  if (detectedPatterns.includes('Zustand Store')) {
-    reminders.push('stores/ 디렉토리, 셀렉터 사용');
-  }
-  if (detectedPatterns.includes('Tailwind CSS')) {
-    reminders.push('cn() 유틸리티 사용 (@/lib/utils)');
-  }
-  if (detectedPatterns.includes('Vitest Testing')) {
-    reminders.push('커버리지 75%+ 목표');
-  }
-
-  if (reminders.length > 0) {
-    msg += ' | Reminders: ' + reminders.join('; ');
-  }
-  return msg;
-}
-
-// ─── Python/Backend 패턴 감지 ───────────────────────────────
-function detectBackendPatterns(prompt) {
-  const lowerPrompt = prompt.toLowerCase();
-  const detectedPatterns = [];
-
-  const patterns = [
-    { keywords: ['fastapi', 'endpoint', 'api'], pattern: 'FastAPI' },
-    { keywords: ['langgraph', 'graph', 'orchestrat'], pattern: 'LangGraph' },
-    { keywords: ['sqlalchemy', 'database', 'repository'], pattern: 'Database' },
-    { keywords: ['hitl', 'approval', '승인'], pattern: 'HITL' },
-    { keywords: ['pytest'], pattern: 'Pytest' }
-  ];
-
-  for (const { keywords, pattern } of patterns) {
-    if (keywords.some(kw => lowerPrompt.includes(kw))) {
-      detectedPatterns.push(pattern);
-    }
-  }
-
-  if (detectedPatterns.length === 0) return null;
-  return '[BACKEND] Detected: ' + detectedPatterns.join(', ');
-}
 
 // ─── 중요 파일 감지 ─────────────────────────────────────────
 function detectCriticalFiles(prompt) {
@@ -207,6 +133,15 @@ function activateSkills(prompt) {
     if (other.length > 0) {
       msg += '\n  SUGGESTED: ' + other.map(s => s.name).join(', ');
     }
+
+    // reminder 필드 출력 (React/Backend 등 도메인별 가이드)
+    for (const s of activated) {
+      const rule = rules[s.name];
+      if (rule && rule.reminder) {
+        msg += `\n  [${s.name}] ${rule.reminder}`;
+      }
+    }
+
     return msg;
   } catch {
     return null;

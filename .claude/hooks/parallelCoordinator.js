@@ -232,10 +232,17 @@ async function onTaskPostExecute(event) {
  * 조정 컨텍스트 주입
  */
 function injectCoordinationContext(prompt, taskInfo) {
+  const agentType = taskInfo.subagentType || 'unknown';
+  const workspace = `.temp/agent_workspaces/${agentType}`;
   const lines = [
     `[PARALLEL TASK: ${taskInfo.taskId}]`,
     '',
-    '다른 에이전트와 같은 파일 수정 시 충돌에 주의하세요.',
+    '## Workspace Isolation Rules (ACE P3)',
+    `- Your workspace: \`${workspace}/\``,
+    '- Write proposals to: `' + workspace + '/proposals/`',
+    '- DO NOT write directly to `src/` — write to your workspace, primary agent merges',
+    '- You may READ any file in the project for reference',
+    '- 다른 에이전트와 같은 파일 수정 시 충돌에 주의하세요.',
     '',
     prompt
   ];
@@ -298,9 +305,19 @@ if (require.main === module) {
     try {
       const event = JSON.parse(inputData);
       if (mode === 'pre') {
-        onTaskPreExecute({ tool_input: event.tool_input || {} });
+        onTaskPreExecute({ tool_input: event.tool_input || {} }).then(result => {
+          if (result && result.decision === 'block') {
+            console.log(`[ParallelCoordinator] ⛔ BLOCKED: ${result.reason}`);
+            process.exit(2);
+          }
+          process.exit(0);
+        });
+        return;
       } else {
-        onTaskPostExecute({ task_id: event.tool_input?.description, success: true });
+        onTaskPostExecute({ task_id: event.tool_input?.description, success: true }).then(() => {
+          process.exit(0);
+        });
+        return;
       }
     } catch (e) { /* ignore */ }
     process.exit(0);

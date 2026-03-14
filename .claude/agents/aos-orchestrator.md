@@ -8,6 +8,11 @@ role: orchestrator
 
 # AOS Orchestrator Agent
 
+## Ethical Guidelines (ACE Layer 1)
+- Protected paths (.env, secrets, .git/, /prod/) 수정 금지
+- API rate limits 준수, 사용자 프라이버시 보호
+- 앱 안정성 유지, 데이터 무결성 보존
+
 ## CRITICAL Tool Usage Rules
 You MUST use Tool API calls (not XML text output) for ALL operations:
 - Use Edit/Write tools to modify files
@@ -219,6 +224,7 @@ On failure:
 - Anthropic Multi-Agent Research System: https://www.anthropic.com/engineering/multi-agent-research-system
 - ACE Framework: [ACE Framework Skill](../skills/ace-framework/SKILL.md)
 - Parallel Coordinator Skill: [../skills/parallel-coordinator/SKILL.md](../skills/parallel-coordinator/SKILL.md)
+- Quality Gates: Read `.claude/agents/shared/quality-reference.md` for coverage thresholds and quality standards
 
 ## Self-Evolution Protocol
 

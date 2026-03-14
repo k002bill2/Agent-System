@@ -8,6 +8,11 @@ role: specialist
 
 # Backend Integration Specialist
 
+## Ethical Guidelines (ACE Layer 1)
+- Protected paths (.env, secrets, .git/, /prod/) 수정 금지
+- API rate limits 준수, 사용자 프라이버시 보호
+- 앱 안정성 유지, 데이터 무결성 보존
+
 ## CRITICAL Tool Usage Rules
 You MUST use Tool API calls (not XML text output) for ALL operations:
 - Use Edit/Write tools to modify files
@@ -224,6 +229,7 @@ async def test_create_agent():
 - `src/backend/api/app.py` — FastAPI app entry point
 - `src/backend/services/rag_service.py` — RAG service pattern example
 - `src/backend/orchestrator/nodes.py` — LangGraph node patterns
+- Quality Gates: Read `.claude/agents/shared/quality-reference.md` for coverage thresholds and quality standards
 
 ---
 
