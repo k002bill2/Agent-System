@@ -11,9 +11,10 @@ disable-model-invocation: true
 ## 1. Hook 등록 상태
 
 ```bash
-cat .claude/settings.json | python3 -c "
+cat .claude/hooks.json | python3 -c "
 import json, sys
-h = json.load(sys.stdin)['hooks']
+data = json.load(sys.stdin)
+h = data.get('hooks', data)
 print('| Event | Rules | Hooks |')
 print('|-------|-------|-------|')
 for event, rules in h.items():
@@ -30,14 +31,14 @@ print(f'\nTotal: {sum(len(r[\"hooks\"]) for rules in h.values() for r in rules)}
 echo "=== 구 경로 (shared/ace-framework) ===" && grep -r "shared/ace-framework" .claude/agents/ --include="*.md" 2>/dev/null || echo "PASS: 0건"
 
 # 훅 파일 존재 확인
-echo "=== Hook 파일 존재 ===" && for f in ethicalValidator.js parallelCoordinator.js agentTracer.js geminiAutoTrigger.js contextMonitor.js stopEvent.js userPromptSubmit.js workspaceGuard.js; do [ -f ".claude/hooks/$f" ] && echo "  ✅ $f" || echo "  ❌ $f (MISSING)"; done
+echo "=== Hook 파일 존재 ===" && for f in ethicalValidator.js parallelCoordinator.js agentTracer.js geminiAutoTrigger.js aceMatrixSync.js stopEvent.js userPromptSubmit.js preCompactSnapshot.js; do [ -f ".claude/hooks/$f" ] && echo "  ✅ $f" || echo "  ❌ $f (MISSING)"; done
 ```
 
 ## 3. Enforcement Matrix 정합성
 
 ```bash
 # settings.json P2 훅 수 vs enforcement-matrix P2 행 수
-echo "=== P2 Hard Constraints ===" && echo "settings.json hooks: $(cat .claude/settings.json | python3 -c "import json,sys; h=json.load(sys.stdin)['hooks']; print(sum(len(r['hooks']) for rules in h.values() for r in rules))")" && echo "enforcement-matrix P2 rows: $(grep -c '^| P2-' .claude/skills/ace-framework/references/enforcement-matrix.md)"
+echo "=== P2 Hard Constraints ===" && echo "hooks.json hooks: $(cat .claude/hooks.json | python3 -c "import json,sys; data=json.load(sys.stdin); h=data.get('hooks',data); print(sum(len(r['hooks']) for rules in h.values() for r in rules))")" && echo "enforcement-matrix P2 rows: $(grep -c '^| P2-' .claude/skills/ace-framework/references/enforcement-matrix.md)"
 ```
 
 ## 4. 병렬 실행 상태

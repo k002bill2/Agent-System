@@ -30,8 +30,8 @@ argument-hint: "[스킬 이름 또는 집중할 영역]"
 
 | 스킬 | 설명 | 커버 파일 패턴 |
 |------|------|---------------|
-
-(아직 등록된 검증 스킬이 없습니다. `/manage-skills`로 프로젝트에 맞는 스킬을 생성하세요.)
+| verify-frontend | React/TypeScript/Tailwind 프론트엔드 패턴 검증 | `src/dashboard/src/**/*.tsx`, `src/dashboard/src/**/*.ts` |
+| verify-backend | Python/FastAPI/LangGraph 백엔드 패턴 검증 | `src/backend/**/*.py` |
 
 ## 워크플로우
 

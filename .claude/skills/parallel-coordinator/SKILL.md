@@ -227,7 +227,7 @@ Define strategic context:
       "output": "src/services/[feature]/[service].ts",
       "workspace": ".temp/agent_workspaces/backend-integration/",
       "dependencies": [],
-      "skill": "backend-development"
+      "skill": "verify-backend"
     },
     {
       "id": "task_2",
@@ -286,12 +286,11 @@ Define strategic context:
 
 ### Layer 6: Skill Invocation
 
-| Task Type | Required Skill |
-|-----------|---------------|
-| React Web UI | `react-web-development` |
-| FastAPI/LangGraph | `backend-development` |
-| RAG/Vector DB | `rag-vector-db` |
-| Tests | `test-automation` |
+| Task Type | Required Skill | Type |
+|-----------|---------------|------|
+| React Web UI | `react-web-development` | Skill (SKILL.md) |
+| FastAPI/LangGraph | `verify-backend` | Skill (SKILL.md) |
+| Tests | `test-automation` | Skill (SKILL.md) |
 
 **Tool Usage**:
 ```typescript
