@@ -1,5 +1,5 @@
 {
-  "_generated": "2026-03-02T02:06:48.734Z",
+  "_generated": "2026-03-13T02:30:00.000Z",
   "_description": "Auto-generated commands registry. Do not edit manually.",
   "commands": {
     "ace-diagnostic": {
@@ -7,35 +7,20 @@
       "description": "ACE Framework 거버넌스 상태 진단 - 훅 등록, 참조 무결성, 병렬 상태 확인",
       "allowedTools": null
     },
+    "auto": {
+      "file": ".claude/commands/auto.md",
+      "description": "E2E 자동화 파이프라인 - feature/bugfix/refactor 자동 감지 후 구현, 검증, 커밋",
+      "allowedTools": null
+    },
     "check-health": {
       "file": ".claude/commands/check-health.md",
       "description": "Comprehensive project health check including tests, types, linting, and build verification",
-      "allowedTools": null
-    },
-    "commit-push-pr": {
-      "file": ".claude/commands/commit-push-pr.md",
-      "description": "커밋, 푸시, PR 생성 자동화 워크플로우 (Boris Cherny 스타일)",
-      "allowedTools": null
-    },
-    "config-backup": {
-      "file": ".claude/commands/config-backup.md",
-      "description": "Claude Code 설정 백업/복원 시스템 - backup, restore, verify, diff, list 지원",
       "allowedTools": null
     },
     "deploy-with-tests": {
       "file": ".claude/commands/deploy-with-tests.md",
       "description": "테스트 검증 후 빌드/배포 실행",
       "allowedTools": null
-    },
-    "dev-docs": {
-      "file": ".claude/commands/dev-docs.md",
-      "description": "대규모 작업을 위한 Dev Docs 3-파일 시스템 생성",
-      "allowedTools": null
-    },
-    "draft-commits": {
-      "file": ".claude/commands/draft-commits.md",
-      "description": "Git 변경사항 분석 및 Conventional Commits 형식 커밋 초안 생성",
-      "allowedTools": "Bash(git status:*), Bash(git diff:*), Bash(git log:*)"
     },
     "gemini-review": {
       "file": ".claude/commands/gemini-review.md",
@@ -47,30 +32,10 @@
       "description": "Gemini CLI로 대규모 코드베이스 분석 실행",
       "allowedTools": null
     },
-    "resume": {
-      "file": ".claude/commands/resume.md",
-      "description": "dev/active에서 저장된 컨텍스트를 불러와 작업 재개",
-      "allowedTools": null
-    },
-    "review": {
-      "file": ".claude/commands/review.md",
-      "description": "코드 리뷰 자동화 - 변경된 파일 분석",
-      "allowedTools": null
-    },
     "run-eval": {
       "file": ".claude/commands/run-eval.md",
       "description": "AI 에이전트 평가 태스크 실행 및 pass@k 지표 계산",
       "allowedTools": "read, grep, glob, bash, task"
-    },
-    "save-and-compact": {
-      "file": ".claude/commands/save-and-compact.md",
-      "description": "Save context to Dev Docs and run /compact in one command",
-      "allowedTools": null
-    },
-    "simplify-code": {
-      "file": ".claude/commands/simplify-code.md",
-      "description": "코드 복잡도 분석 및 단순화 제안 (Boris Cherny 스타일)",
-      "allowedTools": null
     },
     "start-all": {
       "file": ".claude/commands/start-all.md",
@@ -95,11 +60,6 @@
     "test-coverage": {
       "file": ".claude/commands/test-coverage.md",
       "description": "Run tests with coverage report and identify areas needing more tests",
-      "allowedTools": null
-    },
-    "update-dev-docs": {
-      "file": ".claude/commands/update-dev-docs.md",
-      "description": "Context Compaction 전 Dev Docs 업데이트",
       "allowedTools": null
     },
     "verify-app": {
