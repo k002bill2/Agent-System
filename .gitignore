@@ -56,4 +56,11 @@ src/dashboard/coverage/
 .claude/hooks/.context-state.json
 .claude/gemini-bridge/reviews/
 .claude/gemini-bridge/.review-lock
+.claude/snapshots/
 .temp/
+
+# Dev docs (in-progress work)
+dev/active/
+
+# Deprecated architecture diagram (replaced by claude-code-system-architecture.html)
+docs/claude-code-architecture-diagram.html
