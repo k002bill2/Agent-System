@@ -11,34 +11,46 @@ disable-model-invocation: true
 ## 1. Hook 등록 상태
 
 ```bash
-cat .claude/hooks.json | python3 -c "
+# hooks.json 또는 settings.json에서 훅 정보 읽기
+for f in .claude/hooks.json .claude/settings.json; do
+  [ -f "$f" ] && python3 -c "
 import json, sys
-data = json.load(sys.stdin)
-h = data.get('hooks', data)
+data = json.load(open('$f'))
+h = data.get('hooks', data) if 'hooks' in data or isinstance(data, dict) else {}
+if not isinstance(h, dict) or not h:
+    sys.exit(0)
 print('| Event | Rules | Hooks |')
 print('|-------|-------|-------|')
+total = 0
 for event, rules in h.items():
-    total = sum(len(r['hooks']) for r in rules)
-    print(f'| {event} | {len(rules)} | {total} |')
-print(f'\nTotal: {sum(len(r[\"hooks\"]) for rules in h.values() for r in rules)} hooks')
-"
+    if isinstance(rules, list):
+        cnt = sum(len(r.get('hooks',[])) for r in rules)
+        total += cnt
+        print(f'| {event} | {len(rules)} | {cnt} |')
+print(f'\nTotal: {total} hooks (from $f)')
+" && break
+done
 ```
 
-## 2. 끊어진 참조 검사
+## 2. 훅 파일 존재 확인
 
 ```bash
-# ACE 구 경로 참조
-echo "=== 구 경로 (shared/ace-framework) ===" && grep -r "shared/ace-framework" .claude/agents/ --include="*.md" 2>/dev/null || echo "PASS: 0건"
-
-# 훅 파일 존재 확인
-echo "=== Hook 파일 존재 ===" && for f in ethicalValidator.js parallelCoordinator.js agentTracer.js geminiAutoTrigger.js aceMatrixSync.js stopEvent.js userPromptSubmit.js preCompactSnapshot.js; do [ -f ".claude/hooks/$f" ] && echo "  ✅ $f" || echo "  ❌ $f (MISSING)"; done
+echo "=== Hook 파일 존재 ==="
+for f in aceMatrixSync.js agentTracer.js gemini-bridge.js geminiAutoTrigger.js parallelCoordinator.js userPromptSubmit.js; do
+  [ -f ".claude/hooks/$f" ] && echo "  ✅ $f" || echo "  ❌ $f (MISSING)"
+done
 ```
 
-## 3. Enforcement Matrix 정합성
+## 3. 끊어진 참조 검사
 
 ```bash
-# settings.json P2 훅 수 vs enforcement-matrix P2 행 수
-echo "=== P2 Hard Constraints ===" && echo "hooks.json hooks: $(cat .claude/hooks.json | python3 -c "import json,sys; data=json.load(sys.stdin); h=data.get('hooks',data); print(sum(len(r['hooks']) for rules in h.values() for r in rules))")" && echo "enforcement-matrix P2 rows: $(grep -c '^| P2-' .claude/skills/ace-framework/references/enforcement-matrix.md)"
+# 에이전트에서 구 경로 참조 확인
+echo "=== 구 경로 (shared/ace-framework) ==="
+grep -r "shared/ace-framework" .claude/agents/ --include="*.md" 2>/dev/null || echo "PASS: 0건"
+
+# 삭제된 훅 참조 확인
+echo "=== 삭제된 훅 참조 ==="
+grep -rn "ethicalValidator\|workspaceGuard\|contextMonitor\|stopEvent\|l5Verification" .claude/ --include="*.md" --include="*.json" 2>/dev/null | grep -v "ace-diagnostic.md" || echo "PASS: 0건"
 ```
 
 ## 4. 병렬 실행 상태
@@ -51,9 +63,8 @@ node .claude/hooks/parallelCoordinator.js status
 
 ```bash
 python3 -c "
-import json
+import json, os
 reg = json.load(open('.claude/agents-registry.json'))['agents']
-import os
 agent_files = [f[:-3] for f in os.listdir('.claude/agents') if f.endswith('.md')]
 print('| Agent | In Registry | Has File |')
 print('|-------|------------|----------|')

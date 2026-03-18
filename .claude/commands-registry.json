@@ -1,5 +1,5 @@
 {
-  "_generated": "2026-03-13T02:30:00.000Z",
+  "_generated": "2026-03-19T00:00:00.000Z",
   "_description": "Auto-generated commands registry. Do not edit manually.",
   "commands": {
     "ace-diagnostic": {
@@ -9,7 +9,7 @@
     },
     "auto": {
       "file": ".claude/commands/auto.md",
-      "description": "E2E 자동화 파이프라인 - feature/bugfix/refactor 자동 감지 후 구현, 검증, 커밋",
+      "description": "E2E 자동화 파이프라인 (feature/bugfix/refactor 자동 감지)",
       "allowedTools": null
     },
     "check-health": {

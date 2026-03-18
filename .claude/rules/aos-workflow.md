@@ -9,8 +9,8 @@
 | 테스트/커버리지 | `test-automation` |
 | 병렬 에이전트 (3+) | `parallel-coordinator` |
 | 구현 완료 검증 | `verification-loop` |
-| 스킬/에이전트/커맨드 생성 | `skill-creator`, `subagent-creator`, `hook-creator`, `slash-command-creator` |
-| ACE 거버넌스 | `ace-framework` |
+| 스킬/에이전트/커맨드 생성 | `skill-creator`, `subagent-creator`, `hook-creator`, `slash-command-creator` (superpowers 제공) |
+| ACE 거버넌스 | `ace-framework` (superpowers 제공) |
 
 ## 복잡도별 에이전트 수
 | 복잡도 | 에이전트 수 | 기준 |
