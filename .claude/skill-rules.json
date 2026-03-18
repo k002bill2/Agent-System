@@ -415,6 +415,16 @@
       ]
     }
   },
+  "merge-worktree": {
+    "type": "workflow",
+    "enforcement": "suggest",
+    "priority": "normal",
+    "description": "Git worktree 브랜치를 squash-merge하여 깔끔한 커밋 메시지 생성",
+    "promptTriggers": {
+      "keywords": ["worktree", "merge", "squash", "워크트리"],
+      "intentPatterns": ["(merge|squash).*?worktree", "worktree.*?(완료|merge|정리)"]
+    }
+  },
   "verify-backend": {
     "type": "skill",
     "enforcement": "suggest",
