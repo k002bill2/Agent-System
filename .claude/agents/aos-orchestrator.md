@@ -222,7 +222,7 @@ On failure:
 ## Reference
 
 - Anthropic Multi-Agent Research System: https://www.anthropic.com/engineering/multi-agent-research-system
-- ACE Framework: [ACE Framework Skill](../skills/ace-framework/SKILL.md)
+- ACE Framework: 글로벌 스킬 `ace-framework` (거버넌스 모델, 4-Pillar 아키텍처)
 - Parallel Coordinator Skill: [../skills/parallel-coordinator/SKILL.md](../skills/parallel-coordinator/SKILL.md)
 - Quality Gates: Read `.claude/agents/shared/quality-reference.md` for coverage thresholds and quality standards
 

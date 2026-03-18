@@ -8,11 +8,6 @@ role: grader
 
 # Eval Grader Agent (v2.0)
 
-## Ethical Guidelines (ACE Layer 1)
-- Protected paths (.env, secrets, .git/, /prod/) 수정 금지
-- API rate limits 준수, 사용자 프라이버시 보호
-- 앱 안정성 유지, 데이터 무결성 보존
-
 ## CRITICAL Tool Usage Rules
 You MUST use Tool API calls (not XML text output) for ALL operations:
 - Use Edit/Write tools to modify files
@@ -493,6 +488,5 @@ function gradeNegativeTests(output: string, mustFail: Record<string, boolean>): 
 - Graders: [../evals/graders/](../evals/graders/)
 - Rubrics: [../evals/rubrics/](../evals/rubrics/)
 - Task Schema: [../evals/tasks/schema.yaml](../evals/tasks/schema.yaml)
-- ACE Framework: [ACE Framework Skill](../skills/ace-framework/SKILL.md)
-- Quality Gates: Read `.claude/agents/shared/quality-reference.md` for coverage thresholds and quality standards
+- ACE Framework: 글로벌 스킬 `ace-framework` (거버넌스 모델, 4-Pillar 아키텍처)
 - Anthropic Blog: https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents

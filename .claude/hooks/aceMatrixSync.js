@@ -12,8 +12,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const HOOKS_PATH = path.join(__dirname, '../hooks.json');
-const MATRIX_PATH = path.join(__dirname, '../skills/ace-framework/references/enforcement-matrix.md');
+const SETTINGS_PATH = path.join(__dirname, '../settings.json');
+// 글로벌 스킬 경로 사용 (프로젝트 레벨 ace-framework는 글로벌로 통합됨)
+const HOME = process.env.HOME || process.env.USERPROFILE || '';
+const MATRIX_PATH = path.join(HOME, '.claude/skills/ace-framework/references/enforcement-matrix.md');
 
 function main() {
   let inputData = '';
@@ -38,14 +40,14 @@ function main() {
         return;
       }
 
-      if (!fs.existsSync(HOOKS_PATH) || !fs.existsSync(MATRIX_PATH)) {
+      if (!fs.existsSync(SETTINGS_PATH) || !fs.existsSync(MATRIX_PATH)) {
         process.exit(0);
         return;
       }
 
-      // hooks.json에서 총 훅 수 계산
-      const hooksConfig = JSON.parse(fs.readFileSync(HOOKS_PATH, 'utf8'));
-      const hooks = hooksConfig.hooks || {};
+      // settings.json에서 총 훅 수 계산
+      const settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
+      const hooks = settings.hooks || {};
       let totalHooks = 0;
       for (const rules of Object.values(hooks)) {
         for (const rule of rules) {
@@ -59,7 +61,7 @@ function main() {
 
       // drift 감지
       if (totalHooks !== p2Rows) {
-        console.log(`[ACE MatrixSync] ⚠️ Drift 감지: hooks.json ${totalHooks} hooks vs enforcement-matrix ${p2Rows} P2 rows`);
+        console.log(`[ACE MatrixSync] ⚠️ Drift 감지: settings.json ${totalHooks} hooks vs enforcement-matrix ${p2Rows} P2 rows`);
         console.log(`[ACE MatrixSync] enforcement-matrix.md 업데이트가 필요할 수 있습니다.`);
       }
     } catch (e) {

@@ -8,7 +8,7 @@ Claude Code configuration for AOS (Agent Orchestration Service) Dashboard.
 .claude/
 ├── skills/           # 34개 AI 스킬
 ├── agents/           # 8개 서브 에이전트
-│   └── shared/       # 공유 프레임워크 (Quality Gates 등; ACE는 skills/ace-framework/로 이동)
+│   └── shared/       # 공유 프레임워크 (Quality Gates 등; ACE는 글로벌 스킬로 관리)
 ├── commands/         # 12개 슬래시 명령어
 ├── hooks/            # 자동화 훅 스크립트
 ├── checklists/       # 코드 리뷰/테스트/배포 체크리스트
@@ -58,7 +58,7 @@ Claude Code configuration for AOS (Agent Orchestration Service) Dashboard.
 
 | Skill | Purpose |
 |-------|---------|
-| `ace-framework` | 4-Pillar 거버넌스 모델 (Soft/Hard/Boundary/Optimization) |
+| `ace-framework` | 4-Pillar 거버넌스 모델 — **글로벌 스킬** (`~/.claude/skills/ace-framework/`) |
 | `react-web-development` | React Web 컴포넌트, Tailwind CSS, TypeScript |
 | `test-automation` | Vitest 테스트, 커버리지 분석 |
 | `parallel-coordinator` | ACE 프레임워크 병렬 작업 조율 |
@@ -109,7 +109,7 @@ Claude Code configuration for AOS (Agent Orchestration Service) Dashboard.
 
 ### Shared Frameworks (`shared/`)
 
-- ~~`ace-framework.md`~~: **스킬로 이동** → `skills/ace-framework/SKILL.md`
+- ~~`ace-framework.md`~~: **글로벌 스킬로 이동** → `~/.claude/skills/ace-framework/SKILL.md`
 - `quality-reference.md`: 공유 품질 게이트
 - `effort-scaling.md`: 태스크 복잡도별 리소스 할당
 - `delegation-template.md`: 서브에이전트 위임 템플릿

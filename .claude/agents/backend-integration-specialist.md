@@ -235,7 +235,7 @@ async def test_create_agent():
 
 ## Parallel Execution Mode
 
-See [ACE Framework Skill](../skills/ace-framework/SKILL.md) for governance model, workspace isolation, and coordination protocols.
+ACE Framework 거버넌스 모델은 글로벌 스킬 `ace-framework`를 참조하세요.
 
 **Your workspace**: `.temp/agent_workspaces/backend-integration/`
 

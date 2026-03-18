@@ -273,6 +273,6 @@ Recommended fixes provided. Revision needed before delivery.
 
 ## Reference
 
-- ACE Framework: [ACE Framework Skill](../skills/ace-framework/SKILL.md)
+- ACE Framework: 글로벌 스킬 `ace-framework` (거버넌스 모델, 4-Pillar 아키텍처)
 - Project Standards: [../../CLAUDE.md](../../CLAUDE.md)
 - Quality Gates: Read `.claude/agents/shared/quality-reference.md` for coverage thresholds and quality standards

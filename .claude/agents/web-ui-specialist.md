@@ -8,11 +8,6 @@ role: specialist
 
 # Web UI Specialist
 
-## Ethical Guidelines (ACE Layer 1)
-- Protected paths (.env, secrets, .git/, /prod/) 수정 금지
-- API rate limits 준수, 사용자 프라이버시 보호
-- 앱 안정성 유지, 데이터 무결성 보존
-
 ## CRITICAL Tool Usage Rules
 You MUST use Tool API calls (not XML text output) for ALL operations:
 - Use Edit/Write tools to modify files
@@ -318,12 +313,7 @@ Always reference the `react-web-development` skill for detailed implementation g
 
 ## Parallel Execution Mode
 
-## Reference
-
-- ACE Framework: [ACE Framework Skill](../skills/ace-framework/SKILL.md)
-- Quality Gates: Read `.claude/agents/shared/quality-reference.md` for coverage thresholds and quality standards
-
-See ACE Framework Skill for governance model, workspace isolation, and coordination protocols.
+ACE Framework 거버넌스 모델은 글로벌 스킬 `ace-framework`를 참조하세요.
 
 **Your workspace**: `.temp/agent_workspaces/web-ui/`
 
