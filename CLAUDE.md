@@ -53,16 +53,21 @@ cd src/dashboard && npm install && npm run dev
 
 | 명령어 | 설명 |
 |--------|------|
+| `/plan` | 구현 계획 수립 (planner 에이전트) |
+| `/tdd` | TDD 워크플로우 (RED→GREEN→REFACTOR) |
+| `/code-review` | 보안+품질 코드 리뷰 |
+| `/commit-push-pr` | 검증 후 커밋 & PR 생성 |
+| `/verify-loop` | 자동 재검증 루프 (최대 3회) |
+| `/build-fix` | 빌드 에러 점진적 수정 |
+| `/explore` | 코드베이스 탐색 |
+| `/quick-commit` | 간단한 수정용 빠른 커밋 |
+| `/checkpoint` | 작업 상태 저장/복원 |
 | `/check-health` | 타입체크, 린트, 테스트, 빌드 종합 검증 |
-| `/verify-app` | Boris Cherny 스타일 종합 검증 루프 |
-| `/test-coverage` | 테스트 커버리지 분석 및 미흡 영역 식별 |
-| `/auto` | E2E 자동화 파이프라인 (feature/bugfix/refactor 자동 감지) |
-| `/start-all` | 전체 서비스 시작 (인프라 + Backend + Dashboard) |
-| `/stop-all` | 전체 서비스 중지 |
-| `/run-eval` | AI 에이전트 평가 태스크 실행 및 pass@k 지표 계산 |
-| `/gemini-review` | Gemini CLI로 코드 변경사항 크로스 리뷰 |
+| `/auto` | E2E 자동화 파이프라인 |
+| `/run-eval` | AI 에이전트 평가 태스크 실행 |
+| `/gemini-review` | Gemini CLI 크로스 리뷰 |
 
-전체 명령어 목록은 `.claude/commands/` 디렉토리 참조. `/sync-registry`로 레지스트리 동기화.
+전체 명령어: `.claude/commands/` 참조. 서비스: `/start-all`, `/stop-all`
 
 ## Rules
 
@@ -72,10 +77,13 @@ cd src/dashboard && npm install && npm run dev
 - `aos-workflow.md` - 스킬 라우팅, 검증 체크리스트
 
 글로벌 규칙 (`~/.claude/rules/`):
-- `golden-principles.md` - 코드 원칙 (DRY, KISS, YAGNI)
-- `security.md` - 보안 규칙
-- `verification.md` - 검증 규칙
-- `interaction.md` - 소통 규칙
+- `golden-principles.md` - 코드 원칙 (DRY, KISS, YAGNI, TDD, HARD-GATE)
+- `security.md` - 보안 규칙 + OWASP 체크리스트
+- `verification.md` - 검증 규칙 + Iron Law Gate Function
+- `interaction.md` - 소통 규칙 + context7 MCP
+- `coding-style.md` - 코딩 스타일 (Immutability, Error Handling)
+- `git-workflow.md` - Git 워크플로우 (Conventional Commits)
+- `date-calculation.md` - 날짜 계산 시 시스템 도구 필수
 
 ## Environment Variables
 
@@ -133,9 +141,11 @@ cd src/dashboard && npm test
 | Moderate | 2-3 | UI+API 또는 크로스 영역 |
 | Complex | 3+ | 풀스택, 아키텍처 변경 |
 
-**에이전트**: aos-orchestrator(opus), web-ui-specialist(inherit), backend-integration-specialist(inherit),
+**AOS 특화**: aos-orchestrator(opus), web-ui-specialist, backend-integration-specialist,
 test-automation-specialist(haiku), performance-optimizer(haiku), quality-validator(haiku)
-**평가**: eval-task-runner(inherit), eval-grader(inherit)
+**범용**: architect(opus), planner(opus), code-reviewer(opus), tdd-guide(opus),
+security-reviewer(opus), build-error-resolver(sonnet)
+**평가**: eval-task-runner, eval-grader
 **품질 기준**: `.claude/agents/shared/quality-reference.md`
 
 ## Dev Docs System
