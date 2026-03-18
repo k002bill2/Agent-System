@@ -64,3 +64,4 @@ dev/active/
 
 # Deprecated architecture diagram (replaced by claude-code-system-architecture.html)
 docs/claude-code-architecture-diagram.html
+.serena/
