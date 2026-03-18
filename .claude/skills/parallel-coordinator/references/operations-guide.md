@@ -66,17 +66,17 @@ def monitor_parallel_execution():
 # 1. Collect all proposals
 find .temp/agent_workspaces/*/proposals/ -type f
 
-# 2. Run TypeScript type-check
-npm run type-check
+# 2. Run TypeScript type-check (Dashboard)
+cd src/dashboard && npx tsc --noEmit
 # MUST PASS (zero errors)
 
-# 3. Run ESLint
-npm run lint
+# 3. Run ESLint (Dashboard)
+cd src/dashboard && npm run lint
 # MUST PASS (zero errors)
 
-# 4. Run tests with coverage
-npm test -- --coverage
-# MUST PASS (all tests, coverage >75%)
+# 4. Run tests
+cd src/dashboard && npm test           # Dashboard (Vitest)
+cd src/backend && python -m pytest ../../tests/backend  # Backend (pytest)
 
 # 5. Clean up locks and temp files
 rm -f .temp/coordination/locks/*.lock
@@ -146,12 +146,12 @@ def emergency_abort(reason, severity):
 
 ```bash
 # 1. List all proposals
-find .temp/agent_workspaces/*/proposals/ -type f -name "*.ts" -o -name "*.tsx"
+find .temp/agent_workspaces/*/proposals/ -type f
 
 # Output:
-# .temp/agent_workspaces/backend-integration/proposals/seoulSubwayApi.ts
-# .temp/agent_workspaces/web-ui/proposals/AgentDetailScreen.tsx
-# .temp/agent_workspaces/test-automation/proposals/seoulSubwayApi.test.ts
+# .temp/agent_workspaces/backend-integration/proposals/bookmark_service.py
+# .temp/agent_workspaces/web-ui/proposals/BookmarkToggle.tsx
+# .temp/agent_workspaces/test-automation/proposals/test_bookmark_service.py
 ```
 
 ### Reviewing Proposals
@@ -224,43 +224,41 @@ diff .temp/integration/conflicts/file_agent-a.ts \
 
 ---
 
-## Complete Example: Favorite Agents Feature
+## Complete Example: Task Bookmark Feature
 
 ### Task Decomposition
 ```json
 {
   "subtasks": [
     {
-      "id": "favorites_service",
+      "id": "bookmark_service",
       "agent": "backend-integration-specialist",
-      "task": "Firebase favorites service with offline support",
-      "skill": "firebase-integration",
-      "output": "src/services/favorites/favoritesService.ts",
+      "task": "Bookmark service with DB persistence",
+      "output": "src/backend/services/bookmark_service.py",
       "dependencies": []
     },
     {
-      "id": "star_icon",
-      "agent": "web-ui-specialist",
-      "task": "Add star icon to AgentCard component",
-      "skill": "react-web-development",
-      "output": "src/components/agents/AgentCard.tsx",
-      "dependencies": ["favorites_service"]
+      "id": "bookmark_api",
+      "agent": "backend-integration-specialist",
+      "task": "Bookmark API endpoints",
+      "output": "src/backend/api/bookmarks.py",
+      "dependencies": ["bookmark_service"]
     },
     {
-      "id": "favorites_screen",
+      "id": "bookmark_ui",
       "agent": "web-ui-specialist",
-      "task": "Create FavoritesScreen",
+      "task": "Bookmark toggle component + bookmark list page",
       "skill": "react-web-development",
-      "output": "src/screens/FavoritesScreen.tsx",
-      "dependencies": ["favorites_service"]
+      "output": "src/dashboard/src/components/BookmarkToggle.tsx",
+      "dependencies": ["bookmark_api"]
     },
     {
       "id": "tests",
       "agent": "test-automation-specialist",
-      "task": "Test coverage for favorites feature",
+      "task": "Test coverage for bookmark feature",
       "skill": "test-automation",
-      "output": "src/services/favorites/__tests__/favoritesService.test.ts",
-      "dependencies": ["favorites_service"]
+      "output": "tests/backend/test_bookmark_service.py",
+      "dependencies": ["bookmark_service"]
     }
   ]
 }
@@ -268,32 +266,35 @@ diff .temp/integration/conflicts/file_agent-a.ts \
 
 ### Execution Timeline
 ```
-T0:00 - Primary: Invokes backend-integration-specialist
-T0:15 - backend-integration: Completes favoritesService.ts
+T0:00 - Primary: Invokes backend-integration-specialist (service)
+T0:15 - backend-integration: Completes bookmark_service.py
         → Writes to .temp/agent_workspaces/backend-integration/proposals/
 
-T0:16 - Primary: Invokes web-ui-specialist + test-automation-specialist
-        → Both can proceed (backend types available)
+T0:16 - Primary: Invokes backend (API) + test-automation-specialist
+        → Both can proceed (service types available)
 
-T0:26 - web-ui: Completes AgentCard.tsx
-T0:31 - test-automation: Completes favoritesService.test.ts
-T0:32 - Primary: Invokes web-ui-specialist (favorites_screen)
-T0:47 - web-ui: Completes FavoritesScreen.tsx
+T0:26 - backend-integration: Completes bookmarks.py (API)
+T0:31 - test-automation: Completes test_bookmark_service.py
+T0:32 - Primary: Invokes web-ui-specialist (bookmark UI)
+T0:47 - web-ui: Completes BookmarkToggle.tsx + BookmarkListPage.tsx
 
 Feature completed in 47 minutes vs ~75 minutes sequential = 1.6x speedup
 ```
 
 ### Integration
 ```bash
-cp .temp/agent_workspaces/backend-integration/proposals/favoritesService.ts src/services/favorites/
-cp .temp/agent_workspaces/web-ui/proposals/AgentCard.tsx src/components/agents/
-cp .temp/agent_workspaces/web-ui/proposals/FavoritesScreen.tsx src/screens/
-cp .temp/agent_workspaces/test-automation/proposals/favoritesService.test.ts src/services/favorites/__tests__/
+cp .temp/agent_workspaces/backend-integration/proposals/bookmark_service.py src/backend/services/
+cp .temp/agent_workspaces/backend-integration/proposals/bookmarks.py src/backend/api/
+cp .temp/agent_workspaces/web-ui/proposals/BookmarkToggle.tsx src/dashboard/src/components/
+cp .temp/agent_workspaces/test-automation/proposals/test_bookmark_service.py tests/backend/
 ```
 
 ### Validation Results
 ```
-npm run type-check  # No errors
-npm run lint        # No errors
-npm test --coverage # 78% coverage (target: 75%)
+# Dashboard
+cd src/dashboard && npx tsc --noEmit  # No errors
+cd src/dashboard && npm run lint      # No errors
+
+# Backend
+cd src/backend && python -m pytest ../../tests/backend/test_bookmark_service.py  # All passed
 ```

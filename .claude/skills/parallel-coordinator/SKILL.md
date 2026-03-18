@@ -64,7 +64,7 @@ Coordinate parallel execution of specialist agents using the **ACE (Autonomous C
 {Resources to use}
 - Skills to invoke: `react-web-development`
 - Reference files: `src/components/ExistingComponent.tsx`
-- APIs: Seoul Metro API documentation
+- APIs: AOS Backend API (`docs/api-reference.md`)
 
 ### Task Boundaries (DO NOT)
 {Explicit exclusions to prevent overlap}
@@ -77,30 +77,31 @@ Coordinate parallel execution of specialist agents using the **ACE (Autonomous C
 ### Real Example
 
 ```markdown
-## Task: Create AgentInfoCard Component
+## Task: Create TaskStatusCard Component
 
 ### Objective
-Create a reusable card component displaying agent information including:
-- Agent name with status indicator
-- Distance from user (optional)
-- Tap handler for navigation
+Create a reusable card component displaying task execution status:
+- Task name with status indicator (pending/running/completed/failed)
+- Agent assignment info
+- Progress percentage
+- Click handler for detail view
 
 ### Output Format
-- File: `.temp/agent_workspaces/web-ui/proposals/AgentInfoCard.tsx`
+- File: `.temp/agent_workspaces/web-ui/proposals/TaskStatusCard.tsx`
 - Props interface exported
 - memo() wrapper for performance
 - Accessibility labels included
 
 ### Tools & Sources
 - Invoke: `react-web-development` skill
-- Reference: `src/components/agents/AgentCard.tsx` (existing pattern)
-- Types: `src/models/agent.ts`
+- Reference: `src/dashboard/src/components/` (existing patterns)
+- Types: `src/dashboard/src/types/`
 
 ### Task Boundaries (DO NOT)
-- DO NOT fetch agent data (backend handles)
-- DO NOT implement navigation logic (screen handles)
+- DO NOT fetch task data (backend handles)
+- DO NOT implement routing logic (page handles)
 - DO NOT write tests (test-automation handles)
-- DO NOT modify existing AgentCard
+- DO NOT modify existing components
 ```
 
 ---
@@ -177,7 +178,7 @@ Add error and loading states to AgentInfoCard
 
 **Before any parallel execution, verify**:
 - [ ] User privacy respected (no indefinite tracking)
-- [ ] API rate limits honored (Seoul API: 30s minimum)
+- [ ] API rate limits honored
 - [ ] App stability maintained
 - [ ] Data integrity preserved
 
@@ -196,9 +197,9 @@ Define strategic context:
     "Performance: <300ms response"
   ],
   "constraints": [
-    "Seoul API rate limits (30s)",
-    "Optimize Firebase reads",
-    "No breaking changes"
+    "API rate limits",
+    "No breaking changes",
+    "Async/await consistency (backend)"
   ]
 }
 ```
@@ -210,7 +211,7 @@ Define strategic context:
 | **web-ui** | React (0.95), TypeScript (0.90), Tailwind CSS (0.90) | Backend (0.40), Complex animations (0.50) |
 | **backend-integration** | FastAPI (0.95), SQLAlchemy (0.90), LangGraph (0.90) | UI design (0.40), Animations (0.30) |
 | **performance-optimizer** | React optimization (0.90), Memory leaks (0.85) | New features (0.50), UI (0.45) |
-| **test-automation** | Jest (0.95), RTL (0.90), Coverage (0.90) | Feature impl (0.40), UI design (0.35) |
+| **test-automation** | Vitest (0.95), RTL (0.90), Coverage (0.90) | Feature impl (0.40), UI design (0.35) |
 
 **Matching Rule**: If agent confidence < 0.70 → Agent should DECLINE
 
@@ -223,17 +224,16 @@ Define strategic context:
     {
       "id": "task_1",
       "agent": "backend-integration-specialist",
-      "task": "API/Firebase integration",
-      "output": "src/services/[feature]/[service].ts",
+      "task": "API endpoint / service layer",
+      "output": "src/backend/services/[feature].py",
       "workspace": ".temp/agent_workspaces/backend-integration/",
-      "dependencies": [],
-      "skill": "verify-backend"
+      "dependencies": []
     },
     {
       "id": "task_2",
       "agent": "web-ui-specialist",
-      "task": "UI components and screens",
-      "output": "src/screens/[Screen].tsx",
+      "task": "UI components and pages",
+      "output": "src/dashboard/src/components/[Feature]/",
       "workspace": ".temp/agent_workspaces/web-ui/",
       "dependencies": ["task_1"],
       "skill": "react-web-development"
@@ -242,7 +242,7 @@ Define strategic context:
       "id": "task_3",
       "agent": "test-automation-specialist",
       "task": "Test coverage",
-      "output": "**/__tests__/[feature].test.ts",
+      "output": "tests/backend/[feature].test.py or src/dashboard/src/**/*.test.tsx",
       "workspace": ".temp/agent_workspaces/test-automation/",
       "dependencies": ["task_1", "task_2"],
       "skill": "test-automation"
@@ -286,22 +286,23 @@ Define strategic context:
 
 ### Layer 6: Skill Invocation
 
-| Task Type | Required Skill | Type |
-|-----------|---------------|------|
-| React Web UI | `react-web-development` | Skill (SKILL.md) |
-| FastAPI/LangGraph | `verify-backend` | Skill (SKILL.md) |
-| Tests | `test-automation` | Skill (SKILL.md) |
+| Task Type | Required Skill |
+|-----------|---------------|
+| React Web UI | `react-web-development` |
+| FastAPI/LangGraph | (aos-backend rules 적용) |
+| Tests | `test-automation` |
+| 검증 | `verification-loop` |
 
 **Tool Usage**:
 ```typescript
 // GOOD: Agent writes to own workspace
-Write(.temp/agent_workspaces/web-ui/proposals/AgentCard.tsx)
+Write(.temp/agent_workspaces/web-ui/proposals/TaskStatusCard.tsx)
 
 // BAD: Agent writes to src/ directly (DENIED)
-Write(src/components/agents/AgentCard.tsx)
+Write(src/dashboard/src/components/TaskStatusCard.tsx)
 
 // GOOD: Agent reads from src/ for reference
-Read(src/components/train/ExistingComponent.tsx)
+Read(src/dashboard/src/components/ExistingComponent.tsx)
 ```
 
 ---
@@ -366,9 +367,13 @@ Read(src/components/train/ExistingComponent.tsx)
 
 ### Validation Commands
 ```bash
-npm run type-check  # Must pass (zero errors)
-npm run lint        # Must pass (zero errors)
-npm test --coverage # Must pass (>75% coverage)
+# Dashboard
+cd src/dashboard && npx tsc --noEmit  # TypeScript check
+cd src/dashboard && npm run lint      # ESLint
+cd src/dashboard && npm test          # Vitest
+
+# Backend
+cd src/backend && python -m pytest ../../tests/backend  # pytest
 ```
 
 ---
@@ -398,10 +403,10 @@ This skill enables:
 | Agent | Role | Model |
 |-------|------|-------|
 | `aos-orchestrator` | Coordination, effort scaling | opus |
-| `web-ui-specialist` | UI components, pages | sonnet |
-| `backend-integration-specialist` | FastAPI, SQLAlchemy, LangGraph | sonnet |
-| `performance-optimizer` | Memory, render optimization | sonnet |
-| `test-automation-specialist` | Jest tests, coverage | sonnet |
+| `web-ui-specialist` | UI components, pages | inherit |
+| `backend-integration-specialist` | FastAPI, SQLAlchemy, LangGraph | inherit |
+| `performance-optimizer` | Memory, render optimization | haiku |
+| `test-automation-specialist` | Vitest tests, coverage | haiku |
 | `quality-validator` | Final review, validation | haiku |
 
 ## Related Skills
@@ -428,4 +433,4 @@ External Reference:
 
 ---
 
-**Version**: 2.0 | **Last Updated**: 2025-01-04
+**Version**: 2.1 | **Last Updated**: 2026-03-19
