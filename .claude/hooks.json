@@ -125,6 +125,25 @@
             "command": "node .claude/hooks/stopEvent.js 2>/dev/null || true",
             "timeout": 5,
             "statusMessage": "Aggregating session metrics..."
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/commitSession.js 2>/dev/null || true",
+            "timeout": 15,
+            "statusMessage": "Auto-committing session changes..."
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/loadRecentChanges.js 2>/dev/null || true",
+            "timeout": 5,
+            "statusMessage": "Loading recent context..."
           }
         ]
       }
