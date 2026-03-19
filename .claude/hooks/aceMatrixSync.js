@@ -12,6 +12,8 @@
 const fs = require('fs');
 const path = require('path');
 
+// hooks.json이 우선, 없으면 settings.json fallback
+const HOOKS_PATH = path.join(__dirname, '../hooks.json');
 const SETTINGS_PATH = path.join(__dirname, '../settings.json');
 // 글로벌 스킬 경로 사용 (프로젝트 레벨 ace-framework는 글로벌로 통합됨)
 const HOME = process.env.HOME || process.env.USERPROFILE || '';
@@ -40,14 +42,20 @@ function main() {
         return;
       }
 
-      if (!fs.existsSync(SETTINGS_PATH) || !fs.existsSync(MATRIX_PATH)) {
+      if (!fs.existsSync(MATRIX_PATH)) {
         process.exit(0);
         return;
       }
 
-      // settings.json에서 총 훅 수 계산
-      const settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
-      const hooks = settings.hooks || {};
+      // hooks.json 우선, 없으면 settings.json fallback
+      const hooksFile = fs.existsSync(HOOKS_PATH) ? HOOKS_PATH : SETTINGS_PATH;
+      if (!fs.existsSync(hooksFile)) {
+        process.exit(0);
+        return;
+      }
+
+      const config = JSON.parse(fs.readFileSync(hooksFile, 'utf8'));
+      const hooks = config.hooks || {};
       let totalHooks = 0;
       for (const rules of Object.values(hooks)) {
         for (const rule of rules) {
@@ -55,13 +63,15 @@ function main() {
         }
       }
 
-      // enforcement-matrix에서 P2 행 수 계산
+      // enforcement-matrix에서 P2 + P4 행 수 계산 (둘 다 실제 훅에 대응)
       const matrixContent = fs.readFileSync(MATRIX_PATH, 'utf8');
       const p2Rows = (matrixContent.match(/^\| P2-/gm) || []).length;
+      const p4Rows = (matrixContent.match(/^\| P4-/gm) || []).length;
+      const matrixTotal = p2Rows + p4Rows;
 
       // drift 감지
-      if (totalHooks !== p2Rows) {
-        console.log(`[ACE MatrixSync] ⚠️ Drift 감지: settings.json ${totalHooks} hooks vs enforcement-matrix ${p2Rows} P2 rows`);
+      if (totalHooks !== matrixTotal) {
+        console.log(`[ACE MatrixSync] ⚠️ Drift 감지: hooks.json ${totalHooks} hooks vs enforcement-matrix ${matrixTotal} rows (P2:${p2Rows} + P4:${p4Rows})`);
         console.log(`[ACE MatrixSync] enforcement-matrix.md 업데이트가 필요할 수 있습니다.`);
       }
     } catch (e) {
