@@ -1,7 +1,7 @@
 ---
 name: parallel-coordinator
 description: Coordinate parallel agent execution using ACE Framework for AOS development. Use when implementing features with 3+ independent subtasks (UI + API + Tests) or orchestrating multi-agent workflows.
-disable-model-invocation: true
+user-invocable: false
 ---
 
 # Parallel Agent Coordinator

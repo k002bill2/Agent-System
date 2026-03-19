@@ -6,6 +6,7 @@ description: >
   (3) modifying docker-compose port mappings, (4) user asks about port conflicts,
   (5) debugging "address already in use" errors, (6) before running docker compose up.
   Detects when multiple projects claim the same host port (e.g., 5173, 8000).
+allowed-tools: Read, Grep, Glob, Bash
 ---
 
 # Port Conflict Check

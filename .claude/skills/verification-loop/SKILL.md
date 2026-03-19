@@ -1,6 +1,7 @@
 ---
 name: verification-loop
 description: Boris Cherny style verification feedback loop automation. Run type check, lint, test, and build verification. Use after code changes to ensure quality.
+allowed-tools: Read, Grep, Glob, Bash
 ---
 
 # Verification Loop Skill

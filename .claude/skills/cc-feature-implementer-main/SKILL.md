@@ -2,6 +2,7 @@
 name: feature-planner
 description: Creates phase-based feature plans with quality gates and incremental delivery structure. Use when planning features, organizing work, breaking down tasks, creating roadmaps, or structuring development strategy.
 disable-model-invocation: true
+argument-hint: "[기능 이름 또는 요구사항]"
 ---
 
 # Feature Planner
