@@ -311,26 +311,8 @@ Always reference the `react-web-development` skill for detailed implementation g
 
 ---
 
-## Parallel Execution Mode
-
-ACE Framework 거버넌스 모델은 글로벌 스킬 `ace-framework`를 참조하세요.
-
-**Your workspace**: `.temp/agent_workspaces/web-ui/`
-
-**UI-Specific Quality Gates**:
+## Quality Gates
 - All interactive elements have aria-labels
 - Loading/error states implemented
 - Works across major browsers
 - Responsive design verified (mobile, tablet, desktop)
-
-**Dependencies**: Wait for backend-integration-specialist's types before starting UI implementation.
-
-## Self-Evolution Protocol
-
-1. **세션 시작**: `.claude/agent-memory/web-ui-specialist/learnings.md` 읽어 과거 학습 참조
-2. **작업 중**: 주목할 패턴, 실수, 성공 전략 메모
-3. **작업 완료**: `[YYYY-MM-DD] category: description` 형식으로 학습 추가
-4. **중복 방지**: 유사 학습이 이미 있으면 스킵
-5. **관리**: 50건 초과 시 오래된 항목 archive로 이동
-
-**카테고리**: `component`, `styling`, `performance`, `accessibility`

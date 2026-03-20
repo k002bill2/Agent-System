@@ -1,6 +1,5 @@
 /**
- * PreToolUse:Bash Hook - 위험한 쉘 명령어 차단
- * ACE Framework의 윤리적 검증 레이어로, 시스템 파괴적 명령을 사전 차단
+ * PreToolUse:Bash Hook - 위험한 쉘 명령어 사전 차단
  *
  * v2.0: regex 우회 방지 강화 (flag 순서 무관, pipe 대상 확장, base64 감지)
  *
@@ -48,7 +47,7 @@ function main() {
       for (const { pattern, label } of BLOCKED_PATTERNS) {
         if (pattern.test(command)) {
           process.stderr.write(
-            `[ACE Ethical Validator] BLOCKED: "${label}" detected.\n` +
+            `[Security Guard] BLOCKED: "${label}" detected.\n` +
             `Command: ${command.slice(0, 120)}${command.length > 120 ? '...' : ''}\n`
           );
           return process.exit(2);

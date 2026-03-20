@@ -100,26 +100,7 @@ it('should handle empty arrival data', () => {
 - [ ] 불필요한 console.log 제거
 - [ ] TODO 주석 정리
 
-## 패턴 5: 백그라운드 검증
-
-### 시나리오
-복잡한 작업 중 병렬 검증 실행
-
-### 사용법
-```
-Task(
-  subagent_type="quality-validator",
-  prompt="전체 검증 실행",
-  run_in_background=true
-)
-```
-
-### 장점
-- 작업 중단 없이 검증
-- 시간 절약
-- 조기 문제 발견
-
-## 패턴 6: 실패 복구
+## 패턴 5: 실패 복구
 
 ### TypeScript 에러
 ```bash
@@ -148,7 +129,7 @@ npm test -- --coverage --coverageReporters="text"
 # /test-coverage 실행
 ```
 
-## 패턴 7: CI/CD 연동
+## 패턴 6: CI/CD 연동
 
 ### GitHub Actions 예시
 ```yaml

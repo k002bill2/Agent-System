@@ -2,77 +2,37 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 -c \"import json,sys; p=json.load(sys.stdin).get('tool_input',{}).get('file_path',''); blocked=['.env','secrets','.git/','/prod/']; sys.exit(2 if any(b in p for b in blocked) else 0)\"",
-            "timeout": 5,
-            "statusMessage": "Path protection..."
-          }
-        ]
-      },
-      {
         "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/ethicalValidator.js 2>/dev/null || true",
+            "command": "node .claude/hooks/ethicalValidator.js",
             "timeout": 3,
-            "statusMessage": "Ethical validation..."
+            "statusMessage": "Security check..."
           }
         ]
       },
       {
-        "matcher": "Task",
+        "matcher": "Edit|Write",
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/parallelCoordinator.js pre",
+            "command": "python3 -c \"import json,sys; p=json.load(sys.stdin).get('tool_input',{}).get('file_path',''); blocked=['.env','secrets','.git/','/prod/','credentials','private_key','id_rsa','.pem']; sys.exit(2 if any(b in p for b in blocked) else 0)\"",
             "timeout": 5,
-            "statusMessage": "Parallel coordination..."
+            "statusMessage": "Path protection..."
           }
         ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "Edit|Write",
+        "matcher": "Write",
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/l5VerificationGuard.js 2>/dev/null || true",
+            "command": "node .claude/hooks/verificationGuard.js 2>/dev/null || true",
             "timeout": 10,
-            "statusMessage": "L5 verification..."
-          },
-          {
-            "type": "command",
-            "command": "node .claude/hooks/geminiAutoTrigger.js 2>/dev/null || true",
-            "timeout": 5,
-            "statusMessage": "Gemini review queued..."
-          },
-          {
-            "type": "command",
-            "command": "node .claude/hooks/aceMatrixSync.js 2>/dev/null || true",
-            "timeout": 3,
-            "statusMessage": "ACE matrix sync..."
-          }
-        ]
-      },
-      {
-        "matcher": "Task",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/agentTracer.js 2>/dev/null || true",
-            "timeout": 5,
-            "statusMessage": "Agent tracing..."
-          },
-          {
-            "type": "command",
-            "command": "node .claude/hooks/parallelCoordinator.js post",
-            "timeout": 5,
-            "statusMessage": "Parallel cleanup..."
+            "statusMessage": "Verification check..."
           }
         ]
       }
@@ -86,77 +46,6 @@
             "command": "jq -r '.message' | xargs -I{} osascript -e 'display notification \"{}\" with title \"Claude Code\"'",
             "timeout": 5,
             "statusMessage": "Notifying..."
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/userPromptSubmit.js 2>/dev/null || true",
-            "timeout": 5,
-            "statusMessage": "Context activation..."
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/preCompactSnapshot.js 2>/dev/null || true",
-            "timeout": 5,
-            "statusMessage": "Saving context snapshot..."
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/stopEvent.js 2>/dev/null || true",
-            "timeout": 5,
-            "statusMessage": "Aggregating session metrics..."
-          },
-          {
-            "type": "command",
-            "command": "node .claude/hooks/commitSession.js 2>/dev/null || true",
-            "timeout": 15,
-            "statusMessage": "Auto-committing session changes..."
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/loadRecentChanges.js 2>/dev/null || true",
-            "timeout": 5,
-            "statusMessage": "Loading recent context..."
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo '{}' > .claude/coordination/active-locks.json && echo '{\"activeAgents\":[],\"completedAgents\":[],\"lastUpdated\":null,\"sessionId\":null}' > .claude/coordination/parallel-state.json",
-            "timeout": 5,
-            "statusMessage": "Session cleanup..."
           }
         ]
       }

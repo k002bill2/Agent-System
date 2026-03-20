@@ -130,12 +130,12 @@ class GitService:
                 if current:
                     worktrees.append(self._build_worktree(current, is_first))
                     is_first = False
-                current = {"path": line[len("worktree ") :]}
+                current = {"path": line[len("worktree "):]}
             elif line.startswith("HEAD "):
-                current["head_sha"] = line[len("HEAD ") :]
+                current["head_sha"] = line[len("HEAD "):]
             elif line.startswith("branch "):
                 # refs/heads/main -> main
-                ref = line[len("branch ") :]
+                ref = line[len("branch "):]
                 current["branch"] = ref.replace("refs/heads/", "")
             elif line == "detached":
                 current["detached"] = True

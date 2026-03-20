@@ -97,12 +97,6 @@ npm run build:development
 }
 ```
 
-### 백그라운드 검증
-복잡한 작업 완료 후 백그라운드에서 자동 검증:
-```
-Task(subagent_type="quality-validator", run_in_background=true)
-```
-
 ## 실패 시 대응
 
 ### 우선순위
@@ -134,6 +128,5 @@ npm run type-check && npm test
 
 ## 관련 리소스
 
-- [quality-validator 에이전트](../../agents/quality-validator.md)
 - [/verify-app 커맨드](../../commands/verify-app.md)
 - [/check-health 커맨드](../../commands/check-health.md)

@@ -264,7 +264,7 @@ export function GitPage() {
           <select
             value={selectedProjectId || ''}
             onChange={(e) => setSelectedProject(e.target.value || null)}
-            className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           >
             <option value="">Select Project</option>
             {visibleProjects.map((project) => (
@@ -274,11 +274,11 @@ export function GitPage() {
             ))}
           </select>
 
-          {selectedProject && worktrees?.length > 1 ? (
+          {selectedProject && worktrees.length > 1 ? (
             <select
               value={selectedWorktreePath ?? ''}
               onChange={(e) => setSelectedWorktree(e.target.value || null)}
-              className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
               aria-label="Select worktree"
             >
               {worktrees.map((wt) => (
