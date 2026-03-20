@@ -311,6 +311,17 @@ Always reference the `react-web-development` skill for detailed implementation g
 
 ---
 
+## Learning Protocol
+
+작업 시작 시 `.claude/agent-memory/learnings.md` 파일이 있으면 Read 도구로 읽어 과거 학습을 참조하세요.
+
+작업 완료 시 주목할 패턴, 실수, 성공 전략이 있으면 응답 끝에 아래 형식으로 포함하세요:
+`[LEARNING:web-ui-specialist] category: description`
+
+카테고리: `component`, `styling`, `performance`, `accessibility`, `pattern`, `error-recovery`
+
+SubagentStop 훅이 자동으로 파싱하여 learnings.md에 저장합니다.
+
 ## Quality Gates
 - All interactive elements have aria-labels
 - Loading/error states implemented

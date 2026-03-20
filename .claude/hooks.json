@@ -37,6 +37,19 @@
         ]
       }
     ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/agentLearnings.js 2>/dev/null || true",
+            "timeout": 5,
+            "statusMessage": "Saving learnings..."
+          }
+        ]
+      }
+    ],
     "Notification": [
       {
         "matcher": "",
