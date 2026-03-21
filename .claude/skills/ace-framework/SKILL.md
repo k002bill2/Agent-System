@@ -35,12 +35,10 @@ and a 6-Layer execution lifecycle.
 - Full matrix: `references/enforcement-matrix.md`
 
 **P3 - Boundary (Workspace Isolation)**
-- Parallel agents get file locks via `parallelCoordinator.js`
-- State tracked in `.claude/coordination/parallel-state.json`
 - Worktree isolation for complex parallel work
+- File-level coordination for parallel agents
 
 **P4 - Optimization (Analytics)**
-- Agent tracing via `agentTracer.js` hook
 - Session data in `.temp/traces/sessions/`
 - Failure analysis via `agent-improvement` skill
 
@@ -72,8 +70,6 @@ ACE delegates to specialized skills for each concern:
 
 | Concern | Delegated Skill | Pillar |
 |---------|----------------|--------|
-| Parallel agent coordination | `parallel-coordinator` | P3 |
-| Agent tracing and metrics | `agent-observability` | P4 |
 | Output verification | `verification-loop` | P1, L5 |
 | Quality standards | `quality-reference.md` (shared) | P1 |
 | Failure diagnosis | `agent-improvement` | P4 |
@@ -85,7 +81,7 @@ When adding a new governance rule, determine:
 1. **Which Pillar?**
    - Can agents ignore it? -> P1 (soft, add to prompts/skills)
    - Must be enforced? -> P2 (hard, add hook to hooks.json)
-   - About isolation? -> P3 (boundary, update parallelCoordinator)
+   - About isolation? -> P3 (boundary, update coordination)
    - About learning? -> P4 (optimization, update tracing/metrics)
 
 2. **Which Layer?**
@@ -94,16 +90,15 @@ When adding a new governance rule, determine:
    - Delegation logic -> L3 (update delegation templates)
    - Runtime behavior -> L4 (update agent prompts or hooks)
    - Validation -> L5 (add to verification-loop)
-   - Monitoring -> L6 (update agentTracer or metrics)
+   - Monitoring -> L6 (update tracing or metrics)
 
 3. **Where to Implement?**
    - P1: Edit relevant `.md` file (agent, skill, or rule)
    - P2: Add entry to `hooks.json` + update `references/enforcement-matrix.md`
-   - P3: Update `parallelCoordinator.js` or parallel-state schema
-   - P4: Update `agentTracer.js` or create new metric collector
+   - P3: Update coordination scripts or parallel-state schema
+   - P4: Update tracing or create new metric collector
 
 4. **Verify Consistency**
-   - Run `aceMatrixSync.js` to check P2 drift
    - Ensure enforcement-matrix.md row count matches hooks.json entries
    - Test new constraint with a trial agent run
 

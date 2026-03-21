@@ -49,19 +49,19 @@ cd src/dashboard && npm install && npm run dev
 
 **URLs**: Backend `localhost:8000`, Dashboard `localhost:5173`
 
-## Commands
+## Commands & Skills
 
-| 명령어 | 설명 |
-|--------|------|
-| `/check-health` | 타입체크, 린트, 테스트, 빌드 종합 검증 |
-| `/verify-app` | Boris Cherny 스타일 종합 검증 루프 |
-| `/test-coverage` | 테스트 커버리지 분석 및 미흡 영역 식별 |
-| `/run-eval` | AI 에이전트 평가 및 pass@k 지표 계산 |
-| `/start-all` | 전체 서비스 시작 (인프라 + Backend + Dashboard) |
-| `/start-dashboard` | Dashboard 단독 시작 |
-| `/stop-all` | 전체 서비스 중지 |
+| 명령어 | 유형 | 설명 |
+|--------|------|------|
+| `/check-health` | command | 타입체크, 린트, 테스트, 빌드 종합 검증 |
+| `/test-coverage` | command | 테스트 커버리지 분석 및 미흡 영역 식별 |
+| `/start-all` | command | 전체 서비스 시작 (인프라 + Backend + Dashboard) |
+| `/start-dashboard` | command | Dashboard 단독 시작 |
+| `/stop-all` | command | 전체 서비스 중지 |
+| `/verification-loop` | skill | Boris Cherny 스타일 검증 피드백 루프 |
+| `/run-eval` | skill | AI 에이전트 평가 및 pass@k 지표 계산 |
 
-전체 명령어 목록은 `.claude/commands/` 디렉토리 참조.
+전체 목록은 `.claude/commands/`, `.claude/skills/` 참조.
 
 ## Rules
 

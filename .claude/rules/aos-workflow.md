@@ -8,6 +8,7 @@
 | React/UI/컴포넌트 | `react-web-development` |
 | 테스트/커버리지 | `test-automation` |
 | 구현 완료 검증 | `verification-loop` |
+| 에이전트 평가 | `run-eval` |
 
 ## 복잡도별 에이전트 수
 | 복잡도 | 에이전트 수 | 기준 |
@@ -35,7 +36,7 @@ dev/active/[task-name]/
 
 ## 평가 시스템
 에이전트 성능 평가:
-- `/run-eval` 명령으로 실행
+- `/run-eval` 스킬로 실행 (`.claude/skills/run-eval/`)
 - `eval-task-runner`: 태스크 실행 및 pass@k 계산
 - `eval-grader`: 코드 검사 + LLM 루브릭 채점
 - 태스크: `.claude/evals/tasks/`, 루브릭: `.claude/evals/rubrics/`

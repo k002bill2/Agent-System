@@ -6,13 +6,13 @@ Claude Code configuration for AOS (Agent Orchestration Service) Dashboard.
 
 ```
 .claude/
-├── skills/           # 3개 AI 스킬
+├── skills/           # 5개 AI 스킬
 ├── agents/           # 5개 서브 에이전트
 │   └── shared/       # 공유 프레임워크 (Quality Gates 등)
-├── commands/         # 7개 슬래시 명령어
-├── hooks/            # 보안 훅 (ethicalValidator + verificationGuard)
-├── evals/            # 평가 시스템 (13 tasks, 4 rubrics)
-├── hooks.json        # 훅 설정 (security guard + path protection + verification + notification)
+├── commands/         # 5개 슬래시 명령어
+├── hooks/            # 훅 스크립트 (ethicalValidator + verificationGuard + agentLearnings)
+├── evals/            # 평가 시스템 (10 tasks, 4 rubrics)
+├── hooks.json        # 훅 설정 (5개: security + path protection + verification + learnings + notification)
 ├── settings.json     # 로컬 설정
 └── mcp.json          # MCP 서버 설정
 ```
@@ -24,9 +24,7 @@ Claude Code configuration for AOS (Agent Orchestration Service) Dashboard.
 | Command | Purpose |
 |---------|---------|
 | `/check-health` | 타입체크, 린트, 테스트, 빌드 종합 검증 |
-| `/verify-app` | Boris Cherny 스타일 검증 피드백 루프 |
 | `/test-coverage` | 테스트 커버리지 분석 |
-| `/run-eval` | AI 에이전트 평가 및 pass@k 지표 계산 |
 
 ### 서비스 관리
 
@@ -42,7 +40,9 @@ Claude Code configuration for AOS (Agent Orchestration Service) Dashboard.
 |-------|---------|
 | `react-web-development` | React Web 컴포넌트, Tailwind CSS, TypeScript |
 | `test-automation` | Vitest 테스트, 커버리지 분석 |
-| `verification-loop` | 검증 피드백 루프 |
+| `verification-loop` | 검증 피드백 루프 (verify-app 병합) |
+| `run-eval` | AI 에이전트 평가 및 pass@k 지표 계산 |
+| `ace-framework` | 4-Pillar 거버넌스 모델 (참조 문서) |
 
 ## Sub-agents
 
@@ -64,9 +64,9 @@ Claude Code configuration for AOS (Agent Orchestration Service) Dashboard.
 
 | Server | Purpose |
 |--------|---------|
-| `context7` | 시맨틱 검색 |
-| `tavily` | 웹 검색 (API 키 필요) |
+| `context7` | 시맨틱 검색 (글로벌 설정) |
+| `tavily` | 웹 검색 (글로벌 설정, API 키 필요) |
 
 ---
 
-**Skills**: 3 | **Agents**: 5 (+shared) | **Commands**: 7
+**Skills**: 5 | **Agents**: 5 (+shared) | **Commands**: 5

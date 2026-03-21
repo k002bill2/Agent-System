@@ -1,7 +1,6 @@
 ---
 name: run-eval
 description: AI 에이전트 평가 태스크 실행 및 pass@k 지표 계산.
-disable-model-invocation: true
 allowed-tools: Read, Grep, Glob, Bash
 argument-hint: "[task_id | --category <type> | --all] [--k=N]"
 ---
@@ -59,6 +58,7 @@ ls .claude/evals/tasks/*.yaml | grep -v schema | grep -v _templates
 
 ### 3. 평가 실행
 eval-task-runner 에이전트를 호출하여 평가를 실행합니다.
+eval 시스템 상세는 [references/eval-guide.md](references/eval-guide.md) 참조.
 
 ### 4. 결과 저장
 `.claude/evals/results/{date}/` 디렉토리에 결과를 저장합니다.
@@ -104,10 +104,3 @@ eval-task-runner 에이전트를 호출하여 평가를 실행합니다.
 - **태스크 없음**: "지정된 태스크를 찾을 수 없습니다: {task_id}"
 - **타임아웃**: 실행을 FAIL로 기록하고 다음 실행으로 진행
 - **에이전트 오류**: 오류를 기록하고 결과에 포함
-
-## 관련 리소스
-
-- [eval-task-runner 에이전트](../agents/eval-task-runner.md)
-- [eval-grader 에이전트](../agents/eval-grader.md)
-- [태스크 스키마](../evals/tasks/schema.yaml)
-- [루브릭](../evals/rubrics/)
