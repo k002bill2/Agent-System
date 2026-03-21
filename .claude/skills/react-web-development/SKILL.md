@@ -1,6 +1,7 @@
 ---
 name: react-web-development
 description: React Web component development with TypeScript, Vite, Tailwind CSS, and Zustand. Use when creating UI components, pages, implementing routing flows, or working with React/Tailwind/Zustand code.
+user-invocable: false
 ---
 
 # React Web Development Guidelines

@@ -9,30 +9,24 @@
 ```
 1. useAgentSearch.ts 작성 완료
 2. useAgentSearch.test.ts 테스트 작성
-3. /verify-app 실행
+3. Level 2 검증 실행 (/verification-loop)
 4. 결과 확인 및 수정
 5. 커밋 준비
 ```
 
 ### 예시 출력
 ```
-📋 앱 종합 검증 시작...
+## 검증 결과 요약
 
-1️⃣ TypeScript 타입 체크...
-   ✅ 통과 - 에러 0개
+| 항목 | 상태 | 세부사항 |
+|------|------|----------|
+| TypeScript | ✅ | 에러 0개 |
+| ESLint | ✅ | 에러 0개, 경고 2개 |
+| 테스트 | ✅ | 275개 테스트 모두 통과 |
+| 커버리지 | ✅ | Stmt 92%, Fn 96%, Br 75% |
+| 빌드 | ✅ | 빌드 성공 |
 
-2️⃣ ESLint 린트 검사...
-   ✅ 통과 - 에러 0개, 경고 2개
-
-3️⃣ Jest 테스트 실행...
-   ✅ 통과 - 275개 테스트 모두 통과
-   📊 커버리지: Stmt 92%, Fn 96%, Br 75%
-
-4️⃣ 개발 빌드 검증...
-   ✅ 빌드 성공
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ 전체 검증 통과! PR 생성 준비 완료.
+**전체 상태**: ✅ 통과
 ```
 
 ## 패턴 2: 리팩토링 후 검증
@@ -42,11 +36,10 @@
 
 ### 검증 흐름
 ```
-1. /simplify-code src/hooks/useNotifications.ts
-2. 리팩토링 적용
-3. /verify-app 실행
-4. 기존 테스트 통과 확인
-5. 회귀 테스트 추가 (필요 시)
+1. 리팩토링 적용
+2. Level 2 검증 실행 (/verification-loop)
+3. 기존 테스트 통과 확인
+4. 회귀 테스트 추가 (필요 시)
 ```
 
 ### 주의사항
@@ -64,7 +57,7 @@
 1. 버그 재현 테스트 작성 (실패 확인)
 2. 버그 수정
 3. 테스트 통과 확인
-4. /verify-app 실행
+4. Level 2 검증 실행 (/verification-loop)
 5. 관련 컴포넌트 영향 확인
 ```
 
@@ -77,7 +70,7 @@ it('should handle empty arrival data', () => {
 });
 
 // 2. 테스트 통과하도록 수정
-// 3. /verify-app으로 전체 검증
+// 3. Level 2 검증으로 전체 확인
 ```
 
 ## 패턴 4: PR 생성 전 최종 검증
@@ -88,9 +81,9 @@ it('should handle empty arrival data', () => {
 ### 검증 흐름
 ```
 1. /check-health (전체 상태 확인)
-2. /verify-app (상세 검증)
+2. Level 3 검증 실행 (/verification-loop)
 3. git diff 검토
-4. /commit-push-pr
+4. PR 생성
 ```
 
 ### 체크리스트
@@ -100,26 +93,7 @@ it('should handle empty arrival data', () => {
 - [ ] 불필요한 console.log 제거
 - [ ] TODO 주석 정리
 
-## 패턴 5: 백그라운드 검증
-
-### 시나리오
-복잡한 작업 중 병렬 검증 실행
-
-### 사용법
-```
-Task(
-  subagent_type="quality-validator",
-  prompt="전체 검증 실행",
-  run_in_background=true
-)
-```
-
-### 장점
-- 작업 중단 없이 검증
-- 시간 절약
-- 조기 문제 발견
-
-## 패턴 6: 실패 복구
+## 패턴 5: 실패 복구
 
 ### TypeScript 에러
 ```bash
@@ -148,7 +122,7 @@ npm test -- --coverage --coverageReporters="text"
 # /test-coverage 실행
 ```
 
-## 패턴 7: CI/CD 연동
+## 패턴 6: CI/CD 연동
 
 ### GitHub Actions 예시
 ```yaml
@@ -171,4 +145,4 @@ jobs:
 
 ### 로컬과 동일한 검증
 - CI와 로컬 검증 기준 일치
-- `/verify-app` = CI 검증
+- verification-loop 스킬의 Level 2 = CI 검증

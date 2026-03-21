@@ -1,5 +1,5 @@
 /**
- * L5 Verification Guard (ACE P2 Hard Constraint)
+ * Verification Guard
  *
  * PostToolUse:Write 시 src/ 디렉토리의 TypeScript/Python 파일 변경을 감지하고
  * 경량 검증(tsc --noEmit, ruff check)을 실행하여 빌드 깨짐을 조기 경고합니다.
@@ -9,7 +9,7 @@
  *
  * @version 1.0.0
  * @hook-config
- * {"event": "PostToolUse", "matcher": "Write", "command": "node .claude/hooks/l5VerificationGuard.js 2>/dev/null || true", "timeout": 10}
+ * {"event": "PostToolUse", "matcher": "Write", "command": "node .claude/hooks/verificationGuard.js 2>/dev/null || true", "timeout": 10}
  */
 
 const { execSync } = require('child_process');
@@ -44,7 +44,7 @@ function main() {
           if (output) {
             const errorCount = (output.match(/error TS/g) || []).length;
             if (errorCount > 0) {
-              warnings.push(`[L5 Verification] ⚠️ TypeScript: ${errorCount} error(s) detected`);
+              warnings.push(`[Verification] TypeScript: ${errorCount} error(s) detected`);
             }
           }
         }
@@ -61,7 +61,7 @@ function main() {
           const output = (err.stdout || '').toString().trim();
           if (output) {
             const lines = output.split('\n').length;
-            warnings.push(`[L5 Verification] ⚠️ Python lint: ${lines} issue(s) in ${filePath.split('/').pop()}`);
+            warnings.push(`[Verification] Python lint: ${lines} issue(s) in ${filePath.split('/').pop()}`);
           }
         }
       }

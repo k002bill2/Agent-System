@@ -1,6 +1,7 @@
 ---
 name: test-automation
 description: Generate comprehensive Vitest tests for React Web components, hooks, and stores. Use when writing tests, improving coverage, or doing test-driven development.
+user-invocable: false
 ---
 
 # Test Automation Skill

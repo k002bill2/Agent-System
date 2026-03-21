@@ -60,6 +60,4 @@ npm run lint && npm run type-check && npm test -- --coverage
 |-------|------------------------|
 | web-ui-specialist | ARIA attributes, responsive Tailwind design |
 | backend-integration-specialist | API rate limits respected, cleanup functions |
-| performance-optimizer | Core Web Vitals metrics, no memory leaks |
 | test-automation-specialist | Coverage meets thresholds, no flaky tests |
-| quality-validator | All gates verified, integration checked |

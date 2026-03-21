@@ -233,26 +233,19 @@ async def test_create_agent():
 
 ---
 
-## Parallel Execution Mode
+## Learning Protocol
 
-See [ACE Framework Skill](../skills/ace-framework/SKILL.md) for governance model, workspace isolation, and coordination protocols.
+작업 시작 시 `.claude/agent-memory/learnings.md` 파일이 있으면 Read 도구로 읽어 과거 학습을 참조하세요.
 
-**Your workspace**: `.temp/agent_workspaces/backend-integration/`
+작업 완료 시 주목할 패턴, 실수, 성공 전략이 있으면 응답 끝에 아래 형식으로 포함하세요:
+`[LEARNING:backend-integration-specialist] category: description`
 
-**Backend-Specific Quality Gates**:
+카테고리: `api`, `database`, `langgraph`, `security`, `pattern`, `error-recovery`
+
+SubagentStop 훅이 자동으로 파싱하여 learnings.md에 저장합니다.
+
+## Quality Gates
 - No API keys or secrets hardcoded
 - All async resources properly cleaned up
 - Type hints on all public functions
 - pytest tests for new functionality
-
-**Critical**: You provide types first - web-ui and test-automation depend on your interfaces. Export types early and notify when ready.
-
-## Self-Evolution Protocol
-
-1. **세션 시작**: `.claude/agent-memory/backend-integration-specialist/learnings.md` 읽어 과거 학습 참조
-2. **작업 중**: 주목할 패턴, 실수, 성공 전략 메모
-3. **작업 완료**: `[YYYY-MM-DD] category: description` 형식으로 학습 추가
-4. **중복 방지**: 유사 학습이 이미 있으면 스킵
-5. **관리**: 50건 초과 시 오래된 항목 archive로 이동
-
-**카테고리**: `api`, `database`, `langgraph`, `security`

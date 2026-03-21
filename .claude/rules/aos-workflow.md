@@ -7,10 +7,8 @@
 |-----------|------|
 | React/UI/컴포넌트 | `react-web-development` |
 | 테스트/커버리지 | `test-automation` |
-| 병렬 에이전트 (3+) | `parallel-coordinator` |
 | 구현 완료 검증 | `verification-loop` |
-| 스킬/에이전트/커맨드 생성 | `skill-creator`, `subagent-creator`, `hook-creator`, `slash-command-creator` |
-| ACE 거버넌스 | `ace-framework` |
+| 에이전트 평가 | `run-eval` |
 
 ## 복잡도별 에이전트 수
 | 복잡도 | 에이전트 수 | 기준 |
@@ -18,7 +16,6 @@
 | Trivial | 0 | 단일 파일, 명확한 수정 |
 | Simple | 1 | 2-3 파일, 한 영역 |
 | Moderate | 2-3 | UI+API 또는 크로스 영역 |
-| Complex | 3+ | 풀스택, 아키텍처 변경 |
 
 ## 배포 전 검증 체크리스트
 1. `tsc --noEmit` (TypeScript 타입 체크)
@@ -36,3 +33,10 @@ dev/active/[task-name]/
 └── [task-name]-tasks.md
 ```
 워크플로우: `/dev-docs` → 구현 → `/update-dev-docs` → `/compact`
+
+## 평가 시스템
+에이전트 성능 평가:
+- `/run-eval` 스킬로 실행 (`.claude/skills/run-eval/`)
+- `eval-task-runner`: 태스크 실행 및 pass@k 계산
+- `eval-grader`: 코드 검사 + LLM 루브릭 채점
+- 태스크: `.claude/evals/tasks/`, 루브릭: `.claude/evals/rubrics/`
