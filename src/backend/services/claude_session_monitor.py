@@ -481,12 +481,15 @@ class ClaudeSessionMonitor:
         Prefers cwd (original path from jsonl) over encoded path,
         as cwd preserves spaces and special characters correctly.
 
+        Handles .claude subdirectory paths (worktrees, gemini-bridge, etc.)
+        by extracting the actual project name instead of the internal directory name.
+
         Args:
             cwd: Original working directory from session (e.g., "/Users/.../My Project")
             encoded_path: Encoded folder name (e.g., "-Users-...-My-Project")
 
         Returns:
-            Last directory component as project name, or empty string if not determinable
+            Project directory name, or empty string if not determinable
         """
         # Sessions from non-project context (e.g., root "/") have encoded_path="-"
         # These have no meaningful project name
@@ -495,12 +498,23 @@ class ClaudeSessionMonitor:
 
         # Prefer cwd as it preserves original path with spaces/special chars
         if cwd:
-            # Extract last directory component from cwd
-            # e.g., "/Users/user/Library/Mobile Documents/iCloud~md~obsidian/Documents/My Vault"
-            # -> "My Vault"
             from pathlib import PurePath
 
-            name = PurePath(cwd).name
+            p = PurePath(cwd)
+
+            # .claude subdirectory paths:
+            #   /path/to/Project/.claude/worktrees/<branch>
+            #   /path/to/Project/.claude/gemini-bridge/reviews
+            # Extract "Project" (the directory before .claude)
+            parts = p.parts
+            try:
+                claude_idx = parts.index(".claude")
+                if claude_idx > 0 and claude_idx + 1 < len(parts):
+                    return parts[claude_idx - 1]
+            except ValueError:
+                pass
+
+            name = p.name
             if name:
                 return name
 
@@ -513,11 +527,22 @@ class ClaudeSessionMonitor:
         Note: This is a lossy operation as spaces, tildes, and slashes all become dashes.
         Prefer using cwd from session data when available.
 
+        Handles worktree encoded paths (e.g., "-Users-...-Project--claude-worktrees-branch")
+        by extracting the project name before the worktree marker.
+
         Returns the last component as the project name.
         """
+        # Worktree encoded paths contain "--claude-worktrees-"
+        # e.g., "-Users-user-Work-Project--claude-worktrees-branch" -> "Project"
+        worktree_marker = "--claude-worktrees-"
+        if worktree_marker in encoded_path:
+            base_path = encoded_path[: encoded_path.index(worktree_marker)]
+            parts = [p for p in base_path.split("-") if p]
+            if parts:
+                return parts[-1]
+
         # e.g., "-Users-username-Work-MyProject" -> "MyProject"
         parts = encoded_path.split("-")
-        # Filter out empty parts and get the last non-empty part
         non_empty_parts = [p for p in parts if p]
         if non_empty_parts:
             return non_empty_parts[-1]
