@@ -113,6 +113,11 @@ const defaultGitStoreState = {
   createBranchProtectionRule: vi.fn(),
   updateBranchProtectionRule: vi.fn(),
   deleteBranchProtectionRule: vi.fn(),
+  // Worktree
+  worktrees: [],
+  selectedWorktreePath: null,
+  fetchWorktrees: vi.fn(),
+  setSelectedWorktree: vi.fn(),
 }
 
 vi.mock('../stores/git', () => ({

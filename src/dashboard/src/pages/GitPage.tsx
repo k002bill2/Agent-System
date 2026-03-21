@@ -274,7 +274,7 @@ export function GitPage() {
             ))}
           </select>
 
-          {selectedProject && worktrees.length > 1 ? (
+          {selectedProject && worktrees?.length > 1 ? (
             <select
               value={selectedWorktreePath ?? ''}
               onChange={(e) => setSelectedWorktree(e.target.value || null)}
