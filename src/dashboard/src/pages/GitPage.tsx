@@ -129,6 +129,11 @@ export function GitPage() {
     createBranchProtectionRule,
     updateBranchProtectionRule,
     deleteBranchProtectionRule,
+    // Worktree
+    worktrees,
+    selectedWorktreePath,
+    fetchWorktrees,
+    setSelectedWorktree,
   } = useGitStore()
 
   const { projects, fetchProjects, selectedProjectId: globalSelectedProjectId } = useProjectsStore()
@@ -200,8 +205,16 @@ export function GitPage() {
       fetchWorkingStatus(selectedProjectId)
       fetchRemotes(selectedProjectId)
       fetchBranchProtectionRules(selectedProjectId)
+      fetchWorktrees(selectedProjectId)
     }
-  }, [selectedProjectId, gitStatus?.is_valid_repo, fetchBranches, fetchMergeRequests, fetchCommits, fetchWorkingStatus, fetchRemotes, fetchBranchProtectionRules])
+  }, [selectedProjectId, gitStatus?.is_valid_repo, fetchBranches, fetchMergeRequests, fetchCommits, fetchWorkingStatus, fetchRemotes, fetchBranchProtectionRules, fetchWorktrees])
+
+  // Refresh working status when worktree selection changes
+  useEffect(() => {
+    if (selectedProjectId && gitStatus?.is_valid_repo) {
+      fetchWorkingStatus(selectedProjectId)
+    }
+  }, [selectedWorktreePath]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle merge click from branch list
   const handleMergeClick = async (source: string) => {
@@ -251,7 +264,7 @@ export function GitPage() {
           <select
             value={selectedProjectId || ''}
             onChange={(e) => setSelectedProject(e.target.value || null)}
-            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           >
             <option value="">Select Project</option>
             {visibleProjects.map((project) => (
@@ -261,7 +274,20 @@ export function GitPage() {
             ))}
           </select>
 
-          {selectedProject && (
+          {selectedProject && worktrees.length > 1 ? (
+            <select
+              value={selectedWorktreePath ?? ''}
+              onChange={(e) => setSelectedWorktree(e.target.value || null)}
+              className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              aria-label="Select worktree"
+            >
+              {worktrees.map((wt) => (
+                <option key={wt.path} value={wt.is_main ? '' : wt.path}>
+                  {wt.is_main ? `main (${wt.branch ?? 'detached'})` : (wt.branch ?? `detached@${wt.head_sha.slice(0, 7)}`)}
+                </option>
+              ))}
+            </select>
+          ) : selectedProject && (
             <span className="text-sm text-gray-500 dark:text-gray-400">
               Current: <span className="font-mono">{currentBranch}</span>
             </span>
@@ -281,18 +307,18 @@ export function GitPage() {
           </button>
           <button
             onClick={handlePull}
-            disabled={isLoading || !selectedProjectId || !gitStatus?.is_valid_repo}
+            disabled={isLoading || !selectedProjectId || !gitStatus?.is_valid_repo || !!selectedWorktreePath}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
-            title="Pull from remote"
+            title={selectedWorktreePath ? "Pull disabled for worktrees" : "Pull from remote"}
           >
             <Download className="w-4 h-4" />
             Pull
           </button>
           <button
             onClick={handlePush}
-            disabled={isLoading || !selectedProjectId || !gitStatus?.is_valid_repo}
+            disabled={isLoading || !selectedProjectId || !gitStatus?.is_valid_repo || !!selectedWorktreePath}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
-            title="Push to remote"
+            title={selectedWorktreePath ? "Push disabled for worktrees" : "Push to remote"}
           >
             <Upload className="w-4 h-4" />
             Push

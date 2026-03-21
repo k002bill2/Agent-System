@@ -51,6 +51,9 @@ from models.git import (
     GitRepositoryUpdate,
     # Working directory models (NEW)
     GitWorkingStatus,
+    # Worktree models
+    GitWorktree,
+    GitWorktreeListResponse,
     MergeAbortResult,
     MergeExecuteRequest,
     # Merge models
@@ -96,8 +99,15 @@ def get_effective_git_path(project) -> str:
     return project.git_path or project.path
 
 
-def get_git_service_for_project(project_id: str):
-    """Get GitService for a project."""
+def get_git_service_for_project(project_id: str, worktree_path: str | None = None):
+    """Get GitService for a project, optionally targeting a specific worktree.
+
+    Args:
+        project_id: Project identifier
+        worktree_path: Optional worktree path. Validated against actual worktree list.
+    """
+    from pathlib import Path
+
     from services.git_service import get_git_service
 
     project = get_project(project_id)
@@ -110,6 +120,24 @@ def get_git_service_for_project(project_id: str):
         raise HTTPException(
             status_code=400, detail=f"Project '{project_id}' is not a Git repository"
         )
+
+    if worktree_path:
+        # Security: validate worktree_path against actual worktree list
+        resolved_requested = str(Path(worktree_path).resolve())
+        valid_paths = {str(Path(wt.path).resolve()) for wt in service.list_worktrees()}
+        if resolved_requested not in valid_paths:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Invalid worktree path: not a registered worktree",
+            )
+        # Return a GitService instance pointing to the worktree
+        wt_service = get_git_service(resolved_requested)
+        if not wt_service:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Worktree path is not a valid Git working directory",
+            )
+        return wt_service
 
     return service
 
@@ -269,14 +297,30 @@ async def update_project_git_path(
 
 
 # =============================================================================
+# Worktree Endpoints
+# =============================================================================
+
+
+@router.get("/projects/{project_id}/worktrees", response_model=GitWorktreeListResponse)
+async def list_worktrees(project_id: str):
+    """List all git worktrees for a project."""
+    git_service = get_git_service_for_project(project_id)
+    worktrees = git_service.list_worktrees()
+    return GitWorktreeListResponse(worktrees=worktrees, total=len(worktrees))
+
+
+# =============================================================================
 # Working Directory Endpoints (status, add, commit)
 # =============================================================================
 
 
 @router.get("/projects/{project_id}/working-status", response_model=GitWorkingStatus)
-async def get_working_status(project_id: str):
+async def get_working_status(
+    project_id: str,
+    worktree_path: str | None = Query(None, description="Worktree path to target"),
+):
     """Get working directory status (staged, unstaged, untracked files)."""
-    git_service = get_git_service_for_project(project_id)
+    git_service = get_git_service_for_project(project_id, worktree_path=worktree_path)
     return git_service.status()
 
 
@@ -284,6 +328,7 @@ async def get_working_status(project_id: str):
 async def stage_files(
     project_id: str,
     request: AddRequest,
+    worktree_path: str | None = Query(None, description="Worktree path to target"),
 ):
     """Stage files for commit (git add).
 
@@ -291,7 +336,7 @@ async def stage_files(
     - all=True: stages all changes including deletions (git add -A)
     - Specific paths: stages only those files
     """
-    git_service = get_git_service_for_project(project_id)
+    git_service = get_git_service_for_project(project_id, worktree_path=worktree_path)
     result = git_service.add(paths=request.paths, all=request.all)
 
     if not result.success:
@@ -304,12 +349,13 @@ async def stage_files(
 async def create_commit(
     project_id: str,
     request: CommitCreateRequest,
+    worktree_path: str | None = Query(None, description="Worktree path to target"),
 ):
     """Create a commit with staged changes.
 
     Requires files to be staged first using the add endpoint.
     """
-    git_service = get_git_service_for_project(project_id)
+    git_service = get_git_service_for_project(project_id, worktree_path=worktree_path)
     result = git_service.commit(
         message=request.message,
         author_name=request.author_name,
@@ -331,6 +377,7 @@ async def create_commit(
 async def unstage_files(
     project_id: str,
     request: UnstageRequest,
+    worktree_path: str | None = Query(None, description="Worktree path to target"),
 ):
     """Unstage files (git reset HEAD).
 
@@ -338,7 +385,7 @@ async def unstage_files(
     - all=True: unstage all files
     - Specific paths: unstage only those files
     """
-    git_service = get_git_service_for_project(project_id)
+    git_service = get_git_service_for_project(project_id, worktree_path=worktree_path)
     result = git_service.unstage(paths=request.paths or None, all=request.all)
 
     if not result.success:
@@ -352,9 +399,10 @@ async def get_file_diff(
     project_id: str,
     file_path: str = Query(..., description="File path relative to repo root"),
     staged: bool = Query(False, description="Get staged diff instead of unstaged"),
+    worktree_path: str | None = Query(None, description="Worktree path to target"),
 ):
     """Get diff for a single file."""
-    git_service = get_git_service_for_project(project_id)
+    git_service = get_git_service_for_project(project_id, worktree_path=worktree_path)
     try:
         return git_service.get_file_diff(file_path=file_path, staged=staged)
     except Exception as e:
@@ -362,9 +410,12 @@ async def get_file_diff(
 
 
 @router.get("/projects/{project_id}/staged-diff")
-async def get_staged_diff(project_id: str):
+async def get_staged_diff(
+    project_id: str,
+    worktree_path: str | None = Query(None, description="Worktree path to target"),
+):
     """Get the full staged diff (git diff --staged)."""
-    git_service = get_git_service_for_project(project_id)
+    git_service = get_git_service_for_project(project_id, worktree_path=worktree_path)
     try:
         diff = git_service.get_working_diff(staged_only=True)
         return {"diff": diff}
@@ -377,9 +428,10 @@ async def get_file_hunks(
     project_id: str,
     file_path: str = Query(..., description="File path relative to repo root"),
     staged: bool = Query(False, description="Get staged hunks"),
+    worktree_path: str | None = Query(None, description="Worktree path to target"),
 ):
     """Get diff hunks for a single file."""
-    git_service = get_git_service_for_project(project_id)
+    git_service = get_git_service_for_project(project_id, worktree_path=worktree_path)
     try:
         return git_service.get_file_hunks(file_path=file_path, staged=staged)
     except Exception as e:
@@ -390,9 +442,10 @@ async def get_file_hunks(
 async def stage_hunks(
     project_id: str,
     request: StageHunksRequest,
+    worktree_path: str | None = Query(None, description="Worktree path to target"),
 ):
     """Stage specific hunks of a file."""
-    git_service = get_git_service_for_project(project_id)
+    git_service = get_git_service_for_project(project_id, worktree_path=worktree_path)
     result = git_service.stage_hunks(
         file_path=request.file_path,
         hunk_indices=request.hunk_indices,
@@ -436,6 +489,7 @@ CRITICAL: 반드시 유효한 JSON만 응답. 마크다운이나 설명 없이 J
 async def generate_draft_commits(
     project_id: str,
     request: DraftCommitsRequest,
+    worktree_path: str | None = Query(None, description="Worktree path to target"),
 ):
     """Generate LLM-based draft commits from git diff.
 
@@ -446,7 +500,7 @@ async def generate_draft_commits(
 
     from services.llm_service import LLMService
 
-    git_service = get_git_service_for_project(project_id)
+    git_service = get_git_service_for_project(project_id, worktree_path=worktree_path)
 
     # Get diff content
     try:
@@ -1535,9 +1589,10 @@ async def push_remote(
     remote: str = Query("origin", description="Remote name"),
     branch: str | None = Query(None, description="Branch to push"),
     set_upstream: bool = Query(False, description="Set upstream tracking"),
+    worktree_path: str | None = Query(None, description="Worktree path to target"),
 ):
     """Push to remote."""
-    git_service = get_git_service_for_project(project_id)
+    git_service = get_git_service_for_project(project_id, worktree_path=worktree_path)
     result = git_service.push(remote=remote, branch=branch, set_upstream=set_upstream)
     return result
 

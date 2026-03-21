@@ -31,6 +31,7 @@ from models.git import (
     GitCommit,
     GitStatusFile,
     GitWorkingStatus,
+    GitWorktree,
     PullResult,
     PushResult,
 )
@@ -78,6 +79,89 @@ class GitService:
         except TypeError:
             # Detached HEAD state
             return f"HEAD@{self.repo.head.commit.hexsha[:7]}"
+
+    # =========================================================================
+    # Worktree Operations
+    # =========================================================================
+
+    def list_worktrees(self) -> list[GitWorktree]:
+        """List all git worktrees for this repository.
+
+        Returns:
+            List of GitWorktree objects
+        """
+        import subprocess
+
+        try:
+            result = subprocess.run(
+                ["git", "worktree", "list", "--porcelain"],
+                cwd=str(self.project_path),
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return self._parse_worktrees(result.stdout)
+        except subprocess.CalledProcessError as e:
+            logger.warning(f"Failed to list worktrees: {e}")
+            return [
+                GitWorktree(
+                    path=str(self.project_path),
+                    branch=self.current_branch,
+                    head_sha=self.repo.head.commit.hexsha,
+                    is_main=True,
+                )
+            ]
+
+    def _parse_worktrees(self, porcelain_output: str) -> list[GitWorktree]:
+        """Parse `git worktree list --porcelain` output.
+
+        Args:
+            porcelain_output: Raw porcelain output string
+
+        Returns:
+            List of GitWorktree objects
+        """
+        worktrees: list[GitWorktree] = []
+        current: dict[str, str | bool] = {}
+        is_first = True
+
+        for line in porcelain_output.strip().split("\n"):
+            if line.startswith("worktree "):
+                if current:
+                    worktrees.append(self._build_worktree(current, is_first))
+                    is_first = False
+                current = {"path": line[len("worktree "):]}
+            elif line.startswith("HEAD "):
+                current["head_sha"] = line[len("HEAD "):]
+            elif line.startswith("branch "):
+                # refs/heads/main -> main
+                ref = line[len("branch "):]
+                current["branch"] = ref.replace("refs/heads/", "")
+            elif line == "detached":
+                current["detached"] = True
+            elif line == "locked":
+                current["locked"] = True
+            elif line == "" and current:
+                worktrees.append(self._build_worktree(current, is_first))
+                is_first = False
+                current = {}
+
+        if current:
+            worktrees.append(self._build_worktree(current, is_first))
+
+        return worktrees
+
+    @staticmethod
+    def _build_worktree(data: dict, is_first: bool) -> GitWorktree:
+        """Build a GitWorktree from parsed data."""
+        return GitWorktree(
+            path=str(data.get("path", "")),
+            branch=str(data["branch"]) if "branch" in data else None,
+            head_sha=str(data.get("head_sha", "")),
+            is_main=is_first,
+            is_detached=bool(data.get("detached", False)),
+            is_locked=bool(data.get("locked", False)),
+        )
 
     # =========================================================================
     # Branch Operations

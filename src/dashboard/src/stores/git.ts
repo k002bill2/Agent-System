@@ -158,6 +158,15 @@ export interface GitHubPRReview {
   commit_id: string | null
 }
 
+export interface GitWorktree {
+  path: string
+  branch: string | null
+  head_sha: string
+  is_main: boolean
+  is_detached: boolean
+  is_locked: boolean
+}
+
 export type GitTab = 'changes' | 'branches' | 'merge-requests' | 'pull-requests' | 'history' | 'remotes' | 'protection'
 
 // Working Directory Types
@@ -278,6 +287,10 @@ interface GitState {
   // Git Status (for project configuration)
   gitStatus: GitStatus | null
 
+  // Worktree
+  worktrees: GitWorktree[]
+  selectedWorktreePath: string | null
+
   // Working Directory Status
   workingStatus: GitWorkingStatus | null
 
@@ -335,6 +348,10 @@ interface GitState {
   setSelectedProject: (projectId: string | null) => void
   setGitHubRepo: (repo: string | null) => void
   clearError: () => void
+
+  // Actions - Worktree
+  fetchWorktrees: (projectId: string) => Promise<void>
+  setSelectedWorktree: (path: string | null) => void
 
   // Actions - Git Status
   fetchGitStatus: (projectId: string) => Promise<GitStatus | null>
@@ -431,6 +448,13 @@ interface GitState {
 // Store
 // =============================================================================
 
+/** Append worktree_path query parameter to a URL if a worktree is selected. */
+function appendWorktreePath(url: string, worktreePath: string | null): string {
+  if (!worktreePath) return url
+  const separator = url.includes('?') ? '&' : '?'
+  return `${url}${separator}worktree_path=${encodeURIComponent(worktreePath)}`
+}
+
 export const useGitStore = create<GitState>((set, get) => ({
   // Initial State
   activeTab: 'changes',
@@ -439,6 +463,8 @@ export const useGitStore = create<GitState>((set, get) => ({
   error: null,
 
   gitStatus: null,
+  worktrees: [],
+  selectedWorktreePath: null,
   workingStatus: null,
 
   branches: [],
@@ -486,9 +512,22 @@ export const useGitStore = create<GitState>((set, get) => ({
 
   // UI Actions
   setActiveTab: (tab) => set({ activeTab: tab }),
-  setSelectedProject: (projectId) => set({ selectedProjectId: projectId, gitStatus: null }),
+  setSelectedProject: (projectId) => set({ selectedProjectId: projectId, gitStatus: null, worktrees: [], selectedWorktreePath: null }),
   setGitHubRepo: (repo) => set({ githubRepo: repo }),
   clearError: () => set({ error: null }),
+
+  // Worktree Actions
+  fetchWorktrees: async (projectId) => {
+    try {
+      const data = await apiClient.get<{ worktrees: GitWorktree[]; total: number }>(`/api/git/projects/${projectId}/worktrees`)
+      set({ worktrees: data.worktrees })
+    } catch (error) {
+      // Worktree listing is non-critical; silently ignore
+      set({ worktrees: [] })
+    }
+  },
+
+  setSelectedWorktree: (path) => set({ selectedWorktreePath: path }),
 
   // Git Status Actions
   fetchGitStatus: async (projectId) => {
@@ -519,7 +558,8 @@ export const useGitStore = create<GitState>((set, get) => ({
   fetchWorkingStatus: async (projectId) => {
     set({ isLoading: true, error: null })
     try {
-      const status = await apiClient.get<GitWorkingStatus>(`/api/git/projects/${projectId}/working-status`)
+      const url = appendWorktreePath(`/api/git/projects/${projectId}/working-status`, get().selectedWorktreePath)
+      const status = await apiClient.get<GitWorkingStatus>(url)
       set({ workingStatus: status, isLoading: false })
       return status
     } catch (error) {
@@ -531,7 +571,8 @@ export const useGitStore = create<GitState>((set, get) => ({
   stageFiles: async (projectId, paths = [], all = false) => {
     set({ isLoading: true, error: null })
     try {
-      await apiClient.post(`/api/git/projects/${projectId}/add`, { paths, all })
+      const url = appendWorktreePath(`/api/git/projects/${projectId}/add`, get().selectedWorktreePath)
+      await apiClient.post(url, { paths, all })
       await get().fetchWorkingStatus(projectId)
       set({ isLoading: false })
       return true
@@ -544,7 +585,8 @@ export const useGitStore = create<GitState>((set, get) => ({
   unstageFiles: async (projectId, paths = [], all = false) => {
     set({ isLoading: true, error: null })
     try {
-      await apiClient.post(`/api/git/projects/${projectId}/unstage`, { paths, all })
+      const url = appendWorktreePath(`/api/git/projects/${projectId}/unstage`, get().selectedWorktreePath)
+      await apiClient.post(url, { paths, all })
       await get().fetchWorkingStatus(projectId)
       set({ isLoading: false })
       return true
@@ -557,7 +599,8 @@ export const useGitStore = create<GitState>((set, get) => ({
   commitChanges: async (projectId, message, authorName, authorEmail) => {
     set({ isLoading: true, error: null })
     try {
-      await apiClient.post(`/api/git/projects/${projectId}/commit`, {
+      const url = appendWorktreePath(`/api/git/projects/${projectId}/commit`, get().selectedWorktreePath)
+      await apiClient.post(url, {
         message,
         author_name: authorName,
         author_email: authorEmail,
@@ -602,7 +645,8 @@ export const useGitStore = create<GitState>((set, get) => ({
     set({ isLoadingDiff: true })
     try {
       const params = new URLSearchParams({ file_path: filePath, staged: String(staged) })
-      const data = await apiClient.get<FileDiffResponse>(`/api/git/projects/${projectId}/file-diff?${params}`)
+      const url = appendWorktreePath(`/api/git/projects/${projectId}/file-diff?${params}`, get().selectedWorktreePath)
+      const data = await apiClient.get<FileDiffResponse>(url)
       set((state) => ({
         fileDiffs: { ...state.fileDiffs, [`${filePath}:${staged}`]: data.diff },
         isLoadingDiff: false,
@@ -618,7 +662,8 @@ export const useGitStore = create<GitState>((set, get) => ({
 
   fetchStagedDiff: async (projectId) => {
     try {
-      const data = await apiClient.get<{ diff: string | null }>(`/api/git/projects/${projectId}/staged-diff`)
+      const url = appendWorktreePath(`/api/git/projects/${projectId}/staged-diff`, get().selectedWorktreePath)
+      const data = await apiClient.get<{ diff: string | null }>(url)
       set({ stagedDiff: data.diff })
       return data.diff
     } catch (error) {
@@ -630,7 +675,8 @@ export const useGitStore = create<GitState>((set, get) => ({
   fetchFileHunks: async (projectId, filePath, staged = false) => {
     try {
       const params = new URLSearchParams({ file_path: filePath, staged: String(staged) })
-      const data = await apiClient.get<{ hunks: DiffHunk[] }>(`/api/git/projects/${projectId}/file-hunks?${params}`)
+      const url = appendWorktreePath(`/api/git/projects/${projectId}/file-hunks?${params}`, get().selectedWorktreePath)
+      const data = await apiClient.get<{ hunks: DiffHunk[] }>(url)
       set((state) => ({
         fileHunks: { ...state.fileHunks, [filePath]: data.hunks },
       }))
@@ -644,7 +690,8 @@ export const useGitStore = create<GitState>((set, get) => ({
   stageHunks: async (projectId, filePath, hunkIndices) => {
     set({ isLoading: true, error: null })
     try {
-      await apiClient.post(`/api/git/projects/${projectId}/stage-hunks`, { file_path: filePath, hunk_indices: hunkIndices })
+      const url = appendWorktreePath(`/api/git/projects/${projectId}/stage-hunks`, get().selectedWorktreePath)
+      await apiClient.post(url, { file_path: filePath, hunk_indices: hunkIndices })
       await get().fetchWorkingStatus(projectId)
       set({ isLoading: false })
       return true
@@ -658,7 +705,8 @@ export const useGitStore = create<GitState>((set, get) => ({
   generateDraftCommits: async (projectId, stagedOnly = false) => {
     set({ isGeneratingDrafts: true, error: null })
     try {
-      const data = await apiClient.post<DraftCommitsResponse>(`/api/git/projects/${projectId}/draft-commits`, { staged_only: stagedOnly })
+      const url = appendWorktreePath(`/api/git/projects/${projectId}/draft-commits`, get().selectedWorktreePath)
+      const data = await apiClient.post<DraftCommitsResponse>(url, { staged_only: stagedOnly })
       set({ draftCommits: data.drafts, isGeneratingDrafts: false })
       return data.drafts
     } catch (error) {
@@ -1226,7 +1274,8 @@ export const useGitStore = create<GitState>((set, get) => ({
       if (branch) params.set('branch', branch)
       if (remote) params.set('remote', remote)
 
-      await apiClient.post(`/api/git/projects/${projectId}/push?${params}`)
+      const url = appendWorktreePath(`/api/git/projects/${projectId}/push?${params}`, get().selectedWorktreePath)
+      await apiClient.post(url)
       await get().fetchBranches(projectId)
       set({ isLoading: false })
       return true

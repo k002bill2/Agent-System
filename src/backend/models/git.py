@@ -13,6 +13,24 @@ from utils.time import utcnow
 # =============================================================================
 
 
+class GitWorktree(BaseModel):
+    """Git worktree information."""
+
+    path: str
+    branch: str | None = None
+    head_sha: str = ""
+    is_main: bool = False
+    is_detached: bool = False
+    is_locked: bool = False
+
+
+class GitWorktreeListResponse(BaseModel):
+    """Response for worktree list endpoint."""
+
+    worktrees: list[GitWorktree]
+    total: int
+
+
 class MergeRequestStatus(str, Enum):
     """Status of a merge request."""
 
