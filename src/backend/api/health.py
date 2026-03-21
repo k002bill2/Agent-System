@@ -227,10 +227,12 @@ class InfraStatusResponse(BaseModel):
 
 
 def _check_port(port: int) -> bool:
-    """Check if a port is in use using socket.connect_ex (portable)."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(1)
-        return sock.connect_ex(("127.0.0.1", port)) == 0
+    """Check if a port is in use (IPv4 + IPv6 dual-stack)."""
+    try:
+        with socket.create_connection(("localhost", port), timeout=1):
+            return True
+    except (ConnectionRefusedError, OSError):
+        return False
 
 
 def _get_process_on_port(port: int) -> tuple[int | None, str | None]:
