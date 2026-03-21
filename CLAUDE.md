@@ -7,25 +7,6 @@ This file provides guidance to Claude Code when working with code in this reposi
 **Agent Orchestration Service (AOS)** - LangGraph 기반 멀티 에이전트 오케스트레이션 서비스.
 Claude Code 설정과 실제 시스템 소스 코드를 함께 관리하는 하이브리드 모노레포.
 
-## Directory Structure
-
-```
-Agent System/
-├── .claude/              # Claude Code 설정 (skills, agents, commands, hooks)
-├── src/
-│   ├── backend/          # Python (LangGraph + FastAPI)
-│   │   ├── agents/       # 에이전트 정의 (base, specialists, lead_orchestrator)
-│   │   ├── orchestrator/ # 오케스트레이션 (engine, graph, nodes, parallel)
-│   │   ├── services/     # 비즈니스 로직 (auth, mcp, rag, feedback 등)
-│   │   ├── api/          # FastAPI 라우터
-│   │   ├── db/           # SQLAlchemy ORM
-│   │   └── models/       # 데이터 모델
-│   └── dashboard/        # React 대시보드 (Vite + Tailwind + Zustand)
-├── infra/                # Docker, 스크립트
-├── docs/                 # PRD, TRD, 아키텍처 문서
-└── tests/                # Backend/Dashboard 테스트
-```
-
 ## Tech Stack
 
 | Layer | Stack |
