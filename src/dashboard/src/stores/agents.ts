@@ -160,7 +160,7 @@ interface AgentsState {
 
   // Execution Actions
   executeAnalysis: (analysisId: string, projectId?: string | null) => Promise<string | null>
-  executeWithWarp: (analysisId: string, projectId?: string | null) => Promise<boolean>
+  executeWithWarp: (analysisId: string, projectId?: string | null, branchName?: string) => Promise<boolean>
   clearExecution: () => void
 
   // History Actions
@@ -171,6 +171,31 @@ interface AgentsState {
 }
 
 const API_BASE = getApiUrl('/api')
+
+/**
+ * 태스크 입력에서 git 브랜치명을 자동 생성.
+ * 형식: feature/task-{sanitized}-{yyyyMMddHHmm}
+ */
+export function generateBranchName(taskInput: string): string {
+  const sanitized = taskInput
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .substring(0, 40)
+    .replace(/-+$/, '')
+
+  const now = new Date()
+  const ts = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+    String(now.getHours()).padStart(2, '0'),
+    String(now.getMinutes()).padStart(2, '0'),
+  ].join('')
+
+  return `feature/task-${sanitized || 'unnamed'}-${ts}`
+}
 
 /**
  * 분석 결과를 Claude Code CLI 프롬프트로 변환.
@@ -560,7 +585,7 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
   },
 
   // Execute analysis via Warp terminal with Claude CLI
-  executeWithWarp: async (analysisId: string, projectId?: string | null) => {
+  executeWithWarp: async (analysisId: string, projectId?: string | null, branchName?: string) => {
     set({ executingAnalysisId: analysisId, executionError: null })
 
     try {
@@ -589,6 +614,7 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
         new_window: false, // Prefer tab in existing Warp window
         use_claude_cli: true,
         image_paths: analysisData.image_paths || null,
+        branch_name: branchName || null,
       })
 
       if (!warpResult.success) {

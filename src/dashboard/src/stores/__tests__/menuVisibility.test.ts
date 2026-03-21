@@ -10,6 +10,15 @@ vi.mock('../../services/apiClient', () => ({
   },
 }))
 
+vi.mock('../auth', () => ({
+  useAuthStore: {
+    getState: () => ({
+      isAuthenticated: () => true,
+      isTokenExpired: () => false,
+    }),
+  },
+}))
+
 import { useMenuVisibilityStore } from '../menuVisibility'
 import { apiClient } from '../../services/apiClient'
 

@@ -15,6 +15,7 @@ Reference:
 
 import logging
 import os
+import shlex
 import subprocess
 import urllib.parse
 from datetime import datetime
@@ -253,6 +254,7 @@ class WarpService:
         command: str,
         title: str | None = None,
         new_window: bool = True,
+        branch_name: str | None = None,
     ) -> dict:
         """
         Open a path in Warp and execute a command using Launch Configuration.
@@ -298,7 +300,11 @@ class WarpService:
                             "layout": {
                                 "cwd": path,
                                 "commands": [
-                                    {"exec": command},
+                                    {
+                                        "exec": f"git checkout -b {shlex.quote(branch_name)} && {command}"
+                                    }
+                                    if branch_name
+                                    else {"exec": command},
                                 ],
                             },
                         }

@@ -4,9 +4,10 @@ Open projects in Warp terminal, check status, cleanup configs.
 """
 
 import os
+import re
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from models.project import get_project
 from services.warp_service import get_warp_service
@@ -30,6 +31,20 @@ class WarpOpenRequest(BaseModel):
     image_paths: list[str] | None = Field(
         None, description="Image file paths to pass to Claude CLI via --image flags"
     )
+    branch_name: str | None = Field(
+        None, description="Feature branch to create before execution (git checkout -b)"
+    )
+
+    @field_validator("branch_name")
+    @classmethod
+    def validate_branch_name(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not re.match(r"^[a-zA-Z0-9/_.-]+$", v):
+            raise ValueError("Branch name contains invalid characters")
+        if len(v) > 100:
+            raise ValueError("Branch name too long (max 100)")
+        return v
 
 
 class WarpOpenResponse(BaseModel):
@@ -87,6 +102,7 @@ async def open_in_warp(request: WarpOpenRequest):
             command=actual_command,
             title=tab_title,
             new_window=request.new_window,
+            branch_name=request.branch_name,
         )
     else:
         result = warp.open_path(

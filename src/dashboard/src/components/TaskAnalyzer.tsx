@@ -19,7 +19,7 @@ import {
   readTextFile,
   validateMdFile,
 } from '../lib/fileAttachment'
-import { useAgentsStore, TaskAnalysisHistory } from '../stores/agents'
+import { useAgentsStore, TaskAnalysisHistory, generateBranchName } from '../stores/agents'
 import { Project, useOrchestrationStore } from '../stores/orchestration'
 import { useNavigationStore } from '../stores/navigation'
 import { TaskEvaluationCard } from './feedback/TaskEvaluationCard'
@@ -133,6 +133,8 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
   const [taskInput, setTaskInput] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
+  const [showBranchConfirm, setShowBranchConfirm] = useState(false)
+  const [branchName, setBranchName] = useState('')
   const pendingProcessedRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const mdFileInputRef = useRef<HTMLInputElement>(null)
@@ -201,11 +203,21 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
     }
   }
 
-  const handleExecute = async () => {
+  const handleExecute = () => {
     const analysisId = lastAnalysis?.analysis_id
     if (!analysisId || executingAnalysisId) return
 
-    await executeWithWarp(analysisId, projectFilter)
+    const autoName = generateBranchName(taskInput || 'task')
+    setBranchName(autoName)
+    setShowBranchConfirm(true)
+  }
+
+  const handleConfirmExecute = async () => {
+    const analysisId = lastAnalysis?.analysis_id
+    if (!analysisId) return
+
+    setShowBranchConfirm(false)
+    await executeWithWarp(analysisId, projectFilter, branchName || undefined)
   }
 
   // Image handling + OCR
@@ -386,8 +398,8 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               placeholder="Enter a task to analyze... (이미지/MD 문서를 붙여넣기하거나 드래그하세요)"
-              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
-              rows={3}
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none text-sm"
+              rows={6}
             />
 
             {/* Image Previews */}
@@ -767,29 +779,64 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
                   )}
                   {/* Execute with Claude Code Button */}
                   {lastAnalysis.analysis_id && (
-                    <button
-                      onClick={handleExecute}
-                      disabled={!!executingAnalysisId || isLoading || !projectFilter}
-                      title={!projectFilter ? '프로젝트를 먼저 선택하세요' : 'Warp 터미널에서 Claude Code 실행'}
-                      className={cn(
-                        'px-3 py-1.5 rounded-lg font-medium text-xs flex items-center gap-1.5 transition-colors',
-                        executingAnalysisId || !projectFilter
-                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
-                          : 'bg-green-500 hover:bg-green-600 text-white'
+                    <div className="relative">
+                      <button
+                        onClick={handleExecute}
+                        disabled={!!executingAnalysisId || isLoading || !projectFilter}
+                        title={!projectFilter ? '프로젝트를 먼저 선택하세요' : 'Warp 터미널에서 Claude Code 실행'}
+                        className={cn(
+                          'px-3 py-1.5 rounded-lg font-medium text-xs flex items-center gap-1.5 transition-colors',
+                          executingAnalysisId || !projectFilter
+                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
+                            : 'bg-green-500 hover:bg-green-600 text-white'
+                        )}
+                      >
+                        {executingAnalysisId ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            Opening Warp...
+                          </>
+                        ) : (
+                          <>
+                            <Terminal className="w-3.5 h-3.5" />
+                            Execute with Claude Code
+                          </>
+                        )}
+                      </button>
+
+                      {/* Branch Confirm Popover */}
+                      {showBranchConfirm && (
+                        <div className="absolute bottom-full right-0 mb-2 w-80 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg p-4 z-50">
+                          <div className="flex items-center gap-2 mb-3">
+                            <GitBranch className="w-4 h-4 text-primary-500" />
+                            <span className="text-sm font-medium text-gray-900 dark:text-white">Feature Branch에서 실행</span>
+                          </div>
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Branch name</label>
+                          <input
+                            type="text"
+                            value={branchName}
+                            onChange={(e) => setBranchName(e.target.value)}
+                            className="w-full px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 font-mono"
+                            aria-label="Branch name"
+                          />
+                          <div className="flex justify-end gap-2 mt-3">
+                            <button
+                              onClick={() => setShowBranchConfirm(false)}
+                              className="px-3 py-1.5 text-xs rounded-md bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={handleConfirmExecute}
+                              disabled={!branchName.trim()}
+                              className="px-3 py-1.5 text-xs rounded-md bg-green-500 hover:bg-green-600 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                              Execute
+                            </button>
+                          </div>
+                        </div>
                       )}
-                    >
-                      {executingAnalysisId ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          Opening Warp...
-                        </>
-                      ) : (
-                        <>
-                          <Terminal className="w-3.5 h-3.5" />
-                          Execute with Claude Code
-                        </>
-                      )}
-                    </button>
+                    </div>
                   )}
                 </div>
               </div>
