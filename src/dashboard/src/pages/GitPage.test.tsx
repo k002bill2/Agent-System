@@ -113,9 +113,8 @@ const defaultGitStoreState = {
   createBranchProtectionRule: vi.fn(),
   updateBranchProtectionRule: vi.fn(),
   deleteBranchProtectionRule: vi.fn(),
-  // Worktree
   worktrees: [],
-  selectedWorktreePath: null,
+  selectedWorktreePath: null as string | null,
   fetchWorktrees: vi.fn(),
   setSelectedWorktree: vi.fn(),
 }
