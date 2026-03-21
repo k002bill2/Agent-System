@@ -322,4 +322,18 @@ export const apiClient = createApiClient({
   timeout: 30_000,
 })
 
+// Auth interceptor: 매 요청에 Authorization 헤더 자동 추가
+apiClient.addRequestInterceptor({
+  onRequest: (config) => {
+    const { accessToken } = useAuthStore.getState()
+    if (accessToken) {
+      return {
+        ...config,
+        headers: { ...config.headers, Authorization: `Bearer ${accessToken}` },
+      }
+    }
+    return config
+  },
+})
+
 export type { ApiClient }
