@@ -52,7 +52,6 @@ from models.git import (
     # Working directory models (NEW)
     GitWorkingStatus,
     # Worktree models
-    GitWorktree,
     GitWorktreeListResponse,
     MergeAbortResult,
     MergeExecuteRequest,
@@ -128,14 +127,14 @@ def get_git_service_for_project(project_id: str, worktree_path: str | None = Non
         if resolved_requested not in valid_paths:
             raise HTTPException(
                 status_code=403,
-                detail=f"Invalid worktree path: not a registered worktree",
+                detail="Invalid worktree path: not a registered worktree",
             )
         # Return a GitService instance pointing to the worktree
         wt_service = get_git_service(resolved_requested)
         if not wt_service:
             raise HTTPException(
                 status_code=400,
-                detail=f"Worktree path is not a valid Git working directory",
+                detail="Worktree path is not a valid Git working directory",
             )
         return wt_service
 
