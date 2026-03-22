@@ -399,7 +399,7 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
               onPaste={handlePaste}
               placeholder="Enter a task to analyze... (이미지/MD 문서를 붙여넣기하거나 드래그하세요)"
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none text-sm"
-              rows={6}
+              rows={10}
             />
 
             {/* Image Previews */}

@@ -1624,7 +1624,7 @@ def list_claude_processes() -> list[ClaudeProcess]:
                 command = parts[10]
 
                 # Skip if not a main Claude process
-                if "claude" not in command or "/claude" not in command:
+                if "claude" not in command and "/claude" not in command:
                     continue
 
                 # Estimate memory in MB (RSS is in KB on macOS)

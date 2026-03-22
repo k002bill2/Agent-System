@@ -139,8 +139,8 @@ class TaskAnalysisService:
         results = []
 
         for data in self._analyses.values():
-            # 필터 적용
-            if params.project_id and data["project_id"] != params.project_id:
+            # 필터 적용: project_id가 일치하거나 NULL인 레코드 포함
+            if params.project_id and data["project_id"] is not None and data["project_id"] != params.project_id:
                 continue
             if params.user_id and data["user_id"] != params.user_id:
                 continue
@@ -227,10 +227,16 @@ class TaskAnalysisService:
             query = select(TaskAnalysisModel)
             count_query = select(func.count(TaskAnalysisModel.id))
 
-            # Filters
+            # Filters: include records matching project_id OR with NULL project_id
             if params.project_id:
-                query = query.where(TaskAnalysisModel.project_id == params.project_id)
-                count_query = count_query.where(TaskAnalysisModel.project_id == params.project_id)
+                from sqlalchemy import or_
+
+                pid_filter = or_(
+                    TaskAnalysisModel.project_id == params.project_id,
+                    TaskAnalysisModel.project_id.is_(None),
+                )
+                query = query.where(pid_filter)
+                count_query = count_query.where(pid_filter)
             if params.user_id:
                 query = query.where(TaskAnalysisModel.user_id == params.user_id)
                 count_query = count_query.where(TaskAnalysisModel.user_id == params.user_id)

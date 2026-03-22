@@ -7,6 +7,7 @@
 import { create } from 'zustand'
 import { apiClient } from '../services/apiClient'
 import { getApiUrl } from '../config/api'
+import { useAuthStore } from './auth'
 
 // Types
 export type AgentCategory = 'development' | 'orchestration' | 'quality' | 'research'
@@ -407,8 +408,15 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
           formData.append('images', img)
         }
 
+        const headers: Record<string, string> = {}
+        const { accessToken } = useAuthStore.getState()
+        if (accessToken) {
+          headers['Authorization'] = `Bearer ${accessToken}`
+        }
+
         const response = await fetch(`${API_BASE}/agents/orchestrate/analyze-with-images`, {
           method: 'POST',
+          headers,
           body: formData,
         })
         if (!response.ok) {
@@ -514,8 +522,15 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
       const formData = new FormData()
       formData.append('image', file)
 
+      const ocrHeaders: Record<string, string> = {}
+      const { accessToken: ocrToken } = useAuthStore.getState()
+      if (ocrToken) {
+        ocrHeaders['Authorization'] = `Bearer ${ocrToken}`
+      }
+
       const response = await fetch(`${API_BASE}/agents/ocr`, {
         method: 'POST',
+        headers: ocrHeaders,
         body: formData,
       })
 
