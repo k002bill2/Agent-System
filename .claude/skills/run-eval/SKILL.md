@@ -1,8 +1,9 @@
 ---
 name: run-eval
-description: AI 에이전트 평가 태스크 실행 및 pass@k 지표 계산.
-allowed-tools: Read, Grep, Glob, Bash
-argument-hint: "[task_id | --category <type> | --all] [--k=N]"
+description: >
+  AI 에이전트 평가 태스크 실행 및 pass@k 지표 계산.
+  Use when: (1) 에이전트 성능 벤치마크 실행, (2) --category로 특정 에이전트 유형 테스트,
+  (3) --all로 전체 평가, (4) --k=N으로 반복 실행
 ---
 
 # AI Agent Evaluation Runner

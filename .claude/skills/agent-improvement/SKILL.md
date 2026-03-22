@@ -1,7 +1,6 @@
 ---
 name: agent-improvement
-description: Self-improvement loop for multi-agent workflows. Diagnose failures, improve tool descriptions, and learn from success/failure patterns.
-disable-model-invocation: true
+description: Self-improvement loop for multi-agent workflows. Use after eval runs (/run-eval), after failed agent tasks, during periodic trace reviews, or when agent success rate drops below 90%.
 ---
 
 # Agent Improvement
@@ -10,13 +9,6 @@ disable-model-invocation: true
 
 Diagnose agent failures and propose targeted improvements.
 Closes the feedback loop between observation (tracing) and action (prompt/skill refinement).
-
-## When to Use
-
-- After eval runs (`/run-eval`) to analyze pass/fail patterns
-- After failed agent tasks to identify root causes
-- Periodic review of accumulated trace data
-- When agent success rate drops below target (< 90%)
 
 ## Diagnosis Workflow
 

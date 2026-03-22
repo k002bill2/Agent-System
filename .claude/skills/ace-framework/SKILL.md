@@ -1,7 +1,6 @@
 ---
 name: ace-framework
-description: ACE (Autonomous Cognitive Entity) Framework - 4-Pillar governance model for safe, coordinated multi-agent execution. Defines soft constraints (prompts), hard constraints (hooks), boundaries (workspace isolation), and optimization (analytics).
-disable-model-invocation: true
+description: ACE (Autonomous Cognitive Entity) Framework - 4-Pillar governance model for safe, coordinated multi-agent execution. Use when adding new governance rules/constraints, designing agent boundaries, or understanding the enforcement architecture (pillars, layers, delegation map).
 ---
 
 # ACE Framework

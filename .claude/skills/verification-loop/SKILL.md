@@ -1,7 +1,9 @@
 ---
 name: verification-loop
-description: Boris Cherny style verification feedback loop automation. Run type check, lint, test, and build verification. Use after code changes to ensure quality.
-allowed-tools: Read, Grep, Glob, Bash
+description: >
+  Boris Cherny style verification feedback loop automation. Run type check, lint, test, and build verification.
+  Use when: (1) 컴포넌트 구현 완료 후, (2) 리팩토링 후, (3) PR 생성 전 최종 검증,
+  (4) 코드 변경 후 타입/린트/테스트/빌드 통합 확인
 ---
 
 # Verification Loop Skill
@@ -162,3 +164,4 @@ npm run type-check && npm test
 ## 관련 리소스
 
 - [/check-health 커맨드](../../commands/check-health.md)
+- [검증 패턴 레퍼런스](references/verification-patterns.md) — 패턴별 예제 및 시나리오

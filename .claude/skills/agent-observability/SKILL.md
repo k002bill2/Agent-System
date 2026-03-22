@@ -1,7 +1,6 @@
 ---
 name: agent-observability
-description: Production tracing and metrics for multi-agent workflows. Track agent decisions, tool calls, and performance without monitoring conversation content.
-disable-model-invocation: true
+description: Production tracing and metrics for multi-agent workflows. Use when debugging agent behavior, analyzing performance/failure patterns, or setting up observability for new agent workflows.
 ---
 
 # Agent Observability

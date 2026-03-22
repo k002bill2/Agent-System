@@ -1,8 +1,9 @@
 ---
 name: merge-worktree
-description: Squash-merge the current worktree branch into the main branch (or a specified target). Analyzes git history and source code to craft a comprehensive commit message.
-argument-hint: "[target-branch]"
-disable-model-invocation: true
+description: >
+  Squash-merge the current worktree branch into the main branch (or a specified target).
+  Analyzes git history and source code to craft a comprehensive commit message.
+  Use when: worktree 작업 완료 후 main 브랜치로 squash-merge할 때
 ---
 
 # Merge Worktree
