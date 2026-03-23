@@ -30,6 +30,11 @@ Thumbs.db
 logs/
 *.log
 
+# Database backups
+*.dump
+*.rdb
+*.snapshot
+
 # Backend data (playground sessions, etc.)
 src/backend/data/
 
