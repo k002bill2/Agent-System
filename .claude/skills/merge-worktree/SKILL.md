@@ -1,16 +1,18 @@
 ---
 name: merge-worktree
-description: >
-  Squash-merge the current worktree branch into the main branch (or a specified target).
-  Analyzes git history and source code to craft a comprehensive commit message.
-  Use when: worktree 작업 완료 후 main 브랜치로 squash-merge할 때
+description: "Use when worktree work is complete and ready to squash-merge into main branch, or when needing to craft a comprehensive commit message from worktree changes."
+disable-model-invocation: true
 ---
 
 # Merge Worktree
 
-Squash-merge the current worktree branch back into the target branch with a comprehensive, structured commit message.
+## Overview
 
-## Current context
+Squash-merge the current worktree branch back into the target branch with a comprehensive, structured commit message. Ensures clean git history by consolidating all worktree commits into a single well-crafted commit.
+
+**RELATED:** `superpowers:finishing-a-development-branch`
+
+## Current Context
 
 - Git dir: `!git rev-parse --git-dir`
 - Current branch: `!git branch --show-current`
@@ -64,7 +66,7 @@ This is the most critical phase. You must deeply understand what was done before
 
 ---
 
-### Phase 3: Target branch preparation
+### Phase 3: Target Branch Preparation
 
 1. **Get the original repo path** (from Phase 1 step 4).
 
@@ -76,7 +78,7 @@ This is the most critical phase. You must deeply understand what was done before
 
 ---
 
-### Phase 4: Squash merge
+### Phase 4: Squash Merge
 
 1. **Ensure target branch is checked out** in the original repo:
    ```
@@ -98,7 +100,7 @@ This is the most critical phase. You must deeply understand what was done before
 
 ---
 
-### Phase 5: Craft commit message and commit
+### Phase 5: Craft Commit Message and Commit
 
 Based on your Phase 2 research, write the commit message following this **exact structure**:
 
@@ -146,9 +148,25 @@ EOF
 
 ---
 
-## Important notes
+## Common Mistakes
+
+| Mistake | Correction |
+|---------|-----------|
+| Running from a non-worktree directory | Phase 1 must verify `git rev-parse --git-dir` contains `/worktrees/` — stop immediately if not |
+| Writing commit message before reading the full diff | Phase 2 research must be complete before Phase 5; shallow research = poor commit messages |
+| Auto-resolving merge conflicts | Never auto-resolve — stop and report conflicts to the user |
+| Using `--no-verify` to skip pre-commit hooks | Never skip hooks; fix the underlying issue instead |
+| Forgetting to fetch the latest target branch | Always fetch in Phase 3 to avoid merge issues with stale local branches |
+| Including implementation details in the commit summary line | Summary = what and why in imperative mood; details go in the Changes bullets |
+
+## Important Notes
 
 - **Never force-push or use destructive git operations** without explicit user confirmation.
 - **Never skip pre-commit hooks** (`--no-verify`).
 - If anything unexpected happens at any phase, **stop and explain** rather than guessing.
 - The commit message quality is paramount — take time in Phase 2 to truly understand the changes.
+
+## References
+
+- Git worktree docs: `git help worktree`
+- Conventional Commits: https://www.conventionalcommits.org/

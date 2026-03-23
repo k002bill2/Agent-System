@@ -1,15 +1,14 @@
 ---
 name: ace-framework
-description: ACE (Autonomous Cognitive Entity) Framework - 4-Pillar governance model for safe, coordinated multi-agent execution. Use when adding new governance rules/constraints, designing agent boundaries, or understanding the enforcement architecture (pillars, layers, delegation map).
+description: "Use when adding governance rules or constraints, designing agent boundaries, understanding the enforcement architecture, or debugging agent coordination issues in multi-agent workflows."
+user-invocable: false
 ---
 
 # ACE Framework
 
-## Purpose
+## Overview
 
-Governance layer for multi-agent orchestration in Agent System.
-Ensures safe, predictable, and observable agent behavior through a 4-Pillar model
-and a 6-Layer execution lifecycle.
+ACE (Autonomous Cognitive Entity) is the governance layer for multi-agent orchestration. It ensures safe, predictable, and observable agent behavior through a 4-Pillar model and a 6-Layer execution lifecycle.
 
 ## 4-Pillar Model
 
@@ -101,9 +100,20 @@ When adding a new governance rule, determine:
    - Ensure enforcement-matrix.md row count matches hooks.json entries
    - Test new constraint with a trial agent run
 
-## Reference
+## Common Mistakes
+
+| Mistake | Correction |
+|---------|-----------|
+| Adding enforcement logic as P1 (soft) when it must not be bypassed | If agents must not bypass it, use P2 (hard constraint via hooks.json) |
+| Editing hooks.json without updating enforcement-matrix.md | Always update both — matrix row count must match hooks.json entries |
+| Placing a new rule at wrong layer (e.g., L4 runtime rule in L1 ethics) | Re-read the layer definitions; ethics = safety boundaries, runtime = agent behavior |
+| Skipping L5 verification after adding a new constraint | Always run a trial agent to confirm the constraint works as intended |
+| Confusing P3 (boundary/isolation) with P2 (hard enforcement) | P3 is about workspace separation; P2 is about hook-enforced rules |
+
+## References
 
 - Enforcement Matrix: `references/enforcement-matrix.md`
 - Hooks Configuration: `.claude/hooks.json`
 - Agent Definitions: `.claude/agents/`
 - Quality Standards: `.claude/agents/shared/quality-reference.md`
+- **REQUIRED:** Use `superpowers:agent-observability` for P4 tracing setup

@@ -1,14 +1,16 @@
 ---
 name: verify-frontend
-description: >
-  React/TypeScript/Tailwind 프론트엔드 패턴 검증. 컴포넌트 구현 후, PR 전 사용.
-  Use when: (1) React 컴포넌트를 새로 생성/수정한 후, (2) Dashboard PR 생성 전,
-  (3) 프론트엔드 코드 리뷰 시
+description: "Use when verifying React/TypeScript/Tailwind patterns after component creation or modification, before Dashboard PR, or during frontend code review. Checks memo/displayName, TypeScript any, inline styles, accessibility, and dark mode."
+allowed-tools: Bash, Grep, Glob, Read
 ---
 
-# 프론트엔드 패턴 검증
+# Verify Frontend
 
-검증 스크립트를 실행하여 5개 항목을 자동 검사:
+## Overview
+
+React 컴포넌트의 5가지 필수 패턴(memo/displayName, TypeScript any, 인라인 스타일, 접근성, 다크모드)을 자동 검증하는 스킬. 컴포넌트 생성/수정 후 또는 PR 전에 실행한다.
+
+## 검증 실행
 
 ```bash
 bash scripts/verify.sh
@@ -40,7 +42,17 @@ bash scripts/verify.sh
 - **동적 스타일** — 런타임 계산 필요 시 인라인 스타일 허용 (transform, width 등)
 - **서드파티 래퍼** — 외부 라이브러리 props 전달 시 any 허용
 
-## 관련 파일
+## Common Mistakes
+
+| 실수 | 수정 |
+|------|------|
+| 테스트 파일에서 FAIL 보고 | 예외 목록 확인 — 테스트 파일은 면제 |
+| `displayName` 없이 `memo()` 적용 | 반드시 `Component.displayName = 'Component'` 추가 |
+| `bg-gray-100` 사용 후 dark 미대응 | `dark:bg-gray-800` 등 대응 클래스 추가 |
+| `onClick` 있는 `div` 사용 | `button` 시맨틱 태그로 변경 + `aria-label` |
+| 동적 값에 Tailwind 강제 | `transform`, `width` 등 런타임 값은 인라인 예외 |
+
+## References
 
 | 경로 | 용도 |
 |------|------|

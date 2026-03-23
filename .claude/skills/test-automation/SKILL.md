@@ -1,9 +1,15 @@
 ---
 name: test-automation
-description: Generate comprehensive Vitest tests for AOS Dashboard React components, hooks, and stores. Use when writing new tests, improving coverage, doing TDD, or debugging failing tests.
+description: "Use when writing Vitest tests, improving test coverage below 75%, debugging failing tests, or doing TDD for AOS Dashboard React components, hooks, and stores."
 ---
 
-# Test Automation Skill
+# Test Automation
+
+## Overview
+
+AOS Dashboard의 React 컴포넌트, 훅, 스토어에 대한 Vitest 테스트를 작성하고 커버리지 목표를 달성하는 스킬. AAA 패턴과 사용자 행동 중심 테스트를 원칙으로 한다.
+
+**REQUIRED BACKGROUND:** superpowers:test-driven-development (TDD 시)
 
 ## Coverage Requirements
 
@@ -80,7 +86,18 @@ When generating tests, provide:
 - Test user behavior, not implementation details
 - One primary assertion per test case
 
-## Reference
+## Common Mistakes
+
+| 실수 | 수정 |
+|------|------|
+| `jest.fn()` 사용 | `vi.fn()` / `vi.mock()` (Vitest 전용) |
+| `act()` 경고 무시 | `waitFor` 또는 `findBy*`로 비동기 래핑 |
+| 구현 세부사항 테스트 | 사용자 행동 중심 (`getByRole`, `getByText`) |
+| mock cleanup 누락 | `afterEach(() => vi.restoreAllMocks())` |
+| 커버리지 미달 방치 | Step 6에서 uncovered lines 확인 후 테스트 추가 |
+| 상대경로 import | `@/components/...` path alias 사용 |
+
+## References
 
 Detailed test patterns, mock examples, complete test suites, and configuration:
 `references/vitest-patterns.md`
