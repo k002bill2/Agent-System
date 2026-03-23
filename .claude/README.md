@@ -42,7 +42,6 @@ Claude Code configuration for AOS (Agent Orchestration Service) Dashboard.
 | `test-automation` | Vitest 테스트, 커버리지 분석 |
 | `verification-loop` | 검증 피드백 루프 (verify-app 병합) |
 | `run-eval` | AI 에이전트 평가 및 pass@k 지표 계산 |
-| `ace-framework` | 4-Pillar 거버넌스 모델 (참조 문서) |
 
 ## Sub-agents
 

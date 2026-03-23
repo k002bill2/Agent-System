@@ -80,4 +80,3 @@ Diagnosis ──> Proposal ──> Apply ──> Re-evaluate
 - Agent definitions: `.claude/agents/*.md`
 - Quality reference: `.claude/agents/shared/quality-reference.md`
 - Observability skill: `.claude/skills/agent-observability/SKILL.md`
-- ACE Framework: `.claude/skills/ace-framework/SKILL.md` (P4 pillar)

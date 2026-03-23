@@ -2,7 +2,7 @@
 
 LangGraph 기반 멀티 에이전트 오케스트레이션 서비스입니다.
 
-[![CI](https://github.com/k002bill2/Agent-Orchestrator/actions/workflows/ci.yml/badge.svg)](https://github.com/k002bill2/Agent-Orchestrator/actions/workflows/ci.yml)
+[![CI](https://github.com/k002bill2/Agent-System/actions/workflows/ci.yml/badge.svg)](https://github.com/k002bill2/Agent-System/actions/workflows/ci.yml)
 [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template)
 
 ## Features
@@ -18,8 +18,8 @@ LangGraph 기반 멀티 에이전트 오케스트레이션 서비스입니다.
 
 ```bash
 # 1. 저장소 클론
-git clone https://github.com/k002bill2/Agent-Orchestrator.git
-cd Agent-Orchestrator
+git clone https://github.com/k002bill2/Agent-System.git
+cd Agent-System
 
 # 2. 환경변수 설정
 cp .env.example .env
