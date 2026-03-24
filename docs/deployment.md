@@ -1,17 +1,18 @@
 # AOS 배포 가이드
 
-이 문서는 Agent Orchestration Service (AOS)를 Railway 또는 Render에 배포하는 방법을 설명합니다.
+이 문서는 Agent Orchestration Service (AOS)를 Docker Compose(Self-hosted), Railway, 또는 Render에 배포하는 방법을 설명합니다.
 
 ## 목차
 
 1. [사전 요구사항](#사전-요구사항)
-2. [Railway 배포](#railway-배포)
-3. [Render 배포](#render-배포)
-4. [환경 변수 설정](#환경-변수-설정)
-5. [CI/CD 파이프라인](#cicd-파이프라인)
-6. [모니터링 설정](#모니터링-설정)
-7. [트러블슈팅](#트러블슈팅)
-8. [롤백 절차](#롤백-절차)
+2. [Docker Compose 배포 (Self-hosted)](#docker-compose-배포-self-hosted)
+3. [Railway 배포](#railway-배포)
+4. [Render 배포](#render-배포)
+5. [환경 변수 설정](#환경-변수-설정)
+6. [CI/CD 파이프라인](#cicd-파이프라인)
+7. [모니터링 설정](#모니터링-설정)
+8. [트러블슈팅](#트러블슈팅)
+9. [롤백 절차](#롤백-절차)
 
 ---
 
@@ -26,6 +27,59 @@
 - **Slack/Discord** - 알림 웹훅
 - **Sentry** - 에러 추적
 - **AWS S3 또는 GCS** - 백업 저장소
+
+---
+
+## Docker Compose 배포 (Self-hosted)
+
+### Docker 서비스 구성
+
+프로젝트 루트의 `docker-compose.yml`에 전체 서비스가 정의되어 있습니다.
+
+| 서비스 | 이미지 | 포트 | healthcheck |
+|--------|--------|------|-------------|
+| postgres | postgres:16-alpine | 5432 | `pg_isready -U aos -d aos` |
+| redis | redis:7-alpine | 6379 | `redis-cli ping` |
+| qdrant | qdrant/qdrant:latest | 6333, 6334 | 없음 (`service_started`) |
+| backend | aos-backend (FastAPI) | 8000 | `curl -f http://localhost:8000/health` |
+| dashboard | aos-dashboard (Nginx) | 5173→80 | backend healthy 이후 시작 |
+
+> **Qdrant healthcheck 관련**: Qdrant 공식 이미지에는 `curl`/`wget`이 포함되어 있지 않아 Docker healthcheck을 설정할 수 없습니다. `docker-compose.yml`에서는 `condition: service_started`로 Qdrant 시작만 확인합니다. Qdrant의 `/healthz` 엔드포인트는 호스트에서 `curl http://localhost:6333/healthz`로 외부 확인 가능합니다.
+
+### 배포 절차
+
+```bash
+# 1. 환경 변수 설정
+cp .env.example .env
+# .env 편집: GOOGLE_API_KEY, SESSION_SECRET_KEY 등 설정
+
+# 2. 전체 서비스 시작 (프로젝트 루트에서 실행)
+docker compose up -d
+
+# 3. 상태 확인
+docker compose ps
+
+# 4. 로그 확인
+docker compose logs -f backend
+```
+
+### 개발 환경 (인프라만)
+
+로컬 개발 시에는 인프라(DB)만 Docker로, Backend/Dashboard는 직접 실행합니다:
+
+```bash
+# 인프라만 시작 (프로젝트 루트에서)
+docker compose up -d postgres redis qdrant
+
+# 또는 dev.sh 스크립트 사용
+./infra/scripts/dev.sh
+```
+
+> **참고**: `infra/docker/docker-compose.yml`은 개발용 compose 파일로, Backend/Dashboard를 `profiles: [full]`로 포함합니다. 프로덕션/Self-hosted 배포에는 루트의 `docker-compose.yml`을 사용하세요.
+
+### Ollama 연동 (Docker 환경)
+
+Docker 컨테이너 내부에서 호스트의 Ollama에 접근하려면 `localhost` 대신 `host.docker.internal`을 사용해야 합니다. 루트 `docker-compose.yml`에서는 이 값이 하드코딩되어 있어 `.env`의 `OLLAMA_BASE_URL` 설정과 무관하게 올바르게 동작합니다.
 
 ---
 
@@ -68,7 +122,7 @@ Railway 대시보드에서 다음 서비스를 추가합니다:
 3. Settings:
    - **Root Directory**: `src/backend`
    - **Dockerfile Path**: `Dockerfile.full`
-   - **Health Check Path**: `/health/ready`
+   - **Health Check Path**: `/health` (기본) 또는 `/health/ready` (DB 연결 포함 확인)
 
 #### 4. Dashboard 설정
 
@@ -126,7 +180,7 @@ GOOGLE_API_KEY=<your-api-key>
    - **Name**: aos-backend
    - **Dockerfile Path**: `./src/backend/Dockerfile.full`
    - **Docker Context**: `./src/backend`
-   - **Health Check Path**: `/health/ready`
+   - **Health Check Path**: `/health` (기본) 또는 `/health/ready` (DB 연결 포함 확인)
 
 #### 2. Static Site (Dashboard) 생성
 
@@ -244,12 +298,20 @@ BACKUP_S3_BUCKET=<bucket-name>
 
 ### 헬스체크 엔드포인트
 
-| 엔드포인트 | 용도 | 응답 |
-|------------|------|------|
-| `/health` | 기본 헬스체크 | `{"status": "healthy"}` |
-| `/health/ready` | 준비 상태 (K8s readiness) | Ready / 503 |
-| `/health/live` | 생존 상태 (K8s liveness) | OK / 503 |
-| `/health/detailed` | 상세 상태 | 컴포넌트별 상태 |
+| 엔드포인트 | 용도 | 성공 응답 | 실패 응답 |
+|------------|------|-----------|-----------|
+| `/health` | 기본 헬스체크 (로드밸런서) | 200 `{"status": "healthy", "version": "...", "uptime_seconds": ...}` | 503 |
+| `/health/ready` | K8s readiness probe (DB 등 외부 의존성 확인) | 200 `Ready` | 503 `Not Ready` |
+| `/health/live` | K8s liveness probe (프로세스 생존만 확인) | 200 `OK` | 503 `Not OK` |
+| `/health/detailed` | 상세 상태 (컴포넌트별) | 200 SystemHealth JSON | 503 |
+| `/health/database` | DB 연결 상태 | 200 | 503 또는 404 |
+| `/health/redis` | Redis 연결 상태 | 200 | 503 또는 404 |
+| `/health/llm` | LLM Provider 상태 | 200 | 503 또는 404 |
+| `/health/services` | 인프라 서비스 포트 상태 | 200 서비스 목록 | - |
+
+> **참고**: Docker Compose의 backend healthcheck은 `/health`를 사용합니다. Railway/Render에서는 용도에 따라 `/health` (기본) 또는 `/health/ready` (DB 포함 확인)를 선택하세요.
+>
+> health 엔드포인트는 prefix 없이 (`/health`)와 prefix 포함 (`/api/health`) 모두에 마운트되어 있습니다.
 
 ### Slack 알림 설정
 

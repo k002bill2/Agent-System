@@ -996,7 +996,79 @@ class ClaudeConfigService:
 
 ---
 
-## 43. Timezone-aware UTC Helpers
+## 43. Automation Loop Service
+
+주기적 조건 모니터링 및 자동 액션 실행 루프 시스템:
+
+```python
+class AutomationLoopService:
+    async def create_loop(config: AutomationLoopConfig) -> str
+    async def start_loop(loop_id: str) -> None
+    async def stop_loop(loop_id: str) -> None
+    async def delete_loop(loop_id: str) -> bool
+    async def list_loops() -> list[LoopStatus]
+    async def get_loop_status(loop_id: str) -> LoopStatus | None
+```
+
+**구성 요소**:
+- `ConditionDef`: 메트릭 기반 트리거 조건 (metric, operator, threshold, duration)
+- `ActionDef`: 조건 충족 시 실행할 액션 (webhook, workflow, log, notify, pipeline)
+- `AutomationLoopConfig`: 루프 설정 (이름, 주기, 최대 반복, 쿨다운)
+
+**조건 연산자**: `gt`, `lt`, `eq`, `ne`, `gte`, `lte`
+
+**루프 상태**: `pending` -> `running` -> `stopped` | `completed` | `error`
+
+**특징**:
+- In-memory 스토리지 (서버 재시작 시 초기화)
+- 최대 100개 루프 동시 관리
+- 쿨다운 기간 동안 중복 트리거 방지
+- asyncio.Task 기반 비동기 루프 실행
+
+**API**: `/api/automation/loops` (6개 엔드포인트)
+
+---
+
+## 44. Pipeline Service
+
+모듈형 4단계 데이터 파이프라인 오케스트레이터:
+
+```python
+class PipelineService:
+    async def create_pipeline(config: PipelineConfig) -> str
+    async def execute_pipeline(pipeline_id: str, initial_data: dict | None) -> PipelineResult
+    async def list_pipelines() -> list[PipelineSummary]
+    async def delete_pipeline(pipeline_id: str) -> bool
+    def register_stage(stage_type: str, stage_class: type[BaseStage]) -> None
+```
+
+**내장 스테이지** (Chain of Responsibility 패턴):
+
+| 스테이지 | 역할 |
+|----------|------|
+| `CollectStage` | 데이터 수집 |
+| `TransformStage` | 데이터 변환 |
+| `AnalyzeStage` | 데이터 분석 |
+| `OutputStage` | 결과 출력 |
+
+**데이터 흐름**:
+- `PipelineContext`: 스테이지 간 공유 데이터 컨텍스트
+- `StageResult`: 각 스테이지 실행 결과 (status, data, duration_ms)
+- `BaseStage` ABC: 커스텀 스테이지 확장 가능
+
+**에러 전략**: `fail_fast` (즉시 중단), `continue` (계속 실행), `retry` (재시도)
+
+**특징**:
+- 플러그인 방식 커스텀 스테이지 등록 (`register_stage`)
+- In-memory 파이프라인 정의 및 실행 결과 저장
+- 타임아웃 설정 (최대 3600초)
+- 최대 10회 재시도
+
+**API**: `/api/pipelines` (5개 엔드포인트)
+
+---
+
+## 45. Timezone-aware UTC Helpers
 
 `datetime.utcnow()` deprecated 대응:
 
@@ -1013,7 +1085,7 @@ def utcnow() -> datetime:
 
 ---
 
-## 44. Skill Manager
+## 46. Skill Manager
 
 SKILL.md 파일 CRUD 관리:
 
@@ -1032,7 +1104,7 @@ class SkillManager:
 
 ---
 
-## 45. External Usage Tracking (외부 LLM 사용량)
+## 47. External Usage Tracking (외부 LLM 사용량)
 
 외부 LLM 프로바이더(OpenAI, GitHub Copilot, Google Gemini, Anthropic) 사용량 통합 추적:
 
@@ -1054,7 +1126,7 @@ class ExternalUsageService:
 
 ---
 
-## 46. Cost Center Management (비용 센터)
+## 48. Cost Center Management (비용 센터)
 
 조직 단위 비용 센터 관리 및 예산 할당:
 
@@ -1077,7 +1149,7 @@ class CostCenterModel(Base):
 
 ---
 
-## 47. Admin User Management (사용자 관리)
+## 49. Admin User Management (사용자 관리)
 
 관리자 페이지에서 시스템 사용자 관리:
 
@@ -1094,7 +1166,7 @@ class CostCenterModel(Base):
 
 ---
 
-## 48. Project Invitations (프로젝트 초대)
+## 50. Project Invitations (프로젝트 초대)
 
 이메일 기반 프로젝트 멤버 초대 시스템:
 

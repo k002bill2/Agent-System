@@ -18,7 +18,7 @@ echo -e "${GREEN}🚀 Starting Agent Orchestration System${NC}"
 if [ ! -f "$PROJECT_ROOT/.env" ]; then
     echo -e "${YELLOW}⚠️  .env file not found. Creating from .env.example...${NC}"
     cp "$PROJECT_ROOT/.env.example" "$PROJECT_ROOT/.env"
-    echo -e "${YELLOW}⚠️  Please edit .env and add your ANTHROPIC_API_KEY${NC}"
+    echo -e "${YELLOW}⚠️  Please edit .env and add your GOOGLE_API_KEY (default LLM provider is Google Gemini)${NC}"
 fi
 
 # Function to check if command exists
@@ -34,15 +34,15 @@ if ! command_exists docker; then
     exit 1
 fi
 
-if ! command_exists docker-compose; then
-    echo -e "${RED}❌ Docker Compose is not installed${NC}"
+if ! docker compose version >/dev/null 2>&1 && ! command_exists docker-compose; then
+    echo -e "${RED}❌ Docker Compose is not installed (docker compose or docker-compose)${NC}"
     exit 1
 fi
 
 # Start infrastructure services
 echo -e "${GREEN}🐳 Starting infrastructure (PostgreSQL, Redis, Qdrant)...${NC}"
-cd "$PROJECT_ROOT/infra/docker"
-docker-compose up -d postgres redis qdrant
+cd "$PROJECT_ROOT"
+docker compose up -d postgres redis qdrant
 
 # Wait for services
 echo -e "${GREEN}⏳ Waiting for services to be ready...${NC}"
@@ -50,7 +50,7 @@ sleep 5
 
 # Check service health
 echo -e "${GREEN}🔍 Checking service health...${NC}"
-docker-compose ps
+docker compose ps
 
 echo ""
 echo -e "${GREEN}✅ Infrastructure services are running!${NC}"

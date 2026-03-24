@@ -106,11 +106,8 @@ services:
       - "${QDRANT_GRPC_PORT:-6334}:6334"
     volumes:
       - qdrant_data:/qdrant/storage
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    # Note: Qdrant 공식 이미지에 curl/wget 미포함으로 Docker healthcheck 불가
+    # 호스트에서 확인: curl http://localhost:6333/healthz
     networks:
       - aos-network
 
