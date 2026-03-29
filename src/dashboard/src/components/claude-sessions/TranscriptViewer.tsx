@@ -221,7 +221,7 @@ function TranscriptEntryItem({ entry, index }: TranscriptEntryItemProps) {
 
       {expanded && (
         <div className="px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700 overflow-x-auto">
-          <div className="text-xs">
+          <div className="font-mono text-xs">
             <JsonTree data={entry.message} />
           </div>
         </div>

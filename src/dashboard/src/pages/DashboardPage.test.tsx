@@ -35,6 +35,9 @@ vi.mock('../stores/claudeSessions', () => ({
     selector({
       sessions: mockSessions,
       fetchSessions: mockFetchSessions,
+      fetchProjects: vi.fn(),
+      allProjects: [],
+      projectsFetchError: false,
       isLoading: mockIsLoadingSessions,
       selectSession: mockSelectSession,
     }),
@@ -57,8 +60,8 @@ describe('DashboardPage', () => {
     render(<DashboardPage />)
     expect(screen.getByText('Total Sessions')).toBeInTheDocument()
     expect(screen.getByText('Active Sessions')).toBeInTheDocument()
-    expect(screen.getByText('Projects')).toBeInTheDocument()
-    expect(screen.getByText('Messages')).toBeInTheDocument()
+    expect(screen.getByText('Session Projects')).toBeInTheDocument()
+    expect(screen.getByText('Session Messages')).toBeInTheDocument()
   })
 
   it('displays correct session stats', () => {

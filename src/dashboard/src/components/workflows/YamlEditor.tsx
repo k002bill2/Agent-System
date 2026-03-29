@@ -124,13 +124,13 @@ export function YamlEditor({ value, onChange, readOnly = false }: YamlEditorProp
             value={value}
             onChange={handleChange}
             readOnly={readOnly}
-            className="w-full min-h-[300px] p-3 pl-12 text-sm bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 resize-y focus:outline-none leading-5"
+            className="w-full min-h-[300px] p-3 pl-12 font-mono text-sm bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 resize-y focus:outline-none leading-5"
             spellCheck={false}
             placeholder="# Workflow YAML definition..."
           />
         </div>
       ) : (
-        <pre className="p-3 min-h-[300px] text-sm bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 overflow-auto">
+        <pre className="p-3 min-h-[300px] font-mono text-sm bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 overflow-auto">
           {error ? (
             <span className="text-red-500">{error.message}</span>
           ) : (

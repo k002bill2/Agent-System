@@ -284,7 +284,7 @@ export function CommitHistory({
             Commit History
           </h3>
           <span className="text-sm text-gray-500">
-            on <span className="">{branch}</span>
+            on <span className="font-mono">{branch}</span>
           </span>
         </div>
         <span className="text-sm text-gray-500">({commits.length} commits)</span>
@@ -355,7 +355,7 @@ export function CommitHistory({
                               {formatRelativeDate(commit.committed_date)}
                             </span>
                             <span
-                              className="flex items-center gap-1 text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600"
+                              className="flex items-center gap-1 font-mono text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 copyToClipboard(commit.sha)

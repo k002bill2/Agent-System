@@ -64,7 +64,7 @@ export function WorkflowRunLogs() {
       </div>
 
       {/* Log Content */}
-      <div className="flex-1 overflow-y-auto p-3 text-xs">
+      <div className="flex-1 overflow-y-auto p-3 font-mono text-xs">
         {logs.length === 0 ? (
           <div className="text-gray-500">Waiting for logs...</div>
         ) : (

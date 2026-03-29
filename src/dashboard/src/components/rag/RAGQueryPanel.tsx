@@ -497,7 +497,7 @@ export function RAGQueryPanel({ projectId, projectName, className, onClose }: RA
                         </div>
 
                         {/* Content Preview */}
-                        <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap bg-gray-50 dark:bg-gray-900/50 p-3 rounded overflow-x-auto max-h-80">
+                        <pre className="font-mono text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap bg-gray-50 dark:bg-gray-900/50 p-3 rounded overflow-x-auto max-h-80">
                           {doc.content}
                         </pre>
                       </div>

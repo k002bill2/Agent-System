@@ -195,6 +195,7 @@ class ProjectCleanupService:
 
         # 5. Remove symlink or e2e test directory
         try:
+            import asyncio
             import shutil
 
             projects_dir = get_projects_dir()
@@ -206,7 +207,7 @@ class ProjectCleanupService:
                 logger.info(f"Removed symlink: {project_entry}")
             elif project_entry.is_dir() and project_entry.parent == projects_dir:
                 # Non-symlink directory inside projects/ (e.g. e2e test residual)
-                shutil.rmtree(project_entry)
+                await asyncio.to_thread(shutil.rmtree, project_entry)
                 summary.symlink_removed = True
                 logger.info(f"Removed project directory: {project_entry}")
         except Exception as e:

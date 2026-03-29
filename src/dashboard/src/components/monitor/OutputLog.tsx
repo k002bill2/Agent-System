@@ -171,7 +171,7 @@ export function OutputLog({ projectId }: OutputLogProps) {
       {/* Log content */}
       <div
         ref={logContainerRef}
-        className="flex-1 overflow-auto p-4 text-sm bg-gray-900 dark:bg-gray-950"
+        className="flex-1 overflow-auto p-4 font-mono text-sm bg-gray-900 dark:bg-gray-950"
       >
         {displayLogs.length === 0 ? (
           <div className="text-gray-500 text-center py-8">

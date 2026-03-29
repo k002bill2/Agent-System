@@ -26,6 +26,7 @@ export function DashboardPage() {
   const fetchSessions = useClaudeSessionsStore(s => s.fetchSessions)
   const fetchSessionProjects = useClaudeSessionsStore(s => s.fetchProjects)
   const allSessionProjects = useClaudeSessionsStore(s => s.allProjects)
+  const projectsFetchError = useClaudeSessionsStore(s => s.projectsFetchError)
   const isLoadingSessions = useClaudeSessionsStore(s => s.isLoading)
   const selectSession = useClaudeSessionsStore(s => s.selectSession)
   const setView = useNavigationStore(s => s.setView)
@@ -48,7 +49,7 @@ export function DashboardPage() {
 
   // Session-based stats
   const activeSessions = sessions.filter(s => s.status === 'active').length
-  const sessionProjectCount = allSessionProjects.length > 0
+  const sessionProjectCount = (!projectsFetchError && allSessionProjects.length > 0)
     ? allSessionProjects.length
     : new Set(sessions.filter(s => s.project_name && s.project_name !== '-').map(s => s.project_name)).size
   const totalMessages = sessions.reduce((sum, s) => sum + (s.message_count || 0), 0)

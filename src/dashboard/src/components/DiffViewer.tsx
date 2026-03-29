@@ -109,7 +109,7 @@ function UnifiedDiffView({ patch }: { patch: string }) {
   }
 
   return (
-    <div className="text-sm">
+    <div className="font-mono text-sm">
       {hunks.map((hunk, hunkIndex) => (
         <div key={hunkIndex} className="border-b border-gray-700">
           <div className="bg-gray-800 px-4 py-1 text-blue-400 text-xs">
@@ -159,7 +159,7 @@ function SplitDiffView({ patch }: { patch: string }) {
   }
 
   return (
-    <div className="text-sm grid grid-cols-2 gap-0">
+    <div className="font-mono text-sm grid grid-cols-2 gap-0">
       {hunks.map((hunk, hunkIndex) => (
         <div key={hunkIndex} className="col-span-2">
           <div className="bg-gray-800 px-4 py-1 text-blue-400 text-xs col-span-2">
