@@ -279,14 +279,6 @@ function GlobalAgentCard({ agent, isExpanded, onToggle }: GlobalAgentCardProps) 
               </div>
             )}
           </div>
-          {agent.ace_capabilities && (
-            <div>
-              <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ACE Capabilities</h5>
-              <pre className="text-xs text-gray-600 dark:text-gray-400 overflow-x-auto bg-white dark:bg-gray-800 rounded p-3 border border-gray-200 dark:border-gray-700">
-                {JSON.stringify(agent.ace_capabilities, null, 2)}
-              </pre>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -423,17 +415,6 @@ function AgentCard({ agent, isExpanded, isDeleting, onToggle, onEdit, onDelete, 
             )}
           </div>
 
-          {/* ACE Capabilities */}
-          {agent.ace_capabilities && (
-            <div>
-              <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                ACE Capabilities
-              </h5>
-              <pre className="text-xs text-gray-600 dark:text-gray-400 overflow-x-auto bg-white dark:bg-gray-800 rounded p-3 border border-gray-200 dark:border-gray-700">
-                {JSON.stringify(agent.ace_capabilities, null, 2)}
-              </pre>
-            </div>
-          )}
         </div>
       )}
     </div>

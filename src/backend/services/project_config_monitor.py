@@ -781,9 +781,6 @@ class ProjectConfigMonitor:
                             tools=FrontmatterParser.extract_tools(frontmatter),
                             model=frontmatter.get("model"),
                             role=frontmatter.get("role"),
-                            ace_capabilities=FrontmatterParser.get_nested_dict(
-                                frontmatter, "ace_capabilities"
-                            ),
                             is_shared=False,
                             modified_at=datetime.fromtimestamp(stat.st_mtime),
                         )
