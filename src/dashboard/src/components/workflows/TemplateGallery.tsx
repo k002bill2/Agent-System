@@ -159,7 +159,7 @@ export function TemplateGallery({ onSelect, onClose }: TemplateGalleryProps) {
                     {previewTemplate.name}
                   </h3>
                   <p className="text-sm text-gray-500 mb-3">{previewTemplate.description}</p>
-                  <pre className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg font-mono text-xs text-gray-700 dark:text-gray-300 overflow-auto max-h-[250px]">
+                  <pre className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg text-xs text-gray-700 dark:text-gray-300 overflow-auto max-h-[250px]">
                     {previewTemplate.yaml_content}
                   </pre>
 

@@ -342,7 +342,7 @@ export function BranchProtectionSettings({
                     <Shield className={cn('w-5 h-5', rule.enabled ? 'text-yellow-500' : 'text-gray-400')} />
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm font-medium text-gray-900 dark:text-white">
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">
                           {rule.branch_pattern}
                         </span>
                         {!rule.enabled && (

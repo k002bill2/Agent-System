@@ -147,7 +147,7 @@ export function ProjectManagementPage() {
             <h3 className="font-semibold text-gray-900 dark:text-white text-sm">
               {selectedProject.name}
             </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
               {selectedProject.slug}
             </p>
           </div>
@@ -190,7 +190,7 @@ export function ProjectManagementPage() {
               {selectedProject.path && (
                 <div>
                   <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">경로</p>
-                  <p className="text-gray-700 dark:text-gray-300 font-mono text-xs break-all">
+                  <p className="text-gray-700 dark:text-gray-300 text-xs break-all">
                     {selectedProject.path}
                   </p>
                 </div>
@@ -508,7 +508,7 @@ export function ProjectManagementPage() {
                       <h3 className="font-semibold text-gray-900 dark:text-white">
                         {project.name}
                       </h3>
-                      <span className="text-xs font-mono text-gray-400 dark:text-gray-500">
+                      <span className="text-xs text-gray-400 dark:text-gray-500">
                         {project.slug}
                       </span>
                       {!project.is_active && (
@@ -524,7 +524,7 @@ export function ProjectManagementPage() {
                     )}
                     <div className="flex items-center gap-4 mt-1.5 text-xs text-gray-500 dark:text-gray-400">
                       {project.path && (
-                        <span className="font-mono truncate max-w-md" title={project.path}>
+                        <span className="truncate max-w-md" title={project.path}>
                           {project.path}
                         </span>
                       )}

@@ -1068,7 +1068,7 @@ export function AnalyticsPage() {
                           코멘트 없음
                         </p>
                       )}
-                      <div className="text-xs text-gray-400 dark:text-gray-500 mt-1 pl-1 font-mono">
+                      <div className="text-xs text-gray-400 dark:text-gray-500 mt-1 pl-1">
                         {evaluation.task_id.slice(0, 8)}... / {evaluation.session_id.slice(0, 8)}...
                       </div>
                     </div>

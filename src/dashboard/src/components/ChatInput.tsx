@@ -556,7 +556,7 @@ export function ChatInput() {
 
         <div className="flex items-center justify-between mt-2 px-1">
           <span className="text-xs text-gray-400 dark:text-gray-500">
-            Press <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 font-mono text-[10px]">Enter</kbd> to analyze, <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 font-mono text-[10px]">Shift+Enter</kbd> for new line, <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 font-mono text-[10px]">Ctrl+V</kbd> to paste images
+            Press <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-[10px]">Enter</kbd> to analyze, <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-[10px]">Shift+Enter</kbd> for new line, <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-[10px]">Ctrl+V</kbd> to paste images
           </span>
           {(images.length > 0 || mdFiles.length > 0) && (
             <span className="text-xs text-primary-500 dark:text-primary-400">

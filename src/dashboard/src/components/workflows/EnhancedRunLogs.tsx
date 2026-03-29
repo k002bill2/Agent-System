@@ -128,7 +128,7 @@ export function EnhancedRunLogs({ logs, isStreaming = false }: EnhancedRunLogsPr
       </div>
 
       {/* Logs */}
-      <div className="flex-1 overflow-auto p-2 font-mono text-xs space-y-0.5">
+      <div className="flex-1 overflow-auto p-2 text-xs space-y-0.5">
         {filteredLogs.length === 0 ? (
           <p className="text-gray-400 text-center py-4">
             {logs.length === 0 ? 'No logs yet...' : 'No matching logs'}

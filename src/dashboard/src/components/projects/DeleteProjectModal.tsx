@@ -209,7 +209,7 @@ export function DeleteProjectModal({
                     Source files will NOT be deleted
                   </p>
                   <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
-                    Your code at <span className="font-mono">{preview.project_path}</span> will remain intact.
+                    Your code at <span className="">{preview.project_path}</span> will remain intact.
                   </p>
                 </div>
               </div>
@@ -217,7 +217,7 @@ export function DeleteProjectModal({
               {/* Confirm input */}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Type <span className="font-mono text-red-600 dark:text-red-400">{project.name}</span> to confirm
+                  Type <span className="text-red-600 dark:text-red-400">{project.name}</span> to confirm
                 </label>
                 <input
                   type="text"

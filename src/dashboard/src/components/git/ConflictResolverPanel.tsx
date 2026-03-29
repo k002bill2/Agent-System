@@ -150,7 +150,7 @@ export function ConflictResolverPanel({
                   ) : (
                     <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
                   )}
-                  <span className="truncate font-mono text-xs">
+                  <span className="truncate text-xs">
                     {file.path}
                   </span>
                 </button>
@@ -175,11 +175,11 @@ export function ConflictResolverPanel({
               </h2>
             </div>
             <div className="flex items-center gap-2">
-              <span className="font-mono text-sm bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+              <span className="text-sm bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
                 {sourceBranch}
               </span>
               <span className="text-gray-400">→</span>
-              <span className="font-mono text-sm bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+              <span className="text-sm bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
                 {targetBranch}
               </span>
             </div>
@@ -198,7 +198,7 @@ export function ConflictResolverPanel({
               <div className="flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
                 <div className="flex items-center gap-2">
                   <FileCode className="w-4 h-4 text-gray-400" />
-                  <span className="font-mono text-sm text-gray-700 dark:text-gray-300">
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
                     {selectedFile.path}
                   </span>
                 </div>
@@ -250,7 +250,7 @@ export function ConflictResolverPanel({
                   <div className="px-3 py-2 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
                     Base (공통 조상)
                   </div>
-                  <pre className="flex-1 overflow-auto p-3 text-xs font-mono text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900">
+                  <pre className="flex-1 overflow-auto p-3 text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900">
                     {selectedFile.base_content || '(파일 없음)'}
                   </pre>
                 </div>
@@ -270,7 +270,7 @@ export function ConflictResolverPanel({
                       </span>
                     )}
                   </div>
-                  <pre className="flex-1 overflow-auto p-3 text-xs font-mono text-gray-700 dark:text-gray-300 bg-green-50/30 dark:bg-green-900/10">
+                  <pre className="flex-1 overflow-auto p-3 text-xs text-gray-700 dark:text-gray-300 bg-green-50/30 dark:bg-green-900/10">
                     {selectedFile.our_content || '(파일 없음)'}
                   </pre>
                 </div>
@@ -290,7 +290,7 @@ export function ConflictResolverPanel({
                       </span>
                     )}
                   </div>
-                  <pre className="flex-1 overflow-auto p-3 text-xs font-mono text-gray-700 dark:text-gray-300 bg-blue-50/30 dark:bg-blue-900/10">
+                  <pre className="flex-1 overflow-auto p-3 text-xs text-gray-700 dark:text-gray-300 bg-blue-50/30 dark:bg-blue-900/10">
                     {selectedFile.their_content || '(파일 없음)'}
                   </pre>
                 </div>
@@ -305,7 +305,7 @@ export function ConflictResolverPanel({
                   <textarea
                     value={customContent}
                     onChange={(e) => setCustomContent(e.target.value)}
-                    className="w-full h-48 p-3 text-xs font-mono text-gray-900 dark:text-white bg-white dark:bg-gray-800 border-0 resize-none focus:ring-0 focus:outline-none"
+                    className="w-full h-48 p-3 text-xs text-gray-900 dark:text-white bg-white dark:bg-gray-800 border-0 resize-none focus:ring-0 focus:outline-none"
                     placeholder="해결된 코드를 여기에 입력하세요..."
                   />
                 </div>

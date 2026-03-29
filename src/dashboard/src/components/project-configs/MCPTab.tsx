@@ -279,12 +279,12 @@ function MCPServerCard({ server, isToggling, isDeleting, isReadOnly = false, isG
           </div>
 
           {server.package_name && (
-            <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 font-mono">
+            <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
               {server.package_name}
             </p>
           )}
 
-          <div className="text-xs text-gray-500 dark:text-gray-400 mt-2 font-mono">
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
             {server.command} {server.args.join(' ')}
           </div>
 

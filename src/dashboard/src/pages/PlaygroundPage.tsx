@@ -1108,7 +1108,7 @@ function MessageBubble({ message, onCopy, copied, sessionId, agentId, projectNam
             <Wrench className="w-4 h-4" />
             <span className="text-sm font-medium">Tool Call</span>
           </div>
-          <div className="mt-1 text-sm text-amber-600 dark:text-amber-300 font-mono">
+          <div className="mt-1 text-sm text-amber-600 dark:text-amber-300">
             {message.content}
           </div>
           {message.tool_results && message.tool_results.length > 0 && (

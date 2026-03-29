@@ -339,7 +339,7 @@ export function SettingsPage() {
             {/* Token masked display */}
             {claudeConfig?.oauth_token_masked && (
               <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-900 rounded-lg">
-                <span className="text-sm text-gray-500 dark:text-gray-400 font-mono">
+                <span className="text-sm text-gray-500 dark:text-gray-400">
                   {claudeConfig.oauth_token_masked}
                 </span>
                 {claudeConfig.token_source === 'config' && (

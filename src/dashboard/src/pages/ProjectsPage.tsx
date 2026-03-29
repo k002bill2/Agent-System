@@ -176,7 +176,7 @@ function SortableProjectCard({
       </h3>
 
       {/* Project ID */}
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 font-mono">
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
         {project.id}
       </p>
 

@@ -255,7 +255,7 @@ export function ProcessCleanupPanel() {
                 {/* PID and status badges */}
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm font-medium text-gray-900 dark:text-white">
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">
                       PID {proc.pid}
                     </span>
                     {proc.is_current && (

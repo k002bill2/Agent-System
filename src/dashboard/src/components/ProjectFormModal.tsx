@@ -196,7 +196,7 @@ export function ProjectFormModal() {
                 placeholder="my-project"
                 required
                 pattern="[a-z0-9-]+"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white font-mono text-sm"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Lowercase letters, numbers, and hyphens only
@@ -218,7 +218,7 @@ export function ProjectFormModal() {
                 value={editPath}
                 onChange={(e) => setEditPath(e.target.value)}
                 placeholder="/absolute/path/to/project"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white font-mono text-sm"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Absolute path to the project directory. Changing this will update the symlink.

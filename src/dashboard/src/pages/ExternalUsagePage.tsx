@@ -348,7 +348,7 @@ export function ExternalUsagePage() {
                 ? <CheckCircle className="w-3.5 h-3.5 text-green-500" />
                 : <AlertCircle className="w-3.5 h-3.5 text-gray-400" />}
             </div>
-            <code className="text-xs text-gray-600 dark:text-gray-300 font-mono block">
+            <code className="text-xs text-gray-600 dark:text-gray-300 block">
               EXTERNAL_OPENAI_ADMIN_KEY=sk-admin-...
             </code>
           </div>
@@ -359,7 +359,7 @@ export function ExternalUsagePage() {
                 ? <CheckCircle className="w-3.5 h-3.5 text-green-500" />
                 : <AlertCircle className="w-3.5 h-3.5 text-gray-400" />}
             </div>
-            <code className="text-xs text-gray-600 dark:text-gray-300 font-mono block">
+            <code className="text-xs text-gray-600 dark:text-gray-300 block">
               EXTERNAL_GITHUB_TOKEN=ghp_...<br />
               EXTERNAL_GITHUB_ORG=my-org
             </code>

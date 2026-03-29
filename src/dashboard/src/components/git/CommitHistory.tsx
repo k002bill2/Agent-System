@@ -146,7 +146,7 @@ function CommitFileList({
                   </div>
                 )}
                 <StatusIcon className={cn('w-4 h-4 flex-shrink-0', config.color)} />
-                <span className="font-mono text-gray-900 dark:text-white truncate flex-1">
+                <span className="text-gray-900 dark:text-white truncate flex-1">
                   {file.old_path ? (
                     <>
                       <span className="text-gray-400">{file.old_path}</span>
@@ -159,12 +159,12 @@ function CommitFileList({
                 </span>
                 <div className="flex items-center gap-2 flex-shrink-0 text-xs">
                   {file.additions > 0 && (
-                    <span className="text-green-600 dark:text-green-400 font-mono">
+                    <span className="text-green-600 dark:text-green-400">
                       +{file.additions}
                     </span>
                   )}
                   {file.deletions > 0 && (
-                    <span className="text-red-600 dark:text-red-400 font-mono">
+                    <span className="text-red-600 dark:text-red-400">
                       -{file.deletions}
                     </span>
                   )}
@@ -284,7 +284,7 @@ export function CommitHistory({
             Commit History
           </h3>
           <span className="text-sm text-gray-500">
-            on <span className="font-mono">{branch}</span>
+            on <span className="">{branch}</span>
           </span>
         </div>
         <span className="text-sm text-gray-500">({commits.length} commits)</span>
@@ -355,7 +355,7 @@ export function CommitHistory({
                               {formatRelativeDate(commit.committed_date)}
                             </span>
                             <span
-                              className="flex items-center gap-1 font-mono text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600"
+                              className="flex items-center gap-1 text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 copyToClipboard(commit.sha)

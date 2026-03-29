@@ -816,7 +816,7 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
                             type="text"
                             value={branchName}
                             onChange={(e) => setBranchName(e.target.value)}
-                            className="w-full px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 font-mono"
+                            className="w-full px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
                             aria-label="Branch name"
                           />
                           <div className="flex justify-end gap-2 mt-3">

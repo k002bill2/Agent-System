@@ -128,7 +128,7 @@ export function RemoteList({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <Cloud className="w-4 h-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
-                    <span className="font-mono font-semibold text-gray-900 dark:text-white">
+                    <span className="font-semibold text-gray-900 dark:text-white">
                       {remote.name}
                     </span>
                     {remote.name === 'origin' && (
@@ -144,7 +144,7 @@ export function RemoteList({
                         type="text"
                         value={editUrl}
                         onChange={(e) => setEditUrl(e.target.value)}
-                        className="flex-1 px-3 py-1.5 text-sm font-mono border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className="flex-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                         autoFocus
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') handleSaveEdit(remote.name)
@@ -167,7 +167,7 @@ export function RemoteList({
                       </button>
                     </div>
                   ) : (
-                    <p className="mt-1 text-sm font-mono text-gray-500 dark:text-gray-400 truncate">
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 truncate">
                       {remote.url}
                     </p>
                   )}
@@ -261,7 +261,7 @@ export function RemoteList({
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="upstream"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   autoFocus
                 />
               </div>
@@ -274,7 +274,7 @@ export function RemoteList({
                   value={newUrl}
                   onChange={(e) => setNewUrl(e.target.value)}
                   placeholder="https://github.com/user/repo.git"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
               </div>
             </div>

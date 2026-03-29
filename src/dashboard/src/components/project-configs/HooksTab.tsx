@@ -129,7 +129,7 @@ export function HooksTab() {
                           {hook.command && (
                             <div className="mt-2 flex items-start gap-2">
                               <Code className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                              <code className="text-xs text-gray-600 dark:text-gray-400 font-mono break-all">
+                              <code className="text-xs text-gray-600 dark:text-gray-400 break-all">
                                 {hook.command}
                               </code>
                             </div>
@@ -207,7 +207,7 @@ export function HooksTab() {
                               {hook.command && (
                                 <div className="mt-2 flex items-start gap-2">
                                   <Code className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                                  <code className="text-xs text-gray-600 dark:text-gray-400 font-mono break-all">
+                                  <code className="text-xs text-gray-600 dark:text-gray-400 break-all">
                                     {hook.command}
                                   </code>
                                 </div>

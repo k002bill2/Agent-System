@@ -250,7 +250,7 @@ function SessionView({ sessionInfo }: { sessionInfo: SessionInfo | null }) {
             <Activity className="w-4 h-4" />
             <span className="text-xs font-medium">Current Task</span>
           </div>
-          <span className="text-sm text-gray-900 dark:text-white font-mono">
+          <span className="text-sm text-gray-900 dark:text-white">
             {sessionInfo.current_task_id}
           </span>
         </div>

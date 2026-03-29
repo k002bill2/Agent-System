@@ -385,7 +385,7 @@ function AuditLogRow({ log, expanded, onToggle }: AuditLogRowProps) {
         <td className="px-4 py-3 text-sm">
           <span className="text-gray-600 dark:text-gray-300">{log.resource_type}</span>
           {log.resource_id && (
-            <span className="ml-2 text-gray-400 text-xs font-mono">
+            <span className="ml-2 text-gray-400 text-xs">
               {log.resource_id.slice(0, 8)}...
             </span>
           )}
@@ -408,18 +408,18 @@ function AuditLogRow({ log, expanded, onToggle }: AuditLogRowProps) {
                 <dl className="space-y-1">
                   <div className="flex">
                     <dt className="w-24 text-gray-500">ID:</dt>
-                    <dd className="font-mono text-xs">{log.id}</dd>
+                    <dd className="text-xs">{log.id}</dd>
                   </div>
                   {log.session_id && (
                     <div className="flex">
                       <dt className="w-24 text-gray-500">Session:</dt>
-                      <dd className="font-mono text-xs">{log.session_id}</dd>
+                      <dd className="text-xs">{log.session_id}</dd>
                     </div>
                   )}
                   {log.user_id && (
                     <div className="flex">
                       <dt className="w-24 text-gray-500">User:</dt>
-                      <dd className="font-mono text-xs">{log.user_id}</dd>
+                      <dd className="text-xs">{log.user_id}</dd>
                     </div>
                   )}
                   {log.ip_address && (

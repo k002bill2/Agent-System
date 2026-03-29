@@ -464,7 +464,7 @@ export function RAGQueryPanel({ projectId, projectName, className, onClose }: RA
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         {getFileIcon(source)}
-                        <span className="font-mono text-sm text-gray-700 dark:text-gray-300 truncate" title={source}>
+                        <span className="text-sm text-gray-700 dark:text-gray-300 truncate" title={source}>
                           {shortSource}
                         </span>
                         {getPriorityBadge(doc.priority)}
@@ -492,12 +492,12 @@ export function RAGQueryPanel({ projectId, projectName, className, onClose }: RA
                     {isExpanded && (
                       <div className="border-t border-gray-200 dark:border-gray-700 p-3">
                         {/* File Path */}
-                        <div className="mb-2 text-xs text-gray-500 dark:text-gray-400 font-mono break-all">
+                        <div className="mb-2 text-xs text-gray-500 dark:text-gray-400 break-all">
                           {source}
                         </div>
 
                         {/* Content Preview */}
-                        <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-900/50 p-3 rounded overflow-x-auto max-h-80">
+                        <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap bg-gray-50 dark:bg-gray-900/50 p-3 rounded overflow-x-auto max-h-80">
                           {doc.content}
                         </pre>
                       </div>

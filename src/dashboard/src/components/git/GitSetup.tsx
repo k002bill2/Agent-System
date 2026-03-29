@@ -166,7 +166,7 @@ export function GitSetup({
                 <div>
                   <span className="font-medium">Git 저장소 연결됨</span>
                   <span className="mx-2">·</span>
-                  <span className="font-mono text-sm">{gitStatus.current_branch}</span>
+                  <span className="text-sm">{gitStatus.current_branch}</span>
                 </div>
               </>
             ) : (
@@ -203,7 +203,7 @@ export function GitSetup({
               <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 프로젝트 경로에 Git 저장소가 있는 경우
               </div>
-              <div className="text-sm font-mono text-gray-600 dark:text-gray-300 mt-2 bg-gray-100 dark:bg-gray-700 px-3 py-2 rounded">
+              <div className="text-sm text-gray-600 dark:text-gray-300 mt-2 bg-gray-100 dark:bg-gray-700 px-3 py-2 rounded">
                 {projectPath}
               </div>
             </div>
@@ -261,7 +261,7 @@ export function GitSetup({
                                 <AlertCircle className="w-4 h-4 text-amber-500" />
                               )}
                             </div>
-                            <div className="text-xs font-mono text-gray-500 dark:text-gray-400 truncate mt-1">
+                            <div className="text-xs text-gray-500 dark:text-gray-400 truncate mt-1">
                               {repo.path}
                             </div>
                           </div>
@@ -300,7 +300,7 @@ export function GitSetup({
                         value={newRepoPath}
                         onChange={(e) => setNewRepoPath(e.target.value)}
                         placeholder="저장소 경로 (예: /path/to/repo)"
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-sm"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
                       />
                       <div className="flex gap-2">
                         <button
@@ -373,7 +373,7 @@ export function GitSetup({
                   value={gitPath}
                   onChange={(e) => setGitPath(e.target.value)}
                   placeholder="/path/to/git/repository"
-                  className="mt-3 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono text-sm"
+                  className="mt-3 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
                 />
               )}
             </div>

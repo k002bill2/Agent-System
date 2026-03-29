@@ -49,7 +49,7 @@ function ActivityEventItem({ event }: { event: ActivityEvent }) {
     if (event.type === 'tool_use') {
       return (
         <div className="space-y-1">
-          <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
+          <span className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
             {event.tool_name}
           </span>
           {event.tool_input && (

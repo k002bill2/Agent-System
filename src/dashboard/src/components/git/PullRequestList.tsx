@@ -101,11 +101,11 @@ function PullRequestCard({ pr, onViewDetails, onMerge }: PullRequestCardProps) {
             </div>
 
             <div className="flex items-center gap-2 mt-1 text-sm text-gray-500 dark:text-gray-400">
-              <span className="font-mono text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
+              <span className="text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
                 {pr.head_ref}
               </span>
               <span>→</span>
-              <span className="font-mono text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
+              <span className="text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
                 {pr.base_ref}
               </span>
             </div>
@@ -422,9 +422,9 @@ export function PRReviewPanel({
               PR #{pr.number}: {pr.title}
             </h3>
             <div className="flex items-center gap-2 mt-1 text-sm text-gray-500">
-              <span className="font-mono">{pr.head_ref}</span>
+              <span className="">{pr.head_ref}</span>
               <span>→</span>
-              <span className="font-mono">{pr.base_ref}</span>
+              <span className="">{pr.base_ref}</span>
             </div>
           </div>
           <button

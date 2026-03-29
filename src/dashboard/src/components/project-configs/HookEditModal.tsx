@@ -133,7 +133,7 @@ export function HookEditModal({ isOpen, onClose, onSave }: HookEditModalProps) {
               value={matcher}
               onChange={(e) => setMatcher(e.target.value)}
               placeholder="* (all) or specific tool name"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white font-mono text-sm"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Use * for all tools, or specify tool names like "Bash", "Write", etc.
@@ -160,7 +160,7 @@ export function HookEditModal({ isOpen, onClose, onSave }: HookEditModalProps) {
                     value={hook.command}
                     onChange={(e) => handleHookChange(index, 'command', e.target.value)}
                     placeholder="Shell command to execute..."
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white font-mono text-sm"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
                   />
                   {hooks.length > 1 && (
                     <button

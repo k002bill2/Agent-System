@@ -278,7 +278,7 @@ export function GitPage() {
             <select
               value={selectedWorktreePath ?? ''}
               onChange={(e) => setSelectedWorktree(e.target.value || null)}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               aria-label="Select worktree"
             >
               {worktrees.map((wt) => (
@@ -289,7 +289,7 @@ export function GitPage() {
             </select>
           ) : selectedProject && (
             <span className="text-sm text-gray-500 dark:text-gray-400">
-              Current: <span className="font-mono">{currentBranch}</span>
+              Current: <span className="">{currentBranch}</span>
             </span>
           )}
         </div>

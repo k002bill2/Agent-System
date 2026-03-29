@@ -110,7 +110,7 @@ export function TriggerConfigPanel({ workflowId: _workflowId, currentConfig: _cu
                 <input
                   value={webhookUrl || `${window.location.origin}/api/webhooks/{webhook_id}`}
                   readOnly
-                  className="flex-1 px-2 py-1.5 text-xs font-mono border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+                  className="flex-1 px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
                 />
                 <button
                   onClick={handleCopyWebhook}
