@@ -7,8 +7,8 @@
 
 meta:
   name: "AOS Code Conventions"
-  version: "1.0.0"
-  updated: "2026-03-29"
+  version: "1.1.0"
+  updated: "2026-03-30"
   project: "Agent Orchestration Service"
   description: "LangGraph 기반 멀티 에이전트 오케스트레이션 서비스의 팀 코드 컨벤션"
 
@@ -44,7 +44,7 @@ language:
       examples:
         bad: "def process(data):"
         good: "def process(data: dict[str, Any]) -> ProcessResult:"
-    - rule: "async/await 일관 사용 — sync 호출로 이벤트 루프 차단 금지"
+    - rule: "async/await 일관 사용 — sync 호출로 이벤트 루프 차단 금지. sync I/O(shutil, os 등)는 asyncio.to_thread()로 래핑 (ADR-004)"
       severity: error
     - rule: "ruff 린터 사용 (line-length: 100, target-version: py311)"
       severity: error
@@ -399,3 +399,30 @@ security:
       severity: warning
     - rule: "Rate limiting 적용"
       severity: warning
+
+# -----------------------------------------------------------------------------
+# ADR 교차 참조 (Convention ↔ ADR 추적성)
+# -----------------------------------------------------------------------------
+# 자동 리뷰 도구가 규칙 위반 시 관련 ADR을 함께 참조할 수 있도록 매핑.
+adr_references:
+  - convention: "backend.langgraph"
+    adr: ADR-001
+    summary: "LangGraph StateGraph + conditional edges 패턴"
+  - convention: "frontend.zustand"
+    adr: ADR-002
+    summary: "Zustand create<State> 패턴, 도메인별 독립 스토어"
+  - convention: "frontend.tailwind"
+    adr: ADR-003
+    summary: "Tailwind CSS 전용, dark: 필수, cn() 유틸리티"
+  - convention: "language.python (async/await)"
+    adr: ADR-004
+    summary: "async/await 일관 사용, sync I/O는 asyncio.to_thread() 래핑"
+  - convention: "frontend.tailwind (font-mono)"
+    adr: ADR-006
+    summary: "일반 UI 금지, 코드 컨텍스트 허용 (superseded)"
+  - convention: "security.authentication"
+    adr: ADR-009
+    summary: "OAuth + JWT, bcrypt(rounds=12), 토큰 페어"
+  - convention: "testing.frontend"
+    adr: ADR-014
+    summary: "Vitest + @testing-library/react"
