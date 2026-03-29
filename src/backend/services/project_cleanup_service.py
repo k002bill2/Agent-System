@@ -109,10 +109,12 @@ class ProjectCleanupService:
         except Exception as e:
             logger.debug(f"RAG service not available: {e}")
 
-        # Check symlink
+        # Check symlink or project directory
         projects_dir = get_projects_dir()
-        symlink_path = projects_dir / project_id
-        preview.has_symlink = symlink_path.is_symlink()
+        project_entry = projects_dir / project_id
+        preview.has_symlink = project_entry.is_symlink() or (
+            project_entry.is_dir() and project_entry.parent == projects_dir
+        )
 
         return preview
 
@@ -191,15 +193,22 @@ class ProjectCleanupService:
         except Exception as e:
             logger.debug(f"Config monitor cleanup skipped: {e}")
 
-        # 5. Remove symlink
+        # 5. Remove symlink or e2e test directory
         try:
-            projects_dir = get_projects_dir()
-            symlink_path = projects_dir / project_id
+            import shutil
 
-            if symlink_path.is_symlink():
-                symlink_path.unlink()
+            projects_dir = get_projects_dir()
+            project_entry = projects_dir / project_id
+
+            if project_entry.is_symlink():
+                project_entry.unlink()
                 summary.symlink_removed = True
-                logger.info(f"Removed symlink: {symlink_path}")
+                logger.info(f"Removed symlink: {project_entry}")
+            elif project_entry.is_dir() and project_entry.parent == projects_dir:
+                # Non-symlink directory inside projects/ (e.g. e2e test residual)
+                shutil.rmtree(project_entry)
+                summary.symlink_removed = True
+                logger.info(f"Removed project directory: {project_entry}")
         except Exception as e:
             error_msg = f"Symlink removal failed: {e}"
             logger.error(error_msg)

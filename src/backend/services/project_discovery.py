@@ -184,15 +184,17 @@ class ProjectDiscovery:
 
         Checks parent projects/ directory and CLAUDE_PROJECT_PATHS
         for any new project directories not yet in _project_paths.
+        Only symlinks in projects/ are registered (regular directories
+        like e2e test artifacts are ignored).
         """
-        # Re-scan projects/ directory (symlinked projects)
+        # Re-scan projects/ directory (symlinked projects only)
         try:
             # Find the Agent-System root from any known path
             for existing_path in list(self._project_paths):
                 projects_dir = existing_path.parent / "projects"
                 if projects_dir.exists() and projects_dir.is_dir():
                     for entry in projects_dir.iterdir():
-                        if entry.is_dir():
+                        if entry.is_symlink():
                             resolved = entry.resolve() if not self._is_docker else entry
                             if resolved not in self._project_paths:
                                 if self._is_docker or resolved.exists():
