@@ -1,1 +1,0 @@
-{"event":"agent_spawned","timestamp":"2026-02-14T05:17:30.608Z","session_id":"sess_1771046250607","data":{"agent_type":"general-purpose","description":"verify-storybook 검증 실행","model":"haiku","run_in_background":true}}
