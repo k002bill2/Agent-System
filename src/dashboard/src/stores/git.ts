@@ -385,7 +385,7 @@ interface GitState {
   fetchBranches: (projectId: string) => Promise<void>
   createBranch: (projectId: string, name: string, startPoint?: string) => Promise<boolean>
   checkoutBranch: (projectId: string, name: string) => Promise<boolean>
-  deleteBranch: (projectId: string, name: string, force?: boolean, deleteRemote?: boolean) => Promise<boolean>
+  deleteBranch: (projectId: string, name: string, force?: boolean, deleteRemote?: boolean, removeWorktree?: boolean) => Promise<boolean>
 
   // Actions - Commits
   fetchCommits: (projectId: string, branch?: string, limit?: number) => Promise<void>
@@ -810,12 +810,19 @@ export const useGitStore = create<GitState>((set, get) => ({
     }
   },
 
-  deleteBranch: async (projectId, name, force = false, deleteRemote = false) => {
+  deleteBranch: async (projectId, name, force = false, deleteRemote = false, removeWorktree = false) => {
     set({ isLoading: true, error: null })
     try {
-      const params = new URLSearchParams({ force: String(force), delete_remote: String(deleteRemote) })
+      const params = new URLSearchParams({
+        force: String(force),
+        delete_remote: String(deleteRemote),
+        remove_worktree: String(removeWorktree),
+      })
       await apiClient.delete(`/api/git/projects/${projectId}/branches/${encodeURIComponent(name)}?${params}`)
-      await get().fetchBranches(projectId)
+      await Promise.all([
+        get().fetchBranches(projectId),
+        get().fetchWorktrees(projectId),
+      ])
       set({ isLoading: false })
       return true
     } catch (error) {

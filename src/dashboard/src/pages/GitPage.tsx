@@ -413,9 +413,10 @@ export function GitPage() {
                   createBranch(selectedProjectId, name, startPoint)
                 }
                 onCheckoutBranch={(name) => checkoutBranch(selectedProjectId, name)}
-                onDeleteBranch={(name, force, deleteRemote) => deleteBranch(selectedProjectId, name, force, deleteRemote)}
+                onDeleteBranch={(name, force, deleteRemote, removeWorktree) => deleteBranch(selectedProjectId, name, force, deleteRemote, removeWorktree)}
                 onMergeClick={handleMergeClick}
                 onRefresh={() => fetchBranches(selectedProjectId)}
+                worktrees={worktrees}
               />
             )}
 
