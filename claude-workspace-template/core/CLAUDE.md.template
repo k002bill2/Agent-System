@@ -112,7 +112,6 @@ This file provides guidance to Claude Code when working with code in this reposi
 - `quality-validator`: Quality verification
 
 **Shared Frameworks** (`.claude/agents/shared/`):
-- `ace-framework.md`: Parallel execution protocol
 - `quality-gates.md`: Quality gates
 - `effort-scaling.md`: Resource allocation
 

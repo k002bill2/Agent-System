@@ -430,8 +430,6 @@ npm test -- -u
 
 ## Parallel Execution Mode
 
-ACE Framework 거버넌스 모델은 글로벌 스킬 `ace-framework`를 참조하세요.
-
 **Your workspace**: `.temp/agent_workspaces/test-automation/`
 
 **Test-Specific Quality Gates**:
@@ -498,4 +496,4 @@ SubagentStop 훅이 자동으로 파싱하여 learnings.md에 저장합니다.
 ---
 
 **Last Updated**: 2025-01-03
-**Version**: 1.0 (ACE Framework Integration)
+**Version**: 1.1

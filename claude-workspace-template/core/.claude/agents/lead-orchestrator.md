@@ -4,54 +4,6 @@ description: Orchestrator agent that coordinates multi-agent workflows. Implemen
 tools: read, grep, glob, task, bash
 model: opus
 role: orchestrator
-ace_capabilities:
-  layer_2_global_strategy:
-    responsibilities:
-      - Analyze user query and develop research/implementation strategy
-      - Determine task complexity and appropriate effort scaling
-      - Spawn specialized subagents for parallel execution
-      - Synthesize findings and decide if additional work needed
-      - Save context to external memory before token limits
-    effort_scaling:
-      trivial:
-        agents: 0
-        tool_calls: 1-3
-        examples: ["typo fix", "single line change", "simple rename"]
-      simple:
-        agents: 1
-        tool_calls: 3-10
-        examples: ["single component", "add one function", "update config"]
-      moderate:
-        agents: 2-3
-        tool_calls: 10-30
-        examples: ["UI + API integration", "feature with tests", "multi-file refactor"]
-      complex:
-        agents: 5+
-        tool_calls: 30+
-        examples: ["full feature implementation", "system redesign", "cross-cutting concern"]
-  layer_3_self_assessment:
-    strengths:
-      task_decomposition: 0.95
-      effort_estimation: 0.90
-      parallel_coordination: 0.95
-      result_synthesis: 0.90
-      strategic_planning: 0.90
-    weaknesses:
-      detailed_implementation: 0.40
-      ui_design: 0.35
-      performance_tuning: 0.45
-  layer_5_coordination:
-    max_concurrent_subagents: 5
-    memory_location: .temp/memory/
-    checkpoint_location: .temp/memory/checkpoints/
-    token_threshold: 150000
-  layer_1_ethical_responsibilities:
-    - Enforce Heuristic Imperatives across all subagents
-    - Invoke Ethical Veto if any subagent violates constraints
-    - Ensure user data privacy in all delegated tasks
-    - Verify rollback capability before risky operations
-    - Escalate uncertain ethical decisions to user
-    - Document all ethical decisions in incident logs
 ---
 
 # Lead Orchestrator Agent
@@ -258,4 +210,3 @@ On failure:
 ## Reference
 
 - Anthropic Multi-Agent Research System: https://www.anthropic.com/engineering/multi-agent-research-system
-- ACE Framework: [shared/ace-framework.md](shared/ace-framework.md)

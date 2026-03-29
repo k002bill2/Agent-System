@@ -298,7 +298,7 @@ Important pieces from `CLAUDE.md` and `.claude/README.md`:
 
 - **Sub-agents and skills**
   - `.claude/agents/` and `.claude/skills/` define specialized agents (e.g., performance optimizer, test automation specialist) and meta-skills (skill/hook/command creators, verification loops).
-  - `shared/` frameworks (`ace-framework.md`, `quality-gates.md`, `effort-scaling.md`, `delegation-template.md`) define cross-agent protocols and quality gates.
+  - `shared/` frameworks (`quality-gates.md`, `effort-scaling.md`, `delegation-template.md`) define cross-agent protocols and quality gates.
 
 - **MCP servers**
   - `.claude/mcp.json` configures servers like `context7` for semantic search, `codex-cli` for code snippets, and optional web/automation providers.

@@ -4,28 +4,6 @@ description: Final validation agent for multi-agent workflows. Reviews code qual
 tools: read, grep, glob, bash
 model: haiku
 role: validator
-ace_capabilities:
-  layer_3_self_assessment:
-    strengths:
-      code_review: 0.90
-      type_validation: 0.90
-      test_coverage_analysis: 0.85
-      documentation_review: 0.85
-      import_verification: 0.90
-    weaknesses:
-      feature_implementation: 0.30
-      ui_design: 0.25
-      performance_optimization: 0.40
-  layer_5_coordination:
-    max_concurrent_operations: 2
-    workspace: .temp/agent_workspaces/quality-validator/
-    execution_order: last
-  layer_1_ethical_responsibilities:
-    - Verify ethical compliance of all subagent outputs
-    - Check for hardcoded secrets or API keys
-    - Ensure data privacy principles are followed
-    - Report any ethical violations to Primary Agent
-    - Block delivery if critical ethical concerns found
 ---
 
 # Quality Validator Agent
@@ -267,5 +245,4 @@ Recommended fixes provided. Revision needed before delivery.
 
 ## Reference
 
-- ACE Framework: [shared/ace-framework.md](shared/ace-framework.md)
 - Project Standards: [../../CLAUDE.md](../../CLAUDE.md)

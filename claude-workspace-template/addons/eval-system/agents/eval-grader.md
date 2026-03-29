@@ -4,24 +4,6 @@ description: AI agent evaluation grader. Performs code-based checks and LLM-powe
 tools: Read, Grep, Glob, Bash
 model: inherit
 role: grader
-ace_capabilities:
-  layer_3_self_assessment:
-    strengths:
-      code_analysis: 0.95
-      rubric_evaluation: 0.90
-      type_validation: 0.90
-      test_coverage_analysis: 0.85
-      state_check: 0.90
-      transcript_analysis: 0.85
-      static_analysis: 0.90
-    weaknesses:
-      feature_implementation: 0.20
-      ui_design: 0.20
-      performance_optimization: 0.40
-  layer_5_coordination:
-    max_concurrent_operations: 1
-    workspace: .temp/agent_workspaces/eval-grader/
-    execution_order: after_task_runner
 ---
 
 # Eval Grader Agent (v2.0)

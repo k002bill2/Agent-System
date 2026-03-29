@@ -50,8 +50,6 @@ Score = (통과한 윤리 체크 / 전체 윤리 체크) × 100
 - [ ] 30초 미만 API 폴링 간격
 - [ ] 워크스페이스 외부 파일 수정 시도
 
-→ [ace-framework.md](./ace-framework.md)의 Ethical Veto Protocol 참조
-
 ---
 
 ## Quality Gate Requirements

@@ -106,7 +106,6 @@ sequenceDiagram
 | **개발** | `react-web-development` | React/TS/Tailwind/Zustand |
 | **개발** | `test-automation` | Vitest 테스트 생성 |
 | **품질** | `verification-loop` | Boris Cherny 검증 루프 |
-| **품질** | `ace-framework` | ACE 거버넌스 |
 | **메타** | `skill-creator` | 스킬 생성 |
 | **메타** | `hook-creator` | 훅 생성 |
 | **메타** | `subagent-creator` | 에이전트 생성 |

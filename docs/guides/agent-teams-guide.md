@@ -161,6 +161,5 @@ Wait for your teammates to complete      → 리더 대기
 
 ## 관련 문서
 
-- `parallel-coordinator` 스킬 - ACE 프레임워크 기반 병렬 실행
 - `.claude/agents/shared/` - 에이전트 공유 프로토콜
 - `docs/architecture.md` - 시스템 아키텍처

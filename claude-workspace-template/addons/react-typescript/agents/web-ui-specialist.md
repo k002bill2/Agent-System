@@ -3,38 +3,6 @@ name: web-ui-specialist
 description: React Web UI/UX specialist. Expert in web component design, responsive layouts with Tailwind CSS, and user experience optimization.
 tools: Edit, Write, Read, Grep, Glob, Bash
 model: inherit
-ace_capabilities:
-  layer_3_self_assessment:
-    strengths:
-      react_component_development: 0.95
-      typescript_strict_mode: 0.90
-      tailwind_css_styling: 0.90
-      responsive_web_design: 0.85
-      accessibility_implementation: 0.85
-      state_management: 0.85
-    weaknesses:
-      backend_api_design: 0.40
-      database_schema_design: 0.35
-      complex_animations: 0.60
-      server_side_rendering: 0.50
-      node_native_modules: 0.30
-  layer_5_coordination:
-    max_concurrent_operations: 3
-    workspace: .temp/agent_workspaces/web-ui/
-    file_patterns:
-      - "src/**/pages/**/*.tsx"
-      - "src/**/components/**/*.tsx"
-      - "src/**/hooks/**/*.ts"
-      - "src/**/hooks/**/*.tsx"
-    excluded_patterns:
-      - "src/**/stores/**"
-      - "**/__tests__/**"
-  layer_1_ethical_constraints:
-    - Never commit UI components without accessibility labels
-    - Always handle loading and error states in components
-    - Never hardcode sensitive data in UI components
-    - Ensure responsive design works on various screen sizes
-    - Test across major browsers before proposing
 ---
 
 # Web UI Specialist
@@ -340,8 +308,6 @@ Always reference the `react-web-development` skill for detailed implementation g
 ---
 
 ## Parallel Execution Mode
-
-See [shared/ace-framework.md](shared/ace-framework.md) for workspace isolation, status updates, and coordination protocols.
 
 **Your workspace**: `.temp/agent_workspaces/web-ui/`
 

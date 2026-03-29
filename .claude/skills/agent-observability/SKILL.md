@@ -88,8 +88,7 @@ during concurrent agent execution.
 
 ## How It Works
 
-The `agentTracer.js` hook (registered as P2-005 in the ACE enforcement matrix)
-intercepts `PostToolUse:Task` events. It reads tool input via stdin, determines
+The `agentTracer.js` hook intercepts `PostToolUse:Task` events. It reads tool input via stdin, determines
 spawn vs completion by checking `tool_response` presence, and appends the
 appropriate event to the session's `events.jsonl`.
 
@@ -98,6 +97,5 @@ Duration is calculated by cross-referencing `parallel-state.json` start times.
 ## Related
 
 - Hook implementation: `.claude/hooks/agentTracer.js`
-- ACE Framework: `.claude/skills/ace-framework/SKILL.md` (P4 Optimization pillar)
 - Parallel state: `.claude/coordination/parallel-state.json`
 - Failure diagnosis: `.claude/skills/agent-improvement/SKILL.md`
