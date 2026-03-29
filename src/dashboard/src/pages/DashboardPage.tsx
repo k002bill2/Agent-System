@@ -24,14 +24,17 @@ export function DashboardPage() {
   const agents = useOrchestrationStore(s => s.agents)
   const sessions = useClaudeSessionsStore(s => s.sessions)
   const fetchSessions = useClaudeSessionsStore(s => s.fetchSessions)
+  const fetchSessionProjects = useClaudeSessionsStore(s => s.fetchProjects)
+  const allSessionProjects = useClaudeSessionsStore(s => s.allProjects)
   const isLoadingSessions = useClaudeSessionsStore(s => s.isLoading)
   const selectSession = useClaudeSessionsStore(s => s.selectSession)
   const setView = useNavigationStore(s => s.setView)
 
-  // Fetch Claude Code sessions on mount
+  // Fetch Claude Code sessions and session projects on mount
   useEffect(() => {
     fetchSessions()
-  }, [fetchSessions])
+    fetchSessionProjects()
+  }, [fetchSessions, fetchSessionProjects])
 
   const agentStats = Object.values(agents).reduce(
     (acc, agent) => {
@@ -45,7 +48,9 @@ export function DashboardPage() {
 
   // Session-based stats
   const activeSessions = sessions.filter(s => s.status === 'active').length
-  const uniqueProjects = new Set(sessions.filter(s => s.project_name && s.project_name !== '-').map(s => s.project_name)).size
+  const sessionProjectCount = allSessionProjects.length > 0
+    ? allSessionProjects.length
+    : new Set(sessions.filter(s => s.project_name && s.project_name !== '-').map(s => s.project_name)).size
   const totalMessages = sessions.reduce((sum, s) => sum + (s.message_count || 0), 0)
   const lastSession = sessions.length > 0 ? sessions[0] : null
   const lastActivityText = lastSession
@@ -90,8 +95,8 @@ export function DashboardPage() {
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Projects</p>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{uniqueProjects}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Session Projects</p>
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{sessionProjectCount}</p>
             </div>
             <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
               <FolderOpen className="w-5 h-5 text-blue-600 dark:text-blue-400" />
@@ -103,7 +108,7 @@ export function DashboardPage() {
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Messages</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Session Messages</p>
               <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{totalMessages.toLocaleString()}</p>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{lastActivityText}</p>
             </div>

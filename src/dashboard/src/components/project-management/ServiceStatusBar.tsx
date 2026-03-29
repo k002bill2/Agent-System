@@ -100,7 +100,7 @@ export const ServiceStatusBar: React.FC<ServiceStatusBarProps> = memo(({
       {/* Collapsed header */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-750 rounded-lg transition-colors"
+        className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
       >
         <div className="flex items-center gap-2.5">
           <Server className="w-4 h-4 text-gray-500 dark:text-gray-400" />
@@ -149,9 +149,9 @@ export const ServiceStatusBar: React.FC<ServiceStatusBarProps> = memo(({
                 className={cn(
                   'flex flex-col gap-1 p-2.5 rounded-lg border text-xs',
                   service.status === 'running'
-                    ? 'border-green-200 bg-green-50 dark:border-green-900/50 dark:bg-green-900/10'
+                    ? 'border-green-200 bg-green-50 dark:border-green-900/50 dark:bg-green-900/20'
                     : service.status === 'conflict'
-                      ? 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-900/10'
+                      ? 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-900/20'
                       : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800',
                 )}
               >
