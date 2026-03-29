@@ -216,7 +216,7 @@ export function ProjectMembersContent({
             {members.map((member) => (
               <div
                 key={member.id}
-                className="flex items-center gap-3 px-3 py-2.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-750"
+                className="flex items-center gap-3 px-3 py-2.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 <div className="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center shrink-0 text-xs font-medium text-gray-600 dark:text-gray-300">
                   {(member.user_name || member.user_email || '?')[0].toUpperCase()}

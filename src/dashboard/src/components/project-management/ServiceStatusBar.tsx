@@ -100,7 +100,7 @@ export const ServiceStatusBar: React.FC<ServiceStatusBarProps> = memo(({
       {/* Collapsed header */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-750 rounded-lg transition-colors"
+        className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
       >
         <div className="flex items-center gap-2.5">
           <Server className="w-4 h-4 text-gray-500 dark:text-gray-400" />
