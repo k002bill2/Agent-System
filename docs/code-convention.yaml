@@ -104,7 +104,7 @@ frontend:
         good: "bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
     - rule: "반응형 디자인: mobile-first (sm:, md:, lg:)"
       severity: warning
-    - rule: "font-mono 클래스 사용 금지 — 시스템 기본 폰트 유지"
+    - rule: "font-mono 일반 UI에서 사용 금지 — 단, 코드 diff, 터미널 로그, YAML/JSON 에디터, <pre>/<code> 블록 등 코드 컨텍스트는 예외 (ADR-006 개정)"
       severity: error
     - rule: "조건부 클래스는 cn() 유틸리티 사용 (clsx + tailwind-merge)"
       severity: error

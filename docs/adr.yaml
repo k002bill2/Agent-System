@@ -169,29 +169,37 @@ decisions:
     tags: [architecture, monorepo, claude-code, repository]
 
   # ---------------------------------------------------------------------------
-  # ADR-006: font-mono 클래스 사용 금지
+  # ADR-006: font-mono 사용 정책 (일반 UI 금지, 코드 컨텍스트 허용)
   # ---------------------------------------------------------------------------
   - id: ADR-006
-    title: "font-mono Tailwind 클래스 사용 금지"
-    status: accepted
-    date: "2026-02"
+    title: "font-mono 사용 정책 — 일반 UI 금지, 코드 컨텍스트 허용"
+    status: superseded
+    date: "2026-03"
+    superseded_date: "2026-03-29"
     context: |
-      대시보드 전반에서 font-mono 클래스가 사용되어 monospace 폰트가
-      간헐적으로 적용되었다. 시스템 기본 폰트와의 불일치로 시각적 통일성이 깨졌고,
-      한국어 텍스트에서 monospace 폰트가 가독성을 저하시켰다.
-      전체 UI를 시스템 기본 폰트로 통일하기로 결정했다.
+      대시보드 전반에서 font-mono 클래스가 남용되어 일반 UI 요소(라벨, ID 표시,
+      경로 텍스트 등)에도 monospace 폰트가 적용되었다. 이로 인해 시각적 통일성이
+      깨지고, 한국어 텍스트 가독성이 저하되었다.
+      초기에 전면 금지(2026-02)를 결정했으나, 코드리뷰 과정에서 코드 diff,
+      터미널 로그, YAML/JSON 에디터 등 코드 컨텍스트에서 monospace 폰트 없이
+      들여쓰기 정렬과 가독성이 심각하게 저하됨을 확인하여 정책을 개정했다.
     decision: |
-      font-mono Tailwind 클래스의 사용을 프로젝트 규칙으로 금지한다.
-      - .claude/rules/aos-frontend.md에 명시적 금지 규칙 추가
-      - 기존 font-mono 사용처 전면 제거
-      - 코드 블록 등 기술적으로 monospace가 필요한 경우도 시스템 폰트 유지
+      font-mono 사용 정책을 다음과 같이 개정한다:
+      - 일반 UI 요소(라벨, 경로, ID, 상태 뱃지 등)에서는 font-mono 사용 금지
+      - 코드 컨텍스트에서는 font-mono 사용 허용:
+        - 코드 diff 뷰 (DiffViewer)
+        - 터미널/로그 출력 (OutputLog, EnhancedRunLogs, WorkflowRunLogs)
+        - YAML/JSON 에디터 및 프리뷰 (YamlEditor, MCPToolCaller)
+        - 코드 편집/표시 영역 (<pre>, <code>, <textarea> for code)
+        - Git SHA 해시, 브랜치명 등 코드 식별자
+      - .claude/rules/aos-frontend.md에 예외 조건 명시
     consequences:
       positive:
-        - "시각적 일관성 확보"
-        - "한국어 텍스트 가독성 향상"
-        - "폰트 로딩 최적화 (추가 웹폰트 불필요)"
+        - "일반 UI의 시각적 일관성 유지"
+        - "코드 컨텍스트에서 들여쓰기 정렬 및 가독성 보장"
+        - "업계 표준(코드=monospace, UI=sans-serif) 준수"
       negative:
-        - "코드 스니펫 표시 시 monospace 없이 가독성 저하 가능"
+        - "코드 컨텍스트 판단이 주관적일 수 있어 리뷰 시 논의 필요"
     tags: [frontend, tailwind, typography, ui-consistency]
 
   # ---------------------------------------------------------------------------
