@@ -1,1 +1,0 @@
-{"event":"agent_spawned","timestamp":"2026-02-13T03:59:26.493Z","session_id":"sess_1770955166493","data":{"agent_type":"general-purpose","description":"Eval task_bug_001 useEffect fix","model":"default","run_in_background":true}}

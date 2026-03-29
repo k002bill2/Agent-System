@@ -1,1 +1,0 @@
-{"event":"agent_spawned","timestamp":"2026-02-13T04:02:06.569Z","session_id":"sess_1770955326569","data":{"agent_type":"eval-grader","description":"Grade task_ui_001 AgentCard","model":"default","run_in_background":true}}

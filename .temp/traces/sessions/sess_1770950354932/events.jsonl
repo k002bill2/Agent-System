@@ -1,1 +1,0 @@
-{"event":"agent_spawned","timestamp":"2026-02-13T02:39:14.932Z","session_id":"sess_1770950354932","data":{"agent_type":"eval-task-runner","description":"Eval task_bug_002 WebSocket","model":"default","run_in_background":true}}
