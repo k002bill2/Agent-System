@@ -43,7 +43,6 @@ Claude Code configuration for AOS (Agent Orchestration Service) Dashboard.
 | `verification-loop` | 검증 피드백 루프 (verify-app 병합) |
 | `run-eval` | AI 에이전트 평가 및 pass@k 지표 계산 |
 
-
 ## Sub-agents
 
 | Agent | Model | Expertise |

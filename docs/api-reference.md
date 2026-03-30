@@ -956,6 +956,82 @@ AOS Backend API 엔드포인트 문서입니다.
 
 ---
 
+## Automation (자동화 루프)
+
+| Method | Path | 설명 |
+|--------|------|------|
+| POST | `/api/automation/loops` | 자동화 루프 생성 |
+| GET | `/api/automation/loops` | 자동화 루프 목록 조회 |
+| GET | `/api/automation/loops/{loop_id}` | 특정 루프 상태 조회 |
+| POST | `/api/automation/loops/{loop_id}/start` | 루프 시작 |
+| POST | `/api/automation/loops/{loop_id}/stop` | 루프 중지 |
+| DELETE | `/api/automation/loops/{loop_id}` | 루프 삭제 (실행 중이면 먼저 중지) |
+
+**루프 생성 요청 본문** (`POST /api/automation/loops`):
+```json
+{
+  "name": "DB Health Monitor",
+  "interval_seconds": 60,
+  "max_iterations": null,
+  "conditions": [
+    {
+      "metric": "health.database.latency_ms",
+      "operator": "gt",
+      "threshold": 500,
+      "duration_seconds": 0
+    }
+  ],
+  "actions": [
+    {
+      "type": "notify",
+      "target": "slack-channel",
+      "params": {}
+    }
+  ],
+  "cooldown_seconds": 300
+}
+```
+
+**조건 연산자**: `gt`, `lt`, `eq`, `ne`, `gte`, `lte`
+
+**액션 타입**: `webhook`, `workflow`, `log`, `notify`, `pipeline`
+
+**루프 상태**: `pending`, `running`, `stopped`, `completed`, `error`
+
+---
+
+## Pipelines (데이터 파이프라인)
+
+| Method | Path | 설명 |
+|--------|------|------|
+| POST | `/api/pipelines` | 파이프라인 정의 생성 |
+| GET | `/api/pipelines` | 파이프라인 목록 조회 |
+| POST | `/api/pipelines/{pipeline_id}/execute` | 파이프라인 실행 |
+| GET | `/api/pipelines/{pipeline_id}/runs/{run_id}` | 실행 결과 조회 |
+| DELETE | `/api/pipelines/{pipeline_id}` | 파이프라인 삭제 |
+
+**파이프라인 생성 요청 본문** (`POST /api/pipelines`):
+```json
+{
+  "name": "Data Processing Pipeline",
+  "stages": [
+    {"stage_type": "collect", "name": "Collect Data", "config": {}},
+    {"stage_type": "transform", "name": "Transform", "config": {}},
+    {"stage_type": "analyze", "name": "Analyze", "config": {}},
+    {"stage_type": "output", "name": "Output Results", "config": {}}
+  ],
+  "error_strategy": "fail_fast",
+  "max_retries": 2,
+  "timeout_seconds": 300
+}
+```
+
+**내장 스테이지 타입**: `collect`, `transform`, `analyze`, `output`
+
+**에러 전략**: `fail_fast`, `continue`, `retry`
+
+---
+
 ## Warp Terminal
 
 | Method | Path | 설명 |
@@ -963,6 +1039,25 @@ AOS Backend API 엔드포인트 문서입니다.
 | POST | `/api/warp/open` | Warp 터미널에서 프로젝트 열기 |
 | GET | `/api/warp/status` | Warp 설치 상태 확인 |
 | POST | `/api/warp/cleanup` | 오래된 설정 파일 정리 |
+
+**Warp Open 요청 본문** (`POST /api/warp/open`):
+```json
+{
+  "project_id": "project-uuid",
+  "command": "npm test",
+  "title": "Tab Title",
+  "new_window": true,
+  "use_claude_cli": false,
+  "image_paths": ["/path/to/screenshot.png"],
+  "branch_name": "feature/my-branch"
+}
+```
+
+**확장 기능**:
+- `branch_name`: 실행 전 feature branch 자동 생성 (`git checkout -b`)
+- `image_paths`: Claude CLI 실행 시 `--image` 플래그로 이미지 전달
+- `use_claude_cli`: `claude --dangerously-skip-permissions` 래핑 모드
+- Docker 모드: URI를 프론트엔드로 반환 (`open_via_frontend: true`)
 
 ---
 

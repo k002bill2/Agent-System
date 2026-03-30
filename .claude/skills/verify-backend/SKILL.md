@@ -1,14 +1,16 @@
 ---
 name: verify-backend
-description: >
-  Python/FastAPI/LangGraph 백엔드 패턴 검증.
-  Use when: (1) FastAPI 엔드포인트 추가/수정 후, (2) LangGraph 노드 생성/변경 후,
-  (3) 백엔드 PR 생성 전
+description: "Use when verifying Python/FastAPI/LangGraph patterns after endpoint or node changes, before backend PR. Checks type hints, bare except, hardcoded secrets, sync I/O blocking, and print statements."
+allowed-tools: Bash, Grep, Glob, Read
 ---
 
-# 백엔드 패턴 검증
+# Verify Backend
 
-검증 스크립트를 실행하여 5개 항목을 자동 검사:
+## Overview
+
+Python 백엔드의 5가지 필수 패턴(타입 힌트, bare except, 하드코딩 시크릿, sync I/O, print)을 자동 검증하는 스킬. 엔드포인트/노드 변경 후 또는 PR 전에 실행한다.
+
+## 검증 실행
 
 ```bash
 bash scripts/verify.sh
@@ -40,7 +42,17 @@ bash scripts/verify.sh
 - **설정 파일** (`config.py`) — 기본값 문자열은 시크릿 아님
 - **`__init__.py`** — 모듈 초기화 타입 힌트 면제
 
-## 관련 파일
+## Common Mistakes
+
+| 실수 | 수정 |
+|------|------|
+| 테스트 파일에서 FAIL 보고 | 예외 목록 확인 — `test_*.py`는 면제 |
+| `except:` bare except 사용 | `except Exception as e:` 또는 구체 예외 타입 지정 |
+| `requests.get()` 동기 호출 | `async with httpx.AsyncClient() as client:` 비동기 전환 |
+| `time.sleep()` 사용 | `await asyncio.sleep()` 비동기 전환 |
+| `print()` 디버깅용 남김 | `logger = logging.getLogger(__name__)` 후 `logger.info()` |
+
+## References
 
 | 경로 | 용도 |
 |------|------|

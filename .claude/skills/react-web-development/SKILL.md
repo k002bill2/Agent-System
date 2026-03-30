@@ -1,12 +1,15 @@
 ---
 name: react-web-development
-description: >
-  React Web component development with TypeScript, Vite, Tailwind CSS, and Zustand.
-  Use when: creating UI components, pages, implementing routing flows, custom hooks,
-  or working with React/Tailwind/Zustand code.
+description: "Use when creating React UI components, pages, custom hooks, or working with TypeScript/Tailwind CSS/Zustand in AOS Dashboard. Also triggers for styling, responsive design, dark mode, accessibility, or path alias questions."
 ---
 
-# React Web Development Guidelines
+# React Web Development
+
+## Overview
+
+AOS Dashboard의 React 컴포넌트를 TypeScript, Tailwind CSS, Zustand 기반으로 개발하는 스킬. `memo()` + `displayName`, 다크모드, 접근성을 기본으로 보장한다.
+
+**REQUIRED BACKGROUND:** superpowers:brainstorming (새 컴포넌트 설계 시)
 
 ## Component Structure
 
@@ -86,6 +89,17 @@ src/dashboard/src/
 - Path aliases: `@/components/...` (not relative imports)
 - Clean up subscriptions/timers in useEffect cleanup
 - TypeScript strict mode, no `any`
+
+## Common Mistakes
+
+| 실수 | 수정 |
+|------|------|
+| `memo()` 없이 export | `export const X = memo(...)` + `X.displayName = 'X'` |
+| `dark:` 누락 | `bg-white` 사용 시 반드시 `dark:bg-gray-800` 대응 |
+| 인라인 `style={{}}` | Tailwind 클래스로 변환, 동적 값만 예외 |
+| 상대경로 import `../../../` | `@/components/...` path alias 사용 |
+| `any` 타입 사용 | `unknown` + type guard 또는 구체 타입 정의 |
+| `useEffect` cleanup 누락 | 구독/타이머는 반드시 cleanup 반환 |
 
 ## References
 

@@ -1,14 +1,13 @@
 ---
 name: agent-improvement
-description: Self-improvement loop for multi-agent workflows. Use after eval runs (/run-eval), after failed agent tasks, during periodic trace reviews, or when agent success rate drops below 90%.
+description: "Use when agent success rate drops below 90%, after eval runs, after failed agent tasks, or during periodic trace reviews to diagnose failures and propose targeted fixes."
 ---
 
 # Agent Improvement
 
-## Purpose
+## Overview
 
-Diagnose agent failures and propose targeted improvements.
-Closes the feedback loop between observation (tracing) and action (prompt/skill refinement).
+Diagnose agent failures and propose targeted improvements. Closes the feedback loop between observation (tracing) and action (prompt/skill refinement).
 
 ## Diagnosis Workflow
 
@@ -29,6 +28,8 @@ Closes the feedback loop between observation (tracing) and action (prompt/skill 
 4. Propose fixes
    └─> Generate specific, actionable improvement proposals
 ```
+
+**REQUIRED:** Use `superpowers:agent-observability` for reading trace data and understanding event formats.
 
 ## Improvement Targets
 
@@ -62,7 +63,17 @@ Diagnosis ──> Proposal ──> Apply ──> Re-evaluate
 | Silent failure | Agent reports success but output is incomplete | Add verification step in agent prompt |
 | Context starvation | Agent lacks project knowledge | Include relevant SKILL.md or docs in prompt |
 
-## Related Files
+## Common Mistakes
+
+| Mistake | Correction |
+|---------|-----------|
+| Proposing vague improvements like "improve the prompt" | Always specify exact file path, old content, and new content for each change |
+| Fixing symptoms instead of root causes (e.g., adding retries for XML tool output) | Trace back to why the failure happens — use `general-purpose` subagent_type, not retries |
+| Skipping re-evaluation after applying fixes | Always run `/run-eval` or a trial agent task to verify the improvement works |
+| Analyzing only the latest session when the pattern is intermittent | Check multiple sessions in `.temp/traces/sessions/` to confirm patterns |
+| Changing agent prompts without updating quality-reference.md | Keep agent prompts and shared quality standards in sync |
+
+## References
 
 - Trace data: `.temp/traces/sessions/*/events.jsonl`
 - Eval results: `.claude/evals/results/`

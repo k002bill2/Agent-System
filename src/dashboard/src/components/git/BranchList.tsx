@@ -215,7 +215,7 @@ export function BranchList({
               'flex items-center justify-between p-3 rounded-lg border transition-colors',
               branch.is_current
                 ? 'bg-primary-50 border-primary-200 dark:bg-primary-900/10 dark:border-primary-800'
-                : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750'
+                : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
             )}
           >
             {/* Left: Branch info */}

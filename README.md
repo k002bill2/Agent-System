@@ -2,7 +2,7 @@
 
 LangGraph 기반 멀티 에이전트 오케스트레이션 서비스입니다.
 
-[![CI](https://github.com/k002bill2/Agent-Orchestrator/actions/workflows/ci.yml/badge.svg)](https://github.com/k002bill2/Agent-Orchestrator/actions/workflows/ci.yml)
+[![CI](https://github.com/k002bill2/Agent-System/actions/workflows/ci.yml/badge.svg)](https://github.com/k002bill2/Agent-System/actions/workflows/ci.yml)
 [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template)
 
 ## Features
@@ -11,6 +11,10 @@ LangGraph 기반 멀티 에이전트 오케스트레이션 서비스입니다.
 - 📊 **실시간 대시보드**: WebSocket 기반 태스크 트리 및 에이전트 활동 시각화
 - 🔄 **자동 태스크 분해**: 복잡한 작업을 서브태스크로 분해
 - 📝 **완전한 추적성**: 모든 에이전트 활동 및 태스크 이력 저장
+- 🔍 **RAG**: Qdrant 기반 의미론적 검색
+- 🔐 **인증**: OAuth (Google/GitHub) + Email/Password
+- 🛡️ **HITL 승인**: 위험 작업 전 사용자 승인 요청
+- 🔌 **MCP 연동**: 외부 도구 통합 (filesystem, github, playwright)
 
 ## 🚀 Quick Start (Docker)
 
@@ -18,8 +22,8 @@ LangGraph 기반 멀티 에이전트 오케스트레이션 서비스입니다.
 
 ```bash
 # 1. 저장소 클론
-git clone https://github.com/k002bill2/Agent-Orchestrator.git
-cd Agent-Orchestrator
+git clone https://github.com/k002bill2/Agent-System.git
+cd Agent-System
 
 # 2. 환경변수 설정
 cp .env.example .env
@@ -149,23 +153,24 @@ npm run dev
 │  └─────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────┘
                                  │
-                    ┌────────────┴────────────┐
-                    │                         │
-           ┌────────┴────────┐       ┌───────┴───────┐
-           │    PostgreSQL    │       │     Redis     │
-           │   localhost:5432 │       │ localhost:6379│
-           └─────────────────┘       └───────────────┘
+                    ┌────────────┼────────────┐
+                    │            │            │
+           ┌────────┴────────┐ ┌┴──────────┐ ┌┴──────────┐
+           │    PostgreSQL    │ │   Redis   │ │  Qdrant   │
+           │   localhost:5432 │ │ :6379     │ │ :6333     │
+           └─────────────────┘ └───────────┘ └───────────┘
 ```
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|------------|
-| Backend | Python 3.11, LangGraph, FastAPI, SQLAlchemy |
-| Frontend | React 18, TypeScript, Tailwind CSS, Zustand |
+| Backend | Python 3.11, LangGraph 0.2+, FastAPI 0.115+, SQLAlchemy 2.0+ |
+| Frontend | React 18, TypeScript 5.6+, Tailwind CSS 3.4, Zustand 5.0, Vite 6.0+ |
 | Database | PostgreSQL 16 |
 | Cache/Queue | Redis 7 |
-| AI | Claude (via LangChain) |
+| Vector DB | Qdrant (RAG) |
+| AI | Google Gemini (기본), Anthropic Claude, Ollama |
 
 ## API
 

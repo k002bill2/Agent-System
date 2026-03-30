@@ -1,15 +1,14 @@
 ---
 name: agent-observability
-description: Production tracing and metrics for multi-agent workflows. Use when debugging agent behavior, analyzing performance/failure patterns, or setting up observability for new agent workflows.
+description: "Use when debugging agent behavior, analyzing performance or failure patterns, setting up tracing for new agent workflows, or investigating why agents fail silently or timeout."
+user-invocable: false
 ---
 
 # Agent Observability
 
-## Purpose
+## Overview
 
-Trace agent behavior for diagnosis and improvement.
-Records structured events for every agent spawn and completion,
-enabling performance analysis and failure pattern detection.
+Trace agent behavior for diagnosis and improvement. Records structured events for every agent spawn and completion, enabling performance analysis and failure pattern detection.
 
 ## Event Types
 
@@ -88,14 +87,21 @@ during concurrent agent execution.
 
 ## How It Works
 
-The `agentTracer.js` hook intercepts `PostToolUse:Task` events. It reads tool input via stdin, determines
-spawn vs completion by checking `tool_response` presence, and appends the
-appropriate event to the session's `events.jsonl`.
-
+Events are appended to `events.jsonl` via hooks that intercept agent lifecycle events.
 Duration is calculated by cross-referencing `parallel-state.json` start times.
 
-## Related
+## Common Mistakes
 
-- Hook implementation: `.claude/hooks/agentTracer.js`
+| Mistake | Correction |
+|---------|-----------|
+| Looking for events in the wrong session directory | Use `CLAUDE_SESSION_ID` env var or check `.temp/traces/sessions/` for the most recent session |
+| Logging prompt content or response text in events | Only log event type, duration, success boolean — never content (Privacy Rules) |
+| Expecting real-time metrics updates | Metrics are aggregated post-session; during a session, parse `events.jsonl` directly |
+| Confusing `agent_spawned` with `agent_completed` events | Spawned = no `tool_response`; Completed = has `tool_response` with duration and success |
+| Ignoring `run_in_background` when analyzing duration | Background agents run concurrently — their duration does not block the main flow |
+
+## References
+
 - Parallel state: `.claude/coordination/parallel-state.json`
 - Failure diagnosis: `.claude/skills/agent-improvement/SKILL.md`
+- **REQUIRED:** Use `superpowers:agent-improvement` for failure pattern analysis

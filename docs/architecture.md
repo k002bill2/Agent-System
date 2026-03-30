@@ -72,7 +72,7 @@ src/backend/
 │   ├── nodes.py             # 6가지 노드 구현
 │   ├── parallel_executor.py # 병렬 실행
 │   └── tools.py             # MCP 도구 실행자
-├── services/                    # 46개 서비스/매니저 모듈
+├── services/                    # 67개 서비스/매니저 모듈
 │   ├── adapters/               # 어댑터 패턴 구현
 │   ├── cache/                  # 캐싱 레이어
 │   ├── agent_manager.py           # 에이전트 인스턴스 관리
@@ -128,12 +128,23 @@ src/backend/
 │   ├── tmux_service.py            # Tmux 세션 관리
 │   ├── variable_expander.py       # ${{ }} 변수 치환 (steps/env/matrix/secrets)
 │   ├── version_service.py         # 설정 버전 관리/롤백
+│   ├── upload_cleanup_service.py  # 업로드 파일 TTL 기반 정리
 │   ├── warp_service.py            # Warp 터미널 + MCP 에이전트
 │   ├── webhook_service.py         # Webhook 딜리버리 (HMAC-SHA256)
 │   ├── workflow_engine.py         # 워크플로우 DAG 실행 엔진
 │   ├── workflow_service.py        # 워크플로우 CRUD 서비스
-│   └── workflow_yaml_parser.py    # 워크플로우 YAML 파싱
-├── api/                     # FastAPI 라우터 (43개 모듈)
+│   ├── workflow_yaml_parser.py    # 워크플로우 YAML 파싱
+│   ├── automation_loop_service.py # 주기적 조건 모니터링 + 자동 액션 실행 루프
+│   └── pipeline/                  # 모듈형 데이터 파이프라인
+│       ├── pipeline_service.py    # 파이프라인 오케스트레이터
+│       ├── models.py              # PipelineConfig, PipelineResult 등 모델
+│       ├── stage.py               # BaseStage ABC, PipelineContext
+│       └── stages/                # 내장 4단계
+│           ├── collect_stage.py   # 데이터 수집 단계
+│           ├── transform_stage.py # 데이터 변환 단계
+│           ├── analyze_stage.py   # 데이터 분석 단계
+│           └── output_stage.py    # 결과 출력 단계
+├── api/                     # FastAPI 라우터 (44개 모듈)
 │   └── v1/                  # v1 API (agent_monitor, agent_registry, auth_middleware 등 6개)
 ├── auth/                    # 인증 프로바이더
 │   └── providers/
@@ -261,7 +272,15 @@ container = client.containers.run(
 |----|------|------|
 | **PostgreSQL** | 메인 DB | 관계형 데이터 (사용자, 세션, 태스크 등) |
 | **Redis** | 캐시/세션 | 실시간 상태, 세션 스토어 |
-| **Qdrant** | 벡터 DB | RAG용 임베딩 검색 |
+| **Qdrant** | 벡터 DB | RAG용 임베딩 검색 (Vector DB) |
+
+### LLM Provider
+
+| Provider | 용도 | 설명 |
+|----------|------|------|
+| **Google Gemini** | 기본 LLM | Gemini 3/2.5 시리즈 (1M context) |
+| **Anthropic Claude** | 고성능 LLM | Claude 4 시리즈 (200K context) |
+| **Ollama** | 로컬 LLM | 로컬 모델 실행 |
 
 > ⚠️ **Firebase가 아닙니다!** PostgreSQL은 오픈소스 DB로 가입이 필요 없습니다.
 

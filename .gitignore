@@ -23,9 +23,17 @@ build/
 .DS_Store
 Thumbs.db
 
+# Screenshots (root level)
+/*.png
+
 # Logs
 logs/
 *.log
+
+# Database backups
+*.dump
+*.rdb
+*.snapshot
 
 # Backend data (playground sessions, etc.)
 src/backend/data/
