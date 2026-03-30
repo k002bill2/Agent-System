@@ -457,7 +457,11 @@ def reorder_projects(project_ids: list[str]) -> list[Project]:
 
 # Auto-register projects from projects/ directory
 def init_projects(base_path: str = None):
-    """Initialize projects from projects/ directory."""
+    """Initialize projects from projects/ directory.
+
+    Only symlinks are registered as projects. Regular directories
+    (e.g. e2e test artifacts) are ignored.
+    """
     if base_path is None:
         # Default to Agent System root
         base_path = Path(__file__).parent.parent.parent.parent
@@ -465,8 +469,7 @@ def init_projects(base_path: str = None):
     projects_dir = Path(base_path) / "projects"
     if projects_dir.exists():
         for item in projects_dir.iterdir():
-            if item.is_dir() or item.is_symlink():
-                # Resolve symlinks
-                real_path = item.resolve()
+            if item.is_symlink() or (item.is_dir() and not item.name.startswith('test-')):
+                real_path = item.resolve() if item.is_symlink() else item
                 if real_path.is_dir():
                     register_project(item.name, str(real_path))

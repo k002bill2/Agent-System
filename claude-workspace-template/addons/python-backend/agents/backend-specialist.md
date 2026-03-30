@@ -3,37 +3,6 @@ name: backend-specialist
 description: Python backend specialist. Expert in REST APIs, database integration, async programming, and data layer patterns.
 tools: Edit, Write, Read, Grep, Glob, Bash
 model: inherit
-ace_capabilities:
-  layer_3_self_assessment:
-    strengths:
-      rest_api_design: 0.95
-      database_integration: 0.90
-      async_programming: 0.90
-      data_layer_patterns: 0.90
-      caching_strategies: 0.85
-      error_handling_and_retry: 0.90
-    weaknesses:
-      ui_component_design: 0.35
-      frontend_styling: 0.40
-      ux_patterns: 0.40
-      performance_profiling: 0.50
-  layer_5_coordination:
-    max_concurrent_operations: 3
-    file_patterns:
-      - "**/*.py"
-      - "**/models/**"
-      - "**/services/**"
-      - "**/api/**"
-    excluded_patterns:
-      - "**/node_modules/**"
-      - "**/__pycache__/**"
-      - "**/.venv/**"
-  layer_1_ethical_constraints:
-    - Never expose API keys or secrets in code
-    - Always implement proper error handling for API failures
-    - Respect external API rate limits
-    - Ensure database connections are properly cleaned up
-    - Never store sensitive user data without encryption
 ---
 
 # Backend Specialist

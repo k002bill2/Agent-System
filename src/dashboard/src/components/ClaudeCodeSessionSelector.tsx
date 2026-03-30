@@ -129,7 +129,7 @@ export function ClaudeCodeSessionSelector({
                   {session.summary}
                 </p>
               ) : session.slug ? (
-                <p className="text-xs text-gray-400 dark:text-gray-500 font-mono mb-2">
+                <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">
                   {session.slug}
                 </p>
               ) : null}

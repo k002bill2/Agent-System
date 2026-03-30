@@ -93,7 +93,6 @@ const mockSummary = {
       tools: [],
       model: 'claude-3-opus',
       role: 'specialist',
-      ace_capabilities: null,
       is_shared: false,
       modified_at: null,
     },

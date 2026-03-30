@@ -50,7 +50,7 @@ export function OverviewTab() {
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
               {project.project_name}
             </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-mono">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               {project.project_path}
             </p>
             <div className="flex items-center gap-2 mt-2 text-sm text-gray-500 dark:text-gray-400">
@@ -202,7 +202,7 @@ export function OverviewTab() {
                 key={cmd.command_id}
                 className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2"
               >
-                <span className="font-medium font-mono">/{cmd.command_id}</span>
+                <span className="font-medium">/{cmd.command_id}</span>
                 {cmd.description && (
                   <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
                     {cmd.description}

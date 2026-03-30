@@ -34,6 +34,14 @@ dev/active/[task-name]/
 ```
 워크플로우: `/dev-docs` → 구현 → `/update-dev-docs` → `/compact`
 
+## e2e 테스트 잔여물 방지
+- `afterAll`/`afterEach`에서 생성된 리소스(파일, 프로세스, DB 데이터) 정리 필수
+- 임시 파일은 OS temp 디렉토리 또는 `.gitignore`된 경로에 생성
+- 브라우저/프로세스는 테스트 종료 시 반드시 kill
+- DB 테스트 데이터는 트랜잭션 롤백 또는 teardown으로 제거
+- 스크린샷/녹화는 CI 아티팩트로만 보관, 로컬에 남기지 않음
+- 테스트 실행 후 `git status`에 untracked 파일이 생기면 안 됨
+
 ## 평가 시스템
 에이전트 성능 평가:
 - `/run-eval` 스킬로 실행 (`.claude/skills/run-eval/`)

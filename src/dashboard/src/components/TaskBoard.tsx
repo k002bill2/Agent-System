@@ -191,7 +191,7 @@ function SessionDetailCard() {
           <h3 className="font-semibold text-gray-900 dark:text-white truncate">
             {session.project_name || 'Unknown Project'}
           </h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400 font-mono truncate">
+          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
             {session.slug || session.session_id}
           </p>
         </div>
@@ -318,7 +318,7 @@ function ActivitySummaryView() {
                   className="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2"
                 >
                   <Icon className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                  <span className="text-sm text-gray-700 dark:text-gray-300 truncate font-mono">{name}</span>
+                  <span className="text-sm text-gray-700 dark:text-gray-300 truncate">{name}</span>
                   <span className="ml-auto text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded-full">
                     {count}
                   </span>

@@ -51,7 +51,7 @@ function ActivityEventItem({ event }: { event: ActivityEvent }) {
     if (event.type === 'tool_use') {
       return (
         <div className="space-y-1">
-          <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
+          <span className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
             {event.tool_name}
           </span>
           {event.tool_input && (
@@ -125,7 +125,7 @@ function SessionDetailPanel() {
           <h3 className="font-semibold text-gray-900 dark:text-white truncate">
             {selectedSession.project_name || 'Unknown Project'}
           </h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400 font-mono truncate">
+          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
             {selectedSession.slug || selectedSession.session_id}
           </p>
         </div>

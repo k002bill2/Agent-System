@@ -199,12 +199,12 @@ export function SecretsManager({ onClose }: SecretsManagerProps) {
                 >
                   <Lock className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-mono text-gray-700 dark:text-gray-300">{secret.name}</p>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">{secret.name}</p>
                     <p className="text-xs text-gray-400">
                       {secret.scope} · {new Date(secret.created_at).toLocaleDateString()}
                     </p>
                   </div>
-                  <span className="text-xs font-mono text-gray-400">••••••</span>
+                  <span className="text-xs text-gray-400">••••••</span>
                   <button
                     onClick={() => handleDelete(secret.id)}
                     className="p-1 opacity-0 group-hover:opacity-100 hover:bg-red-100 dark:hover:bg-red-900/20 rounded"

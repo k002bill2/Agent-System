@@ -160,7 +160,7 @@ export function MCPServerCard({
         <div className="mb-3 space-y-1">
           {server.pid && (
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              PID: <span className="font-mono">{server.pid}</span>
+              PID: <span className="">{server.pid}</span>
             </p>
           )}
           {server.started_at && (

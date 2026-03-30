@@ -58,7 +58,7 @@ your-project/
 
 Core는 모든 프로젝트에 공통으로 설치되는 기본 설정입니다.
 
-### Agents (2) + Shared Frameworks (5)
+### Agents (2) + Shared Frameworks (4)
 
 | Agent | Description |
 |-------|-------------|
@@ -67,7 +67,6 @@ Core는 모든 프로젝트에 공통으로 설치되는 기본 설정입니다.
 
 | Shared Framework | Description |
 |------------------|-------------|
-| `ace-framework` | 병렬 실행 프로토콜 (Agent Collaborative Execution) |
 | `quality-gates` | 단계별 품질 게이트 정의 |
 | `effort-scaling` | 작업 복잡도에 따른 리소스 할당 |
 | `delegation-template` | 에이전트 위임 템플릿 |

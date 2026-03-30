@@ -52,7 +52,7 @@ export function ConfirmDeleteModal({
           <p className="text-gray-600 dark:text-gray-300 mb-4">{message}</p>
 
           <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-3 mb-6">
-            <code className="text-sm font-mono text-gray-800 dark:text-gray-200">
+            <code className="text-sm text-gray-800 dark:text-gray-200">
               {itemName}
             </code>
           </div>

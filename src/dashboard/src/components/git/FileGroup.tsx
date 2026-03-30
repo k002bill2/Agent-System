@@ -81,7 +81,7 @@ function FileItem({ file, selected, onSelect, onStage }: FileItemProps) {
         onClick={(e) => e.stopPropagation()}
       />
       <Icon className={cn('w-3.5 h-3.5 flex-shrink-0', statusColors[file.status])} />
-      <span className="flex-1 text-xs font-mono truncate text-gray-700 dark:text-gray-300">
+      <span className="flex-1 text-xs truncate text-gray-700 dark:text-gray-300">
         {file.path}
       </span>
       <span
@@ -218,7 +218,7 @@ export function FileGroupCard({
                   }
                 }}
                 autoFocus
-                className="w-full px-2 py-1 text-sm font-mono border border-blue-300 dark:border-blue-700 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-2 py-1 text-sm border border-blue-300 dark:border-blue-700 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             ) : (
               <div

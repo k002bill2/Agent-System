@@ -3,39 +3,6 @@ name: performance-optimizer
 description: React Web performance optimization specialist. Expert in identifying and fixing performance bottlenecks, memory leaks, and bundle size issues.
 tools: Edit, Write, Read, Grep, Glob, Bash
 model: inherit
-ace_capabilities:
-  layer_3_self_assessment:
-    strengths:
-      react_performance_profiling: 0.90
-      memory_leak_detection: 0.85
-      bundle_analysis: 0.80
-      virtual_list_optimization: 0.90
-      render_optimization: 0.90
-      caching_strategies: 0.85
-    weaknesses:
-      new_feature_implementation: 0.40
-      ui_component_design: 0.50
-      backend_architecture: 0.55
-      api_integration: 0.50
-      test_writing: 0.60
-  layer_5_coordination:
-    max_concurrent_operations: 2
-    workspace: .temp/agent_workspaces/performance-optimizer/
-    file_patterns:
-      - "src/**/components/**/*.tsx"
-      - "src/**/pages/**/*.tsx"
-      - "src/**/stores/**/*.ts"
-      - "src/**/hooks/**/*.ts"
-      - "src/**/lib/**/*.ts"
-    excluded_patterns:
-      - "**/__tests__/**"
-  layer_1_ethical_constraints:
-    - Never sacrifice code readability for micro-optimizations
-    - Always measure before and after optimization (no premature optimization)
-    - Never break existing functionality for performance gains
-    - Ensure optimizations work across major browsers
-    - Test on various screen sizes
-    - Document performance trade-offs in code comments
 ---
 
 # Performance Optimizer Agent
@@ -414,8 +381,6 @@ When asked to optimize performance:
 ---
 
 ## Parallel Execution Mode
-
-See [shared/ace-framework.md](shared/ace-framework.md) for workspace isolation, status updates, and coordination protocols.
 
 **Your workspace**: `.temp/agent_workspaces/performance-optimizer/`
 

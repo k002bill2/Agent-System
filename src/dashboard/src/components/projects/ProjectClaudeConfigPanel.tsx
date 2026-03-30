@@ -374,7 +374,7 @@ export function ProjectClaudeConfigPanel({ project, onClose }: ProjectClaudeConf
                               )}
                             </button>
                           </div>
-                          <div className="mt-1.5 text-xs text-gray-500 dark:text-gray-400 font-mono truncate">
+                          <div className="mt-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
                             {server.command} {server.args.slice(0, 2).join(' ')}
                             {server.args.length > 2 && '...'}
                           </div>
@@ -426,7 +426,7 @@ export function ProjectClaudeConfigPanel({ project, onClose }: ProjectClaudeConf
                                 {hook.event}
                               </span>
                             </div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono truncate">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
                               {hook.matcher !== '*' ? `[${hook.matcher}] ` : ''}{hook.command}
                             </p>
                           </div>

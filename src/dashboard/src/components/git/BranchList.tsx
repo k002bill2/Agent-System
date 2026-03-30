@@ -13,10 +13,11 @@ import {
   AlertTriangle,
   Loader2,
   ArrowRightLeft,
+  FolderGit,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { GitAlert } from './GitAlert'
-import type { GitBranch, ConflictStatus } from '../../stores/git'
+import type { GitBranch, GitWorktree, ConflictStatus } from '../../stores/git'
 
 interface DeleteConfirmState {
   branchName: string
@@ -24,6 +25,8 @@ interface DeleteConfirmState {
   isUnmerged: boolean
   isRemote: boolean
   hasTracking: boolean
+  hasWorktree: boolean
+  worktreePath: string | null
 }
 
 interface BranchListProps {
@@ -33,10 +36,11 @@ interface BranchListProps {
   isLoading: boolean
   onCreateBranch: (name: string, startPoint?: string) => Promise<boolean>
   onCheckoutBranch: (name: string) => Promise<boolean>
-  onDeleteBranch: (name: string, force?: boolean, deleteRemote?: boolean) => Promise<boolean>
+  onDeleteBranch: (name: string, force?: boolean, deleteRemote?: boolean, removeWorktree?: boolean) => Promise<boolean>
   onMergeClick: (source: string) => void
   onRefresh: () => void
   conflictStatuses?: Record<string, ConflictStatus>
+  worktrees?: GitWorktree[]
 }
 
 export function BranchList({
@@ -50,6 +54,7 @@ export function BranchList({
   onMergeClick,
   onRefresh,
   conflictStatuses = {},
+  worktrees = [],
 }: BranchListProps) {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newBranchName, setNewBranchName] = useState('')
@@ -60,6 +65,7 @@ export function BranchList({
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState | null>(null)
   const [forceDelete, setForceDelete] = useState(false)
   const [deleteRemote, setDeleteRemote] = useState(false)
+  const [removeWorktree, setRemoveWorktree] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [checkingOut, setCheckingOut] = useState<string | null>(null)
@@ -94,18 +100,25 @@ export function BranchList({
   )
 
   const openDeleteConfirm = useCallback((branch: GitBranch) => {
+    const matchingWorktree = worktrees.find(
+      (wt) => wt.branch === branch.name && !wt.is_main
+    ) ?? null
+
     setDeleteConfirm({
       branchName: branch.name,
       isProtected: branch.is_protected || isBranchProtected(branch.name),
       isUnmerged: (branch.ahead ?? 0) > 0,
       isRemote: branch.is_remote,
       hasTracking: !!branch.tracking_branch,
+      hasWorktree: !!matchingWorktree,
+      worktreePath: matchingWorktree?.path ?? null,
     })
     setForceDelete(false)
     setDeleteRemote(false)
+    setRemoveWorktree(false)
     setDeleteError(null)
     setMenuOpen(null)
-  }, [isBranchProtected])
+  }, [isBranchProtected, worktrees])
 
   const handleDelete = async () => {
     if (!deleteConfirm) return
@@ -114,7 +127,8 @@ export function BranchList({
     try {
       const needsForce = forceDelete || deleteConfirm.isProtected
       const shouldDeleteRemote = deleteConfirm.isRemote || deleteRemote
-      const success = await onDeleteBranch(deleteConfirm.branchName, needsForce, shouldDeleteRemote)
+      const shouldRemoveWorktree = deleteConfirm.hasWorktree && removeWorktree
+      const success = await onDeleteBranch(deleteConfirm.branchName, needsForce, shouldDeleteRemote, shouldRemoveWorktree)
       if (success) {
         setDeleteConfirm(null)
       } else {
@@ -428,15 +442,28 @@ export function BranchList({
             <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
               <div className="flex items-center gap-2">
                 <GitBranchIcon className="w-4 h-4 text-gray-500" />
-                <span className="font-mono text-sm font-medium text-gray-900 dark:text-white">
+                <span className="text-sm font-medium text-gray-900 dark:text-white">
                   {deleteConfirm.branchName}
                 </span>
               </div>
             </div>
 
             {/* Warnings */}
-            {(deleteConfirm.isProtected || deleteConfirm.isUnmerged || deleteConfirm.isRemote) && (
+            {(deleteConfirm.isProtected || deleteConfirm.isUnmerged || deleteConfirm.isRemote || deleteConfirm.hasWorktree) && (
               <div className="mb-4 space-y-2">
+                {deleteConfirm.hasWorktree && (
+                  <div className="flex items-start gap-2 p-3 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded-lg">
+                    <FolderGit className="w-4 h-4 text-violet-600 dark:text-violet-400 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm text-violet-700 dark:text-violet-300">
+                        이 브랜치에 연결된 worktree가 있습니다. 삭제하려면 worktree를 먼저 제거해야 합니다.
+                      </p>
+                      <p className="text-xs text-violet-600 dark:text-violet-400 mt-1 truncate" title={deleteConfirm.worktreePath ?? undefined}>
+                        {deleteConfirm.worktreePath}
+                      </p>
+                    </div>
+                  </div>
+                )}
                 {deleteConfirm.isRemote && (
                   <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                     <Cloud className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
@@ -466,6 +493,21 @@ export function BranchList({
 
             {/* Options */}
             <div className="mb-4 space-y-2">
+              {/* Remove worktree checkbox */}
+              {deleteConfirm.hasWorktree && (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={removeWorktree}
+                    onChange={(e) => setRemoveWorktree(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    Worktree 먼저 제거 후 브랜치 삭제
+                  </span>
+                </label>
+              )}
+
               {/* Force delete checkbox */}
               {!deleteConfirm.isRemote && (deleteConfirm.isProtected || deleteConfirm.isUnmerged) && (
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -512,7 +554,7 @@ export function BranchList({
               </button>
               <button
                 onClick={handleDelete}
-                disabled={deleting || (deleteConfirm.isProtected && !forceDelete)}
+                disabled={deleting || (deleteConfirm.isProtected && !forceDelete) || (deleteConfirm.hasWorktree && !removeWorktree)}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
               >
                 {deleting ? (

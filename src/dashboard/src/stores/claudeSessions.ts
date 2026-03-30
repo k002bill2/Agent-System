@@ -54,6 +54,7 @@ interface ClaudeSessionsState {
 
   // All projects (from API)
   allProjects: string[]
+  projectsFetchError: boolean
 
   // Auto-refresh
   autoRefresh: boolean
@@ -158,6 +159,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
   // All projects initial state
   allProjects: [],
+  projectsFetchError: false,
 
   autoRefresh: true,
   refreshInterval: 5,
@@ -352,9 +354,11 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       const data = await apiClient.get<{ projects: string[] }>(`/api/claude-sessions/projects`)
       set({
         allProjects: data.projects || [],
+        projectsFetchError: false,
       })
-    } catch {
-      // Silently ignore errors
+    } catch (e) {
+      console.error('Failed to fetch session projects:', e)
+      set({ projectsFetchError: true })
     }
   },
 

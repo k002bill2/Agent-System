@@ -154,7 +154,7 @@ export function MCPServerModal() {
                 placeholder="my-server"
                 required
                 pattern="[a-z0-9-_]+"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white font-mono text-sm"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Lowercase letters, numbers, hyphens, and underscores only
@@ -211,7 +211,7 @@ export function MCPServerModal() {
                     }
                   }}
                   placeholder="Add argument..."
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white font-mono text-sm"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
                 />
                 <button
                   type="button"
@@ -237,7 +237,7 @@ export function MCPServerModal() {
                     value={pair.key}
                     onChange={(e) => handleEnvChange(index, 'key', e.target.value)}
                     placeholder="KEY"
-                    className="w-1/3 px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white font-mono text-sm"
+                    className="w-1/3 px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
                   />
                   <span className="text-gray-500">=</span>
                   <input
@@ -245,7 +245,7 @@ export function MCPServerModal() {
                     value={pair.value}
                     onChange={(e) => handleEnvChange(index, 'value', e.target.value)}
                     placeholder="value"
-                    className="flex-1 px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white font-mono text-sm"
+                    className="flex-1 px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
                   />
                   <button
                     type="button"

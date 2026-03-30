@@ -1,24 +1,23 @@
 ---
 name: parallel-agents-protocol
-description: Parallel Agents Safety Protocol with ACE Framework for AOS Dashboard multi-agent execution
+description: Parallel Agents Safety Protocol for AOS Dashboard multi-agent execution
 ---
 
 # Parallel Agents Safety Protocol v3.1.0
-## ACE Framework Integration - AOS Dashboard Project
+## Multi-Agent Execution Protocol - AOS Dashboard Project
 
 ## Document Information
 - **Version**: 3.1.0
 - **Last Updated**: 2025-01-26
-- **Status**: Active - ACE Framework Integrated for AOS Dashboard
+- **Status**: Active - AOS Dashboard
 - **Scope**: Multi-agent parallel execution for AOS React Web + Python Backend
-- **Framework**: Based on Autonomous Cognitive Entity (ACE) Framework
 - **Project**: AOS Dashboard - Agent Orchestration Service
 
 ---
 
-## 1. ACE Framework Foundation
+## 1. Foundation
 
-### 1.1 ACE Layer Architecture
+### 1.1 Layer Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐

@@ -47,7 +47,6 @@ export interface AgentConfig {
   tools: string[]
   model: string | null
   role: string | null
-  ace_capabilities: Record<string, unknown> | null
   is_shared: boolean
   modified_at: string | null
 }

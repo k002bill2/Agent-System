@@ -263,7 +263,7 @@ export function MCPToolCaller({ servers }: MCPToolCallerProps) {
               onChange={(e) => handleArgsChange(e.target.value)}
               placeholder='{"key": "value"}'
               className={cn(
-                'flex-1 min-h-[80px] px-3 py-2 bg-gray-50 dark:bg-gray-900 border rounded-lg text-sm font-mono text-gray-900 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-primary-500',
+                'flex-1 min-h-[80px] px-3 py-2 bg-gray-50 dark:bg-gray-900 border rounded-lg font-mono text-sm text-gray-900 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-primary-500',
                 argsError ? 'border-red-300 dark:border-red-700' : 'border-gray-200 dark:border-gray-700'
               )}
             />
@@ -481,7 +481,7 @@ function SingleResultDisplay({ result, onClose }: SingleResultDisplayProps) {
       </div>
 
       <div className="bg-gray-900 rounded p-2 max-h-40 overflow-auto">
-        <pre className="text-xs text-gray-300 font-mono whitespace-pre-wrap">
+        <pre className="font-mono text-xs text-gray-300 whitespace-pre-wrap">
           {result.success
             ? formatResult(result.result)
             : result.error || 'Unknown error'}
@@ -595,7 +595,7 @@ function BatchResultDisplay({ result, tools, onClose }: BatchResultDisplayProps)
               {isExpanded && (
                 <div className="px-2 pb-2">
                   <div className="bg-gray-900 rounded p-2 max-h-32 overflow-auto">
-                    <pre className="text-xs text-gray-300 font-mono whitespace-pre-wrap">
+                    <pre className="font-mono text-xs text-gray-300 whitespace-pre-wrap">
                       {r.success
                         ? formatContent(r.content)
                         : r.error || 'Unknown error'}

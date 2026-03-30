@@ -1,0 +1,428 @@
+# =============================================================================
+# AOS (Agent Orchestration Service) - 팀 코드 컨벤션
+# =============================================================================
+# 코드 리뷰 파이프라인에서 자동/수동 검증에 사용되는 규칙 정의.
+# severity: error (머지 차단), warning (리뷰어 주의), info (권장사항)
+# =============================================================================
+
+meta:
+  name: "AOS Code Conventions"
+  version: "1.1.0"
+  updated: "2026-03-30"
+  project: "Agent Orchestration Service"
+  description: "LangGraph 기반 멀티 에이전트 오케스트레이션 서비스의 팀 코드 컨벤션"
+
+# -----------------------------------------------------------------------------
+# 언어별 컨벤션
+# -----------------------------------------------------------------------------
+language:
+  typescript:
+    - rule: "strict 모드 필수 (tsconfig.json strict: true)"
+      severity: error
+    - rule: "noUnusedLocals, noUnusedParameters 활성화"
+      severity: error
+    - rule: "ES2020 target 사용"
+      severity: info
+    - rule: "@typescript-eslint/no-explicit-any 경고 — any 타입 최소화"
+      severity: warning
+      examples:
+        bad: "function parse(data: any): any { ... }"
+        good: "function parse(data: unknown): ParsedResult { ... }"
+    - rule: "미사용 변수는 _ 접두사로 명시 (argsIgnorePattern: '^_')"
+      severity: warning
+      examples:
+        bad: "const [value, index] = tuple  // index 미사용"
+        good: "const [value, _index] = tuple"
+    - rule: "moduleResolution: bundler 사용"
+      severity: info
+
+  python:
+    - rule: "Python 3.11+ 필수 (requires-python >= 3.11)"
+      severity: error
+    - rule: "타입 힌트 필수 — 모든 함수 시그니처 및 반환값"
+      severity: error
+      examples:
+        bad: "def process(data):"
+        good: "def process(data: dict[str, Any]) -> ProcessResult:"
+    - rule: "async/await 일관 사용 — sync 호출로 이벤트 루프 차단 금지. sync I/O(shutil, os 등)는 asyncio.to_thread()로 래핑 (ADR-004)"
+      severity: error
+    - rule: "ruff 린터 사용 (line-length: 100, target-version: py311)"
+      severity: error
+    - rule: "ruff lint 선택 규칙: E, F, I, N, W, B, UP"
+      severity: error
+    - rule: "union 타입은 파이프 문법 사용 (str | None, PEP 604)"
+      severity: warning
+      examples:
+        bad: "Optional[str], Union[str, None]"
+        good: "str | None"
+    - rule: "Pydantic v2 모델 사용 (BaseModel, Field)"
+      severity: error
+
+# -----------------------------------------------------------------------------
+# 프론트엔드 컨벤션
+# -----------------------------------------------------------------------------
+frontend:
+  react:
+    - rule: "React.memo() + displayName 필수 — 모든 exported 컴포넌트"
+      severity: warning
+      examples:
+        bad: |
+          export function MyComponent(props: Props) { ... }
+        good: |
+          const MyComponent = memo(function MyComponent(props: Props) { ... })
+          MyComponent.displayName = 'MyComponent'
+    - rule: "Props interface 선언 필수 (JSDoc 포함 권장)"
+      severity: error
+      examples:
+        bad: "function Card({ title, desc }: { title: string; desc: string }) { ... }"
+        good: |
+          interface CardProps {
+            /** 카드 제목 */
+            title: string
+            /** 카드 설명 */
+            description: string
+          }
+    - rule: "useMemo, useCallback 적절히 사용 — 불필요한 리렌더링 방지"
+      severity: warning
+    - rule: "대용량 리스트는 @tanstack/react-virtual 사용"
+      severity: info
+    - rule: "코드 스플리팅: React.lazy + Suspense 활용"
+      severity: info
+    - rule: "react-hooks/rules-of-hooks: error, exhaustive-deps: warn"
+      severity: error
+
+  tailwind:
+    - rule: "Tailwind CSS 전용 — 인라인 스타일(style=) 금지"
+      severity: error
+      examples:
+        bad: '<div style={{ color: "red" }}>'
+        good: '<div className="text-red-500">'
+    - rule: "다크모드 필수 — dark: prefix 적용"
+      severity: warning
+      examples:
+        bad: "bg-white text-gray-900"
+        good: "bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+    - rule: "반응형 디자인: mobile-first (sm:, md:, lg:)"
+      severity: warning
+    - rule: "font-mono 일반 UI에서 사용 금지 — 단, 코드 diff, 터미널 로그, YAML/JSON 에디터, <pre>/<code> 블록 등 코드 컨텍스트는 예외 (ADR-006 개정)"
+      severity: error
+    - rule: "조건부 클래스는 cn() 유틸리티 사용 (clsx + tailwind-merge)"
+      severity: error
+      examples:
+        bad: "className={`btn ${isActive ? 'bg-blue-500' : 'bg-gray-500'}`}"
+        good: "className={cn('btn', isActive ? 'bg-blue-500' : 'bg-gray-500')}"
+
+  zustand:
+    - rule: "Zustand 스토어 패턴: create<State>((set) => ({...}))"
+      severity: error
+    - rule: "전역 상태 최소화, 로컬 상태(useState) 우선"
+      severity: warning
+    - rule: "스토어 파일은 stores/ 디렉토리에 배치"
+      severity: info
+
+  path_aliases:
+    - rule: "@/ 경로 별칭 사용 필수 (상대 경로 ../../../ 금지)"
+      severity: warning
+      examples:
+        bad: "import { cn } from '../../../lib/utils'"
+        good: "import { cn } from '@/lib/utils'"
+
+  accessibility:
+    - rule: "aria-label 모든 인터랙티브 요소에 부여"
+      severity: warning
+    - rule: "시맨틱 HTML 사용 (button, nav, main, section)"
+      severity: warning
+    - rule: "키보드 네비게이션 지원 (onKeyDown)"
+      severity: info
+
+  icons:
+    - rule: "아이콘은 lucide-react 라이브러리 사용"
+      severity: info
+
+# -----------------------------------------------------------------------------
+# 백엔드 컨벤션
+# -----------------------------------------------------------------------------
+backend:
+  fastapi:
+    - rule: "Router 패턴: APIRouter(prefix='/api/...', tags=[...]) + Depends(get_session)"
+      severity: error
+    - rule: "비즈니스 로직은 Service 클래스로 분리 — Router에 로직 직접 작성 금지"
+      severity: error
+      examples:
+        bad: |
+          @router.post("/projects")
+          async def create(req: Request, db: AsyncSession = Depends(get_session)):
+              project = Project(name=req.name)
+              db.add(project)
+              await db.commit()
+        good: |
+          @router.post("/projects")
+          async def create(req: Request, db: AsyncSession = Depends(get_session)):
+              return await ProjectService(db).create(req)
+    - rule: "Pydantic 모델로 request/response 검증 필수"
+      severity: error
+    - rule: "HTTPException with 적절한 status code 사용"
+      severity: error
+
+  sqlalchemy:
+    - rule: "async_sessionmaker + dependency injection 패턴"
+      severity: error
+    - rule: "mapped_column declarative 모델 사용"
+      severity: info
+    - rule: "Relationship 로딩: selectinload 기본 사용"
+      severity: warning
+    - rule: "asyncpg prepared statement 캐시 충돌 주의"
+      severity: info
+
+  langgraph:
+    - rule: "노드 시그니처: async def node_name(state: AgentState) -> AgentState:"
+      severity: error
+    - rule: "StateGraph 조립 후 conditional edges로 라우팅"
+      severity: error
+    - rule: "HITL 노드: 위험 작업 전 사용자 승인 요청"
+      severity: warning
+
+  error_handling:
+    - rule: "logging.getLogger(__name__) 사용"
+      severity: error
+      examples:
+        bad: "print('Error occurred')"
+        good: |
+          logger = logging.getLogger(__name__)
+          logger.error("Operation failed: %s", error)
+    - rule: "민감 정보 로깅 금지 (API 키, 비밀번호, 토큰)"
+      severity: error
+    - rule: "Optional 의존성은 try/except ImportError + *_AVAILABLE 플래그 패턴"
+      severity: info
+      examples:
+        good: |
+          QDRANT_AVAILABLE = False
+          try:
+              from qdrant_client import QdrantClient
+              QDRANT_AVAILABLE = True
+          except ImportError:
+              QdrantClient = None
+
+# -----------------------------------------------------------------------------
+# 네이밍 컨벤션
+# -----------------------------------------------------------------------------
+naming:
+  files:
+    - rule: "React 컴포넌트: PascalCase (TaskBoard.tsx, DiffViewer.tsx)"
+      severity: error
+    - rule: "Zustand 스토어: camelCase (projectConfigs.ts, claudeSessions.ts)"
+      severity: error
+    - rule: "Python 모듈: snake_case (auth_service.py, project_discovery.py)"
+      severity: error
+    - rule: "테스트 파일: [ComponentName].test.tsx 또는 __tests__/ 디렉토리"
+      severity: error
+    - rule: "YAML/설정: kebab-case (code-convention.yaml)"
+      severity: info
+
+  variables:
+    - rule: "TypeScript 변수/함수: camelCase"
+      severity: error
+    - rule: "TypeScript 상수: UPPER_SNAKE_CASE 또는 camelCase"
+      severity: warning
+    - rule: "Python 변수/함수: snake_case"
+      severity: error
+    - rule: "Python 상수: UPPER_SNAKE_CASE"
+      severity: error
+      examples:
+        good: "RAG_ENABLE_HYBRID, DEFAULT_EMBEDDING_MODEL"
+
+  components:
+    - rule: "React 컴포넌트: PascalCase"
+      severity: error
+    - rule: "Props 인터페이스: [ComponentName]Props"
+      severity: error
+      examples:
+        good: "DiffViewerProps, TaskBoardProps, ApprovalModalProps"
+    - rule: "커스텀 훅: use[Feature] (camelCase)"
+      severity: error
+
+  classes:
+    - rule: "Python 클래스: PascalCase"
+      severity: error
+      examples:
+        good: "AuthService, ProjectDiscovery, RAGService"
+    - rule: "Pydantic 모델: PascalCase (TokenPair, UserInfo, Project)"
+      severity: error
+    - rule: "SQLAlchemy 모델: PascalCase + Model 접미사 (UserModel, OrganizationMemberModel)"
+      severity: error
+
+# -----------------------------------------------------------------------------
+# 테스트 컨벤션
+# -----------------------------------------------------------------------------
+testing:
+  frontend:
+    - rule: "테스트 프레임워크: Vitest + @testing-library/react"
+      severity: error
+    - rule: "테스트 파일 위치: __tests__/ 디렉토리 또는 컴포넌트 옆"
+      severity: info
+    - rule: "테스트 커버리지 목표: 80%+"
+      severity: warning
+    - rule: "describe/it 패턴으로 테스트 구조화"
+      severity: info
+
+  backend:
+    - rule: "테스트 프레임워크: pytest + pytest-asyncio"
+      severity: error
+    - rule: "asyncio_mode: auto 설정"
+      severity: error
+    - rule: "테스트 파일 위치: tests/backend/"
+      severity: info
+    - rule: "테스트 커버리지 목표: 80%+"
+      severity: warning
+
+  general:
+    - rule: "TDD 접근: RED -> GREEN -> IMPROVE"
+      severity: info
+    - rule: "e2e 테스트 잔여물 방지 — afterAll/afterEach에서 리소스 정리 필수"
+      severity: error
+    - rule: "테스트 실행 후 git status에 untracked 파일 없어야 함"
+      severity: error
+    - rule: "DB 테스트 데이터는 트랜잭션 롤백 또는 teardown으로 제거"
+      severity: warning
+
+# -----------------------------------------------------------------------------
+# 코드 품질 컨벤션
+# -----------------------------------------------------------------------------
+code_quality:
+  size_limits:
+    - rule: "함수 50줄 이내"
+      severity: warning
+    - rule: "파일 800줄 이내 (400줄 넘으면 분리 검토)"
+      severity: warning
+    - rule: "네스팅 4단계 이내"
+      severity: warning
+
+  principles:
+    - rule: "DRY (Don't Repeat Yourself)"
+      severity: warning
+    - rule: "KISS (Keep It Simple, Stupid)"
+      severity: info
+    - rule: "YAGNI (You Aren't Gonna Need It)"
+      severity: info
+    - rule: "Immutability 우선 — const, readonly, 스프레드 연산자, Object.freeze"
+      severity: warning
+      examples:
+        bad: |
+          function updateUser(user, name) {
+            user.name = name  // mutation!
+            return user
+          }
+        good: |
+          function updateUser(user, name) {
+            return { ...user, name }
+          }
+    - rule: "no-console 규칙 — console.log 금지, console.warn/error만 허용"
+      severity: warning
+    - rule: "하드코딩 값 금지 — 환경변수 또는 상수로 추출"
+      severity: warning
+
+# -----------------------------------------------------------------------------
+# Git 컨벤션
+# -----------------------------------------------------------------------------
+git:
+  commit_message:
+    - rule: "Conventional Commits 형식: <type>: <description>"
+      severity: error
+      examples:
+        good: |
+          feat: AutomationLoopService 자동화 루프 시스템 구축
+          fix: GitPage worktrees undefined 접근 오류 수정
+          refactor: 스킬 구조 개선 및 불필요 커맨드 정리
+          docs: 전체 문서 현행화
+          test: RAGService 유닛 테스트 추가
+          chore: .gitignore에 DB 백업 파일 패턴 추가
+          perf: 쿼리 최적화
+          ci: GitHub Actions 워크플로우 수정
+    - rule: "타입: feat, fix, refactor, docs, test, chore, perf, ci"
+      severity: error
+    - rule: "스코프 선택 가능: feat(auth), fix(ui), docs(skills)"
+      severity: info
+    - rule: "한국어 설명 사용 가능"
+      severity: info
+
+  branch:
+    - rule: "기능 브랜치: feature/, worktree- 접두사"
+      severity: info
+    - rule: "수정 브랜치: fix/ 접두사"
+      severity: info
+
+  workflow:
+    - rule: "3+ 파일 변경 시 구현 계획 먼저 수립"
+      severity: warning
+    - rule: "빌드 깨진 채 커밋 금지"
+      severity: error
+    - rule: "커밋 전 검증: tsc --noEmit + lint + test + build"
+      severity: error
+
+# -----------------------------------------------------------------------------
+# 보안 컨벤션
+# -----------------------------------------------------------------------------
+security:
+  secrets:
+    - rule: "시크릿은 반드시 환경변수 사용 — 하드코딩 절대 금지"
+      severity: error
+      examples:
+        bad: 'const token = "sk-abc123..."'
+        good: |
+          const token = process.env.SECRET_TOKEN
+          if (!token) throw new Error('SECRET_TOKEN not configured')
+    - rule: "Private key, API key 커밋 금지"
+      severity: error
+    - rule: ".env, credentials.json 파일 커밋 금지"
+      severity: error
+
+  authentication:
+    - rule: "JWT 토큰으로 API 인증 (access + refresh 토큰 페어)"
+      severity: error
+    - rule: "bcrypt로 비밀번호 해싱 (rounds=12)"
+      severity: error
+    - rule: "OAuth 코드 교환 시 에러 로깅에 민감 정보 미포함"
+      severity: error
+
+  input_validation:
+    - rule: "경계에서 입력 검증 필수 (Pydantic, zod)"
+      severity: error
+    - rule: "SQL 파라미터 바인딩 필수 — raw query 금지"
+      severity: error
+    - rule: "사용자 입력 검증/새니타이징"
+      severity: error
+
+  general:
+    - rule: "에러 메시지에 민감 정보(스택 트레이스, DB 스키마) 미포함"
+      severity: error
+    - rule: "CORS 설정 명시적으로 관리"
+      severity: warning
+    - rule: "Rate limiting 적용"
+      severity: warning
+
+# -----------------------------------------------------------------------------
+# ADR 교차 참조 (Convention ↔ ADR 추적성)
+# -----------------------------------------------------------------------------
+# 자동 리뷰 도구가 규칙 위반 시 관련 ADR을 함께 참조할 수 있도록 매핑.
+adr_references:
+  - convention: "backend.langgraph"
+    adr: ADR-001
+    summary: "LangGraph StateGraph + conditional edges 패턴"
+  - convention: "frontend.zustand"
+    adr: ADR-002
+    summary: "Zustand create<State> 패턴, 도메인별 독립 스토어"
+  - convention: "frontend.tailwind"
+    adr: ADR-003
+    summary: "Tailwind CSS 전용, dark: 필수, cn() 유틸리티"
+  - convention: "language.python (async/await)"
+    adr: ADR-004
+    summary: "async/await 일관 사용, sync I/O는 asyncio.to_thread() 래핑"
+  - convention: "frontend.tailwind (font-mono)"
+    adr: ADR-006
+    summary: "일반 UI 금지, 코드 컨텍스트 허용 (superseded)"
+  - convention: "security.authentication"
+    adr: ADR-009
+    summary: "OAuth + JWT, bcrypt(rounds=12), 토큰 페어"
+  - convention: "testing.frontend"
+    adr: ADR-014
+    summary: "Vitest + @testing-library/react"

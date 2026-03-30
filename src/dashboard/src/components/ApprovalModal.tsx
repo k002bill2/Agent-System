@@ -93,7 +93,7 @@ export function ApprovalModal({ approval, onClose }: ApprovalModalProps) {
               Operation
             </h4>
             <div className="bg-gray-100 dark:bg-gray-700 rounded-md p-3">
-              <code className="text-sm font-mono text-gray-800 dark:text-gray-200">
+              <code className="text-sm text-gray-800 dark:text-gray-200">
                 {approval.tool_name}
               </code>
             </div>

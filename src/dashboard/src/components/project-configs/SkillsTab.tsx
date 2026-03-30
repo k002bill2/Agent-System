@@ -304,7 +304,7 @@ function SkillCard({ skill, isExpanded, isLoadingContent, isDeleting, content, o
           {isLoadingContent ? (
             <div className="p-4 text-center text-gray-500">Loading content...</div>
           ) : content ? (
-            <pre className="p-4 text-sm text-gray-700 dark:text-gray-300 overflow-x-auto whitespace-pre-wrap font-mono">
+            <pre className="p-4 text-sm text-gray-700 dark:text-gray-300 overflow-x-auto whitespace-pre-wrap">
               {content}
             </pre>
           ) : (

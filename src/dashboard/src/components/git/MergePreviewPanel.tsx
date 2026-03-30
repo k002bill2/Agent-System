@@ -136,11 +136,11 @@ export function MergePreviewPanel({
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {/* Branch Info */}
           <div className="flex items-center justify-center gap-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
-            <span className="font-mono text-sm bg-white dark:bg-gray-800 px-2 py-1 rounded border border-gray-200 dark:border-gray-700">
+            <span className="text-sm bg-white dark:bg-gray-800 px-2 py-1 rounded border border-gray-200 dark:border-gray-700">
               {preview.source_branch}
             </span>
             <span className="text-gray-400">→</span>
-            <span className="font-mono text-sm bg-white dark:bg-gray-800 px-2 py-1 rounded border border-gray-200 dark:border-gray-700">
+            <span className="text-sm bg-white dark:bg-gray-800 px-2 py-1 rounded border border-gray-200 dark:border-gray-700">
               {preview.target_branch}
             </span>
           </div>
@@ -223,7 +223,7 @@ export function MergePreviewPanel({
                     className="flex items-center gap-2 p-2 bg-red-50 dark:bg-red-900/10 rounded text-sm"
                   >
                     <AlertTriangle className="w-4 h-4 text-red-500" />
-                    <span className="font-mono text-red-700 dark:text-red-400 truncate">
+                    <span className="text-red-700 dark:text-red-400 truncate">
                       {file}
                     </span>
                   </div>

@@ -143,7 +143,7 @@ function FileItem({
           onClick={(e) => e.stopPropagation()}
         />
         <Icon className={cn('w-4 h-4', statusColors[file.status])} />
-        <span className="flex-1 text-sm font-mono truncate text-gray-700 dark:text-gray-300">
+        <span className="flex-1 text-sm truncate text-gray-700 dark:text-gray-300">
           {file.path}
         </span>
         {SafetyIcon && (
@@ -188,7 +188,7 @@ function FileItem({
       </div>
       {/* Inline diff preview */}
       {showDiff && (
-        <div className="ml-6 mr-3 mb-2 bg-gray-900 rounded-lg overflow-hidden text-xs font-mono max-h-60 overflow-y-auto">
+        <div className="ml-6 mr-3 mb-2 bg-gray-900 rounded-lg overflow-hidden text-xs max-h-60 overflow-y-auto">
           {isLoadingDiff ? (
             <div className="flex items-center gap-2 p-3 text-gray-400">
               <Loader2 className="w-3 h-3 animate-spin" />
@@ -263,7 +263,7 @@ function StagedDiffReviewPanel({
         )}
       </button>
       {isExpanded && (
-        <div className="max-h-96 overflow-y-auto bg-gray-900 text-xs font-mono">
+        <div className="max-h-96 overflow-y-auto bg-gray-900 text-xs">
           {isLoading ? (
             <div className="flex items-center gap-2 p-4 text-gray-400">
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -325,7 +325,7 @@ function SensitiveFilesDialog({
             {dangers.map(({ path, reason }) => (
               <div key={path} className="flex items-center gap-2 text-xs text-red-500 ml-2 py-0.5">
                 <ShieldAlert className="w-3 h-3" />
-                <span className="font-mono">{path}</span>
+                <span className="">{path}</span>
                 <span className="text-gray-400">- {reason}</span>
               </div>
             ))}
@@ -338,7 +338,7 @@ function SensitiveFilesDialog({
             {warnings.map(({ path, reason }) => (
               <div key={path} className="flex items-center gap-2 text-xs text-yellow-500 ml-2 py-0.5">
                 <AlertTriangle className="w-3 h-3" />
-                <span className="font-mono">{path}</span>
+                <span className="">{path}</span>
                 <span className="text-gray-400">- {reason}</span>
               </div>
             ))}
@@ -409,9 +409,9 @@ function HunkStagingPanel({
               onChange={() => toggleHunk(hunk.index)}
               className="w-3.5 h-3.5 rounded border-gray-600 text-blue-500 focus:ring-blue-500"
             />
-            <span className="text-xs text-blue-400 font-mono">{hunk.header}</span>
+            <span className="text-xs text-blue-400">{hunk.header}</span>
           </div>
-          <div className="text-xs font-mono max-h-32 overflow-y-auto">
+          <div className="text-xs max-h-32 overflow-y-auto">
             {hunk.content.split('\n').map((line, i) => (
               <div
                 key={i}

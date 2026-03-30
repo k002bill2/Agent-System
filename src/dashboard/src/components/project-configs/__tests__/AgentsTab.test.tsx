@@ -35,7 +35,6 @@ const mockAgents = [
     tools: ['Read', 'Edit'],
     file_path: null,
     modified_at: null,
-    ace_capabilities: null,
   },
   {
     agent_id: 'shared-agent',
@@ -48,7 +47,6 @@ const mockAgents = [
     tools: ['Bash'],
     file_path: null,
     modified_at: null,
-    ace_capabilities: null,
   },
 ]
 

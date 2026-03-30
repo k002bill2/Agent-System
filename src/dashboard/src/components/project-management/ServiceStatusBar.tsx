@@ -149,9 +149,9 @@ export const ServiceStatusBar: React.FC<ServiceStatusBarProps> = memo(({
                 className={cn(
                   'flex flex-col gap-1 p-2.5 rounded-lg border text-xs',
                   service.status === 'running'
-                    ? 'border-green-200 bg-green-50 dark:border-green-900/50 dark:bg-green-900/10'
+                    ? 'border-green-200 bg-green-50 dark:border-green-900/50 dark:bg-green-900/20'
                     : service.status === 'conflict'
-                      ? 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-900/10'
+                      ? 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-900/20'
                       : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800',
                 )}
               >

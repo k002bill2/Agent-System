@@ -146,7 +146,7 @@ function CommitFileList({
                   </div>
                 )}
                 <StatusIcon className={cn('w-4 h-4 flex-shrink-0', config.color)} />
-                <span className="font-mono text-gray-900 dark:text-white truncate flex-1">
+                <span className="text-gray-900 dark:text-white truncate flex-1">
                   {file.old_path ? (
                     <>
                       <span className="text-gray-400">{file.old_path}</span>
@@ -159,12 +159,12 @@ function CommitFileList({
                 </span>
                 <div className="flex items-center gap-2 flex-shrink-0 text-xs">
                   {file.additions > 0 && (
-                    <span className="text-green-600 dark:text-green-400 font-mono">
+                    <span className="text-green-600 dark:text-green-400">
                       +{file.additions}
                     </span>
                   )}
                   {file.deletions > 0 && (
-                    <span className="text-red-600 dark:text-red-400 font-mono">
+                    <span className="text-red-600 dark:text-red-400">
                       -{file.deletions}
                     </span>
                   )}

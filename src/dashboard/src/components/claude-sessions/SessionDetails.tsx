@@ -110,7 +110,7 @@ function MessageItem({ message }: { message: SessionMessage }) {
         </div>
         {/* Tool input summary */}
         {toolInputSummary && (
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 font-mono truncate">
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 truncate">
             {toolInputSummary}
           </p>
         )}

@@ -76,7 +76,7 @@ function CheckCardSkeleton() {
 
 function LogLineSkeleton() {
   return (
-    <div className="flex items-center gap-2 font-mono text-sm">
+    <div className="flex items-center gap-2 text-sm">
       <Skeleton className="h-4 w-20 bg-gray-700" />
       <Skeleton className="h-4 flex-1 bg-gray-700" />
     </div>

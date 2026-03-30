@@ -112,7 +112,7 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
               <input
                 value={field.value}
                 onChange={e => updatePart(field.idx, e.target.value)}
-                className="w-full px-1.5 py-1 text-xs text-center font-mono border border-gray-200 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                className="w-full px-1.5 py-1 text-xs text-center border border-gray-200 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
               />
             </div>
           ))}

@@ -143,11 +143,11 @@ export function MergeRequestCard({
               {mr.title}
             </h4>
             <div className="flex items-center gap-2 mt-1 text-sm text-gray-500 dark:text-gray-400">
-              <span className="font-mono text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
+              <span className="text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
                 {mr.source_branch}
               </span>
               <span>→</span>
-              <span className="font-mono text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
+              <span className="text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
                 {mr.target_branch}
               </span>
             </div>

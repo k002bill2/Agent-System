@@ -756,6 +756,7 @@ async def delete_branch(
     branch_name: str,
     force: bool = Query(False, description="Force delete even if not merged"),
     delete_remote: bool = Query(False, description="Also delete the remote tracking branch"),
+    remove_worktree: bool = Query(False, description="Remove associated worktree before deleting"),
 ):
     """Delete a branch (local and/or remote)."""
     from services.git_service import GitServiceError
@@ -764,7 +765,7 @@ async def delete_branch(
 
     try:
         success = git_service.delete_branch(
-            name=branch_name, force=force, delete_remote=delete_remote
+            name=branch_name, force=force, delete_remote=delete_remote, remove_worktree=remove_worktree
         )
         return {"success": success, "message": f"Branch '{branch_name}' deleted"}
     except GitServiceError as e:
@@ -1243,6 +1244,9 @@ async def merge_merge_request(
 
         if not mr:
             raise HTTPException(status_code=404, detail="Merge request not found")
+
+        if result and not result.success:
+            raise HTTPException(status_code=409, detail=result.message)
 
         return {"merge_request": mr, "merge_result": result}
     except HTTPException:

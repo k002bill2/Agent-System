@@ -147,7 +147,7 @@ export function ProcessMonitorWidget() {
                             : 'bg-yellow-500'
                       }`}
                     />
-                    <span className="font-mono text-gray-700 dark:text-gray-300">
+                    <span className="text-gray-700 dark:text-gray-300">
                       {proc.pid}
                     </span>
                     <span className="text-gray-500 dark:text-gray-400">

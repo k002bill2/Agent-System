@@ -4,33 +4,6 @@ description: Evaluation task orchestrator. Loads task definitions, executes eval
 tools: Read, Grep, Glob, Bash
 model: inherit
 role: evaluator
-ace_capabilities:
-  layer_2_global_strategy:
-    responsibilities:
-      - Load and parse evaluation task definitions
-      - Spawn appropriate specialist agents for task execution
-      - Record transcripts for observability
-      - Invoke eval-grader for scoring
-      - Calculate pass@k and pass^k metrics
-      - Save results to .claude/evals/results/
-      - Monitor saturation (tasks reaching 100% pass@k)
-      - Run pairwise comparisons between agents/models
-      - Detect regressions against previous results
-  layer_3_self_assessment:
-    strengths:
-      task_orchestration: 0.95
-      metric_calculation: 0.90
-      result_aggregation: 0.90
-      transcript_management: 0.85
-      saturation_monitoring: 0.90
-      pairwise_comparison: 0.85
-    weaknesses:
-      detailed_implementation: 0.30
-      code_review: 0.40
-  layer_5_coordination:
-    max_concurrent_subagents: 3
-    workspace: .temp/agent_workspaces/eval-task-runner/
-    results_location: .claude/evals/results/
 ---
 
 # Eval Task Runner Agent (v2.0)

@@ -9,6 +9,7 @@
 - Tailwind CSS 전용 (인라인 스타일 금지)
 - 다크모드 필수: `dark:` prefix
 - 반응형: mobile-first (`sm:`, `md:`, `lg:`)
+- `font-mono` 일반 UI에서 사용 금지 — 단, 코드 diff, 터미널 로그, YAML/JSON 에디터, `<pre>`/`<code>` 블록 등 코드 컨텍스트는 예외
 
 ## State Management
 - Zustand 스토어: `create<State>((set) => ({...}))`

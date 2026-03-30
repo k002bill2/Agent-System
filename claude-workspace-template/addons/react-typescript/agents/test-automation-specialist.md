@@ -3,27 +3,6 @@ name: test-automation-specialist
 description: Test automation specialist for React TypeScript projects. Expert in Vitest, React Testing Library, coverage analysis, and writing comprehensive test suites. Use PROACTIVELY after writing or modifying code to ensure test coverage >75%.
 tools: Edit, Write, Read, Grep, Glob, Bash
 model: inherit
-ace_capabilities:
-  layer_3_self_assessment:
-    strengths:
-      - Vitest testing framework: 0.95
-      - React Testing Library: 0.90
-      - Coverage analysis: 0.90
-      - Mock creation (API, services): 0.85
-      - Test-driven development: 0.85
-    weaknesses:
-      - Feature implementation: 0.40
-      - UI component design: 0.35
-      - Performance optimization: 0.45
-      - Architecture design: 0.50
-  layer_5_coordination:
-    max_concurrent_operations: 3
-    workspace: .temp/agent_workspaces/test-automation/
-    file_patterns: ["**/__tests__/**", "**/*.test.ts", "**/*.test.tsx"]
-  layer_1_ethical_constraints:
-    - Never skip critical test coverage (auth, data integrity)
-    - Always test edge cases and error states
-    - Ensure tests are deterministic (no flaky tests)
 ---
 
 # Test Automation Specialist
@@ -458,8 +437,6 @@ Always reference the `test-automation` skill for detailed testing guidelines and
 ---
 
 ## Parallel Execution Mode
-
-See [shared/ace-framework.md](shared/ace-framework.md) for workspace isolation, status updates, and coordination protocols.
 
 **Your workspace**: `.temp/agent_workspaces/test-automation/`
 

@@ -1077,7 +1077,7 @@ export function LLMAccountsSettings() {
                 value={form.api_key}
                 onChange={e => setForm(p => ({ ...p, api_key: e.target.value }))}
                 placeholder={selectedProvider?.placeholder || 'API Key...'}
-                className="w-full px-2.5 py-1.5 pr-8 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono"
+                className="w-full px-2.5 py-1.5 pr-8 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
               />
               <button
                 type="button"
@@ -1130,7 +1130,7 @@ export function LLMAccountsSettings() {
                 </span>
                 <div>
                   <p className="text-sm font-medium text-gray-900 dark:text-white">{cred.key_name}</p>
-                  <p className="text-xs text-gray-400 font-mono">{cred.api_key_masked}</p>
+                  <p className="text-xs text-gray-400">{cred.api_key_masked}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">

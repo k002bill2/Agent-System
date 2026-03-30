@@ -163,6 +163,34 @@ class GitService:
             is_locked=bool(data.get("locked", False)),
         )
 
+    def remove_worktree(self, path: str, force: bool = False) -> bool:
+        """Remove a git worktree.
+
+        Args:
+            path: Path to the worktree to remove
+            force: Force removal even if worktree has modifications
+
+        Returns:
+            True if removed successfully
+        """
+        import subprocess
+
+        cmd = ["git", "worktree", "remove", path]
+        if force:
+            cmd.append("--force")
+
+        try:
+            subprocess.run(
+                cmd,
+                cwd=str(self.project_path),
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return True
+        except subprocess.CalledProcessError as e:
+            raise GitServiceError(f"Failed to remove worktree: {e.stderr.strip()}")
+
     # =========================================================================
     # Branch Operations
     # =========================================================================
@@ -295,13 +323,20 @@ class GitService:
         except GitCommandError as e:
             raise GitServiceError(f"Failed to create branch: {e}")
 
-    def delete_branch(self, name: str, force: bool = False, delete_remote: bool = False) -> bool:
+    def delete_branch(
+        self,
+        name: str,
+        force: bool = False,
+        delete_remote: bool = False,
+        remove_worktree: bool = False,
+    ) -> bool:
         """Delete a branch (local and optionally remote).
 
         Args:
             name: Branch name to delete
             force: Force delete even if not merged
             delete_remote: Also delete the branch from the remote
+            remove_worktree: Remove associated worktree before deleting
 
         Returns:
             True if deleted successfully
@@ -311,6 +346,19 @@ class GitService:
 
         if name in DEFAULT_PROTECTED_BRANCHES and not force:
             raise GitServiceError(f"Cannot delete protected branch '{name}' without force flag")
+
+        # Check if branch has an active worktree
+        worktrees = self.list_worktrees()
+        matching_wt = next(
+            (wt for wt in worktrees if wt.branch == name and not wt.is_main), None
+        )
+        if matching_wt:
+            if not remove_worktree:
+                raise GitServiceError(
+                    f"Branch '{name}' has an active worktree at '{matching_wt.path}'. "
+                    f"Remove the worktree first or set remove_worktree=True."
+                )
+            self.remove_worktree(matching_wt.path, force=force)
 
         try:
             # Check if this is a remote-only branch (e.g. "origin/feature")

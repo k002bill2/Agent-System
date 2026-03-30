@@ -126,7 +126,7 @@ export function CommandEditModal() {
                   Command ID *
                 </label>
                 <div className="flex items-center gap-2">
-                  <span className="text-gray-500 dark:text-gray-400 font-mono">/</span>
+                  <span className="text-gray-500 dark:text-gray-400">/</span>
                   <input
                     type="text"
                     value={commandId}
@@ -134,7 +134,7 @@ export function CommandEditModal() {
                     placeholder="my-command"
                     required
                     pattern="[a-z0-9-_]+"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white font-mono text-sm"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
                   />
                 </div>
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -151,7 +151,7 @@ export function CommandEditModal() {
               </div>
             ) : showPreview ? (
               <div className="border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 p-4 min-h-[400px] overflow-auto">
-                <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono">
+                <pre className="font-mono text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
                   {content}
                 </pre>
               </div>

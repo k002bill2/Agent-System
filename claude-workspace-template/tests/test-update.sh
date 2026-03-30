@@ -112,23 +112,7 @@ else
   FAIL=$((FAIL + 1))
 fi
 
-# 4e: shared/ files were overwritten (always overwrite rule)
-if [ -f "$TEST_DIR/.claude/agents/shared/ace-framework.md" ]; then
-  PASS=$((PASS + 1))
-else
-  echo "FAIL: shared/ace-framework.md missing after update"
-  FAIL=$((FAIL + 1))
-fi
-
-if [ ! -f "$TEST_DIR/.claude/agents/shared/ace-framework.md.new" ]; then
-  PASS=$((PASS + 1))
-  echo "  OK: shared/ files overwritten directly (no .new)"
-else
-  echo "FAIL: shared/ace-framework.md.new should not exist (shared/ always overwritten)"
-  FAIL=$((FAIL + 1))
-fi
-
-# 4f: hooks/*.js files were overwritten (always overwrite rule)
+# 4e: hooks/*.js files were overwritten (always overwrite rule)
 if [ -f "$TEST_DIR/.claude/hooks/ethicalValidator.js" ]; then
   PASS=$((PASS + 1))
 else
@@ -144,7 +128,7 @@ else
   FAIL=$((FAIL + 1))
 fi
 
-# 4g: CLAUDE.md was NOT overwritten (preserved)
+# 4f: CLAUDE.md was NOT overwritten (preserved)
 if grep -q "My Custom Notes" "$TEST_DIR/CLAUDE.md"; then
   PASS=$((PASS + 1))
   echo "  OK: CLAUDE.md was NOT overwritten (user customization preserved)"
@@ -153,7 +137,7 @@ else
   FAIL=$((FAIL + 1))
 fi
 
-# 4h: CLAUDE.md.new should exist (template had changes vs current)
+# 4g: CLAUDE.md.new should exist (template had changes vs current)
 if [ -f "$TEST_DIR/CLAUDE.md.new" ]; then
   PASS=$((PASS + 1))
   echo "  OK: CLAUDE.md.new created for review"
@@ -163,7 +147,7 @@ else
   PASS=$((PASS + 1))
 fi
 
-# 4i: Checksums were regenerated
+# 4h: Checksums were regenerated
 if [ -f "$TEST_DIR/.claude/.checksums" ]; then
   NEW_CHECKSUM_COUNT=$(wc -l < "$TEST_DIR/.claude/.checksums" | xargs)
   if [ "$NEW_CHECKSUM_COUNT" -gt 0 ]; then
@@ -178,7 +162,7 @@ else
   FAIL=$((FAIL + 1))
 fi
 
-# 4j: Registries were regenerated
+# 4i: Registries were regenerated
 if [ -f "$TEST_DIR/.claude/agents-registry.json" ] && [ -f "$TEST_DIR/.claude/commands-registry.json" ]; then
   PASS=$((PASS + 1))
   echo "  OK: Registries regenerated"
@@ -187,7 +171,7 @@ else
   FAIL=$((FAIL + 1))
 fi
 
-# 4k: settings.json still exists and was merged
+# 4j: settings.json still exists and was merged
 if [ -f "$TEST_DIR/.claude/settings.json" ]; then
   PASS=$((PASS + 1))
 else
@@ -195,7 +179,7 @@ else
   FAIL=$((FAIL + 1))
 fi
 
-# 4l: Unmodified files should have been overwritten cleanly (no .new)
+# 4k: Unmodified files should have been overwritten cleanly (no .new)
 if [ -f "$TEST_DIR/.claude/agents/quality-validator.md" ] && [ ! -f "$TEST_DIR/.claude/agents/quality-validator.md.new" ]; then
   PASS=$((PASS + 1))
   echo "  OK: Unmodified files updated in-place (no .new)"

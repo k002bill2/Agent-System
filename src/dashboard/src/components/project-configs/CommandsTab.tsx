@@ -159,7 +159,7 @@ function CommandCard({ command, isExpanded, isLoadingContent, isDeleting, conten
         </button>
         <div className="flex-1 min-w-0 cursor-pointer" onClick={onToggle}>
           <div className="flex items-center gap-2">
-            <h4 className="font-medium text-gray-900 dark:text-white font-mono">
+            <h4 className="font-medium text-gray-900 dark:text-white">
               /{command.command_id}
             </h4>
           </div>
@@ -229,7 +229,7 @@ function CommandCard({ command, isExpanded, isLoadingContent, isDeleting, conten
           {isLoadingContent ? (
             <div className="p-4 text-center text-gray-500">Loading content...</div>
           ) : content ? (
-            <pre className="p-4 text-sm text-gray-700 dark:text-gray-300 overflow-x-auto whitespace-pre-wrap font-mono">
+            <pre className="p-4 text-sm text-gray-700 dark:text-gray-300 overflow-x-auto whitespace-pre-wrap">
               {content}
             </pre>
           ) : (

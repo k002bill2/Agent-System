@@ -91,11 +91,6 @@ class AgentConfig(BaseModel):
     model: str | None = Field(default=None, description="Preferred model (opus/sonnet/haiku)")
     role: str | None = Field(default=None, description="Agent role")
 
-    # ACE capabilities (if present)
-    ace_capabilities: dict[str, Any] | None = Field(
-        default=None, description="ACE framework capabilities"
-    )
-
     # Metadata
     is_shared: bool = Field(default=False, description="Is in shared/ directory")
     modified_at: datetime | None = Field(default=None)

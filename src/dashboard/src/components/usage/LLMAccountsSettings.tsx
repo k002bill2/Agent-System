@@ -254,7 +254,7 @@ function CredentialRow({
           <ProviderBadge provider={cred.provider} />
         </div>
         <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-          <span className="text-xs font-mono text-gray-500 dark:text-gray-400">
+          <span className="text-xs text-gray-500 dark:text-gray-400">
             {cred.api_key_masked}
           </span>
           {cred.last_verified_at && (
