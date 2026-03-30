@@ -1057,7 +1057,12 @@ export const useGitStore = create<GitState>((set, get) => ({
   mergeMergeRequest: async (projectId, mrId, userId, userRole = 'member') => {
     set({ isLoading: true, error: null })
     try {
-      await apiClient.post(`/api/git/projects/${projectId}/merge-requests/${mrId}/merge?user_id=${userId}&user_role=${userRole}`)
+      const response = await apiClient.post(`/api/git/projects/${projectId}/merge-requests/${mrId}/merge?user_id=${userId}&user_role=${userRole}`)
+      const data = response.data as { merge_request?: unknown; merge_result?: { success: boolean; message?: string } }
+      if (data.merge_result && !data.merge_result.success) {
+        set({ error: data.merge_result.message || '머지에 실패했습니다', isLoading: false })
+        return false
+      }
       await get().fetchMergeRequests(projectId)
       await get().fetchBranches(projectId)
       set({ isLoading: false })

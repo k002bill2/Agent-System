@@ -1245,6 +1245,9 @@ async def merge_merge_request(
         if not mr:
             raise HTTPException(status_code=404, detail="Merge request not found")
 
+        if result and not result.success:
+            raise HTTPException(status_code=409, detail=result.message)
+
         return {"merge_request": mr, "merge_result": result}
     except HTTPException:
         raise
