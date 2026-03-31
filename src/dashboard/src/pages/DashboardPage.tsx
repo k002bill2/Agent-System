@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo, useCallback } from 'react'
 import { useOrchestrationStore } from '../stores/orchestration'
 import { useClaudeSessionsStore } from '../stores/claudeSessions'
 import { Users, Terminal, FolderOpen, MessageSquare, Zap } from 'lucide-react'
@@ -31,35 +31,52 @@ export function DashboardPage() {
   const selectSession = useClaudeSessionsStore(s => s.selectSession)
   const setView = useNavigationStore(s => s.setView)
 
-  // Fetch Claude Code sessions and session projects on mount
-  useEffect(() => {
+  // Stable callback to fetch data on mount — prevents re-triggering
+  const fetchOnMount = useCallback(() => {
     fetchSessions()
     fetchSessionProjects()
   }, [fetchSessions, fetchSessionProjects])
 
-  const agentStats = Object.values(agents).reduce(
-    (acc, agent) => {
-      acc.total++
-      if (agent.status === 'in_progress') acc.active++
-      else acc.idle++
-      return acc
-    },
-    { total: 0, active: 0, idle: 0 }
+  // Fetch Claude Code sessions and session projects on mount
+  useEffect(() => {
+    fetchOnMount()
+  }, [fetchOnMount])
+
+  const agentStats = useMemo(
+    () =>
+      Object.values(agents).reduce(
+        (acc, agent) => ({
+          total: acc.total + 1,
+          active: acc.active + (agent.status === 'in_progress' ? 1 : 0),
+          idle: acc.idle + (agent.status !== 'in_progress' ? 1 : 0),
+        }),
+        { total: 0, active: 0, idle: 0 },
+      ),
+    [agents],
   )
 
-  // Session-based stats
-  const activeSessions = sessions.filter(s => s.status === 'active').length
-  const sessionProjectCount = (!projectsFetchError && allSessionProjects.length > 0)
-    ? allSessionProjects.length
-    : new Set(sessions.filter(s => s.project_name && s.project_name !== '-').map(s => s.project_name)).size
-  const totalMessages = sessions.reduce((sum, s) => sum + (s.message_count || 0), 0)
-  const lastSession = sessions.length > 0 ? sessions[0] : null
-  const lastActivityText = lastSession
-    ? formatTimeAgo(new Date(lastSession.last_activity))
-    : 'No sessions'
+  // Session-based stats — memoised to avoid recalculation on every render
+  const { activeSessions, sessionProjectCount, totalMessages, lastActivityText } = useMemo(() => {
+    const active = sessions.filter(s => s.status === 'active').length
+    const projectCount = (!projectsFetchError && allSessionProjects.length > 0)
+      ? allSessionProjects.length
+      : new Set(sessions.filter(s => s.project_name && s.project_name !== '-').map(s => s.project_name)).size
+    const messages = sessions.reduce((sum, s) => sum + (s.message_count || 0), 0)
+    const last = sessions.length > 0 ? sessions[0] : null
+    const activityText = last
+      ? formatTimeAgo(new Date(last.last_activity))
+      : 'No sessions'
+
+    return {
+      activeSessions: active,
+      sessionProjectCount: projectCount,
+      totalMessages: messages,
+      lastActivityText: activityText,
+    }
+  }, [sessions, allSessionProjects, projectsFetchError])
 
   // Get recent Claude Code sessions (top 10 by last activity)
-  const recentSessions = sessions.slice(0, 10)
+  const recentSessions = useMemo(() => sessions.slice(0, 10), [sessions])
 
   return (
     <div className="flex-1 p-6 overflow-y-auto">
