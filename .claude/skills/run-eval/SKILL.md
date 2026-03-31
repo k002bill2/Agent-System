@@ -21,6 +21,9 @@ Systematically evaluate AI agent performance and compute pass@k metrics. Provide
 /run-eval --category ui_component
 /run-eval --category service
 /run-eval --category bug_fix
+/run-eval --category refactor
+/run-eval --category api
+/run-eval --category test
 
 # 전체 평가
 /run-eval --all
@@ -40,7 +43,7 @@ Systematically evaluate AI agent performance and compute pass@k metrics. Provide
 `$ARGUMENTS`에서 태스크 ID 또는 옵션을 파싱합니다:
 
 - task_id: 특정 태스크 ID (예: task_ui_001)
-- --category: 카테고리 필터 (ui_component, service, bug_fix, refactor)
+- --category: 카테고리 필터 (ui_component, service, bug_fix, refactor, api, test, integration)
 - --all: 모든 태스크 실행
 - --k: 반복 횟수 (기본값: 1)
 - --agent: 특정 에이전트 지정 (선택)
