@@ -50,6 +50,32 @@
         ]
       }
     ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/evalCleanup.js 2>/dev/null || true",
+            "timeout": 5,
+            "statusMessage": "Eval cleanup..."
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/evalCleanup.js 2>/dev/null || true",
+            "timeout": 5,
+            "statusMessage": "Eval cleanup..."
+          }
+        ]
+      }
+    ],
     "Notification": [
       {
         "matcher": "",
