@@ -1,0 +1,135 @@
+{
+  "date": "2026-03-31",
+  "total_queries": 180,
+  "overall_accuracy": 0.6388888888888888,
+  "average_f1": 0.5246537913410978,
+  "skills": {
+    "react-web-development": {
+      "accuracy": 0.65,
+      "precision": 1.0,
+      "recall": 0.417,
+      "f1": 0.588,
+      "tp": 5,
+      "tn": 8,
+      "fp": 0,
+      "fn": 7,
+      "suggestions": [
+        "FN 7건: description에 다음 키워드 추가 고려: 페이지네이션, 적용, 훅, ui, 고쳐줘",
+        "accuracy <75% — description 대폭 개선 필요"
+      ]
+    },
+    "verify-frontend": {
+      "accuracy": 0.75,
+      "precision": 1.0,
+      "recall": 0.583,
+      "f1": 0.737,
+      "tp": 7,
+      "tn": 8,
+      "fp": 0,
+      "fn": 5,
+      "suggestions": [
+        "FN 5건: description에 다음 키워드 추가 고려: 전에, 체크해줘, tsx, 후, 파일",
+        "accuracy 75-90% — 일부 키워드 조정 필요"
+      ]
+    },
+    "verify-backend": {
+      "accuracy": 0.6,
+      "precision": 1.0,
+      "recall": 0.333,
+      "f1": 0.5,
+      "tp": 4,
+      "tn": 8,
+      "fp": 0,
+      "fn": 8,
+      "suggestions": [
+        "FN 8건: description에 다음 키워드 추가 고려: 수정, api, 남아있는, 타입, 누락",
+        "accuracy <75% — description 대폭 개선 필요"
+      ]
+    },
+    "test-automation": {
+      "accuracy": 0.85,
+      "precision": 0.846,
+      "recall": 0.917,
+      "f1": 0.88,
+      "tp": 11,
+      "tn": 6,
+      "fp": 2,
+      "fn": 1,
+      "suggestions": [
+        "FN 1건: description에 다음 키워드 추가 고려: 기능, tdd로, 구현하자, 새",
+        "FP 2건: 과매칭 키워드: 테스트→coverage, react, test, 컴포넌트→react, 테스트→test. description을 더 구체적으로.",
+        "accuracy 75-90% — 일부 키워드 조정 필요"
+      ]
+    },
+    "verification-loop": {
+      "accuracy": 0.65,
+      "precision": 1.0,
+      "recall": 0.417,
+      "f1": 0.588,
+      "tp": 5,
+      "tn": 8,
+      "fp": 0,
+      "fn": 7,
+      "suggestions": [
+        "FN 7건: description에 다음 키워드 추가 고려: 돌려봐, changes, 문제, 전에, 부탁",
+        "accuracy <75% — description 대폭 개선 필요"
+      ]
+    },
+    "merge-worktree": {
+      "accuracy": 0.85,
+      "precision": 1.0,
+      "recall": 0.75,
+      "f1": 0.857,
+      "tp": 9,
+      "tn": 8,
+      "fp": 0,
+      "fn": 3,
+      "suggestions": [
+        "FN 3건: description에 다음 키워드 추가 고려: 완료, feature, 커밋, 브랜치를, 합치자",
+        "accuracy 75-90% — 일부 키워드 조정 필요"
+      ]
+    },
+    "run-eval": {
+      "accuracy": 0.5,
+      "precision": 1.0,
+      "recall": 0.167,
+      "f1": 0.286,
+      "tp": 2,
+      "tn": 8,
+      "fp": 0,
+      "fn": 10,
+      "suggestions": [
+        "FN 10건: description에 다음 키워드 추가 고려: 결과, ui, 비교, 테스트, 채점",
+        "accuracy <75% — description 대폭 개선 필요"
+      ]
+    },
+    "agent-improvement": {
+      "accuracy": 0.4,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "tn": 8,
+      "fp": 0,
+      "fn": 12,
+      "suggestions": [
+        "FN 12건: description에 다음 키워드 추가 고려: 결과, 수정, 문제, 프롬프트, 타임아웃",
+        "accuracy <75% — description 대폭 개선 필요"
+      ]
+    },
+    "agent-observability": {
+      "accuracy": 0.5,
+      "precision": 1.0,
+      "recall": 0.167,
+      "f1": 0.286,
+      "tp": 2,
+      "tn": 8,
+      "fp": 0,
+      "fn": 10,
+      "suggestions": [
+        "FN 10건: description에 다음 키워드 추가 고려: 기록, 확인, 타임아웃, 에이전트, 로그",
+        "accuracy <75% — description 대폭 개선 필요"
+      ]
+    }
+  }
+}

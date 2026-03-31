@@ -1,0 +1,61 @@
+{
+  "skill_id": "test-automation",
+  "skill_name": "Test Automation",
+  "type": "ability_enhancement",
+  "test_method": "ab_test",
+  "description": "테스트 작성 시 AAA 패턴, 커버리지, 엣지케이스, 모킹 품질 향상 효과 측정",
+  "scoring": {
+    "dimensions": ["test_count", "aaa_pattern", "edge_cases", "mock_quality", "coverage_target", "vitest_conventions"],
+    "pass_threshold": 0.7
+  },
+  "evals": [
+    {
+      "id": "ta_001",
+      "name": "Zustand 스토어 테스트 작성",
+      "prompt": "src/dashboard/src/stores/agents.ts 스토어에 대한 테스트를 작성해주세요. 상태 초기화, 액션 호출, 비동기 API 호출 모킹, 에러 핸들링을 커버하세요.",
+      "expected_patterns": {
+        "must_have": ["describe(", "it(", "expect(", "vi.fn(", "vi.mock(", "waitFor|act", "beforeEach|afterEach"],
+        "must_not_have": ["jest.fn(", "jest.mock(", ": any", "console.log"]
+      },
+      "grading": {
+        "test_count": { "weight": 20, "check": "count 'it(' >= 8" },
+        "aaa_pattern": { "weight": 20, "check": "arrange/act/assert structure visible" },
+        "edge_cases": { "weight": 20, "check": "empty state, error state, loading state tested" },
+        "mock_quality": { "weight": 20, "check": "vi.fn()/vi.mock() used, cleanup in afterEach" },
+        "vitest_conventions": { "weight": 20, "check": "vi.* not jest.*, path aliases used" }
+      }
+    },
+    {
+      "id": "ta_002",
+      "name": "커스텀 훅 테스트 작성",
+      "prompt": "useDebounce 훅 (src/dashboard/src/hooks/useDebounce.ts)에 대한 테스트를 작성해주세요. 타이머 동작, cleanup, 제네릭 타입, 엣지케이스를 커버하세요.",
+      "expected_patterns": {
+        "must_have": ["renderHook", "act", "vi.useFakeTimers", "vi.advanceTimersByTime", "expect("],
+        "must_not_have": ["jest.", ": any"]
+      },
+      "grading": {
+        "test_count": { "weight": 15, "check": "count 'it(' >= 6" },
+        "timer_mocking": { "weight": 25, "check": "vi.useFakeTimers + vi.advanceTimersByTime" },
+        "cleanup_test": { "weight": 20, "check": "tests for cleanup/unmount behavior" },
+        "edge_cases": { "weight": 20, "check": "rapid value changes, zero delay, undefined input" },
+        "vitest_conventions": { "weight": 20, "check": "renderHook from @testing-library/react" }
+      }
+    },
+    {
+      "id": "ta_003",
+      "name": "API 서비스 모킹 테스트",
+      "prompt": "src/dashboard/src/services/apiClient.ts의 API 클라이언트에 대한 테스트를 작성해주세요. 성공 응답, 에러 응답, 타임아웃, 인터셉터, 토큰 갱신을 커버하세요.",
+      "expected_patterns": {
+        "must_have": ["vi.mock(", "vi.fn(", "describe(", "it(", "expect(", "async", "await"],
+        "must_not_have": ["jest.", ": any", "console.log"]
+      },
+      "grading": {
+        "test_count": { "weight": 15, "check": "count 'it(' >= 10" },
+        "mock_quality": { "weight": 25, "check": "proper fetch/axios mocking with different responses" },
+        "error_scenarios": { "weight": 25, "check": "401, 404, 500, timeout, network error tested" },
+        "async_handling": { "weight": 15, "check": "async/await + waitFor used correctly" },
+        "vitest_conventions": { "weight": 20, "check": "vi.* used, cleanup in afterEach" }
+      }
+    }
+  ]
+}

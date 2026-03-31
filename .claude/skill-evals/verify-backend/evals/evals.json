@@ -1,0 +1,59 @@
+{
+  "skill_id": "verify-backend",
+  "skill_name": "Verify Backend",
+  "type": "ability_enhancement",
+  "test_method": "ab_test",
+  "description": "백엔드 코드 검증 시 타입 힌트, bare except, 하드코딩 시크릿, sync I/O, print 위반 탐지율 비교",
+  "scoring": {
+    "dimensions": ["violation_detection", "false_positive_avoidance", "exception_handling", "report_completeness", "actionable_feedback"],
+    "pass_threshold": 0.7
+  },
+  "evals": [
+    {
+      "id": "vb_001",
+      "name": "위반 포함 엔드포인트 검증",
+      "setup": "Create flawed endpoint at src/backend/api/v1/test_flawed.py with: (1) missing return type hint, (2) bare except:, (3) hardcoded API_KEY='sk-xxx', (4) requests.get() sync call, (5) print() statement",
+      "prompt": "방금 생성한 test_flawed.py 엔드포인트를 검증해주세요.",
+      "expected_behavior": {
+        "must_detect": ["타입 힌트 누락", "bare except", "하드코딩 시크릿", "sync I/O (requests.get)", "print() 사용"],
+        "detection_count": 5
+      },
+      "grading": {
+        "violation_detection": { "weight": 40, "check": "count detected violations out of 5 planted" },
+        "false_positive_avoidance": { "weight": 20, "check": "no false positives" },
+        "actionable_feedback": { "weight": 20, "check": "each violation has specific fix with code example" },
+        "report_completeness": { "weight": 20, "check": "table format with PASS/FAIL per check" }
+      }
+    },
+    {
+      "id": "vb_002",
+      "name": "예외 케이스 정확성",
+      "setup": "Create test_something.py (test file with print/no type hints) and config.py (with default string values)",
+      "prompt": "test_something.py와 config.py를 검증해주세요.",
+      "expected_behavior": {
+        "must_not_flag": ["test file print/type hints", "config.py default strings"],
+        "must_flag": ["only actual violations in production code"]
+      },
+      "grading": {
+        "exception_handling": { "weight": 50, "check": "correctly skips test and config files" },
+        "false_positive_avoidance": { "weight": 50, "check": "zero false positives on exempt files" }
+      }
+    },
+    {
+      "id": "vb_003",
+      "name": "다중 파일 일괄 검증",
+      "setup": "3 Python files: 1 clean, 1 with 3 violations, 1 with 5 violations",
+      "prompt": "src/backend/api/v1/test_target/ 디렉토리의 모든 파일을 검증해주세요.",
+      "expected_behavior": {
+        "must_detect": ["8 total violations across 2 files"],
+        "must_pass": ["clean file reports PASS"]
+      },
+      "grading": {
+        "violation_detection": { "weight": 35, "check": "8/8 violations detected" },
+        "clean_pass": { "weight": 25, "check": "clean file correctly marked PASS" },
+        "per_file_report": { "weight": 20, "check": "separate report per file" },
+        "summary_table": { "weight": 20, "check": "aggregate summary" }
+      }
+    }
+  ]
+}

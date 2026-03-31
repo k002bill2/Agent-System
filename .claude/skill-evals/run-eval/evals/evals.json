@@ -1,0 +1,42 @@
+{
+  "skill_id": "run-eval",
+  "skill_name": "Run Eval",
+  "type": "workflow_meta",
+  "test_method": "with_skill",
+  "description": "에이전트 평가 실행 오케스트레이션 완료율 및 결과 품질 측정",
+  "scoring": {
+    "dimensions": ["task_loading", "agent_execution", "grading_quality", "result_storage", "metrics_calculation"],
+    "pass_threshold": 0.7
+  },
+  "evals": [
+    {
+      "id": "re_001",
+      "name": "단일 태스크 eval 실행",
+      "prompt": "/run-eval task_ui_002",
+      "expected_behavior": {
+        "must_do": ["load task YAML", "spawn implementation agent", "grade output", "save result JSON", "report score"]
+      },
+      "grading": {
+        "task_loading": { "weight": 20, "check": "correctly parses task_ui_002.yaml" },
+        "agent_execution": { "weight": 25, "check": "spawns general-purpose agent with task prompt" },
+        "grading_quality": { "weight": 25, "check": "code checks + LLM grading performed" },
+        "result_storage": { "weight": 15, "check": "JSON result saved to results/ directory" },
+        "metrics_calculation": { "weight": 15, "check": "score and PASS/FAIL reported" }
+      }
+    },
+    {
+      "id": "re_002",
+      "name": "카테고리별 배치 실행",
+      "prompt": "/run-eval --category ui_component",
+      "expected_behavior": {
+        "must_do": ["find all ui_component tasks", "run each task", "aggregate results", "report summary table"]
+      },
+      "grading": {
+        "task_discovery": { "weight": 25, "check": "correctly identifies all ui_component tasks" },
+        "batch_execution": { "weight": 25, "check": "runs each task sequentially or in parallel" },
+        "aggregation": { "weight": 25, "check": "summary with per-task scores" },
+        "output_format": { "weight": 25, "check": "markdown table with task/score/result" }
+      }
+    }
+  ]
+}
