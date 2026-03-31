@@ -1,0 +1,20 @@
+[
+  {"query": "Git Management 페이지에 WorktreeDeleteModal 컴포넌트를 새로 만들어줘. GitWorktree 타입 받아서 경로 표시하고 삭제 확인하는 모달", "should_trigger": true},
+  {"query": "useAsyncAction이라는 커스텀 훅 만들어줘. 제네릭으로 반환값 타입 지정 가능하게", "should_trigger": true},
+  {"query": "워크트리 상태 관리하는 Zustand 미니 스토어를 stores/worktree.ts에 만들어줘", "should_trigger": true},
+  {"query": "DashboardPage에 반응형 그리드 레이아웃 적용해줘. mobile-first로 sm, md, lg 브레이크포인트", "should_trigger": true},
+  {"query": "AgentCard 컴포넌트에 다크모드 토글 애니메이션 추가하고 싶어. Tailwind transition 써서", "should_trigger": true},
+  {"query": "SettingsPage에서 탭 네비게이션 컴포넌트를 분리하고 싶어. 접근성 고려해서 키보드 네비게이션 지원", "should_trigger": true},
+  {"query": "GitPage.tsx에서 worktrees prop 전달하는 부분 수정하고 브랜치 삭제 콜백도 바꿔야 해", "should_trigger": true},
+  {"query": "테이블 컴포넌트에 가상 스크롤 적용하고 싶어. @tanstack/react-virtual 써서 1000행 이상도 부드럽게", "should_trigger": true},
+  {"query": "cn() 유틸리티 함수가 어떻게 동작하는지 설명해줘. clsx랑 tailwind-merge 조합이라던데", "should_trigger": true},
+  {"query": "git_service.py에 remove_worktree 메서드 추가해줘. subprocess.run으로 git worktree remove 실행", "should_trigger": false},
+  {"query": "FastAPI 엔드포인트에 remove_worktree 쿼리 파라미터 추가해줘", "should_trigger": false},
+  {"query": "BranchList 컴포넌트 Vitest 테스트 작성해줘. worktree 경고 시나리오 커버", "should_trigger": false},
+  {"query": "프론트엔드 패턴 검증해줘. memo 빠진 거 없나 확인", "should_trigger": false},
+  {"query": "tsc --noEmit이랑 npm run build 검증 돌려줘", "should_trigger": false},
+  {"query": "에이전트 평가에서 web-ui-specialist가 실패해. 원인 분석해줘", "should_trigger": false},
+  {"query": "worktree-feature-update에서 main으로 squash-merge 해줘", "should_trigger": false},
+  {"query": "프로젝트 테스트 커버리지를 75% 이상으로 올리고 싶어", "should_trigger": false},
+  {"query": "hooks.json에 새 PreToolUse 훅 등록해줘", "should_trigger": false}
+]

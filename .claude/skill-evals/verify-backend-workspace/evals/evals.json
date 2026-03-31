@@ -1,0 +1,39 @@
+{
+  "skill_name": "verify-backend",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "src/backend/services/git_service.py에 remove_worktree 메서드 추가하고 delete_branch에 worktree 검사 로직 넣었어. 백엔드 패턴 검증해줘. 특히 타입 힌트랑 에러 핸들링 쪽으로.",
+      "expected_output": "타입 힌트 완전성, bare except 여부, subprocess 호출 안전성, GitServiceError 적절한 사용 검증",
+      "files": ["src/backend/services/git_service.py"],
+      "expectations": [
+        "함수 시그니처의 타입 힌트 완전성을 검사한다",
+        "bare except (except:) 사용 여부를 검사한다",
+        "하드코딩된 시크릿이나 패스워드가 없는지 확인한다",
+        "print() 문 사용 여부를 검사한다"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "api/git.py의 delete_branch 엔드포인트에 remove_worktree 쿼리 파라미터 추가했어. FastAPI 패턴 맞는지, 동기 I/O 차단은 없는지 백엔드 검증해줘",
+      "expected_output": "Query 파라미터 사용, async/await 일관성, HTTPException 적절한 사용 검증",
+      "files": ["src/backend/api/git.py"],
+      "expectations": [
+        "async def로 선언된 엔드포인트에서 sync I/O 차단 호출이 없는지 확인한다",
+        "HTTPException의 status_code가 적절한지 확인한다",
+        "Query 파라미터에 description이 있는지 확인한다"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "src/backend/services/project_discovery.py 수정해서 symlink만 프로젝트로 등록하게 바꿨는데 백엔드 패턴 검증 돌려줘. pathlib 사용이랑 에러 핸들링이 맞는지 궁금해",
+      "expected_output": "pathlib 사용 패턴, 타입 힌트, 로깅 패턴, async 일관성 검증",
+      "files": ["src/backend/services/project_discovery.py"],
+      "expectations": [
+        "타입 힌트가 모든 함수 시그니처와 반환값에 있는지 확인한다",
+        "logging.getLogger(__name__) 패턴을 사용하는지 확인한다",
+        "bare except 없이 구체적 예외를 잡는지 확인한다"
+      ]
+    }
+  ]
+}

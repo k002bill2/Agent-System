@@ -1,0 +1,20 @@
+[
+  {"query": "현재 세션에서 에이전트가 몇 개 스폰되었고 각각의 성공률이 어떻게 되는지 확인해줘", "should_trigger": true},
+  {"query": "최근 세션에서 general-purpose 에이전트들의 평균 실행 시간이 너무 긴 것 같아. .temp/traces/ 분석해줘", "should_trigger": true},
+  {"query": "에이전트 트레이싱 설정해줘. 실행 시간, 토큰 사용량, 도구 호출 횟수 추적", "should_trigger": true},
+  {"query": "서브에이전트별 성능 메트릭 대시보드 만들어줘. 평균 duration, 성공률, 토큰 비용", "should_trigger": true},
+  {"query": "에이전트가 타임아웃으로 실패하는 패턴이 있어. 로그 분석해서 병목 찾아줘", "should_trigger": true},
+  {"query": "background 에이전트 vs foreground 에이전트 성능 비교해줘", "should_trigger": true},
+  {"query": "에이전트 KPI 확인해줘. 스폰 수, 완료율, 평균 토큰", "should_trigger": true},
+  {"query": "최근 7일간 에이전트 실행 추이 보여줘. metrics.json 파일 기반으로", "should_trigger": true},
+  {"query": "에이전트가 task_ui_002에서 실패해. 프롬프트 개선해줘", "should_trigger": false},
+  {"query": "ui_component 평가를 k=3으로 돌려줘", "should_trigger": false},
+  {"query": "새 서브에이전트 만들어줘", "should_trigger": false},
+  {"query": "BranchList 컴포넌트 수정해줘", "should_trigger": false},
+  {"query": "verification loop 돌려줘", "should_trigger": false},
+  {"query": "FastAPI 엔드포인트 검증해줘", "should_trigger": false},
+  {"query": "테스트 커버리지 올려줘", "should_trigger": false},
+  {"query": "worktree squash-merge", "should_trigger": false},
+  {"query": "hooks.json에 새 훅 등록", "should_trigger": false},
+  {"query": "프론트엔드 검증해줘. 다크모드 누락 확인", "should_trigger": false}
+]

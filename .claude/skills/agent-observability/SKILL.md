@@ -1,6 +1,6 @@
 ---
 name: agent-observability
-description: "Use when debugging agent behavior, analyzing performance or failure patterns, setting up tracing for new agent workflows, or investigating why agents fail silently or timeout."
+description: "에이전트 트레이싱/메트릭 수집 전문 스킬. 에이전트 실행 시간, 토큰 사용량, 도구 호출 횟수 모니터링, KPI 대시보드, .temp/traces/ 분석, background vs foreground 성능 비교 등에 사용. '에이전트 성능 모니터링', '실행 시간 확인', '토큰 사용량 분석', 'KPI 확인', '트레이싱 설정', '메트릭 수집' 등의 요청에 트리거. 실패 원인 진단(agent-improvement)이 아닌, 정량적 성능 데이터 수집과 시각화에 특화."
 user-invocable: false
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: react-web-development
-description: "Use when creating React UI components, pages, custom hooks, or working with TypeScript/Tailwind CSS/Zustand in AOS Dashboard. Also triggers for styling, responsive design, dark mode, accessibility, or path alias questions."
+description: "React/TypeScript/Tailwind/Zustand 개발 가이드 스킬. 새 컴포넌트 생성, 커스텀 훅 작성, Zustand 스토어 추가, 페이지 레이아웃, 반응형 디자인, 다크모드 구현, 접근성, @/ 경로 별칭 등 AOS Dashboard 프론트엔드 구현 작업 시 사용. '컴포넌트 만들어줘', '훅 작성해줘', '스토어 추가', '스타일링', 'Tailwind 적용', '반응형', 'mobile-first' 등의 요청에 트리거. 이미 작성된 코드의 검증이 아닌, 새로운 코드를 작성하거나 기존 코드를 수정하는 구현 작업에 특화."
 ---
 
 # React Web Development

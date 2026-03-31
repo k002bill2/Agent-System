@@ -1,6 +1,6 @@
 ---
 name: verify-frontend
-description: "Use when verifying React/TypeScript/Tailwind patterns after component creation or modification, before Dashboard PR, or during frontend code review. Checks memo/displayName, TypeScript any, inline styles, accessibility, and dark mode."
+description: "React/TypeScript/Tailwind 프론트엔드 패턴 검증 전문 스킬. TSX 컴포넌트를 수정하거나 생성한 후, PR 전, 또는 프론트엔드 코드리뷰 시 반드시 사용. memo/displayName 누락, TypeScript any, 인라인 스타일, dark: prefix 누락, aria-label 접근성, font-mono 규칙(ADR-006) 등을 체계적으로 검사. '프론트엔드 검증', '패턴 확인', '다크모드 체크', 'PR 전 확인', 'displayName 빠졌나', '접근성 검사' 등의 요청에 트리거. 새 컴포넌트를 만드는 것이 아닌, 이미 작성된 코드의 패턴 준수 여부를 검사하는 데 특화."
 allowed-tools: Bash, Grep, Glob, Read
 ---
 

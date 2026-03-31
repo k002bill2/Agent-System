@@ -1,0 +1,37 @@
+{
+  "skill_name": "merge-worktree",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "worktree-feature-frontend 브랜치 작업이 끝났어요. DiffViewer, TranscriptViewer, ConflictResolverPanel 등 여러 컴포넌트를 수정했는데, main 브랜치로 squash-merge 해주세요.",
+      "expected_output": "6단계 워크플로우를 순서대로 수행: 워크트리 검증 -> 브랜치/대상 식별 -> 변경사항 연구(커밋 이력, diff stat, full diff 분석) -> 대상 브랜치 준비(fetch, WIP 감지) -> squash merge -> 구조화된 커밋 메시지 작성 및 커밋 -> 검증 및 보고.",
+      "files": [],
+      "expectations": [
+        "git rev-parse --git-dir 실행으로 현재 디렉토리가 worktree인지 검증했다",
+        "git branch --show-current로 현재 브랜치를 식별했다",
+        "git log --oneline main..HEAD 또는 유사 명령으로 커밋 이력을 조회했다",
+        "git diff main...HEAD --stat으로 변경 파일 요약을 조회했다",
+        "git diff main...HEAD로 전체 diff를 조회했다",
+        "변경사항을 feat/fix/refactor/docs/chore/test 카테고리로 분류했다",
+        "git rev-parse --git-common-dir로 원본 레포 경로를 파악했다",
+        "원본 레포에서 git merge --squash 명령을 실행했다",
+        "커밋 메시지가 conventional commit 형식(type: summary)을 따르고 Co-Authored-By를 포함했다",
+        "최종 커밋 해시와 머지 대상 브랜치를 사용자에게 보고했다"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "현재 worktree에서 develop 브랜치로 머지하고 싶어요. /merge-worktree develop",
+      "expected_output": "ARGUMENTS로 전달된 develop을 대상 브랜치로 사용하여 squash-merge 수행. main 대신 develop 브랜치를 타겟으로 전체 6단계 워크플로우 실행.",
+      "files": [],
+      "expectations": [
+        "대상 브랜치가 main이 아닌 develop으로 설정되었다",
+        "git diff develop...HEAD 명령으로 diff를 조회했다",
+        "git log --oneline develop..HEAD 명령으로 커밋 이력을 조회했다",
+        "원본 레포에서 git checkout develop이 실행되었다",
+        "원본 레포에서 git merge --squash 명령이 worktree 브랜치를 대상으로 실행되었다",
+        "충돌 발생 시 자동 해결을 시도하지 않고 사용자에게 보고했다"
+      ]
+    }
+  ]
+}

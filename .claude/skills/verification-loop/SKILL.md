@@ -1,6 +1,6 @@
 ---
 name: verification-loop
-description: "Use when implementation is complete, after refactoring, before PR creation, or when type/lint/test/build verification is needed. Also triggers for 'check health', 'verify', or 'validate' requests."
+description: "Boris Cherny 스타일 검증 피드백 루프. 구현 완료, 리팩토링 후, PR 생성 전, 빌드 깨짐 수정 시 사용. tsc --noEmit → ESLint → vitest → npm run build 순서로 전체 검증하고 실패 시 자동 재시도(최대 3회). 'verification loop 돌려줘', '검증해줘', 'verify', 'validate', 'check health', '빌드 확인', 'PR 전 검사', '구현 끝 확인' 등의 요청에 트리거. 개별 패턴 검사(verify-frontend/verify-backend)가 아닌, 전체 빌드 파이프라인을 한 번에 검증하는 데 특화."
 ---
 
 # Verification Loop

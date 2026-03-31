@@ -1,0 +1,20 @@
+[
+  {"query": "BranchList.tsx의 worktree 경고 표시, 체크박스 토글, 삭제 버튼 disabled 조건 테스트 작성해줘. Vitest로", "should_trigger": true},
+  {"query": "git.ts 스토어의 deleteBranch 액션 테스트해줘. API 모킹하고 성공/실패/removeWorktree 케이스", "should_trigger": true},
+  {"query": "GitAlert.tsx의 에러 severity 분류 로직 테스트 추가해줘. auto-dismiss 타이머도", "should_trigger": true},
+  {"query": "src/dashboard/src/components/git/ 디렉토리 테스트 커버리지가 30%밖에 안 돼. 70% 이상으로 올려줘", "should_trigger": true},
+  {"query": "useAsyncAction 훅 TDD로 만들어줘. 먼저 테스트 작성하고 그 다음 구현", "should_trigger": true},
+  {"query": "ProjectFormModal 테스트에서 vi.useFakeTimers 쓰는데 가끔 flaky해. 원인 찾아줘", "should_trigger": true},
+  {"query": "Zustand 스토어 테스트 패턴이 궁금해. act() 래핑이랑 상태 변경 검증 어떻게 하는지", "should_trigger": true},
+  {"query": "WorkflowCreateModal 컴포넌트에 대한 통합 테스트 작성해줘. form 제출 플로우 전체", "should_trigger": true},
+  {"query": "npm test 돌리면 3개 테스트가 실패하는데 디버깅해줘", "should_trigger": true},
+  {"query": "WorktreeDeleteModal 컴포넌트를 새로 만들어줘. React + Tailwind로", "should_trigger": false},
+  {"query": "BranchList.tsx에서 다크모드 누락 확인해줘. 프론트엔드 검증", "should_trigger": false},
+  {"query": "git_service.py 타입 힌트 검증해줘. bare except 있나 확인", "should_trigger": false},
+  {"query": "구현 완료됐으니 verification loop 돌려줘. tsc, lint, build 전부", "should_trigger": false},
+  {"query": "에이전트 성공률 분석해줘. 최근 세션 트레이스 기반으로", "should_trigger": false},
+  {"query": "worktree에서 main으로 squash-merge 해줘", "should_trigger": false},
+  {"query": "pytest로 백엔드 테스트 돌려줘", "should_trigger": false},
+  {"query": "DashboardPage에 반응형 그리드 적용해줘", "should_trigger": false},
+  {"query": "hooks.json에 worktreeGuard 훅 등록해줘", "should_trigger": false}
+]

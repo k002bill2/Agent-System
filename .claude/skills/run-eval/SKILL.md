@@ -1,6 +1,6 @@
 ---
 name: run-eval
-description: "Use when benchmarking agent performance, running evaluation tasks by category, computing pass@k metrics, or testing specific agent types against defined rubrics."
+description: "AI 에이전트 평가 실행 전문 스킬. .claude/evals/tasks/ 태스크 정의 기반으로 에이전트 성능 벤치마크를 실행하고 pass@k, pass^k, avg_score 지표를 계산. '/run-eval', '평가 돌려줘', 'eval 실행', 'pass@k 계산', '벤치마크', '--category ui_component', '--all' 등의 요청에 트리거. 에이전트 실패 원인 분석(agent-improvement)이 아닌, 정량적 성능 측정과 결과 기록에 특화."
 disable-model-invocation: true
 argument-hint: "[task_id | --category <name> | --all] [--k=N]"
 ---

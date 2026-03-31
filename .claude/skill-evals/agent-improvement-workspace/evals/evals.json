@@ -1,0 +1,33 @@
+{
+  "skill_name": "agent-improvement",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "최근 에이전트 평가에서 web-ui-specialist가 task_ui_002에서 계속 실패해요. 트레이스 분석해서 원인 찾고 개선안 제시해주세요.",
+      "expected_output": ".temp/traces/sessions/의 events.jsonl을 파싱하여 web-ui-specialist 관련 agent_completed 이벤트 중 success=false를 필터링. 실패 패턴(XML tool output, scope violation, timeout 등)을 식별하고, 구체적인 파일 경로와 변경 내용을 포함한 개선 제안을 제시.",
+      "files": [],
+      "expectations": [
+        ".temp/traces/sessions/ 디렉토리의 events.jsonl 파일을 읽었다",
+        "agent_completed 이벤트 중 success=false인 항목을 필터링했다",
+        "실패를 agent_type, description, duration 기준으로 그룹핑했다",
+        "Known Failure Patterns(XML tool output, scope violation, silent failure, context starvation) 중 해당되는 패턴을 식별했다",
+        "개선 제안이 구체적 파일 경로(.claude/agents/*.md 등)와 변경할 내용(old content -> new content)을 포함했다",
+        "개선 적용 후 /run-eval로 재평가를 권장했다"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "에이전트 성공률이 80%로 떨어졌어요. 최근 여러 세션의 트레이스를 분석해서 반복되는 실패 패턴을 찾아주세요. 특히 timeout 관련 이슈가 있는지 확인해주세요.",
+      "expected_output": "여러 세션의 events.jsonl을 분석하여 반복 실패 패턴을 식별. duration_ms 기반으로 timeout 이슈를 확인하고, agent_type별 실패율을 계산. 근본 원인 분석과 함께 Improvement Targets 테이블에 맞는 구체적 개선안 제시.",
+      "files": [],
+      "expectations": [
+        ".temp/traces/sessions/ 하위의 여러 세션 디렉토리를 탐색했다 (최신 세션만이 아닌 복수 세션)",
+        "agent_completed 이벤트의 duration_ms를 분석하여 timeout 패턴을 확인했다",
+        "agent_type별 실패 그룹핑 결과가 제시되었다",
+        "개선 대상이 Improvement Targets(Agent prompts, Skill content, Delegation templates, Effort scaling, Hook behavior) 중 해당 항목과 매핑되었다",
+        "증상 수정이 아닌 근본 원인에 대한 분석이 포함되었다 (예: 재시도 추가가 아닌 실패 원인 해결)",
+        "quality-reference.md와의 동기화 여부가 확인되었다"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+[
+  {"query": "git_service.py에 remove_worktree 메서드 추가했는데 타입 힌트 빠진 거 없나 백엔드 검증해줘", "should_trigger": true},
+  {"query": "api/git.py의 delete_branch 엔드포인트에 remove_worktree 파라미터 넣었어. FastAPI 패턴 맞는지 검증 좀", "should_trigger": true},
+  {"query": "project_discovery.py 수정했는데 bare except 쓴 곳 있나 확인해줘. async/await 일관성도", "should_trigger": true},
+  {"query": "src/backend/services/feedback.py에 새 메서드 추가했어. print문 남아있는지, logging 패턴 맞는지 백엔드 검증", "should_trigger": true},
+  {"query": "rag_service.py 리팩토링 후 하드코딩된 시크릿 없는지, 타입 힌트 완전한지 체크해줘", "should_trigger": true},
+  {"query": "LangGraph 노드 3개 수정했어. state 타입이 AgentState 맞는지, async def 패턴 따르는지 백엔드 검증", "should_trigger": true},
+  {"query": "auth_service.py에서 OAuth 토큰 검증 로직 바꿨는데 민감 정보 로깅 안 하는지 확인해줘", "should_trigger": true},
+  {"query": "claude_sessions.py 수정 후 SQLAlchemy async 세션 패턴 맞나 봐줘. selectinload 쓰고 있는지도", "should_trigger": true},
+  {"query": "새로운 FastAPI 라우터 파일 만들었어. Depends(get_session) 패턴이랑 Pydantic 모델 검증해줘", "should_trigger": true},
+  {"query": "BranchList.tsx에 FolderGit import 추가하고 다크모드 검증해줘", "should_trigger": false},
+  {"query": "React 컴포넌트에서 memo랑 displayName 빠진 거 확인해줘", "should_trigger": false},
+  {"query": "BranchList 컴포넌트 Vitest 테스트 작성해줘", "should_trigger": false},
+  {"query": "npm run build 에러 수정해줘. TypeScript 타입 에러야", "should_trigger": false},
+  {"query": "구현 완료했으니 tsc --noEmit이랑 빌드 검증 돌려줘", "should_trigger": false},
+  {"query": "worktree-feature-update에서 main으로 squash-merge 해줘", "should_trigger": false},
+  {"query": "에이전트 성공률이 80%로 떨어졌어. 실패 패턴 분석해줘", "should_trigger": false},
+  {"query": "Zustand 스토어에서 deleteBranch 타입 시그니처 변경했어. 프론트엔드 패턴 확인해줘", "should_trigger": false},
+  {"query": "docker-compose.yml에서 PostgreSQL 볼륨 설정 바꾸고 싶어", "should_trigger": false}
+]

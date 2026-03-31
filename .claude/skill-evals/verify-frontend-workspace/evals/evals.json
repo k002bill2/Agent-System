@@ -1,0 +1,44 @@
+{
+  "skill_name": "verify-frontend",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "src/dashboard/src/components/git/BranchList.tsx를 대폭 수정했는데 PR 올리기 전에 프론트엔드 패턴 검증해줘. FolderGit import 추가하고 DeleteConfirmState에 hasWorktree, worktreePath 필드 추가했고, removeWorktree 체크박스 UI도 넣었어.",
+      "expected_output": "memo/displayName 체크, TypeScript any 사용 여부, 인라인 스타일 여부, 다크모드 누락, aria-label 확인 결과를 포함한 검증 리포트",
+      "files": ["src/dashboard/src/components/git/BranchList.tsx"],
+      "expectations": [
+        "Grep 또는 Read 도구를 사용하여 실제 파일 내용을 검사한다",
+        "memo() 또는 displayName 사용 여부를 확인한다",
+        "TypeScript any 타입 사용 여부를 검사한다",
+        "dark: prefix가 포함된 Tailwind 클래스 누락 여부를 확인한다"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "방금 ConflictResolverPanel.tsx에서 font-mono 클래스를 코드 컨텍스트에만 남기고 나머지는 제거하는 리팩토링 했어. ADR-006 규칙 준수하는지 프론트엔드 검증 돌려줘",
+      "expected_output": "font-mono 사용이 코드 블록/pre/code 컨텍스트에서만 사용되는지, 인라인 스타일 없는지, 접근성 속성 확인",
+      "files": ["src/dashboard/src/components/git/ConflictResolverPanel.tsx"],
+      "expectations": [
+        "font-mono 클래스의 사용 컨텍스트를 검사한다",
+        "인라인 style 속성 사용 여부를 검사한다",
+        "aria-label 등 접근성 속성 존재 여부를 확인한다"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "OutputLog.tsx, YamlEditor.tsx, EnhancedRunLogs.tsx 세 파일 동시에 수정했어. 전체적으로 프론트엔드 패턴 확인해줘. 특히 다크모드 hover 상태랑 TypeScript 타입 안전성 쪽으로",
+      "expected_output": "3개 파일 각각에 대한 검증 결과 — 다크모드 hover 클래스, any 타입, 컴포넌트 구조 분석",
+      "files": [
+        "src/dashboard/src/components/monitor/OutputLog.tsx",
+        "src/dashboard/src/components/workflows/YamlEditor.tsx",
+        "src/dashboard/src/components/workflows/EnhancedRunLogs.tsx"
+      ],
+      "expectations": [
+        "3개 파일 모두에 대해 검사를 수행한다",
+        "dark:hover: 패턴의 Tailwind 클래스 사용을 확인한다",
+        "TypeScript any 또는 as any 사용을 검사한다",
+        "각 파일별로 개별 결과를 보고한다"
+      ]
+    }
+  ]
+}

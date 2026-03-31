@@ -1,0 +1,36 @@
+{
+  "skill_name": "verification-loop",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "RAGQueryPanel 컴포넌트 리팩토링이 끝났습니다. src/dashboard/src/components/rag/RAGQueryPanel.tsx 파일을 수정했고, 검색 결과 하이라이팅 로직을 별도 유틸로 분리했어요. PR 올리기 전에 전체 검증 돌려주세요.",
+      "expected_output": "Level 2 Standard Check를 실행하여 TypeScript 타입 체크, ESLint 린트, 테스트 + 커버리지, 빌드를 순서대로 실행하고 결과를 테이블 형식으로 보고. 실패 항목이 있으면 우선순위에 따라 수정 후 재검증.",
+      "files": [
+        "src/dashboard/src/components/rag/RAGQueryPanel.tsx"
+      ],
+      "expectations": [
+        "npm run type-check (또는 tsc --noEmit) 명령어가 실행되었다",
+        "npm run lint 명령어가 실행되었다",
+        "npm test 명령어가 커버리지 옵션과 함께 실행되었다",
+        "npm run build 명령어가 실행되었다",
+        "검증 결과가 항목별 PASS/FAIL 상태를 포함한 테이블 형식으로 보고되었다",
+        "실패한 항목이 있으면 우선순위(TypeScript > 테스트 > 린트 > 커버리지) 순서로 수정을 시도했다",
+        "수정 후 재검증(type-check && test)이 실행되었다"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "WorkflowRunLogs.tsx에서 로그 필터링 기능을 추가했는데, 빠르게 타입 에러만 확인하고 싶어요. Quick Check만 돌려주세요.",
+      "expected_output": "Level 1 Quick Check로 type-check만 실행하고 타입 에러 개수를 보고. 에러가 있으면 구체적 에러 위치와 수정 방법을 제시.",
+      "files": [
+        "src/dashboard/src/components/workflows/WorkflowRunLogs.tsx"
+      ],
+      "expectations": [
+        "npm run type-check 명령어가 실행되었다",
+        "Level 2나 Level 3가 아닌 Level 1 Quick Check만 실행되었다 (lint, test, build는 실행하지 않았다)",
+        "타입 에러 개수가 보고되었다",
+        "타입 에러가 있는 경우 파일 경로와 줄 번호를 포함한 구체적 위치가 언급되었다"
+      ]
+    }
+  ]
+}

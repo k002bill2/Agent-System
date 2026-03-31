@@ -1,0 +1,20 @@
+[
+  {"query": "최근 에이전트 평가에서 web-ui-specialist가 task_ui_002에서 계속 실패해. 트레이스 보고 원인 분석해줘", "should_trigger": true},
+  {"query": "에이전트 성공률이 80%로 떨어졌어. 최근 세션 트레이스 분석해서 반복되는 실패 패턴 찾아줘", "should_trigger": true},
+  {"query": "eval 결과 보니까 backend-specialist 에이전트가 타입 힌트 검사를 자꾸 빠뜨려. 에이전트 프롬프트 개선해줘", "should_trigger": true},
+  {"query": "서브에이전트들이 Tool API 대신 XML 태그를 텍스트로 출력하는 문제가 있어. 진단해줘", "should_trigger": true},
+  {"query": "에이전트 실패율이 90% 넘었어. 긴급 진단 필요해", "should_trigger": true},
+  {"query": "test-automation-specialist 에이전트가 vi.mock 패턴을 잘 못 써. 개선 방법 제안해줘", "should_trigger": true},
+  {"query": "에이전트 성능 개선을 위한 자기 개선 루프 돌려줘", "should_trigger": true},
+  {"query": "최근 R3 평가에서 general-purpose가 10/10 성공한 이유를 분석해줘. 성공 패턴 추출", "should_trigger": true},
+  {"query": "ui_component 카테고리 평가를 k=3으로 돌려줘", "should_trigger": false},
+  {"query": "에이전트 실행 시간이랑 토큰 사용량 모니터링해줘", "should_trigger": false},
+  {"query": "BranchList 컴포넌트 테스트 작성해줘", "should_trigger": false},
+  {"query": "프론트엔드 패턴 검증. memo, displayName 체크", "should_trigger": false},
+  {"query": "구현 완료. verification loop", "should_trigger": false},
+  {"query": "새 서브에이전트 만들어줘. security-reviewer용", "should_trigger": false},
+  {"query": "React 컴포넌트 만들어줘. AgentStatusCard", "should_trigger": false},
+  {"query": "worktree squash-merge 해줘", "should_trigger": false},
+  {"query": "FastAPI 엔드포인트 추가해줘", "should_trigger": false},
+  {"query": "hooks.json에 새 훅 등록", "should_trigger": false}
+]

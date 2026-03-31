@@ -1,6 +1,6 @@
 ---
 name: verify-backend
-description: "Use when verifying Python/FastAPI/LangGraph patterns after endpoint or node changes, before backend PR. Checks type hints, bare except, hardcoded secrets, sync I/O blocking, and print statements."
+description: "Python/FastAPI/LangGraph 백엔드 패턴 검증 전문 스킬. FastAPI 엔드포인트, LangGraph 노드, SQLAlchemy 모델, 서비스 레이어를 수정한 후 반드시 사용. 타입 힌트 완전성, bare except 금지, 하드코딩 시크릿, sync I/O 차단, print문 잔존, logging 패턴, Pydantic 모델 검증을 체계적으로 검사. '백엔드 검증', '타입 힌트 확인', 'FastAPI 패턴 맞나', 'bare except 있나', 'async 일관성 확인' 등의 요청에 트리거. 프론트엔드나 테스트 작성이 아닌, Python 백엔드 코드의 패턴 준수 여부를 검사하는 데 특화."
 allowed-tools: Bash, Grep, Glob, Read
 ---
 

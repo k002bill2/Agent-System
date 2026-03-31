@@ -1,6 +1,6 @@
 ---
 name: merge-worktree
-description: "Use when worktree work is complete and ready to squash-merge into main branch, or when needing to craft a comprehensive commit message from worktree changes."
+description: "Git worktree squash-merge 전문 스킬. worktree 브랜치 작업 완료 후 main(또는 지정 브랜치)으로 squash-merge할 때 사용. 커밋 히스토리와 소스 코드를 분석하여 포괄적인 커밋 메시지를 생성. '/merge-worktree', 'worktree 머지해줘', 'squash-merge', 'worktree에서 main으로 통합', '브랜치 합쳐줘' 등의 요청에 트리거. 일반 git merge, rebase, PR 생성과는 다른, worktree 전용 squash-merge 워크플로우에 특화."
 disable-model-invocation: true
 ---
 

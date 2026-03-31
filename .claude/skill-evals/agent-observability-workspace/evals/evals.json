@@ -1,0 +1,33 @@
+{
+  "skill_name": "agent-observability",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "현재 세션에서 에이전트가 몇 개 스폰되었고 각각의 성공률이 어떻게 되는지 확인해주세요. background로 실행된 에이전트가 있었는지도 알려주세요.",
+      "expected_output": "현재 세션의 events.jsonl을 파싱하여 agent_spawned/agent_completed 이벤트를 분류. 에이전트 수, 성공률, background 비율 등 KPI를 계산하여 보고.",
+      "files": [],
+      "expectations": [
+        "CLAUDE_SESSION_ID 환경변수 또는 .temp/traces/sessions/에서 현재 세션을 식별했다",
+        "events.jsonl에서 agent_spawned 이벤트를 파싱하여 총 스폰 수를 계산했다",
+        "events.jsonl에서 agent_completed 이벤트를 파싱하여 success=true/false 비율을 계산했다",
+        "run_in_background 필드를 확인하여 background 에이전트 비율을 보고했다",
+        "KPI 지표(Success Rate, Avg Duration, Agent Utilization, Background Ratio) 중 2개 이상이 보고되었다",
+        "프롬프트 내용이나 응답 텍스트는 출력하지 않았다 (Privacy Rules 준수)"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "최근 세션에서 general-purpose 에이전트들의 평균 실행 시간이 너무 긴 것 같아요. .temp/traces/sessions/ 에서 가장 최근 3개 세션의 duration 분포를 분석해주세요.",
+      "expected_output": "최근 3개 세션의 events.jsonl을 파싱하여 general-purpose 에이전트의 agent_completed 이벤트에서 duration_ms를 수집. 평균, 최대, 최소 duration을 계산하고 이상치를 식별. agent-improvement 스킬 연계를 제안.",
+      "files": [],
+      "expectations": [
+        ".temp/traces/sessions/ 디렉토리에서 최근 3개 세션을 식별했다",
+        "각 세션의 events.jsonl에서 agent_completed 이벤트를 파싱했다",
+        "agent_type이 general-purpose인 이벤트만 필터링했다",
+        "duration_ms의 평균, 최대값, 최소값 중 2개 이상이 계산되어 보고되었다",
+        "run_in_background=true인 에이전트의 duration이 별도로 구분되어 분석되었다 (동시 실행이므로 main flow 차단 없음)",
+        "실행 시간이 비정상적으로 긴 에이전트가 있으면 agent-improvement 스킬을 통한 진단을 권장했다"
+      ]
+    }
+  ]
+}

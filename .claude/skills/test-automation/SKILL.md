@@ -1,6 +1,6 @@
 ---
 name: test-automation
-description: "Use when writing Vitest tests, improving test coverage below 75%, debugging failing tests, or doing TDD for AOS Dashboard React components, hooks, and stores."
+description: "Vitest/React Testing Library 테스트 전문 스킬. 컴포넌트 테스트 작성, 스토어 테스트, 커스텀 훅 테스트, 테스트 커버리지 75% 이상 개선, TDD 워크플로우, 실패하는 테스트 디버깅 등에 사용. '테스트 작성해줘', '커버리지 올려줘', 'TDD로', '테스트 실패 디버깅', 'vi.mock 패턴', 'act() 래핑', '스냅샷 테스트' 등의 요청에 트리거. pytest 백엔드 테스트가 아닌 AOS Dashboard(React/TypeScript) 프론트엔드 테스트에 특화."
 ---
 
 # Test Automation

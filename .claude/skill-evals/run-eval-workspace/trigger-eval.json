@@ -1,0 +1,20 @@
+[
+  {"query": "ui_component 카테고리 전체 평가를 k=3으로 돌려줘. 저성능 태스크 원인 분석도", "should_trigger": true},
+  {"query": "task_bug_001 평가 한 번만 빠르게 돌려보고 결과 알려줘", "should_trigger": true},
+  {"query": "/run-eval --category service --k=5 실행해줘", "should_trigger": true},
+  {"query": "전체 에이전트 벤치마크 돌려줘. pass@k 지표 보고 싶어", "should_trigger": true},
+  {"query": "integration 카테고리 태스크 평가하고 싶어. task_integration_001 포함", "should_trigger": true},
+  {"query": "최근 eval 결과와 비교해서 성능 변화 확인해줘", "should_trigger": true},
+  {"query": "refactor 카테고리 평가 돌리고 pass^k도 계산해줘", "should_trigger": true},
+  {"query": "모든 카테고리 전체 평가 실행. --all 옵션으로", "should_trigger": true},
+  {"query": "에이전트가 task_ui_002에서 실패하는 원인 분석해줘", "should_trigger": false},
+  {"query": "BranchList 컴포넌트 Vitest 테스트 작성해줘", "should_trigger": false},
+  {"query": "프론트엔드 패턴 검증해줘. memo 빠진 거 확인", "should_trigger": false},
+  {"query": "구현 완료. verification loop 돌려줘", "should_trigger": false},
+  {"query": "worktree에서 main으로 squash-merge", "should_trigger": false},
+  {"query": "에이전트 트레이싱 설정해줘. 실행 시간 모니터링", "should_trigger": false},
+  {"query": "새 React 컴포넌트 만들어줘", "should_trigger": false},
+  {"query": "FastAPI 엔드포인트 검증해줘", "should_trigger": false},
+  {"query": "npm test 실패하는 거 디버깅해줘", "should_trigger": false},
+  {"query": "hooks.json에 새 훅 등록", "should_trigger": false}
+]

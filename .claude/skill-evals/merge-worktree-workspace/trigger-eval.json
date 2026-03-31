@@ -1,0 +1,20 @@
+[
+  {"query": "worktree-feature-update 브랜치 작업 끝났어. main으로 squash-merge 해줘", "should_trigger": true},
+  {"query": "/merge-worktree 실행해줘. 현재 worktree를 main에 통합하고 싶어", "should_trigger": true},
+  {"query": "feature-update worktree 작업 완료. develop 브랜치로 squash-merge 해줘", "should_trigger": true},
+  {"query": "이 worktree 브랜치를 main에 합치고 싶어. 커밋 메시지 잘 만들어서", "should_trigger": true},
+  {"query": "worktree 머지할 때 커밋 히스토리 분석해서 포괄적인 커밋 메시지 만들어줘", "should_trigger": true},
+  {"query": "현재 worktree에서 작업한 내용을 메인 브랜치로 통합해줘. squash로", "should_trigger": true},
+  {"query": "worktree 정리하고 main에 머지하고 싶어", "should_trigger": true},
+  {"query": "feature 브랜치 작업 끝. merge-worktree로 main에 합쳐줘", "should_trigger": true},
+  {"query": "git branch -D worktree-feature-frontend 해줘", "should_trigger": false},
+  {"query": "새 worktree 만들어줘. feature/new-component 브랜치로", "should_trigger": false},
+  {"query": "git merge feature-branch 해줘. 일반 머지", "should_trigger": false},
+  {"query": "PR 만들어줘. worktree-feature-update에서 main으로", "should_trigger": false},
+  {"query": "BranchList.tsx에서 다크모드 검증해줘", "should_trigger": false},
+  {"query": "구현 완료했으니 tsc --noEmit 돌려줘", "should_trigger": false},
+  {"query": "에이전트 평가 돌려줘. ui_component 카테고리", "should_trigger": false},
+  {"query": "커밋 메시지 작성해줘. feat(git): worktree 보호 추가", "should_trigger": false},
+  {"query": "git rebase main 해줘", "should_trigger": false},
+  {"query": "git stash 하고 다른 브랜치로 전환해줘", "should_trigger": false}
+]

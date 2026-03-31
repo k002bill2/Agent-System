@@ -1,0 +1,41 @@
+{
+  "skill_name": "react-web-development",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Git Management 페이지에 worktree 삭제 확인 모달 컴포넌트를 새로 만들어줘. src/dashboard/src/components/git/WorktreeDeleteModal.tsx로. GitWorktree 타입 받아서 경로 표시하고 삭제 확인하는 간단한 모달이면 돼",
+      "expected_output": "TypeScript + Tailwind CSS 컴포넌트, Props interface, memo/displayName, 다크모드 지원, aria-label",
+      "files": [],
+      "expectations": [
+        "생성된 파일이 .tsx 확장자이고 React 컴포넌트 export를 포함한다",
+        "Props interface가 명시적으로 선언되어 있다",
+        "Tailwind CSS 클래스만 사용하고 인라인 style이 없다",
+        "dark: prefix가 포함된 다크모드 클래스가 있다"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "API 호출 시 로딩/에러/성공 상태를 관리하는 커스텀 훅 useAsyncAction을 만들어줘. src/dashboard/src/hooks/useAsyncAction.ts에. 제네릭으로 반환값 타입 지정 가능하게",
+      "expected_output": "TypeScript 제네릭 훅, 상태 관리, 에러 핸들링, 반환 타입 정의",
+      "files": [],
+      "expectations": [
+        "TypeScript 제네릭을 사용한 훅 시그니처가 있다",
+        "useState로 loading, error, data 상태를 관리한다",
+        "try/catch 에러 핸들링이 포함되어 있다",
+        "반환값이 명시적 타입을 가진다"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "워크트리 상태를 관리하는 Zustand 미니 스토어를 src/dashboard/src/stores/worktree.ts에 만들어줘. worktrees 배열, selectedWorktree, fetchWorktrees, removeWorktree 액션 포함해서",
+      "expected_output": "Zustand create 패턴, TypeScript interface, async 액션, immutability",
+      "files": [],
+      "expectations": [
+        "create<State>() 패턴으로 Zustand 스토어가 정의된다",
+        "State interface가 명시적으로 선언되어 있다",
+        "set() 호출에서 spread 연산자로 불변성을 유지한다",
+        "async 액션에서 try/catch 에러 핸들링이 있다"
+      ]
+    }
+  ]
+}
