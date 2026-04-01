@@ -127,6 +127,14 @@ async def update_session_settings(
     return session
 
 
+@router.delete("/sessions/{session_id}/messages/{message_id}")
+async def delete_message(session_id: str, message_id: str):
+    """Delete a specific message from a session."""
+    if not PlaygroundService.delete_message(session_id, message_id):
+        raise HTTPException(status_code=404, detail="Session or message not found")
+    return {"success": True, "message": "Message deleted"}
+
+
 @router.post("/sessions/{session_id}/clear")
 async def clear_session_history(session_id: str):
     """Clear conversation history."""

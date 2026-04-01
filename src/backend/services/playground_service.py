@@ -639,6 +639,24 @@ class PlaygroundService:
     # ─────────────────────────────────────────────────────────────
 
     @staticmethod
+    def delete_message(session_id: str, message_id: str) -> bool:
+        """Delete a specific message from a session."""
+        _load_sessions()
+        session = _sessions.get(session_id)
+        if not session:
+            return False
+
+        original_len = len(session.messages)
+        session.messages = [m for m in session.messages if m.id != message_id]
+
+        if len(session.messages) == original_len:
+            return False  # Message not found
+
+        session.updated_at = utcnow()
+        _save_sessions()
+        return True
+
+    @staticmethod
     def clear_session_history(session_id: str) -> bool:
         """Clear conversation history for a session."""
         _load_sessions()  # Ensure sessions are loaded
