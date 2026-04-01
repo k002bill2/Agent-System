@@ -10,7 +10,7 @@ from typing import Any
 
 from db.database import async_session_factory
 from db.repository import ApprovalRepository, MessageRepository, SessionRepository, TaskRepository
-from models.agent_state import AgentState, create_initial_state
+from models.agent_state import AgentState, create_initial_state, migrate_state
 from models.project import Project
 from utils.time import utcnow
 
@@ -181,6 +181,9 @@ class SessionService:
 
         if not state:
             return None
+
+        # Migrate from older schema versions if needed
+        state = migrate_state(state)
 
         # Restore or create metadata
         metadata = self._session_metadata.get(session_id)

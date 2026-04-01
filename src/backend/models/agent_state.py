@@ -96,6 +96,9 @@ class AgentState(TypedDict):
     the complete state of the orchestration system.
     """
 
+    # Schema version for forward-compatible migrations
+    _schema_version: int
+
     # Session information
     session_id: str
     user_id: str | None
@@ -140,6 +143,13 @@ class AgentState(TypedDict):
     # Parallel execution
     batch_task_ids: list[str]  # Task IDs for parallel execution
 
+    # Context compression tracking
+    compression_history: list[dict[str, Any]]
+
+
+# Current schema version — bump when adding/removing/renaming fields
+AGENT_STATE_SCHEMA_VERSION = 2
+
 
 def create_initial_state(
     session_id: str,
@@ -149,6 +159,7 @@ def create_initial_state(
 ) -> AgentState:
     """Create an initial agent state."""
     return AgentState(
+        _schema_version=AGENT_STATE_SCHEMA_VERSION,
         session_id=session_id,
         user_id=user_id,
         organization_id=organization_id,
@@ -175,4 +186,25 @@ def create_initial_state(
         total_cost=0.0,
         # Parallel execution
         batch_task_ids=[],
+        # Context compression
+        compression_history=[],
     )
+
+
+def migrate_state(state: dict) -> dict:
+    """Migrate state from older schema versions to current.
+
+    Each migration step is additive and idempotent — safe to re-apply.
+    """
+    version = state.get("_schema_version", 1)
+
+    if version < 2:
+        # v1 → v2: add batch_task_ids, compression_history
+        state.setdefault("batch_task_ids", [])
+        state.setdefault("compression_history", [])
+        state["_schema_version"] = 2
+
+    # Future migrations go here:
+    # if version < 3: ...
+
+    return state
