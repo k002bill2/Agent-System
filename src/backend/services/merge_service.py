@@ -1099,6 +1099,10 @@ class MergeRequestService:
                     merged_at=utcnow(),
                     merged_by=merged_by,
                 )
+                # Close other OPEN MRs with the same source→target branch
+                await self._close_duplicate_mrs_async(
+                    repo, mr_id, mr.source_branch, mr.target_branch, merged_by
+                )
 
             mr = await self.get_merge_request_async(mr_id)
             return mr, result
@@ -1140,6 +1144,10 @@ class MergeRequestService:
             mr.status = MergeRequestStatus.MERGED
             mr.merged_at = utcnow()
             mr.merged_by = merged_by
+            # Close other OPEN MRs with the same source→target branch
+            self._close_duplicate_mrs_sync(
+                mr_id, mr.source_branch, mr.target_branch, merged_by
+            )
 
         mr.updated_at = utcnow()
         return mr, result
@@ -1167,6 +1175,55 @@ class MergeRequestService:
         mr.closed_by = closed_by
         mr.updated_at = utcnow()
         return mr
+
+    # ── Close duplicate MRs ──
+
+    async def _close_duplicate_mrs_async(
+        self,
+        repo: Any,
+        merged_mr_id: str,
+        source_branch: str,
+        target_branch: str,
+        closed_by: str,
+    ) -> None:
+        """Close other OPEN MRs with the same source→target after a successful merge."""
+        open_mrs = await repo.list_by_project(self.project_id, status="open")
+        now = utcnow()
+        for model in open_mrs:
+            if (
+                model.id != merged_mr_id
+                and model.source_branch == source_branch
+                and model.target_branch == target_branch
+            ):
+                await repo.update(
+                    model.id,
+                    status="closed",
+                    closed_at=now,
+                    closed_by=closed_by,
+                )
+                logger.info(f"Auto-closed duplicate MR {model.id[:8]} (same branch pair)")
+
+    def _close_duplicate_mrs_sync(
+        self,
+        merged_mr_id: str,
+        source_branch: str,
+        target_branch: str,
+        closed_by: str,
+    ) -> None:
+        """Close other OPEN MRs with the same source→target after a successful merge."""
+        now = utcnow()
+        for mr_id, mr in _merge_requests[self.project_id].items():
+            if (
+                mr_id != merged_mr_id
+                and mr.status == MergeRequestStatus.OPEN
+                and mr.source_branch == source_branch
+                and mr.target_branch == target_branch
+            ):
+                mr.status = MergeRequestStatus.CLOSED
+                mr.closed_at = now
+                mr.closed_by = closed_by
+                mr.updated_at = now
+                logger.info(f"Auto-closed duplicate MR {mr_id[:8]} (same branch pair)")
 
     # ── Refresh conflict status ──
 

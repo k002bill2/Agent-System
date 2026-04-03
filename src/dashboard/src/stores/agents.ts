@@ -13,6 +13,22 @@ import { useAuthStore } from './auth'
 export type AgentCategory = 'development' | 'orchestration' | 'quality' | 'research'
 export type AgentStatus = 'available' | 'busy' | 'unavailable' | 'error'
 
+// Terminal Types
+export type TerminalType = 'warp' | 'tmux'
+
+export interface TerminalOption {
+  type: TerminalType
+  label: string
+  description: string
+}
+
+export const TERMINAL_OPTIONS: TerminalOption[] = [
+  { type: 'warp', label: 'Warp', description: 'Warp 터미널에서 실행 (Launch Configuration)' },
+  { type: 'tmux', label: 'Tmux', description: '백그라운드 tmux 세션에서 실행 (claude -p)' },
+]
+
+const TERMINAL_PREF_KEY = 'aos-terminal-preference'
+
 export interface AgentCapability {
   name: string
   description: string
@@ -111,6 +127,9 @@ interface AgentsState {
   historyProjectFilter: string | null
   selectedHistoryId: string | null
 
+  // Terminal Selection
+  terminalType: TerminalType
+
   // Execution State
   executingAnalysisId: string | null
   executionSessionId: string | null
@@ -159,9 +178,14 @@ interface AgentsState {
   setMdReadStatus: (fileKey: string, status: 'reading' | 'done' | 'error') => void
   removeMdReadStatus: (fileKey: string) => void
 
+  // Terminal Actions
+  setTerminalType: (type: TerminalType) => void
+
   // Execution Actions
   executeAnalysis: (analysisId: string, projectId?: string | null) => Promise<string | null>
   executeWithWarp: (analysisId: string, projectId?: string | null, branchName?: string) => Promise<boolean>
+  executeWithTmux: (analysisId: string, projectId?: string | null, branchName?: string) => Promise<boolean>
+  executeInTerminal: (analysisId: string, projectId?: string | null, branchName?: string) => Promise<boolean>
   clearExecution: () => void
 
   // History Actions
@@ -317,6 +341,9 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
   historyHasMore: false,
   historyProjectFilter: null,
   selectedHistoryId: null,
+
+  // Terminal selection (persisted in localStorage)
+  terminalType: (localStorage.getItem(TERMINAL_PREF_KEY) as TerminalType) || 'warp',
 
   // Execution state
   executingAnalysisId: null,
@@ -646,6 +673,55 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
       })
       return false
     }
+  },
+
+  // Execute analysis via tmux + Claude CLI (backend builds prompt)
+  executeWithTmux: async (analysisId: string, projectId?: string | null, branchName?: string) => {
+    set({ executingAnalysisId: analysisId, executionError: null })
+
+    try {
+      const result = await apiClient.post<{
+        session_name: string
+        analysis_id: string
+        active: boolean
+      }>('/api/agents/orchestrate/execute-with-tmux', {
+        analysis_id: analysisId,
+        project_id: projectId || null,
+        branch_name: branchName || null,
+      })
+
+      set({
+        executingAnalysisId: null,
+        executionSessionId: result.session_name,
+      })
+      return true
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Tmux 실행에 실패했습니다'
+      set({
+        executingAnalysisId: null,
+        executionError: errorMsg,
+      })
+      return false
+    }
+  },
+
+  // Unified terminal execution router
+  executeInTerminal: async (analysisId: string, projectId?: string | null, branchName?: string) => {
+    const { terminalType, executeWithWarp, executeWithTmux } = get()
+    switch (terminalType) {
+      case 'warp':
+        return executeWithWarp(analysisId, projectId, branchName)
+      case 'tmux':
+        return executeWithTmux(analysisId, projectId, branchName)
+      default:
+        set({ executionError: `지원하지 않는 터미널 타입: ${terminalType}` })
+        return false
+    }
+  },
+
+  setTerminalType: (type: TerminalType) => {
+    localStorage.setItem(TERMINAL_PREF_KEY, type)
+    set({ terminalType: type })
   },
 
   clearExecution: () => {
