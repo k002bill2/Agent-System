@@ -1,0 +1,101 @@
+# Task: LLM Provider Gateway
+id: task_api_001
+name: "LLM Provider 추상화 게이트웨이"
+category: api
+difficulty: medium
+
+description: |
+  여러 LLM 프로바이더(Google Gemini, Anthropic Claude, Ollama)를
+  통합 인터페이스로 호출할 수 있는 게이트웨이 레이어를 구현합니다.
+
+  전략 패턴으로 프로바이더 교체가 쉬워야 하며,
+  재시도 로직, 타임아웃, 응답 스트리밍을 지원해야 합니다.
+
+acceptance_criteria:
+  - 통합 LLMProvider 인터페이스 (generate, stream, embed)
+  - 프로바이더별 어댑터 (Google, Anthropic, Ollama)
+  - 팩토리 패턴으로 프로바이더 인스턴스 생성
+  - 재시도 로직 (exponential backoff, max 3회)
+  - 타임아웃 처리 (configurable, 기본 30초)
+  - 응답 스트리밍 지원 (async generator)
+  - 환경변수 기반 설정 (하드코딩 금지)
+  - Pydantic 모델로 요청/응답 스키마 정의
+  - 테스트 파일 포함 (최소 10개 케이스)
+  - 타입 힌트 완전 적용
+
+input:
+  prompt: |
+    LLM Provider Gateway를 구현해주세요.
+
+    ## 아키텍처
+    ```
+    LLMGateway (facade)
+    ├── LLMProvider (ABC, 인터페이스)
+    │   ├── GoogleProvider (Gemini API)
+    │   ├── AnthropicProvider (Claude API)
+    │   └── OllamaProvider (로컬 Ollama)
+    ├── ProviderFactory (프로바이더 생성)
+    ├── RetryHandler (재시도 로직)
+    └── LLMConfig (Pydantic 설정)
+    ```
+
+    ## 통합 인터페이스
+    ```python
+    class LLMProvider(ABC):
+        @abstractmethod
+        async def generate(self, prompt: str, **kwargs) -> LLMResponse: ...
+
+        @abstractmethod
+        async def stream(self, prompt: str, **kwargs) -> AsyncGenerator[str, None]: ...
+
+        @abstractmethod
+        async def embed(self, texts: list[str]) -> list[list[float]]: ...
+    ```
+
+    ## 요구사항
+    - 환경변수: LLM_PROVIDER, GOOGLE_API_KEY, ANTHROPIC_API_KEY, OLLAMA_BASE_URL
+    - 재시도: 429(rate limit), 500+(서버 에러)에만 적용
+    - 스트리밍: async for chunk in provider.stream(prompt): yield chunk
+    - 에러: ProviderError(공통), RateLimitError, TimeoutError, AuthenticationError
+    - 로깅: 요청/응답 메타데이터 (토큰수, 지연시간) 로깅
+  context_files:
+    - src/backend/services/llm_router.py
+    - src/backend/models/llm.py
+  dependencies: []
+
+expected_output:
+  files:
+    - src/backend/services/llm_gateway.py
+    - src/backend/services/providers/__init__.py
+    - src/backend/services/providers/base.py
+    - src/backend/services/providers/google_provider.py
+    - src/backend/services/providers/anthropic_provider.py
+    - src/backend/services/providers/ollama_provider.py
+    - tests/backend/services/test_llm_gateway.py
+  patterns:
+    - "class LLMProvider|ABC|abstractmethod"
+    - "class.*Provider.*LLMProvider"
+    - "async def generate|async def stream|async def embed"
+    - "AsyncGenerator|yield"
+    - "retry|backoff|RetryHandler"
+    - "environ|getenv|config"
+    - "class.*Error.*Exception"
+  forbidden_patterns:
+    - "pass  # TODO"
+    - "# type: ignore"
+    - "print\\("
+    - "hardcoded.*key|api_key.*=.*['\"]sk-|api_key.*=.*['\"]AI"
+
+evaluation:
+  timeout_minutes: 25
+  rubric: api.yaml
+  weights:
+    code_checks: 40
+    llm_grading: 60
+  passing_score: 0.7
+
+metadata:
+  created_at: 2026-03-30
+  author: system
+  tags: [api, llm, gateway, provider, abstraction, medium]
+  recommended_agent: backend-integration-specialist

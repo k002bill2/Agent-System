@@ -1,0 +1,62 @@
+{
+  "skill_id": "react-web-development",
+  "skill_name": "React Web Development",
+  "type": "ability_enhancement",
+  "test_method": "ab_test",
+  "description": "React 컴포넌트 개발 시 memo/displayName, 다크모드, 접근성, Tailwind 품질 향상 효과 측정",
+  "scoring": {
+    "dimensions": ["memo_displayname", "dark_mode", "accessibility", "tailwind_only", "typescript_strict", "test_included"],
+    "pass_threshold": 0.7
+  },
+  "evals": [
+    {
+      "id": "rwd_001",
+      "name": "StatusBadge 컴포넌트 생성",
+      "prompt": "AOS Dashboard에 StatusBadge 컴포넌트를 생성해주세요. Props: status('active'|'inactive'|'error'), label(string), size('sm'|'md'|'lg'). 상태별 색상이 다르고, 원형 인디케이터 + 텍스트 레이블로 구성됩니다. src/dashboard/src/components/common/StatusBadge.tsx에 생성하세요.",
+      "expected_patterns": {
+        "must_have": ["memo(", "displayName", "dark:", "aria-label", "interface.*Props", "cn("],
+        "must_not_have": [": any", "style={{", "// @ts-ignore"]
+      },
+      "grading": {
+        "memo_displayname": { "weight": 20, "check": "grep 'memo(' && grep 'displayName'" },
+        "dark_mode": { "weight": 20, "check": "grep 'dark:'" },
+        "accessibility": { "weight": 15, "check": "grep 'aria-label'" },
+        "tailwind_only": { "weight": 15, "check": "!grep 'style={{'" },
+        "typescript_strict": { "weight": 15, "check": "!grep ': any'" },
+        "test_included": { "weight": 15, "check": "file_exists '*.test.tsx'" }
+      }
+    },
+    {
+      "id": "rwd_002",
+      "name": "useDebounce 커스텀 훅 생성",
+      "prompt": "AOS Dashboard에 useDebounce 커스텀 훅을 생성해주세요. 제네릭 타입 지원, configurable delay, cleanup 포함. src/dashboard/src/hooks/useDebounce.ts에 생성하고 테스트도 작성해주세요.",
+      "expected_patterns": {
+        "must_have": ["<T>", "useEffect", "clearTimeout", "return.*cleanup|return.*\\(\\)", "export"],
+        "must_not_have": [": any", "// @ts-ignore"]
+      },
+      "grading": {
+        "generic_type": { "weight": 25, "check": "grep '<T>'" },
+        "cleanup": { "weight": 25, "check": "grep 'clearTimeout'" },
+        "typescript_strict": { "weight": 20, "check": "!grep ': any'" },
+        "test_included": { "weight": 30, "check": "file_exists '*.test.ts'" }
+      }
+    },
+    {
+      "id": "rwd_003",
+      "name": "ConfirmDialog 모달 컴포넌트",
+      "prompt": "AOS Dashboard에 위험한 작업 전 확인을 요청하는 ConfirmDialog 컴포넌트를 생성해주세요. Props: isOpen, onConfirm, onCancel, title, message, confirmText, variant('danger'|'warning'|'info'). 키보드(Escape로 닫기, Enter로 확인) 지원 필수. src/dashboard/src/components/common/ConfirmDialog.tsx에 생성하세요.",
+      "expected_patterns": {
+        "must_have": ["memo(", "displayName", "dark:", "aria-", "onKeyDown|onKeyUp", "Escape", "role=.dialog"],
+        "must_not_have": [": any", "style={{", "// @ts-ignore"]
+      },
+      "grading": {
+        "memo_displayname": { "weight": 15, "check": "grep 'memo(' && grep 'displayName'" },
+        "dark_mode": { "weight": 15, "check": "grep 'dark:'" },
+        "accessibility": { "weight": 20, "check": "grep 'role=.dialog' && grep 'aria-'" },
+        "keyboard": { "weight": 20, "check": "grep 'Escape' && grep 'onKeyDown'" },
+        "typescript_strict": { "weight": 15, "check": "!grep ': any'" },
+        "test_included": { "weight": 15, "check": "file_exists '*.test.tsx'" }
+      }
+    }
+  ]
+}

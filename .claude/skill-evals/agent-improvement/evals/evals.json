@@ -1,0 +1,43 @@
+{
+  "skill_id": "agent-improvement",
+  "skill_name": "Agent Improvement",
+  "type": "workflow_meta",
+  "test_method": "with_skill",
+  "description": "에이전트 실패 진단 정확도 및 개선 제안 구체성 측정",
+  "scoring": {
+    "dimensions": ["diagnosis_accuracy", "root_cause_identification", "fix_specificity", "feedback_loop"],
+    "pass_threshold": 0.7
+  },
+  "evals": [
+    {
+      "id": "ai_001",
+      "name": "실패 패턴 진단",
+      "setup": "Create mock events.jsonl with 3 agent_completed events: 1 XML tool output failure, 1 timeout failure, 1 scope violation",
+      "prompt": "최근 에이전트 실행 결과를 분석하고 실패 원인을 진단해주세요.",
+      "expected_behavior": {
+        "must_identify": ["XML tool output pattern", "timeout pattern", "scope violation pattern"],
+        "must_propose": ["specific fix per failure"]
+      },
+      "grading": {
+        "diagnosis_accuracy": { "weight": 35, "check": "3/3 failure patterns correctly identified" },
+        "root_cause_identification": { "weight": 25, "check": "root cause explained, not just symptoms" },
+        "fix_specificity": { "weight": 25, "check": "each fix has file path + old content + new content" },
+        "feedback_loop": { "weight": 15, "check": "recommends re-eval after fixes" }
+      }
+    },
+    {
+      "id": "ai_002",
+      "name": "개선 적용 후 검증",
+      "setup": "Simulated scenario: agent prompt lacks CRITICAL Tool Usage Rules section",
+      "prompt": "web-ui-specialist 에이전트가 XML 태그를 텍스트로 출력하는 문제를 진단하고 수정해주세요.",
+      "expected_behavior": {
+        "must_do": ["read agent .md file", "identify missing CRITICAL section", "propose addition", "recommend re-eval"]
+      },
+      "grading": {
+        "diagnosis_accuracy": { "weight": 30, "check": "identifies CRITICAL Tool Usage Rules missing" },
+        "fix_specificity": { "weight": 40, "check": "provides exact content to add with file path" },
+        "feedback_loop": { "weight": 30, "check": "proposes verification via /run-eval" }
+      }
+    }
+  ]
+}

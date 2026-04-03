@@ -1,0 +1,194 @@
+{
+  "phase": 2,
+  "status": "in_progress",
+  "date": "2026-03-31",
+  "methodology": {
+    "ability_enhancement": "A/B test: same prompt executed with_skill vs without_skill, scored against evals.json criteria",
+    "workflow_meta": "with_skill only: execute skill workflow and score process completeness",
+    "note": "IMPORTANT: Project rules (aos-frontend.md, aos-backend.md) are always loaded via CLAUDE.md, causing significant overlap with skill content. Baseline scores may be inflated."
+  },
+
+  "ability_enhancement_results": {
+    "react-web-development": {
+      "eval_id": "rwd_001",
+      "eval_name": "StatusBadge 컴포넌트 생성",
+      "baseline": {
+        "score": 1.0,
+        "breakdown": {
+          "memo_displayname": { "score": 20, "max": 20, "pass": true },
+          "dark_mode": { "score": 20, "max": 20, "pass": true },
+          "accessibility": { "score": 15, "max": 15, "pass": true },
+          "tailwind_only": { "score": 15, "max": 15, "pass": true },
+          "typescript_strict": { "score": 15, "max": 15, "pass": true },
+          "test_included": { "score": 15, "max": 15, "pass": true }
+        },
+        "observations": "Project rules (aos-frontend.md) already enforce memo/displayName, dark mode, accessibility. Relative import used instead of @/ alias.",
+        "duration_ms": 89232
+      },
+      "enhanced": {
+        "score": 1.0,
+        "breakdown": {
+          "memo_displayname": { "score": 20, "max": 20, "pass": true },
+          "dark_mode": { "score": 20, "max": 20, "pass": true },
+          "accessibility": { "score": 15, "max": 15, "pass": true },
+          "tailwind_only": { "score": 15, "max": 15, "pass": true },
+          "typescript_strict": { "score": 15, "max": 15, "pass": true },
+          "test_included": { "score": 15, "max": 15, "pass": true }
+        },
+        "observations": "Path alias @/lib/utils used (vs baseline relative import). All patterns identical to baseline due to project rule overlap.",
+        "duration_ms": 148378
+      },
+      "uplift": 0.0,
+      "uplift_analysis": "Near-zero uplift. Project rules (aos-frontend.md) already enforce all skill patterns. Only difference: @/ path alias. Skill serves as documentation/reference rather than adding new rules."
+    },
+
+    "verify-frontend": {
+      "eval_id": "vf_001",
+      "eval_name": "위반 포함 컴포넌트 검증",
+      "baseline": {
+        "score": 0.75,
+        "breakdown": {
+          "violation_detection": { "score": 40, "max": 40, "detail": "5/5 planted violations detected + 5 additional" },
+          "false_positive_avoidance": { "score": 10, "max": 20, "detail": "Found additional issues outside 5-item scope (useful but not checklist-compliant)" },
+          "actionable_feedback": { "score": 15, "max": 20, "detail": "Severity-based suggestions, not 5-item specific" },
+          "report_completeness": { "score": 10, "max": 20, "detail": "Table format but not 5-item checklist structure" }
+        },
+        "observations": "Detected all violations but used severity-based (10 items) rather than structured 5-item checklist. Found extra issues (console.log, null safety).",
+        "duration_ms": 35567
+      },
+      "enhanced": {
+        "score": 0.95,
+        "breakdown": {
+          "violation_detection": { "score": 40, "max": 40, "detail": "5/5 planted violations detected, 6 total issues" },
+          "false_positive_avoidance": { "score": 20, "max": 20, "detail": "No false positives, stayed within 5-item scope" },
+          "actionable_feedback": { "score": 18, "max": 20, "detail": "Specific fix per violation with code example" },
+          "report_completeness": { "score": 17, "max": 20, "detail": "Exact | # | 검사 항목 | 상태 | 이슈 수 | table format" }
+        },
+        "observations": "Perfect 5-item checklist execution. Exact output format match. Code fix example included.",
+        "duration_ms": 32715
+      },
+      "uplift": 0.20,
+      "uplift_analysis": "Skill adds structured checklist format, exception awareness, and AOS-specific fix patterns. Baseline detects violations but lacks project-specific structure."
+    },
+
+    "verify-backend": {
+      "eval_id": "vb_001",
+      "eval_name": "위반 포함 엔드포인트 검증",
+      "baseline": {
+        "score": 0.70,
+        "breakdown": {
+          "violation_detection": { "score": 40, "max": 40, "detail": "5/5 planted violations detected + 4 additional" },
+          "false_positive_avoidance": { "score": 10, "max": 20, "detail": "Extra issues outside 5-item scope" },
+          "actionable_feedback": { "score": 10, "max": 20, "detail": "General fix suggestions, no code example" },
+          "report_completeness": { "score": 10, "max": 20, "detail": "Severity table, not 5-item checklist" }
+        },
+        "observations": "All violations detected. 9 total issues reported (severity-based). No corrected code example.",
+        "duration_ms": 22918
+      },
+      "enhanced": {
+        "score": 0.95,
+        "breakdown": {
+          "violation_detection": { "score": 40, "max": 40, "detail": "5/5 violations, 6 total issues across 5 categories" },
+          "false_positive_avoidance": { "score": 20, "max": 20, "detail": "Stayed within 5-item scope" },
+          "actionable_feedback": { "score": 18, "max": 20, "detail": "Specific fix per item with exact code patterns" },
+          "report_completeness": { "score": 17, "max": 20, "detail": "Exact | # | 검사 항목 | 상태 | 이슈 수 | format + full corrected code" }
+        },
+        "observations": "Perfect 5-item execution. Complete corrected code example with all fixes applied.",
+        "duration_ms": 16644
+      },
+      "uplift": 0.25,
+      "uplift_analysis": "Skill adds 5-item structure, AOS-specific patterns (httpx.AsyncClient, logging.getLogger), and complete corrected code. Largest uplift among verify skills."
+    },
+
+    "test-automation": {
+      "eval_id": "ta_001",
+      "eval_name": "Zustand 스토어 테스트 작성",
+      "baseline": {
+        "score": 0.92,
+        "breakdown": {
+          "test_count": { "score": 20, "max": 20, "detail": "100 test cases across 29 describe blocks" },
+          "aaa_pattern": { "score": 18, "max": 20, "detail": "Good structure, some tests combine multiple assertions" },
+          "edge_cases": { "score": 18, "max": 20, "detail": "Error states, null values, but fewer boundary tests" },
+          "mock_quality": { "score": 18, "max": 20, "detail": "vi.fn() used, 25 vi.* calls, cleanup present" },
+          "vitest_conventions": { "score": 18, "max": 20, "detail": "vi.* (no jest.*), but relative imports in some places" }
+        },
+        "observations": "Comprehensive 100-test suite covering all store actions. Project rules guided vi.* usage. Wrote full new file rather than extending existing.",
+        "duration_ms": 285470
+      },
+      "enhanced": {
+        "score": 0.98,
+        "breakdown": {
+          "test_count": { "score": 20, "max": 20, "detail": "52 NEW tests added to existing 101 = 153 total" },
+          "aaa_pattern": { "score": 20, "max": 20, "detail": "Consistent AAA, one assertion per test" },
+          "edge_cases": { "score": 20, "max": 20, "detail": "out-of-bounds, empty, null, duplicate, trailing chars" },
+          "mock_quality": { "score": 18, "max": 20, "detail": "vi.fn(), console.error suppression, proper cleanup" },
+          "vitest_conventions": { "score": 20, "max": 20, "detail": "vi.* only, path aliases, co-located __tests__/" }
+        },
+        "observations": "Added 52 tests targeting UNTESTED areas of existing store. Skill-guided approach: analyze existing coverage → fill gaps. Path aliases used.",
+        "duration_ms": 214978
+      },
+      "uplift": 0.06,
+      "uplift_analysis": "Small uplift. Both produce high-quality tests due to project rules. Skill adds: (1) gap-filling strategy over full rewrite, (2) stricter AAA one-assertion pattern, (3) path alias enforcement. Baseline produced MORE tests (100 vs 52 new) but enhanced was more targeted."
+    }
+  },
+
+  "workflow_meta_results": {
+    "verification-loop": { "status": "not_started", "reason": "requires live dev server execution" },
+    "merge-worktree": { "status": "not_started", "reason": "requires actual worktree merge scenario" },
+    "run-eval": { "status": "not_started", "reason": "meta-recursive: eval skill evaluates itself" },
+    "agent-improvement": {
+      "eval_id": "ai_001",
+      "score": 1.0,
+      "result": "PASS",
+      "breakdown": {
+        "diagnosis_accuracy": { "score": 35, "max": 35, "detail": "3/3 failure patterns correctly identified (XML tool output, timeout, scope violation)" },
+        "root_cause_identification": { "score": 25, "max": 25, "detail": "Root causes traced: subagent_type binding, missing time management, false negative scope check" },
+        "fix_specificity": { "score": 25, "max": 25, "detail": "All 3 fixes with exact file path + old/new content diffs. Read actual agent .md files for context." },
+        "feedback_loop": { "score": 15, "max": 15, "detail": "Each fix includes /run-eval re-evaluation method" }
+      },
+      "observations": "Perfect score. Agent read real codebase files to produce contextually accurate fixes. Proposed SCOPE_EXTENSION tag mechanism as novel improvement. 3 summary table + per-failure deep analysis."
+    },
+    "agent-observability": {
+      "eval_id": "ao_001",
+      "score": 1.0,
+      "result": "PASS",
+      "breakdown": {
+        "event_parsing": { "score": 30, "max": 30, "detail": "10/10 JSONL events correctly parsed" },
+        "kpi_calculation": { "score": 35, "max": 35, "detail": "success_rate 80%, avg_duration 444s, failure_count 1, total_agents 5 — all correct" },
+        "privacy_compliance": { "score": 20, "max": 20, "detail": "No prompt/response content in output" },
+        "metric_derivation": { "score": 15, "max": 15, "detail": "background_ratio 40%, per-agent detail table, timeline analysis" }
+      },
+      "observations": "Perfect score. Identified failure correlation with preceding WebSocket fix. 5 actionable recommendations including schema enhancement, DAG dependency chain, and threshold monitoring."
+    }
+  },
+
+  "summary": {
+    "completed_ab_tests": 4,
+    "total_ab_tests": 4,
+    "completed_workflow_tests": 2,
+    "total_workflow_tests": 5,
+    "avg_baseline_score": 0.843,
+    "avg_enhanced_score": 0.97,
+    "avg_uplift": 0.127,
+    "uplift_by_skill": {
+      "react-web-development": 0.00,
+      "verify-frontend": 0.20,
+      "verify-backend": 0.25,
+      "test-automation": 0.06
+    },
+    "key_findings": [
+      "Average uplift +12.7% across 4 ability-enhancement skills",
+      "Verify skills show highest uplift (+20-25%): structured checklist format is the primary value",
+      "Development skills (rwd, ta) show low uplift (0-6%): project rules (aos-frontend.md) already cover most patterns",
+      "Skills add most value for FORMAT COMPLIANCE, not raw capability",
+      "agent-observability workflow scored 100%: mock-based eval validated skill's KPI calculation accuracy"
+    ],
+    "recommendations": [
+      "verify-frontend/backend: Keep as-is — clear uplift in structured verification",
+      "react-web-development: Differentiate from aos-frontend.md by adding unique patterns (advanced hooks, state patterns, performance optimization)",
+      "test-automation: Add gap-filling strategy guidance as unique value vs project rules",
+      "Workflow skills (3 remaining): Need real-world execution scenarios for proper evaluation"
+    ],
+    "caveat": "Baseline scores influenced by project rules (CLAUDE.md → aos-*.md). True no-skill baseline would require stripping project rules."
+  }
+}

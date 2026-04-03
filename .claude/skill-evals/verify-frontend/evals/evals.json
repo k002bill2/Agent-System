@@ -1,0 +1,59 @@
+{
+  "skill_id": "verify-frontend",
+  "skill_name": "Verify Frontend",
+  "type": "ability_enhancement",
+  "test_method": "ab_test",
+  "description": "프론트엔드 코드 검증 시 memo/displayName, any 타입, 인라인 스타일, 접근성, 다크모드 위반 탐지율 비교",
+  "scoring": {
+    "dimensions": ["violation_detection", "false_positive_avoidance", "exception_handling", "report_completeness", "actionable_feedback"],
+    "pass_threshold": 0.7
+  },
+  "evals": [
+    {
+      "id": "vf_001",
+      "name": "위반 포함 컴포넌트 검증",
+      "setup": "Create a deliberately flawed component at src/dashboard/src/components/test-target/FlawedCard.tsx with: (1) no memo(), (2) `: any` type, (3) inline style={{color:'red'}}, (4) clickable div without aria-label, (5) bg-white without dark: variant",
+      "prompt": "방금 생성한 FlawedCard.tsx 컴포넌트를 검증해주세요.",
+      "expected_behavior": {
+        "must_detect": ["memo/displayName 누락", "any 타입 사용", "인라인 스타일", "aria-label 누락", "다크모드 미대응"],
+        "detection_count": 5
+      },
+      "grading": {
+        "violation_detection": { "weight": 40, "check": "count detected violations out of 5 planted" },
+        "false_positive_avoidance": { "weight": 20, "check": "no false positives on clean code" },
+        "actionable_feedback": { "weight": 20, "check": "each violation has specific fix suggestion" },
+        "report_completeness": { "weight": 20, "check": "table format with PASS/FAIL per check" }
+      }
+    },
+    {
+      "id": "vf_002",
+      "name": "예외 케이스 정확성",
+      "setup": "Create test file FlawedCard.test.tsx with `: any` usage and a SVG icon component without memo()",
+      "prompt": "FlawedCard.test.tsx와 IconSvg.tsx를 검증해주세요.",
+      "expected_behavior": {
+        "must_not_flag": ["test file any usage", "SVG component memo"],
+        "must_flag": ["production code violations only"]
+      },
+      "grading": {
+        "exception_handling": { "weight": 50, "check": "correctly skips test files and SVG components" },
+        "false_positive_avoidance": { "weight": 50, "check": "zero false positives on exempt files" }
+      }
+    },
+    {
+      "id": "vf_003",
+      "name": "다중 파일 일괄 검증",
+      "setup": "3 component files: 1 clean, 1 with 2 violations, 1 with 4 violations",
+      "prompt": "src/dashboard/src/components/test-target/ 디렉토리의 모든 컴포넌트를 검증해주세요.",
+      "expected_behavior": {
+        "must_detect": ["6 total violations across 2 files"],
+        "must_pass": ["clean component reports PASS"]
+      },
+      "grading": {
+        "violation_detection": { "weight": 35, "check": "6/6 violations detected" },
+        "clean_pass": { "weight": 25, "check": "clean file correctly marked PASS" },
+        "per_file_report": { "weight": 20, "check": "separate report per file" },
+        "summary_table": { "weight": 20, "check": "aggregate summary at end" }
+      }
+    }
+  ]
+}

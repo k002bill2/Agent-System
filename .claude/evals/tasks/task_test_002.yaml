@@ -1,0 +1,140 @@
+# Task: API Contract Testing
+id: task_test_002
+name: "Backend API 계약 테스트 스위트"
+category: test
+difficulty: hard
+
+description: |
+  Backend API 엔드포인트에 대한 계약 테스트(Contract Testing)를 작성합니다.
+  요청/응답 스키마 검증, 상태 코드 검증, 에러 응답 형식 검증,
+  프로퍼티 기반 테스트(property-based testing)를 포함해야 합니다.
+
+acceptance_criteria:
+  - pytest + httpx(AsyncClient) 사용
+  - 모든 API 엔드포인트 계약 테스트 (GET/POST/PUT/DELETE)
+  - 응답 스키마 검증 (Pydantic 모델 대비)
+  - 상태 코드 검증 (성공/실패 케이스별)
+  - 에러 응답 형식 표준화 검증 (code, message, details)
+  - 프로퍼티 기반 테스트 (hypothesis 라이브러리)
+  - 경계값 테스트 (빈 문자열, 최대 길이, 음수, 특수 문자)
+  - 인증 시나리오 테스트 (유효/무효/만료 토큰)
+  - 테스트 픽스처 팩토리 (conftest.py)
+  - 최소 25개 테스트 케이스
+  - 테스트 독립성 보장 (순서 무관 실행)
+
+input:
+  prompt: |
+    Backend API 계약 테스트 스위트를 작성해주세요.
+
+    ## 테스트 대상
+    기존 Agent API 엔드포인트:
+    - GET /api/v1/agents
+    - GET /api/v1/agents/{id}
+    - POST /api/v1/agents
+    - PUT /api/v1/agents/{id}
+    - DELETE /api/v1/agents/{id}
+
+    ## 테스트 범위
+
+    ### 1. 스키마 검증 (Response Contract)
+    ```python
+    # 응답이 Pydantic 모델과 일치하는지 검증
+    # 필수 필드 존재, 타입 일치, 열거형 값 범위
+    def test_list_agents_response_matches_schema(response):
+        AgentListResponse.model_validate(response.json())
+    ```
+
+    ### 2. 상태 코드 매트릭스
+    ```
+    GET    /agents       → 200 (목록), 401 (미인증)
+    GET    /agents/{id}  → 200 (존재), 404 (미존재), 401
+    POST   /agents       → 201 (생성), 422 (검증 실패), 401, 403
+    PUT    /agents/{id}  → 200 (수정), 404, 422, 401, 403
+    DELETE /agents/{id}  → 204 (삭제), 404, 401, 403
+    ```
+
+    ### 3. 에러 응답 표준화
+    ```json
+    {
+      "error": {
+        "code": "AGENT_NOT_FOUND",
+        "message": "Agent with id 'xxx' not found",
+        "details": {}
+      }
+    }
+    ```
+
+    ### 4. 프로퍼티 기반 테스트 (Hypothesis)
+    ```python
+    from hypothesis import given, strategies as st
+
+    @given(name=st.text(min_size=1, max_size=100))
+    def test_create_agent_with_any_valid_name(name):
+        # 유효한 이름이면 항상 성공해야 함
+    ```
+
+    ### 5. 경계값 테스트
+    - 빈 문자열 이름 → 422
+    - 255자 초과 이름 → 422
+    - 음수 값 → 422
+    - SQL 인젝션 문자열 → 안전하게 처리
+    - XSS 페이로드 → 이스케이핑
+
+    ### 6. 인증 시나리오
+    - 유효한 토큰 → 200
+    - 만료된 토큰 → 401
+    - 잘못된 형식 토큰 → 401
+    - 권한 부족 → 403
+    - 토큰 없음 → 401
+
+    ## 픽스처
+    ```python
+    # conftest.py
+    @pytest.fixture
+    def async_client(): ...
+    @pytest.fixture
+    def auth_headers(): ...
+    @pytest.fixture
+    def sample_agent(): ...
+    @pytest.fixture
+    def agent_factory(): ...
+    ```
+  context_files:
+    - src/backend/api/routes.py
+    - src/backend/models/agent.py
+    - tests/backend/conftest.py
+  dependencies: []
+
+expected_output:
+  files:
+    - tests/backend/api/test_agent_contract.py
+    - tests/backend/api/conftest.py
+    - tests/backend/api/test_schemas.py
+  patterns:
+    - "@pytest.mark"
+    - "async def test_"
+    - "AsyncClient|httpx"
+    - "model_validate|parse_obj"
+    - "status_code"
+    - "assert.*200|assert.*201|assert.*404|assert.*422"
+    - "@pytest.fixture"
+    - "hypothesis|given|strategies"
+  forbidden_patterns:
+    - "# type: ignore"
+    - "print\\("
+    - "import \\*"
+    - "sleep\\("
+
+evaluation:
+  timeout_minutes: 35
+  rubric: test.yaml
+  weights:
+    code_checks: 35
+    llm_grading: 65
+  passing_score: 0.75
+
+metadata:
+  created_at: 2026-03-30
+  author: system
+  tags: [test, api, contract, pytest, hypothesis, property-based, hard]
+  recommended_agent: backend-integration-specialist

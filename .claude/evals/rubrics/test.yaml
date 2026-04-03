@@ -1,0 +1,111 @@
+# Test Quality Evaluation Rubric
+# 테스트 작성 품질 평가 기준
+
+rubric_id: test
+version: "1.0"
+description: 테스트 스위트 작성 및 커버리지 품질 평가 루브릭
+
+# 코드 검사 (자동화 가능)
+code_checks:
+  file_existence:
+    weight: 10
+    description: 테스트 파일 존재 여부
+    checks:
+      - type: file_exists
+        pattern: "{expected_files}"
+
+  test_count:
+    weight: 10
+    description: 최소 테스트 케이스 수
+    checks:
+      - type: pattern_present
+        pattern: "it\\(|test\\(|def test_"
+        message: "충분한 테스트 케이스 필요"
+
+  test_structure:
+    weight: 10
+    description: 테스트 구조 (describe/it, setup/teardown)
+    checks:
+      - type: pattern_present
+        pattern: "describe\\(|beforeEach|afterEach|@pytest.fixture"
+        message: "구조화된 테스트 필요"
+
+  assertion_quality:
+    weight: 10
+    description: 어서션 품질
+    checks:
+      - type: pattern_present
+        pattern: "expect\\(|assert|toEqual|toBe|toHave|toThrow"
+        message: "구체적인 어서션 필요"
+
+# LLM 평가 기준
+llm_grading:
+  dimensions:
+    coverage_strategy:
+      weight: 25
+      description: 커버리지 전략 (행복 경로 + 엣지 케이스 + 에러 경로)
+      criteria:
+        5: 행복/엣지/에러 경로 모두 커버, 경계값 분석, 등가 분할
+        4: 대부분의 경로 커버, 주요 엣지 케이스 포함
+        3: 행복 경로 + 일부 에러 케이스
+        2: 행복 경로만 커버
+        1: 매우 제한적인 커버리지
+
+    test_isolation:
+      weight: 20
+      description: 테스트 격리 (독립 실행, 부작용 없음)
+      criteria:
+        5: 완벽한 격리, 모킹 전략 명확, 각 테스트 독립 실행 가능
+        4: 좋은 격리, 사소한 의존성 존재
+        3: 대부분 격리되나 일부 순서 의존성
+        2: 테스트 간 상태 공유
+        1: 격리 거의 없음
+
+    readability:
+      weight: 20
+      description: 테스트 가독성 (AAA 패턴, 명확한 테스트 이름)
+      criteria:
+        5: Arrange-Act-Assert 일관, 의미 있는 테스트 이름, 시나리오 명확
+        4: 대부분 가독성 좋음
+        3: 기본적인 가독성
+        2: 테스트 의도 불명확
+        1: 가독성 매우 낮음
+
+    maintainability:
+      weight: 20
+      description: 유지보수성 (헬퍼/팩토리, DRY, 변경 내성)
+      criteria:
+        5: 테스트 팩토리/헬퍼 활용, 변경에 강건, 구현이 아닌 행위 검증
+        4: 좋은 유지보수성, 사소한 중복
+        3: 기본적인 수준
+        2: 과도한 중복, 구현 의존적
+        1: 유지보수 매우 어려움
+
+    assertions:
+      weight: 15
+      description: 어서션 품질 (구체성, 완전성)
+      criteria:
+        5: 구체적 매처, 스냅샷 적절 사용, 부정 어서션 포함, 비동기 대기
+        4: 좋은 어서션 품질
+        3: 기본적인 어서션
+        2: 약한 어서션 (truthy만 검사 등)
+        1: 어서션 거의 없음
+
+# 점수 계산
+scoring:
+  code_checks_total: 40
+  llm_grading_total: 60
+  passing_threshold: 0.7
+
+feedback_template: |
+  ## 코드 검사 결과 ({code_score}%)
+  {code_feedback}
+
+  ## LLM 평가 결과 ({llm_score}%)
+  {llm_feedback}
+
+  ## 총점: {total_score}%
+  ## 결과: {result}
+
+  ## 개선 제안
+  {suggestions}

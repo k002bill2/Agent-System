@@ -1,0 +1,152 @@
+# Task: Interactive Workflow Graph Editor
+id: task_ui_004
+name: "인터랙티브 워크플로우 그래프 에디터"
+category: ui_component
+difficulty: expert
+
+description: |
+  드래그 앤 드롭으로 노드를 배치하고 연결선으로 워크플로우를 구성하는
+  인터랙티브 그래프 에디터를 구현합니다.
+
+  SVG 기반 렌더링, 줌/팬, 언두/리두, 노드 간 연결,
+  유효성 검증, 직렬화/역직렬화를 모두 지원해야 합니다.
+  외부 그래프 라이브러리 없이 순수 React + SVG로 구현합니다.
+
+acceptance_criteria:
+  - SVG 기반 캔버스 (줌/팬 지원, wheel + 드래그)
+  - 노드 컴포넌트 (드래그로 위치 이동, 리사이즈)
+  - 노드 타입별 렌더링 (start, end, action, condition, parallel)
+  - 포트 연결 (출력 포트 → 입력 포트 드래그로 연결)
+  - 연결선 렌더링 (베지에 커브, 화살표)
+  - 연결 유효성 검증 (순환 참조 방지, 타입 호환성)
+  - 선택/다중 선택 (클릭, Shift+클릭, 영역 선택)
+  - 언두/리두 (Ctrl+Z/Ctrl+Y, Command 패턴)
+  - 직렬화/역직렬화 (JSON ↔ 그래프 상태)
+  - 미니맵 (전체 그래프 미리보기)
+  - 키보드 단축키 (Delete: 삭제, Ctrl+A: 전체 선택, Ctrl+C/V: 복사/붙여넣기)
+  - 접근성 (aria 속성, 키보드 네비게이션)
+  - React.memo + useMemo + useCallback 성능 최적화
+  - TypeScript 제네릭으로 노드 데이터 타입 안전
+  - 테스트 (최소 20개 케이스)
+  - `: any` 타입 금지, 외부 그래프 라이브러리 금지
+
+input:
+  prompt: |
+    인터랙티브 워크플로우 그래프 에디터를 구현해주세요.
+
+    ## 핵심 타입
+    ```typescript
+    interface WorkflowNode<T = Record<string, unknown>> {
+      id: string
+      type: 'start' | 'end' | 'action' | 'condition' | 'parallel'
+      position: { x: number; y: number }
+      size: { width: number; height: number }
+      data: T
+      ports: { inputs: Port[]; outputs: Port[] }
+    }
+
+    interface Port {
+      id: string
+      type: 'input' | 'output'
+      dataType: string  // 연결 호환성 검증용
+      label: string
+    }
+
+    interface Connection {
+      id: string
+      sourceNodeId: string
+      sourcePortId: string
+      targetNodeId: string
+      targetPortId: string
+    }
+
+    interface WorkflowGraph<T = Record<string, unknown>> {
+      nodes: WorkflowNode<T>[]
+      connections: Connection[]
+      viewport: { x: number; y: number; zoom: number }
+    }
+    ```
+
+    ## 컴포넌트 구조
+    ```
+    WorkflowEditor (메인)
+    ├── GraphCanvas (SVG 캔버스 + 줌/팬)
+    │   ├── NodeRenderer (노드 렌더링)
+    │   │   ├── PortComponent (입출력 포트)
+    │   │   └── NodeContent (타입별 콘텐츠)
+    │   ├── ConnectionRenderer (연결선)
+    │   └── SelectionBox (영역 선택)
+    ├── Minimap (미니맵)
+    ├── Toolbar (도구 모음)
+    └── useWorkflowState (상태 관리 훅)
+        ├── useHistory (언두/리두)
+        └── useSelection (선택 관리)
+    ```
+
+    ## 인터랙션
+    - 캔버스 빈 공간 드래그: 팬
+    - 마우스 휠: 줌 (0.1x ~ 3x)
+    - 노드 드래그: 위치 이동 (스냅 그리드 옵션)
+    - 포트 드래그: 연결 생성 (드래그 중 임시 연결선 표시)
+    - 클릭: 단일 선택 (기존 선택 해제)
+    - Shift+클릭: 다중 선택에 추가/제거
+    - 캔버스 드래그 (Shift): 영역 선택
+    - Delete: 선택된 노드/연결 삭제
+    - Ctrl+Z/Y: 언두/리두
+    - Ctrl+C/V: 복사/붙여넣기 (오프셋 적용)
+
+    ## 유효성 검증
+    - 순환 참조 감지 (DFS/BFS)
+    - 포트 타입 호환성 (같은 dataType만 연결)
+    - start 노드 입력 포트 연결 금지
+    - end 노드 출력 포트 연결 금지
+    - 이미 연결된 입력 포트에 중복 연결 금지
+
+    기존 컴포넌트 패턴: src/dashboard/src/components/ 참조
+  context_files:
+    - src/dashboard/src/components/agents/AgentCard.tsx
+    - src/dashboard/src/lib/utils.ts
+    - src/dashboard/src/types/index.ts
+  dependencies: []
+
+expected_output:
+  files:
+    - src/dashboard/src/components/workflow/WorkflowEditor.tsx
+    - src/dashboard/src/components/workflow/GraphCanvas.tsx
+    - src/dashboard/src/components/workflow/NodeRenderer.tsx
+    - src/dashboard/src/components/workflow/ConnectionRenderer.tsx
+    - src/dashboard/src/components/workflow/Minimap.tsx
+    - src/dashboard/src/hooks/useWorkflowState.ts
+    - src/dashboard/src/hooks/useHistory.ts
+    - src/dashboard/src/components/workflow/WorkflowEditor.test.tsx
+  patterns:
+    - "<svg|<g |<path|<circle|<rect"
+    - "viewBox|transform"
+    - "onMouseDown|onMouseMove|onMouseUp|onWheel"
+    - "React\\.memo|memo\\("
+    - "useMemo|useCallback|useRef"
+    - "interface.*Node|interface.*Connection|interface.*Port"
+    - "undo|redo|history"
+    - "serialize|deserialize|JSON"
+    - "bezier|cubic|curve|M.*C.*"
+    - "dragstart|dragging|dragend"
+  forbidden_patterns:
+    - ": any"
+    - "// @ts-ignore"
+    - "// @ts-nocheck"
+    - "dangerouslySetInnerHTML"
+    - "reactflow|react-flow|d3-|cytoscape|jointjs"
+
+evaluation:
+  timeout_minutes: 60
+  rubric: ui_component.yaml
+  weights:
+    code_checks: 35
+    llm_grading: 65
+  passing_score: 0.80
+
+metadata:
+  created_at: 2026-03-30
+  author: system
+  tags: [react, svg, graph-editor, drag-drop, workflow, undo-redo, expert]
+  recommended_agent: web-ui-specialist

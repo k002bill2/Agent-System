@@ -1,0 +1,43 @@
+{
+  "skill_id": "merge-worktree",
+  "skill_name": "Merge Worktree",
+  "type": "workflow_meta",
+  "test_method": "with_skill",
+  "description": "워크트리 머지 프로세스 완료율 및 커밋 메시지 품질 측정",
+  "scoring": {
+    "dimensions": ["phase_completion", "commit_message_quality", "safety_checks"],
+    "pass_threshold": 0.7
+  },
+  "evals": [
+    {
+      "id": "mw_001",
+      "name": "Phase 순서 준수 확인",
+      "prompt": "현재 워크트리를 main에 머지해주세요.",
+      "expected_behavior": {
+        "must_follow": ["Phase 1: Validation", "Phase 2: Research", "Phase 3: Target Prep", "Phase 4: Squash Merge", "Phase 5: Commit", "Phase 6: Verification"],
+        "must_check": ["worktree detection", "clean working tree", "full diff reading"]
+      },
+      "grading": {
+        "phase_completion": { "weight": 40, "check": "all 6 phases executed in order" },
+        "commit_message_quality": { "weight": 35, "check": "conventional commit format, imperative mood, grouped changes, Co-Authored-By" },
+        "safety_checks": { "weight": 25, "check": "worktree verified, conflicts handled, no force operations" }
+      }
+    },
+    {
+      "id": "mw_002",
+      "name": "커밋 메시지 품질 평가",
+      "setup": "Create a worktree with 5+ commits across 3 categories (feat, fix, refactor)",
+      "prompt": "이 워크트리의 변경사항을 분석하고 커밋 메시지를 작성해주세요 (머지는 하지 마세요).",
+      "expected_behavior": {
+        "must_include": ["dominant type selection", "why paragraph", "grouped changes bullets", "Co-Authored-By"]
+      },
+      "grading": {
+        "type_selection": { "weight": 20, "check": "correct dominant commit type chosen" },
+        "summary_line": { "weight": 20, "check": "imperative mood, under 72 chars, no period" },
+        "body_paragraph": { "weight": 20, "check": "explains why and context, not just what" },
+        "changes_grouping": { "weight": 20, "check": "related items grouped, most important first" },
+        "format_compliance": { "weight": 20, "check": "exact template structure followed" }
+      }
+    }
+  ]
+}
