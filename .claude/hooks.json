@@ -59,6 +59,12 @@
             "command": "node .claude/hooks/evalCleanup.js 2>/dev/null || true",
             "timeout": 5,
             "statusMessage": "Eval cleanup..."
+          },
+          {
+            "type": "command",
+            "command": "rm -rf /tmp/gemini-review-retries 2>/dev/null; true",
+            "timeout": 3,
+            "statusMessage": "Resetting Gemini review state..."
           }
         ]
       }

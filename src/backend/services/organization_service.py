@@ -596,12 +596,54 @@ class OrganizationService:
         members = OrganizationService.get_members(org_id)
         org = _organizations.get(org_id)
 
+        now = utcnow()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start = now - timedelta(days=7)
+
+        # Aggregate usage from member records
+        tokens_today = 0
+        sessions_today: set[str] = set()
+        sessions_week: set[str] = set()
+        sessions_all: set[str] = set()
+        api_calls_today = 0
+        active_member_ids: set[str] = set()
+
+        for record in _member_usage.values():
+            if record.organization_id != org_id:
+                continue
+
+            if record.session_id:
+                sessions_all.add(record.session_id)
+
+            if record.timestamp >= today_start:
+                tokens_today += record.tokens
+                api_calls_today += 1
+                if record.session_id:
+                    sessions_today.add(record.session_id)
+                active_member_ids.add(record.user_id)
+
+            if record.timestamp >= week_start and record.session_id:
+                sessions_week.add(record.session_id)
+
+        # Cost estimation: $0.01 per 1K tokens (simplified)
+        tokens_month = org.tokens_used_this_month if org else 0
+        cost_this_month = round(tokens_month / 1000 * 0.01, 2)
+
         return OrganizationStats(
             organization_id=org_id,
             total_members=len(members),
-            active_members=len([m for m in members if m.is_active]),
+            active_members=len(active_member_ids) or len(
+                [m for m in members if m.is_active]
+            ),
             total_projects=org.current_projects if org else 0,
-            tokens_used_this_month=org.tokens_used_this_month if org else 0,
+            active_projects=org.current_projects if org else 0,
+            total_sessions=len(sessions_all),
+            sessions_today=len(sessions_today),
+            sessions_this_week=len(sessions_week),
+            tokens_used_today=tokens_today,
+            tokens_used_this_month=tokens_month,
+            total_cost_this_month=cost_this_month,
+            api_calls_today=api_calls_today,
         )
 
     # ─────────────────────────────────────────────────────────────

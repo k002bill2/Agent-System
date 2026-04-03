@@ -193,6 +193,7 @@ class ExecuteWithTmuxRequest(BaseModel):
 
     analysis_id: str = Field(..., description="실행할 분석 ID")
     project_id: str | None = Field(None, description="프로젝트 ID (선택)")
+    branch_name: str | None = Field(None, description="실행 전 생성할 feature branch (선택)")
 
 
 class TmuxSessionResponse(BaseModel):
@@ -1022,6 +1023,7 @@ async def execute_with_tmux(
         project_path=project_path,
         analysis=entry.analysis,
         task_input=entry.task_input,
+        branch_name=request.branch_name,
     )
 
     if not info:

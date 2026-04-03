@@ -401,6 +401,7 @@ class TmuxService:
         project_path: str,
         analysis: dict[str, Any],
         task_input: str,
+        branch_name: str | None = None,
     ) -> TmuxSessionInfo | None:
         """분석 결과를 tmux + Claude Code CLI로 실행.
 
@@ -409,6 +410,7 @@ class TmuxService:
             project_path: 프로젝트 작업 디렉토리
             analysis: 분석 결과 데이터
             task_input: 원본 태스크 입력
+            branch_name: 실행 전 생성할 feature branch (선택)
 
         Returns:
             TmuxSessionInfo 또는 실패 시 None
@@ -432,6 +434,22 @@ class TmuxService:
         # tmux 세션 생성
         if not self.create_session(session_name, project_path):
             return None
+
+        # feature branch 생성 (요청된 경우)
+        if branch_name:
+            import re
+
+            if not re.match(r"^[a-zA-Z0-9/_.-]+$", branch_name) or len(branch_name) > 100:
+                logger.warning("Invalid branch name: %s", branch_name)
+            else:
+                git_cmd = f"git checkout -b {branch_name}"
+                if not self.send_command(session_name, git_cmd):
+                    logger.warning("Failed to create branch: %s", branch_name)
+                else:
+                    # git checkout 완료 대기
+                    import asyncio
+
+                    await asyncio.sleep(1)
 
         # 프롬프트를 임시 파일로 저장 (셸 이스케이프 문제 방지)
         import tempfile

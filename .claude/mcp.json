@@ -1,3 +1,13 @@
 {
-  "mcpServers": {}
+  "mcpServers": {
+    "obsidian-vault": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@anthropic/mcp-filesystem",
+        "--read-only",
+        "/Users/younghwankang/Library/Mobile Documents/iCloud~md~obsidian/Documents/icloud Obsidian"
+      ]
+    }
+  }
 }
