@@ -83,6 +83,7 @@ from services.audit_service import (
     AuditService,
     ResourceType,
 )
+from services.context_compressor import ContextCompressor
 from services.session_service import SessionService, get_session_service
 from tools import ALL_TOOLS
 
@@ -139,6 +140,9 @@ class OrchestrationEngine:
 
         # Session service for persistence
         self.session_service = session_service or get_session_service()
+
+        # Context compressor — closes the token economy gap
+        self._compressor = ContextCompressor()
 
         # In-memory session cache (for fast access during execution)
         self._sessions: dict[str, AgentState] = {}
@@ -254,6 +258,13 @@ class OrchestrationEngine:
             content=user_message,
         )
 
+        # Compress context if approaching token limit
+        await self._compressor.compress_if_needed(
+            state,
+            provider=LLM_PROVIDER,
+            model=GOOGLE_MODEL if LLM_PROVIDER == "google" else "",
+        )
+
         # Run the graph
         final_state = await self.compiled_graph.ainvoke(state)
 
@@ -296,6 +307,28 @@ class OrchestrationEngine:
             role="user",
             content=user_message,
         )
+
+        # Compress context if approaching token limit
+        compression = await self._compressor.compress_if_needed(
+            state,
+            provider=LLM_PROVIDER,
+            model=GOOGLE_MODEL if LLM_PROVIDER == "google" else "",
+        )
+        if compression.compressed:
+            yield Message(
+                type=MessageType.STATE_UPDATE,
+                payload=StateUpdatePayload(
+                    tasks={},
+                    agents={},
+                    current_task_id=None,
+                    active_agent_id=None,
+                ).model_dump()
+                | {
+                    "context_compressed": True,
+                    "compression": compression.to_dict(),
+                },
+                session_id=session_id,
+            )
 
         # Yield task started event
         yield Message(

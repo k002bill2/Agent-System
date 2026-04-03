@@ -164,6 +164,13 @@ async function deleteSession(sessionId: string): Promise<void> {
   if (!res.ok) throw new Error('Failed to delete session')
 }
 
+async function deleteMessage(sessionId: string, messageId: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/playground/sessions/${sessionId}/messages/${messageId}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) throw new Error('Failed to delete message')
+}
+
 async function executePrompt(
   sessionId: string,
   prompt: string,
@@ -411,6 +418,19 @@ export function PlaygroundPage() {
     }
   }
 
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!currentSession) return
+    try {
+      await deleteMessage(currentSession.id, messageId)
+      const updatedMessages = currentSession.messages.filter((m) => m.id !== messageId)
+      const updated = { ...currentSession, messages: updatedMessages }
+      setCurrentSession(updated)
+      setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
+    } catch (e) {
+      handleError(e)
+    }
+  }
+
   const handleTriggerIndexing = async (projectId: string) => {
     try {
       setIndexingStatus((prev) => ({ ...prev, [projectId]: 'indexing' }))
@@ -650,6 +670,7 @@ export function PlaygroundPage() {
                       key={msg.id}
                       message={msg}
                       onCopy={(content) => handleCopy(content, msg.id)}
+                      onDelete={handleDeleteMessage}
                       copied={copiedId === msg.id}
                       sessionId={currentSession.id}
                       agentId={currentSession.agent_id || undefined}
@@ -1088,13 +1109,14 @@ export function PlaygroundPage() {
 interface MessageBubbleProps {
   message: PlaygroundMessage
   onCopy: (content: string) => void
+  onDelete: (messageId: string) => void
   copied: boolean
   sessionId?: string
   agentId?: string
   projectName?: string
 }
 
-function MessageBubble({ message, onCopy, copied, sessionId, agentId, projectName }: MessageBubbleProps) {
+function MessageBubble({ message, onCopy, onDelete, copied, sessionId, agentId, projectName }: MessageBubbleProps) {
   const isUser = message.role === 'user'
   const isTool = message.role === 'tool'
   const [showSources, setShowSources] = useState(false)
@@ -1102,8 +1124,15 @@ function MessageBubble({ message, onCopy, copied, sessionId, agentId, projectNam
   // Tool call message - special styling
   if (isTool) {
     return (
-      <div className="flex gap-3 justify-center">
-        <div className="max-w-[90%] rounded-lg px-4 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+      <div className="flex gap-3 justify-center group/msg">
+        <div className="max-w-[90%] rounded-lg px-4 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 relative">
+          <button
+            onClick={() => onDelete(message.id)}
+            className="absolute -top-2 -right-2 p-1 rounded-full bg-red-100 dark:bg-red-900/40 text-red-500 hover:bg-red-200 dark:hover:bg-red-900/60 opacity-0 group-hover/msg:opacity-100 transition-opacity"
+            aria-label="메시지 삭제"
+          >
+            <X className="w-3 h-3" />
+          </button>
           <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
             <Wrench className="w-4 h-4" />
             <span className="text-sm font-medium">Tool Call</span>
@@ -1127,7 +1156,7 @@ function MessageBubble({ message, onCopy, copied, sessionId, agentId, projectNam
   }
 
   return (
-    <div className={cn('flex gap-3', isUser && 'flex-row-reverse')}>
+    <div className={cn('flex gap-3 group/msg', isUser && 'flex-row-reverse')}>
       <div
         className={cn(
           'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0',
@@ -1144,12 +1173,24 @@ function MessageBubble({ message, onCopy, copied, sessionId, agentId, projectNam
       </div>
       <div
         className={cn(
-          'max-w-[70%] rounded-lg px-4 py-3',
+          'max-w-[70%] rounded-lg px-4 py-3 relative',
           isUser
             ? 'bg-blue-600 text-white'
             : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
         )}
       >
+        <button
+          onClick={() => onDelete(message.id)}
+          className={cn(
+            'absolute -top-2 -right-2 p-1 rounded-full opacity-0 group-hover/msg:opacity-100 transition-opacity',
+            isUser
+              ? 'bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-300 dark:hover:bg-blue-700'
+              : 'bg-red-100 dark:bg-red-900/40 text-red-500 hover:bg-red-200 dark:hover:bg-red-900/60'
+          )}
+          aria-label="메시지 삭제"
+        >
+          <X className="w-3 h-3" />
+        </button>
         <div className="whitespace-pre-wrap text-sm">{message.content}</div>
         {/* RAG Sources collapsible section */}
         {!isUser && message.rag_sources && message.rag_sources.length > 0 && (
