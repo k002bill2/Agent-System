@@ -151,11 +151,13 @@ interface OrganizationsState {
   error: string | null
   modalMode: OrganizationModalMode
   activeTab: OrganizationTab
+  selectedMemberId: string | null
 
   // Actions
   setModalMode: (mode: OrganizationModalMode) => void
   setActiveTab: (tab: OrganizationTab) => void
   setCurrentOrganization: (org: Organization | null) => void
+  setSelectedMemberId: (id: string | null) => void
   clearError: () => void
 
   // Organization CRUD
@@ -201,11 +203,13 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
   error: null,
   modalMode: null,
   activeTab: 'overview',
+  selectedMemberId: null,
 
   // UI Actions
   setModalMode: (mode) => set({ modalMode: mode }),
   setActiveTab: (tab) => set({ activeTab: tab }),
   setCurrentOrganization: (org) => set({ currentOrganization: org }),
+  setSelectedMemberId: (id) => set({ selectedMemberId: id }),
   clearError: () => set({ error: null }),
 
   // ─────────────────────────────────────────────────────────────

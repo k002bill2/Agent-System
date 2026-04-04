@@ -147,6 +147,7 @@ const mockInviteMember = vi.fn()
 const mockUpdateMemberRole = vi.fn()
 const mockRemoveMember = vi.fn()
 const mockGetCurrentUserRole = vi.fn()
+const mockSetSelectedMemberId = vi.fn()
 
 let mockOrganizations: ReturnType<typeof makeOrg>[] = []
 let mockCurrentOrganization: ReturnType<typeof makeOrg> | null = null
@@ -182,6 +183,9 @@ vi.mock('../stores/organizations', () => ({
     fetchUserMemberships: mockFetchUserMemberships,
     getCurrentUserRole: mockGetCurrentUserRole,
     fetchStats: mockFetchStats,
+    selectedMemberId: null,
+    setSelectedMemberId: mockSetSelectedMemberId,
+    memberUsage: null,
   }),
 }))
 

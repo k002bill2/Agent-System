@@ -1,41 +1,29 @@
-import { useState } from 'react'
-import { MoreVertical, Shield, ShieldCheck, Eye, User, Trash2 } from 'lucide-react'
+import { memo, useState } from 'react'
+import { MoreVertical, Trash2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
+import { roleIcons, roleColors, roleLabels } from './memberRoleConstants'
 import type { OrganizationMember, MemberRole } from '../../stores/organizations'
 
 interface MemberCardProps {
+  /** 멤버 정보 */
   member: OrganizationMember
+  /** 현재 로그인한 사용자 ID */
   currentUserId: string
+  /** 역할 변경/제거 권한 여부 */
   canManage: boolean
+  /** 카드 클릭 핸들러 */
+  onClick?: () => void
+  /** 역할 변경 */
   onUpdateRole: (role: MemberRole) => void
+  /** 멤버 제거 */
   onRemove: () => void
 }
 
-const roleIcons: Record<MemberRole, typeof Shield> = {
-  owner: ShieldCheck,
-  admin: Shield,
-  member: User,
-  viewer: Eye,
-}
-
-const roleColors: Record<MemberRole, string> = {
-  owner: 'text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30',
-  admin: 'text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/30',
-  member: 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30',
-  viewer: 'text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700',
-}
-
-const roleLabels: Record<MemberRole, string> = {
-  owner: 'Owner',
-  admin: 'Admin',
-  member: 'Member',
-  viewer: 'Viewer',
-}
-
-export function MemberCard({
+export const MemberCard = memo(function MemberCard({
   member,
   currentUserId,
   canManage,
+  onClick,
   onUpdateRole,
   onRemove,
 }: MemberCardProps) {
@@ -44,7 +32,17 @@ export function MemberCard({
   const RoleIcon = roleIcons[member.role]
 
   return (
-    <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+    <div
+      className={cn(
+        'flex items-center justify-between p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg',
+        onClick && 'cursor-pointer hover:border-primary-300 dark:hover:border-primary-600 transition-colors'
+      )}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-label={onClick ? `View details for ${member.name || member.email}` : undefined}
+      onClick={onClick}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } } : undefined}
+    >
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
           <span className="text-gray-700 dark:text-gray-300 font-medium">
@@ -78,8 +76,9 @@ export function MemberCard({
         {canManage && !isCurrentUser && member.role !== 'owner' && (
           <div className="relative">
             <button
-              onClick={() => setShowMenu(!showMenu)}
+              onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu) }}
               className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+              aria-label="Member actions menu"
             >
               <MoreVertical className="w-4 h-4" />
             </button>
@@ -110,7 +109,7 @@ export function MemberCard({
                           : 'text-gray-700 dark:text-gray-300'
                       )}
                     >
-                      {React.createElement(roleIcons[role], { className: 'w-4 h-4' })}
+                      {(() => { const Icon = roleIcons[role]; return <Icon className="w-4 h-4" /> })()}
                       {roleLabels[role]}
                     </button>
                   ))}
@@ -134,7 +133,6 @@ export function MemberCard({
       </div>
     </div>
   )
-}
+})
 
-// Need to import React for createElement
-import React from 'react'
+MemberCard.displayName = 'MemberCard'

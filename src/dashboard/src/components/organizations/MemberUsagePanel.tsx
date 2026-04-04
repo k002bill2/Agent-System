@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { BarChart3, Coins, Activity, Clock, TrendingUp } from 'lucide-react'
 import { useOrganizationsStore } from '../../stores/organizations'
 import type { MemberUsageSummary } from '../../stores/organizations'
@@ -14,13 +14,20 @@ const periodLabels: Record<string, string> = {
   month: 'This Month',
 }
 
-function UsageBar({ member, maxTokens }: { member: MemberUsageSummary; maxTokens: number }) {
+function UsageBar({ member, maxTokens, onClick }: { member: MemberUsageSummary; maxTokens: number; onClick: () => void }) {
   const barWidth = maxTokens > 0
     ? Math.max((member.tokens_used_this_month / maxTokens) * 100, 2)
     : 0
 
   return (
-    <div className="flex items-center gap-4 p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-primary-300 dark:hover:border-primary-600 transition-colors">
+    <div
+      className="flex items-center gap-4 p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-primary-300 dark:hover:border-primary-600 transition-colors cursor-pointer"
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } }}
+      aria-label={`View details for ${member.name || member.email}`}
+    >
       {/* Avatar */}
       <div className="w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -75,8 +82,8 @@ function UsageBar({ member, maxTokens }: { member: MemberUsageSummary; maxTokens
   )
 }
 
-export function MemberUsagePanel({ organizationId }: MemberUsagePanelProps) {
-  const { memberUsage, fetchMemberUsage } = useOrganizationsStore()
+export const MemberUsagePanel = memo(function MemberUsagePanel({ organizationId }: MemberUsagePanelProps) {
+  const { memberUsage, fetchMemberUsage, setSelectedMemberId } = useOrganizationsStore()
   const [period, setPeriod] = useState<string>('month')
 
   useEffect(() => {
@@ -177,10 +184,12 @@ export function MemberUsagePanel({ organizationId }: MemberUsagePanelProps) {
       ) : (
         <div className="space-y-2">
           {memberUsage.members.map((member) => (
-            <UsageBar key={member.user_id} member={member} maxTokens={maxTokens} />
+            <UsageBar key={member.user_id} member={member} maxTokens={maxTokens} onClick={() => setSelectedMemberId(member.user_id)} />
           ))}
         </div>
       )}
     </div>
   )
-}
+})
+
+MemberUsagePanel.displayName = 'MemberUsagePanel'

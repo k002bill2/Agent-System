@@ -16,6 +16,7 @@ import {
   OrganizationStats,
   QuotaStatusPanel,
   MemberUsagePanel,
+  MemberDetailDrawer,
 } from '../components/organizations'
 
 const tabs: { id: OrganizationTab; label: string; icon: typeof Info }[] = [
@@ -50,6 +51,9 @@ export function OrganizationsPage() {
     fetchUserMemberships,
     getCurrentUserRole,
     fetchStats,
+    selectedMemberId,
+    setSelectedMemberId,
+    memberUsage,
   } = useOrganizationsStore()
 
   const { user } = useAuthStore()
@@ -66,9 +70,10 @@ export function OrganizationsPage() {
 
   // Load organization details when selected
   const handleSelectOrganization = useCallback(async (org: typeof organizations[0]) => {
+    setSelectedMemberId(null)
     setCurrentOrganization(org)
     await Promise.all([fetchMembers(org.id), fetchStats(org.id)])
-  }, [setCurrentOrganization, fetchMembers, fetchStats])
+  }, [setSelectedMemberId, setCurrentOrganization, fetchMembers, fetchStats])
 
   // Auto-select first organization
   useEffect(() => {
@@ -83,6 +88,14 @@ export function OrganizationsPage() {
     : null
 
   const canManageOrg = currentUserRole === 'owner' || currentUserRole === 'admin'
+
+  // Derive selected member data for detail drawer
+  const selectedMember = selectedMemberId
+    ? members.find((m) => m.user_id === selectedMemberId) ?? null
+    : null
+  const selectedMemberUsage = selectedMemberId
+    ? memberUsage?.members.find((m) => m.user_id === selectedMemberId) ?? null
+    : null
 
   // Handle delete
   const handleDeleteClick = (orgId: string) => {
@@ -279,6 +292,7 @@ export function OrganizationsPage() {
                   currentUserRole={currentUserRole}
                   isLoading={isLoading}
                   onInvite={() => setModalMode('invite')}
+                  onSelectMember={(userId) => setSelectedMemberId(userId)}
                   onUpdateRole={(memberId, role) =>
                     updateMemberRole(currentOrganization.id, memberId, role)
                   }
@@ -404,6 +418,24 @@ export function OrganizationsPage() {
           isLoading={isLoading}
           onSubmit={(data) => inviteMember(currentOrganization.id, data, user?.id)}
           onClose={() => setModalMode(null)}
+        />
+      )}
+
+      {/* Member Detail Drawer */}
+      {selectedMember && currentOrganization && (
+        <MemberDetailDrawer
+          member={selectedMember}
+          usage={selectedMemberUsage}
+          currentUserId={user?.id || ''}
+          canManage={canManageOrg}
+          onClose={() => setSelectedMemberId(null)}
+          onUpdateRole={(role) =>
+            updateMemberRole(currentOrganization.id, selectedMember.id, role)
+          }
+          onRemove={() => {
+            removeMember(currentOrganization.id, selectedMember.id)
+            setSelectedMemberId(null)
+          }}
         />
       )}
 

@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { UserPlus, Users } from 'lucide-react'
 import { MemberCard } from './MemberCard'
 import type { OrganizationMember, MemberRole } from '../../stores/organizations'
@@ -8,16 +9,18 @@ interface MemberListProps {
   currentUserRole: MemberRole | null
   isLoading: boolean
   onInvite: () => void
+  onSelectMember?: (userId: string) => void
   onUpdateRole: (memberId: string, role: MemberRole) => void
   onRemove: (memberId: string) => void
 }
 
-export function MemberList({
+export const MemberList = memo(function MemberList({
   members,
   currentUserId,
   currentUserRole,
   isLoading,
   onInvite,
+  onSelectMember,
   onUpdateRole,
   onRemove,
 }: MemberListProps) {
@@ -83,6 +86,7 @@ export function MemberList({
               member={member}
               currentUserId={currentUserId}
               canManage={canManageMembers}
+              onClick={onSelectMember ? () => onSelectMember(member.user_id) : undefined}
               onUpdateRole={(role) => onUpdateRole(member.id, role)}
               onRemove={() => onRemove(member.id)}
             />
@@ -91,4 +95,6 @@ export function MemberList({
       )}
     </div>
   )
-}
+})
+
+MemberList.displayName = 'MemberList'
