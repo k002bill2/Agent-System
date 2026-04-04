@@ -860,6 +860,7 @@ export function PlaygroundPage() {
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
+                        className="w-5 h-5 accent-blue-500 rounded border-gray-300 dark:border-gray-600"
                         checked={currentSession.rag_enabled}
                         disabled={!currentSession.project_id}
                         onChange={(e) => {
@@ -873,7 +874,6 @@ export function PlaygroundPage() {
                             }
                           }
                         }}
-                        className="rounded border-gray-300 dark:border-gray-600"
                       />
                       <Database className="w-4 h-4 text-gray-700 dark:text-gray-300" />
                       <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -975,6 +975,7 @@ export function PlaygroundPage() {
                         >
                           <input
                             type="checkbox"
+                            className="w-5 h-5 accent-blue-500 rounded border-gray-300 dark:border-gray-600"
                             checked={currentSession.enabled_tools.includes(tool.name)}
                             onChange={(e) => {
                               const enabled = e.target.checked
@@ -982,7 +983,6 @@ export function PlaygroundPage() {
                                 : currentSession.enabled_tools.filter((t) => t !== tool.name)
                               handleUpdateSettings({ enabled_tools: enabled })
                             }}
-                            className="rounded border-gray-300 dark:border-gray-600"
                           />
                           <span className="text-sm text-gray-700 dark:text-gray-300">
                             {tool.name}

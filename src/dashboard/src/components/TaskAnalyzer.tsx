@@ -853,11 +853,11 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm">
                   <SquareTerminal className="w-4 h-4 flex-shrink-0" />
                   <span>
-                    Tmux 세션 시작됨: <code className="px-1 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-xs">{executionSessionId}</code>
+                    Tmux 세션 실행 중: <code className="px-1 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-xs">{executionSessionId}</code>
                   </span>
-                  <span className="text-xs text-blue-400 dark:text-blue-500">
+                  <code className="text-xs text-blue-400 dark:text-blue-500 select-all cursor-text">
                     tmux attach -t {executionSessionId}
-                  </span>
+                  </code>
                   <button
                     onClick={clearExecution}
                     className="ml-auto text-xs hover:underline"
