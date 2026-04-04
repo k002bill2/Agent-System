@@ -67,6 +67,10 @@ src/dashboard/coverage/
 .claude/snapshots/
 .temp/
 
+# GSD planning/state (ephemeral)
+.planning/
+.gsd/states/
+
 # Dev docs (in-progress work)
 dev/active/
 

@@ -148,6 +148,27 @@ dev/active/[task-name]/
 
 **워크플로우**: `/dev-docs` → 구현 → `/update-dev-docs` → `/compact`
 
+## Power Stack 워크플로우 (Gstack + GSD + Superpowers)
+
+작업 시 반드시 아래 4단계 파이프라인을 준수합니다. 상세 라우팅: `.claude/rules/power-stack.md`
+
+### Phase 1: 기획 및 설계 (Gstack Mode)
+- `.gstack/personas/Engineer_Manager.md` 페르소나 관점으로 아키텍처 설계
+- 복잡한 로직은 단순화하여 마크다운으로 정리
+
+### Phase 2: 작업 분할 및 상태 저장 (GSD Mode)
+- **50% 규칙**: 전체 작업을 작은 마일스톤으로 분할
+- 마일스톤 완료 시 `.gsd/states/current_state.md`에 진행 상황/다음 할 일/핵심 변수 기록
+- `/clear` 후에도 `current_state.md`를 읽어 작업 연속성 유지
+
+### Phase 3: 코드 구현 (Superpowers Mode)
+- **엄격한 TDD**: `.superpowers/specs/`에 스펙 작성 → 테스트 먼저 → 본 코드 작성
+- RED(실패) → GREEN(통과) → IMPROVE(리팩토링) 순서 준수
+
+### Phase 4: 최종 검증 (Gstack QA Mode)
+- `.gstack/personas/QA_Lead.md` 페르소나로 전환하여 엣지 케이스 테스트
+- Gemini CLI (Checker) 교차 검증 호출
+
 ---
 
 ## 문서 관리 원칙
