@@ -1,6 +1,7 @@
 """Agent API routes - Agent Registry, Lead Orchestrator, MCP Manager."""
 
 import json
+import logging
 import os
 import uuid
 from pathlib import Path
@@ -40,6 +41,8 @@ from services.mcp_manager import (
 from services.task_analysis_service import (
     get_task_analysis_service,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -95,6 +98,54 @@ def _validate_project_path(path_str: str) -> Path:
         status_code=400,
         detail="Project path must be within allowed workspace directories",
     )
+
+
+USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
+
+
+async def _resolve_project(project_id: str) -> Any | None:
+    """프로젝트 ID로 프로젝트 객체 조회 (DB 또는 인메모리)."""
+    try:
+        if USE_DATABASE:
+            from db.database import async_session_factory
+            from db.models import ProjectModel
+            from sqlalchemy import select
+
+            async with async_session_factory() as db_session:
+                result = await db_session.execute(
+                    select(ProjectModel).where(ProjectModel.id == project_id)
+                )
+                return result.scalar_one_or_none()
+        else:
+            from models.project import get_project
+
+            return get_project(project_id)
+    except Exception:
+        logger.warning("Failed to resolve project %s", project_id, exc_info=True)
+        return None
+
+
+async def _resolve_project_path(project_id: str) -> str | None:
+    """프로젝트 ID로 프로젝트 경로만 조회."""
+    try:
+        if USE_DATABASE:
+            from db.database import async_session_factory
+            from db.models import ProjectModel
+            from sqlalchemy import select
+
+            async with async_session_factory() as db_session:
+                result = await db_session.execute(
+                    select(ProjectModel.path).where(ProjectModel.id == project_id)
+                )
+                return result.scalar_one_or_none()
+        else:
+            from models.project import get_project
+
+            project = get_project(project_id)
+            return str(project.path) if project and project.path else None
+    except Exception:
+        logger.warning("Failed to resolve project path for %s", project_id, exc_info=True)
+        return None
 
 
 # ─────────────────────────────────────────────────────────────
@@ -898,14 +949,7 @@ async def execute_analysis(
     project = None
     project_id = request.project_id or entry.project_id
     if project_id:
-        # 프로젝트 DB 조회 시도, 없으면 최소한의 정보로 생성
-        try:
-            from services.project_service import get_project_service
-
-            project_service = get_project_service()
-            project = await project_service.get_project(project_id)
-        except Exception:
-            pass
+        project = await _resolve_project(project_id)
 
     session_id = await engine.create_session(
         project=project,
@@ -996,15 +1040,9 @@ async def execute_with_tmux(
     project_path = "."
     project_id = request.project_id or entry.project_id
     if project_id:
-        try:
-            from services.project_service import get_project_service
-
-            project_service = get_project_service()
-            project = await project_service.get_project(project_id)
-            if project and project.path:
-                project_path = project.path
-        except Exception:
-            pass
+        resolved_path = await _resolve_project_path(project_id)
+        if resolved_path:
+            project_path = resolved_path
 
     # 컨텍스트에서 project_path 추출 시도
     if project_path == "." and entry.context:
@@ -1050,17 +1088,11 @@ async def get_tmux_session_status(session_name: str, _user: UserModel = Depends(
     if not info:
         raise HTTPException(status_code=404, detail=f"Tmux session not found: {session_name}")
 
-    # 출력 캡처
+    # 출력 캡처 (활성/종료 모두 동일)
     output = ""
-    if info.active:
-        captured = tmux.capture_output(session_name)
-        if captured is not None:
-            output = captured
-    else:
-        # 세션이 종료된 경우에도 마지막 캡처 시도
-        captured = tmux.capture_output(session_name)
-        if captured is not None:
-            output = captured
+    captured = tmux.capture_output(session_name)
+    if captured is not None:
+        output = captured
 
     return TmuxSessionResponse(
         session_name=info.session_name,
@@ -1074,8 +1106,13 @@ async def get_tmux_session_status(session_name: str, _user: UserModel = Depends(
 
 @router.get("/orchestrate/tmux-sessions/{session_name}/stream")
 async def stream_tmux_session(session_name: str, _user: UserModel = Depends(get_current_user)):
-    """SSE 스트리밍으로 tmux 세션 출력 전달 (2초 폴링)."""
+    """SSE 스트리밍으로 tmux 세션 상태 전달 (heartbeat).
+
+    인터랙티브 TUI 모드에서는 터미널 출력 대신 세션 활성/종료 상태만 전달합니다.
+    사용자는 tmux attach로 직접 진행 상황을 확인합니다.
+    """
     import asyncio
+    import json
 
     from starlette.responses import StreamingResponse
 
@@ -1088,55 +1125,17 @@ async def stream_tmux_session(session_name: str, _user: UserModel = Depends(get_
         raise HTTPException(status_code=404, detail=f"Tmux session not found: {session_name}")
 
     async def event_generator():
-        last_output = ""
-        inactive_count = 0
-
-        while True:
+        max_heartbeats = 120  # 10분 타임아웃 (120 * 5초)
+        for _ in range(max_heartbeats):
             current_info = tmux.get_session(session_name)
-            if not current_info:
-                yield "data: {'event': 'session_ended', 'active': false}\n\n"
-                break
+            if not current_info or not current_info.active:
+                yield f"data: {json.dumps({'event': 'session_ended', 'active': False})}\n\n"
+                return
 
-            captured = tmux.capture_output(session_name)
-            output = captured if captured is not None else ""
+            yield f"data: {json.dumps({'event': 'heartbeat', 'active': True})}\n\n"
+            await asyncio.sleep(5)
 
-            # 새로운 출력이 있으면 전송
-            if output != last_output:
-                import json
-
-                data = json.dumps(
-                    {
-                        "event": "output",
-                        "output": output,
-                        "active": current_info.active,
-                    }
-                )
-                yield f"data: {data}\n\n"
-                last_output = output
-                inactive_count = 0
-            else:
-                inactive_count += 1
-
-            # 세션이 종료되면 마지막 상태 전송 후 종료
-            if not current_info.active:
-                import json
-
-                data = json.dumps(
-                    {
-                        "event": "session_ended",
-                        "output": output,
-                        "active": False,
-                    }
-                )
-                yield f"data: {data}\n\n"
-                break
-
-            # 5분 동안 변화 없으면 종료 (150 * 2초)
-            if inactive_count > 150:
-                yield "data: {'event': 'timeout'}\n\n"
-                break
-
-            await asyncio.sleep(2)
+        yield f"data: {json.dumps({'event': 'timeout'})}\n\n"
 
     return StreamingResponse(
         event_generator(),

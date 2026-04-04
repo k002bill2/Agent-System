@@ -1,12 +1,13 @@
 """Tmux session management service for Claude Code CLI execution.
 
-Manages tmux sessions that run Claude Code CLI in print mode (-p),
-enabling real-time output capture via `tmux capture-pane`.
+Manages tmux sessions that run Claude Code CLI in interactive TUI mode,
+enabling real-time monitoring via `tmux attach` and GUI terminal auto-open.
 
 Usage:
 - Task Analyzer produces an analysis → build_claude_prompt() converts to instructions
-- execute_analysis() creates a tmux session and runs `claude -p "prompt"`
-- Dashboard polls capture_output() for live terminal output
+- execute_analysis() creates a tmux session and runs `claude "prompt"` (interactive)
+- User attaches to tmux session to watch progress and continue conversation
+- Dashboard shows session status (active/ended) via polling
 """
 
 import asyncio
@@ -44,6 +45,7 @@ class TmuxSessionInfo(BaseModel):
     active: bool
     started_at: datetime
     task_input: str = ""
+    pane_id: str = ""  # split-window 모드 시 pane 식별자 (%N 형식)
 
 
 class TmuxService:
@@ -52,8 +54,36 @@ class TmuxService:
     # AOS 세션 접두사
     SESSION_PREFIX = "aos-"
 
+    # 부모 Claude Code 세션에서 상속되면 안 되는 환경변수 패턴
+    # - CLAUDECODE, CLAUDE_CODE_*: 팀원 모드로 hang 유발
+    # - ANTHROPIC_API_KEY/MODEL: 구독 가로채기 방지
+    _ENV_STRIP_PREFIXES = ("CLAUDECODE", "CLAUDE_CODE_", "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL")
+
     def __init__(self):
         self._sessions: dict[str, TmuxSessionInfo] = {}
+
+    @staticmethod
+    def _clean_env() -> dict[str, str]:
+        """Claude Code 관련 환경변수를 제거한 깨끗한 env dict 반환.
+
+        부모 Claude Code 프로세스의 환경변수(CLAUDECODE, CLAUDE_CODE_*,
+        ANTHROPIC_API_KEY 등)가 자식 claude -p에 전달되면 팀원 모드로
+        동작하여 hang되므로, 패턴 매칭으로 모두 제거합니다.
+        """
+        return {
+            k: v
+            for k, v in os.environ.items()
+            if not any(k == p or k.startswith(p) for p in TmuxService._ENV_STRIP_PREFIXES)
+        }
+
+    @staticmethod
+    def _env_keys_to_strip() -> list[str]:
+        """현재 환경에서 제거해야 할 Claude Code 관련 변수명 목록 반환."""
+        return [
+            k
+            for k in os.environ
+            if any(k == p or k.startswith(p) for p in TmuxService._ENV_STRIP_PREFIXES)
+        ]
 
     # =========================================================================
     # tmux 기본 명령
@@ -89,6 +119,9 @@ class TmuxService:
 
         try:
             # login shell (-l)을 통해 실행하여 사용자 환경 상속
+            # _clean_env()로 부모 Claude Code 변수 제거 (팀원 모드 hang 방지)
+            clean = self._clean_env()
+            clean["HOME"] = str(Path.home())
             proc = await asyncio.create_subprocess_exec(
                 "/bin/bash",
                 "-l",
@@ -96,7 +129,7 @@ class TmuxService:
                 'claude -p "respond with only: ok"',
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                env={**os.environ, "HOME": str(Path.home())},
+                env=clean,
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
 
@@ -208,22 +241,26 @@ class TmuxService:
             return False
 
     def capture_output(self, name: str, lines: int = 200) -> str | None:
-        """tmux 세션의 현재 출력 캡처.
+        """tmux 세션/pane의 현재 출력 캡처.
 
         Args:
-            name: 세션 이름
+            name: 세션 이름 (내부적으로 pane_id가 있으면 자동 사용)
             lines: 캡처할 최대 줄 수
 
         Returns:
             캡처된 출력 텍스트, 실패 시 None
         """
+        # split 모드면 pane_id를 타겟으로 사용
+        info = self._sessions.get(name)
+        target = info.pane_id if info and info.pane_id else name
+
         try:
             result = subprocess.run(
                 [
                     "tmux",
                     "capture-pane",
                     "-t",
-                    name,
+                    target,
                     "-p",  # stdout으로 출력
                     "-S",
                     f"-{lines}",  # 시작 줄 (음수 = 스크롤백)
@@ -250,23 +287,34 @@ class TmuxService:
             return False
 
     def kill_session(self, name: str) -> bool:
-        """tmux 세션 종료."""
+        """tmux 세션 또는 pane 종료."""
+        info = self._sessions.get(name)
+
         try:
-            subprocess.run(
-                ["tmux", "kill-session", "-t", name],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            # 내부 추적에서도 제거
+            if info and info.pane_id:
+                # split 모드: pane만 종료
+                subprocess.run(
+                    ["tmux", "kill-pane", "-t", info.pane_id],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            else:
+                # 독립 세션 모드: 세션 전체 종료
+                subprocess.run(
+                    ["tmux", "kill-session", "-t", name],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
             self._sessions.pop(name, None)
             return True
         except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to kill tmux session '{name}': {e.stderr}")
+            logger.error(f"Failed to kill tmux target '{name}': {e.stderr}")
             return False
 
     def list_aos_sessions(self) -> list[TmuxSessionInfo]:
-        """모든 AOS tmux 세션 목록 반환."""
+        """모든 AOS tmux 세션/pane 목록 반환."""
         # 실제 tmux 세션 확인하여 상태 동기화
         try:
             result = subprocess.run(
@@ -280,15 +328,254 @@ class TmuxService:
         except subprocess.CalledProcessError:
             live_sessions = set()
 
-        # 내부 추적 정보와 동기화
+        # 활성 pane ID 일괄 조회 (N+1 방지)
+        live_panes: set[str] = set()
+        try:
+            result = subprocess.run(
+                ["tmux", "list-panes", "-a", "-F", "#{pane_id}"],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                live_panes = set(result.stdout.strip().split("\n"))
+        except subprocess.CalledProcessError:
+            pass
+
+        # 내부 추적 정보와 동기화 + 비활성 세션 정리
         sessions = []
+        stale_keys = []
+        now = utcnow()
         for name, info in list(self._sessions.items()):
-            is_alive = name in live_sessions
+            if info.pane_id:
+                is_alive = info.pane_id in live_panes
+            else:
+                is_alive = name in live_sessions
             updated = info.model_copy(update={"active": is_alive})
             self._sessions[name] = updated
             sessions.append(updated)
 
+            # 1시간 이상 비활성 세션 정리 대상
+            if not is_alive and (now - info.started_at).total_seconds() > 3600:
+                stale_keys.append(name)
+
+        for key in stale_keys:
+            self._sessions.pop(key, None)
+
         return sessions
+
+    # =========================================================================
+    # Split-window 모드 (기존 tmux 창에 분할)
+    # =========================================================================
+
+    def _find_user_session(self) -> str | None:
+        """split 대상 tmux 세션 찾기.
+
+        가장 최근 활동한 세션을 반환합니다.
+        비-AOS 세션 우선, 없으면 가장 최근 AOS 세션 사용.
+
+        Returns:
+            활성 세션 이름, 없으면 None
+        """
+        try:
+            # session_activity (Unix timestamp)로 최신 활동순 정렬
+            result = subprocess.run(
+                [
+                    "tmux",
+                    "list-sessions",
+                    "-F",
+                    "#{session_activity} #{session_name}",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0 or not result.stdout.strip():
+                return None
+
+            # 활동 시간 역순 정렬 (최신 먼저)
+            lines = result.stdout.strip().split("\n")
+            entries = []
+            for line in lines:
+                parts = line.split(" ", 1)
+                if len(parts) == 2:
+                    entries.append((int(parts[0]), parts[1]))
+            entries.sort(key=lambda x: x[0], reverse=True)
+
+            # 비-AOS 세션 우선
+            for _, name in entries:
+                if not name.startswith(self.SESSION_PREFIX):
+                    return name
+            # 없으면 가장 최근 AOS 세션
+            if entries:
+                return entries[0][1]
+            return None
+        except Exception:
+            return None
+
+    def split_window(
+        self, target_session: str, command: str, cwd: str | None = None
+    ) -> str | None:
+        """기존 tmux 세션의 현재 윈도우를 분할하여 명령어 실행.
+
+        pane이 너무 작으면 (높이 < 10줄) 새 윈도우를 만듭니다.
+        pane 생성과 명령어 전송을 분리하여 quoting 문제를 방지합니다.
+
+        Args:
+            target_session: 분할할 대상 세션 이름
+            command: 새 pane에서 실행할 명령어
+            cwd: 작업 디렉토리 (선택)
+
+        Returns:
+            새 pane의 ID (%N 형식), 실패 시 None
+        """
+        # 현재 활성 pane 높이 확인 — 작으면 split 대신 new-window
+        # window_height는 전체 윈도우라 항상 크므로, pane_height를 사용
+        use_new_window = False
+        try:
+            height_result = subprocess.run(
+                ["tmux", "display-message", "-t", target_session, "-p", "#{pane_height}"],
+                capture_output=True,
+                text=True,
+            )
+            pane_height = int(height_result.stdout.strip()) if height_result.stdout.strip() else 0
+            if pane_height < 20:
+                use_new_window = True
+        except (subprocess.CalledProcessError, ValueError):
+            pass
+
+        # 1단계: pane 또는 window 생성
+        if use_new_window:
+            args = [
+                "tmux",
+                "new-window",
+                "-t",
+                target_session,
+                "-P",
+                "-F",
+                "#{pane_id}",
+            ]
+        else:
+            args = [
+                "tmux",
+                "split-window",
+                "-t",
+                target_session,
+                "-v",  # 세로 분할 (위/아래)
+                "-l",
+                "50%",
+                "-P",
+                "-F",
+                "#{pane_id}",
+            ]
+        if cwd:
+            args.extend(["-c", cwd])
+
+        try:
+            result = subprocess.run(
+                args, capture_output=True, text=True, check=True
+            )
+            pane_id = result.stdout.strip()
+        except subprocess.CalledProcessError as e:
+            logger.error("Failed to create pane in '%s': %s", target_session, e.stderr)
+            return None
+
+        # 2단계: 새 pane에 명령어 전송 (quoting 문제 회피)
+        try:
+            subprocess.run(
+                ["tmux", "send-keys", "-t", pane_id, command, "Enter"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            logger.error("Failed to send command to pane %s: %s", pane_id, e.stderr)
+            return None
+
+        mode = "new-window" if use_new_window else "split"
+        logger.info("Created %s pane %s in session '%s'", mode, pane_id, target_session)
+        return pane_id
+
+    def is_pane_alive(self, pane_id: str) -> bool:
+        """tmux pane이 살아있는지 확인."""
+        try:
+            subprocess.run(
+                ["tmux", "display-message", "-t", pane_id, "-p", ""],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            return True
+        except subprocess.CalledProcessError:
+            return False
+
+    # =========================================================================
+    # GUI 터미널 연결 (split 불가 시 폴백)
+    # =========================================================================
+
+    def _detect_terminal_app(self) -> str:
+        """GUI 터미널 감지: iTerm 우선, 없으면 Terminal.app.
+
+        Returns:
+            "iTerm" 또는 "Terminal"
+        """
+        if Path("/Applications/iTerm.app").exists():
+            return "iTerm"
+        return "Terminal"
+
+    def open_gui_terminal(self, session_name: str) -> bool:
+        """GUI 터미널 창을 열어 tmux 세션에 attach.
+
+        iTerm이 설치되어 있으면 iTerm, 아니면 Terminal.app을 사용합니다.
+        Best-effort: 실패해도 tmux 세션 실행에 영향 없음.
+
+        Args:
+            session_name: attach할 tmux 세션 이름
+
+        Returns:
+            성공 여부
+        """
+        terminal_app = self._detect_terminal_app()
+        tmux_path = shutil.which("tmux") or "/opt/homebrew/bin/tmux"
+        attach_cmd = f"{tmux_path} attach-session -t {session_name}"
+
+        if terminal_app == "iTerm":
+            applescript = (
+                'tell application "iTerm"\n'
+                "    activate\n"
+                f'    create window with default profile command "{attach_cmd}"\n'
+                "end tell"
+            )
+        else:
+            applescript = (
+                'tell application "Terminal"\n'
+                "    activate\n"
+                f'    do script "{attach_cmd}"\n'
+                "end tell"
+            )
+
+        try:
+            subprocess.run(
+                ["osascript", "-e", applescript],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            logger.info("Opened %s for tmux session '%s'", terminal_app, session_name)
+            return True
+        except subprocess.TimeoutExpired:
+            logger.warning("Timeout opening %s for session '%s'", terminal_app, session_name)
+            return False
+        except subprocess.CalledProcessError as e:
+            logger.warning(
+                "Failed to open %s for session '%s': %s",
+                terminal_app,
+                session_name,
+                e.stderr,
+            )
+            return False
+        except Exception as e:
+            logger.warning("Unexpected error opening GUI terminal: %s", e)
+            return False
 
     # =========================================================================
     # Claude Code 프롬프트 생성
@@ -405,6 +692,9 @@ class TmuxService:
     ) -> TmuxSessionInfo | None:
         """분석 결과를 tmux + Claude Code CLI로 실행.
 
+        기존 tmux 세션이 있으면 split-window로 분할하여 실행하고,
+        없으면 새 세션을 생성한 후 GUI 터미널을 엽니다.
+
         Args:
             analysis_id: 분석 ID
             project_path: 프로젝트 작업 디렉토리
@@ -423,52 +713,51 @@ class TmuxService:
             logger.error("Claude CLI is not installed")
             return None
 
-        # 세션 이름 생성
+        # 트래킹용 이름 생성
         short_id = analysis_id[:8]
         timestamp = int(time.time())
         session_name = f"{self.SESSION_PREFIX}{short_id}-{timestamp}"
 
-        # 프롬프트 생성
+        # 프롬프트 생성 및 임시 파일 저장
         prompt = self.build_claude_prompt(analysis, task_input)
 
-        # tmux 세션 생성
-        if not self.create_session(session_name, project_path):
-            return None
-
-        # feature branch 생성 (요청된 경우)
-        if branch_name:
-            import re
-
-            if not re.match(r"^[a-zA-Z0-9/_.-]+$", branch_name) or len(branch_name) > 100:
-                logger.warning("Invalid branch name: %s", branch_name)
-            else:
-                git_cmd = f"git checkout -b {branch_name}"
-                if not self.send_command(session_name, git_cmd):
-                    logger.warning("Failed to create branch: %s", branch_name)
-                else:
-                    # git checkout 완료 대기
-                    import asyncio
-
-                    await asyncio.sleep(1)
-
-        # 프롬프트를 임시 파일로 저장 (셸 이스케이프 문제 방지)
         import tempfile
 
         prompt_dir = Path(tempfile.mkdtemp(prefix="aos-"))
         prompt_file = prompt_dir / f"{session_name}.md"
         prompt_file.write_text(prompt, encoding="utf-8")
 
-        # Claude CLI를 print mode(-p)로 실행
-        # login shell(bash -l)로 감싸서 사용자 환경(PATH, 키체인 등) 상속
-        # - print mode: 깔끔한 stdout 출력, TUI 아티팩트 없음
-        # - login shell: tmux 세션에서도 인증 토큰 정상 접근
-        claude_cmd = f"bash -l -c 'cat \"{prompt_file}\" | claude -p'"
+        # Claude 명령어 조립
+        strip_keys = self._env_keys_to_strip()
+        unset_clause = f"unset {' '.join(strip_keys)}; " if strip_keys else ""
+        cd_clause = f"cd \"{project_path}\" && " if project_path and project_path != "." else ""
+
+        # branch 생성 (선택, 실패해도 계속 진행)
+        import re
+
+        branch_clause = ""
+        if branch_name and re.match(r"^[a-zA-Z0-9/_.-]+$", branch_name) and len(branch_name) <= 100:
+            branch_clause = f"git checkout -b {branch_name} 2>/dev/null; "
+
+        claude_cmd = (
+            f"bash -l -c '{unset_clause}{cd_clause}{branch_clause}"
+            f"claude \"$(cat \"{prompt_file}\")\" --dangerously-skip-permissions'"
+        )
+
+        # ── 독립 세션 + GUI 터미널 ──
+        if not self.create_session(session_name, project_path):
+            return None
+
+        for env_key in strip_keys:
+            subprocess.run(
+                ["tmux", "set-environment", "-t", session_name, "-u", env_key],
+                capture_output=True,
+            )
 
         if not self.send_command(session_name, claude_cmd):
             self.kill_session(session_name)
             return None
 
-        # 세션 정보 저장
         info = TmuxSessionInfo(
             session_name=session_name,
             analysis_id=analysis_id,
@@ -479,6 +768,9 @@ class TmuxService:
         )
         self._sessions[session_name] = info
 
+        # GUI 터미널로 세션 표시
+        self.open_gui_terminal(session_name)
+
         return info
 
     def get_session(self, session_name: str) -> TmuxSessionInfo | None:
@@ -487,8 +779,12 @@ class TmuxService:
         if not info:
             return None
 
-        # 실제 tmux 세션 상태 확인
-        is_alive = self.is_session_alive(session_name)
+        # 실제 tmux 세션/pane 상태 확인
+        if info.pane_id:
+            is_alive = self.is_pane_alive(info.pane_id)
+        else:
+            is_alive = self.is_session_alive(session_name)
+
         if info.active != is_alive:
             info = info.model_copy(update={"active": is_alive})
             self._sessions[session_name] = info
