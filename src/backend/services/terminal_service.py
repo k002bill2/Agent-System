@@ -270,6 +270,25 @@ class TmuxAdapter(TerminalAdapter):
                 "error": f"Failed to send command: {e.stderr}",
             }
 
+        # Open Terminal.app and attach to the tmux session so the user
+        # gets a visible window (tmux alone is detached/invisible).
+        attach_script = (
+            'tell application "Terminal"\n'
+            "    activate\n"
+            f'    do script "tmux attach -t {session_name}"\n'
+            "end tell"
+        )
+        try:
+            subprocess.run(
+                ["osascript", "-e", attach_script],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            logger.warning("Failed to auto-attach tmux session: %s", e)
+
         return {
             "success": True,
             "terminal": TerminalType.TMUX.value,
