@@ -83,6 +83,29 @@ export function ProcessCleanupPanel() {
     }
   }
 
+  const handleKillAll = async () => {
+    setCleaning(true)
+    setMessage(null)
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/claude-sessions/processes/cleanup-stale?include_foreground=true`,
+        { method: 'POST' },
+      )
+      if (!res.ok) throw new Error('Kill all failed')
+      const data: ProcessKillResponse = await res.json()
+      setMessage({
+        type: data.success ? 'success' : 'error',
+        text: data.message,
+      })
+      setSelectedPids(new Set())
+      await fetchProcesses()
+    } catch (err) {
+      setMessage({ type: 'error', text: String(err) })
+    } finally {
+      setCleaning(false)
+    }
+  }
+
   const handleKillSelected = async () => {
     if (selectedPids.size === 0) return
 
@@ -111,8 +134,8 @@ export function ProcessCleanupPanel() {
   }
 
   const toggleSelect = (pid: number, process: ProcessInfo) => {
-    // Don't allow selecting current or foreground processes
-    if (process.is_current || process.is_foreground) return
+    // Don't allow selecting current process only
+    if (process.is_current) return
 
     const newSelected = new Set(selectedPids)
     if (newSelected.has(pid)) {
@@ -128,6 +151,13 @@ export function ProcessCleanupPanel() {
       .filter((p) => !p.is_foreground && !p.is_current)
       .map((p) => p.pid)
     setSelectedPids(new Set(backgroundPids))
+  }
+
+  const selectAllKillable = () => {
+    const killablePids = processes
+      .filter((p) => !p.is_current)
+      .map((p) => p.pid)
+    setSelectedPids(new Set(killablePids))
   }
 
   const clearSelection = () => {
@@ -176,6 +206,15 @@ export function ProcessCleanupPanel() {
           >
             {cleaning ? 'Cleaning...' : `Cleanup ${backgroundCount} Stale`}
           </button>
+          {totalCount > 1 && (
+            <button
+              onClick={handleKillAll}
+              disabled={cleaning}
+              className="px-3 py-1.5 text-sm bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
+            >
+              {cleaning ? 'Killing...' : 'Kill All'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -193,14 +232,25 @@ export function ProcessCleanupPanel() {
       )}
 
       {/* Selection controls */}
-      {backgroundCount > 0 && (
+      {totalCount > 1 && (
         <div className="flex items-center gap-2 mb-3 text-sm">
           <button
-            onClick={selectAllBackground}
-            className="text-blue-600 dark:text-blue-400 hover:underline"
+            onClick={selectAllKillable}
+            className="text-red-600 dark:text-red-400 hover:underline"
           >
-            Select all background
+            Select all
           </button>
+          {backgroundCount > 0 && (
+            <>
+              <span className="text-gray-400">|</span>
+              <button
+                onClick={selectAllBackground}
+                className="text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                Select all background
+              </button>
+            </>
+          )}
           {selectedPids.size > 0 && (
             <>
               <span className="text-gray-400">|</span>
@@ -232,17 +282,17 @@ export function ProcessCleanupPanel() {
             className={`p-3 rounded-lg border transition-colors ${
               proc.is_current
                 ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
-                : proc.is_foreground
-                  ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-                  : selectedPids.has(proc.pid)
-                    ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 cursor-pointer'
+                : selectedPids.has(proc.pid)
+                  ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 cursor-pointer'
+                  : proc.is_foreground
+                    ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 cursor-pointer hover:bg-green-100 dark:hover:bg-green-900/30'
                     : 'bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700'
             }`}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                {/* Checkbox for selectable processes */}
-                {!proc.is_current && !proc.is_foreground && (
+                {/* Checkbox for selectable processes (all except current) */}
+                {!proc.is_current && (
                   <input
                     type="checkbox"
                     checked={selectedPids.has(proc.pid)}

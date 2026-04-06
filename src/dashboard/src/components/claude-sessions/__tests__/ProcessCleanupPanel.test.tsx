@@ -178,12 +178,12 @@ describe('ProcessCleanupPanel', () => {
     })
   })
 
-  it('shows checkboxes only for non-current, non-foreground processes', async () => {
+  it('shows checkboxes for all non-current processes', async () => {
     render(<ProcessCleanupPanel />)
     await waitFor(() => {
       const checkboxes = screen.getAllByRole('checkbox')
-      // Only PID 1002 is background+non-current, so 1 checkbox
-      expect(checkboxes).toHaveLength(1)
+      // PID 1001 (foreground, non-current) + PID 1002 (background, non-current) = 2 checkboxes
+      expect(checkboxes).toHaveLength(2)
     })
   })
 

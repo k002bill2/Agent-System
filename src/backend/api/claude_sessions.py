@@ -539,16 +539,21 @@ async def kill_processes(request: ProcessKillRequest) -> ProcessKillResponse:
 
 
 @router.post("/processes/cleanup-stale", response_model=ProcessKillResponse)
-async def cleanup_stale() -> ProcessKillResponse:
-    """Kill all stale (background) Claude Code processes.
+async def cleanup_stale(include_foreground: bool = False) -> ProcessKillResponse:
+    """Kill stale Claude Code processes.
 
-    Protects foreground terminal sessions and current process.
+    By default only kills background processes.
+    With include_foreground=True, also kills foreground processes
+    (e.g. zombie AOS-spawned sessions stuck in terminal tabs).
+
+    Args:
+        include_foreground: Also kill foreground processes (except current)
 
     Returns:
         Result with killed/failed/protected PIDs
     """
     result = cleanup_stale_processes(
-        protect_foreground=True,
+        protect_foreground=not include_foreground,
         protect_current=True,
     )
 
