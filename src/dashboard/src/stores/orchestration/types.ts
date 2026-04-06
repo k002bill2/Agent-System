@@ -193,7 +193,7 @@ export interface OrchestrationState {
   providerUsage: Record<LLMProvider, ProviderUsage>
   totalCost: number
 
-  // Warp integration
+  // Warp integration (deprecated: use SettingsPage terminal detection instead)
   warpInstalled: boolean | null
   warpLoading: boolean
 

@@ -6,6 +6,7 @@ This module was split into domain-specific modules:
 - api.context         — Project context & context window meter
 - api.hitl            — Human-in-the-Loop approvals
 - api.warp            — Warp Terminal integration
+- api.terminal        — Terminal integration (generic)
 - api.permission_toggles — Permission toggles
 
 The Projects API (CRUD for filesystem-based projects) remains here.
@@ -51,6 +52,7 @@ from api.hitl import router as hitl_router
 from api.monitoring import router as monitoring_router
 from api.permission_toggles import router as permission_toggles_router
 from api.sessions import router as sessions_router
+from api.terminal import router as terminal_router
 from api.warp import router as warp_router
 
 router.include_router(sessions_router)
@@ -58,6 +60,7 @@ router.include_router(monitoring_router)
 router.include_router(context_router)
 router.include_router(hitl_router)
 router.include_router(warp_router)
+router.include_router(terminal_router)
 router.include_router(permission_toggles_router)
 
 
