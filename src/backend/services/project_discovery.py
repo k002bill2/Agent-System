@@ -317,6 +317,22 @@ class ProjectDiscovery:
         if commands_dir.exists():
             command_count = sum(1 for f in commands_dir.glob("*.md") if f.is_file())
 
+        # Count rules
+        rules_dir = claude_dir / "rules"
+        rule_count = 0
+        if rules_dir.exists():
+            rule_count = sum(1 for f in rules_dir.glob("*.md") if f.is_file())
+
+        # Count memory entries (stored at ~/.claude/projects/{encoded}/memory/)
+        encoded_path = self.encode_path(project_path)
+        memory_dir = Path.home() / ".claude" / "projects" / encoded_path / "memory"
+        memory_count = 0
+        if memory_dir.exists():
+            memory_count = sum(
+                1 for f in memory_dir.glob("*.md")
+                if f.is_file() and f.name != "MEMORY.md"
+            )
+
         # Count hooks
         hook_count = 0
         if hooks_file.exists():
@@ -356,11 +372,15 @@ class ProjectDiscovery:
             has_mcp=mcp_file.exists(),
             has_hooks=hooks_file.exists() or (claude_dir / "hooks").exists(),
             has_commands=command_count > 0,
+            has_rules=rule_count > 0,
+            has_memory=memory_count > 0,
             skill_count=skill_count,
             agent_count=agent_count,
             mcp_server_count=mcp_server_count,
             hook_count=hook_count,
             command_count=command_count,
+            rule_count=rule_count,
+            memory_count=memory_count,
             last_modified=last_modified,
         )
 

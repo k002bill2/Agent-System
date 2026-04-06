@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { cn } from '../lib/utils'
-import { LayoutGrid, Sparkles, Bot, Server, Webhook, Terminal, RefreshCw, AlertCircle } from 'lucide-react'
+import { LayoutGrid, Sparkles, Bot, Server, Webhook, Terminal, ScrollText, Brain, RefreshCw, AlertCircle } from 'lucide-react'
 import {
   ProjectList,
   OverviewTab,
@@ -9,6 +9,8 @@ import {
   MCPTab,
   HooksTab,
   CommandsTab,
+  RulesTab,
+  MemoryTab,
 } from '../components/project-configs'
 import { useProjectConfigsStore, TabType } from '../stores/projectConfigs'
 
@@ -17,6 +19,8 @@ const tabs: { id: TabType; label: string; icon: typeof LayoutGrid }[] = [
   { id: 'skills', label: 'Skills', icon: Sparkles },
   { id: 'agents', label: 'Agents', icon: Bot },
   { id: 'commands', label: 'Commands', icon: Terminal },
+  { id: 'rules', label: 'Rules', icon: ScrollText },
+  { id: 'memory', label: 'Memory', icon: Brain },
   { id: 'mcp', label: 'MCP', icon: Server },
   { id: 'hooks', label: 'Hooks', icon: Webhook },
 ]
@@ -54,6 +58,10 @@ export function ProjectConfigsPage() {
         return <MCPTab />
       case 'commands':
         return <CommandsTab />
+      case 'rules':
+        return <RulesTab />
+      case 'memory':
+        return <MemoryTab />
       case 'hooks':
         return <HooksTab />
       default:
@@ -119,6 +127,16 @@ export function ProjectConfigsPage() {
                   {tab.id === 'commands' && selectedProject?.commands?.length ? (
                     <span className="ml-1 text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
                       {selectedProject.commands.length}
+                    </span>
+                  ) : null}
+                  {tab.id === 'rules' && selectedProject?.rules?.length ? (
+                    <span className="ml-1 text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
+                      {selectedProject.rules.length}
+                    </span>
+                  ) : null}
+                  {tab.id === 'memory' && selectedProject?.memories?.length ? (
+                    <span className="ml-1 text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
+                      {selectedProject.memories.length}
                     </span>
                   ) : null}
                   {tab.id === 'hooks' && selectedProject?.hooks?.length ? (

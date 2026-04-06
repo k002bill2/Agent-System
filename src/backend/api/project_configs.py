@@ -25,6 +25,7 @@ from models.project_config import (
     CopyCommandRequest,
     CopyHookRequest,
     CopyMCPRequest,
+    CopyRuleRequest,
     CopySkillRequest,
     ExternalPathRequest,
     GlobalConfigSummary,
@@ -34,8 +35,16 @@ from models.project_config import (
     MCPServerCreateRequest,
     MCPServerUpdateRequest,
     MCPToggleRequest,
+    MemoryConfig,
+    MemoryContentResponse,
+    MemoryCreateRequest,
+    MemoryUpdateRequest,
     ProjectConfigResponse,
     ProjectConfigSummary,
+    RuleConfig,
+    RuleContentResponse,
+    RuleCreateRequest,
+    RuleUpdateRequest,
     SkillConfig,
     SkillContentResponse,
     SkillCreateRequest,
@@ -101,6 +110,120 @@ async def get_global_configs(
     """
     monitor = get_project_config_monitor()
     return monitor.get_global_configs()
+
+
+# ========================================
+# Global Rules
+# ========================================
+
+
+@router.get("/global/rules", response_model=list[RuleConfig])
+async def list_global_rules() -> list[RuleConfig]:
+    """Get all global rules from ~/.claude/rules/.
+
+    Returns:
+        List of global rule configurations
+    """
+    monitor = get_project_config_monitor()
+    return monitor.get_global_rules()
+
+
+@router.get("/global/rules/{rule_id}/content", response_model=RuleContentResponse)
+async def get_global_rule_content(rule_id: str) -> RuleContentResponse:
+    """Get full content of a global rule.
+
+    Args:
+        rule_id: Rule identifier
+
+    Returns:
+        Rule configuration with full content
+    """
+    monitor = get_project_config_monitor()
+    rule, content = monitor.get_rule_content("global", rule_id, is_global=True)
+
+    if rule is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Global rule not found: {rule_id}",
+        )
+
+    return RuleContentResponse(rule=rule, content=content)
+
+
+@router.post("/global/rules", response_model=RuleConfig)
+async def create_global_rule(request: RuleCreateRequest) -> RuleConfig:
+    """Create a new global rule.
+
+    Args:
+        request: Rule create request
+
+    Returns:
+        Created rule configuration
+    """
+    monitor = get_project_config_monitor()
+    result = monitor.create_rule("global", request.rule_id, request.content, is_global=True)
+
+    if result is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to create global rule: {request.rule_id}. Check if rule ID is unique.",
+        )
+
+    audit_config_change(AuditAction.CONFIG_CREATED, "rules", request.rule_id, "global")
+    return result
+
+
+@router.put("/global/rules/{rule_id}")
+async def update_global_rule(rule_id: str, request: RuleUpdateRequest) -> dict:
+    """Update global rule content.
+
+    Args:
+        rule_id: Rule identifier
+        request: Update request with new content
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    if monitor.update_rule_content("global", rule_id, request.content, is_global=True):
+        audit_config_change(AuditAction.CONFIG_UPDATED, "rules", rule_id, "global")
+        return {
+            "success": True,
+            "message": f"Updated global rule: {rule_id}",
+            "rule_id": rule_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to update global rule: {rule_id}. Check if rule exists.",
+        )
+
+
+@router.delete("/global/rules/{rule_id}")
+async def delete_global_rule(rule_id: str) -> dict:
+    """Delete a global rule.
+
+    Args:
+        rule_id: Rule identifier
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    if monitor.delete_rule("global", rule_id, is_global=True):
+        audit_config_change(AuditAction.CONFIG_DELETED, "rules", rule_id, "global")
+        return {
+            "success": True,
+            "message": f"Deleted global rule: {rule_id}",
+            "rule_id": rule_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to delete global rule: {rule_id}. Check if rule exists.",
+        )
 
 
 async def _get_db_filtered_projects(monitor, current_user=None) -> list:
@@ -1193,6 +1316,343 @@ async def delete_command(project_id: str, command_id: str) -> dict:
         raise HTTPException(
             status_code=400,
             detail=f"Failed to delete command: {command_id}. Check if project and command exist.",
+        )
+
+
+# ========================================
+# Memories
+# ========================================
+
+
+@router.get("/{project_id}/memories", response_model=list[MemoryConfig])
+async def list_project_memories(project_id: str) -> list[MemoryConfig]:
+    """Get all memory entries for a specific project.
+
+    Args:
+        project_id: Project identifier
+
+    Returns:
+        List of memory entries for the project
+    """
+    monitor = get_project_config_monitor()
+    memories = monitor.get_project_memories(project_id)
+
+    if not memories:
+        summary = monitor.get_project_summary(project_id)
+        if summary is None:
+            raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+
+    return memories
+
+
+@router.get("/{project_id}/memories/index")
+async def get_memory_index(project_id: str) -> dict:
+    """Get the MEMORY.md index content for a project.
+
+    Args:
+        project_id: Project identifier
+
+    Returns:
+        Dict with MEMORY.md content
+    """
+    monitor = get_project_config_monitor()
+    content = monitor.get_memory_index(project_id)
+
+    return {
+        "project_id": project_id,
+        "content": content,
+    }
+
+
+@router.put("/{project_id}/memories/index")
+async def update_memory_index(project_id: str, request: MemoryUpdateRequest) -> dict:
+    """Update the MEMORY.md index content for a project.
+
+    Args:
+        project_id: Project identifier
+        request: Update request with new content
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    if monitor.update_memory_index(project_id, request.content):
+        audit_config_change(AuditAction.CONFIG_UPDATED, "memory", "MEMORY.md", project_id)
+        return {
+            "success": True,
+            "message": "Updated MEMORY.md index",
+            "project_id": project_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Failed to update MEMORY.md. Check if project exists.",
+        )
+
+
+@router.get("/{project_id}/memories/{memory_id}/content", response_model=MemoryContentResponse)
+async def get_memory_content(project_id: str, memory_id: str) -> MemoryContentResponse:
+    """Get full content of a memory entry.
+
+    Args:
+        project_id: Project identifier
+        memory_id: Memory identifier
+
+    Returns:
+        Memory configuration with full content
+    """
+    monitor = get_project_config_monitor()
+    memory, content = monitor.get_memory_content(project_id, memory_id)
+
+    if memory is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Memory not found: {memory_id} in project {project_id}",
+        )
+
+    return MemoryContentResponse(memory=memory, content=content)
+
+
+@router.post("/{project_id}/memories", response_model=MemoryConfig)
+async def create_memory(project_id: str, request: MemoryCreateRequest) -> MemoryConfig:
+    """Create a new memory entry.
+
+    Args:
+        project_id: Project identifier
+        request: Memory create request
+
+    Returns:
+        Created memory configuration
+    """
+    monitor = get_project_config_monitor()
+    result = monitor.create_memory(project_id, request.memory_id, request.content)
+
+    if result is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to create memory: {request.memory_id}. Check if project exists and memory ID is unique.",
+        )
+
+    audit_config_change(AuditAction.CONFIG_CREATED, "memory", request.memory_id, project_id)
+    return result
+
+
+@router.put("/{project_id}/memories/{memory_id}")
+async def update_memory(project_id: str, memory_id: str, request: MemoryUpdateRequest) -> dict:
+    """Update memory content.
+
+    Args:
+        project_id: Project identifier
+        memory_id: Memory identifier
+        request: Update request with new content
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    if monitor.update_memory_content(project_id, memory_id, request.content):
+        audit_config_change(AuditAction.CONFIG_UPDATED, "memory", memory_id, project_id)
+        return {
+            "success": True,
+            "message": f"Updated memory: {memory_id}",
+            "project_id": project_id,
+            "memory_id": memory_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to update memory: {memory_id}. Check if project and memory exist.",
+        )
+
+
+@router.delete("/{project_id}/memories/{memory_id}")
+async def delete_memory(project_id: str, memory_id: str) -> dict:
+    """Delete a memory entry.
+
+    Args:
+        project_id: Project identifier
+        memory_id: Memory identifier
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    if monitor.delete_memory(project_id, memory_id):
+        audit_config_change(AuditAction.CONFIG_DELETED, "memory", memory_id, project_id)
+        return {
+            "success": True,
+            "message": f"Deleted memory: {memory_id}",
+            "project_id": project_id,
+            "memory_id": memory_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to delete memory: {memory_id}. Check if project and memory exist.",
+        )
+
+
+# ========================================
+# Rules
+# ========================================
+
+
+@router.get("/{project_id}/rules", response_model=list[RuleConfig])
+async def list_project_rules(project_id: str) -> list[RuleConfig]:
+    """Get all rules for a specific project.
+
+    Args:
+        project_id: Project identifier
+
+    Returns:
+        List of rules for the project
+    """
+    monitor = get_project_config_monitor()
+    rules = monitor.get_project_rules(project_id)
+
+    if not rules:
+        summary = monitor.get_project_summary(project_id)
+        if summary is None:
+            raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+
+    return rules
+
+
+@router.get("/{project_id}/rules/{rule_id}/content", response_model=RuleContentResponse)
+async def get_rule_content(project_id: str, rule_id: str) -> RuleContentResponse:
+    """Get full content of a project rule.
+
+    Args:
+        project_id: Project identifier
+        rule_id: Rule identifier
+
+    Returns:
+        Rule configuration with full content
+    """
+    monitor = get_project_config_monitor()
+    rule, content = monitor.get_rule_content(project_id, rule_id, is_global=False)
+
+    if rule is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Rule not found: {rule_id} in project {project_id}",
+        )
+
+    return RuleContentResponse(rule=rule, content=content)
+
+
+@router.post("/{project_id}/rules", response_model=RuleConfig)
+async def create_rule(project_id: str, request: RuleCreateRequest) -> RuleConfig:
+    """Create a new project rule.
+
+    Args:
+        project_id: Project identifier
+        request: Rule create request
+
+    Returns:
+        Created rule configuration
+    """
+    monitor = get_project_config_monitor()
+    result = monitor.create_rule(project_id, request.rule_id, request.content, is_global=False)
+
+    if result is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to create rule: {request.rule_id}. Check if project exists and rule ID is unique.",
+        )
+
+    audit_config_change(AuditAction.CONFIG_CREATED, "rules", request.rule_id, project_id)
+    return result
+
+
+@router.put("/{project_id}/rules/{rule_id}")
+async def update_rule(project_id: str, rule_id: str, request: RuleUpdateRequest) -> dict:
+    """Update project rule content.
+
+    Args:
+        project_id: Project identifier
+        rule_id: Rule identifier
+        request: Update request with new content
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    if monitor.update_rule_content(project_id, rule_id, request.content, is_global=False):
+        audit_config_change(AuditAction.CONFIG_UPDATED, "rules", rule_id, project_id)
+        return {
+            "success": True,
+            "message": f"Updated rule: {rule_id}",
+            "project_id": project_id,
+            "rule_id": rule_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to update rule: {rule_id}. Check if project and rule exist.",
+        )
+
+
+@router.delete("/{project_id}/rules/{rule_id}")
+async def delete_rule(project_id: str, rule_id: str) -> dict:
+    """Delete a project rule.
+
+    Args:
+        project_id: Project identifier
+        rule_id: Rule identifier
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    if monitor.delete_rule(project_id, rule_id, is_global=False):
+        audit_config_change(AuditAction.CONFIG_DELETED, "rules", rule_id, project_id)
+        return {
+            "success": True,
+            "message": f"Deleted rule: {rule_id}",
+            "project_id": project_id,
+            "rule_id": rule_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to delete rule: {rule_id}. Check if project and rule exist.",
+        )
+
+
+@router.post("/{project_id}/rules/{rule_id}/copy")
+async def copy_rule(project_id: str, rule_id: str, request: CopyRuleRequest) -> dict:
+    """Copy a rule to another project.
+
+    Args:
+        project_id: Source project identifier
+        rule_id: Rule identifier to copy
+        request: Copy request with target project
+
+    Returns:
+        Success status
+    """
+    monitor = get_project_config_monitor()
+
+    result = monitor.copy_rule(project_id, rule_id, request.target_project_id)
+
+    if result:
+        return {
+            "success": True,
+            "message": f"Copied rule '{rule_id}' to project '{request.target_project_id}'",
+            "source_project_id": project_id,
+            "target_project_id": request.target_project_id,
+            "rule_id": rule_id,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to copy rule '{rule_id}'. Check if source and target projects exist.",
         )
 
 
