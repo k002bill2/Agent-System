@@ -17,6 +17,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from services.rag.store import ProjectVectorStore, get_project_context, get_project_context_with_sources, get_cross_project_context
+
 
 # ── Test Helpers ─────────────────────────────────────────────────────────────
 
@@ -24,37 +26,37 @@ import pytest
 @pytest.fixture(autouse=True)
 def _mock_qdrant(monkeypatch):
     """Ensure QDRANT_AVAILABLE is True with mocked Qdrant for all tests."""
-    import services.rag_service as rag_mod
+    import services.rag.config as rag_config
 
-    monkeypatch.setattr(rag_mod, "QDRANT_AVAILABLE", True)
+    monkeypatch.setattr(rag_config, "QDRANT_AVAILABLE", True)
 
     class FakeDocument:
         def __init__(self, page_content: str = "", metadata: dict | None = None):
             self.page_content = page_content
             self.metadata = metadata or {}
 
-    monkeypatch.setattr(rag_mod, "Document", FakeDocument)
+    monkeypatch.setattr(rag_config, "Document", FakeDocument)
 
 
 @pytest.fixture
 def vector_store(monkeypatch):
     """Create a ProjectVectorStore with mocked dependencies."""
-    import services.rag_service as rag_mod
+    import services.rag.config as rag_config
 
     mock_embeddings = MagicMock()
     # 384-dim embeddings (HuggingFace all-MiniLM-L6-v2 기본값)
     mock_embeddings.embed_query.return_value = [0.1] * 384
 
     monkeypatch.setattr(
-        rag_mod.ProjectVectorStore,
+        ProjectVectorStore,
         "_create_embeddings",
         lambda self, model=None: mock_embeddings,
     )
 
     mock_client = MagicMock()
-    monkeypatch.setattr(rag_mod, "QdrantClient", lambda **kwargs: mock_client)
+    monkeypatch.setattr(rag_config, "QdrantClient", lambda **kwargs: mock_client)
 
-    store = rag_mod.ProjectVectorStore(qdrant_url="http://localhost:6333")
+    store = ProjectVectorStore(qdrant_url="http://localhost:6333")
     store.client = mock_client
     return store
 
@@ -69,9 +71,9 @@ class TestStage1Ingestion:
 
     def test_chunk_count_matches_source(self, vector_store, monkeypatch):
         """원본 문서의 청크 개수와 생성된 벡터 개수가 일치하는지 확인."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RAG_FULL_CONTEXT_THRESHOLD", 100)
+        monkeypatch.setattr(rag_config, "RAG_FULL_CONTEXT_THRESHOLD", 100)
 
         content = "line " * 500  # ~2500 chars
         chunks = vector_store._chunk_document(content, "test.py", chunk_size=200)
@@ -139,7 +141,7 @@ class TestStage1Ingestion:
         priority_files = ["CLAUDE.md", "README.md", "package.json", "pyproject.toml"]
 
         # 실제 인덱싱에서 priority_files 목록이 코드와 일치하는지 확인
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
         # index_project 메서드 내의 priority_files 목록 참조
         # 코드에서 하드코딩된 목록과 일치하는지 검증
@@ -184,9 +186,9 @@ class TestStage2Retrieval:
     @pytest.mark.asyncio
     async def test_semantic_search_returns_relevant_results(self, vector_store, monkeypatch):
         """시맨틱 검색이 관련된 내용을 상위(Top-k)에 반환하는지."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
+        monkeypatch.setattr(rag_config, "RAG_ENABLE_HYBRID", False)
 
         # 관련 문서와 비관련 문서를 포함한 mock 결과
         mock_collection = MagicMock()
@@ -205,7 +207,7 @@ class TestStage2Retrieval:
         ]
 
         monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
+            vector_store, "get_or_create_collection", lambda pid: mock_collection
         )
 
         result = await vector_store.query("proj1", "재택근무 규정은?", k=5)
@@ -218,9 +220,9 @@ class TestStage2Retrieval:
     @pytest.mark.asyncio
     async def test_score_range_is_valid(self, vector_store, monkeypatch):
         """점수가 0~1 범위 내에 있는지 (Cosine similarity)."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
+        monkeypatch.setattr(rag_config, "RAG_ENABLE_HYBRID", False)
 
         mock_collection = MagicMock()
         mock_doc = MagicMock()
@@ -229,7 +231,7 @@ class TestStage2Retrieval:
         mock_collection.similarity_search_with_score.return_value = [(mock_doc, 0.75)]
 
         monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
+            vector_store, "get_or_create_collection", lambda pid: mock_collection
         )
 
         result = await vector_store.query("proj1", "test", k=5)
@@ -240,9 +242,9 @@ class TestStage2Retrieval:
     @pytest.mark.asyncio
     async def test_score_clamping_for_edge_cases(self, vector_store, monkeypatch):
         """점수가 0 미만이거나 1 초과일 때 클램핑되는지."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
+        monkeypatch.setattr(rag_config, "RAG_ENABLE_HYBRID", False)
 
         mock_collection = MagicMock()
         doc1 = MagicMock()
@@ -258,7 +260,7 @@ class TestStage2Retrieval:
         ]
 
         monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
+            vector_store, "get_or_create_collection", lambda pid: mock_collection
         )
 
         result = await vector_store.query("proj1", "test", k=5)
@@ -268,9 +270,9 @@ class TestStage2Retrieval:
 
     def test_bm25_keyword_relevance(self, vector_store, monkeypatch):
         """BM25 키워드 검색이 정확한 키워드 매칭을 하는지."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "BM25_AVAILABLE", True)
+        monkeypatch.setattr(rag_config, "BM25_AVAILABLE", True)
 
         texts = [
             "PostgreSQL 데이터베이스 연결 설정 방법",
@@ -294,7 +296,7 @@ class TestStage2Retrieval:
 
     def test_rrf_fusion_combines_results(self):
         """RRF 퓨전이 시맨틱 + BM25 결과를 올바르게 합성하는지."""
-        from services.rag_service import ProjectVectorStore
+        from services.rag.store import ProjectVectorStore, get_project_context, get_project_context_with_sources, get_cross_project_context
 
         # 시맨틱 검색 결과: 의미적으로 관련된 문서
         semantic_list = [
@@ -319,9 +321,9 @@ class TestStage2Retrieval:
     @pytest.mark.asyncio
     async def test_priority_filter_works(self, vector_store, monkeypatch):
         """priority 필터가 올바르게 적용되는지."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
+        monkeypatch.setattr(rag_config, "RAG_ENABLE_HYBRID", False)
 
         mock_collection = MagicMock()
         mock_doc = MagicMock()
@@ -330,7 +332,7 @@ class TestStage2Retrieval:
         mock_collection.similarity_search_with_score.return_value = [(mock_doc, 0.9)]
 
         monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
+            vector_store, "get_or_create_collection", lambda pid: mock_collection
         )
 
         result = await vector_store.query("proj1", "query", k=5, filter_priority="high")
@@ -351,9 +353,9 @@ class TestStage3Generation:
     @pytest.mark.asyncio
     async def test_context_includes_source_references(self, vector_store, monkeypatch):
         """get_project_context_with_sources가 출처 정보를 함께 반환하는지."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
+        monkeypatch.setattr(rag_config, "RAG_ENABLE_HYBRID", False)
 
         mock_collection = MagicMock()
         mock_doc = MagicMock()
@@ -366,13 +368,13 @@ class TestStage3Generation:
         mock_collection.similarity_search_with_score.return_value = [(mock_doc, 0.88)]
 
         monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
+            vector_store, "get_or_create_collection", lambda pid: mock_collection
         )
 
         # 전역 인스턴스 모킹
-        monkeypatch.setattr(rag_mod, "_vector_store", vector_store)
+        import services.rag.store as rag_store; monkeypatch.setattr(rag_store, "_vector_store", vector_store)
 
-        context, sources = await rag_mod.get_project_context_with_sources(
+        context, sources = await get_project_context_with_sources(
             "proj1", "프로젝트 Alpha 3단계 목표는?"
         )
 
@@ -388,9 +390,9 @@ class TestStage3Generation:
     @pytest.mark.asyncio
     async def test_context_format_for_llm(self, vector_store, monkeypatch):
         """LLM에 전달되는 컨텍스트 형식이 올바른지."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
+        monkeypatch.setattr(rag_config, "RAG_ENABLE_HYBRID", False)
 
         mock_collection = MagicMock()
 
@@ -408,11 +410,11 @@ class TestStage3Generation:
         ]
 
         monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
+            vector_store, "get_or_create_collection", lambda pid: mock_collection
         )
-        monkeypatch.setattr(rag_mod, "_vector_store", vector_store)
+        import services.rag.store as rag_store; monkeypatch.setattr(rag_store, "_vector_store", vector_store)
 
-        context = await rag_mod.get_project_context("proj1", "query", k=2)
+        context = await get_project_context("proj1", "query", k=2)
 
         # 구분자로 분리된 형식
         assert "---" in context
@@ -422,22 +424,22 @@ class TestStage3Generation:
     @pytest.mark.asyncio
     async def test_empty_results_return_empty_context(self, vector_store, monkeypatch):
         """결과가 없을 때 빈 문자열을 반환하는지."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
+        monkeypatch.setattr(rag_config, "RAG_ENABLE_HYBRID", False)
 
         mock_collection = MagicMock()
         mock_collection.similarity_search_with_score.return_value = []
 
         monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
+            vector_store, "get_or_create_collection", lambda pid: mock_collection
         )
-        monkeypatch.setattr(rag_mod, "_vector_store", vector_store)
+        import services.rag.store as rag_store; monkeypatch.setattr(rag_store, "_vector_store", vector_store)
 
-        context = await rag_mod.get_project_context("proj1", "존재하지 않는 내용")
+        context = await get_project_context("proj1", "존재하지 않는 내용")
         assert context == ""
 
-        context2, sources2 = await rag_mod.get_project_context_with_sources(
+        context2, sources2 = await get_project_context_with_sources(
             "proj1", "존재하지 않는 내용"
         )
         assert context2 == ""
@@ -457,28 +459,28 @@ class TestTroubleshooting:
 
         인덱싱 시 사용한 모델과 검색 시 사용하는 모델이 동일한지.
         """
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
         # 기본 임베딩 제공자가 일관되는지
-        assert rag_mod.EMBEDDING_PROVIDER in ("huggingface", "openai", "google")
+        assert rag_config.EMBEDDING_PROVIDER in ("huggingface", "openai", "google")
 
         # HuggingFace 기본값 확인
-        if rag_mod.EMBEDDING_PROVIDER == "huggingface":
-            assert rag_mod.DEFAULT_EMBEDDING_MODEL == "sentence-transformers/all-MiniLM-L6-v2"
-        elif rag_mod.EMBEDDING_PROVIDER == "openai":
-            assert rag_mod.DEFAULT_EMBEDDING_MODEL == "text-embedding-3-small"
-        elif rag_mod.EMBEDDING_PROVIDER == "google":
-            assert rag_mod.DEFAULT_EMBEDDING_MODEL == "models/text-embedding-004"
+        if rag_config.EMBEDDING_PROVIDER == "huggingface":
+            assert rag_config.DEFAULT_EMBEDDING_MODEL == "sentence-transformers/all-MiniLM-L6-v2"
+        elif rag_config.EMBEDDING_PROVIDER == "openai":
+            assert rag_config.DEFAULT_EMBEDDING_MODEL == "text-embedding-3-small"
+        elif rag_config.EMBEDDING_PROVIDER == "google":
+            assert rag_config.DEFAULT_EMBEDDING_MODEL == "models/text-embedding-004"
 
     def test_distance_metric_is_cosine(self):
         """거리 계산 방식이 Cosine으로 올바르게 설정되어 있는지."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
         # 코드에서 Distance.COSINE을 사용하는지 확인
         # _ensure_collection_exists 메서드에서 Distance.COSINE 설정
         import inspect
 
-        source = inspect.getsource(rag_mod.ProjectVectorStore._ensure_collection_exists)
+        source = inspect.getsource(ProjectVectorStore._ensure_collection_exists)
         assert "Distance.COSINE" in source
 
     def test_single_embedding_instance_per_store(self, vector_store):
@@ -509,30 +511,34 @@ class TestTroubleshooting:
         vector_store._bm25_corpus["proj1"] = [("text", {})]
 
         # force_reindex가 캐시를 지우는지 확인 (실제 인덱싱 없이 로직만 검증)
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        source = inspect.getsource(rag_mod.ProjectVectorStore.index_project)
+        from services.rag.indexing import index_project as _index_project_fn
+
+        source = inspect.getsource(_index_project_fn)
         assert "bm25_indices.pop" in source
         assert "bm25_corpus.pop" in source
 
     def test_hybrid_search_config_flags(self, monkeypatch):
         """하이브리드 검색 및 리랭킹 플래그가 올바르게 설정되는지."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
         # 기본값 확인 (비활성)
         # 모듈 레벨 상수이므로 직접 확인
-        assert isinstance(rag_mod.RAG_ENABLE_HYBRID, bool)
-        assert isinstance(rag_mod.RAG_ENABLE_RERANK, bool)
-        assert isinstance(rag_mod.RAG_CANDIDATE_MULTIPLIER, int)
-        assert rag_mod.RAG_CANDIDATE_MULTIPLIER >= 1
+        assert isinstance(rag_config.RAG_ENABLE_HYBRID, bool)
+        assert isinstance(rag_config.RAG_ENABLE_RERANK, bool)
+        assert isinstance(rag_config.RAG_CANDIDATE_MULTIPLIER, int)
+        assert rag_config.RAG_CANDIDATE_MULTIPLIER >= 1
 
     def test_batch_ingestion_size(self):
         """배치 크기가 적절한지 확인 (5000)."""
         import inspect
 
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        source = inspect.getsource(rag_mod.ProjectVectorStore.index_project)
+        from services.rag.indexing import index_project as _index_project_fn
+
+        source = inspect.getsource(_index_project_fn)
         assert "batch_size = 5000" in source
 
 
@@ -549,7 +555,8 @@ class TestEdgeCases:
         chunks = vector_store._chunk_document("", "empty.py")
         # 빈 내용이면 단일 청크 (빈 상태)
         assert len(chunks) == 1
-        assert chunks[0].page_content == ""
+        # Context prefix is prepended, so empty content has just the prefix
+        assert "[Context:" in chunks[0].page_content
 
     def test_unicode_content_handling(self, vector_store):
         """유니코드(한국어 등) 내용이 올바르게 처리되는지."""
@@ -589,9 +596,9 @@ class TestEdgeCases:
 
     def test_tokenizer_handles_mixed_content(self):
         """토크나이저가 혼합 콘텐츠(코드+한국어)를 처리하는지."""
-        from services.rag_service import _tokenize
+        from services.rag.config import tokenize
 
-        tokens = _tokenize("def hello(): # 인사 함수")
+        tokens = tokenize("def hello(): # 인사 함수")
         assert "def" in tokens
         assert "hello" in tokens
         assert "인사" in tokens
@@ -608,9 +615,11 @@ class TestStage4CrossProject:
 
     def test_indexing_includes_project_id_metadata(self, vector_store, monkeypatch):
         """인덱싱 시 chunk 메타데이터에 project_id가 포함되는지."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        source = inspect.getsource(rag_mod.ProjectVectorStore.index_project)
+        import services.rag.indexing as indexing_mod
+
+        source = inspect.getsource(indexing_mod)
         # project_id가 메타데이터에 추가되는 코드가 있는지
         assert 'metadata["project_id"]' in source
 
@@ -622,9 +631,9 @@ class TestStage4CrossProject:
     @pytest.mark.asyncio
     async def test_cross_project_context_format(self, vector_store, monkeypatch):
         """get_cross_project_context가 project_id:source 형식으로 포맷하는지."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
+        monkeypatch.setattr(rag_config, "RAG_ENABLE_HYBRID", False)
 
         mock_coll = MagicMock()
         mock_coll.name = "proj_alpha"
@@ -643,10 +652,10 @@ class TestStage4CrossProject:
 
         mock_vs = MagicMock()
         mock_vs.similarity_search_with_score.return_value = [(doc, 0.9)]
-        monkeypatch.setattr(vector_store, "_get_or_create_collection", lambda pid: mock_vs)
-        monkeypatch.setattr(rag_mod, "_vector_store", vector_store)
+        monkeypatch.setattr(vector_store, "get_or_create_collection", lambda pid: mock_vs)
+        import services.rag.store as rag_store; monkeypatch.setattr(rag_store, "_vector_store", vector_store)
 
-        context = await rag_mod.get_cross_project_context("docs query", k=3)
+        context = await get_cross_project_context("docs query", k=3)
 
         assert "[alpha:docs.md]" in context
         assert "alpha documentation" in context
@@ -654,9 +663,9 @@ class TestStage4CrossProject:
     @pytest.mark.asyncio
     async def test_include_shared_boosts_local_results(self, vector_store, monkeypatch):
         """include_shared=True일 때 현재 프로젝트 결과가 우선순위를 받는지."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
+        monkeypatch.setattr(rag_config, "RAG_ENABLE_HYBRID", False)
 
         # Two collections: main and other
         mock_coll1 = MagicMock()
@@ -696,7 +705,7 @@ class TestStage4CrossProject:
                 return mock_local_vs
             return mock_other_vs
 
-        monkeypatch.setattr(vector_store, "_get_or_create_collection", fake_get)
+        monkeypatch.setattr(vector_store, "get_or_create_collection", fake_get)
 
         result = await vector_store.query("main", "shared topic", k=5, include_shared=True)
 
@@ -706,7 +715,7 @@ class TestStage4CrossProject:
 
     def test_rrf_fusion_preserves_project_id(self):
         """RRF 퓨전 결과에 project_id가 보존되는지."""
-        from services.rag_service import ProjectVectorStore
+        from services.rag.store import ProjectVectorStore, get_project_context, get_project_context_with_sources, get_cross_project_context
 
         ranked = [
             [

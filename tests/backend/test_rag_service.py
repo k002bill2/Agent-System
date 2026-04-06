@@ -21,9 +21,9 @@ def _make_document(page_content: str, metadata: dict | None = None):
 @pytest.fixture(autouse=True)
 def _mock_qdrant(monkeypatch):
     """Ensure QDRANT_AVAILABLE is True with mocked Qdrant for all tests."""
-    import services.rag_service as rag_mod
+    import services.rag.config as rag_config
 
-    monkeypatch.setattr(rag_mod, "QDRANT_AVAILABLE", True)
+    monkeypatch.setattr(rag_config, "QDRANT_AVAILABLE", True)
 
     # Mock Document to behave like a simple dataclass
     class FakeDocument:
@@ -31,27 +31,28 @@ def _mock_qdrant(monkeypatch):
             self.page_content = page_content
             self.metadata = metadata or {}
 
-    monkeypatch.setattr(rag_mod, "Document", FakeDocument)
+    monkeypatch.setattr(rag_config, "Document", FakeDocument)
 
 
 @pytest.fixture
 def vector_store(monkeypatch):
     """Create a ProjectVectorStore with mocked Qdrant client and embeddings."""
-    import services.rag_service as rag_mod
+    import services.rag.config as rag_config
+    from services.rag.store import ProjectVectorStore
 
     # Mock embeddings to avoid loading real models
     mock_embeddings = MagicMock()
     monkeypatch.setattr(
-        rag_mod.ProjectVectorStore,
+        ProjectVectorStore,
         "_create_embeddings",
         lambda self, model=None: mock_embeddings,
     )
 
     # Mock QdrantClient to avoid needing a real Qdrant server
     mock_client = MagicMock()
-    monkeypatch.setattr(rag_mod, "QdrantClient", lambda **kwargs: mock_client)
+    monkeypatch.setattr(rag_config, "QdrantClient", lambda **kwargs: mock_client)
 
-    store = rag_mod.ProjectVectorStore(qdrant_url="http://localhost:6333")
+    store = ProjectVectorStore(qdrant_url="http://localhost:6333")
     store.client = mock_client
     return store
 
@@ -68,16 +69,16 @@ class TestChunkDocument:
         chunks = vector_store._chunk_document(content, "readme.md")
 
         assert len(chunks) == 1
-        assert chunks[0].page_content == content
+        assert content in chunks[0].page_content  # context prefix prepended
         assert chunks[0].metadata["chunk_index"] == 0
         assert chunks[0].metadata["total_chunks"] == 1
         assert chunks[0].metadata["source"] == "readme.md"
 
     def test_large_file_multiple_chunks(self, vector_store, monkeypatch):
         """Files above threshold are split into multiple chunks."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RAG_FULL_CONTEXT_THRESHOLD", 100)
+        monkeypatch.setattr(rag_config, "RAG_FULL_CONTEXT_THRESHOLD", 100)
 
         content = "line\n" * 200  # ~1000 chars
         chunks = vector_store._chunk_document(content, "big.py", chunk_size=200)
@@ -108,25 +109,25 @@ class TestChunkDocument:
 
     def test_full_context_threshold_configurable(self, vector_store, monkeypatch):
         """RAG_FULL_CONTEXT_THRESHOLD controls single-chunk boundary."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
         content = "x" * 2500  # 2500 chars
 
         # Default threshold 3000 -> single chunk
-        monkeypatch.setattr(rag_mod, "RAG_FULL_CONTEXT_THRESHOLD", 3000)
+        monkeypatch.setattr(rag_config, "RAG_FULL_CONTEXT_THRESHOLD", 3000)
         chunks = vector_store._chunk_document(content, "file.txt")
         assert len(chunks) == 1
 
         # Threshold 500 -> multiple chunks
-        monkeypatch.setattr(rag_mod, "RAG_FULL_CONTEXT_THRESHOLD", 500)
+        monkeypatch.setattr(rag_config, "RAG_FULL_CONTEXT_THRESHOLD", 500)
         chunks = vector_store._chunk_document(content, "file.txt", chunk_size=1000)
         assert len(chunks) > 1
 
     def test_python_file_chunking(self, vector_store, monkeypatch):
         """Python files use language-aware separators when available."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RAG_FULL_CONTEXT_THRESHOLD", 100)
+        monkeypatch.setattr(rag_config, "RAG_FULL_CONTEXT_THRESHOLD", 100)
 
         python_content = '''
 class MyClass:
@@ -176,9 +177,9 @@ class TestBM25:
 
     def test_build_bm25_index(self, vector_store, monkeypatch):
         """BM25 index is built from texts and metadatas."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "BM25_AVAILABLE", True)
+        monkeypatch.setattr(rag_config, "BM25_AVAILABLE", True)
 
         texts = [
             "def calculate_total(items):",
@@ -199,9 +200,9 @@ class TestBM25:
 
     def test_bm25_search_keyword_match(self, vector_store, monkeypatch):
         """BM25 returns documents matching query keywords."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "BM25_AVAILABLE", True)
+        monkeypatch.setattr(rag_config, "BM25_AVAILABLE", True)
 
         texts = [
             "def calculate_total(items): return sum(items)",
@@ -228,9 +229,9 @@ class TestBM25:
 
     def test_bm25_search_empty_query(self, vector_store, monkeypatch):
         """BM25 search handles empty/whitespace query."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "BM25_AVAILABLE", True)
+        monkeypatch.setattr(rag_config, "BM25_AVAILABLE", True)
 
         texts = ["some content"]
         metadatas = [{"source": "a.py", "chunk_index": 0}]
@@ -314,9 +315,9 @@ class TestReranking:
 
     def test_rerank_with_mock_encoder(self, vector_store, monkeypatch):
         """Reranking re-sorts candidates by CrossEncoder score."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RERANK_AVAILABLE", True)
+        monkeypatch.setattr(rag_config, "RERANK_AVAILABLE", True)
 
         # Mock CrossEncoder to return reversed scores
         mock_encoder = MagicMock()
@@ -338,9 +339,9 @@ class TestReranking:
 
     def test_rerank_no_encoder(self, vector_store, monkeypatch):
         """Without encoder, rerank returns original order truncated."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RERANK_AVAILABLE", False)
+        monkeypatch.setattr(rag_config, "RERANK_AVAILABLE", False)
         vector_store._cross_encoder = None
 
         candidates = [
@@ -367,9 +368,9 @@ class TestQueryPaths:
     @pytest.mark.asyncio
     async def test_semantic_only_query(self, vector_store, monkeypatch):
         """When hybrid disabled, uses standard similarity search."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
+        monkeypatch.setattr(rag_config, "RAG_ENABLE_HYBRID", False)
 
         # Mock collection (QdrantVectorStore)
         mock_collection = MagicMock()
@@ -379,7 +380,7 @@ class TestQueryPaths:
         mock_collection.similarity_search_with_score.return_value = [(mock_doc, 0.8)]
 
         monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
+            vector_store, "get_or_create_collection", lambda pid: mock_collection
         )
 
         result = await vector_store.query("proj1", "test query", k=5)
@@ -392,11 +393,11 @@ class TestQueryPaths:
     @pytest.mark.asyncio
     async def test_hybrid_query_path(self, vector_store, monkeypatch):
         """When hybrid enabled, uses RRF fusion of semantic + BM25."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", True)
-        monkeypatch.setattr(rag_mod, "RAG_ENABLE_RERANK", False)
-        monkeypatch.setattr(rag_mod, "BM25_AVAILABLE", True)
+        monkeypatch.setattr(rag_config, "RAG_ENABLE_HYBRID", True)
+        monkeypatch.setattr(rag_config, "RAG_ENABLE_RERANK", False)
+        monkeypatch.setattr(rag_config, "BM25_AVAILABLE", True)
 
         # Mock collection for semantic search
         mock_collection = MagicMock()
@@ -406,7 +407,7 @@ class TestQueryPaths:
         mock_collection.similarity_search_with_score.return_value = [(mock_doc, 0.9)]
 
         monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
+            vector_store, "get_or_create_collection", lambda pid: mock_collection
         )
 
         # Build BM25 index
@@ -472,9 +473,9 @@ class TestCrossProjectQuery:
     @pytest.mark.asyncio
     async def test_query_cross_project_all_collections(self, vector_store, monkeypatch):
         """query_cross_project searches across all collections."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
+        monkeypatch.setattr(rag_config, "RAG_ENABLE_HYBRID", False)
 
         # Set up two collections
         mock_coll1 = MagicMock()
@@ -508,7 +509,7 @@ class TestCrossProjectQuery:
                 return mock_vs_alpha
             return mock_vs_beta
 
-        monkeypatch.setattr(vector_store, "_get_or_create_collection", fake_get_or_create)
+        monkeypatch.setattr(vector_store, "get_or_create_collection", fake_get_or_create)
 
         result = await vector_store.query_cross_project("auth query", k=5)
 
@@ -519,9 +520,9 @@ class TestCrossProjectQuery:
     @pytest.mark.asyncio
     async def test_query_cross_project_with_filter(self, vector_store, monkeypatch):
         """query_cross_project respects source_project_ids filter."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
+        monkeypatch.setattr(rag_config, "RAG_ENABLE_HYBRID", False)
 
         doc = MagicMock()
         doc.page_content = "only alpha content"
@@ -530,7 +531,7 @@ class TestCrossProjectQuery:
         mock_vs = MagicMock()
         mock_vs.similarity_search_with_score.return_value = [(doc, 0.8)]
 
-        monkeypatch.setattr(vector_store, "_get_or_create_collection", lambda pid: mock_vs)
+        monkeypatch.setattr(vector_store, "get_or_create_collection", lambda pid: mock_vs)
 
         result = await vector_store.query_cross_project(
             "query", k=5, source_project_ids=["alpha"]
@@ -542,9 +543,9 @@ class TestCrossProjectQuery:
     @pytest.mark.asyncio
     async def test_query_with_include_shared(self, vector_store, monkeypatch):
         """query() with include_shared merges local + other project results."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
+        monkeypatch.setattr(rag_config, "RAG_ENABLE_HYBRID", False)
 
         # Mock: 2 collections exist
         mock_coll1 = MagicMock()
@@ -573,7 +574,7 @@ class TestCrossProjectQuery:
                 return mock_local_vs
             return mock_other_vs
 
-        monkeypatch.setattr(vector_store, "_get_or_create_collection", fake_get)
+        monkeypatch.setattr(vector_store, "get_or_create_collection", fake_get)
 
         result = await vector_store.query("main", "test query", k=5, include_shared=True)
 
@@ -585,9 +586,9 @@ class TestCrossProjectQuery:
     @pytest.mark.asyncio
     async def test_backward_compatibility_include_shared_false(self, vector_store, monkeypatch):
         """query() with include_shared=False behaves identically to original."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
+        monkeypatch.setattr(rag_config, "RAG_ENABLE_HYBRID", False)
 
         mock_collection = MagicMock()
         mock_doc = MagicMock()
@@ -596,7 +597,7 @@ class TestCrossProjectQuery:
         mock_collection.similarity_search_with_score.return_value = [(mock_doc, 0.8)]
 
         monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
+            vector_store, "get_or_create_collection", lambda pid: mock_collection
         )
 
         result = await vector_store.query("proj1", "test query", k=5, include_shared=False)
@@ -609,9 +610,9 @@ class TestCrossProjectQuery:
     @pytest.mark.asyncio
     async def test_cross_project_result_has_project_id(self, vector_store, monkeypatch):
         """Cross-project results include project_id in each document."""
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
-        monkeypatch.setattr(rag_mod, "RAG_ENABLE_HYBRID", False)
+        monkeypatch.setattr(rag_config, "RAG_ENABLE_HYBRID", False)
 
         mock_coll = MagicMock()
         mock_coll.name = "proj_alpha"
@@ -625,7 +626,7 @@ class TestCrossProjectQuery:
 
         mock_vs = MagicMock()
         mock_vs.similarity_search_with_score.return_value = [(doc, 0.85)]
-        monkeypatch.setattr(vector_store, "_get_or_create_collection", lambda pid: mock_vs)
+        monkeypatch.setattr(vector_store, "get_or_create_collection", lambda pid: mock_vs)
 
         result = await vector_store.query_cross_project("query", k=5)
 
@@ -651,16 +652,16 @@ class TestCrossProjectQuery:
 
 class TestTokenize:
     def test_basic_tokenization(self):
-        from services.rag_service import _tokenize
+        from services.rag.config import tokenize
 
-        tokens = _tokenize("Hello World! This is a Test_123.")
+        tokens = tokenize("Hello World! This is a Test_123.")
         assert tokens == ["hello", "world", "this", "is", "a", "test_123"]
 
     def test_empty_string(self):
-        from services.rag_service import _tokenize
+        from services.rag.config import tokenize
 
-        assert _tokenize("") == []
-        assert _tokenize("   ") == []
+        assert tokenize("") == []
+        assert tokenize("   ") == []
 
 
 # ── Config tests ──────────────────────────────────────────────────────────────
@@ -676,10 +677,10 @@ class TestConfig:
 
         # Re-evaluate module-level constants by importing fresh
         # (Note: in practice these are set at module load time)
-        import services.rag_service as rag_mod
+        import services.rag.config as rag_config
 
         # These are the defaults when env vars are not set
-        assert rag_mod.RAG_FULL_CONTEXT_THRESHOLD >= 1000  # Sensible default
+        assert rag_config.RAG_FULL_CONTEXT_THRESHOLD >= 1000  # Sensible default
 
     def test_collection_stats_with_qdrant(self, vector_store, monkeypatch):
         """get_collection_stats uses Qdrant client to get point count."""

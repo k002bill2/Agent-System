@@ -10,6 +10,7 @@ from models.project import PROJECTS_REGISTRY, get_project
 from services.code_entity_extractor import extract_dependencies, extract_entities
 from services.rag_service import (
     QDRANT_AVAILABLE,
+    DebugQueryResult,
     QueryResult,
     get_vector_store,
 )
@@ -205,6 +206,38 @@ async def query_project(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
+
+
+class DebugQueryRequest(BaseModel):
+    """Request for debug query (returns detailed chunk information)."""
+
+    query: str = Field(..., description="Search query")
+    k: int = Field(default=20, ge=1, le=50, description="Number of results (up to 50)")
+
+
+@router.post("/projects/{project_id}/debug-query", response_model=DebugQueryResult)
+async def debug_query_project(
+    project_id: str,
+    request: DebugQueryRequest,
+) -> DebugQueryResult:
+    """Debug endpoint: returns top-N chunks with full metadata, scores, and highlights.
+
+    Use this to inspect search quality — the guide recommends examining
+    the top 20 chunks to understand why relevant info isn't ranking.
+    """
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
+
+    try:
+        store = get_vector_store()
+        return await store.debug_query(
+            project_id=project_id,
+            query_text=request.query,
+            k=request.k,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Debug query failed: {str(e)}")
 
 
 @router.get("/projects/{project_id}/stats", response_model=StatsResponse)
