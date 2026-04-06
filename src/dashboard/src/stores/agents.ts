@@ -8,6 +8,7 @@ import { create } from 'zustand'
 import { apiClient } from '../services/apiClient'
 import { getApiUrl } from '../config/api'
 import { useAuthStore } from './auth'
+import { useSettingsStore, TERMINAL_DISPLAY_NAMES } from './settings'
 
 // Types
 export type AgentCategory = 'development' | 'orchestration' | 'quality' | 'research'
@@ -161,7 +162,7 @@ interface AgentsState {
 
   // Execution Actions
   executeAnalysis: (analysisId: string, projectId?: string | null) => Promise<string | null>
-  executeWithWarp: (analysisId: string, projectId?: string | null, branchName?: string) => Promise<boolean>
+  executeInTerminal: (analysisId: string, projectId?: string | null, branchName?: string) => Promise<boolean>
   clearExecution: () => void
 
   // History Actions
@@ -599,8 +600,10 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
     }
   },
 
-  // Execute analysis via Warp terminal with Claude CLI
-  executeWithWarp: async (analysisId: string, projectId?: string | null, branchName?: string) => {
+  // Execute analysis via selected terminal with Claude CLI
+  executeInTerminal: async (analysisId: string, projectId?: string | null, branchName?: string) => {
+    const terminal = useSettingsStore.getState().preferredTerminal
+    const terminalName = TERMINAL_DISPLAY_NAMES[terminal]
     set({ executingAnalysisId: analysisId, executionError: null })
 
     try {
@@ -612,34 +615,34 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
         image_paths?: string[]
       }>(`/api/agents/orchestrate/analyses/${analysisId}`)
 
-      // 2. 분석 → 프롬프트 텍스트 변환 (프론트엔드에서 수행)
+      // 2. 분석 → 프롬프트 텍스트 변환
       const prompt = buildClaudePrompt(analysisData.analysis, analysisData.task_input)
 
-      // 3. project_id로 project 찾기 (path 필요)
+      // 3. project_id
       const pid = projectId || analysisData.project_id
       if (!pid) {
         throw new Error('프로젝트가 선택되지 않았습니다')
       }
 
-      // 4. Warp 터미널 열기 (use_claude_cli: true로 expect 스크립트 활용)
-      const warpResult = await apiClient.post<{ success: boolean; error?: string }>('/api/warp/open', {
+      // 4. 선택된 터미널로 실행
+      const result = await apiClient.post<{ success: boolean; terminal: string; error?: string }>('/api/terminal/execute', {
+        terminal,
         project_id: pid,
         command: prompt,
         title: `Task: ${analysisData.task_input?.substring(0, 40) || 'Analysis'}`,
-        new_window: false, // Prefer tab in existing Warp window
-        use_claude_cli: true,
         image_paths: analysisData.image_paths || null,
         branch_name: branchName || null,
+        use_claude_cli: true,
       })
 
-      if (!warpResult.success) {
-        throw new Error(warpResult.error || 'Warp 터미널을 열 수 없습니다')
+      if (!result.success) {
+        throw new Error(result.error || `${terminalName} 실행에 실패했습니다`)
       }
 
       set({ executingAnalysisId: null })
       return true
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Warp 실행에 실패했습니다'
+      const errorMsg = error instanceof Error ? error.message : `${terminalName} 실행에 실패했습니다`
       set({
         executingAnalysisId: null,
         executionError: errorMsg,

@@ -22,6 +22,7 @@ import {
 import { useAgentsStore, TaskAnalysisHistory, generateBranchName } from '../stores/agents'
 import { Project, useOrchestrationStore } from '../stores/orchestration'
 import { useNavigationStore } from '../stores/navigation'
+import { useSettingsStore, TERMINAL_DISPLAY_NAMES } from '../stores/settings'
 import { TaskEvaluationCard } from './feedback/TaskEvaluationCard'
 import {
   Sparkles,
@@ -107,7 +108,7 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
     // Execution
     executingAnalysisId,
     executionError,
-    executeWithWarp,
+    executeInTerminal,
     clearExecution,
     // Images
     attachedImages,
@@ -130,6 +131,8 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
   } = useAgentsStore()
   const { projects } = useOrchestrationStore()
   const { pendingTaskInput, setPendingTaskInput } = useNavigationStore()
+  const preferredTerminal = useSettingsStore((s) => s.preferredTerminal)
+  const terminalName = TERMINAL_DISPLAY_NAMES[preferredTerminal]
   const [taskInput, setTaskInput] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -217,7 +220,7 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
     if (!analysisId) return
 
     setShowBranchConfirm(false)
-    await executeWithWarp(analysisId, projectFilter, branchName || undefined)
+    await executeInTerminal(analysisId, projectFilter, branchName || undefined)
   }
 
   // Image handling + OCR
@@ -783,7 +786,7 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
                       <button
                         onClick={handleExecute}
                         disabled={!!executingAnalysisId || isLoading || !projectFilter}
-                        title={!projectFilter ? '프로젝트를 먼저 선택하세요' : 'Warp 터미널에서 Claude Code 실행'}
+                        title={!projectFilter ? '프로젝트를 먼저 선택하세요' : `${terminalName}에서 Claude Code 실행`}
                         className={cn(
                           'px-3 py-1.5 rounded-lg font-medium text-xs flex items-center gap-1.5 transition-colors',
                           executingAnalysisId || !projectFilter
@@ -794,7 +797,7 @@ export function TaskAnalyzer({ projectFilter, selectedProject }: TaskAnalyzerPro
                         {executingAnalysisId ? (
                           <>
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            Opening Warp...
+                            Opening {terminalName}...
                           </>
                         ) : (
                           <>

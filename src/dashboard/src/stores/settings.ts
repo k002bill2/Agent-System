@@ -4,6 +4,19 @@ import { persist } from 'zustand/middleware'
 export type Theme = 'light' | 'dark' | 'system'
 export type LLMProvider = 'anthropic' | 'openai' | 'google' | 'local'
 
+export type TerminalType = 'warp' | 'tmux' | 'terminal_app' | 'iterm2' | 'kitty' | 'alacritty' | 'ghostty' | 'wezterm'
+
+export const TERMINAL_DISPLAY_NAMES: Record<TerminalType, string> = {
+  warp: 'Warp',
+  tmux: 'tmux',
+  terminal_app: 'Terminal.app',
+  iterm2: 'iTerm2',
+  kitty: 'Kitty',
+  alacritty: 'Alacritty',
+  ghostty: 'Ghostty',
+  wezterm: 'WezTerm',
+}
+
 export interface NotificationSettings {
   // 채널
   browserNotifications: boolean    // 브라우저 알림
@@ -63,6 +76,9 @@ interface SettingsState {
   // Notifications
   notifications: NotificationSettings
 
+  // Terminal
+  preferredTerminal: TerminalType
+
   // LLM Models from API
   availableModels: LLMModel[]
   modelsLoading: boolean
@@ -78,6 +94,7 @@ interface SettingsState {
     key: K,
     value: NotificationSettings[K]
   ) => void
+  setPreferredTerminal: (terminal: TerminalType) => void
   fetchModels: () => Promise<void>
   getModelsForProvider: (provider: LLMProvider) => LLMModel[]
 }
@@ -132,6 +149,7 @@ export const useSettingsStore = create<SettingsState>()(
       backendUrl: 'http://localhost:8000',
       theme: 'light',
       notifications: defaultNotifications,
+      preferredTerminal: 'warp',
 
       // LLM Models state
       availableModels: [],
@@ -157,6 +175,8 @@ export const useSettingsStore = create<SettingsState>()(
         applyThemeToDocument(theme)
         set({ theme })
       },
+
+      setPreferredTerminal: (terminal) => set({ preferredTerminal: terminal }),
 
       setNotificationSetting: (key, value) =>
         set((state) => ({
@@ -206,6 +226,7 @@ export const useSettingsStore = create<SettingsState>()(
         backendUrl: state.backendUrl,
         theme: state.theme,
         notifications: state.notifications,
+        preferredTerminal: state.preferredTerminal,
         // Note: apiKey is intentionally NOT persisted for security
         // Note: availableModels are fetched fresh, not persisted
       }),

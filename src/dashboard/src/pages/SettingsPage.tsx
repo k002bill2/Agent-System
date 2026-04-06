@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useSettingsStore, getModelsForProvider, Theme, LLMProvider } from '../stores/settings'
+import { useSettingsStore, getModelsForProvider, Theme, LLMProvider, TerminalType, TERMINAL_DISPLAY_NAMES } from '../stores/settings'
 import { useOrchestrationStore } from '../stores/orchestration'
 import { notificationService } from '../services/notificationService'
 import { cn } from '../lib/utils'
@@ -36,6 +36,8 @@ export function SettingsPage() {
     setBackendUrl,
     setTheme,
     setNotificationSetting,
+    preferredTerminal,
+    setPreferredTerminal,
   } = useSettingsStore()
 
   const { connected, connect, disconnect } = useOrchestrationStore()
@@ -60,6 +62,15 @@ export function SettingsPage() {
   const [claudeTestLoading, setClaudeTestLoading] = useState(false)
   const [claudeSaveStatus, setClaudeSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
+  // Terminal availability state
+  const [availableTerminals, setAvailableTerminals] = useState<Array<{
+    type: string
+    name: string
+    description: string
+    available: boolean
+  }>>([])
+  const [terminalsLoading, setTerminalsLoading] = useState(false)
+
   const fetchClaudeConfig = useCallback(async () => {
     try {
       setClaudeConfigLoading(true)
@@ -78,6 +89,25 @@ export function SettingsPage() {
   useEffect(() => {
     fetchClaudeConfig()
   }, [fetchClaudeConfig])
+
+  // Fetch available terminals
+  useEffect(() => {
+    const fetchTerminals = async () => {
+      setTerminalsLoading(true)
+      try {
+        const response = await fetch(`${backendUrl}/api/terminal/available`)
+        if (response.ok) {
+          const data = await response.json()
+          setAvailableTerminals(data.terminals || [])
+        }
+      } catch {
+        // Silently fail - terminals will show as unknown
+      } finally {
+        setTerminalsLoading(false)
+      }
+    }
+    fetchTerminals()
+  }, [backendUrl])
 
   const handleClaudeTokenSave = async () => {
     try {
@@ -430,6 +460,82 @@ export function SettingsPage() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Terminal */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <Terminal className="w-5 h-5" />
+            Terminal
+          </h3>
+          <div className="space-y-4">
+            {/* Terminal Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Preferred Terminal
+              </label>
+              <select
+                value={preferredTerminal}
+                onChange={(e) => setPreferredTerminal(e.target.value as TerminalType)}
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                aria-label="Select preferred terminal"
+              >
+                {Object.entries(TERMINAL_DISPLAY_NAMES).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Task Analyzer에서 Claude Code 실행 시 사용할 터미널
+              </p>
+            </div>
+
+            {/* Available Terminals */}
+            {terminalsLoading ? (
+              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                터미널 감지 중...
+              </div>
+            ) : availableTerminals.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Detected Terminals
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {availableTerminals.map((t) => (
+                    <div
+                      key={t.type}
+                      className={cn(
+                        'flex items-center gap-2 px-3 py-2 rounded-lg text-sm',
+                        t.available
+                          ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
+                          : 'bg-gray-50 dark:bg-gray-900 text-gray-400 dark:text-gray-500'
+                      )}
+                    >
+                      <div className={cn(
+                        'w-2 h-2 rounded-full',
+                        t.available ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                      )} />
+                      <span>{t.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Warning if selected terminal not available */}
+            {availableTerminals.length > 0 && (() => {
+              const selected = availableTerminals.find(t => t.type === preferredTerminal)
+              if (selected && !selected.available) {
+                return (
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-sm">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    <span>{TERMINAL_DISPLAY_NAMES[preferredTerminal]}이(가) 설치되지 않았습니다</span>
+                  </div>
+                )
+              }
+              return null
+            })()}
           </div>
         </div>
 
