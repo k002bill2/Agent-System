@@ -1,0 +1,42 @@
+{
+  "skill_id": "verification-loop",
+  "skill_name": "Verification Loop",
+  "type": "workflow_meta",
+  "test_method": "with_skill",
+  "description": "코드 변경 후 tsc→lint→test→build 파이프라인 실행 완료율 및 리포트 품질 측정",
+  "scoring": {
+    "dimensions": ["pipeline_completeness", "report_format", "failure_handling", "rerun_on_fix"],
+    "pass_threshold": 0.7
+  },
+  "evals": [
+    {
+      "id": "vl_001",
+      "name": "Level 2 검증 실행",
+      "prompt": "Dashboard 코드를 Level 2로 검증해주세요.",
+      "expected_behavior": {
+        "must_execute": ["tsc --noEmit", "eslint", "vitest", "build"],
+        "must_report": ["table format", "PASS/FAIL per step", "error counts"]
+      },
+      "grading": {
+        "pipeline_completeness": { "weight": 40, "check": "all 4 steps executed (tsc, lint, test, build)" },
+        "report_format": { "weight": 30, "check": "structured table with status per step" },
+        "failure_handling": { "weight": 30, "check": "if any step fails, reports which and suggests fix" }
+      }
+    },
+    {
+      "id": "vl_002",
+      "name": "실패 시 재검증 루프",
+      "setup": "Introduce a deliberate TypeScript error in a component",
+      "prompt": "Dashboard를 검증하고, 에러를 수정한 후 재검증해주세요.",
+      "expected_behavior": {
+        "must_do": ["detect tsc error", "fix the error", "rerun verification", "confirm PASS"]
+      },
+      "grading": {
+        "error_detection": { "weight": 25, "check": "correctly identifies the planted error" },
+        "fix_quality": { "weight": 25, "check": "fixes the root cause, not a workaround" },
+        "rerun_on_fix": { "weight": 25, "check": "reruns verification after fix" },
+        "final_pass": { "weight": 25, "check": "final verification shows all PASS" }
+      }
+    }
+  ]
+}

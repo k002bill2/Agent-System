@@ -454,7 +454,7 @@ export function BranchList({
                 {deleteConfirm.hasWorktree && (
                   <div className="flex items-start gap-2 p-3 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded-lg">
                     <FolderGit className="w-4 h-4 text-violet-600 dark:text-violet-400 mt-0.5 flex-shrink-0" />
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-sm text-violet-700 dark:text-violet-300">
                         이 브랜치에 연결된 worktree가 있습니다. 삭제하려면 worktree를 먼저 제거해야 합니다.
                       </p>

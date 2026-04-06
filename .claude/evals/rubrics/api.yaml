@@ -1,0 +1,124 @@
+# API Integration Evaluation Rubric
+# 외부 API 통합 및 게이트웨이 태스크 평가 기준
+
+rubric_id: api
+version: "1.0"
+description: API 통합, 게이트웨이, 웹훅 처리 품질 평가 루브릭
+
+# 코드 검사 (자동화 가능)
+code_checks:
+  file_existence:
+    weight: 8
+    description: 필수 파일 존재 여부
+    checks:
+      - type: file_exists
+        pattern: "{expected_files}"
+
+  test_existence:
+    weight: 8
+    description: 테스트 파일 존재 여부
+    checks:
+      - type: file_exists
+        pattern: "*test*"
+
+  type_safety:
+    weight: 8
+    description: 타입 안전성
+    checks:
+      - type: pattern_present
+        pattern: "def.*->.*:|interface|type "
+        message: "타입 정의 필요"
+      - type: pattern_absent
+        pattern: ": any|# type: ignore"
+        message: "any/type ignore 금지"
+
+  error_handling:
+    weight: 8
+    description: 에러 처리
+    checks:
+      - type: pattern_present
+        pattern: "try|except|catch|HTTPException|raise"
+        message: "에러 처리 필요"
+
+  security:
+    weight: 8
+    description: 보안 검사
+    checks:
+      - type: pattern_absent
+        pattern: "hardcoded.*key|secret.*=.*['\"]"
+        message: "하드코딩된 시크릿 금지"
+      - type: pattern_present
+        pattern: "environ|env|config"
+        message: "환경변수/설정 기반 구성 필요"
+
+# LLM 평가 기준
+llm_grading:
+  dimensions:
+    api_design:
+      weight: 20
+      description: API 설계 품질
+      criteria:
+        5: RESTful 원칙, 명확한 계약, 버전관리, 표준 응답 형식
+        4: 좋은 API 설계, 사소한 개선 여지
+        3: 기능적으로 동작하는 API
+        2: 설계 원칙 일부 위반
+        1: 설계 원칙 심각하게 위반
+
+    resilience:
+      weight: 25
+      description: 장애 복원력 (재시도, 타임아웃, 서킷브레이커)
+      criteria:
+        5: 포괄적 재시도 전략, 서킷브레이커, 그레이스풀 디그레이드, 폴백
+        4: 재시도 + 타임아웃 잘 구현
+        3: 기본적인 에러 처리와 재시도
+        2: 에러 처리 부족, 장애 시 크래시
+        1: 장애 복원력 거의 없음
+
+    abstraction:
+      weight: 20
+      description: 추상화 수준 (프로바이더 교체 용이성)
+      criteria:
+        5: 전략 패턴, 팩토리 패턴, 인터페이스 기반, 프로바이더 무관
+        4: 좋은 추상화, 교체 용이
+        3: 부분적 추상화
+        2: 특정 프로바이더에 강하게 결합
+        1: 하드코딩, 추상화 없음
+
+    performance:
+      weight: 20
+      description: 성능 최적화 (커넥션 풀링, 캐싱, 배치 처리)
+      criteria:
+        5: 커넥션 풀링, 응답 캐싱, 배치 처리, 비동기 파이프라인
+        4: 비동기 + 캐싱 잘 구현
+        3: 기본적인 비동기 처리
+        2: 동기 호출, 성능 병목 존재
+        1: 심각한 성능 문제
+
+    security:
+      weight: 15
+      description: API 보안 (인증, 서명 검증, 입력 검증)
+      criteria:
+        5: HMAC 서명 검증, 입력 스키마 검증, rate limiting, 시크릿 관리
+        4: 인증 + 입력 검증 잘 구현
+        3: 기본적인 인증
+        2: 보안 취약점 존재
+        1: 보안 고려 거의 없음
+
+# 점수 계산
+scoring:
+  code_checks_total: 40
+  llm_grading_total: 60
+  passing_threshold: 0.7
+
+feedback_template: |
+  ## 코드 검사 결과 ({code_score}%)
+  {code_feedback}
+
+  ## LLM 평가 결과 ({llm_score}%)
+  {llm_feedback}
+
+  ## 총점: {total_score}%
+  ## 결과: {result}
+
+  ## 개선 제안
+  {suggestions}

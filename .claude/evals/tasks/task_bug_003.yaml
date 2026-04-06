@@ -1,0 +1,188 @@
+# Task: Multi-layer State Sync Bug
+id: task_bug_003
+name: "풀스택 상태 동기화 복합 버그 수정"
+category: bug_fix
+difficulty: expert
+
+description: |
+  프론트엔드 낙관적 업데이트(optimistic update)와 백엔드 상태가
+  충돌하여 데이터 불일치가 발생하는 복합 버그를 수정합니다.
+
+  3가지 레이어(Zustand 스토어, REST API, WebSocket 실시간 이벤트)에서
+  동시에 상태가 변경될 때 발생하는 경쟁 상태, 캐시 무효화 실패,
+  이벤트 순서 뒤바뀜 문제를 모두 해결해야 합니다.
+
+  버그 1 (Optimistic Update Rollback 실패):
+  - 낙관적 업데이트 후 서버 에러 발생 시 롤백이 불완전
+  - 중간에 다른 업데이트가 끼어들면 롤백 대상이 꼬임
+  - 결과: UI에 이전 상태가 아닌 꼬인 상태 표시
+
+  버그 2 (WebSocket Event Ordering):
+  - 서버에서 이벤트 A→B 순서로 발생하지만 네트워크 지연으로 B→A 도착
+  - 시퀀스 번호 없이 도착 순서대로 처리
+  - 결과: 이전 상태로 덮어써짐
+
+  버그 3 (Cache Invalidation 실패):
+  - REST API 응답 캐시가 WebSocket 이벤트로 변경된 상태를 반영하지 못함
+  - 캐시 TTL 내에 stale data 제공
+  - 결과: 새로고침까지 오래된 데이터 표시
+
+  버그 4 (Concurrent Mutation Conflict):
+  - 두 사용자가 동시에 같은 에이전트를 수정
+  - Last-write-wins로 한쪽 변경이 유실
+  - ETag/If-Match 헤더 없음
+
+acceptance_criteria:
+  - 4가지 버그 모두 수정
+  - Optimistic Update 엔진 (롤백 큐, 순차 적용, 충돌 감지)
+  - 이벤트 순서 보장 메커니즘 (시퀀스 번호 + 리오더링 버퍼)
+  - 캐시 무효화 연동 (WebSocket 이벤트 → 관련 캐시 키 제거)
+  - 낙관적 잠금 (ETag/version 기반 충돌 감지 + 사용자 알림)
+  - 회귀 테스트 (각 버그별 최소 3개, 총 12개 이상)
+  - 동시성 시나리오 테스트 (2+ 동시 업데이트)
+  - 기존 API 호환성 유지
+  - TypeScript 타입 안전성
+
+input:
+  prompt: |
+    풀스택 상태 동기화 버그를 수정해주세요.
+
+    ## 버그 있는 코드
+
+    ### 1. Zustand Store (낙관적 업데이트)
+    ```typescript
+    // src/dashboard/src/stores/agentSync.ts (버그 있는 코드)
+    const useAgentSyncStore = create<AgentSyncState>((set, get) => ({
+      agents: [],
+      pendingUpdates: [],
+
+      updateAgent: async (id: string, data: Partial<Agent>) => {
+        // BUG 1: 낙관적 업데이트 - 이전 상태를 저장하지 않음
+        set(state => ({
+          agents: state.agents.map(a =>
+            a.id === id ? { ...a, ...data } : a
+          )
+        }))
+
+        try {
+          await api.put(`/agents/${id}`, data)
+          // BUG 2: 서버 응답을 무시하고 낙관적 상태 유지
+        } catch (error) {
+          // BUG 3: 롤백 시 다른 업데이트가 끼어든 경우 처리 안됨
+          // 이전 상태가 없어서 전체 다시 fetch
+          const fresh = await api.get('/agents')
+          set({ agents: fresh.data })
+        }
+      },
+
+      // BUG 4: WebSocket 이벤트 순서 보장 없음
+      handleWebSocketEvent: (event: AgentEvent) => {
+        set(state => ({
+          agents: state.agents.map(a =>
+            a.id === event.agentId ? { ...a, ...event.data } : a
+          )
+        }))
+      }
+    }))
+    ```
+
+    ### 2. REST API (동시성 제어 없음)
+    ```python
+    # src/backend/api/v1/agent_sync.py (버그 있는 코드)
+    @router.put("/agents/{agent_id}")
+    async def update_agent(agent_id: str, data: AgentUpdate):
+        agent = await get_agent(agent_id)
+        if not agent:
+            raise HTTPException(404)
+        # BUG 5: ETag/version 체크 없이 덮어쓰기
+        updated = await update_agent_db(agent_id, data.model_dump())
+        # BUG 6: WebSocket 이벤트에 시퀀스 번호 없음
+        await broadcast_event("agent_updated", {"agentId": agent_id, "data": data})
+        return updated
+    ```
+
+    ## 수정 목표
+
+    ### A. OptimisticUpdateEngine
+    ```typescript
+    // 낙관적 업데이트 관리 엔진
+    // - 스냅샷 저장 (업데이트 전 상태)
+    // - 순차 큐 (동시 업데이트 직렬화)
+    // - 충돌 감지 (서버 응답 vs 로컬 상태 비교)
+    // - 롤백 (실패 시 스냅샷으로 복원, 중간 업데이트 재적용)
+    ```
+
+    ### B. EventSequencer
+    ```typescript
+    // 이벤트 순서 보장 메커니즘
+    // - 시퀀스 번호 기반 순서 보장
+    // - 리오더링 버퍼 (누락된 이벤트 대기)
+    // - 갭 감지 (시퀀스 누락 시 전체 동기화)
+    // - 중복 이벤트 필터링 (idempotency)
+    ```
+
+    ### C. CacheInvalidator
+    ```typescript
+    // 캐시 ↔ WebSocket 연동
+    // - 이벤트 타입 → 캐시 키 매핑
+    // - 자동 무효화 + 재요청
+    ```
+
+    ### D. OptimisticLocking (Backend)
+    ```python
+    # ETag/version 기반 낙관적 잠금
+    # - 응답에 ETag 헤더 포함
+    # - 업데이트 시 If-Match 헤더 검증
+    # - 충돌 시 409 Conflict 반환
+    ```
+  context_files:
+    - src/dashboard/src/stores/agents.ts
+    - src/backend/api/routes.py
+  dependencies: []
+
+expected_output:
+  files:
+    # Frontend
+    - src/dashboard/src/stores/agentSync.ts
+    - src/dashboard/src/lib/optimisticUpdate.ts
+    - src/dashboard/src/lib/eventSequencer.ts
+    - src/dashboard/src/lib/cacheInvalidator.ts
+    - src/dashboard/src/lib/__tests__/optimisticUpdate.test.ts
+    - src/dashboard/src/lib/__tests__/eventSequencer.test.ts
+    # Backend
+    - src/backend/api/v1/agent_sync.py
+    - tests/backend/api/test_agent_sync.py
+  patterns:
+    # Frontend
+    - "class OptimisticUpdate|optimistic|rollback|snapshot"
+    - "sequence|sequenceNumber|reorder|buffer"
+    - "invalidate|cache.*invalid|stale"
+    - "create<|useStore"
+    # Backend
+    - "ETag|If-Match|etag|version"
+    - "409|Conflict|conflict"
+    - "sequence_number|seq_num"
+    - "@router\\.(get|put)"
+    # Shared
+    - "async|await"
+    - "test|describe|expect|assert"
+  forbidden_patterns:
+    - ": any"
+    - "// @ts-ignore"
+    - "# type: ignore"
+    - "console\\.log"
+    - "print\\("
+
+evaluation:
+  timeout_minutes: 60
+  rubric: bug_fix.yaml
+  weights:
+    code_checks: 30
+    llm_grading: 70
+  passing_score: 0.80
+
+metadata:
+  created_at: 2026-03-30
+  author: system
+  tags: [bug, fullstack, optimistic-update, websocket, cache, concurrency, etag, expert]
+  recommended_agent: aos-orchestrator

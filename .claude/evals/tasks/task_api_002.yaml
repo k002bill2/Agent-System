@@ -1,0 +1,110 @@
+# Task: Webhook Event Dispatch System
+id: task_api_002
+name: "Webhook 수신 및 이벤트 디스패치 시스템"
+category: api
+difficulty: hard
+
+description: |
+  외부 서비스(GitHub, Slack 등)로부터 웹훅을 수신하고,
+  서명 검증 후 적절한 핸들러로 디스패치하는 시스템을 구현합니다.
+
+  재시도 큐, 데드레터 큐, 이벤트 로그를 포함해야 합니다.
+  다양한 웹훅 소스를 플러그인 방식으로 추가할 수 있어야 합니다.
+
+acceptance_criteria:
+  - FastAPI 라우터로 웹훅 수신 엔드포인트
+  - HMAC 서명 검증 미들웨어 (SHA-256)
+  - 이벤트 타입별 핸들러 디스패치 (레지스트리 패턴)
+  - 인메모리 재시도 큐 (최대 3회, exponential backoff)
+  - 데드레터 큐 (재시도 실패 시)
+  - 이벤트 로그 (수신/처리/실패 이력)
+  - 웹훅 소스별 어댑터 (GitHub, Slack 최소 2개)
+  - Pydantic 모델로 이벤트 스키마 정의
+  - 비동기 처리 (백그라운드 태스크)
+  - 테스트 (최소 15개 케이스: 수신, 검증, 디스패치, 재시도, 에러)
+  - 타입 힌트 완전 적용
+
+input:
+  prompt: |
+    Webhook Event Dispatch 시스템을 구현해주세요.
+
+    ## 아키텍처
+    ```
+    WebhookRouter (FastAPI)
+    ├── SignatureVerifier (HMAC 검증 미들웨어)
+    ├── EventDispatcher (핸들러 매칭 + 실행)
+    │   ├── HandlerRegistry (이벤트→핸들러 매핑)
+    │   ├── RetryQueue (재시도 큐)
+    │   └── DeadLetterQueue (실패 이벤트)
+    ├── WebhookAdapter (소스별 파싱)
+    │   ├── GitHubAdapter
+    │   └── SlackAdapter
+    └── EventLog (이벤트 이력)
+    ```
+
+    ## 엔드포인트
+    ```
+    POST /api/v1/webhooks/{source}          - 웹훅 수신 (source: github, slack)
+    GET  /api/v1/webhooks/events            - 이벤트 로그 조회
+    GET  /api/v1/webhooks/events/{id}       - 단일 이벤트 상세
+    GET  /api/v1/webhooks/dead-letter       - 데드레터 큐 조회
+    POST /api/v1/webhooks/dead-letter/{id}/retry - 데드레터 재시도
+    ```
+
+    ## 서명 검증
+    ```python
+    # GitHub: X-Hub-Signature-256 헤더
+    # Slack: X-Slack-Signature + X-Slack-Request-Timestamp
+    # HMAC-SHA256으로 검증, 실패 시 403
+    ```
+
+    ## 이벤트 처리 흐름
+    ```
+    수신 → 서명 검증 → 어댑터 파싱 → 핸들러 디스패치 → 성공/실패 로그
+                                                    ↓ (실패)
+                                              재시도 큐 (3회)
+                                                    ↓ (3회 실패)
+                                              데드레터 큐
+    ```
+  context_files:
+    - src/backend/api/routes.py
+    - src/backend/services/mcp/mcp_service.py
+  dependencies: []
+
+expected_output:
+  files:
+    - src/backend/api/v1/webhooks.py
+    - src/backend/services/webhook/dispatcher.py
+    - src/backend/services/webhook/adapters.py
+    - src/backend/services/webhook/retry_queue.py
+    - src/backend/services/webhook/signature.py
+    - src/backend/models/webhook_event.py
+    - tests/backend/services/test_webhook_dispatcher.py
+  patterns:
+    - "@router\\.(post|get)"
+    - "async def"
+    - "hmac|sha256|HMAC"
+    - "class.*Adapter|class.*adapter"
+    - "class.*Dispatcher|dispatch"
+    - "class.*Queue|retry|dead_letter"
+    - "BackgroundTasks|background_task"
+    - "class.*Event.*BaseModel"
+  forbidden_patterns:
+    - "pass  # TODO"
+    - "# type: ignore"
+    - "print\\("
+    - "import \\*"
+
+evaluation:
+  timeout_minutes: 40
+  rubric: api.yaml
+  weights:
+    code_checks: 35
+    llm_grading: 65
+  passing_score: 0.75
+
+metadata:
+  created_at: 2026-03-30
+  author: system
+  tags: [api, webhook, event-driven, dispatcher, retry, security, hard]
+  recommended_agent: backend-integration-specialist

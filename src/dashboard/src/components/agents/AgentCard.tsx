@@ -1,151 +1,191 @@
 /**
  * AgentCard Component
  *
- * 에이전트 정보를 표시하는 카드 컴포넌트.
- * 에이전트 이름, 상태 배지, 사용 가능한 도구 수, 엔드포인트를 표시합니다.
+ * 에이전트 정보를 카드 형태로 표시하는 컴포넌트.
+ * 이름, 상태 배지, 도구 가용률, 엔드포인트를 시각적으로 보여줍니다.
  */
 
-import { useMemo } from 'react'
+import { memo, useCallback, useMemo } from 'react'
 import { cn } from '../../lib/utils'
-import { Globe, Wrench, Bot } from 'lucide-react'
 
 // ─────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────
 
+/** 에이전트 상태 */
 export type AgentStatus = 'available' | 'busy' | 'offline'
 
+/** 에이전트 정보 */
 export interface Agent {
-  id: string
-  name: string
-  status: AgentStatus
-  endpoint: string
-  totalTools: number
-  availableTools: number
-  lastUpdated?: string
+  readonly id: string
+  readonly name: string
+  readonly status: AgentStatus
+  readonly endpoint: string
+  readonly totalTools: number
+  readonly availableTools: number
+  readonly lastUpdated?: string
 }
 
+/** AgentCard 컴포넌트 Props */
 interface AgentCardProps {
-  agent: Agent
-  onSelect?: (agent: Agent) => void
-  isSelected?: boolean
-  className?: string
+  /** 표시할 에이전트 정보 */
+  readonly agent: Agent
+  /** 카드 클릭(선택) 시 호출되는 콜백 */
+  readonly onSelect?: (agent: Agent) => void
+  /** 선택 상태 표시 여부 */
+  readonly isSelected?: boolean
+  /** 추가 CSS 클래스 */
+  readonly className?: string
 }
 
 // ─────────────────────────────────────────────────────────────
-// Status Configuration
+// Status Configuration (불변 맵)
 // ─────────────────────────────────────────────────────────────
 
-const statusConfig: Record<
-  AgentStatus,
-  { label: string; badgeClass: string; dotClass: string }
-> = {
+interface StatusStyle {
+  readonly label: string
+  readonly badge: string
+  readonly dot: string
+}
+
+const STATUS_STYLES: Readonly<Record<AgentStatus, StatusStyle>> = Object.freeze({
   available: {
-    label: 'Available',
-    badgeClass: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
-    dotClass: 'bg-green-500',
+    label: '사용 가능',
+    badge: 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    dot: 'bg-green-500',
   },
   busy: {
-    label: 'Busy',
-    badgeClass: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
-    dotClass: 'bg-yellow-500',
+    label: '사용 중',
+    badge: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+    dot: 'bg-amber-500',
   },
   offline: {
-    label: 'Offline',
-    badgeClass: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
-    dotClass: 'bg-red-500',
+    label: '오프라인',
+    badge: 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    dot: 'bg-red-500',
   },
+})
+
+// ─────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────
+
+function computeToolPercent(available: number, total: number): number {
+  if (total <= 0) return 0
+  return Math.round((available / total) * 100)
 }
 
 // ─────────────────────────────────────────────────────────────
 // Component
 // ─────────────────────────────────────────────────────────────
 
-export function AgentCard({ agent, onSelect, isSelected, className }: AgentCardProps) {
-  const config = statusConfig[agent.status]
+export const AgentCard = memo(function AgentCard({
+  agent,
+  onSelect,
+  isSelected = false,
+  className,
+}: AgentCardProps) {
+  const style = STATUS_STYLES[agent.status]
 
-  const toolRatio = useMemo(() => {
-    if (agent.totalTools === 0) return 0
-    return (agent.availableTools / agent.totalTools) * 100
-  }, [agent.availableTools, agent.totalTools])
+  const toolPercent = useMemo(
+    () => computeToolPercent(agent.availableTools, agent.totalTools),
+    [agent.availableTools, agent.totalTools],
+  )
+
+  const handleClick = useCallback(() => {
+    onSelect?.(agent)
+  }, [onSelect, agent])
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        onSelect?.(agent)
+      }
+    },
+    [onSelect, agent],
+  )
 
   return (
-    <div
-      onClick={() => onSelect?.(agent)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onSelect?.(agent)
-        }
-      }}
+    <article
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
       role="button"
       tabIndex={0}
-      aria-label={`Agent ${agent.name}, status: ${agent.status}, ${agent.availableTools} of ${agent.totalTools} tools available`}
+      aria-label={`에이전트 ${agent.name}, 상태: ${style.label}, 도구 ${agent.availableTools}/${agent.totalTools} 사용 가능`}
       className={cn(
-        'bg-white dark:bg-gray-800 rounded-lg border p-4 transition-all cursor-pointer hover:shadow-md',
+        'group relative rounded-xl border p-4 transition-all duration-200 cursor-pointer',
+        'bg-white dark:bg-gray-800',
+        'hover:shadow-md dark:hover:shadow-gray-900/40',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2',
         isSelected
-          ? 'border-primary-500 ring-2 ring-primary-500/20'
+          ? 'border-primary-500 ring-2 ring-primary-500/20 shadow-sm'
           : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600',
-        className
+        className,
       )}
     >
-      {/* Header: Name + Status Badge */}
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-9 h-9 bg-primary-100 dark:bg-primary-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
-            <Bot className="w-4.5 h-4.5 text-primary-600 dark:text-primary-400" />
-          </div>
-          <h3 className="font-medium text-gray-900 dark:text-white truncate">{agent.name}</h3>
-        </div>
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+          {agent.name}
+        </h3>
+
         <span
           className={cn(
-            'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0',
-            config.badgeClass
+            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium shrink-0',
+            style.badge,
           )}
-          aria-label={`Status: ${config.label}`}
+          aria-label={`상태: ${style.label}`}
         >
-          <span className={cn('w-1.5 h-1.5 rounded-full', config.dotClass)} />
-          {config.label}
+          <span
+            className={cn('h-1.5 w-1.5 rounded-full', style.dot)}
+            aria-hidden="true"
+          />
+          {style.label}
         </span>
       </div>
 
       {/* Endpoint */}
-      <div className="flex items-start gap-1.5 mb-3">
-        <Globe className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 flex-shrink-0 mt-0.5" />
-        <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-1" aria-label={`Endpoint: ${agent.endpoint}`}>
-          {agent.endpoint}
-        </p>
-      </div>
+      <p
+        className="text-xs text-gray-500 dark:text-gray-400 truncate mb-4"
+        title={agent.endpoint}
+        aria-label={`엔드포인트: ${agent.endpoint}`}
+      >
+        {agent.endpoint}
+      </p>
 
-      {/* Tools */}
-      <div className="pt-3 border-t border-gray-100 dark:border-gray-700">
-        <div className="flex items-center justify-between mb-1.5">
-          <div className="flex items-center gap-1.5">
-            <Wrench className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
-            <span className="text-xs text-gray-500 dark:text-gray-400">Tools</span>
-          </div>
-          <span
-            className="text-sm font-medium text-gray-900 dark:text-white"
-            aria-label={`${agent.availableTools} of ${agent.totalTools} tools available`}
-          >
-            {agent.availableTools}/{agent.totalTools}
+      {/* Tool availability */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            도구
+          </span>
+          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+            {agent.availableTools} / {agent.totalTools}
           </span>
         </div>
-        <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+
+        <div
+          className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700"
+          role="progressbar"
+          aria-valuenow={agent.availableTools}
+          aria-valuemin={0}
+          aria-valuemax={agent.totalTools}
+          aria-label="도구 가용률"
+        >
           <div
             className={cn(
-              'h-full rounded-full transition-all',
-              agent.status === 'offline' ? 'bg-gray-400' : 'bg-green-500'
+              'h-full rounded-full transition-[width] duration-300',
+              agent.status === 'offline'
+                ? 'bg-gray-400 dark:bg-gray-500'
+                : 'bg-primary-500 dark:bg-primary-400',
             )}
-            style={{ width: `${toolRatio}%` }}
-            role="progressbar"
-            aria-valuenow={agent.availableTools}
-            aria-valuemin={0}
-            aria-valuemax={agent.totalTools}
-            aria-label="Tool availability"
+            style={{ width: `${toolPercent}%` }}
           />
         </div>
       </div>
-    </div>
+    </article>
   )
-}
+})
+
+AgentCard.displayName = 'AgentCard'
