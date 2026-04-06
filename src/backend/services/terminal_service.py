@@ -270,14 +270,27 @@ class TmuxAdapter(TerminalAdapter):
                 "error": f"Failed to send command: {e.stderr}",
             }
 
-        # Open Terminal.app and attach to the tmux session so the user
+        # Open a GUI terminal and attach to the tmux session so the user
         # gets a visible window (tmux alone is detached/invisible).
-        attach_script = (
-            'tell application "Terminal"\n'
-            "    activate\n"
-            f'    do script "tmux attach -t {session_name}"\n'
-            "end tell"
-        )
+        # Prefer iTerm over Terminal.app when available.
+        attach_cmd = f"tmux attach -t {session_name}"
+        if Path("/Applications/iTerm.app").exists():
+            attach_script = (
+                'tell application "iTerm"\n'
+                "    activate\n"
+                "    create window with default profile\n"
+                "    tell current session of current window\n"
+                f'        write text "{attach_cmd}"\n'
+                "    end tell\n"
+                "end tell"
+            )
+        else:
+            attach_script = (
+                'tell application "Terminal"\n'
+                "    activate\n"
+                f'    do script "{attach_cmd}"\n'
+                "end tell"
+            )
         try:
             subprocess.run(
                 ["osascript", "-e", attach_script],
