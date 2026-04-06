@@ -1225,6 +1225,51 @@ class MergeRequestService:
                 mr.updated_at = now
                 logger.info(f"Auto-closed duplicate MR {mr_id[:8]} (same branch pair)")
 
+    # ── Close MRs by deleted source branch ──
+
+    async def close_mrs_by_source_branch_async(
+        self, branch_name: str, closed_by: str = "system"
+    ) -> int:
+        """Close all OPEN MRs whose source_branch matches a deleted branch."""
+        closed_count = 0
+        now = utcnow()
+        if self.use_database:
+            repo = await self._get_repo()
+            open_mrs = await repo.list_by_project(self.project_id, status="open")
+            for model in open_mrs:
+                if model.source_branch == branch_name:
+                    await repo.update(
+                        model.id,
+                        status="closed",
+                        closed_at=now,
+                        closed_by=closed_by,
+                    )
+                    closed_count += 1
+                    logger.info(
+                        f"Auto-closed MR {model.id[:8]} (source branch '{branch_name}' deleted)"
+                    )
+        else:
+            closed_count = self.close_mrs_by_source_branch(branch_name, closed_by)
+        return closed_count
+
+    def close_mrs_by_source_branch(
+        self, branch_name: str, closed_by: str = "system"
+    ) -> int:
+        """Close all OPEN MRs whose source_branch matches a deleted branch."""
+        closed_count = 0
+        now = utcnow()
+        for mr_id, mr in _merge_requests[self.project_id].items():
+            if mr.status == MergeRequestStatus.OPEN and mr.source_branch == branch_name:
+                mr.status = MergeRequestStatus.CLOSED
+                mr.closed_at = now
+                mr.closed_by = closed_by
+                mr.updated_at = now
+                closed_count += 1
+                logger.info(
+                    f"Auto-closed MR {mr_id[:8]} (source branch '{branch_name}' deleted)"
+                )
+        return closed_count
+
     # ── Refresh conflict status ──
 
     async def refresh_conflict_status_async(self, mr_id: str) -> MergeRequest | None:

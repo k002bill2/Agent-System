@@ -17,6 +17,7 @@ interface MergeRequestCardProps {
   mergeRequest: MergeRequest
   currentUserId: string
   userRole: string
+  availableBranches?: string[]
   onApprove: (mrId: string) => Promise<boolean>
   onMerge: (mrId: string) => Promise<boolean>
   onClose: (mrId: string) => Promise<boolean>
@@ -26,6 +27,7 @@ export function MergeRequestCard({
   mergeRequest: mr,
   currentUserId,
   userRole,
+  availableBranches,
   onApprove,
   onMerge,
   onClose,
@@ -35,6 +37,9 @@ export function MergeRequestCard({
 
   const canMerge = userRole === 'owner' || userRole === 'admin'
   const hasApproved = mr.approved_by.includes(currentUserId)
+  const sourceBranchMissing = availableBranches
+    ? !availableBranches.includes(mr.source_branch)
+    : false
 
   const handleApprove = async () => {
     setLoading(true)
@@ -156,7 +161,13 @@ export function MergeRequestCard({
 
         <div className="flex items-center gap-2">
           {getStatusBadge(mr.status)}
-          {getConflictBadge(mr.conflict_status)}
+          {sourceBranchMissing && mr.status === 'open' && (
+            <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+              <AlertTriangle className="w-3 h-3" />
+              브랜치 삭제됨
+            </span>
+          )}
+          {!sourceBranchMissing && getConflictBadge(mr.conflict_status)}
           {mr.auto_merge && mr.status === 'open' && (
             <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
               <Zap className="w-3 h-3" />
@@ -231,7 +242,7 @@ export function MergeRequestCard({
               </button>
             )}
 
-            {canMerge && mr.conflict_status !== 'has_conflicts' && (
+            {canMerge && mr.conflict_status !== 'has_conflicts' && !sourceBranchMissing && (
               <button
                 onClick={handleMerge}
                 disabled={loading}
@@ -252,6 +263,7 @@ interface MergeRequestListProps {
   mergeRequests: MergeRequest[]
   currentUserId: string
   userRole: string
+  availableBranches?: string[]
   onApprove: (mrId: string) => Promise<boolean>
   onMerge: (mrId: string) => Promise<boolean>
   onClose: (mrId: string) => Promise<boolean>
@@ -262,6 +274,7 @@ export function MergeRequestList({
   mergeRequests,
   currentUserId,
   userRole,
+  availableBranches,
   onApprove,
   onMerge,
   onClose,
@@ -320,6 +333,7 @@ export function MergeRequestList({
             mergeRequest={mr}
             currentUserId={currentUserId}
             userRole={userRole}
+            availableBranches={availableBranches}
             onApprove={onApprove}
             onMerge={onMerge}
             onClose={onClose}

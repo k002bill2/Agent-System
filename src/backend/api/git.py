@@ -767,7 +767,22 @@ async def delete_branch(
         success = git_service.delete_branch(
             name=branch_name, force=force, delete_remote=delete_remote, remove_worktree=remove_worktree
         )
-        return {"success": success, "message": f"Branch '{branch_name}' deleted"}
+
+        # Auto-close open MRs whose source branch was deleted
+        closed_mrs = 0
+        try:
+            db_session = await _get_db_session()
+            mr_service = get_mr_service_for_project(project_id, db_session=db_session)
+            closed_mrs = await mr_service.close_mrs_by_source_branch_async(
+                branch_name, closed_by="system"
+            )
+        except Exception:
+            logger.warning(f"Failed to auto-close MRs for deleted branch '{branch_name}'")
+
+        message = f"Branch '{branch_name}' deleted"
+        if closed_mrs > 0:
+            message += f" ({closed_mrs} open MR(s) auto-closed)"
+        return {"success": success, "message": message}
     except GitServiceError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

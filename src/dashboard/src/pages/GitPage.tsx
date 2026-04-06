@@ -425,6 +425,7 @@ export function GitPage() {
                 mergeRequests={mergeRequests}
                 currentUserId={currentUserId}
                 userRole={userRole}
+                availableBranches={branches.filter((b) => !b.is_remote).map((b) => b.name)}
                 onApprove={(mrId) => approveMergeRequest(selectedProjectId, mrId, currentUserId)}
                 onMerge={(mrId) => mergeMergeRequest(selectedProjectId, mrId, currentUserId, userRole)}
                 onClose={(mrId) => closeMergeRequest(selectedProjectId, mrId, currentUserId)}
