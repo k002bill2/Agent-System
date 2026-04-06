@@ -137,6 +137,31 @@ def _build_full_command(
     return claude_cmd
 
 
+def _write_exec_script(
+    project_path: str,
+    command: str,
+    branch_name: str | None = None,
+    image_paths: list[str] | None = None,
+) -> Path:
+    """Write a temp shell script for AppleScript-based terminals.
+
+    Complex commands with nested quotes break AppleScript string escaping.
+    Writing to a script file avoids all escaping issues.
+    """
+    full_command = _build_full_command(command, branch_name, image_paths)
+    script_dir = Path.home() / ".aos" / "scripts"
+    script_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+    script_file = script_dir / f"aos-exec-{timestamp}.sh"
+    script_file.write_text(
+        f"#!/bin/bash\ncd {shlex.quote(project_path)} && {full_command}\n",
+        encoding="utf-8",
+    )
+    script_file.chmod(0o755)
+    return script_file
+
+
 # ---------------------------------------------------------------------------
 # Concrete adapters
 # ---------------------------------------------------------------------------
@@ -267,11 +292,11 @@ class TerminalAppAdapter(TerminalAdapter):
         branch_name: str | None = None,
         image_paths: list[str] | None = None,
     ) -> dict:
-        full_command = _build_full_command(command, branch_name, image_paths)
+        exec_script = _write_exec_script(project_path, command, branch_name, image_paths)
         script = (
             'tell application "Terminal"\n'
             "    activate\n"
-            f'    do script "cd {shlex.quote(project_path)} && {full_command}"\n'
+            f'    do script "bash {exec_script}"\n'
             "end tell"
         )
         return await _run_osascript(script, TerminalType.TERMINAL_APP)
@@ -291,13 +316,13 @@ class ITermAdapter(TerminalAdapter):
         branch_name: str | None = None,
         image_paths: list[str] | None = None,
     ) -> dict:
-        full_command = _build_full_command(command, branch_name, image_paths)
+        exec_script = _write_exec_script(project_path, command, branch_name, image_paths)
         script = (
-            'tell application "iTerm2"\n'
+            'tell application "iTerm"\n'
             "    activate\n"
             "    create window with default profile\n"
             "    tell current session of current window\n"
-            f'        write text "cd {shlex.quote(project_path)} && {full_command}"\n'
+            f'        write text "bash {exec_script}"\n'
             "    end tell\n"
             "end tell"
         )
@@ -404,8 +429,7 @@ class GhosttyAdapter(TerminalAdapter):
         branch_name: str | None = None,
         image_paths: list[str] | None = None,
     ) -> dict:
-        full_command = _build_full_command(command, branch_name, image_paths)
-        escaped_cmd = f"cd {shlex.quote(project_path)} && {full_command}"
+        exec_script = _write_exec_script(project_path, command, branch_name, image_paths)
         script = (
             'tell application "Ghostty"\n'
             "    activate\n"
@@ -413,7 +437,7 @@ class GhosttyAdapter(TerminalAdapter):
             "delay 0.5\n"
             'tell application "System Events"\n'
             '    tell process "Ghostty"\n'
-            f'        keystroke "{escaped_cmd}"\n'
+            f'        keystroke "bash {exec_script}"\n'
             "        key code 36\n"
             "    end tell\n"
             "end tell"
