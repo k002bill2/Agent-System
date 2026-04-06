@@ -129,7 +129,7 @@ describe('ProcessMonitorWidget', () => {
       render(<ProcessMonitorWidget />)
     })
 
-    expect(screen.getByText('Cleanup 1 Stale Processes')).toBeInTheDocument()
+    expect(screen.getByText('Cleanup 1 Stale')).toBeInTheDocument()
   })
 
   it('does not show cleanup button when no stale processes', async () => {
@@ -145,7 +145,15 @@ describe('ProcessMonitorWidget', () => {
       render(<ProcessMonitorWidget />)
     })
 
-    expect(screen.queryByText(/Cleanup/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Cleanup.*Stale/)).not.toBeInTheDocument()
+  })
+
+  it('shows Kill All button when more than 1 process exists', async () => {
+    await act(async () => {
+      render(<ProcessMonitorWidget />)
+    })
+
+    expect(screen.getByText('Kill All (2)')).toBeInTheDocument()
   })
 
   it('calls cleanup endpoint when cleanup button is clicked', async () => {
@@ -153,10 +161,10 @@ describe('ProcessMonitorWidget', () => {
       render(<ProcessMonitorWidget />)
     })
 
-    expect(screen.getByText('Cleanup 1 Stale Processes')).toBeInTheDocument()
+    expect(screen.getByText('Cleanup 1 Stale')).toBeInTheDocument()
 
     await act(async () => {
-      fireEvent.click(screen.getByText('Cleanup 1 Stale Processes'))
+      fireEvent.click(screen.getByText('Cleanup 1 Stale'))
     })
 
     expect(global.fetch).toHaveBeenCalledWith(
