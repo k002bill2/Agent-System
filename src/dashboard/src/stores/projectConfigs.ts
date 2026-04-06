@@ -13,11 +13,15 @@ export interface ProjectInfo {
   has_mcp: boolean
   has_hooks: boolean
   has_commands: boolean
+  has_rules: boolean
+  has_memory: boolean
   skill_count: number
   agent_count: number
   mcp_server_count: number
   hook_count: number
   command_count: number
+  rule_count: number
+  memory_count: number
   last_modified: string
 }
 
@@ -87,6 +91,26 @@ export interface CommandConfig {
   modified_at: string | null
 }
 
+export interface MemoryConfig {
+  memory_id: string
+  project_id: string
+  name: string
+  description: string
+  file_path: string
+  memory_type: string
+  modified_at: string | null
+}
+
+export interface RuleConfig {
+  rule_id: string
+  project_id: string
+  name: string
+  description: string
+  file_path: string
+  is_global: boolean
+  modified_at: string | null
+}
+
 export interface ProjectConfigSummary {
   project: ProjectInfo
   skills: SkillConfig[]
@@ -95,6 +119,8 @@ export interface ProjectConfigSummary {
   user_mcp_servers: MCPServerConfig[]
   hooks: HookConfig[]
   commands: CommandConfig[]
+  rules: RuleConfig[]
+  memories: MemoryConfig[]
 }
 
 export interface GlobalConfigSummary {
@@ -102,6 +128,7 @@ export interface GlobalConfigSummary {
   skills: SkillConfig[]
   hooks: HookConfig[]
   mcp_servers: MCPServerConfig[]
+  rules: RuleConfig[]
 }
 
 export interface ConfigChangeEvent {
@@ -127,7 +154,7 @@ export interface DBProject {
   created_by: string | null
 }
 
-export type TabType = 'overview' | 'skills' | 'agents' | 'mcp' | 'hooks' | 'commands'
+export type TabType = 'overview' | 'skills' | 'agents' | 'mcp' | 'hooks' | 'commands' | 'rules' | 'memory'
 
 // MCP Modal Types
 export type MCPModalMode = 'create' | 'edit' | null
@@ -136,6 +163,8 @@ export type MCPModalMode = 'create' | 'edit' | null
 export type SkillModalMode = 'create' | 'edit' | null
 export type AgentModalMode = 'create' | 'edit' | null
 export type CommandModalMode = 'create' | 'edit' | null
+export type RuleModalMode = 'create' | 'edit' | null
+export type MemoryModalMode = 'create' | 'edit' | null
 
 interface ProjectConfigsState {
   // Projects
@@ -198,6 +227,21 @@ interface ProjectConfigsState {
   commandContent: string | null
   savingCommand: boolean
   deletingCommands: Set<string>
+
+  // Rule Modal state
+  ruleModalMode: RuleModalMode
+  editingRule: RuleConfig | null
+  ruleContent: string | null
+  savingRule: boolean
+  deletingRules: Set<string>
+
+  // Memory Modal state
+  memoryModalMode: MemoryModalMode
+  editingMemory: MemoryConfig | null
+  memoryContent: string | null
+  memoryIndex: string | null
+  savingMemory: boolean
+  deletingMemories: Set<string>
 
   // Actions
   fetchProjects: () => Promise<void>
@@ -264,12 +308,35 @@ interface ProjectConfigsState {
   updateCommand: (projectId: string, commandId: string, content: string) => Promise<boolean>
   deleteCommand: (projectId: string, commandId: string) => Promise<boolean>
 
+  // Rule CRUD actions
+  openRuleModal: (mode: 'create' | 'edit', rule?: RuleConfig) => void
+  closeRuleModal: () => void
+  fetchRuleContent: (projectId: string, ruleId: string) => Promise<void>
+  fetchGlobalRuleContent: (ruleId: string) => Promise<void>
+  createRule: (projectId: string, ruleId: string, content: string) => Promise<boolean>
+  updateRule: (projectId: string, ruleId: string, content: string) => Promise<boolean>
+  deleteRule: (projectId: string, ruleId: string) => Promise<boolean>
+  createGlobalRule: (ruleId: string, content: string) => Promise<boolean>
+  updateGlobalRule: (ruleId: string, content: string) => Promise<boolean>
+  deleteGlobalRule: (ruleId: string) => Promise<boolean>
+
+  // Memory CRUD actions
+  openMemoryModal: (mode: 'create' | 'edit', memory?: MemoryConfig) => void
+  closeMemoryModal: () => void
+  fetchMemoryContent: (projectId: string, memoryId: string) => Promise<void>
+  fetchMemoryIndex: (projectId: string) => Promise<void>
+  createMemory: (projectId: string, memoryId: string, content: string) => Promise<boolean>
+  updateMemory: (projectId: string, memoryId: string, content: string) => Promise<boolean>
+  deleteMemory: (projectId: string, memoryId: string) => Promise<boolean>
+  updateMemoryIndex: (projectId: string, content: string) => Promise<boolean>
+
   // Copy actions
   copySkill: (sourceProjectId: string, skillId: string, targetProjectId: string) => Promise<boolean>
   copyAgent: (sourceProjectId: string, agentId: string, targetProjectId: string) => Promise<boolean>
   copyMCPServer: (sourceProjectId: string, serverId: string, targetProjectId: string) => Promise<boolean>
   copyHook: (sourceProjectId: string, event: string, index: number, targetProjectId: string) => Promise<boolean>
   copyCommand: (sourceProjectId: string, commandId: string, targetProjectId: string) => Promise<boolean>
+  copyRule: (sourceProjectId: string, ruleId: string, targetProjectId: string) => Promise<boolean>
 
   // DB Project CRUD actions
   dbProjects: DBProject[]
@@ -341,6 +408,21 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
   commandContent: null,
   savingCommand: false,
   deletingCommands: new Set(),
+
+  // Rule Modal state
+  ruleModalMode: null,
+  editingRule: null,
+  ruleContent: null,
+  savingRule: false,
+  deletingRules: new Set(),
+
+  // Memory Modal state
+  memoryModalMode: null,
+  editingMemory: null,
+  memoryContent: null,
+  memoryIndex: null,
+  savingMemory: false,
+  deletingMemories: new Set(),
 
   // Actions
   fetchProjects: async () => {
@@ -1022,6 +1104,305 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
         newSet.delete(key)
         return { deletingCommands: newSet }
       })
+    }
+  },
+
+  // Rule CRUD actions
+  openRuleModal: (mode, rule) => {
+    set({
+      ruleModalMode: mode,
+      editingRule: rule || null,
+      ruleContent: null,
+    })
+    if (mode === 'edit' && rule) {
+      if (rule.is_global) {
+        get().fetchGlobalRuleContent(rule.rule_id)
+      } else {
+        get().fetchRuleContent(rule.project_id, rule.rule_id)
+      }
+    }
+  },
+
+  closeRuleModal: () => {
+    set({
+      ruleModalMode: null,
+      editingRule: null,
+      ruleContent: null,
+    })
+  },
+
+  fetchRuleContent: async (projectId, ruleId) => {
+    set({ isLoadingContent: true })
+
+    try {
+      const data = await apiClient.get<{ content: string }>(`/api/project-configs/${projectId}/rules/${ruleId}/content`)
+      set({ ruleContent: data.content, isLoadingContent: false })
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage, isLoadingContent: false })
+    }
+  },
+
+  fetchGlobalRuleContent: async (ruleId) => {
+    set({ isLoadingContent: true })
+
+    try {
+      const data = await apiClient.get<{ content: string }>(`/api/project-configs/global/rules/${ruleId}/content`)
+      set({ ruleContent: data.content, isLoadingContent: false })
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage, isLoadingContent: false })
+    }
+  },
+
+  createRule: async (projectId, ruleId, content) => {
+    set({ savingRule: true, error: null })
+
+    try {
+      await apiClient.post(`/api/project-configs/${projectId}/rules`, { rule_id: ruleId, content })
+
+      await get().fetchProjectSummary(projectId)
+      set({ ruleModalMode: null, editingRule: null })
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    } finally {
+      set({ savingRule: false })
+    }
+  },
+
+  updateRule: async (projectId, ruleId, content) => {
+    set({ savingRule: true, error: null })
+
+    try {
+      await apiClient.put(`/api/project-configs/${projectId}/rules/${ruleId}`, { content })
+
+      await get().fetchProjectSummary(projectId)
+      set({ ruleModalMode: null, editingRule: null })
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    } finally {
+      set({ savingRule: false })
+    }
+  },
+
+  deleteRule: async (projectId, ruleId) => {
+    const key = `${projectId}:${ruleId}`
+    set((state) => ({ deletingRules: new Set([...state.deletingRules, key]) }))
+
+    try {
+      await apiClient.delete(`/api/project-configs/${projectId}/rules/${ruleId}`)
+
+      await get().fetchProjectSummary(projectId)
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    } finally {
+      set((state) => {
+        const newSet = new Set(state.deletingRules)
+        newSet.delete(key)
+        return { deletingRules: newSet }
+      })
+    }
+  },
+
+  createGlobalRule: async (ruleId, content) => {
+    set({ savingRule: true, error: null })
+
+    try {
+      await apiClient.post('/api/project-configs/global/rules', { rule_id: ruleId, content })
+
+      await get().fetchGlobalConfigs()
+      set({ ruleModalMode: null, editingRule: null })
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    } finally {
+      set({ savingRule: false })
+    }
+  },
+
+  updateGlobalRule: async (ruleId, content) => {
+    set({ savingRule: true, error: null })
+
+    try {
+      await apiClient.put(`/api/project-configs/global/rules/${ruleId}`, { content })
+
+      await get().fetchGlobalConfigs()
+      set({ ruleModalMode: null, editingRule: null })
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    } finally {
+      set({ savingRule: false })
+    }
+  },
+
+  deleteGlobalRule: async (ruleId) => {
+    const key = `global:${ruleId}`
+    set((state) => ({ deletingRules: new Set([...state.deletingRules, key]) }))
+
+    try {
+      await apiClient.delete(`/api/project-configs/global/rules/${ruleId}`)
+
+      await get().fetchGlobalConfigs()
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    } finally {
+      set((state) => {
+        const newSet = new Set(state.deletingRules)
+        newSet.delete(key)
+        return { deletingRules: newSet }
+      })
+    }
+  },
+
+  // Memory CRUD actions
+  openMemoryModal: (mode, memory) => {
+    set({
+      memoryModalMode: mode,
+      editingMemory: memory || null,
+      memoryContent: null,
+    })
+    if (mode === 'edit' && memory) {
+      get().fetchMemoryContent(memory.project_id, memory.memory_id)
+    }
+  },
+
+  closeMemoryModal: () => {
+    set({
+      memoryModalMode: null,
+      editingMemory: null,
+      memoryContent: null,
+    })
+  },
+
+  fetchMemoryContent: async (projectId, memoryId) => {
+    set({ isLoadingContent: true })
+
+    try {
+      const data = await apiClient.get<{ content: string }>(`/api/project-configs/${projectId}/memories/${memoryId}/content`)
+      set({ memoryContent: data.content, isLoadingContent: false })
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage, isLoadingContent: false })
+    }
+  },
+
+  fetchMemoryIndex: async (projectId) => {
+    set({ isLoadingContent: true })
+
+    try {
+      const data = await apiClient.get<{ content: string }>(`/api/project-configs/${projectId}/memories/index`)
+      set({ memoryIndex: data.content, isLoadingContent: false })
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage, isLoadingContent: false })
+    }
+  },
+
+  createMemory: async (projectId, memoryId, content) => {
+    set({ savingMemory: true, error: null })
+
+    try {
+      await apiClient.post(`/api/project-configs/${projectId}/memories`, { memory_id: memoryId, content })
+
+      await get().fetchProjectSummary(projectId)
+      set({ memoryModalMode: null, editingMemory: null })
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    } finally {
+      set({ savingMemory: false })
+    }
+  },
+
+  updateMemory: async (projectId, memoryId, content) => {
+    set({ savingMemory: true, error: null })
+
+    try {
+      await apiClient.put(`/api/project-configs/${projectId}/memories/${memoryId}`, { content })
+
+      await get().fetchProjectSummary(projectId)
+      set({ memoryModalMode: null, editingMemory: null })
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    } finally {
+      set({ savingMemory: false })
+    }
+  },
+
+  deleteMemory: async (projectId, memoryId) => {
+    const key = `${projectId}:${memoryId}`
+    set((state) => ({ deletingMemories: new Set([...state.deletingMemories, key]) }))
+
+    try {
+      await apiClient.delete(`/api/project-configs/${projectId}/memories/${memoryId}`)
+
+      await get().fetchProjectSummary(projectId)
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    } finally {
+      set((state) => {
+        const newSet = new Set(state.deletingMemories)
+        newSet.delete(key)
+        return { deletingMemories: newSet }
+      })
+    }
+  },
+
+  updateMemoryIndex: async (projectId, content) => {
+    set({ savingMemory: true, error: null })
+
+    try {
+      await apiClient.put(`/api/project-configs/${projectId}/memories/index`, { content })
+
+      set({ memoryIndex: content })
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    } finally {
+      set({ savingMemory: false })
+    }
+  },
+
+  copyRule: async (sourceProjectId, ruleId, targetProjectId) => {
+    set({ error: null })
+
+    try {
+      await apiClient.post(`/api/project-configs/${sourceProjectId}/rules/${ruleId}/copy`, { rule_id: ruleId, target_project_id: targetProjectId })
+
+      await get().fetchProjects()
+      await get().fetchProjectSummary(targetProjectId)
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
     }
   },
 

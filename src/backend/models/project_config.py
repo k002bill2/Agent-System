@@ -44,11 +44,15 @@ class ProjectInfo(BaseModel):
     has_mcp: bool = Field(default=False, description="Whether project has MCP config")
     has_hooks: bool = Field(default=False, description="Whether project has hooks")
     has_commands: bool = Field(default=False, description="Whether project has commands")
+    has_rules: bool = Field(default=False, description="Whether project has rules")
+    has_memory: bool = Field(default=False, description="Whether project has memory")
     skill_count: int = Field(default=0, description="Number of skills")
     agent_count: int = Field(default=0, description="Number of agents")
     mcp_server_count: int = Field(default=0, description="Number of MCP servers")
     hook_count: int = Field(default=0, description="Number of hooks")
     command_count: int = Field(default=0, description="Number of commands")
+    rule_count: int = Field(default=0, description="Number of rules")
+    memory_count: int = Field(default=0, description="Number of memory entries")
     last_modified: datetime = Field(default_factory=utcnow)
 
 
@@ -147,6 +151,30 @@ class CommandConfig(BaseModel):
     modified_at: datetime | None = Field(default=None)
 
 
+class MemoryConfig(BaseModel):
+    """Parsed memory configuration from .md file."""
+
+    memory_id: str = Field(..., description="Memory identifier (filename without .md)")
+    project_id: str = Field(..., description="Parent project ID")
+    name: str = Field(..., description="Memory name from frontmatter")
+    description: str = Field(default="", description="Memory description from frontmatter")
+    file_path: str = Field(..., description="Path to memory .md file")
+    memory_type: str = Field(default="user", description="Memory type: user/feedback/project/reference")
+    modified_at: datetime | None = Field(default=None)
+
+
+class RuleConfig(BaseModel):
+    """Parsed rule configuration from .md file."""
+
+    rule_id: str = Field(..., description="Rule identifier (filename without .md)")
+    project_id: str = Field(..., description="Parent project ID")
+    name: str = Field(..., description="Rule name from frontmatter or derived from filename")
+    description: str = Field(default="", description="Rule description or content preview")
+    file_path: str = Field(..., description="Path to rule .md file")
+    is_global: bool = Field(default=False, description="Whether from ~/.claude/rules/")
+    modified_at: datetime | None = Field(default=None)
+
+
 class ProjectConfigSummary(BaseModel):
     """Summary of project configuration."""
 
@@ -159,6 +187,8 @@ class ProjectConfigSummary(BaseModel):
     )
     hooks: list[HookConfig] = Field(default_factory=list)
     commands: list[CommandConfig] = Field(default_factory=list)
+    rules: list[RuleConfig] = Field(default_factory=list)
+    memories: list[MemoryConfig] = Field(default_factory=list)
 
 
 class GlobalConfigSummary(BaseModel):
@@ -168,6 +198,7 @@ class GlobalConfigSummary(BaseModel):
     skills: list[SkillConfig] = Field(default_factory=list)
     hooks: list[HookConfig] = Field(default_factory=list)
     mcp_servers: list[MCPServerConfig] = Field(default_factory=list)
+    rules: list[RuleConfig] = Field(default_factory=list)
 
 
 class ConfigChangeEvent(BaseModel):
@@ -175,7 +206,7 @@ class ConfigChangeEvent(BaseModel):
 
     event_type: ConfigChangeType
     project_id: str
-    config_type: str = Field(..., description="skills|agents|mcp|hooks")
+    config_type: str = Field(..., description="skills|agents|mcp|hooks|rules|memory")
     item_id: str | None = Field(default=None, description="Changed item ID")
     timestamp: datetime = Field(default_factory=utcnow)
     details: dict[str, Any] = Field(default_factory=dict)
@@ -223,6 +254,20 @@ class CommandContentResponse(BaseModel):
 
     command: CommandConfig
     content: str = Field(..., description="Full command .md content")
+
+
+class MemoryContentResponse(BaseModel):
+    """Response for memory content."""
+
+    memory: MemoryConfig
+    content: str = Field(..., description="Full memory .md content")
+
+
+class RuleContentResponse(BaseModel):
+    """Response for rule content."""
+
+    rule: RuleConfig
+    content: str = Field(..., description="Full rule .md content")
 
 
 # ========================================
@@ -291,6 +336,33 @@ class CommandCreateRequest(BaseModel):
     content: str = Field(..., description="Command .md content")
 
 
+class MemoryCreateRequest(BaseModel):
+    """Request to create a new memory entry."""
+
+    memory_id: str = Field(..., description="Memory identifier (filename without .md)")
+    content: str = Field(..., description="Memory .md content with frontmatter")
+
+
+class MemoryUpdateRequest(BaseModel):
+    """Request to update memory content."""
+
+    content: str = Field(..., description="Full memory .md content")
+
+
+class RuleCreateRequest(BaseModel):
+    """Request to create a new rule."""
+
+    rule_id: str = Field(..., description="Rule identifier (filename without .md)")
+    content: str = Field(..., description="Rule .md content")
+    is_global: bool = Field(default=False, description="Create in ~/.claude/rules/ instead of project")
+
+
+class RuleUpdateRequest(BaseModel):
+    """Request to update rule content."""
+
+    content: str = Field(..., description="Full rule .md content")
+
+
 class HookEntryRequest(BaseModel):
     """Request to add a hook entry."""
 
@@ -342,4 +414,11 @@ class CopyCommandRequest(BaseModel):
     """Request to copy command to another project."""
 
     command_id: str = Field(..., description="Command identifier to copy")
+    target_project_id: str = Field(..., description="Target project ID")
+
+
+class CopyRuleRequest(BaseModel):
+    """Request to copy rule to another project."""
+
+    rule_id: str = Field(..., description="Rule identifier to copy")
     target_project_id: str = Field(..., description="Target project ID")

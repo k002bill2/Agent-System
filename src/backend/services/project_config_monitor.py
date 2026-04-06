@@ -8,6 +8,8 @@ Domain managers:
 - SkillManager: skill CRUD and parsing
 - AgentManager: agent CRUD and parsing
 - MCPConfigManager: MCP server CRUD
+- MemoryManager: memory CRUD and parsing
+- RulesManager: rules CRUD and parsing
 """
 
 import asyncio
@@ -26,14 +28,18 @@ from models.project_config import (
     GlobalConfigSummary,
     HookConfig,
     MCPServerConfig,
+    MemoryConfig,
     ProjectConfigSummary,
     ProjectInfo,
+    RuleConfig,
     SkillConfig,
 )
 from services.agent_manager import AgentManager
 from services.frontmatter_parser import FrontmatterParser
 from services.mcp_config_manager import MCPConfigManager
+from services.memory_manager import MemoryManager
 from services.project_discovery import ProjectDiscovery
+from services.rules_manager import RulesManager
 from services.skill_manager import SkillManager
 from utils.time import utcnow
 
@@ -65,6 +71,8 @@ class ProjectConfigMonitor:
         self._skill_manager = SkillManager(self._discovery)
         self._agent_manager = AgentManager(self._discovery)
         self._mcp_manager = MCPConfigManager(self._discovery)
+        self._memory_manager = MemoryManager(self._discovery)
+        self._rules_manager = RulesManager(self._discovery)
 
         self._cache: dict[str, ProjectConfigSummary] = {}
         self._file_mtimes: dict[str, float] = {}
@@ -210,6 +218,68 @@ class ProjectConfigMonitor:
         self, source_project_id: str, server_id: str, target_project_id: str
     ) -> bool:
         return self._mcp_manager.copy_mcp_server(source_project_id, server_id, target_project_id)
+
+    # ========================================
+    # Delegated: MemoryManager
+    # ========================================
+
+    def get_project_memories(self, project_id: str) -> list[MemoryConfig]:
+        return self._memory_manager.get_project_memories(project_id)
+
+    def get_memory_content(
+        self, project_id: str, memory_id: str
+    ) -> tuple[MemoryConfig | None, str]:
+        return self._memory_manager.get_memory_content(project_id, memory_id)
+
+    def get_memory_index(self, project_id: str) -> str:
+        return self._memory_manager.get_memory_index(project_id)
+
+    def update_memory_index(self, project_id: str, content: str) -> bool:
+        return self._memory_manager.update_memory_index(project_id, content)
+
+    def create_memory(
+        self, project_id: str, memory_id: str, content: str
+    ) -> MemoryConfig | None:
+        return self._memory_manager.create_memory(project_id, memory_id, content)
+
+    def update_memory_content(self, project_id: str, memory_id: str, content: str) -> bool:
+        return self._memory_manager.update_memory_content(project_id, memory_id, content)
+
+    def delete_memory(self, project_id: str, memory_id: str) -> bool:
+        return self._memory_manager.delete_memory(project_id, memory_id)
+
+    # ========================================
+    # Delegated: RulesManager
+    # ========================================
+
+    def get_project_rules(self, project_id: str) -> list[RuleConfig]:
+        return self._rules_manager.get_project_rules(project_id)
+
+    def get_global_rules(self) -> list[RuleConfig]:
+        return self._rules_manager.get_global_rules()
+
+    def get_rule_content(
+        self, project_id: str, rule_id: str, is_global: bool = False
+    ) -> tuple[RuleConfig | None, str]:
+        return self._rules_manager.get_rule_content(project_id, rule_id, is_global)
+
+    def create_rule(
+        self, project_id: str, rule_id: str, content: str, is_global: bool = False
+    ) -> RuleConfig | None:
+        return self._rules_manager.create_rule(project_id, rule_id, content, is_global)
+
+    def update_rule_content(
+        self, project_id: str, rule_id: str, content: str, is_global: bool = False
+    ) -> bool:
+        return self._rules_manager.update_rule_content(project_id, rule_id, content, is_global)
+
+    def delete_rule(self, project_id: str, rule_id: str, is_global: bool = False) -> bool:
+        return self._rules_manager.delete_rule(project_id, rule_id, is_global)
+
+    def copy_rule(
+        self, source_project_id: str, rule_id: str, target_project_id: str
+    ) -> bool:
+        return self._rules_manager.copy_rule(source_project_id, rule_id, target_project_id)
 
     # ========================================
     # Hooks CRUD (kept in monitor)
@@ -867,8 +937,12 @@ class ProjectConfigMonitor:
         # --- Global MCP Servers (from ~/.claude.json) ---
         mcp_servers = self._mcp_manager.get_user_mcp_config(global_project_id)
 
+        # --- Global Rules ---
+        rules = self._rules_manager.get_global_rules()
+
         return GlobalConfigSummary(
-            agents=agents, skills=skills, hooks=hooks, mcp_servers=mcp_servers
+            agents=agents, skills=skills, hooks=hooks, mcp_servers=mcp_servers,
+            rules=rules,
         )
 
     # ========================================
@@ -900,6 +974,8 @@ class ProjectConfigMonitor:
             user_mcp_servers=self.get_user_mcp_config(project_id),
             hooks=self.get_project_hooks(project_id),
             commands=self.get_project_commands(project_id),
+            rules=self.get_project_rules(project_id),
+            memories=self.get_project_memories(project_id),
         )
 
     # ========================================

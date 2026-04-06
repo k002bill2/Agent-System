@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FolderCode, Sparkles, Bot, Server, Webhook, Terminal, Clock, Trash2, Loader2 } from 'lucide-react'
+import { FolderCode, Sparkles, Bot, Server, Webhook, Terminal, ScrollText, Brain, Clock, Trash2, Loader2 } from 'lucide-react'
 import { useProjectConfigsStore } from '../../stores/projectConfigs'
 
 export function OverviewTab() {
@@ -33,7 +33,7 @@ export function OverviewTab() {
     )
   }
 
-  const { project, skills, agents, mcp_servers, user_mcp_servers, hooks, commands } = selectedProject
+  const { project, skills, agents, mcp_servers, user_mcp_servers, hooks, commands, rules, memories } = selectedProject
   const totalMCPCount = mcp_servers.length + (user_mcp_servers?.length || 0)
   const enabledMCPCount = mcp_servers.filter((s) => !s.disabled).length +
     (user_mcp_servers?.filter((s) => !s.disabled).length || 0)
@@ -75,7 +75,7 @@ export function OverviewTab() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
         <StatCard
           icon={Sparkles}
           label="Skills"
@@ -96,6 +96,20 @@ export function OverviewTab() {
           count={commands.length}
           color="text-teal-600 dark:text-teal-400"
           bgColor="bg-teal-100 dark:bg-teal-900/30"
+        />
+        <StatCard
+          icon={ScrollText}
+          label="Rules"
+          count={rules?.length ?? 0}
+          color="text-amber-600 dark:text-amber-400"
+          bgColor="bg-amber-100 dark:bg-amber-900/30"
+        />
+        <StatCard
+          icon={Brain}
+          label="Memory"
+          count={memories?.length ?? 0}
+          color="text-rose-600 dark:text-rose-400"
+          bgColor="bg-rose-100 dark:bg-rose-900/30"
         />
         <StatCard
           icon={Server}
@@ -220,6 +234,72 @@ export function OverviewTab() {
             )}
             {commands.length === 0 && (
               <p className="text-sm text-gray-500">No commands found</p>
+            )}
+          </div>
+        </div>
+
+        {/* Rules List */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+            <ScrollText className="w-4 h-4 text-amber-500" />
+            Rules
+          </h3>
+          <div className="space-y-2">
+            {(expandedSections.rules ? (rules ?? []) : (rules ?? []).slice(0, 5)).map((rule) => (
+              <div
+                key={rule.rule_id}
+                className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2"
+              >
+                <span className="font-medium">{rule.name}</span>
+                {rule.is_global && (
+                  <span className="text-xs px-1.5 py-0.5 bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 rounded">
+                    global
+                  </span>
+                )}
+              </div>
+            ))}
+            {(rules?.length ?? 0) > 5 && (
+              <button
+                onClick={() => toggleSection('rules')}
+                className="text-xs text-primary-500 hover:text-primary-400 cursor-pointer transition-colors"
+              >
+                {expandedSections.rules ? 'Show less' : `+${(rules?.length ?? 0) - 5} more`}
+              </button>
+            )}
+            {(rules?.length ?? 0) === 0 && (
+              <p className="text-sm text-gray-500">No rules found</p>
+            )}
+          </div>
+        </div>
+
+        {/* Memory List */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+            <Brain className="w-4 h-4 text-rose-500" />
+            Memory
+          </h3>
+          <div className="space-y-2">
+            {(expandedSections.memory ? (memories ?? []) : (memories ?? []).slice(0, 5)).map((memory) => (
+              <div
+                key={memory.memory_id}
+                className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2"
+              >
+                <span className="font-medium">{memory.name}</span>
+                <span className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded">
+                  {memory.memory_type}
+                </span>
+              </div>
+            ))}
+            {(memories?.length ?? 0) > 5 && (
+              <button
+                onClick={() => toggleSection('memory')}
+                className="text-xs text-primary-500 hover:text-primary-400 cursor-pointer transition-colors"
+              >
+                {expandedSections.memory ? 'Show less' : `+${(memories?.length ?? 0) - 5} more`}
+              </button>
+            )}
+            {(memories?.length ?? 0) === 0 && (
+              <p className="text-sm text-gray-500">No memory entries found</p>
             )}
           </div>
         </div>

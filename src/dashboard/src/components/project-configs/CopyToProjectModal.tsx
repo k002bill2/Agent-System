@@ -3,7 +3,7 @@ import { X, FolderOpen, Copy, Check, AlertCircle } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { useProjectConfigsStore } from '../../stores/projectConfigs'
 
-export type CopyItemType = 'skill' | 'agent' | 'mcp' | 'hook' | 'command'
+export type CopyItemType = 'skill' | 'agent' | 'mcp' | 'hook' | 'command' | 'rule'
 
 interface CopyItem {
   type: CopyItemType
@@ -70,6 +70,7 @@ export function CopyToProjectModal({
     mcp: 'MCP Server',
     hook: 'Hook',
     command: 'Command',
+    rule: 'Rule',
   }
 
   const typeColors: Record<CopyItemType, string> = {
@@ -78,6 +79,7 @@ export function CopyToProjectModal({
     mcp: 'text-green-600 dark:text-green-400',
     hook: 'text-orange-600 dark:text-orange-400',
     command: 'text-teal-600 dark:text-teal-400',
+    rule: 'text-amber-600 dark:text-amber-400',
   }
 
   return (
