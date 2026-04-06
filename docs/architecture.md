@@ -72,9 +72,9 @@ src/backend/
 │   ├── nodes.py             # 6가지 노드 구현
 │   ├── parallel_executor.py # 병렬 실행
 │   └── tools.py             # MCP 도구 실행자
-├── services/                    # 67개 서비스/매니저 모듈
-│   ├── adapters/               # 어댑터 패턴 구현
-│   ├── cache/                  # 캐싱 레이어
+├── services/                    # 69개 서비스/매니저 모듈
+│   ├── adapters/               # 어댑터 패턴 구현 (비어있음)
+│   ├── cache/                  # 캐싱 레이어 (비어있음)
 │   ├── agent_manager.py           # 에이전트 인스턴스 관리
 │   ├── agent_registry.py          # 에이전트 등록소
 │   ├── alerting_service.py        # 알림/경고 서비스
@@ -135,6 +135,8 @@ src/backend/
 │   ├── workflow_service.py        # 워크플로우 CRUD 서비스
 │   ├── workflow_yaml_parser.py    # 워크플로우 YAML 파싱
 │   ├── automation_loop_service.py # 주기적 조건 모니터링 + 자동 액션 실행 루프
+│   ├── context_compressor.py      # 컨텍스트 압축 서비스
+│   ├── terminal_service.py        # 터미널 세션 관리 서비스
 │   └── pipeline/                  # 모듈형 데이터 파이프라인
 │       ├── pipeline_service.py    # 파이프라인 오케스트레이터
 │       ├── models.py              # PipelineConfig, PipelineResult 등 모델
@@ -144,9 +146,13 @@ src/backend/
 │           ├── transform_stage.py # 데이터 변환 단계
 │           ├── analyze_stage.py   # 데이터 분석 단계
 │           └── output_stage.py    # 결과 출력 단계
-├── api/                     # FastAPI 라우터 (44개 모듈)
-│   └── v1/                  # v1 API (agent_monitor, agent_registry, auth_middleware 등 6개)
+├── api/                     # FastAPI 라우터 (45개 모듈)
+│   └── v1/                  # v1 API (agent_monitor, agent_registry, auth_middleware 등)
+│       ├── agents.py        # 에이전트 CRUD API
+│       ├── rate_limiter.py  # API 속도 제한
+│       └── stations.py      # 스테이션 관리 API
 ├── auth/                    # 인증 프로바이더
+│   ├── token_service.py     # JWT 토큰 발급/검증 서비스
 │   └── providers/
 │       ├── base.py          # AuthProvider ABC, UserInfo
 │       ├── google.py        # Google OAuth
@@ -154,6 +160,10 @@ src/backend/
 │       ├── oidc.py          # OpenID Connect (httpx 기반)
 │       └── saml.py          # SAML 2.0 (stdlib XML 기반)
 ├── db/                      # SQLAlchemy ORM
+│   ├── database.py          # 데이터베이스 연결/세션 관리
+│   ├── repository.py        # 리포지토리 패턴 구현
+│   ├── types.py             # DB 커스텀 타입 정의
+│   ├── migrations/          # DB 마이그레이션 스크립트
 │   └── models/
 │       ├── session.py       # SessionModel, TaskModel, MessageModel, ApprovalModel
 │       ├── auth.py          # UserModel, RefreshTokenModel
@@ -168,11 +178,14 @@ src/backend/
 │       ├── project.py       # ProjectModel
 │       ├── activity.py      # SessionActivityModel
 │       └── base.py          # Base, TimestampMixin
-├── models/                  # Pydantic 데이터 모델 (33개)
+├── models/                  # Pydantic 데이터 모델 (32개)
 ├── middleware/
 │   └── rate_limit.py        # RateLimitMiddleware (per-user/IP, tier-based)
 ├── utils/
 │   └── time.py              # utcnow() - timezone-aware UTC (datetime.utcnow() 대체)
+├── data/                    # 데이터 파일 (시드, 설정 등)
+├── scripts/                 # 유틸리티 스크립트
+├── config.py                # 앱 설정 (환경변수 로드)
 └── tools/                   # MCP 도구 구현
     ├── bash_tools.py
     ├── code_tools.py

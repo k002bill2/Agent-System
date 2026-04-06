@@ -30,7 +30,7 @@ npm run dev
 ```typescript
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
-import { useOrchestration } from '@/stores/orchestration'
+import { useOrchestrationStore } from '@/stores/orchestration'
 ```
 
 ## Styling Pattern
@@ -204,9 +204,9 @@ import { cn } from '@/lib/utils';
 |----------|------|
 | `GitSetup` | Git 초기 설정 안내 |
 | `WorkingDirectory` | 작업 디렉토리 (staged/unstaged/untracked) |
-| `BranchList` | 브랜치 목록 (local/remote 필터, ahead/behind, 원격 브랜치 삭제) |
+| `BranchList` | 브랜치 목록 (local/remote 필터, ahead/behind, `worktrees` prop으로 worktree-aware 삭제, force/remote/worktree 삭제 옵션) |
 | `CommitHistory` | 커밋 타임라인 (확장 가능한 상세) |
-| `MergeRequestCard` | 내부 MR 카드 (승인/머지/닫기) |
+| `MergeRequestCard` | 내부 MR 카드 (승인/머지/닫기, `availableBranches` prop으로 "브랜치 삭제됨" warning badge 표시) |
 | `MergePreviewPanel` | 머지 미리보기 모달 (충돌 정보) |
 | `PullRequestList` | GitHub PR 목록 + 리뷰 패널 |
 | `ConflictResolverPanel` | 머지 충돌 해결 UI (3-way diff, 전략 선택) |
@@ -347,33 +347,33 @@ import { cn } from '@/lib/utils';
 
 | Store | 파일 | 설명 |
 |-------|------|------|
-| `useOrchestration` | `orchestration.ts` | 세션/태스크 관리, WebSocket 연결 |
-| `useProjects` | `projects.ts` | 프로젝트 목록 및 상태 |
-| `useProjectConfigs` | `projectConfigs.ts` | 프로젝트 설정 (Skills, Agents, MCP, Hooks) + DB 프로젝트 CRUD |
-| `useAgents` | `agents.ts` | 에이전트 레지스트리 |
-| `useAgentMonitor` | `agentMonitor.ts` | 에이전트 모니터링 메트릭 |
+| `useOrchestrationStore` | `orchestration.ts` | 세션/태스크 관리, WebSocket 연결 |
+| `useProjectsStore` | `projects.ts` | 프로젝트 목록 및 상태 |
+| `useProjectConfigsStore` | `projectConfigs.ts` | 프로젝트 설정 (Skills, Agents, MCP, Hooks) + DB 프로젝트 CRUD |
+| `useAgentsStore` | `agents.ts` | 에이전트 레지스트리 |
+| `useAgentMonitorStore` | `agentMonitor.ts` | 에이전트 모니터링 메트릭 |
 | `useTaskStore` | `taskStore.ts` | 태스크 CRUD 관리 |
-| `useFeedback` | `feedback.ts` | RLHF 피드백 |
-| `useClaudeSessions` | `claudeSessions.ts` | Claude 세션 모니터링 |
-| `useClaudeCodeActivity` | `claudeCodeActivity.ts` | Claude Code 실시간 활동 |
-| `useClaudeUsage` | `claudeUsage.ts` | Context Window 사용량 |
-| `useMCP` | `mcp.ts` | MCP 서버 관리 |
-| `useAuth` | `auth.ts` | 인증 상태 (OAuth/Email, 토큰 관리) |
-| `useDiff` | `diff.ts` | 파일 변경 비교 |
-| `usePermissions` | `permissions.ts` | 세션 권한 상태 |
-| `useNavigation` | `navigation.ts` | 네비게이션 상태 |
+| `useFeedbackStore` | `feedback.ts` | RLHF 피드백 |
+| `useClaudeSessionsStore` | `claudeSessions.ts` | Claude 세션 모니터링 |
+| `useClaudeCodeActivityStore` | `claudeCodeActivity.ts` | Claude Code 실시간 활동 |
+| `useClaudeUsageStore` | `claudeUsage.ts` | Context Window 사용량 |
+| `useMCPStore` | `mcp.ts` | MCP 서버 관리 |
+| `useAuthStore` | `auth.ts` | 인증 상태 (OAuth/Email, 토큰 관리) |
+| `useDiffStore` | `diff.ts` | 파일 변경 비교 |
+| `usePermissionsStore` | `permissions.ts` | 세션 권한 상태 |
+| `useNavigationStore` | `navigation.ts` | 네비게이션 상태 |
 | `useUIStore` | `uiStore.ts` | UI 상태 (테마, 모달, 토스트) |
-| `useMonitoring` | `monitoring.ts` | 프로젝트 모니터링 |
-| `useSettings` | `settings.ts` | 설정 상태 |
-| `useGit` | `git.ts` | Git 브랜치/머지 관리 |
-| `useOrganizations` | `organizations.ts` | 조직/멤버 관리 |
-| `useAudit` | `audit.ts` | 감사 로그 |
+| `useMonitoringStore` | `monitoring.ts` | 프로젝트 모니터링 |
+| `useSettingsStore` | `settings.ts` | 설정 상태 |
+| `useGitStore` | `git.ts` | Git 브랜치/머지 관리, Worktree 관리 (`GitWorktree`, `worktrees`, `selectedWorktreePath`, `fetchWorktrees`, `setSelectedWorktree`), Staging 강화 (`fetchFileDiff`, `fetchFileHunks`, `stageHunks`, `fetchStagedDiff`), Draft Commits (`DraftCommit`, `generateDraftCommits`, `clearDraftCommits`), Remote 관리 (`fetchRemotes`, `addRemote`, `removeRemote`, `updateRemote`), Commit 상세 (`fetchCommitFiles`, `fetchCommitDiff`) |
+| `useOrganizationsStore` | `organizations.ts` | 조직/멤버 관리 |
+| `useAuditStore` | `audit.ts` | 감사 로그 |
 | `useMenuVisibilityStore` | `menuVisibility.ts` | 메뉴 가시성 및 순서 |
-| `useProjectAccess` | `projectAccess.ts` | 프로젝트별 멤버/역할 관리 |
+| `useProjectAccessStore` | `projectAccess.ts` | 프로젝트별 멤버/역할 관리 |
 | `useWorkflowStore` | `workflows.ts` | 워크플로우 CRUD, 실행, 시크릿, 스케줄 |
-| `useExternalUsage` | `externalUsage.ts` | 외부 LLM 프로바이더 사용량 추적 |
-| `useLLMCredentials` | `llmCredentials.ts` | LLM 프로바이더 자격증명/API 키 관리 |
-| `useInfraStatus` | `infraStatus.ts` | 인프라 서비스 상태 관리 (Docker, 포트 체크) |
+| `useExternalUsageStore` | `externalUsage.ts` | 외부 LLM 프로바이더 사용량 추적 |
+| `useLLMCredentialStore` | `llmCredentials.ts` | LLM 프로바이더 자격증명/API 키 관리 |
+| `useInfraStatusStore` | `infraStatus.ts` | 인프라 서비스 상태 관리 (Docker, 포트 체크) |
 
 ### Store Pattern
 
@@ -540,7 +540,7 @@ src/dashboard/
 │   │   └── analytics/          # Analytics
 │   │       └── ProjectMultiSelect.tsx
 │   ├── services/               # API 서비스 레이어
-│   ├── stores/                 # Zustand 스토어 (28개 + index.ts)
+│   ├── stores/                 # Zustand 스토어 (27개 + index.ts)
 │   │   ├── orchestration/      # 리팩토링: index.ts, types.ts, wsConnection.ts, wsHandler.ts
 │   │   ├── orchestration.ts    # 재export
 │   │   ├── projects.ts
@@ -569,6 +569,8 @@ src/dashboard/
 │   │   ├── llmCredentials.ts
 │   │   ├── infraStatus.ts
 │   │   └── workflows.ts
+│   ├── config/                 # 설정 (API 엔드포인트 등)
+│   │   └── api.ts
 │   ├── hooks/                  # 커스텀 훅
 │   │   ├── useErrorHandler.ts
 │   │   └── useRealtimeMonitor.ts
@@ -628,14 +630,14 @@ src/dashboard/
 
 ### 1. 실시간 WebSocket 통신
 
-`useOrchestration` 스토어에서 WebSocket 연결을 관리합니다.
+`useOrchestrationStore` 스토어에서 WebSocket 연결을 관리합니다.
 
 ```typescript
 // 연결 상태 확인
-const { isConnected } = useOrchestration()
+const { isConnected } = useOrchestrationStore()
 
 // 태스크 생성
-const { submitTask } = useOrchestration()
+const { submitTask } = useOrchestrationStore()
 await submitTask({ title: 'My Task', description: '...' })
 
 // 상태 업데이트 구독
@@ -646,10 +648,10 @@ useEffect(() => {
 
 ### 2. 인증 및 OAuth
 
-`useAuth` 스토어에서 인증 상태를 관리합니다.
+`useAuthStore` 스토어에서 인증 상태를 관리합니다.
 
 ```typescript
-const { user, isAuthenticated, login, logout } = useAuth()
+const { user, isAuthenticated, login, logout } = useAuthStore()
 
 // OAuth 로그인
 await login('google')
@@ -661,44 +663,44 @@ await loginWithEmail(email, password)
 
 ### 3. 프로젝트 설정 관리
 
-`useProjectConfigs` 스토어에서 Skills, Agents, MCP, Hooks를 관리합니다.
+`useProjectConfigsStore` 스토어에서 Skills, Agents, MCP, Hooks를 관리합니다.
 
 ```typescript
 const {
   skills, agents, mcpServers, hooks,
   createSkill, updateAgent, deleteMCPServer, createHook
-} = useProjectConfigs()
+} = useProjectConfigsStore()
 ```
 
 ### 4. Git 통합
 
-`useGit` 스토어에서 Git 작업을 관리합니다.
+`useGitStore` 스토어에서 Git 작업을 관리합니다.
 
 ```typescript
 const {
   branches, commits, mergeRequests,
-  createBranch, stageFiles, commit, createMergeRequest
-} = useGit()
+  createBranch, stageFiles, commitChanges, createMergeRequest
+} = useGitStore()
 ```
 
 ### 5. 조직 관리
 
-`useOrganizations` 스토어에서 멀티테넌트 조직을 관리합니다.
+`useOrganizationsStore` 스토어에서 멀티테넌트 조직을 관리합니다.
 
 ```typescript
 const {
   organizations, currentOrg, members,
   createOrganization, inviteMember, changeMemberRole
-} = useOrganizations()
+} = useOrganizationsStore()
 ```
 
 ### 6. 프로젝트 모니터링
 
-`useMonitoring` 스토어에서 헬스 체크를 관리합니다.
+`useMonitoringStore` 스토어에서 헬스 체크를 관리합니다.
 
 ```typescript
 const {
   checkResults, isRunning,
   runCheck, stopCheck
-} = useMonitoring()
+} = useMonitoringStore()
 ```

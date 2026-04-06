@@ -35,29 +35,27 @@ TOOL_RISK_CONFIG = {
 에이전트별 토큰 사용량과 비용을 실시간 추적합니다.
 
 ```python
-COST_PER_1K_TOKENS = {
-    # Anthropic Claude 4 series
-    "claude-opus-4-6": {"input": 0.015, "output": 0.075},
-    "claude-sonnet-4-6": {"input": 0.003, "output": 0.015},
-    "claude-haiku-4-5-20251001": {"input": 0.001, "output": 0.005},
-    # Google Gemini series
-    "gemini-3-flash-preview": {"input": 0.0005, "output": 0.003},
-    "gemini-3-pro-preview": {"input": 0.002, "output": 0.012},
-    "gemini-2.5-pro-preview-05-06": {"input": 0.00125, "output": 0.01},
-    "gemini-2.5-flash-preview-05-20": {"input": 0.0001, "output": 0.0004},
-    # OpenAI GPT-4o / o1 series
-    "gpt-4o": {"input": 0.0025, "output": 0.01},
-    "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},
-    "o1": {"input": 0.015, "output": 0.06},
-    "o1-mini": {"input": 0.003, "output": 0.012},
-}
+class LLMModelConfig(BaseModel):
+    id: str              # "claude-sonnet-4-6"
+    display_name: str    # "Claude Sonnet 4"
+    provider: LLMProvider  # anthropic, google, openai, ollama
+    context_window: int  # Max context window size
+    input_price: float   # USD per 1K tokens
+    output_price: float  # USD per 1K tokens
+    is_default: bool     # Default model for this provider
+    is_enabled: bool     # Whether model is enabled
+    supports_tools: bool # Tool/function calling support
+    supports_vision: bool # Vision/image support
 ```
+
+`LLMModelRegistry`가 단일 소스로 모든 모델 정보를 관리합니다. `USE_DATABASE=true` 시 DB에서 로드, 미설정 시 인메모리 폴백.
 
 **Provider별 Context 한도**:
 - Claude 4 (Opus/Sonnet/Haiku): 200K tokens
 - Gemini 3/2.5: 1M tokens
 - GPT-4o / GPT-4o Mini: 128K tokens
 - o1: 200K tokens / o1-mini: 128K tokens
+- Ollama (Local): 모델별 상이 (8K~32K tokens, 비용 무료)
 
 ---
 
@@ -205,7 +203,7 @@ class AuthService:
 | SAML | `auth/providers/saml.py` | SAML 2.0 (stdlib XML, python3-saml 불필요) |
 
 **토큰 설정**:
-- Access Token: 60분 유효
+- Access Token: 기본 60분 유효 (`access_token_expire_minutes` 설정 가능)
 - Refresh Token: 7일 유효
 - `authFetch` 래퍼를 통한 자동 토큰 갱신 (401 시 refresh 자동 수행)
 
@@ -489,14 +487,62 @@ class MergeService:
 - Staged/Unstaged/Untracked 파일 표시
 - 파일 스테이징 (git add)
 - 커밋 생성 (git commit)
+- **Worktree 지원**: 선택한 Worktree 기준으로 작업 디렉토리 스코핑
+
+### Staging 고급 기능
+
+파일/Hunk 단위 세분화된 스테이징:
+
+```python
+class GitService:
+    def get_file_diff(file_path: str, staged: bool = False) -> FileDiffResponse
+    def get_file_hunks(file_path: str, staged: bool = False) -> FileHunksResponse
+    def stage_hunks(file_path: str, hunk_indices: list[int]) -> AddResult
+    def get_working_diff(staged_only: bool = False) -> str
+```
+
+- **파일 단위 Diff 프리뷰**: Staged/Unstaged 각각의 diff 확인
+- **Hunk 단위 부분 스테이징**: 파일 내 개별 Hunk 선택 스테이징
+- **Staged Diff 리뷰**: 커밋 전 전체 스테이징 내역 검토
+- 모든 스테이징 API는 Worktree 경로 파라미터 지원
 
 ### LLM 기반 Draft Commits
 
 AI가 Git 변경사항을 분석하여 논리적인 커밋 그룹을 제안:
+
+```python
+class DraftCommit(BaseModel):
+    message: str       # Conventional commit message
+    files: list[str]   # 포함 파일 목록
+    type: str          # 커밋 타입 (feat, fix, docs 등)
+    scope: str | None  # 커밋 스코프 (선택)
+```
+
 - 관련 파일 자동 그룹화 (같은 기능/모듈)
 - Conventional Commits 형식 메시지 생성
 - 커밋 타입/스코프 자동 추론 (feat, fix, docs 등)
 - 패턴 기반 그룹화와 LLM 기반 그룹화 전환 가능
+- `staged_only` 옵션으로 스테이징된 파일만 분석 가능
+- 토큰 사용량 추적 (`token_usage`)
+
+### Worktree 관리
+
+Git Worktree 지원으로 독립적인 작업 공간 관리:
+
+```python
+class GitWorktree(BaseModel):
+    path: str
+    branch: str | None
+    head_sha: str
+    is_main: bool
+    is_detached: bool
+    is_locked: bool
+```
+
+- Worktree 목록 조회 (`git worktree list --porcelain` 파싱)
+- 활성 Worktree 선택 (Dashboard에서 선택 시 모든 작업이 해당 Worktree 기준)
+- Worktree 경로 보안 검증 (실제 등록된 Worktree만 허용)
+- Working Directory, Staging, Commit, Diff, Push 등 모든 API에 `worktree_path` 파라미터 지원
 
 ### 브랜치 관리
 
@@ -504,7 +550,41 @@ AI가 Git 변경사항을 분석하여 논리적인 커밋 그룹을 제안:
 - 브랜치 생성/삭제 (로컬 + 원격)
 - Ahead/Behind 커밋 수 계산
 - 보호 브랜치 (main, master) 설정
-- 원격 브랜치 삭제 (`?remote=true` 쿼리 파라미터)
+- 원격 브랜치 삭제 (`?delete_remote=true` 쿼리 파라미터)
+- **Worktree 연계 삭제**: `remove_worktree=true` 시 연관된 Worktree도 함께 제거
+
+### 브랜치 삭제 + MR 자동 정리
+
+브랜치 삭제 시 관련 Merge Request 자동 처리:
+
+```python
+class MergeService:
+    async def close_mrs_by_source_branch_async(branch_name: str, closed_by: str) -> int
+    def close_mrs_by_source_branch(branch_name: str, closed_by: str) -> int
+```
+
+- `DELETE /projects/{id}/branches/{name}` 호출 시 `close_mrs_by_source_branch_async` 자동 실행
+- Source Branch가 삭제된 Open MR은 자동으로 `closed` 상태로 변경
+- Dashboard `MergeRequestCard`: Source Branch 부재 시 "브랜치 삭제됨" 경고 배지 표시
+- 머지 버튼은 Source Branch 부재 시 자동 비활성화
+
+### Remote 관리
+
+원격 저장소 CRUD 및 동기화:
+
+```python
+class GitService:
+    def list_remotes() -> list[GitRemote]
+    def add_remote(name: str, url: str) -> RemoteOperationResult
+    def remove_remote(name: str) -> RemoteOperationResult
+    # update: rename 또는 URL 변경
+```
+
+- Remote 추가/삭제/수정 (이름 변경, URL 변경)
+- Remote별 Fetch (`POST /projects/{id}/fetch?remote=origin`)
+- Remote별 Pull (`POST /projects/{id}/pull?remote=origin&branch=main`)
+- Remote별 Push (`POST /projects/{id}/push?remote=origin&branch=main&set_upstream=true`)
+- Dashboard에서 Remote 목록 표시 및 관리
 
 ### 충돌 감지
 
@@ -542,6 +622,12 @@ class MergeService:
 - MR 상태: `open`, `merged`, `closed`, `draft`
 - **Auto-Merge**: MR 생성 시 `auto_merge` 활성화 → 승인 조건 충족 시 자동 머지
 
+**MergeRequestCard 표시 기능**:
+- `availableBranches` prop으로 Source Branch 존재 여부 검증
+- Source Branch 부재 시 "브랜치 삭제됨" 경고 배지 + 머지 버튼 비활성화
+- Auto-Merge 활성화된 Open MR에 Auto-Merge 배지 표시
+- 충돌 상태 배지: `has_conflicts` 시 빨간색 충돌 경고, `clean` 시 초록색 표시
+
 ### GitHub 통합
 
 - Pull Request 목록 조회
@@ -560,11 +646,25 @@ class MergeService:
 ### 브랜치 보호 규칙 (동적)
 
 DB 기반 동적 브랜치 보호 규칙 관리:
+
+```python
+class BranchProtectionRule(BaseModel):
+    branch_pattern: str           # glob 패턴 (main, release/*, feature/*)
+    require_approvals: int        # 필요 승인 수
+    require_no_conflicts: bool    # 충돌 금지 여부
+    allowed_merge_roles: list[str]  # 머지 허용 역할 (owner, admin 등)
+    allow_force_push: bool        # Force push 허용 여부
+    allow_deletion: bool          # 브랜치 삭제 허용 여부
+    auto_deploy: bool             # 머지 시 자동 배포
+    deploy_workflow: str | None   # GitHub Actions workflow 이름
+    enabled: bool                 # 규칙 활성화 여부
+```
+
+- **CRUD API**: 보호 규칙 생성/조회/수정/삭제 (`BranchProtectionRepository`)
 - glob 패턴 매칭 (`main`, `release/*`, `feature/*`)
-- 필요 승인 수, 충돌 금지, 역할별 머지 권한 설정
-- Force push / 삭제 허용 여부
+- 설정 가능 항목: 필요 승인 수, 충돌 금지, 역할별 머지 권한, Force Push/삭제 허용
 - **Auto-Deploy**: 머지 시 GitHub Actions workflow 자동 트리거
-- Dashboard Protection 탭에서 CRUD 관리
+- Dashboard `BranchProtectionSettings` 컴포넌트: Protection 탭에서 규칙 CRUD + 역할 토글 + Auto-Deploy 설정
 
 **보호 브랜치**: 규칙 미설정 시 기본으로 `main`, `master` 브랜치는 `merge_main` 권한 필요
 
@@ -714,25 +814,38 @@ class HealthService:
 
 ---
 
-## 33. Warp Terminal Integration
+## 33. Terminal Integration
 
-Warp 터미널을 통한 Claude Code 실행:
+8종 터미널을 지원하는 통합 터미널 추상화 레이어:
 
 ```python
-class WarpService:
-    def build_claude_command(task: str | None = None) -> str
-    def open_with_command(path: str, command: str, title: str | None = None) -> dict
-    def cleanup_old_configs(max_age_hours: int = 24) -> int
-    def list_models() -> list[dict]          # Warp 사용 가능 모델 목록
-    def run_agent(task, model, mcp_servers) -> dict  # MCP 연동 에이전트 실행
+class TerminalType(str, Enum):
+    WARP = "warp"           # AI-powered terminal
+    TMUX = "tmux"           # Terminal multiplexer
+    TERMINAL_APP = "terminal_app"  # macOS 내장
+    ITERM2 = "iterm2"       # macOS 터미널 에뮬레이터
+    KITTY = "kitty"         # GPU-based terminal
+    ALACRITTY = "alacritty" # GPU-accelerated terminal
+    GHOSTTY = "ghostty"     # Fast, native terminal
+    WEZTERM = "wezterm"     # GPU-accelerated terminal
 ```
 
-**특징**:
+**Warp 전용 기능** (`WarpService`):
 - Warp Launch Configuration (YAML) 기반 실행
 - 태스크 내용을 임시 파일로 저장 후 `claude --dangerously-skip-permissions "$(cat file)"` 방식으로 전달
 - Docker 모드 지원 (URI를 프론트엔드로 반환)
 - 오래된 설정 파일 자동 정리
-- MCP 서버 연동 에이전트 실행 지원
+
+**Warp 도구 함수** (`tools/warp_tools.py`):
+- `warp_agent_run`: Warp에서 AI 에이전트 실행
+- `warp_list_models`: 사용 가능한 AI 모델 목록 조회
+- `warp_agent_with_mcp`: MCP 서버 연동 에이전트 실행
+
+**기타 터미널 어댑터**:
+- `TmuxAdapter`: tmux 세션 생성 + iTerm2/Terminal.app 자동 attach
+- `ITermAdapter`, `TerminalAppAdapter`: AppleScript 기반 실행
+- `KittyAdapter`, `AlacrittyAdapter`, `WezTermAdapter`: CLI 기반 실행
+- `GhosttyAdapter`: System Events 키스트로크 기반 실행
 
 ---
 
