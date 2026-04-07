@@ -78,6 +78,12 @@
             "command": "node .claude/hooks/evalCleanup.js 2>/dev/null || true",
             "timeout": 5,
             "statusMessage": "Eval cleanup..."
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/evalArtifactCleanup.js 2>/dev/null || true",
+            "timeout": 30,
+            "statusMessage": "Cleaning eval artifacts..."
           }
         ]
       }

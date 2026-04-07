@@ -43,9 +43,10 @@ npm run lint && npm run type-check && npm test -- --coverage
 - No console.log with sensitive information
 
 ### 5. React Web Specific
-- `React.memo()` on expensive components
+- `React.memo()` + `displayName` on ALL exported components (project convention, not just expensive ones)
 - `useCallback`/`useMemo` for stable references
-- `aria-label` on interactive elements
+- `aria-label` on ALL interactive elements
+- `dark:` prefix on all color-related Tailwind classes
 - Proper cleanup in useEffect return functions
 
 ### 6. Python Backend

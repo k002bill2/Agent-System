@@ -113,6 +113,14 @@ Provide the agent with:
 - Reference files for context
 - Success criteria (TypeScript errors, coverage threshold, etc.)
 - Expected output files
+- **Project conventions** (MUST include):
+  - React: `memo()` + `displayName` on ALL exported components (not just expensive ones)
+  - React: `cn()` utility for conditional Tailwind classes
+  - React: `dark:` prefix for all color classes
+  - React: `aria-label` on all interactive elements
+  - Python: type hints on all function signatures, async/await consistent
+  - Refactor tasks: migration guide is REQUIRED if acceptance_criteria mentions it
+  - All acceptance_criteria items must be explicitly listed in the agent prompt
 
 ### Receiving Agent Results
 Collect: status, duration, files created, self-assessment, notes.
