@@ -81,6 +81,17 @@ _MODELS: list[LLMModelConfig] = [
     # Google Gemini Models
     # ─────────────────────────────────────────────────────────
     LLMModelConfig(
+        id="gemini-3.1-pro-preview",
+        display_name="Gemini 3.1 Pro",
+        provider=LLMProvider.GOOGLE,
+        context_window=1048576,
+        input_price=0.002,  # $2.00/1M tokens (≤200K context)
+        output_price=0.012,  # $12.00/1M tokens (≤200K context)
+        is_default=False,
+        supports_tools=True,
+        supports_vision=True,
+    ),
+    LLMModelConfig(
         id="gemini-3-flash-preview",
         display_name="Gemini 3 Flash",
         provider=LLMProvider.GOOGLE,
@@ -92,18 +103,18 @@ _MODELS: list[LLMModelConfig] = [
         supports_vision=True,
     ),
     LLMModelConfig(
-        id="gemini-3-pro-preview",
-        display_name="Gemini 3 Pro",
+        id="gemini-3.1-flash-lite-preview",
+        display_name="Gemini 3.1 Flash Lite",
         provider=LLMProvider.GOOGLE,
         context_window=1000000,
-        input_price=0.002,  # $2.00/1M tokens (≤200K context)
-        output_price=0.012,  # $12.00/1M tokens (≤200K context)
+        input_price=0.00025,  # $0.25/1M tokens
+        output_price=0.0015,  # $1.50/1M tokens
         is_default=False,
         supports_tools=True,
         supports_vision=True,
     ),
     LLMModelConfig(
-        id="gemini-2.5-pro-preview-05-06",
+        id="gemini-2.5-pro",
         display_name="Gemini 2.5 Pro",
         provider=LLMProvider.GOOGLE,
         context_window=1000000,
@@ -114,12 +125,12 @@ _MODELS: list[LLMModelConfig] = [
         supports_vision=True,
     ),
     LLMModelConfig(
-        id="gemini-2.5-flash-preview-05-20",
+        id="gemini-2.5-flash",
         display_name="Gemini 2.5 Flash",
         provider=LLMProvider.GOOGLE,
         context_window=1000000,
-        input_price=0.0001,  # $0.10/1M tokens
-        output_price=0.0004,  # $0.40/1M tokens
+        input_price=0.0003,  # $0.30/1M tokens
+        output_price=0.0025,  # $2.50/1M tokens
         is_default=False,
         supports_tools=True,
         supports_vision=True,

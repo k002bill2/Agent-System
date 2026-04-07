@@ -218,7 +218,7 @@ describe('settings store', () => {
 
       const models: LLMModel[] = [
         makeModel({ id: 'gemini-3-flash-preview', provider: 'google', is_default: true }),
-        makeModel({ id: 'gemini-2.5-pro-preview-05-06', provider: 'google' }),
+        makeModel({ id: 'gemini-2.5-pro', provider: 'google' }),
         makeModel({ id: 'exaone3.5:7.8b', provider: 'ollama' }),
       ]
 
@@ -434,8 +434,8 @@ describe('settings store', () => {
 
       useSettingsStore.getState().setLLMProvider('anthropic')
 
-      // Fallback for anthropic is 'claude-opus-4-5-20250514'
-      expect(useSettingsStore.getState().model).toBe('claude-opus-4-5-20250514')
+      // Fallback for anthropic is 'claude-opus-4-6'
+      expect(useSettingsStore.getState().model).toBe('claude-opus-4-6')
       expect(useSettingsStore.getState().llmProvider).toBe('anthropic')
     })
 
@@ -458,8 +458,8 @@ describe('settings store', () => {
 describe('getModelsForProvider (legacy exported function)', () => {
   it('returns anthropic models', () => {
     const models = getModelsForProvider('anthropic')
-    expect(models).toContain('claude-opus-4-5-20250514')
-    expect(models).toContain('claude-sonnet-4-20250514')
+    expect(models).toContain('claude-opus-4-6')
+    expect(models).toContain('claude-sonnet-4-6')
   })
 
   it('returns openai models', () => {
@@ -471,7 +471,7 @@ describe('getModelsForProvider (legacy exported function)', () => {
   it('returns google/gemini models', () => {
     const models = getModelsForProvider('google')
     expect(models).toContain('gemini-3-flash-preview')
-    expect(models).toContain('gemini-2.5-pro-preview-05-06')
+    expect(models).toContain('gemini-2.5-pro')
   })
 
   it('returns local models', () => {
