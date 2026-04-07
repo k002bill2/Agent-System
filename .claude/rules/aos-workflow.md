@@ -17,6 +17,10 @@
 | Simple | 1 | 2-3 파일, 한 영역 |
 | Moderate | 2-3 | UI+API 또는 크로스 영역 |
 
+## 자동 검증 가드 (verificationGuard)
+- Hook이 `[BLOCKED]` 출력 시 → 즉시 에러를 수정하고 `/verify-loop` 실행
+- 경고만 출력 시 → 작업 계속하되, 커밋 전 반드시 에러 해결
+
 ## 배포 전 검증 체크리스트
 1. `tsc --noEmit` (TypeScript 타입 체크)
 2. `lint` (ESLint/ruff)

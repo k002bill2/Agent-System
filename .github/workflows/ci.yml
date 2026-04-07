@@ -192,6 +192,9 @@ jobs:
       - name: ESLint
         run: npm run lint
 
+      - name: Knip (dead code detection)
+        run: npx knip --no-exit-code
+
   frontend-typecheck:
     name: Frontend Type Check
     runs-on: ubuntu-latest

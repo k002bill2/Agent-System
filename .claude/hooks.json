@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/verificationGuard.js 2>/dev/null || true",
+            "command": "node .claude/hooks/verificationGuard.js",
             "timeout": 10,
             "statusMessage": "Verification check..."
           }
