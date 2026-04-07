@@ -29,19 +29,25 @@ import {
   FileText,
   AlertCircle,
   CheckCircle2,
+  ImagePlus,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import {
+  ALLOWED_IMAGE_TYPES,
+  MAX_IMAGES,
   MAX_MD_FILES,
   getFileKey,
+  removeOcrBlock,
   removeMdBlock,
   isMdFile,
+  isImageFile,
   readTextFile,
   validateMdFile,
 } from '../lib/fileAttachment'
 import { TaskEvaluationCard } from '../components/feedback/TaskEvaluationCard'
 import { useAuthStore, authFetch } from '../stores/auth'
 import { useNavigationStore } from '../stores/navigation'
+import { useAgentsStore } from '../stores/agents'
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -274,11 +280,17 @@ export function PlaygroundPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const mdFileInputRef = useRef<HTMLInputElement>(null)
+  const imageFileInputRef = useRef<HTMLInputElement>(null)
 
   // MD file state
   const [mdFiles, setMdFiles] = useState<File[]>([])
   const [mdReadStatuses, setMdReadStatuses] = useState<Record<string, 'reading' | 'done' | 'error'>>({})
   const [isDragOver, setIsDragOver] = useState(false)
+
+  // Image state
+  const [images, setImages] = useState<File[]>([])
+  const [ocrStatuses, setOcrStatuses] = useState<Record<string, 'processing' | 'done' | 'error'>>({})
+  const extractTextFromImage = useAgentsStore(s => s.extractTextFromImage)
 
   useEffect(() => {
     loadData()
@@ -390,6 +402,8 @@ export function PlaygroundPage() {
       setPrompt('')
       setMdFiles([])
       setMdReadStatuses({})
+      setImages([])
+      setOcrStatuses({})
     } catch (e) {
       handleError(e)
     } finally {
@@ -446,6 +460,56 @@ export function PlaygroundPage() {
     setCopiedId(id)
     setTimeout(() => setCopiedId(null), 2000)
   }
+
+  // Image handlers
+  const triggerOcr = useCallback((file: File) => {
+    const fileKey = getFileKey(file)
+    setOcrStatuses(prev => ({ ...prev, [fileKey]: 'processing' }))
+
+    extractTextFromImage(file).then(text => {
+      if (text !== null && text.trim().length > 0) {
+        setPrompt(prev => `${prev}${prev ? '\n\n' : ''}[이미지 OCR: ${file.name}]\n${text.trim()}`)
+        setOcrStatuses(prev => ({ ...prev, [fileKey]: 'done' }))
+      } else if (text !== null) {
+        setOcrStatuses(prev => ({ ...prev, [fileKey]: 'done' }))
+      } else {
+        setOcrStatuses(prev => ({ ...prev, [fileKey]: 'error' }))
+      }
+    })
+  }, [extractTextFromImage])
+
+  const addImages = useCallback((files: FileList | File[]) => {
+    const validFiles = Array.from(files).filter(f => ALLOWED_IMAGE_TYPES.includes(f.type))
+    if (validFiles.length === 0) return
+    setImages(prev => [...prev, ...validFiles].slice(0, MAX_IMAGES))
+
+    for (const file of validFiles) {
+      if (file.type === 'image/svg+xml') continue
+      triggerOcr(file)
+    }
+  }, [triggerOcr])
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData.items
+    const imageFiles: File[] = []
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        const file = items[i].getAsFile()
+        if (file) imageFiles.push(file)
+      }
+    }
+    if (imageFiles.length > 0) {
+      e.preventDefault()
+      addImages(imageFiles)
+    }
+  }, [addImages])
+
+  const handleImageFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      addImages(e.target.files)
+    }
+    e.target.value = ''
+  }, [addImages])
 
   // MD file handlers
   const addMdFiles = useCallback((files: FileList | File[]) => {
@@ -511,9 +575,13 @@ export function PlaygroundPage() {
     e.stopPropagation()
     setIsDragOver(false)
     if (e.dataTransfer.files.length > 0) {
-      addMdFiles(e.dataTransfer.files)
+      const files = Array.from(e.dataTransfer.files)
+      const imageFiles = files.filter(isImageFile)
+      const droppedMdFiles = files.filter(isMdFile)
+      if (imageFiles.length > 0) addImages(imageFiles)
+      if (droppedMdFiles.length > 0) addMdFiles(droppedMdFiles)
     }
-  }, [addMdFiles])
+  }, [addImages, addMdFiles])
 
   if (loading) {
     return (
@@ -692,6 +760,62 @@ export function PlaygroundPage() {
                 onDragLeave={handlePlaygroundDragLeave}
                 onDrop={handlePlaygroundDrop}
               >
+                {/* Image Previews */}
+                {images.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {images.map((file, idx) => {
+                      const status = ocrStatuses[getFileKey(file)]
+                      return (
+                        <div
+                          key={`img-${file.name}-${idx}`}
+                          className="relative group w-12 h-12 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 flex-shrink-0"
+                        >
+                          <img
+                            src={URL.createObjectURL(file)}
+                            alt={file.name}
+                            className="w-full h-full object-cover"
+                            onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const key = getFileKey(file)
+                              setOcrStatuses(prev => { const { [key]: _, ...rest } = prev; return rest })
+                              setPrompt(prev => removeOcrBlock(prev, file.name))
+                              setImages(prev => prev.filter((_, i) => i !== idx))
+                            }}
+                            className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                            aria-label={`이미지 제거: ${file.name}`}
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                          {status === 'processing' && (
+                            <div className="absolute bottom-0 right-0 p-0.5 bg-blue-500 rounded-tl-md" title="OCR 처리 중...">
+                              <Loader2 className="w-2.5 h-2.5 text-white animate-spin" />
+                            </div>
+                          )}
+                          {status === 'done' && (
+                            <div className="absolute bottom-0 right-0 p-0.5 bg-green-500 rounded-tl-md" title="OCR 완료">
+                              <CheckCircle2 className="w-2.5 h-2.5 text-white" />
+                            </div>
+                          )}
+                          {status === 'error' && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); triggerOcr(file) }}
+                              className="absolute bottom-0 right-0 p-0.5 bg-red-500 rounded-tl-md hover:bg-red-600 transition-colors"
+                              title="OCR 실패 - 클릭하여 재시도"
+                              aria-label={`OCR 재시도: ${file.name}`}
+                            >
+                              <AlertCircle className="w-2.5 h-2.5 text-white" />
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
                 {/* MD File Previews */}
                 {mdFiles.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mb-2">
@@ -723,12 +847,12 @@ export function PlaygroundPage() {
                 {/* Drag overlay */}
                 {isDragOver && (
                   <div className="flex items-center justify-center gap-2 py-2 mb-2 border-2 border-dashed border-blue-400 dark:border-blue-600 rounded-lg text-sm text-blue-500 dark:text-blue-400">
-                    <FileText className="w-4 h-4" />
-                    MD 문서를 여기에 놓으세요
+                    <ImagePlus className="w-4 h-4" />
+                    이미지 또는 MD 문서를 여기에 놓으세요
                   </div>
                 )}
 
-                {/* Hidden MD file input */}
+                {/* Hidden file inputs */}
                 <input
                   ref={mdFileInputRef}
                   type="file"
@@ -736,6 +860,15 @@ export function PlaygroundPage() {
                   multiple
                   onChange={handleMdFileSelect}
                   className="hidden"
+                />
+                <input
+                  ref={imageFileInputRef}
+                  type="file"
+                  accept={ALLOWED_IMAGE_TYPES.join(',')}
+                  multiple
+                  onChange={handleImageFileSelect}
+                  className="hidden"
+                  aria-label="이미지 파일 선택"
                 />
 
                 <div className="flex gap-2">
@@ -748,12 +881,27 @@ export function PlaygroundPage() {
                         handleExecute()
                       }
                     }}
-                    placeholder="Enter your prompt... (MD 문서를 드래그하거나 첨부하세요)"
+                    onPaste={handlePaste}
+                    placeholder="Enter your prompt... (이미지/MD 문서를 드래그하거나 첨부하세요)"
                     rows={3}
                     className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
                     disabled={executing}
                   />
                   <div className="flex flex-col gap-1">
+                    <button
+                      onClick={() => imageFileInputRef.current?.click()}
+                      disabled={images.length >= MAX_IMAGES || executing}
+                      className={cn(
+                        'p-3 rounded-lg transition-colors',
+                        images.length >= MAX_IMAGES || executing
+                          ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                          : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      )}
+                      title={images.length >= MAX_IMAGES ? `최대 ${MAX_IMAGES}개` : '이미지 첨부'}
+                      aria-label="이미지 첨부"
+                    >
+                      <ImagePlus className="w-5 h-5" />
+                    </button>
                     <button
                       onClick={() => mdFileInputRef.current?.click()}
                       disabled={mdFiles.length >= MAX_MD_FILES || executing}
@@ -764,6 +912,7 @@ export function PlaygroundPage() {
                           : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                       )}
                       title={mdFiles.length >= MAX_MD_FILES ? `최대 ${MAX_MD_FILES}개` : 'MD 문서 첨부'}
+                      aria-label="MD 문서 첨부"
                     >
                       <FileText className="w-5 h-5" />
                     </button>
@@ -771,6 +920,7 @@ export function PlaygroundPage() {
                       onClick={handleExecute}
                       disabled={executing || !prompt.trim()}
                       className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      aria-label="프롬프트 실행"
                     >
                       {executing ? (
                         <Loader2 className="w-5 h-5 animate-spin" />

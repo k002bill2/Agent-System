@@ -111,7 +111,7 @@ export const MemoryTab: React.FC = memo(() => {
           <button
             onClick={() => setIndexExpanded(!indexExpanded)}
             aria-label="Toggle MEMORY.md index"
-            className="w-full p-4 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
+            className="w-full p-4 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
             <div className="p-2 bg-rose-100 dark:bg-rose-900/30 rounded-lg">
               <FileText className="w-5 h-5 text-rose-600 dark:text-rose-400" />

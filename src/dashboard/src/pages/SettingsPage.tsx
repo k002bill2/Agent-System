@@ -205,7 +205,7 @@ export function SettingsPage() {
         Settings
       </h2>
 
-      <div className="max-w-2xl space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-5xl">
         {/* Connection Status */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -331,7 +331,7 @@ export function SettingsPage() {
         </div>
 
         {/* Claude Code */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 lg:col-span-2">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
             <Terminal className="w-5 h-5" />
             Claude Code
@@ -569,13 +569,17 @@ export function SettingsPage() {
         </div>
 
         {/* LLM Auto-Switch */}
-        <LLMRouterSettings />
+        <div className="lg:col-span-2">
+          <LLMRouterSettings />
+        </div>
 
         {/* My LLM API Keys */}
-        <LLMAccountsSettings />
+        <div className="lg:col-span-2">
+          <LLMAccountsSettings />
+        </div>
 
         {/* Notifications */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 lg:col-span-2">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
             <Bell className="w-5 h-5" />
             Notifications

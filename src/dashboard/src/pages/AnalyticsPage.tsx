@@ -293,7 +293,7 @@ export function AnalyticsPage() {
 
   // Multi-project comparison state
   const [compareProjectIds, setCompareProjectIds] = useState<string[]>([])
-  const [compareMetric, setCompareMetric] = useState<CompareMetric>('tasks')
+  const [compareMetric, setCompareMetric] = useState<CompareMetric>('tokens')
   const [compareData, setCompareData] = useState<MultiProjectTrendsResponse | null>(null)
   const [compareLoading, setCompareLoading] = useState(false)
   const [evalStats, setEvalStats] = useState<TaskEvalStats | null>(null)
@@ -323,6 +323,19 @@ export function AnalyticsPage() {
   useEffect(() => {
     fetchProjects()
   }, [fetchProjects])
+
+  // Auto-select default comparison projects when project list loads
+  const DEFAULT_COMPARE_PROJECTS = ['Agent-System', 'AOS_web', 'image-maker', 'youtube-maker', 'icloud Obsidian']
+  useEffect(() => {
+    if (visibleProjects.length > 0 && compareProjectIds.length === 0) {
+      const defaultIds = DEFAULT_COMPARE_PROJECTS
+        .map((name) => visibleProjects.find((p: Project) => p.name === name)?.id)
+        .filter((id): id is string => id !== undefined)
+      if (defaultIds.length >= 2) {
+        setCompareProjectIds(defaultIds)
+      }
+    }
+  }, [visibleProjects]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch Claude usage on mount
   useEffect(() => {
