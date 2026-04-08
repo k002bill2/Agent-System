@@ -3,6 +3,8 @@
 # Dashboard: http://localhost:5173
 # API: http://localhost:8000
 
+name: aos
+
 services:
   # React Dashboard (Nginx)
   dashboard:
@@ -89,7 +91,7 @@ services:
       POSTGRES_PASSWORD: aos
       POSTGRES_DB: aos
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./infra/docker/data/postgres:/var/lib/postgresql/data
       # Note: SQLAlchemy auto-creates tables on startup
       # - ./infra/docker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
@@ -148,8 +150,6 @@ services:
     # Actual sandbox containers are created by sandbox_manager.py
 
 volumes:
-  postgres_data:
-    driver: local
   redis_data:
     driver: local
   qdrant_data:

@@ -1,3 +1,5 @@
+name: aos
+
 services:
   # PostgreSQL Database
   postgres:
@@ -8,7 +10,7 @@ services:
       POSTGRES_PASSWORD: aos
       POSTGRES_DB: aos
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data
     ports:
       - "${PG_PORT:-5432}:5432"
     healthcheck:
@@ -112,7 +114,6 @@ services:
       - aos-network
 
 volumes:
-  postgres_data:
   redis_data:
   qdrant_data:
 

@@ -39,10 +39,12 @@ if ! docker compose version >/dev/null 2>&1 && ! command_exists docker-compose; 
     exit 1
 fi
 
+# Compose file path (always use -f to avoid volume naming issues)
+COMPOSE_FILE="$PROJECT_ROOT/infra/docker/docker-compose.yml"
+
 # Start infrastructure services
 echo -e "${GREEN}🐳 Starting infrastructure (PostgreSQL, Redis, Qdrant)...${NC}"
-cd "$PROJECT_ROOT"
-docker compose up -d postgres redis qdrant
+docker compose -f "$COMPOSE_FILE" up -d postgres redis qdrant
 
 # Wait for services
 echo -e "${GREEN}⏳ Waiting for services to be ready...${NC}"
@@ -50,7 +52,7 @@ sleep 5
 
 # Check service health
 echo -e "${GREEN}🔍 Checking service health...${NC}"
-docker compose ps
+docker compose -f "$COMPOSE_FILE" ps
 
 echo ""
 echo -e "${GREEN}✅ Infrastructure services are running!${NC}"

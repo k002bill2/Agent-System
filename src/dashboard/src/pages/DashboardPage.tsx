@@ -193,9 +193,9 @@ export function DashboardPage() {
             <p className="text-sm text-gray-500 dark:text-gray-400">No recent sessions</p>
           ) : (
             <div className="space-y-2">
-              {recentSessions.map((session) => (
+              {recentSessions.map((session, idx) => (
                 <div
-                  key={session.session_id}
+                  key={`${session.session_id}-${idx}`}
                   className="p-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
                   onClick={() => {
                     selectSession(session.session_id)

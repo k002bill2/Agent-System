@@ -30,6 +30,9 @@ if [ ! -f "$PROJECT_ROOT/.env" ]; then
     cp "$PROJECT_ROOT/.env.example" "$PROJECT_ROOT/.env"
 fi
 
+# Compose file path (always use -f to avoid volume naming issues)
+COMPOSE_FILE="$PROJECT_ROOT/infra/docker/docker-compose.yml"
+
 # Check Docker
 echo -e "${GREEN}[1/3] Starting Infrastructure (Docker)...${NC}"
 if ! docker info > /dev/null 2>&1; then
@@ -37,14 +40,13 @@ if ! docker info > /dev/null 2>&1; then
     exit 1
 fi
 
-cd "$PROJECT_ROOT/infra/docker"
-docker-compose up -d postgres redis qdrant
+docker compose -f "$COMPOSE_FILE" up -d postgres redis qdrant
 
 echo -e "${GREEN}      Waiting for PostgreSQL, Redis, and Qdrant...${NC}"
 sleep 3
 
 # Check if services are healthy
-if docker-compose ps | grep -q "Up"; then
+if docker compose -f "$COMPOSE_FILE" ps | grep -q "Up"; then
     echo -e "${GREEN}      Infrastructure is running${NC}"
 else
     echo -e "${RED}      Failed to start infrastructure${NC}"
@@ -56,16 +58,41 @@ echo ""
 echo -e "${GREEN}[2/3] Starting Backend (FastAPI)...${NC}"
 cd "$PROJECT_ROOT/src/backend"
 
-# Check if venv exists
-if [ ! -d ".venv" ]; then
-    echo -e "${YELLOW}      Creating virtual environment...${NC}"
-    python3 -m venv .venv
+# Find Python 3.11+ for venv
+PYTHON_BIN=""
+for v in python3.13 python3.12 python3.11; do
+    if command -v "$v" &>/dev/null; then
+        PYTHON_BIN="$v"
+        break
+    fi
+done
+if [ -z "$PYTHON_BIN" ]; then
+    echo -e "${RED}      Python 3.11+ required but not found. Install via: brew install python@3.13${NC}"
+    exit 1
+fi
+
+# Check if venv exists with correct Python version
+VENV_OK=false
+if [ -d ".venv" ] && [ -f ".venv/bin/python3" ]; then
+    VENV_VER=$(.venv/bin/python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || echo "0.0")
+    VENV_MAJOR=$(echo "$VENV_VER" | cut -d. -f1)
+    VENV_MINOR=$(echo "$VENV_VER" | cut -d. -f2)
+    if [ "$VENV_MAJOR" -ge 3 ] && [ "$VENV_MINOR" -ge 11 ]; then
+        VENV_OK=true
+    fi
+fi
+
+if [ "$VENV_OK" = false ]; then
+    echo -e "${YELLOW}      Creating virtual environment with $PYTHON_BIN...${NC}"
+    $PYTHON_BIN -m venv .venv --clear
 fi
 
 source .venv/bin/activate
 
 # Install dependencies if needed
 if ! python -c "import fastapi" 2>/dev/null; then
+    echo -e "${YELLOW}      Upgrading pip...${NC}"
+    pip install --upgrade pip -q
     echo -e "${YELLOW}      Installing dependencies...${NC}"
     pip install -e . -q
 fi
@@ -83,6 +110,9 @@ fi
 pkill -9 -f "uvicorn api.app" 2>/dev/null || true
 lsof -ti :8000 | xargs kill -9 2>/dev/null || true
 sleep 0.5
+
+# Create logs directory
+mkdir -p "$PROJECT_ROOT/logs"
 
 # Load specific environment variables from .env
 export GITHUB_TOKEN=$(grep "^GITHUB_TOKEN=" "$PROJECT_ROOT/.env" | cut -d'=' -f2-)
@@ -118,9 +148,6 @@ if [ -f "$PID_DIR/dashboard.pid" ]; then
         sleep 1
     fi
 fi
-
-# Create logs directory
-mkdir -p "$PROJECT_ROOT/logs"
 
 # Start dashboard in background
 nohup npm run dev > "$PROJECT_ROOT/logs/dashboard.log" 2>&1 &

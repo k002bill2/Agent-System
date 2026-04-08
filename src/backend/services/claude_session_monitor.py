@@ -7,12 +7,18 @@ Discovers and monitors external Claude Code sessions by scanning
 import json
 import logging
 import os
+import re
 
 logger = logging.getLogger(__name__)
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+
+# Claude Code session files are named with UUID v4
+_UUID_PATTERN = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+)
 
 import httpx
 
@@ -262,6 +268,10 @@ class ClaudeSessionMonitor:
 
                 # Find all .jsonl files in project directory (including subagents)
                 for jsonl_file in project_dir.glob("**/*.jsonl"):
+                    # Skip non-session files (session files are named with UUID)
+                    if not _UUID_PATTERN.match(jsonl_file.stem):
+                        continue
+
                     try:
                         # Check cache first
                         cached = _session_cache.get(jsonl_file)
