@@ -20,19 +20,59 @@
             "command": "python3 -c \"import json,sys; p=json.load(sys.stdin).get('tool_input',{}).get('file_path',''); blocked=['.env','secrets','.git/','/prod/','credentials','private_key','id_rsa','.pem']; sys.exit(2 if any(b in p for b in blocked) else 0)\"",
             "timeout": 5,
             "statusMessage": "Path protection..."
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/hardGateGuard.js",
+            "timeout": 3,
+            "statusMessage": "HARD-GATE check..."
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/tddGuard.js",
+            "timeout": 3,
+            "statusMessage": "TDD check..."
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/skillGateGuard.js",
+            "timeout": 3,
+            "statusMessage": "Skill gate check..."
           }
         ]
       }
     ],
     "PostToolUse": [
       {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/skillGateGuard.js",
+            "timeout": 3,
+            "statusMessage": "Recording skill invocation..."
+          }
+        ]
+      },
+      {
         "matcher": "Write",
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/verificationGuard.js 2>/dev/null || true",
-            "timeout": 10,
+            "command": "node .claude/hooks/verificationGuard.js",
+            "timeout": 15,
             "statusMessage": "Verification check..."
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/componentPatternChecker.js",
+            "timeout": 5,
+            "statusMessage": "Component pattern check..."
           }
         ]
       }
@@ -62,9 +102,9 @@
           },
           {
             "type": "command",
-            "command": "rm -rf /tmp/gemini-review-retries 2>/dev/null; true",
+            "command": "node -e \"const fs=require('fs');['/tmp/gemini-review-retries','/tmp/claude-hard-gate','/tmp/claude-tdd-guard','/tmp/claude-skill-gate','/tmp/claude-skill-gate-cooldown'].forEach(d=>{try{fs.rmSync(d,{recursive:true})}catch{}})\"",
             "timeout": 3,
-            "statusMessage": "Resetting Gemini review state..."
+            "statusMessage": "Resetting session state..."
           }
         ]
       }
