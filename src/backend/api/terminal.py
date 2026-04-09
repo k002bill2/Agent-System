@@ -33,12 +33,8 @@ class TerminalExecuteRequest(BaseModel):
     project_id: str = Field(..., description="Project ID")
     command: str = Field(..., description="Command/prompt to execute")
     title: str | None = Field(None, description="Optional window/tab title")
-    branch_name: str | None = Field(
-        None, description="Git branch to create before execution"
-    )
-    image_paths: list[str] | None = Field(
-        None, description="Image paths for --image flags"
-    )
+    branch_name: str | None = Field(None, description="Git branch to create before execution")
+    image_paths: list[str] | None = Field(None, description="Image paths for --image flags")
     use_claude_cli: bool = Field(True, description="Wrap with claude CLI")
 
     @field_validator("branch_name")

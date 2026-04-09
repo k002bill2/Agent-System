@@ -237,9 +237,7 @@ class ProjectConfigMonitor:
     def update_memory_index(self, project_id: str, content: str) -> bool:
         return self._memory_manager.update_memory_index(project_id, content)
 
-    def create_memory(
-        self, project_id: str, memory_id: str, content: str
-    ) -> MemoryConfig | None:
+    def create_memory(self, project_id: str, memory_id: str, content: str) -> MemoryConfig | None:
         return self._memory_manager.create_memory(project_id, memory_id, content)
 
     def update_memory_content(self, project_id: str, memory_id: str, content: str) -> bool:
@@ -276,9 +274,7 @@ class ProjectConfigMonitor:
     def delete_rule(self, project_id: str, rule_id: str, is_global: bool = False) -> bool:
         return self._rules_manager.delete_rule(project_id, rule_id, is_global)
 
-    def copy_rule(
-        self, source_project_id: str, rule_id: str, target_project_id: str
-    ) -> bool:
+    def copy_rule(self, source_project_id: str, rule_id: str, target_project_id: str) -> bool:
         return self._rules_manager.copy_rule(source_project_id, rule_id, target_project_id)
 
     # ========================================
@@ -941,7 +937,10 @@ class ProjectConfigMonitor:
         rules = self._rules_manager.get_global_rules()
 
         return GlobalConfigSummary(
-            agents=agents, skills=skills, hooks=hooks, mcp_servers=mcp_servers,
+            agents=agents,
+            skills=skills,
+            hooks=hooks,
+            mcp_servers=mcp_servers,
             rules=rules,
         )
 

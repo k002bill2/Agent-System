@@ -79,9 +79,17 @@ class MemoryManager:
         if not name:
             name = memory_id.replace("-", " ").replace("_", " ").title()
 
-        description = FrontmatterParser.get_string_field(frontmatter, "description", "") if frontmatter else ""
+        description = (
+            FrontmatterParser.get_string_field(frontmatter, "description", "")
+            if frontmatter
+            else ""
+        )
 
-        memory_type = FrontmatterParser.get_string_field(frontmatter, "type", "user") if frontmatter else "user"
+        memory_type = (
+            FrontmatterParser.get_string_field(frontmatter, "type", "user")
+            if frontmatter
+            else "user"
+        )
 
         return MemoryConfig(
             memory_id=memory_id,
@@ -142,9 +150,7 @@ class MemoryManager:
             logger.error(f"Error updating memory index: {e}")
             return False
 
-    def create_memory(
-        self, project_id: str, memory_id: str, content: str
-    ) -> MemoryConfig | None:
+    def create_memory(self, project_id: str, memory_id: str, content: str) -> MemoryConfig | None:
         """Create a new memory entry."""
         memory_dir = self._get_or_create_memory_dir(project_id)
         if not memory_dir:
@@ -168,9 +174,7 @@ class MemoryManager:
             logger.error(f"Error creating memory: {e}")
             return None
 
-    def update_memory_content(
-        self, project_id: str, memory_id: str, content: str
-    ) -> bool:
+    def update_memory_content(self, project_id: str, memory_id: str, content: str) -> bool:
         """Update a memory entry's content."""
         memory_dir = self._get_memory_dir(project_id)
         if not memory_dir:
@@ -217,8 +221,4 @@ class MemoryManager:
         if not memory_dir:
             return 0
 
-        return sum(
-            1
-            for f in memory_dir.glob("*.md")
-            if f.is_file() and f.name != "MEMORY.md"
-        )
+        return sum(1 for f in memory_dir.glob("*.md") if f.is_file() and f.name != "MEMORY.md")

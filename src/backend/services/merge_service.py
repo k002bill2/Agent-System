@@ -1145,9 +1145,7 @@ class MergeRequestService:
             mr.merged_at = utcnow()
             mr.merged_by = merged_by
             # Close other OPEN MRs with the same source→target branch
-            self._close_duplicate_mrs_sync(
-                mr_id, mr.source_branch, mr.target_branch, merged_by
-            )
+            self._close_duplicate_mrs_sync(mr_id, mr.source_branch, mr.target_branch, merged_by)
 
         mr.updated_at = utcnow()
         return mr, result
@@ -1252,9 +1250,7 @@ class MergeRequestService:
             closed_count = self.close_mrs_by_source_branch(branch_name, closed_by)
         return closed_count
 
-    def close_mrs_by_source_branch(
-        self, branch_name: str, closed_by: str = "system"
-    ) -> int:
+    def close_mrs_by_source_branch(self, branch_name: str, closed_by: str = "system") -> int:
         """Close all OPEN MRs whose source_branch matches a deleted branch."""
         closed_count = 0
         now = utcnow()
@@ -1265,9 +1261,7 @@ class MergeRequestService:
                 mr.closed_by = closed_by
                 mr.updated_at = now
                 closed_count += 1
-                logger.info(
-                    f"Auto-closed MR {mr_id[:8]} (source branch '{branch_name}' deleted)"
-                )
+                logger.info(f"Auto-closed MR {mr_id[:8]} (source branch '{branch_name}' deleted)")
         return closed_count
 
     # ── Refresh conflict status ──

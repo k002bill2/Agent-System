@@ -469,7 +469,7 @@ def init_projects(base_path: str = None):
     projects_dir = Path(base_path) / "projects"
     if projects_dir.exists():
         for item in projects_dir.iterdir():
-            if item.is_symlink() or (item.is_dir() and not item.name.startswith('test-')):
+            if item.is_symlink() or (item.is_dir() and not item.name.startswith("test-")):
                 real_path = item.resolve() if item.is_symlink() else item
                 if real_path.is_dir():
                     register_project(item.name, str(real_path))

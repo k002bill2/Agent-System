@@ -286,10 +286,7 @@ class TmuxAdapter(TerminalAdapter):
             )
         else:
             attach_script = (
-                'tell application "Terminal"\n'
-                "    activate\n"
-                f'    do script "{attach_cmd}"\n'
-                "end tell"
+                f'tell application "Terminal"\n    activate\n    do script "{attach_cmd}"\nend tell'
             )
         try:
             subprocess.run(
