@@ -23,28 +23,28 @@ describe('AgentCard', () => {
   it('renders available status badge with green color', () => {
     render(<AgentCard agent={mockAgent} />)
 
-    expect(screen.getByText('Available')).toBeInTheDocument()
-    expect(screen.getByLabelText('Status: Available')).toBeInTheDocument()
+    expect(screen.getByText('사용 가능')).toBeInTheDocument()
+    expect(screen.getByLabelText('상태: 사용 가능')).toBeInTheDocument()
   })
 
   it('renders busy status badge with yellow color', () => {
     const busyAgent = { ...mockAgent, status: 'busy' as const }
     render(<AgentCard agent={busyAgent} />)
 
-    expect(screen.getByText('Busy')).toBeInTheDocument()
+    expect(screen.getByText('사용 중')).toBeInTheDocument()
   })
 
   it('renders offline status badge with red color', () => {
     const offlineAgent = { ...mockAgent, status: 'offline' as const }
     render(<AgentCard agent={offlineAgent} />)
 
-    expect(screen.getByText('Offline')).toBeInTheDocument()
+    expect(screen.getByText('오프라인')).toBeInTheDocument()
   })
 
   it('renders tool count', () => {
     render(<AgentCard agent={mockAgent} />)
 
-    expect(screen.getByText('5/8')).toBeInTheDocument()
+    expect(screen.getByText((_, el) => el?.textContent === '5 / 8')).toBeInTheDocument()
   })
 
   it('calls onSelect when clicked', () => {
@@ -91,7 +91,7 @@ describe('AgentCard', () => {
     const card = screen.getByRole('button')
     expect(card).toHaveAttribute(
       'aria-label',
-      'Agent AOS Orchestrator, status: available, 5 of 8 tools available'
+      '에이전트 AOS Orchestrator, 상태: 사용 가능, 도구 5/8 사용 가능'
     )
   })
 
@@ -108,7 +108,7 @@ describe('AgentCard', () => {
     const noTools = { ...mockAgent, totalTools: 0, availableTools: 0 }
     render(<AgentCard agent={noTools} />)
 
-    expect(screen.getByText('0/0')).toBeInTheDocument()
+    expect(screen.getByText((_, el) => el?.textContent === '0 / 0')).toBeInTheDocument()
   })
 
   it('accepts custom className', () => {
