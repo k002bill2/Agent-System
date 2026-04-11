@@ -150,12 +150,15 @@ if [[ -z "$CLEAN" ]]; then
     CLEAN=$(echo "$REVIEW" | tail -15)
 fi
 
-# VERDICT 파싱하여 리트라이 카운터 갱신
+# VERDICT 파싱하여 리트라이 카운터 갱신 + BLOCK 판정
 VERDICT=$(echo "$CLEAN" | grep -i '^VERDICT:' | head -1 | tr '[:upper:]' '[:lower:]')
+SHOULD_BLOCK=false
+
 if echo "$VERDICT" | grep -q 'needs-attention'; then
     # needs-attention: 카운터 증가
     CURRENT=$(cat "$RETRY_FILE" 2>/dev/null || echo "0")
     echo $(( CURRENT + 1 )) > "$RETRY_FILE" 2>/dev/null || true
+    SHOULD_BLOCK=true
 elif echo "$VERDICT" | grep -q 'approve'; then
     # approve: 카운터 리셋
     rm -f "$RETRY_FILE" 2>/dev/null || true
@@ -164,3 +167,11 @@ fi
 echo ""
 echo "Gemini Checker [$BASENAME]"
 echo "$CLEAN"
+
+# v2.0: needs-attention 시 exit 2로 차단 신호 전송
+# (PostToolUse이므로 edit 자체는 완료되었지만, Claude에게 수정 필요 신호)
+if [[ "$SHOULD_BLOCK" == "true" ]]; then
+    echo ""
+    echo "[BLOCKED] Gemini가 문제를 발견했습니다. 위 이슈를 먼저 수정하세요."
+    exit 2
+fi

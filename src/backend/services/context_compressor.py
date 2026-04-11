@@ -30,10 +30,10 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Configuration defaults
 # ---------------------------------------------------------------------------
-DEFAULT_WARNING_THRESHOLD = 0.60   # start compressing early
-DEFAULT_HIGH_THRESHOLD = 0.75      # compress more aggressively
+DEFAULT_WARNING_THRESHOLD = 0.60  # start compressing early
+DEFAULT_HIGH_THRESHOLD = 0.75  # compress more aggressively
 DEFAULT_CRITICAL_THRESHOLD = 0.90  # compress everything except recent
-DEFAULT_PRESERVE_RECENT = 10       # minimum messages to keep verbatim
+DEFAULT_PRESERVE_RECENT = 10  # minimum messages to keep verbatim
 DEFAULT_MIN_MESSAGES_TO_COMPRESS = 6
 
 
@@ -172,14 +172,14 @@ class ContextCompressor:
         original_count = len(messages)
 
         result = await self._graduated_compress(
-            messages, preserve, provider, model, tier,
+            messages,
+            preserve,
+            provider,
+            model,
+            tier,
         )
 
-        tokens_after = (
-            estimate_messages_tokens(state["messages"])
-            + system_tokens
-            + task_tokens
-        )
+        tokens_after = estimate_messages_tokens(state["messages"]) + system_tokens + task_tokens
 
         # Record compression event
         record = result.to_dict()
@@ -214,11 +214,13 @@ class ContextCompressor:
         if usage_ratio >= self.critical_threshold:
             return ("CRITICAL", 1.0)  # compress all but preserve_recent
         if usage_ratio >= self.high_threshold:
-            return ("HIGH", 0.5)      # compress oldest half
-        return ("WARNING", 0.33)      # compress oldest third
+            return ("HIGH", 0.5)  # compress oldest half
+        return ("WARNING", 0.33)  # compress oldest third
 
     def _calculate_preserve_count(
-        self, total: int, compress_ratio: float,
+        self,
+        total: int,
+        compress_ratio: float,
     ) -> int:
         """Calculate how many recent messages to preserve.
 
@@ -262,8 +264,7 @@ class ContextCompressor:
         summary_msg: dict[str, Any] = {
             "role": "system",
             "content": (
-                f"[이전 대화 요약 — {len(old_messages)}개 메시지 압축 ({tier})]\n"
-                f"{summary}"
+                f"[이전 대화 요약 — {len(old_messages)}개 메시지 압축 ({tier})]\n{summary}"
             ),
         }
 

@@ -19,6 +19,9 @@ class TestGitService:
         active_branch.name = "main"
         repo.active_branch = active_branch
 
+        # Mock head commit (needed for list_worktrees fallback)
+        repo.head.commit.hexsha = "abc123def456"
+
         # Mock branches
         branch1 = MagicMock()
         branch1.name = "main"

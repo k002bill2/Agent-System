@@ -7,18 +7,29 @@
 
 import { memo } from 'react'
 import { cn } from '../lib/utils'
-import { useAgentsStore, TERMINAL_OPTIONS, type TerminalType } from '../stores/agents'
+import { useSettingsStore, type TerminalType } from '../stores/settings'
 import { Terminal, SquareTerminal } from 'lucide-react'
 
-const ICONS: Record<TerminalType, typeof Terminal> = {
+interface TerminalOption {
+  type: TerminalType
+  label: string
+  description: string
+}
+
+const TERMINAL_OPTIONS: TerminalOption[] = [
+  { type: 'warp', label: 'Warp', description: 'Warp 터미널에서 실행' },
+  { type: 'tmux', label: 'tmux', description: 'tmux 세션에서 실행' },
+]
+
+const ICONS: Record<string, typeof Terminal> = {
   warp: Terminal,
   tmux: SquareTerminal,
 }
 
 /** 터미널 타입 선택 세그먼트 토글. */
 const TerminalSelector = memo(function TerminalSelector() {
-  const terminalType = useAgentsStore((s) => s.terminalType)
-  const setTerminalType = useAgentsStore((s) => s.setTerminalType)
+  const terminalType = useSettingsStore((s) => s.preferredTerminal)
+  const setTerminalType = useSettingsStore((s) => s.setPreferredTerminal)
 
   return (
     <div

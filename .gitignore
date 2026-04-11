@@ -32,8 +32,13 @@ logs/
 
 # Database backups
 *.dump
+infra/backups/
 *.rdb
 *.snapshot
+
+# PostgreSQL local data (bind mount) and pre-shutdown backups
+infra/docker/data/postgres/
+infra/docker/data/backups/
 
 # Backend data (playground sessions, etc.)
 src/backend/data/

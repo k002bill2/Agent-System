@@ -140,7 +140,11 @@ class TaskAnalysisService:
 
         for data in self._analyses.values():
             # 필터 적용: project_id가 일치하거나 NULL인 레코드 포함
-            if params.project_id and data["project_id"] is not None and data["project_id"] != params.project_id:
+            if (
+                params.project_id
+                and data["project_id"] is not None
+                and data["project_id"] != params.project_id
+            ):
                 continue
             if params.user_id and data["user_id"] != params.user_id:
                 continue

@@ -159,7 +159,9 @@ class MemoryConfig(BaseModel):
     name: str = Field(..., description="Memory name from frontmatter")
     description: str = Field(default="", description="Memory description from frontmatter")
     file_path: str = Field(..., description="Path to memory .md file")
-    memory_type: str = Field(default="user", description="Memory type: user/feedback/project/reference")
+    memory_type: str = Field(
+        default="user", description="Memory type: user/feedback/project/reference"
+    )
     modified_at: datetime | None = Field(default=None)
 
 
@@ -354,7 +356,9 @@ class RuleCreateRequest(BaseModel):
 
     rule_id: str = Field(..., description="Rule identifier (filename without .md)")
     content: str = Field(..., description="Rule .md content")
-    is_global: bool = Field(default=False, description="Create in ~/.claude/rules/ instead of project")
+    is_global: bool = Field(
+        default=False, description="Create in ~/.claude/rules/ instead of project"
+    )
 
 
 class RuleUpdateRequest(BaseModel):

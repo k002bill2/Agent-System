@@ -10,6 +10,16 @@ vi.mock('../../services/apiClient', () => ({
   },
 }))
 
+vi.mock('../settings', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../settings')>()
+  return {
+    ...original,
+    useSettingsStore: {
+      getState: () => ({ preferredTerminal: 'warp' as const }),
+    },
+  }
+})
+
 import { useAgentsStore, Agent, AgentRegistryStats, TaskAnalysisHistory, TaskAnalysisResult } from '../agents'
 import { apiClient } from '../../services/apiClient'
 
@@ -896,10 +906,10 @@ describe('agents store', () => {
     })
   })
 
-  // ── executeWithWarp ───────────────────────────────────
-  // executeWithWarp uses apiClient.get (analysis) + apiClient.post (warp)
+  // ── executeInTerminal ───────────────────────────────────
+  // executeInTerminal uses apiClient.get (analysis) + apiClient.post (terminal)
 
-  describe('executeWithWarp', () => {
+  describe('executeInTerminal', () => {
     const mockAnalysisData = {
       task_input: 'Build a feature',
       analysis: {
@@ -927,11 +937,11 @@ describe('agents store', () => {
       image_paths: ['/tmp/img.png'],
     }
 
-    it('returns true on successful warp execution', async () => {
+    it('returns true on successful terminal execution', async () => {
       mockApiClient.get.mockResolvedValueOnce(mockAnalysisData) // analysis fetch
-      mockApiClient.post.mockResolvedValueOnce({ success: true }) // warp open
+      mockApiClient.post.mockResolvedValueOnce({ success: true, terminal: 'warp' }) // terminal execute
 
-      const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
+      const result = await useAgentsStore.getState().executeInTerminal('a-1', 'proj-1')
 
       expect(result).toBe(true)
       expect(useAgentsStore.getState().executingAnalysisId).toBeNull()
@@ -945,18 +955,18 @@ describe('agents store', () => {
         })
       )
 
-      const promise = useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
+      const promise = useAgentsStore.getState().executeInTerminal('a-1', 'proj-1')
       expect(useAgentsStore.getState().executingAnalysisId).toBe('a-1')
 
       resolvePromise!(mockAnalysisData)
-      mockApiClient.post.mockResolvedValueOnce({ success: true })
+      mockApiClient.post.mockResolvedValueOnce({ success: true, terminal: 'warp' })
       await promise.catch(() => {})
     })
 
     it('returns false when analysis fetch fails', async () => {
       mockApiClient.get.mockRejectedValueOnce(new Error('Not Found'))
 
-      const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
+      const result = await useAgentsStore.getState().executeInTerminal('a-1', 'proj-1')
 
       expect(result).toBe(false)
       expect(useAgentsStore.getState().executionError).toBe('Not Found')
@@ -966,7 +976,7 @@ describe('agents store', () => {
       const dataWithoutProject = { ...mockAnalysisData, project_id: null }
       mockApiClient.get.mockResolvedValueOnce(dataWithoutProject)
 
-      const result = await useAgentsStore.getState().executeWithWarp('a-1')
+      const result = await useAgentsStore.getState().executeInTerminal('a-1')
 
       expect(result).toBe(false)
       expect(useAgentsStore.getState().executionError).toContain('프로젝트')
@@ -974,28 +984,28 @@ describe('agents store', () => {
 
     it('uses analysis project_id when projectId argument is not provided', async () => {
       mockApiClient.get.mockResolvedValueOnce(mockAnalysisData)
-      mockApiClient.post.mockResolvedValueOnce({ success: true })
+      mockApiClient.post.mockResolvedValueOnce({ success: true, terminal: 'warp' })
 
-      await useAgentsStore.getState().executeWithWarp('a-1')
+      await useAgentsStore.getState().executeInTerminal('a-1')
 
-      const warpBody = mockApiClient.post.mock.calls[0][1] as Record<string, unknown>
-      expect(warpBody.project_id).toBe('proj-1')
+      const body = mockApiClient.post.mock.calls[0][1] as Record<string, unknown>
+      expect(body.project_id).toBe('proj-1')
     })
 
-    it('returns false when warp result.success is false', async () => {
+    it('returns false when terminal result.success is false', async () => {
       mockApiClient.get.mockResolvedValueOnce(mockAnalysisData)
-      mockApiClient.post.mockResolvedValueOnce({ success: false, error: 'Warp error' })
+      mockApiClient.post.mockResolvedValueOnce({ success: false, terminal: 'warp', error: 'Terminal error' })
 
-      const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
+      const result = await useAgentsStore.getState().executeInTerminal('a-1', 'proj-1')
 
       expect(result).toBe(false)
-      expect(useAgentsStore.getState().executionError).toBe('Warp error')
+      expect(useAgentsStore.getState().executionError).toBe('Terminal error')
     })
 
     it('handles network error', async () => {
       mockApiClient.get.mockRejectedValueOnce(new Error('Network error'))
 
-      const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
+      const result = await useAgentsStore.getState().executeInTerminal('a-1', 'proj-1')
 
       expect(result).toBe(false)
       expect(useAgentsStore.getState().executionError).toBe('Network error')
@@ -1004,40 +1014,41 @@ describe('agents store', () => {
     it('handles non-Error thrown objects in catch', async () => {
       mockApiClient.get.mockRejectedValueOnce('string error')
 
-      const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
+      const result = await useAgentsStore.getState().executeInTerminal('a-1', 'proj-1')
 
       expect(result).toBe(false)
       expect(useAgentsStore.getState().executionError).toBe('Warp 실행에 실패했습니다')
     })
 
-    it('sends correct warp request body with image_paths', async () => {
+    it('sends correct terminal request body with image_paths', async () => {
       mockApiClient.get.mockResolvedValueOnce(mockAnalysisData)
-      mockApiClient.post.mockResolvedValueOnce({ success: true })
+      mockApiClient.post.mockResolvedValueOnce({ success: true, terminal: 'warp' })
 
-      await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
+      await useAgentsStore.getState().executeInTerminal('a-1', 'proj-1')
 
-      const warpBody = mockApiClient.post.mock.calls[0][1] as Record<string, unknown>
-      expect(warpBody.image_paths).toEqual(['/tmp/img.png'])
-      expect(warpBody.use_claude_cli).toBe(true)
-      expect(warpBody.new_window).toBe(false)
+      const body = mockApiClient.post.mock.calls[0][1] as Record<string, unknown>
+      expect(body.image_paths).toEqual(['/tmp/img.png'])
+      expect(body.use_claude_cli).toBe(true)
+      expect(body.terminal).toBe('warp')
+      expect(body.branch_name).toBeNull()
     })
 
     it('sends null image_paths when not present in analysis', async () => {
       const dataNoImages = { ...mockAnalysisData, image_paths: null }
       mockApiClient.get.mockResolvedValueOnce(dataNoImages)
-      mockApiClient.post.mockResolvedValueOnce({ success: true })
+      mockApiClient.post.mockResolvedValueOnce({ success: true, terminal: 'warp' })
 
-      await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
+      await useAgentsStore.getState().executeInTerminal('a-1', 'proj-1')
 
-      const warpBody = mockApiClient.post.mock.calls[0][1] as Record<string, unknown>
-      expect(warpBody.image_paths).toBeNull()
+      const body = mockApiClient.post.mock.calls[0][1] as Record<string, unknown>
+      expect(body.image_paths).toBeNull()
     })
 
-    it('uses default error when warp result success is false without error field', async () => {
+    it('uses default error when terminal result success is false without error field', async () => {
       mockApiClient.get.mockResolvedValueOnce(mockAnalysisData)
-      mockApiClient.post.mockResolvedValueOnce({ success: false })
+      mockApiClient.post.mockResolvedValueOnce({ success: false, terminal: 'warp' })
 
-      const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
+      const result = await useAgentsStore.getState().executeInTerminal('a-1', 'proj-1')
 
       expect(result).toBe(false)
       expect(useAgentsStore.getState().executionError).toContain('Warp')
@@ -1056,9 +1067,9 @@ describe('agents store', () => {
         },
       }
       mockApiClient.get.mockResolvedValueOnce(dataNoGroups)
-      mockApiClient.post.mockResolvedValueOnce({ success: true })
+      mockApiClient.post.mockResolvedValueOnce({ success: true, terminal: 'warp' })
 
-      const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
+      const result = await useAgentsStore.getState().executeInTerminal('a-1', 'proj-1')
       expect(result).toBe(true)
     })
 
@@ -1077,9 +1088,9 @@ describe('agents store', () => {
         },
       }
       mockApiClient.get.mockResolvedValueOnce(dataSingleGroup)
-      mockApiClient.post.mockResolvedValueOnce({ success: true })
+      mockApiClient.post.mockResolvedValueOnce({ success: true, terminal: 'warp' })
 
-      const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
+      const result = await useAgentsStore.getState().executeInTerminal('a-1', 'proj-1')
       expect(result).toBe(true)
     })
 
@@ -1099,9 +1110,9 @@ describe('agents store', () => {
         },
       }
       mockApiClient.get.mockResolvedValueOnce(dataEdgeCases)
-      mockApiClient.post.mockResolvedValueOnce({ success: true })
+      mockApiClient.post.mockResolvedValueOnce({ success: true, terminal: 'warp' })
 
-      const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
+      const result = await useAgentsStore.getState().executeInTerminal('a-1', 'proj-1')
       expect(result).toBe(true)
     })
 
@@ -1120,9 +1131,9 @@ describe('agents store', () => {
         },
       }
       mockApiClient.get.mockResolvedValueOnce(dataMissing)
-      mockApiClient.post.mockResolvedValueOnce({ success: true })
+      mockApiClient.post.mockResolvedValueOnce({ success: true, terminal: 'warp' })
 
-      const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
+      const result = await useAgentsStore.getState().executeInTerminal('a-1', 'proj-1')
       expect(result).toBe(true)
     })
 
@@ -1135,9 +1146,9 @@ describe('agents store', () => {
         },
       }
       mockApiClient.get.mockResolvedValueOnce(dataNoExecPlan)
-      mockApiClient.post.mockResolvedValueOnce({ success: true })
+      mockApiClient.post.mockResolvedValueOnce({ success: true, terminal: 'warp' })
 
-      const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
+      const result = await useAgentsStore.getState().executeInTerminal('a-1', 'proj-1')
       expect(result).toBe(true)
     })
 
@@ -1147,9 +1158,9 @@ describe('agents store', () => {
         analysis: null,
       }
       mockApiClient.get.mockResolvedValueOnce(dataNoAnalysis)
-      mockApiClient.post.mockResolvedValueOnce({ success: true })
+      mockApiClient.post.mockResolvedValueOnce({ success: true, terminal: 'warp' })
 
-      const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
+      const result = await useAgentsStore.getState().executeInTerminal('a-1', 'proj-1')
       expect(result).toBe(true)
     })
 
@@ -1168,9 +1179,9 @@ describe('agents store', () => {
         },
       }
       mockApiClient.get.mockResolvedValueOnce(dataNoDepsProp)
-      mockApiClient.post.mockResolvedValueOnce({ success: true })
+      mockApiClient.post.mockResolvedValueOnce({ success: true, terminal: 'warp' })
 
-      const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
+      const result = await useAgentsStore.getState().executeInTerminal('a-1', 'proj-1')
       expect(result).toBe(true)
     })
 
@@ -1180,13 +1191,13 @@ describe('agents store', () => {
         task_input: null,
       }
       mockApiClient.get.mockResolvedValueOnce(dataNoTaskInput)
-      mockApiClient.post.mockResolvedValueOnce({ success: true })
+      mockApiClient.post.mockResolvedValueOnce({ success: true, terminal: 'warp' })
 
-      const result = await useAgentsStore.getState().executeWithWarp('a-1', 'proj-1')
+      const result = await useAgentsStore.getState().executeInTerminal('a-1', 'proj-1')
       expect(result).toBe(true)
 
-      const warpBody = mockApiClient.post.mock.calls[0][1] as Record<string, unknown>
-      expect(warpBody.title).toContain('Analysis')
+      const body = mockApiClient.post.mock.calls[0][1] as Record<string, unknown>
+      expect(body.title).toContain('Analysis')
     })
   })
 

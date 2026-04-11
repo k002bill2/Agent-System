@@ -10,6 +10,7 @@ const {
   mockSetBackendUrl,
   mockSetTheme,
   mockSetNotificationSetting,
+  mockSetPreferredTerminal,
   mockConnect,
   mockDisconnect,
   mockRequestPermission,
@@ -28,6 +29,7 @@ const {
     mockSetBackendUrl: vi.fn(),
     mockSetTheme: vi.fn(),
     mockSetNotificationSetting: vi.fn(),
+    mockSetPreferredTerminal: vi.fn(),
     mockConnect: vi.fn(),
     mockDisconnect: vi.fn(),
     mockRequestPermission: vi.fn(),
@@ -66,15 +68,30 @@ vi.mock('../stores/settings', () => ({
     backendUrl: 'http://localhost:8000',
     theme: 'system',
     notifications: defaultNotifications,
+    preferredTerminal: 'warp',
     setLLMProvider: mockSetLLMProvider,
     setModel: mockSetModel,
     setApiKey: mockSetApiKey,
     setBackendUrl: mockSetBackendUrl,
     setTheme: mockSetTheme,
     setNotificationSetting: mockSetNotificationSetting,
+    setPreferredTerminal: mockSetPreferredTerminal,
     ...getSettingsOverrides(),
   }),
   getModelsForProvider: () => ['model-a', 'model-b'],
+  Theme: {},
+  LLMProvider: {},
+  TerminalType: {},
+  TERMINAL_DISPLAY_NAMES: {
+    warp: 'Warp',
+    tmux: 'tmux',
+    terminal_app: 'Terminal.app',
+    iterm2: 'iTerm2',
+    kitty: 'Kitty',
+    alacritty: 'Alacritty',
+    ghostty: 'Ghostty',
+    wezterm: 'WezTerm',
+  },
 }))
 
 vi.mock('../stores/orchestration', () => ({
@@ -238,7 +255,10 @@ describe('SettingsPage', () => {
 
     it('renders model dropdown with options from getModelsForProvider', async () => {
       await renderSettingsPage()
-      const options = screen.getAllByRole('option')
+      const selects = screen.getAllByRole('combobox')
+      // First combobox is model select, second is terminal select
+      const modelSelect = selects[0]
+      const options = modelSelect.querySelectorAll('option')
       expect(options).toHaveLength(2)
       expect(options[0]).toHaveTextContent('model-a')
       expect(options[1]).toHaveTextContent('model-b')
@@ -246,9 +266,10 @@ describe('SettingsPage', () => {
 
     it('calls setModel when model selection changes', async () => {
       await renderSettingsPage()
-      const select = screen.getByRole('combobox')
+      const selects = screen.getAllByRole('combobox')
+      const modelSelect = selects[0]
       await act(async () => {
-        fireEvent.change(select, { target: { value: 'model-b' } })
+        fireEvent.change(modelSelect, { target: { value: 'model-b' } })
       })
       expect(mockSetModel).toHaveBeenCalledWith('model-b')
     })
@@ -567,25 +588,26 @@ describe('SettingsPage', () => {
     })
 
     it('saves token successfully on Save click', async () => {
-      let callCount = 0
-      mockFetch.mockImplementation(() => {
-        callCount++
-        if (callCount === 1) {
+      mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+        if (typeof url === 'string' && url.includes('/api/terminal/')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ terminals: [] }) })
+        }
+        if (options?.method === 'PUT') {
           return Promise.resolve({
             ok: true,
             json: () => Promise.resolve({
-              oauth_token_set: false,
-              oauth_token_masked: '',
-              token_source: 'none',
+              oauth_token_set: true,
+              oauth_token_masked: 'my-...en',
+              token_source: 'config',
             }),
           })
         }
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({
-            oauth_token_set: true,
-            oauth_token_masked: 'my-...en',
-            token_source: 'config',
+            oauth_token_set: false,
+            oauth_token_masked: '',
+            token_source: 'none',
           }),
         })
       })
@@ -616,20 +638,21 @@ describe('SettingsPage', () => {
     })
 
     it('handles save token failure (non-ok response)', async () => {
-      let callCount = 0
-      mockFetch.mockImplementation(() => {
-        callCount++
-        if (callCount === 1) {
-          return Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve({
-              oauth_token_set: false,
-              oauth_token_masked: '',
-              token_source: 'none',
-            }),
-          })
+      mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+        if (typeof url === 'string' && url.includes('/api/terminal/')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ terminals: [] }) })
         }
-        return Promise.resolve({ ok: false, json: () => Promise.resolve({}) })
+        if (options?.method === 'PUT') {
+          return Promise.resolve({ ok: false, json: () => Promise.resolve({}) })
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            oauth_token_set: false,
+            oauth_token_masked: '',
+            token_source: 'none',
+          }),
+        })
       })
 
       await renderSettingsPage()
@@ -645,25 +668,29 @@ describe('SettingsPage', () => {
       })
 
       await waitFor(() => {
-        expect(mockFetch).toHaveBeenCalledTimes(2)
+        expect(mockFetch).toHaveBeenCalledWith(
+          'http://localhost:8000/api/usage/claude-config',
+          expect.objectContaining({ method: 'PUT' })
+        )
       })
     })
 
     it('handles save token network error', async () => {
-      let callCount = 0
-      mockFetch.mockImplementation(() => {
-        callCount++
-        if (callCount === 1) {
-          return Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve({
-              oauth_token_set: false,
-              oauth_token_masked: '',
-              token_source: 'none',
-            }),
-          })
+      mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+        if (typeof url === 'string' && url.includes('/api/terminal/')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ terminals: [] }) })
         }
-        return Promise.reject(new Error('Network error'))
+        if (options?.method === 'PUT') {
+          return Promise.reject(new Error('Network error'))
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            oauth_token_set: false,
+            oauth_token_masked: '',
+            token_source: 'none',
+          }),
+        })
       })
 
       await renderSettingsPage()
@@ -679,30 +706,34 @@ describe('SettingsPage', () => {
       })
 
       await waitFor(() => {
-        expect(mockFetch).toHaveBeenCalledTimes(2)
+        expect(mockFetch).toHaveBeenCalledWith(
+          'http://localhost:8000/api/usage/claude-config',
+          expect.objectContaining({ method: 'PUT' })
+        )
       })
     })
 
     it('clears token on Clear button click', async () => {
-      let callCount = 0
-      mockFetch.mockImplementation(() => {
-        callCount++
-        if (callCount === 1) {
+      mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+        if (typeof url === 'string' && url.includes('/api/terminal/')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ terminals: [] }) })
+        }
+        if (options?.method === 'PUT') {
           return Promise.resolve({
             ok: true,
             json: () => Promise.resolve({
-              oauth_token_set: true,
-              oauth_token_masked: 'sk-...xx',
-              token_source: 'config',
+              oauth_token_set: false,
+              oauth_token_masked: '',
+              token_source: 'none',
             }),
           })
         }
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({
-            oauth_token_set: false,
-            oauth_token_masked: '',
-            token_source: 'none',
+            oauth_token_set: true,
+            oauth_token_masked: 'sk-...xx',
+            token_source: 'config',
           }),
         })
       })
@@ -727,20 +758,21 @@ describe('SettingsPage', () => {
     })
 
     it('handles clear token network error', async () => {
-      let callCount = 0
-      mockFetch.mockImplementation(() => {
-        callCount++
-        if (callCount === 1) {
-          return Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve({
-              oauth_token_set: true,
-              oauth_token_masked: 'sk-...xx',
-              token_source: 'config',
-            }),
-          })
+      mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+        if (typeof url === 'string' && url.includes('/api/terminal/')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ terminals: [] }) })
         }
-        return Promise.reject(new Error('Network failure'))
+        if (options?.method === 'PUT') {
+          return Promise.reject(new Error('Network failure'))
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            oauth_token_set: true,
+            oauth_token_masked: 'sk-...xx',
+            token_source: 'config',
+          }),
+        })
       })
 
       await renderSettingsPage()
@@ -754,7 +786,10 @@ describe('SettingsPage', () => {
       })
 
       await waitFor(() => {
-        expect(mockFetch).toHaveBeenCalledTimes(2)
+        expect(mockFetch).toHaveBeenCalledWith(
+          'http://localhost:8000/api/usage/claude-config',
+          expect.objectContaining({ method: 'PUT' })
+        )
       })
     })
 
@@ -764,27 +799,28 @@ describe('SettingsPage', () => {
     })
 
     it('shows success result after successful connection test', async () => {
-      let callCount = 0
-      mockFetch.mockImplementation(() => {
-        callCount++
-        if (callCount === 1) {
+      mockFetch.mockImplementation((url: string) => {
+        if (typeof url === 'string' && url.includes('/api/terminal/')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ terminals: [] }) })
+        }
+        if (typeof url === 'string' && url.includes('/api/usage/oauth-test')) {
           return Promise.resolve({
             ok: true,
             json: () => Promise.resolve({
-              oauth_token_set: true,
-              oauth_token_masked: 'sk-...xx',
-              token_source: 'config',
+              tokenFound: true,
+              tokenSource: 'config',
+              apiResponse: {
+                subscription_type: 'Pro',
+              },
             }),
           })
         }
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({
-            tokenFound: true,
-            tokenSource: 'config',
-            apiResponse: {
-              subscription_type: 'Pro',
-            },
+            oauth_token_set: true,
+            oauth_token_masked: 'sk-...xx',
+            token_source: 'config',
           }),
         })
       })
@@ -802,24 +838,25 @@ describe('SettingsPage', () => {
     })
 
     it('shows failure result when connection test fails (tokenFound false)', async () => {
-      let callCount = 0
-      mockFetch.mockImplementation(() => {
-        callCount++
-        if (callCount === 1) {
+      mockFetch.mockImplementation((url: string) => {
+        if (typeof url === 'string' && url.includes('/api/terminal/')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ terminals: [] }) })
+        }
+        if (typeof url === 'string' && url.includes('/api/usage/oauth-test')) {
           return Promise.resolve({
             ok: true,
             json: () => Promise.resolve({
-              oauth_token_set: false,
-              oauth_token_masked: '',
-              token_source: 'none',
+              tokenFound: false,
+              error: 'No token configured',
             }),
           })
         }
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({
-            tokenFound: false,
-            error: 'No token configured',
+            oauth_token_set: false,
+            oauth_token_masked: '',
+            token_source: 'none',
           }),
         })
       })
@@ -836,20 +873,21 @@ describe('SettingsPage', () => {
     })
 
     it('shows error message when connection test network fails', async () => {
-      let callCount = 0
-      mockFetch.mockImplementation(() => {
-        callCount++
-        if (callCount === 1) {
-          return Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve({
-              oauth_token_set: false,
-              oauth_token_masked: '',
-              token_source: 'none',
-            }),
-          })
+      mockFetch.mockImplementation((url: string) => {
+        if (typeof url === 'string' && url.includes('/api/terminal/')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ terminals: [] }) })
         }
-        return Promise.reject(new Error('Network error'))
+        if (typeof url === 'string' && url.includes('/api/usage/oauth-test')) {
+          return Promise.reject(new Error('Network error'))
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            oauth_token_set: false,
+            oauth_token_masked: '',
+            token_source: 'none',
+          }),
+        })
       })
 
       await renderSettingsPage()
@@ -864,27 +902,28 @@ describe('SettingsPage', () => {
     })
 
     it('shows connection test with plan fallback when subscription_type missing', async () => {
-      let callCount = 0
-      mockFetch.mockImplementation(() => {
-        callCount++
-        if (callCount === 1) {
+      mockFetch.mockImplementation((url: string) => {
+        if (typeof url === 'string' && url.includes('/api/terminal/')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ terminals: [] }) })
+        }
+        if (typeof url === 'string' && url.includes('/api/usage/oauth-test')) {
           return Promise.resolve({
             ok: true,
             json: () => Promise.resolve({
-              oauth_token_set: true,
-              oauth_token_masked: 'sk-...xx',
-              token_source: 'config',
+              tokenFound: true,
+              tokenSource: 'env',
+              apiResponse: {
+                plan: 'Team',
+              },
             }),
           })
         }
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({
-            tokenFound: true,
-            tokenSource: 'env',
-            apiResponse: {
-              plan: 'Team',
-            },
+            oauth_token_set: true,
+            oauth_token_masked: 'sk-...xx',
+            token_source: 'config',
           }),
         })
       })
@@ -902,24 +941,25 @@ describe('SettingsPage', () => {
     })
 
     it('shows Unknown subscription when neither subscription_type nor plan exist', async () => {
-      let callCount = 0
-      mockFetch.mockImplementation(() => {
-        callCount++
-        if (callCount === 1) {
+      mockFetch.mockImplementation((url: string) => {
+        if (typeof url === 'string' && url.includes('/api/terminal/')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ terminals: [] }) })
+        }
+        if (typeof url === 'string' && url.includes('/api/usage/oauth-test')) {
           return Promise.resolve({
             ok: true,
             json: () => Promise.resolve({
-              oauth_token_set: true,
-              oauth_token_masked: 'sk-...xx',
-              token_source: 'config',
+              tokenFound: true,
+              apiResponse: {},
             }),
           })
         }
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({
-            tokenFound: true,
-            apiResponse: {},
+            oauth_token_set: true,
+            oauth_token_masked: 'sk-...xx',
+            token_source: 'config',
           }),
         })
       })
@@ -965,25 +1005,26 @@ describe('SettingsPage', () => {
 
   describe('Saved status timeout', () => {
     it('resets save status to idle after timeout', async () => {
-      let callCount = 0
-      mockFetch.mockImplementation(() => {
-        callCount++
-        if (callCount === 1) {
+      mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+        if (typeof url === 'string' && url.includes('/api/terminal/')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ terminals: [] }) })
+        }
+        if (options?.method === 'PUT') {
           return Promise.resolve({
             ok: true,
             json: () => Promise.resolve({
-              oauth_token_set: false,
-              oauth_token_masked: '',
-              token_source: 'none',
+              oauth_token_set: true,
+              oauth_token_masked: 'tok-...xx',
+              token_source: 'config',
             }),
           })
         }
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({
-            oauth_token_set: true,
-            oauth_token_masked: 'tok-...xx',
-            token_source: 'config',
+            oauth_token_set: false,
+            oauth_token_masked: '',
+            token_source: 'none',
           }),
         })
       })

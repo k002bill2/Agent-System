@@ -765,7 +765,10 @@ async def delete_branch(
 
     try:
         success = git_service.delete_branch(
-            name=branch_name, force=force, delete_remote=delete_remote, remove_worktree=remove_worktree
+            name=branch_name,
+            force=force,
+            delete_remote=delete_remote,
+            remove_worktree=remove_worktree,
         )
 
         # Auto-close open MRs whose source branch was deleted

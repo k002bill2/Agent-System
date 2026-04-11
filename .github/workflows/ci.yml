@@ -89,9 +89,7 @@ jobs:
           uv pip install --system -e ".[dev]"
 
       - name: MyPy type check
-        run: mypy . --ignore-missing-imports --no-error-summary || true
-        # Note: '|| true' to allow warnings without failing the build
-        # Remove when type coverage improves
+        run: mypy . --ignore-missing-imports --no-error-summary
 
   backend-test:
     name: Backend Tests

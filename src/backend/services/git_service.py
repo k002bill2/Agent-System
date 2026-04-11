@@ -349,9 +349,7 @@ class GitService:
 
         # Check if branch has an active worktree
         worktrees = self.list_worktrees()
-        matching_wt = next(
-            (wt for wt in worktrees if wt.branch == name and not wt.is_main), None
-        )
+        matching_wt = next((wt for wt in worktrees if wt.branch == name and not wt.is_main), None)
         if matching_wt:
             if not remove_worktree:
                 raise GitServiceError(

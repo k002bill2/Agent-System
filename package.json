@@ -7,6 +7,21 @@
     "test": "echo 'No tests configured yet'",
     "lint": "cd src/dashboard && npm run lint",
     "type-check": "cd src/dashboard && npx tsc --noEmit",
-    "build": "cd src/dashboard && npm run build"
+    "build": "cd src/dashboard && npm run build",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.0.0",
+    "lint-staged": "^15.0.0"
+  },
+  "lint-staged": {
+    "src/dashboard/src/**/*.{ts,tsx}": [
+      "bash -c 'cd src/dashboard && npx tsc --noEmit'",
+      "bash -c 'cd src/dashboard && npx eslint --fix'"
+    ],
+    "src/backend/**/*.py": [
+      "ruff check --fix",
+      "ruff format"
+    ]
   }
 }

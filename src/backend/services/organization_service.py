@@ -632,9 +632,7 @@ class OrganizationService:
         return OrganizationStats(
             organization_id=org_id,
             total_members=len(members),
-            active_members=len(active_member_ids) or len(
-                [m for m in members if m.is_active]
-            ),
+            active_members=len(active_member_ids) or len([m for m in members if m.is_active]),
             total_projects=org.current_projects if org else 0,
             active_projects=org.current_projects if org else 0,
             total_sessions=len(sessions_all),

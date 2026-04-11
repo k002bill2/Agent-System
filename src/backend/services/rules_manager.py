@@ -63,9 +63,7 @@ class RulesManager:
         rules.sort(key=lambda r: r.name.lower())
         return rules
 
-    def _parse_rule(
-        self, rule_file: Path, project_id: str, is_global: bool
-    ) -> RuleConfig | None:
+    def _parse_rule(self, rule_file: Path, project_id: str, is_global: bool) -> RuleConfig | None:
         """Parse a rule .md file.
 
         Handles files with and without YAML frontmatter.
@@ -178,9 +176,7 @@ class RulesManager:
             logger.error(f"Error updating rule: {e}")
             return False
 
-    def delete_rule(
-        self, project_id: str, rule_id: str, is_global: bool = False
-    ) -> bool:
+    def delete_rule(self, project_id: str, rule_id: str, is_global: bool = False) -> bool:
         """Delete a rule."""
         rule_file = self._resolve_rule_path(project_id, rule_id, is_global)
         if not rule_file or not rule_file.exists():
@@ -195,9 +191,7 @@ class RulesManager:
             logger.error(f"Error deleting rule: {e}")
             return False
 
-    def copy_rule(
-        self, source_project_id: str, rule_id: str, target_project_id: str
-    ) -> bool:
+    def copy_rule(self, source_project_id: str, rule_id: str, target_project_id: str) -> bool:
         """Copy a rule to another project."""
         source_file = self._resolve_rule_path(source_project_id, rule_id, is_global=False)
         if not source_file or not source_file.exists():
@@ -239,9 +233,7 @@ class RulesManager:
 
         return sum(1 for f in rules_dir.glob("*.md") if f.is_file())
 
-    def _resolve_rule_path(
-        self, project_id: str, rule_id: str, is_global: bool
-    ) -> Path | None:
+    def _resolve_rule_path(self, project_id: str, rule_id: str, is_global: bool) -> Path | None:
         """Resolve the filesystem path for a rule."""
         if is_global:
             return GLOBAL_RULES_DIR / f"{rule_id}.md"

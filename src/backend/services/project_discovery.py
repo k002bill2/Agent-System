@@ -194,8 +194,14 @@ class ProjectDiscovery:
                 projects_dir = existing_path.parent / "projects"
                 if projects_dir.exists() and projects_dir.is_dir():
                     for entry in projects_dir.iterdir():
-                        if entry.is_symlink() or (entry.is_dir() and not entry.name.startswith('test-')):
-                            resolved = entry.resolve() if (entry.is_symlink() and not self._is_docker) else entry
+                        if entry.is_symlink() or (
+                            entry.is_dir() and not entry.name.startswith("test-")
+                        ):
+                            resolved = (
+                                entry.resolve()
+                                if (entry.is_symlink() and not self._is_docker)
+                                else entry
+                            )
                             if resolved not in self._project_paths:
                                 if self._is_docker or resolved.exists():
                                     self._project_paths.append(resolved)
@@ -329,8 +335,7 @@ class ProjectDiscovery:
         memory_count = 0
         if memory_dir.exists():
             memory_count = sum(
-                1 for f in memory_dir.glob("*.md")
-                if f.is_file() and f.name != "MEMORY.md"
+                1 for f in memory_dir.glob("*.md") if f.is_file() and f.name != "MEMORY.md"
             )
 
         # Count hooks
