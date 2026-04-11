@@ -1,6 +1,6 @@
 """Terminal Integration API routes.
 
-Generic terminal execution supporting 8 terminal types.
+Generic terminal execution supporting 9 terminal types.
 Complements the Warp-specific routes in ``api.warp``.
 """
 
