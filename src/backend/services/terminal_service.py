@@ -10,6 +10,7 @@ Other adapters implement terminal-specific execution via AppleScript or CLI.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import shlex
@@ -37,6 +38,7 @@ class TerminalType(str, Enum):
     ALACRITTY = "alacritty"
     GHOSTTY = "ghostty"
     WEZTERM = "wezterm"
+    CMUX = "cmux"
 
 
 TERMINAL_INFO: dict[TerminalType, dict[str, str]] = {
@@ -62,6 +64,10 @@ TERMINAL_INFO: dict[TerminalType, dict[str, str]] = {
     TerminalType.WEZTERM: {
         "name": "WezTerm",
         "description": "GPU-accelerated terminal by Wez Furlong",
+    },
+    TerminalType.CMUX: {
+        "name": "cmux",
+        "description": "AI-native terminal with workspaces",
     },
 }
 
@@ -520,6 +526,69 @@ class WezTermAdapter(TerminalAdapter):
             }
 
 
+class CmuxAdapter(TerminalAdapter):
+    """cmux terminal via its CLI."""
+
+    async def is_available(self) -> bool:
+        return shutil.which("cmux") is not None or Path(
+            "/Applications/cmux.app"
+        ).exists()
+
+    async def execute(
+        self,
+        project_path: str,
+        command: str,
+        title: str | None = None,
+        branch_name: str | None = None,
+        image_paths: list[str] | None = None,
+    ) -> dict:
+        exec_script = _write_exec_script(project_path, command, branch_name, image_paths)
+
+        # cmux CLI IPC fails with Broken pipe from uvicorn subprocess.
+        # Workaround: open via LaunchServices, then type command via
+        # AppleScript keystroke (same approach as GhosttyAdapter).
+        try:
+            open_proc = await asyncio.create_subprocess_exec(
+                "/usr/bin/open", "-a", "cmux", project_path,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, open_err = await asyncio.wait_for(
+                open_proc.communicate(), timeout=10
+            )
+        except (asyncio.TimeoutError, OSError) as e:
+            logger.error("Failed to launch cmux: %s", e)
+            return {
+                "success": False,
+                "terminal": TerminalType.CMUX.value,
+                "error": f"Failed to launch cmux: {e}",
+            }
+
+        if open_proc.returncode != 0:
+            err = open_err.decode().strip() if open_err else "unknown error"
+            logger.error("open -a cmux failed: %s", err)
+            return {
+                "success": False,
+                "terminal": TerminalType.CMUX.value,
+                "error": f"Failed to launch cmux: {err}",
+            }
+
+        # Type the command into the new workspace via System Events
+        script = (
+            'tell application "cmux"\n'
+            "    activate\n"
+            "end tell\n"
+            "delay 1.5\n"
+            'tell application "System Events"\n'
+            '    tell process "cmux"\n'
+            f'        keystroke "bash {exec_script}"\n'
+            "        key code 36\n"
+            "    end tell\n"
+            "end tell"
+        )
+        return await _run_osascript(script, TerminalType.CMUX)
+
+
 # ---------------------------------------------------------------------------
 # Shared helper for AppleScript-based adapters
 # ---------------------------------------------------------------------------
@@ -574,6 +643,7 @@ class TerminalService:
             TerminalType.ALACRITTY: AlacrittyAdapter(),
             TerminalType.GHOSTTY: GhosttyAdapter(),
             TerminalType.WEZTERM: WezTermAdapter(),
+            TerminalType.CMUX: CmuxAdapter(),
         }
 
     def get_adapter(self, terminal: TerminalType) -> TerminalAdapter:

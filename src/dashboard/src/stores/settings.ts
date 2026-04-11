@@ -4,7 +4,7 @@ import { persist } from 'zustand/middleware'
 export type Theme = 'light' | 'dark' | 'system'
 export type LLMProvider = 'anthropic' | 'openai' | 'google' | 'local'
 
-export type TerminalType = 'warp' | 'tmux' | 'terminal_app' | 'iterm2' | 'kitty' | 'alacritty' | 'ghostty' | 'wezterm'
+export type TerminalType = 'warp' | 'tmux' | 'terminal_app' | 'iterm2' | 'kitty' | 'alacritty' | 'ghostty' | 'wezterm' | 'cmux'
 
 export const TERMINAL_DISPLAY_NAMES: Record<TerminalType, string> = {
   warp: 'Warp',
@@ -15,6 +15,7 @@ export const TERMINAL_DISPLAY_NAMES: Record<TerminalType, string> = {
   alacritty: 'Alacritty',
   ghostty: 'Ghostty',
   wezterm: 'WezTerm',
+  cmux: 'cmux',
 }
 
 export interface NotificationSettings {
