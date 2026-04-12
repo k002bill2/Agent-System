@@ -397,7 +397,7 @@ class VersionService:
 
 ## 23. Project Config Management
 
-Claude Code 프로젝트의 스킬, 에이전트, MCP, Hook을 웹 UI에서 관리:
+Claude Code 프로젝트의 스킬, 에이전트, MCP, Hook, 커맨드, 메모리, 규칙을 웹 UI에서 관리:
 
 ```python
 class ProjectConfigMonitor:
@@ -441,6 +441,18 @@ class ProjectConfigMonitor:
 - 콘텐츠 편집
 - 허용 도구 설정
 - 프로젝트 간 커맨드 복사
+
+### Memories 관리
+- `~/.claude/projects/{path}/memory/` 메모리 파일 CRUD
+- MEMORY.md 인덱스 편집
+- YAML Frontmatter 메타데이터 (name, description, type)
+- 메모리 타입: `user`, `feedback`, `project`, `reference`
+
+### Rules 관리
+- 프로젝트 규칙 (`.claude/rules/*.md`) CRUD
+- 글로벌 규칙 (`~/.claude/rules/*.md`) 조회/편집
+- 프로젝트 간 규칙 복사
+- Frontmatter 없는 규칙 파일도 자동 파싱 (파일명/제목에서 이름 추론)
 
 ---
 
@@ -1297,3 +1309,55 @@ class ProjectInvitationService:
 - pending 초대 목록 조회/취소
 
 **API**: `/api/v1/projects/{project_id}/invitations` (CRUD), `/api/v1/invitations/{token}` (수락)
+
+---
+
+## 51. Memory Manager
+
+Claude Code 메모리 파일을 웹 UI에서 CRUD 관리:
+
+```python
+class MemoryManager:
+    def get_project_memories(self, project_id: str) -> list[MemoryConfig]
+    def create_memory(self, project_id: str, memory_id: str, content: str) -> MemoryConfig | None
+    def update_memory_content(self, project_id: str, memory_id: str, content: str) -> bool
+    def delete_memory(self, project_id: str, memory_id: str) -> bool
+    def get_memory_index(self, project_id: str) -> str
+    def update_memory_index(self, project_id: str, content: str) -> bool
+```
+
+**저장 경로**: `~/.claude/projects/{encoded_path}/memory/`
+
+**메모리 메타데이터**: YAML Frontmatter (`name`, `description`, `type`, `modified_at`)
+
+**메모리 타입**: `user`, `feedback`, `project`, `reference`
+
+**Dashboard UI**: `MemoryTab`, `MemoryEditModal` (ProjectConfigsPage 내)
+
+**API**: `/api/project-configs/{project_id}/memories` (7개 엔드포인트)
+
+---
+
+## 52. Rules Manager
+
+Claude Code 규칙 파일을 웹 UI에서 CRUD 관리 (프로젝트/글로벌):
+
+```python
+class RulesManager:
+    def get_project_rules(self, project_id: str) -> list[RuleConfig]
+    def get_global_rules(self) -> list[RuleConfig]
+    def create_rule(self, project_id: str, rule_id: str, content: str, is_global: bool = False) -> RuleConfig | None
+    def update_rule_content(self, project_id: str, rule_id: str, content: str, is_global: bool = False) -> bool
+    def delete_rule(self, project_id: str, rule_id: str, is_global: bool = False) -> bool
+    def copy_rule(self, source_project_id: str, rule_id: str, target_project_id: str) -> bool
+```
+
+**저장 경로**: 프로젝트 `.claude/rules/*.md`, 글로벌 `~/.claude/rules/*.md`
+
+**특징**:
+- Frontmatter 없는 파일도 자동 파싱 (파일명/첫 제목에서 이름 추론)
+- 프로젝트 간 규칙 복사 지원
+
+**Dashboard UI**: `RulesTab`, `RuleEditModal` (ProjectConfigsPage 내)
+
+**API**: `/api/project-configs/{project_id}/rules` (6개) + `/api/project-configs/global/rules` (5개)

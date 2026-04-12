@@ -259,7 +259,7 @@ npm test -- --run src/specific.test.ts
 - [ ] 에러 시나리오 테스트
 
 ## 문서
-- [ ] API 변경 시 docs/api-reference.md 업데이트
+- [ ] API 변경 시 docs/api/ 도메인별 파일 업데이트 (인덱스: docs/api-reference.md)
 - [ ] 기능 변경 시 docs/features.md 업데이트
 ```
 
@@ -327,6 +327,6 @@ gh pr create --title "HOTFIX: [issue]" --body "긴급 수정"
 
 - `CLAUDE.md` - 프로젝트 메인 가이드
 - `docs/architecture.md` - 시스템 아키텍처
-- `docs/api-reference.md` - API 문서
+- `docs/api-reference.md` - API 문서 인덱스 (→ `docs/api/` 도메인별 파일)
 - `docs/guides/boris-cherny-workflow-guide.md` - Boris Cherny 원칙
 - `docs/guides/agent-teams-guide.md` - Agent Teams

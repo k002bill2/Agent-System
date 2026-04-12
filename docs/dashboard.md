@@ -146,6 +146,10 @@ import { cn } from '@/lib/utils';
 | `HookEditModal` | `components/project-configs/` | Hook 편집 모달 |
 | `CommandsTab` | `components/project-configs/` | 커맨드 목록 탭 |
 | `CommandEditModal` | `components/project-configs/` | 커맨드 편집 모달 |
+| `MemoryTab` | `components/project-configs/` | 메모리 엔트리 목록/MEMORY.md 인덱스 편집 |
+| `MemoryEditModal` | `components/project-configs/` | 메모리 엔트리 생성/편집 모달 (YAML frontmatter) |
+| `RulesTab` | `components/project-configs/` | 프로젝트/글로벌 규칙 관리 탭 |
+| `RuleEditModal` | `components/project-configs/` | 규칙 생성/편집 모달 |
 | `ConfirmDeleteModal` | `components/project-configs/` | 삭제 확인 범용 모달 |
 | `CopyToProjectModal` | `components/project-configs/` | 프로젝트 간 복사 모달 |
 
@@ -287,7 +291,7 @@ import { cn } from '@/lib/utils';
 |----------|------|
 | `VersionHistory` | 버전 히스토리 (타임라인, 비교, 롤백 포함) |
 
-### Usage & Cost Components
+### Usage & Cost Components (`components/usage/`)
 
 | 컴포넌트 | 설명 |
 |----------|------|
@@ -298,6 +302,12 @@ import { cn } from '@/lib/utils';
 | `DailyCostTrend` | 일간 비용 추이 차트 |
 | `LLMAccountsSettings` | LLM 계정/API 키 설정 |
 | `MemberUsageTable` | 멤버별 사용량 테이블 |
+
+### Terminal Components
+
+| 컴포넌트 | 설명 |
+|----------|------|
+| `TerminalSelector` | 실행 터미널 선택 (Warp/tmux 토글) |
 
 ### Admin Components
 
@@ -477,6 +487,10 @@ src/dashboard/
 │   │   │   ├── HookEditModal.tsx
 │   │   │   ├── CommandsTab.tsx
 │   │   │   ├── CommandEditModal.tsx
+│   │   │   ├── MemoryTab.tsx
+│   │   │   ├── MemoryEditModal.tsx
+│   │   │   ├── RulesTab.tsx
+│   │   │   ├── RuleEditModal.tsx
 │   │   │   ├── ConfirmDeleteModal.tsx
 │   │   │   └── CopyToProjectModal.tsx
 │   │   ├── workflows/          # 워크플로우
@@ -531,6 +545,15 @@ src/dashboard/
 │   │   │   └── WorkflowCheckCard.tsx
 │   │   ├── rag/                # RAG 검색
 │   │   │   └── RAGQueryPanel.tsx
+│   │   ├── permissions/         # 권한 관리
+│   │   │   └── PermissionTogglePanel.tsx
+│   │   ├── usage/              # 사용량/비용 모니터링
+│   │   │   ├── ClaudeUsageDashboard.tsx
+│   │   │   ├── UsageProgressBar.tsx
+│   │   │   ├── ContextWindowMeter.tsx
+│   │   │   ├── MemberUsageTable.tsx
+│   │   │   ├── DailyCostTrend.tsx
+│   │   │   └── LLMAccountsSettings.tsx
 │   │   ├── admin/              # 관리자 설정
 │   │   │   ├── MenuSettingsTab.tsx
 │   │   │   ├── UserManagementTab.tsx

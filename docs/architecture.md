@@ -72,7 +72,7 @@ src/backend/
 │   ├── nodes.py             # 6가지 노드 구현
 │   ├── parallel_executor.py # 병렬 실행
 │   └── tools.py             # MCP 도구 실행자
-├── services/                    # 69개 서비스/매니저 모듈
+├── services/                    # 71개 서비스/매니저 모듈
 │   ├── adapters/               # 어댑터 패턴 구현 (비어있음)
 │   ├── cache/                  # 캐싱 레이어 (비어있음)
 │   ├── agent_manager.py           # 에이전트 인스턴스 관리
@@ -128,6 +128,8 @@ src/backend/
 │   ├── tmux_service.py            # Tmux 세션 관리
 │   ├── variable_expander.py       # ${{ }} 변수 치환 (steps/env/matrix/secrets)
 │   ├── version_service.py         # 설정 버전 관리/롤백
+│   ├── memory_manager.py          # Claude Code 메모리 파일 CRUD 관리
+│   ├── rules_manager.py           # Claude Code 규칙 파일 CRUD 관리 (프로젝트/글로벌)
 │   ├── upload_cleanup_service.py  # 업로드 파일 TTL 기반 정리
 │   ├── warp_service.py            # Warp 터미널 + MCP 에이전트
 │   ├── webhook_service.py         # Webhook 딜리버리 (HMAC-SHA256)
