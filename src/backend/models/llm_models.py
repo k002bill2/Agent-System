@@ -42,15 +42,16 @@ class LLMModelConfig(BaseModel):
 # All supported models with their configurations
 _MODELS: list[LLMModelConfig] = [
     # ─────────────────────────────────────────────────────────
-    # Anthropic Claude Models
+    # Anthropic Claude Models (updated 2026-04-12)
+    # Pricing: USD per 1K tokens. Docs: https://docs.anthropic.com/en/docs/about-claude/models
     # ─────────────────────────────────────────────────────────
     LLMModelConfig(
         id="claude-opus-4-6",
         display_name="Claude Opus 4.6",
         provider=LLMProvider.ANTHROPIC,
-        context_window=200000,
-        input_price=0.015,
-        output_price=0.075,
+        context_window=1000000,  # 1M tokens
+        input_price=0.005,  # $5.00/1M tokens
+        output_price=0.025,  # $25.00/1M tokens
         is_default=False,
         supports_tools=True,
         supports_vision=True,
@@ -59,9 +60,9 @@ _MODELS: list[LLMModelConfig] = [
         id="claude-sonnet-4-6",
         display_name="Claude Sonnet 4.6",
         provider=LLMProvider.ANTHROPIC,
-        context_window=200000,
-        input_price=0.003,
-        output_price=0.015,
+        context_window=1000000,  # 1M tokens
+        input_price=0.003,  # $3.00/1M tokens
+        output_price=0.015,  # $15.00/1M tokens
         is_default=True,  # Default Anthropic model
         supports_tools=True,
         supports_vision=True,
@@ -71,14 +72,15 @@ _MODELS: list[LLMModelConfig] = [
         display_name="Claude Haiku 4.5",
         provider=LLMProvider.ANTHROPIC,
         context_window=200000,
-        input_price=0.001,
-        output_price=0.005,
+        input_price=0.001,  # $1.00/1M tokens
+        output_price=0.005,  # $5.00/1M tokens
         is_default=False,
         supports_tools=True,
         supports_vision=True,
     ),
     # ─────────────────────────────────────────────────────────
-    # Google Gemini Models
+    # Google Gemini Models (updated 2026-04-12)
+    # Pricing: USD per 1K tokens. Docs: https://ai.google.dev/gemini-api/docs/models
     # ─────────────────────────────────────────────────────────
     LLMModelConfig(
         id="gemini-3-flash-preview",
@@ -92,10 +94,10 @@ _MODELS: list[LLMModelConfig] = [
         supports_vision=True,
     ),
     LLMModelConfig(
-        id="gemini-3-pro-preview",
-        display_name="Gemini 3 Pro",
+        id="gemini-3.1-pro-preview",
+        display_name="Gemini 3.1 Pro",
         provider=LLMProvider.GOOGLE,
-        context_window=1000000,
+        context_window=1048576,
         input_price=0.002,  # $2.00/1M tokens (≤200K context)
         output_price=0.012,  # $12.00/1M tokens (≤200K context)
         is_default=False,
@@ -103,7 +105,18 @@ _MODELS: list[LLMModelConfig] = [
         supports_vision=True,
     ),
     LLMModelConfig(
-        id="gemini-2.5-pro-preview-05-06",
+        id="gemini-3.1-flash-lite-preview",
+        display_name="Gemini 3.1 Flash-Lite",
+        provider=LLMProvider.GOOGLE,
+        context_window=1000000,
+        input_price=0.00025,  # $0.25/1M tokens
+        output_price=0.0015,  # $1.50/1M tokens
+        is_default=False,
+        supports_tools=True,
+        supports_vision=True,
+    ),
+    LLMModelConfig(
+        id="gemini-2.5-pro",
         display_name="Gemini 2.5 Pro",
         provider=LLMProvider.GOOGLE,
         context_window=1000000,
@@ -114,62 +127,74 @@ _MODELS: list[LLMModelConfig] = [
         supports_vision=True,
     ),
     LLMModelConfig(
-        id="gemini-2.5-flash-preview-05-20",
+        id="gemini-2.5-flash",
         display_name="Gemini 2.5 Flash",
         provider=LLMProvider.GOOGLE,
         context_window=1000000,
-        input_price=0.0001,  # $0.10/1M tokens
-        output_price=0.0004,  # $0.40/1M tokens
+        input_price=0.0003,  # $0.30/1M tokens
+        output_price=0.0025,  # $2.50/1M tokens
         is_default=False,
         supports_tools=True,
         supports_vision=True,
     ),
     # ─────────────────────────────────────────────────────────
-    # OpenAI Models
+    # OpenAI Models (updated 2026-04-12)
+    # Pricing: USD per 1K tokens. Docs: https://platform.openai.com/docs/pricing
     # ─────────────────────────────────────────────────────────
     LLMModelConfig(
-        id="gpt-4o",
-        display_name="GPT-4o",
+        id="gpt-5.4",
+        display_name="GPT-5.4",
         provider=LLMProvider.OPENAI,
-        context_window=128000,
-        input_price=0.0025,
-        output_price=0.01,
+        context_window=1050000,  # 1.05M tokens
+        input_price=0.0025,  # $2.50/1M tokens
+        output_price=0.015,  # $15.00/1M tokens
         is_default=True,  # Default OpenAI model
         supports_tools=True,
         supports_vision=True,
     ),
     LLMModelConfig(
-        id="gpt-4o-mini",
-        display_name="GPT-4o Mini",
+        id="gpt-5.4-mini",
+        display_name="GPT-5.4 Mini",
         provider=LLMProvider.OPENAI,
-        context_window=128000,
-        input_price=0.00015,
-        output_price=0.0006,
+        context_window=400000,
+        input_price=0.00075,  # $0.75/1M tokens
+        output_price=0.0045,  # $4.50/1M tokens
         is_default=False,
         supports_tools=True,
         supports_vision=True,
     ),
     LLMModelConfig(
-        id="o1",
-        display_name="OpenAI o1",
+        id="gpt-5.4-nano",
+        display_name="GPT-5.4 Nano",
         provider=LLMProvider.OPENAI,
-        context_window=200000,
-        input_price=0.015,
-        output_price=0.06,
+        context_window=400000,
+        input_price=0.0002,  # $0.20/1M tokens
+        output_price=0.00125,  # $1.25/1M tokens
         is_default=False,
-        supports_tools=False,  # o1 has limited tool support
+        supports_tools=True,
         supports_vision=True,
     ),
     LLMModelConfig(
-        id="o1-mini",
-        display_name="OpenAI o1 Mini",
+        id="o3",
+        display_name="OpenAI o3",
         provider=LLMProvider.OPENAI,
-        context_window=128000,
-        input_price=0.003,
-        output_price=0.012,
+        context_window=200000,
+        input_price=0.002,  # $2.00/1M tokens
+        output_price=0.008,  # $8.00/1M tokens
         is_default=False,
-        supports_tools=False,
-        supports_vision=False,
+        supports_tools=True,
+        supports_vision=True,
+    ),
+    LLMModelConfig(
+        id="o4-mini",
+        display_name="OpenAI o4 Mini",
+        provider=LLMProvider.OPENAI,
+        context_window=200000,
+        input_price=0.00055,  # $0.55/1M tokens
+        output_price=0.0022,  # $2.20/1M tokens
+        is_default=False,
+        supports_tools=True,
+        supports_vision=True,
     ),
     # ─────────────────────────────────────────────────────────
     # Ollama (Local) Models

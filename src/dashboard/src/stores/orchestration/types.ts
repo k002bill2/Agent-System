@@ -124,8 +124,8 @@ export function identifyProvider(model: string): LLMProvider {
   // Google models
   if (modelLower.includes('gemini')) return 'google'
 
-  // OpenAI models
-  if (modelLower.includes('gpt')) return 'openai'
+  // OpenAI models (gpt-*, o1*, o3*, o4*)
+  if (modelLower.includes('gpt') || /^o\d/.test(modelLower)) return 'openai'
 
   // Ollama/Local models (common patterns)
   if (
