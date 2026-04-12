@@ -5,6 +5,7 @@ import os
 import time
 from datetime import timedelta
 
+from config import get_model_for_provider
 from models.llm_router import (
     LLMHealthCheck,
     LLMProvider,
@@ -416,7 +417,7 @@ class LLMRouterService:
             LLMRouterService.create_provider(
                 LLMProviderConfigCreate(
                     provider=LLMProvider.ANTHROPIC,
-                    model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
+                    model=get_model_for_provider("anthropic"),
                     api_key=anthropic_key,
                     priority=100,
                     cost_per_1k_input=0.003,
@@ -430,7 +431,7 @@ class LLMRouterService:
             LLMRouterService.create_provider(
                 LLMProviderConfigCreate(
                     provider=LLMProvider.GOOGLE,
-                    model=os.getenv("GOOGLE_MODEL", "gemini-3-flash-preview"),
+                    model=get_model_for_provider("google"),
                     api_key=google_key,
                     priority=90,
                     cost_per_1k_input=0.00025,
@@ -444,7 +445,7 @@ class LLMRouterService:
             LLMRouterService.create_provider(
                 LLMProviderConfigCreate(
                     provider=LLMProvider.OPENAI,
-                    model=os.getenv("OPENAI_MODEL", "gpt-4o"),
+                    model=get_model_for_provider("openai"),
                     api_key=openai_key,
                     priority=80,
                     cost_per_1k_input=0.005,
@@ -458,7 +459,7 @@ class LLMRouterService:
             LLMRouterService.create_provider(
                 LLMProviderConfigCreate(
                     provider=LLMProvider.OLLAMA,
-                    model=os.getenv("OLLAMA_MODEL", "exaone3.5:7.8b"),
+                    model=get_model_for_provider("ollama"),
                     base_url=ollama_url,
                     priority=50,
                     cost_per_1k_input=0.0,

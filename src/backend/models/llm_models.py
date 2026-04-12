@@ -218,17 +218,6 @@ _MODELS: list[LLMModelConfig] = [
         supports_tools=False,
         supports_vision=False,
     ),
-    LLMModelConfig(
-        id="exaone3.5:7.8b",
-        display_name="EXAONE 3.5 7.8B",
-        provider=LLMProvider.OLLAMA,
-        context_window=32768,
-        input_price=0.0,
-        output_price=0.0,
-        is_default=False,
-        supports_tools=True,
-        supports_vision=False,
-    ),
 ]
 
 # Index by model ID for fast lookup
@@ -300,6 +289,70 @@ class LLMModelRegistry:
                 print("⚠️  llm_model_configs table is empty, using in-memory fallback")
         except Exception as e:
             print(f"⚠️  Failed to load models from DB: {e}. Using in-memory fallback.")
+
+    @classmethod
+    async def sync_to_db(cls, session: Any) -> dict[str, int]:
+        """Sync code-defined _MODELS to DB via upsert.
+
+        - INSERT new models that don't exist in DB
+        - UPDATE metadata fields for existing models (preserving admin-controlled fields)
+        - Does NOT delete models from DB that are no longer in code
+
+        Returns:
+            Dict with 'inserted' and 'updated' counts.
+        """
+        from sqlalchemy import select
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        from db.models import LLMModelConfigModel
+
+        # Get existing IDs to distinguish insert vs update
+        result = await session.execute(select(LLMModelConfigModel.id))
+        existing_ids = {row[0] for row in result.fetchall()}
+
+        inserted = 0
+        updated = 0
+
+        for model in _MODELS:
+            values = {
+                "id": model.id,
+                "display_name": model.display_name,
+                "provider": model.provider.value,
+                "context_window": model.context_window,
+                "input_price": model.input_price,
+                "output_price": model.output_price,
+                "is_default": model.is_default,
+                "is_enabled": model.is_enabled,
+                "supports_tools": model.supports_tools,
+                "supports_vision": model.supports_vision,
+            }
+
+            # Metadata-only fields to update on conflict
+            # Preserves admin-controlled fields: is_enabled, is_default
+            update_fields = {
+                "display_name": model.display_name,
+                "context_window": model.context_window,
+                "input_price": model.input_price,
+                "output_price": model.output_price,
+                "supports_tools": model.supports_tools,
+                "supports_vision": model.supports_vision,
+            }
+
+            stmt = pg_insert(LLMModelConfigModel).values(**values).on_conflict_do_update(
+                index_elements=["id"],
+                set_=update_fields,
+            )
+            await session.execute(stmt)
+
+            if model.id in existing_ids:
+                updated += 1
+            else:
+                inserted += 1
+
+        await session.commit()
+        await cls.load_from_db(session)
+
+        return {"inserted": inserted, "updated": updated}
 
     @classmethod
     def get_all(cls) -> list[LLMModelConfig]:

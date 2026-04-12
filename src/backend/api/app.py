@@ -159,12 +159,20 @@ else:
                 else:
                     print("✅ Database initialized (PostgreSQL)")
 
-                # Load LLM model configs from DB into registry cache
+                # Load LLM model configs from DB into registry cache, then sync code→DB
                 try:
                     from models.llm_models import LLMModelRegistry
 
                     async with async_session_factory() as session:
                         await LLMModelRegistry.load_from_db(session)
+
+                    # Sync code-defined models to DB (upsert metadata, preserve admin settings)
+                    async with async_session_factory() as session:
+                        sync_result = await LLMModelRegistry.sync_to_db(session)
+                    if logger:
+                        logger.info("llm_model_sync_completed", **sync_result)
+                    else:
+                        print(f"✅ LLM model sync: {sync_result}")
                 except Exception as e:
                     if logger:
                         logger.warning("llm_model_registry_load_failed", error=str(e))
@@ -223,17 +231,52 @@ else:
 
         cleanup_task = asyncio.create_task(schedule_upload_cleanup())
 
+        # Start periodic LLM model sync background task
+        model_sync_task = None
+        if USE_DATABASE:
+            sync_interval_hours = int(os.getenv("LLM_MODEL_SYNC_INTERVAL_HOURS", "12"))
+
+            async def _periodic_model_sync() -> None:
+                """Periodically sync code-defined models to DB."""
+                interval = sync_interval_hours * 3600
+                while True:
+                    await asyncio.sleep(interval)
+                    try:
+                        from db.database import async_session_factory
+                        from models.llm_models import LLMModelRegistry
+
+                        async with async_session_factory() as session:
+                            result = await LLMModelRegistry.sync_to_db(session)
+                        if logger:
+                            logger.info("periodic_llm_model_sync", **result)
+                        else:
+                            print(f"🔄 Periodic LLM model sync: {result}")
+                    except Exception as e:
+                        if logger:
+                            logger.warning("periodic_llm_model_sync_failed", error=str(e))
+                        else:
+                            print(f"⚠️  Periodic LLM model sync failed: {e}")
+
+            model_sync_task = asyncio.create_task(_periodic_model_sync())
+
         if logger:
             logger.info("application_started")
 
         yield
 
-        # Cancel cleanup task on shutdown and await it for clean resource release
+        # Cancel background tasks on shutdown
         cleanup_task.cancel()
         try:
             await cleanup_task
         except asyncio.CancelledError:
             pass
+
+        if model_sync_task is not None:
+            model_sync_task.cancel()
+            try:
+                await model_sync_task
+            except asyncio.CancelledError:
+                pass
 
         # Shutdown
         if logger:

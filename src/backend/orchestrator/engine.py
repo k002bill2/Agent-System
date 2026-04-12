@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 
 from dotenv import load_dotenv
 
-from config import get_settings
+from config import get_model_for_provider, get_settings
 
 settings = get_settings()
 
@@ -14,28 +14,24 @@ settings = get_settings()
 load_dotenv()
 
 # LLM Provider selection
-# Prefer explicit env vars but fall back to Settings defaults
-LLM_PROVIDER = os.getenv(
-    "LLM_PROVIDER", settings.llm_provider
-)  # "ollama", "anthropic", or "google"
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", settings.ollama_model)
-GOOGLE_MODEL = os.getenv("GOOGLE_MODEL", settings.google_model)
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", settings.llm_provider)
 
 
 def get_llm():
-    """Get LLM instance based on provider setting."""
+    """Get LLM instance based on provider setting.
+
+    Model selection comes from LLMModelRegistry (DB-backed).
+    """
     if LLM_PROVIDER == "anthropic":
         from langchain_anthropic import ChatAnthropic
 
         return ChatAnthropic(
-            model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
+            model=get_model_for_provider("anthropic"),
             api_key=os.getenv("ANTHROPIC_API_KEY"),
         )
     elif LLM_PROVIDER == "google":
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        # LangChain's ChatGoogleGenerativeAI expects an `api_key` argument or
-        # GOOGLE_API_KEY / GEMINI_API_KEY in the environment.
         api_key = (
             os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or settings.google_api_key
         )
@@ -47,14 +43,14 @@ def get_llm():
             )
 
         return ChatGoogleGenerativeAI(
-            model=GOOGLE_MODEL,
+            model=get_model_for_provider("google"),
             api_key=api_key,
         )
     else:
         from langchain_ollama import ChatOllama
 
         return ChatOllama(
-            model=OLLAMA_MODEL,
+            model=get_model_for_provider("ollama"),
             base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
         )
 
@@ -262,7 +258,7 @@ class OrchestrationEngine:
         await self._compressor.compress_if_needed(
             state,
             provider=LLM_PROVIDER,
-            model=GOOGLE_MODEL if LLM_PROVIDER == "google" else "",
+            model=get_model_for_provider(LLM_PROVIDER),
         )
 
         # Run the graph
@@ -312,7 +308,7 @@ class OrchestrationEngine:
         compression = await self._compressor.compress_if_needed(
             state,
             provider=LLM_PROVIDER,
-            model=GOOGLE_MODEL if LLM_PROVIDER == "google" else "",
+            model=get_model_for_provider(LLM_PROVIDER),
         )
         if compression.compressed:
             yield Message(

@@ -219,18 +219,10 @@ async def get_context_usage(
     if not state:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Get provider/model from environment
-    provider = os.getenv("LLM_PROVIDER", "google")
+    # Get provider/model from registry
+    from config import get_model_for_provider, get_settings
 
-    if provider == "google":
-        model = os.getenv("GOOGLE_MODEL", "gemini-3-flash-preview")
-    elif provider == "anthropic":
-        model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
-    elif provider == "openai":
-        model = os.getenv("OPENAI_MODEL", "gpt-4o")
-    elif provider == "ollama":
-        model = os.getenv("OLLAMA_MODEL", "exaone3.5:7.8b")
-    else:
-        model = "unknown"
+    provider = os.getenv("LLM_PROVIDER", get_settings().llm_provider)
+    model = get_model_for_provider(provider)
 
     return _calculate_session_context_usage(state, provider, model)
