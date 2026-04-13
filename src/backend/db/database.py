@@ -366,7 +366,13 @@ async def _run_migrations() -> None:
                         "is_default, is_enabled, supports_tools, supports_vision) "
                         "VALUES (:id, :display_name, :provider, :context_window, :input_price, "
                         ":output_price, :is_default, :is_enabled, :supports_tools, :supports_vision) "
-                        "ON CONFLICT (id) DO NOTHING"
+                        "ON CONFLICT (id) DO UPDATE SET "
+                        "display_name = EXCLUDED.display_name, "
+                        "context_window = EXCLUDED.context_window, "
+                        "input_price = EXCLUDED.input_price, "
+                        "output_price = EXCLUDED.output_price, "
+                        "supports_tools = EXCLUDED.supports_tools, "
+                        "supports_vision = EXCLUDED.supports_vision"
                     ),
                     {
                         "id": model.id,

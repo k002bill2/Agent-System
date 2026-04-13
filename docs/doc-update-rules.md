@@ -4,7 +4,7 @@
 
 | 변경 내용 | 업데이트 문서 | 업데이트 항목 |
 |-----------|--------------|---------------|
-| 새 API 엔드포인트 | `docs/api-reference.md` | 엔드포인트 테이블 추가 |
+| 새 API 엔드포인트 | `docs/api/` 도메인별 파일 | 해당 도메인 파일에 추가 (`docs/api-reference.md` 인덱스 참조) |
 | 새 기능/서비스 | `docs/features.md` | 번호 매긴 새 섹션 추가 |
 | 새 페이지 | `docs/dashboard.md` | Pages 테이블에 추가 |
 | 새 컴포넌트 | `docs/dashboard.md` | Components 섹션에 추가 |

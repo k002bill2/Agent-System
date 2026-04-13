@@ -19,7 +19,7 @@ describe('settings store', () => {
     // Reset store to default state
     useSettingsStore.setState({
       llmProvider: 'anthropic',
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       apiKey: '',
       backendUrl: 'http://localhost:8000',
       theme: 'light',
@@ -72,7 +72,7 @@ describe('settings store', () => {
 
       const state = useSettingsStore.getState()
       expect(state.llmProvider).toBe('openai')
-      expect(state.model).toBe('gpt-4o')
+      expect(state.model).toBe('gpt-5.4')
     })
 
     it('selects google/gemini models when switching to google', () => {
@@ -100,8 +100,8 @@ describe('settings store', () => {
     it('updates model', () => {
       const { setModel } = useSettingsStore.getState()
 
-      setModel('claude-opus-4-5-20250514')
-      expect(useSettingsStore.getState().model).toBe('claude-opus-4-5-20250514')
+      setModel('claude-opus-4-6')
+      expect(useSettingsStore.getState().model).toBe('claude-opus-4-6')
     })
   })
 
@@ -179,7 +179,7 @@ describe('settings store', () => {
       vi.stubGlobal('fetch', mockFetch)
 
       const models: LLMModel[] = [
-        makeModel({ id: 'claude-sonnet-4-20250514', provider: 'anthropic', is_default: true }),
+        makeModel({ id: 'claude-sonnet-4-6', provider: 'anthropic', is_default: true }),
       ]
 
       // Capture the in-flight loading state by delaying resolution
@@ -209,7 +209,7 @@ describe('settings store', () => {
       expect(state.modelsLoading).toBe(false)
       expect(state.modelsError).toBeNull()
       expect(state.availableModels).toHaveLength(1)
-      expect(state.availableModels[0].id).toBe('claude-sonnet-4-20250514')
+      expect(state.availableModels[0].id).toBe('claude-sonnet-4-6')
     })
 
     it('populates availableModels with the array returned by the API', async () => {
@@ -339,7 +339,7 @@ describe('settings store', () => {
   // ──────────────────────────────────────────────────────────────────────────
   describe('store.getModelsForProvider (instance method)', () => {
     const anthropicModel = makeModel({
-      id: 'claude-sonnet-4-20250514',
+      id: 'claude-sonnet-4-6',
       provider: 'anthropic',
       is_default: true,
     })
@@ -359,11 +359,11 @@ describe('settings store', () => {
     it('returns models matching the requested provider', () => {
       const result = useSettingsStore.getState().getModelsForProvider('anthropic')
       expect(result).toHaveLength(1)
-      expect(result[0].id).toBe('claude-sonnet-4-20250514')
+      expect(result[0].id).toBe('claude-sonnet-4-6')
     })
 
     it('returns multiple models when several share the same provider', () => {
-      const extra = makeModel({ id: 'claude-opus-4-5-20250514', provider: 'anthropic' })
+      const extra = makeModel({ id: 'claude-opus-4-6', provider: 'anthropic' })
       useSettingsStore.setState({
         availableModels: [anthropicModel, extra, googleModel, ollamaModel],
       })
@@ -405,7 +405,7 @@ describe('settings store', () => {
     it('selects the is_default model when one exists for the provider', () => {
       const nonDefault = makeModel({ id: 'claude-haiku', provider: 'anthropic' })
       const defaultModel = makeModel({
-        id: 'claude-sonnet-4-20250514',
+        id: 'claude-sonnet-4-6',
         provider: 'anthropic',
         is_default: true,
       })
@@ -413,7 +413,7 @@ describe('settings store', () => {
 
       useSettingsStore.getState().setLLMProvider('anthropic')
 
-      expect(useSettingsStore.getState().model).toBe('claude-sonnet-4-20250514')
+      expect(useSettingsStore.getState().model).toBe('claude-sonnet-4-6')
     })
 
     it('selects the first model when no is_default model exists for the provider', () => {
@@ -434,8 +434,8 @@ describe('settings store', () => {
 
       useSettingsStore.getState().setLLMProvider('anthropic')
 
-      // Fallback for anthropic is 'claude-opus-4-5-20250514'
-      expect(useSettingsStore.getState().model).toBe('claude-opus-4-5-20250514')
+      // Fallback for anthropic is 'claude-opus-4-6'
+      expect(useSettingsStore.getState().model).toBe('claude-opus-4-6')
       expect(useSettingsStore.getState().llmProvider).toBe('anthropic')
     })
 
@@ -458,20 +458,20 @@ describe('settings store', () => {
 describe('getModelsForProvider (legacy exported function)', () => {
   it('returns anthropic models', () => {
     const models = getModelsForProvider('anthropic')
-    expect(models).toContain('claude-opus-4-5-20250514')
-    expect(models).toContain('claude-sonnet-4-20250514')
+    expect(models).toContain('claude-opus-4-6')
+    expect(models).toContain('claude-sonnet-4-6')
   })
 
   it('returns openai models', () => {
     const models = getModelsForProvider('openai')
-    expect(models).toContain('gpt-4o')
-    expect(models).toContain('gpt-4o-mini')
+    expect(models).toContain('gpt-5.4')
+    expect(models).toContain('gpt-5.4-mini')
   })
 
   it('returns google/gemini models', () => {
     const models = getModelsForProvider('google')
     expect(models).toContain('gemini-3-flash-preview')
-    expect(models).toContain('gemini-2.5-pro-preview-05-06')
+    expect(models).toContain('gemini-2.5-pro')
   })
 
   it('returns local models', () => {

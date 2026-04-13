@@ -1,5 +1,17 @@
 {
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/docEnforcer.js",
+            "timeout": 3000
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -73,6 +85,12 @@
             "command": "node .claude/hooks/componentPatternChecker.js",
             "timeout": 5,
             "statusMessage": "Component pattern check..."
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/geminiDaemonHook.js",
+            "timeout": 45,
+            "statusMessage": "Gemini review..."
           }
         ]
       }
@@ -102,7 +120,7 @@
           },
           {
             "type": "command",
-            "command": "node -e \"const fs=require('fs');['/tmp/gemini-review-retries','/tmp/claude-hard-gate','/tmp/claude-tdd-guard','/tmp/claude-skill-gate','/tmp/claude-skill-gate-cooldown'].forEach(d=>{try{fs.rmSync(d,{recursive:true})}catch{}})\"",
+            "command": "node -e \"const fs=require('fs');['/tmp/gemini-review-retries','/tmp/gemini-review-cooldown','/tmp/gemini-daemon-fail-count','/tmp/claude-hard-gate','/tmp/claude-tdd-guard','/tmp/claude-skill-gate','/tmp/claude-skill-gate-cooldown'].forEach(d=>{try{fs.rmSync(d,{recursive:true})}catch{}});try{fs.unlinkSync('.claude/gemini-daemon/.daemon-disabled')}catch{}\"",
             "timeout": 3,
             "statusMessage": "Resetting session state..."
           }

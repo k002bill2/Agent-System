@@ -24,13 +24,13 @@ class Settings(BaseSettings):
     google_api_key: str = ""
 
     # LLM Provider Settings
-    # Note: These are environment variable overrides.
-    # Default values come from models.llm_models.LLMModelRegistry
     llm_provider: str = "google"
-    google_model: str = ""  # If empty, uses LLMModelRegistry.get_default(GOOGLE)
-    anthropic_model: str = ""  # If empty, uses LLMModelRegistry.get_default(ANTHROPIC)
-    ollama_model: str = ""  # If empty, uses LLMModelRegistry.get_default(OLLAMA)
     ollama_base_url: str = "http://localhost:11434"
+    # DEPRECATED: Model selection now comes from DB via LLMModelRegistry.
+    # These fields remain for backward compatibility but are no longer used.
+    google_model: str = ""
+    anthropic_model: str = ""
+    ollama_model: str = ""
 
     # Database
     database_url: str = "postgresql+asyncpg://aos:aos@localhost:5432/aos"
@@ -47,7 +47,8 @@ class Settings(BaseSettings):
 
     # Orchestration
     max_iterations: int = 100
-    default_model: str = ""  # If empty, uses LLMModelRegistry.get_default()
+    # DEPRECATED: Use LLMModelRegistry.get_default() instead.
+    default_model: str = ""
 
     # CORS - NoDecode prevents EnvSettingsSource from JSON-parsing before validator runs
     cors_origins: Annotated[list[str], NoDecode] = [
@@ -153,9 +154,7 @@ def get_settings() -> Settings:
 
 
 def get_model_for_provider(provider: str) -> str:
-    """Get model for a provider, with Registry fallback.
-
-    Uses environment variable if set, otherwise falls back to LLMModelRegistry.
+    """Get the default model for a provider from the LLM Model Registry (DB-backed).
 
     Args:
         provider: Provider name ('google', 'anthropic', 'openai', 'ollama')
@@ -165,17 +164,6 @@ def get_model_for_provider(provider: str) -> str:
     """
     from models.llm_models import LLMModelRegistry, LLMProvider
 
-    settings = get_settings()
-
-    # Check environment variable override first
-    if provider == "google" and settings.google_model:
-        return settings.google_model
-    elif provider == "anthropic" and settings.anthropic_model:
-        return settings.anthropic_model
-    elif provider == "ollama" and settings.ollama_model:
-        return settings.ollama_model
-
-    # Fallback to Registry default
     try:
         return LLMModelRegistry.get_default(LLMProvider(provider))
     except ValueError:
@@ -183,15 +171,7 @@ def get_model_for_provider(provider: str) -> str:
 
 
 def get_default_model() -> str:
-    """Get the default model, with Registry fallback.
-
-    Uses DEFAULT_MODEL env var if set, otherwise falls back to LLMModelRegistry.
-    """
+    """Get the default model from the LLM Model Registry (DB-backed)."""
     from models.llm_models import LLMModelRegistry
-
-    settings = get_settings()
-
-    if settings.default_model:
-        return settings.default_model
 
     return LLMModelRegistry.get_default()

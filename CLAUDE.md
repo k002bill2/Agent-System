@@ -52,13 +52,13 @@ cd src/dashboard && npm test
 
 | 작업 유형 | 문서 |
 |-----------|------|
-| API 엔드포인트 추가/수정 | @docs/api-reference.md |
-| 백엔드 아키텍처 이해 | @docs/architecture.md |
-| 핵심 기능 구현/수정 | @docs/features.md |
-| Dashboard 컴포넌트 작업 | @docs/dashboard.md |
-| Agent/Task 개념 이해 | @docs/ontology.md |
-| Claude Code 통합 아키텍처 | @docs/architecture/claude-code-integration.md |
-| 문서 업데이트 규칙 | @docs/doc-update-rules.md |
+| API 엔드포인트 추가/수정 | docs/api-reference.md (→ docs/api/ 도메인별 인덱스) |
+| 백엔드 아키텍처 이해 | docs/architecture.md |
+| 핵심 기능 구현/수정 | docs/features.md |
+| Dashboard 컴포넌트 작업 | docs/dashboard.md |
+| Agent/Task 개념 이해 | docs/ontology.md |
+| Claude Code 통합 아키텍처 | docs/architecture/claude-code-integration.md |
+| 문서 업데이트 규칙 | docs/doc-update-rules.md |
 
 ## 문서 관리 원칙
 

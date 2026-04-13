@@ -940,7 +940,9 @@ class ClaudeSessionMonitor:
 
         try:
             ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-            ollama_model = os.getenv("OLLAMA_MODEL", "exaone3.5:7.8b")
+            from config import get_model_for_provider
+
+            ollama_model = get_model_for_provider("ollama")
 
             async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.post(

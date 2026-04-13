@@ -102,9 +102,9 @@ interface SettingsState {
 
 // Fallback models when API is unavailable
 const fallbackModels: Record<LLMProvider, string[]> = {
-  anthropic: ['claude-opus-4-5-20250514', 'claude-sonnet-4-20250514'],
-  google: ['gemini-3-flash-preview', 'gemini-3-pro-preview', 'gemini-2.5-pro-preview-05-06'],
-  openai: ['gpt-4o', 'gpt-4o-mini', 'o1', 'o1-mini'],
+  anthropic: ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
+  google: ['gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemini-2.5-pro', 'gemini-2.5-flash'],
+  openai: ['gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano', 'o3', 'o4-mini'],
   local: ['exaone3.5:7.8b', 'llama3:8b', 'mistral:7b', 'codellama:7b'],
 }
 
