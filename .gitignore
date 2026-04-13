@@ -69,6 +69,8 @@ src/dashboard/coverage/
 .claude/hooks/.context-state.json
 .claude/gemini-bridge/reviews/
 .claude/gemini-bridge/.review-lock
+.claude/gemini-daemon/daemon.log
+.claude/gemini-daemon/.daemon-disabled
 .claude/snapshots/
 .temp/
 
