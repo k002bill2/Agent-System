@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
-import { BarChart3, Coins, Activity, Clock, TrendingUp } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { BarChart3, ChevronDown, ChevronRight, Coins, Activity, Clock, TrendingUp } from 'lucide-react'
 import { useOrganizationsStore } from '../../stores/organizations'
 import type { MemberUsageSummary } from '../../stores/organizations'
 import { cn } from '../../lib/utils'
+import { MemberDetailPanel } from './MemberDetailPanel'
 
 interface MemberUsagePanelProps {
   organizationId: string
@@ -14,13 +15,52 @@ const periodLabels: Record<string, string> = {
   month: 'This Month',
 }
 
-function UsageBar({ member, maxTokens }: { member: MemberUsageSummary; maxTokens: number }) {
+function UsageBar({
+  member,
+  maxTokens,
+  isExpanded,
+  onClick,
+}: {
+  member: MemberUsageSummary
+  maxTokens: number
+  isExpanded: boolean
+  onClick: () => void
+}) {
   const barWidth = maxTokens > 0
     ? Math.max((member.tokens_used_this_month / maxTokens) * 100, 2)
     : 0
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onClick()
+    }
+  }
+
   return (
-    <div className="flex items-center gap-4 p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-primary-300 dark:hover:border-primary-600 transition-colors">
+    <div
+      role="button"
+      tabIndex={0}
+      aria-expanded={isExpanded}
+      aria-label={`${member.name || member.email} usage details`}
+      onClick={onClick}
+      onKeyDown={handleKeyDown}
+      className={cn(
+        'flex items-center gap-4 p-3 bg-white dark:bg-gray-800 border rounded-lg transition-colors cursor-pointer select-none',
+        isExpanded
+          ? 'border-primary-500 dark:border-primary-600 ring-1 ring-primary-200 dark:ring-primary-800'
+          : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600'
+      )}
+    >
+      {/* Chevron */}
+      <div className="flex-shrink-0 text-gray-400 dark:text-gray-500">
+        {isExpanded ? (
+          <ChevronDown className="w-4 h-4" />
+        ) : (
+          <ChevronRight className="w-4 h-4" />
+        )}
+      </div>
+
       {/* Avatar */}
       <div className="w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -76,12 +116,58 @@ function UsageBar({ member, maxTokens }: { member: MemberUsageSummary; maxTokens
 }
 
 export function MemberUsagePanel({ organizationId }: MemberUsagePanelProps) {
-  const { memberUsage, fetchMemberUsage } = useOrganizationsStore()
+  const {
+    memberUsage,
+    memberUsageDetail,
+    isMemberDetailLoading,
+    fetchMemberUsage,
+    fetchMemberUsageDetail,
+    clearMemberUsageDetail,
+  } = useOrganizationsStore()
   const [period, setPeriod] = useState<string>('month')
+  const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null)
+  // Track the expanded member's user_id for API calls (usage is keyed by user_id)
+  const [expandedUserIdRef, setExpandedUserIdRef] = useState<string | null>(null)
 
   useEffect(() => {
     fetchMemberUsage(organizationId, period)
   }, [organizationId, period, fetchMemberUsage])
+
+  // Re-fetch detail when period changes while a member is expanded
+  useEffect(() => {
+    if (expandedMemberId && expandedUserIdRef) {
+      fetchMemberUsageDetail(organizationId, expandedUserIdRef, period, expandedMemberId)
+    }
+  }, [period]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clean up on org change
+  useEffect(() => {
+    setExpandedMemberId(null)
+    setExpandedUserIdRef(null)
+    clearMemberUsageDetail()
+  }, [organizationId, clearMemberUsageDetail])
+
+  const handleMemberClick = useCallback(
+    (memberId: string, userId: string) => {
+      if (expandedMemberId === memberId) {
+        setExpandedMemberId(null)
+        setExpandedUserIdRef(null)
+        clearMemberUsageDetail()
+      } else {
+        clearMemberUsageDetail()
+        setExpandedMemberId(memberId)
+        setExpandedUserIdRef(userId)
+        fetchMemberUsageDetail(organizationId, userId, period, memberId)
+      }
+    },
+    [expandedMemberId, organizationId, period, fetchMemberUsageDetail, clearMemberUsageDetail]
+  )
+
+  const handleDetailClose = useCallback(() => {
+    setExpandedMemberId(null)
+    setExpandedUserIdRef(null)
+    clearMemberUsageDetail()
+  }, [clearMemberUsageDetail])
 
   if (!memberUsage) {
     return (
@@ -177,7 +263,21 @@ export function MemberUsagePanel({ organizationId }: MemberUsagePanelProps) {
       ) : (
         <div className="space-y-2">
           {memberUsage.members.map((member) => (
-            <UsageBar key={member.user_id} member={member} maxTokens={maxTokens} />
+              <div key={member.id}>
+                <UsageBar
+                  member={member}
+                  maxTokens={maxTokens}
+                  isExpanded={expandedMemberId === member.id}
+                  onClick={() => handleMemberClick(member.id, member.user_id)}
+                />
+                {expandedMemberId === member.id && (
+                  <MemberDetailPanel
+                    detail={memberUsageDetail?.user_id === member.user_id ? memberUsageDetail : null}
+                    isLoading={isMemberDetailLoading || memberUsageDetail?.user_id !== member.user_id}
+                    onClose={handleDetailClose}
+                  />
+                )}
+              </div>
           ))}
         </div>
       )}

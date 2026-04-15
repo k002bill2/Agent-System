@@ -179,6 +179,7 @@ class MemberUsageRecord(BaseModel):
 class MemberUsageSummary(BaseModel):
     """Aggregated usage summary for a single member."""
 
+    id: str  # membership UUID — unique per org member
     user_id: str
     email: str
     name: str | None = None
@@ -198,6 +199,48 @@ class MemberUsageResponse(BaseModel):
     period: str = "month"  # day, week, month
     total_tokens: int = 0
     members: list[MemberUsageSummary] = []
+
+
+class MemberDailyUsage(BaseModel):
+    """Daily usage data point for a single member."""
+
+    date: str  # YYYY-MM-DD
+    tokens: int = 0
+    sessions: int = 0
+    cost_usd: float = 0.0
+
+
+class MemberModelUsage(BaseModel):
+    """Per-model usage breakdown for a single member."""
+
+    model: str
+    tokens: int = 0
+    sessions: int = 0
+    percentage: float = 0.0
+
+
+class MemberUsageDetail(BaseModel):
+    """Detailed usage response for a single member."""
+
+    user_id: str
+    email: str
+    name: str | None = None
+    role: MemberRole = MemberRole.MEMBER
+    permissions: list[str] = []
+    is_active: bool = True
+    invited_by: str | None = None
+    joined_at: datetime | None = None
+    last_active_at: datetime | None = None
+    # Aggregate stats
+    tokens_used_today: int = 0
+    tokens_used_this_month: int = 0
+    sessions_today: int = 0
+    sessions_this_month: int = 0
+    total_cost_usd: float = 0.0
+    percentage_of_org: float = 0.0
+    # Detailed breakdowns
+    daily_usage: list[MemberDailyUsage] = []
+    model_usage: list[MemberModelUsage] = []
 
 
 # Plan limits configuration

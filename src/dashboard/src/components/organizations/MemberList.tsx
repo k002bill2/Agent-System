@@ -1,5 +1,8 @@
+import { useCallback, useEffect, useState } from 'react'
 import { UserPlus, Users } from 'lucide-react'
 import { MemberCard } from './MemberCard'
+import { MemberDetailPanel } from './MemberDetailPanel'
+import { useOrganizationsStore } from '../../stores/organizations'
 import type { OrganizationMember, MemberRole } from '../../stores/organizations'
 
 interface MemberListProps {
@@ -21,6 +24,14 @@ export function MemberList({
   onUpdateRole,
   onRemove,
 }: MemberListProps) {
+  const {
+    memberUsageDetail,
+    isMemberDetailLoading,
+    fetchMemberUsageDetail,
+    clearMemberUsageDetail,
+  } = useOrganizationsStore()
+
+  const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null)
   const canManageMembers = currentUserRole === 'owner' || currentUserRole === 'admin'
 
   // Sort: owner first, then admin, member, viewer
@@ -28,6 +39,31 @@ export function MemberList({
     const roleOrder: Record<MemberRole, number> = { owner: 0, admin: 1, member: 2, viewer: 3 }
     return roleOrder[a.role] - roleOrder[b.role]
   })
+
+  // Clean up on member list change
+  useEffect(() => {
+    setExpandedMemberId(null)
+    clearMemberUsageDetail()
+  }, [members.length, clearMemberUsageDetail])
+
+  const handleMemberClick = useCallback(
+    (member: OrganizationMember) => {
+      if (expandedMemberId === member.id) {
+        setExpandedMemberId(null)
+        clearMemberUsageDetail()
+      } else {
+        clearMemberUsageDetail()
+        setExpandedMemberId(member.id)
+        fetchMemberUsageDetail(member.organization_id, member.user_id, 'month', member.id)
+      }
+    },
+    [expandedMemberId, fetchMemberUsageDetail, clearMemberUsageDetail]
+  )
+
+  const handleDetailClose = useCallback(() => {
+    setExpandedMemberId(null)
+    clearMemberUsageDetail()
+  }, [clearMemberUsageDetail])
 
   if (isLoading) {
     return (
@@ -78,14 +114,24 @@ export function MemberList({
       ) : (
         <div className="space-y-3">
           {sortedMembers.map((member) => (
-            <MemberCard
-              key={member.id}
-              member={member}
-              currentUserId={currentUserId}
-              canManage={canManageMembers}
-              onUpdateRole={(role) => onUpdateRole(member.id, role)}
-              onRemove={() => onRemove(member.id)}
-            />
+            <div key={member.id}>
+              <MemberCard
+                member={member}
+                currentUserId={currentUserId}
+                canManage={canManageMembers}
+                isExpanded={expandedMemberId === member.id}
+                onUpdateRole={(role) => onUpdateRole(member.id, role)}
+                onRemove={() => onRemove(member.id)}
+                onClick={() => handleMemberClick(member)}
+              />
+              {expandedMemberId === member.id && (
+                <MemberDetailPanel
+                  detail={memberUsageDetail?.user_id === member.user_id ? memberUsageDetail : null}
+                  isLoading={isMemberDetailLoading || memberUsageDetail?.user_id !== member.user_id}
+                  onClose={handleDetailClose}
+                />
+              )}
+            </div>
           ))}
         </div>
       )}

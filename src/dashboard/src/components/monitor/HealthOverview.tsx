@@ -1,6 +1,6 @@
 import { CheckCard } from './CheckCard'
 import { WorkflowCheckCard } from './WorkflowCheckCard'
-import { ProjectHealth, ALL_CHECK_TYPES } from '../../types/monitoring'
+import { ProjectHealth } from '../../types/monitoring'
 import { useMonitoringStore } from '../../stores/monitoring'
 import { Workflow } from 'lucide-react'
 
@@ -13,6 +13,7 @@ export function HealthOverview({ health, projectId }: HealthOverviewProps) {
   const {
     getRunningChecks,
     getCheckLabel,
+    getCheckTypes,
     runCheck,
     activeLogView,
     setActiveLogView,
@@ -21,6 +22,7 @@ export function HealthOverview({ health, projectId }: HealthOverviewProps) {
     runWorkflowCheck,
   } = useMonitoringStore()
   const runningChecks = getRunningChecks(projectId)
+  const checkTypes = getCheckTypes(projectId)
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3">
@@ -29,7 +31,7 @@ export function HealthOverview({ health, projectId }: HealthOverviewProps) {
       </h2>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        {ALL_CHECK_TYPES.map((checkType) => {
+        {checkTypes.map((checkType) => {
           const check = health.checks[checkType]
           const isRunning = runningChecks.has(checkType)
 

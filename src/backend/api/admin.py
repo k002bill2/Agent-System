@@ -24,10 +24,10 @@ VALID_ROLES = ("user", "manager", "admin")
 DEFAULT_MENU_ORDER: list[str] = [
     "dashboard",
     "projects",
-    "tasks",
+    "sessions",
     "agents",
-    "activity",
     "monitor",
+    "claude-sessions",
     "project-configs",
     "project-management",
     "git",
@@ -44,9 +44,9 @@ DEFAULT_MENU_ORDER: list[str] = [
 DEFAULT_MENU_VISIBILITY: dict[str, dict[str, bool]] = {
     "dashboard": {"user": True, "manager": True, "admin": True},
     "projects": {"user": True, "manager": True, "admin": True},
-    "tasks": {"user": True, "manager": True, "admin": True},
+    "sessions": {"user": True, "manager": True, "admin": True},
     "agents": {"user": False, "manager": True, "admin": True},
-    "activity": {"user": True, "manager": True, "admin": True},
+    "claude-sessions": {"user": True, "manager": True, "admin": True},
     "monitor": {"user": False, "manager": True, "admin": True},
     "project-configs": {"user": False, "manager": True, "admin": True},
     "project-management": {"user": False, "manager": True, "admin": True},
@@ -310,22 +310,23 @@ async def get_menu_visibility(
                             visibility[menu_key][role] = defaults.get(role, False)
 
             # menu_order 구성: sort_order가 있으면 정렬, 없으면 기본값
+            valid_keys = set(DEFAULT_MENU_ORDER)
             if sort_orders:
-                # sort_order가 있는 메뉴는 sort_order 기준, 없는 메뉴는 기본 순서 뒤에 추가
+                # sort_order가 있는 유효 메뉴만 정렬 (DB에 남은 과거 키 제외)
                 ordered = sorted(sort_orders.items(), key=lambda x: x[1])
-                menu_order = [k for k, _ in ordered]
+                menu_order = [k for k, _ in ordered if k in valid_keys]
                 # sort_order가 없지만 DEFAULT_MENU_ORDER에 있는 메뉴 추가
                 for mk in DEFAULT_MENU_ORDER:
                     if mk not in menu_order:
                         menu_order.append(mk)
             else:
-                menu_order = DEFAULT_MENU_ORDER
+                menu_order = list(DEFAULT_MENU_ORDER)
 
             return MenuVisibilityResponse(visibility=visibility, menu_order=menu_order)
     except ImportError:
         return MenuVisibilityResponse(
             visibility=DEFAULT_MENU_VISIBILITY,
-            menu_order=DEFAULT_MENU_ORDER,
+            menu_order=list(DEFAULT_MENU_ORDER),
         )
 
 
@@ -404,14 +405,15 @@ async def update_menu_visibility(
                             visibility[mk][r] = defaults.get(r, False)
 
             # menu_order 구성
+            valid_keys = set(DEFAULT_MENU_ORDER)
             if sort_orders:
                 ordered = sorted(sort_orders.items(), key=lambda x: x[1])
-                menu_order = [k for k, _ in ordered]
+                menu_order = [k for k, _ in ordered if k in valid_keys]
                 for mk in DEFAULT_MENU_ORDER:
                     if mk not in menu_order:
                         menu_order.append(mk)
             else:
-                menu_order = request.menu_order or DEFAULT_MENU_ORDER
+                menu_order = request.menu_order or list(DEFAULT_MENU_ORDER)
 
             return MenuVisibilityResponse(visibility=visibility, menu_order=menu_order)
     except ImportError:

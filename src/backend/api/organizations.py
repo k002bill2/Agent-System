@@ -68,10 +68,12 @@ class CreateOrganizationRequest(BaseModel):
 async def create_organization(
     data: CreateOrganizationRequest,
     current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Create a new organization. The current user becomes the owner."""
     try:
-        return OrganizationService.create_organization(
+        return await OrganizationService.create_organization_async(
+            db=db,
             data=data.organization,
             owner_user_id=current_user.id,
             owner_email=current_user.email or "",
@@ -88,18 +90,20 @@ async def list_organizations(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """List organizations the current user belongs to (admins see all)."""
     # System admins can see all organizations
     if current_user.role == "admin" or current_user.is_admin:
-        return OrganizationService.list_organizations(
+        return await OrganizationService.list_organizations_async(
+            db,
             status=status,
             plan=plan,
             limit=limit,
             offset=offset,
         )
     # Regular users only see their own organizations
-    return OrganizationService.get_user_organizations(current_user.id)
+    return await OrganizationService.get_user_organizations_async(db, current_user.id)
 
 
 @router.get("/{org_id}", response_model=Organization)
@@ -110,7 +114,7 @@ async def get_organization(
 ):
     """Get an organization by ID. Requires membership."""
     await require_org_member(org_id, current_user, db)
-    org = OrganizationService.get_organization(org_id)
+    org = await OrganizationService.get_organization_async(db, org_id)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
     return org
@@ -120,9 +124,10 @@ async def get_organization(
 async def get_organization_by_slug(
     slug: str,
     current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get an organization by slug. Requires authentication."""
-    org = OrganizationService.get_organization_by_slug(slug)
+    org = await OrganizationService.get_organization_by_slug_async(db, slug)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
     return org
@@ -137,7 +142,7 @@ async def update_organization(
 ):
     """Update an organization. Requires admin role in the org."""
     await require_org_role(org_id, current_user, db, min_role=MemberRole.ADMIN)
-    org = OrganizationService.update_organization(org_id, data)
+    org = await OrganizationService.update_organization_async(db, org_id, data)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
     return org
@@ -151,7 +156,7 @@ async def delete_organization(
 ):
     """Delete an organization (soft delete). Requires owner role."""
     await require_org_role(org_id, current_user, db, min_role=MemberRole.OWNER)
-    if not OrganizationService.delete_organization(org_id):
+    if not await OrganizationService.delete_organization_async(db, org_id):
         raise HTTPException(status_code=404, detail="Organization not found")
     return {"success": True, "message": "Organization deleted"}
 
@@ -171,7 +176,7 @@ async def upgrade_plan(
 ):
     """Upgrade organization plan. Requires admin role."""
     await require_org_role(org_id, current_user, db, min_role=MemberRole.ADMIN)
-    org = OrganizationService.upgrade_plan(org_id, data.plan)
+    org = await OrganizationService.upgrade_plan_async(db, org_id, data.plan)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
     return org
@@ -190,7 +195,7 @@ async def list_members(
 ):
     """List all members of an organization. Requires membership."""
     await require_org_member(org_id, current_user, db)
-    return OrganizationService.get_members(org_id)
+    return await OrganizationService.get_members_async(db, org_id)
 
 
 async def send_invitation_email(
@@ -265,10 +270,12 @@ async def invite_member(
     """Invite a new member to the organization. Requires admin role."""
     await require_org_role(org_id, current_user, db, min_role=MemberRole.ADMIN)
     try:
-        invitation = OrganizationService.invite_member(org_id, data, current_user.id)
+        invitation = await OrganizationService.invite_member_async(
+            db, org_id, data, current_user.id
+        )
 
         # Get organization name for email
-        org = OrganizationService.get_organization(org_id)
+        org = await OrganizationService.get_organization_async(db, org_id)
         org_name = org.name if org else "Organization"
 
         # Send invitation email
@@ -291,7 +298,7 @@ async def list_invitations(
 ):
     """List pending invitations for an organization. Requires admin role."""
     await require_org_role(org_id, current_user, db, min_role=MemberRole.ADMIN)
-    return OrganizationService.get_pending_invitations(org_id)
+    return await OrganizationService.get_pending_invitations_async(db, org_id)
 
 
 @router.delete("/{org_id}/invitations/{invitation_id}")
@@ -304,7 +311,7 @@ async def cancel_invitation(
     """Cancel a pending invitation. Requires admin role."""
     await require_org_role(org_id, current_user, db, min_role=MemberRole.ADMIN)
     try:
-        OrganizationService.cancel_invitation(org_id, invitation_id)
+        await OrganizationService.cancel_invitation_async(db, org_id, invitation_id)
         return {"success": True, "message": "Invitation cancelled"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -325,7 +332,8 @@ async def accept_invitation(
 ):
     """Accept an invitation and join the organization."""
     try:
-        member = OrganizationService.accept_invitation(
+        member = await OrganizationService.accept_invitation_async(
+            db=db,
             token=data.token,
             user_id=current_user.id,
             user_name=data.user_name or current_user.name,
@@ -356,7 +364,7 @@ async def update_member_role(
     """Update a member's role. Requires owner role."""
     await require_org_role(org_id, current_user, db, min_role=MemberRole.OWNER)
     try:
-        member = OrganizationService.update_member_role(member_id, data.role)
+        member = await OrganizationService.update_member_role_async(db, member_id, data.role)
         if not member:
             raise HTTPException(status_code=404, detail="Member not found")
 
@@ -380,14 +388,14 @@ async def remove_member(
     await require_org_role(org_id, current_user, db, min_role=MemberRole.ADMIN)
     try:
         # Get user_id before removal for role sync
-        members = OrganizationService.get_members(org_id)
+        members = await OrganizationService.get_members_async(db, org_id)
         target_user_id = None
         for m in members:
             if m.id == member_id:
                 target_user_id = m.user_id
                 break
 
-        if not OrganizationService.remove_member(member_id):
+        if not await OrganizationService.remove_member_async(db, member_id):
             raise HTTPException(status_code=404, detail="Member not found")
 
         # Sync user role after removal (recalculate from remaining orgs)
@@ -408,22 +416,24 @@ async def remove_member(
 async def get_user_organizations(
     user_id: str,
     current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get all organizations a user belongs to. Users can only query their own."""
     if current_user.id != user_id and not (current_user.role == "admin" or current_user.is_admin):
         raise HTTPException(status_code=403, detail="Cannot view other user's organizations")
-    return OrganizationService.get_user_organizations(user_id)
+    return await OrganizationService.get_user_organizations_async(db, user_id)
 
 
 @router.get("/user/{user_id}/memberships", response_model=list[OrganizationMember])
 async def get_user_memberships(
     user_id: str,
     current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get all memberships for a user. Users can only query their own."""
     if current_user.id != user_id and not (current_user.role == "admin" or current_user.is_admin):
         raise HTTPException(status_code=403, detail="Cannot view other user's memberships")
-    return OrganizationService.get_user_memberships(user_id)
+    return await OrganizationService.get_user_memberships_async(db, user_id)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -443,7 +453,7 @@ async def get_tenant_context(
     if current_user.id != user_id and not (current_user.role == "admin" or current_user.is_admin):
         raise HTTPException(status_code=403, detail="Access denied")
     await require_org_member(org_id, current_user, db)
-    context = OrganizationService.get_tenant_context(org_id, user_id)
+    context = await OrganizationService.get_tenant_context_async(db, org_id, user_id)
     if not context:
         raise HTTPException(status_code=403, detail="Access denied")
     return context
@@ -462,7 +472,7 @@ async def get_organization_stats(
 ):
     """Get statistics for an organization. Requires membership."""
     await require_org_member(org_id, current_user, db)
-    return OrganizationService.get_organization_stats(org_id)
+    return await OrganizationService.get_organization_stats_async(db, org_id)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -488,7 +498,8 @@ async def track_usage(
 ):
     """Track token usage for an organization. Requires membership."""
     await require_org_member(org_id, current_user, db)
-    if not OrganizationService.track_token_usage(
+    if not await OrganizationService.track_token_usage_async(
+        db,
         org_id,
         data.tokens,
         user_id=data.user_id or current_user.id,
@@ -516,12 +527,31 @@ async def get_member_usage(
 ):
     """Get per-member usage breakdown. Requires admin role in the org."""
     await require_org_role(org_id, current_user, db, min_role=MemberRole.ADMIN)
-    org = OrganizationService.get_organization(org_id)
+    org = await OrganizationService.get_organization_async(db, org_id)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
 
-    usage = OrganizationService.get_member_usage(org_id, period=period)
+    usage = await OrganizationService.get_member_usage_async(db, org_id, period=period)
     return usage.model_dump()
+
+
+@router.get("/{org_id}/members/{user_id}/usage-detail")
+async def get_member_usage_detail(
+    org_id: str,
+    user_id: str,
+    period: str = Query(default="month", pattern="^(day|week|month)$"),
+    member_id: str | None = Query(default=None),
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Get detailed usage for a specific member. Requires admin role."""
+    await require_org_role(org_id, current_user, db, min_role=MemberRole.ADMIN)
+    detail = await OrganizationService.get_member_usage_detail_async(
+        db, org_id, user_id, period, member_id=member_id
+    )
+    if not detail:
+        raise HTTPException(status_code=404, detail="Member not found")
+    return detail.model_dump()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -539,12 +569,12 @@ async def get_quota_status(
     from services.quota_service import QuotaService
 
     await require_org_member(org_id, current_user, db)
-    org = OrganizationService.get_organization(org_id)
+    org = await OrganizationService.get_organization_async(db, org_id)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
 
     # Get today's session count
-    sessions_today = org.sessions_today
+    sessions_today = getattr(org, "sessions_today", 0)
 
     status = QuotaService.get_quota_status(org, sessions_today)
     return status.model_dump()

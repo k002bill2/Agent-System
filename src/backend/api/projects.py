@@ -62,26 +62,7 @@ async def _get_admin_org_ids(user) -> list[str]:
         )
         db_org_ids = [row[0] for row in result.all()]
 
-    # JSON fallback
-    from services.organization_service import OrganizationService
-
-    all_orgs = OrganizationService.list_organizations()
-    json_org_ids = []
-    for org in all_orgs:
-        mem = OrganizationService.get_member_by_user(org.id, user.id)
-        if mem:
-            role_val = mem.role.value if hasattr(mem.role, "value") else mem.role
-            if role_val in admin_roles:
-                json_org_ids.append(org.id)
-
-    # 합집합 (순서 유지, 중복 제거)
-    seen = set()
-    combined = []
-    for oid in db_org_ids + json_org_ids:
-        if oid not in seen:
-            seen.add(oid)
-            combined.append(oid)
-    return combined
+    return db_org_ids
 
 
 def _slugify(name: str) -> str:
@@ -621,14 +602,6 @@ async def add_project_member(
             is_org_member = org_mem_result.scalar_one_or_none() is not None
 
             if not is_org_member:
-                from services.organization_service import OrganizationService
-
-                json_mem = OrganizationService.get_member_by_user(
-                    proj_org.organization_id, request.user_id
-                )
-                is_org_member = json_mem is not None
-
-            if not is_org_member:
                 raise HTTPException(
                     status_code=400,
                     detail="해당 유저는 프로젝트의 조직에 속하지 않습니다. 먼저 조직에 초대해 주세요.",
@@ -841,25 +814,6 @@ async def list_available_org_members(
                     email=mem.email,
                     name=user.name if user else mem.name,
                     org_role=mem.role,
-                )
-            )
-
-        # JSON fallback
-        from services.organization_service import OrganizationService
-
-        json_members = OrganizationService.get_members(org_id) or []
-        for jmem in json_members:
-            uid = jmem.user_id if hasattr(jmem, "user_id") else ""
-            if not uid or uid in existing_user_ids or uid in seen_user_ids:
-                continue
-            seen_user_ids.add(uid)
-            role_val = jmem.role.value if hasattr(jmem.role, "value") else str(jmem.role)
-            available.append(
-                OrgMemberForProject(
-                    user_id=uid,
-                    email=getattr(jmem, "email", ""),
-                    name=getattr(jmem, "name", None),
-                    org_role=role_val,
                 )
             )
 

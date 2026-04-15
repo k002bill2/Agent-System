@@ -1,5 +1,7 @@
 """OAuth and email/password authentication API routes."""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict
@@ -132,47 +134,52 @@ async def google_callback(
     # Use provided redirect_uri or default
     redirect_uri = request.redirect_uri or f"{settings.frontend_url}/auth/callback/google"
 
+    logger = logging.getLogger(__name__)
+
+    # Phase 1: Exchange authorization code via Google OAuth
     try:
-        # Exchange code for user info
         user_info = await auth_service.exchange_google_code(request.code, redirect_uri)
-
-        # Get or create user
-        user = await auth_service.get_or_create_user(user_info)
-
-        # Create token pair
-        tokens = auth_service.create_token_pair(user.id)
-
-        audit_user_auth(
-            AuditAction.USER_LOGIN,
-            user_id=user.id,
-            metadata={"provider": "google", "email": user.email},
-        )
-
-        return AuthResponse(
-            access_token=tokens.access_token,
-            refresh_token=tokens.refresh_token,
-            token_type=tokens.token_type,
-            expires_in=tokens.expires_in,
-            user=UserResponse(
-                id=user.id,
-                email=user.email,
-                name=user.name,
-                avatar_url=user.avatar_url,
-                oauth_provider=user.oauth_provider,
-                is_admin=user.is_admin,
-                role=_get_user_role(user),
-            ),
-        )
     except Exception as e:
-        import logging
-
-        logging.getLogger(__name__).error(
-            "Google OAuth callback error: %s, redirect_uri=%s", str(e), redirect_uri
+        logger.error(
+            "Google OAuth token exchange failed: %s, redirect_uri=%s", str(e), redirect_uri
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to authenticate with Google: {str(e)}",
+            detail=f"Google OAuth token exchange failed: {str(e)}",
         )
+
+    # Phase 2: User creation/lookup and token generation (DB operations)
+    try:
+        user = await auth_service.get_or_create_user(user_info)
+        tokens = auth_service.create_token_pair(user.id)
+    except Exception as e:
+        logger.error("Database error during Google auth for %s: %s", user_info.email, str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Authentication database error: {str(e)}",
+        )
+
+    audit_user_auth(
+        AuditAction.USER_LOGIN,
+        user_id=user.id,
+        metadata={"provider": "google", "email": user.email},
+    )
+
+    return AuthResponse(
+        access_token=tokens.access_token,
+        refresh_token=tokens.refresh_token,
+        token_type=tokens.token_type,
+        expires_in=tokens.expires_in,
+        user=UserResponse(
+            id=user.id,
+            email=user.email,
+            name=user.name,
+            avatar_url=user.avatar_url,
+            oauth_provider=user.oauth_provider,
+            is_admin=user.is_admin,
+            role=_get_user_role(user),
+        ),
+    )
 
 
 # ─────────────────────────────────────────────────────────────
@@ -211,42 +218,52 @@ async def github_callback(
     # Use provided redirect_uri or default
     redirect_uri = request.redirect_uri or f"{settings.frontend_url}/auth/callback/github"
 
+    logger = logging.getLogger(__name__)
+
+    # Phase 1: Exchange authorization code via GitHub OAuth
     try:
-        # Exchange code for user info
         user_info = await auth_service.exchange_github_code(request.code, redirect_uri)
-
-        # Get or create user
-        user = await auth_service.get_or_create_user(user_info)
-
-        # Create token pair
-        tokens = auth_service.create_token_pair(user.id)
-
-        audit_user_auth(
-            AuditAction.USER_LOGIN,
-            user_id=user.id,
-            metadata={"provider": "github", "email": user.email},
-        )
-
-        return AuthResponse(
-            access_token=tokens.access_token,
-            refresh_token=tokens.refresh_token,
-            token_type=tokens.token_type,
-            expires_in=tokens.expires_in,
-            user=UserResponse(
-                id=user.id,
-                email=user.email,
-                name=user.name,
-                avatar_url=user.avatar_url,
-                oauth_provider=user.oauth_provider,
-                is_admin=user.is_admin,
-                role=_get_user_role(user),
-            ),
-        )
     except Exception as e:
+        logger.error(
+            "GitHub OAuth token exchange failed: %s, redirect_uri=%s", str(e), redirect_uri
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to authenticate with GitHub: {str(e)}",
+            detail=f"GitHub OAuth token exchange failed: {str(e)}",
         )
+
+    # Phase 2: User creation/lookup and token generation (DB operations)
+    try:
+        user = await auth_service.get_or_create_user(user_info)
+        tokens = auth_service.create_token_pair(user.id)
+    except Exception as e:
+        logger.error("Database error during GitHub auth for %s: %s", user_info.email, str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Authentication database error: {str(e)}",
+        )
+
+    audit_user_auth(
+        AuditAction.USER_LOGIN,
+        user_id=user.id,
+        metadata={"provider": "github", "email": user.email},
+    )
+
+    return AuthResponse(
+        access_token=tokens.access_token,
+        refresh_token=tokens.refresh_token,
+        token_type=tokens.token_type,
+        expires_in=tokens.expires_in,
+        user=UserResponse(
+            id=user.id,
+            email=user.email,
+            name=user.name,
+            avatar_url=user.avatar_url,
+            oauth_provider=user.oauth_provider,
+            is_admin=user.is_admin,
+            role=_get_user_role(user),
+        ),
+    )
 
 
 # ─────────────────────────────────────────────────────────────

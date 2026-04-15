@@ -1,27 +1,22 @@
 import { useEffect, useRef } from 'react'
 import { cn } from '../../lib/utils'
 import { Terminal, Trash2 } from 'lucide-react'
-import { ALL_CHECK_TYPES, CheckType } from '../../types/monitoring'
+import { CheckType } from '../../types/monitoring'
 import { useMonitoringStore } from '../../stores/monitoring'
 
 interface OutputLogProps {
   projectId: string
 }
 
-/** Get label for a check type, using dynamic config or defaults */
-function useCheckLabels(projectId: string): Record<CheckType, string> {
-  const { getCheckLabel } = useMonitoringStore()
-  return {
-    test: getCheckLabel(projectId, 'test'),
-    lint: getCheckLabel(projectId, 'lint'),
-    typecheck: getCheckLabel(projectId, 'typecheck'),
-    build: getCheckLabel(projectId, 'build'),
+/** Get label for each check type, using dynamic config */
+function useCheckLabels(projectId: string): Record<string, string> {
+  const { getCheckTypes, getCheckLabel } = useMonitoringStore()
+  const checkTypes = getCheckTypes(projectId)
+  const labels: Record<string, string> = {}
+  for (const ct of checkTypes) {
+    labels[ct] = getCheckLabel(projectId, ct)
   }
-}
-
-/** Check if view is a standard CheckType */
-function isCheckType(view: string): view is CheckType {
-  return ALL_CHECK_TYPES.includes(view as CheckType)
+  return labels
 }
 
 export function OutputLog({ projectId }: OutputLogProps) {
@@ -33,21 +28,26 @@ export function OutputLog({ projectId }: OutputLogProps) {
     workflowChecks,
     workflowLogs,
     clearWorkflowLogs,
+    getCheckTypes,
   } = useMonitoringStore()
   const checkLabels = useCheckLabels(projectId)
+  const checkTypes = getCheckTypes(projectId)
   const logContainerRef = useRef<HTMLDivElement>(null)
 
+  // Check if current view is a known check type
+  const isCheckView = (view: string): boolean => checkTypes.includes(view)
+
   // Check if current view is a workflow ID
-  const isWorkflowView = activeLogView !== 'all' && !isCheckType(activeLogView)
+  const isWorkflowView = activeLogView !== 'all' && !isCheckView(activeLogView)
 
   // Get logs based on active view, filtered by current project
   const getDisplayLogs = () => {
     if (activeLogView === 'all') {
       // Combine all check logs + workflow logs, sorted by timestamp
-      const allCheckLogs = ALL_CHECK_TYPES.flatMap((ct) =>
-        checkLogs[ct]
+      const allCheckLogs = checkTypes.flatMap((ct) =>
+        (checkLogs[ct] || [])
           .filter((log) => log.projectId === projectId)
-          .map((log) => ({ ...log, label: checkLabels[ct] }))
+          .map((log) => ({ ...log, label: checkLabels[ct] || ct }))
       )
       const allWfLogs = Object.entries(workflowLogs).flatMap(([wfId, logs]) => {
         const wf = workflowChecks.find((w) => w.id === wfId)
@@ -67,9 +67,9 @@ export function OutputLog({ projectId }: OutputLogProps) {
     }
 
     // Standard check type logs
-    return checkLogs[activeLogView as CheckType]
+    return (checkLogs[activeLogView as CheckType] || [])
       .filter((log) => log.projectId === projectId)
-      .map((log) => ({ ...log, label: checkLabels[activeLogView as CheckType] }))
+      .map((log) => ({ ...log, label: checkLabels[activeLogView] || activeLogView }))
   }
 
   const displayLogs = getDisplayLogs()
@@ -85,10 +85,10 @@ export function OutputLog({ projectId }: OutputLogProps) {
     if (activeLogView === 'all') {
       clearLogs()
       clearWorkflowLogs()
-    } else if (isWorkflowView) {
+    } else if (!isCheckView(activeLogView)) {
       clearWorkflowLogs(activeLogView)
     } else {
-      clearLogs(activeLogView as CheckType)
+      clearLogs(activeLogView)
     }
   }
 
@@ -129,7 +129,7 @@ export function OutputLog({ projectId }: OutputLogProps) {
             >
               All
             </button>
-            {ALL_CHECK_TYPES.map((ct) => (
+            {checkTypes.map((ct) => (
               <button
                 key={ct}
                 onClick={() => setActiveLogView(ct)}
@@ -140,7 +140,7 @@ export function OutputLog({ projectId }: OutputLogProps) {
                     : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                 )}
               >
-                {checkLabels[ct]}
+                {checkLabels[ct] || ct}
               </button>
             ))}
 

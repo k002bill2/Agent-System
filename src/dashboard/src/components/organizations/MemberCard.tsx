@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { MoreVertical, Shield, ShieldCheck, Eye, User, Trash2 } from 'lucide-react'
+import React, { useState } from 'react'
+import { ChevronDown, ChevronRight, MoreVertical, Shield, ShieldCheck, Eye, User, Trash2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import type { OrganizationMember, MemberRole } from '../../stores/organizations'
 
@@ -7,8 +7,10 @@ interface MemberCardProps {
   member: OrganizationMember
   currentUserId: string
   canManage: boolean
+  isExpanded?: boolean
   onUpdateRole: (role: MemberRole) => void
   onRemove: () => void
+  onClick?: () => void
 }
 
 const roleIcons: Record<MemberRole, typeof Shield> = {
@@ -36,16 +38,57 @@ export function MemberCard({
   member,
   currentUserId,
   canManage,
+  isExpanded = false,
   onUpdateRole,
   onRemove,
+  onClick,
 }: MemberCardProps) {
   const [showMenu, setShowMenu] = useState(false)
   const isCurrentUser = member.user_id === currentUserId
   const RoleIcon = roleIcons[member.role]
 
+  const handleCardClick = () => {
+    if (!showMenu && onClick) {
+      onClick()
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.key === 'Enter' || e.key === ' ') && onClick) {
+      e.preventDefault()
+      onClick()
+    }
+  }
+
   return (
-    <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+    <div
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-expanded={onClick ? isExpanded : undefined}
+      aria-label={onClick ? `${member.name || member.email} details` : undefined}
+      onClick={handleCardClick}
+      onKeyDown={onClick ? handleKeyDown : undefined}
+      className={cn(
+        'flex items-center justify-between p-4 bg-white dark:bg-gray-800 border rounded-lg transition-colors',
+        onClick && 'cursor-pointer',
+        isExpanded
+          ? 'border-primary-500 dark:border-primary-600 ring-1 ring-primary-200 dark:ring-primary-800'
+          : 'border-gray-200 dark:border-gray-700',
+        onClick && !isExpanded && 'hover:border-primary-300 dark:hover:border-primary-600'
+      )}
+    >
       <div className="flex items-center gap-3">
+        {/* Chevron */}
+        {onClick && (
+          <div className="flex-shrink-0 text-gray-400 dark:text-gray-500">
+            {isExpanded ? (
+              <ChevronDown className="w-4 h-4" />
+            ) : (
+              <ChevronRight className="w-4 h-4" />
+            )}
+          </div>
+        )}
+
         <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
           <span className="text-gray-700 dark:text-gray-300 font-medium">
             {(member.name || member.email).charAt(0).toUpperCase()}
@@ -78,8 +121,12 @@ export function MemberCard({
         {canManage && !isCurrentUser && member.role !== 'owner' && (
           <div className="relative">
             <button
-              onClick={() => setShowMenu(!showMenu)}
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowMenu(!showMenu)
+              }}
               className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+              aria-label="Member actions"
             >
               <MoreVertical className="w-4 h-4" />
             </button>
@@ -88,7 +135,10 @@ export function MemberCard({
               <>
                 <div
                   className="fixed inset-0 z-10"
-                  onClick={() => setShowMenu(false)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowMenu(false)
+                  }}
                 />
                 <div className="absolute right-0 top-8 z-20 w-40 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1">
                   <div className="px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
@@ -97,7 +147,8 @@ export function MemberCard({
                   {(['admin', 'member', 'viewer'] as MemberRole[]).map((role) => (
                     <button
                       key={role}
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation()
                         setShowMenu(false)
                         if (role !== member.role) {
                           onUpdateRole(role)
@@ -116,7 +167,8 @@ export function MemberCard({
                   ))}
                   <div className="border-t border-gray-200 dark:border-gray-700 mt-1 pt-1">
                     <button
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation()
                         setShowMenu(false)
                         onRemove()
                       }}
@@ -135,6 +187,3 @@ export function MemberCard({
     </div>
   )
 }
-
-// Need to import React for createElement
-import React from 'react'

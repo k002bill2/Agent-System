@@ -3,6 +3,7 @@
 This module was split into domain-specific modules:
 - api.sessions        — Session & Task API
 - api.monitoring      — Project health checks
+- api.diagnostics     — Project environment diagnostics
 - api.context         — Project context & context window meter
 - api.hitl            — Human-in-the-Loop approvals
 - api.warp            — Warp Terminal integration
@@ -48,6 +49,7 @@ router = APIRouter(tags=["orchestration"])
 
 # Include domain-specific sub-routers
 from api.context import router as context_router
+from api.diagnostics import router as diagnostics_router
 from api.hitl import router as hitl_router
 from api.monitoring import router as monitoring_router
 from api.permission_toggles import router as permission_toggles_router
@@ -57,6 +59,7 @@ from api.warp import router as warp_router
 
 router.include_router(sessions_router)
 router.include_router(monitoring_router)
+router.include_router(diagnostics_router)
 router.include_router(context_router)
 router.include_router(hitl_router)
 router.include_router(warp_router)

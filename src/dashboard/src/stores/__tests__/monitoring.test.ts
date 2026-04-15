@@ -44,10 +44,11 @@ function resetStore() {
   useMonitoringStore.setState({
     projectHealthMap: {},
     isLoadingHealth: false,
+    checkConfigMap: {},
     projectContext: null,
     isLoadingContext: false,
     runningChecksMap: {},
-    checkLogs: { test: [], lint: [], typecheck: [], build: [] },
+    checkLogs: {},
     activeLogView: 'all',
     activeContextTab: 'claude-md',
     workflowChecks: [],
@@ -82,10 +83,7 @@ describe('monitoring store', () => {
 
     it('has empty check logs', () => {
       const logs = useMonitoringStore.getState().checkLogs
-      expect(logs.test).toEqual([])
-      expect(logs.lint).toEqual([])
-      expect(logs.typecheck).toEqual([])
-      expect(logs.build).toEqual([])
+      expect(logs).toEqual({})
     })
   })
 
@@ -132,18 +130,18 @@ describe('monitoring store', () => {
       useMonitoringStore.getState().clearLogs('test')
 
       const logs = useMonitoringStore.getState().checkLogs
-      expect(logs.test).toEqual([])
-      expect(logs.lint).toHaveLength(1) // preserved
+      expect(logs['test']).toEqual([])
+      expect(logs['lint']).toHaveLength(1) // preserved
     })
 
     it('clears all logs when no type specified', () => {
       useMonitoringStore.getState().clearLogs()
 
       const logs = useMonitoringStore.getState().checkLogs
-      expect(logs.test).toEqual([])
-      expect(logs.lint).toEqual([])
-      expect(logs.typecheck).toEqual([])
-      expect(logs.build).toEqual([])
+      expect(logs['test']).toEqual([])
+      expect(logs['lint']).toEqual([])
+      expect(logs['typecheck']).toEqual([])
+      expect(logs['build']).toEqual([])
     })
   })
 
@@ -179,6 +177,76 @@ describe('monitoring store', () => {
       })
 
       expect(useMonitoringStore.getState().getRunningChecks('p1').size).toBe(2)
+    })
+  })
+
+  // ── getCheckTypes ──────────────────────────────────────
+
+  describe('getCheckTypes', () => {
+    it('returns empty array for unknown project', () => {
+      expect(useMonitoringStore.getState().getCheckTypes('unknown')).toEqual([])
+    })
+
+    it('returns check types from config', () => {
+      useMonitoringStore.setState({
+        checkConfigMap: {
+          p1: {
+            project_id: 'p1',
+            check_types: ['test', 'lint', 'typecheck', 'build'],
+            checks: {},
+          },
+        },
+      })
+
+      expect(useMonitoringStore.getState().getCheckTypes('p1')).toEqual([
+        'test', 'lint', 'typecheck', 'build',
+      ])
+    })
+  })
+
+  // ── fetchCheckConfig ──────────────────────────────────
+
+  describe('fetchCheckConfig', () => {
+    it('fetches config and initializes checkLogs for new check types', async () => {
+      const configData = {
+        project_id: 'p1',
+        check_types: ['test', 'lint', 'custom-check'],
+        checks: {
+          test: { label: 'Test', command: 'npm test' },
+          lint: { label: 'Lint', command: 'npm run lint' },
+          'custom-check': { label: 'Custom', command: 'custom cmd' },
+        },
+      }
+      mockApiClient.get.mockResolvedValueOnce(configData)
+
+      await useMonitoringStore.getState().fetchCheckConfig('p1')
+
+      const state = useMonitoringStore.getState()
+      expect(state.checkConfigMap['p1']).toEqual(configData)
+      expect(state.checkLogs['test']).toEqual([])
+      expect(state.checkLogs['lint']).toEqual([])
+      expect(state.checkLogs['custom-check']).toEqual([])
+    })
+
+    it('preserves existing logs when fetching config', async () => {
+      useMonitoringStore.setState({
+        checkLogs: {
+          test: [{ timestamp: '', text: 'existing', isStderr: false, projectId: 'p1' }],
+        },
+      })
+
+      const configData = {
+        project_id: 'p1',
+        check_types: ['test', 'lint'],
+        checks: {},
+      }
+      mockApiClient.get.mockResolvedValueOnce(configData)
+
+      await useMonitoringStore.getState().fetchCheckConfig('p1')
+
+      const state = useMonitoringStore.getState()
+      expect(state.checkLogs['test']).toHaveLength(1) // preserved
+      expect(state.checkLogs['lint']).toEqual([]) // initialized
     })
   })
 
@@ -333,7 +401,7 @@ describe('monitoring store', () => {
         started_at: '2025-01-01T00:00:00Z',
       })
 
-      expect(useMonitoringStore.getState().checkLogs['test']).toHaveLength(0)
+      expect(useMonitoringStore.getState().checkLogs['test'] || []).toHaveLength(0)
     })
 
     it('handles check_progress event and appends log', () => {
@@ -440,7 +508,16 @@ describe('monitoring store', () => {
       expect(useMonitoringStore.getState().checkLogs['lint']).toHaveLength(1)
     })
 
-    it('closes EventSource on build check_completed', () => {
+    it('closes EventSource on all_checks_done event', () => {
+      useMonitoringStore.getState().runAllChecks('p1')
+      const es = eventSourceInstances[0]
+
+      es.emit('all_checks_done', {})
+
+      expect(es.close).toHaveBeenCalled()
+    })
+
+    it('does not close EventSource on individual check_completed', () => {
       useMonitoringStore.getState().runAllChecks('p1')
       const es = eventSourceInstances[0]
 
@@ -454,7 +531,7 @@ describe('monitoring store', () => {
         stderr: '',
       })
 
-      expect(es.close).toHaveBeenCalled()
+      expect(es.close).not.toHaveBeenCalled()
     })
 
     it('handles error event and clears running checks', () => {

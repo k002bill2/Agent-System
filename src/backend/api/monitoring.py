@@ -1,6 +1,6 @@
 """Monitoring API routes.
 
-Project health checks: typecheck, lint, test, build via SSE streaming.
+Obsidian vault health checks: links, frontmatter, orphans, images via SSE streaming.
 """
 
 import json
@@ -15,7 +15,6 @@ from models.monitoring import (
     CheckResult,
     CheckStartedPayload,
     CheckStatus,
-    CheckType,
     ProjectHealth,
 )
 from models.project import get_project
@@ -31,7 +30,7 @@ class CheckResponse(BaseModel):
     """Response for check result."""
 
     project_id: str
-    check_type: CheckType
+    check_type: str
     status: CheckStatus
     exit_code: int | None
     duration_ms: int | None
@@ -61,6 +60,7 @@ class CheckConfigResponse(BaseModel):
 
     project_id: str
     checks: dict[str, CheckConfigEntry]
+    check_types: list[str] = []
 
 
 @router.get("/projects/{project_id}/health-config", response_model=CheckConfigResponse)
@@ -74,6 +74,7 @@ async def get_health_config(project_id: str):
     return CheckConfigResponse(
         project_id=project_id,
         checks={k: CheckConfigEntry(**v) for k, v in config.items()},
+        check_types=list(config.keys()),
     )
 
 
@@ -94,21 +95,24 @@ async def get_project_health(project_id: str):
 
     health = _project_health[project_id]
 
+    config = get_check_config(project.path)
     return ProjectHealthResponse(
         project_id=health.project_id,
         project_name=health.project_name,
         project_path=health.project_path,
         checks={
-            ct.value: CheckResponse(
+            check_id: CheckResponse(
                 project_id=project_id,
-                check_type=ct,
-                status=health.checks.get(ct, CheckResult(check_type=ct)).status,
-                exit_code=health.checks.get(ct, CheckResult(check_type=ct)).exit_code,
-                duration_ms=health.checks.get(ct, CheckResult(check_type=ct)).duration_ms,
-                stdout=health.checks.get(ct, CheckResult(check_type=ct)).stdout,
-                stderr=health.checks.get(ct, CheckResult(check_type=ct)).stderr,
+                check_type=check_id,
+                status=health.checks.get(check_id, CheckResult(check_type=check_id)).status,
+                exit_code=health.checks.get(check_id, CheckResult(check_type=check_id)).exit_code,
+                duration_ms=health.checks.get(
+                    check_id, CheckResult(check_type=check_id)
+                ).duration_ms,
+                stdout=health.checks.get(check_id, CheckResult(check_type=check_id)).stdout,
+                stderr=health.checks.get(check_id, CheckResult(check_type=check_id)).stderr,
             )
-            for ct in CheckType
+            for check_id in config
         },
         last_updated=health.last_updated.isoformat(),
     )
@@ -136,14 +140,15 @@ async def run_all_checks(project_id: str):
     async def event_stream():
         """Generate SSE events for all checks."""
         runner = get_runner(project.path)
+        config = get_check_config(project.path)
 
-        for check_type in CheckType:
+        for check_id in config:
             try:
-                async for event in runner.stream_check(project_id, check_type):
+                async for event in runner.stream_check(project_id, check_id):
                     if isinstance(event, CheckStartedPayload):
                         _project_health[project_id].update_check(
                             CheckResult(
-                                check_type=check_type,
+                                check_type=check_id,
                                 status=CheckStatus.RUNNING,
                                 started_at=event.started_at,
                             )
@@ -156,7 +161,7 @@ async def run_all_checks(project_id: str):
                     elif isinstance(event, CheckCompletedPayload):
                         _project_health[project_id].update_check(
                             CheckResult(
-                                check_type=check_type,
+                                check_type=check_id,
                                 status=event.status,
                                 exit_code=event.exit_code,
                                 stdout=event.stdout,
@@ -168,8 +173,10 @@ async def run_all_checks(project_id: str):
                         yield f"event: check_completed\ndata: {event.model_dump_json()}\n\n"
 
             except Exception as e:
-                error_data = json.dumps({"error": str(e), "check_type": check_type.value})
+                error_data = json.dumps({"error": str(e), "check_type": check_id})
                 yield f"event: error\ndata: {error_data}\n\n"
+
+        yield "event: all_checks_done\ndata: {}\n\n"
 
     return StreamingResponse(
         event_stream(),
@@ -183,7 +190,7 @@ async def run_all_checks(project_id: str):
 
 
 @router.get("/projects/{project_id}/checks/{check_type}")
-async def run_check(project_id: str, check_type: CheckType):
+async def run_check(project_id: str, check_type: str):
     """
     Run a specific check on a project.
 
@@ -195,6 +202,13 @@ async def run_check(project_id: str, check_type: CheckType):
     project = get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    config = get_check_config(project.path)
+    if check_type not in config:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid check type: {check_type}. Valid types: {list(config.keys())}",
+        )
 
     # Initialize health if not exists
     if project_id not in _project_health:

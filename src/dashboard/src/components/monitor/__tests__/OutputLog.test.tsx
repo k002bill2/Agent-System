@@ -16,10 +16,10 @@ const mockClearWorkflowLogs = vi.fn()
 let mockActiveLogView = 'all' as string
 let mockWorkflowChecks: Array<{ id: string; name: string }> = []
 let mockCheckLogs: Record<string, Array<{ timestamp: string; text: string; isStderr: boolean; projectId: string }>> = {
-  test: [],
-  lint: [],
-  typecheck: [],
-  build: [],
+  links: [],
+  frontmatter: [],
+  orphans: [],
+  images: [],
 }
 let mockWorkflowLogs: Record<string, Array<{ timestamp: string; text: string; isStderr: boolean; projectId: string }>> = {}
 
@@ -33,9 +33,10 @@ vi.mock('../../../stores/monitoring', () => ({
     workflowLogs: mockWorkflowLogs,
     clearWorkflowLogs: mockClearWorkflowLogs,
     getCheckLabel: (_projectId: string, checkType: string) => {
-      const labels: Record<string, string> = { test: 'Test', lint: 'Lint', typecheck: 'TypeCheck', build: 'Build' }
+      const labels: Record<string, string> = { links: 'Links', frontmatter: 'Frontmatter', orphans: 'Orphans', images: 'Images' }
       return labels[checkType] ?? checkType
     },
+    getCheckTypes: () => ['links', 'frontmatter', 'orphans', 'images'],
   }),
 }))
 
@@ -45,10 +46,10 @@ describe('OutputLog', () => {
     mockActiveLogView = 'all'
     mockWorkflowChecks = []
     mockCheckLogs = {
-      test: [],
-      lint: [],
-      typecheck: [],
-      build: [],
+      links: [],
+      frontmatter: [],
+      orphans: [],
+      images: [],
     }
     mockWorkflowLogs = {}
   })
@@ -66,27 +67,27 @@ describe('OutputLog', () => {
   it('renders tab buttons for all check types', () => {
     render(<OutputLog projectId="proj-1" />)
     expect(screen.getByText('All')).toBeInTheDocument()
-    expect(screen.getByText('Test')).toBeInTheDocument()
-    expect(screen.getByText('Lint')).toBeInTheDocument()
-    expect(screen.getByText('TypeCheck')).toBeInTheDocument()
-    expect(screen.getByText('Build')).toBeInTheDocument()
+    expect(screen.getByText('Links')).toBeInTheDocument()
+    expect(screen.getByText('Frontmatter')).toBeInTheDocument()
+    expect(screen.getByText('Orphans')).toBeInTheDocument()
+    expect(screen.getByText('Images')).toBeInTheDocument()
   })
 
   it('calls setActiveLogView when tab is clicked', () => {
     render(<OutputLog projectId="proj-1" />)
-    fireEvent.click(screen.getByText('Test'))
-    expect(mockSetActiveLogView).toHaveBeenCalledWith('test')
+    fireEvent.click(screen.getByText('Links'))
+    expect(mockSetActiveLogView).toHaveBeenCalledWith('links')
   })
 
   it('displays log lines when present', () => {
     mockCheckLogs = {
-      test: [
+      links: [
         { timestamp: '2024-01-01T00:00:01Z', text: 'Test output line 1', isStderr: false, projectId: 'proj-1' },
         { timestamp: '2024-01-01T00:00:02Z', text: 'Test error line', isStderr: true, projectId: 'proj-1' },
       ],
-      lint: [],
-      typecheck: [],
-      build: [],
+      frontmatter: [],
+      orphans: [],
+      images: [],
     }
     render(<OutputLog projectId="proj-1" />)
     expect(screen.getByText('Test output line 1')).toBeInTheDocument()
@@ -103,11 +104,11 @@ describe('OutputLog', () => {
   })
 
   it('calls clearLogs with checkType when clear is clicked on a check tab', () => {
-    mockActiveLogView = 'test'
+    mockActiveLogView = 'links'
     render(<OutputLog projectId="proj-1" />)
     const clearBtn = screen.getByTitle('Clear logs')
     fireEvent.click(clearBtn)
-    expect(mockClearLogs).toHaveBeenCalledWith('test')
+    expect(mockClearLogs).toHaveBeenCalledWith('links')
   })
 
   it('renders workflow tabs when workflow checks exist', () => {
@@ -120,13 +121,13 @@ describe('OutputLog', () => {
 
   it('filters logs by projectId in "all" view', () => {
     mockCheckLogs = {
-      test: [
+      links: [
         { timestamp: '2024-01-01T00:00:01Z', text: 'Matching log', isStderr: false, projectId: 'proj-1' },
         { timestamp: '2024-01-01T00:00:02Z', text: 'Other project log', isStderr: false, projectId: 'proj-2' },
       ],
-      lint: [],
-      typecheck: [],
-      build: [],
+      frontmatter: [],
+      orphans: [],
+      images: [],
     }
     render(<OutputLog projectId="proj-1" />)
     expect(screen.getByText('Matching log')).toBeInTheDocument()

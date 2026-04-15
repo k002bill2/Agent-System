@@ -5,7 +5,6 @@ import {
   CheckType,
   CheckConfig,
   CheckConfigEntry,
-  DEFAULT_CHECK_TYPE_LABELS,
   ProjectHealth,
   ProjectContext,
   CheckStartedPayload,
@@ -13,6 +12,7 @@ import {
   CheckCompletedPayload,
   WorkflowCheck,
   WorkflowCheckStatus,
+  VaultHealthResult,
 } from '../types/monitoring'
 
 export interface LogLine {
@@ -52,6 +52,9 @@ interface MonitoringState {
   runningWorkflowIds: Set<string>
   workflowLogs: Record<string, LogLine[]>
 
+  // Vault health (parsed from vault-health check stdout)
+  vaultHealthMap: Record<string, VaultHealthResult>
+
   // Error state
   error: string | null
 
@@ -59,7 +62,8 @@ interface MonitoringState {
   getProjectHealth: (projectId: string) => ProjectHealth | null
   getRunningChecks: (projectId: string) => Set<CheckType>
   getCheckLabel: (projectId: string, checkType: CheckType) => string
-  getCheckConfig: (projectId: string) => Record<CheckType, CheckConfigEntry> | null
+  getCheckConfig: (projectId: string) => Record<string, CheckConfigEntry> | null
+  getCheckTypes: (projectId: string) => string[]
   fetchCheckConfig: (projectId: string) => Promise<void>
   fetchProjectHealth: (projectId: string) => Promise<void>
   fetchProjectContext: (projectId: string) => Promise<void>
@@ -69,6 +73,10 @@ interface MonitoringState {
   setActiveContextTab: (tab: 'claude-md' | 'dev-docs' | 'session') => void
   clearLogs: (checkType?: CheckType) => void
   clearError: () => void
+
+  // Vault health actions
+  getVaultHealth: (projectId: string) => VaultHealthResult | null
+  parseVaultHealth: (projectId: string, stdout: string) => void
 
   // Workflow actions
   fetchWorkflowChecks: (projectId: string) => Promise<void>
@@ -83,18 +91,14 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
   projectContext: null,
   isLoadingContext: false,
   runningChecksMap: {},
-  checkLogs: {
-    test: [],
-    lint: [],
-    typecheck: [],
-    build: [],
-  },
+  checkLogs: {},
   activeLogView: 'all',
   activeContextTab: 'claude-md',
   workflowChecks: [],
   isLoadingWorkflows: false,
   runningWorkflowIds: new Set(),
   workflowLogs: {},
+  vaultHealthMap: {},
   error: null,
 
   getProjectHealth: (projectId: string) => {
@@ -107,24 +111,34 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
 
   getCheckLabel: (projectId: string, checkType: CheckType) => {
     const config = get().checkConfigMap[projectId]
-    return config?.checks?.[checkType]?.label ?? DEFAULT_CHECK_TYPE_LABELS[checkType]
+    return config?.checks?.[checkType]?.label ?? checkType
   },
 
   getCheckConfig: (projectId: string) => {
     return get().checkConfigMap[projectId]?.checks ?? null
   },
 
+  getCheckTypes: (projectId: string) => {
+    return get().checkConfigMap[projectId]?.check_types ?? []
+  },
+
   fetchCheckConfig: async (projectId: string) => {
     try {
       const data = await apiClient.get<CheckConfig>(`/api/projects/${projectId}/health-config`)
-      set((state) => ({
-        checkConfigMap: {
-          ...state.checkConfigMap,
-          [projectId]: data,
-        },
-      }))
+      set((state) => {
+        // Initialize checkLogs for new check types
+        const newLogs = { ...state.checkLogs }
+        for (const ct of data.check_types) {
+          if (!(ct in newLogs)) {
+            newLogs[ct] = []
+          }
+        }
+        return {
+          checkConfigMap: { ...state.checkConfigMap, [projectId]: data },
+          checkLogs: newLogs,
+        }
+      })
     } catch (e) {
-      // Non-critical: fall back to defaults
       console.warn('Failed to fetch check config:', e)
     }
   },
@@ -215,7 +229,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
         checkLogs: {
           ...state.checkLogs,
           [checkType]: [
-            ...state.checkLogs[checkType],
+            ...(state.checkLogs[checkType] || []),
             {
               timestamp: payload.started_at,
               text: `>>> Starting ${checkType}...`,
@@ -237,7 +251,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
         checkLogs: {
           ...state.checkLogs,
           [checkType]: [
-            ...state.checkLogs[checkType],
+            ...(state.checkLogs[checkType] || []),
             {
               timestamp: new Date().toISOString(),
               text: payload.output,
@@ -296,12 +310,17 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
         }))
       }
 
+      // vault-health check → parse JSON from stdout
+      if (checkType === 'vault-health' && payload.stdout) {
+        get().parseVaultHealth(projectId, payload.stdout)
+      }
+
       // 로그 추가
       set((state) => ({
         checkLogs: {
           ...state.checkLogs,
           [checkType]: [
-            ...state.checkLogs[checkType],
+            ...(state.checkLogs[checkType] || []),
             {
               timestamp: new Date().toISOString(),
               text: `>>> ${checkType} completed with exit code ${payload.exit_code} (${payload.duration_ms}ms)`,
@@ -398,7 +417,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
         checkLogs: {
           ...state.checkLogs,
           [checkType]: [
-            ...state.checkLogs[checkType],
+            ...(state.checkLogs[checkType] || []),
             {
               timestamp: payload.started_at,
               text: `>>> Starting ${checkType}...`,
@@ -421,7 +440,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
         checkLogs: {
           ...state.checkLogs,
           [checkType]: [
-            ...state.checkLogs[checkType],
+            ...(state.checkLogs[checkType] || []),
             {
               timestamp: new Date().toISOString(),
               text: payload.output,
@@ -478,12 +497,17 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
         }))
       }
 
+      // vault-health check → parse JSON from stdout
+      if (checkType === 'vault-health' && payload.stdout) {
+        get().parseVaultHealth(projectId, payload.stdout)
+      }
+
       // 로그 추가
       set((state) => ({
         checkLogs: {
           ...state.checkLogs,
           [checkType]: [
-            ...state.checkLogs[checkType],
+            ...(state.checkLogs[checkType] || []),
             {
               timestamp: new Date().toISOString(),
               text: `>>> ${checkType} completed with exit code ${payload.exit_code} (${payload.duration_ms}ms)`,
@@ -493,11 +517,11 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
           ],
         },
       }))
+    })
 
-      // Check if this is the last check (build)
-      if (checkType === 'build') {
-        eventSource.close()
-      }
+    // Close EventSource when backend signals all checks are done
+    eventSource.addEventListener('all_checks_done', () => {
+      eventSource.close()
     })
 
     eventSource.addEventListener('error', (event) => {
@@ -527,19 +551,36 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
         checkLogs: { ...state.checkLogs, [checkType]: [] },
       }))
     } else {
-      set({
-        checkLogs: {
-          test: [],
-          lint: [],
-          typecheck: [],
-          build: [],
-        },
+      // Clear all check logs - reset to empty arrays for all known keys
+      set((state) => {
+        const cleared: Record<string, LogLine[]> = {}
+        for (const key of Object.keys(state.checkLogs)) {
+          cleared[key] = []
+        }
+        return { checkLogs: cleared }
       })
     }
   },
 
   clearError: () => {
     set({ error: null })
+  },
+
+  // ── Vault Health ──────────────────────────────────────────
+
+  getVaultHealth: (projectId: string) => {
+    return get().vaultHealthMap[projectId] ?? null
+  },
+
+  parseVaultHealth: (projectId: string, stdout: string) => {
+    try {
+      const parsed: VaultHealthResult = JSON.parse(stdout)
+      set((state) => ({
+        vaultHealthMap: { ...state.vaultHealthMap, [projectId]: parsed },
+      }))
+    } catch {
+      // stdout is not valid vault-health JSON — ignore silently
+    }
   },
 
   // ── Workflow Actions ──────────────────────────────────────
