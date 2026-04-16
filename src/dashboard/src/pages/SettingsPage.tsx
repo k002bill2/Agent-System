@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useSettingsStore, getModelsForProvider, Theme, LLMProvider, TerminalType, TERMINAL_DISPLAY_NAMES } from '../stores/settings'
+import { useSettingsStore, getModelsForProvider as getFallbackModels, Theme, LLMProvider, TerminalType, TERMINAL_DISPLAY_NAMES } from '../stores/settings'
 import { useOrchestrationStore } from '../stores/orchestration'
 import { notificationService } from '../services/notificationService'
 import { cn } from '../lib/utils'
@@ -19,7 +19,7 @@ import {
   Shield,
   AlertTriangle,
 } from 'lucide-react'
-import { LLMRouterSettings } from '../components/llm-router'
+import { LLMRouterSettings, ModelUpdatePanel } from '../components/llm-router'
 import { LLMAccountsSettings } from '../components/usage'
 
 export function SettingsPage() {
@@ -38,6 +38,8 @@ export function SettingsPage() {
     setNotificationSetting,
     preferredTerminal,
     setPreferredTerminal,
+    fetchModels,
+    getModelsForProvider,
   } = useSettingsStore()
 
   const { connected, connect, disconnect } = useOrchestrationStore()
@@ -191,7 +193,16 @@ export function SettingsPage() {
     notificationService.playSound('approval')
   }
 
-  const models = getModelsForProvider(llmProvider)
+  // Fetch models from API on mount
+  useEffect(() => {
+    fetchModels()
+  }, [fetchModels])
+
+  // Use API models if available, fallback to hardcoded list
+  const apiModels = getModelsForProvider(llmProvider)
+  const models = apiModels.length > 0
+    ? apiModels.map(m => m.id)
+    : getFallbackModels(llmProvider)
 
   const handleReconnect = () => {
     disconnect()
@@ -205,7 +216,8 @@ export function SettingsPage() {
         Settings
       </h2>
 
-      <div className="max-w-2xl space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* ── Row 1: Small cards ── */}
         {/* Connection Status */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -254,6 +266,39 @@ export function SettingsPage() {
           </div>
         </div>
 
+        {/* Appearance */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <Palette className="w-5 h-5" />
+            Appearance
+          </h3>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Theme
+            </label>
+            <div className="flex gap-2">
+              {(['light', 'dark', 'system'] as Theme[]).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTheme(t)}
+                  className={cn(
+                    'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                    theme === t
+                      ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
+                  )}
+                >
+                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* My LLM API Keys */}
+        <LLMAccountsSettings />
+
+        {/* ── Row 2: Medium cards ── */}
         {/* LLM Settings */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -463,117 +508,6 @@ export function SettingsPage() {
           </div>
         </div>
 
-        {/* Terminal */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <Terminal className="w-5 h-5" />
-            Terminal
-          </h3>
-          <div className="space-y-4">
-            {/* Terminal Selection */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Preferred Terminal
-              </label>
-              <select
-                value={preferredTerminal}
-                onChange={(e) => setPreferredTerminal(e.target.value as TerminalType)}
-                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                aria-label="Select preferred terminal"
-              >
-                {Object.entries(TERMINAL_DISPLAY_NAMES).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Task Analyzer에서 Claude Code 실행 시 사용할 터미널
-              </p>
-            </div>
-
-            {/* Available Terminals */}
-            {terminalsLoading ? (
-              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                터미널 감지 중...
-              </div>
-            ) : availableTerminals.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Detected Terminals
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {availableTerminals.map((t) => (
-                    <div
-                      key={t.type}
-                      className={cn(
-                        'flex items-center gap-2 px-3 py-2 rounded-lg text-sm',
-                        t.available
-                          ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
-                          : 'bg-gray-50 dark:bg-gray-900 text-gray-400 dark:text-gray-500'
-                      )}
-                    >
-                      <div className={cn(
-                        'w-2 h-2 rounded-full',
-                        t.available ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
-                      )} />
-                      <span>{t.name}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Warning if selected terminal not available */}
-            {availableTerminals.length > 0 && (() => {
-              const selected = availableTerminals.find(t => t.type === preferredTerminal)
-              if (selected && !selected.available) {
-                return (
-                  <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-sm">
-                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                    <span>{TERMINAL_DISPLAY_NAMES[preferredTerminal]}이(가) 설치되지 않았습니다</span>
-                  </div>
-                )
-              }
-              return null
-            })()}
-          </div>
-        </div>
-
-        {/* Theme */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <Palette className="w-5 h-5" />
-            Appearance
-          </h3>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Theme
-            </label>
-            <div className="flex gap-2">
-              {(['light', 'dark', 'system'] as Theme[]).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTheme(t)}
-                  className={cn(
-                    'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                    theme === t
-                      ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
-                  )}
-                >
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* LLM Auto-Switch */}
-        <LLMRouterSettings />
-
-        {/* My LLM API Keys */}
-        <LLMAccountsSettings />
-
         {/* Notifications */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -724,6 +658,91 @@ export function SettingsPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* ── Row 3: Large cards ── */}
+        {/* Terminal */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <Terminal className="w-5 h-5" />
+            Terminal
+          </h3>
+          <div className="space-y-4">
+            {/* Terminal Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Preferred Terminal
+              </label>
+              <select
+                value={preferredTerminal}
+                onChange={(e) => setPreferredTerminal(e.target.value as TerminalType)}
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                aria-label="Select preferred terminal"
+              >
+                {Object.entries(TERMINAL_DISPLAY_NAMES).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Task Analyzer에서 Claude Code 실행 시 사용할 터미널
+              </p>
+            </div>
+
+            {/* Available Terminals */}
+            {terminalsLoading ? (
+              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                터미널 감지 중...
+              </div>
+            ) : availableTerminals.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Detected Terminals
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {availableTerminals.map((t) => (
+                    <div
+                      key={t.type}
+                      className={cn(
+                        'flex items-center gap-2 px-3 py-2 rounded-lg text-sm',
+                        t.available
+                          ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
+                          : 'bg-gray-50 dark:bg-gray-900 text-gray-400 dark:text-gray-500'
+                      )}
+                    >
+                      <div className={cn(
+                        'w-2 h-2 rounded-full',
+                        t.available ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                      )} />
+                      <span>{t.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Warning if selected terminal not available */}
+            {availableTerminals.length > 0 && (() => {
+              const selected = availableTerminals.find(t => t.type === preferredTerminal)
+              if (selected && !selected.available) {
+                return (
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-sm">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    <span>{TERMINAL_DISPLAY_NAMES[preferredTerminal]}이(가) 설치되지 않았습니다</span>
+                  </div>
+                )
+              }
+              return null
+            })()}
+          </div>
+        </div>
+
+        {/* Model Version Updates */}
+        <ModelUpdatePanel />
+
+        {/* LLM Auto-Switch */}
+        <div className="lg:col-span-2">
+          <LLMRouterSettings />
         </div>
       </div>
     </div>

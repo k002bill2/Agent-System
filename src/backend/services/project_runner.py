@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import time
+from collections import OrderedDict
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 
@@ -13,70 +14,177 @@ from models.monitoring import (
     CheckResult,
     CheckStartedPayload,
     CheckStatus,
-    CheckType,
 )
 from utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
-# Default npm commands (used when no custom config exists)
-DEFAULT_COMMANDS: dict[CheckType, list[str]] = {
-    CheckType.TEST: ["npm", "test"],
-    CheckType.LINT: ["npm", "run", "lint"],
-    CheckType.TYPECHECK: ["npm", "run", "type-check"],
-    CheckType.BUILD: ["npm", "run", "build"],
+# Vault health inline script — combines links/frontmatter/orphans/images into one JSON result
+_VAULT_HEALTH_SCRIPT = (
+    "import os,re,sys,json\n"
+    "from datetime import datetime as D\n"
+    "v='.'\n"
+    "notes={}\n"
+    "for r,_,fs in os.walk(v):\n"
+    " for f in fs:\n"
+    "  if f.endswith('.md'):\n"
+    "   p=os.path.join(r,f)\n"
+    "   notes[p]=open(p,encoding='utf-8',errors='replace').read()\n"
+    "stems={os.path.splitext(os.path.basename(p))[0].lower() for p in notes}\n"
+    "ie=('.png','.jpg','.jpeg','.gif','.svg','.webp','.bmp')\n"
+    "imgs={f.lower() for r,_,fs in os.walk(v) for f in fs if f.lower().endswith(ie)}\n"
+    "bl,refs,mf,bi=[],set(),[],[]\n"
+    "for p,t in notes.items():\n"
+    " rp=os.path.relpath(p,v)\n"
+    " if not t.startswith('---'): mf.append(rp)\n"
+    " for m in re.findall(r'\\[\\[([^\\]|#]+)',t):\n"
+    "  s=m.strip().lower()\n"
+    "  refs.add(s)\n"
+    "  if s and s not in stems: bl.append(f'{rp}: [[{m.strip()}]]')\n"
+    " for m in re.findall(r'!\\[\\[([^\\]]+?)\\]\\]',t):\n"
+    "  if m.lower() not in imgs: bi.append(f'{rp}: ![[{m}]]')\n"
+    "orph=sorted(stems-refs)\n"
+    "ck=[\n"
+    " {'name':'links','status':'fail' if bl else 'pass','count':len(bl),'details':bl[:20]},\n"
+    " {'name':'frontmatter','status':'fail' if mf else 'pass','count':len(mf),'details':mf[:20]},\n"
+    " {'name':'orphans','status':'warn' if orph else 'pass','count':len(orph),'details':[f'{o}.md' for o in orph[:20]]},\n"
+    " {'name':'images','status':'fail' if bi else 'pass','count':len(bi),'details':bi[:20]},\n"
+    "]\n"
+    "hf=any(c['status']=='fail' for c in ck)\n"
+    "hw=any(c['status']=='warn' for c in ck)\n"
+    "print(json.dumps({'status':'unhealthy' if hf else 'degraded' if hw else 'healthy',"
+    "'timestamp':D.now().isoformat(),"
+    "'metrics':{'total_notes':len(notes),'total_links':len(refs),'broken_links':len(bl),"
+    "'orphan_notes':len(orph),'missing_frontmatter':len(mf),'broken_images':len(bi)},"
+    "'checks':ck},ensure_ascii=False))\n"
+    "sys.exit(1 if hf else 0)"
+)
+
+PRESET_PROFILES: dict[str, OrderedDict[str, dict[str, str | list[str]]]] = {
+    "default": OrderedDict(
+        {
+            "test": {"label": "Test", "command": ["npm", "test"]},
+            "lint": {"label": "Lint", "command": ["npm", "run", "lint"]},
+            "typecheck": {"label": "TypeCheck", "command": ["npm", "run", "type-check"]},
+            "build": {"label": "Build", "command": ["npm", "run", "build"]},
+        }
+    ),
+    "obsidian": OrderedDict(
+        {
+            "links": {
+                "label": "Links",
+                "command": [
+                    "python3",
+                    "-c",
+                    "import os,re,sys\nvault='.'\nstems={os.path.splitext(f)[0].lower() for r,_,fs in os.walk(vault) for f in fs if f.endswith('.md')}\nerrs=[]\nfor r,_,fs in os.walk(vault):\n for f in fs:\n  if not f.endswith('.md'): continue\n  p=os.path.join(r,f)\n  for m in re.findall(r'\\[\\[([^\\]|#]+)',open(p,encoding='utf-8',errors='replace').read()):\n   t=m.strip().lower()\n   if t and t not in stems: errs.append(f'{os.path.relpath(p,vault)}: broken [[{m.strip()}]]')\nfor e in errs: print(e)\nprint(f'Broken links: {len(errs)}')\nsys.exit(1 if errs else 0)",
+                ],
+            },
+            "frontmatter": {
+                "label": "Frontmatter",
+                "command": [
+                    "python3",
+                    "-c",
+                    "import os,sys\nerrs=[]\nfor r,_,fs in os.walk('.'):\n for f in fs:\n  if not f.endswith('.md'): continue\n  p=os.path.join(r,f)\n  txt=open(p,encoding='utf-8',errors='replace').read()\n  if not txt.startswith('---'): errs.append(f'{os.path.relpath(p,\".\")}: missing frontmatter')\nfor e in errs: print(e)\nprint(f'Frontmatter issues: {len(errs)}')\nsys.exit(1 if errs else 0)",
+                ],
+            },
+            "orphans": {
+                "label": "Orphans",
+                "command": [
+                    "python3",
+                    "-c",
+                    "import os,re,sys\nvault='.'\nall_stems={os.path.splitext(f)[0].lower() for r,_,fs in os.walk(vault) for f in fs if f.endswith('.md')}\nrefs=set()\nfor r,_,fs in os.walk(vault):\n for f in fs:\n  if not f.endswith('.md'): continue\n  for m in re.findall(r'\\[\\[([^\\]|#]+)',open(os.path.join(r,f),encoding='utf-8',errors='replace').read()):\n   refs.add(m.strip().lower())\norphans=sorted(all_stems-refs)\nfor o in orphans: print(f'orphan: {o}.md')\nprint(f'Orphan notes: {len(orphans)}')\nsys.exit(1 if orphans else 0)",
+                ],
+            },
+            "images": {
+                "label": "Images",
+                "command": [
+                    "python3",
+                    "-c",
+                    "import os,re,sys\nvault='.'\nimg_ext=('.png','.jpg','.jpeg','.gif','.svg','.webp','.bmp')\nimgs={f.lower() for r,_,fs in os.walk(vault) for f in fs if f.lower().endswith(img_ext)}\nerrs=[]\nfor r,_,fs in os.walk(vault):\n for f in fs:\n  if not f.endswith('.md'): continue\n  p=os.path.join(r,f)\n  for m in re.findall(r'!\\[\\[([^\\]]+?)\\]\\]',open(p,encoding='utf-8',errors='replace').read()):\n   if m.lower() not in imgs: errs.append(f'{os.path.relpath(p,vault)}: broken ![[{m}]]')\nfor e in errs: print(e)\nprint(f'Broken image refs: {len(errs)}')\nsys.exit(1 if errs else 0)",
+                ],
+            },
+            "vault-health": {
+                "label": "Vault Health",
+                "command": ["python3", "-c", _VAULT_HEALTH_SCRIPT],
+            },
+        }
+    ),
+    "python": OrderedDict(
+        {
+            "test": {"label": "Test", "command": ["pytest"]},
+            "lint": {"label": "Lint", "command": ["ruff", "check", "."]},
+            "typecheck": {"label": "TypeCheck", "command": ["mypy", "src/"]},
+            "build": {"label": "Build", "command": ["python", "-m", "build"]},
+        }
+    ),
+    "go": OrderedDict(
+        {
+            "test": {"label": "Test", "command": ["go", "test", "./..."]},
+            "lint": {"label": "Lint", "command": ["golangci-lint", "run"]},
+            "vet": {"label": "Vet", "command": ["go", "vet", "./..."]},
+            "build": {"label": "Build", "command": ["go", "build", "./..."]},
+        }
+    ),
+    "rust": OrderedDict(
+        {
+            "test": {"label": "Test", "command": ["cargo", "test"]},
+            "clippy": {"label": "Clippy", "command": ["cargo", "clippy"]},
+            "check": {"label": "Check", "command": ["cargo", "check"]},
+            "build": {"label": "Build", "command": ["cargo", "build"]},
+        }
+    ),
 }
 
-# Default labels per check type
-DEFAULT_LABELS: dict[CheckType, str] = {
-    CheckType.TEST: "Test",
-    CheckType.LINT: "Lint",
-    CheckType.TYPECHECK: "TypeCheck",
-    CheckType.BUILD: "Build",
-}
 
-
-def _load_health_checks_config(project_path: Path) -> dict | None:
-    """Load health_checks config from .aos-project.json if present."""
+def _load_project_config(project_path: Path) -> dict | None:
+    """Load project config from .aos-project.json."""
     config_file = project_path / ".aos-project.json"
     if not config_file.exists():
         return None
     try:
-        data = json.loads(config_file.read_text(encoding="utf-8"))
-        return data.get("health_checks")
+        return json.loads(config_file.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as e:
-        logger.warning(f"Failed to load health_checks from {config_file}: {e}")
+        logger.warning(f"Failed to load config from {config_file}: {e}")
         return None
 
 
-def get_check_config(project_path: str) -> dict[str, dict[str, str]]:
-    """Get check labels and commands for a project.
+def get_check_config(project_path: str) -> OrderedDict[str, dict[str, str]]:
+    """Get check configuration for a project.
 
-    Returns dict like:
-        {"test": {"label": "Links", "command": "bash -c '...'"}, ...}
+    Priority: health_checks dict > health_check_preset > default preset.
+    Returns OrderedDict of {check_id: {"label": str, "command": str}}.
     """
     path = Path(project_path)
-    custom = _load_health_checks_config(path)
-    result: dict[str, dict[str, str]] = {}
+    config = _load_project_config(path)
 
-    for ct in CheckType:
-        if custom and ct.value in custom:
-            entry = custom[ct.value]
-            cmd = entry.get("command", DEFAULT_COMMANDS[ct])
+    # 1. Custom health_checks dict
+    if config and "health_checks" in config:
+        custom = config["health_checks"]
+        result: OrderedDict[str, dict[str, str]] = OrderedDict()
+        for check_id, entry in custom.items():
+            cmd = entry.get("command", "echo 'no command'")
             if isinstance(cmd, list):
                 cmd_str = " ".join(cmd)
             else:
                 cmd_str = str(cmd)
-            result[ct.value] = {
-                "label": entry.get("label", DEFAULT_LABELS[ct]),
+            result[check_id] = {
+                "label": entry.get("label", check_id.title()),
                 "command": cmd_str,
             }
-        else:
-            result[ct.value] = {
-                "label": DEFAULT_LABELS[ct],
-                "command": " ".join(DEFAULT_COMMANDS[ct]),
-            }
+        return result
 
+    # 2. Preset
+    preset_name = (config or {}).get("health_check_preset", "default")
+    preset = PRESET_PROFILES.get(preset_name, PRESET_PROFILES["default"])
+
+    result: OrderedDict[str, dict[str, str]] = OrderedDict()
+    for check_id, entry in preset.items():
+        cmd = entry["command"]
+        if isinstance(cmd, list):
+            cmd_str = " ".join(cmd)
+        else:
+            cmd_str = str(cmd)
+        result[check_id] = {"label": str(entry["label"]), "command": cmd_str}
     return result
 
 
@@ -88,29 +196,43 @@ class ProjectRunner:
         self.project_path = Path(project_path)
         if not self.project_path.exists():
             raise ValueError(f"Project path does not exist: {project_path}")
-        self._custom_config = _load_health_checks_config(self.project_path)
+        self._config = get_check_config(project_path)
 
-    def _get_command(self, check_type: CheckType) -> list[str]:
-        """Get the command for a check type, using custom config if available."""
-        if self._custom_config and check_type.value in self._custom_config:
-            entry = self._custom_config[check_type.value]
-            cmd = entry.get("command", DEFAULT_COMMANDS[check_type])
+    def _get_command(self, check_id: str) -> list[str]:
+        """Get the command for a check ID."""
+        config = _load_project_config(self.project_path)
+
+        # Check for custom command in .aos-project.json
+        if config and "health_checks" in config:
+            hc = config["health_checks"]
+            if check_id in hc:
+                cmd = hc[check_id].get("command")
+                if isinstance(cmd, str):
+                    return ["bash", "-c", cmd]
+                if isinstance(cmd, list):
+                    return list(cmd)
+
+        # Check in preset
+        preset_name = (config or {}).get("health_check_preset", "default")
+        preset = PRESET_PROFILES.get(preset_name, PRESET_PROFILES["default"])
+        if check_id in preset:
+            cmd = preset[check_id]["command"]
             if isinstance(cmd, str):
-                # Shell string → run via bash -c
                 return ["bash", "-c", cmd]
             return list(cmd)
-        return DEFAULT_COMMANDS[check_type].copy()
+
+        raise ValueError(f"Unknown check type: {check_id}")
 
     async def run_check(
         self,
-        check_type: CheckType,
+        check_type: str,
         on_output: Callable[[str, bool], None] | None = None,
     ) -> CheckResult:
         """
         Run a single check and return the result.
 
         Args:
-            check_type: Type of check to run
+            check_type: Check type ID (e.g. 'test', 'lint', 'links')
             on_output: Optional callback for streaming output (line, is_stderr)
 
         Returns:
@@ -185,7 +307,7 @@ class ProjectRunner:
     async def stream_check(
         self,
         project_id: str,
-        check_type: CheckType,
+        check_type: str,
     ) -> AsyncIterator[CheckStartedPayload | CheckProgressPayload | CheckCompletedPayload]:
         """
         Run a check with streaming output.

@@ -8,15 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from utils.time import utcnow
 
 
-class CheckType(str, Enum):
-    """Types of project checks."""
-
-    TEST = "test"
-    LINT = "lint"
-    TYPECHECK = "typecheck"
-    BUILD = "build"
-
-
 class CheckStatus(str, Enum):
     """Status of a check."""
 
@@ -29,7 +20,7 @@ class CheckStatus(str, Enum):
 class CheckResult(BaseModel):
     """Result of a single check."""
 
-    check_type: CheckType
+    check_type: str
     status: CheckStatus = CheckStatus.IDLE
     exit_code: int | None = None
     stdout: str = ""
@@ -47,10 +38,10 @@ class ProjectHealth(BaseModel):
     project_id: str
     project_name: str
     project_path: str
-    checks: dict[CheckType, CheckResult] = Field(default_factory=dict)
+    checks: dict[str, CheckResult] = Field(default_factory=dict)
     last_updated: datetime = Field(default_factory=utcnow)
 
-    def get_check(self, check_type: CheckType) -> CheckResult:
+    def get_check(self, check_type: str) -> CheckResult:
         """Get or create a check result."""
         if check_type not in self.checks:
             self.checks[check_type] = CheckResult(check_type=check_type)
@@ -66,7 +57,7 @@ class CheckStartedPayload(BaseModel):
     """Payload when a check starts."""
 
     project_id: str
-    check_type: CheckType
+    check_type: str
     started_at: datetime
 
 
@@ -74,7 +65,7 @@ class CheckProgressPayload(BaseModel):
     """Payload for check progress (streaming output)."""
 
     project_id: str
-    check_type: CheckType
+    check_type: str
     output: str
     is_stderr: bool = False
 
@@ -83,7 +74,7 @@ class CheckCompletedPayload(BaseModel):
     """Payload when a check completes."""
 
     project_id: str
-    check_type: CheckType
+    check_type: str
     status: CheckStatus
     exit_code: int
     duration_ms: int

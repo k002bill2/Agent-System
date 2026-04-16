@@ -12,9 +12,8 @@ from models.mcp import (
     MCPToolDefinition,
     MCPToolResult,
 )
-from models.monitoring import CheckType
 from models.project import PROJECTS_REGISTRY, get_project, list_projects
-from services.project_runner import get_runner
+from services.project_runner import get_check_config, get_runner
 
 
 class MCPService:
@@ -73,15 +72,14 @@ class MCPService:
             ),
             MCPToolDefinition(
                 name="aos_run_check",
-                description="Run project verification checks (typecheck, lint, test, build)",
+                description="Run project verification checks",
                 inputSchema={
                     "type": "object",
                     "properties": {
                         "project_id": {"type": "string", "description": "Project identifier"},
                         "check_type": {
                             "type": "string",
-                            "enum": ["typecheck", "lint", "test", "build", "all"],
-                            "description": "Type of check to run",
+                            "description": "Check type ID (project-specific) or 'all' to run all checks",
                         },
                     },
                     "required": ["project_id"],
@@ -279,42 +277,36 @@ To track progress, use aos_get_status with session_id: {session_id}"""
                 content=[{"type": "text", "text": f"Project not found: {project_id}"}], isError=True
             )
 
-        # Map check type string to enum
-        check_type_map = {
-            "typecheck": CheckType.TYPECHECK,
-            "lint": CheckType.LINT,
-            "test": CheckType.TEST,
-            "build": CheckType.BUILD,
-        }
-
+        config = get_check_config(project.path)
         runner = get_runner(project.path)
         results = []
 
         if check_type_str == "all":
-            check_types = list(check_type_map.values())
+            check_ids = list(config.keys())
         else:
-            if check_type_str not in check_type_map:
+            if check_type_str not in config:
                 return MCPToolResult(
-                    content=[{"type": "text", "text": f"Invalid check type: {check_type_str}"}],
+                    content=[
+                        {
+                            "type": "text",
+                            "text": f"Invalid check type: {check_type_str}. Valid: {list(config.keys())}",
+                        }
+                    ],
                     isError=True,
                 )
-            check_types = [check_type_map[check_type_str]]
+            check_ids = [check_type_str]
 
         # Run checks
         all_success = True
         output_lines = [f"Running checks for {project.name}...\n"]
 
-        for check_type in check_types:
-            result = await runner.run_check(check_type)
+        for check_id in check_ids:
+            result = await runner.run_check(check_id)
             # CheckResult uses use_enum_values=True, so status is already a string
             status_str = str(result.status)
             is_success = status_str == "success"
             status_icon = "✅" if is_success else "❌"
-            # Use .value for clean enum display
-            check_name = check_type.value if hasattr(check_type, "value") else str(check_type)
-            output_lines.append(
-                f"{status_icon} {check_name}: {status_str} ({result.duration_ms}ms)"
-            )
+            output_lines.append(f"{status_icon} {check_id}: {status_str} ({result.duration_ms}ms)")
 
             if not is_success:
                 all_success = False
@@ -323,7 +315,7 @@ To track progress, use aos_get_status with session_id: {session_id}"""
 
             results.append(
                 {
-                    "type": check_name,
+                    "type": check_id,
                     "status": status_str,
                     "duration_ms": result.duration_ms,
                 }

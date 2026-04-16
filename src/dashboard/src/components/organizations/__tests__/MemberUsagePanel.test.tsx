@@ -3,14 +3,33 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { MemberUsagePanel } from '../MemberUsagePanel'
 import type { MemberUsageResponse } from '../../../stores/organizations'
 
-// Mock lucide-react icons
-vi.mock('lucide-react', () => ({
-  BarChart3: (props: Record<string, unknown>) => <span data-testid="icon-barchart" {...props} />,
-  Coins: (props: Record<string, unknown>) => <span data-testid="icon-coins" {...props} />,
-  Activity: (props: Record<string, unknown>) => <span data-testid="icon-activity" {...props} />,
-  Clock: (props: Record<string, unknown>) => <span data-testid="icon-clock" {...props} />,
-  TrendingUp: (props: Record<string, unknown>) => <span data-testid="icon-trending" {...props} />,
+// Mock recharts - needs DOM measurements not available in jsdom
+vi.mock('recharts', () => ({
+  ResponsiveContainer: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="responsive-container">{children}</div>
+  ),
+  AreaChart: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="area-chart">{children}</div>
+  ),
+  Area: ({ dataKey }: { dataKey: string }) => <div data-testid={`area-${dataKey}`} />,
+  CartesianGrid: () => <div data-testid="cartesian-grid" />,
+  XAxis: () => <div data-testid="x-axis" />,
+  YAxis: () => <div data-testid="y-axis" />,
+  Tooltip: () => <div data-testid="tooltip" />,
 }))
+
+// Mock lucide-react icons (use importOriginal to include all exports)
+vi.mock('lucide-react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('lucide-react')>()
+  return {
+    ...actual,
+    BarChart3: (props: Record<string, unknown>) => <span data-testid="icon-barchart" {...props} />,
+    Coins: (props: Record<string, unknown>) => <span data-testid="icon-coins" {...props} />,
+    Activity: (props: Record<string, unknown>) => <span data-testid="icon-activity" {...props} />,
+    Clock: (props: Record<string, unknown>) => <span data-testid="icon-clock" {...props} />,
+    TrendingUp: (props: Record<string, unknown>) => <span data-testid="icon-trending" {...props} />,
+  }
+})
 
 const mockFetchMemberUsage = vi.fn()
 const mockMemberUsage: MemberUsageResponse = {
@@ -19,36 +38,49 @@ const mockMemberUsage: MemberUsageResponse = {
   total_tokens: 25000,
   members: [
     {
+      id: 'mem-1',
       user_id: 'u1',
       email: 'alice@test.com',
       name: 'Alice',
       role: 'admin',
       tokens_used_today: 100,
       tokens_used_this_month: 15000,
+      tokens_used_period: 15000,
       sessions_today: 3,
       sessions_this_month: 20,
+      sessions_period: 20,
       last_active_at: '2024-01-10T00:00:00Z',
       percentage_of_org: 60,
     },
     {
+      id: 'mem-2',
       user_id: 'u2',
       email: 'bob@test.com',
       name: 'Bob',
       role: 'member',
       tokens_used_today: 50,
       tokens_used_this_month: 10000,
+      tokens_used_period: 10000,
       sessions_today: 1,
       sessions_this_month: 10,
+      sessions_period: 10,
       last_active_at: null,
       percentage_of_org: 40,
     },
   ],
 }
 
+const mockFetchMemberUsageDetail = vi.fn()
+const mockClearMemberUsageDetail = vi.fn()
+
 vi.mock('../../../stores/organizations', () => ({
   useOrganizationsStore: vi.fn(() => ({
     memberUsage: mockMemberUsage,
+    memberUsageDetail: null,
+    isMemberDetailLoading: false,
     fetchMemberUsage: mockFetchMemberUsage,
+    fetchMemberUsageDetail: mockFetchMemberUsageDetail,
+    clearMemberUsageDetail: mockClearMemberUsageDetail,
   })),
 }))
 
@@ -109,7 +141,11 @@ describe('MemberUsagePanel', () => {
     const { useOrganizationsStore } = await import('../../../stores/organizations')
     ;(useOrganizationsStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       memberUsage: null,
+      memberUsageDetail: null,
+      isMemberDetailLoading: false,
       fetchMemberUsage: mockFetchMemberUsage,
+      fetchMemberUsageDetail: mockFetchMemberUsageDetail,
+      clearMemberUsageDetail: mockClearMemberUsageDetail,
     })
 
     const { container } = render(<MemberUsagePanel organizationId="org-1" />)
@@ -119,7 +155,11 @@ describe('MemberUsagePanel', () => {
     // Restore
     ;(useOrganizationsStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       memberUsage: mockMemberUsage,
+      memberUsageDetail: null,
+      isMemberDetailLoading: false,
       fetchMemberUsage: mockFetchMemberUsage,
+      fetchMemberUsageDetail: mockFetchMemberUsageDetail,
+      clearMemberUsageDetail: mockClearMemberUsageDetail,
     })
   })
 
@@ -127,7 +167,11 @@ describe('MemberUsagePanel', () => {
     const { useOrganizationsStore } = await import('../../../stores/organizations')
     ;(useOrganizationsStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       memberUsage: { ...mockMemberUsage, members: [] },
+      memberUsageDetail: null,
+      isMemberDetailLoading: false,
       fetchMemberUsage: mockFetchMemberUsage,
+      fetchMemberUsageDetail: mockFetchMemberUsageDetail,
+      clearMemberUsageDetail: mockClearMemberUsageDetail,
     })
 
     render(<MemberUsagePanel organizationId="org-1" />)
@@ -136,7 +180,11 @@ describe('MemberUsagePanel', () => {
     // Restore
     ;(useOrganizationsStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       memberUsage: mockMemberUsage,
+      memberUsageDetail: null,
+      isMemberDetailLoading: false,
       fetchMemberUsage: mockFetchMemberUsage,
+      fetchMemberUsageDetail: mockFetchMemberUsageDetail,
+      clearMemberUsageDetail: mockClearMemberUsageDetail,
     })
   })
 

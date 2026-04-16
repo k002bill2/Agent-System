@@ -389,6 +389,20 @@ async def _run_migrations() -> None:
                 )
             print(f"✅ llm_model_configs seeded with {len(_MODELS)} models")
 
+        # Migration 11: Widen organization_invitations.token from varchar(36) to varchar(64)
+        # secrets.token_urlsafe(32) produces 44-char tokens, which exceed varchar(36)
+        result = await conn.execute(
+            text(
+                "SELECT character_maximum_length FROM information_schema.columns "
+                "WHERE table_name = 'organization_invitations' AND column_name = 'token'"
+            )
+        )
+        row = result.fetchone()
+        if row and row[0] and row[0] < 64:
+            await conn.execute(
+                text("ALTER TABLE organization_invitations ALTER COLUMN token TYPE VARCHAR(64)")
+            )
+
         # Migration 7: Add unique constraint and FK to workflow_secrets
         result = await conn.execute(
             text(

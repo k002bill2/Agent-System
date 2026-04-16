@@ -19,6 +19,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@types/js-yaml": "^4.0.9",
+    "@xyflow/react": "^12.10.2",
     "clsx": "^2.1.1",
     "diff": "^9.0.0",
     "js-yaml": "^4.1.1",

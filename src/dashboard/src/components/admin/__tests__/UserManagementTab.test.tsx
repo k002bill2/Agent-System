@@ -12,6 +12,7 @@ vi.mock('lucide-react', () => ({
   UserX: (props: Record<string, unknown>) => <span data-testid="icon-userx" {...props} />,
   Check: (props: Record<string, unknown>) => <span data-testid="icon-check" {...props} />,
   Loader2: (props: Record<string, unknown>) => <span data-testid="icon-loader" {...props} />,
+  Trash2: (props: Record<string, unknown>) => <span data-testid="icon-trash" {...props} />,
 }))
 
 const mockFetchUsers = vi.fn()

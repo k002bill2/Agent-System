@@ -3,15 +3,19 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { MemberCard } from '../MemberCard'
 import type { OrganizationMember, MemberRole } from '../../../stores/organizations'
 
-// Mock lucide-react icons
-vi.mock('lucide-react', () => ({
-  MoreVertical: (props: Record<string, unknown>) => <span data-testid="icon-more-vertical" {...props} />,
-  Shield: (props: Record<string, unknown>) => <span data-testid="icon-shield" {...props} />,
-  ShieldCheck: (props: Record<string, unknown>) => <span data-testid="icon-shield-check" {...props} />,
-  Eye: (props: Record<string, unknown>) => <span data-testid="icon-eye" {...props} />,
-  User: (props: Record<string, unknown>) => <span data-testid="icon-user" {...props} />,
-  Trash2: (props: Record<string, unknown>) => <span data-testid="icon-trash" {...props} />,
-}))
+// Mock lucide-react icons (use importOriginal to include all exports)
+vi.mock('lucide-react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('lucide-react')>()
+  return {
+    ...actual,
+    MoreVertical: (props: Record<string, unknown>) => <span data-testid="icon-more-vertical" {...props} />,
+    Shield: (props: Record<string, unknown>) => <span data-testid="icon-shield" {...props} />,
+    ShieldCheck: (props: Record<string, unknown>) => <span data-testid="icon-shield-check" {...props} />,
+    Eye: (props: Record<string, unknown>) => <span data-testid="icon-eye" {...props} />,
+    User: (props: Record<string, unknown>) => <span data-testid="icon-user" {...props} />,
+    Trash2: (props: Record<string, unknown>) => <span data-testid="icon-trash" {...props} />,
+  }
+})
 
 function makeMember(overrides: Partial<OrganizationMember> = {}): OrganizationMember {
   return {

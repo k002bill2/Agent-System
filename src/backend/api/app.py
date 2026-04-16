@@ -259,6 +259,46 @@ else:
 
             model_sync_task = asyncio.create_task(_periodic_model_sync())
 
+        # Start periodic LLM model update check (external provider API check)
+        model_update_task = None
+        if USE_DATABASE:
+            update_interval_hours = int(os.getenv("LLM_UPDATE_CHECK_INTERVAL_HOURS", "24"))
+
+            async def _periodic_model_update_check() -> None:
+                """Periodically check provider APIs for new/updated models."""
+                interval = update_interval_hours * 3600
+                while True:
+                    await asyncio.sleep(interval)
+                    try:
+                        from services.model_update_service import ModelUpdateService
+
+                        results = await ModelUpdateService.check_all_providers(
+                            apply_updates=True,
+                            is_manual=False,
+                            triggered_by="scheduler",
+                        )
+                        total_new = sum(len(r.new_models) for r in results)
+                        total_updates = sum(len(r.updates) for r in results)
+                        if logger:
+                            logger.info(
+                                "periodic_model_update_check",
+                                providers_checked=len(results),
+                                new_models=total_new,
+                                updates=total_updates,
+                            )
+                        else:
+                            print(
+                                f"🔄 Model update check: {len(results)} providers, "
+                                f"{total_new} new, {total_updates} updates"
+                            )
+                    except Exception as e:
+                        if logger:
+                            logger.warning("periodic_model_update_check_failed", error=str(e))
+                        else:
+                            print(f"⚠️  Model update check failed: {e}")
+
+            model_update_task = asyncio.create_task(_periodic_model_update_check())
+
         if logger:
             logger.info("application_started")
 
@@ -275,6 +315,13 @@ else:
             model_sync_task.cancel()
             try:
                 await model_sync_task
+            except asyncio.CancelledError:
+                pass
+
+        if model_update_task is not None:
+            model_update_task.cancel()
+            try:
+                await model_update_task
             except asyncio.CancelledError:
                 pass
 

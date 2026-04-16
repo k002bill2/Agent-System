@@ -17,6 +17,15 @@ vi.mock('../components/monitor', () => ({
     <div data-testid="resizable-panel">{children}</div>
   ),
   ProjectsPanel: () => <div data-testid="projects-panel">Projects</div>,
+  DiagnosticsPanel: ({ projectId }: { projectId: string }) => (
+    <div data-testid="diagnostics-panel">Diagnostics: {projectId}</div>
+  ),
+  TopologyMap: ({ projectId }: { projectId: string }) => (
+    <div data-testid="topology-map">Topology: {projectId}</div>
+  ),
+  VaultHealthDetail: ({ projectId }: { projectId: string }) => (
+    <div data-testid="vault-health-detail">Vault: {projectId}</div>
+  ),
 }))
 
 // Store mocks - need to match actual selector pattern

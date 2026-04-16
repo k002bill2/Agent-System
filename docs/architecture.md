@@ -72,7 +72,7 @@ src/backend/
 │   ├── nodes.py             # 6가지 노드 구현
 │   ├── parallel_executor.py # 병렬 실행
 │   └── tools.py             # MCP 도구 실행자
-├── services/                    # 71개 서비스/매니저 모듈
+├── services/                    # 72개 서비스/매니저 모듈
 │   ├── adapters/               # 어댑터 패턴 구현 (비어있음)
 │   ├── cache/                  # 캐싱 레이어 (비어있음)
 │   ├── agent_manager.py           # 에이전트 인스턴스 관리
@@ -89,6 +89,7 @@ src/backend/
 │   ├── cost_allocation_service.py # 비용 추적/할당 서비스
 │   ├── credential_service.py      # 자격증명 암호화/저장
 │   ├── encryption_service.py      # AES-256-GCM 암호화 서비스
+│   ├── environment_diagnostic_service.py  # 환경 진단 서비스 (Vault Health, 시스템 상태)
 │   ├── external_usage_service.py  # 외부 LLM 사용량 추적
 │   ├── feedback_service.py        # RLHF 피드백
 │   ├── frontmatter_parser.py      # YAML Frontmatter 파싱 (SKILL.md, agent .md)
@@ -179,6 +180,8 @@ src/backend/
 │       ├── llm.py           # LLMModelConfigModel
 │       ├── project.py       # ProjectModel
 │       ├── activity.py      # SessionActivityModel
+│       ├── config_version.py # ConfigVersionModel (설정 버전 스냅샷/롤백)
+│       ├── playground.py    # PlaygroundSessionModel (에이전트 테스트 세션)
 │       └── base.py          # Base, TimestampMixin
 ├── models/                  # Pydantic 데이터 모델 (32개)
 ├── middleware/
@@ -324,7 +327,7 @@ USE_DATABASE=false
 - **AWS RDS** - 엔터프라이즈급
 - **Neon** - 서버리스 PostgreSQL
 
-### Schema (주요 테이블 - 38개)
+### Schema (주요 테이블 - 40개)
 
 | 테이블 | 용도 |
 |--------|------|
@@ -366,6 +369,8 @@ USE_DATABASE=false
 | `task_evaluations` | 태스크 평가 |
 | `session_activities` | 세션 활동 |
 | `task_analyses` | 태스크 분석 |
+| `config_versions` | 설정 버전 스냅샷 (타입별, diff 추적, 롤백) |
+| `playground_sessions` | 에이전트 플레이그라운드 세션 (메시지, 실행, 비용) |
 
 ### Database Migration (Alembic)
 

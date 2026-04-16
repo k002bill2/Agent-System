@@ -2,7 +2,8 @@
  * Monitoring types for project health checks.
  */
 
-export type CheckType = 'test' | 'lint' | 'typecheck' | 'build'
+// CheckType is now dynamic — any string check ID from project config
+export type CheckType = string
 
 export type CheckStatus = 'idle' | 'running' | 'success' | 'failure'
 
@@ -48,26 +49,6 @@ export interface CheckCompletedPayload {
   stderr: string
 }
 
-// Default check type labels (overridden by project health-config)
-export const DEFAULT_CHECK_TYPE_LABELS: Record<CheckType, string> = {
-  test: 'Test',
-  lint: 'Lint',
-  typecheck: 'TypeCheck',
-  build: 'Build',
-}
-
-/** @deprecated Use dynamic labels from health-config API */
-export const CHECK_TYPE_LABELS = DEFAULT_CHECK_TYPE_LABELS
-
-export const DEFAULT_CHECK_TYPE_COMMANDS: Record<CheckType, string> = {
-  test: 'npm test',
-  lint: 'npm run lint',
-  typecheck: 'npm run type-check',
-  build: 'npm run build:preview',
-}
-
-export const CHECK_TYPE_COMMANDS = DEFAULT_CHECK_TYPE_COMMANDS
-
 // Per-project health check config from API
 export interface CheckConfigEntry {
   label: string
@@ -76,10 +57,9 @@ export interface CheckConfigEntry {
 
 export interface CheckConfig {
   project_id: string
-  checks: Record<CheckType, CheckConfigEntry>
+  check_types: string[]  // ordered list of check type IDs from backend
+  checks: Record<string, CheckConfigEntry>
 }
-
-export const ALL_CHECK_TYPES: CheckType[] = ['test', 'lint', 'typecheck', 'build']
 
 // Workflow check types for monitor integration
 export type WorkflowCheckStatus = 'idle' | 'running' | 'success' | 'failure'
@@ -91,6 +71,30 @@ export interface WorkflowCheck {
   status: WorkflowCheckStatus
   lastRunAt: string | null
   lastRunDuration: number | null // seconds
+}
+
+// Vault Health JSON result (parsed from check stdout)
+export interface VaultHealthCheck {
+  name: string
+  status: 'pass' | 'warn' | 'fail'
+  count: number
+  details: string[]
+}
+
+export interface VaultHealthMetrics {
+  total_notes: number
+  total_links: number
+  broken_links: number
+  orphan_notes: number
+  missing_frontmatter: number
+  broken_images: number
+}
+
+export interface VaultHealthResult {
+  status: 'healthy' | 'degraded' | 'unhealthy'
+  timestamp: string
+  metrics: VaultHealthMetrics
+  checks: VaultHealthCheck[]
 }
 
 // Project Context types

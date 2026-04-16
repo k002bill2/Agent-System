@@ -12,8 +12,8 @@ vi.mock('lucide-react', () => ({
 }))
 
 const defaultProps = {
-  checkType: 'test' as const,
-  label: 'Test',
+  checkType: 'links',
+  label: 'Links',
   status: 'idle' as const,
   exitCode: null,
   durationMs: null,
@@ -26,7 +26,7 @@ const defaultProps = {
 describe('CheckCard', () => {
   it('renders check type label', () => {
     render(<CheckCard {...defaultProps} />)
-    expect(screen.getByText('Test')).toBeInTheDocument()
+    expect(screen.getByText('Links')).toBeInTheDocument()
   })
 
   it('shows "Not run" for idle status', () => {
@@ -61,13 +61,13 @@ describe('CheckCard', () => {
 
   it('does not display duration when null', () => {
     render(<CheckCard {...defaultProps} durationMs={null} />)
-    expect(screen.queryByText(/ms|s$/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/\d+ms|\d+\.\d+s/)).not.toBeInTheDocument()
   })
 
   it('calls onClick when card is clicked', () => {
     const onClick = vi.fn()
     render(<CheckCard {...defaultProps} onClick={onClick} />)
-    fireEvent.click(screen.getByText('Test').closest('div')!.parentElement!.parentElement!)
+    fireEvent.click(screen.getByText('Links').closest('div')!.parentElement!.parentElement!)
     expect(onClick).toHaveBeenCalledTimes(1)
   })
 
@@ -75,7 +75,7 @@ describe('CheckCard', () => {
     const onRun = vi.fn()
     const onClick = vi.fn()
     render(<CheckCard {...defaultProps} onRun={onRun} onClick={onClick} />)
-    const button = screen.getByTitle('Run Test')
+    const button = screen.getByTitle('Run Links')
     fireEvent.click(button)
     expect(onRun).toHaveBeenCalledTimes(1)
     expect(onClick).not.toHaveBeenCalled()
@@ -83,18 +83,18 @@ describe('CheckCard', () => {
 
   it('disables run button when isRunning', () => {
     render(<CheckCard {...defaultProps} isRunning={true} />)
-    const button = screen.getByTitle('Run Test')
+    const button = screen.getByTitle('Run Links')
     expect(button).toBeDisabled()
   })
 
   it('renders different check types', () => {
-    const { rerender } = render(<CheckCard {...defaultProps} checkType="lint" label="Lint" />)
-    expect(screen.getByText('Lint')).toBeInTheDocument()
+    const { rerender } = render(<CheckCard {...defaultProps} checkType="frontmatter" label="Frontmatter" />)
+    expect(screen.getByText('Frontmatter')).toBeInTheDocument()
 
-    rerender(<CheckCard {...defaultProps} checkType="typecheck" label="TypeCheck" />)
-    expect(screen.getByText('TypeCheck')).toBeInTheDocument()
+    rerender(<CheckCard {...defaultProps} checkType="orphans" label="Orphans" />)
+    expect(screen.getByText('Orphans')).toBeInTheDocument()
 
-    rerender(<CheckCard {...defaultProps} checkType="build" label="Build" />)
-    expect(screen.getByText('Build')).toBeInTheDocument()
+    rerender(<CheckCard {...defaultProps} checkType="images" label="Images" />)
+    expect(screen.getByText('Images')).toBeInTheDocument()
   })
 })

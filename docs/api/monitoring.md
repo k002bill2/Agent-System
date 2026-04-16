@@ -165,10 +165,21 @@
 | POST | `/api/organizations/{id}/usage/track` | 토큰 사용량 기록 (user_id, session_id, model 옵션) |
 | GET | `/api/organizations/{id}/quota` | Quota 현황 조회 (멤버/프로젝트/세션/토큰) |
 | GET | `/api/organizations/{id}/members/usage?period=month` | 멤버별 사용량 분석 (day/week/month) |
+| GET | `/api/organizations/{id}/members/{user_id}/usage-detail` | 멤버 개인 상세 사용량 (일별 트렌드, 모델별 분류) |
+| GET | `/api/organizations/{id}/source-user-map` | 소스 유저(OS 유저네임)→멤버 매핑 조회 |
+| PUT | `/api/organizations/{id}/source-user-map` | 소스 유저 매핑 업데이트 |
 
 **플랜**: `free`, `starter`, `professional`, `enterprise`
 
 **역할**: `owner`, `admin`, `member`, `viewer`
+
+**멤버 상세 사용량** (`GET /api/organizations/{id}/members/{user_id}/usage-detail`):
+- `period`: `day` | `week` | `month` (기본: `month`)
+- 응답: 일별 토큰 트렌드 (`daily_usage`), 모델별 사용량 분류 (`model_breakdown`), 총 토큰/세션/비용
+
+**소스 유저 매핑** (`PUT /api/organizations/{id}/source-user-map`):
+- Body: `{"mapping": {"os-username": "member-user-id", ...}}`
+- Claude Code 세션의 OS 유저네임을 조직 멤버에 연결하여 사용량 귀속 추적
 
 ---
 
@@ -178,6 +189,7 @@
 |--------|------|------|
 | GET | `/api/admin/users` | 사용자 목록 조회 (관리자 전용) |
 | PATCH | `/api/admin/users/{user_id}` | 사용자 정보 수정 (관리자 전용) |
+| DELETE | `/api/admin/users/{user_id}` | 사용자 삭제 (관리자 전용) |
 | GET | `/api/admin/menu-visibility` | 메뉴 가시성 설정 조회 (인증 사용자) |
 | PUT | `/api/admin/menu-visibility` | 메뉴 가시성 일괄 업데이트 (관리자 전용) |
 | GET | `/api/admin/system-info` | 시스템 정보 조회 (관리자 전용) |

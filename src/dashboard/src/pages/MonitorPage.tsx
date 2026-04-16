@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { RefreshCw, Play, AlertCircle, PanelLeftClose, PanelLeft, FolderKanban } from 'lucide-react'
+import { RefreshCw, Play, AlertCircle, PanelLeftClose, PanelLeft, FolderKanban, Network, ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '../lib/utils'
-import { HealthOverview, OutputLog, ContextPanel, ResizablePanel, ProjectsPanel } from '../components/monitor'
+import { HealthOverview, OutputLog, ContextPanel, ResizablePanel, ProjectsPanel, DiagnosticsPanel, TopologyMap, VaultHealthDetail } from '../components/monitor'
 import { useMonitoringStore } from '../stores/monitoring'
 import { useOrchestrationStore } from '../stores/orchestration'
 
@@ -12,6 +12,7 @@ export function MonitorPage() {
     getRunningChecks,
     isLoadingHealth,
     error,
+    activeLogView,
     fetchCheckConfig,
     fetchProjectHealth,
     fetchWorkflowChecks,
@@ -21,6 +22,7 @@ export function MonitorPage() {
 
   const [showContext, setShowContext] = useState(true)
   const [showProjects, setShowProjects] = useState(true)
+  const [showTopology, setShowTopology] = useState(false)
   const selectedProject = projects.find((p) => p.id === selectedProjectId)
 
   // 현재 선택된 프로젝트의 health와 runningChecks
@@ -181,9 +183,42 @@ export function MonitorPage() {
         {projectHealth && (
           <>
             <HealthOverview health={projectHealth} projectId={selectedProjectId} />
+            <DiagnosticsPanel projectId={selectedProjectId} />
+
+            {/* Topology Map (collapsible) */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => setShowTopology(!showTopology)}
+                className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg"
+                aria-label="Toggle topology map"
+              >
+                {showTopology ? (
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                )}
+                <Network className="w-4 h-4 text-gray-500" />
+                <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Topology Map
+                </span>
+              </button>
+              {showTopology && (
+                <div className="px-3 pb-3">
+                  <TopologyMap
+                    projectId={selectedProjectId}
+                    projectName={selectedProject.name}
+                    projectPath={selectedProject.path}
+                  />
+                </div>
+              )}
+            </div>
 
             <div className="h-[500px] min-h-[400px]">
-              <OutputLog projectId={selectedProjectId} />
+              {activeLogView === 'vault-health' ? (
+                <VaultHealthDetail projectId={selectedProjectId} />
+              ) : (
+                <OutputLog projectId={selectedProjectId} />
+              )}
             </div>
           </>
         )}

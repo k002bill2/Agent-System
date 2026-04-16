@@ -227,3 +227,120 @@ async def get_providers() -> dict:
             "count": len(models),
         }
     return result
+
+
+# ─────────────────────────────────────────────────────────────
+# Model Update Check Endpoints
+# ─────────────────────────────────────────────────────────────
+
+
+class UpdateCheckResponse(BaseModel):
+    """Response for a model update check."""
+
+    provider: str
+    status: str
+    models_discovered: int
+    new_models_found: int
+    updates_found: int
+    errors: list[str]
+
+
+class UpdateHistoryEntry(BaseModel):
+    """A single update history entry."""
+
+    id: str
+    provider: str
+    status: str
+    models_discovered: int
+    new_models_found: int
+    updates_found: int
+    updates_applied: int
+    is_manual: bool
+    changes: dict | None = None
+    error_message: str | None = None
+    triggered_by: str | None = None
+    checked_at: str | None = None
+
+
+class UpdateStatusResponse(BaseModel):
+    """Current update check status."""
+
+    enabled: bool
+    check_interval_hours: int
+    last_check: dict | None = None
+    configured_providers: list[str]
+
+
+@router.post("/models/check-updates", response_model=list[UpdateCheckResponse])
+async def check_model_updates(
+    provider: str | None = Query(None, description="Check specific provider only"),
+    current_user: UserModel | None = Depends(get_current_user_optional),
+) -> list[UpdateCheckResponse]:
+    """Manually trigger a model update check.
+
+    Queries provider APIs (Anthropic, OpenAI, Google) for new or updated models.
+    New models are added as disabled — admin must enable them manually.
+    Requires DB mode and admin access.
+    """
+    if not USE_DATABASE:
+        raise HTTPException(status_code=501, detail="USE_DATABASE=false: DB mode required")
+    if not current_user or not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    from services.model_update_service import ModelUpdateService
+
+    user_id = getattr(current_user, "id", None) or "admin"
+
+    if provider:
+        try:
+            p = LLMProvider(provider)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid provider: {provider}")
+
+        result = await ModelUpdateService.check_provider(p, apply_updates=True)
+        # Save log for single provider
+        await ModelUpdateService._save_log([result], is_manual=True, triggered_by=str(user_id))
+        results = [result]
+    else:
+        results = await ModelUpdateService.check_all_providers(
+            apply_updates=True, is_manual=True, triggered_by=str(user_id)
+        )
+
+    return [
+        UpdateCheckResponse(
+            provider=r.provider,
+            status=r.status,
+            models_discovered=r.models_discovered,
+            new_models_found=len(r.new_models),
+            updates_found=len(r.updates),
+            errors=r.errors,
+        )
+        for r in results
+    ]
+
+
+@router.get("/models/update-history", response_model=list[UpdateHistoryEntry])
+async def get_update_history(
+    provider: str | None = Query(None, description="Filter by provider"),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+) -> list[UpdateHistoryEntry]:
+    """Get model update check history."""
+    if not USE_DATABASE:
+        raise HTTPException(status_code=501, detail="USE_DATABASE=false: DB mode required")
+
+    from services.model_update_service import ModelUpdateService
+
+    logs = await ModelUpdateService.get_update_history(
+        provider=provider, limit=limit, offset=offset
+    )
+    return [UpdateHistoryEntry(**log) for log in logs]
+
+
+@router.get("/models/update-status", response_model=UpdateStatusResponse)
+async def get_update_status() -> UpdateStatusResponse:
+    """Get current model update check status."""
+    from services.model_update_service import ModelUpdateService
+
+    status = await ModelUpdateService.get_update_status()
+    return UpdateStatusResponse(**status)

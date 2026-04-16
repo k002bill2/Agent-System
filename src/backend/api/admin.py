@@ -8,9 +8,11 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import func
 
 from api.deps import get_current_admin_user, get_current_user
 from db.models import MenuVisibilityModel, UserModel
+from db.models.organization import OrganizationMemberModel, OrganizationModel
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -24,10 +26,10 @@ VALID_ROLES = ("user", "manager", "admin")
 DEFAULT_MENU_ORDER: list[str] = [
     "dashboard",
     "projects",
-    "tasks",
+    "sessions",
     "agents",
-    "activity",
     "monitor",
+    "claude-sessions",
     "project-configs",
     "project-management",
     "git",
@@ -44,9 +46,9 @@ DEFAULT_MENU_ORDER: list[str] = [
 DEFAULT_MENU_VISIBILITY: dict[str, dict[str, bool]] = {
     "dashboard": {"user": True, "manager": True, "admin": True},
     "projects": {"user": True, "manager": True, "admin": True},
-    "tasks": {"user": True, "manager": True, "admin": True},
+    "sessions": {"user": True, "manager": True, "admin": True},
     "agents": {"user": False, "manager": True, "admin": True},
-    "activity": {"user": True, "manager": True, "admin": True},
+    "claude-sessions": {"user": True, "manager": True, "admin": True},
     "monitor": {"user": False, "manager": True, "admin": True},
     "project-configs": {"user": False, "manager": True, "admin": True},
     "project-management": {"user": False, "manager": True, "admin": True},
@@ -233,6 +235,8 @@ async def update_user(
 
             if update.is_active is not None:
                 user.is_active = update.is_active
+                # organization_members 연동
+                await _sync_member_active_status(session, user_id, update.is_active)
             if update.is_admin is not None:
                 user.is_admin = update.is_admin
             if update.role is not None:
@@ -257,6 +261,104 @@ async def update_user(
                 created_at=user.created_at,
                 last_login_at=user.last_login_at,
             )
+    except HTTPException:
+        raise
+    except ImportError:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+
+async def _sync_member_active_status(
+    session,
+    user_id: str,
+    is_active: bool,  # noqa: ANN001
+) -> None:
+    """사용자 활성화/비활성화 시 organization_members.is_active 연동."""
+    from sqlalchemy import select, update
+
+    # 해당 사용자의 모든 조직 멤버십 활성 상태 변경
+    await session.execute(
+        update(OrganizationMemberModel)
+        .where(OrganizationMemberModel.user_id == user_id)
+        .values(is_active=is_active)
+    )
+
+    # 각 조직의 current_members 카운터 재계산
+    member_result = await session.execute(
+        select(OrganizationMemberModel.organization_id).where(
+            OrganizationMemberModel.user_id == user_id
+        )
+    )
+    org_ids = [row[0] for row in member_result.all()]
+
+    for org_id in org_ids:
+        count_result = await session.execute(
+            select(func.count(OrganizationMemberModel.id)).where(
+                OrganizationMemberModel.organization_id == org_id,
+                OrganizationMemberModel.is_active == True,  # noqa: E712
+            )
+        )
+        active_count = count_result.scalar() or 0
+        await session.execute(
+            update(OrganizationModel)
+            .where(OrganizationModel.id == org_id)
+            .values(current_members=active_count)
+        )
+
+
+async def _decrement_org_member_counts(
+    session,
+    user_id: str,  # noqa: ANN001
+) -> None:
+    """사용자 삭제 전 소속 조직의 current_members 카운터 감소."""
+    from sqlalchemy import select, update
+
+    member_result = await session.execute(
+        select(OrganizationMemberModel.organization_id).where(
+            OrganizationMemberModel.user_id == user_id,
+            OrganizationMemberModel.is_active == True,  # noqa: E712
+        )
+    )
+    org_ids = [row[0] for row in member_result.all()]
+
+    for org_id in org_ids:
+        await session.execute(
+            update(OrganizationModel)
+            .where(OrganizationModel.id == org_id)
+            .values(current_members=OrganizationModel.current_members - 1)
+        )
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(
+    user_id: str,
+    admin: UserModel = Depends(get_current_admin_user),
+):
+    """사용자 삭제 (관리자 전용, DB에서 완전 삭제)"""
+    if user_id == admin.id:
+        raise HTTPException(
+            status_code=400,
+            detail="자기 자신은 삭제할 수 없습니다.",
+        )
+
+    try:
+        from sqlalchemy import select
+
+        from db.database import async_session_factory
+
+        async with async_session_factory() as session:
+            result = await session.execute(select(UserModel).where(UserModel.id == user_id))
+            user = result.scalar_one_or_none()
+
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+
+            # CASCADE 전에 소속 조직의 current_members 카운터 감소
+            await _decrement_org_member_counts(session, user_id)
+
+            await session.delete(user)
+            await session.commit()
+
+            return {"success": True, "message": f"User {user.email} deleted"}
     except HTTPException:
         raise
     except ImportError:
@@ -310,22 +412,23 @@ async def get_menu_visibility(
                             visibility[menu_key][role] = defaults.get(role, False)
 
             # menu_order 구성: sort_order가 있으면 정렬, 없으면 기본값
+            valid_keys = set(DEFAULT_MENU_ORDER)
             if sort_orders:
-                # sort_order가 있는 메뉴는 sort_order 기준, 없는 메뉴는 기본 순서 뒤에 추가
+                # sort_order가 있는 유효 메뉴만 정렬 (DB에 남은 과거 키 제외)
                 ordered = sorted(sort_orders.items(), key=lambda x: x[1])
-                menu_order = [k for k, _ in ordered]
+                menu_order = [k for k, _ in ordered if k in valid_keys]
                 # sort_order가 없지만 DEFAULT_MENU_ORDER에 있는 메뉴 추가
                 for mk in DEFAULT_MENU_ORDER:
                     if mk not in menu_order:
                         menu_order.append(mk)
             else:
-                menu_order = DEFAULT_MENU_ORDER
+                menu_order = list(DEFAULT_MENU_ORDER)
 
             return MenuVisibilityResponse(visibility=visibility, menu_order=menu_order)
     except ImportError:
         return MenuVisibilityResponse(
             visibility=DEFAULT_MENU_VISIBILITY,
-            menu_order=DEFAULT_MENU_ORDER,
+            menu_order=list(DEFAULT_MENU_ORDER),
         )
 
 
@@ -404,14 +507,15 @@ async def update_menu_visibility(
                             visibility[mk][r] = defaults.get(r, False)
 
             # menu_order 구성
+            valid_keys = set(DEFAULT_MENU_ORDER)
             if sort_orders:
                 ordered = sorted(sort_orders.items(), key=lambda x: x[1])
-                menu_order = [k for k, _ in ordered]
+                menu_order = [k for k, _ in ordered if k in valid_keys]
                 for mk in DEFAULT_MENU_ORDER:
                     if mk not in menu_order:
                         menu_order.append(mk)
             else:
-                menu_order = request.menu_order or DEFAULT_MENU_ORDER
+                menu_order = request.menu_order or list(DEFAULT_MENU_ORDER)
 
             return MenuVisibilityResponse(visibility=visibility, menu_order=menu_order)
     except ImportError:

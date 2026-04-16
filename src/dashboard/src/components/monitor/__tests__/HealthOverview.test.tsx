@@ -27,9 +27,10 @@ vi.mock('../../../stores/monitoring', () => ({
   useMonitoringStore: () => ({
     getRunningChecks: () => mockRunningChecks,
     getCheckLabel: (_projectId: string, checkType: string) => {
-      const labels: Record<string, string> = { test: 'Test', lint: 'Lint', typecheck: 'TypeCheck', build: 'Build' }
+      const labels: Record<string, string> = { links: 'Links', frontmatter: 'Frontmatter', orphans: 'Orphans', images: 'Images' }
       return labels[checkType] ?? checkType
     },
+    getCheckTypes: () => ['links', 'frontmatter', 'orphans', 'images'],
     runCheck: mockRunCheck,
     activeLogView: mockActiveLogView,
     setActiveLogView: mockSetActiveLogView,
@@ -44,10 +45,10 @@ const makeHealth = (overrides?: Partial<ProjectHealth>): ProjectHealth => ({
   project_name: 'Test Project',
   project_path: '/test/project',
   checks: {
-    test: { project_id: 'proj-1', check_type: 'test', status: 'idle', exit_code: null, duration_ms: null, stdout: '', stderr: '' },
-    lint: { project_id: 'proj-1', check_type: 'lint', status: 'success', exit_code: 0, duration_ms: 1200, stdout: '', stderr: '' },
-    typecheck: { project_id: 'proj-1', check_type: 'typecheck', status: 'failure', exit_code: 1, duration_ms: 5000, stdout: '', stderr: '' },
-    build: { project_id: 'proj-1', check_type: 'build', status: 'idle', exit_code: null, duration_ms: null, stdout: '', stderr: '' },
+    links: { project_id: 'proj-1', check_type: 'links', status: 'idle', exit_code: null, duration_ms: null, stdout: '', stderr: '' },
+    frontmatter: { project_id: 'proj-1', check_type: 'frontmatter', status: 'success', exit_code: 0, duration_ms: 1200, stdout: '', stderr: '' },
+    orphans: { project_id: 'proj-1', check_type: 'orphans', status: 'failure', exit_code: 1, duration_ms: 5000, stdout: '', stderr: '' },
+    images: { project_id: 'proj-1', check_type: 'images', status: 'idle', exit_code: null, duration_ms: null, stdout: '', stderr: '' },
   },
   last_updated: '2024-01-01T00:00:00Z',
   ...overrides,
@@ -69,10 +70,10 @@ describe('HealthOverview', () => {
 
   it('renders all 4 check type cards', () => {
     render(<HealthOverview health={makeHealth()} projectId="proj-1" />)
-    expect(screen.getByText('Test')).toBeInTheDocument()
-    expect(screen.getByText('Lint')).toBeInTheDocument()
-    expect(screen.getByText('TypeCheck')).toBeInTheDocument()
-    expect(screen.getByText('Build')).toBeInTheDocument()
+    expect(screen.getByText('Links')).toBeInTheDocument()
+    expect(screen.getByText('Frontmatter')).toBeInTheDocument()
+    expect(screen.getByText('Orphans')).toBeInTheDocument()
+    expect(screen.getByText('Images')).toBeInTheDocument()
   })
 
   it('shows correct status text for each check', () => {
@@ -109,10 +110,10 @@ describe('HealthOverview', () => {
   it('handles all checks in success state', () => {
     const health = makeHealth({
       checks: {
-        test: { project_id: 'proj-1', check_type: 'test', status: 'success', exit_code: 0, duration_ms: 100, stdout: '', stderr: '' },
-        lint: { project_id: 'proj-1', check_type: 'lint', status: 'success', exit_code: 0, duration_ms: 200, stdout: '', stderr: '' },
-        typecheck: { project_id: 'proj-1', check_type: 'typecheck', status: 'success', exit_code: 0, duration_ms: 300, stdout: '', stderr: '' },
-        build: { project_id: 'proj-1', check_type: 'build', status: 'success', exit_code: 0, duration_ms: 400, stdout: '', stderr: '' },
+        links: { project_id: 'proj-1', check_type: 'links', status: 'success', exit_code: 0, duration_ms: 100, stdout: '', stderr: '' },
+        frontmatter: { project_id: 'proj-1', check_type: 'frontmatter', status: 'success', exit_code: 0, duration_ms: 200, stdout: '', stderr: '' },
+        orphans: { project_id: 'proj-1', check_type: 'orphans', status: 'success', exit_code: 0, duration_ms: 300, stdout: '', stderr: '' },
+        images: { project_id: 'proj-1', check_type: 'images', status: 'success', exit_code: 0, duration_ms: 400, stdout: '', stderr: '' },
       },
     })
     render(<HealthOverview health={health} projectId="proj-1" />)
@@ -123,10 +124,10 @@ describe('HealthOverview', () => {
   it('shows duration in ms for fast checks', () => {
     const health = makeHealth({
       checks: {
-        test: { project_id: 'proj-1', check_type: 'test', status: 'success', exit_code: 0, duration_ms: 50, stdout: '', stderr: '' },
-        lint: { project_id: 'proj-1', check_type: 'lint', status: 'idle', exit_code: null, duration_ms: null, stdout: '', stderr: '' },
-        typecheck: { project_id: 'proj-1', check_type: 'typecheck', status: 'idle', exit_code: null, duration_ms: null, stdout: '', stderr: '' },
-        build: { project_id: 'proj-1', check_type: 'build', status: 'idle', exit_code: null, duration_ms: null, stdout: '', stderr: '' },
+        links: { project_id: 'proj-1', check_type: 'links', status: 'success', exit_code: 0, duration_ms: 50, stdout: '', stderr: '' },
+        frontmatter: { project_id: 'proj-1', check_type: 'frontmatter', status: 'idle', exit_code: null, duration_ms: null, stdout: '', stderr: '' },
+        orphans: { project_id: 'proj-1', check_type: 'orphans', status: 'idle', exit_code: null, duration_ms: null, stdout: '', stderr: '' },
+        images: { project_id: 'proj-1', check_type: 'images', status: 'idle', exit_code: null, duration_ms: null, stdout: '', stderr: '' },
       },
     })
     render(<HealthOverview health={health} projectId="proj-1" />)

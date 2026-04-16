@@ -7,11 +7,12 @@ import {
   UserX,
   Check,
   Loader2,
+  Trash2,
 } from 'lucide-react'
 import type { UserRole } from '../../stores/auth'
 import type { AdminUser } from './types'
 import { ROLE_COLORS } from './types'
-import { fetchUsers, updateUser } from './api'
+import { fetchUsers, updateUser, deleteUser } from './api'
 
 interface Props {
   currentUserId: string
@@ -30,6 +31,8 @@ export function UserManagementTab({ currentUserId }: Props) {
   const [batchAction, setBatchAction] = useState<string>('')
   const [savingRoleId, setSavingRoleId] = useState<string | null>(null)
   const [savedRoleId, setSavedRoleId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const limit = 20
 
   const load = useCallback(async () => {
@@ -104,9 +107,39 @@ export function UserManagementTab({ currentUserId }: Props) {
     })
   }
 
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      await deleteUser(deleteTarget.id)
+      setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id))
+      setTotal((prev) => prev - 1)
+      setDeleteTarget(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete failed')
+      setDeleteTarget(null)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const handleBatchApply = async () => {
     if (!batchAction || selectedIds.size === 0) return
     setError(null)
+
+    if (batchAction === 'delete') {
+      try {
+        await Promise.all([...selectedIds].map((id) => deleteUser(id)))
+        setUsers((prev) => prev.filter((u) => !selectedIds.has(u.id)))
+        setTotal((prev) => prev - selectedIds.size)
+        setSelectedIds(new Set())
+        setBatchAction('')
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Batch delete failed')
+        load()
+      }
+      return
+    }
 
     const updates: Promise<AdminUser>[] = []
     for (const id of selectedIds) {
@@ -212,6 +245,7 @@ export function UserManagementTab({ currentUserId }: Props) {
             <option value="user">역할: 일반</option>
             <option value="manager">역할: 관리자</option>
             <option value="admin">역할: 최고관리자</option>
+            <option value="delete">삭제</option>
           </select>
           <button
             onClick={handleBatchApply}
@@ -252,7 +286,7 @@ export function UserManagementTab({ currentUserId }: Props) {
                 User
               </th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 dark:text-gray-400">
-                Provider
+                Auth Provider
               </th>
               <th className="text-center px-4 py-3 font-medium text-gray-500 dark:text-gray-400">
                 Status
@@ -396,6 +430,14 @@ export function UserManagementTab({ currentUserId }: Props) {
                           <UserCheck className="w-4 h-4 text-green-500" />
                         )}
                       </button>
+                      <button
+                        onClick={() => setDeleteTarget(u)}
+                        disabled={u.id === currentUserId}
+                        className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-30"
+                        title="삭제"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -501,18 +543,28 @@ export function UserManagementTab({ currentUserId }: Props) {
                     </div>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleToggleActive(u.id, u.is_active)}
-                  disabled={u.id === currentUserId}
-                  className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors disabled:opacity-30"
-                  title={u.is_active ? '비활성화' : '활성화'}
-                >
-                  {u.is_active ? (
-                    <UserX className="w-4 h-4 text-red-500" />
-                  ) : (
-                    <UserCheck className="w-4 h-4 text-green-500" />
-                  )}
-                </button>
+                <div className="flex flex-col gap-1">
+                  <button
+                    onClick={() => handleToggleActive(u.id, u.is_active)}
+                    disabled={u.id === currentUserId}
+                    className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors disabled:opacity-30"
+                    title={u.is_active ? '비활성화' : '활성화'}
+                  >
+                    {u.is_active ? (
+                      <UserX className="w-4 h-4 text-red-500" />
+                    ) : (
+                      <UserCheck className="w-4 h-4 text-green-500" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setDeleteTarget(u)}
+                    disabled={u.id === currentUserId}
+                    className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-30"
+                    title="삭제"
+                  >
+                    <Trash2 className="w-4 h-4 text-red-500" />
+                  </button>
+                </div>
               </div>
             </div>
           ))
@@ -542,6 +594,45 @@ export function UserManagementTab({ currentUserId }: Props) {
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              사용자 삭제
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-1">
+              <span className="font-medium text-gray-900 dark:text-white">
+                {deleteTarget.name || deleteTarget.email}
+              </span>
+              {deleteTarget.name && (
+                <span className="text-sm"> ({deleteTarget.email})</span>
+              )}
+            </p>
+            <p className="text-sm text-red-600 dark:text-red-400 mb-6">
+              이 사용자를 DB에서 완전히 삭제합니다. 이 작업은 되돌릴 수 없습니다.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-lg transition-colors flex items-center gap-2"
+              >
+                {deleting && <Loader2 className="w-4 h-4 animate-spin" />}
+                {deleting ? '삭제 중...' : '삭제'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

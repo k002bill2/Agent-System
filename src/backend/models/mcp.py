@@ -120,8 +120,8 @@ class RunCheckArgs(BaseModel):
     """Arguments for aos_run_check tool."""
 
     project_id: str = Field(description="Project identifier")
-    check_type: Literal["typecheck", "lint", "test", "build", "all"] = Field(
-        default="all", description="Type of check to run"
+    check_type: str = Field(
+        default="all", description="Check type ID (project-specific, e.g. 'test', 'links') or 'all'"
     )
 
 

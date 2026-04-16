@@ -82,14 +82,17 @@ export interface QuotaStatus {
 }
 
 export interface MemberUsageSummary {
+  id: string
   user_id: string
   email: string
   name: string | null
   role: MemberRole
   tokens_used_today: number
   tokens_used_this_month: number
+  tokens_used_period: number
   sessions_today: number
   sessions_this_month: number
+  sessions_period: number
   last_active_at: string | null
   percentage_of_org: number
 }
@@ -99,6 +102,40 @@ export interface MemberUsageResponse {
   period: string
   total_tokens: number
   members: MemberUsageSummary[]
+}
+
+export interface MemberDailyUsage {
+  date: string
+  tokens: number
+  sessions: number
+  cost_usd: number
+}
+
+export interface MemberModelUsage {
+  model: string
+  tokens: number
+  sessions: number
+  percentage: number
+}
+
+export interface MemberUsageDetail {
+  user_id: string
+  email: string
+  name: string | null
+  role: MemberRole
+  permissions: string[]
+  is_active: boolean
+  invited_by: string | null
+  joined_at: string | null
+  last_active_at: string | null
+  tokens_used_today: number
+  tokens_used_this_month: number
+  sessions_today: number
+  sessions_this_month: number
+  total_cost_usd: number
+  percentage_of_org: number
+  daily_usage: MemberDailyUsage[]
+  model_usage: MemberModelUsage[]
 }
 
 export interface OrganizationCreate {
@@ -146,6 +183,8 @@ interface OrganizationsState {
   stats: OrganizationStats | null
   quotaStatus: QuotaStatus | null
   memberUsage: MemberUsageResponse | null
+  memberUsageDetail: MemberUsageDetail | null
+  isMemberDetailLoading: boolean
   userMemberships: OrganizationMember[]
   isLoading: boolean
   error: string | null
@@ -179,6 +218,8 @@ interface OrganizationsState {
   fetchStats: (orgId: string) => Promise<void>
   fetchQuotaStatus: (orgId: string) => Promise<void>
   fetchMemberUsage: (orgId: string, period?: string) => Promise<void>
+  fetchMemberUsageDetail: (orgId: string, userId: string, period?: string, memberId?: string) => Promise<void>
+  clearMemberUsageDetail: () => void
 
   // Invitation
   acceptInvitation: (token: string, userId: string, userName?: string) => Promise<{ success: boolean; member?: OrganizationMember; error?: string }>
@@ -196,6 +237,8 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
   stats: null,
   quotaStatus: null,
   memberUsage: null,
+  memberUsageDetail: null,
+  isMemberDetailLoading: false,
   userMemberships: [],
   isLoading: false,
   error: null,
@@ -447,6 +490,23 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
       console.error('Failed to fetch member usage:', error)
     }
   },
+
+  fetchMemberUsageDetail: async (orgId, userId, period = 'month', memberId) => {
+    set({ isMemberDetailLoading: true })
+    try {
+      const params = new URLSearchParams({ period })
+      if (memberId) params.set('member_id', memberId)
+      const data = await apiClient.get<MemberUsageDetail>(
+        `/api/organizations/${orgId}/members/${userId}/usage-detail?${params.toString()}`
+      )
+      set({ memberUsageDetail: data, isMemberDetailLoading: false })
+    } catch (error) {
+      console.error('Failed to fetch member usage detail:', error)
+      set({ memberUsageDetail: null, isMemberDetailLoading: false })
+    }
+  },
+
+  clearMemberUsageDetail: () => set({ memberUsageDetail: null }),
 
   // ─────────────────────────────────────────────────────────────
   // Invitation
