@@ -254,7 +254,7 @@ function UsageTrendTab({ detail }: { detail: MemberUsageDetail }) {
           width={50}
         />
         <Tooltip
-          formatter={(value: number | undefined) => [formatTokens(value ?? 0), 'Tokens']}
+          formatter={(value) => [formatTokens(typeof value === 'number' ? value : 0), 'Tokens']}
           labelFormatter={(label) => String(label)}
           contentStyle={{
             fontSize: 12,
