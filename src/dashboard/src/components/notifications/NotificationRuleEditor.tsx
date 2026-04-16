@@ -12,7 +12,7 @@ import {
   TestTube,
   Check,
   X,
-  Slack,
+  MessageSquare,
   MessageCircle,
   Mail,
   Webhook,
@@ -93,8 +93,8 @@ interface NotificationRuleEditorProps {
 // Channel Icons
 // ─────────────────────────────────────────────────────────────
 
-const CHANNEL_ICONS: Record<NotificationChannel, typeof Slack> = {
-  slack: Slack,
+const CHANNEL_ICONS: Record<NotificationChannel, typeof MessageSquare> = {
+  slack: MessageSquare,
   discord: MessageCircle,
   email: Mail,
   webhook: Webhook,

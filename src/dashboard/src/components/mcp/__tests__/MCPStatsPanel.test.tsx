@@ -9,7 +9,7 @@ vi.mock('lucide-react', () => ({
   Play: (props: Record<string, unknown>) => <svg data-testid="icon-play" {...props} />,
   Wrench: (props: Record<string, unknown>) => <svg data-testid="icon-wrench" {...props} />,
   FolderOpen: (props: Record<string, unknown>) => <svg data-testid="icon-folder" {...props} />,
-  Github: (props: Record<string, unknown>) => <svg data-testid="icon-github" {...props} />,
+  Code2: (props: Record<string, unknown>) => <svg data-testid="icon-github" {...props} />,
   Globe: (props: Record<string, unknown>) => <svg data-testid="icon-globe" {...props} />,
   Database: (props: Record<string, unknown>) => <svg data-testid="icon-database" {...props} />,
   Settings: (props: Record<string, unknown>) => <svg data-testid="icon-settings" {...props} />,
