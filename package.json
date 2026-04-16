@@ -20,8 +20,8 @@
       "bash -c 'cd src/dashboard && npx eslint --fix'"
     ],
     "src/backend/**/*.py": [
-      "ruff check --fix",
-      "ruff format"
+      "uv run --project src/backend ruff check --fix",
+      "uv run --project src/backend ruff format"
     ]
   }
 }
