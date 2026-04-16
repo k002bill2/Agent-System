@@ -1,0 +1,43 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Infrastructure (Postgres + Redis + Qdrant)",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": [
+        "compose",
+        "-f",
+        "infra/docker/docker-compose.yml",
+        "up",
+        "-d",
+        "postgres",
+        "redis",
+        "qdrant"
+      ],
+      "port": 5432
+    },
+    {
+      "name": "Backend (FastAPI / uvicorn)",
+      "runtimeExecutable": "uvicorn",
+      "runtimeArgs": [
+        "api.app:app",
+        "--reload",
+        "--reload-exclude",
+        ".claude/*",
+        "--reload-exclude",
+        ".temp/*",
+        "--reload-exclude",
+        "*.json"
+      ],
+      "cwd": "src/backend",
+      "port": 8000
+    },
+    {
+      "name": "Dashboard (Vite / React)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "src/dashboard",
+      "port": 5173
+    }
+  ]
+}
