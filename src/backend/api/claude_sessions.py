@@ -94,6 +94,97 @@ SortField = Literal[
 SortOrder = Literal["asc", "desc"]
 
 
+# ─────────────────────────────────────────────────────────────
+# Background DB Sync
+# ─────────────────────────────────────────────────────────────
+
+# Track file mtime+size to detect changes (avoids redundant DB writes)
+_sync_cache: dict[str, tuple[float, int]] = {}
+_sync_lock = asyncio.Lock()
+
+
+async def _sync_sessions_to_db(sessions: list) -> None:
+    """Sync discovered sessions to DB in background. Only upserts changed files."""
+    import os
+
+    if os.getenv("USE_DATABASE", "false").lower() != "true":
+        return
+
+    try:
+        from sqlalchemy import select
+
+        from db.database import async_session_factory
+        from db.models.claude_session import ClaudeSessionSnapshotModel
+
+        async with _sync_lock:
+            # Find sessions with changed files
+            changed = []
+            for s in sessions:
+                fp = s.file_path
+                key = (s.file_size, hash(fp))
+                cached = _sync_cache.get(s.session_id)
+                current = (getattr(s, "_file_mtime", 0) or s.file_size, s.file_size)
+                if cached != current:
+                    changed.append(s)
+
+            if not changed:
+                return
+
+            now = utcnow()
+            async with async_session_factory() as db:
+                for s in changed:
+                    result = await db.execute(
+                        select(ClaudeSessionSnapshotModel).where(
+                            ClaudeSessionSnapshotModel.id == s.session_id
+                        )
+                    )
+                    existing = result.scalar_one_or_none()
+
+                    data = {
+                        "slug": s.slug,
+                        "model": s.model,
+                        "project_path": s.project_path,
+                        "project_name": s.project_name,
+                        "git_branch": s.git_branch,
+                        "cwd": s.cwd,
+                        "version": s.version,
+                        "status": s.status.value if hasattr(s.status, "value") else str(s.status),
+                        "source_user": s.source_user,
+                        "source_path": s.source_path,
+                        "message_count": s.message_count,
+                        "user_message_count": s.user_message_count,
+                        "assistant_message_count": s.assistant_message_count,
+                        "tool_call_count": s.tool_call_count,
+                        "total_input_tokens": s.total_input_tokens,
+                        "total_output_tokens": s.total_output_tokens,
+                        "estimated_cost": s.estimated_cost,
+                        "file_path": s.file_path,
+                        "file_size": s.file_size,
+                        "updated_at": now,
+                    }
+
+                    if existing:
+                        for key, value in data.items():
+                            setattr(existing, key, value)
+                    else:
+                        snapshot = ClaudeSessionSnapshotModel(
+                            id=s.session_id,
+                            **data,
+                            session_created_at=s.created_at,
+                            session_last_activity=s.last_activity,
+                            created_at=now,
+                        )
+                        db.add(snapshot)
+
+                    _sync_cache[s.session_id] = (s.file_size, s.file_size)
+
+                await db.commit()
+                logger.debug(f"Synced {len(changed)} claude sessions to DB")
+
+    except Exception as e:
+        logger.warning(f"Background session sync failed: {e}")
+
+
 @router.get("", response_model=ClaudeSessionResponse)
 async def list_sessions(
     status: SessionStatus | None = None,
@@ -167,6 +258,9 @@ async def list_sessions(
         cached_summary = monitor.get_cached_summary(session.session_id)
         if cached_summary:
             session.summary = cached_summary
+
+    # Background sync: save discovered sessions to DB (non-blocking)
+    asyncio.create_task(_sync_sessions_to_db(all_sessions))
 
     return ClaudeSessionResponse(
         sessions=paginated_sessions,

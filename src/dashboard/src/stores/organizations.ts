@@ -89,8 +89,10 @@ export interface MemberUsageSummary {
   role: MemberRole
   tokens_used_today: number
   tokens_used_this_month: number
+  tokens_used_period: number
   sessions_today: number
   sessions_this_month: number
+  sessions_period: number
   last_active_at: string | null
   percentage_of_org: number
 }

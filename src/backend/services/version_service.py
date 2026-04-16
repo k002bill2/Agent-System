@@ -1,5 +1,8 @@
 """Version service for config version control."""
 
+import asyncio
+import logging
+import os
 from typing import Any
 
 from models.config_version import (
@@ -14,6 +17,11 @@ from models.config_version import (
     VersionStatus,
 )
 from utils.time import utcnow
+
+logger = logging.getLogger(__name__)
+
+# Environment variable to control storage mode
+USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 
 # In-memory storage
 _versions: dict[str, ConfigVersion] = {}
@@ -82,6 +90,15 @@ class VersionService:
         if key not in _version_index:
             _version_index[key] = []
         _version_index[key].append(version.id)
+
+        # Sync to DB (fire-and-forget)
+        VersionService._fire_and_forget_save(version)
+        # Also sync any archived previous versions
+        if existing_version_ids:
+            for vid in existing_version_ids:
+                v = _versions.get(vid)
+                if v and v.status == VersionStatus.ARCHIVED and v.id != version.id:
+                    VersionService._fire_and_forget_save(v)
 
         return version
 
@@ -248,6 +265,9 @@ class VersionService:
         new_version.rolled_back_from = current.id
         new_version.rolled_back_at = utcnow()
 
+        # Sync rollback metadata to DB
+        VersionService._fire_and_forget_save(new_version)
+
         return RollbackResult(
             success=True,
             new_version=new_version,
@@ -267,6 +287,7 @@ class VersionService:
         if not version:
             return None
         version.label = label
+        VersionService._fire_and_forget_save(version)
         return version
 
     @staticmethod
@@ -276,6 +297,7 @@ class VersionService:
         if not version:
             return None
         version.status = VersionStatus.ARCHIVED
+        VersionService._fire_and_forget_save(version)
         return version
 
     @staticmethod
@@ -294,6 +316,7 @@ class VersionService:
 
         # Remove from storage
         del _versions[version_id]
+        VersionService._fire_and_forget_delete(version_id)
         return True
 
     # ─────────────────────────────────────────────────────────────
@@ -336,6 +359,151 @@ class VersionService:
             recent_versions=recent,
             most_versioned_configs=most_versioned,
         )
+
+    # ─────────────────────────────────────────────────────────────
+    # Database Persistence (dual-write)
+    # ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    async def _save_version_to_db(version: ConfigVersion) -> None:
+        """Save or update a config version in the database."""
+        try:
+            from sqlalchemy import select
+
+            from db.database import async_session_factory
+            from db.models import ConfigVersionModel
+
+            async with async_session_factory() as db:
+                # Upsert: check if exists
+                result = await db.execute(
+                    select(ConfigVersionModel).where(ConfigVersionModel.id == version.id)
+                )
+                existing = result.scalar_one_or_none()
+
+                if existing:
+                    existing.status = version.status.value
+                    existing.label = version.label
+                    existing.description = version.description
+                    existing.rolled_back_from = version.rolled_back_from
+                    existing.rolled_back_at = version.rolled_back_at
+                else:
+                    model = ConfigVersionModel(
+                        id=version.id,
+                        config_type=version.config_type.value,
+                        config_id=version.config_id,
+                        version=version.version,
+                        label=version.label,
+                        data=version.data,
+                        diff_from_previous=version.diff_from_previous,
+                        status=version.status.value,
+                        changes_summary=version.changes_summary,
+                        created_by=version.created_by,
+                        description=version.description,
+                        rolled_back_from=version.rolled_back_from,
+                        rolled_back_at=version.rolled_back_at,
+                        created_at=version.created_at,
+                    )
+                    db.add(model)
+                await db.commit()
+        except Exception:
+            logger.warning("Failed to save config version %s to DB", version.id, exc_info=True)
+
+    @staticmethod
+    async def _delete_version_from_db(version_id: str) -> None:
+        """Delete a config version from the database."""
+        try:
+            from sqlalchemy import delete
+
+            from db.database import async_session_factory
+            from db.models import ConfigVersionModel
+
+            async with async_session_factory() as db:
+                await db.execute(
+                    delete(ConfigVersionModel).where(ConfigVersionModel.id == version_id)
+                )
+                await db.commit()
+        except Exception:
+            logger.warning("Failed to delete config version %s from DB", version_id, exc_info=True)
+
+    @staticmethod
+    async def load_versions_from_db() -> int:
+        """Load all config versions from DB into in-memory cache.
+
+        Returns the number of versions loaded.
+        """
+        try:
+            from sqlalchemy import select
+
+            from db.database import async_session_factory
+            from db.models import ConfigVersionModel
+
+            async with async_session_factory() as db:
+                result = await db.execute(select(ConfigVersionModel))
+                rows = result.scalars().all()
+
+            loaded = 0
+            for row in rows:
+                if row.id in _versions:
+                    continue  # Skip already-loaded versions
+
+                version = ConfigVersion(
+                    id=row.id,
+                    config_type=ConfigType(row.config_type),
+                    config_id=row.config_id,
+                    version=row.version,
+                    label=row.label,
+                    description=row.description,
+                    status=VersionStatus(row.status),
+                    data=row.data or {},
+                    changes_summary=row.changes_summary,
+                    diff_from_previous=row.diff_from_previous,
+                    created_by=row.created_by,
+                    created_at=row.created_at or utcnow(),
+                    rolled_back_from=row.rolled_back_from,
+                    rolled_back_at=row.rolled_back_at,
+                )
+
+                _versions[version.id] = version
+                key = (version.config_type.value, version.config_id)
+                if key not in _version_index:
+                    _version_index[key] = []
+                if version.id not in _version_index[key]:
+                    _version_index[key].append(version.id)
+                loaded += 1
+
+            # Sort index lists by version number
+            for key in _version_index:
+                _version_index[key].sort(
+                    key=lambda vid: _versions[vid].version if vid in _versions else 0
+                )
+
+            logger.info("Loaded %d config versions from DB", loaded)
+            return loaded
+        except Exception:
+            logger.warning("Failed to load config versions from DB", exc_info=True)
+            return 0
+
+    @staticmethod
+    def _fire_and_forget_save(version: ConfigVersion) -> None:
+        """Fire-and-forget DB save for a config version."""
+        if not USE_DATABASE:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(VersionService._save_version_to_db(version))
+        except RuntimeError:
+            pass  # No running event loop
+
+    @staticmethod
+    def _fire_and_forget_delete(version_id: str) -> None:
+        """Fire-and-forget DB delete for a config version."""
+        if not USE_DATABASE:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(VersionService._delete_version_from_db(version_id))
+        except RuntimeError:
+            pass  # No running event loop
 
 
 # ─────────────────────────────────────────────────────────────

@@ -16,6 +16,7 @@ import {
   OrganizationStats,
   QuotaStatusPanel,
   MemberUsagePanel,
+  SourceUserMapping,
 } from '../components/organizations'
 
 const tabs: { id: OrganizationTab; label: string; icon: typeof Info }[] = [
@@ -341,6 +342,14 @@ export function OrganizationsPage() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Source User Mapping */}
+                  {canManageOrg && (
+                    <SourceUserMapping
+                      organizationId={currentOrganization.id}
+                      members={members}
+                    />
+                  )}
 
                   {/* Danger Zone */}
                   {canManageOrg && (

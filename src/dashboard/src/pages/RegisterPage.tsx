@@ -39,7 +39,15 @@ export function RegisterPage() {
       )
       setTokens(accessToken, refreshToken, expiresIn)
       setUser(user)
-      setView('dashboard')
+
+      // Check for redirect URL (e.g., from invitation)
+      const redirectUrl = sessionStorage.getItem('redirectAfterLogin')
+      if (redirectUrl) {
+        sessionStorage.removeItem('redirectAfterLogin')
+        window.location.href = redirectUrl
+      } else {
+        setView('dashboard')
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '회원가입에 실패했습니다')
     } finally {

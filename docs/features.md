@@ -331,6 +331,9 @@ class PlaygroundService:
 - 모델/온도/도구 설정
 - 스트리밍 응답
 - 에이전트 비교 (2-5개)
+- **DB 지속성**: `PlaygroundSessionModel`로 세션/메시지/실행 이력 영구 저장
+- **이중 스토리지**: 인메모리 캐시 + JSON 파일 지속성 (DB 미사용 시 폴백)
+- RAG 연동 옵션 (`rag_enabled`)
 
 ---
 
@@ -363,6 +366,11 @@ class VersionService:
 
 **버전 상태**: `draft`, `active`, `archived`, `rolled_back`
 
+**DB 모델**: `ConfigVersionModel` — 설정 스냅샷, diff 추적, 롤백 지원
+- **config_type**: `AGENT`, `SESSION`, `PROJECT`, `WORKFLOW`, `PERMISSION`, `NOTIFICATION_RULE`, `LLM_ROUTER`
+- Unique constraint: (config_type, config_id, version)
+- 자동 diff 계산 및 변경 요약 생성
+
 ---
 
 ## 22. Multi-tenant (Organizations)
@@ -391,7 +399,16 @@ class VersionService:
 - `QuotaStatusPanel` 대시보드 컴포넌트 (progress bar 기반)
 - **멤버별 사용량 추적**: `MemberUsageRecord`로 개인별 토큰/세션 사용 기록
 - `GET /organizations/{id}/members/usage?period=day|week|month` API
+- `GET /organizations/{id}/members/{user_id}/usage-detail` API (일별 트렌드, 모델별 분류)
 - `MemberUsagePanel` 컴포넌트 (기간별 필터, 사용량 비율 시각화)
+- **멤버 상세 패널**: `MemberDetailPanel` (Overview/Usage Trend/Model Breakdown 3탭)
+  - Recharts 기반 일별 토큰 사용 Area 차트
+  - 프로바이더 그룹화된 모델별 사용량 분류 (토큰 수, 비율)
+  - 역할 아이콘, 조직 내 점유율, 초대자 정보 표시
+- **소스 유저 매핑**: Claude Code OS 유저네임을 조직 멤버에 연결
+  - `GET /organizations/{id}/source-user-map` API
+  - `PUT /organizations/{id}/source-user-map` API
+  - `SourceUserMapping` 컴포넌트 (OrganizationsPage Settings 탭)
 
 ---
 

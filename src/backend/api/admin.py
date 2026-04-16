@@ -8,9 +8,11 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import func
 
 from api.deps import get_current_admin_user, get_current_user
 from db.models import MenuVisibilityModel, UserModel
+from db.models.organization import OrganizationMemberModel, OrganizationModel
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -233,6 +235,8 @@ async def update_user(
 
             if update.is_active is not None:
                 user.is_active = update.is_active
+                # organization_members 연동
+                await _sync_member_active_status(session, user_id, update.is_active)
             if update.is_admin is not None:
                 user.is_admin = update.is_admin
             if update.role is not None:
@@ -257,6 +261,104 @@ async def update_user(
                 created_at=user.created_at,
                 last_login_at=user.last_login_at,
             )
+    except HTTPException:
+        raise
+    except ImportError:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+
+async def _sync_member_active_status(
+    session,
+    user_id: str,
+    is_active: bool,  # noqa: ANN001
+) -> None:
+    """사용자 활성화/비활성화 시 organization_members.is_active 연동."""
+    from sqlalchemy import select, update
+
+    # 해당 사용자의 모든 조직 멤버십 활성 상태 변경
+    await session.execute(
+        update(OrganizationMemberModel)
+        .where(OrganizationMemberModel.user_id == user_id)
+        .values(is_active=is_active)
+    )
+
+    # 각 조직의 current_members 카운터 재계산
+    member_result = await session.execute(
+        select(OrganizationMemberModel.organization_id).where(
+            OrganizationMemberModel.user_id == user_id
+        )
+    )
+    org_ids = [row[0] for row in member_result.all()]
+
+    for org_id in org_ids:
+        count_result = await session.execute(
+            select(func.count(OrganizationMemberModel.id)).where(
+                OrganizationMemberModel.organization_id == org_id,
+                OrganizationMemberModel.is_active == True,  # noqa: E712
+            )
+        )
+        active_count = count_result.scalar() or 0
+        await session.execute(
+            update(OrganizationModel)
+            .where(OrganizationModel.id == org_id)
+            .values(current_members=active_count)
+        )
+
+
+async def _decrement_org_member_counts(
+    session,
+    user_id: str,  # noqa: ANN001
+) -> None:
+    """사용자 삭제 전 소속 조직의 current_members 카운터 감소."""
+    from sqlalchemy import select, update
+
+    member_result = await session.execute(
+        select(OrganizationMemberModel.organization_id).where(
+            OrganizationMemberModel.user_id == user_id,
+            OrganizationMemberModel.is_active == True,  # noqa: E712
+        )
+    )
+    org_ids = [row[0] for row in member_result.all()]
+
+    for org_id in org_ids:
+        await session.execute(
+            update(OrganizationModel)
+            .where(OrganizationModel.id == org_id)
+            .values(current_members=OrganizationModel.current_members - 1)
+        )
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(
+    user_id: str,
+    admin: UserModel = Depends(get_current_admin_user),
+):
+    """사용자 삭제 (관리자 전용, DB에서 완전 삭제)"""
+    if user_id == admin.id:
+        raise HTTPException(
+            status_code=400,
+            detail="자기 자신은 삭제할 수 없습니다.",
+        )
+
+    try:
+        from sqlalchemy import select
+
+        from db.database import async_session_factory
+
+        async with async_session_factory() as session:
+            result = await session.execute(select(UserModel).where(UserModel.id == user_id))
+            user = result.scalar_one_or_none()
+
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+
+            # CASCADE 전에 소속 조직의 current_members 카운터 감소
+            await _decrement_org_member_counts(session, user_id)
+
+            await session.delete(user)
+            await session.commit()
+
+            return {"success": True, "message": f"User {user.email} deleted"}
     except HTTPException:
         raise
     except ImportError:

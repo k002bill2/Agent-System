@@ -100,7 +100,7 @@ class OrganizationInvitationModel(Base):
     email = Column(String(255), nullable=False)
     role = Column(String(20), default="member")
     invited_by = Column(String(36), nullable=False)
-    token = Column(String(36), nullable=False, unique=True)
+    token = Column(String(64), nullable=False, unique=True)
     message = Column(Text, nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     accepted = Column(Boolean, default=False)

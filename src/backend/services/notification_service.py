@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import ssl
 import uuid
 from abc import ABC, abstractmethod
@@ -215,11 +216,21 @@ class EmailAdapter(NotificationAdapter):
 
         # Plain text and HTML versions
         text_content = f"{message.title}\n\n{message.body}"
+
+        # Convert URLs in body to clickable <a> tags for HTML version
+        html_body = re.sub(
+            r'(https?://[^\s<>"]+)',
+            r'<a href="\1" style="color: #2563eb;">\1</a>',
+            message.body,
+        )
+        # Preserve line breaks in HTML
+        html_body = html_body.replace("\n", "<br>")
+
         html_content = f"""
         <html>
         <body style="font-family: Arial, sans-serif; padding: 20px;">
             <h2 style="color: #333;">{message.title}</h2>
-            <p style="color: #666; line-height: 1.6;">{message.body}</p>
+            <p style="color: #666; line-height: 1.6;">{html_body}</p>
             <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
             <p style="color: #999; font-size: 12px;">
                 Sent by Agent Orchestration Service

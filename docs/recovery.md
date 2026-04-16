@@ -5,13 +5,14 @@
 ## 목차
 
 1. [장애 대응 프로세스](#장애-대응-프로세스)
-2. [PostgreSQL 백업/복원](#postgresql-백업복원)
-3. [Redis 백업/복원](#redis-백업복원)
-4. [Qdrant 백업/복원](#qdrant-백업복원)
-5. [서비스 롤백](#서비스-롤백)
-6. [장애 유형별 대응](#장애-유형별-대응)
-7. [DB 스키마 충돌 해결](#db-스키마-충돌-해결)
-8. [복구 후 검증](#복구-후-검증)
+2. [자동 백업 설정](#자동-백업-설정)
+3. [PostgreSQL 백업/복원](#postgresql-백업복원)
+4. [Redis 백업/복원](#redis-백업복원)
+5. [Qdrant 백업/복원](#qdrant-백업복원)
+6. [서비스 롤백](#서비스-롤백)
+7. [장애 유형별 대응](#장애-유형별-대응)
+8. [DB 스키마 충돌 해결](#db-스키마-충돌-해결)
+9. [복구 후 검증](#복구-후-검증)
 
 ---
 
@@ -47,6 +48,96 @@ docker compose logs -f backend --tail=100
 - Slack 채널에 장애 공지
 - 예상 복구 시간 안내
 - 복구 완료 후 사후 분석(Postmortem) 작성
+
+---
+
+## 자동 백업 설정
+
+macOS `launchd` 기반으로 매일 자동 DB 백업을 실행합니다.
+
+### 구성 요소
+
+| 파일 | 역할 |
+|------|------|
+| `infra/scripts/backup-all.sh` | 통합 백업 (Postgres + Redis + Qdrant) |
+| `infra/scripts/restore-all.sh` | 통합 복원 (한번에 전체 복원) |
+| `infra/scripts/backup-db.sh` | PostgreSQL 단독 백업 (레거시) |
+| `infra/scripts/com.aos.db-backup.plist` | launchd 스케줄 템플릿 |
+| `infra/scripts/setup-auto-backup.sh` | 설치/제거/상태 관리 CLI |
+
+### 설치
+
+```bash
+cd infra/scripts
+./setup-auto-backup.sh install
+```
+
+설치 시 `com.aos.db-backup.plist` 템플릿의 `__PROJECT_ROOT__`, `__LOG_DIR__` 플레이스홀더가 실제 경로로 치환되어 `~/Library/LaunchAgents/`에 복사됩니다.
+
+### 관리 명령어
+
+```bash
+./setup-auto-backup.sh status     # 상태 확인 (설치 여부, 최신 백업, 총 백업 수)
+./setup-auto-backup.sh run        # 즉시 백업 실행
+./setup-auto-backup.sh uninstall  # 자동 백업 제거
+```
+
+### 수동 백업/복원
+
+```bash
+# 전체 백업 (Postgres + Redis + Qdrant)
+./infra/scripts/backup-all.sh --verify
+
+# 전체 복원 (최신 백업)
+./infra/scripts/restore-all.sh latest
+
+# 특정 시점 복원
+./infra/scripts/restore-all.sh 20260416_030205
+
+# 복원 미리보기 (실행 안 함)
+./infra/scripts/restore-all.sh latest --dry-run
+```
+
+### 동작 방식
+
+| 항목 | 값 |
+|------|-----|
+| 스케줄 | 매일 03:00 (launchd `StartCalendarInterval`) |
+| 대상 | PostgreSQL + Redis + Qdrant (통합) |
+| 검증 | `pg_restore --list`로 무결성 확인 (`--verify`) |
+| 보관 기간 | 30일 (이후 자동 삭제) |
+| 로그 | `infra/backups/logs/backup-stdout.log`, `backup-stderr.log` |
+
+### 백업 디렉토리 구조
+
+```
+infra/backups/
+├── 20260416_030205/          # 타임스탬프 디렉토리
+│   ├── postgres.dump         # PostgreSQL (pg_dump custom format)
+│   ├── redis.rdb             # Redis RDB snapshot
+│   ├── qdrant.snapshot       # Qdrant full snapshot
+│   └── manifest.json         # 메타데이터 (서비스별 상태)
+├── latest -> 20260416_030205 # 최신 백업 심링크
+└── logs/
+    ├── backup-stdout.log
+    └── backup-stderr.log
+```
+
+### 놓친 백업 실행
+
+macOS `StartCalendarInterval`은 컴퓨터가 꺼져 있거나 잠자기 상태였던 스케줄을 깨어난 후 자동 실행합니다. 별도 설정 없이 놓친 백업이 복구됩니다.
+
+### 환경 변수 (선택)
+
+plist 내 기본값이 설정되어 있으며, 필요 시 수정 가능합니다:
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `CONTAINER_NAME` | `aos-postgres` | PostgreSQL 컨테이너 |
+| `REDIS_CONTAINER` | `aos-redis` | Redis 컨테이너 |
+| `DB_USER` | `aos` | 데이터베이스 사용자 |
+| `DB_NAME` | `aos` | 데이터베이스 이름 |
+| `QDRANT_URL` | `http://localhost:6333` | Qdrant 엔드포인트 |
 
 ---
 

@@ -67,12 +67,12 @@ import { cn } from '@/lib/utils';
 | `NotificationsPage` | `/notifications` | 알림 규칙/채널 설정 |
 | `PlaygroundPage` | `/playground` | 에이전트 테스트 환경 |
 | `ProjectManagementPage` | `/project-management` | DB 기반 프로젝트 레지스트리 관리 (CRUD, soft-delete, 복원) |
-| `OrganizationsPage` | `/organizations` | 조직 관리 (멤버, 역할, 통계) |
+| `OrganizationsPage` | `/organizations` | 조직 관리 (Overview/Members/Settings 3탭, 소스 유저 매핑) |
 | `WorkflowsPage` | `/workflows` | 워크플로우 자동화 (CI/CD 파이프라인 관리) |
 | `ExternalUsagePage` | `/external-usage` | 외부 LLM 프로바이더 사용량 모니터링 (비용, 토큰, 프로바이더별 현황) |
 | `AdminPage` | `/admin` | 관리자 페이지 (사용자 관리, 메뉴 설정, 시스템 정보) |
 | `SessionsPage` | `/sessions` | 세션 활동 뷰 (ClaudeCodeActivity 래핑) |
-| `SettingsPage` | `/settings` | 시스템 설정 |
+| `SettingsPage` | `/settings` | 시스템 설정 (Claude Code OAuth 인증, 터미널 감지) |
 | `LoginPage` | `/login` | OAuth/Email 로그인 |
 | `RegisterPage` | `/register` | 이메일/비밀번호 회원가입 |
 | `AuthCallbackPage` | `/auth/callback` | OAuth 콜백 처리 (App.tsx에서 eager 로딩) |
@@ -227,10 +227,12 @@ import { cn } from '@/lib/utils';
 | `OrganizationFormModal` | 조직 생성/수정 모달 |
 | `OrganizationStats` | 조직 통계 패널 |
 | `QuotaStatusPanel` | Quota 사용량 패널 (멤버/프로젝트/세션/토큰 progress bar) |
-| `MemberUsagePanel` | 멤버별 사용량 분석 패널 (토큰/세션 per-member, 기간 선택) |
-| `MemberList` | 멤버 목록 컨테이너 |
+| `MemberUsagePanel` | 멤버별 사용량 분석 패널 (기간 선택, 요약 통계, 클릭→상세) |
+| `MemberDetailPanel` | 멤버 상세 슬라이드 패널 (Overview/Usage Trend/Model Breakdown 3탭, Recharts 차트) |
+| `MemberList` | 멤버 목록 (클릭→MemberDetailPanel 연동, 역할순 정렬) |
 | `MemberCard` | 멤버 카드 (역할 변경, 제거) |
 | `InviteMemberModal` | 멤버 초대 모달 |
+| `SourceUserMapping` | Claude Code OS 유저네임→조직 멤버 매핑 UI (사용량 추적용) |
 
 ### Project Management Components
 
@@ -314,7 +316,7 @@ import { cn } from '@/lib/utils';
 | 컴포넌트 | 설명 |
 |----------|------|
 | `MenuSettingsTab` | 메뉴 가시성/순서 설정 (드래그 앤 드롭) |
-| `UserManagementTab` | 사용자 관리 (역할 변경, 활성화) |
+| `UserManagementTab` | 사용자 관리 (검색, 필터, 배치 작업, 역할 변경, 삭제, 페이지네이션) |
 | `SystemInfoTab` | 시스템 정보 조회 |
 
 ### Permission Components
@@ -376,7 +378,7 @@ import { cn } from '@/lib/utils';
 | `useMonitoringStore` | `monitoring.ts` | 프로젝트 모니터링 |
 | `useSettingsStore` | `settings.ts` | 설정 상태 |
 | `useGitStore` | `git.ts` | Git 브랜치/머지 관리, Worktree 관리 (`GitWorktree`, `worktrees`, `selectedWorktreePath`, `fetchWorktrees`, `setSelectedWorktree`), Staging 강화 (`fetchFileDiff`, `fetchFileHunks`, `stageHunks`, `fetchStagedDiff`), Draft Commits (`DraftCommit`, `generateDraftCommits`, `clearDraftCommits`), Remote 관리 (`fetchRemotes`, `addRemote`, `removeRemote`, `updateRemote`), Commit 상세 (`fetchCommitFiles`, `fetchCommitDiff`) |
-| `useOrganizationsStore` | `organizations.ts` | 조직/멤버 관리 |
+| `useOrganizationsStore` | `organizations.ts` | 조직/멤버 관리, 멤버 사용량 (`fetchMemberUsage`, `fetchMemberUsageDetail`), 소스 유저 매핑 |
 | `useAuditStore` | `audit.ts` | 감사 로그 |
 | `useMenuVisibilityStore` | `menuVisibility.ts` | 메뉴 가시성 및 순서 |
 | `useProjectAccessStore` | `projectAccess.ts` | 프로젝트별 멤버/역할 관리 |

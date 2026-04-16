@@ -578,3 +578,75 @@ async def get_quota_status(
 
     status = QuotaService.get_quota_status(org, sessions_today)
     return status.model_dump()
+
+
+# ─────────────────────────────────────────────────────────────
+# Source User Mapping
+# ─────────────────────────────────────────────────────────────
+
+
+class SourceUserMapRequest(BaseModel):
+    """Map org member user_ids to claude source_user names."""
+
+    source_user_map: dict[str, str]  # {user_id: source_user}
+
+
+@router.get("/{org_id}/source-user-map")
+async def get_source_user_map(
+    org_id: str,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Get source_user mapping and available source_users. Requires admin role."""
+    await require_org_role(org_id, current_user, db, min_role=MemberRole.ADMIN)
+
+    from sqlalchemy import select
+
+    from db.models import ClaudeSessionSnapshotModel, OrganizationModel
+
+    # Get current mapping from org settings
+    result = await db.execute(
+        select(OrganizationModel.settings).where(OrganizationModel.id == org_id)
+    )
+    settings = result.scalar_one_or_none() or {}
+    current_map = settings.get("source_user_map", {})
+
+    # Get available source_users from snapshots
+    result = await db.execute(
+        select(ClaudeSessionSnapshotModel.source_user)
+        .where(ClaudeSessionSnapshotModel.source_user.isnot(None))
+        .distinct()
+    )
+    available = [row[0] for row in result.fetchall()]
+
+    return {
+        "source_user_map": current_map,
+        "available_source_users": available,
+    }
+
+
+@router.put("/{org_id}/source-user-map")
+async def update_source_user_map(
+    org_id: str,
+    data: SourceUserMapRequest,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Update source_user mapping. Requires admin role."""
+    await require_org_role(org_id, current_user, db, min_role=MemberRole.ADMIN)
+
+    from sqlalchemy import select
+
+    from db.models import OrganizationModel
+
+    result = await db.execute(select(OrganizationModel).where(OrganizationModel.id == org_id))
+    org = result.scalar_one_or_none()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    settings = dict(org.settings or {})
+    settings["source_user_map"] = data.source_user_map
+    org.settings = settings
+
+    await db.commit()
+    return {"success": True, "source_user_map": data.source_user_map}

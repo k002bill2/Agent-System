@@ -4,7 +4,6 @@ All models are re-exported here for backward compatibility.
 Usage: from db.models import SessionModel, TaskModel, ...
 """
 
-# Session & Core
 # Activity
 from db.models.activity import (
     MenuVisibilityModel,
@@ -21,6 +20,12 @@ from db.models.auth import (
     TokenBlacklistModel,
     UserModel,
 )
+
+# Claude Session
+from db.models.claude_session import ClaudeSessionSnapshotModel
+
+# Config Version
+from db.models.config_version import ConfigVersionModel
 
 # Cost
 from db.models.cost import (
@@ -47,6 +52,9 @@ from db.models.llm import (
     UserLLMCredentialModel,
 )
 
+# Model Update
+from db.models.model_update import ModelUpdateLogModel
+
 # Notification
 from db.models.notification import (
     ChannelConfigModel,
@@ -60,6 +68,9 @@ from db.models.organization import (
     OrganizationMemberModel,
     OrganizationModel,
 )
+
+# Playground
+from db.models.playground import PlaygroundSessionModel
 
 # Project
 from db.models.project import (
@@ -133,7 +144,15 @@ __all__ = [
     "WorkflowWebhookModel",
     "WorkflowArtifactModel",
     "WorkflowTemplateModel",
+    # Claude Session
+    "ClaudeSessionSnapshotModel",
     # LLM
     "LLMModelConfigModel",
     "UserLLMCredentialModel",
+    # Config Version
+    "ConfigVersionModel",
+    # Playground
+    "PlaygroundSessionModel",
+    # Model Update
+    "ModelUpdateLogModel",
 ]

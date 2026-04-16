@@ -186,10 +186,12 @@ class MemberUsageSummary(BaseModel):
     role: MemberRole = MemberRole.MEMBER
     tokens_used_today: int = 0
     tokens_used_this_month: int = 0
+    tokens_used_period: int = 0  # tokens for selected period (day/week/month)
     sessions_today: int = 0
     sessions_this_month: int = 0
+    sessions_period: int = 0  # sessions for selected period
     last_active_at: datetime | None = None
-    percentage_of_org: float = 0.0  # % of org total usage
+    percentage_of_org: float = 0.0  # % of org total usage in selected period
 
 
 class MemberUsageResponse(BaseModel):

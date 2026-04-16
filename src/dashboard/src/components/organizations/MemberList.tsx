@@ -32,6 +32,7 @@ export function MemberList({
   } = useOrganizationsStore()
 
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null)
+  const [expandedUserIdRef, setExpandedUserIdRef] = useState<string | null>(null)
   const canManageMembers = currentUserRole === 'owner' || currentUserRole === 'admin'
 
   // Sort: owner first, then admin, member, viewer
@@ -43,6 +44,7 @@ export function MemberList({
   // Clean up on member list change
   useEffect(() => {
     setExpandedMemberId(null)
+    setExpandedUserIdRef(null)
     clearMemberUsageDetail()
   }, [members.length, clearMemberUsageDetail])
 
@@ -50,10 +52,12 @@ export function MemberList({
     (member: OrganizationMember) => {
       if (expandedMemberId === member.id) {
         setExpandedMemberId(null)
+        setExpandedUserIdRef(null)
         clearMemberUsageDetail()
       } else {
         clearMemberUsageDetail()
         setExpandedMemberId(member.id)
+        setExpandedUserIdRef(member.user_id)
         fetchMemberUsageDetail(member.organization_id, member.user_id, 'month', member.id)
       }
     },
@@ -62,6 +66,7 @@ export function MemberList({
 
   const handleDetailClose = useCallback(() => {
     setExpandedMemberId(null)
+    setExpandedUserIdRef(null)
     clearMemberUsageDetail()
   }, [clearMemberUsageDetail])
 
@@ -114,27 +119,34 @@ export function MemberList({
       ) : (
         <div className="space-y-3">
           {sortedMembers.map((member) => (
-            <div key={member.id}>
-              <MemberCard
-                member={member}
-                currentUserId={currentUserId}
-                canManage={canManageMembers}
-                isExpanded={expandedMemberId === member.id}
-                onUpdateRole={(role) => onUpdateRole(member.id, role)}
-                onRemove={() => onRemove(member.id)}
-                onClick={() => handleMemberClick(member)}
-              />
-              {expandedMemberId === member.id && (
-                <MemberDetailPanel
-                  detail={memberUsageDetail?.user_id === member.user_id ? memberUsageDetail : null}
-                  isLoading={isMemberDetailLoading || memberUsageDetail?.user_id !== member.user_id}
-                  onClose={handleDetailClose}
-                />
-              )}
-            </div>
+            <MemberCard
+              key={member.id}
+              member={member}
+              currentUserId={currentUserId}
+              canManage={canManageMembers}
+              isExpanded={expandedMemberId === member.id}
+              onUpdateRole={(role) => onUpdateRole(member.id, role)}
+              onRemove={() => onRemove(member.id)}
+              onClick={() => handleMemberClick(member)}
+            />
           ))}
         </div>
       )}
+
+      {/* Right slide detail panel */}
+      <MemberDetailPanel
+        detail={
+          expandedMemberId !== null && memberUsageDetail?.user_id === expandedUserIdRef
+            ? memberUsageDetail
+            : null
+        }
+        isLoading={
+          expandedMemberId !== null &&
+          (isMemberDetailLoading || memberUsageDetail?.user_id !== expandedUserIdRef)
+        }
+        isOpen={expandedMemberId !== null}
+        onClose={handleDetailClose}
+      />
     </div>
   )
 }

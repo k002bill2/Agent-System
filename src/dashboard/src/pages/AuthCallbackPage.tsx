@@ -61,11 +61,16 @@ export function AuthCallbackPage({ provider }: AuthCallbackPageProps) {
 
         setStatus('success')
 
-        // Clean up URL and redirect to dashboard after a short delay
+        // Clean up URL and redirect (invitation or dashboard)
         window.history.replaceState({}, '', '/')
         setTimeout(() => {
-          // Setting view to dashboard
-          setView('dashboard')
+          const redirectUrl = sessionStorage.getItem('redirectAfterLogin')
+          if (redirectUrl) {
+            sessionStorage.removeItem('redirectAfterLogin')
+            window.location.href = redirectUrl
+          } else {
+            setView('dashboard')
+          }
         }, 1500)
       } catch (err) {
         console.error('OAuth callback error:', err)

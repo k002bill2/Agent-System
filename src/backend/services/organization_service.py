@@ -41,6 +41,7 @@ try:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from db.models import (
+        ClaudeSessionSnapshotModel,
         OrganizationInvitationModel,
         OrganizationMemberModel,
         OrganizationModel,
@@ -428,7 +429,13 @@ class OrganizationService:
         if not invitation:
             raise ValueError("Invalid or expired invitation")
 
-        if invitation.expires_at < utcnow():
+        # Strip tzinfo for naive UTC comparison (DB may return aware datetimes)
+        expires_at = (
+            invitation.expires_at.replace(tzinfo=None)
+            if invitation.expires_at.tzinfo
+            else invitation.expires_at
+        )
+        if expires_at < utcnow():
             raise ValueError("Invitation has expired")
 
         org = _organizations.get(invitation.organization_id)
@@ -725,10 +732,11 @@ class OrganizationService:
         members = OrganizationService.get_members(org_id)
 
         # Aggregate by user_id
-        user_tokens: dict[str, int] = {}
+        user_tokens_period: dict[str, int] = {}
         user_tokens_today: dict[str, int] = {}
         user_tokens_month: dict[str, int] = {}
-        user_sessions: dict[str, set] = {}
+        user_sessions_period: dict[str, set] = {}
+        user_sessions_month: dict[str, set] = {}
         user_sessions_today: dict[str, set] = {}
         user_last_active: dict[str, datetime] = {}
 
@@ -742,9 +750,9 @@ class OrganizationService:
             if record.timestamp >= month_start:
                 user_tokens_month[uid] = user_tokens_month.get(uid, 0) + record.tokens
                 if record.session_id:
-                    if uid not in user_sessions:
-                        user_sessions[uid] = set()
-                    user_sessions[uid].add(record.session_id)
+                    if uid not in user_sessions_month:
+                        user_sessions_month[uid] = set()
+                    user_sessions_month[uid].add(record.session_id)
 
             # Today tokens
             if record.timestamp >= today_start:
@@ -754,22 +762,26 @@ class OrganizationService:
                         user_sessions_today[uid] = set()
                     user_sessions_today[uid].add(record.session_id)
 
-            # Period tokens
+            # Period tokens (based on selected cutoff)
             if record.timestamp >= cutoff:
-                user_tokens[uid] = user_tokens.get(uid, 0) + record.tokens
+                user_tokens_period[uid] = user_tokens_period.get(uid, 0) + record.tokens
+                if record.session_id:
+                    if uid not in user_sessions_period:
+                        user_sessions_period[uid] = set()
+                    user_sessions_period[uid].add(record.session_id)
 
             # Last active
             if uid not in user_last_active or record.timestamp > user_last_active[uid]:
                 user_last_active[uid] = record.timestamp
 
-        total_tokens = sum(user_tokens.values())
+        total_tokens = sum(user_tokens_period.values())
 
         # Build member summaries
         summaries: list[MemberUsageSummary] = []
         for member in members:
             uid = member.user_id
-            month_tokens = user_tokens_month.get(uid, 0)
-            pct = (month_tokens / total_tokens * 100) if total_tokens > 0 else 0.0
+            period_tokens = user_tokens_period.get(uid, 0)
+            pct = (period_tokens / total_tokens * 100) if total_tokens > 0 else 0.0
 
             summaries.append(
                 MemberUsageSummary(
@@ -779,16 +791,18 @@ class OrganizationService:
                     name=member.name,
                     role=member.role,
                     tokens_used_today=user_tokens_today.get(uid, 0),
-                    tokens_used_this_month=month_tokens,
+                    tokens_used_this_month=user_tokens_month.get(uid, 0),
+                    tokens_used_period=period_tokens,
                     sessions_today=len(user_sessions_today.get(uid, set())),
-                    sessions_this_month=len(user_sessions.get(uid, set())),
+                    sessions_this_month=len(user_sessions_month.get(uid, set())),
+                    sessions_period=len(user_sessions_period.get(uid, set())),
                     last_active_at=user_last_active.get(uid),
                     percentage_of_org=round(pct, 1),
                 )
             )
 
-        # Sort by tokens used this month (desc)
-        summaries.sort(key=lambda s: s.tokens_used_this_month, reverse=True)
+        # Sort by period tokens (desc)
+        summaries.sort(key=lambda s: s.tokens_used_period, reverse=True)
 
         return MemberUsageResponse(
             organization_id=org_id,
@@ -1291,7 +1305,13 @@ class OrganizationService:
         if not invitation:
             raise ValueError("Invalid or expired invitation")
 
-        if invitation.expires_at < utcnow():
+        # Strip tzinfo for naive UTC comparison (DB may return aware datetimes)
+        expires_at = (
+            invitation.expires_at.replace(tzinfo=None)
+            if invitation.expires_at.tzinfo
+            else invitation.expires_at
+        )
+        if expires_at < utcnow():
             raise ValueError("Invitation has expired")
 
         # Get org
@@ -1592,6 +1612,70 @@ class OrganizationService:
         await db.commit()
         return True
 
+    # ─────────────────────────────────────────────────────────────
+    # Claude Session Snapshot Helpers
+    # ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    async def _resolve_source_user(
+        db: AsyncSession,
+        org_id: str,
+        user_id: str,
+    ) -> str | None:
+        """Resolve claude source_user for a given org member.
+
+        Checks org settings 'source_user_map' first, then auto-detects
+        if only one source_user exists in snapshots.
+        """
+        result = await db.execute(
+            select(OrganizationModel.settings).where(OrganizationModel.id == org_id)
+        )
+        settings = result.scalar_one_or_none() or {}
+        source_map: dict[str, str] = settings.get("source_user_map", {})
+
+        if user_id in source_map:
+            return source_map[user_id]
+
+        # If explicit map exists but this user isn't in it, don't auto-detect
+        if source_map:
+            return None
+
+        # Auto-detect: if only 1 distinct source_user and 1 org member, use it
+        result = await db.execute(
+            select(ClaudeSessionSnapshotModel.source_user)
+            .where(ClaudeSessionSnapshotModel.source_user.isnot(None))
+            .distinct()
+        )
+        source_users = [row[0] for row in result.fetchall()]
+
+        if len(source_users) == 1:
+            return source_users[0]
+
+        return None
+
+    @staticmethod
+    async def _get_org_source_users(
+        db: AsyncSession,
+        org_id: str,
+    ) -> list[str]:
+        """Get all source_users that belong to this org."""
+        result = await db.execute(
+            select(OrganizationModel.settings).where(OrganizationModel.id == org_id)
+        )
+        settings = result.scalar_one_or_none() or {}
+        source_map: dict[str, str] = settings.get("source_user_map", {})
+
+        if source_map:
+            return list(set(source_map.values()))
+
+        # Fallback: all distinct source_users from snapshots
+        result = await db.execute(
+            select(ClaudeSessionSnapshotModel.source_user)
+            .where(ClaudeSessionSnapshotModel.source_user.isnot(None))
+            .distinct()
+        )
+        return [row[0] for row in result.fetchall()]
+
     @staticmethod
     async def get_organization_stats_async(
         db: AsyncSession,
@@ -1599,7 +1683,7 @@ class OrganizationService:
     ) -> OrganizationStats:
         """Get statistics for an organization (async DB version).
 
-        Note: Member info from DB, usage data from in-memory _member_usage (no DB table yet).
+        Queries claude_session_snapshots for real usage data.
         """
         members = await OrganizationService.get_members_async(db, org_id)
         org_result = await db.execute(
@@ -1610,45 +1694,53 @@ class OrganizationService:
         now = utcnow()
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         week_start = now - timedelta(days=7)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-        # Aggregate usage from in-memory member records
+        source_users = await OrganizationService._get_org_source_users(db, org_id)
+
         tokens_today = 0
-        sessions_today: set[str] = set()
-        sessions_week: set[str] = set()
-        sessions_all: set[str] = set()
-        api_calls_today = 0
-        active_member_ids: set[str] = set()
+        tokens_month = 0
+        sessions_today = 0
+        sessions_week = 0
+        sessions_all = 0
+        cost_this_month = 0.0
 
-        for record in _member_usage.values():
-            if record.organization_id != org_id:
-                continue
-            if record.session_id:
-                sessions_all.add(record.session_id)
-            if record.timestamp >= today_start:
-                tokens_today += record.tokens
-                api_calls_today += 1
-                if record.session_id:
-                    sessions_today.add(record.session_id)
-                active_member_ids.add(record.user_id)
-            if record.timestamp >= week_start and record.session_id:
-                sessions_week.add(record.session_id)
+        if source_users:
+            result = await db.execute(
+                select(ClaudeSessionSnapshotModel).where(
+                    ClaudeSessionSnapshotModel.source_user.in_(source_users)
+                )
+            )
+            snapshots = result.scalars().all()
 
-        tokens_month = org.tokens_used_this_month if org else 0
-        cost_this_month = round(tokens_month / 1000 * 0.01, 2)
+            for snap in snapshots:
+                ts = snap.session_created_at or snap.created_at
+                if ts.tzinfo is not None:
+                    ts = ts.replace(tzinfo=None)
+                tok = (snap.total_input_tokens or 0) + (snap.total_output_tokens or 0)
+                sessions_all += 1
+                if ts >= month_start:
+                    tokens_month += tok
+                    cost_this_month += snap.estimated_cost or 0.0
+                if ts >= today_start:
+                    tokens_today += tok
+                    sessions_today += 1
+                if ts >= week_start:
+                    sessions_week += 1
 
         return OrganizationStats(
             organization_id=org_id,
             total_members=len(members),
-            active_members=len(active_member_ids) or len([m for m in members if m.is_active]),
+            active_members=len([m for m in members if m.is_active]),
             total_projects=org.current_projects if org else 0,
             active_projects=org.current_projects if org else 0,
-            total_sessions=len(sessions_all),
-            sessions_today=len(sessions_today),
-            sessions_this_week=len(sessions_week),
+            total_sessions=sessions_all,
+            sessions_today=sessions_today,
+            sessions_this_week=sessions_week,
             tokens_used_today=tokens_today,
             tokens_used_this_month=tokens_month,
-            total_cost_this_month=cost_this_month,
-            api_calls_today=api_calls_today,
+            total_cost_this_month=round(cost_this_month, 2),
+            api_calls_today=sessions_today,
         )
 
     @staticmethod
@@ -1659,47 +1751,75 @@ class OrganizationService:
     ) -> MemberUsageResponse:
         """Get per-member usage breakdown (async DB version).
 
-        Note: Member info from DB, usage data from in-memory _member_usage.
+        Queries claude_session_snapshots for real usage data.
         """
         now = utcnow()
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
+        if period == "day":
+            period_start = today_start
+        elif period == "week":
+            period_start = now - timedelta(days=7)
+        else:
+            period_start = month_start
+
         members = await OrganizationService.get_members_async(db, org_id)
 
-        # Aggregate by user_id from in-memory usage
+        # Resolve source_user for each member
+        user_source: dict[str, str | None] = {}
+        for member in members:
+            user_source[member.user_id] = await OrganizationService._resolve_source_user(
+                db, org_id, member.user_id
+            )
+
+        # Build reverse map: source_user -> user_id
+        source_to_uid: dict[str, str] = {su: uid for uid, su in user_source.items() if su}
+
+        # Aggregate by user_id from snapshots
         user_tokens_today: dict[str, int] = {}
         user_tokens_month: dict[str, int] = {}
-        user_sessions: dict[str, set] = {}
-        user_sessions_today: dict[str, set] = {}
+        user_tokens_period: dict[str, int] = {}
+        user_sessions_month: dict[str, int] = {}
+        user_sessions_today: dict[str, int] = {}
+        user_sessions_period: dict[str, int] = {}
         user_last_active: dict[str, datetime] = {}
 
-        for record in _member_usage.values():
-            if record.organization_id != org_id:
-                continue
-            uid = record.user_id
-            if record.timestamp >= month_start:
-                user_tokens_month[uid] = user_tokens_month.get(uid, 0) + record.tokens
-                if record.session_id:
-                    if uid not in user_sessions:
-                        user_sessions[uid] = set()
-                    user_sessions[uid].add(record.session_id)
-            if record.timestamp >= today_start:
-                user_tokens_today[uid] = user_tokens_today.get(uid, 0) + record.tokens
-                if record.session_id:
-                    if uid not in user_sessions_today:
-                        user_sessions_today[uid] = set()
-                    user_sessions_today[uid].add(record.session_id)
-            if uid not in user_last_active or record.timestamp > user_last_active[uid]:
-                user_last_active[uid] = record.timestamp
+        all_source = list(source_to_uid.keys())
+        if all_source:
+            result = await db.execute(
+                select(ClaudeSessionSnapshotModel).where(
+                    ClaudeSessionSnapshotModel.source_user.in_(all_source)
+                )
+            )
+            for snap in result.scalars().all():
+                uid = source_to_uid.get(snap.source_user)
+                if not uid:
+                    continue
+                ts = snap.session_created_at or snap.created_at
+                if ts.tzinfo is not None:
+                    ts = ts.replace(tzinfo=None)
+                tok = (snap.total_input_tokens or 0) + (snap.total_output_tokens or 0)
 
-        total_tokens = sum(user_tokens_month.values())
+                if ts >= month_start:
+                    user_tokens_month[uid] = user_tokens_month.get(uid, 0) + tok
+                    user_sessions_month[uid] = user_sessions_month.get(uid, 0) + 1
+                if ts >= today_start:
+                    user_tokens_today[uid] = user_tokens_today.get(uid, 0) + tok
+                    user_sessions_today[uid] = user_sessions_today.get(uid, 0) + 1
+                if ts >= period_start:
+                    user_tokens_period[uid] = user_tokens_period.get(uid, 0) + tok
+                    user_sessions_period[uid] = user_sessions_period.get(uid, 0) + 1
+                if uid not in user_last_active or ts > user_last_active[uid]:
+                    user_last_active[uid] = ts
+
+        total_tokens = sum(user_tokens_period.values())
 
         summaries: list[MemberUsageSummary] = []
         for member in members:
             uid = member.user_id
-            month_tokens = user_tokens_month.get(uid, 0)
-            pct = (month_tokens / total_tokens * 100) if total_tokens > 0 else 0.0
+            period_tokens = user_tokens_period.get(uid, 0)
+            pct = (period_tokens / total_tokens * 100) if total_tokens > 0 else 0.0
             summaries.append(
                 MemberUsageSummary(
                     id=member.id,
@@ -1708,14 +1828,16 @@ class OrganizationService:
                     name=member.name,
                     role=member.role,
                     tokens_used_today=user_tokens_today.get(uid, 0),
-                    tokens_used_this_month=month_tokens,
-                    sessions_today=len(user_sessions_today.get(uid, set())),
-                    sessions_this_month=len(user_sessions.get(uid, set())),
+                    tokens_used_this_month=user_tokens_month.get(uid, 0),
+                    tokens_used_period=period_tokens,
+                    sessions_today=user_sessions_today.get(uid, 0),
+                    sessions_this_month=user_sessions_month.get(uid, 0),
+                    sessions_period=user_sessions_period.get(uid, 0),
                     last_active_at=user_last_active.get(uid),
                     percentage_of_org=round(pct, 1),
                 )
             )
-        summaries.sort(key=lambda s: s.tokens_used_this_month, reverse=True)
+        summaries.sort(key=lambda s: s.tokens_used_period, reverse=True)
 
         return MemberUsageResponse(
             organization_id=org_id,
@@ -1734,7 +1856,7 @@ class OrganizationService:
     ) -> MemberUsageDetail | None:
         """Get detailed usage for a specific member (async DB version).
 
-        Note: Member info from DB, usage data from in-memory _member_usage.
+        Queries claude_session_snapshots for real usage data.
         """
         member = None
         if member_id:
@@ -1757,6 +1879,9 @@ class OrganizationService:
         if not member:
             return None
 
+        # Resolve source_user for this member
+        source_user = await OrganizationService._resolve_source_user(db, org_id, user_id)
+
         now = utcnow()
         if period == "day":
             cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1768,56 +1893,69 @@ class OrganizationService:
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-        daily_buckets: dict[str, dict[str, int | set]] = {}
+        daily_buckets: dict[str, dict[str, int | float]] = {}
         model_tokens: dict[str, int] = {}
-        model_sessions: dict[str, set[str]] = {}
+        model_sessions: dict[str, int] = {}
         tokens_today = 0
         tokens_month = 0
-        sessions_today: set[str] = set()
-        sessions_month: set[str] = set()
+        cost_month = 0.0
+        sessions_today = 0
+        sessions_month = 0
         total_org_tokens = 0
         last_active: datetime | None = None
 
-        for record in _member_usage.values():
-            if record.organization_id != org_id:
-                continue
-            if record.timestamp >= month_start:
-                total_org_tokens += record.tokens
-            if record.user_id != user_id:
-                continue
-            if record.timestamp >= month_start:
-                tokens_month += record.tokens
-                if record.session_id:
-                    sessions_month.add(record.session_id)
-            if record.timestamp >= today_start:
-                tokens_today += record.tokens
-                if record.session_id:
-                    sessions_today.add(record.session_id)
-            if record.timestamp >= cutoff:
-                date_key = record.timestamp.strftime("%Y-%m-%d")
-                if date_key not in daily_buckets:
-                    daily_buckets[date_key] = {"tokens": 0, "sessions": set()}
-                daily_buckets[date_key]["tokens"] += record.tokens  # type: ignore[operator]
-                if record.session_id:
-                    daily_buckets[date_key]["sessions"].add(record.session_id)  # type: ignore[union-attr]
-                model_name = record.model or "Unknown"
-                model_tokens[model_name] = model_tokens.get(model_name, 0) + record.tokens
-                if record.session_id:
-                    if model_name not in model_sessions:
-                        model_sessions[model_name] = set()
-                    model_sessions[model_name].add(record.session_id)
-            if last_active is None or record.timestamp > last_active:
-                last_active = record.timestamp
+        if source_user:
+            # Get total org tokens for percentage calculation
+            org_source_users = await OrganizationService._get_org_source_users(db, org_id)
+            result = await db.execute(
+                select(ClaudeSessionSnapshotModel).where(
+                    ClaudeSessionSnapshotModel.source_user.in_(org_source_users)
+                )
+            )
+            for snap in result.scalars().all():
+                ts = snap.session_created_at or snap.created_at
+                if ts.tzinfo is not None:
+                    ts = ts.replace(tzinfo=None)
+                tok = (snap.total_input_tokens or 0) + (snap.total_output_tokens or 0)
+
+                if ts >= month_start:
+                    total_org_tokens += tok
+
+                # Only aggregate this user's data
+                if snap.source_user != source_user:
+                    continue
+
+                if ts >= month_start:
+                    tokens_month += tok
+                    sessions_month += 1
+                    cost_month += snap.estimated_cost or 0.0
+                if ts >= today_start:
+                    tokens_today += tok
+                    sessions_today += 1
+                if ts >= cutoff:
+                    date_key = ts.strftime("%Y-%m-%d")
+                    if date_key not in daily_buckets:
+                        daily_buckets[date_key] = {"tokens": 0, "sessions": 0, "cost": 0.0}
+                    daily_buckets[date_key]["tokens"] += tok
+                    daily_buckets[date_key]["sessions"] += 1
+                    daily_buckets[date_key]["cost"] += snap.estimated_cost or 0.0
+
+                    model_name = snap.model or "Unknown"
+                    model_tokens[model_name] = model_tokens.get(model_name, 0) + tok
+                    model_sessions[model_name] = model_sessions.get(model_name, 0) + 1
+
+                if last_active is None or ts > last_active:
+                    last_active = ts
 
         daily_usage = sorted(
             [
                 MemberDailyUsage(
-                    date=date_key,
-                    tokens=bucket["tokens"],  # type: ignore[arg-type]
-                    sessions=len(bucket["sessions"]),  # type: ignore[arg-type]
-                    cost_usd=round(bucket["tokens"] / 1000 * 0.01, 4),  # type: ignore[operator]
+                    date=dk,
+                    tokens=int(bk["tokens"]),
+                    sessions=int(bk["sessions"]),
+                    cost_usd=round(bk["cost"], 4),
                 )
-                for date_key, bucket in daily_buckets.items()
+                for dk, bk in daily_buckets.items()
             ],
             key=lambda d: d.date,
         )
@@ -1826,12 +1964,12 @@ class OrganizationService:
         model_usage = sorted(
             [
                 MemberModelUsage(
-                    model=model_name,
-                    tokens=tokens,
-                    sessions=len(model_sessions.get(model_name, set())),
-                    percentage=round(tokens / total_model_tokens * 100, 1),
+                    model=mn,
+                    tokens=tk,
+                    sessions=model_sessions.get(mn, 0),
+                    percentage=round(tk / total_model_tokens * 100, 1),
                 )
-                for model_name, tokens in model_tokens.items()
+                for mn, tk in model_tokens.items()
             ],
             key=lambda m: m.tokens,
             reverse=True,
@@ -1851,9 +1989,9 @@ class OrganizationService:
             last_active_at=last_active or member.last_active_at,
             tokens_used_today=tokens_today,
             tokens_used_this_month=tokens_month,
-            sessions_today=len(sessions_today),
-            sessions_this_month=len(sessions_month),
-            total_cost_usd=round(tokens_month / 1000 * 0.01, 4),
+            sessions_today=sessions_today,
+            sessions_this_month=sessions_month,
+            total_cost_usd=round(cost_month, 4),
             percentage_of_org=pct,
             daily_usage=daily_usage,
             model_usage=model_usage,

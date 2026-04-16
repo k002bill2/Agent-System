@@ -27,7 +27,7 @@ function UsageBar({
   onClick: () => void
 }) {
   const barWidth = maxTokens > 0
-    ? Math.max((member.tokens_used_this_month / maxTokens) * 100, 2)
+    ? Math.max((member.tokens_used_period / maxTokens) * 100, 2)
     : 0
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -80,12 +80,12 @@ function UsageBar({
             </span>
           </div>
           <div className="flex items-center gap-3 flex-shrink-0 ml-2">
-            <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400" title="Sessions this month">
+            <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400" title="Sessions">
               <Activity className="w-3 h-3" />
-              <span>{member.sessions_this_month}</span>
+              <span>{member.sessions_period}</span>
             </div>
             <span className="text-sm font-semibold text-gray-900 dark:text-white">
-              {member.tokens_used_this_month.toLocaleString()}
+              {member.tokens_used_period.toLocaleString()}
               <span className="text-xs font-normal text-gray-400 ml-1">tokens</span>
             </span>
           </div>
@@ -98,8 +98,8 @@ function UsageBar({
               className={cn(
                 'h-full rounded-full transition-all duration-500',
                 member.percentage_of_org > 50
-                  ? 'bg-primary-500'
-                  : member.percentage_of_org > 25
+                ? 'bg-primary-500'
+                : member.percentage_of_org > 25
                   ? 'bg-blue-500'
                   : 'bg-emerald-500'
               )}
@@ -184,11 +184,12 @@ export function MemberUsagePanel({ organizationId }: MemberUsagePanelProps) {
   }
 
   const maxTokens = Math.max(
-    ...memberUsage.members.map((m) => m.tokens_used_this_month),
+    ...memberUsage.members.map((m) => m.tokens_used_period),
     1
   )
 
   return (
+    <>
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -234,7 +235,7 @@ export function MemberUsagePanel({ organizationId }: MemberUsagePanelProps) {
           <div>
             <p className="text-xs text-gray-500 dark:text-gray-400">Active Members</p>
             <p className="text-sm font-semibold text-gray-900 dark:text-white">
-              {memberUsage.members.filter((m) => m.tokens_used_this_month > 0).length}
+              {memberUsage.members.filter((m) => m.tokens_used_period > 0).length}
               <span className="text-xs font-normal text-gray-400 ml-0.5">
                 / {memberUsage.members.length}
               </span>
@@ -263,24 +264,32 @@ export function MemberUsagePanel({ organizationId }: MemberUsagePanelProps) {
       ) : (
         <div className="space-y-2">
           {memberUsage.members.map((member) => (
-              <div key={member.id}>
-                <UsageBar
-                  member={member}
-                  maxTokens={maxTokens}
-                  isExpanded={expandedMemberId === member.id}
-                  onClick={() => handleMemberClick(member.id, member.user_id)}
-                />
-                {expandedMemberId === member.id && (
-                  <MemberDetailPanel
-                    detail={memberUsageDetail?.user_id === member.user_id ? memberUsageDetail : null}
-                    isLoading={isMemberDetailLoading || memberUsageDetail?.user_id !== member.user_id}
-                    onClose={handleDetailClose}
-                  />
-                )}
-              </div>
+              <UsageBar
+                key={member.id}
+                member={member}
+                maxTokens={maxTokens}
+                isExpanded={expandedMemberId === member.id}
+                onClick={() => handleMemberClick(member.id, member.user_id)}
+              />
           ))}
         </div>
       )}
     </div>
+
+    {/* Right slide detail panel */}
+    <MemberDetailPanel
+      detail={
+        expandedMemberId !== null && memberUsageDetail?.user_id === expandedUserIdRef
+          ? memberUsageDetail
+          : null
+      }
+      isLoading={
+        expandedMemberId !== null &&
+        (isMemberDetailLoading || memberUsageDetail?.user_id !== expandedUserIdRef)
+      }
+      isOpen={expandedMemberId !== null}
+      onClose={handleDetailClose}
+    />
+    </>
   )
 }

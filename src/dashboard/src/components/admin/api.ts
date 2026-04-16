@@ -42,6 +42,16 @@ export async function updateUser(
   return res.json()
 }
 
+export async function deleteUser(userId: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/admin/users/${userId}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || res.statusText)
+  }
+}
+
 export async function fetchSystemInfo(): Promise<SystemInfo> {
   const res = await authFetch(`${API_BASE}/admin/system-info`)
   if (!res.ok) throw new Error(`Failed to fetch system info: ${res.statusText}`)
