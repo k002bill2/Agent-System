@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.aos.db-backup</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PROJECT_ROOT__/infra/scripts/backup-all.sh</string>
+        <string>--verify</string>
+        <string>--retention</string>
+        <string>30</string>
+    </array>
+
+    <!-- Daily at 03:00. Missed runs execute on next wake. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>3</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>__LOG_DIR__/backup-stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__LOG_DIR__/backup-stderr.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+        <key>CONTAINER_NAME</key>
+        <string>aos-postgres</string>
+        <key>DB_USER</key>
+        <string>aos</string>
+        <key>DB_NAME</key>
+        <string>aos</string>
+    </dict>
+
+    <!-- Do not restart on failure -->
+    <key>KeepAlive</key>
+    <false/>
+
+    <!-- Reasonable resource limits -->
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>
