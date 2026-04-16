@@ -363,9 +363,13 @@ class LLMModelRegistry:
                 "supports_vision": model.supports_vision,
             }
 
-            stmt = pg_insert(LLMModelConfigModel).values(**values).on_conflict_do_update(
-                index_elements=["id"],
-                set_=update_fields,
+            stmt = (
+                pg_insert(LLMModelConfigModel)
+                .values(**values)
+                .on_conflict_do_update(
+                    index_elements=["id"],
+                    set_=update_fields,
+                )
             )
             await session.execute(stmt)
 

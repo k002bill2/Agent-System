@@ -28,7 +28,7 @@ jobs:
     environment: production
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install PostgreSQL client
         run: |
@@ -108,7 +108,7 @@ jobs:
         env:
           AWS_KEY: ${{ secrets.AWS_ACCESS_KEY_ID }}
           GCS_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: database-backup-${{ steps.backup.outputs.timestamp }}
           path: ${{ steps.backup.outputs.backup_file }}
@@ -148,7 +148,7 @@ jobs:
 
       - name: Notify on failure
         if: failure()
-        uses: slackapi/slack-github-action@v1.26.0
+        uses: slackapi/slack-github-action@v3.0.1
         with:
           payload: |
             {
