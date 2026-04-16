@@ -13,7 +13,7 @@ import {
   Square,
   RotateCw,
   FolderOpen,
-  Github,
+  Code2,
   Globe,
   Database,
   Settings,
@@ -27,7 +27,7 @@ import {
 // 서버 타입별 아이콘
 const serverTypeIcons: Record<MCPServerType, typeof Server> = {
   filesystem: FolderOpen,
-  github: Github,
+  github: Code2,
   playwright: Globe,
   sqlite: Database,
   custom: Settings,

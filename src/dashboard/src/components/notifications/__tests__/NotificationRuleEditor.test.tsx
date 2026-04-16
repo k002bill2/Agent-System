@@ -10,7 +10,7 @@ vi.mock('lucide-react', () => ({
   TestTube: (props: Record<string, unknown>) => <div data-testid="test-tube" {...props} />,
   Check: (props: Record<string, unknown>) => <div data-testid="check" {...props} />,
   X: (props: Record<string, unknown>) => <div data-testid="x-icon" {...props} />,
-  Slack: (props: Record<string, unknown>) => <div data-testid="slack-icon" {...props} />,
+  MessageSquare: (props: Record<string, unknown>) => <div data-testid="slack-icon" {...props} />,
   MessageCircle: (props: Record<string, unknown>) => <div data-testid="discord-icon" {...props} />,
   Mail: (props: Record<string, unknown>) => <div data-testid="mail-icon" {...props} />,
   Webhook: (props: Record<string, unknown>) => <div data-testid="webhook-icon" {...props} />,
