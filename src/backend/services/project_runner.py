@@ -177,14 +177,14 @@ def get_check_config(project_path: str) -> OrderedDict[str, dict[str, str]]:
     preset_name = (config or {}).get("health_check_preset", "default")
     preset = PRESET_PROFILES.get(preset_name, PRESET_PROFILES["default"])
 
-    result = OrderedDict()
+    result: OrderedDict[str, dict[str, str]] = OrderedDict()
     for check_id, entry in preset.items():
         cmd = entry["command"]
         if isinstance(cmd, list):
             cmd_str = " ".join(cmd)
         else:
             cmd_str = str(cmd)
-        result[check_id] = {"label": entry["label"], "command": cmd_str}
+        result[check_id] = {"label": str(entry["label"]), "command": cmd_str}
     return result
 
 

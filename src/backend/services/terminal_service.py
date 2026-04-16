@@ -527,9 +527,7 @@ class CmuxAdapter(TerminalAdapter):
     """cmux terminal via its CLI."""
 
     async def is_available(self) -> bool:
-        return shutil.which("cmux") is not None or Path(
-            "/Applications/cmux.app"
-        ).exists()
+        return shutil.which("cmux") is not None or Path("/Applications/cmux.app").exists()
 
     async def execute(
         self,
@@ -546,14 +544,15 @@ class CmuxAdapter(TerminalAdapter):
         # AppleScript keystroke (same approach as GhosttyAdapter).
         try:
             open_proc = await asyncio.create_subprocess_exec(
-                "/usr/bin/open", "-a", "cmux", project_path,
+                "/usr/bin/open",
+                "-a",
+                "cmux",
+                project_path,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.PIPE,
             )
-            _, open_err = await asyncio.wait_for(
-                open_proc.communicate(), timeout=10
-            )
-        except (asyncio.TimeoutError, OSError) as e:
+            _, open_err = await asyncio.wait_for(open_proc.communicate(), timeout=10)
+        except (TimeoutError, OSError) as e:
             logger.error("Failed to launch cmux: %s", e)
             return {
                 "success": False,

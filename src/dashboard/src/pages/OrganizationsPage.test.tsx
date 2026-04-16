@@ -129,6 +129,9 @@ vi.mock('../components/organizations', () => ({
   MemberUsagePanel: ({ organizationId }: { organizationId: string }) => (
     <div data-testid="member-usage">{organizationId}</div>
   ),
+  SourceUserMapping: ({ organizationId }: { organizationId: string }) => (
+    <div data-testid="source-user-mapping">{organizationId}</div>
+  ),
 }))
 
 // ---------- store mocks ----------

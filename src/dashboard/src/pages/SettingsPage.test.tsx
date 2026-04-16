@@ -54,6 +54,7 @@ const defaultNotifications = {
 // Mock child components
 vi.mock('../components/llm-router', () => ({
   LLMRouterSettings: () => <div data-testid="llm-router-settings">LLMRouterSettings</div>,
+  ModelUpdatePanel: () => <div data-testid="model-update-panel">ModelUpdatePanel</div>,
 }))
 vi.mock('../components/usage', () => ({
   LLMAccountsSettings: () => <div data-testid="llm-accounts">LLMAccountsSettings</div>,
