@@ -138,17 +138,6 @@ async def get_default_model(
     )
 
 
-@router.get("/models/{model_id}", response_model=ModelResponse)
-async def get_model(model_id: str) -> ModelResponse:
-    """Get a specific model by ID."""
-    model = LLMModelRegistry.get_by_id(model_id)
-
-    if not model:
-        raise HTTPException(status_code=404, detail=f"Model '{model_id}' not found")
-
-    return _model_to_response(model)
-
-
 @router.patch("/models/{model_id}", response_model=ModelResponse)
 async def update_model(
     model_id: str,
@@ -164,8 +153,10 @@ async def update_model(
     if not USE_DATABASE:
         raise HTTPException(status_code=501, detail="USE_DATABASE=false: DB mode required")
 
-    # Admin check
-    if not current_user or not getattr(current_user, "is_admin", False):
+    # Auth check: distinguish 401 (no/invalid token) from 403 (authenticated but not admin)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    if not (current_user.role == "admin" or current_user.is_admin):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     from db.models import LLMModelConfigModel
@@ -284,12 +275,14 @@ async def check_model_updates(
     """
     if not USE_DATABASE:
         raise HTTPException(status_code=501, detail="USE_DATABASE=false: DB mode required")
-    if not current_user or not getattr(current_user, "is_admin", False):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    if not (current_user.role == "admin" or current_user.is_admin):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     from services.model_update_service import ModelUpdateService
 
-    user_id = getattr(current_user, "id", None) or "admin"
+    user_id = current_user.id
 
     if provider:
         try:
@@ -344,3 +337,17 @@ async def get_update_status() -> UpdateStatusResponse:
 
     status = await ModelUpdateService.get_update_status()
     return UpdateStatusResponse(**status)
+
+
+# NOTE: dynamic `/models/{model_id}` must be defined AFTER all static `/models/*` routes
+# (update-history, update-status, check-updates) — FastAPI matches routes in declaration
+# order; placing this earlier caused static paths to be swallowed as {model_id} → 404.
+@router.get("/models/{model_id}", response_model=ModelResponse)
+async def get_model(model_id: str) -> ModelResponse:
+    """Get a specific model by ID."""
+    model = LLMModelRegistry.get_by_id(model_id)
+
+    if not model:
+        raise HTTPException(status_code=404, detail=f"Model '{model_id}' not found")
+
+    return _model_to_response(model)

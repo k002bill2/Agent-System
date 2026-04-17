@@ -11,6 +11,7 @@ import {
   ChevronUp,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settings'
+import { useAuthStore } from '../../stores/auth'
 import { cn } from '../../lib/utils'
 
 interface UpdateCheckResult {
@@ -135,7 +136,7 @@ const ModelUpdatePanel = memo(function ModelUpdatePanel() {
     try {
       setChecking(true)
       setCheckResults(null)
-      const token = localStorage.getItem('auth_token')
+      const token = useAuthStore.getState().accessToken
       const res = await fetch(`${backendUrl}/api/llm/models/check-updates`, {
         method: 'POST',
         headers: {
@@ -274,22 +275,30 @@ const ModelUpdatePanel = memo(function ModelUpdatePanel() {
         </button>
 
         {/* Check Results */}
-        {checkResults && (
+        {checkResults && (() => {
+          const allFailed = checkResults.every(r => r.status === 'failed')
+          const anyFailed = checkResults.some(r => r.status === 'failed')
+          const allSuccess = checkResults.every(r => r.status === 'success')
+          const firstError = checkResults.find(r => r.status === 'failed')?.errors[0]
+          const summary = allFailed
+            ? (firstError ?? 'Check failed')
+            : anyFailed
+              ? `Partial: ${totalNew} new, ${totalUpdates} updated (some providers failed)`
+              : totalNew > 0 || totalUpdates > 0
+                ? `Found ${totalNew} new model${totalNew !== 1 ? 's' : ''}, ${totalUpdates} update${totalUpdates !== 1 ? 's' : ''}`
+                : 'All models up to date'
+          return (
           <div className="space-y-2 p-3 rounded-lg bg-gray-50 dark:bg-gray-900">
             {/* Summary */}
             <div className="flex items-center gap-2 text-sm">
-              {checkResults.every(r => r.status === 'success') ? (
+              {allSuccess ? (
                 <CheckCircle className="w-4 h-4 text-green-500" />
-              ) : checkResults.some(r => r.status === 'failed') ? (
-                <AlertTriangle className="w-4 h-4 text-yellow-500" />
+              ) : allFailed ? (
+                <XCircle className="w-4 h-4 text-red-500" />
               ) : (
-                <CheckCircle className="w-4 h-4 text-green-500" />
+                <AlertTriangle className="w-4 h-4 text-yellow-500" />
               )}
-              <span className="text-gray-900 dark:text-white font-medium">
-                {totalNew > 0 || totalUpdates > 0
-                  ? `Found ${totalNew} new model${totalNew !== 1 ? 's' : ''}, ${totalUpdates} update${totalUpdates !== 1 ? 's' : ''}`
-                  : 'All models up to date'}
-              </span>
+              <span className="text-gray-900 dark:text-white font-medium">{summary}</span>
             </div>
 
             {/* Per-provider details */}
@@ -307,7 +316,8 @@ const ModelUpdatePanel = memo(function ModelUpdatePanel() {
               </div>
             ))}
           </div>
-        )}
+          )
+        })()}
 
         {/* History Toggle */}
         <button
