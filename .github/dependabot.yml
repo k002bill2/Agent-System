@@ -10,7 +10,29 @@ updates:
       - "dependencies"
       - "npm"
     groups:
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+          - "@vitejs/plugin-react"
+      eslint:
+        patterns:
+          - "eslint"
+          - "@eslint/*"
+          - "eslint-plugin-*"
+          - "typescript-eslint"
+          - "@typescript-eslint/*"
+      testing:
+        patterns:
+          - "@testing-library/*"
+          - "vitest"
+          - "@vitest/*"
+          - "jsdom"
       minor-and-patch:
+        patterns:
+          - "*"
         update-types:
           - "minor"
           - "patch"
@@ -24,6 +46,30 @@ updates:
     labels:
       - "dependencies"
       - "python"
+    groups:
+      langchain:
+        patterns:
+          - "langchain*"
+          - "langgraph*"
+          - "langsmith"
+      fastapi:
+        patterns:
+          - "fastapi"
+          - "starlette"
+          - "uvicorn*"
+          - "pydantic*"
+      sqlalchemy:
+        patterns:
+          - "sqlalchemy*"
+          - "alembic"
+          - "asyncpg"
+          - "psycopg*"
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -34,3 +80,7 @@ updates:
     labels:
       - "dependencies"
       - "ci"
+    groups:
+      actions:
+        patterns:
+          - "*"
