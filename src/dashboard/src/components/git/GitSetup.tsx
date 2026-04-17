@@ -68,7 +68,7 @@ export function GitSetup({
     setError(null)
     setSuccess(false)
 
-    let pathToSet: string | null = null
+    let pathToSet: string | null
 
     if (pathOption === 'project') {
       pathToSet = null

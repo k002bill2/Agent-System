@@ -31,7 +31,7 @@ function describeCron(cron: string): string {
   const preset = PRESETS.find(p => p.cron === cron)
   if (preset) return preset.description
 
-  let desc = ''
+  let desc: string
 
   if (minute.startsWith('*/')) {
     desc = `${minute.slice(2)}분마다`
