@@ -5,7 +5,7 @@ AOS React 대시보드 문서입니다.
 ## Overview
 
 **위치**: `src/dashboard/`
-**스택**: React 18.3 + Vite 6.0 + Tailwind CSS 3.4 + Zustand 5.0 + TypeScript 5.6
+**스택**: React 18.3 + Vite 6.0 + Tailwind CSS 4.2 + Zustand 5.0 + TypeScript 5.6
 
 ## Quick Start
 
@@ -625,7 +625,6 @@ src/dashboard/
 ├── public/
 ├── index.html
 ├── vite.config.ts
-├── tailwind.config.js
 ├── tsconfig.json
 └── package.json
 ```

@@ -127,11 +127,10 @@ src/dashboard/
 │   └── main.tsx           # 진입점
 ├── package.json
 ├── vite.config.ts
-├── tailwind.config.js
 └── tsconfig.json
 ```
 
-**기술 스택**: React 18.3, Zustand 5.0, Tailwind CSS 3.4, Vite 6.0+, TypeScript 5.6+
+**기술 스택**: React 18.3, Zustand 5.0, Tailwind CSS 4.2, Vite 6.0+, TypeScript 5.6+
 
 ---
 

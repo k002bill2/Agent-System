@@ -87,12 +87,12 @@ decisions:
       CSS Modules, styled-components, Tailwind CSS를 비교했다.
       빠른 프로토타이핑, 일관된 디자인 시스템, 다크모드 지원이 핵심 요구사항이었다.
     decision: |
-      Tailwind CSS 3.4를 유일한 스타일링 방식으로 채택한다.
+      Tailwind CSS 4.2를 유일한 스타일링 방식으로 채택한다. (2026-04 v3→v4 마이그레이션, CSS-first 이관)
       - 인라인 style={} 금지, Tailwind 클래스만 사용
-      - 다크모드: dark: prefix 필수 적용
+      - 다크모드: dark: prefix 필수 적용 (@custom-variant dark로 class 기반)
       - 반응형: mobile-first (sm:, md:, lg:)
       - 조건부 클래스: cn() 유틸리티 (clsx + tailwind-merge)
-      - CSS 파일 직접 작성 금지 (global.css의 @tailwind 디렉티브만 허용)
+      - CSS 파일 직접 작성 금지 (index.css의 @import "tailwindcss" + @theme 블록만 허용)
     consequences:
       positive:
         - "유틸리티 우선 접근으로 빠른 UI 개발"
@@ -101,7 +101,7 @@ decisions:
         - "tailwind-merge로 클래스 충돌 자동 해결"
       negative:
         - "긴 className 문자열로 JSX 가독성 저하 가능"
-        - "커스텀 디자인 토큰은 tailwind.config.js에서 관리 필요"
+        - "커스텀 디자인 토큰은 index.css의 @theme 블록에서 관리 (v4 CSS-first)"
         - "Tailwind 미경험 팀원의 학습 곡선"
     tags: [frontend, styling, tailwind, dark-mode]
 
