@@ -43,6 +43,8 @@ class PlaygroundSessionModel(Base):
     # Per-session overrides for env flags (NULL = follow env)
     rag_hybrid_override = Column(Boolean, nullable=True)
     rag_rerank_override = Column(Boolean, nullable=True)
+    # Include results from OTHER project collections (cross-project RAG)
+    rag_include_shared = Column(Boolean, default=False, nullable=False, server_default="false")
 
     # Tools
     available_tools = Column(JSONB, default=list)

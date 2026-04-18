@@ -99,6 +99,10 @@ RAG_CHUNK_OVERLAP = int(os.getenv("RAG_CHUNK_OVERLAP", "300"))
 # longer indexing runs, so default to CPU. Override with mps/cuda when
 # running outside an event loop or when the indexer is run as a CLI script.
 RAG_EMBEDDING_DEVICE = os.getenv("RAG_EMBEDDING_DEVICE", "cpu").strip().lower()
+# Batch size for sentence-transformers encode(). Larger = faster but more
+# memory. bge-m3 default 32 is conservative; 64 roughly halves wallclock
+# at ~2x peak memory.
+RAG_EMBEDDING_BATCH_SIZE = int(os.getenv("RAG_EMBEDDING_BATCH_SIZE", "64"))
 
 # ── File extension → Language mapping ─────────────────────────────────────────
 _EXTENSION_LANGUAGE_MAP: dict[str, Any] = {}
@@ -246,10 +250,19 @@ class ProjectVectorStore:
                 from langchain_huggingface import HuggingFaceEmbeddings
 
                 model_kwargs: dict[str, Any] = {"device": RAG_EMBEDDING_DEVICE}
+                encode_kwargs: dict[str, Any] = {
+                    "batch_size": RAG_EMBEDDING_BATCH_SIZE,
+                    "normalize_embeddings": True,
+                }
                 print(
-                    f"[RAG] Using HuggingFace embeddings: {model} (device={RAG_EMBEDDING_DEVICE})"
+                    f"[RAG] Using HuggingFace embeddings: {model} "
+                    f"(device={RAG_EMBEDDING_DEVICE}, batch={RAG_EMBEDDING_BATCH_SIZE})"
                 )
-                return HuggingFaceEmbeddings(model_name=model, model_kwargs=model_kwargs)
+                return HuggingFaceEmbeddings(
+                    model_name=model,
+                    model_kwargs=model_kwargs,
+                    encode_kwargs=encode_kwargs,
+                )
             except ImportError:
                 print("[RAG] langchain-huggingface not installed, trying alternatives...")
 
@@ -923,25 +936,29 @@ class ProjectVectorStore:
             return local_result
 
         # ── Cross-project search: merge results from other collections ────
+        # Strategy: fair RRF across every project, then (when rerank is on)
+        # CrossEncoder-score the fused pool against the query. This replaces
+        # the prior "insert local twice" boost, which mathematically locked
+        # every slot to the current project when k <= len(local_result).
         other_collections = self._get_all_project_collections(exclude_ids=[project_id])
 
         all_ranked_lists: list[list[tuple[str, dict[str, Any]]]] = []
 
-        # Add local results as a ranked list (with boost via double insertion)
         local_ranked: list[tuple[str, dict[str, Any]]] = [
             (d["content"], {**d, "project_id": d.get("project_id", project_id)})
             for d in local_result.documents
         ]
-        # Insert local list twice to give it a boost in RRF fusion
-        all_ranked_lists.append(local_ranked)
         all_ranked_lists.append(local_ranked)
 
+        # Pull a wider candidate pool from each other project so the reranker
+        # has a real chance to surface them in the final top-k.
+        other_k = max(k, k * 2)
         for coll_name in other_collections:
             try:
                 other_pid = self._extract_project_id_from_collection(coll_name)
                 other_vs = self._get_or_create_collection(other_pid)
                 other_results = other_vs.similarity_search_with_score(
-                    query=query, k=k, filter=qdrant_filter
+                    query=query, k=other_k, filter=qdrant_filter
                 )
                 other_ranked: list[tuple[str, dict[str, Any]]] = [
                     (
@@ -959,9 +976,18 @@ class ProjectVectorStore:
             except Exception as e:
                 logger.warning("Cross-project search failed for %s: %s", coll_name, e)
 
-        fused = self._rrf_fusion(all_ranked_lists)[:k]
+        fused = self._rrf_fusion(all_ranked_lists)
 
-        return QueryResult(query=query, documents=fused, total_found=len(fused))
+        # Final reranking on the fused pool when enabled — CrossEncoder
+        # compares the query directly against each candidate, giving a fair
+        # cross-project ranking regardless of per-collection score scales.
+        if use_rerank and RERANK_AVAILABLE:
+            rerank_pool = fused[: max(k * 3, 30)]
+            final = self._rerank(query, rerank_pool, top_k=k)
+        else:
+            final = fused[:k]
+
+        return QueryResult(query=query, documents=final, total_found=len(final))
 
     async def query_cross_project(
         self,

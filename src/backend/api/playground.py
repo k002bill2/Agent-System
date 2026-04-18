@@ -85,6 +85,7 @@ class SessionSettingsUpdate(BaseModel):
     rag_k: int | None = None
     rag_hybrid_override: bool | None = None
     rag_rerank_override: bool | None = None
+    rag_include_shared: bool | None = None
 
 
 @router.patch("/sessions/{session_id}/settings", response_model=PlaygroundSession)
@@ -109,6 +110,7 @@ async def update_session_settings(
         rag_k=data.rag_k,
         rag_hybrid_override=data.rag_hybrid_override,
         rag_rerank_override=data.rag_rerank_override,
+        rag_include_shared=data.rag_include_shared,
     )
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")

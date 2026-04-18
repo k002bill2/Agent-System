@@ -82,6 +82,7 @@ interface PlaygroundSession {
   rag_k: number
   rag_hybrid_override: boolean | null
   rag_rerank_override: boolean | null
+  rag_include_shared: boolean
   available_tools: string[]
   enabled_tools: string[]
   messages: PlaygroundMessage[]
@@ -200,6 +201,7 @@ async function updateSettings(
     rag_k: number
     rag_hybrid_override: boolean | null
     rag_rerank_override: boolean | null
+    rag_include_shared: boolean
   }>
 ): Promise<PlaygroundSession> {
   const res = await authFetch(`${API_BASE}/playground/sessions/${sessionId}/settings`, {
@@ -1036,8 +1038,28 @@ export function PlaygroundPage() {
                           </span>
                         </label>
 
+                        {/* Cross-project include_shared */}
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={currentSession.rag_include_shared}
+                            onChange={(e) =>
+                              handleUpdateSettings({
+                                rag_include_shared: e.target.checked,
+                              })
+                            }
+                            className="rounded border-gray-300 dark:border-gray-600"
+                            aria-label="Include other projects in RAG search"
+                          />
+                          <span className="text-xs text-gray-700 dark:text-gray-300">
+                            다른 프로젝트 지식 포함 (cross-project)
+                          </span>
+                        </label>
+
                         <p className="text-[10px] text-gray-400">
-                          기본값은 서버 환경변수를 따릅니다. 체크 해제 시 이 세션에서만 비활성화됩니다.
+                          하이브리드/재정렬은 서버 환경변수 기본값, 체크 해제 시 세션 단위 비활성화.
+                          cross-project는 기본 OFF — ON 시 다른 프로젝트 콜렉션도 검색에 포함되며,
+                          현재 프로젝트가 RRF에서 우선순위를 받습니다.
                         </p>
                       </div>
                     )}

@@ -101,6 +101,11 @@ class PlaygroundSession(BaseModel):
     # Per-session overrides for env flags (None = follow env)
     rag_hybrid_override: bool | None = None
     rag_rerank_override: bool | None = None
+    # Also pull relevant chunks from OTHER projects' collections (current
+    # project still gets a rank boost via RRF double-insertion). Useful when
+    # project_id is code, but background notes live in a separate project
+    # (e.g. Obsidian).
+    rag_include_shared: bool = False
 
     # Tools
     available_tools: list[str] = Field(default_factory=list)
@@ -148,6 +153,7 @@ class PlaygroundExecuteRequest(BaseModel):
     rag_k: int | None = Field(default=None, ge=1, le=20)
     rag_hybrid_override: bool | None = None
     rag_rerank_override: bool | None = None
+    rag_include_shared: bool | None = None
 
 
 class PlaygroundToolTest(BaseModel):

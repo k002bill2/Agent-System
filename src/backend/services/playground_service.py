@@ -339,6 +339,7 @@ class PlaygroundService:
         rag_k: int | None = None,
         rag_hybrid_override: bool | None = None,
         rag_rerank_override: bool | None = None,
+        rag_include_shared: bool | None = None,
     ) -> PlaygroundSession | None:
         """Update session settings."""
         _load_sessions()  # Ensure sessions are loaded
@@ -372,6 +373,8 @@ class PlaygroundService:
             session.rag_hybrid_override = rag_hybrid_override
         if rag_rerank_override is not None:
             session.rag_rerank_override = rag_rerank_override
+        if rag_include_shared is not None:
+            session.rag_include_shared = rag_include_shared
 
         session.updated_at = utcnow()
         _save_sessions()  # Persist to file
@@ -441,10 +444,16 @@ class PlaygroundService:
                         if getattr(request, "rag_rerank_override", None) is not None
                         else getattr(session, "rag_rerank_override", None)
                     )
+                    include_shared = (
+                        request.rag_include_shared
+                        if getattr(request, "rag_include_shared", None) is not None
+                        else bool(getattr(session, "rag_include_shared", False))
+                    )
                     rag_context_str, rag_sources = await get_project_context_with_sources(
                         project_id=session.project_id,
                         query=request.prompt,
                         k=k,
+                        include_shared=include_shared,
                         force_hybrid=force_hybrid,
                         force_rerank=force_rerank,
                     )
@@ -594,10 +603,16 @@ class PlaygroundService:
                     if getattr(request, "rag_rerank_override", None) is not None
                     else getattr(session, "rag_rerank_override", None)
                 )
+                include_shared = (
+                    request.rag_include_shared
+                    if getattr(request, "rag_include_shared", None) is not None
+                    else bool(getattr(session, "rag_include_shared", False))
+                )
                 rag_context_str, rag_sources = await get_project_context_with_sources(
                     project_id=session.project_id,
                     query=request.prompt,
                     k=k,
+                    include_shared=include_shared,
                     force_hybrid=force_hybrid,
                     force_rerank=force_rerank,
                 )
@@ -858,6 +873,7 @@ class PlaygroundService:
             rag_k=getattr(model, "rag_k", None) or 5,
             rag_hybrid_override=getattr(model, "rag_hybrid_override", None),
             rag_rerank_override=getattr(model, "rag_rerank_override", None),
+            rag_include_shared=bool(getattr(model, "rag_include_shared", False)),
             available_tools=model.available_tools or [],
             enabled_tools=model.enabled_tools or [],
             messages=[PlaygroundMessage(**m) for m in (model.messages or [])],
@@ -887,6 +903,7 @@ class PlaygroundService:
             "rag_k": session.rag_k,
             "rag_hybrid_override": session.rag_hybrid_override,
             "rag_rerank_override": session.rag_rerank_override,
+            "rag_include_shared": session.rag_include_shared,
             "available_tools": session.available_tools,
             "enabled_tools": session.enabled_tools,
             "messages": [m.model_dump(mode="json") for m in session.messages],
