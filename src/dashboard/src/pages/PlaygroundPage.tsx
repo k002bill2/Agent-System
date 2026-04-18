@@ -79,6 +79,9 @@ interface PlaygroundSession {
   max_tokens: number
   system_prompt: string | null
   rag_enabled: boolean
+  rag_k: number
+  rag_hybrid_override: boolean | null
+  rag_rerank_override: boolean | null
   available_tools: string[]
   enabled_tools: string[]
   messages: PlaygroundMessage[]
@@ -194,6 +197,9 @@ async function updateSettings(
     system_prompt: string
     enabled_tools: string[]
     rag_enabled: boolean
+    rag_k: number
+    rag_hybrid_override: boolean | null
+    rag_rerank_override: boolean | null
   }>
 ): Promise<PlaygroundSession> {
   const res = await authFetch(`${API_BASE}/playground/sessions/${sessionId}/settings`, {
@@ -959,6 +965,82 @@ export function PlaygroundPage() {
                         </div>
                       )
                     })()}
+
+                    {/* RAG advanced controls (visible only when RAG is on) */}
+                    {currentSession.rag_enabled && currentSession.project_id && (
+                      <div
+                        className="mt-3 ml-6 space-y-3 border-l-2 border-gray-200 dark:border-gray-700 pl-3"
+                        aria-label="RAG advanced settings"
+                      >
+                        {/* k slider */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label
+                              htmlFor="rag-k-slider"
+                              className="text-xs text-gray-700 dark:text-gray-300"
+                            >
+                              검색 청크 수 (k)
+                            </label>
+                            <span className="text-xs font-medium text-gray-900 dark:text-gray-100">
+                              {currentSession.rag_k} chunks
+                            </span>
+                          </div>
+                          <input
+                            id="rag-k-slider"
+                            type="range"
+                            min={3}
+                            max={15}
+                            step={1}
+                            value={currentSession.rag_k}
+                            onChange={(e) =>
+                              handleUpdateSettings({ rag_k: parseInt(e.target.value, 10) })
+                            }
+                            className="w-full accent-blue-500"
+                            aria-label="RAG chunk retrieval count"
+                          />
+                        </div>
+
+                        {/* Hybrid override */}
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={currentSession.rag_hybrid_override ?? true}
+                            onChange={(e) =>
+                              handleUpdateSettings({
+                                rag_hybrid_override: e.target.checked,
+                              })
+                            }
+                            className="rounded border-gray-300 dark:border-gray-600"
+                            aria-label="Toggle hybrid BM25 + semantic search"
+                          />
+                          <span className="text-xs text-gray-700 dark:text-gray-300">
+                            하이브리드 검색 (BM25 + 의미)
+                          </span>
+                        </label>
+
+                        {/* Rerank override */}
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={currentSession.rag_rerank_override ?? true}
+                            onChange={(e) =>
+                              handleUpdateSettings({
+                                rag_rerank_override: e.target.checked,
+                              })
+                            }
+                            className="rounded border-gray-300 dark:border-gray-600"
+                            aria-label="Toggle CrossEncoder reranking"
+                          />
+                          <span className="text-xs text-gray-700 dark:text-gray-300">
+                            CrossEncoder 재정렬
+                          </span>
+                        </label>
+
+                        <p className="text-[10px] text-gray-400">
+                          기본값은 서버 환경변수를 따릅니다. 체크 해제 시 이 세션에서만 비활성화됩니다.
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Tools */}
