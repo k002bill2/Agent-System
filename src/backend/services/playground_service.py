@@ -284,6 +284,7 @@ class PlaygroundService:
             agent_id=data.agent_id,
             model=data.model,
             system_prompt=data.system_prompt or DEFAULT_SYSTEM_PROMPT,
+            rag_enabled=data.rag_enabled,
             available_tools=list(PLAYGROUND_TOOLS.keys()),
         )
         _sessions[session.id] = session
