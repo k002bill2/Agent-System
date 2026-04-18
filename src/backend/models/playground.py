@@ -96,6 +96,11 @@ class PlaygroundSession(BaseModel):
 
     # RAG
     rag_enabled: bool = False
+    # How many chunks to retrieve per query
+    rag_k: int = Field(default=5, ge=1, le=20)
+    # Per-session overrides for env flags (None = follow env)
+    rag_hybrid_override: bool | None = None
+    rag_rerank_override: bool | None = None
 
     # Tools
     available_tools: list[str] = Field(default_factory=list)
@@ -138,6 +143,11 @@ class PlaygroundExecuteRequest(BaseModel):
     max_tokens: int | None = None
     tools: list[str] | None = None
     stream: bool = False
+
+    # Per-request RAG overrides (fall back to session defaults when None)
+    rag_k: int | None = Field(default=None, ge=1, le=20)
+    rag_hybrid_override: bool | None = None
+    rag_rerank_override: bool | None = None
 
 
 class PlaygroundToolTest(BaseModel):

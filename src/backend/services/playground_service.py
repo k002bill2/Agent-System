@@ -9,6 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+
 from models.cost import calculate_cost, estimate_tokens
 from models.playground import (
     PlaygroundCompareRequest,
@@ -53,9 +55,66 @@ SESSIONS_FILE = STORAGE_DIR / "playground_sessions.json"
 _sessions: dict[str, PlaygroundSession] = {}
 _initialized = False
 
-# Default system prompt for playground
-DEFAULT_SYSTEM_PROMPT = """당신은 도움이 되는 AI 어시스턴트입니다.
-항상 한국어로 답변해주세요. 명확하고 친절하게 응답하며, 필요한 경우 단계별로 설명해주세요."""
+# Default system prompt for playground — Gemini 특화 가이드
+DEFAULT_SYSTEM_PROMPT = """당신은 AOS 플랫폼의 AI 어시스턴트입니다.
+
+- 한국어로 답변하고, 코드/명령어/경로는 원문을 그대로 유지합니다.
+- project context가 제공되면 그것을 사실의 단일 출처로 삼고,
+  컨텍스트에 없는 사실은 추측 대신 "제공된 컨텍스트에 없습니다"라고 명시합니다.
+- 답하기 전에 의도와 필요한 정보를 1~2문장으로 정리한 뒤 답변합니다.
+- 외부/최신 정보가 필요하면 사용 가능한 도구를 우선 호출합니다.
+- 여러 단계가 필요한 작업은 단계별로 명확히 설명합니다."""
+
+
+def _to_lc_messages(msgs: list[PlaygroundMessage]) -> list[BaseMessage]:
+    """
+    Convert persisted ``PlaygroundMessage`` history into LangChain messages.
+
+    - ``user`` → ``HumanMessage``
+    - ``assistant`` → ``AIMessage``
+    - ``tool`` → ``SystemMessage(content="[previous tool call] ...")``
+      (Legacy sessions don't carry ``tool_call_id`` required by LangChain
+      ``ToolMessage``; absorbing as SystemMessage preserves the information
+      without tripping strict tool-call validation on the next turn.)
+    - ``system`` role is omitted (handled via explicit ``system_prompt`` arg)
+    """
+    out: list[BaseMessage] = []
+    for m in msgs:
+        role = m.role
+        content = m.content or ""
+        if role == "user":
+            out.append(HumanMessage(content=content))
+        elif role == "assistant":
+            out.append(AIMessage(content=content))
+        elif role == "tool":
+            out.append(SystemMessage(content=f"[previous tool call] {content}"))
+        # other roles (system, etc.) are intentionally dropped
+    return out
+
+
+def _coerce_llm_content(content: Any) -> str:
+    """
+    Flatten LLM content into a plain string.
+
+    Gemini's multi-part responses can arrive as ``[{type: "text", text: ...},
+    {type: "tool_use", ...}]``. We extract only the textual parts so the
+    ``tool_use`` blocks don't leak into persisted transcripts as ``str(dict)``.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict):
+                # Only collect text parts; skip tool_use/tool_result blocks
+                if item.get("type") in (None, "text"):
+                    text = item.get("text")
+                    if text:
+                        parts.append(str(text))
+            else:
+                parts.append(str(item))
+        return " ".join(parts)
+    return str(content)
 
 
 def _ensure_storage_dir():
@@ -276,6 +335,9 @@ class PlaygroundService:
         project_id: str | None = None,
         working_directory: str | None = None,
         rag_enabled: bool | None = None,
+        rag_k: int | None = None,
+        rag_hybrid_override: bool | None = None,
+        rag_rerank_override: bool | None = None,
     ) -> PlaygroundSession | None:
         """Update session settings."""
         _load_sessions()  # Ensure sessions are loaded
@@ -303,6 +365,12 @@ class PlaygroundService:
             session.working_directory = working_directory
         if rag_enabled is not None:
             session.rag_enabled = rag_enabled
+        if rag_k is not None:
+            session.rag_k = rag_k
+        if rag_hybrid_override is not None:
+            session.rag_hybrid_override = rag_hybrid_override
+        if rag_rerank_override is not None:
+            session.rag_rerank_override = rag_rerank_override
 
         session.updated_at = utcnow()
         _save_sessions()  # Persist to file
@@ -346,35 +414,41 @@ class PlaygroundService:
         session.messages.append(user_msg)
 
         try:
-            # Build conversation history for context
-            conversation_context = None
-            if len(session.messages) > 1:
-                # Include recent conversation history
-                history = []
-                for msg in session.messages[-10:-1]:  # Last 10 messages excluding current
-                    history.append(f"{msg.role}: {msg.content}")
-                if history:
-                    conversation_context = {"conversation_history": "\n".join(history)}
-                    if request.context:
-                        conversation_context.update(request.context)
+            # Convert prior turns (excluding the one we just appended) into
+            # LangChain messages so the LLM sees a real multi-turn dialogue.
+            history = _to_lc_messages(session.messages[-11:-1])
 
             # Inject RAG context if enabled
-            rag_sources = None
+            rag_sources: list[dict] | None = None
+            rag_context_str: str | None = None
             if session.rag_enabled and session.project_id:
                 try:
                     from services.rag_service import get_project_context_with_sources
 
-                    rag_context, rag_sources = await get_project_context_with_sources(
+                    k = (
+                        request.rag_k
+                        if getattr(request, "rag_k", None)
+                        else getattr(session, "rag_k", None) or 5
+                    )
+                    force_hybrid = (
+                        request.rag_hybrid_override
+                        if getattr(request, "rag_hybrid_override", None) is not None
+                        else getattr(session, "rag_hybrid_override", None)
+                    )
+                    force_rerank = (
+                        request.rag_rerank_override
+                        if getattr(request, "rag_rerank_override", None) is not None
+                        else getattr(session, "rag_rerank_override", None)
+                    )
+                    rag_context_str, rag_sources = await get_project_context_with_sources(
                         project_id=session.project_id,
                         query=request.prompt,
-                        k=5,
+                        k=k,
+                        force_hybrid=force_hybrid,
+                        force_rerank=force_rerank,
                     )
-                    if rag_context:
-                        if conversation_context is None:
-                            conversation_context = request.context.copy() if request.context else {}
-                        conversation_context["project_context"] = rag_context
                 except Exception as e:
-                    print(f"Warning: RAG context retrieval failed: {e}")
+                    logger.warning("RAG context retrieval failed: %s", e)
 
             # Check if tools are enabled
             enabled_tools = execution.tools_enabled or []
@@ -388,7 +462,9 @@ class PlaygroundService:
                     system_prompt=session.system_prompt,
                     temperature=execution.temperature,
                     max_tokens=execution.max_tokens,
-                    context=conversation_context or request.context or None,
+                    context=request.context or None,
+                    history=history,
+                    rag_context=rag_context_str,
                     working_directory=session.working_directory,
                 )
 
@@ -407,26 +483,19 @@ class PlaygroundService:
                     session.messages.append(tool_msg)
             else:
                 # Regular LLM invocation without tools
-                llm_response: LLMResponse = await LLMService.invoke(
+                llm_response = await LLMService.invoke(
                     prompt=request.prompt,
                     model_id=session.model,
                     system_prompt=session.system_prompt,
                     temperature=execution.temperature,
                     max_tokens=execution.max_tokens,
-                    context=conversation_context or request.context or None,
+                    context=request.context or None,
+                    history=history,
+                    rag_context=rag_context_str,
                 )
 
-            # Add assistant message
-            # Handle content that might be a list (e.g., [{'type': 'text', 'text': '...'}])
-            content = llm_response.content
-            if isinstance(content, list):
-                # Extract text from list format
-                content = " ".join(
-                    item.get("text", str(item)) if isinstance(item, dict) else str(item)
-                    for item in content
-                )
-            elif not isinstance(content, str):
-                content = str(content)
+            # Flatten multi-part content (Gemini) into a persistable string
+            content = _coerce_llm_content(llm_response.content)
 
             assistant_msg = PlaygroundMessage(
                 role="assistant",
@@ -479,7 +548,14 @@ class PlaygroundService:
         session_id: str,
         request: PlaygroundExecuteRequest,
     ) -> AsyncIterator[str]:
-        """Execute with streaming response."""
+        """Execute with streaming response.
+
+        When ``request.tools`` (or session.enabled_tools) are active this
+        path routes through ``invoke_with_tools`` (non-streaming at the
+        provider level) and yields the final synthesized answer as a single
+        chunk, because Gemini's tool-calling protocol requires a complete
+        round-trip before a final textual response is produced.
+        """
         _load_sessions()  # Ensure sessions are loaded
         session = _sessions.get(session_id)
         if not session:
@@ -492,68 +568,106 @@ class PlaygroundService:
         )
         session.messages.append(user_msg)
 
-        # Build conversation context
-        conversation_context = None
-        if len(session.messages) > 1:
-            history = []
-            for msg in session.messages[-10:-1]:
-                history.append(f"{msg.role}: {msg.content}")
-            if history:
-                conversation_context = {"conversation_history": "\n".join(history)}
-                if request.context:
-                    conversation_context.update(request.context)
+        # Multi-turn history as LangChain messages (excl. the just-appended user)
+        history = _to_lc_messages(session.messages[-11:-1])
 
         # Inject RAG context if enabled
-        rag_sources = None
+        rag_sources: list[dict] | None = None
+        rag_context_str: str | None = None
         if session.rag_enabled and session.project_id:
             try:
                 from services.rag_service import get_project_context_with_sources
 
-                rag_context, rag_sources = await get_project_context_with_sources(
+                k = (
+                    request.rag_k
+                    if getattr(request, "rag_k", None)
+                    else getattr(session, "rag_k", None) or 5
+                )
+                force_hybrid = (
+                    request.rag_hybrid_override
+                    if getattr(request, "rag_hybrid_override", None) is not None
+                    else getattr(session, "rag_hybrid_override", None)
+                )
+                force_rerank = (
+                    request.rag_rerank_override
+                    if getattr(request, "rag_rerank_override", None) is not None
+                    else getattr(session, "rag_rerank_override", None)
+                )
+                rag_context_str, rag_sources = await get_project_context_with_sources(
                     project_id=session.project_id,
                     query=request.prompt,
-                    k=5,
+                    k=k,
+                    force_hybrid=force_hybrid,
+                    force_rerank=force_rerank,
                 )
-                if rag_context:
-                    if conversation_context is None:
-                        conversation_context = request.context.copy() if request.context else {}
-                    conversation_context["project_context"] = rag_context
             except Exception as e:
-                print(f"Warning: RAG context retrieval failed: {e}")
+                logger.warning("RAG context retrieval failed: %s", e)
 
-        # Stream from LLM with token tracking
+        # Choose streaming path vs tool-enabled path
+        enabled_tools = request.tools or session.enabled_tools or []
+        temperature = request.temperature or session.temperature
+        max_tokens = request.max_tokens or session.max_tokens
+
         full_response = ""
-        token_info = None
+        token_info: dict | None = None
 
         try:
-            async for chunk, info in LLMService.stream_with_tokens(
-                prompt=request.prompt,
-                model_id=session.model,
-                system_prompt=session.system_prompt,
-                temperature=request.temperature or session.temperature,
-                max_tokens=request.max_tokens or session.max_tokens,
-                context=conversation_context or request.context or None,
-            ):
-                if info:
-                    # Final chunk with token info
-                    token_info = info
-                elif chunk:
-                    full_response += chunk
-                    yield chunk
+            if enabled_tools:
+                # Tool-enabled: single-shot invoke_with_tools, yield final answer.
+                resp = await LLMService.invoke_with_tools(
+                    prompt=request.prompt,
+                    tools=enabled_tools,
+                    model_id=session.model,
+                    system_prompt=session.system_prompt,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    context=request.context or None,
+                    history=history,
+                    rag_context=rag_context_str,
+                    working_directory=session.working_directory,
+                )
+                full_response = _coerce_llm_content(resp.content)
+                yield full_response
+                token_info = {
+                    "input_tokens": resp.input_tokens,
+                    "output_tokens": resp.output_tokens,
+                }
+                # Emit tool call/result sentinels so clients can surface them.
+                for tc, tr in zip(resp.tool_calls, resp.tool_results, strict=False):
+                    yield f"\n\n__TOOL_CALL__{json.dumps({'call': tc, 'result': tr}, ensure_ascii=False)}"
+            else:
+                async for chunk, info in LLMService.stream_with_tokens(
+                    prompt=request.prompt,
+                    model_id=session.model,
+                    system_prompt=session.system_prompt,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    context=request.context or None,
+                    history=history,
+                    rag_context=rag_context_str,
+                ):
+                    if info:
+                        if info.get("error"):
+                            # Structured error — surface plain text to user
+                            yield chunk
+                            return
+                        token_info = info
+                    elif chunk:
+                        full_response += chunk
+                        yield chunk
 
-            # Calculate token usage - use actual values if available, else estimate
+            # Calculate token usage
             if token_info:
                 input_tokens = token_info.get("input_tokens", 0)
                 output_tokens = token_info.get("output_tokens", 0)
             else:
-                # Fallback: 추정값 사용
                 input_tokens = estimate_tokens(request.prompt, session.model)
                 output_tokens = estimate_tokens(full_response, session.model)
 
             total_tokens = input_tokens + output_tokens
             cost = calculate_cost(input_tokens, output_tokens, session.model)
 
-            # Add assistant message after streaming completes
+            # Persist assistant message
             assistant_msg = PlaygroundMessage(
                 role="assistant",
                 content=full_response,
@@ -565,14 +679,11 @@ class PlaygroundService:
             session.total_tokens += total_tokens
             session.total_cost += cost
             session.updated_at = utcnow()
-            _save_sessions()  # Persist to file
+            _save_sessions()
             _fire_and_forget(PlaygroundService.save_session_to_db(session))
 
-            # Send RAG sources as final metadata event
             if rag_sources:
-                import json
-
-                yield f"\n\n__RAG_SOURCES__{json.dumps(rag_sources)}"
+                yield f"\n\n__RAG_SOURCES__{json.dumps(rag_sources, ensure_ascii=False)}"
 
         except Exception as e:
             yield f"\n\n[Error: {str(e)}]"
@@ -743,6 +854,9 @@ class PlaygroundService:
             max_tokens=model.max_tokens or 4096,
             system_prompt=model.system_prompt,
             rag_enabled=model.rag_enabled or False,
+            rag_k=getattr(model, "rag_k", None) or 5,
+            rag_hybrid_override=getattr(model, "rag_hybrid_override", None),
+            rag_rerank_override=getattr(model, "rag_rerank_override", None),
             available_tools=model.available_tools or [],
             enabled_tools=model.enabled_tools or [],
             messages=[PlaygroundMessage(**m) for m in (model.messages or [])],
@@ -769,6 +883,9 @@ class PlaygroundService:
             "max_tokens": session.max_tokens,
             "system_prompt": session.system_prompt,
             "rag_enabled": session.rag_enabled,
+            "rag_k": session.rag_k,
+            "rag_hybrid_override": session.rag_hybrid_override,
+            "rag_rerank_override": session.rag_rerank_override,
             "available_tools": session.available_tools,
             "enabled_tools": session.enabled_tools,
             "messages": [m.model_dump(mode="json") for m in session.messages],
