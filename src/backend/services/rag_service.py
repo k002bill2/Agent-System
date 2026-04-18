@@ -94,6 +94,12 @@ else:
 RAG_CHUNK_SIZE = int(os.getenv("RAG_CHUNK_SIZE", "1500"))
 RAG_CHUNK_OVERLAP = int(os.getenv("RAG_CHUNK_OVERLAP", "300"))
 
+# HuggingFace embedding device. macOS PyTorch MPS + asyncio/uvloop has a
+# known deadlock pattern (metal gpu stream + idle callback livelock) on
+# longer indexing runs, so default to CPU. Override with mps/cuda when
+# running outside an event loop or when the indexer is run as a CLI script.
+RAG_EMBEDDING_DEVICE = os.getenv("RAG_EMBEDDING_DEVICE", "cpu").strip().lower()
+
 # ── File extension → Language mapping ─────────────────────────────────────────
 _EXTENSION_LANGUAGE_MAP: dict[str, Any] = {}
 if SPLITTER_AVAILABLE:
@@ -239,8 +245,11 @@ class ProjectVectorStore:
             try:
                 from langchain_huggingface import HuggingFaceEmbeddings
 
-                print(f"[RAG] Using HuggingFace embeddings: {model}")
-                return HuggingFaceEmbeddings(model_name=model)
+                model_kwargs: dict[str, Any] = {"device": RAG_EMBEDDING_DEVICE}
+                print(
+                    f"[RAG] Using HuggingFace embeddings: {model} (device={RAG_EMBEDDING_DEVICE})"
+                )
+                return HuggingFaceEmbeddings(model_name=model, model_kwargs=model_kwargs)
             except ImportError:
                 print("[RAG] langchain-huggingface not installed, trying alternatives...")
 
