@@ -1378,3 +1378,148 @@ class RulesManager:
 **Dashboard UI**: `RulesTab`, `RuleEditModal` (ProjectConfigsPage 내)
 
 **API**: `/api/project-configs/{project_id}/rules` (6개) + `/api/project-configs/global/rules` (5개)
+
+---
+
+## 53. Phase Runner (tasks.md 자동 실행)
+
+`dev/active/<phase>/*-tasks.md` 의 YAML frontmatter를 단일 진실 소스로 삼아 웨이브 순차 + 태스크 병렬로 실행하는 경량 오케스트레이터.
+
+```python
+class Task(BaseModel):
+    id: str                           # ^[A-Za-z0-9_-]+$
+    desc: str | None = None
+    depends_on: list[str] = []        # same-wave ids only
+    agent_hint: str | None = None     # preferred subagent_type
+    status: Literal["pending", "in_progress", "done", "failed"] = "pending"
+
+class Wave(BaseModel):
+    name: str
+    tasks: list[Task]                 # duplicate id / cycle 자동 거부
+
+class PhaseSpec(BaseModel):
+    phase: str
+    description: str | None = None
+    waves: list[Wave]
+```
+
+**서브커맨드**:
+
+| 커맨드 | 기능 |
+|--------|------|
+| `migrate` | 기존 tasks.md에서 Wave 헤딩 + `[ ] **ID**` 패턴 추출하여 frontmatter prepend |
+| `validate` | Pydantic 스키마 검증 + 요약 출력 |
+| `sync` | YAML status → 본문 `[x]/[ ]` 마커 재작성 |
+| `run` | CLI 비지원 → `/execute-tasks-file` 슬래시 커맨드 사용 |
+
+**실행 엔진** (`PhaseRunner`):
+- 웨이브 순차 실행, 웨이브 내 `depends_on` 기반 토폴로지 정렬
+- `asyncio.Semaphore(max_concurrency=3)` 로 병렬 제한
+- 태스크당 최대 3회 재시도, 의존 태스크 연쇄 failed 마킹
+
+**슬래시 커맨드** (`/execute-tasks-file <phase-dir>`):
+1. `validate` → 실패 시 중단
+2. `PhaseSpec.from_tasks_md()` 로드
+3. 웨이브별 `superpowers:dispatching-parallel-agents` 로 동시 디스패치
+4. 웨이브 종료 후 `sync_checkboxes()` 로 파일 갱신
+5. 전체 완료 시 `verification-loop` 호출 (tsc → lint → test → build)
+
+**GSD 와의 관계**: `gsd:execute-phase` 와 병행. 장기/복잡 phase는 GSD, 3-파일 시스템 일상 phase는 Phase Runner.
+
+**상세 문서**: [`phase_runner.md`](phase_runner.md)
+
+---
+
+## 54. RAG 고도화 (bge-m3 + 공정한 크로스 프로젝트 Rerank)
+
+RAG 검색 품질과 크로스 프로젝트 공정성 개선:
+
+**임베딩 업그레이드**:
+- 기본 모델 `BAAI/bge-m3` (multilingual + code-aware, 1024d)
+- Device: `cpu` 기본 (macOS MPS + uvloop 데드락 회피)
+- 배치 크기 64 (기본 32 대비 ~2배 빠름)
+
+**Hybrid Search (BM25 + Semantic + RRF Fusion)**:
+- 환경 변수 `RAG_ENABLE_HYBRID=true` 또는 쿼리별 `force_hybrid=True`
+- Semantic: `k * RAG_CANDIDATE_MULTIPLIER` 후보, BM25: `k * 2` 후보
+- Reciprocal Rank Fusion 으로 병합
+
+**CrossEncoder Reranking**:
+- 기본 모델 `cross-encoder/ms-marco-MiniLM-L-6-v2`
+- 환경 변수 `RAG_ENABLE_RERANK=true` 또는 쿼리별 `force_rerank=True`
+- 융합 결과 풀에 대해 쿼리-문서 직접 스코어링
+
+**Fair Cross-Project Retrieval**:
+- 이전: "local을 두 번 삽입" boost → `k ≤ len(local_result)` 시 모든 슬롯이 현재 프로젝트로 잠기는 수학적 버그
+- 현재: 모든 프로젝트에서 동일 쿼리로 가져온 뒤 **RRF 융합 + rerank on fused pool** → 콜렉션별 스코어 스케일과 무관하게 공정한 순위
+
+```python
+# rag_service.py
+# 1. 각 프로젝트에서 k*3 후보 조회 (semantic + optional hybrid)
+# 2. RRF 로 전체 ranked list 융합
+# 3. rerank 활성 시 fused[:max(k*3, 30)] 에 CrossEncoder 적용
+# 4. top-k 반환
+```
+
+**관련 환경변수** (`.env.example`):
+```
+RAG_ENABLE_HYBRID=true
+RAG_ENABLE_RERANK=true
+RAG_RERANK_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
+RAG_FULL_CONTEXT_THRESHOLD=8000
+RAG_CHUNK_SIZE=1500
+RAG_CHUNK_OVERLAP=300
+RAG_CANDIDATE_MULTIPLIER=3
+RAG_EMBEDDING_MODEL=BAAI/bge-m3
+RAG_EMBEDDING_DEVICE=cpu
+RAG_EMBEDDING_BATCH_SIZE=64
+```
+
+**Dashboard UI**: `RAGQueryPanel` / Playground 고급 컨트롤에서 `k` 슬라이더(1-20) + hybrid / rerank per-call 토글.
+
+---
+
+## 55. Playground 업그레이드 (웹 검색, 동적 RAG, LC 히스토리)
+
+`PlaygroundService` 의 실행 파이프라인 개선:
+
+**Tavily 웹 검색 + DDG 폴백**:
+- `TAVILY_API_KEY` 설정 시 Tavily advanced search (synthesized answer + 일반 웹 결과)
+- 미설정 시 DuckDuckGo Instant Answer 로 폴백 (Wikipedia 카드 한정)
+- 반환: `{success, query, results[{title, url, snippet[, score]}], total, answer?, provider}`
+
+```python
+@staticmethod
+async def web_search(query: str, max_results: int = 5) -> dict[str, Any]:
+    api_key = os.getenv("TAVILY_API_KEY", "").strip()
+    if api_key:
+        try:
+            return await PlaygroundTools._web_search_tavily(...)
+        except Exception as e:
+            logger.warning("Tavily failed, fallback to DDG: %s", e)
+    return await PlaygroundTools._web_search_ddg(query, max_results)
+```
+
+**세션 레벨 RAG 컨트롤** (DB 컬럼 추가, migration `b7e4f9d2c8a1`):
+- `rag_k: int` - 1-20 슬라이더 (기본 5)
+- `rag_hybrid_override: bool | None` - None=env 따름, True/False=강제
+- `rag_rerank_override: bool | None` - 동일
+- 요청 단위(`PlaygroundExecuteRequest`) 오버라이드도 지원 → 세션 설정보다 우선
+
+**LangChain 메시지 히스토리 전파**:
+- 실행 노드가 `HumanMessage`/`AIMessage`/`ToolMessage` 리스트를 그대로 수용
+- 멀티턴 대화에서 이전 도구 호출/결과까지 컨텍스트에 포함
+
+**Force-Final on Tool Exhaustion**:
+- 도구 호출 횟수 한도 도달 시 최종 응답 강제 생성 단계 삽입
+- 도구 루프 탈출 불가로 인한 무응답 방지
+
+**`rag_enabled` 전파 버그 수정**:
+- `PlaygroundSessionCreate.rag_enabled` 가 세션 생성 시 반영되지 않던 문제 수정 (`f6a76d3`)
+
+**Dashboard UI**:
+- `PlaygroundPage` 에 Advanced Controls 패널 추가
+- k 슬라이더 + hybrid / rerank per-call 토글
+- 웹 검색 도구는 도구 토글에서 선택
+
+**테스트 커버리지** (`tests/backend/test_playground_*.py`): rag_k 전파, 히스토리 병합, 도구 호출, force-final, 레거시 호환.
