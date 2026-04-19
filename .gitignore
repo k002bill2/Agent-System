@@ -72,7 +72,11 @@ src/dashboard/coverage/
 .claude/gemini-daemon/daemon.log
 .claude/gemini-daemon/.daemon-disabled
 .claude/snapshots/
+.claude/scheduled_tasks.lock
 .temp/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
 
 # Dev docs (in-progress work)
 dev/active/
