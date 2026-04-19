@@ -212,6 +212,17 @@ else:
             project_root = backend_dir.parent.parent
             init_projects(str(project_root))
 
+            if USE_DATABASE:
+                try:
+                    from services.project_sync_service import sync_all_projects_to_db
+
+                    synced = await sync_all_projects_to_db()
+                    if logger:
+                        logger.info("startup_project_sync_done", count=synced)
+                except Exception as e:
+                    if logger:
+                        logger.warning("startup_project_sync_failed", error=str(e))
+
         if ORCHESTRATOR_ENABLED:
             set_engine(OrchestrationEngine())
 
