@@ -32,6 +32,7 @@ class ProjectDiscovery:
         """
         self._project_paths: list[Path] = []
         self._external_paths: list[str] = []
+        self._auto_discovered: set[Path] = set()
         self._is_docker = bool(os.getenv("CLAUDE_HOME"))
 
         # Add current directory (even without .claude/)
@@ -119,6 +120,7 @@ class ProjectDiscovery:
         resolved_path = str(p)
         if resolved_path in self._external_paths:
             self._external_paths.remove(resolved_path)
+        self._auto_discovered.discard(p)
 
         # Cache clearing is handled by the monitor
 
@@ -153,6 +155,7 @@ class ProjectDiscovery:
         resolved_path = str(target)
         if resolved_path in self._external_paths:
             self._external_paths.remove(resolved_path)
+        self._auto_discovered.discard(target)
 
         logger.info(f"Removed project from monitoring: {target}")
         return True
@@ -180,16 +183,16 @@ class ProjectDiscovery:
         return project_id.replace("-", "/")
 
     def refresh_project_paths(self) -> None:
-        """Re-scan known directories for newly added projects.
+        """Re-scan known directories to sync newly added and removed projects.
 
-        Checks parent projects/ directory and CLAUDE_PROJECT_PATHS
-        for any new project directories not yet in _project_paths.
-        Only symlinks in projects/ are registered (regular directories
-        like e2e test artifacts are ignored).
+        Checks parent projects/ directory and CLAUDE_PROJECT_PATHS.
+        Projects auto-discovered from projects/ are synced in both directions:
+        new symlinks are added, stale entries (symlink removed) are evicted.
+        Paths added manually (cwd / external API / env) are never evicted here.
         """
         # Re-scan projects/ directory (symlinked projects only)
+        current_symlink_targets: set[Path] = set()
         try:
-            # Find the Agent-System root from any known path
             for existing_path in list(self._project_paths):
                 projects_dir = existing_path.parent / "projects"
                 if projects_dir.exists() and projects_dir.is_dir():
@@ -202,13 +205,25 @@ class ProjectDiscovery:
                                 if (entry.is_symlink() and not self._is_docker)
                                 else entry
                             )
-                            if resolved not in self._project_paths:
-                                if self._is_docker or resolved.exists():
+                            if self._is_docker or resolved.exists():
+                                current_symlink_targets.add(resolved)
+                                if resolved not in self._project_paths:
                                     self._project_paths.append(resolved)
+                                    self._auto_discovered.add(resolved)
                                     logger.info(f"Auto-discovered new project: {resolved}")
                     break  # Only need to scan projects/ once
         except Exception as e:
             logger.debug(f"Error refreshing project paths: {e}")
+
+        # Evict auto-discovered entries whose symlink no longer exists.
+        # Only touches paths originally added via projects/ scan — manual
+        # additions (cwd, env, external API) are preserved.
+        stale = self._auto_discovered - current_symlink_targets
+        for path in stale:
+            if path in self._project_paths:
+                self._project_paths.remove(path)
+                logger.info(f"Removed stale auto-discovered project: {path}")
+            self._auto_discovered.discard(path)
 
         # Re-scan CLAUDE_PROJECT_PATHS env var
         env_paths = os.getenv("CLAUDE_PROJECT_PATHS", "")
