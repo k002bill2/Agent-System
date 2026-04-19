@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Server, Bot, Sparkles, Webhook } from 'lucide-react'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts'
 import { useProjectConfigsStore } from '../stores/projectConfigs'
@@ -9,6 +9,10 @@ const COLORS = {
   skills: '#8B5CF6',   // purple
   hooks: '#F97316',    // orange
 }
+
+const CHART_ROW_HEIGHT = 28
+const CHART_MIN_HEIGHT = 160
+const CHART_PADDING = 40
 
 // Total Configuration Items 카드 (별도 컴포넌트)
 export function ConfigStatsCard() {
@@ -61,16 +65,24 @@ export function ConfigStatsCard() {
 export function ConfigChartCard() {
   const { projects, isLoading } = useProjectConfigsStore()
 
-  const barData = projects.map(project => ({
-    name: project.project_name.length > 15
-      ? project.project_name.slice(0, 15) + '...'
-      : project.project_name,
-    fullName: project.project_name,
-    mcp: project.mcp_server_count,
-    agents: project.agent_count,
-    skills: project.skill_count,
-    hooks: project.hook_count,
-  }))
+  const barData = useMemo(
+    () => projects.map(project => ({
+      name: project.project_name.length > 15
+        ? project.project_name.slice(0, 15) + '...'
+        : project.project_name,
+      fullName: project.project_name,
+      mcp: project.mcp_server_count,
+      agents: project.agent_count,
+      skills: project.skill_count,
+      hooks: project.hook_count,
+    })),
+    [projects]
+  )
+
+  const chartHeight = Math.max(
+    CHART_MIN_HEIGHT,
+    projects.length * CHART_ROW_HEIGHT + CHART_PADDING
+  )
 
   if (isLoading) {
     return (
@@ -85,7 +97,7 @@ export function ConfigChartCard() {
       </h3>
 
       {barData.length > 0 ? (
-        <div className="h-40 w-full">
+        <div className="w-full" style={{ height: chartHeight }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={barData} layout="vertical" margin={{ left: 0, right: 10 }}>
               <XAxis type="number" tick={{ fontSize: 10 }} />
@@ -93,7 +105,8 @@ export function ConfigChartCard() {
                 type="category"
                 dataKey="name"
                 tick={{ fontSize: 10 }}
-                width={90}
+                width={110}
+                interval={0}
               />
               <Tooltip
                 contentStyle={{
