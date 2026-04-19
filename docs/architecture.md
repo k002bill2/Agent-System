@@ -305,15 +305,26 @@ container = client.containers.run(
 ### 실행 방법
 
 ```bash
-# Docker로 로컬 실행 (PostgreSQL, Redis, Qdrant 모두 포함)
+# shared-infra 공용 스택(PostgreSQL, Redis, Qdrant) 기동
 cd infra/scripts && ./dev.sh
 ```
+
+### Shared Infrastructure (중요)
+
+AOS는 더 이상 자체 DB 스택을 띄우지 않는다. `~/Work/shared-infra/docker-compose.yml` 하나를 다른 프로젝트(ppt-maker, image-maker)와 공유한다.
+
+- `infra/scripts/dev.sh`, `start-all.sh`, `stop-all.sh`, `backup-all.sh`, `restore-all.sh` 모두 shared-infra를 대상으로 동작
+- `infra/docker/docker-compose.yml` 은 **DB 스택 소스가 아님** — 빌드/배포 참조용으로만 유지
+- `infra/docker/docker-compose.legacy.yml` 은 과거 자체 스택 보관용 (신규 개발 시 사용 금지)
+- shared-infra 미설치 시 `dev.sh` 가 `~/Work/shared-infra 를 먼저 클론/생성하세요` 안내 후 중단
+
+**포트 충돌 시**: 프로젝트 `.env` 에서 `PG_PORT`, `REDIS_PORT`, `QDRANT_PORT`, `BACKEND_PORT`, `DASHBOARD_PORT` 오버라이드.
 
 ### 환경 변수
 
 ```bash
-# PostgreSQL 연결
-DATABASE_URL=postgresql+asyncpg://aos:aos@localhost:5432/aos
+# PostgreSQL 연결 (shared-infra 기본값)
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/aos
 
 # DB 사용 여부 (false면 DB 없이 개발 가능)
 USE_DATABASE=false
