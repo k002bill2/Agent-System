@@ -1,44 +1,17 @@
 name: aos
 
+# ──────────────────────────────────────────────────────────────
+# 인프라(PostgreSQL, Redis, Qdrant)는 ~/Work/shared-infra 에서 관리
+# 시작:  cd ~/Work/shared-infra && docker compose up -d
+#
+# 이 파일은 Docker로 backend/dashboard/sandbox를 기동할 때만 사용.
+# 로컬 개발은 infra/scripts/dev.sh 또는 start-all.sh 권장.
+#
+# 기존 자체 Postgres/Redis/Qdrant 서비스는 docker-compose.legacy.yml에 보존됨.
+# ──────────────────────────────────────────────────────────────
+
 services:
-  # PostgreSQL Database
-  postgres:
-    image: postgres:16-alpine
-    container_name: aos-postgres
-    environment:
-      POSTGRES_USER: aos
-      POSTGRES_PASSWORD: aos
-      POSTGRES_DB: aos
-    volumes:
-      - ./data/postgres:/var/lib/postgresql/data
-    ports:
-      - "${PG_PORT:-5432}:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U aos"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - aos-network
-
-  # Redis for caching and queues
-  redis:
-    image: redis:7-alpine
-    container_name: aos-redis
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - aos-network
-
-  # Backend API (development)
+  # Backend API (Docker 기동 시에만 사용 — 로컬은 uvicorn 권장)
   backend:
     build:
       context: ../../src/backend
@@ -47,24 +20,20 @@ services:
     env_file:
       - ../../.env
     environment:
-      - DATABASE_URL=postgresql+asyncpg://aos:aos@postgres:5432/aos
-      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@shared-postgres:5432/aos
+      - REDIS_URL=redis://shared-redis:6379/0
+      - QDRANT_URL=http://shared-qdrant:6333
       - DEBUG=true
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ../../src/backend:/app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     networks:
-      - aos-network
+      - shared-infra
     profiles:
       - full
 
-  # Dashboard (development)
+  # Dashboard (Docker 기동 시에만 사용)
   dashboard:
     build:
       context: ../../src/dashboard
@@ -78,12 +47,12 @@ services:
     depends_on:
       - backend
     networks:
-      - aos-network
+      - shared-infra
     profiles:
       - full
 
-  # Sandbox image builder (run with: docker-compose build sandbox)
-  # Note: This service is not meant to run; it only builds the sandbox image
+  # Sandbox image builder (run with: docker compose build sandbox)
+  # Note: This service only builds the sandbox image.
   # Actual sandbox containers are created dynamically by sandbox_manager.py
   sandbox:
     build:
@@ -99,24 +68,6 @@ services:
     # read_only: false
     # user: sandbox
 
-  # Qdrant Vector Database
-  qdrant:
-    image: qdrant/qdrant:latest
-    container_name: aos-qdrant
-    ports:
-      - "${QDRANT_PORT:-6333}:6333"
-      - "${QDRANT_GRPC_PORT:-6334}:6334"
-    volumes:
-      - qdrant_data:/qdrant/storage
-    # Note: Qdrant 공식 이미지에 curl/wget 미포함으로 Docker healthcheck 불가
-    # 호스트에서 확인: curl http://localhost:6333/healthz
-    networks:
-      - aos-network
-
-volumes:
-  redis_data:
-  qdrant_data:
-
 networks:
-  aos-network:
-    driver: bridge
+  shared-infra:
+    external: true

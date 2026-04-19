@@ -22,10 +22,10 @@ SKIP_REDIS=false
 SKIP_QDRANT=false
 VERIFY=false
 
-# Docker container names
-PG_CONTAINER="${CONTAINER_NAME:-aos-postgres}"
-REDIS_CONTAINER="${REDIS_CONTAINER:-aos-redis}"
-PG_USER="${DB_USER:-aos}"
+# Docker container names (shared-infra after migration)
+PG_CONTAINER="${CONTAINER_NAME:-shared-postgres}"
+REDIS_CONTAINER="${REDIS_CONTAINER:-shared-redis}"
+PG_USER="${DB_USER:-postgres}"
 PG_DB="${DB_NAME:-aos}"
 QDRANT_URL="${QDRANT_URL:-http://localhost:6333}"
 

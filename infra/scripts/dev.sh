@@ -39,12 +39,19 @@ if ! docker compose version >/dev/null 2>&1 && ! command_exists docker-compose; 
     exit 1
 fi
 
-# Compose file path (always use -f to avoid volume naming issues)
-COMPOSE_FILE="$PROJECT_ROOT/infra/docker/docker-compose.yml"
+# Shared infrastructure (Postgres + Redis + Qdrant) at ~/Work/shared-infra
+# All projects (AOS, EliteDeck/ppt-maker, image-maker) connect to this single stack.
+COMPOSE_FILE="$HOME/Work/shared-infra/docker-compose.yml"
+
+if [ ! -f "$COMPOSE_FILE" ]; then
+    echo -e "${RED}❌ shared-infra not found at $COMPOSE_FILE${NC}"
+    echo -e "${YELLOW}   Clone or create ~/Work/shared-infra first${NC}"
+    exit 1
+fi
 
 # Start infrastructure services
-echo -e "${GREEN}🐳 Starting infrastructure (PostgreSQL, Redis, Qdrant)...${NC}"
-docker compose -f "$COMPOSE_FILE" up -d postgres redis qdrant
+echo -e "${GREEN}🐳 Starting shared-infra (PostgreSQL, Redis, Qdrant)...${NC}"
+docker compose -f "$COMPOSE_FILE" up -d
 
 # Wait for services
 echo -e "${GREEN}⏳ Waiting for services to be ready...${NC}"
@@ -70,7 +77,7 @@ echo ""
 echo -e "${YELLOW}Service URLs:${NC}"
 echo "  Backend API:  http://localhost:8000"
 echo "  Dashboard:    http://localhost:5173"
-echo "  PostgreSQL:   postgresql://aos:aos@localhost:5432/aos"
+echo "  PostgreSQL:   postgresql://postgres:postgres@localhost:5432/aos  (shared-infra)"
 echo "  Redis:        redis://localhost:6379"
 echo "  Qdrant:       http://localhost:6333"
 echo ""

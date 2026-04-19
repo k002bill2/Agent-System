@@ -1,0 +1,122 @@
+name: aos
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: aos-postgres
+    environment:
+      POSTGRES_USER: aos
+      POSTGRES_PASSWORD: aos
+      POSTGRES_DB: aos
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aos"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aos-network
+
+  # Redis for caching and queues
+  redis:
+    image: redis:7-alpine
+    container_name: aos-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aos-network
+
+  # Backend API (development)
+  backend:
+    build:
+      context: ../../src/backend
+      dockerfile: ../../infra/docker/Dockerfile.backend
+    container_name: aos-backend
+    env_file:
+      - ../../.env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://aos:aos@postgres:5432/aos
+      - REDIS_URL=redis://redis:6379/0
+      - DEBUG=true
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ../../src/backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - aos-network
+    profiles:
+      - full
+
+  # Dashboard (development)
+  dashboard:
+    build:
+      context: ../../src/dashboard
+      dockerfile: ../../infra/docker/Dockerfile.dashboard
+    container_name: aos-dashboard
+    ports:
+      - "${DASHBOARD_PORT:-5173}:5173"
+    volumes:
+      - ../../src/dashboard:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - aos-network
+    profiles:
+      - full
+
+  # Sandbox image builder (run with: docker-compose build sandbox)
+  # Note: This service is not meant to run; it only builds the sandbox image
+  # Actual sandbox containers are created dynamically by sandbox_manager.py
+  sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox
+    image: aos-sandbox:latest
+    container_name: aos-sandbox-builder
+    profiles:
+      - build-only
+    # Security constraints (for reference - applied at runtime)
+    # network_mode: none
+    # mem_limit: 512m
+    # read_only: false
+    # user: sandbox
+
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: aos-qdrant
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    # Note: Qdrant 공식 이미지에 curl/wget 미포함으로 Docker healthcheck 불가
+    # 호스트에서 확인: curl http://localhost:6333/healthz
+    networks:
+      - aos-network
+
+volumes:
+  redis_data:
+  qdrant_data:
+
+networks:
+  aos-network:
+    driver: bridge

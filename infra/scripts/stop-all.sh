@@ -7,7 +7,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PID_DIR="$PROJECT_ROOT/.pids"
-COMPOSE_FILE="$PROJECT_ROOT/infra/docker/docker-compose.yml"
+COMPOSE_FILE="$HOME/Work/shared-infra/docker-compose.yml"
 
 # Colors
 RED='\033[0;31m'
@@ -60,29 +60,31 @@ else
     echo -e "${YELLOW}Backend PID file not found${NC}"
 fi
 # Always kill remaining uvicorn processes (workers may survive parent kill)
-pkill -f "uvicorn.*8000" 2>/dev/null || true
+# Match AOS backend regardless of whether --port 8000 flag is present
+pkill -f "uvicorn.*api\.app:app" 2>/dev/null || true
 sleep 1
 # Force kill if still running
-if pgrep -f "uvicorn.*8000" > /dev/null 2>&1; then
+if pgrep -f "uvicorn.*api\.app:app" > /dev/null 2>&1; then
     echo -e "${YELLOW}Force killing remaining backend processes...${NC}"
-    pkill -9 -f "uvicorn.*8000" 2>/dev/null || true
+    pkill -9 -f "uvicorn.*api\.app:app" 2>/dev/null || true
 fi
 
-# Auto-backup before shutdown (if postgres is running)
-if docker ps --filter "name=aos-postgres" --filter "status=running" -q | grep -q .; then
-    echo -e "${YELLOW}Creating pre-shutdown backup...${NC}"
+# Auto-backup before shutdown (if shared-postgres is running)
+# shared-infra uses postgres:postgres credentials; DB name is 'aos'.
+if docker ps --filter "name=shared-postgres" --filter "status=running" -q | grep -q .; then
+    echo -e "${YELLOW}Creating pre-shutdown backup (aos DB)...${NC}"
     BACKUP_DIR="$PROJECT_ROOT/infra/docker/data/backups"
     mkdir -p "$BACKUP_DIR"
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-    docker exec aos-postgres pg_dump -U aos aos | gzip > "$BACKUP_DIR/pre_shutdown_${TIMESTAMP}.sql.gz" 2>/dev/null && \
+    docker exec shared-postgres pg_dump -U postgres aos | gzip > "$BACKUP_DIR/pre_shutdown_${TIMESTAMP}.sql.gz" 2>/dev/null && \
         echo -e "${GREEN}Backup saved: $BACKUP_DIR/pre_shutdown_${TIMESTAMP}.sql.gz${NC}" || \
         echo -e "${YELLOW}Backup skipped (non-critical)${NC}"
     # Keep only last 5 pre-shutdown backups
     ls -t "$BACKUP_DIR"/pre_shutdown_*.sql.gz 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null || true
 fi
 
-# Stop Infrastructure
-echo -e "${GREEN}Stopping Infrastructure (Docker)...${NC}"
+# Stop Infrastructure (shared-infra: Postgres, Redis, Qdrant — shared across projects)
+echo -e "${GREEN}Stopping Infrastructure (shared-infra)...${NC}"
 docker compose -f "$COMPOSE_FILE" down ${COMPOSE_DOWN_FLAGS} 2>/dev/null || true
 
 echo ""
