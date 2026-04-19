@@ -30,9 +30,17 @@
 dev/active/[task-name]/
 ├── [task-name]-plan.md
 ├── [task-name]-context.md
-└── [task-name]-tasks.md
+└── [task-name]-tasks.md    # YAML frontmatter + 체크박스 본문
 ```
 워크플로우: `/dev-docs` → 구현 → `/update-dev-docs` → `/compact`
+
+`tasks.md` 자동 실행 (frontmatter 필수, 없으면 migrate 먼저):
+```
+src/backend/.venv/bin/python scripts/phase_runner.py migrate  dev/active/<phase>
+src/backend/.venv/bin/python scripts/phase_runner.py validate dev/active/<phase>
+/execute-tasks-file dev/active/<phase>     # 웨이브 순차 + 태스크 병렬 실행
+```
+실행기는 `superpowers:dispatching-parallel-agents`로 디스패치하고, 각 웨이브 완료 후 체크박스를 동기화하며, 모든 웨이브 종료 시 `verification-loop`를 호출한다. `gsd:execute-phase`와 병행 가능.
 
 ## e2e 테스트 잔여물 방지
 - `afterAll`/`afterEach`에서 생성된 리소스(파일, 프로세스, DB 데이터) 정리 필수
