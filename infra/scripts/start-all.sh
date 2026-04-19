@@ -30,17 +30,24 @@ if [ ! -f "$PROJECT_ROOT/.env" ]; then
     cp "$PROJECT_ROOT/.env.example" "$PROJECT_ROOT/.env"
 fi
 
-# Compose file path (always use -f to avoid volume naming issues)
-COMPOSE_FILE="$PROJECT_ROOT/infra/docker/docker-compose.yml"
+# Shared infrastructure (Postgres + Redis + Qdrant) at ~/Work/shared-infra
+# All projects (AOS, ppt-maker, image-maker) connect to this single stack.
+COMPOSE_FILE="$HOME/Work/shared-infra/docker-compose.yml"
 
 # Check Docker
-echo -e "${GREEN}[1/3] Starting Infrastructure (Docker)...${NC}"
+echo -e "${GREEN}[1/3] Starting Infrastructure (shared-infra)...${NC}"
 if ! docker info > /dev/null 2>&1; then
     echo -e "${RED}Docker is not running. Please start Docker Desktop.${NC}"
     exit 1
 fi
 
-docker compose -f "$COMPOSE_FILE" up -d postgres redis qdrant
+if [ ! -f "$COMPOSE_FILE" ]; then
+    echo -e "${RED}shared-infra not found at $COMPOSE_FILE${NC}"
+    echo -e "${YELLOW}Clone or create ~/Work/shared-infra first.${NC}"
+    exit 1
+fi
+
+docker compose -f "$COMPOSE_FILE" up -d
 
 echo -e "${GREEN}      Waiting for PostgreSQL, Redis, and Qdrant...${NC}"
 sleep 3
@@ -107,7 +114,8 @@ if [ -f "$PID_DIR/backend.pid" ]; then
     fi
 fi
 # Kill any orphaned uvicorn processes and workers on port 8000
-pkill -9 -f "uvicorn api.app" 2>/dev/null || true
+# Match AOS backend (regex; \. escaped to avoid any-char false-positives)
+pkill -9 -f "uvicorn.*api\.app:app" 2>/dev/null || true
 lsof -ti :8000 | xargs kill -9 2>/dev/null || true
 sleep 0.5
 

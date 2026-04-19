@@ -9,8 +9,8 @@
 #   --verify                Verify backup after creation
 #
 # Environment variables:
-#   CONTAINER_NAME          Docker container name (default: aos-postgres)
-#   DB_USER                 Database user (default: aos)
+#   CONTAINER_NAME          Docker container name (default: shared-postgres)
+#   DB_USER                 Database user (default: postgres)
 #   DB_NAME                 Database name (default: aos)
 
 set -euo pipefail
@@ -22,8 +22,8 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 OUTPUT_DIR="$PROJECT_ROOT/infra/backups"
 RETENTION_DAYS=30
 VERIFY=false
-CONTAINER_NAME="${CONTAINER_NAME:-aos-postgres}"
-DB_USER="${DB_USER:-aos}"
+CONTAINER_NAME="${CONTAINER_NAME:-shared-postgres}"
+DB_USER="${DB_USER:-postgres}"
 DB_NAME="${DB_NAME:-aos}"
 
 # Colors
@@ -61,7 +61,7 @@ done
 # Check Docker container is running
 if ! docker inspect -f '{{.State.Running}}' "$CONTAINER_NAME" 2>/dev/null | grep -q true; then
     log_error "Docker container '$CONTAINER_NAME' is not running."
-    log_error "Start it with: cd $PROJECT_ROOT/infra/docker && docker-compose up -d postgres"
+    log_error "Start it with: cd ~/Work/shared-infra && docker compose up -d"
     notify "AOS Backup Failed" "Docker container '$CONTAINER_NAME' is not running."
     exit 1
 fi

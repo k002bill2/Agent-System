@@ -3,6 +3,11 @@
 # ============================================================
 # PostgreSQL Data Migration: Named Volume → Bind Mount
 # One-time migration tool
+#
+# DEPRECATED: AOS now uses ~/Work/shared-infra for Postgres/Redis/Qdrant.
+# The legacy infra/docker/docker-compose.yml is no longer the canonical
+# Postgres host. Keep this script only for historical one-off migrations
+# from the old AOS-local stack. New setups do not need to run this.
 # ============================================================
 set -e
 
