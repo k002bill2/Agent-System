@@ -79,6 +79,10 @@ interface PlaygroundSession {
   max_tokens: number
   system_prompt: string | null
   rag_enabled: boolean
+  rag_k: number
+  rag_hybrid_override: boolean | null
+  rag_rerank_override: boolean | null
+  rag_include_shared: boolean
   available_tools: string[]
   enabled_tools: string[]
   messages: PlaygroundMessage[]
@@ -194,6 +198,10 @@ async function updateSettings(
     system_prompt: string
     enabled_tools: string[]
     rag_enabled: boolean
+    rag_k: number
+    rag_hybrid_override: boolean | null
+    rag_rerank_override: boolean | null
+    rag_include_shared: boolean
   }>
 ): Promise<PlaygroundSession> {
   const res = await authFetch(`${API_BASE}/playground/sessions/${sessionId}/settings`, {
@@ -959,6 +967,102 @@ export function PlaygroundPage() {
                         </div>
                       )
                     })()}
+
+                    {/* RAG advanced controls (visible only when RAG is on) */}
+                    {currentSession.rag_enabled && currentSession.project_id && (
+                      <div
+                        className="mt-3 ml-6 space-y-3 border-l-2 border-gray-200 dark:border-gray-700 pl-3"
+                        aria-label="RAG advanced settings"
+                      >
+                        {/* k slider */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label
+                              htmlFor="rag-k-slider"
+                              className="text-xs text-gray-700 dark:text-gray-300"
+                            >
+                              검색 청크 수 (k)
+                            </label>
+                            <span className="text-xs font-medium text-gray-900 dark:text-gray-100">
+                              {currentSession.rag_k} chunks
+                            </span>
+                          </div>
+                          <input
+                            id="rag-k-slider"
+                            type="range"
+                            min={3}
+                            max={15}
+                            step={1}
+                            value={currentSession.rag_k}
+                            onChange={(e) =>
+                              handleUpdateSettings({ rag_k: parseInt(e.target.value, 10) })
+                            }
+                            className="w-full accent-blue-500"
+                            aria-label="RAG chunk retrieval count"
+                          />
+                        </div>
+
+                        {/* Hybrid override */}
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={currentSession.rag_hybrid_override ?? true}
+                            onChange={(e) =>
+                              handleUpdateSettings({
+                                rag_hybrid_override: e.target.checked,
+                              })
+                            }
+                            className="rounded border-gray-300 dark:border-gray-600"
+                            aria-label="Toggle hybrid BM25 + semantic search"
+                          />
+                          <span className="text-xs text-gray-700 dark:text-gray-300">
+                            하이브리드 검색 (BM25 + 의미)
+                          </span>
+                        </label>
+
+                        {/* Rerank override */}
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={currentSession.rag_rerank_override ?? true}
+                            onChange={(e) =>
+                              handleUpdateSettings({
+                                rag_rerank_override: e.target.checked,
+                              })
+                            }
+                            className="rounded border-gray-300 dark:border-gray-600"
+                            aria-label="Toggle CrossEncoder reranking"
+                          />
+                          <span className="text-xs text-gray-700 dark:text-gray-300">
+                            CrossEncoder 재정렬
+                          </span>
+                        </label>
+
+                        {/* Cross-project include_shared */}
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={currentSession.rag_include_shared}
+                            onChange={(e) =>
+                              handleUpdateSettings({
+                                rag_include_shared: e.target.checked,
+                              })
+                            }
+                            className="rounded border-gray-300 dark:border-gray-600"
+                            aria-label="Include other projects in RAG search"
+                          />
+                          <span className="text-xs text-gray-700 dark:text-gray-300">
+                            다른 프로젝트 지식 포함 (cross-project)
+                          </span>
+                        </label>
+
+                        <p className="text-[10px] text-gray-400">
+                          하이브리드/재정렬은 서버 환경변수 기본값, 체크 해제 시 세션 단위 비활성화.
+                          cross-project는 기본 OFF — ON 시 다른 프로젝트 콜렉션도 검색에 포함되며,
+                          현재 프로젝트가 RRF에서 우선순위를 받습니다.
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Tools */}

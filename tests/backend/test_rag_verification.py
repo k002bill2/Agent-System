@@ -462,9 +462,9 @@ class TestTroubleshooting:
         # 기본 임베딩 제공자가 일관되는지
         assert rag_mod.EMBEDDING_PROVIDER in ("huggingface", "openai", "google")
 
-        # HuggingFace 기본값 확인
+        # HuggingFace 기본값 확인 (BAAI/bge-m3 — 다국어, 1024-dim)
         if rag_mod.EMBEDDING_PROVIDER == "huggingface":
-            assert rag_mod.DEFAULT_EMBEDDING_MODEL == "sentence-transformers/all-MiniLM-L6-v2"
+            assert rag_mod.DEFAULT_EMBEDDING_MODEL == "BAAI/bge-m3"
         elif rag_mod.EMBEDDING_PROVIDER == "openai":
             assert rag_mod.DEFAULT_EMBEDDING_MODEL == "text-embedding-3-small"
         elif rag_mod.EMBEDDING_PROVIDER == "google":

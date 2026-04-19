@@ -38,6 +38,13 @@ class PlaygroundSessionModel(Base):
     max_tokens = Column(Integer, default=4096)
     system_prompt = Column(Text, nullable=True)
     rag_enabled = Column(Boolean, default=False)
+    # How many chunks to retrieve per RAG query (UI slider 1-20)
+    rag_k = Column(Integer, default=5, nullable=False, server_default="5")
+    # Per-session overrides for env flags (NULL = follow env)
+    rag_hybrid_override = Column(Boolean, nullable=True)
+    rag_rerank_override = Column(Boolean, nullable=True)
+    # Include results from OTHER project collections (cross-project RAG)
+    rag_include_shared = Column(Boolean, default=False, nullable=False, server_default="false")
 
     # Tools
     available_tools = Column(JSONB, default=list)

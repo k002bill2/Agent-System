@@ -1,12 +1,15 @@
 """Playground Tools - Real implementations for playground tool execution."""
 
 import asyncio
+import logging
 import os
 import re
 from datetime import datetime
 from typing import Any
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 class PlaygroundTools:
@@ -19,17 +22,63 @@ class PlaygroundTools:
     @staticmethod
     async def web_search(query: str, max_results: int = 5) -> dict[str, Any]:
         """
-        Search the web using DuckDuckGo Instant Answer API.
+        Search the web. Uses Tavily (advanced search + synthesized answer)
+        when ``TAVILY_API_KEY`` is set, otherwise falls back to DuckDuckGo
+        Instant Answer (which only returns Wikipedia-style answer cards, not
+        general web results).
 
-        Args:
-            query: Search query string
-            max_results: Maximum number of results to return
-
-        Returns:
-            Search results with titles, URLs, and snippets
+        Returns a dict with ``success``, ``query``, ``results`` (list of
+        {title, url, snippet[, score]}), ``total``, and optionally ``answer``
+        (Tavily's synthesized answer) and ``provider``.
         """
+        api_key = os.getenv("TAVILY_API_KEY", "").strip()
+        if api_key:
+            try:
+                return await PlaygroundTools._web_search_tavily(query, max_results, api_key)
+            except Exception as e:
+                logger.warning("Tavily search failed, falling back to DuckDuckGo: %s", e)
+        return await PlaygroundTools._web_search_ddg(query, max_results)
+
+    @staticmethod
+    async def _web_search_tavily(
+        query: str,
+        max_results: int,
+        api_key: str,
+    ) -> dict[str, Any]:
+        """Tavily-backed search — returns real web results with LLM-ready answer."""
+        from tavily import AsyncTavilyClient
+
+        client = AsyncTavilyClient(api_key=api_key)
+        response = await client.search(
+            query=query,
+            max_results=max_results,
+            search_depth="advanced",
+            include_answer=True,
+        )
+
+        results = [
+            {
+                "title": r.get("title", ""),
+                "url": r.get("url", ""),
+                "snippet": r.get("content", ""),
+                "score": r.get("score", 0.0),
+            }
+            for r in response.get("results", [])
+        ]
+
+        return {
+            "success": True,
+            "query": query,
+            "answer": response.get("answer"),
+            "results": results,
+            "total": len(results),
+            "provider": "tavily",
+        }
+
+    @staticmethod
+    async def _web_search_ddg(query: str, max_results: int = 5) -> dict[str, Any]:
+        """Legacy DuckDuckGo Instant Answer fallback (no API key required)."""
         try:
-            # Use DuckDuckGo Instant Answer API (free, no API key needed)
             async with httpx.AsyncClient(timeout=10.0) as client:
                 # DuckDuckGo Instant Answer API
                 response = await client.get(
@@ -92,7 +141,12 @@ class PlaygroundTools:
                         "success": True,
                         "query": query,
                         "results": [],
-                        "message": f"No instant answers found for '{query}'. Try a more specific query or rephrase.",
+                        "provider": "duckduckgo",
+                        "message": (
+                            f"No instant answers found for '{query}'. DuckDuckGo "
+                            "Instant Answer only returns Wikipedia-style cards — "
+                            "set TAVILY_API_KEY for general web search."
+                        ),
                     }
 
                 return {
@@ -100,6 +154,7 @@ class PlaygroundTools:
                     "query": query,
                     "results": results[:max_results],
                     "total": len(results),
+                    "provider": "duckduckgo",
                 }
 
         except httpx.TimeoutException:
@@ -107,12 +162,14 @@ class PlaygroundTools:
                 "success": False,
                 "error": "Search request timed out",
                 "results": [],
+                "provider": "duckduckgo",
             }
         except Exception as e:
             return {
                 "success": False,
                 "error": f"Search failed: {str(e)}",
                 "results": [],
+                "provider": "duckduckgo",
             }
 
     @staticmethod
@@ -566,7 +623,12 @@ class PlaygroundTools:
 TOOL_DEFINITIONS = [
     {
         "name": "web_search",
-        "description": "Search the web for information. Use this when you need to find current information, facts, or answers to questions.",
+        "description": (
+            "Search the web for current information using Tavily (advanced search). "
+            "Returns up to N results with title, URL, snippet, and a synthesized "
+            "answer. Use this whenever you need recent or external information not "
+            "covered in the project context."
+        ),
         "parameters": {
             "type": "object",
             "properties": {

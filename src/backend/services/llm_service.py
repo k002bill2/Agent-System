@@ -6,7 +6,12 @@ import time
 from collections.abc import AsyncIterator
 from typing import Any
 
-from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import (
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 
 from models.llm_models import LLMModelRegistry, get_model_configs
 
@@ -45,6 +50,53 @@ class LLMResponse:
         input_cost = (self.input_tokens / 1000) * pricing["input"]
         output_cost = (self.output_tokens / 1000) * pricing["output"]
         return round(input_cost + output_cost, 6)
+
+
+def _build_messages(
+    system_prompt: str | None,
+    history: list[BaseMessage] | None,
+    prompt: str,
+    rag_context: str | None = None,
+    extra_context: dict[str, Any] | None = None,
+) -> list[BaseMessage]:
+    """
+    Build a LangChain message sequence for LLM invocation.
+
+    Layout:
+        1. SystemMessage: base system prompt (persona, rules)
+        2. SystemMessage: RAG / project context (separated so the model treats
+           it as authoritative context, not user input)
+        3. <history>: previous HumanMessage / AIMessage / ToolMessage turns
+        4. HumanMessage: current user prompt (with optional inline extra_context)
+    """
+    messages: list[BaseMessage] = []
+
+    if system_prompt:
+        messages.append(SystemMessage(content=system_prompt))
+
+    if rag_context:
+        messages.append(
+            SystemMessage(
+                content=(
+                    "## Relevant project context\n"
+                    "Use the following retrieved context as the source of truth "
+                    "for any project-specific facts. If the answer isn't in the "
+                    "context, say so explicitly instead of guessing.\n\n"
+                    f"{rag_context}"
+                )
+            )
+        )
+
+    if history:
+        messages.extend(history)
+
+    if extra_context:
+        ctx_str = "\n".join(f"- {k}: {v}" for k, v in extra_context.items())
+        messages.append(HumanMessage(content=f"Additional context:\n{ctx_str}\n\nUser: {prompt}"))
+    else:
+        messages.append(HumanMessage(content=prompt))
+
+    return messages
 
 
 class LLMService:
@@ -128,20 +180,22 @@ class LLMService:
         temperature: float = 0.7,
         max_tokens: int = 4096,
         context: dict[str, Any] | None = None,
+        history: list[BaseMessage] | None = None,
+        rag_context: str | None = None,
     ) -> LLMResponse:
         """
         Invoke an LLM with the given prompt.
 
         Args:
-            prompt: The user's prompt
-            model_id: Model identifier (e.g., "gemini-3-flash-preview", "claude-sonnet-4-6")
-            system_prompt: Optional system prompt
-            temperature: Sampling temperature
-            max_tokens: Maximum output tokens
-            context: Optional context dict to include
-
-        Returns:
-            LLMResponse with content and metrics
+            prompt: The user's prompt (current turn).
+            model_id: Model identifier (e.g., "gemini-3-flash-preview").
+            system_prompt: Optional system prompt.
+            temperature: Sampling temperature.
+            max_tokens: Maximum output tokens.
+            context: Optional extra-context dict inlined above the user prompt.
+            history: Prior turns as LangChain messages (enables multi-turn).
+            rag_context: Retrieved project context injected as a separate
+                SystemMessage so the model treats it as authoritative.
         """
         config = MODEL_CONFIGS.get(model_id, {})
         provider = config.get("provider", "unknown")
@@ -151,19 +205,13 @@ class LLMService:
         try:
             llm = cls._get_llm(model_id, temperature, max_tokens)
 
-            # Build messages
-            messages = []
-            if system_prompt:
-                messages.append(SystemMessage(content=system_prompt))
-
-            # Add context if provided
-            if context:
-                context_str = "\n".join(f"- {k}: {v}" for k, v in context.items())
-                full_prompt = f"Context:\n{context_str}\n\nUser: {prompt}"
-            else:
-                full_prompt = prompt
-
-            messages.append(HumanMessage(content=full_prompt))
+            messages = _build_messages(
+                system_prompt=system_prompt,
+                history=history,
+                prompt=prompt,
+                rag_context=rag_context,
+                extra_context=context,
+            )
 
             # Invoke LLM
             response = await llm.ainvoke(messages)
@@ -184,11 +232,13 @@ class LLMService:
                     input_tokens = usage.get("input_tokens", usage.get("prompt_tokens", 0))
                     output_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
 
-            # Estimate if not available
+            # Estimate if not available (sum across all messages — history +
+            # rag + current turn — to reflect what the model actually saw)
             if input_tokens == 0:
-                input_tokens = len(full_prompt.split()) * 2
+                approx = sum(len(str(m.content).split()) for m in messages if hasattr(m, "content"))
+                input_tokens = approx * 2
             if output_tokens == 0:
-                output_tokens = len(response.content.split()) * 2
+                output_tokens = len(str(response.content).split()) * 2
 
             return LLMResponse(
                 content=response.content,
@@ -212,29 +262,21 @@ class LLMService:
         temperature: float = 0.7,
         max_tokens: int = 4096,
         context: dict[str, Any] | None = None,
+        history: list[BaseMessage] | None = None,
+        rag_context: str | None = None,
     ) -> AsyncIterator[str]:
-        """
-        Stream response from LLM.
-
-        Yields chunks of text as they arrive.
-        """
+        """Stream response from LLM. See ``invoke`` for argument semantics."""
         try:
             llm = cls._get_llm(model_id, temperature, max_tokens)
 
-            # Build messages
-            messages = []
-            if system_prompt:
-                messages.append(SystemMessage(content=system_prompt))
+            messages = _build_messages(
+                system_prompt=system_prompt,
+                history=history,
+                prompt=prompt,
+                rag_context=rag_context,
+                extra_context=context,
+            )
 
-            if context:
-                context_str = "\n".join(f"- {k}: {v}" for k, v in context.items())
-                full_prompt = f"Context:\n{context_str}\n\nUser: {prompt}"
-            else:
-                full_prompt = prompt
-
-            messages.append(HumanMessage(content=full_prompt))
-
-            # Stream response
             async for chunk in llm.astream(messages):
                 if hasattr(chunk, "content") and chunk.content:
                     yield chunk.content
@@ -251,6 +293,8 @@ class LLMService:
         temperature: float = 0.7,
         max_tokens: int = 4096,
         context: dict[str, Any] | None = None,
+        history: list[BaseMessage] | None = None,
+        rag_context: str | None = None,
     ) -> AsyncIterator[tuple[str, dict | None]]:
         """
         Stream response from LLM with token information.
@@ -259,24 +303,21 @@ class LLMService:
 
         Yields:
             Tuple of (chunk_text, token_info).
-            token_info is None for intermediate chunks, and contains
-            token usage data in the final yield.
+            ``token_info`` is None for intermediate chunks; the final yield
+            carries usage data, or ``{"error": True, "message": ...}`` on
+            failure so callers can distinguish error payloads from streamed
+            content.
         """
         try:
             llm = cls._get_llm(model_id, temperature, max_tokens)
 
-            # Build messages
-            messages = []
-            if system_prompt:
-                messages.append(SystemMessage(content=system_prompt))
-
-            if context:
-                context_str = "\n".join(f"- {k}: {v}" for k, v in context.items())
-                full_prompt = f"Context:\n{context_str}\n\nUser: {prompt}"
-            else:
-                full_prompt = prompt
-
-            messages.append(HumanMessage(content=full_prompt))
+            messages = _build_messages(
+                system_prompt=system_prompt,
+                history=history,
+                prompt=prompt,
+                rag_context=rag_context,
+                extra_context=context,
+            )
 
             token_info = None
 
@@ -324,7 +365,9 @@ class LLMService:
                 yield "", token_info
 
         except Exception as e:
-            yield f"\n\n[Error: {str(e)}]", None
+            # Emit error with structured sentinel so callers can distinguish
+            # an error payload from a streamed content chunk.
+            yield f"\n\n[Error: {str(e)}]", {"error": True, "message": str(e)}
 
     @classmethod
     def get_available_models(cls) -> list[dict[str, Any]]:
@@ -354,26 +397,18 @@ class LLMService:
         context: dict[str, Any] | None = None,
         max_tool_iterations: int = 15,
         working_directory: str | None = None,
+        history: list[BaseMessage] | None = None,
+        rag_context: str | None = None,
     ) -> LLMResponse:
         """
         Invoke an LLM with tool support.
 
         The LLM can call tools, and this method will execute them
-        and return the final response.
+        and return the final response. When the iteration budget is exhausted
+        a single forced-final round is performed (without tools) so callers
+        always receive a real answer instead of a sentinel string.
 
-        Args:
-            prompt: The user's prompt
-            tools: List of enabled tool names
-            model_id: Model identifier
-            system_prompt: Optional system prompt
-            temperature: Sampling temperature
-            max_tokens: Maximum output tokens
-            context: Optional context dict
-            max_tool_iterations: Max number of tool call rounds
-            working_directory: Working directory for file/code tools
-
-        Returns:
-            LLMResponse with content, tool calls, and metrics
+        See ``invoke`` for ``history`` / ``rag_context`` semantics.
         """
         from services.playground_tools import TOOL_DEFINITIONS, execute_tool
 
@@ -383,8 +418,15 @@ class LLMService:
         start_time = time.time()
         total_input_tokens = 0
         total_output_tokens = 0
-        all_tool_calls = []
-        all_tool_results = []
+        all_tool_calls: list[dict[str, Any]] = []
+        all_tool_results: list[dict[str, Any]] = []
+
+        default_tool_sys = (
+            "You are a helpful AI assistant. You have access to tools that you can use "
+            "to help answer questions. Use tools when they would help provide accurate "
+            "and current information. After using tools, synthesize the results into a "
+            "helpful response."
+        )
 
         try:
             llm = cls._get_llm(model_id, temperature, max_tokens)
@@ -398,29 +440,13 @@ class LLMService:
             else:
                 llm_with_tools = llm
 
-            # Build initial messages
-            messages = []
-            if system_prompt:
-                messages.append(SystemMessage(content=system_prompt))
-            else:
-                # Default system prompt for tool usage
-                messages.append(
-                    SystemMessage(
-                        content="You are a helpful AI assistant. "
-                        "You have access to tools that you can use to help answer questions. "
-                        "Use tools when they would help provide accurate and current information. "
-                        "After using tools, synthesize the results into a helpful response."
-                    )
-                )
-
-            # Add context if provided
-            if context:
-                context_str = "\n".join(f"- {k}: {v}" for k, v in context.items())
-                full_prompt = f"Context:\n{context_str}\n\nUser: {prompt}"
-            else:
-                full_prompt = prompt
-
-            messages.append(HumanMessage(content=full_prompt))
+            messages = _build_messages(
+                system_prompt=system_prompt or default_tool_sys,
+                history=history,
+                prompt=prompt,
+                rag_context=rag_context,
+                extra_context=context,
+            )
 
             # Iterate until we get a final response or hit max iterations
             for _iteration in range(max_tool_iterations):
@@ -439,11 +465,14 @@ class LLMService:
                     # No more tool calls - return final response
                     latency_ms = int((time.time() - start_time) * 1000)
 
-                    # Estimate tokens if not available
+                    # Estimate tokens if not available — sum across all messages
                     if total_input_tokens == 0:
-                        total_input_tokens = len(full_prompt.split()) * 2
+                        approx = sum(
+                            len(str(m.content).split()) for m in messages if hasattr(m, "content")
+                        )
+                        total_input_tokens = approx * 2
                     if total_output_tokens == 0:
-                        total_output_tokens = len(response.content.split()) * 2
+                        total_output_tokens = len(str(response.content).split()) * 2
 
                     return LLMResponse(
                         content=response.content,
@@ -498,11 +527,34 @@ class LLMService:
                         )
                     )
 
-            # Max iterations reached
+            # Tool iteration budget exhausted — force a final-answer round
+            # using the raw (non-tool-bound) LLM so we never return the
+            # "[Max tool iterations reached]" sentinel to users.
+            messages.append(
+                SystemMessage(
+                    content=(
+                        "Tool budget exhausted. Based on the tool results gathered "
+                        "so far, produce your best final answer to the user now. "
+                        "Do NOT call any more tools."
+                    )
+                )
+            )
+            final_response = await llm.ainvoke(messages)
+
+            if hasattr(final_response, "usage_metadata") and final_response.usage_metadata:
+                total_input_tokens += final_response.usage_metadata.get("input_tokens", 0)
+                total_output_tokens += final_response.usage_metadata.get("output_tokens", 0)
+
             latency_ms = int((time.time() - start_time) * 1000)
 
+            if total_input_tokens == 0:
+                approx = sum(len(str(m.content).split()) for m in messages if hasattr(m, "content"))
+                total_input_tokens = approx * 2
+            if total_output_tokens == 0:
+                total_output_tokens = len(str(final_response.content).split()) * 2
+
             return LLMResponse(
-                content="[Max tool iterations reached]",
+                content=final_response.content,
                 input_tokens=total_input_tokens,
                 output_tokens=total_output_tokens,
                 latency_ms=latency_ms,

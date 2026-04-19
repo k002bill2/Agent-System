@@ -76,12 +76,33 @@ except ImportError:
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "google")
 EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "huggingface")
 
-if EMBEDDING_PROVIDER == "openai":
+# Explicit override (per provider default is only used when this is empty)
+_RAG_EMBEDDING_MODEL_OVERRIDE = os.getenv("RAG_EMBEDDING_MODEL", "").strip()
+
+if _RAG_EMBEDDING_MODEL_OVERRIDE:
+    DEFAULT_EMBEDDING_MODEL = _RAG_EMBEDDING_MODEL_OVERRIDE
+elif EMBEDDING_PROVIDER == "openai":
     DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
 elif EMBEDDING_PROVIDER == "google":
     DEFAULT_EMBEDDING_MODEL = "models/text-embedding-004"
 else:
-    DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+    # Multilingual + code aware; Korean/English/code quality far better than
+    # all-MiniLM-L6-v2. 1024 dim, ~2.3 GB on first load.
+    DEFAULT_EMBEDDING_MODEL = "BAAI/bge-m3"
+
+# Chunking defaults — larger chunks to exploit Gemini 1M context window
+RAG_CHUNK_SIZE = int(os.getenv("RAG_CHUNK_SIZE", "1500"))
+RAG_CHUNK_OVERLAP = int(os.getenv("RAG_CHUNK_OVERLAP", "300"))
+
+# HuggingFace embedding device. macOS PyTorch MPS + asyncio/uvloop has a
+# known deadlock pattern (metal gpu stream + idle callback livelock) on
+# longer indexing runs, so default to CPU. Override with mps/cuda when
+# running outside an event loop or when the indexer is run as a CLI script.
+RAG_EMBEDDING_DEVICE = os.getenv("RAG_EMBEDDING_DEVICE", "cpu").strip().lower()
+# Batch size for sentence-transformers encode(). Larger = faster but more
+# memory. bge-m3 default 32 is conservative; 64 roughly halves wallclock
+# at ~2x peak memory.
+RAG_EMBEDDING_BATCH_SIZE = int(os.getenv("RAG_EMBEDDING_BATCH_SIZE", "64"))
 
 # ── File extension → Language mapping ─────────────────────────────────────────
 _EXTENSION_LANGUAGE_MAP: dict[str, Any] = {}
@@ -220,21 +241,28 @@ class ProjectVectorStore:
         """Create embeddings instance based on EMBEDDING_PROVIDER."""
         model = model_name or DEFAULT_EMBEDDING_MODEL
 
-        if (
-            EMBEDDING_PROVIDER == "huggingface"
-            or "sentence-transformers" in model
-            or "all-MiniLM" in model
-        ):
+        # HuggingFace route: explicit provider, OR model name matches a known
+        # HF repo pattern. Previously this clamped non-"sentence-transformers"
+        # names back to all-MiniLM, which silently discarded BAAI/bge-m3 etc.
+        _looks_like_hf = "/" in model or "sentence-transformers" in model or "all-MiniLM" in model
+        if EMBEDDING_PROVIDER == "huggingface" or _looks_like_hf:
             try:
                 from langchain_huggingface import HuggingFaceEmbeddings
 
-                hf_model = (
-                    model
-                    if "sentence-transformers" in model
-                    else "sentence-transformers/all-MiniLM-L6-v2"
+                model_kwargs: dict[str, Any] = {"device": RAG_EMBEDDING_DEVICE}
+                encode_kwargs: dict[str, Any] = {
+                    "batch_size": RAG_EMBEDDING_BATCH_SIZE,
+                    "normalize_embeddings": True,
+                }
+                print(
+                    f"[RAG] Using HuggingFace embeddings: {model} "
+                    f"(device={RAG_EMBEDDING_DEVICE}, batch={RAG_EMBEDDING_BATCH_SIZE})"
                 )
-                print(f"[RAG] Using HuggingFace embeddings: {hf_model}")
-                return HuggingFaceEmbeddings(model_name=hf_model)
+                return HuggingFaceEmbeddings(
+                    model_name=model,
+                    model_kwargs=model_kwargs,
+                    encode_kwargs=encode_kwargs,
+                )
             except ImportError:
                 print("[RAG] langchain-huggingface not installed, trying alternatives...")
 
@@ -387,9 +415,14 @@ class ProjectVectorStore:
         self,
         content: str,
         file_path: str,
-        chunk_size: int = 1000,
-        chunk_overlap: int = 200,
+        chunk_size: int | None = None,
+        chunk_overlap: int | None = None,
     ) -> list[Document]:
+        # Use env-driven defaults when caller doesn't specify
+        if chunk_size is None:
+            chunk_size = RAG_CHUNK_SIZE
+        if chunk_overlap is None:
+            chunk_overlap = RAG_CHUNK_OVERLAP
         """
         Split a document into chunks for indexing.
 
@@ -830,15 +863,18 @@ class ProjectVectorStore:
         k: int = 5,
         filter_priority: str | None = None,
         include_shared: bool = False,
+        force_hybrid: bool | None = None,
+        force_rerank: bool | None = None,
     ) -> QueryResult:
         """
         Query the vector store for relevant documents.
 
-        When RAG_ENABLE_HYBRID is True:
+        When hybrid is active (env ``RAG_ENABLE_HYBRID`` or ``force_hybrid=True``):
           1. Semantic search (k * CANDIDATE_MULTIPLIER candidates)
           2. BM25 keyword search (k * 2 candidates)
           3. RRF fusion of both lists
-          4. Optional CrossEncoder reranking (if RAG_ENABLE_RERANK)
+          4. Optional CrossEncoder reranking (env ``RAG_ENABLE_RERANK`` or
+             ``force_rerank=True``)
           5. Return top-k
 
         Otherwise: standard semantic similarity search.
@@ -846,8 +882,15 @@ class ProjectVectorStore:
         Args:
             include_shared: If True, also search other project collections
                 and merge results (current project gets a boost).
+            force_hybrid: Per-call override for ``RAG_ENABLE_HYBRID`` env
+                (``None`` = use env, ``True``/``False`` = force).
+            force_rerank: Per-call override for ``RAG_ENABLE_RERANK`` env.
         """
         collection = self._get_or_create_collection(project_id)
+
+        # Resolve effective flags (per-call overrides beat env)
+        use_hybrid = RAG_ENABLE_HYBRID if force_hybrid is None else force_hybrid
+        use_rerank = RAG_ENABLE_RERANK if force_rerank is None else force_rerank
 
         # Build Qdrant filter for priority
         qdrant_filter = None
@@ -861,8 +904,10 @@ class ProjectVectorStore:
                 ]
             )
 
-        if RAG_ENABLE_HYBRID and BM25_AVAILABLE:
-            local_result = await self._hybrid_query(project_id, collection, query, k, qdrant_filter)
+        if use_hybrid and BM25_AVAILABLE:
+            local_result = await self._hybrid_query(
+                project_id, collection, query, k, qdrant_filter, use_rerank=use_rerank
+            )
         else:
             # ── Standard semantic-only path ───────────────────────────────────
             results = collection.similarity_search_with_score(
@@ -891,25 +936,29 @@ class ProjectVectorStore:
             return local_result
 
         # ── Cross-project search: merge results from other collections ────
+        # Strategy: fair RRF across every project, then (when rerank is on)
+        # CrossEncoder-score the fused pool against the query. This replaces
+        # the prior "insert local twice" boost, which mathematically locked
+        # every slot to the current project when k <= len(local_result).
         other_collections = self._get_all_project_collections(exclude_ids=[project_id])
 
         all_ranked_lists: list[list[tuple[str, dict[str, Any]]]] = []
 
-        # Add local results as a ranked list (with boost via double insertion)
         local_ranked: list[tuple[str, dict[str, Any]]] = [
             (d["content"], {**d, "project_id": d.get("project_id", project_id)})
             for d in local_result.documents
         ]
-        # Insert local list twice to give it a boost in RRF fusion
-        all_ranked_lists.append(local_ranked)
         all_ranked_lists.append(local_ranked)
 
+        # Pull a wider candidate pool from each other project so the reranker
+        # has a real chance to surface them in the final top-k.
+        other_k = max(k, k * 2)
         for coll_name in other_collections:
             try:
                 other_pid = self._extract_project_id_from_collection(coll_name)
                 other_vs = self._get_or_create_collection(other_pid)
                 other_results = other_vs.similarity_search_with_score(
-                    query=query, k=k, filter=qdrant_filter
+                    query=query, k=other_k, filter=qdrant_filter
                 )
                 other_ranked: list[tuple[str, dict[str, Any]]] = [
                     (
@@ -927,9 +976,18 @@ class ProjectVectorStore:
             except Exception as e:
                 logger.warning("Cross-project search failed for %s: %s", coll_name, e)
 
-        fused = self._rrf_fusion(all_ranked_lists)[:k]
+        fused = self._rrf_fusion(all_ranked_lists)
 
-        return QueryResult(query=query, documents=fused, total_found=len(fused))
+        # Final reranking on the fused pool when enabled — CrossEncoder
+        # compares the query directly against each candidate, giving a fair
+        # cross-project ranking regardless of per-collection score scales.
+        if use_rerank and RERANK_AVAILABLE:
+            rerank_pool = fused[: max(k * 3, 30)]
+            final = self._rerank(query, rerank_pool, top_k=k)
+        else:
+            final = fused[:k]
+
+        return QueryResult(query=query, documents=final, total_found=len(final))
 
     async def query_cross_project(
         self,
@@ -1007,8 +1065,14 @@ class ProjectVectorStore:
         query: str,
         k: int,
         qdrant_filter: QdrantFilter | None,
+        use_rerank: bool | None = None,
     ) -> QueryResult:
-        """Hybrid search: semantic + BM25 -> RRF -> optional rerank."""
+        """Hybrid search: semantic + BM25 -> RRF -> optional rerank.
+
+        ``use_rerank`` defaults to the env flag ``RAG_ENABLE_RERANK`` when None.
+        """
+        if use_rerank is None:
+            use_rerank = RAG_ENABLE_RERANK
 
         # 1. Semantic candidates (expanded)
         semantic_k = k * RAG_CANDIDATE_MULTIPLIER
@@ -1031,8 +1095,8 @@ class ProjectVectorStore:
         # 3. RRF fusion
         fused = self._rrf_fusion([semantic_ranked, bm25_ranked])
 
-        # 4. Optional reranking
-        if RAG_ENABLE_RERANK and RERANK_AVAILABLE:
+        # 4. Optional reranking (respects per-call override, falls back to env)
+        if use_rerank and RERANK_AVAILABLE:
             rerank_pool = fused[: k * 2]
             final = self._rerank(query, rerank_pool, top_k=k)
         else:
@@ -1132,19 +1196,29 @@ async def get_project_context_with_sources(
     query: str,
     k: int = 5,
     include_shared: bool = False,
+    force_hybrid: bool | None = None,
+    force_rerank: bool | None = None,
 ) -> tuple[str, list[dict]]:
     """
     Get relevant project context with structured source information.
 
     Args:
         include_shared: If True, also include results from other projects.
+        force_hybrid / force_rerank: Per-call overrides for env flags (None=env).
 
     Returns:
         tuple of (formatted context string, list of source document dicts)
         Each source dict: {content, source, chunk_index, priority, score[, project_id]}
     """
     store = get_vector_store()
-    result = await store.query(project_id, query, k=k, include_shared=include_shared)
+    result = await store.query(
+        project_id,
+        query,
+        k=k,
+        include_shared=include_shared,
+        force_hybrid=force_hybrid,
+        force_rerank=force_rerank,
+    )
 
     if not result.documents:
         return "", []
