@@ -335,9 +335,11 @@ class TestStage2Retrieval:
 
         result = await vector_store.query("proj1", "query", k=5, filter_priority="high")
 
-        # Qdrant 필터가 호출되었는지 확인
-        call_args = mock_collection.similarity_search_with_score.call_args
-        assert call_args.kwargs.get("filter") is not None
+        # Qdrant 필터가 첫 호출에 적용되었는지 확인.
+        # (sparse-result fallback 발동 시 후속 호출은 filter=None로 재시도하므로
+        # 마지막 호출이 아니라 첫 호출을 검사해야 한다.)
+        first_call = mock_collection.similarity_search_with_score.call_args_list[0]
+        assert first_call.kwargs.get("filter") is not None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -511,7 +513,7 @@ class TestTroubleshooting:
         # force_reindex가 캐시를 지우는지 확인 (실제 인덱싱 없이 로직만 검증)
         import services.rag_service as rag_mod
 
-        source = inspect.getsource(rag_mod.ProjectVectorStore.index_project)
+        source = inspect.getsource(rag_mod.ProjectVectorStore._index_project_sync)
         assert "bm25_indices.pop" in source
         assert "bm25_corpus.pop" in source
 
@@ -532,7 +534,7 @@ class TestTroubleshooting:
 
         import services.rag_service as rag_mod
 
-        source = inspect.getsource(rag_mod.ProjectVectorStore.index_project)
+        source = inspect.getsource(rag_mod.ProjectVectorStore._index_project_sync)
         assert "batch_size = 5000" in source
 
 
@@ -610,7 +612,7 @@ class TestStage4CrossProject:
         """인덱싱 시 chunk 메타데이터에 project_id가 포함되는지."""
         import services.rag_service as rag_mod
 
-        source = inspect.getsource(rag_mod.ProjectVectorStore.index_project)
+        source = inspect.getsource(rag_mod.ProjectVectorStore._index_project_sync)
         # project_id가 메타데이터에 추가되는 코드가 있는지
         assert 'metadata["project_id"]' in source
 

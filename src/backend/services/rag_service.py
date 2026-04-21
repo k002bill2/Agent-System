@@ -9,10 +9,12 @@ All new features are off by default and controlled via environment variables.
 Vector DB backend: Qdrant (migrated from ChromaDB).
 """
 
+import asyncio
 import hashlib
 import logging
 import os
 import re
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -235,6 +237,12 @@ class ProjectVectorStore:
         # CrossEncoder singleton (lazy)
         self._cross_encoder: Any | None = None
 
+        # Approx collection-size cache (project_id → (count, monotonic_ts))
+        # Used by _effective_candidate_multiplier to widen the candidate pool
+        # on large corpora without paying the count() cost on every query.
+        self._collection_size_cache: dict[str, tuple[int, float]] = {}
+        self._collection_size_ttl_seconds: float = 60.0
+
     # ── Embeddings ────────────────────────────────────────────────────────────
 
     def _create_embeddings(self, model_name: str | None = None) -> Embeddings:
@@ -432,9 +440,9 @@ class ProjectVectorStore:
         """
         content_hash = hashlib.md5(content.encode()).hexdigest()[:8]
 
-        # Small files -> single chunk (use configurable threshold)
-        effective_threshold = max(chunk_size, RAG_FULL_CONTEXT_THRESHOLD)
-        if len(content) <= effective_threshold:
+        # Small files -> single chunk. Use threshold directly so callers can
+        # tune chunk_size and threshold independently (no implicit floor).
+        if len(content) <= RAG_FULL_CONTEXT_THRESHOLD:
             return [
                 Document(
                     page_content=content,
@@ -696,6 +704,10 @@ class ProjectVectorStore:
         """
         Index all relevant files in a project directory.
 
+        Offloads the synchronous filesystem walk + embedding generation +
+        Qdrant upload to a worker thread so the asyncio event loop stays
+        responsive during long indexing runs (4000+ chunks).
+
         Args:
             project_id: Unique project identifier
             project_path: Path to the project root
@@ -704,6 +716,16 @@ class ProjectVectorStore:
         Returns:
             IndexingResult with statistics
         """
+        return await asyncio.to_thread(
+            self._index_project_sync, project_id, project_path, force_reindex
+        )
+
+    def _index_project_sync(
+        self,
+        project_id: str,
+        project_path: str,
+        force_reindex: bool = False,
+    ) -> IndexingResult:
         collection = self._get_or_create_collection(project_id)
         collection_name = self._get_collection_name(project_id)
 
@@ -854,6 +876,40 @@ class ProjectVectorStore:
             collection_name=collection_name,
         )
 
+    # ── Adaptive search helpers ───────────────────────────────────────────────
+
+    def _approx_collection_size(self, project_id: str) -> int:
+        """Approximate point count for a project's collection (TTL-cached)."""
+        now = time.monotonic()
+        cached = self._collection_size_cache.get(project_id)
+        if cached is not None and (now - cached[1]) < self._collection_size_ttl_seconds:
+            return cached[0]
+
+        try:
+            collection_name = self._get_collection_name(project_id)
+            count = int(self.client.count(collection_name=collection_name, exact=False).count)
+        except Exception:
+            count = 0
+
+        self._collection_size_cache[project_id] = (count, now)
+        return count
+
+    def _effective_candidate_multiplier(self, project_id: str) -> int:
+        """Scale candidate pool by corpus size so large projects get a wider net.
+
+        Why: similarity_search_with_score returns the top-k closest vectors,
+        but in a 100k-chunk corpus the truly best matches may not be in the
+        top-k by raw cosine — RRF + reranker can rescue them, but only if
+        they are in the candidate pool to begin with.
+        """
+        size = self._approx_collection_size(project_id)
+        base = RAG_CANDIDATE_MULTIPLIER
+        if size < 1_000:
+            return base
+        if size < 10_000:
+            return base * 2
+        return base * 3
+
     # ── Query ─────────────────────────────────────────────────────────────────
 
     async def query(
@@ -910,11 +966,14 @@ class ProjectVectorStore:
             )
         else:
             # ── Standard semantic-only path ───────────────────────────────────
+            # Pull a wider pool then trim to k so adaptive multiplier helps
+            # the non-hybrid path too.
+            pool_size = k * self._effective_candidate_multiplier(project_id)
             results = collection.similarity_search_with_score(
                 query=query,
-                k=k,
+                k=pool_size,
                 filter=qdrant_filter,
-            )
+            )[:k]
 
             documents = []
             for doc, score in results:
@@ -931,6 +990,26 @@ class ProjectVectorStore:
                 )
 
             local_result = QueryResult(query=query, documents=documents, total_found=len(documents))
+
+        # Sparse-result fallback: if a priority filter starved the result set,
+        # retry once without the filter so callers always get something useful.
+        if filter_priority and len(local_result.documents) < min(k, 2):
+            logger.info(
+                "Sparse result (%d) for project '%s' with priority='%s'; "
+                "retrying without priority filter",
+                len(local_result.documents),
+                project_id,
+                filter_priority,
+            )
+            local_result = await self.query(
+                project_id=project_id,
+                query=query,
+                k=k,
+                filter_priority=None,
+                include_shared=False,
+                force_hybrid=force_hybrid,
+                force_rerank=force_rerank,
+            )
 
         if not include_shared:
             return local_result
@@ -1074,8 +1153,9 @@ class ProjectVectorStore:
         if use_rerank is None:
             use_rerank = RAG_ENABLE_RERANK
 
-        # 1. Semantic candidates (expanded)
-        semantic_k = k * RAG_CANDIDATE_MULTIPLIER
+        # 1. Semantic candidates — pool size scales with corpus so reranker
+        # has a real chance to surface deep matches in large projects.
+        semantic_k = k * self._effective_candidate_multiplier(project_id)
         semantic_results = collection.similarity_search_with_score(
             query=query,
             k=semantic_k,

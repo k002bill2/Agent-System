@@ -165,6 +165,16 @@ class LLMService:
                 api_key=api_key,
             )
 
+        elif provider == "ollama":
+            from langchain_ollama import ChatOllama
+
+            llm = ChatOllama(
+                model=config["model"],
+                temperature=temperature,
+                num_predict=max_tokens,
+                base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+            )
+
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
