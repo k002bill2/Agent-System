@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -107,6 +107,18 @@ class PlaygroundSession(BaseModel):
     # (e.g. Obsidian).
     rag_include_shared: bool = False
 
+    # Claude Code rules / memory injection (opt-in).
+    # When a mode is not "off", matching rule/memory bodies are prepended to
+    # ``system_prompt`` at LLM invocation time. See
+    # ``services.playground_context.build_effective_system_prompt``.
+    rules_mode: Literal["off", "global", "project", "both"] = "off"
+    memory_mode: Literal["off", "index", "full"] = "off"
+    # Empty list = "include everything allowed by mode". Non-empty = allow-list.
+    selected_rule_ids: list[str] = Field(default_factory=list)
+    selected_memory_ids: list[str] = Field(default_factory=list)
+    # Soft cap on total tokens injected for rules + memory (LLM-independent).
+    context_budget_tokens: int = Field(default=8000, ge=500, le=64000)
+
     # Tools
     available_tools: list[str] = Field(default_factory=list)
     enabled_tools: list[str] = Field(default_factory=list)
@@ -137,6 +149,13 @@ class PlaygroundSessionCreate(BaseModel):
     model: str = Field(default_factory=_get_default_model)
     system_prompt: str | None = None
     rag_enabled: bool = False
+
+    # Optional at creation time — can also be edited later via settings PATCH.
+    rules_mode: Literal["off", "global", "project", "both"] = "off"
+    memory_mode: Literal["off", "index", "full"] = "off"
+    selected_rule_ids: list[str] = Field(default_factory=list)
+    selected_memory_ids: list[str] = Field(default_factory=list)
+    context_budget_tokens: int = Field(default=8000, ge=500, le=64000)
 
 
 class PlaygroundExecuteRequest(BaseModel):

@@ -46,6 +46,14 @@ class PlaygroundSessionModel(Base):
     # Include results from OTHER project collections (cross-project RAG)
     rag_include_shared = Column(Boolean, default=False, nullable=False, server_default="false")
 
+    # Claude Code rules / memory injection mode (opt-in).
+    # Modes are stored as strings; application layer validates via Literal.
+    rules_mode = Column(String(16), nullable=False, default="off", server_default="off")
+    memory_mode = Column(String(16), nullable=False, default="off", server_default="off")
+    selected_rule_ids = Column(JSONB, default=list, nullable=False, server_default="[]")
+    selected_memory_ids = Column(JSONB, default=list, nullable=False, server_default="[]")
+    context_budget_tokens = Column(Integer, nullable=False, default=8000, server_default="8000")
+
     # Tools
     available_tools = Column(JSONB, default=list)
     enabled_tools = Column(JSONB, default=list)

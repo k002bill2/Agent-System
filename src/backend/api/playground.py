@@ -1,10 +1,11 @@
 """Playground API routes."""
 
 import logging
+from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from api.deps import get_current_user_optional
 from api.rag import trigger_background_indexing
@@ -20,6 +21,7 @@ from models.playground import (
 )
 from models.project import PROJECTS_REGISTRY, get_project
 from services.llm_service import LLMService
+from services.playground_context import build_effective_system_prompt
 from services.playground_service import PlaygroundService
 
 logger = logging.getLogger(__name__)
@@ -61,6 +63,49 @@ async def get_session(session_id: str):
     return session
 
 
+class EffectiveSystemPromptResponse(BaseModel):
+    """Preview of the system prompt that will be sent to the LLM."""
+
+    session_id: str
+    system_prompt: str
+    base_length: int
+    effective_length: int
+    rules_mode: str
+    memory_mode: str
+
+
+@router.get(
+    "/sessions/{session_id}/effective-system-prompt",
+    response_model=EffectiveSystemPromptResponse,
+)
+async def get_effective_system_prompt(
+    session_id: str,
+    current_user: UserModel | None = Depends(get_current_user_optional),
+):
+    """Preview the final system prompt that will be sent to the LLM.
+
+    Includes the session base ``system_prompt`` plus any rules/memory bodies
+    selected by ``rules_mode`` / ``memory_mode``. Useful for debugging why
+    the model behaves (or doesn't behave) as expected.
+    """
+    session = PlaygroundService.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    # Authorization: if a user is attached to the session, require match.
+    if current_user and session.user_id and session.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    effective = build_effective_system_prompt(session)
+    return EffectiveSystemPromptResponse(
+        session_id=session.id,
+        system_prompt=effective,
+        base_length=len(session.system_prompt or ""),
+        effective_length=len(effective),
+        rules_mode=session.rules_mode,
+        memory_mode=session.memory_mode,
+    )
+
+
 @router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str):
     """Delete a playground session."""
@@ -86,6 +131,12 @@ class SessionSettingsUpdate(BaseModel):
     rag_hybrid_override: bool | None = None
     rag_rerank_override: bool | None = None
     rag_include_shared: bool | None = None
+    # Claude Code rules / memory injection
+    rules_mode: Literal["off", "global", "project", "both"] | None = None
+    memory_mode: Literal["off", "index", "full"] | None = None
+    selected_rule_ids: list[str] | None = None
+    selected_memory_ids: list[str] | None = None
+    context_budget_tokens: int | None = Field(default=None, ge=500, le=64000)
 
 
 @router.patch("/sessions/{session_id}/settings", response_model=PlaygroundSession)
@@ -111,6 +162,11 @@ async def update_session_settings(
         rag_hybrid_override=data.rag_hybrid_override,
         rag_rerank_override=data.rag_rerank_override,
         rag_include_shared=data.rag_include_shared,
+        rules_mode=data.rules_mode,
+        memory_mode=data.memory_mode,
+        selected_rule_ids=data.selected_rule_ids,
+        selected_memory_ids=data.selected_memory_ids,
+        context_budget_tokens=data.context_budget_tokens,
     )
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
