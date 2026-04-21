@@ -196,14 +196,14 @@ export function GitSetup({
               onChange={() => setPathOption('project')}
               className="mt-1"
             />
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <div className="font-medium text-gray-900 dark:text-white">
                 프로젝트 경로 사용
               </div>
               <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 프로젝트 경로에 Git 저장소가 있는 경우
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-300 mt-2 bg-gray-100 dark:bg-gray-700 px-3 py-2 rounded">
+              <div className="text-sm text-gray-600 dark:text-gray-300 mt-2 bg-gray-100 dark:bg-gray-700 px-3 py-2 rounded break-all">
                 {projectPath}
               </div>
             </div>
@@ -225,7 +225,7 @@ export function GitSetup({
               onChange={() => setPathOption('registered')}
               className="mt-1"
             />
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 font-medium text-gray-900 dark:text-white">
                 <Database className="w-4 h-4" />
                 등록된 저장소에서 선택
@@ -360,7 +360,7 @@ export function GitSetup({
               onChange={() => setPathOption('custom')}
               className="mt-1"
             />
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <div className="font-medium text-gray-900 dark:text-white">
                 다른 경로 지정
               </div>

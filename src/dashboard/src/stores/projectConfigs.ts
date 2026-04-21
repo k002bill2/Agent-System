@@ -346,6 +346,7 @@ interface ProjectConfigsState {
   createDBProject: (data: { name: string; description?: string; path?: string }) => Promise<boolean>
   updateDBProject: (id: string, data: { name?: string; description?: string; path?: string }) => Promise<boolean>
   deleteDBProject: (id: string) => Promise<boolean>
+  hardDeleteDBProject: (id: string) => Promise<boolean>
   restoreDBProject: (id: string) => Promise<boolean>
   toggleDBProjectActive: (id: string) => Promise<boolean>
 }
@@ -1491,6 +1492,22 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
 
     try {
       await apiClient.delete(`/api/project-registry/${id}`)
+
+      await get().fetchAllDBProjects()
+      await get().fetchProjects()
+      return true
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return false
+    }
+  },
+
+  hardDeleteDBProject: async (id) => {
+    set({ error: null })
+
+    try {
+      await apiClient.delete(`/api/project-registry/${id}/permanent`)
 
       await get().fetchAllDBProjects()
       await get().fetchProjects()

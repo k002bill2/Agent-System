@@ -880,3 +880,50 @@ def delete_git_repository(repo_id: str) -> bool:
         del GIT_REPOSITORIES[repo_id]
         return True
     return False
+
+
+def sync_git_repositories_from_projects() -> int:
+    """Re-populate GIT_REPOSITORIES from registered projects.
+
+    Iterates the project registry and registers the effective git path of each
+    project (git_path if set, otherwise project path) as a Git repository, but
+    only when the path is a valid Git working tree and not already registered.
+
+    Since GIT_REPOSITORIES is an in-memory dict, this should be invoked at
+    backend startup so the registry survives process restarts.
+
+    Returns:
+        Number of repositories newly registered during this sync.
+    """
+    from pathlib import Path as _Path
+
+    # Import here to avoid circular dependency at module load.
+    from models.project import list_projects
+
+    known_paths = {repo.path for repo in GIT_REPOSITORIES.values()}
+    added = 0
+
+    for project in list_projects():
+        raw_path = project.git_path or project.path
+        if not raw_path:
+            continue
+
+        try:
+            normalized = str(_Path(raw_path).resolve())
+        except (OSError, RuntimeError):
+            continue
+
+        if normalized in known_paths:
+            continue
+        if not (_Path(normalized) / ".git").exists():
+            continue
+
+        register_git_repository(
+            name=project.name,
+            path=normalized,
+            description=project.description or "",
+        )
+        known_paths.add(normalized)
+        added += 1
+
+    return added
