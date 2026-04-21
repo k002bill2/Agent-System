@@ -83,6 +83,11 @@ interface PlaygroundSession {
   rag_hybrid_override: boolean | null
   rag_rerank_override: boolean | null
   rag_include_shared: boolean
+  rules_mode: 'off' | 'global' | 'project' | 'both'
+  memory_mode: 'off' | 'index' | 'full'
+  selected_rule_ids: string[]
+  selected_memory_ids: string[]
+  context_budget_tokens: number
   available_tools: string[]
   enabled_tools: string[]
   messages: PlaygroundMessage[]
@@ -202,6 +207,11 @@ async function updateSettings(
     rag_hybrid_override: boolean | null
     rag_rerank_override: boolean | null
     rag_include_shared: boolean
+    rules_mode: 'off' | 'global' | 'project' | 'both'
+    memory_mode: 'off' | 'index' | 'full'
+    selected_rule_ids: string[]
+    selected_memory_ids: string[]
+    context_budget_tokens: number
   }>
 ): Promise<PlaygroundSession> {
   const res = await authFetch(`${API_BASE}/playground/sessions/${sessionId}/settings`, {
@@ -210,6 +220,53 @@ async function updateSettings(
     body: JSON.stringify(settings),
   })
   if (!res.ok) throw new Error('Failed to update settings')
+  return res.json()
+}
+
+interface RuleSummary {
+  rule_id: string
+  name: string
+  description: string
+  is_global: boolean
+}
+
+interface MemorySummary {
+  memory_id: string
+  name: string
+  description: string
+}
+
+async function fetchProjectConfigByPath(
+  projectPath: string
+): Promise<{ rules: RuleSummary[]; memories: MemorySummary[] } | null> {
+  const res = await authFetch(
+    `${API_BASE}/project-configs/by-path?path=${encodeURIComponent(projectPath)}`
+  )
+  if (!res.ok) return null
+  const data = (await res.json()) as {
+    rules?: RuleSummary[]
+    memories?: MemorySummary[]
+  }
+  return {
+    rules: data.rules ?? [],
+    memories: data.memories ?? [],
+  }
+}
+
+async function fetchGlobalRules(): Promise<RuleSummary[]> {
+  const res = await authFetch(`${API_BASE}/project-configs/global/rules`)
+  if (!res.ok) return []
+  const data = (await res.json()) as unknown
+  return Array.isArray(data) ? (data as RuleSummary[]) : []
+}
+
+async function fetchEffectiveSystemPrompt(
+  sessionId: string
+): Promise<{ system_prompt: string; base_length: number; effective_length: number }> {
+  const res = await authFetch(
+    `${API_BASE}/playground/sessions/${sessionId}/effective-system-prompt`
+  )
+  if (!res.ok) throw new Error('Failed to fetch effective system prompt')
   return res.json()
 }
 
@@ -288,6 +345,14 @@ export function PlaygroundPage() {
   const [mdReadStatuses, setMdReadStatuses] = useState<Record<string, 'reading' | 'done' | 'error'>>({})
   const [isDragOver, setIsDragOver] = useState(false)
 
+  // Context injection (Claude Code rules + memory)
+  const [globalRules, setGlobalRules] = useState<RuleSummary[]>([])
+  const [projectRules, setProjectRules] = useState<RuleSummary[]>([])
+  const [projectMemories, setProjectMemories] = useState<MemorySummary[]>([])
+  const [showEffectivePrompt, setShowEffectivePrompt] = useState(false)
+  const [effectivePromptText, setEffectivePromptText] = useState('')
+  const [effectivePromptLoading, setEffectivePromptLoading] = useState(false)
+
   useEffect(() => {
     loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -296,6 +361,54 @@ export function PlaygroundPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [currentSession?.messages])
+
+  // Load Claude Code rules/memories whenever the session's project changes —
+  // these lists drive the "Context injection" multi-selects in the settings
+  // panel. Global rules are fetched once; project-scoped ones refetch per
+  // selected project.
+  useEffect(() => {
+    let cancelled = false
+    fetchGlobalRules()
+      .then((rules) => {
+        if (!cancelled) setGlobalRules(rules)
+      })
+      .catch(() => {
+        if (!cancelled) setGlobalRules([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const projectId = currentSession?.project_id ?? null
+    if (!projectId) {
+      setProjectRules([])
+      setProjectMemories([])
+      return
+    }
+    const project = projects.find((p) => p.id === projectId)
+    if (!project) {
+      setProjectRules([])
+      setProjectMemories([])
+      return
+    }
+    fetchProjectConfigByPath(project.path)
+      .then((summary) => {
+        if (cancelled || !summary) return
+        setProjectRules(summary.rules)
+        setProjectMemories(summary.memories)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setProjectRules([])
+        setProjectMemories([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [currentSession?.project_id, projects])
 
   // Poll indexing status for projects that are currently indexing
   useEffect(() => {
@@ -424,6 +537,41 @@ export function PlaygroundPage() {
     } catch (e) {
       handleError(e)
     }
+  }
+
+  // Fetch the fully-composed system prompt (base + rules + memory) and open
+  // the preview modal. Keeps UI honest about what the LLM actually receives.
+  const handleShowEffectivePrompt = async () => {
+    if (!currentSession) return
+    setEffectivePromptLoading(true)
+    setShowEffectivePrompt(true)
+    try {
+      const result = await fetchEffectiveSystemPrompt(currentSession.id)
+      setEffectivePromptText(result.system_prompt)
+    } catch (e) {
+      handleError(e)
+      setEffectivePromptText('')
+    } finally {
+      setEffectivePromptLoading(false)
+    }
+  }
+
+  const toggleRuleSelection = (ruleId: string) => {
+    if (!currentSession) return
+    const current = currentSession.selected_rule_ids ?? []
+    const next = current.includes(ruleId)
+      ? current.filter((id) => id !== ruleId)
+      : [...current, ruleId]
+    void handleUpdateSettings({ selected_rule_ids: next })
+  }
+
+  const toggleMemorySelection = (memoryId: string) => {
+    if (!currentSession) return
+    const current = currentSession.selected_memory_ids ?? []
+    const next = current.includes(memoryId)
+      ? current.filter((id) => id !== memoryId)
+      : [...current, memoryId]
+    void handleUpdateSettings({ selected_memory_ids: next })
   }
 
   const handleDeleteMessage = async (messageId: string) => {
@@ -863,6 +1011,172 @@ export function PlaygroundPage() {
                     />
                   </div>
 
+                  {/* Claude Code Context Injection */}
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Claude Context
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleShowEffectivePrompt}
+                        aria-label="Preview effective system prompt"
+                        className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                      >
+                        Preview
+                      </button>
+                    </div>
+
+                    {/* Rules mode */}
+                    <div>
+                      <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                        Rules
+                      </label>
+                      <select
+                        aria-label="Rules injection mode"
+                        value={currentSession.rules_mode}
+                        onChange={(e) =>
+                          handleUpdateSettings({
+                            rules_mode: e.target.value as PlaygroundSession['rules_mode'],
+                          })
+                        }
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      >
+                        <option value="off">Off</option>
+                        <option value="global">Global (~/.claude/rules)</option>
+                        <option value="project" disabled={!currentSession.project_id}>
+                          Project (.claude/rules)
+                        </option>
+                        <option value="both" disabled={!currentSession.project_id}>
+                          Both
+                        </option>
+                      </select>
+                    </div>
+
+                    {currentSession.rules_mode !== 'off' && (
+                      <div className="max-h-40 overflow-y-auto rounded border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800">
+                        {[...(currentSession.rules_mode !== 'project' ? globalRules : []),
+                          ...((currentSession.rules_mode === 'project' ||
+                            currentSession.rules_mode === 'both') ? projectRules : []),
+                        ].map((rule) => {
+                          const selected = (currentSession.selected_rule_ids ?? []).includes(rule.rule_id)
+                          // Empty selection means "include all allowed by mode"
+                          const effectivelyOn = selected || (currentSession.selected_rule_ids ?? []).length === 0
+                          return (
+                            <label
+                              key={`${rule.is_global ? 'g' : 'p'}:${rule.rule_id}`}
+                              className="flex items-start gap-2 px-2 py-1.5 text-xs cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={effectivelyOn}
+                                onChange={() => toggleRuleSelection(rule.rule_id)}
+                                className="mt-0.5 rounded border-gray-300 dark:border-gray-600"
+                                aria-label={`Toggle rule ${rule.name}`}
+                              />
+                              <span className="flex-1">
+                                <span className="font-medium text-gray-800 dark:text-gray-200">
+                                  {rule.is_global ? 'G · ' : 'P · '}{rule.name}
+                                </span>
+                                {rule.description && (
+                                  <span className="block text-gray-500 dark:text-gray-400 truncate">
+                                    {rule.description}
+                                  </span>
+                                )}
+                              </span>
+                            </label>
+                          )
+                        })}
+                        {globalRules.length === 0 && projectRules.length === 0 && (
+                          <div className="px-2 py-2 text-xs text-gray-500 dark:text-gray-400">
+                            No rules found.
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Memory mode */}
+                    <div>
+                      <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                        Memory
+                      </label>
+                      <select
+                        aria-label="Memory injection mode"
+                        value={currentSession.memory_mode}
+                        disabled={!currentSession.project_id}
+                        onChange={(e) =>
+                          handleUpdateSettings({
+                            memory_mode: e.target.value as PlaygroundSession['memory_mode'],
+                          })
+                        }
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:opacity-50"
+                      >
+                        <option value="off">Off</option>
+                        <option value="index">Index only (MEMORY.md)</option>
+                        <option value="full">Full (index + files)</option>
+                      </select>
+                      {!currentSession.project_id && (
+                        <p className="text-[11px] text-gray-400 mt-1">
+                          프로젝트를 선택해야 메모리를 주입할 수 있습니다
+                        </p>
+                      )}
+                    </div>
+
+                    {currentSession.memory_mode === 'full' && projectMemories.length > 0 && (
+                      <div className="max-h-40 overflow-y-auto rounded border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800">
+                        {projectMemories.map((memory) => {
+                          const selected = (currentSession.selected_memory_ids ?? []).includes(memory.memory_id)
+                          const effectivelyOn = selected || (currentSession.selected_memory_ids ?? []).length === 0
+                          return (
+                            <label
+                              key={memory.memory_id}
+                              className="flex items-start gap-2 px-2 py-1.5 text-xs cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={effectivelyOn}
+                                onChange={() => toggleMemorySelection(memory.memory_id)}
+                                className="mt-0.5 rounded border-gray-300 dark:border-gray-600"
+                                aria-label={`Toggle memory ${memory.name}`}
+                              />
+                              <span className="flex-1">
+                                <span className="font-medium text-gray-800 dark:text-gray-200">
+                                  {memory.name}
+                                </span>
+                                {memory.description && (
+                                  <span className="block text-gray-500 dark:text-gray-400 truncate">
+                                    {memory.description}
+                                  </span>
+                                )}
+                              </span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* Token budget */}
+                    <div>
+                      <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                        Context budget (tokens)
+                      </label>
+                      <input
+                        type="number"
+                        min={500}
+                        max={64000}
+                        step={500}
+                        value={currentSession.context_budget_tokens}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value, 10)
+                          if (!Number.isNaN(v)) {
+                            handleUpdateSettings({ context_budget_tokens: v })
+                          }
+                        }}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+
                   {/* RAG Context */}
                   <div>
                     <label className="flex items-center gap-2 cursor-pointer">
@@ -1111,6 +1425,53 @@ export function PlaygroundPage() {
       )}
 
       {/* New Session Dialog */}
+      {showEffectivePrompt && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Effective system prompt preview"
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-3xl mx-4 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Effective System Prompt
+              </h3>
+              <button
+                onClick={() => setShowEffectivePrompt(false)}
+                className="p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                aria-label="Close preview"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1">
+              {effectivePromptLoading ? (
+                <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading…
+                </div>
+              ) : (
+                <pre className="text-xs whitespace-pre-wrap break-words font-mono text-gray-800 dark:text-gray-200">
+                  {effectivePromptText || '(empty)'}
+                </pre>
+              )}
+            </div>
+            <div className="p-3 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+              <span>
+                {effectivePromptText ? `${effectivePromptText.length} chars` : ''}
+              </span>
+              <button
+                onClick={() => setShowEffectivePrompt(false)}
+                className="px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showNewSessionDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md mx-4">

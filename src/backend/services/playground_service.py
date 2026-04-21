@@ -24,6 +24,7 @@ from models.playground import (
     PlaygroundToolTest,
 )
 from services.llm_service import LLMResponse, LLMService
+from services.playground_context import build_effective_system_prompt
 from utils.time import utcnow
 
 logger = logging.getLogger(__name__)
@@ -285,6 +286,11 @@ class PlaygroundService:
             model=data.model,
             system_prompt=data.system_prompt or DEFAULT_SYSTEM_PROMPT,
             rag_enabled=data.rag_enabled,
+            rules_mode=data.rules_mode,
+            memory_mode=data.memory_mode,
+            selected_rule_ids=list(data.selected_rule_ids),
+            selected_memory_ids=list(data.selected_memory_ids),
+            context_budget_tokens=data.context_budget_tokens,
             available_tools=list(PLAYGROUND_TOOLS.keys()),
         )
         _sessions[session.id] = session
@@ -340,6 +346,11 @@ class PlaygroundService:
         rag_hybrid_override: bool | None = None,
         rag_rerank_override: bool | None = None,
         rag_include_shared: bool | None = None,
+        rules_mode: str | None = None,
+        memory_mode: str | None = None,
+        selected_rule_ids: list[str] | None = None,
+        selected_memory_ids: list[str] | None = None,
+        context_budget_tokens: int | None = None,
     ) -> PlaygroundSession | None:
         """Update session settings."""
         _load_sessions()  # Ensure sessions are loaded
@@ -375,6 +386,16 @@ class PlaygroundService:
             session.rag_rerank_override = rag_rerank_override
         if rag_include_shared is not None:
             session.rag_include_shared = rag_include_shared
+        if rules_mode is not None:
+            session.rules_mode = rules_mode  # type: ignore[assignment]
+        if memory_mode is not None:
+            session.memory_mode = memory_mode  # type: ignore[assignment]
+        if selected_rule_ids is not None:
+            session.selected_rule_ids = list(selected_rule_ids)
+        if selected_memory_ids is not None:
+            session.selected_memory_ids = list(selected_memory_ids)
+        if context_budget_tokens is not None:
+            session.context_budget_tokens = context_budget_tokens
 
         session.updated_at = utcnow()
         _save_sessions()  # Persist to file
@@ -463,13 +484,17 @@ class PlaygroundService:
             # Check if tools are enabled
             enabled_tools = execution.tools_enabled or []
 
+            # Compose the session system prompt with opt-in rules/memory once
+            # per invocation (identical for tool and non-tool paths).
+            effective_system_prompt = build_effective_system_prompt(session)
+
             if enabled_tools:
                 # Use tool-enabled LLM invocation
                 llm_response: LLMResponse = await LLMService.invoke_with_tools(
                     prompt=request.prompt,
                     tools=enabled_tools,
                     model_id=session.model,
-                    system_prompt=session.system_prompt,
+                    system_prompt=effective_system_prompt,
                     temperature=execution.temperature,
                     max_tokens=execution.max_tokens,
                     context=request.context or None,
@@ -496,7 +521,7 @@ class PlaygroundService:
                 llm_response = await LLMService.invoke(
                     prompt=request.prompt,
                     model_id=session.model,
-                    system_prompt=session.system_prompt,
+                    system_prompt=effective_system_prompt,
                     temperature=execution.temperature,
                     max_tokens=execution.max_tokens,
                     context=request.context or None,
@@ -627,6 +652,9 @@ class PlaygroundService:
         full_response = ""
         token_info: dict | None = None
 
+        # Compose once — shared by streaming and tool-enabled branches.
+        effective_system_prompt = build_effective_system_prompt(session)
+
         try:
             if enabled_tools:
                 # Tool-enabled: single-shot invoke_with_tools, yield final answer.
@@ -634,7 +662,7 @@ class PlaygroundService:
                     prompt=request.prompt,
                     tools=enabled_tools,
                     model_id=session.model,
-                    system_prompt=session.system_prompt,
+                    system_prompt=effective_system_prompt,
                     temperature=temperature,
                     max_tokens=max_tokens,
                     context=request.context or None,
@@ -655,7 +683,7 @@ class PlaygroundService:
                 async for chunk, info in LLMService.stream_with_tokens(
                     prompt=request.prompt,
                     model_id=session.model,
-                    system_prompt=session.system_prompt,
+                    system_prompt=effective_system_prompt,
                     temperature=temperature,
                     max_tokens=max_tokens,
                     context=request.context or None,
@@ -874,6 +902,11 @@ class PlaygroundService:
             rag_hybrid_override=getattr(model, "rag_hybrid_override", None),
             rag_rerank_override=getattr(model, "rag_rerank_override", None),
             rag_include_shared=bool(getattr(model, "rag_include_shared", False)),
+            rules_mode=getattr(model, "rules_mode", None) or "off",
+            memory_mode=getattr(model, "memory_mode", None) or "off",
+            selected_rule_ids=list(getattr(model, "selected_rule_ids", None) or []),
+            selected_memory_ids=list(getattr(model, "selected_memory_ids", None) or []),
+            context_budget_tokens=getattr(model, "context_budget_tokens", None) or 8000,
             available_tools=model.available_tools or [],
             enabled_tools=model.enabled_tools or [],
             messages=[PlaygroundMessage(**m) for m in (model.messages or [])],
@@ -904,6 +937,11 @@ class PlaygroundService:
             "rag_hybrid_override": session.rag_hybrid_override,
             "rag_rerank_override": session.rag_rerank_override,
             "rag_include_shared": session.rag_include_shared,
+            "rules_mode": session.rules_mode,
+            "memory_mode": session.memory_mode,
+            "selected_rule_ids": list(session.selected_rule_ids),
+            "selected_memory_ids": list(session.selected_memory_ids),
+            "context_budget_tokens": session.context_budget_tokens,
             "available_tools": session.available_tools,
             "enabled_tools": session.enabled_tools,
             "messages": [m.model_dump(mode="json") for m in session.messages],
