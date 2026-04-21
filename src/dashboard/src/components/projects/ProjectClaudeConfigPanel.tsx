@@ -16,6 +16,8 @@ import {
 import { cn } from '../../lib/utils'
 import { Project } from '../../stores/projects'
 import { useProjectConfigsStore, ProjectConfigSummary } from '../../stores/projectConfigs'
+import { apiClient } from '../../services/apiClient'
+import { isApiError } from '../../services/errors'
 
 interface ProjectClaudeConfigPanelProps {
   project: Project
@@ -40,24 +42,17 @@ export function ProjectClaudeConfigPanel({ project, onClose }: ProjectClaudeConf
       setError(null)
 
       try {
-        // Use by-path endpoint which resolves symlinks
-        const encodedPath = encodeURIComponent(project.path)
-        const res = await fetch(`/api/project-configs/by-path?path=${encodedPath}`)
-        if (res.status === 404) {
-          // Path doesn't exist
-          setError('프로젝트 경로를 찾을 수 없습니다.')
-          setIsLoading(false)
-          return
-        }
-        if (!res.ok) {
-          throw new Error(`Failed to fetch: ${res.statusText}`)
-        }
-        const data: ProjectConfigSummary = await res.json()
+        const data = await apiClient.get<ProjectConfigSummary>(
+          `/api/project-configs/by-path?path=${encodeURIComponent(project.path)}`,
+        )
         setSummary(data)
-        // Store the resolved project_id for MCP toggle
         setResolvedProjectId(data.project.project_id)
       } catch (e) {
-        setError(e instanceof Error ? e.message : '로드 실패')
+        if (isApiError(e) && e.status === 404) {
+          setError('프로젝트 경로를 찾을 수 없습니다.')
+        } else {
+          setError(e instanceof Error ? e.message : '로드 실패')
+        }
       } finally {
         setIsLoading(false)
       }
@@ -69,12 +64,13 @@ export function ProjectClaudeConfigPanel({ project, onClose }: ProjectClaudeConf
   const handleToggleMCP = async (serverId: string, enabled: boolean) => {
     if (!resolvedProjectId) return
     await toggleMCPServer(resolvedProjectId, serverId, enabled)
-    // Refresh summary
-    const encodedPath = encodeURIComponent(project.path)
-    const res = await fetch(`/api/project-configs/by-path?path=${encodedPath}`)
-    if (res.ok) {
-      const data: ProjectConfigSummary = await res.json()
+    try {
+      const data = await apiClient.get<ProjectConfigSummary>(
+        `/api/project-configs/by-path?path=${encodeURIComponent(project.path)}`,
+      )
       setSummary(data)
+    } catch {
+      // Refresh failure is non-fatal: keep previous summary
     }
   }
 

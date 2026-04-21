@@ -164,12 +164,13 @@ describe('ProjectClaudeConfigPanel', () => {
   it('shows error when fetch fails', async () => {
     vi.mocked(global.fetch).mockResolvedValue({
       ok: false,
+      status: 500,
       statusText: 'Internal Server Error',
     } as Response)
 
     render(<ProjectClaudeConfigPanel project={mockProject} onClose={mockOnClose} />)
     await waitFor(() => {
-      expect(screen.getByText(/Failed to fetch/)).toBeInTheDocument()
+      expect(screen.getByText(/Internal Server Error/)).toBeInTheDocument()
     })
   })
 

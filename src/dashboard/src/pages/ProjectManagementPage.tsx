@@ -8,6 +8,7 @@ import {
   X,
   Check,
   AlertCircle,
+  Trash2,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useProjectConfigsStore, DBProject } from '../stores/projectConfigs'
@@ -15,6 +16,7 @@ import { useProjectAccessStore } from '@/stores/projectAccess'
 import { useAuthStore } from '../stores/auth'
 import { ProjectMembersContent } from '@/components/project-management/ProjectMembersContent'
 import { ServiceStatusBar } from '@/components/project-management/ServiceStatusBar'
+import { DeleteProjectModal } from '@/components/project-management/DeleteProjectModal'
 
 type DetailTab = 'info' | 'members'
 
@@ -34,6 +36,7 @@ export function ProjectManagementPage() {
     createDBProject,
     updateDBProject,
     toggleDBProjectActive,
+    hardDeleteDBProject,
   } = useProjectConfigsStore()
 
   const { fetchMembers } = useProjectAccessStore()
@@ -41,6 +44,8 @@ export function ProjectManagementPage() {
   const isSystemAdmin = currentUser?.is_admin ?? false
   const canCreateProject = isSystemAdmin || (currentUser?.is_org_admin ?? false)
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set())
+  const [deleteTarget, setDeleteTarget] = useState<DBProject | null>(null)
+  const [isDeletingTarget, setIsDeletingTarget] = useState(false)
 
   const [searchQuery, setSearchQuery] = useState('')
   const [showInactive, setShowInactive] = useState(true)
@@ -134,6 +139,28 @@ export function ProjectManagementPage() {
       next.delete(project.id)
       return next
     })
+  }
+
+  const openDeleteModal = (project: DBProject) => {
+    setDeleteTarget(project)
+  }
+
+  const closeDeleteModal = () => {
+    if (isDeletingTarget) return
+    setDeleteTarget(null)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
+    setIsDeletingTarget(true)
+    const ok = await hardDeleteDBProject(deleteTarget.id)
+    setIsDeletingTarget(false)
+    if (ok) {
+      if (selectedProject?.id === deleteTarget.id) {
+        setSelectedProject(null)
+      }
+      setDeleteTarget(null)
+    }
   }
 
   const renderDetailPanel = () => {
@@ -565,6 +592,17 @@ export function ProjectManagementPage() {
                       )}
                     />
                   </button>
+                  {/* Permanent delete (admin + inactive only) */}
+                  {isSystemAdmin && !project.is_active && (
+                    <button
+                      onClick={() => openDeleteModal(project)}
+                      aria-label={`Permanently delete project ${project.name}`}
+                      title="영구 삭제 (되돌릴 수 없음)"
+                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -582,6 +620,13 @@ export function ProjectManagementPage() {
       </div>
     </div>
     {renderDetailPanel()}
+    <DeleteProjectModal
+      isOpen={deleteTarget !== null}
+      project={deleteTarget}
+      isDeleting={isDeletingTarget}
+      onCancel={closeDeleteModal}
+      onConfirm={handleConfirmDelete}
+    />
     </div>
   )
 }

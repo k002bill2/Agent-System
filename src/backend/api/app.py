@@ -223,6 +223,16 @@ else:
                     if logger:
                         logger.warning("startup_project_sync_failed", error=str(e))
 
+            try:
+                from models.git import sync_git_repositories_from_projects
+
+                git_synced = sync_git_repositories_from_projects()
+                if logger:
+                    logger.info("startup_git_registry_sync_done", count=git_synced)
+            except Exception as e:
+                if logger:
+                    logger.warning("startup_git_registry_sync_failed", error=str(e))
+
         if ORCHESTRATOR_ENABLED:
             set_engine(OrchestrationEngine())
 

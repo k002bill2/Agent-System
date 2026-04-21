@@ -1,8 +1,19 @@
 """Git service for local repository operations using GitPython."""
 
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
+
+# Pick a git binary that does not depend on Xcode CLT license acceptance.
+# macOS /usr/bin/git is an Apple shim that exits with code 69 ("You have not
+# agreed to the Xcode license agreements") until `sudo xcodebuild -license` is
+# run, which breaks GitPython's import-time `git version` probe.
+if "GIT_PYTHON_GIT_EXECUTABLE" not in os.environ:
+    for _candidate in ("/opt/homebrew/bin/git", "/usr/local/bin/git", "/usr/bin/git"):
+        if os.path.isfile(_candidate) and os.access(_candidate, os.X_OK):
+            os.environ["GIT_PYTHON_GIT_EXECUTABLE"] = _candidate
+            break
 
 try:
     from git import GitCommandError, InvalidGitRepositoryError, Repo

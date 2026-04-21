@@ -436,8 +436,17 @@ export function ProjectsPage() {
 
       {/* Error */}
       {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400">
-          {error}
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400 flex items-center justify-between gap-4">
+          <span className="min-w-0 flex-1">{error}</span>
+          <button
+            type="button"
+            onClick={() => fetchProjects()}
+            disabled={isLoading}
+            aria-label="프로젝트 목록 다시 불러오기"
+            className="flex-shrink-0 px-3 py-1.5 text-sm font-medium rounded border border-red-300 dark:border-red-700 bg-white dark:bg-red-950/30 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isLoading ? '재시도 중…' : '다시 시도'}
+          </button>
         </div>
       )}
 

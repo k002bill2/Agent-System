@@ -547,7 +547,7 @@ export const useGitStore = create<GitState>((set, get) => ({
     try {
       const status = await apiClient.put<GitStatus>(`/api/git/projects/${projectId}/git-path`, { git_path: gitPath })
       set({ gitStatus: status, isLoading: false })
-      return status.is_valid_repo
+      return true
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })
       return false

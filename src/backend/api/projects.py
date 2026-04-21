@@ -8,7 +8,7 @@ import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_current_admin_user, get_current_user, get_db_session
@@ -473,6 +473,59 @@ async def restore_project(project_id: str) -> DBProjectResponse:
         await session.refresh(project)
 
         return _model_to_response(project)
+
+
+@router.delete("/{project_id}/permanent")
+async def permanent_delete_project(
+    project_id: str,
+    current_user: UserModel = Depends(get_current_admin_user),
+) -> dict:
+    """Permanently delete a project (hard delete). Admin only.
+
+    Removes the project row plus its access/invitation rows. Leaves orphaned
+    references in sessions/activities/audit intentionally for historical record.
+    """
+    import os
+
+    use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
+    if not use_database:
+        raise HTTPException(status_code=503, detail="Database mode is not enabled")
+
+    from db.database import async_session_factory
+    from db.models import ProjectAccessModel, ProjectInvitationModel, ProjectModel
+
+    async with async_session_factory() as session:
+        result = await session.execute(select(ProjectModel).where(ProjectModel.id == project_id))
+        project = result.scalar_one_or_none()
+
+        if not project:
+            raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+
+        project_name = project.name
+
+        await session.execute(
+            delete(ProjectAccessModel).where(ProjectAccessModel.project_id == project_id)
+        )
+        await session.execute(
+            delete(ProjectInvitationModel).where(ProjectInvitationModel.project_id == project_id)
+        )
+        await session.delete(project)
+        await session.commit()
+
+        logger.info(
+            "Project permanently deleted",
+            extra={
+                "project_id": project_id,
+                "project_name": project_name,
+                "admin_user_id": current_user.id,
+            },
+        )
+
+        return {
+            "success": True,
+            "message": f"Project '{project_name}' permanently deleted",
+            "project_id": project_id,
+        }
 
 
 # ========================================
