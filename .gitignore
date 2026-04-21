@@ -73,6 +73,14 @@ src/dashboard/coverage/
 .claude/gemini-daemon/.daemon-disabled
 .claude/snapshots/
 .claude/scheduled_tasks.lock
+
+# Nested .claude/ runtime artifacts (e.g. src/backend/.claude/, src/dashboard/.claude/)
+**/.claude/coordination/
+**/.claude/gemini-bridge/daemon.log
+**/.claude/gemini-bridge/.review-lock
+**/.claude/gemini-bridge/reviews/
+**/.claude/gemini-daemon/daemon.log
+**/.claude/snapshots/
 .temp/
 
 # TypeScript incremental build cache
