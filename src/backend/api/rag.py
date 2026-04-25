@@ -74,11 +74,42 @@ class StatsResponse(BaseModel):
     collection_name: str
     document_count: int
     indexed: bool
+    status: str = "not_started"
+    started_at: str | None = None
+    completed_at: str | None = None
     error: str | None = None
 
 
-# Track indexing status
-_indexing_status: dict[str, str] = {}
+# Per-project indexing state. Status values: not_started | indexing | completed | error.
+# last_known_count holds the most recent stable chunk count so we can serve a
+# stable number to the UI while a background reindex is mid-flight (the live
+# Qdrant points_count fluctuates as the collection is dropped and refilled).
+_indexing_state: dict[str, dict] = {}
+
+
+def _get_state(project_id: str) -> dict:
+    """Return the indexing state record, creating a not_started default."""
+    return _indexing_state.get(
+        project_id,
+        {
+            "status": "not_started",
+            "started_at": None,
+            "completed_at": None,
+            "last_known_count": 0,
+            "error": None,
+        },
+    )
+
+
+def _safe_count(project_id: str) -> int:
+    """Best-effort live Qdrant count, swallowing transient errors."""
+    if not QDRANT_AVAILABLE:
+        return 0
+    try:
+        store = get_vector_store()
+        return int(store.get_collection_stats(project_id).get("document_count", 0))
+    except Exception:
+        return 0
 
 
 async def _do_index_project(
@@ -93,7 +124,14 @@ async def _do_index_project(
             force_reindex=force_reindex,
         )
 
-        _indexing_status[project_id] = "completed"
+        prev = _get_state(project_id)
+        _indexing_state[project_id] = {
+            "status": "completed",
+            "started_at": prev.get("started_at"),
+            "completed_at": datetime.now(UTC).isoformat(),
+            "last_known_count": result.chunks_created,
+            "error": None,
+        }
 
         # Update project registry to mark as indexed
         if project_id in PROJECTS_REGISTRY:
@@ -108,7 +146,14 @@ async def _do_index_project(
         )
 
     except Exception as e:
-        _indexing_status[project_id] = f"error: {str(e)}"
+        prev = _get_state(project_id)
+        _indexing_state[project_id] = {
+            "status": "error",
+            "started_at": prev.get("started_at"),
+            "completed_at": datetime.now(UTC).isoformat(),
+            "last_known_count": prev.get("last_known_count", 0),
+            "error": str(e),
+        }
         logger.error("Indexing failed for project '%s': %s", project_id, e)
 
 
@@ -126,19 +171,33 @@ def trigger_background_indexing(
         logger.warning("Qdrant not available, skipping indexing for '%s'", project_id)
         return False
 
-    if _indexing_status.get(project_id) == "indexing":
+    current = _get_state(project_id)
+    if current.get("status") == "indexing":
         logger.info("Project '%s' is already being indexed, skipping", project_id)
         return False
 
-    _indexing_status[project_id] = "indexing"
+    # Capture pre-indexing count so polling clients see the last stable value
+    # while the collection is being dropped and refilled by the background task.
+    last_known = current.get("last_known_count") or _safe_count(project_id)
+
+    _indexing_state[project_id] = {
+        "status": "indexing",
+        "started_at": datetime.now(UTC).isoformat(),
+        "completed_at": None,
+        "last_known_count": last_known,
+        "error": None,
+    }
     background_tasks.add_task(_do_index_project, project_id, project_path, force_reindex)
     logger.info("Background indexing triggered for project '%s'", project_id)
     return True
 
 
 def get_indexing_status_value(project_id: str) -> str:
-    """Get the current indexing status for a project."""
-    return _indexing_status.get(project_id, "not_started")
+    """Get the current indexing status string for a project (backward-compat helper)."""
+    state = _get_state(project_id)
+    if state["status"] == "error" and state.get("error"):
+        return f"error: {state['error']}"
+    return state["status"]
 
 
 @router.post("/projects/{project_id}/index", response_model=IndexResponse)
@@ -167,7 +226,7 @@ async def index_project(
         force_reindex=force_reindex,
     )
 
-    if not triggered and _indexing_status.get(project_id) == "indexing":
+    if not triggered and _get_state(project_id).get("status") == "indexing":
         return IndexResponse(project_id=project_id, status="already_indexing")
 
     if not triggered:
@@ -222,13 +281,33 @@ async def get_project_stats(project_id: str) -> StatsResponse:
     try:
         store = get_vector_store()
         stats = store.get_collection_stats(project_id)
+        state = _get_state(project_id)
+
+        # While indexing is in flight the collection is being dropped and
+        # refilled, so the live points_count fluctuates and would flash 0/partial
+        # values in the UI. Pin the count to the last stable value until the
+        # background task completes.
+        live_count = stats["document_count"]
+        if state["status"] == "indexing":
+            document_count = state.get("last_known_count") or 0
+            indexed = document_count > 0
+        else:
+            document_count = live_count
+            indexed = stats["indexed"]
+            # Keep last_known_count in sync with reality outside indexing.
+            if state["status"] in ("not_started", "completed") and live_count > 0:
+                state["last_known_count"] = live_count
+                _indexing_state[project_id] = state
 
         return StatsResponse(
             project_id=stats["project_id"],
             collection_name=stats["collection_name"],
-            document_count=stats["document_count"],
-            indexed=stats["indexed"],
-            error=stats.get("error"),
+            document_count=document_count,
+            indexed=indexed,
+            status=state["status"],
+            started_at=state.get("started_at"),
+            completed_at=state.get("completed_at"),
+            error=stats.get("error") or state.get("error"),
         )
 
     except Exception as e:
@@ -252,7 +331,7 @@ async def delete_project_index(project_id: str) -> dict:
         success = await store.delete_project_index(project_id)
 
         if success:
-            _indexing_status.pop(project_id, None)
+            _indexing_state.pop(project_id, None)
             # Reset project registry status
             if project_id in PROJECTS_REGISTRY:
                 PROJECTS_REGISTRY[project_id].vector_store_initialized = False
@@ -268,29 +347,30 @@ async def delete_project_index(project_id: str) -> dict:
 @router.get("/status/{project_id}")
 async def get_indexing_status(project_id: str) -> dict:
     """Get the current indexing status for a project."""
-    status = _indexing_status.get(project_id, "not_started")
+    state = _get_state(project_id)
 
     indexed = False
-    document_count = 0
-
-    # Check project registry for indexed state
     if project_id in PROJECTS_REGISTRY:
         indexed = PROJECTS_REGISTRY[project_id].vector_store_initialized or False
 
-    # Try to get document count from vector store
-    if QDRANT_AVAILABLE and indexed:
-        try:
-            store = get_vector_store()
-            stats = store.get_collection_stats(project_id)
-            document_count = stats.get("document_count", 0)
-        except Exception:
-            pass
+    # Mirror /stats: while indexing, return the last known stable count so
+    # the UI never sees the partial mid-reindex value.
+    if state["status"] == "indexing":
+        document_count = state.get("last_known_count") or 0
+    else:
+        document_count = _safe_count(project_id) if indexed else 0
+        if state["status"] in ("not_started", "completed") and document_count > 0:
+            state["last_known_count"] = document_count
+            _indexing_state[project_id] = state
 
     return {
         "project_id": project_id,
-        "status": status,
+        "status": state["status"],
         "indexed": indexed,
         "document_count": document_count,
+        "started_at": state.get("started_at"),
+        "completed_at": state.get("completed_at"),
+        "error": state.get("error"),
     }
 
 

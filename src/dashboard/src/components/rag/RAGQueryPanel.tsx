@@ -41,11 +41,16 @@ interface QueryResult {
   total_found: number
 }
 
+type IndexingStatus = 'not_started' | 'indexing' | 'completed' | 'error'
+
 interface RAGStats {
   project_id: string
   collection_name: string
   document_count: number
   indexed: boolean
+  status?: IndexingStatus
+  started_at?: string | null
+  completed_at?: string | null
   error: string | null
 }
 
@@ -124,6 +129,7 @@ export function RAGQueryPanel({ projectId, projectName, className, onClose }: RA
   const [isSearching, setIsSearching] = useState(false)
   const [isLoadingStats, setIsLoadingStats] = useState(true)
   const [isIndexing, setIsIndexing] = useState(false)
+  const [isPolling, setIsPolling] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Search options
@@ -151,6 +157,35 @@ export function RAGQueryPanel({ projectId, projectName, className, onClose }: RA
   useEffect(() => {
     loadStats()
   }, [projectId, loadStats])
+
+  // While a background reindex is in flight, poll until the backend reports
+  // a non-indexing status. The backend pins document_count to the last stable
+  // value during this window so the UI never sees the partial mid-reindex
+  // count. Two seconds is a balance between responsiveness and load.
+  useEffect(() => {
+    if (!isPolling) return
+
+    let cancelled = false
+    const tick = async () => {
+      try {
+        const data = await getRAGStats(projectId)
+        if (cancelled) return
+        setStats(data)
+        if (data.status && data.status !== 'indexing') {
+          setIsPolling(false)
+          setIsIndexing(false)
+        }
+      } catch {
+        // Transient errors are common during reindex (collection drops). Keep polling.
+      }
+    }
+
+    const id = window.setInterval(tick, 2000)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
+  }, [isPolling, projectId])
 
   const handleSearch = useCallback(async () => {
     if (!query.trim()) return
@@ -182,10 +217,12 @@ export function RAGQueryPanel({ projectId, projectName, className, onClose }: RA
     setError(null)
     try {
       await reindexProject(projectId, true)
+      // Indexing runs as a background task on the server; flip the panel into
+      // polling mode and let the effect drive UI updates until completion.
       await loadStats()
+      setIsPolling(true)
     } catch (err) {
       setError((err as Error).message)
-    } finally {
       setIsIndexing(false)
     }
   }
@@ -265,7 +302,12 @@ export function RAGQueryPanel({ projectId, projectName, className, onClose }: RA
           {/* Stats */}
           {stats && (
             <div className="flex items-center gap-2 text-sm">
-              {stats.indexed ? (
+              {stats.status === 'indexing' ? (
+                <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  인덱싱 중… (마지막: {stats.document_count} 청크)
+                </span>
+              ) : stats.indexed ? (
                 <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
                   <CheckCircle className="w-4 h-4" />
                   {stats.document_count} 청크

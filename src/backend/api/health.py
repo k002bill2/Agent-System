@@ -294,6 +294,21 @@ _PORT_RE = re.compile(
     re.VERBOSE,
 )
 
+# Container-port → protocol label, used to disambiguate multi-port services
+# (e.g. Qdrant exposes 6333 REST + 6334 gRPC from a single container).
+_PORT_PROTOCOL: dict[int, str] = {
+    6333: "REST",
+    6334: "gRPC",
+    5432: "SQL",
+    3306: "SQL",
+    6379: "main",
+    9000: "API",
+    9001: "Console",
+    9090: "metrics",
+    80: "HTTP",
+    443: "HTTPS",
+}
+
 
 def _parse_compose_services(project_path: str) -> list[tuple[str, int, str | None]] | None:
     """Parse docker-compose files to extract service name and host port.
@@ -326,10 +341,25 @@ def _parse_compose_services(project_path: str) -> list[tuple[str, int, str | Non
         return None
 
     results: list[tuple[str, int, str | None]] = []
+    # Buffer for the current service's port mappings: (display_name, host_port, container_port, prefix)
+    pending: list[tuple[str, int, int, str | None]] = []
     current_service: str | None = None
     current_image: str | None = None
     in_services = False
     in_ports = False
+
+    def flush_pending() -> None:
+        """Move buffered mappings to results; add protocol labels when multi-port."""
+        if not pending:
+            return
+        if len(pending) == 1:
+            name, host_port, _container_port, prefix = pending[0]
+            results.append((name, host_port, prefix))
+        else:
+            for name, host_port, container_port, prefix in pending:
+                label = _PORT_PROTOCOL.get(container_port, f"port {container_port}")
+                results.append((f"{name} ({label})", host_port, prefix))
+        pending.clear()
 
     for line in content.splitlines():
         stripped = line.strip()
@@ -341,6 +371,7 @@ def _parse_compose_services(project_path: str) -> list[tuple[str, int, str | Non
 
         # Detect other top-level keys (exit services block)
         if in_services and not line.startswith(" ") and stripped and not stripped.startswith("#"):
+            flush_pending()
             in_services = False
             continue
 
@@ -354,7 +385,8 @@ def _parse_compose_services(project_path: str) -> list[tuple[str, int, str | Non
             and stripped.endswith(":")
             and not stripped.startswith("#")
         ):
-            # Save previous service if it had ports
+            # Flush previous service before switching
+            flush_pending()
             current_service = stripped[:-1].strip()
             current_image = None
             in_ports = False
@@ -378,6 +410,7 @@ def _parse_compose_services(project_path: str) -> list[tuple[str, int, str | Non
             match = _PORT_RE.search(port_str)
             if match:
                 host_port = int(match.group(1))
+                container_port = int(match.group(2))
                 # Determine display name and prefix from image
                 display_name = current_service.replace("-", " ").replace("_", " ").title()
                 url_prefix: str | None = "http"
@@ -389,13 +422,14 @@ def _parse_compose_services(project_path: str) -> list[tuple[str, int, str | Non
                             url_prefix = hint_prefix
                             break
 
-                results.append((display_name, host_port, url_prefix))
+                pending.append((display_name, host_port, container_port, url_prefix))
             continue
 
         # Exit ports section on non-list item
         if in_ports and not stripped.startswith("- ") and stripped and not stripped.startswith("#"):
             in_ports = False
 
+    flush_pending()
     return results if results else None
 
 

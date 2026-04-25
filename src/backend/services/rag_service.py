@@ -11,6 +11,7 @@ Vector DB backend: Qdrant (migrated from ChromaDB).
 
 import asyncio
 import hashlib
+import json
 import logging
 import os
 import re
@@ -39,7 +40,7 @@ try:
     from langchain_core.embeddings import Embeddings
     from langchain_qdrant import QdrantVectorStore
     from qdrant_client import QdrantClient
-    from qdrant_client.models import Distance, FieldCondition, MatchValue, VectorParams
+    from qdrant_client.models import Distance, FieldCondition, MatchAny, MatchValue, VectorParams
     from qdrant_client.models import Filter as QdrantFilter
 
     QDRANT_AVAILABLE = True
@@ -106,6 +107,13 @@ RAG_EMBEDDING_DEVICE = os.getenv("RAG_EMBEDDING_DEVICE", "cpu").strip().lower()
 # at ~2x peak memory.
 RAG_EMBEDDING_BATCH_SIZE = int(os.getenv("RAG_EMBEDDING_BATCH_SIZE", "64"))
 
+# File-level idempotency cache for incremental re-indexing. Stores per-project
+# {rel_path: {mtime_ns, size}} so unchanged files skip the full chunk+embed
+# cost on every re-index. Default: ~/.aos/rag_index/ (outside any project tree).
+RAG_INDEX_CACHE_DIR = Path(
+    os.getenv("RAG_INDEX_CACHE_DIR", str(Path.home() / ".aos" / "rag_index"))
+)
+
 # ── File extension → Language mapping ─────────────────────────────────────────
 _EXTENSION_LANGUAGE_MAP: dict[str, Any] = {}
 if SPLITTER_AVAILABLE:
@@ -145,6 +153,23 @@ def _tokenize(text: str) -> list[str]:
 def _entity_in_chunk(entity: CodeEntity, chunk: Any) -> bool:
     """Check if a code entity is referenced in a document chunk."""
     return entity.name in chunk.page_content
+
+
+def _extract_collection_dim(info: Any) -> int | None:
+    """Pull the vector dimension from a qdrant CollectionInfo, handling both
+    single-vector and named-vector configurations. Returns None if the
+    structure is unrecognized (e.g. sparse-only collection)."""
+    try:
+        vectors = info.config.params.vectors
+    except AttributeError:
+        return None
+    size = getattr(vectors, "size", None)
+    if isinstance(size, int):
+        return size
+    if isinstance(vectors, dict) and vectors:
+        first = next(iter(vectors.values()))
+        return getattr(first, "size", None)
+    return None
 
 
 class ProjectVectorStore:
@@ -243,6 +268,9 @@ class ProjectVectorStore:
         self._collection_size_cache: dict[str, tuple[int, float]] = {}
         self._collection_size_ttl_seconds: float = 60.0
 
+        # File-level index cache directory (lazy mkdir on first save)
+        self._index_cache_dir: Path = RAG_INDEX_CACHE_DIR
+
     # ── Embeddings ────────────────────────────────────────────────────────────
 
     def _create_embeddings(self, model_name: str | None = None) -> Embeddings:
@@ -325,11 +353,17 @@ class ProjectVectorStore:
         return f"proj_{safe_name}"[:63]
 
     def _ensure_collection_exists(self, collection_name: str) -> None:
-        """Ensure a Qdrant collection exists, creating it if needed."""
+        """Ensure a Qdrant collection exists, creating it if needed.
+
+        If the collection already exists, verify its vector dimension matches
+        the active embedding model. Mismatches raise RuntimeError rather than
+        silently corrupting the index — the operator must explicitly drop and
+        re-index, or revert RAG_EMBEDDING_MODEL to a same-dim model.
+        """
         try:
-            self.client.get_collection(collection_name)
+            info = self.client.get_collection(collection_name)
         except Exception:
-            # Collection doesn't exist, create it
+            # Collection doesn't exist — create it
             dim = self._get_embedding_dimension()
             self.client.create_collection(
                 collection_name=collection_name,
@@ -339,6 +373,19 @@ class ProjectVectorStore:
                 ),
             )
             logger.info(f"Created Qdrant collection '{collection_name}' (dim={dim}, cosine)")
+            return
+
+        existing_dim = _extract_collection_dim(info)
+        if existing_dim is None:
+            return  # unknown structure (e.g. sparse-only) — skip check
+        current_dim = self._get_embedding_dimension()
+        if existing_dim != current_dim:
+            raise RuntimeError(
+                f"Embedding dimension mismatch for collection '{collection_name}': "
+                f"existing={existing_dim}, current model={current_dim}. "
+                f"Either revert RAG_EMBEDDING_MODEL to a {existing_dim}-dim model, "
+                f"or DELETE /api/rag/projects/<project_id>/index then re-index."
+            )
 
     def _get_or_create_collection(self, project_id: str) -> QdrantVectorStore:
         """Get or create a Qdrant vector store for a project."""
@@ -395,6 +442,82 @@ class ProjectVectorStore:
         if collection_name.startswith("proj_"):
             return collection_name[5:]
         return collection_name
+
+    # ── Index cache (file-level idempotency) ─────────────────────────────────
+
+    def _index_cache_path(self, project_id: str) -> Path:
+        """Return the JSON cache path for this project."""
+        safe = "".join(c if c.isalnum() else "_" for c in project_id)[:80]
+        return self._index_cache_dir / f"{safe}.json"
+
+    def _load_index_cache(self, project_id: str) -> dict[str, dict]:
+        """Load the per-project file signature cache. Returns {} on any error."""
+        path = self._index_cache_path(project_id)
+        if not path.exists():
+            return {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+            return {}
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning("RAG index cache read failed for '%s': %s", project_id, e)
+            return {}
+
+    def _save_index_cache(self, project_id: str, cache: dict[str, dict]) -> None:
+        """Atomically persist the cache. Logs and continues on I/O failure."""
+        path = self._index_cache_path(project_id)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(cache, separators=(",", ":")), encoding="utf-8")
+            tmp.replace(path)
+        except OSError as e:
+            logger.warning("RAG index cache write failed for '%s': %s", project_id, e)
+
+    @staticmethod
+    def _file_signature(file_path: Path) -> dict[str, int] | None:
+        """Cheap stat-based signature. Returns None if the file is unreadable."""
+        try:
+            st = file_path.stat()
+        except OSError:
+            return None
+        return {"mtime_ns": st.st_mtime_ns, "size": st.st_size}
+
+    @staticmethod
+    def _signature_unchanged(prev: dict | None, current: dict) -> bool:
+        """True iff prev and current agree on mtime_ns AND size."""
+        if not prev:
+            return False
+        return prev.get("mtime_ns") == current["mtime_ns"] and prev.get("size") == current["size"]
+
+    def _gc_removed_files(self, collection_name: str, removed_paths: list[str]) -> None:
+        """Delete Qdrant points belonging to files that disappeared from disk.
+
+        Best-effort: a failure here doesn't block the indexing run, the points
+        just become orphaned (still queryable but with broken source paths).
+        """
+        if not removed_paths:
+            return
+        try:
+            self.client.delete(
+                collection_name=collection_name,
+                points_selector=QdrantFilter(
+                    must=[
+                        FieldCondition(
+                            key="metadata.source",
+                            match=MatchAny(any=removed_paths),
+                        )
+                    ]
+                ),
+            )
+            logger.info(
+                "RAG gc: removed %d orphaned files from '%s'",
+                len(removed_paths),
+                collection_name,
+            )
+        except Exception as e:
+            logger.warning("RAG gc failed for '%s': %s", collection_name, e)
 
     # ── File filtering ────────────────────────────────────────────────────────
 
@@ -738,7 +861,16 @@ class ProjectVectorStore:
             # Clear BM25 caches too
             self._bm25_indices.pop(project_id, None)
             self._bm25_corpus.pop(project_id, None)
+            # Drop the collection-size cache so the search path doesn't keep
+            # serving the pre-reindex count for up to 60s.
+            self._collection_size_cache.pop(project_id, None)
             collection = self._get_or_create_collection(project_id)
+
+        # Load file-level cache. Empty when force_reindex (start fresh).
+        cache: dict[str, dict] = {} if force_reindex else self._load_index_cache(project_id)
+        new_cache: dict[str, dict] = {}
+        seen_files: set[str] = set()
+        unchanged_count = 0
 
         # Resolve symlinks for consistent path handling
         project_root = Path(project_path).resolve()
@@ -754,33 +886,43 @@ class ProjectVectorStore:
 
         for priority_file in priority_files:
             file_path = project_root / priority_file
-            if file_path.exists() and file_path.is_file():
+            if not (file_path.exists() and file_path.is_file()):
+                continue
+            rel = str(file_path.relative_to(project_root))
+            sig = self._file_signature(file_path)
+            if sig is None:
+                continue
+            if self._signature_unchanged(cache.get(rel), sig):
+                # Unchanged since last index — keep prior cache entry, skip embed.
+                seen_files.add(rel)
+                new_cache[rel] = sig
+                unchanged_count += 1
+                continue
+            try:
+                content = file_path.read_text(encoding="utf-8", errors="ignore")
+                chunks = self._chunk_document(content, rel)
+
+                # Extract code entities for metadata enrichment
                 try:
-                    content = file_path.read_text(encoding="utf-8", errors="ignore")
-                    rel = str(file_path.relative_to(project_root))
-                    chunks = self._chunk_document(content, rel)
+                    entities = extract_entities(rel, content)
+                    file_imports = list({imp for e in entities for imp in e.imports})
+                except Exception:
+                    entities, file_imports = [], []
 
-                    # Extract code entities for metadata enrichment
-                    try:
-                        entities = extract_entities(rel, content)
-                        file_imports = list({imp for e in entities for imp in e.imports})
-                    except Exception:
-                        entities, file_imports = [], []
+                for chunk in chunks:
+                    chunk.metadata["priority"] = "high"
+                    chunk.metadata["project_id"] = project_id
+                    chunk_entities = [e for e in entities if _entity_in_chunk(e, chunk)]
+                    chunk.metadata["entity_names"] = [e.name for e in chunk_entities]
+                    chunk.metadata["entity_types"] = [e.entity_type.value for e in chunk_entities]
+                    chunk.metadata["imports"] = file_imports
 
-                    for chunk in chunks:
-                        chunk.metadata["priority"] = "high"
-                        chunk.metadata["project_id"] = project_id
-                        chunk_entities = [e for e in entities if _entity_in_chunk(e, chunk)]
-                        chunk.metadata["entity_names"] = [e.name for e in chunk_entities]
-                        chunk.metadata["entity_types"] = [
-                            e.entity_type.value for e in chunk_entities
-                        ]
-                        chunk.metadata["imports"] = file_imports
-
-                    documents.extend(chunks)
-                    files_indexed += 1
-                except Exception as e:
-                    logger.debug(f"Skipped priority file {file_path}: {e}")
+                documents.extend(chunks)
+                files_indexed += 1
+                seen_files.add(rel)
+                new_cache[rel] = sig
+            except Exception as e:
+                logger.debug(f"Skipped priority file {file_path}: {e}")
 
         for item in project_root.rglob("*"):
             if not item.is_file():
@@ -807,12 +949,21 @@ class ProjectVectorStore:
             if not self._should_index_file(item):
                 continue
 
+            rel_str = str(rel_path)
+            sig = self._file_signature(item)
+            if sig is None:
+                continue
+            if self._signature_unchanged(cache.get(rel_str), sig):
+                seen_files.add(rel_str)
+                new_cache[rel_str] = sig
+                unchanged_count += 1
+                continue
+
             try:
                 content = item.read_text(encoding="utf-8", errors="ignore")
                 if not content.strip():
                     continue
 
-                rel_str = str(rel_path)
                 chunks = self._chunk_document(content, rel_str)
 
                 # Extract code entities for metadata enrichment
@@ -832,14 +983,27 @@ class ProjectVectorStore:
 
                 documents.extend(chunks)
                 files_indexed += 1
+                seen_files.add(rel_str)
+                new_cache[rel_str] = sig
             except Exception as e:
                 skipped_count += 1
                 logger.warning(f"Skipped file (read/chunk failed): {item}: {e}")
                 continue
 
+        # Files in old cache but not seen this run = deleted from disk.
+        # GC their points from Qdrant so search doesn't return ghost results.
+        removed_paths = sorted(set(cache.keys()) - seen_files)
+        if removed_paths and not force_reindex:
+            self._gc_removed_files(collection_name, removed_paths)
+
+        # Persist the refreshed cache for next run.
+        self._save_index_cache(project_id, new_cache)
+
         logger.info(
-            f"Indexing complete: {files_indexed} files, "
-            f"{len(documents)} chunks, {skipped_count} skipped"
+            f"Indexing complete: {files_indexed} embedded, "
+            f"{unchanged_count} unchanged (cache hit), "
+            f"{len(documents)} chunks, {skipped_count} skipped, "
+            f"{len(removed_paths)} gc'd"
         )
 
         if documents:
@@ -869,10 +1033,20 @@ class ProjectVectorStore:
             if RAG_ENABLE_HYBRID:
                 self._build_bm25_index(project_id, texts, metadatas)
 
+        # Reflect current collection totals in the result so that
+        # api/rag.py's last_known_count tracks reality after partial re-index.
+        total_files = files_indexed + unchanged_count
+        try:
+            total_chunks = int(
+                self.client.count(collection_name=collection_name, exact=False).count
+            )
+        except Exception:
+            total_chunks = len(documents)
+
         return IndexingResult(
             project_id=project_id,
-            documents_indexed=files_indexed,
-            chunks_created=len(documents),
+            documents_indexed=total_files,
+            chunks_created=total_chunks,
             collection_name=collection_name,
         )
 
@@ -1196,6 +1370,7 @@ class ProjectVectorStore:
             # Clear BM25 caches
             self._bm25_indices.pop(project_id, None)
             self._bm25_corpus.pop(project_id, None)
+            self._collection_size_cache.pop(project_id, None)
             return True
         except Exception:
             return False

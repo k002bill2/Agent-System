@@ -702,3 +702,155 @@ class TestConfig:
         assert stats["document_count"] == 0
         assert stats["indexed"] is False
         assert "error" in stats
+
+
+# ── E: collection-dim consistency check ───────────────────────────────────────
+
+
+class TestDimConsistencyCheck:
+    """Phase E: ensure dimension drift between collection and model is loud."""
+
+    def test_extract_dim_single_vector(self):
+        from services.rag_service import _extract_collection_dim
+
+        info = MagicMock()
+        info.config.params.vectors.size = 768
+        assert _extract_collection_dim(info) == 768
+
+    def test_extract_dim_named_vectors(self):
+        from services.rag_service import _extract_collection_dim
+
+        info = MagicMock()
+        named = MagicMock()
+        named.size = 1024
+        # Replace .vectors with a real dict so the dict branch fires
+        info.config.params.vectors = {"default": named}
+        assert _extract_collection_dim(info) == 1024
+
+    def test_extract_dim_unknown_structure_returns_none(self):
+        from services.rag_service import _extract_collection_dim
+
+        info = MagicMock(spec=[])  # no attributes
+        assert _extract_collection_dim(info) is None
+
+    def test_ensure_collection_creates_when_missing(self, vector_store):
+        # get_collection raises → existing path takes the create branch
+        vector_store.client.get_collection.side_effect = Exception("not found")
+        vector_store._embedding_dimension = 768
+
+        vector_store._ensure_collection_exists("proj_x")
+        vector_store.client.create_collection.assert_called_once()
+
+    def test_ensure_collection_passes_when_dim_matches(self, vector_store):
+        info = MagicMock()
+        info.config.params.vectors.size = 768
+        vector_store.client.get_collection.return_value = info
+        vector_store._embedding_dimension = 768
+
+        # Should not raise and must not recreate the collection
+        vector_store._ensure_collection_exists("proj_x")
+        vector_store.client.create_collection.assert_not_called()
+
+    def test_ensure_collection_raises_on_dim_mismatch(self, vector_store):
+        info = MagicMock()
+        info.config.params.vectors.size = 768
+        vector_store.client.get_collection.return_value = info
+        vector_store._embedding_dimension = 1024  # operator switched models
+
+        with pytest.raises(RuntimeError, match="dimension mismatch"):
+            vector_store._ensure_collection_exists("proj_x")
+        vector_store.client.create_collection.assert_not_called()
+
+
+# ── D: file-level idempotency cache ───────────────────────────────────────────
+
+
+class TestIndexCacheHelpers:
+    """Phase D: per-file cache short-circuits unchanged files."""
+
+    def test_cache_path_sanitizes_project_id(self, vector_store, tmp_path):
+        vector_store._index_cache_dir = tmp_path
+        path = vector_store._index_cache_path("a/b!c d")
+        assert path.parent == tmp_path
+        # Only alnum+underscore in the basename
+        assert all(c.isalnum() or c == "_" for c in path.stem)
+
+    def test_load_returns_empty_when_missing(self, vector_store, tmp_path):
+        vector_store._index_cache_dir = tmp_path
+        assert vector_store._load_index_cache("absent") == {}
+
+    def test_load_returns_empty_on_corrupt_json(self, vector_store, tmp_path):
+        vector_store._index_cache_dir = tmp_path
+        vector_store._index_cache_path("p1").write_text("{not json")
+        assert vector_store._load_index_cache("p1") == {}
+
+    def test_save_then_load_round_trip(self, vector_store, tmp_path):
+        vector_store._index_cache_dir = tmp_path
+        cache = {"foo.md": {"mtime_ns": 12345, "size": 100}}
+        vector_store._save_index_cache("p1", cache)
+        assert vector_store._load_index_cache("p1") == cache
+
+    def test_save_is_atomic(self, vector_store, tmp_path):
+        """Tmp file is renamed in-place; no partial files remain on success."""
+        vector_store._index_cache_dir = tmp_path
+        vector_store._save_index_cache("p1", {"a": {"mtime_ns": 1, "size": 1}})
+        leftovers = list(tmp_path.glob("*.tmp"))
+        assert leftovers == []
+
+    def test_file_signature_returns_none_for_missing(self, vector_store, tmp_path):
+        from services.rag_service import ProjectVectorStore
+
+        assert ProjectVectorStore._file_signature(tmp_path / "nope") is None
+
+    def test_file_signature_captures_mtime_and_size(self, vector_store, tmp_path):
+        from services.rag_service import ProjectVectorStore
+
+        f = tmp_path / "a.md"
+        f.write_text("hello")
+        sig = ProjectVectorStore._file_signature(f)
+        assert sig is not None
+        assert sig["size"] == 5
+        assert sig["mtime_ns"] > 0
+
+    def test_signature_unchanged_handles_none_prev(self, vector_store):
+        from services.rag_service import ProjectVectorStore
+
+        cur = {"mtime_ns": 1, "size": 2}
+        assert ProjectVectorStore._signature_unchanged(None, cur) is False
+
+    def test_signature_unchanged_detects_match(self, vector_store):
+        from services.rag_service import ProjectVectorStore
+
+        sig = {"mtime_ns": 100, "size": 50}
+        assert ProjectVectorStore._signature_unchanged(sig, sig) is True
+
+    def test_signature_unchanged_detects_mtime_change(self, vector_store):
+        from services.rag_service import ProjectVectorStore
+
+        prev = {"mtime_ns": 100, "size": 50}
+        cur = {"mtime_ns": 101, "size": 50}
+        assert ProjectVectorStore._signature_unchanged(prev, cur) is False
+
+    def test_signature_unchanged_detects_size_change(self, vector_store):
+        from services.rag_service import ProjectVectorStore
+
+        prev = {"mtime_ns": 100, "size": 50}
+        cur = {"mtime_ns": 100, "size": 51}
+        assert ProjectVectorStore._signature_unchanged(prev, cur) is False
+
+    def test_gc_removed_files_skips_when_empty(self, vector_store):
+        vector_store._gc_removed_files("proj_x", [])
+        vector_store.client.delete.assert_not_called()
+
+    def test_gc_removed_files_invokes_qdrant_delete(self, vector_store):
+        vector_store._gc_removed_files("proj_x", ["a.md", "b.md"])
+        vector_store.client.delete.assert_called_once()
+        kwargs = vector_store.client.delete.call_args.kwargs
+        assert kwargs["collection_name"] == "proj_x"
+        # Best-effort: just verify a points_selector was passed
+        assert "points_selector" in kwargs
+
+    def test_gc_swallows_qdrant_failure(self, vector_store):
+        vector_store.client.delete.side_effect = Exception("qdrant down")
+        # Must not propagate — gc is best-effort
+        vector_store._gc_removed_files("proj_x", ["a.md"])
