@@ -470,6 +470,7 @@ export function WorkingDirectory({
   onClearDrafts,
 }: WorkingDirectoryProps) {
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
+  const [selectedStagedFiles, setSelectedStagedFiles] = useState<Set<string>>(new Set())
   const [commitMessage, setCommitMessage] = useState('')
   const [isCommitting, setIsCommitting] = useState(false)
   const [isCommittingAndPushing, setIsCommittingAndPushing] = useState(false)
@@ -491,6 +492,25 @@ export function WorkingDirectory({
       }
       return next
     })
+  }
+
+  const handleSelectStagedFile = (path: string) => {
+    setSelectedStagedFiles((prev) => {
+      const next = new Set(prev)
+      if (next.has(path)) {
+        next.delete(path)
+      } else {
+        next.add(path)
+      }
+      return next
+    })
+  }
+
+  const handleUnstageSelected = async () => {
+    if (selectedStagedFiles.size === 0) return
+    const paths = Array.from(selectedStagedFiles)
+    const success = await onUnstageFiles(paths)
+    if (success) setSelectedStagedFiles(new Set())
   }
 
   const handleToggleDiff = async (path: string, staged: boolean) => {
@@ -773,8 +793,8 @@ export function WorkingDirectory({
                     <FileItem
                       key={file.path}
                       file={{ ...file, staged: true }}
-                      selected={false}
-                      onSelect={() => {}}
+                      selected={selectedStagedFiles.has(file.path)}
+                      onSelect={handleSelectStagedFile}
                       onUnstage={(path) => onUnstageFiles([path])}
                       onToggleDiff={(path) => handleToggleDiff(path, true)}
                       showDiff={expandedDiffs.has(`${file.path}:true`)}
@@ -784,6 +804,20 @@ export function WorkingDirectory({
                   ))
                 )}
               </div>
+
+              {/* Unstage Selected Button */}
+              {selectedStagedFiles.size > 0 && (
+                <div className="p-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 shrink-0">
+                  <button
+                    onClick={handleUnstageSelected}
+                    disabled={isLoading}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-lg transition-colors"
+                  >
+                    <Minus className="w-4 h-4" />
+                    Unstage Selected ({selectedStagedFiles.size})
+                  </button>
+                </div>
+              )}
 
               {/* Review Staged Changes Panel */}
               {staged_files.length > 0 && (
