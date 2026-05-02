@@ -10,12 +10,14 @@ vi.mock('../../services/apiClient', () => ({
   },
 }))
 
+const authState = {
+  isAuthenticated: () => true,
+  isTokenExpired: () => false,
+}
+
 vi.mock('../auth', () => ({
   useAuthStore: {
-    getState: () => ({
-      isAuthenticated: () => true,
-      isTokenExpired: () => false,
-    }),
+    getState: () => authState,
   },
 }))
 
@@ -36,6 +38,9 @@ describe('menuVisibility store', () => {
   beforeEach(() => {
     resetStore()
     vi.clearAllMocks()
+    // 각 테스트마다 인증 상태 초기화 (비인증 테스트가 흐름을 오염시키지 않도록)
+    authState.isAuthenticated = () => true
+    authState.isTokenExpired = () => false
   })
 
   // ── Initial State ──────────────────────────────────────
@@ -80,23 +85,23 @@ describe('menuVisibility store', () => {
       expect(mockApiClient.get).not.toHaveBeenCalled()
     })
 
-    it('keeps defaults on fetch failure', async () => {
+    it('marks loaded as true on fetch failure to avoid permanent skeleton', async () => {
       mockApiClient.get.mockRejectedValueOnce(new Error('Fetch failed'))
 
       await useMenuVisibilityStore.getState().fetchVisibility()
 
       const state = useMenuVisibilityStore.getState()
       expect(state.visibility).toEqual({})
-      expect(state.isLoaded).toBe(false)
+      expect(state.isLoaded).toBe(true)
     })
 
-    it('keeps defaults on network error', async () => {
+    it('marks loaded as true on network error to avoid permanent skeleton', async () => {
       mockApiClient.get.mockRejectedValueOnce(new Error('Network error'))
 
       await useMenuVisibilityStore.getState().fetchVisibility()
 
       expect(useMenuVisibilityStore.getState().visibility).toEqual({})
-      expect(useMenuVisibilityStore.getState().isLoaded).toBe(false)
+      expect(useMenuVisibilityStore.getState().isLoaded).toBe(true)
     })
 
     it('handles missing menu_order in response', async () => {
@@ -105,6 +110,26 @@ describe('menuVisibility store', () => {
       await useMenuVisibilityStore.getState().fetchVisibility()
 
       expect(useMenuVisibilityStore.getState().menuOrder).toEqual([])
+    })
+
+    it('marks loaded as true when unauthenticated (no API call)', async () => {
+      authState.isAuthenticated = () => false
+
+      await useMenuVisibilityStore.getState().fetchVisibility()
+
+      const state = useMenuVisibilityStore.getState()
+      expect(mockApiClient.get).not.toHaveBeenCalled()
+      expect(state.isLoaded).toBe(true)
+    })
+
+    it('marks loaded as true when token expired (no API call)', async () => {
+      authState.isTokenExpired = () => true
+
+      await useMenuVisibilityStore.getState().fetchVisibility()
+
+      const state = useMenuVisibilityStore.getState()
+      expect(mockApiClient.get).not.toHaveBeenCalled()
+      expect(state.isLoaded).toBe(true)
     })
   })
 })
