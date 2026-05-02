@@ -291,6 +291,7 @@ export function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsDashboard | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null)
 
   // Multi-project comparison state
   const [compareProjectIds, setCompareProjectIds] = useState<string[]>([])
@@ -339,6 +340,16 @@ export function AnalyticsPage() {
     loadData()
   }, [timeRange, selectedProjectId]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 짧은 시간 범위(1h, 24h)에서만 60초 자동 폴링.
+  // 백그라운드 탭에서는 정지(배터리/네트워크 절약), 큰 윈도우(7d/30d/all)는 변동성 낮아 제외.
+  useEffect(() => {
+    if (timeRange !== '1h' && timeRange !== '24h') return
+    const id = window.setInterval(() => {
+      if (!document.hidden) loadData()
+    }, 60_000)
+    return () => window.clearInterval(id)
+  }, [timeRange, selectedProjectId]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Load multi-project comparison data when selection changes
   useEffect(() => {
     if (compareProjectIds.length >= 2) {
@@ -361,6 +372,7 @@ export function AnalyticsPage() {
       setEvalStats(evalResult)
       setEvalList(evalListResult)
       setError(null)
+      setLastFetchedAt(new Date())
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -458,8 +470,20 @@ export function AnalyticsPage() {
             </select>
           </div>
 
+          {lastFetchedAt && (
+            <span
+              className="text-xs text-gray-500 dark:text-gray-400 tabular-nums"
+              title={`마지막 갱신: ${lastFetchedAt.toLocaleString('ko-KR')}`}
+            >
+              갱신 {lastFetchedAt.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              {(timeRange === '1h' || timeRange === '24h') && (
+                <span className="ml-1 text-gray-400">· 자동 60초</span>
+              )}
+            </span>
+          )}
           <button
             onClick={loadData}
+            aria-label="새로고침"
             className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
           >
             <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
@@ -641,8 +665,12 @@ export function AnalyticsPage() {
         </ChartCard>
 
         {/* Model Token Breakdown (Weekly) */}
-        <ChartCard title="Model Token Breakdown (7 Days)" icon={Users}>
-          {claudeUsage && claudeUsage.weeklyModelTokens ? (
+        <ChartCard
+          title="Model Token Breakdown (7 Days)"
+          icon={Users}
+          headerExtra={renderTokenSourceBadge(claudeUsage)}
+        >
+          {claudeUsage?.weeklyModelTokens && claudeUsage.weeklyModelTokens.length > 0 ? (
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={transformModelTokensData(claudeUsage.weeklyModelTokens)}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
@@ -1185,9 +1213,10 @@ interface ChartCardProps {
   icon: typeof BarChart3
   children: React.ReactNode
   className?: string
+  headerExtra?: React.ReactNode
 }
 
-function ChartCard({ title, icon: Icon, children, className }: ChartCardProps) {
+function ChartCard({ title, icon: Icon, children, className, headerExtra }: ChartCardProps) {
   return (
     <div
       className={cn(
@@ -1195,10 +1224,13 @@ function ChartCard({ title, icon: Icon, children, className }: ChartCardProps) {
         className
       )}
     >
-      <h3 className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-2 mb-4">
-        <Icon className="w-4 h-4 text-gray-400" />
-        {title}
-      </h3>
+      <div className="flex items-center justify-between mb-4 gap-2">
+        <h3 className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-2">
+          <Icon className="w-4 h-4 text-gray-400" />
+          {title}
+        </h3>
+        {headerExtra}
+      </div>
       {children}
     </div>
   )
@@ -1501,6 +1533,44 @@ function transformMultiSeriesData(
   })
 
   return Array.from(dateMap.values())
+}
+
+/**
+ * Render a small status badge above the Model Token Breakdown chart that
+ * tells the user *why* the data looks the way it does — silent fallback is
+ * confusing, especially when stats-cache.json has gone stale upstream.
+ */
+function renderTokenSourceBadge(
+  usage: import('../types/claudeUsage').ClaudeUsageResponse | null
+): React.ReactNode {
+  if (!usage) return null
+  const source = usage.weeklyModelTokensSource
+  const ageDays = usage.statsCacheAgeDays ?? null
+
+  if (source === 'jsonl-fallback') {
+    const ageHint = ageDays != null && ageDays > 0 ? ` (Claude 캐시 ${ageDays}일 stale)` : ''
+    return (
+      <span
+        className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 whitespace-nowrap"
+        title={`stats-cache.json이 갱신되지 않아 세션 JSONL에서 직접 집계했습니다${ageHint}.`}
+      >
+        세션 로그 기반{ageHint}
+      </span>
+    )
+  }
+
+  if (ageDays != null && ageDays >= 2) {
+    return (
+      <span
+        className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 whitespace-nowrap"
+        title="Claude Code의 stats-cache.json이 며칠째 갱신되지 않았습니다."
+      >
+        캐시 {ageDays}일 stale
+      </span>
+    )
+  }
+
+  return null
 }
 
 /**

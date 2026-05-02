@@ -58,6 +58,16 @@ export interface ClaudeUsageResponse {
   // Weekly usage from local cache
   weeklyActivity: DailyActivity[]
   weeklyModelTokens: DailyModelTokens[]
+  /**
+   * Where weeklyModelTokens came from:
+   * - "stats-cache": Claude Code's internal stats-cache.json (preferred path)
+   * - "jsonl-fallback": reconstructed from session JSONL files because the
+   *   stats-cache went stale
+   * - "empty": no data found in either source
+   */
+  weeklyModelTokensSource?: 'stats-cache' | 'jsonl-fallback' | 'empty'
+  /** Days since stats-cache.json was last refreshed by Claude Code itself. */
+  statsCacheAgeDays?: number | null
 
   // Model usage totals from local cache
   modelUsage: Record<string, ModelUsage>
