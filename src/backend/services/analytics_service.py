@@ -27,9 +27,35 @@ from models.analytics import (
     TrendDataPoint,
 )
 from models.project import get_project
-from utils.time import utcnow
+from utils.time import to_display_tz, utcnow
 
 logger = logging.getLogger(__name__)
+
+_HEATMAP_MAX_SPAN_HOURS = 24 * 30  # 비정상 long-running 세션 가드
+
+
+def _spread_session_hours(created_at, last_activity):
+    """Yield (day, hour) pairs covering each hour the session was active.
+
+    좌표는 사용자 표시 시간대(`utils.time.display_tz`) 기준이며, 일요일=0 매핑이다.
+    `last_activity < created_at` 또는 비정상 long-running(>30일) 세션은 시작 시각만
+    한 셀에 카운트하여 무한 루프와 노이즈를 막는다.
+    """
+    start = to_display_tz(created_at)
+    end = to_display_tz(last_activity)
+
+    span = end - start
+    if span.total_seconds() < 0 or span.total_seconds() > _HEATMAP_MAX_SPAN_HOURS * 3600:
+        day = (start.weekday() + 1) % 7
+        yield day, start.hour
+        return
+
+    cur = start.replace(minute=0, second=0, microsecond=0)
+    end_floor = end.replace(minute=0, second=0, microsecond=0)
+    while cur <= end_floor:
+        day = (cur.weekday() + 1) % 7
+        yield day, cur.hour
+        cur += timedelta(hours=1)
 
 
 def _normalize_model_name(model: str) -> str:
@@ -708,7 +734,11 @@ class AnalyticsService:
         time_range: TimeRange = TimeRange.WEEK,
         project_name: str | None = None,
     ) -> ActivityHeatmap:
-        """Get activity heatmap from Claude Code sessions."""
+        """Get activity heatmap from Claude Code sessions.
+
+        세션을 표시 시간대(env HEATMAP_DISPLAY_TZ, 기본 KST)의 weekday/hour 격자에
+        매핑하고, 한 세션이 여러 시간대에 걸쳐 있으면 시간 단위로 분산 카운트한다.
+        """
         sessions = AnalyticsService._get_sessions(project_name)
         delta = _get_time_delta(time_range)
         start = utcnow() - delta
@@ -719,8 +749,8 @@ class AnalyticsService:
                 return dt.astimezone(UTC).replace(tzinfo=None)
             return dt
 
-        start = _normalize_dt(start)
-        range_sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
+        # last_activity 기준 윈도우: 시작은 윈도우 밖이지만 여전히 활성인 세션도 포함.
+        range_sessions = [s for s in sessions if _normalize_dt(s.last_activity) >= start]
 
         heatmap: dict[tuple[int, int], int] = {}
         for day in range(7):
@@ -728,12 +758,8 @@ class AnalyticsService:
                 heatmap[(day, hour)] = 0
 
         for s in range_sessions:
-            ca = _normalize_dt(s.created_at)
-            day = ca.weekday()  # 0=Monday
-            hour = ca.hour
-            # Convert to Sunday=0 format
-            day = (day + 1) % 7
-            heatmap[(day, hour)] += 1
+            for day, hour in _spread_session_hours(s.created_at, s.last_activity):
+                heatmap[(day, hour)] += 1
 
         cells = []
         max_value = 0
@@ -1098,11 +1124,10 @@ class AnalyticsService:
                 heatmap[(day, hour)] = 0
 
         for activity in activities:
-            day = activity.created_at.weekday()  # 0=Monday, 6=Sunday
-            hour = activity.created_at.hour
+            local = to_display_tz(activity.created_at)
             # Convert to Sunday=0 format
-            day = (day + 1) % 7
-            heatmap[(day, hour)] += 1
+            day = (local.weekday() + 1) % 7
+            heatmap[(day, local.hour)] += 1
 
         cells = []
         max_value = 0

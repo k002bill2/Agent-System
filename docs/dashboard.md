@@ -70,7 +70,7 @@ import { cn } from '@/lib/utils';
 | `OrganizationsPage` | `/organizations` | 조직 관리 (Overview/Members/Settings 3탭, 소스 유저 매핑) |
 | `WorkflowsPage` | `/workflows` | 워크플로우 자동화 (CI/CD 파이프라인 관리) |
 | `ExternalUsagePage` | `/external-usage` | 외부 LLM 프로바이더 사용량 모니터링 (비용, 토큰, 프로바이더별 현황) |
-| `AdminPage` | `/admin` | 관리자 페이지 (사용자 관리, 메뉴 설정, 시스템 정보) |
+| `AdminPage` | `/admin` | 관리자 페이지 (사용자 관리, 메뉴 설정, 시스템 정보, External Sources) |
 | `SessionsPage` | `/sessions` | 세션 활동 뷰 (ClaudeCodeActivity 래핑) |
 | `SettingsPage` | `/settings` | 시스템 설정 (Claude Code OAuth 인증, 터미널 감지) |
 | `LoginPage` | `/login` | OAuth/Email 로그인 |

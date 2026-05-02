@@ -15,6 +15,9 @@ vi.mock('../components/admin', () => ({
   ),
   MenuSettingsTab: () => <div data-testid="menu-settings-tab">MenuSettingsTab</div>,
   SystemInfoTab: () => <div data-testid="system-info-tab">SystemInfoTab</div>,
+  ExternalSourcesTab: () => (
+    <div data-testid="external-sources-tab">ExternalSourcesTab</div>
+  ),
 }))
 
 // Mock lucide-react icons
@@ -23,6 +26,7 @@ vi.mock('lucide-react', () => ({
   ShieldOff: ({ className }: { className?: string }) => <span data-testid="icon-shield-off" className={className} />,
   Server: ({ className }: { className?: string }) => <span data-testid="icon-server" className={className} />,
   Menu: ({ className }: { className?: string }) => <span data-testid="icon-menu" className={className} />,
+  FolderTree: ({ className }: { className?: string }) => <span data-testid="icon-folder-tree" className={className} />,
 }))
 
 import { AdminPage } from './AdminPage'
@@ -39,6 +43,16 @@ describe('AdminPage', () => {
     expect(screen.getByText('Users')).toBeInTheDocument()
     expect(screen.getByText('Menu Settings')).toBeInTheDocument()
     expect(screen.getByText('System')).toBeInTheDocument()
+    expect(screen.getByText('External Sources')).toBeInTheDocument()
+  })
+
+  it('switches to External Sources tab when clicked', () => {
+    render(<AdminPage />)
+
+    fireEvent.click(screen.getByText('External Sources'))
+
+    expect(screen.queryByTestId('user-management-tab')).not.toBeInTheDocument()
+    expect(screen.getByTestId('external-sources-tab')).toBeInTheDocument()
   })
 
   it('shows UserManagementTab by default', () => {

@@ -46,6 +46,7 @@ import {
   FileText,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
+import { computeHeatmapAlpha } from '../lib/heatmap'
 import { useProjectsStore, Project } from '../stores/projects'
 import { useClaudeUsageStore } from '../stores/claudeUsage'
 import { useExternalUsageStore } from '../stores/externalUsage'
@@ -1386,16 +1387,16 @@ function ActivityHeatmapChart({ data }: { data: ActivityHeatmap }) {
             {Array.from({ length: 24 }, (_, hour) => {
               const cell = data.cells.find((c) => c.day === day && c.hour === hour)
               const value = cell?.value || 0
-              const intensity = data.max_value > 0 ? value / data.max_value : 0
+              const alpha = computeHeatmapAlpha(value, data.max_value)
 
               return (
                 <div
                   key={hour}
                   style={{
                     height: cellHeight,
-                    backgroundColor: intensity === 0
+                    backgroundColor: alpha === 0
                       ? emptyColor
-                      : `rgba(59, 130, 246, ${0.2 + intensity * 0.8})`,
+                      : `rgba(59, 130, 246, ${alpha})`,
                   }}
                   className="w-full rounded-sm cursor-pointer hover:ring-2 hover:ring-blue-400"
                   title={`${DAY_LABELS[day]} ${hour}:00 - ${value} sessions`}

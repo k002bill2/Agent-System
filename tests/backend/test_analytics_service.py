@@ -554,19 +554,69 @@ class TestActivityHeatmapFromSessions:
             result = AnalyticsService.get_activity_heatmap_from_sessions()
         assert result.max_value == 0
 
-    def test_session_increments_corresponding_cell(self):
-        # Use a recent Monday within the last 365 days so it passes the utcnow filter.
-        # Find the most recent Monday relative to now.
+    def test_session_increments_cell_in_display_tz(self):
+        # 표시 시간대(KST 기본) 기준 좌표로 카운트되는지 확인.
+        # UTC Monday 01:00 == KST Monday 10:00.
         now = utcnow()
         days_since_monday = now.weekday()  # 0=Monday
-        last_monday = (now - timedelta(days=days_since_monday)).replace(
-            hour=10, minute=0, second=0, microsecond=0
+        last_monday_utc_1am = (now - timedelta(days=days_since_monday)).replace(
+            hour=1, minute=0, second=0, microsecond=0
         )
-        # Ensure it is within the last year (it will be: 0-6 days ago)
-        session = _make_mock_session(created_at=last_monday, last_activity=last_monday)
+        session = _make_mock_session(
+            created_at=last_monday_utc_1am, last_activity=last_monday_utc_1am
+        )
         with self._patch_sessions([session]):
             result = AnalyticsService.get_activity_heatmap_from_sessions(TimeRange.ALL)
-        # Monday weekday=0 → day=(0+1)%7=1, hour=10
+        # Monday weekday=0 → day=(0+1)%7=1, KST hour=10
         matching = [c for c in result.cells if c.day == 1 and c.hour == 10]
         assert len(matching) == 1
         assert matching[0].value == 1
+
+    def test_session_spans_multiple_hours(self):
+        # 3시간 세션은 시작/끝 floor 기준 4셀(10,11,12,13시)에 1씩 카운트.
+        now = utcnow()
+        days_since_monday = now.weekday()
+        start_utc = (now - timedelta(days=days_since_monday)).replace(
+            hour=1, minute=0, second=0, microsecond=0
+        )  # KST Mon 10:00
+        end_utc = start_utc + timedelta(hours=3)  # KST Mon 13:00
+        session = _make_mock_session(created_at=start_utc, last_activity=end_utc)
+        with self._patch_sessions([session]):
+            result = AnalyticsService.get_activity_heatmap_from_sessions(TimeRange.ALL)
+        kst_hours = {c.hour for c in result.cells if c.day == 1 and c.value > 0}
+        assert kst_hours == {10, 11, 12, 13}
+
+    def test_inverted_timestamps_falls_back_to_single_cell(self):
+        # last_activity < created_at 인 비정상 세션은 시작 시각만 카운트(무한 루프 방지).
+        now = utcnow()
+        start_utc = now.replace(hour=1, minute=0, second=0, microsecond=0)
+        end_utc = start_utc - timedelta(hours=2)
+        session = _make_mock_session(created_at=start_utc, last_activity=end_utc)
+        with self._patch_sessions([session]):
+            result = AnalyticsService.get_activity_heatmap_from_sessions(TimeRange.ALL)
+        non_zero = [c for c in result.cells if c.value > 0]
+        # last_activity로 윈도우 필터를 하므로 ALL 윈도우에서는 통과, 단 1셀만 카운트.
+        assert sum(c.value for c in non_zero) == 1
+
+    def test_overly_long_session_falls_back_to_single_cell(self):
+        # 30일 초과 세션은 노이즈 방지를 위해 시작 시각만 카운트.
+        now = utcnow()
+        start_utc = now - timedelta(days=60)
+        end_utc = now
+        session = _make_mock_session(created_at=start_utc, last_activity=end_utc)
+        with self._patch_sessions([session]):
+            result = AnalyticsService.get_activity_heatmap_from_sessions(TimeRange.ALL)
+        total = sum(c.value for c in result.cells)
+        assert total == 1
+
+    def test_active_session_starting_outside_window_is_included(self):
+        # 윈도우 밖에 시작했지만 last_activity가 윈도우 안이면 포함되어야 함.
+        now = utcnow()
+        start_utc = now - timedelta(days=10)  # 7d 윈도우 밖
+        end_utc = now - timedelta(hours=1)  # 윈도우 안
+        session = _make_mock_session(created_at=start_utc, last_activity=end_utc)
+        with self._patch_sessions([session]):
+            result = AnalyticsService.get_activity_heatmap_from_sessions(TimeRange.WEEK)
+        total = sum(c.value for c in result.cells)
+        # 30일 초과 세션 가드(>720h)에 안 걸리므로 시간 단위로 펼쳐짐.
+        assert total > 0

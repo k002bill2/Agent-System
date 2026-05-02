@@ -34,7 +34,7 @@ export interface SystemInfo {
 
 export type MenuVisibility = Record<string, Record<string, boolean>>
 
-export type AdminTab = 'users' | 'menu-settings' | 'system'
+export type AdminTab = 'users' | 'menu-settings' | 'system' | 'external-sources'
 
 export const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
