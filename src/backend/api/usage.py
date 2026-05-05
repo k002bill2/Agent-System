@@ -4,8 +4,10 @@ Fetches real usage data from Anthropic OAuth API using macOS Keychain credential
 """
 
 import json
+import logging
 import os
 import sys
+from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -24,6 +26,8 @@ from services.claude_config_service import (
 
 router = APIRouter(prefix="/usage", tags=["Usage"])
 
+logger = logging.getLogger(__name__)
+
 # Claude Code stats cache file path (configurable via env)
 STATS_CACHE_PATH = Path(
     os.getenv(
@@ -31,6 +35,23 @@ STATS_CACHE_PATH = Path(
         str(Path.home() / ".claude" / "stats-cache.json"),
     )
 )
+
+# Claude Code session JSONL directory — fallback source when stats-cache is stale.
+CLAUDE_PROJECTS_DIR = Path(
+    os.getenv(
+        "CLAUDE_PROJECTS_DIR",
+        str(Path.home() / ".claude" / "projects"),
+    )
+)
+
+# Aggregated JSONL token cache (avoids re-scanning hundreds of MB on every request)
+JSONL_TOKEN_CACHE_PATH = Path(
+    os.getenv(
+        "CLAUDE_JSONL_TOKEN_CACHE_PATH",
+        str(Path.home() / ".claude" / "aos-jsonl-token-cache.json"),
+    )
+)
+JSONL_TOKEN_CACHE_TTL_SECONDS = 300  # 5 minutes
 
 # Anthropic OAuth Usage API
 ANTHROPIC_USAGE_API = "https://api.anthropic.com/api/oauth/usage"
@@ -175,6 +196,12 @@ class UsageResponse(BaseModel):
     # Weekly usage
     weeklyActivity: list[DailyActivity] = Field(default_factory=list)
     weeklyModelTokens: list[DailyModelTokens] = Field(default_factory=list)
+    # "stats-cache" when filled from Claude Code's internal cache,
+    # "jsonl-fallback" when reconstructed from session JSONL files,
+    # "empty" when no data was found anywhere.
+    weeklyModelTokensSource: str = "stats-cache"
+    # How many days old the underlying stats-cache.json data is, if any.
+    statsCacheAgeDays: int | None = None
 
     # Model usage totals
     modelUsage: dict[str, ModelUsage] = Field(default_factory=dict)
@@ -205,6 +232,113 @@ def load_stats_cache() -> dict[str, Any] | None:
     except (OSError, json.JSONDecodeError) as e:
         print(f"Error reading stats cache: {e}")
         return None
+
+
+def _read_jsonl_token_cache(days: int) -> list[dict[str, Any]] | None:
+    """Return cached aggregation if fresh and matches `days` window, else None."""
+    if not JSONL_TOKEN_CACHE_PATH.exists():
+        return None
+    try:
+        with open(JSONL_TOKEN_CACHE_PATH) as f:
+            cache = json.load(f)
+        if cache.get("days") != days:
+            return None
+        cached_at = datetime.fromisoformat(cache["cachedAt"])
+        if (datetime.now(UTC) - cached_at).total_seconds() < JSONL_TOKEN_CACHE_TTL_SECONDS:
+            return cache.get("data", [])
+    except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        return None
+    return None
+
+
+def _write_jsonl_token_cache(days: int, data: list[dict[str, Any]]) -> None:
+    """Persist aggregation alongside its window size and a fresh timestamp."""
+    try:
+        JSONL_TOKEN_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(JSONL_TOKEN_CACHE_PATH, "w") as f:
+            json.dump(
+                {
+                    "cachedAt": datetime.now(UTC).isoformat(),
+                    "days": days,
+                    "data": data,
+                },
+                f,
+            )
+    except OSError:
+        logger.warning("Failed to write JSONL token cache", exc_info=True)
+
+
+def aggregate_model_tokens_from_jsonl(days: int = 7) -> list["DailyModelTokens"]:
+    """Aggregate per-day token usage by model from Claude Code session JSONL files.
+
+    Used as a fallback when ``stats-cache.json`` is stale or empty. Walks
+    ``~/.claude/projects/**/*.jsonl`` (including ``subagents/`` subfolders),
+    counts only ``type == "assistant"`` entries within the window, and sums
+    input + output + cache tokens per (date, model).
+    """
+    cached = _read_jsonl_token_cache(days)
+    if cached is not None:
+        return [DailyModelTokens(**item) for item in cached]
+
+    if not CLAUDE_PROJECTS_DIR.exists():
+        return []
+
+    cutoff_dt = datetime.now(UTC) - timedelta(days=days)
+    cutoff_ts = cutoff_dt.timestamp()
+    aggregated: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+
+    for jsonl_path in CLAUDE_PROJECTS_DIR.rglob("*.jsonl"):
+        try:
+            if jsonl_path.stat().st_mtime < cutoff_ts:
+                continue
+        except OSError:
+            continue
+        try:
+            with open(jsonl_path) as f:
+                for line in f:
+                    # Cheap string prefilter avoids JSON-parsing every line in
+                    # a multi-hundred-MB file.
+                    if '"type":"assistant"' not in line and '"type": "assistant"' not in line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if obj.get("type") != "assistant":
+                        continue
+                    ts_raw = obj.get("timestamp")
+                    if not ts_raw:
+                        continue
+                    try:
+                        ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+                    except ValueError:
+                        continue
+                    if ts < cutoff_dt:
+                        continue
+                    msg = obj.get("message") or {}
+                    model = msg.get("model")
+                    usage = msg.get("usage") or {}
+                    if not model or not usage:
+                        continue
+                    tokens = (
+                        int(usage.get("input_tokens", 0) or 0)
+                        + int(usage.get("output_tokens", 0) or 0)
+                        + int(usage.get("cache_creation_input_tokens", 0) or 0)
+                        + int(usage.get("cache_read_input_tokens", 0) or 0)
+                    )
+                    if tokens <= 0:
+                        continue
+                    aggregated[ts.date().isoformat()][model] += tokens
+        except OSError:
+            continue
+
+    result = [
+        DailyModelTokens(date=d, tokensByModel=dict(models))
+        for d, models in sorted(aggregated.items())
+    ]
+
+    _write_jsonl_token_cache(days, [item.model_dump() for item in result])
+    return result
 
 
 def get_oauth_token() -> str | None:
@@ -341,6 +475,26 @@ async def get_usage() -> UsageResponse:
         for entry in daily_model_tokens
         if datetime.strptime(entry["date"], "%Y-%m-%d").date() >= week_ago
     ]
+    weekly_model_tokens_source = "stats-cache" if weekly_model_tokens else "empty"
+
+    # stats-cache.json is a Claude Code internal cache that recent CLI versions
+    # have stopped refreshing. Fall back to scanning the live session JSONL
+    # files so the chart keeps working when the cache goes stale.
+    if not weekly_model_tokens:
+        weekly_model_tokens = aggregate_model_tokens_from_jsonl(days=7)
+        if weekly_model_tokens:
+            weekly_model_tokens_source = "jsonl-fallback"
+
+    # Compute how many days behind today the stats-cache reports — useful for
+    # surfacing "the upstream cache stopped updating" to the UI.
+    stats_cache_age_days: int | None = None
+    last_computed_raw = stats.get("lastComputedDate")
+    if last_computed_raw:
+        try:
+            last_computed = datetime.strptime(last_computed_raw, "%Y-%m-%d").date()
+            stats_cache_age_days = max((today - last_computed).days, 0)
+        except ValueError:
+            stats_cache_age_days = None
 
     # Build model usage response
     model_usage_response = {
@@ -430,6 +584,8 @@ async def get_usage() -> UsageResponse:
         firstSessionDate=stats.get("firstSessionDate"),
         weeklyActivity=weekly_activity,
         weeklyModelTokens=weekly_model_tokens,
+        weeklyModelTokensSource=weekly_model_tokens_source,
+        statsCacheAgeDays=stats_cache_age_days,
         modelUsage=model_usage_response,
         planLimits=plan_limits,
         oauthAvailable=oauth_available,

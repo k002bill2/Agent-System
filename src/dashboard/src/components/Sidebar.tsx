@@ -24,27 +24,35 @@ import { useOrchestrationStore } from '../stores/orchestration'
 import { useNavigationStore, ViewType } from '../stores/navigation'
 import { useAuthStore } from '../stores/auth'
 import { useMenuVisibilityStore } from '../stores/menuVisibility'
-import { MENU_LABELS } from './admin/types'
+import { MENU_LABELS, DEFAULT_MENU_ORDER } from './admin/types'
+import { syncMenuOrder } from '../lib/menuOrder'
+import { SidebarSkeleton } from './skeletons/SidebarSkeleton'
 
-// 아이콘 매핑 (메뉴명은 MENU_LABELS에서 가져옴)
-const navigation: { icon: typeof LayoutDashboard; view: ViewType }[] = [
-  { icon: LayoutDashboard, view: 'dashboard' },
-  { icon: FolderKanban, view: 'projects' },
-  { icon: Activity, view: 'sessions' },
-  { icon: Users, view: 'agents' },
-  { icon: Monitor, view: 'monitor' },
-  { icon: Code2, view: 'claude-sessions' },
-  { icon: FolderCog, view: 'project-configs' },
-  { icon: Database, view: 'project-management' },
-  { icon: GitBranch, view: 'git' },
-  { icon: Building2, view: 'organizations' },
-  { icon: FileText, view: 'audit' },
-  { icon: Bell, view: 'notifications' },
-  { icon: BarChart3, view: 'analytics' },
-  { icon: FlaskConical, view: 'playground' },
-  { icon: GitBranch, view: 'workflows' },
-  { icon: Wallet, view: 'external-usage' },
-]
+// 메뉴 키 → 아이콘 매핑. 순서/라벨은 DEFAULT_MENU_ORDER, MENU_LABELS가 담당.
+const MENU_ICONS: Record<string, typeof LayoutDashboard> = {
+  dashboard: LayoutDashboard,
+  projects: FolderKanban,
+  sessions: Activity,
+  agents: Users,
+  monitor: Monitor,
+  'claude-sessions': Code2,
+  'project-configs': FolderCog,
+  'project-management': Database,
+  git: GitBranch,
+  organizations: Building2,
+  audit: FileText,
+  notifications: Bell,
+  analytics: BarChart3,
+  playground: FlaskConical,
+  workflows: GitBranch,
+  'external-usage': Wallet,
+}
+
+const navigation: { icon: typeof LayoutDashboard; view: ViewType }[] =
+  DEFAULT_MENU_ORDER.map((view) => ({
+    icon: MENU_ICONS[view] ?? LayoutDashboard,
+    view: view as ViewType,
+  }))
 
 export function Sidebar() {
   const fetchProjects = useOrchestrationStore(s => s.fetchProjects)
@@ -53,6 +61,7 @@ export function Sidebar() {
   const user = useAuthStore(s => s.user)
   const visibility = useMenuVisibilityStore(s => s.visibility)
   const menuOrder = useMenuVisibilityStore(s => s.menuOrder)
+  const isLoaded = useMenuVisibilityStore(s => s.isLoaded)
   const fetchVisibility = useMenuVisibilityStore(s => s.fetchVisibility)
 
   useEffect(() => {
@@ -62,7 +71,7 @@ export function Sidebar() {
   // 사용자 변경 시 메뉴 가시성 재로딩 (다른 계정으로 전환 시 stale data 방지)
   useEffect(() => {
     if (user?.id) {
-      useMenuVisibilityStore.setState({ isLoaded: false })
+      useMenuVisibilityStore.setState({ isLoaded: false, menuOrder: [], visibility: {} })
       fetchVisibility()
     }
   }, [user?.id, fetchVisibility])
@@ -71,18 +80,13 @@ export function Sidebar() {
 
   // 역할 기반 메뉴 필터링 + 순서 적용
   const filteredNavigation = useMemo(() => {
-    // menuOrder가 있으면 해당 순서로 정렬
-    let sorted = navigation
-    if (menuOrder.length > 0) {
-      sorted = [...navigation].sort((a, b) => {
-        const aIdx = menuOrder.indexOf(a.view)
-        const bIdx = menuOrder.indexOf(b.view)
-        // menuOrder에 없는 항목은 뒤로
-        const aOrder = aIdx === -1 ? 999 : aIdx
-        const bOrder = bIdx === -1 ? 999 : bIdx
-        return aOrder - bOrder
-      })
-    }
+    // 서버 menuOrder와 DEFAULT_MENU_ORDER를 머지: 누락된 새 메뉴는 끝에 append.
+    // menuOrder가 비어있으면 DEFAULT_MENU_ORDER를 그대로 반환.
+    const effectiveOrder = syncMenuOrder(menuOrder)
+    const navByView = new Map(navigation.map((n) => [n.view, n]))
+    const sorted = effectiveOrder
+      .map((view) => navByView.get(view as ViewType))
+      .filter((n): n is (typeof navigation)[number] => n !== undefined)
 
     if (userRole === 'admin') return sorted // admin은 모든 메뉴 접근 가능
 
@@ -98,6 +102,9 @@ export function Sidebar() {
 
   // Settings 메뉴 표시 여부
   const showSettings = userRole === 'admin' || (visibility['settings']?.[userRole] ?? true)
+
+  // 첫 fetch 종료 전에는 Skeleton — DEFAULT_MENU_ORDER가 잠깐 노출 후 재정렬되는 깜빡임 차단.
+  if (!isLoaded) return <SidebarSkeleton />
 
   return (
     <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">

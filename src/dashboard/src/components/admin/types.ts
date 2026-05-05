@@ -34,7 +34,7 @@ export interface SystemInfo {
 
 export type MenuVisibility = Record<string, Record<string, boolean>>
 
-export type AdminTab = 'users' | 'menu-settings' | 'system'
+export type AdminTab = 'users' | 'menu-settings' | 'system' | 'external-sources'
 
 export const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
@@ -71,26 +71,23 @@ export const MENU_LABELS: Record<string, string> = {
   admin: 'Admin',
 }
 
-// Menu categories for grouped display
-export const MENU_CATEGORIES: { label: string; keys: string[] }[] = [
-  {
-    label: 'Core',
-    keys: ['dashboard', 'projects', 'sessions'],
-  },
-  {
-    label: 'Development',
-    keys: ['agents', 'playground'],
-  },
-  {
-    label: 'Operations',
-    keys: ['monitor', 'claude-sessions', 'project-configs', 'project-management', 'git', 'workflows'],
-  },
-  {
-    label: 'Organization',
-    keys: ['organizations', 'notifications'],
-  },
-  {
-    label: 'Analytics & Admin',
-    keys: ['audit', 'analytics', 'external-usage', 'settings', 'admin'],
-  },
+// Sidebar 메뉴의 기본 순서 (Single Source of Truth).
+// admin/settings는 사이드바 하단 별도 영역이므로 제외.
+export const DEFAULT_MENU_ORDER: string[] = [
+  'dashboard',
+  'projects',
+  'sessions',
+  'agents',
+  'monitor',
+  'claude-sessions',
+  'project-configs',
+  'project-management',
+  'git',
+  'organizations',
+  'audit',
+  'notifications',
+  'analytics',
+  'playground',
+  'workflows',
+  'external-usage',
 ]
