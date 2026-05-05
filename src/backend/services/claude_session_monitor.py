@@ -1581,6 +1581,42 @@ class ProcessCleanupResult:
     protected: list[int]  # PIDs that were skipped (foreground sessions)
 
 
+def _is_claude_cli_command(command: str) -> bool:
+    """Return True only when `command` is the Claude Code CLI binary.
+
+    The previous heuristic matched any line containing "claude" (case-insensitive),
+    which incorrectly captured the Claude desktop app, its helper subprocesses,
+    the chrome-native-host bridge, and unrelated processes whose arguments happen
+    to mention `.claude/` (e.g. uvicorn run with `--reload-exclude .claude/*`).
+    We now require the executable's basename to be exactly "claude" and reject
+    known non-CLI executables explicitly.
+    """
+    if not command:
+        return False
+
+    # First whitespace-separated token is the executable path. ps output does
+    # not escape spaces inside paths (e.g. "Claude Helper.app/.../Claude Helper"),
+    # so splitting on whitespace truncates desktop-app helpers before the space —
+    # which is fine, because their basename then becomes "Claude" (capital C)
+    # and fails the case-sensitive equality check below.
+    exe = command.split(None, 1)[0]
+
+    # Reject known non-CLI executables that share the "claude" substring.
+    rejected_markers = (
+        "/Applications/Claude.app/",  # desktop app + its helpers
+        "Claude Helper",
+        "chrome-native-host",
+        "chrome_crashpad_handler",
+        "--claude-in-chrome-mcp",
+        "ShipIt",
+    )
+    if any(marker in command for marker in rejected_markers):
+        return False
+
+    basename = exe.rsplit("/", 1)[-1]
+    return basename == "claude"
+
+
 def list_claude_processes() -> list[ClaudeProcess]:
     """List all running Claude Code processes.
 
@@ -1609,16 +1645,12 @@ def list_claude_processes() -> list[ClaudeProcess]:
         processes = []
         current_pid = os.getpid()
         parent_pid = os.getppid()
+        # Backend server PIDs must never be classified as Claude CLI sessions —
+        # the "Kill" buttons on the dashboard would otherwise terminate the API
+        # serving them.
+        backend_pids = {current_pid, parent_pid}
 
         for line in result.stdout.strip().split("\n")[1:]:  # Skip header
-            # Skip non-Claude processes
-            if "claude" not in line.lower():
-                continue
-
-            # Skip helper processes (ShipIt, MCP, etc.)
-            if "ShipIt" in line or "--claude-in-chrome-mcp" in line:
-                continue
-
             # Parse ps output: USER PID %CPU %MEM VSZ RSS TTY STAT START TIME COMMAND
             parts = line.split(None, 10)
             if len(parts) < 11:
@@ -1633,8 +1665,9 @@ def list_claude_processes() -> list[ClaudeProcess]:
                 cpu_time = parts[9]
                 command = parts[10]
 
-                # Skip if not a main Claude process
-                if "claude" not in command and "/claude" not in command:
+                if pid in backend_pids:
+                    continue
+                if not _is_claude_cli_command(command):
                     continue
 
                 # Estimate memory in MB (RSS is in KB on macOS)
