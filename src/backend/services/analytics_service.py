@@ -450,25 +450,30 @@ class AnalyticsService:
     # ─────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _get_sessions(project_name: str | None = None):
-        """Get Claude sessions, optionally filtered by project name."""
+    def _get_sessions(project_path: str | None = None):
+        """Get Claude sessions, optionally filtered by project filesystem path.
+
+        Matches against `Session.cwd` (the original working directory captured
+        in the .jsonl) so that distinct projects sharing a basename are not
+        conflated. Pass a sentinel non-existent path to force an empty result.
+        """
         from services.claude_session_monitor import get_monitor
 
         monitor = get_monitor()
         sessions = monitor.discover_sessions()
 
-        if project_name:
-            sessions = [s for s in sessions if s.project_name == project_name]
+        if project_path:
+            sessions = [s for s in sessions if s.cwd == project_path]
 
         return sessions
 
     @staticmethod
     def get_overview_from_sessions(
         time_range: TimeRange = TimeRange.ALL,
-        project_name: str | None = None,
+        project_path: str | None = None,
     ) -> OverviewMetrics:
         """Get overview metrics from Claude Code sessions."""
-        sessions = AnalyticsService._get_sessions(project_name)
+        sessions = AnalyticsService._get_sessions(project_path)
 
         # Filter by time range
         if time_range != TimeRange.ALL:
@@ -524,10 +529,10 @@ class AnalyticsService:
     @staticmethod
     def get_trends_from_sessions(
         time_range: TimeRange = TimeRange.WEEK,
-        project_name: str | None = None,
+        project_path: str | None = None,
     ) -> MultiTrendData:
         """Get trend data from Claude Code sessions."""
-        sessions = AnalyticsService._get_sessions(project_name)
+        sessions = AnalyticsService._get_sessions(project_path)
         delta = _get_time_delta(time_range)
         interval = _get_interval(time_range)
         now = utcnow()
@@ -593,10 +598,10 @@ class AnalyticsService:
     @staticmethod
     def get_agent_performance_from_sessions(
         time_range: TimeRange = TimeRange.WEEK,
-        project_name: str | None = None,
+        project_path: str | None = None,
     ) -> AgentPerformanceList:
         """Get model-level performance from Claude Code sessions."""
-        sessions = AnalyticsService._get_sessions(project_name)
+        sessions = AnalyticsService._get_sessions(project_path)
         delta = _get_time_delta(time_range)
         start = utcnow() - delta
 
@@ -651,10 +656,10 @@ class AnalyticsService:
     @staticmethod
     def get_cost_analytics_from_sessions(
         time_range: TimeRange = TimeRange.WEEK,
-        project_name: str | None = None,
+        project_path: str | None = None,
     ) -> CostAnalytics:
         """Get cost analytics from Claude Code sessions."""
-        sessions = AnalyticsService._get_sessions(project_name)
+        sessions = AnalyticsService._get_sessions(project_path)
         delta = _get_time_delta(time_range)
         start = utcnow() - delta
 
@@ -732,14 +737,14 @@ class AnalyticsService:
     @staticmethod
     def get_activity_heatmap_from_sessions(
         time_range: TimeRange = TimeRange.WEEK,
-        project_name: str | None = None,
+        project_path: str | None = None,
     ) -> ActivityHeatmap:
         """Get activity heatmap from Claude Code sessions.
 
         세션을 표시 시간대(env HEATMAP_DISPLAY_TZ, 기본 KST)의 weekday/hour 격자에
         매핑하고, 한 세션이 여러 시간대에 걸쳐 있으면 시간 단위로 분산 카운트한다.
         """
-        sessions = AnalyticsService._get_sessions(project_name)
+        sessions = AnalyticsService._get_sessions(project_path)
         delta = _get_time_delta(time_range)
         start = utcnow() - delta
 
@@ -772,7 +777,7 @@ class AnalyticsService:
     @staticmethod
     def get_error_analytics_from_sessions(
         time_range: TimeRange = TimeRange.WEEK,
-        project_name: str | None = None,
+        project_path: str | None = None,
     ) -> ErrorAnalytics:
         """Get error analytics (minimal, since sessions don't track errors explicitly)."""
         return ErrorAnalytics(
@@ -786,16 +791,16 @@ class AnalyticsService:
     @staticmethod
     def get_dashboard_from_sessions(
         time_range: TimeRange = TimeRange.WEEK,
-        project_name: str | None = None,
+        project_path: str | None = None,
     ) -> AnalyticsDashboard:
         """Get complete dashboard from Claude Code sessions."""
         return AnalyticsDashboard(
-            overview=AnalyticsService.get_overview_from_sessions(time_range, project_name),
-            trends=AnalyticsService.get_trends_from_sessions(time_range, project_name),
-            agents=AnalyticsService.get_agent_performance_from_sessions(time_range, project_name),
-            costs=AnalyticsService.get_cost_analytics_from_sessions(time_range, project_name),
-            activity=AnalyticsService.get_activity_heatmap_from_sessions(time_range, project_name),
-            errors=AnalyticsService.get_error_analytics_from_sessions(time_range, project_name),
+            overview=AnalyticsService.get_overview_from_sessions(time_range, project_path),
+            trends=AnalyticsService.get_trends_from_sessions(time_range, project_path),
+            agents=AnalyticsService.get_agent_performance_from_sessions(time_range, project_path),
+            costs=AnalyticsService.get_cost_analytics_from_sessions(time_range, project_path),
+            activity=AnalyticsService.get_activity_heatmap_from_sessions(time_range, project_path),
+            errors=AnalyticsService.get_error_analytics_from_sessions(time_range, project_path),
         )
 
     # ─────────────────────────────────────────────────────────────
