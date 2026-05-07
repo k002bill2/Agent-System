@@ -86,3 +86,39 @@ export async function saveMenuVisibility(
   if (!res.ok) throw new Error(`Failed to save menu visibility: ${res.statusText}`)
   return res.json()
 }
+
+export interface ExternalSourcePathsResponse {
+  paths: string[]
+  message: string
+}
+
+export async function fetchExternalSourcePaths(): Promise<ExternalSourcePathsResponse> {
+  const res = await authFetch(`${API_BASE}/claude-sessions/external-paths`)
+  if (!res.ok) throw new Error(`Failed to fetch external paths: ${res.statusText}`)
+  return res.json()
+}
+
+export async function addExternalSourcePath(path: string): Promise<ExternalSourcePathsResponse> {
+  const res = await authFetch(`${API_BASE}/claude-sessions/external-paths`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || res.statusText)
+  }
+  return res.json()
+}
+
+export async function removeExternalSourcePath(path: string): Promise<ExternalSourcePathsResponse> {
+  const encoded = encodeURIComponent(path)
+  const res = await authFetch(`${API_BASE}/claude-sessions/external-paths/${encoded}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || res.statusText)
+  }
+  return res.json()
+}

@@ -3,9 +3,9 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
-from utils.time import utcnow
+from utils.time import to_utc_iso, utcnow
 
 
 class TimeRange(str, Enum):
@@ -63,6 +63,10 @@ class TrendDataPoint(BaseModel):
     timestamp: datetime
     value: float | None  # None = no data (e.g., empty bucket)
     label: str | None = None
+
+    @field_serializer("timestamp")
+    def _serialize_timestamp(self, v: datetime) -> str:
+        return to_utc_iso(v)  # type: ignore[return-value]
 
 
 class TrendData(BaseModel):
@@ -196,6 +200,10 @@ class ErrorBreakdown(BaseModel):
     last_occurred: datetime | None = None
     sample_message: str | None = None
 
+    @field_serializer("last_occurred")
+    def _serialize_last_occurred(self, v: datetime | None) -> str | None:
+        return to_utc_iso(v)
+
 
 class ErrorAnalytics(BaseModel):
     """Error analytics data."""
@@ -222,3 +230,7 @@ class AnalyticsDashboard(BaseModel):
     activity: ActivityHeatmap
     errors: ErrorAnalytics
     generated_at: datetime = Field(default_factory=utcnow)
+
+    @field_serializer("generated_at")
+    def _serialize_generated_at(self, v: datetime) -> str:
+        return to_utc_iso(v)  # type: ignore[return-value]

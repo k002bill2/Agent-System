@@ -36,13 +36,24 @@
 | GET | `/api/analytics/dashboard` | 전체 대시보드 데이터 |
 | GET | `/api/analytics/trends/compare` | 멀티 프로젝트 트렌드 비교 |
 
-**데이터 소스**: Claude 세션 파일 기반 (`~/.claude/projects/` 스캔). `USE_DATABASE` 설정과 무관하게 항상 세션 파일에서 실제 데이터를 읽음.
+**데이터 소스**: Claude 세션 파일 기반 (`~/.claude/projects/` + 등록된 외부 경로). `USE_DATABASE` 설정과 무관하게 항상 세션 파일에서 실제 데이터를 읽음. 외부 경로는 `/api/claude-sessions/external-paths` 또는 `CLAUDE_EXTERNAL_PROJECTS` env 로 등록.
 
 **쿼리 파라미터**:
 - `time_range`: `1h` | `24h` | `7d` | `30d` | `all` (기본: `7d`)
 - `project_id`: 프로젝트 이름으로 필터 (선택)
 
-**버킷팅 기준**: 세션 `created_at` (생성 시점) 기준으로 시간별 분포 계산
+**버킷팅 기준** (`/api/analytics/activity`):
+- 윈도우 필터: 세션 `last_activity` ≥ `start` (시작이 윈도우 밖이지만 활성인 세션 포함)
+- 좌표: 표시 시간대(env `HEATMAP_DISPLAY_TZ`, 기본 `Asia/Seoul`) 기준 weekday/hour
+- 한 세션이 여러 시간대에 걸치면 시간 단위로 분산 카운트 (>30일 long-running 세션은 시작 시각만 카운트하는 안전 가드 적용)
+
+**외부 세션 경로 등록** (Admin > External Sources):
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/claude-sessions/external-paths` | 등록된 외부 경로 목록 |
+| POST | `/api/claude-sessions/external-paths` | 외부 경로 추가 (body: `{path}`) |
+| DELETE | `/api/claude-sessions/external-paths/{path_encoded}` | 외부 경로 삭제 (URL-encoded path) |
 
 **멀티 프로젝트 비교** (`GET /api/analytics/trends/compare`):
 - `project_ids`: 비교할 프로젝트 ID 목록 (최대 5개, 필수)

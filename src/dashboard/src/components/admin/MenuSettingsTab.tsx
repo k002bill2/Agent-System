@@ -2,36 +2,10 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { Save, Check, GripVertical } from 'lucide-react'
 import type { UserRole } from '../../stores/auth'
 import type { MenuVisibility } from './types'
-import { MENU_LABELS, ROLE_LABELS, ROLE_COLORS } from './types'
+import { MENU_LABELS, ROLE_LABELS, ROLE_COLORS, DEFAULT_MENU_ORDER } from './types'
 import { fetchMenuVisibilityData, saveMenuVisibility } from './api'
 import { useMenuVisibilityStore } from '../../stores/menuVisibility'
-
-// 기본 메뉴 순서 (Sidebar와 동일) — Single Source of Truth
-const DEFAULT_MENU_ORDER: string[] = [
-  'dashboard', 'projects', 'sessions', 'agents',
-  'monitor', 'claude-sessions', 'project-configs', 'project-management', 'git',
-  'organizations', 'audit', 'notifications', 'analytics', 'playground', 'workflows',
-  'external-usage',
-]
-
-/**
- * 서버에서 받은 menu_order와 DEFAULT_MENU_ORDER를 동기화.
- * - 서버에 없지만 DEFAULT에 있는 항목 → 끝에 추가
- * - 서버에 있지만 DEFAULT에 없는 항목 → 제거 (삭제된 메뉴)
- */
-function syncMenuOrder(serverOrder: string[]): string[] {
-  const defaultSet = new Set(DEFAULT_MENU_ORDER)
-  // 서버 순서에서 유효한 항목만 유지
-  const synced = serverOrder.filter((key) => defaultSet.has(key))
-  // 서버에 없는 새 항목을 끝에 추가
-  const existingSet = new Set(synced)
-  for (const key of DEFAULT_MENU_ORDER) {
-    if (!existingSet.has(key)) {
-      synced.push(key)
-    }
-  }
-  return synced
-}
+import { syncMenuOrder } from '../../lib/menuOrder'
 
 /**
  * visibility 데이터에 새 메뉴의 기본값 추가.

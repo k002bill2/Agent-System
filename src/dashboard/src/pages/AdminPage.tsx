@@ -1,7 +1,12 @@
 import { useState } from 'react'
-import { Users, ShieldOff, Server, Menu } from 'lucide-react'
+import { Users, ShieldOff, Server, Menu, FolderTree } from 'lucide-react'
 import { useAuthStore } from '../stores/auth'
-import { UserManagementTab, MenuSettingsTab, SystemInfoTab } from '../components/admin'
+import {
+  UserManagementTab,
+  MenuSettingsTab,
+  SystemInfoTab,
+  ExternalSourcesTab,
+} from '../components/admin'
 import type { AdminTab } from '../components/admin'
 
 export function AdminPage() {
@@ -30,6 +35,7 @@ export function AdminPage() {
     { id: 'users', label: 'Users', icon: Users },
     { id: 'menu-settings', label: 'Menu Settings', icon: Menu },
     { id: 'system', label: 'System', icon: Server },
+    { id: 'external-sources', label: 'External Sources', icon: FolderTree },
   ]
 
   return (
@@ -55,6 +61,7 @@ export function AdminPage() {
       {activeTab === 'users' && <UserManagementTab currentUserId={user.id} />}
       {activeTab === 'menu-settings' && <MenuSettingsTab />}
       {activeTab === 'system' && <SystemInfoTab />}
+      {activeTab === 'external-sources' && <ExternalSourcesTab />}
     </div>
   )
 }

@@ -1154,6 +1154,45 @@ describe('AnalyticsPage', () => {
     })
   })
 
+  it('shows empty state when weeklyModelTokens is an empty array', async () => {
+    // Regression: an empty array is truthy in JS, so the previous gate
+    // rendered an empty <BarChart> instead of the empty-state UI.
+    vi.mocked(useClaudeUsageStore).mockReturnValue({
+      usage: { weeklyModelTokens: [] },
+      fetchUsage: mockFetchUsage,
+    } as unknown as ReturnType<typeof useClaudeUsageStore>)
+
+    await act(async () => {
+      render(<AnalyticsPage />)
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('No model token data available')).toBeInTheDocument()
+    })
+  })
+
+  it('shows a "session logs" badge when token data came from JSONL fallback', async () => {
+    vi.mocked(useClaudeUsageStore).mockReturnValue({
+      usage: {
+        weeklyModelTokens: [
+          { date: '2026-04-30', tokensByModel: { 'claude-opus-4-7': 1000 } },
+        ],
+        weeklyModelTokensSource: 'jsonl-fallback',
+        statsCacheAgeDays: 27,
+      },
+      fetchUsage: mockFetchUsage,
+    } as unknown as ReturnType<typeof useClaudeUsageStore>)
+
+    await act(async () => {
+      render(<AnalyticsPage />)
+    })
+
+    await waitFor(() => {
+      // The badge surfaces both the source ("session logs") and the staleness.
+      expect(screen.getByText(/세션 로그 기반/)).toBeInTheDocument()
+    })
+  })
+
   // ── Multi-project comparison ──
 
   it('shows comparison placeholder when fewer than 2 projects selected', async () => {

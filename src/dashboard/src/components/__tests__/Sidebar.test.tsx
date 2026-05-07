@@ -30,7 +30,7 @@ vi.mock('@/stores/auth', () => ({
 
 vi.mock('@/stores/menuVisibility', () => ({
   useMenuVisibilityStore: vi.fn((selector?: (s: Record<string, unknown>) => unknown) => {
-    const state = { visibility: {}, menuOrder: [], fetchVisibility: vi.fn() }
+    const state = { visibility: {}, menuOrder: [], isLoaded: true, fetchVisibility: vi.fn() }
     return selector ? selector(state) : state
   }),
 }))

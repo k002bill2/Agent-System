@@ -3,10 +3,23 @@
 Always uses Claude session file data (_from_sessions methods) since that's
 where actual session data lives. DB-based methods are kept for future use but
 analytics always reads from discovered session files.
+
+Project filtering: the frontend sends the file-based registry id (e.g.
+``agent-orchestration``) returned by ``GET /api/projects``. Sessions on disk
+only know their cwd, so this layer resolves the id to its filesystem path
+before delegating to the service. The file-based registry is checked first;
+the DB ``ProjectModel`` (keyed by UUID) is consulted as a fallback for callers
+that already have a UUID. When no match is found, a sentinel path is forwarded
+so the service returns an empty result set instead of silently aggregating
+across projects.
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.deps import get_db_session
+from db.models.project import ProjectModel
+from models.project import get_project as get_registry_project
 from models.analytics import (
     ActivityHeatmap,
     AgentPerformanceList,
@@ -22,68 +35,116 @@ from services.analytics_service import AnalyticsService
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
+# Forwarded to the service when a project_id resolves to nothing matchable.
+# No real cwd will ever equal this, so the session filter returns [].
+_NO_MATCH_PATH = "/__aos_no_match_sentinel__"
+
+
+async def _resolve_project_path(project_id: str | None, db: AsyncSession) -> str | None:
+    """Resolve a project identifier to its filesystem path for session matching.
+
+    Accepts either the file-based registry id (e.g. ``agent-orchestration``)
+    that ``GET /api/projects`` returns, or a DB ``ProjectModel`` UUID.
+
+    Returns:
+        - None when no filtering is requested (project_id is empty).
+        - The project's resolved `path` when found and configured.
+        - `_NO_MATCH_PATH` when the project doesn't exist or has no path,
+          which yields an empty session set downstream.
+    """
+    if not project_id:
+        return None
+
+    registry_project = get_registry_project(project_id)
+    if registry_project and registry_project.path:
+        return registry_project.path
+
+    project = await db.get(ProjectModel, project_id)
+    if project is None or not project.path:
+        return _NO_MATCH_PATH
+
+    return project.path
+
 
 @router.get("/overview", response_model=OverviewMetrics)
 async def get_overview(
     time_range: TimeRange = Query(default=TimeRange.ALL, description="Time range for data"),
-    project_id: str | None = Query(default=None, description="Filter by project name"),
+    project_id: str | None = Query(default=None, description="Filter by project UUID"),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get high-level overview metrics."""
-    return AnalyticsService.get_overview_from_sessions(time_range, project_name=project_id)
+    project_path = await _resolve_project_path(project_id, db)
+    return AnalyticsService.get_overview_from_sessions(time_range, project_path=project_path)
 
 
 @router.get("/trends", response_model=MultiTrendData)
 async def get_trends(
     time_range: TimeRange = Query(default=TimeRange.WEEK, description="Time range for data"),
-    project_id: str | None = Query(default=None, description="Filter by project name"),
+    project_id: str | None = Query(default=None, description="Filter by project UUID"),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get trend data over time."""
-    return AnalyticsService.get_trends_from_sessions(time_range, project_name=project_id)
+    project_path = await _resolve_project_path(project_id, db)
+    return AnalyticsService.get_trends_from_sessions(time_range, project_path=project_path)
 
 
 @router.get("/agents", response_model=AgentPerformanceList)
 async def get_agent_performance(
     time_range: TimeRange = Query(default=TimeRange.WEEK, description="Time range for data"),
-    project_id: str | None = Query(default=None, description="Filter by project name"),
+    project_id: str | None = Query(default=None, description="Filter by project UUID"),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get performance metrics by model."""
-    return AnalyticsService.get_agent_performance_from_sessions(time_range, project_name=project_id)
+    project_path = await _resolve_project_path(project_id, db)
+    return AnalyticsService.get_agent_performance_from_sessions(
+        time_range, project_path=project_path
+    )
 
 
 @router.get("/costs", response_model=CostAnalytics)
 async def get_cost_analytics(
     time_range: TimeRange = Query(default=TimeRange.WEEK, description="Time range for data"),
-    project_id: str | None = Query(default=None, description="Filter by project name"),
+    project_id: str | None = Query(default=None, description="Filter by project UUID"),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get cost analytics breakdown."""
-    return AnalyticsService.get_cost_analytics_from_sessions(time_range, project_name=project_id)
+    project_path = await _resolve_project_path(project_id, db)
+    return AnalyticsService.get_cost_analytics_from_sessions(time_range, project_path=project_path)
 
 
 @router.get("/activity", response_model=ActivityHeatmap)
 async def get_activity_heatmap(
     time_range: TimeRange = Query(default=TimeRange.WEEK, description="Time range for data"),
-    project_id: str | None = Query(default=None, description="Filter by project name"),
+    project_id: str | None = Query(default=None, description="Filter by project UUID"),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get activity heatmap data."""
-    return AnalyticsService.get_activity_heatmap_from_sessions(time_range, project_name=project_id)
+    project_path = await _resolve_project_path(project_id, db)
+    return AnalyticsService.get_activity_heatmap_from_sessions(
+        time_range, project_path=project_path
+    )
 
 
 @router.get("/errors", response_model=ErrorAnalytics)
 async def get_error_analytics(
     time_range: TimeRange = Query(default=TimeRange.WEEK, description="Time range for data"),
-    project_id: str | None = Query(default=None, description="Filter by project name"),
+    project_id: str | None = Query(default=None, description="Filter by project UUID"),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get error analytics breakdown."""
-    return AnalyticsService.get_error_analytics_from_sessions(time_range, project_name=project_id)
+    project_path = await _resolve_project_path(project_id, db)
+    return AnalyticsService.get_error_analytics_from_sessions(time_range, project_path=project_path)
 
 
 @router.get("/dashboard", response_model=AnalyticsDashboard)
 async def get_dashboard(
     time_range: TimeRange = Query(default=TimeRange.WEEK, description="Time range for data"),
-    project_id: str | None = Query(default=None, description="Filter by project name"),
+    project_id: str | None = Query(default=None, description="Filter by project UUID"),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get complete analytics dashboard data."""
-    return AnalyticsService.get_dashboard_from_sessions(time_range, project_name=project_id)
+    project_path = await _resolve_project_path(project_id, db)
+    return AnalyticsService.get_dashboard_from_sessions(time_range, project_path=project_path)
 
 
 @router.get("/trends/compare", response_model=MultiProjectTrendsResponse)
