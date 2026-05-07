@@ -84,12 +84,31 @@ class GitService:
 
     @property
     def current_branch(self) -> str:
-        """Get the current branch name."""
+        """Get the current branch name as a display label.
+
+        On detached HEAD, returns a human-readable marker like ``HEAD@abc1234``.
+        That marker is NOT a valid git revision — git will reject it with
+        ``fatal: bad revision``. Use :pyattr:`current_ref` whenever the value
+        will be passed to git (rev-list, iter_commits, push, pull, ...).
+        """
         try:
             return self.repo.active_branch.name
         except TypeError:
             # Detached HEAD state
             return f"HEAD@{self.repo.head.commit.hexsha[:7]}"
+
+    @property
+    def current_ref(self) -> str:
+        """Get a git-resolvable revision for the current HEAD.
+
+        Returns the active branch name when checked out normally, or the full
+        commit SHA when HEAD is detached. Always safe to pass to GitPython /
+        ``git`` as a revision argument.
+        """
+        try:
+            return self.repo.active_branch.name
+        except TypeError:
+            return self.repo.head.commit.hexsha
 
     # =========================================================================
     # Worktree Operations
@@ -507,7 +526,10 @@ class GitService:
         """
         commits: list[GitCommit] = []
         try:
-            ref = branch or self.current_branch
+            # current_ref (not current_branch) so detached HEAD resolves to the
+            # commit SHA rather than the "HEAD@abc1234" display label, which
+            # git rejects as ``fatal: bad revision``.
+            ref = branch or self.current_ref
             for commit in self.repo.iter_commits(ref, max_count=limit, skip=skip):
                 commits.append(self._commit_to_model(commit))
         except GitCommandError as e:
@@ -1387,7 +1409,7 @@ class GitService:
         Returns:
             Pull result
         """
-        branch = branch or self.current_branch
+        branch = branch or self.current_ref
         try:
             remote_obj = self.repo.remotes[remote]
 
@@ -1433,7 +1455,7 @@ class GitService:
         Returns:
             Push result
         """
-        branch = branch or self.current_branch
+        branch = branch or self.current_ref
         try:
             remote_obj = self.repo.remotes[remote]
 
