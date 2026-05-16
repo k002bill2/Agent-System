@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_db_session
 from db.models.project import ProjectModel
-from models.project import get_project as get_registry_project
 from models.analytics import (
     ActivityHeatmap,
     AgentPerformanceList,
@@ -31,6 +30,7 @@ from models.analytics import (
     OverviewMetrics,
     TimeRange,
 )
+from models.project import get_project as get_registry_project
 from services.analytics_service import AnalyticsService
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
