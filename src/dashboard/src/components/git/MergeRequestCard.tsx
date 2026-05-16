@@ -9,6 +9,7 @@ import {
   User,
   MoreVertical,
   Zap,
+  Trash2,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import type { MergeRequest, MergeRequestStatus, ConflictStatus } from '../../stores/git'
@@ -21,6 +22,7 @@ interface MergeRequestCardProps {
   onApprove: (mrId: string) => Promise<boolean>
   onMerge: (mrId: string) => Promise<boolean>
   onClose: (mrId: string) => Promise<boolean>
+  onDelete: (mrId: string) => Promise<boolean>
 }
 
 export function MergeRequestCard({
@@ -31,6 +33,7 @@ export function MergeRequestCard({
   onApprove,
   onMerge,
   onClose,
+  onDelete,
 }: MergeRequestCardProps) {
   const [loading, setLoading] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -58,6 +61,15 @@ export function MergeRequestCard({
     if (confirm('이 머지 요청을 닫으시겠습니까?')) {
       setLoading(true)
       await onClose(mr.id)
+      setLoading(false)
+    }
+    setMenuOpen(false)
+  }
+
+  const handleDelete = async () => {
+    if (confirm('이 머지 요청을 영구 삭제하시겠습니까? 되돌릴 수 없습니다.')) {
+      setLoading(true)
+      await onDelete(mr.id)
       setLoading(false)
     }
     setMenuOpen(false)
@@ -175,31 +187,43 @@ export function MergeRequestCard({
             </span>
           )}
 
-          {mr.status === 'open' && (
-            <div className="relative">
-              <button
-                onClick={() => setMenuOpen(!menuOpen)}
-                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-              >
-                <MoreVertical className="w-4 h-4" />
-              </button>
+          <div className="relative">
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              aria-label="머지 요청 액션 메뉴"
+              className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
 
-              {menuOpen && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                  <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[120px]">
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[120px]">
+                  {mr.status === 'open' && (
                     <button
                       onClick={handleClose}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      disabled={loading}
+                      aria-label="머지 요청 닫기"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
                     >
                       <XCircle className="w-4 h-4" />
                       Close
                     </button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+                  )}
+                  <button
+                    onClick={handleDelete}
+                    disabled={loading}
+                    aria-label="머지 요청 삭제"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -267,6 +291,7 @@ interface MergeRequestListProps {
   onApprove: (mrId: string) => Promise<boolean>
   onMerge: (mrId: string) => Promise<boolean>
   onClose: (mrId: string) => Promise<boolean>
+  onDelete: (mrId: string) => Promise<boolean>
   onCreateNew: () => void
 }
 
@@ -278,6 +303,7 @@ export function MergeRequestList({
   onApprove,
   onMerge,
   onClose,
+  onDelete,
   onCreateNew,
 }: MergeRequestListProps) {
   const [filter, setFilter] = useState<MergeRequestStatus | 'all'>('open')
@@ -337,6 +363,7 @@ export function MergeRequestList({
             onApprove={onApprove}
             onMerge={onMerge}
             onClose={onClose}
+            onDelete={onDelete}
           />
         ))}
 

@@ -1301,6 +1301,31 @@ async def close_merge_request(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.delete("/projects/{project_id}/merge-requests/{mr_id}", status_code=204)
+async def delete_merge_request(
+    project_id: str,
+    mr_id: str,
+):
+    """Permanently delete a merge request record (metadata only — git refs are untouched)."""
+    db_session = await _get_db_session()
+    try:
+        mr_service = get_mr_service_for_project(project_id, db_session=db_session)
+        if db_session:
+            async with db_session:
+                deleted = await mr_service.delete_merge_request_async(mr_id)
+                await db_session.commit()
+        else:
+            deleted = mr_service.delete_merge_request(mr_id)
+
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Merge request not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete merge request: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post(
     "/projects/{project_id}/merge-requests/{mr_id}/refresh-conflicts", response_model=MergeRequest
 )
