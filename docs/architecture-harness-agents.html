@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AOS 하네스 에이전트 시스템 아키텍처</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #131a33;
+      --panel-2: #1a2244;
+      --border: #2a335a;
+      --text: #e6ebff;
+      --muted: #9aa6d6;
+      --accent: #7aa2ff;
+      --accent-2: #5be7c4;
+      --warn: #ffb86b;
+      --danger: #ff7a90;
+      --code-bg: #0e1430;
+      --shadow: 0 6px 24px rgba(0,0,0,.35);
+      --radius: 12px;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f6f8ff;
+        --panel: #ffffff;
+        --panel-2: #f0f3ff;
+        --border: #d7defa;
+        --text: #0e1430;
+        --muted: #5b6692;
+        --accent: #2e5bff;
+        --accent-2: #00a884;
+        --warn: #b25c00;
+        --danger: #c8324c;
+        --code-bg: #eef1ff;
+        --shadow: 0 6px 18px rgba(20,30,80,.08);
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { background: var(--bg); color: var(--text); }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+      line-height: 1.55;
+      padding: 32px 24px 80px;
+      max-width: 1280px;
+      margin-inline: auto;
+    }
+    header {
+      margin-bottom: 28px;
+      padding: 24px;
+      background: linear-gradient(135deg, var(--panel) 0%, var(--panel-2) 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    header h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      letter-spacing: -0.01em;
+    }
+    header .meta {
+      color: var(--muted);
+      font-size: 14px;
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .legend {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+      font-size: 13px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .dot.client { background: var(--accent); }
+    .dot.api { background: #a78bfa; }
+    .dot.orch { background: var(--accent-2); }
+    .dot.svc { background: var(--warn); }
+    .dot.store { background: var(--danger); }
+    .dot.meta { background: #f0abfc; }
+
+    section {
+      margin: 18px 0;
+      padding: 18px 20px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    section > h2 {
+      margin: 0 0 14px;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    section > h2 .tag {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: var(--panel-2);
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .grid {
+      display: grid;
+      gap: 12px;
+    }
+    .grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    @media (max-width: 900px) {
+      .grid.cols-3, .grid.cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 600px) {
+      .grid.cols-2, .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr; }
+    }
+    .card {
+      padding: 12px 14px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .card h3 {
+      margin: 0 0 6px;
+      font-size: 14px;
+      letter-spacing: -0.005em;
+    }
+    .card p, .card ul { margin: 0; color: var(--muted); font-size: 13px; }
+    .card ul { padding-left: 18px; }
+    .card .path {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 12px;
+      color: var(--accent);
+    }
+
+    .accent-client { border-left: 3px solid var(--accent); }
+    .accent-api    { border-left: 3px solid #a78bfa; }
+    .accent-orch   { border-left: 3px solid var(--accent-2); }
+    .accent-svc    { border-left: 3px solid var(--warn); }
+    .accent-store  { border-left: 3px solid var(--danger); }
+    .accent-meta   { border-left: 3px solid #f0abfc; }
+
+    .mermaid-wrap {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      overflow-x: auto;
+    }
+    pre, code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      overflow-x: auto;
+      font-size: 12.5px;
+      color: var(--text);
+    }
+    .footnote {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 6px;
+    }
+    .arrow {
+      text-align: center;
+      color: var(--muted);
+      font-size: 18px;
+      margin: 4px 0;
+    }
+    .insights {
+      background: linear-gradient(135deg, rgba(122,162,255,.08), rgba(91,231,196,.08));
+      border: 1px dashed var(--accent);
+    }
+    .insights h2 .tag { background: var(--accent); color: #061040; border-color: transparent; }
+    .insights ul { color: var(--text); }
+    .insights li { margin-bottom: 6px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AOS 하네스 에이전트 시스템 아키텍처</h1>
+    <div class="meta">
+      <span>Repository: <code>~/Work/Agent-System</code></span>
+      <span>Branch: <code>fix/git-detached-head-ref</code></span>
+      <span>생성일: 2026-05-07</span>
+    </div>
+    <div class="legend" aria-label="구성도 색상 범례">
+      <span class="chip"><span class="dot client"></span>Clients</span>
+      <span class="chip"><span class="dot api"></span>API Layer</span>
+      <span class="chip"><span class="dot orch"></span>Orchestration / Agents</span>
+      <span class="chip"><span class="dot svc"></span>Services / Tools</span>
+      <span class="chip"><span class="dot store"></span>Storage / External</span>
+      <span class="chip"><span class="dot meta"></span>Meta-Agent Harness (.claude/)</span>
+    </div>
+  </header>
+
+  <!-- ─────────────────────  LAYERED VIEW  ───────────────────── -->
+  <section aria-labelledby="layered">
+    <h2 id="layered">계층형 구성도 <span class="tag">Layered</span></h2>
+
+    <!-- Clients -->
+    <div class="grid cols-3">
+      <div class="card accent-client">
+        <h3>Claude Code CLI</h3>
+        <p>subprocess 파이프로 백엔드와 양방향 연동</p>
+        <p class="path">services/claude_session_monitor.py</p>
+      </div>
+      <div class="card accent-client">
+        <h3>Dashboard (React + Vite)</h3>
+        <p>:5173 — Pages 29 / Stores (Zustand) 28+ / Components</p>
+        <p class="path">src/dashboard/</p>
+      </div>
+      <div class="card accent-client">
+        <h3>External Clients</h3>
+        <p>HTTP / WebSocket / Webhooks</p>
+        <p class="path">curl · SDK · Webhook senders</p>
+      </div>
+    </div>
+
+    <div class="arrow">▼ /api/* (Vite proxy + WS)</div>
+
+    <!-- API -->
+    <div class="card accent-api">
+      <h3>FastAPI Routers <span style="color:var(--muted);font-weight:400;font-size:12px">(50+)</span></h3>
+      <p>agents · projects · workflows · pipelines · hitl · llm · llm_router · playground · sessions · websocket · mcp · rag · audit · git · monitoring · notifications · permissions · cost_allocation · webhooks · rate_limits · secrets · templates · …</p>
+      <p class="path">src/backend/api/  +  middleware/ (auth · CORS · audit · errors)  +  deps.py</p>
+    </div>
+
+    <div class="arrow">▼</div>
+
+    <!-- Orchestration core -->
+    <div class="grid cols-2">
+      <div class="card accent-orch">
+        <h3>LangGraph StateGraph</h3>
+        <ul>
+          <li><b>Orchestrator</b> → 다음 단계 라우팅</li>
+          <li><b>Planner</b> → SubtaskPlan / TaskPlanResult 생성</li>
+          <li><b>Executor</b> / <b>ParallelExecutor</b> → 도구 호출</li>
+          <li><b>SelfCorrection</b> → 실패 태스크 재시도 (max_retries)</li>
+          <li><b>Reviewer</b> → 결과 검증</li>
+          <li><b>Waiting</b> → HITL 승인 대기 (passthrough resume)</li>
+        </ul>
+        <p class="path">orchestrator/graph.py · nodes.py · parallel_executor.py · engine.py</p>
+      </div>
+      <div class="card accent-orch">
+        <h3>Agent Roster</h3>
+        <ul>
+          <li><b>LeadOrchestrator</b> — DAG planner. 전략: <code>SEQUENTIAL · PARALLEL · MIXED</code></li>
+          <li>SubtaskPlan에 <code>task_boundaries(do_not / wait_for / stop_if)</code> 부여</li>
+          <li>Specialists/
+            <ul>
+              <li><code>backend_agent</code> — FastAPI · SQLAlchemy · LangGraph 작업</li>
+              <li><code>mobile_ui_agent</code> — UI 구현</li>
+              <li><code>test_agent</code> — 테스트 생성·실행</li>
+            </ul>
+          </li>
+          <li>BaseAgent / Specialist (공통 인터페이스, AgentConfig, AgentResult)</li>
+        </ul>
+        <p class="path">agents/lead_orchestrator.py · agents/specialists/</p>
+      </div>
+    </div>
+
+    <div class="arrow">▼</div>
+
+    <!-- Services + Tools -->
+    <div class="grid cols-2">
+      <div class="card accent-svc">
+        <h3>Services Layer <span style="color:var(--muted);font-weight:400;font-size:12px">(60+)</span></h3>
+        <div class="grid cols-2" style="gap:6px;margin-top:6px">
+          <div>
+            <p style="color:var(--text);font-weight:600;font-size:12px">Agent / Task</p>
+            <p>agent_manager · agent_registry · task_service · task_analysis</p>
+          </div>
+          <div>
+            <p style="color:var(--text);font-weight:600;font-size:12px">LLM / RAG</p>
+            <p>llm_router_service · llm_service · rag_service · model_update_service</p>
+          </div>
+          <div>
+            <p style="color:var(--text);font-weight:600;font-size:12px">HITL · Audit</p>
+            <p>audit_service · audit_integrity · feedback_service</p>
+          </div>
+          <div>
+            <p style="color:var(--text);font-weight:600;font-size:12px">Claude Code 통합</p>
+            <p>claude_session_monitor · claude_config_service</p>
+          </div>
+          <div>
+            <p style="color:var(--text);font-weight:600;font-size:12px">Project · Git</p>
+            <p>project_runner · git_service · merge_service · project_sync_service</p>
+          </div>
+          <div>
+            <p style="color:var(--text);font-weight:600;font-size:12px">Workflow · Schedule</p>
+            <p>workflow_engine · workflow_yaml_parser · scheduler_service · automation_loop_service</p>
+          </div>
+          <div>
+            <p style="color:var(--text);font-weight:600;font-size:12px">MCP · Sandbox</p>
+            <p>mcp_manager · mcp_service · sandbox_manager · skill_manager</p>
+          </div>
+          <div>
+            <p style="color:var(--text);font-weight:600;font-size:12px">Infra · Quota</p>
+            <p>rate_limit · quota · encryption · key_management · secret_service</p>
+          </div>
+        </div>
+      </div>
+      <div class="card accent-svc">
+        <h3>Tools Layer</h3>
+        <ul>
+          <li><code>bash_tools</code> — 셸 실행 · 안전 가드</li>
+          <li><code>code_tools</code> — 정적 분석 · 패치</li>
+          <li><code>file_tools</code> — 파일 IO</li>
+          <li><code>warp_tools</code> — Warp 터미널 통합</li>
+          <li><code>MCPToolExecutor</code> — MCP 서버 호출 (orchestrator/tools.py)</li>
+        </ul>
+        <p class="footnote">노드는 LLM 추론만 담당하고, 부수효과는 services 계층에 위임합니다 (DI via api/deps.py).</p>
+      </div>
+    </div>
+
+    <div class="arrow">▼</div>
+
+    <!-- Storage + External -->
+    <div class="grid cols-3">
+      <div class="card accent-store">
+        <h3>Shared-Infra <span style="color:var(--muted);font-weight:400;font-size:12px">(공용)</span></h3>
+        <ul>
+          <li>PostgreSQL — aos / image_maker / livemetro / ppt-maker</li>
+          <li>Redis — DB index per project</li>
+          <li>Qdrant — RAG vector store</li>
+        </ul>
+        <p class="path">~/Work/shared-infra</p>
+        <p class="footnote" style="color:var(--danger)">⚠ <code>docker compose down -v</code> 절대 금지 (전체 프로젝트 데이터 소실)</p>
+      </div>
+      <div class="card accent-store">
+        <h3>LLM Providers</h3>
+        <ul>
+          <li>Anthropic — <code>ChatAnthropic</code></li>
+          <li>Google — <code>ChatGoogleGenerativeAI</code></li>
+          <li>Ollama — <code>ChatOllama</code> (local)</li>
+          <li>LLM Router — 비용 · 쿼터 기반 라우팅</li>
+        </ul>
+        <p class="path">orchestrator/engine.py + services/llm_router_service.py</p>
+      </div>
+      <div class="card accent-store">
+        <h3>Claude Code Harness</h3>
+        <ul>
+          <li>subprocess pipes (양방향)</li>
+          <li>session_monitor — 활성 세션 관측</li>
+          <li>config_service — settings/hooks 관리</li>
+          <li>workspace-template — 신규 프로젝트 부트스트랩</li>
+        </ul>
+        <p class="path">claude-workspace-template/ + services/claude_*</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────  FLOW  ───────────────────── -->
+  <section aria-labelledby="flow">
+    <h2 id="flow">제어 / 데이터 흐름 <span class="tag">Flow</span></h2>
+    <div class="mermaid-wrap">
+      <pre class="mermaid">
+flowchart LR
+    subgraph Client
+      U[Claude Code CLI]
+      D[React Dashboard]
+      X[External]
+    end
+    subgraph API[FastAPI Routers]
+      R[/api/agents · /api/hitl · /api/workflows · …/]
+    end
+    subgraph Core[Orchestration Core]
+      E[Engine]
+      G{LangGraph<br/>StateGraph}
+      P[Planner]
+      EX[Executor]
+      PX[ParallelExecutor]
+      SC[SelfCorrection]
+      W[Waiting<br/>HITL gate]
+      RV[Reviewer]
+    end
+    subgraph Agents
+      L[LeadOrchestrator]
+      S1[backend_agent]
+      S2[mobile_ui_agent]
+      S3[test_agent]
+    end
+    subgraph SVC[Services Layer]
+      AG[agent_manager]
+      LR[llm_router]
+      MC[mcp_manager]
+      AU[audit_service]
+      CS[claude_session_monitor]
+      GT[git_service]
+      RG[rag_service]
+    end
+    subgraph Store[Shared-Infra]
+      PG[(Postgres)]
+      RD[(Redis)]
+      QD[(Qdrant)]
+    end
+    subgraph LLM[LLM Providers]
+      AN[Anthropic]
+      GG[Google]
+      OL[Ollama]
+    end
+
+    U & D & X --> R
+    R --> E --> G
+    G -->|plan| P
+    G -->|execute| EX
+    G -->|batch| PX
+    EX -->|fail+retry| SC --> EX
+    EX -->|risky op| W
+    W -. approval .-> R
+    G --> RV
+    P & EX & PX --> L
+    L --> S1 & S2 & S3
+    S1 & S2 & S3 --> SVC
+    SVC --> PG & RD & QD
+    CS -. subprocess .-> U
+    E -->|chat completion| LLM
+      </pre>
+    </div>
+  </section>
+
+  <!-- ─────────────────────  META AGENT HARNESS  ───────────────────── -->
+  <section aria-labelledby="meta">
+    <h2 id="meta">Meta-Agent Harness <span class="tag">.claude/</span></h2>
+    <p class="footnote" style="margin-bottom:10px">
+      런타임 에이전트(<code>src/backend/agents/</code>)와는 <b>완전히 다른 실행 컨텍스트</b>입니다.
+      코드베이스 자체를 만들고 검증·평가하는 개발 자동화용 에이전트 군입니다.
+    </p>
+    <div class="grid cols-3">
+      <div class="card accent-meta">
+        <h3>Agents <span style="color:var(--muted);font-weight:400;font-size:12px">(.claude/agents/)</span></h3>
+        <ul>
+          <li>planner · architect</li>
+          <li>code-reviewer · security-reviewer</li>
+          <li>tdd-guide · test-automation-specialist</li>
+          <li>build-error-resolver</li>
+          <li>web-ui-specialist · backend-integration-specialist</li>
+          <li>eval-task-runner · eval-grader</li>
+        </ul>
+      </div>
+      <div class="card accent-meta">
+        <h3>Slash Commands <span style="color:var(--muted);font-weight:400;font-size:12px">(.claude/commands/)</span></h3>
+        <ul>
+          <li>/plan · /tdd · /code-review</li>
+          <li>/verify-loop · /check-health · /build-fix</li>
+          <li>/execute-tasks-file · /commit-push-pr</li>
+          <li>/start-all · /stop-all · /start-dashboard</li>
+          <li>/checkpoint · /restore · /backup</li>
+        </ul>
+      </div>
+      <div class="card accent-meta">
+        <h3>Skills <span style="color:var(--muted);font-weight:400;font-size:12px">(.claude/skills/)</span></h3>
+        <ul>
+          <li>react-web-development · test-automation</li>
+          <li>verify-frontend · verify-backend</li>
+          <li>verification-loop</li>
+          <li>run-eval (.claude/evals/tasks · rubrics)</li>
+          <li>agent-improvement · agent-observability</li>
+          <li>merge-worktree</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────  KEY DESIGN DECISIONS  ───────────────────── -->
+  <section class="insights" aria-labelledby="insights">
+    <h2 id="insights">핵심 설계 결정 <span class="tag">Insights</span></h2>
+    <ul>
+      <li><b>이중 에이전트 우주</b> — 런타임(<code>src/backend/agents/</code>)과 메타(<code>.claude/agents/</code>)가 한 리포에 공존하지만 실행 컨텍스트가 다릅니다. 같은 단어 "agent"의 의미가 두 가지라는 점이 신규 기여자가 가장 자주 헷갈리는 지점입니다.</li>
+      <li><b>HITL이 1급 노드</b> — 보통 미들웨어/인터럽트로 처리되는 HITL이 LangGraph 위 별도 <code>waiting_node</code>로 존재합니다. 덕분에 <em>state checkpoint → 외부 승인 → resume</em> 시나리오가 LangGraph의 native persistence와 자연스럽게 맞물립니다.</li>
+      <li><b>ExecutionStrategy = DAG planner</b> — LeadOrchestrator의 <code>SEQUENTIAL / PARALLEL / MIXED</code>는 단순 옵션이 아니라 specialists에게 <code>task_boundaries(do_not · wait_for · stop_if)</code> 계약을 부여하며 격리 단위를 정의합니다.</li>
+      <li><b>shared-infra 공유는 정책</b> — Postgres/Redis/Qdrant를 image_maker · ppt-maker · livemetro와 공용하므로, 마이그레이션·백업은 <em>다른 프로젝트와 협상이 필요한</em> 결정입니다 (CLAUDE.md의 "down -v 금지").</li>
+      <li><b>노드와 부수효과의 분리</b> — LangGraph 노드는 LLM 추론에만 집중하고, 모든 부수효과(DB/git/subprocess)는 services 계층에 위임됩니다. 이 덕분에 노드는 결정적 테스트가 가능합니다.</li>
+    </ul>
+  </section>
+
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: isDark ? 'dark' : 'default',
+      themeVariables: {
+        fontFamily: '-apple-system, "Pretendard", "Segoe UI", Roboto, "Noto Sans KR", sans-serif',
+      },
+      flowchart: { curve: 'basis', htmlLabels: true },
+      securityLevel: 'loose',
+    });
+  </script>
+</body>
+</html>
