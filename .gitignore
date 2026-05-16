@@ -93,3 +93,6 @@ dev/active/
 docs/claude-code-architecture-diagram.html
 .serena/
 .gstack/
+
+# Benchmark outputs — host-specific absolute paths, not reproducible
+scripts/bench_results/
