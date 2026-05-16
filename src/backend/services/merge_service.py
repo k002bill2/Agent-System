@@ -1174,6 +1174,19 @@ class MergeRequestService:
         mr.updated_at = utcnow()
         return mr
 
+    # ── Delete ──
+
+    async def delete_merge_request_async(self, mr_id: str) -> bool:
+        """Permanently delete a merge request record. Returns True if a row was removed."""
+        if self.use_database:
+            repo = await self._get_repo()
+            return await repo.delete(mr_id)
+        return self.delete_merge_request(mr_id)
+
+    def delete_merge_request(self, mr_id: str) -> bool:
+        """In-memory delete. Returns True if the MR existed and was removed."""
+        return _merge_requests[self.project_id].pop(mr_id, None) is not None
+
     # ── Close duplicate MRs ──
 
     async def _close_duplicate_mrs_async(

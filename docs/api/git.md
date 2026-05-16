@@ -173,6 +173,7 @@ Git 상태, 브랜치, 커밋, 머지, MR, 브랜치 보호, GitHub 통합 API�
 | POST | `/api/git/projects/{id}/merge-requests/{mr_id}/approve` | MR 승인 |
 | POST | `/api/git/projects/{id}/merge-requests/{mr_id}/merge` | MR 머지 |
 | POST | `/api/git/projects/{id}/merge-requests/{mr_id}/close` | MR 닫기 |
+| DELETE | `/api/git/projects/{id}/merge-requests/{mr_id}` | MR 영구 삭제 (메타데이터만, git ref 무관) → 204 |
 | POST | `/api/git/projects/{id}/merge-requests/{mr_id}/refresh-conflicts` | 충돌 상태 갱신 |
 
 **MR 상태**: `open`, `merged`, `closed`, `draft`

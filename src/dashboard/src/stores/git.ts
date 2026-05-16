@@ -418,6 +418,7 @@ interface GitState {
   approveMergeRequest: (projectId: string, mrId: string, userId: string) => Promise<boolean>
   mergeMergeRequest: (projectId: string, mrId: string, userId: string, userRole?: string) => Promise<boolean>
   closeMergeRequest: (projectId: string, mrId: string, userId: string) => Promise<boolean>
+  deleteMergeRequest: (projectId: string, mrId: string) => Promise<boolean>
 
   // Actions - GitHub PRs
   fetchPullRequests: (state?: string, base?: string) => Promise<void>
@@ -1076,6 +1077,19 @@ export const useGitStore = create<GitState>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       await apiClient.post(`/api/git/projects/${projectId}/merge-requests/${mrId}/close?user_id=${userId}`)
+      await get().fetchMergeRequests(projectId)
+      set({ isLoading: false })
+      return true
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return false
+    }
+  },
+
+  deleteMergeRequest: async (projectId, mrId) => {
+    set({ isLoading: true, error: null })
+    try {
+      await apiClient.delete(`/api/git/projects/${projectId}/merge-requests/${mrId}`)
       await get().fetchMergeRequests(projectId)
       set({ isLoading: false })
       return true

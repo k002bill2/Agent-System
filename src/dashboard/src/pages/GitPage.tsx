@@ -81,6 +81,7 @@ export function GitPage() {
     approveMergeRequest,
     mergeMergeRequest,
     closeMergeRequest,
+    deleteMergeRequest,
     // GitHub PRs
     pullRequests,
     selectedPullRequest,
@@ -429,6 +430,7 @@ export function GitPage() {
                 onApprove={(mrId) => approveMergeRequest(selectedProjectId, mrId, currentUserId)}
                 onMerge={(mrId) => mergeMergeRequest(selectedProjectId, mrId, currentUserId, userRole)}
                 onClose={(mrId) => closeMergeRequest(selectedProjectId, mrId, currentUserId)}
+                onDelete={(mrId) => deleteMergeRequest(selectedProjectId, mrId)}
                 onCreateNew={() => setShowCreateMR(true)}
               />
             )}
