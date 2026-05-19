@@ -7,6 +7,7 @@ import {
   GitMerge,
   RefreshCw,
   Plus,
+  Sparkles,
   ArrowUp,
   ArrowDown,
   Cloud,
@@ -39,6 +40,7 @@ interface BranchListProps {
   onDeleteBranch: (name: string, force?: boolean, deleteRemote?: boolean, removeWorktree?: boolean) => Promise<boolean>
   onMergeClick: (source: string) => void
   onRefresh: () => void
+  onPruneMerged?: () => void
   conflictStatuses?: Record<string, ConflictStatus>
   worktrees?: GitWorktree[]
 }
@@ -53,6 +55,7 @@ export function BranchList({
   onDeleteBranch,
   onMergeClick,
   onRefresh,
+  onPruneMerged,
   conflictStatuses = {},
   worktrees = [],
 }: BranchListProps) {
@@ -195,6 +198,20 @@ export function BranchList({
           >
             <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
           </button>
+
+          {onPruneMerged && (
+            <button
+              type="button"
+              onClick={onPruneMerged}
+              disabled={isLoading}
+              aria-label="머지된 브랜치 정리"
+              title="GitHub PR이 머지된 로컬 브랜치를 일괄 정리"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <Sparkles className="w-4 h-4" />
+              Prune Merged
+            </button>
+          )}
 
           <button
             onClick={() => setShowCreateModal(true)}

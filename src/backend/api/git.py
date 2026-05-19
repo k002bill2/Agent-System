@@ -64,6 +64,9 @@ from models.git import (
     MergeRequestStatus,
     MergeRequestUpdate,
     MergeResult,
+    # Prune merged branches
+    PruneExecuteResult,
+    PruneRequest,
     PullResult,
     PushResult,
     RemoteAddRequest,
@@ -788,6 +791,65 @@ async def delete_branch(
         return {"success": success, "message": message}
     except GitServiceError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post(
+    "/projects/{project_id}/branches/prune-merged",
+    response_model=PruneExecuteResult,
+)
+async def prune_merged_branches(project_id: str, request: PruneRequest):
+    """Prune local branches whose GitHub PR has been merged.
+
+    Two phases:
+    - dry_run=True  → scan only, returns candidates + skipped (no deletion)
+    - dry_run=False → executes deletion of candidates, returns deletion outcome
+
+    GitHub token required (503 if not configured). Protection rules from
+    BranchProtectionRule table are honored automatically.
+    """
+    from services.git_service import GitServiceError
+
+    git_service = get_git_service_for_project(project_id)
+    github_service = get_github_service()  # raises 503 without token
+
+    # Pre-fetch active protection patterns (async DB) → pass to sync service
+    protection_patterns: list[str] = []
+    db_session = await _get_db_session()
+    if db_session:
+        try:
+            async with db_session:
+                from db.repository import BranchProtectionRepository
+
+                repo = BranchProtectionRepository(db_session)
+                rules = await repo.list_by_project(project_id, enabled_only=True)
+                protection_patterns = [r.branch_pattern for r in rules if r.branch_pattern]
+        except Exception as e:
+            logger.warning(f"Failed to load protection rules for {project_id}: {e}")
+
+    try:
+        scan = git_service.find_prune_candidates(
+            github_service=github_service,
+            protection_patterns=protection_patterns,
+            extra_protected=request.extra_protected,
+        )
+    except GitServiceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if request.dry_run:
+        return PruneExecuteResult(
+            candidates=scan.candidates,
+            skipped=scan.skipped,
+            deleted=[],
+            errors=[],
+        )
+
+    execute = git_service.prune_merged_branches(scan.candidates)
+    return PruneExecuteResult(
+        candidates=execute.candidates,
+        skipped=scan.skipped,  # preserve skip reasons across both phases
+        deleted=execute.deleted,
+        errors=execute.errors,
+    )
 
 
 @router.get("/projects/{project_id}/branches/{branch_name:path}/diff", response_model=BranchDiff)
