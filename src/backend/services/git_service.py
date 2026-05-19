@@ -28,6 +28,7 @@ except ImportError:
 
 from models.git import (
     DEFAULT_PROTECTED_BRANCHES,
+    PRUNE_PROTECTED_BRANCHES,
     AddResult,
     BranchDiff,
     CommitCreateResult,
@@ -43,6 +44,10 @@ from models.git import (
     GitStatusFile,
     GitWorkingStatus,
     GitWorktree,
+    PruneCandidate,
+    PruneExecuteResult,
+    PruneScanResult,
+    PruneSkipped,
     PullResult,
     PushResult,
 )
@@ -445,6 +450,129 @@ class GitService:
                         raise GitServiceError(
                             f"Failed to clean up stale remote ref '{remote_ref}': {prune_err}"
                         )
+
+    def find_prune_candidates(
+        self,
+        github_service,
+        protection_patterns: list[str] | None = None,
+        extra_protected: list[str] | None = None,
+    ) -> PruneScanResult:
+        """Find local branches eligible for prune (matching merged PR).
+
+        Uses GitHub PR `merged_at` as source of truth so squash-merge is detected.
+        Applies 4-fold protection: PRUNE_PROTECTED_BRANCHES, current HEAD,
+        unpushed commits, BranchProtectionRule patterns.
+
+        Note: protection_patterns must be pre-fetched by the API layer (async DB).
+        Keeping this method DB-free preserves test isolation and reusability.
+
+        Args:
+            github_service: GitHubService instance for PR lookup
+            protection_patterns: Branch glob patterns (e.g. ["release/*", "hotfix/*"])
+            extra_protected: Additional branch names to exclude (user-supplied)
+
+        Returns:
+            PruneScanResult with candidates and skipped lists
+        """
+        from fnmatch import fnmatch
+
+        extra = set(extra_protected or [])
+        patterns = protection_patterns or []
+        current_head = self.repo.active_branch.name
+
+        # Fetch merged PRs (Wave 0 fix: limit must be high to avoid stale-branch miss)
+        merged_prs_by_head: dict[str, object] = {}
+        try:
+            prs = github_service.list_pull_requests(state="all", limit=500)
+            for pr in prs:
+                if pr.merged_at is not None:
+                    merged_prs_by_head[pr.head_ref] = pr
+        except Exception as e:
+            logger.warning(f"Failed to fetch PRs for prune scan: {e}")
+
+        candidates: list[PruneCandidate] = []
+        skipped: list[PruneSkipped] = []
+
+        for branch in self.repo.branches:
+            name = branch.name
+
+            if name in PRUNE_PROTECTED_BRANCHES or name in extra:
+                skipped.append(PruneSkipped(branch=name, reason="default_branch"))
+                continue
+
+            if name == current_head:
+                skipped.append(PruneSkipped(branch=name, reason="current_head"))
+                continue
+
+            if any(fnmatch(name, pattern) for pattern in patterns):
+                skipped.append(PruneSkipped(branch=name, reason="protected_rule"))
+                continue
+
+            pr = merged_prs_by_head.get(name)
+            if pr is None:
+                # No merged PR → not a prune target regardless of push state
+                skipped.append(PruneSkipped(branch=name, reason="no_matching_pr"))
+                continue
+
+            if self._has_unpushed_commits(branch):
+                # PR exists but local has additional unpushed commits — protect work
+                skipped.append(PruneSkipped(branch=name, reason="unpushed_commits"))
+                continue
+
+            candidates.append(
+                PruneCandidate(
+                    branch=name,
+                    pr_number=pr.number,
+                    pr_url=pr.html_url,
+                    pr_title=pr.title,
+                    merged_at=pr.merged_at,
+                    last_commit_sha=branch.commit.hexsha,
+                )
+            )
+
+        return PruneScanResult(candidates=candidates, skipped=skipped)
+
+    def _has_unpushed_commits(self, branch) -> bool:
+        """Return True if branch has local commits not on its tracked remote.
+
+        Conservative: treats untracked branches as unpushed (so they're skipped),
+        protecting purely-local work.
+        """
+        tracking = branch.tracking_branch()
+        if tracking is None:
+            return True
+        try:
+            ahead = sum(1 for _ in self.repo.iter_commits(f"{tracking.name}..{branch.name}"))
+            return ahead > 0
+        except Exception as e:
+            logger.warning(f"Failed to compute ahead for '{branch.name}': {e}")
+            return True
+
+    def prune_merged_branches(self, candidates: list[PruneCandidate]) -> PruneExecuteResult:
+        """Delete each candidate branch locally; collect errors without aborting batch.
+
+        Args:
+            candidates: Pre-vetted candidates from find_prune_candidates()
+
+        Returns:
+            PruneExecuteResult with deleted names and per-branch errors
+        """
+        deleted: list[str] = []
+        errors: list[dict] = []
+
+        for candidate in candidates:
+            try:
+                self.delete_branch(candidate.branch)
+                deleted.append(candidate.branch)
+            except Exception as e:
+                errors.append({"branch": candidate.branch, "error": str(e)})
+
+        return PruneExecuteResult(
+            candidates=candidates,
+            skipped=[],
+            deleted=deleted,
+            errors=errors,
+        )
 
     def checkout_branch(self, name: str, create: bool = False) -> GitBranch:
         """Checkout a branch.

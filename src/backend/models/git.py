@@ -609,6 +609,63 @@ GIT_ROLE_PERMISSIONS: dict[str, list[GitPermission]] = {
 # Default protected branches
 DEFAULT_PROTECTED_BRANCHES = ["main", "master"]
 
+# Branches that prune-merged must never delete, regardless of merge state
+PRUNE_PROTECTED_BRANCHES: frozenset[str] = frozenset({"main", "master", "develop"})
+
+
+# =============================================================================
+# Prune Merged Branches Models
+# =============================================================================
+
+
+class PruneCandidate(BaseModel):
+    """A local branch eligible for prune (matching merged PR + passes safety checks)."""
+
+    branch: str
+    pr_number: int
+    pr_url: str
+    pr_title: str
+    merged_at: datetime
+    last_commit_sha: str
+
+
+class PruneSkipped(BaseModel):
+    """A local branch excluded from prune with a reason.
+
+    Reason codes (stable contract for UI):
+      - default_branch     : main/master/develop
+      - current_head       : the active HEAD branch
+      - unpushed_commits   : local commits not present on origin
+      - no_matching_pr     : no merged PR matches branch name
+      - protected_rule     : matched a BranchProtectionRule pattern
+    """
+
+    branch: str
+    reason: str
+
+
+class PruneScanResult(BaseModel):
+    """Dry-run result: what would be deleted vs skipped."""
+
+    candidates: list[PruneCandidate] = []
+    skipped: list[PruneSkipped] = []
+
+
+class PruneExecuteResult(BaseModel):
+    """Actual deletion result, extending scan with deletion outcomes."""
+
+    candidates: list[PruneCandidate] = []
+    skipped: list[PruneSkipped] = []
+    deleted: list[str] = []
+    errors: list[dict] = []  # [{"branch": str, "error": str}]
+
+
+class PruneRequest(BaseModel):
+    """API request body for POST /branches/prune-merged."""
+
+    dry_run: bool = True
+    extra_protected: list[str] = []
+
 
 def has_git_permission(role: str, permission: GitPermission) -> bool:
     """Check if a role has a specific Git permission."""
