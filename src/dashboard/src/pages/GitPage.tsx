@@ -30,6 +30,7 @@ import {
   BranchProtectionSettings,
   GitAlert,
 } from '../components/git'
+import { PruneMergedModal } from '../components/git/PruneMergedModal'
 
 const tabs: { id: GitTab; label: string; icon: typeof GitBranch }[] = [
   { id: 'changes', label: 'Changes', icon: FileEdit },
@@ -62,6 +63,7 @@ export function GitPage() {
     createBranch,
     checkoutBranch,
     deleteBranch,
+    pruneMergedBranches,
     // Commits
     commits,
     fetchCommits,
@@ -154,6 +156,7 @@ export function GitPage() {
   const [showCreateMR, setShowCreateMR] = useState(false)
   const [showPRReview, setShowPRReview] = useState(false)
   const [userRole, setUserRole] = useState<MemberRole>('viewer')
+  const [showPruneModal, setShowPruneModal] = useState(false)
 
   // Current user info
   const currentUserId = user?.id || 'anonymous'
@@ -417,6 +420,7 @@ export function GitPage() {
                 onDeleteBranch={(name, force, deleteRemote, removeWorktree) => deleteBranch(selectedProjectId, name, force, deleteRemote, removeWorktree)}
                 onMergeClick={handleMergeClick}
                 onRefresh={() => fetchBranches(selectedProjectId)}
+                onPruneMerged={() => setShowPruneModal(true)}
                 worktrees={worktrees}
               />
             )}
@@ -525,6 +529,16 @@ export function GitPage() {
             return success
           }}
           onClose={() => setShowCreateMR(false)}
+        />
+      )}
+
+      {/* Prune Merged Branches Modal */}
+      {selectedProjectId && (
+        <PruneMergedModal
+          isOpen={showPruneModal}
+          projectId={selectedProjectId}
+          onClose={() => setShowPruneModal(false)}
+          pruneMergedBranches={pruneMergedBranches}
         />
       )}
 

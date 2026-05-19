@@ -60,6 +60,38 @@ export interface MergeRequest {
   closed_by: string | null
 }
 
+// =============================================================================
+// Prune Merged Branches Types
+// =============================================================================
+
+export interface PruneCandidate {
+  branch: string
+  pr_number: number
+  pr_url: string
+  pr_title: string
+  merged_at: string
+  last_commit_sha: string
+}
+
+export type PruneSkipReason =
+  | 'default_branch'
+  | 'current_head'
+  | 'unpushed_commits'
+  | 'no_matching_pr'
+  | 'protected_rule'
+
+export interface PruneSkipped {
+  branch: string
+  reason: PruneSkipReason
+}
+
+export interface PruneExecuteResult {
+  candidates: PruneCandidate[]
+  skipped: PruneSkipped[]
+  deleted: string[]
+  errors: Array<{ branch: string; error: string }>
+}
+
 export interface BranchProtectionRule {
   id: string
   project_id: string
@@ -386,6 +418,7 @@ interface GitState {
   createBranch: (projectId: string, name: string, startPoint?: string) => Promise<boolean>
   checkoutBranch: (projectId: string, name: string) => Promise<boolean>
   deleteBranch: (projectId: string, name: string, force?: boolean, deleteRemote?: boolean, removeWorktree?: boolean) => Promise<boolean>
+  pruneMergedBranches: (projectId: string, dryRun: boolean, extraProtected?: string[]) => Promise<PruneExecuteResult | null>
 
   // Actions - Commits
   fetchCommits: (projectId: string, branch?: string, limit?: number) => Promise<void>
@@ -829,6 +862,24 @@ export const useGitStore = create<GitState>((set, get) => ({
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })
       return false
+    }
+  },
+
+  pruneMergedBranches: async (projectId, dryRun, extraProtected = []) => {
+    set({ isLoading: true, error: null })
+    try {
+      const result = await apiClient.post<PruneExecuteResult>(
+        `/api/git/projects/${projectId}/branches/prune-merged`,
+        { dry_run: dryRun, extra_protected: extraProtected },
+      )
+      if (!dryRun) {
+        await get().fetchBranches(projectId)
+      }
+      set({ isLoading: false })
+      return result
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false })
+      return null
     }
   },
 
