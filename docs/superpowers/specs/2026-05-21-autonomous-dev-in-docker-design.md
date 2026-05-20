@@ -344,3 +344,16 @@ AOS 적용: 위 애드온을 AOS 레포에 두고 첫 e2e 검증 대상으로 �
 - Claude 플랜으로 Agent SDK 사용 (Support) — https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan
 - 유료 플랜 extra usage 관리 (Support) — https://support.claude.com/en/articles/12429409-manage-extra-usage-for-paid-claude-plans
 - Ralph 기법 (Geoffrey Huntley) — https://ghuntley.com/ralph/
+
+## 13. 구현 중 확정된 사양 변경
+
+설계는 구현 전 작성됐다. 12개 Task 구현·독립 리뷰 과정에서 다음 사양이 확정·조정됐다 — 모두 리뷰를 거친 의도된 결정이다. §4·§5 본문은 원래 설계 의도를 보존하며, 현재 코드의 정식 소스는 `claude-workspace-template/addons/autodev/`이다.
+
+| 설계 원안 | 실제 구현 | 이유 |
+|-----------|-----------|------|
+| `autodev.config.yaml` (YAML) | `autodev.config.sh` (sourceable bash) | 모든 셸 스크립트가 설정을 읽으므로 YAML 파서 의존성 제거 |
+| `/etc/autodev/settings.json` | `/opt/autodev/config/settings.json` | 애드온 자산을 `/opt/autodev/` 한곳에 모음 (Dockerfile COPY 대상과 일치) |
+| `loop-state.json` 별도 파일 | iteration별 `iter-NNN.jsonl` 로그를 `autodev_total_cost()`가 집계 | 같은 목표(비용 cap)를 더 적은 코드로 달성 |
+| `BLOCKED.md` (사람용 서술) | 빈 `BLOCKED` sentinel + `PROGRESS.md`에 막힌 원인 기록 | sentinel은 기계 판정용, 서술은 PROGRESS.md로 일원화 |
+| `NET_ADMIN`/`NET_RAW`만 재부여 | 7종 cap (§격리 불변식 3) | `gosu` 권한 강등·`chown`이 추가 cap 필요 |
+| clone 후 origin = `/host-repo` | entrypoint가 origin을 호스트의 실제 GitHub 리모트로 교체, ralph.sh가 `gh auth setup-git`으로 토큰 인증 | 읽기 전용 마운트 경로로는 push 불가 |
