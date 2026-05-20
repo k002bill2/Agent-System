@@ -30,4 +30,28 @@ empty_total=$(autodev_total_cost "$emptydir")
 assert_eq "$empty_total" "0" "empty log dir → cost 0"
 rm -rf "$emptydir"
 
+echo "test: verify.sh 게이트 — 통과 케이스"
+work=$(mktemp -d); mkdir -p "$work/repo"
+cat > "$work/autodev.config.sh" <<'CFG'
+GATE_TYPECHECK='true'
+GATE_LINT='true'
+GATE_TEST='true'
+GATE_BUILD='true'
+GATE_COVERAGE_CMD=''
+CFG
+WORKSPACE_OVERRIDE="$work" bash "$HERE/../scripts/verify.sh"
+assert_eq "$?" "0" "모든 게이트 true → verify.sh exit 0"
+
+echo "test: verify.sh 게이트 — 실패 케이스"
+cat > "$work/autodev.config.sh" <<'CFG'
+GATE_TYPECHECK='true'
+GATE_LINT='false'
+GATE_TEST='true'
+GATE_BUILD='true'
+GATE_COVERAGE_CMD=''
+CFG
+WORKSPACE_OVERRIDE="$work" bash "$HERE/../scripts/verify.sh"; rc=$?
+assert_eq "$rc" "1" "게이트 1개 false → verify.sh exit 1"
+rm -rf "$work"
+
 assert_summary
