@@ -24,6 +24,7 @@ autodev_log "인증 OK — 구독 OAuth 토큰 확인."
 
 # --- 4. 레포 클론 ---
 autodev_log "레포 클론 중..."
+mkdir -p /workspace/state /workspace/logs
 [ -d /host-repo/.git ] || autodev_die "/host-repo가 git 레포가 아님"
 git clone /host-repo /workspace/repo
 cd /workspace/repo
@@ -35,7 +36,6 @@ echo "$branch" > /workspace/state/branch
 autodev_log "작업 브랜치: $branch"
 
 # --- 5. 권한 강등 후 루프 시작 ---
-mkdir -p /workspace/state /workspace/logs
 chown -R devagent:devagent /workspace/repo /workspace/state /workspace/logs
 autodev_log "devagent로 강등, 루프 시작..."
 exec gosu devagent /opt/autodev/scripts/ralph.sh
