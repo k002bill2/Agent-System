@@ -38,7 +38,7 @@
 ┌─ 호스트 Mac ──────────────────────────────────────────────┐
 │  run-autodev.sh  ──docker run──▶                           │
 │   --env-file (구독 OAuth 토큰, GitHub PAT)                          │
-│   --cap-drop ALL --cap-add NET_ADMIN --cap-add NET_RAW     │
+│   --cap-drop ALL  +필수 cap 7종 (아래 불변식 3 참조)        │
 │   --memory --cpus --pids-limit                             │
 │   -v <repo>:/host-repo:ro       (read-only)                │
 │   -v <out>/logs:/workspace/logs (쓰기 — 로그 회수용)        │
@@ -71,7 +71,7 @@
 
 1. **호스트 레포는 read-only 마운트만.** 컨테이너는 `/host-repo`를 읽어 `/workspace/repo`로 클론한다. 호스트 원본은 변경 불가능하다.
 2. **Docker 소켓 미마운트.** `/var/run/docker.sock`을 주면 컨테이너가 호스트 권한으로 컨테이너를 띄울 수 있어 격리가 즉시 무너진다. 절대 마운트하지 않는다.
-3. **capability 최소화.** `--cap-drop ALL` 후 방화벽 설정에 필요한 `NET_ADMIN`/`NET_RAW`만 재부여한다. `--privileged` 금지.
+3. **capability 최소화.** `--cap-drop ALL` 후 꼭 필요한 7종만 재부여한다 — 방화벽용 `NET_ADMIN`·`NET_RAW`, gosu 권한 강등용 `SETUID`·`SETGID`, 클론 파일 소유권 변경용 `CHOWN`·`DAC_OVERRIDE`·`FOWNER`. `SYS_ADMIN`·`SYS_PTRACE`·`SYS_MODULE` 등 위험 cap은 drop 유지. `--privileged` 금지. (구현 중 확인: `NET_ADMIN`/`NET_RAW`만으로는 컨테이너 내 `gosu` 권한 강등과 `chown`이 실패한다.)
 4. **결과는 PR로만.** 루프는 origin의 작업 브랜치로 push하고 PR을 생성할 뿐, main을 직접 바꾸지 않는다.
 
 `--dangerously-skip-permissions`(= `--permission-mode bypassPermissions`)는 권한 프롬프트만 제거하며, `rm -rf /` 류 회로 차단기는 그대로 유지된다. 위 격리 불변식이 성립하는 컨테이너 안에서만 이 플래그를 쓴다 — 이것이 이 플래그가 설계된 용도다.
