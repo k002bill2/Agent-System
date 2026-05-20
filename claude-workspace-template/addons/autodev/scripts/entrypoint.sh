@@ -28,6 +28,18 @@ mkdir -p /workspace/state /workspace/logs
 [ -d /host-repo/.git ] || autodev_die "/host-repo가 git 레포가 아님"
 git clone /host-repo /workspace/repo
 cd /workspace/repo
+# clone은 origin을 /host-repo로 둔다 — 실제 GitHub 리모트로 교체해야 push 가능.
+host_origin=$(git -C /host-repo remote get-url origin 2>/dev/null || true)
+if [ -n "$host_origin" ]; then
+  case "$host_origin" in
+    git@github.com:*)      host_origin="https://github.com/${host_origin#git@github.com:}" ;;
+    ssh://git@github.com/*) host_origin="https://github.com/${host_origin#ssh://git@github.com/}" ;;
+  esac
+  git remote set-url origin "$host_origin"
+  autodev_log "origin → $host_origin"
+else
+  autodev_log "경고: 호스트 레포에 origin 리모트 없음 — push 불가"
+fi
 branch="autodev/$(date -u +%Y%m%d-%H%M%S)"
 git checkout -b "$branch"
 git config user.name  "autodev"

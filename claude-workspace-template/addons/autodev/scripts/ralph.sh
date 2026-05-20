@@ -68,7 +68,7 @@ while [ "$iter" -lt "$MAX_ITERATIONS" ]; do
 done
 
 # 완료 처리
-if [ -f "$STATE/DONE" ] && /opt/autodev/scripts/verify.sh; then
+if [ -f "$STATE/DONE" ] && [ ! -f "$STATE/BLOCKED" ] && /opt/autodev/scripts/verify.sh; then
   autodev_log "최종 독립 리뷰어 실행..."
   claude_run /opt/autodev/prompts/REVIEWER.md "$LOGS/final-review.jsonl"
   if head -1 "$STATE/FINAL-REVIEW.md" 2>/dev/null | grep -q '^FINAL-REVIEW: PASS'; then
@@ -77,13 +77,16 @@ if [ -f "$STATE/DONE" ] && /opt/autodev/scripts/verify.sh; then
     if [ "${AUTODEV_DRY_RUN:-0}" = "1" ]; then
       autodev_log "[dry-run] PR 생성 생략 — branch=$branch"
       touch "$STATE/COMPLETED"
-    elif git push "$GIT_REMOTE" "$branch" \
-         && gh pr create --fill --base "$BASE_BRANCH" --head "$branch"; then
-      autodev_log "PR 생성 완료"
-      touch "$STATE/COMPLETED"
     else
-      autodev_log "push/PR 실패 — GH_TOKEN 권한 확인"
-      touch "$STATE/BLOCKED"
+      gh auth setup-git 2>/dev/null || autodev_log "경고: gh auth setup-git 실패"
+      if git push "$GIT_REMOTE" "$branch" \
+         && gh pr create --fill --base "$BASE_BRANCH" --head "$branch"; then
+        autodev_log "PR 생성 완료"
+        touch "$STATE/COMPLETED"
+      else
+        autodev_log "push/PR 실패 — GH_TOKEN·origin 리모트 확인"
+        touch "$STATE/BLOCKED"
+      fi
     fi
   else
     autodev_log "최종 리뷰어 PASS 아님 — BLOCKED"

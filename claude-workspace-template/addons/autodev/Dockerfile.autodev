@@ -40,6 +40,4 @@ COPY --chown=devagent:devagent config/   /opt/autodev/config/
 RUN chmod +x /opt/autodev/scripts/*.sh
 
 WORKDIR /workspace
-# entrypoint.sh는 Task 5에서 추가된다. 그 전까지 이 이미지로 컨테이너를
-# 실행하면 ENTRYPOINT를 찾지 못하므로, 빌드 검증은 --entrypoint 오버라이드로 한다.
 ENTRYPOINT ["/opt/autodev/scripts/entrypoint.sh"]
