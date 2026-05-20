@@ -36,6 +36,21 @@ iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 # DNS (허용 도메인 해석에 필요)
 iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
 iptables -A OUTPUT -p tcp --dport 53 -j ACCEPT
+iptables -A INPUT  -p udp --sport 53 -j ACCEPT
+iptables -A INPUT  -p tcp --sport 53 -j ACCEPT
+
+# IPv6 전면 차단 (allowlist는 IPv4 전용 — v6 egress는 유출 경로)
+sysctl -w net.ipv6.conf.all.disable_ipv6=1     >/dev/null 2>&1 || true
+sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null 2>&1 || true
+if command -v ip6tables >/dev/null 2>&1; then
+  ip6tables -F 2>/dev/null || true
+  for chain in INPUT FORWARD OUTPUT; do
+    ip6tables -P "$chain" DROP 2>/dev/null || true
+  done
+  ip6tables -A INPUT  -i lo -j ACCEPT 2>/dev/null || true
+  ip6tables -A OUTPUT -o lo -j ACCEPT 2>/dev/null || true
+fi
+echo "[firewall] IPv6 egress 차단."
 
 # allowlist ipset
 ipset destroy autodev-allow 2>/dev/null || true
