@@ -14,7 +14,7 @@ run_gate() {  # $1=name $2=cmd
   local name="$1" cmd="$2"
   if [ -z "$cmd" ]; then autodev_log "게이트 $name: 건너뜀"; return 0; fi
   autodev_log "게이트 $name: 실행..."
-  if bash -c "$cmd"; then autodev_log "게이트 $name: PASS"; return 0
+  if bash -c "set -o pipefail; $cmd"; then autodev_log "게이트 $name: PASS"; return 0
   else autodev_log "게이트 $name: FAIL"; return 1; fi
 }
 
@@ -27,12 +27,14 @@ run_gate build     "${GATE_BUILD:-}"     || fail=1
 # 커버리지 게이트
 if [ -n "${GATE_COVERAGE_CMD:-}" ]; then
   autodev_log "게이트 coverage: 실행..."
-  pct=$(bash -c "$GATE_COVERAGE_CMD" 2>&1 \
-        | grep -oE 'TOTAL[^0-9]*[0-9]+%' | grep -oE '[0-9]+%' | tr -d '%' | tail -1)
-  if [ -z "$pct" ]; then
+  # pytest-cov의 'TOTAL ... NN%' 라인에서 마지막 퍼센트 값을 추출. 소수도 허용.
+  pct=$(bash -c "set -o pipefail; $GATE_COVERAGE_CMD" 2>&1 \
+        | grep -E '^TOTAL' | grep -oE '[0-9]+(\.[0-9]+)?%' | tr -d '%' | tail -1)
+  pct_int=${pct%%.*}   # 정수부만 (정수 비교용)
+  if [ -z "$pct_int" ]; then
     autodev_log "게이트 coverage: FAIL (커버리지 수치 파싱 실패)"; fail=1
-  elif [ "$pct" -lt "${COVERAGE_THRESHOLD:-80}" ]; then
-    autodev_log "게이트 coverage: FAIL ($pct% < ${COVERAGE_THRESHOLD}%)"; fail=1
+  elif [ "$pct_int" -lt "${COVERAGE_THRESHOLD:-80}" ]; then
+    autodev_log "게이트 coverage: FAIL ($pct% < ${COVERAGE_THRESHOLD:-80}%)"; fail=1
   else
     autodev_log "게이트 coverage: PASS ($pct%)"
   fi

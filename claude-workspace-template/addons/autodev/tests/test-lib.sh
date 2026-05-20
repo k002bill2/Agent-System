@@ -54,4 +54,30 @@ WORKSPACE_OVERRIDE="$work" bash "$HERE/../scripts/verify.sh"; rc=$?
 assert_eq "$rc" "1" "게이트 1개 false → verify.sh exit 1"
 rm -rf "$work"
 
+echo "test: verify.sh 커버리지 게이트 — 임계값 이상 통과 (소수 포함)"
+covwork=$(mktemp -d); mkdir -p "$covwork/repo"
+cat > "$covwork/autodev.config.sh" <<'CFG'
+GATE_TYPECHECK='true'
+GATE_LINT='true'
+GATE_TEST='true'
+GATE_BUILD='true'
+GATE_COVERAGE_CMD='printf "Name  Stmts  Miss  Cover\nTOTAL   245    41   83.5%%\n"'
+COVERAGE_THRESHOLD=80
+CFG
+WORKSPACE_OVERRIDE="$covwork" bash "$HERE/../scripts/verify.sh"; rc=$?
+assert_eq "$rc" "0" "커버리지 83.5% ≥ 80% → exit 0"
+
+echo "test: verify.sh 커버리지 게이트 — 임계값 미만 실패"
+cat > "$covwork/autodev.config.sh" <<'CFG'
+GATE_TYPECHECK='true'
+GATE_LINT='true'
+GATE_TEST='true'
+GATE_BUILD='true'
+GATE_COVERAGE_CMD='printf "Name  Stmts  Miss  Cover\nTOTAL   245   200   18%%\n"'
+COVERAGE_THRESHOLD=80
+CFG
+WORKSPACE_OVERRIDE="$covwork" bash "$HERE/../scripts/verify.sh"; rc=$?
+assert_eq "$rc" "1" "커버리지 18% < 80% → exit 1"
+rm -rf "$covwork"
+
 assert_summary
