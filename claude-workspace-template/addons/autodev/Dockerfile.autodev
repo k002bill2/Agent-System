@@ -31,8 +31,7 @@ RUN npm install -g @anthropic-ai/claude-code
 RUN usermod -l devagent -d /home/devagent -m node \
     && groupmod -n devagent node \
     && mkdir -p /workspace/state /workspace/logs /opt/autodev \
-    && chown root:root /workspace \
-    && chown -R devagent:devagent /workspace/state /workspace/logs
+    && chown -R devagent:devagent /workspace
 
 # 애드온 자산 (시크릿은 절대 포함하지 않음)
 COPY --chown=devagent:devagent scripts/  /opt/autodev/scripts/

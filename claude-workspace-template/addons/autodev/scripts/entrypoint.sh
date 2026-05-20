@@ -36,12 +36,6 @@ echo "$branch" > /workspace/state/branch
 autodev_log "작업 브랜치: $branch"
 
 # --- 5. 권한 강등 후 루프 시작 ---
-# gosu devagent 강등은 CAP_SETUID 필요. 운영 환경에서는 --cap-add SETUID로 활성화.
-# dry-run/CI 환경(cap-drop ALL)에서는 현재 사용자로 직접 실행.
-if gosu devagent true 2>/dev/null; then
-  autodev_log "devagent로 강등 후 루프 시작..."
-  exec gosu devagent /opt/autodev/scripts/ralph.sh
-else
-  autodev_log "CAP_SETUID 없음 — 현재 사용자로 루프 시작 (dry-run/CI 모드)..."
-  exec /opt/autodev/scripts/ralph.sh
-fi
+chown -R devagent:devagent /workspace/repo /workspace/state /workspace/logs
+autodev_log "devagent로 강등, 루프 시작..."
+exec gosu devagent /opt/autodev/scripts/ralph.sh

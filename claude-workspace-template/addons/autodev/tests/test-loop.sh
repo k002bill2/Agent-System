@@ -27,6 +27,8 @@ echo "dummy spec" > "$work/run/state/SPEC.md"
 echo "test: dry-run 루프가 완료까지 돈다"
 docker run --rm \
   --cap-drop ALL --cap-add NET_ADMIN --cap-add NET_RAW \
+  --cap-add SETUID --cap-add SETGID --cap-add CHOWN \
+  --cap-add DAC_OVERRIDE --cap-add FOWNER \
   -e AUTODEV_DRY_RUN=1 \
   -e CLAUDE_CODE_OAUTH_TOKEN=dummy-token \
   -v "$work:/host-repo:ro" \
@@ -60,6 +62,8 @@ CFG
 mkdir -p "$work2/run/state" "$work2/run/logs"
 echo spec > "$work2/run/state/SPEC.md"
 docker run --rm --cap-drop ALL --cap-add NET_ADMIN --cap-add NET_RAW \
+  --cap-add SETUID --cap-add SETGID --cap-add CHOWN \
+  --cap-add DAC_OVERRIDE --cap-add FOWNER \
   -e AUTODEV_DRY_RUN=1 -e CLAUDE_CODE_OAUTH_TOKEN=dummy \
   -v "$work2:/host-repo:ro" \
   -v "$work2/run/state:/workspace/state" \
