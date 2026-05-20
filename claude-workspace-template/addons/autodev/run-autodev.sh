@@ -12,9 +12,9 @@ ENV_FILE="$REPO_DIR/.autodev.env"
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run)   DRY_RUN=1 ;;
-    --config)    CONFIG="$2"; shift ;;
-    --spec)      SPEC="$2"; shift ;;
-    --env-file)  ENV_FILE="$2"; shift ;;
+    --config)    [ -n "${2-}" ] || { echo "FATAL: --config 에 경로 인자 필요" >&2; exit 1; }; CONFIG="$2"; shift ;;
+    --spec)      [ -n "${2-}" ] || { echo "FATAL: --spec 에 경로 인자 필요" >&2; exit 1; }; SPEC="$2"; shift ;;
+    --env-file)  [ -n "${2-}" ] || { echo "FATAL: --env-file 에 경로 인자 필요" >&2; exit 1; }; ENV_FILE="$2"; shift ;;
     *) echo "알 수 없는 인자: $1" >&2; exit 1 ;;
   esac
   shift
@@ -27,11 +27,11 @@ done
 [ -f "$ENV_FILE" ] || { echo "FATAL: env 파일 없음: $ENV_FILE (CLAUDE_CODE_OAUTH_TOKEN, GH_TOKEN)"; exit 1; }
 
 # --- 과금 가드: env 파일에 종량제 키가 있으면 중단 ---
-if grep -qE '^[[:space:]]*ANTHROPIC_API_KEY=' "$ENV_FILE"; then
+if grep -qE '^[[:space:]]*(export[[:space:]]+)?ANTHROPIC_API_KEY=' "$ENV_FILE"; then
   echo "FATAL: $ENV_FILE 에 ANTHROPIC_API_KEY 가 있음 — 제거하라 (종량제 과금 전환됨)" >&2
   exit 1
 fi
-if ! grep -qE '^[[:space:]]*CLAUDE_CODE_OAUTH_TOKEN=' "$ENV_FILE"; then
+if ! grep -qE '^[[:space:]]*(export[[:space:]]+)?CLAUDE_CODE_OAUTH_TOKEN=' "$ENV_FILE"; then
   echo "FATAL: $ENV_FILE 에 CLAUDE_CODE_OAUTH_TOKEN 이 없음 (claude setup-token 으로 발급)" >&2
   exit 1
 fi
@@ -41,7 +41,7 @@ source "$CONFIG"
 : "${RES_MEMORY:=8g}" "${RES_CPUS:=4}" "${RES_PIDS:=512}"
 
 # --- 실행 디렉토리 준비 ---
-RUN_DIR="$REPO_DIR/.autodev-runs/$(date -u +%Y%m%d-%H%M%S)"
+RUN_DIR="$REPO_DIR/.autodev-runs/$(date -u +%Y%m%d-%H%M%S)-$$"
 mkdir -p "$RUN_DIR/logs" "$RUN_DIR/state"
 cp "$SPEC" "$RUN_DIR/state/SPEC.md"
 cp "$CONFIG" "$RUN_DIR/autodev.config.sh"
