@@ -24,4 +24,10 @@ total=$(autodev_total_cost "$logdir")
 assert_eq "$total" "0.35" "total cost = 0.35"
 rm -rf "$logdir"
 
+echo "test: autodev_total_cost on empty dir returns 0"
+emptydir=$(mktemp -d)
+empty_total=$(autodev_total_cost "$emptydir")
+assert_eq "$empty_total" "0" "empty log dir → cost 0"
+rm -rf "$emptydir"
+
 assert_summary

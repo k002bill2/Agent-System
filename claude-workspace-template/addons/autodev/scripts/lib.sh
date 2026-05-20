@@ -30,7 +30,7 @@ autodev_total_cost() {
   local logs="$1" total=0 c f
   for f in "$logs"/iter-*.jsonl "$logs"/final-review.jsonl; do
     [ -f "$f" ] || continue
-    c=$(grep -oE '"total_cost_usd":[0-9.]+' "$f" | tail -1 | cut -d: -f2)
+    c=$(grep -oE '"total_cost_usd":[0-9.eE+-]+' "$f" | tail -1 | cut -d: -f2)
     [ -n "$c" ] && total=$(awk "BEGIN{printf \"%g\", $total + $c}")
   done
   echo "$total"
