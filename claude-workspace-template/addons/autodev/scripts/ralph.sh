@@ -60,7 +60,7 @@ while [ "$iter" -lt "$MAX_ITERATIONS" ]; do
     stall=$((stall+1))
     autodev_log "이번 iteration 커밋 없음 (정체 $stall/$STALL_LIMIT)"
     if [ "$stall" -ge "$STALL_LIMIT" ]; then
-      autodev_log "정체 한도 도달"; touch "$STATE/BLOCKED"
+      autodev_log "정체 한도 도달"; touch "$STATE/BLOCKED"; break
     fi
   else
     stall=0; prev=$cur
@@ -76,12 +76,15 @@ if [ -f "$STATE/DONE" ] && /opt/autodev/scripts/verify.sh; then
     branch=$(cat "$STATE/branch")
     if [ "${AUTODEV_DRY_RUN:-0}" = "1" ]; then
       autodev_log "[dry-run] PR 생성 생략 — branch=$branch"
+      touch "$STATE/COMPLETED"
+    elif git push "$GIT_REMOTE" "$branch" \
+         && gh pr create --fill --base "$BASE_BRANCH" --head "$branch"; then
+      autodev_log "PR 생성 완료"
+      touch "$STATE/COMPLETED"
     else
-      git push "$GIT_REMOTE" "$branch" \
-        && gh pr create --fill --base "$BASE_BRANCH" --head "$branch" \
-        || autodev_log "push/PR 실패 — GH_TOKEN 권한 확인"
+      autodev_log "push/PR 실패 — GH_TOKEN 권한 확인"
+      touch "$STATE/BLOCKED"
     fi
-    touch "$STATE/COMPLETED"
   else
     autodev_log "최종 리뷰어 PASS 아님 — BLOCKED"
     touch "$STATE/BLOCKED"

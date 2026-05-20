@@ -71,6 +71,7 @@ docker run --rm --cap-drop ALL --cap-add NET_ADMIN --cap-add NET_RAW \
   -v "$work2/autodev.config.sh:/workspace/autodev.config.sh:ro" \
   "$IMG" >/dev/null 2>&1 || true
 assert_fail "게이트 실패 시 COMPLETED 미생성" test -f "$work2/run/state/COMPLETED"
+assert_fail "정체 한도 미도달이므로 BLOCKED 미생성" test -f "$work2/run/state/BLOCKED"
 
 rm -rf "$work" "$work2"
 assert_summary
