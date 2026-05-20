@@ -1,0 +1,4 @@
+{
+  "sandbox": { "enabled": false },
+  "permissions": { "defaultMode": "bypassPermissions" }
+}
