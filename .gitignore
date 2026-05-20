@@ -96,3 +96,7 @@ docs/claude-code-architecture-diagram.html
 
 # Benchmark outputs — host-specific absolute paths, not reproducible
 scripts/bench_results/
+
+# autodev 런타임 산출물
+.autodev-runs/
+.autodev.env

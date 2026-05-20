@@ -1523,3 +1523,26 @@ async def web_search(query: str, max_results: int = 5) -> dict[str, Any]:
 - 웹 검색 도구는 도구 토글에서 선택
 
 **테스트 커버리지** (`tests/backend/test_playground_*.py`): rag_k 전파, 히스토리 병합, 도구 호출, force-final, 레거시 호환.
+
+---
+
+## 56. Autonomous Dev in a Box (autodev)
+
+Docker로 격리된 컨테이너 안에서 Claude Code가 완전 자율로 개발을 수행하는 애드온 (`claude-workspace-template/addons/autodev/`).
+
+**구성 요소**:
+- `Dockerfile.autodev`: devagent(uid 1000) + Claude Code + gosu + 방화벽(iptables) 격리 이미지
+- `scripts/lib.sh`: 공용 헬퍼 (설정 로드, 비용 집계, 로그)
+- `scripts/verify.sh`: 4-게이트(typecheck/lint/test/build) + 커버리지 임계값 체크
+- `scripts/entrypoint.sh`: 토큰 검증 → 방화벽 적용 → gosu 강등 부팅 시퀀스
+- `scripts/loop.sh`: Ralph 루프 오케스트레이터 (반복/정체/비용 상한 관리)
+- `run-autodev.sh`: 호스트 런처 (`--dry-run` 지원)
+- `autodev.config.sh` (레포 루트): 프로젝트별 게이트 명령 및 제한 설정
+
+**보안 격리**:
+- 허용 도메인 외 이그레스 차단 (iptables allowlist)
+- Docker 소켓 미포함, read-only 마운트, non-root 실행
+
+**AOS 설정** (`autodev.config.sh` 레포 루트): tsc/ruff/pytest/npm build 게이트, Opus 모델, 비용 상한 $50.
+
+**테스트**: `tests/test-lib.sh`, `tests/test-firewall.sh`, `tests/test-isolation.sh`, `tests/test-loop.sh` (총 23개 테스트, 전체 PASS)

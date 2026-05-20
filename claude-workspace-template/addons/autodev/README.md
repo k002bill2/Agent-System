@@ -32,3 +32,23 @@ bash tests/test-firewall.sh   # 방화벽 (Docker 필요)
 bash tests/test-isolation.sh  # 격리 (Docker 필요)
 bash tests/test-loop.sh       # 루프 e2e dry-run (Docker 필요)
 ```
+
+## AOS 적용 예시
+
+AOS 레포 루트에 `autodev.config.sh`가 준비돼 있다. 실행:
+
+```bash
+cd ~/Work/Agent-System
+# 1회: claude setup-token → 토큰 발급
+printf 'CLAUDE_CODE_OAUTH_TOKEN=<토큰>\nGH_TOKEN=<PAT>\n' > .autodev.env
+echo "<자율 개발할 작업 명세>" > SPEC.md
+claude-workspace-template/addons/autodev/run-autodev.sh --dry-run   # 먼저 dry-run
+claude-workspace-template/addons/autodev/run-autodev.sh            # 실제 실행
+```
+
+## 과금 주의
+
+- 구독 OAuth 토큰만 쓰면 추가 과금 없음 (사용 한도 내).
+- ⚠️ `.autodev.env`에 `ANTHROPIC_API_KEY`를 넣으면 종량제로 전환됨 — 런처가 막지만 넣지 말 것.
+- ⚠️ 사용 한도(5시간/주간) 초과 시 기본값으로 종량제 과금됨. Anthropic Console에서
+  extra usage를 OFF로 두면 한도 초과 시 과금 대신 차단(throttle)만 발생.
