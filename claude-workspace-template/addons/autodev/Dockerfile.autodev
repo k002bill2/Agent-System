@@ -1,0 +1,42 @@
+# 격리된 자율 개발 이미지.
+FROM node:20-slim
+
+# 개발 도구 + 방화벽 도구 + 권한 강등 도구
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3 python3-pip python3-venv \
+      git curl jq ripgrep ca-certificates \
+      iptables ipset dnsutils gosu \
+    && rm -rf /var/lib/apt/lists/*
+
+# iptables-legacy 사용 (컨테이너에서 nft보다 안정적)
+RUN update-alternatives --set iptables /usr/sbin/iptables-legacy || true
+
+# uv (Python 패키지 매니저)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && mv /root/.local/bin/uv /usr/local/bin/uv
+
+# gh CLI
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# Claude Code CLI
+RUN npm install -g @anthropic-ai/claude-code
+
+# 비root 유저 (node:20-slim의 기존 UID 1000 'node' 유저를 devagent로 재명명)
+RUN usermod -l devagent -d /home/devagent -m node \
+    && groupmod -n devagent node \
+    && mkdir -p /workspace/state /workspace/logs /opt/autodev \
+    && chown -R devagent:devagent /workspace
+
+# 애드온 자산 (시크릿은 절대 포함하지 않음)
+COPY scripts/  /opt/autodev/scripts/
+COPY prompts/  /opt/autodev/prompts/
+COPY config/   /opt/autodev/config/
+RUN chmod +x /opt/autodev/scripts/*.sh
+
+WORKDIR /workspace
+ENTRYPOINT ["/opt/autodev/scripts/entrypoint.sh"]
