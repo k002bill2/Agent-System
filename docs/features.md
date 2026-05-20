@@ -1535,7 +1535,7 @@ Docker로 격리된 컨테이너 안에서 Claude Code가 완전 자율로 개�
 - `scripts/lib.sh`: 공용 헬퍼 (설정 로드, 비용 집계, 로그)
 - `scripts/verify.sh`: 4-게이트(typecheck/lint/test/build) + 커버리지 임계값 체크
 - `scripts/entrypoint.sh`: 토큰 검증 → 방화벽 적용 → gosu 강등 부팅 시퀀스
-- `scripts/loop.sh`: Ralph 루프 오케스트레이터 (반복/정체/비용 상한 관리)
+- `scripts/ralph.sh`: Ralph 루프 오케스트레이터 (반복/정체/비용 상한 관리)
 - `run-autodev.sh`: 호스트 런처 (`--dry-run` 지원)
 - `autodev.config.sh` (레포 루트): 프로젝트별 게이트 명령 및 제한 설정
 
