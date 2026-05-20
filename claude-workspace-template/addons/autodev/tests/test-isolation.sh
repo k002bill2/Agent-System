@@ -13,9 +13,9 @@ content=$(cat "$sentinel/file.txt")
 assert_eq "$content" "original" "ro 마운트 호스트 파일이 변경되지 않음"
 rm -rf "$sentinel"
 
-echo "test: 컨테이너는 비root(devagent)로 루프를 돈다"
-uid=$(docker run --rm --entrypoint sh "$IMG" -c 'id -u devagent')
-assert_eq "$uid" "1000" "devagent uid=1000 존재"
+echo "test: gosu 강등 시 devagent(uid 1000)로 실행된다"
+uid=$(docker run --rm --entrypoint bash "$IMG" -c 'gosu devagent id -u')
+assert_eq "$uid" "1000" "gosu devagent 강등 후 uid=1000"
 
 echo "test: Docker 소켓이 이미지에 없다"
 assert_fail "docker 소켓 미존재" \

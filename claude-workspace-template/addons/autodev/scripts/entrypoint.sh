@@ -13,7 +13,7 @@ autodev_log "방화벽 검증 중..."
 if curl -fsS --max-time 5 https://example.com >/dev/null 2>&1; then
   autodev_die "방화벽 미적용 — example.com 도달 가능"
 fi
-code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 https://api.anthropic.com || echo 000)
+code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 https://api.anthropic.com 2>/dev/null) || code="000"
 [ "$code" = "000" ] && autodev_die "api.anthropic.com 도달 불가 — 방화벽 과차단"
 autodev_log "방화벽 OK."
 
@@ -35,6 +35,7 @@ echo "$branch" > /workspace/state/branch
 autodev_log "작업 브랜치: $branch"
 
 # --- 5. 권한 강등 후 루프 시작 ---
+mkdir -p /workspace/state /workspace/logs
 chown -R devagent:devagent /workspace/repo /workspace/state /workspace/logs
 autodev_log "devagent로 강등, 루프 시작..."
 exec gosu devagent /opt/autodev/scripts/ralph.sh
