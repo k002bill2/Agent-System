@@ -33,10 +33,12 @@ RUN usermod -l devagent -d /home/devagent -m node \
     && chown -R devagent:devagent /workspace
 
 # 애드온 자산 (시크릿은 절대 포함하지 않음)
-COPY scripts/  /opt/autodev/scripts/
-COPY prompts/  /opt/autodev/prompts/
-COPY config/   /opt/autodev/config/
+COPY --chown=devagent:devagent scripts/  /opt/autodev/scripts/
+COPY --chown=devagent:devagent prompts/  /opt/autodev/prompts/
+COPY --chown=devagent:devagent config/   /opt/autodev/config/
 RUN chmod +x /opt/autodev/scripts/*.sh
 
 WORKDIR /workspace
+# entrypoint.sh는 Task 5에서 추가된다. 그 전까지 이 이미지로 컨테이너를
+# 실행하면 ENTRYPOINT를 찾지 못하므로, 빌드 검증은 --entrypoint 오버라이드로 한다.
 ENTRYPOINT ["/opt/autodev/scripts/entrypoint.sh"]
