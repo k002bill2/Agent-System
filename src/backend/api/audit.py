@@ -122,68 +122,24 @@ async def get_audit_stats(
     """
     Get audit statistics summary.
 
-    Returns counts for:
-    - Total actions
-    - Tool executions
-    - Approvals (HITL decisions)
-    - Errors (failed operations)
-    - Breakdown by action type and status
+    Returns counts for total actions, tool executions, approvals (HITL
+    decisions) and errors, plus breakdowns by action type and status and a
+    zero-filled 7-day activity trend.
+
+    Counts are computed via aggregation (no row-limit cap), so the breakdowns
+    always stay consistent with ``total_actions``.
     """
-    # Get all logs for stats calculation
     filter = AuditLogFilter(
         session_id=session_id,
         project_id=project_id,
         include_global=include_global,
         start_date=start_date,
         end_date=end_date,
-        limit=10000,  # Get enough for accurate stats
-        offset=0,
     )
 
     if USE_DATABASE:
-        response = await AuditService.query_async(db, filter)
-    else:
-        response = AuditService.query(filter)
-
-    logs = response.logs
-
-    # Calculate stats
-    total_actions = response.total
-    tool_executions = sum(1 for l in logs if "tool" in l.action.value.lower())
-    approvals = sum(1 for l in logs if "approval" in l.action.value.lower())
-    errors = sum(1 for l in logs if l.status == "failed")
-
-    # Group by action type
-    actions_by_type: dict[str, int] = {}
-    for log in logs:
-        action = log.action.value
-        actions_by_type[action] = actions_by_type.get(action, 0) + 1
-
-    # Group by status
-    actions_by_status: dict[str, int] = {}
-    for log in logs:
-        status = log.status
-        actions_by_status[status] = actions_by_status.get(status, 0) + 1
-
-    # Recent trend (last 7 days)
-    from collections import defaultdict
-
-    trend: dict[str, int] = defaultdict(int)
-    for log in logs:
-        date_str = log.created_at.strftime("%Y-%m-%d")
-        trend[date_str] += 1
-
-    recent_trend = [{"date": date, "count": count} for date, count in sorted(trend.items())[-7:]]
-
-    return {
-        "total_actions": total_actions,
-        "tool_executions": tool_executions,
-        "approvals": approvals,
-        "errors": errors,
-        "actions_by_type": actions_by_type,
-        "actions_by_status": actions_by_status,
-        "recent_trend": recent_trend,
-    }
+        return await AuditService.get_stats_async(db, filter)
+    return AuditService.get_stats(filter)
 
 
 @router.get("/actions")

@@ -17,6 +17,7 @@ import { useAuditStore } from '../stores/audit'
 import { useOrchestrationStore } from '../stores/orchestration'
 import { useAuthStore } from '../stores/auth'
 import { cn } from '../lib/utils'
+import { computeTrendChange, computeActionBreakdown } from '../utils/auditStats'
 
 export function AuditPage() {
   const { sessionId, projects, fetchProjects } = useOrchestrationStore()
@@ -442,19 +443,7 @@ function ActivityChart({ trend }: { trend: { date: string; count: number }[] }) 
 
 /** Trend indicator showing percent change */
 function TrendIndicator({ trend }: { trend: { date: string; count: number }[] }) {
-  const trendInfo = useMemo(() => {
-    if (trend.length < 2) return null
-    const mid = Math.floor(trend.length / 2)
-    const firstHalf = trend.slice(0, mid).reduce((s, t) => s + t.count, 0)
-    const secondHalf = trend.slice(mid).reduce((s, t) => s + t.count, 0)
-    if (firstHalf === 0 && secondHalf === 0) return { change: 0, direction: 'flat' as const }
-    if (firstHalf === 0) return { change: 100, direction: 'up' as const }
-    const change = Math.round(((secondHalf - firstHalf) / firstHalf) * 100)
-    return {
-      change: Math.abs(change),
-      direction: change > 0 ? 'up' as const : change < 0 ? 'down' as const : 'flat' as const,
-    }
-  }, [trend])
+  const trendInfo = useMemo(() => computeTrendChange(trend), [trend])
 
   if (!trendInfo) return null
 
@@ -487,15 +476,11 @@ const breakdownColors = [
 
 /** Horizontal bar chart for action type breakdown */
 function ActionBreakdown({ data }: { data: Record<string, number> }) {
-  const sorted = Object.entries(data).sort((a, b) => b[1] - a[1]).slice(0, 6)
-  const maxVal = sorted[0]?.[1] ?? 1
-  const total = sorted.reduce((s, [, v]) => s + v, 0)
+  const items = computeActionBreakdown(data)
 
   return (
     <div className="space-y-2.5">
-      {sorted.map(([action, count], idx) => {
-        const pct = Math.round((count / total) * 100)
-        const barWidth = (count / maxVal) * 100
+      {items.map(({ action, count, pct, barWidth }, idx) => {
         const color = breakdownColors[idx % breakdownColors.length]
 
         return (
