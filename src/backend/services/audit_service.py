@@ -683,9 +683,7 @@ class AuditService:
         trend_rows = (
             await db.execute(
                 _scoped(
-                    select(AuditLogModel.created_at).where(
-                        AuditLogModel.created_at >= window_start
-                    )
+                    select(AuditLogModel.created_at).where(AuditLogModel.created_at >= window_start)
                 )
             )
         ).all()
