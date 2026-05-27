@@ -53,7 +53,7 @@ def _assistant_entry(*, ts: datetime, model: str, **usage_kwargs: int) -> dict:
 
 def test_aggregates_tokens_per_day_per_model(isolated_jsonl_env: Path) -> None:
     """Sums input + output + cache tokens, grouped by date and model."""
-    now = datetime.now(UTC).replace(microsecond=0)
+    now = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
     today = now.date()
 
     _write_jsonl(
