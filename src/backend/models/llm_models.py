@@ -42,12 +42,12 @@ class LLMModelConfig(BaseModel):
 # All supported models with their configurations
 _MODELS: list[LLMModelConfig] = [
     # ─────────────────────────────────────────────────────────
-    # Anthropic Claude Models (updated 2026-04-12)
+    # Anthropic Claude Models (updated 2026-05-30)
     # Pricing: USD per 1K tokens. Docs: https://docs.anthropic.com/en/docs/about-claude/models
     # ─────────────────────────────────────────────────────────
     LLMModelConfig(
-        id="claude-opus-4-6",
-        display_name="Claude Opus 4.6",
+        id="claude-opus-4-8",
+        display_name="Claude Opus 4.8",
         provider=LLMProvider.ANTHROPIC,
         context_window=1000000,  # 1M tokens
         input_price=0.005,  # $5.00/1M tokens
@@ -79,7 +79,7 @@ _MODELS: list[LLMModelConfig] = [
         supports_vision=True,
     ),
     # ─────────────────────────────────────────────────────────
-    # Google Gemini Models (updated 2026-04-12)
+    # Google Gemini Models (updated 2026-05-30)
     # Pricing: USD per 1K tokens. Docs: https://ai.google.dev/gemini-api/docs/models
     # ─────────────────────────────────────────────────────────
     LLMModelConfig(
@@ -97,7 +97,7 @@ _MODELS: list[LLMModelConfig] = [
         id="gemini-3.1-pro-preview",
         display_name="Gemini 3.1 Pro",
         provider=LLMProvider.GOOGLE,
-        context_window=1048576,
+        context_window=2097152,  # 2M tokens (released 2026-02-19)
         input_price=0.002,  # $2.00/1M tokens (≤200K context)
         output_price=0.012,  # $12.00/1M tokens (≤200K context)
         is_default=False,
@@ -138,9 +138,20 @@ _MODELS: list[LLMModelConfig] = [
         supports_vision=True,
     ),
     # ─────────────────────────────────────────────────────────
-    # OpenAI Models (updated 2026-04-12)
+    # OpenAI Models (updated 2026-05-30)
     # Pricing: USD per 1K tokens. Docs: https://platform.openai.com/docs/pricing
     # ─────────────────────────────────────────────────────────
+    LLMModelConfig(
+        id="gpt-5.5",
+        display_name="GPT-5.5",
+        provider=LLMProvider.OPENAI,
+        context_window=1000000,  # 1M tokens (flagship, released 2026-04)
+        input_price=0.005,  # $5.00/1M tokens
+        output_price=0.03,  # $30.00/1M tokens
+        is_default=False,  # gpt-5.4 remains default (production-recommended, lower cost)
+        supports_tools=True,
+        supports_vision=True,
+    ),
     LLMModelConfig(
         id="gpt-5.4",
         display_name="GPT-5.4",
