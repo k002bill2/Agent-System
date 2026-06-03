@@ -149,6 +149,23 @@ else:
         if LOGGING_ENABLED and logger:
             logger.info("application_starting", env=os.getenv("ENV", "development"))
 
+        # Fail fast on a missing/default JWT secret outside debug mode: signing
+        # JWTs with a publicly-known key allows token forgery. setup.sh generates
+        # a strong value; see docs/self-host-quickstart.md.
+        _session_secret = os.getenv("SESSION_SECRET_KEY", "")
+        if not _session_secret or _session_secret == "aos-secret-key-change-in-production":
+            _secret_msg = (
+                "SESSION_SECRET_KEY is empty or the insecure default — set a strong "
+                "value (run ./setup.sh) before deploying to production."
+            )
+            if app.debug:
+                if logger:
+                    logger.warning("insecure_session_secret_key", detail=_secret_msg)
+                else:
+                    print(f"⚠️  {_secret_msg}")
+            else:
+                raise RuntimeError(_secret_msg)
+
         if USE_DATABASE:
             try:
                 from db.database import async_session_factory, init_db

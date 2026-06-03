@@ -32,8 +32,8 @@ services:
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     environment:
-      # Database
-      - DATABASE_URL=postgresql+asyncpg://aos:aos@postgres:5432/aos
+      # Database (URL built from POSTGRES_* in .env; password is required)
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-aos}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD or run ./setup.sh}@postgres:5432/${POSTGRES_DB:-aos}
       - USE_DATABASE=true
       # Redis
       - REDIS_URL=redis://redis:6379/0
@@ -50,21 +50,24 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
-      # JWT
-      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY:-aos-secret-key-change-in-production}
-      - FRONTEND_URL=http://localhost:5173
+      # JWT (required — run ./setup.sh to auto-generate)
+      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY:?set SESSION_SECRET_KEY or run ./setup.sh}
+      # First-admin bootstrap (comma-separated emails)
+      - SUPER_ADMIN_EMAILS=${SUPER_ADMIN_EMAILS:-}
+      # Frontend URL & CORS — set to the externally reachable URL for remote self-host
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173}
       # Claude Code paths (inside container)
       - CLAUDE_HOME=/home/aos/.claude
       - CLAUDE_PROJECTS_PATH=/home/aos/.claude/projects
     volumes:
-      # Claude Code directory (sessions, stats, settings)
-      - ${HOME}/.claude:/home/aos/.claude:ro
-      # Warp launch configurations (host ↔ container sync)
-      - ${HOME}/.warp/launch_configurations:/home/aos/.warp/launch_configurations
       # ChromaDB persistence
       - chromadb_data:/app/data/chromadb
       # Summary cache (writable)
       - summary_cache:/app/data/summaries
+      # NOTE: host ~/.claude and ~/.warp mounts (Claude Code usage monitoring +
+      # Warp sync) are maintainer-local and live in docker-compose.override.yml,
+      # which Compose auto-merges on that machine only. See docs/self-host-quickstart.md.
     depends_on:
       postgres:
         condition: service_healthy
@@ -87,9 +90,9 @@ services:
     image: postgres:16-alpine
     container_name: aos-postgres
     environment:
-      POSTGRES_USER: aos
-      POSTGRES_PASSWORD: aos
-      POSTGRES_DB: aos
+      POSTGRES_USER: ${POSTGRES_USER:-aos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD or run ./setup.sh}
+      POSTGRES_DB: ${POSTGRES_DB:-aos}
     volumes:
       - ./infra/docker/data/postgres:/var/lib/postgresql/data
       # Note: SQLAlchemy auto-creates tables on startup
@@ -97,7 +100,7 @@ services:
     ports:
       - "${PG_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U aos -d aos"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aos} -d ${POSTGRES_DB:-aos}"]
       interval: 10s
       timeout: 5s
       retries: 5

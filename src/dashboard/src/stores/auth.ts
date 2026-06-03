@@ -7,7 +7,10 @@ import {
 } from '../lib/cookieStorage'
 import { analytics } from '../services/analytics'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// Empty fallback = relative paths (/api/...), proxied by nginx (prod) or Vite (dev).
+// A hardcoded host breaks remote self-host: the browser would hit ITS OWN localhost.
+// Matches the canonical pattern in config/api.ts. Set VITE_API_URL to override.
+const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 // ─────────────────────────────────────────────────────────────
 // Constants

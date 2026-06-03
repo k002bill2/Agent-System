@@ -25,16 +25,21 @@ LangGraph 기반 멀티 에이전트 오케스트레이션 서비스입니다.
 git clone https://github.com/k002bill2/Agent-System.git
 cd Agent-System
 
-# 2. 환경변수 설정
+# 2. 환경변수 설정 (LLM 키만 — 보안 시크릿은 setup.sh가 자동 생성)
 cp .env.example .env
-# .env 파일 편집하여 API 키 설정
+# .env 파일 편집하여 API 키 설정 (GOOGLE_API_KEY 또는 ANTHROPIC_API_KEY)
 
-# 3. 실행 (미리 빌드된 이미지 사용, 빌드 불필요)
-docker compose up -d
+# 3. 셋업: 시크릿 자동 생성 + 이미지 빌드 + 전체 기동
+./setup.sh
 
 # 4. 접속
 open http://localhost:5173
 ```
+
+> **Self-host로 팀에 배포하나요?** 원격 접속 설정, 첫 관리자 계정 부트스트랩,
+> 백업, 그리고 **보안 주의사항(내부망 전용)** 은
+> [docs/self-host-quickstart.md](docs/self-host-quickstart.md)를 참조하세요.
+> `docker compose up -d`를 직접 실행하면 시크릿 미설정으로 실패하므로 `./setup.sh`를 사용하세요.
 
 ### 필수 환경변수
 
