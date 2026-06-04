@@ -72,7 +72,7 @@ describe('settings store', () => {
 
       const state = useSettingsStore.getState()
       expect(state.llmProvider).toBe('openai')
-      expect(state.model).toBe('gpt-5.4')
+      expect(state.model).toBe('gpt-5.5')
     })
 
     it('selects google/gemini models when switching to google', () => {
@@ -100,8 +100,8 @@ describe('settings store', () => {
     it('updates model', () => {
       const { setModel } = useSettingsStore.getState()
 
-      setModel('claude-opus-4-6')
-      expect(useSettingsStore.getState().model).toBe('claude-opus-4-6')
+      setModel('claude-opus-4-8')
+      expect(useSettingsStore.getState().model).toBe('claude-opus-4-8')
     })
   })
 
@@ -363,7 +363,7 @@ describe('settings store', () => {
     })
 
     it('returns multiple models when several share the same provider', () => {
-      const extra = makeModel({ id: 'claude-opus-4-6', provider: 'anthropic' })
+      const extra = makeModel({ id: 'claude-opus-4-8', provider: 'anthropic' })
       useSettingsStore.setState({
         availableModels: [anthropicModel, extra, googleModel, ollamaModel],
       })
@@ -434,8 +434,8 @@ describe('settings store', () => {
 
       useSettingsStore.getState().setLLMProvider('anthropic')
 
-      // Fallback for anthropic is 'claude-opus-4-6'
-      expect(useSettingsStore.getState().model).toBe('claude-opus-4-6')
+      // Fallback for anthropic is 'claude-opus-4-8'
+      expect(useSettingsStore.getState().model).toBe('claude-opus-4-8')
       expect(useSettingsStore.getState().llmProvider).toBe('anthropic')
     })
 
@@ -458,7 +458,7 @@ describe('settings store', () => {
 describe('getModelsForProvider (legacy exported function)', () => {
   it('returns anthropic models', () => {
     const models = getModelsForProvider('anthropic')
-    expect(models).toContain('claude-opus-4-6')
+    expect(models).toContain('claude-opus-4-8')
     expect(models).toContain('claude-sonnet-4-6')
   })
 

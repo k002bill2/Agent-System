@@ -63,7 +63,7 @@ function isIgnoredModel(value: string): boolean {
   return IGNORED_MODELS.some((m) => lower.includes(m))
 }
 
-/** Extract model family: claude-opus-4-6 → opus, gemini-2.0-flash → flash */
+/** Extract model family: claude-opus-4-8 → opus, gemini-2.0-flash → flash */
 function getModelFamily(model: string): string {
   const lower = model.toLowerCase()
   // Claude: claude-{family}-{version}
