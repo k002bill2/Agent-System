@@ -45,6 +45,64 @@ else
     echo -e "${GREEN}[OK]${NC} .env exists"
 fi
 
+# --- 2.5. Secret bootstrap (auto-generate strong secrets) ---
+gen_secret() {
+    if command -v python3 &>/dev/null; then
+        python3 -c "import secrets; print(secrets.token_hex(32))"
+    elif command -v openssl &>/dev/null; then
+        openssl rand -hex 32
+    else
+        echo -e "${RED}Error: need python3 or openssl to generate secrets.${NC}" >&2
+        exit 1
+    fi
+}
+
+# Read the value of KEY= from .env ("" if absent). Never fails (|| true).
+env_value() {
+    grep -E "^$1=" .env | head -n1 | cut -d= -f2- || true
+}
+
+# Replace KEY=... in .env in place, or append if absent (portable; no sed -i).
+set_env_value() {
+    local key=$1 val=$2
+    if grep -qE "^${key}=" .env; then
+        awk -v key="$key" -v val="$val" \
+            'BEGIN{FS=OFS="="} $1==key{print key"="val; next} {print}' \
+            .env > .env.tmp && mv .env.tmp .env
+    else
+        printf '%s=%s\n' "$key" "$val" >> .env
+    fi
+}
+
+# SESSION_SECRET_KEY — safe to (re)generate whenever empty or the old default.
+SESSION_VAL="$(env_value SESSION_SECRET_KEY)"
+if [ -z "$SESSION_VAL" ] || [ "$SESSION_VAL" = "aos-secret-key-change-in-production" ]; then
+    NEW_SECRET="$(gen_secret)"
+    set_env_value SESSION_SECRET_KEY "$NEW_SECRET"
+    echo -e "${GREEN}[OK]${NC} Generated SESSION_SECRET_KEY (****${NEW_SECRET: -4})"
+else
+    echo -e "${GREEN}[OK]${NC} SESSION_SECRET_KEY already set"
+fi
+
+# POSTGRES_PASSWORD — postgres only applies it on a FRESH data dir, so never
+# rotate against an existing DB (it would break auth). Keep the current value.
+PG_DATA_DIR="infra/docker/data/postgres"
+PG_PW_VAL="$(env_value POSTGRES_PASSWORD)"
+if [ -d "$PG_DATA_DIR" ] && [ -n "$(ls -A "$PG_DATA_DIR" 2>/dev/null)" ]; then
+    if [ -z "$PG_PW_VAL" ]; then
+        set_env_value POSTGRES_PASSWORD "aos"
+        echo -e "${YELLOW}[keep]${NC} Existing Postgres data dir — set POSTGRES_PASSWORD=aos to match it"
+    else
+        echo -e "${GREEN}[OK]${NC} POSTGRES_PASSWORD already set (existing DB)"
+    fi
+elif [ -z "$PG_PW_VAL" ]; then
+    NEW_PG_PW="$(gen_secret)"
+    set_env_value POSTGRES_PASSWORD "$NEW_PG_PW"
+    echo -e "${GREEN}[OK]${NC} Generated POSTGRES_PASSWORD (****${NEW_PG_PW: -4})"
+else
+    echo -e "${GREEN}[OK]${NC} POSTGRES_PASSWORD already set"
+fi
+
 # --- 3. Port conflict detection ---
 check_port() {
     local port=$1
@@ -122,7 +180,7 @@ echo ""
 echo -e "${CYAN}=== AOS is running ===${NC}"
 echo -e "  Dashboard:  ${GREEN}http://localhost:${DASH_PORT}${NC}"
 echo -e "  Backend:    ${GREEN}http://localhost:${BACKEND_PORT}${NC}"
-echo -e "  PostgreSQL: postgresql://aos:aos@localhost:${PG_P}/aos"
+echo -e "  PostgreSQL: postgresql://aos:****@localhost:${PG_P}/aos  (credentials in .env)"
 echo -e "  Redis:      redis://localhost:${REDIS_P}"
 echo -e "  Qdrant:     http://localhost:${QDRANT_P}"
 echo ""

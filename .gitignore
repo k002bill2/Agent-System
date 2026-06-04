@@ -3,6 +3,9 @@
 .env.local
 .env.*.local
 
+# Maintainer-local Compose overrides (host-specific bind mounts; never shipped)
+docker-compose.override.yml
+
 # Dependencies
 node_modules/
 __pycache__/

@@ -46,15 +46,20 @@
 
 > **Qdrant healthcheck 관련**: Qdrant 공식 이미지에는 `curl`/`wget`이 포함되어 있지 않아 Docker healthcheck을 설정할 수 없습니다. `docker-compose.yml`에서는 `condition: service_started`로 Qdrant 시작만 확인합니다. Qdrant의 `/healthz` 엔드포인트는 호스트에서 `curl http://localhost:6333/healthz`로 외부 확인 가능합니다.
 
+> **사내/팀 self-host라면** 원격 접속·첫 관리자 부트스트랩·백업·**보안 주의사항**을 정리한
+> [self-host 퀵스타트](./self-host-quickstart.md)를 먼저 참고하세요.
+
 ### 배포 절차
 
 ```bash
-# 1. 환경 변수 설정
+# 1. 환경 변수 설정 (LLM 키만 — 시크릿은 setup.sh가 자동 생성)
 cp .env.example .env
-# .env 편집: GOOGLE_API_KEY, SESSION_SECRET_KEY 등 설정
+# .env 편집: GOOGLE_API_KEY (또는 ANTHROPIC_API_KEY) 설정
 
-# 2. 전체 서비스 시작 (프로젝트 루트에서 실행)
-docker compose up -d
+# 2. 셋업 — 시크릿 자동 생성 + 빌드 + 전체 기동
+./setup.sh
+#    (또는 .env에 강한 SESSION_SECRET_KEY·POSTGRES_PASSWORD를 직접 넣었다면:
+#     docker compose up -d --build )
 
 # 3. 상태 확인
 docker compose ps
@@ -62,6 +67,10 @@ docker compose ps
 # 4. 로그 확인
 docker compose logs -f backend
 ```
+
+> **보안**: `docker-compose.yml`은 `SESSION_SECRET_KEY`·`POSTGRES_PASSWORD`가 비어 있으면
+> 즉시 실패합니다(약한 기본 시크릿 배포 방지). `setup.sh`가 강한 값을 자동 생성하므로
+> 이 스크립트를 사용하세요.
 
 ### 개발 환경 (인프라만)
 
