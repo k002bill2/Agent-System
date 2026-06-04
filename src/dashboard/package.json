@@ -23,17 +23,17 @@
     "@xyflow/react": "^12.10.2",
     "clsx": "^2.1.1",
     "diff": "^9.0.0",
-    "js-yaml": "^4.1.1",
-    "lucide-react": "^1.16.0",
-    "posthog-js": "^1.373.5",
+    "js-yaml": "^4.2.0",
+    "lucide-react": "^1.17.0",
+    "posthog-js": "^1.376.6",
     "react": "^19.2.6",
     "react-diff-view": "^3.3.3",
     "react-dom": "^19.2.6",
-    "react-router-dom": "^7.15.1",
+    "react-router-dom": "^7.16.0",
     "recharts": "^3.8.1",
     "tailwind-merge": "^3.6.0",
     "unidiff": "^1.0.4",
-    "zustand": "^5.0.13"
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -48,11 +48,11 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.6.0",
     "jsdom": "^29.1.1",
-    "postcss": "^8.5.14",
+    "postcss": "^8.5.15",
     "tailwindcss": "^4.2.2",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.3",
-    "vite": "^8.0.13",
+    "vite": "^8.0.14",
     "vitest": "^4.0.18"
   }
 }
