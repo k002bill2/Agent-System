@@ -352,8 +352,16 @@ class TestReranking:
         assert len(result) == 1
         assert result[0]["source"] == "a.py"
 
-    def test_rerank_empty_candidates(self, vector_store):
-        """Rerank handles empty candidate list."""
+    def test_rerank_empty_candidates(self, vector_store, monkeypatch):
+        """Rerank handles empty candidate list without touching the model.
+
+        Pins RERANK_AVAILABLE=False so the test never depends on whether
+        sentence_transformers happens to be installed (defense-in-depth on top
+        of the _rerank empty-candidate short-circuit).
+        """
+        import services.rag_service as rag_mod
+
+        monkeypatch.setattr(rag_mod, "RERANK_AVAILABLE", False)
         result = vector_store._rerank("query", [], top_k=5)
         assert result == []
 
