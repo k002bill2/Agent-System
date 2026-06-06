@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { memo, useEffect, useState, useMemo } from 'react'
 import { useClaudeSessionsStore } from '../../stores/claudeSessions'
 import { cn } from '../../lib/utils'
 import {
@@ -86,13 +86,45 @@ function getEntryIcon(type: string) {
   }
 }
 
+// Default preview length for long string leaves. Full content stays reachable
+// via the "더 보기" toggle so the Raw Transcript never silently loses content.
+const STRING_PREVIEW_LIMIT = 500
+
+/**
+ * Renders a string leaf with an expand/collapse toggle when it exceeds the
+ * preview limit. Extracted into its own component because each string needs
+ * independent expand state (Hooks cannot live in JsonTree's string branch).
+ */
+const JsonString = memo(({ value }: { value: string }) => {
+  const [expanded, setExpanded] = useState(false)
+  const isLong = value.length > STRING_PREVIEW_LIMIT
+  const displayStr = !isLong || expanded ? value : value.slice(0, STRING_PREVIEW_LIMIT)
+
+  return (
+    <span className="text-green-600 dark:text-green-400 break-all whitespace-pre-wrap">
+      "{displayStr}"
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-label={expanded ? '문자열 접기' : `전체 문자열 보기 (${value.length.toLocaleString()}자)`}
+          className="ml-1 text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 underline"
+        >
+          {expanded ? '접기' : `… 더 보기 (${value.length.toLocaleString()}자)`}
+        </button>
+      )}
+    </span>
+  )
+})
+JsonString.displayName = 'JsonString'
+
 interface JsonTreeProps {
   data: unknown
   depth?: number
   maxDepth?: number
 }
 
-function JsonTree({ data, depth = 0, maxDepth = 6 }: JsonTreeProps) {
+function JsonTree({ data, depth = 0, maxDepth = 12 }: JsonTreeProps) {
   const [expanded, setExpanded] = useState(depth < 2)
 
   if (depth >= maxDepth) {
@@ -112,13 +144,7 @@ function JsonTree({ data, depth = 0, maxDepth = 6 }: JsonTreeProps) {
   }
 
   if (typeof data === 'string') {
-    // Truncate long strings
-    const displayStr = data.length > 500 ? data.slice(0, 500) + '...' : data
-    return (
-      <span className="text-green-600 dark:text-green-400 break-all whitespace-pre-wrap">
-        "{displayStr}"
-      </span>
-    )
+    return <JsonString value={data} />
   }
 
   if (Array.isArray(data)) {

@@ -18,6 +18,30 @@ from pathlib import Path
 # Claude Code session files are named with UUID v4
 _UUID_PATTERN = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
+# Recent-messages window for the session-details Overview tab.
+# Content is capped per message and the list is windowed; both are FLAGGED
+# (content_truncated / messages_truncated) so the UI can offer "view full".
+RECENT_MESSAGE_CONTENT_LIMIT = 2000  # per-message char cap (was a silent 500)
+RECENT_MESSAGE_WINDOW_LINES = 200  # raw lines parsed from file tail (was 50)
+RECENT_MESSAGE_COUNT = 20  # messages kept in recent_messages
+# Activity feed (separate timeline view) per-event content cap.
+ACTIVITY_CONTENT_LIMIT = 1000
+
+
+def _truncate_content(text: str | None, limit: int) -> tuple[str | None, bool, int | None]:
+    """Cap text to ``limit`` and report whether it was cut.
+
+    Returns (capped_text, was_truncated, original_length_or_None).
+    Never mutates input; always returns a fresh tuple.
+    """
+    if not text:
+        return (None if text is None else text), False, None
+    full_length = len(text)
+    if full_length > limit:
+        return text[:limit], True, full_length
+    return text, False, None
+
+
 import httpx
 
 from models.claude_session import (
@@ -614,8 +638,10 @@ class ClaudeSessionMonitor:
         with open(session_file, encoding="utf-8") as f:
             lines = f.readlines()
 
-        # Parse last 50 lines for recent messages
-        for line in lines[-50:]:
+        # Parse the file tail for recent messages. Window is line-based for cost,
+        # but generous enough that tool_use/empty entries don't crowd out real
+        # messages (the old 50-line window could yield <20 visible messages).
+        for line in lines[-RECENT_MESSAGE_WINDOW_LINES:]:
             line = line.strip()
             if not line:
                 continue
@@ -656,12 +682,17 @@ class ClaudeSessionMonitor:
                         elif not isinstance(result_content, str):
                             result_content = str(result_content) if result_content else ""
 
+                        capped, truncated, full_length = _truncate_content(
+                            result_content or None, RECENT_MESSAGE_CONTENT_LIMIT
+                        )
                         recent_messages.append(
                             SessionMessage(
                                 type=MessageType.TOOL_RESULT,
                                 timestamp=timestamp,
                                 tool_id=tool_use_id,
-                                content=result_content[:500] if result_content else None,
+                                content=capped,
+                                content_truncated=truncated,
+                                full_length=full_length,
                             )
                         )
                         continue
@@ -676,15 +707,20 @@ class ClaudeSessionMonitor:
                 if not content or (isinstance(content, str) and not content.strip()):
                     continue
 
+                capped, truncated, full_length = _truncate_content(
+                    content or None, RECENT_MESSAGE_CONTENT_LIMIT
+                )
                 recent_messages.append(
                     SessionMessage(
                         type=MessageType.USER,
                         timestamp=timestamp,
-                        content=content[:500] if content else None,
+                        content=capped,
+                        content_truncated=truncated,
+                        full_length=full_length,
                     )
                 )
 
-                # Track current task from user messages
+                # Track current task from user messages (short label)
                 if content:
                     current_task = content[:200]
 
@@ -704,7 +740,7 @@ class ClaudeSessionMonitor:
                     for item in content_list:
                         if isinstance(item, dict):
                             if item.get("type") == "text":
-                                content = item.get("text", "")[:500]
+                                content = item.get("text", "")
                             elif item.get("type") == "tool_use":
                                 tool_name = item.get("name")
                                 tool_id = item.get("id")
@@ -733,12 +769,17 @@ class ClaudeSessionMonitor:
                     )
                 elif content and content.strip():
                     # Skip assistant messages with empty content (e.g., thinking-only blocks)
+                    capped, truncated, full_length = _truncate_content(
+                        content, RECENT_MESSAGE_CONTENT_LIMIT
+                    )
                     recent_messages.append(
                         SessionMessage(
                             type=msg_type,
                             timestamp=timestamp,
                             model=model,
-                            content=content,
+                            content=capped,
+                            content_truncated=truncated,
+                            full_length=full_length,
                             usage=usage,
                         )
                     )
@@ -748,20 +789,28 @@ class ClaudeSessionMonitor:
                 message_data = entry.get("message", {})
                 content = message_data.get("content", "")
                 if content:
+                    capped, truncated, full_length = _truncate_content(
+                        content, RECENT_MESSAGE_CONTENT_LIMIT
+                    )
                     recent_messages.append(
                         SessionMessage(
                             type=MessageType.PROGRESS,
                             timestamp=timestamp,
-                            content=content[:200],
+                            content=capped,
+                            content_truncated=truncated,
+                            full_length=full_length,
                         )
                     )
 
-        # Keep only last 20 messages for the response
-        recent_messages = recent_messages[-20:]
+        # Keep only the most recent messages for the response. Flag when the
+        # full conversation is larger so the UI can link to the Raw Transcript.
+        recent_messages = recent_messages[-RECENT_MESSAGE_COUNT:]
+        messages_truncated = basic_info.message_count > len(recent_messages)
 
         return ClaudeSessionDetail(
             **basic_info.model_dump(),
             recent_messages=recent_messages,
+            messages_truncated=messages_truncated,
             current_task=current_task,
         )
 
@@ -1191,14 +1240,17 @@ class ClaudeSessionMonitor:
                                 elif not isinstance(result_content, str):
                                     result_content = str(result_content) if result_content else ""
 
+                                capped, truncated, full_length = _truncate_content(
+                                    result_content or None, ACTIVITY_CONTENT_LIMIT
+                                )
                                 events.append(
                                     ActivityEvent(
                                         id=event_id,
                                         type=ActivityEventType.TOOL_RESULT,
                                         timestamp=timestamp,
-                                        tool_result=result_content[:500]
-                                        if result_content
-                                        else None,
+                                        tool_result=capped,
+                                        content_truncated=truncated,
+                                        full_length=full_length,
                                         session_id=session_id,
                                     )
                                 )
@@ -1216,12 +1268,17 @@ class ClaudeSessionMonitor:
 
                     total_count += 1
                     if total_count > offset and len(events) < limit:
+                        capped, truncated, full_length = _truncate_content(
+                            content or None, ACTIVITY_CONTENT_LIMIT
+                        )
                         events.append(
                             ActivityEvent(
                                 id=event_id,
                                 type=ActivityEventType.USER,
                                 timestamp=timestamp,
-                                content=content[:1000] if content else None,
+                                content=capped,
+                                content_truncated=truncated,
+                                full_length=full_length,
                                 session_id=session_id,
                             )
                         )
@@ -1241,12 +1298,17 @@ class ClaudeSessionMonitor:
                                     if text_content and text_content.strip():
                                         total_count += 1
                                         if total_count > offset and len(events) < limit:
+                                            capped, truncated, full_length = _truncate_content(
+                                                text_content, ACTIVITY_CONTENT_LIMIT
+                                            )
                                             events.append(
                                                 ActivityEvent(
                                                     id=f"{event_id}_text",
                                                     type=ActivityEventType.ASSISTANT,
                                                     timestamp=timestamp,
-                                                    content=text_content[:1000],
+                                                    content=capped,
+                                                    content_truncated=truncated,
+                                                    full_length=full_length,
                                                     session_id=session_id,
                                                 )
                                             )
@@ -1269,14 +1331,25 @@ class ClaudeSessionMonitor:
                     total_count += 1
                     if total_count > offset and len(events) < limit:
                         result_data = entry.get("result", {})
-                        tool_result = str(result_data)[:500] if result_data else None
+                        # Serialize to JSON before capping so the structure is
+                        # not broken mid-dict (str(dict)[:500] could cut a value).
+                        result_str = (
+                            json.dumps(result_data, ensure_ascii=False, default=str)
+                            if result_data
+                            else None
+                        )
+                        capped, truncated, full_length = _truncate_content(
+                            result_str, ACTIVITY_CONTENT_LIMIT
+                        )
 
                         events.append(
                             ActivityEvent(
                                 id=event_id,
                                 type=ActivityEventType.TOOL_RESULT,
                                 timestamp=timestamp,
-                                tool_result=tool_result,
+                                tool_result=capped,
+                                content_truncated=truncated,
+                                full_length=full_length,
                                 session_id=session_id,
                             )
                         )
@@ -1468,12 +1541,17 @@ class ClaudeSessionMonitor:
                         elif not isinstance(result_content, str):
                             result_content = str(result_content) if result_content else ""
 
+                        capped, truncated, full_length = _truncate_content(
+                            result_content or None, ACTIVITY_CONTENT_LIMIT
+                        )
                         events.append(
                             ActivityEvent(
                                 id=event_id,
                                 type=ActivityEventType.TOOL_RESULT,
                                 timestamp=timestamp,
-                                tool_result=result_content[:500] if result_content else None,
+                                tool_result=capped,
+                                content_truncated=truncated,
+                                full_length=full_length,
                                 session_id=session_id,
                             )
                         )
@@ -1489,12 +1567,17 @@ class ClaudeSessionMonitor:
                 if not content or (isinstance(content, str) and not content.strip()):
                     continue
 
+                capped, truncated, full_length = _truncate_content(
+                    content or None, ACTIVITY_CONTENT_LIMIT
+                )
                 events.append(
                     ActivityEvent(
                         id=event_id,
                         type=ActivityEventType.USER,
                         timestamp=timestamp,
-                        content=content[:1000] if content else None,
+                        content=capped,
+                        content_truncated=truncated,
+                        full_length=full_length,
                         session_id=session_id,
                     )
                 )
@@ -1512,12 +1595,17 @@ class ClaudeSessionMonitor:
                                 text_content = item.get("text", "")
                                 # Skip empty text blocks (e.g., thinking-only responses)
                                 if text_content and text_content.strip():
+                                    capped, truncated, full_length = _truncate_content(
+                                        text_content, ACTIVITY_CONTENT_LIMIT
+                                    )
                                     events.append(
                                         ActivityEvent(
                                             id=f"{event_id}_text",
                                             type=ActivityEventType.ASSISTANT,
                                             timestamp=timestamp,
-                                            content=text_content[:1000],
+                                            content=capped,
+                                            content_truncated=truncated,
+                                            full_length=full_length,
                                             session_id=session_id,
                                         )
                                     )
@@ -1536,14 +1624,25 @@ class ClaudeSessionMonitor:
 
             elif msg_type == "result":
                 result_data = entry.get("result", {})
-                tool_result = str(result_data)[:500] if result_data else None
+                # JSON-serialize before capping to avoid breaking the structure
+                # mid-dict (str(dict)[:N] could cut a value in half).
+                result_str = (
+                    json.dumps(result_data, ensure_ascii=False, default=str)
+                    if result_data
+                    else None
+                )
+                capped, truncated, full_length = _truncate_content(
+                    result_str, ACTIVITY_CONTENT_LIMIT
+                )
 
                 events.append(
                     ActivityEvent(
                         id=event_id,
                         type=ActivityEventType.TOOL_RESULT,
                         timestamp=timestamp,
-                        tool_result=tool_result,
+                        tool_result=capped,
+                        content_truncated=truncated,
+                        full_length=full_length,
                         session_id=session_id,
                     )
                 )

@@ -43,6 +43,12 @@ class SessionMessage(BaseModel):
     timestamp: datetime
     model: str | None = None
     content: str | None = None
+    content_truncated: bool = Field(
+        default=False, description="True if content was cut to a length cap"
+    )
+    full_length: int | None = Field(
+        default=None, description="Original content length when truncated"
+    )
     tool_name: str | None = None
     tool_id: str | None = None
     tool_input: dict | None = None  # Tool input parameters
@@ -99,6 +105,10 @@ class ClaudeSessionDetail(ClaudeSessionInfo):
     recent_messages: list[SessionMessage] = Field(
         default_factory=list, description="Recent messages (last 20)"
     )
+    messages_truncated: bool = Field(
+        default=False,
+        description="True if recent_messages is a partial window (message_count > shown)",
+    )
     current_task: str | None = Field(default=None, description="Current task description if active")
 
 
@@ -151,6 +161,12 @@ class ActivityEvent(BaseModel):
     type: ActivityEventType = Field(..., description="Event type")
     timestamp: datetime = Field(..., description="Event timestamp")
     content: str | None = Field(default=None, description="Text content")
+    content_truncated: bool = Field(
+        default=False, description="True if content was cut to a length cap"
+    )
+    full_length: int | None = Field(
+        default=None, description="Original content length when truncated"
+    )
     tool_name: str | None = Field(default=None, description="Tool name (for tool_use/tool_result)")
     tool_input: dict | None = Field(default=None, description="Tool input parameters")
     tool_result: str | None = Field(default=None, description="Tool result (for tool_result)")

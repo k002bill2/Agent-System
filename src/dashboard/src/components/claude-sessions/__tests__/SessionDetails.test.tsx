@@ -222,4 +222,51 @@ describe('SessionDetails', () => {
     expect(screen.getByText('Recent Activity')).toBeInTheDocument()
     expect(screen.queryByTestId('transcript-viewer')).not.toBeInTheDocument()
   })
+
+  describe('truncation affordances', () => {
+    it('shows a "view full transcript" banner when messages_truncated', () => {
+      storeState.selectedSession = { ...mockSession, messages_truncated: true }
+      render(<SessionDetails />)
+      expect(
+        screen.getByRole('button', { name: '전체 대화를 Raw Transcript에서 보기' })
+      ).toBeInTheDocument()
+    })
+
+    it('does not show the banner when not truncated', () => {
+      storeState.selectedSession = { ...mockSession, messages_truncated: false }
+      render(<SessionDetails />)
+      expect(
+        screen.queryByRole('button', { name: '전체 대화를 Raw Transcript에서 보기' })
+      ).not.toBeInTheDocument()
+    })
+
+    it('switches to the transcript tab when the banner link is clicked', () => {
+      storeState.selectedSession = { ...mockSession, messages_truncated: true }
+      render(<SessionDetails />)
+      fireEvent.click(
+        screen.getByRole('button', { name: '전체 대화를 Raw Transcript에서 보기' })
+      )
+      expect(screen.getByTestId('transcript-viewer')).toBeInTheDocument()
+    })
+
+    it('shows a per-message "view full" link when a message content is truncated', () => {
+      storeState.selectedSession = {
+        ...mockSession,
+        messages_truncated: false,
+        recent_messages: [
+          {
+            type: 'assistant',
+            timestamp: '2026-01-15T10:56:00Z',
+            content: 'partial text',
+            content_truncated: true,
+            full_length: 4200,
+          },
+        ] as SessionMessage[],
+      }
+      render(<SessionDetails />)
+      expect(
+        screen.getByRole('button', { name: '전체 메시지를 Raw Transcript에서 보기' })
+      ).toBeInTheDocument()
+    })
+  })
 })
