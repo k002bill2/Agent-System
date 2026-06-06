@@ -761,8 +761,13 @@ class ProjectVectorStore:
         top_k: int,
     ) -> list[dict[str, Any]]:
         """Rerank candidates using CrossEncoder. Returns top_k results."""
+        # Short-circuit on empty input BEFORE loading the model: there is
+        # nothing to score, and instantiating CrossEncoder would trigger an
+        # unnecessary HuggingFace download (the source of CI 429 flakes).
+        if not candidates:
+            return candidates[:top_k]
         encoder = self._get_cross_encoder()
-        if encoder is None or not candidates:
+        if encoder is None:
             return candidates[:top_k]
 
         pairs = [(query, c["content"]) for c in candidates]
