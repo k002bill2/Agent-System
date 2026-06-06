@@ -52,7 +52,6 @@ your-project/
 | `react-typescript` | React/TypeScript 개발 | web-ui-specialist, performance-optimizer, test-automation-specialist | test-coverage, start-dev-server | react-web-development, test-automation, verify-ui | prettierFormatter |
 | `python-backend` | Python 백엔드 개발 | backend-specialist, code-simplifier | deploy-with-tests | verify-api-route | ruffFormatter |
 | `eval-system` | 에이전트 평가 프레임워크 | eval-task-runner, eval-grader | run-eval | -- | -- |
-| `gemini-bridge` | Gemini CLI 크로스리뷰 | -- | gemini-review, gemini-scan | -- | geminiAutoReview |
 
 ## Core Contents
 
@@ -129,7 +128,6 @@ addons:
   - react-typescript
   - python-backend
   # - eval-system
-  # - gemini-bridge
 
 # 소스 경로 설정
 paths:
@@ -391,8 +389,7 @@ claude-workspace-template/
 ├── addons/               # 스택별 확장
 │   ├── react-typescript/
 │   ├── python-backend/
-│   ├── eval-system/
-│   └── gemini-bridge/
+│   └── eval-system/
 ├── tests/                # 통합 테스트
 ├── init.sh               # 설치/업데이트 CLI
 ├── config.yaml.example   # 설정 파일 예제

@@ -53,9 +53,6 @@ This file provides guidance to Claude Code when working with code in this reposi
 | `/run-evals` | Run evaluation suite |
 | `/eval-report` | Generate eval report |
 {{/if}}
-{{#if addon.gemini-bridge}}
-| `/gemini-review` | Cross-review with Gemini CLI |
-{{/if}}
 
 ## Code Patterns
 
@@ -176,13 +173,6 @@ dev/active/[task-name]/
 - Results: `.claude/evals/results/{date}/summary.json`
 - Rubrics: `.claude/evals/rubrics/`
 - Use `general-purpose` subagent_type for reliable tool usage
-{{/if}}
-
-{{#if addon.gemini-bridge}}
-## Gemini Cross-Review
-
-- Bridge config: `.claude/gemini-bridge/`
-- Use `/gemini-review` for cross-model code review
 {{/if}}
 
 ## Detailed Docs (Read when needed)

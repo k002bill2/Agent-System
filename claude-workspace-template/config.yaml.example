@@ -9,7 +9,6 @@ addons: []
   # - react-typescript
   # - python-backend
   # - eval-system
-  # - gemini-bridge
 
 # 소스 경로 설정
 paths:
