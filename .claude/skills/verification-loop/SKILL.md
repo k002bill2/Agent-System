@@ -95,6 +95,10 @@ npm run type-check && npm test
 | 빌드 실패 시 바로 코드 수정 | `npm install` 및 캐시 정리부터 시도 |
 | 커버리지만 보고 테스트 품질 무시 | edge case, error case 포함 여부 확인 |
 
+## 사용하지 말아야 할 때
+
+단일 파일의 사소한 편집, 문서/주석 수정에는 전체 검증 루프(tsc → ESLint → test → build)를 돌리지 마라. 구현 완료, 리팩토링 직후, PR 직전에만 사용한다. 작은 변경에는 Level 1 Quick Check로 충분하다.
+
 ## References
 
 - [/check-health 커맨드](../../commands/check-health.md)
