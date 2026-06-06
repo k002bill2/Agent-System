@@ -96,3 +96,8 @@
 - `offset`: 시작 오프셋 (기본: 0)
 - `project`: 프로젝트 이름 필터 (선택)
 - `source_user`: 소스 사용자 필터 (선택)
+
+**대화 내용 절단 정책** (`{id}`, `{id}/stream`, `{id}/activity`):
+- `{id}` / `{id}/stream`의 `recent_messages`는 **요약 윈도**입니다 — 파일 tail 일부만 파싱하고 최근 N개 메시지만, 각 본문은 길이 캡(기본 2000자)으로 제한됩니다.
+- 절단은 더 이상 무표시가 아닙니다. 각 `SessionMessage`/`ActivityEvent`는 `content_truncated`(bool)와 `full_length`(원본 길이)를 포함하고, `ClaudeSessionDetail`은 `messages_truncated`(bool)로 부분 윈도 여부를 알립니다. 전체 대화는 `{id}/transcript`(절단 없음, 페이지네이션만)로 조회합니다.
+- `{id}/activity`의 `result` 이벤트 `tool_result`는 `json.dumps`로 직렬화 후 캡되어 잘린 결과도 유효한 JSON 접두사를 유지합니다.

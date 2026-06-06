@@ -125,8 +125,8 @@ import { cn } from '@/lib/utils';
 |----------|------|
 | `SessionList` | 세션 목록 (정렬, 자동 새로고침) |
 | `SessionCard` | 세션 카드 (상태, 토큰, 비용) |
-| `SessionDetails` | 상세 정보 + Recent Activity |
-| `TranscriptViewer` | Raw 트랜스크립트 (JSON Tree) |
+| `SessionDetails` | 상세 정보 + Recent Activity (요약 윈도 시 "전체 Transcript 보기" 배너, 메시지별 잘림 표시) |
+| `TranscriptViewer` | Raw 트랜스크립트 (JSON Tree, 긴 문자열은 "더 보기" 토글로 전체 표시) |
 | `ProcessCleanupPanel` | 프로세스 정리 패널 |
 
 ### Project Config Components

@@ -18,6 +18,8 @@ export interface SessionMessage {
   timestamp: string
   model?: string
   content?: string
+  content_truncated?: boolean  // content was cut to a length cap
+  full_length?: number  // original content length when truncated
   tool_name?: string
   tool_id?: string
   tool_input?: Record<string, unknown>
@@ -54,6 +56,7 @@ export interface ClaudeSessionInfo {
 
 export interface ClaudeSessionDetail extends ClaudeSessionInfo {
   recent_messages: SessionMessage[]
+  messages_truncated?: boolean  // recent_messages is a partial window of the full conversation
   current_task?: string
 }
 

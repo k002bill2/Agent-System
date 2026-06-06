@@ -84,7 +84,13 @@ function formatToolInput(input: Record<string, unknown>): string {
   return ''
 }
 
-function MessageItem({ message }: { message: SessionMessage }) {
+function MessageItem({
+  message,
+  onViewTranscript,
+}: {
+  message: SessionMessage
+  onViewTranscript?: () => void
+}) {
   const time = new Date(message.timestamp).toLocaleTimeString()
   const toolInputSummary = message.tool_input ? formatToolInput(message.tool_input) : null
 
@@ -110,7 +116,10 @@ function MessageItem({ message }: { message: SessionMessage }) {
         </div>
         {/* Tool input summary */}
         {toolInputSummary && (
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 truncate">
+          <p
+            className="mt-1 text-xs text-gray-500 dark:text-gray-400 truncate"
+            title={toolInputSummary}
+          >
             {toolInputSummary}
           </p>
         )}
@@ -119,12 +128,29 @@ function MessageItem({ message }: { message: SessionMessage }) {
             {message.content}
           </p>
         )}
+        {/* Content was capped by the backend — point users to the full transcript */}
+        {message.content_truncated && (
+          <button
+            type="button"
+            onClick={onViewTranscript}
+            aria-label="전체 메시지를 Raw Transcript에서 보기"
+            className="mt-1 text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 underline"
+          >
+            … 잘림{message.full_length ? ` (전체 ${message.full_length.toLocaleString()}자)` : ''} · 전체 보기
+          </button>
+        )}
       </div>
     </div>
   )
 }
 
-function OverviewContent({ session }: { session: ClaudeSessionDetail }) {
+function OverviewContent({
+  session,
+  onViewTranscript,
+}: {
+  session: ClaudeSessionDetail
+  onViewTranscript: () => void
+}) {
   return (
     <>
       {/* Header */}
@@ -148,7 +174,10 @@ function OverviewContent({ session }: { session: ClaudeSessionDetail }) {
             <p className="text-sm text-blue-700 dark:text-blue-300 font-medium">
               Current Task
             </p>
-            <p className="text-sm text-blue-600 dark:text-blue-400 mt-1 line-clamp-2">
+            <p
+              className="text-sm text-blue-600 dark:text-blue-400 mt-1 line-clamp-2"
+              title={session.current_task}
+            >
               {session.current_task}
             </p>
           </div>
@@ -232,6 +261,23 @@ function OverviewContent({ session }: { session: ClaudeSessionDetail }) {
           <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Recent Activity
           </h3>
+          {/* Overview is a recent-window summary — link to the full transcript */}
+          {session.messages_truncated && (
+            <div className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+              <span>
+                전체 {session.message_count.toLocaleString()}개 중 최근{' '}
+                {session.recent_messages.length}개만 표시 중
+              </span>
+              <button
+                type="button"
+                onClick={onViewTranscript}
+                aria-label="전체 대화를 Raw Transcript에서 보기"
+                className="font-medium underline hover:text-amber-800 dark:hover:text-amber-300 whitespace-nowrap"
+              >
+                전체 Transcript 보기
+              </button>
+            </div>
+          )}
           {session.recent_messages.length === 0 ? (
             <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">
               No recent messages
@@ -239,7 +285,11 @@ function OverviewContent({ session }: { session: ClaudeSessionDetail }) {
           ) : (
             <div className="space-y-1">
               {session.recent_messages.map((message, index) => (
-                <MessageItem key={`msg-${message.type ?? 'unknown'}-${index}`} message={message} />
+                <MessageItem
+                  key={`msg-${message.type ?? 'unknown'}-${index}`}
+                  message={message}
+                  onViewTranscript={onViewTranscript}
+                />
               ))}
             </div>
           )}
@@ -304,7 +354,7 @@ export function SessionDetails() {
 
       {/* Tab Content */}
       {activeTab === 'overview' ? (
-        <OverviewContent session={session} />
+        <OverviewContent session={session} onViewTranscript={() => setActiveTab('transcript')} />
       ) : (
         <TranscriptViewer />
       )}
