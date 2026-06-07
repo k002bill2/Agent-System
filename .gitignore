@@ -96,3 +96,8 @@ scripts/bench_results/
 dev/harness-legacy-scan/
 .claude/archive/
 .claude/workflows/
+
+# Local AI-tooling config (Codex CLI / agent mirrors) — machine-specific, has absolute paths
+# AGENTS.md is intentionally NOT ignored (portable public doc, mirror of CLAUDE.md)
+.agents/
+.codex/
