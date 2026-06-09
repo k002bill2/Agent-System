@@ -29,17 +29,15 @@ Most development assumes Postgres + Redis are running via Docker.
   This script:
   - Ensures `.env` exists (copies from `.env.example` if missing).
   - Checks for Docker + Docker Compose.
-  - Runs `docker-compose up -d postgres redis` in `infra/docker`.
+  - Brings up the shared `~/Work/shared-infra` stack (Postgres, Redis, Qdrant). AOS does not run its own DB stack.
 
 - **Docker Compose (manual control)**
   ```bash
-  cd infra/docker
-  # Infra only
-  docker-compose up -d postgres redis
-
-  # Full stack (Backend + Dashboard + infra), if configured
-  docker-compose --profile full up -d
+  # The DB stack lives in the shared stack, not infra/docker
+  cd ~/Work/shared-infra
+  docker compose up -d postgres redis
   ```
+  Note: `infra/docker/docker-compose.yml` is no longer the DB stack source (build/deploy reference only).
 
 ### 2. Backend (FastAPI + LangGraph)
 
@@ -198,7 +196,7 @@ Key packages:
 
 - `services/`
   - `session_service.py` – High-level session lifecycle operations: creating sessions, updating state, fetching status.
-  - `rag_service.py` – Vector DB integration (Chroma) for project indexing and semantic search (`ProjectVectorStore`).
+  - `rag_service.py` – Vector DB integration (Qdrant) for project indexing and semantic search (`ProjectVectorStore`).
   - `project_runner.py`, `project_template_service.py` – Running and templating projects within AOS.
   - `sandbox_manager.py` – Docker-based sandbox for executing risky commands with network isolation, resource limits, and non-root users.
   - `mcp_service.py`, `warp_service.py` – Bridges to MCP servers and Warp/Claude-style tooling.
@@ -277,7 +275,7 @@ Key areas (see `tsconfig.json` and `vite.config.ts` for configuration):
 ### 4. Tests and Quality Gates
 
 - **Backend tests** live under `tests/backend` and are executed via `pytest` from the `src/backend` directory (see `pyproject.toml`).
-- **Dashboard tests** live under `tests/dashboard` (as referenced in `CLAUDE.md` and directory structure); follow the npm scripts described above.
+- **Dashboard tests** are co-located with components under `src/dashboard/src` (Vitest, `*.test.tsx`); run via `npm test`.
 - **Static analysis**:
   - Python: `ruff` and `mypy` configured in `pyproject.toml`.
   - TypeScript/React: Strict TS (`strict: true`) and ESLint (`npm run lint`).
@@ -290,10 +288,9 @@ Important pieces from `CLAUDE.md` and `.claude/README.md`:
 
 - **Claude Code commands** (run from within Claude Code, not the shell):
   - `/check-health` – Run a combined suite of type checks, lint, tests, and build.
-  - `/verify-app` – Verification/feedback loop on changes.
+  - `/verify-loop` – Verification/feedback loop on changes.
   - `/test-coverage` – Analyze test coverage.
-  - `/simplify-code` – Complexity analysis and refactoring suggestions.
-  - `/review` – Review changed files.
+  - `/code-review` – Review changed files (delegates to native review).
   - `/commit-push-pr` – Commit, push, and open a PR.
 
 - **Sub-agents and skills**
@@ -301,7 +298,7 @@ Important pieces from `CLAUDE.md` and `.claude/README.md`:
   - `shared/` frameworks (`quality-gates.md`, `effort-scaling.md`, `delegation-template.md`) define cross-agent protocols and quality gates.
 
 - **MCP servers**
-  - `.claude/mcp.json` configures servers like `context7` for semantic search, `codex-cli` for code snippets, and optional web/automation providers.
+  - `.claude/mcp.json` holds project-scoped MCP server config (currently empty). Servers like `context7` are provided via the user/global Claude config, not this file.
 
 For Warp:
 - Be aware that some workflows and expectations (e.g., health checks, verification loops) are encoded in these Claude configs and mirrored in the backend services (`warp_service.py`, MCP endpoints, usage tracking).

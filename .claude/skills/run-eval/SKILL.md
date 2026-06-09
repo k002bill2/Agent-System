@@ -33,7 +33,7 @@ Systematically evaluate AI agent performance and compute pass@k metrics. Provide
 /run-eval --all --k=3
 
 # 특정 에이전트로 실행
-/run-eval task_ui_001 --agent=web-ui-specialist
+/run-eval task_ui_001 --agent=general-purpose
 ```
 
 ## Execution Steps
