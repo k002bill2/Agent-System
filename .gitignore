@@ -3,6 +3,14 @@
 .env.local
 .env.*.local
 
+# Secrets / keys (defense-in-depth — never commit)
+*.pem
+id_rsa*
+*credentials*
+
+# Local review artifacts (worktree review internals, not for the public repo)
+.review-artifacts/
+
 # Maintainer-local Compose overrides (host-specific bind mounts; never shipped)
 docker-compose.override.yml
 
