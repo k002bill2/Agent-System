@@ -15,6 +15,8 @@ const BLOCKED_PATTERNS = [
   // 파일 시스템 파괴 (flag 순서/조합 무관)
   { pattern: /\brm\s+(-\w+\s+)*\//,                    label: 'rm with root path' },
   { pattern: /\brm\s+(-\w+\s+)*~/,                     label: 'rm with home path' },
+  // 변수 확장 우회 ($HOME, ${HOME}, 따옴표 포함) — 리터럴 ~/ 미사용 회피 차단
+  { pattern: /\brm\s+(-\w+\s+)*["']?\$\{?HOME\b/,      label: 'rm with $HOME variable' },
   // 데이터베이스 파괴
   { pattern: /DROP\s+(TABLE|DATABASE|SCHEMA)/i,         label: 'DROP TABLE/DATABASE' },
   { pattern: /TRUNCATE\s+TABLE/i,                       label: 'TRUNCATE TABLE' },
@@ -28,6 +30,8 @@ const BLOCKED_PATTERNS = [
   // 원격 코드 실행 (sh, bash, zsh, dash 모두 차단, 파이프 공백 무관)
   { pattern: /\bcurl\b.*\|\s*(sh|bash|zsh|dash)\b/,     label: 'curl pipe to shell' },
   { pattern: /\bwget\b.*\|\s*(sh|bash|zsh|dash)\b/,     label: 'wget pipe to shell' },
+  // 비-셸 인터프리터 파이프 (perl/python/node/ruby/php) — sh|bash 한정 회피 차단
+  { pattern: /\b(curl|wget)\b.*\|\s*(perl|python3?|node|ruby|php)\b/, label: 'download pipe to interpreter' },
   // base64 인코딩 우회 감지
   { pattern: /base64\s+(-d|--decode).*\|\s*(sh|bash)\b/, label: 'base64 decode pipe to shell' },
   // eval/exec 기반 우회

@@ -3,6 +3,14 @@
 .env.local
 .env.*.local
 
+# Secrets / keys (defense-in-depth — never commit)
+*.pem
+id_rsa*
+*credentials*
+
+# Local review artifacts (worktree review internals, not for the public repo)
+.review-artifacts/
+
 # Maintainer-local Compose overrides (host-specific bind mounts; never shipped)
 docker-compose.override.yml
 
@@ -96,3 +104,8 @@ scripts/bench_results/
 dev/harness-legacy-scan/
 .claude/archive/
 .claude/workflows/
+
+# Local AI-tooling config (Codex CLI / agent mirrors) — machine-specific, has absolute paths
+# AGENTS.md is intentionally NOT ignored (portable public doc, mirror of CLAUDE.md)
+.agents/
+.codex/
