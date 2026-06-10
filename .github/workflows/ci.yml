@@ -164,7 +164,7 @@ jobs:
           pytest ../../tests/backend -v --tb=short --cov=. --cov-report=xml -m "not network"
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: ./coverage.xml
           flags: backend
@@ -243,7 +243,7 @@ jobs:
         run: npm test -- --coverage --reporter=verbose
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: ./coverage/lcov.info
           flags: frontend
