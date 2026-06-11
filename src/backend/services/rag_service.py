@@ -765,7 +765,7 @@ class ProjectVectorStore:
         # nothing to score, and instantiating CrossEncoder would trigger an
         # unnecessary HuggingFace download (the source of CI 429 flakes).
         if not candidates:
-            return candidates[:top_k]
+            return []
         encoder = self._get_cross_encoder()
         if encoder is None:
             return candidates[:top_k]

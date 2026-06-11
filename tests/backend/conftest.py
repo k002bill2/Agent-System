@@ -17,6 +17,13 @@ os.environ["USE_DATABASE"] = "false"
 os.environ["LLM_PROVIDER"] = "ollama"
 os.environ["OLLAMA_MODEL"] = "qwen2.5:7b"
 
+# Force HuggingFace offline so tests never download models (HF 429 flake
+# guard for every pytest invocation, local and CI). An unmocked model load
+# fails loudly instead of hitting the network — mark such tests
+# @pytest.mark.network and run them with: HF_HUB_OFFLINE=0 pytest -m network
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
 
 @pytest.fixture(scope="session")
 def anyio_backend():
