@@ -154,14 +154,10 @@ jobs:
           USE_DATABASE: "true"
           SESSION_SECRET_KEY: test-secret-key
           LLM_PROVIDER: google
-          # Force HuggingFace offline so tests never download models (prevents
-          # 429 flakes). All model code paths are mocked; a future unmocked
-          # test will fail loudly offline instead of hitting the network — mark
-          # such tests @pytest.mark.network (excluded below) and mock the model.
-          HF_HUB_OFFLINE: "1"
-          TRANSFORMERS_OFFLINE: "1"
+        # HF offline mode + network-marker exclusion are enforced for every
+        # pytest run by tests/backend/conftest.py and pyproject addopts.
         run: |
-          pytest ../../tests/backend -v --tb=short --cov=. --cov-report=xml -m "not network"
+          pytest ../../tests/backend -v --tb=short --cov=. --cov-report=xml
 
       - name: Upload coverage
         uses: codecov/codecov-action@v7
