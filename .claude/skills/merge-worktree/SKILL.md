@@ -137,9 +137,16 @@ EOF
 
 ### Phase 6: Verification
 
-1. **Confirm the commit**: Run `git -C <original-repo-path> log --oneline -3` and show the result to the user.
+1. **Ground-truth landing check (가장 중요)**: A squash merge does NOT update the merge-base, so `git cherry` / `git branch --merged` / 3-dot `git diff <target>...<branch>` all give **false negatives** — never use them. Instead, directly compare the trees of the files the worktree touched:
+   ```bash
+   git -C <original-repo-path> diff --name-only -z <target>...<worktree-branch> \
+     | xargs -0 git -C <original-repo-path> diff <worktree-branch> <target> --
+   ```
+   The output **must be empty** — that proves every worktree change landed in `<target>`. If it is non-empty, the squash merge dropped some changes: **stop immediately**, report to the user, and do NOT delete the worktree branch. (Use `-z | xargs -0`, not `-- $(...)`: under zsh an unquoted command substitution is not word-split, so the pathspec would match nothing and silently pass.)
 
-2. **Report summary**: Tell the user:
+2. **Confirm the commit**: Run `git -C <original-repo-path> log --oneline -3` and show the result to the user.
+
+3. **Report summary**: Tell the user:
    - The final commit hash
    - The commit summary line
    - Which branch it was merged into
@@ -157,6 +164,7 @@ EOF
 | Auto-resolving merge conflicts | Never auto-resolve — stop and report conflicts to the user |
 | Using `--no-verify` to skip pre-commit hooks | Never skip hooks; fix the underlying issue instead |
 | Forgetting to fetch the latest target branch | Always fetch in Phase 3 to avoid merge issues with stale local branches |
+| Trusting `git cherry` / `--merged` to confirm a squash merge landed | Squash doesn't update the merge-base → false negative; Phase 6 must verify via direct tree diff of the touched files |
 | Including implementation details in the commit summary line | Summary = what and why in imperative mood; details go in the Changes bullets |
 
 ## Important Notes
