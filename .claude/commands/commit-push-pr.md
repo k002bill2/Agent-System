@@ -47,9 +47,27 @@ git push --set-upstream origin [브랜치명]
 gh pr create --title "[메시지]" --body "[변경사항 요약]"
 ```
 
-### 7단계: 머지 (옵션 있을 때만)
+### 7단계: 머지 + 안착 검증 (옵션 있을 때만)
+
+1. 머지 실행 (브랜치 자동 삭제 분리 — 검증 통과 후 삭제):
 ```bash
-gh pr merge --[merge|squash|rebase] --delete-branch
+gh pr merge --[merge|squash|rebase]
+```
+
+2. **머지 안착 검증** — squash 머지는 merge-base를 갱신하지 않아 `git cherry`/`git branch --merged`가 false negative이므로 금지. GitHub가 권위 소스:
+```bash
+gh pr view --json state,mergedAt   # state == "MERGED" && mergedAt != null 확인
+```
+   - 오프라인/GitHub 미사용 폴백 — 브랜치가 건드린 파일이 베이스에 모두 반영됐는지 트리 직접 비교:
+     ```bash
+     git fetch origin
+     git diff --name-only -z origin/[베이스]...HEAD \
+       | xargs -0 git diff HEAD origin/[베이스] --   # 빈 출력이어야 안착 완료
+     ```
+
+3. 검증 통과 시에만 브랜치 삭제. 실패(`state != MERGED` 또는 diff 비어있지 않음)면 **STOP** — 삭제 금지, 사용자에게 보고:
+```bash
+git push origin --delete [브랜치] && git branch -D [브랜치]
 ```
 
 ### 8단계: 완료 출력
