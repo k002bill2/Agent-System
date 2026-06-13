@@ -8,6 +8,7 @@ from config import get_settings
 
 try:
     from github import Auth, Github, GithubException
+    from github.GithubObject import NotSet
     from github.PullRequest import PullRequest
     from github.Repository import Repository
 
@@ -17,6 +18,7 @@ except ImportError:
     Github = None
     GithubException = Exception
     Auth = None
+    NotSet = None
     PullRequest = None
     Repository = None
 
@@ -114,10 +116,13 @@ class GitHubService:
         repository = self._get_repo(repo)
 
         try:
+            # PyGithub distinguishes NotSet (omitted) from "" (filter on an empty
+            # branch ref, which matches nothing). Coercing None→"" silently returned
+            # zero PRs, breaking both the prune scan and the Pull Requests tab.
             prs = repository.get_pulls(
                 state=state,
-                base=base or "",
-                head=head or "",
+                base=base if base else NotSet,
+                head=head if head else NotSet,
                 sort=sort,
                 direction=direction,
             )

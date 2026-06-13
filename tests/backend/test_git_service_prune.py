@@ -14,7 +14,7 @@ Covered scenarios:
 """
 
 from datetime import UTC, datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -458,3 +458,248 @@ class TestPruneMergedBranches:
         assert "feat/also-ok" in result.deleted
         assert "feat/fail" not in result.deleted
         assert any(e["branch"] == "feat/fail" for e in result.errors)
+
+    @patch("services.git_service.Repo")
+    @patch("services.git_service.GIT_AVAILABLE", True)
+    def test_prune_uses_force_delete(self, mock_repo_class, mock_repo, tmp_path):
+        """Squash/rebase-merged branches are not git-ancestors of main, so vetted
+        candidates must be deleted with force=True (git branch -D), else every
+        delete fails with 'not fully merged'."""
+        mock_repo_class.return_value = mock_repo
+
+        from models.git import PruneCandidate
+        from services.git_service import GitService
+
+        service = GitService(str(tmp_path))
+        candidates = [
+            PruneCandidate(
+                branch="feat/squashed",
+                pr_number=7,
+                pr_url="u",
+                pr_title="t",
+                merged_at=datetime.now(UTC),
+                last_commit_sha="sha",
+            )
+        ]
+
+        with patch.object(service, "delete_branch", return_value=True) as mock_del:
+            service.prune_merged_branches(candidates)
+
+        assert mock_del.call_args.kwargs.get("force") is True
+
+
+# =============================================================================
+# F1: per-project GitHub repo resolution
+# =============================================================================
+
+
+class TestResolveGithubRepo:
+    """find_prune_candidates must target the project's own origin repo."""
+
+    @patch("services.git_service.Repo")
+    @patch("services.git_service.GIT_AVAILABLE", True)
+    def test_resolves_owner_repo_from_origin_url(self, mock_repo_class, tmp_path):
+        from services.git_service import GitService
+
+        cases = [
+            ("https://github.com/k002bill2/LiveMetro.git", "k002bill2/LiveMetro"),
+            ("git@github.com:k002bill2/LiveMetro.git", "k002bill2/LiveMetro"),
+            ("https://github.com/owner/repo", "owner/repo"),
+        ]
+        for url, expected in cases:
+            repo = MagicMock()
+            repo.remotes.origin.url = url
+            mock_repo_class.return_value = repo
+            service = GitService(str(tmp_path))
+            assert service._resolve_github_repo() == expected, url
+
+    @patch("services.git_service.Repo")
+    @patch("services.git_service.GIT_AVAILABLE", True)
+    def test_resolve_returns_none_when_origin_missing(self, mock_repo_class, tmp_path):
+        from services.git_service import GitService
+
+        repo = MagicMock()
+        # MagicMock url is not a str → cannot parse → None (also covers the
+        # existing unit-test fixtures whose origin.url is a bare MagicMock).
+        type(repo.remotes).origin = PropertyMock(side_effect=AttributeError)
+        mock_repo_class.return_value = repo
+        service = GitService(str(tmp_path))
+        assert service._resolve_github_repo() is None
+
+    @patch("services.git_service.Repo")
+    @patch("services.git_service.GIT_AVAILABLE", True)
+    def test_find_prune_candidates_passes_resolved_repo(
+        self, mock_repo_class, mock_repo, mock_github_service, tmp_path
+    ):
+        """The resolved owner/repo must be forwarded to list_pull_requests."""
+        mock_repo.remotes.origin.url = "https://github.com/o/r.git"
+        mock_repo_class.return_value = mock_repo
+        mock_github_service.list_pull_requests.return_value = []
+
+        from services.git_service import GitService
+
+        service = GitService(str(tmp_path))
+        service.find_prune_candidates(github_service=mock_github_service)
+
+        kwargs = mock_github_service.list_pull_requests.call_args.kwargs
+        assert kwargs.get("repo") == "o/r"
+
+
+# =============================================================================
+# F3: PR-fetch failure must be surfaced, not silently swallowed
+# =============================================================================
+
+
+class TestScanErrorSurfacing:
+    @patch("services.git_service.Repo")
+    @patch("services.git_service.GIT_AVAILABLE", True)
+    def test_pr_fetch_failure_sets_scan_error(
+        self, mock_repo_class, mock_repo, mock_github_service, tmp_path
+    ):
+        """If list_pull_requests raises, scan_error is populated (not masked as 0)."""
+        mock_repo_class.return_value = mock_repo
+        mock_github_service.list_pull_requests.side_effect = RuntimeError(
+            "Repository name not specified"
+        )
+
+        from services.git_service import GitService
+
+        service = GitService(str(tmp_path))
+        result = service.find_prune_candidates(github_service=mock_github_service)
+
+        assert result.scan_error is not None
+        assert "Repository name not specified" in result.scan_error
+        assert result.candidates == []
+
+
+# =============================================================================
+# F4: untracked-but-pushed branch must not be treated as unpushed
+# =============================================================================
+
+
+class TestHasUnpushedCommitsFallback:
+    @patch("services.git_service.Repo")
+    @patch("services.git_service.GIT_AVAILABLE", True)
+    def test_untracked_branch_with_remote_ref_not_unpushed(
+        self, mock_repo_class, tmp_path
+    ):
+        """No upstream config but origin/<name> exists at same tip → not unpushed."""
+        repo = MagicMock()
+        branch = _make_branch("feat/pushed", tracking_ref=None, ahead=0)
+
+        origin = MagicMock()
+        origin.name = "origin"
+        ref = MagicMock()
+        ref.name = "origin/feat/pushed"
+        origin.refs = [ref]
+        repo.remotes = [origin]
+
+        # 0 commits ahead of the remote-tracking ref
+        repo.iter_commits.side_effect = lambda rev_range, **_: iter([])
+        mock_repo_class.return_value = repo
+
+        from services.git_service import GitService
+
+        service = GitService(str(tmp_path))
+        assert service._has_unpushed_commits(branch) is False
+
+    @patch("services.git_service.Repo")
+    @patch("services.git_service.GIT_AVAILABLE", True)
+    def test_untracked_branch_without_remote_ref_is_unpushed(
+        self, mock_repo_class, tmp_path
+    ):
+        """Genuinely-local branch (no upstream, no origin/<name>) stays protected."""
+        repo = MagicMock()
+        branch = _make_branch("wip/local-only", tracking_ref=None, ahead=0)
+        origin = MagicMock()
+        origin.name = "origin"
+        origin.refs = []  # no matching remote ref
+        repo.remotes = [origin]
+        mock_repo_class.return_value = repo
+
+        from services.git_service import GitService
+
+        service = GitService(str(tmp_path))
+        assert service._has_unpushed_commits(branch) is True
+
+    @patch("services.git_service.Repo")
+    @patch("services.git_service.GIT_AVAILABLE", True)
+    def test_squash_merged_no_remote_is_eligible(self, mock_repo_class, tmp_path):
+        """Canonical case: squash-merged, remote auto-deleted (no origin ref), but
+        the branch tip == merged PR head → work captured by PR → eligible."""
+        repo = MagicMock()
+        branch = _make_branch("feat/squashed", sha="deadc0de", tracking_ref=None)
+        origin = MagicMock()
+        origin.name = "origin"
+        origin.refs = []  # remote branch deleted after merge
+        repo.remotes = [origin]
+        repo.is_ancestor.return_value = True  # tip is ancestor/equal of PR head
+        mock_repo_class.return_value = repo
+
+        from services.git_service import GitService
+
+        service = GitService(str(tmp_path))
+        assert service._has_unpushed_commits(branch, pr_head_sha="deadc0de") is False
+        # arg order guard: is_ancestor(branch_tip, pr_head)
+        repo.is_ancestor.assert_called_once_with("deadc0de", "deadc0de")
+
+    @patch("services.git_service.Repo")
+    @patch("services.git_service.GIT_AVAILABLE", True)
+    def test_descendant_of_pr_head_is_protected(self, mock_repo_class, tmp_path):
+        """Local commits added after the PR head (tip not ancestor) → protect."""
+        repo = MagicMock()
+        branch = _make_branch("feat/newer", sha="newcommit", tracking_ref=None)
+        origin = MagicMock()
+        origin.name = "origin"
+        origin.refs = []
+        repo.remotes = [origin]
+        repo.is_ancestor.return_value = False  # tip diverged beyond PR head
+        mock_repo_class.return_value = repo
+
+        from services.git_service import GitService
+
+        service = GitService(str(tmp_path))
+        assert service._has_unpushed_commits(branch, pr_head_sha="oldhead") is True
+
+    @patch("services.git_service.Repo")
+    @patch("services.git_service.GIT_AVAILABLE", True)
+    def test_unresolvable_pr_head_is_protected(self, mock_repo_class, tmp_path):
+        """If the PR head commit isn't in the local object DB, fail safe → protect."""
+        repo = MagicMock()
+        branch = _make_branch("feat/missing-head", sha="abc", tracking_ref=None)
+        origin = MagicMock()
+        origin.name = "origin"
+        origin.refs = []
+        repo.remotes = [origin]
+        repo.is_ancestor.side_effect = Exception("bad object")
+        mock_repo_class.return_value = repo
+
+        from services.git_service import GitService
+
+        service = GitService(str(tmp_path))
+        assert service._has_unpushed_commits(branch, pr_head_sha="missingsha") is True
+
+
+# =============================================================================
+# F6: detached HEAD must not raise an unguarded TypeError
+# =============================================================================
+
+
+class TestDetachedHeadSafety:
+    @patch("services.git_service.Repo")
+    @patch("services.git_service.GIT_AVAILABLE", True)
+    def test_detached_head_does_not_raise(
+        self, mock_repo_class, mock_repo, mock_github_service, tmp_path
+    ):
+        """active_branch raises TypeError on detached HEAD; scan must still run."""
+        type(mock_repo).active_branch = PropertyMock(side_effect=TypeError)
+        mock_repo.head.commit.hexsha = "deadbeef000"
+        mock_repo_class.return_value = mock_repo
+        mock_github_service.list_pull_requests.return_value = []
+
+        from services.git_service import GitService
+
+        service = GitService(str(tmp_path))
+        # Must not raise; no branch is the (non-existent) current HEAD.
+        result = service.find_prune_candidates(github_service=mock_github_service)
+        assert all(s.reason != "current_head" for s in result.skipped)

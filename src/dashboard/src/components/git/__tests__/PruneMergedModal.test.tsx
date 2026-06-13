@@ -147,7 +147,7 @@ describe('PruneMergedModal', () => {
     expect(deleteBtn).toBeDisabled()
   })
 
-  it('shows error when scan fails (token missing)', async () => {
+  it('shows error when scan returns null (network / token missing)', async () => {
     const prune = vi.fn().mockResolvedValue(null)
     render(
       <PruneMergedModal
@@ -159,7 +159,25 @@ describe('PruneMergedModal', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText(/GitHub 토큰을 확인하세요/)).toBeInTheDocument()
+      expect(screen.getByText(/스캔에 실패했습니다/)).toBeInTheDocument()
+    })
+  })
+
+  it('surfaces backend scan_error instead of a misleading "nothing to prune"', async () => {
+    const prune = vi.fn().mockResolvedValue(
+      makeScanResult({ scan_error: 'Repository name not specified' }),
+    )
+    render(
+      <PruneMergedModal
+        isOpen={true}
+        projectId="proj-1"
+        onClose={vi.fn()}
+        pruneMergedBranches={prune}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(/Repository name not specified/)).toBeInTheDocument()
     })
   })
 
