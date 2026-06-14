@@ -90,6 +90,9 @@ export interface PruneExecuteResult {
   skipped: PruneSkipped[]
   deleted: string[]
   errors: Array<{ branch: string; error: string }>
+  // Set when the GitHub PR lookup itself failed (repo unresolved, bad token,
+  // network) — distinguishes a real failure from a genuine "nothing to prune".
+  scan_error?: string | null
 }
 
 export interface BranchProtectionRule {

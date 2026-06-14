@@ -44,8 +44,14 @@ function PruneMergedModalImpl({
     setScanError(null)
     const result = await pruneMergedBranches(projectId, true)
     if (result === null) {
-      setScanError('스캔 실패 — GitHub 토큰을 확인하세요.')
+      setScanError('스캔에 실패했습니다. 네트워크 연결과 GitHub 토큰(GITHUB_TOKEN) 설정을 확인하세요.')
+      setPhase('review') // stop the spinner; show the error banner
       return
+    }
+    if (result.scan_error) {
+      // The PR lookup failed server-side (e.g. repo unresolved). Surface the real
+      // reason instead of a misleading "정리할 브랜치가 없습니다".
+      setScanError(`GitHub PR 조회에 실패했습니다: ${result.scan_error}`)
     }
     setScanResult(result)
     setExcluded(new Set())

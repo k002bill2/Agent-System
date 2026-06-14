@@ -478,16 +478,29 @@ class GitService:
 
         extra = set(extra_protected or [])
         patterns = protection_patterns or []
-        current_head = self.repo.active_branch.name
+        # current_ref (not active_branch.name) so a detached HEAD resolves to a SHA
+        # instead of raising an unguarded TypeError that escapes as a 500.
+        current_head = self.current_ref
 
-        # Fetch merged PRs (Wave 0 fix: limit must be high to avoid stale-branch miss)
+        # Fetch merged PRs (Wave 0 fix: limit must be high to avoid stale-branch miss).
+        # Target the project's own origin repo, not a single global default.
         merged_prs_by_head: dict[str, object] = {}
+        scan_error: str | None = None
         try:
-            prs = github_service.list_pull_requests(state="all", limit=500)
+            # lite=True: the scan only needs head_ref/merged_at/number/title/url/
+            # head_sha (all in the list payload). Full conversion reads .mergeable
+            # etc., one API round-trip per PR — a 200+ PR scan took ~4 min and the
+            # client timed out.
+            prs = github_service.list_pull_requests(
+                repo=self._resolve_github_repo(), state="all", limit=500, lite=True
+            )
             for pr in prs:
                 if pr.merged_at is not None:
                     merged_prs_by_head[pr.head_ref] = pr
         except Exception as e:
+            # Surface the failure (returned as scan_error) instead of silently
+            # producing "0 candidates", which is indistinguishable from success.
+            scan_error = str(e)
             logger.warning(f"Failed to fetch PRs for prune scan: {e}")
 
         candidates: list[PruneCandidate] = []
@@ -514,7 +527,7 @@ class GitService:
                 skipped.append(PruneSkipped(branch=name, reason="no_matching_pr"))
                 continue
 
-            if self._has_unpushed_commits(branch):
+            if self._has_unpushed_commits(branch, pr_head_sha=getattr(pr, "head_sha", None)):
                 # PR exists but local has additional unpushed commits — protect work
                 skipped.append(PruneSkipped(branch=name, reason="unpushed_commits"))
                 continue
@@ -530,23 +543,76 @@ class GitService:
                 )
             )
 
-        return PruneScanResult(candidates=candidates, skipped=skipped)
+        return PruneScanResult(candidates=candidates, skipped=skipped, scan_error=scan_error)
 
-    def _has_unpushed_commits(self, branch) -> bool:
-        """Return True if branch has local commits not on its tracked remote.
+    def _resolve_github_repo(self) -> str | None:
+        """Resolve this project's GitHub repo as ``owner/repo`` from its origin URL.
 
-        Conservative: treats untracked branches as unpushed (so they're skipped),
-        protecting purely-local work.
+        Handles both HTTPS (``https://github.com/owner/repo.git``) and SSH
+        (``git@github.com:owner/repo.git``) remotes. Returns None when there is no
+        parseable GitHub origin, in which case the GitHub service falls back to any
+        configured default and the failure surfaces via scan_error.
+        """
+        import re
+
+        try:
+            url = self.repo.remotes.origin.url
+        except Exception:
+            return None
+        if not isinstance(url, str) or not url:
+            return None
+        match = re.search(r"github\.com[:/]+([^/]+/[^/]+?)(?:\.git)?/?$", url.strip())
+        return match.group(1) if match else None
+
+    def _has_unpushed_commits(self, branch, pr_head_sha: str | None = None) -> bool:
+        """Return True if branch has local commits not preserved on the remote.
+
+        Resolution order:
+          1. configured upstream, else an ``origin/<name>`` remote-tracking ref →
+             compare the ahead-count against it.
+          2. no remote ref, but the branch tip is captured by the merged PR head
+             commit (the common "squash-merged, remote auto-deleted" case) → the
+             work lives in the merged PR, so it is not unpushed.
+          3. otherwise treat as purely-local work and protect it.
+
+        Fails safe: returns True (protect) on any uncertainty, because prune
+        deletes with ``force=True`` and this is the last guard against losing
+        local commits.
         """
         tracking = branch.tracking_branch()
-        if tracking is None:
-            return True
+        tracking_name = (
+            tracking.name if tracking is not None else self._find_remote_tracking_ref(branch.name)
+        )
+
+        if tracking_name is not None:
+            try:
+                ahead = sum(1 for _ in self.repo.iter_commits(f"{tracking_name}..{branch.name}"))
+                return ahead > 0
+            except Exception as e:
+                logger.warning(f"Failed to compute ahead for '{branch.name}': {e}")
+                return True
+
+        # No remote-tracking ref. Safe to delete only if the branch tip is an
+        # ancestor of (or equal to) the merged PR head — i.e. fully captured by it.
+        if pr_head_sha:
+            try:
+                if self.repo.is_ancestor(branch.commit.hexsha, pr_head_sha):
+                    return False
+            except Exception as e:
+                logger.warning(f"Failed ancestor check for '{branch.name}': {e}")
+
+        return True
+
+    def _find_remote_tracking_ref(self, branch_name: str) -> str | None:
+        """Find an existing ``<remote>/<branch_name>`` remote-tracking ref, if any."""
         try:
-            ahead = sum(1 for _ in self.repo.iter_commits(f"{tracking.name}..{branch.name}"))
-            return ahead > 0
+            for remote in self.repo.remotes:
+                ref_name = f"{remote.name}/{branch_name}"
+                if any(r.name == ref_name for r in remote.refs):
+                    return ref_name
         except Exception as e:
-            logger.warning(f"Failed to compute ahead for '{branch.name}': {e}")
-            return True
+            logger.warning(f"Failed to resolve remote ref for '{branch_name}': {e}")
+        return None
 
     def prune_merged_branches(self, candidates: list[PruneCandidate]) -> PruneExecuteResult:
         """Delete each candidate branch locally; collect errors without aborting batch.
@@ -562,7 +628,10 @@ class GitService:
 
         for candidate in candidates:
             try:
-                self.delete_branch(candidate.branch)
+                # force=True: candidates are confirmed-merged via the GitHub PR API,
+                # but squash/rebase merges aren't git-ancestors of the base, so a
+                # plain ``git branch -d`` would refuse them with "not fully merged".
+                self.delete_branch(candidate.branch, force=True)
                 deleted.append(candidate.branch)
             except Exception as e:
                 errors.append({"branch": candidate.branch, "error": str(e)})

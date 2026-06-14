@@ -841,6 +841,7 @@ async def prune_merged_branches(project_id: str, request: PruneRequest):
             skipped=scan.skipped,
             deleted=[],
             errors=[],
+            scan_error=scan.scan_error,
         )
 
     execute = git_service.prune_merged_branches(scan.candidates)
@@ -849,6 +850,7 @@ async def prune_merged_branches(project_id: str, request: PruneRequest):
         skipped=scan.skipped,  # preserve skip reasons across both phases
         deleted=execute.deleted,
         errors=execute.errors,
+        scan_error=scan.scan_error,
     )
 
 

@@ -649,6 +649,9 @@ class PruneScanResult(BaseModel):
 
     candidates: list[PruneCandidate] = []
     skipped: list[PruneSkipped] = []
+    # Populated when the GitHub PR lookup itself failed (e.g. repo unresolved,
+    # bad token, network). Distinguishes a real failure from "nothing to prune".
+    scan_error: str | None = None
 
 
 class PruneExecuteResult(BaseModel):
@@ -658,6 +661,7 @@ class PruneExecuteResult(BaseModel):
     skipped: list[PruneSkipped] = []
     deleted: list[str] = []
     errors: list[dict] = []  # [{"branch": str, "error": str}]
+    scan_error: str | None = None  # mirrors PruneScanResult.scan_error
 
 
 class PruneRequest(BaseModel):
