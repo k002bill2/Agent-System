@@ -4,9 +4,9 @@ description: 작업 상태 저장/복원 (WIP 커밋)
 argument-hint: [save|restore] [설명]
 ---
 
-# Checkpoint
+# WIP Save/Restore
 
-작업 중간 상태를 저장하고 복원합니다.
+작업 중간 상태를 저장하고 복원합니다. (구 `/checkpoint` — 네이티브 `/checkpoint` rewind alias와 이름 충돌하여 `/wip-save`로 개명. git 커밋 컨벤션 `checkpoint:`는 기존 WIP 커밋 복원 호환을 위해 유지.)
 
 ## Save (저장)
 
