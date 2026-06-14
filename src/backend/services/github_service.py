@@ -98,6 +98,7 @@ class GitHubService:
         sort: str = "created",
         direction: str = "desc",
         limit: int = 30,
+        lite: bool = False,
     ) -> list[GitHubPullRequest]:
         """List pull requests.
 
@@ -109,6 +110,9 @@ class GitHubService:
             sort: Sort by (created, updated, popularity, long-running)
             direction: Sort direction (asc, desc)
             limit: Maximum number of PRs to return
+            lite: Use the list-payload-only conversion (no .mergeable/.commits/...
+                access). Each of those attributes triggers a per-PR API round-trip,
+                so a full bulk scan (e.g. prune) is orders of magnitude faster lite.
 
         Returns:
             List of pull requests
@@ -127,11 +131,12 @@ class GitHubService:
                 direction=direction,
             )
 
+            to_model = self._pr_to_model_lite if lite else self._pr_to_model
             result: list[GitHubPullRequest] = []
             for i, pr in enumerate(prs):
                 if i >= limit:
                     break
-                result.append(self._pr_to_model(pr))
+                result.append(to_model(pr))
 
             return result
 
@@ -553,6 +558,37 @@ class GitHubService:
             deletions=pr.deletions,
             changed_files=pr.changed_files,
             review_comments=pr.review_comments,
+            labels=[label.name for label in pr.labels],
+            created_at=pr.created_at,
+            updated_at=pr.updated_at,
+            merged_at=pr.merged_at,
+            closed_at=pr.closed_at,
+        )
+
+    def _pr_to_model_lite(self, pr: "PullRequest") -> GitHubPullRequest:
+        """Convert using only PR *list-payload* fields (fast bulk path).
+
+        Deliberately does NOT read ``mergeable``, ``mergeable_state``,
+        ``commits``, ``additions``, ``deletions``, ``changed_files`` or
+        ``review_comments``: none are present in the ``GET /pulls`` list response,
+        so PyGithub fetches the full PR (one API round-trip each) on first access.
+        For a 200+ PR scan that turned a ~2s call into ~4 minutes. Those fields
+        are left at their model defaults (None/0) — the prune scan never uses them.
+        """
+        return GitHubPullRequest(
+            number=pr.number,
+            title=pr.title,
+            body="",
+            state=pr.state,
+            draft=pr.draft,
+            head_ref=pr.head.ref,
+            head_sha=pr.head.sha,
+            base_ref=pr.base.ref,
+            base_sha=pr.base.sha,
+            user_login=pr.user.login if pr.user else "unknown",
+            user_avatar_url=pr.user.avatar_url if pr.user else None,
+            html_url=pr.html_url,
+            diff_url=pr.diff_url,
             labels=[label.name for label in pr.labels],
             created_at=pr.created_at,
             updated_at=pr.updated_at,

@@ -487,8 +487,12 @@ class GitService:
         merged_prs_by_head: dict[str, object] = {}
         scan_error: str | None = None
         try:
+            # lite=True: the scan only needs head_ref/merged_at/number/title/url/
+            # head_sha (all in the list payload). Full conversion reads .mergeable
+            # etc., one API round-trip per PR — a 200+ PR scan took ~4 min and the
+            # client timed out.
             prs = github_service.list_pull_requests(
-                repo=self._resolve_github_repo(), state="all", limit=500
+                repo=self._resolve_github_repo(), state="all", limit=500, lite=True
             )
             for pr in prs:
                 if pr.merged_at is not None:
