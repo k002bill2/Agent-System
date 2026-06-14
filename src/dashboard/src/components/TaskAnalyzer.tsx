@@ -970,8 +970,8 @@ function HistoryItem({ item, projectName, onDelete, onSelect, isDeleting, isSele
       className={cn(
         'p-3 transition-colors group cursor-pointer',
         isSelected
-          ? 'bg-primary-50 dark:bg-primary-900/20 border-l-2 border-primary-500'
-          : 'hover:bg-gray-50 dark:hover:bg-gray-800/50 border-l-2 border-transparent'
+          ? 'bg-primary-50 dark:bg-primary-900/20'
+          : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
       )}
     >
       <div className="flex items-start gap-2">
