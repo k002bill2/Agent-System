@@ -49,6 +49,9 @@ class LLMProviderConfig(BaseModel):
     status: LLMProviderStatus = LLMProviderStatus.UNKNOWN
     last_health_check: datetime | None = None
     consecutive_failures: int = 0
+    # Latency (populated on read from the in-memory tracker; never persisted)
+    last_latency_ms: int | None = None
+    avg_latency_ms: float | None = None
     # Metadata
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
