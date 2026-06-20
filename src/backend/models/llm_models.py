@@ -139,17 +139,40 @@ _MODELS: list[LLMModelConfig] = [
         supports_vision=True,
     ),
     # ─────────────────────────────────────────────────────────
-    # OpenAI Models (updated 2026-05-30)
+    # OpenAI Models
     # Pricing: USD per 1K tokens. Docs: https://platform.openai.com/docs/pricing
     # ─────────────────────────────────────────────────────────
+    LLMModelConfig(
+        id="gpt-4o-mini",
+        display_name="GPT-4o Mini",
+        provider=LLMProvider.OPENAI,
+        context_window=128000,
+        input_price=0.00015,  # $0.15/1M tokens
+        output_price=0.0006,  # $0.60/1M tokens
+        is_default=True,  # Conservative default for broad API project access
+        supports_tools=True,
+        supports_vision=True,
+    ),
+    LLMModelConfig(
+        id="gpt-4o",
+        display_name="GPT-4o",
+        provider=LLMProvider.OPENAI,
+        context_window=128000,
+        input_price=0.005,  # $5.00/1M tokens
+        output_price=0.015,  # $15.00/1M tokens
+        is_default=False,
+        supports_tools=True,
+        supports_vision=True,
+    ),
     LLMModelConfig(
         id="gpt-5.5",
         display_name="GPT-5.5",
         provider=LLMProvider.OPENAI,
-        context_window=1000000,  # 1M tokens (flagship, released 2026-04)
-        input_price=0.005,  # $5.00/1M tokens
-        output_price=0.03,  # $30.00/1M tokens
-        is_default=False,  # gpt-5.4 remains default (production-recommended, lower cost)
+        context_window=1000000,
+        input_price=0.005,
+        output_price=0.03,
+        is_default=False,
+        is_enabled=False,
         supports_tools=True,
         supports_vision=True,
     ),
@@ -157,10 +180,11 @@ _MODELS: list[LLMModelConfig] = [
         id="gpt-5.4",
         display_name="GPT-5.4",
         provider=LLMProvider.OPENAI,
-        context_window=1050000,  # 1.05M tokens
-        input_price=0.0025,  # $2.50/1M tokens
-        output_price=0.015,  # $15.00/1M tokens
-        is_default=True,  # Default OpenAI model
+        context_window=1050000,
+        input_price=0.0025,
+        output_price=0.015,
+        is_default=False,
+        is_enabled=False,
         supports_tools=True,
         supports_vision=True,
     ),
@@ -169,9 +193,10 @@ _MODELS: list[LLMModelConfig] = [
         display_name="GPT-5.4 Mini",
         provider=LLMProvider.OPENAI,
         context_window=400000,
-        input_price=0.00075,  # $0.75/1M tokens
-        output_price=0.0045,  # $4.50/1M tokens
+        input_price=0.00075,
+        output_price=0.0045,
         is_default=False,
+        is_enabled=False,
         supports_tools=True,
         supports_vision=True,
     ),
@@ -180,9 +205,10 @@ _MODELS: list[LLMModelConfig] = [
         display_name="GPT-5.4 Nano",
         provider=LLMProvider.OPENAI,
         context_window=400000,
-        input_price=0.0002,  # $0.20/1M tokens
-        output_price=0.00125,  # $1.25/1M tokens
+        input_price=0.0002,
+        output_price=0.00125,
         is_default=False,
+        is_enabled=False,
         supports_tools=True,
         supports_vision=True,
     ),

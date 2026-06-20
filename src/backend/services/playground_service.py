@@ -12,6 +12,7 @@ from typing import Any
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from models.cost import calculate_cost, estimate_tokens
+from models.llm_models import LLMModelRegistry
 from models.playground import (
     PlaygroundCompareRequest,
     PlaygroundCompareResult,
@@ -116,6 +117,45 @@ def _coerce_llm_content(content: Any) -> str:
                 parts.append(str(item))
         return " ".join(parts)
     return str(content)
+
+
+def _is_inaccessible_model_error(error: Exception) -> bool:
+    """Detect provider errors caused by a model the current project cannot use."""
+    message = str(error).lower()
+    return (
+        "model_not_found" in message
+        or "does not have access to model" in message
+        or "unknown model:" in message
+    )
+
+
+def _safe_playground_fallback_model(current_model: str) -> str | None:
+    """Pick a conservative fallback for stale persisted Playground sessions."""
+    configured_default = LLMModelRegistry.get_default(os.getenv("LLM_PROVIDER") or "codex_cli")
+    fallback = configured_default or "codex-cli"
+    return fallback if fallback and fallback != current_model else None
+
+
+async def _invoke_with_model_fallback(
+    session: PlaygroundSession,
+    invoke,
+    **kwargs: Any,
+) -> LLMResponse:
+    """Invoke once, then retry with the configured safe default for stale models."""
+    try:
+        return await invoke(model_id=session.model, **kwargs)
+    except Exception as exc:
+        fallback_model = _safe_playground_fallback_model(session.model)
+        if not fallback_model or not _is_inaccessible_model_error(exc):
+            raise
+
+        stale_model = session.model
+        logger.warning(
+            "playground_model_inaccessible_retry",
+            extra={"stale_model": stale_model, "fallback_model": fallback_model},
+        )
+        session.model = fallback_model
+        return await invoke(model_id=fallback_model, **kwargs)
 
 
 def _ensure_storage_dir():
@@ -490,10 +530,11 @@ class PlaygroundService:
 
             if enabled_tools:
                 # Use tool-enabled LLM invocation
-                llm_response: LLMResponse = await LLMService.invoke_with_tools(
+                llm_response = await _invoke_with_model_fallback(
+                    session,
+                    LLMService.invoke_with_tools,
                     prompt=request.prompt,
                     tools=enabled_tools,
-                    model_id=session.model,
                     system_prompt=effective_system_prompt,
                     temperature=execution.temperature,
                     max_tokens=execution.max_tokens,
@@ -518,9 +559,10 @@ class PlaygroundService:
                     session.messages.append(tool_msg)
             else:
                 # Regular LLM invocation without tools
-                llm_response = await LLMService.invoke(
+                llm_response = await _invoke_with_model_fallback(
+                    session,
+                    LLMService.invoke,
                     prompt=request.prompt,
-                    model_id=session.model,
                     system_prompt=effective_system_prompt,
                     temperature=execution.temperature,
                     max_tokens=execution.max_tokens,
@@ -658,10 +700,11 @@ class PlaygroundService:
         try:
             if enabled_tools:
                 # Tool-enabled: single-shot invoke_with_tools, yield final answer.
-                resp = await LLMService.invoke_with_tools(
+                resp = await _invoke_with_model_fallback(
+                    session,
+                    LLMService.invoke_with_tools,
                     prompt=request.prompt,
                     tools=enabled_tools,
-                    model_id=session.model,
                     system_prompt=effective_system_prompt,
                     temperature=temperature,
                     max_tokens=max_tokens,

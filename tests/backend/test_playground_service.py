@@ -22,10 +22,13 @@ from models.playground import (
     PlaygroundExecuteRequest,
     PlaygroundMessage,
     PlaygroundSession,
+    PlaygroundSessionCreate,
 )
-from services.llm_service import LLMService, _build_messages
+from services.llm_service import LLMResponse, LLMService, _build_messages
+from services import playground_service
 from services.playground_service import (
     DEFAULT_SYSTEM_PROMPT,
+    PlaygroundService,
     _coerce_llm_content,
     _to_lc_messages,
 )
@@ -101,6 +104,51 @@ def test_request_carries_per_call_rag_overrides() -> None:
 def test_default_system_prompt_is_gemini_specific() -> None:
     assert "단일 출처" in DEFAULT_SYSTEM_PROMPT
     assert "제공된 컨텍스트에 없습니다" in DEFAULT_SYSTEM_PROMPT
+
+
+@pytest.mark.asyncio
+async def test_execute_retries_with_safe_default_when_saved_model_is_inaccessible(
+    monkeypatch,
+) -> None:
+    """Persisted sessions with stale OpenAI models should not stay broken."""
+    playground_service._sessions.clear()
+    monkeypatch.setattr(playground_service, "_load_sessions", lambda: None)
+    monkeypatch.setattr(playground_service, "_save_sessions", lambda: None)
+
+    def close_background_coro(coro):
+        coro.close()
+
+    monkeypatch.setattr(playground_service, "_fire_and_forget", close_background_coro)
+    monkeypatch.setenv("LLM_PROVIDER", "codex_cli")
+
+    session = PlaygroundService.create_session(
+        PlaygroundSessionCreate(name="stale", model="gpt-5.4")
+    )
+    session.enabled_tools = ["web_search"]
+
+    calls: list[str] = []
+
+    async def fake_invoke_with_tools(**kwargs):
+        model_id = kwargs["model_id"]
+        calls.append(model_id)
+        if model_id == "gpt-5.4":
+            raise RuntimeError(
+                "LLM invocation with tools failed (gpt-5.4): "
+                "Error code: 403 - {'error': {'code': 'model_not_found'}}"
+            )
+        return LLMResponse(content="fallback answer", model=model_id, provider="codex_cli")
+
+    monkeypatch.setattr(LLMService, "invoke_with_tools", fake_invoke_with_tools)
+
+    execution = await PlaygroundService.execute(
+        session.id,
+        PlaygroundExecuteRequest(prompt="사용모델이 뭐야?"),
+    )
+
+    assert calls == ["gpt-5.4", "codex-cli"]
+    assert execution.status.value == "completed"
+    assert execution.result == "fallback answer"
+    assert session.model == "codex-cli"
 
 
 # ─────────────────────────────────────────────────────────────

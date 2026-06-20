@@ -82,7 +82,7 @@ describe('settings store', () => {
 
       const state = useSettingsStore.getState()
       expect(state.llmProvider).toBe('openai')
-      expect(state.model).toBe('gpt-5.5')
+      expect(state.model).toBe('gpt-4o-mini')
     })
 
     it('selects google/gemini models when switching to google', () => {
@@ -474,8 +474,9 @@ describe('getModelsForProvider (legacy exported function)', () => {
 
   it('returns openai models', () => {
     const models = getModelsForProvider('openai')
-    expect(models).toContain('gpt-5.4')
-    expect(models).toContain('gpt-5.4-mini')
+    expect(models).toContain('gpt-4o-mini')
+    expect(models).toContain('gpt-4o')
+    expect(models).not.toContain('gpt-5.4')
   })
 
   it('returns codex cli models', () => {
