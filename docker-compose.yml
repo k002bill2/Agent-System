@@ -40,7 +40,8 @@ services:
       # Qdrant
       - QDRANT_URL=http://qdrant:6333
       # LLM Provider (set in .env)
-      - LLM_PROVIDER=${LLM_PROVIDER:-google}
+      - LLM_PROVIDER=${LLM_PROVIDER:-codex_cli}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       # Docker에서는 항상 host.docker.internal 사용 (.env의 localhost 무시)

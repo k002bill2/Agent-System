@@ -5,6 +5,7 @@
 """
 
 import json
+import os
 import time
 import uuid
 from datetime import datetime
@@ -14,7 +15,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from agents.base import AgentConfig, AgentResult, BaseAgent
-from models.llm_models import LLMModelRegistry, LLMProvider
+from models.llm_models import LLMModelRegistry
 from services.agent_registry import (
     EffortLevel,
     get_agent_registry,
@@ -258,7 +259,7 @@ class LeadOrchestratorAgent(BaseAgent):
             name="LeadOrchestrator",
             description="Multi-agent workflow coordinator that decomposes complex tasks and delegates to specialized agents",
             system_prompt=LEAD_ORCHESTRATOR_SYSTEM_PROMPT,
-            model_name=LLMModelRegistry.get_default(LLMProvider.GOOGLE),
+            model_name=LLMModelRegistry.get_default(os.getenv("LLM_PROVIDER", "codex_cli")),
             temperature=0.0,  # 일관된 분석 결과를 위해 temperature 0
             max_tokens=4096,
         )

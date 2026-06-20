@@ -296,7 +296,9 @@ container = client.containers.run(
 
 | Provider | 용도 | 설명 |
 |----------|------|------|
-| **Google Gemini** | 기본 LLM | Gemini 3/2.5 시리즈 (1M context) |
+| **Codex CLI** | 로컬 기본 LLM | `codex exec` 셸 호출, ChatGPT 구독 세션 사용 (도구 호출 미지원, 로컬 전용) |
+| **Google Gemini** | 헤드리스 배포 기본 | Gemini 3/2.5 시리즈 (1M context) |
+| **OpenAI GPT** | 사용량 과금 API | GPT-5 시리즈 (1M context) |
 | **Anthropic Claude** | 고성능 LLM | Claude 4 시리즈 (200K context) |
 | **Ollama** | 로컬 LLM | 로컬 모델 실행 |
 

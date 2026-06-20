@@ -11,6 +11,7 @@ class LLMProvider(str, Enum):
     ANTHROPIC = "anthropic"
     GOOGLE = "google"
     OPENAI = "openai"
+    CODEX_CLI = "codex_cli"
     OLLAMA = "ollama"
 
 
@@ -36,6 +37,10 @@ PROVIDER_CONTEXT_LIMITS = {
         "gpt-3.5-turbo": 16_385,
         "gpt-4o": 128_000,
         "default": 128_000,
+    },
+    LLMProvider.CODEX_CLI: {
+        "codex-cli": 200_000,
+        "default": 200_000,
     },
     LLMProvider.OLLAMA: {
         "exaone3.5:7.8b": 32_000,

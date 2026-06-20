@@ -65,6 +65,16 @@ describe('settings store', () => {
   })
 
   describe('setLLMProvider', () => {
+    it('selects codex cli model when switching to codex_cli', () => {
+      const { setLLMProvider } = useSettingsStore.getState()
+
+      setLLMProvider('codex_cli')
+
+      const state = useSettingsStore.getState()
+      expect(state.llmProvider).toBe('codex_cli')
+      expect(state.model).toBe('codex-cli')
+    })
+
     it('updates provider and selects first model', () => {
       const { setLLMProvider } = useSettingsStore.getState()
 
@@ -466,6 +476,11 @@ describe('getModelsForProvider (legacy exported function)', () => {
     const models = getModelsForProvider('openai')
     expect(models).toContain('gpt-5.4')
     expect(models).toContain('gpt-5.4-mini')
+  })
+
+  it('returns codex cli models', () => {
+    const models = getModelsForProvider('codex_cli')
+    expect(models).toContain('codex-cli')
   })
 
   it('returns google/gemini models', () => {

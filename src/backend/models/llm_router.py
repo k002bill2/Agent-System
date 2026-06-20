@@ -24,6 +24,7 @@ class LLMProvider(str, Enum):
     ANTHROPIC = "anthropic"
     GOOGLE = "google"
     OPENAI = "openai"
+    CODEX_CLI = "codex_cli"
     OLLAMA = "ollama"
 
 

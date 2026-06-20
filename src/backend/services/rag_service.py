@@ -76,7 +76,7 @@ except ImportError:
     RecursiveCharacterTextSplitter = None  # type: ignore
 
 # ── Embedding provider config ────────────────────────────────────────────────
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "google")
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "codex_cli")
 EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "huggingface")
 
 # Explicit override (per provider default is only used when this is empty)

@@ -165,6 +165,11 @@ class LLMService:
                 api_key=api_key,
             )
 
+        elif provider == "codex_cli":
+            from services.codex_cli_chat_model import CodexCliChatModel
+
+            llm = CodexCliChatModel(model_name=config["model"])
+
         elif provider == "ollama":
             from langchain_ollama import ChatOllama
 

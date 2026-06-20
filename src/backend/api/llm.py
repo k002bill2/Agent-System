@@ -83,7 +83,7 @@ def _model_to_response(model: LLMModelConfig) -> ModelResponse:
 @router.get("/models", response_model=ModelsListResponse)
 async def get_models(
     provider: str | None = Query(
-        None, description="Filter by provider (anthropic, google, openai, ollama)"
+        None, description="Filter by provider (codex_cli, anthropic, google, openai, ollama)"
     ),
     available_only: bool = Query(False, description="Only return models with available API keys"),
     include_disabled: bool = Query(False, description="Include disabled models (admin only)"),

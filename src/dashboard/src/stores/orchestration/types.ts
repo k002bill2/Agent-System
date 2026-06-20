@@ -93,7 +93,7 @@ export interface TokenUsage {
 }
 
 // Provider identification
-export type LLMProvider = 'google' | 'anthropic' | 'ollama' | 'openai' | 'unknown'
+export type LLMProvider = 'google' | 'anthropic' | 'ollama' | 'openai' | 'codex_cli' | 'unknown'
 
 export interface ProviderUsage {
   provider: LLMProvider
@@ -111,6 +111,7 @@ export const PROVIDER_CONFIG: Record<LLMProvider, { displayName: string; color: 
   anthropic: { displayName: 'Anthropic Claude', color: 'orange', icon: '🟠' },
   ollama: { displayName: 'Ollama (Local)', color: 'green', icon: '🟢' },
   openai: { displayName: 'OpenAI GPT', color: 'purple', icon: '🟣' },
+  codex_cli: { displayName: 'Codex CLI', color: 'purple', icon: '🟣' },
   unknown: { displayName: 'Unknown', color: 'gray', icon: '⚪' },
 }
 
@@ -126,6 +127,9 @@ export function identifyProvider(model: string): LLMProvider {
 
   // OpenAI models (gpt-*, o1*, o3*, o4*)
   if (modelLower.includes('gpt') || /^o\d/.test(modelLower)) return 'openai'
+
+  // Codex CLI model
+  if (modelLower.includes('codex-cli')) return 'codex_cli'
 
   // Ollama/Local models (common patterns)
   if (

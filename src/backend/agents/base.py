@@ -8,10 +8,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from models.errors import StructuredError
-from models.llm_models import LLMModelRegistry, LLMProvider
+from models.llm_models import LLMModelRegistry
 
-# Default model from registry
-_DEFAULT_AGENT_MODEL = LLMModelRegistry.get_default(LLMProvider.GOOGLE)
+# Default model resolved from the configured provider (LLM_PROVIDER).
+# Headless deploys set LLM_PROVIDER=google/openai; local dev defaults to codex_cli.
+_DEFAULT_AGENT_MODEL = LLMModelRegistry.get_default(os.getenv("LLM_PROVIDER", "codex_cli"))
 
 # Specialist agent model (configurable via env, defaults to registry default)
 SPECIALIST_AGENT_MODEL = os.getenv(

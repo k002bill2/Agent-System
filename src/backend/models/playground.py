@@ -1,5 +1,6 @@
 """Playground models for agent testing environment."""
 
+import os
 import uuid
 from datetime import datetime
 from enum import Enum
@@ -7,14 +8,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from models.llm_models import LLMModelRegistry, LLMProvider
+from models.llm_models import LLMModelRegistry
 from utils.time import utcnow
 
 
 # Get default model from central registry
 def _get_default_model() -> str:
-    """Get default model for playground."""
-    return LLMModelRegistry.get_default(LLMProvider.GOOGLE)
+    """Get default model for playground, resolved from the configured provider."""
+    return LLMModelRegistry.get_default(os.getenv("LLM_PROVIDER", "codex_cli"))
 
 
 class PlaygroundExecutionStatus(str, Enum):

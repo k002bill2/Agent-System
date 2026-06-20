@@ -154,12 +154,17 @@ USE_DATABASE=true
 SESSION_SECRET_KEY=<32자 이상 랜덤 문자열>
 FRONTEND_URL=https://<dashboard-service>.railway.app
 
-# LLM 설정
+# LLM 설정 (헤드리스 배포는 API 프로바이더를 사용)
 LLM_PROVIDER=google
 GOOGLE_API_KEY=<your-api-key>
 # 또는
+# LLM_PROVIDER=openai
+# OPENAI_API_KEY=<your-api-key>
+# 또는
 # LLM_PROVIDER=anthropic
 # ANTHROPIC_API_KEY=<your-api-key>
+# 참고: codex_cli는 로컬 개발 전용입니다. Codex CLI 설치 + 대화형 ChatGPT
+# 로그인 세션이 필요해 헤드리스 배포 환경에서는 동작하지 않습니다.
 ```
 
 #### 6. 커스텀 도메인 (선택)
@@ -221,7 +226,9 @@ GOOGLE_API_KEY=<your-api-key>
 | `USE_DATABASE` | 데이터베이스 사용 여부 | `true` |
 | `SESSION_SECRET_KEY` | JWT 서명 키 | (32자 이상 랜덤) |
 | `FRONTEND_URL` | 대시보드 URL | `https://aos.example.com` |
-| `LLM_PROVIDER` | LLM 제공자 | `google` 또는 `anthropic` |
+| `LLM_PROVIDER` | LLM 제공자 | `codex_cli`, `openai`, `google`, `anthropic`, `ollama` |
+| `CODEX_CLI_COMMAND` | Codex CLI 실행 파일 | `codex` |
+| `OPENAI_API_KEY` | OpenAI API 키 | (OpenAI Platform) |
 | `GOOGLE_API_KEY` | Google AI API 키 | (Google Cloud Console) |
 
 ### 선택 환경 변수

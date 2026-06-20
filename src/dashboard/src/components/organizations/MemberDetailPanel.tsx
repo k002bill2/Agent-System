@@ -51,6 +51,7 @@ const PROVIDER_BAR_COLORS: Record<LLMProvider, { bar: string; text: string }> = 
   anthropic: { bar: 'bg-orange-500', text: 'text-orange-600 dark:text-orange-400' },
   google: { bar: 'bg-blue-500', text: 'text-blue-600 dark:text-blue-400' },
   openai: { bar: 'bg-purple-500', text: 'text-purple-600 dark:text-purple-400' },
+  codex_cli: { bar: 'bg-purple-500', text: 'text-purple-600 dark:text-purple-400' },
   ollama: { bar: 'bg-green-500', text: 'text-green-600 dark:text-green-400' },
   unknown: { bar: 'bg-gray-500', text: 'text-gray-600 dark:text-gray-400' },
 }

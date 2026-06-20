@@ -38,7 +38,7 @@ TOOL_RISK_CONFIG = {
 class LLMModelConfig(BaseModel):
     id: str              # "claude-sonnet-4-6"
     display_name: str    # "Claude Sonnet 4"
-    provider: LLMProvider  # anthropic, google, openai, ollama
+    provider: LLMProvider  # codex_cli, anthropic, google, openai, ollama
     context_window: int  # Max context window size
     input_price: float   # USD per 1K tokens
     output_price: float  # USD per 1K tokens
