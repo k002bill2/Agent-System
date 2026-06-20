@@ -37,18 +37,19 @@ Agent(
 
 > **읽기 전용 에이전트 주의:** `planner`는 Write/Edit 도구가 없다(읽기 전용). 따라서 `[출력]`에 "파일로 저장"을 지시해도 스스로 저장하지 못한다. 이런 에이전트는 산출물을 **반환값으로 제출**하게 하고, **오케스트레이터가 받아서 `_workspace/`에 저장**한다.
 
-## 에이전트 구성 (기존 재사용 + integration-qa 1개 신규)
+## 에이전트 구성 (기존 재사용 + integration-qa·docs-sync 2개 신규)
 
 | Phase | 에이전트(.md) | 역할 | 연결 스킬 | 출력 |
 |-------|--------------|------|----------|------|
 | A | `planner` | 요구사항 인터뷰·3~6단계 계획 | — | `_workspace/A_planner_plan.md` |
 | B-1 | `backend-integration-specialist` | FastAPI/SQLAlchemy/LangGraph 구현 | verify-backend | `_workspace/B_backend_impl.md` |
-| B-2 | `web-ui-specialist` | React/Tailwind/Zustand 구현 | react-web-development | `_workspace/B_frontend_impl.md` |
+| B-2 | `web-ui-specialist` | React/Tailwind/Zustand 구현 | react-web-development, verify-frontend | `_workspace/B_frontend_impl.md` |
 | C | `integration-qa` ★신규 | API↔훅 경계면 교차 검증 | — | `_workspace/C_integration_report.md` |
 | D | `test-automation-specialist` | Vitest/pytest 테스트 작성·커버리지 | test-automation | `_workspace/D_test_report.md` |
 | E-1 | `code-reviewer` | 품질·유지보수성 리뷰 | — | `_workspace/E_code_review.md` |
 | E-2 | `security-reviewer` | 보안 취약점 감사 | — | `_workspace/E_security_review.md` |
 | F | (스킬) `verification-loop` | tsc+lint+test+build 최종 게이트 | verification-loop | — |
+| G | `docs-sync` ★신규 | 변경 델타↔mandatory-docs 매핑 후 문서 동기화 | — | docs/ 직접 수정 + `_workspace/G_docs_sync.md` |
 
 ## 워크플로우
 
@@ -62,7 +63,7 @@ Agent(
 
 ### Phase 1: 준비
 1. 사용자 요청에서 기능 범위·영향 영역(백엔드/프론트/양쪽) 파악
-2. `_workspace/` 생성, 입력을 `_workspace/00_input.md`에 저장
+2. `_workspace/` 생성, 입력을 `_workspace/00_input.md`에 저장. **기능 시작 시점 baseline 스냅샷 저장**: `git status --porcelain > _workspace/00_base_changed.txt` (Phase G `docs-sync`가 이번 기능의 변경 파일을 무관한 기존 워킹트리 수정과 분리하는 기준 — 미저장 시 docs-sync가 변경 범위를 단정 못 함)
 3. **복잡도 판정** (`.claude/rules/aos-workflow.md` 기준): Trivial(0 에이전트, 하네스 불필요) / Simple(1) / Moderate(2-3). Trivial이면 사용자에게 "이건 직접 처리가 빠릅니다" 제안 후 중단
 
 ### Phase A: 계획 [순차]
@@ -91,6 +92,12 @@ Agent(
 ### Phase F: 최종 게이트
 - `verification-loop` 스킬 실행 (tsc --noEmit → ESLint/ruff → vitest/pytest → build). 실패 시 자동 재시도(최대 3회). 0 에러 확인 후에만 완료 선언
 
+### Phase G: 문서 동기화 [순차]
+- `docs-sync` 1개 호출 (run_in_background: false). **Phase F 게이트 통과 후** 실행 — 빌드/테스트가 녹색일 때만 문서를 확정한다 (테스트 통과 전 문서 갱신은 시기상조)
+- 입력: `_workspace/00_base_changed.txt`(baseline) + `_workspace/A·B·C` 산출물 + 현재 `git status`
+- docs-sync는 **(현재 변경 − baseline) 델타**로 이번 기능이 건드린 파일만 식별 → `.claude/rules/mandatory-docs.md` 매핑표대로 영향 docs/만 surgical 갱신. raw `git diff` 전체를 신뢰하지 않는다(워킹트리의 무관한 기존 수정 혼입 방지)
+- 결과를 `_workspace/G_docs_sync.md`로 보고. 갱신할 문서가 없으면(델타 0 또는 신규 정보 없음) "문서 갱신 불필요"로 정상 통과. **백엔드/프론트 어느 쪽도 docs 매핑 영역을 건드리지 않았으면 Phase G 생략 가능**
+
 ### Phase 정리
 1. `_workspace/` 보존 (감사 추적용 — 삭제 금지). `.gitignore`에 `_workspace/`가 등록되어 있어 untracked 잔여물로 뜨지 않는다 (미등록 시 먼저 추가).
 2. 사용자에게 결과 요약: 변경 파일, 테스트 결과, 리뷰 findings, 게이트 통과 증거
@@ -115,6 +122,8 @@ Phase D: test-automation-specialist → D_test_report.md
 Phase E: code-reviewer ∥ security-reviewer  (병렬 팬인)
           ↓ (CRITICAL 수정)
 Phase F: verification-loop (tsc+lint+test+build) → 0 에러
+          ↓
+Phase G: docs-sync (변경 델타 → mandatory-docs 매핑 → docs/ surgical 갱신)
           ↓
    [최종 보고 + 진화 피드백]
 ```

@@ -57,7 +57,7 @@ cd src/dashboard && npm test
 
 ## 하네스: AOS 기능 개발
 
-**목표:** 풀스택 기능을 계획→빌드(백엔드∥프론트)→통합검증→테스트→리뷰까지 전문 에이전트 팀으로 자동 조율.
+**목표:** 풀스택 기능을 계획→빌드(백엔드∥프론트)→통합검증→테스트→리뷰→문서동기화까지 전문 에이전트 팀으로 자동 조율.
 
 **트리거:** 풀스택/엔드투엔드 기능 개발·수정·부분 재실행 요청 시 `aos-feature-harness` 스킬을 사용하라. 단순 단일 파일 수정·질문은 직접 처리.
 
@@ -66,6 +66,8 @@ cd src/dashboard && npm test
 |------|----------|------|------|
 | 2026-06-20 | 초기 구성 (서브에이전트 모드, 기존 6 에이전트 재사용) | aos-feature-harness, integration-qa | 전문가 에이전트는 있으나 조율 레이어 부재 |
 | 2026-06-20 | Phase 7 진화: planner 영속화 명시, `_workspace/` gitignore, integration-qa 픽스처 fan-out 체크 추가 | SKILL.md, integration-qa.md, .gitignore | 드라이런 스모크 테스트가 드러낸 개선점 |
+| 2026-06-20 | docs-sync 에이전트 추가 (Phase G: F 게이트 통과 후 변경 델타↔mandatory-docs 매핑으로 docs/ 자동 동기화) | docs-sync.md, SKILL.md | 구현 후 문서 갱신 Phase 부재 (mandatory-docs 갭) |
+| 2026-06-20 | 정비: B-2에 `verify-frontend` 배선(B-1의 verify-backend와 대칭 복원) | SKILL.md | 감사에서 프론트 패턴검증 스킬 미배선 비대칭 발견 |
 
 ## Compact 시 보존
 
