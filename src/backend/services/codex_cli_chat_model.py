@@ -145,6 +145,9 @@ class CodexCliChatModel(SimpleChatModel):
                 cwd=self.working_directory,
                 text=True,
                 capture_output=True,
+                # Detach stdin so Codex never blocks waiting on interactive input
+                # when invoked from a non-interactive backend (it sees EOF).
+                stdin=subprocess.DEVNULL,
                 timeout=self.timeout_seconds,
                 check=False,
             )

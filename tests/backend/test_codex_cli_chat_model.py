@@ -103,6 +103,18 @@ def test_call_cleans_up_temp_file() -> None:
     assert not Path(captured["path"]).exists()
 
 
+def test_call_detaches_stdin_to_avoid_interactive_hang() -> None:
+    # Regression: without stdin=DEVNULL, Codex inherits the backend's stdin and
+    # blocks waiting for interactive input, hanging until the timeout fires.
+    import subprocess
+
+    mock_run = MagicMock(side_effect=_run_side_effect(last_message="ok"))
+    with patch(f"{MODULE}.subprocess.run", mock_run):
+        _model()._call([HumanMessage(content="q")])
+
+    assert mock_run.call_args.kwargs["stdin"] is subprocess.DEVNULL
+
+
 # ── _call: error paths ───────────────────────────────────────────────────────
 
 
