@@ -27,9 +27,17 @@ cp .env.example .env
 `.env` 파일을 편집하여 최소한 다음을 설정합니다:
 
 ```bash
-# 기본 LLM Provider는 Google Gemini
-LLM_PROVIDER=google
-GOOGLE_API_KEY=your_google_api_key_here
+# 기본 LLM Provider는 Codex CLI (ChatGPT 구독 세션)
+LLM_PROVIDER=codex_cli
+# 시작 전 로컬에서 `codex`를 실행하고 ChatGPT로 로그인하세요.
+
+# OpenAI API 사용 시 (사용량 과금)
+# LLM_PROVIDER=openai
+# OPENAI_API_KEY=your_openai_api_key_here
+
+# Google Gemini 사용 시
+# LLM_PROVIDER=google
+# GOOGLE_API_KEY=your_google_api_key_here
 
 # Anthropic Claude 사용 시
 # LLM_PROVIDER=anthropic
@@ -115,7 +123,10 @@ http://localhost:5173
 
 | 변수 | 필수 | 기본값 | 설명 |
 |------|------|--------|------|
-| `LLM_PROVIDER` | O | `google` | LLM 제공자 (google, anthropic, ollama) |
+| `LLM_PROVIDER` | O | `codex_cli` | LLM 제공자 (codex_cli, openai, google, anthropic, ollama) |
+| `CODEX_CLI_COMMAND` | - | `codex` | Codex CLI 실행 파일 |
+| `CODEX_CLI_ARGS` | - | `exec --sandbox read-only --color never` | Codex CLI 비대화식 호출 인자 |
+| `OPENAI_API_KEY` | △ | - | OpenAI API 키 (openai 사용 시 필수) |
 | `GOOGLE_API_KEY` | △ | - | Google Gemini API 키 (google 사용 시 필수) |
 | `ANTHROPIC_API_KEY` | △ | - | Anthropic Claude API 키 (anthropic 사용 시 필수) |
 | `USE_DATABASE` | - | `true` | DB 사용 여부 (false면 인메모리) |

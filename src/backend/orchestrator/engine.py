@@ -46,6 +46,25 @@ def get_llm():
             model=get_model_for_provider("google"),
             api_key=api_key,
         )
+    elif LLM_PROVIDER == "openai":
+        from langchain_openai import ChatOpenAI
+
+        api_key = os.getenv("OPENAI_API_KEY") or settings.openai_api_key
+        if not api_key:
+            raise RuntimeError(
+                "LLM_PROVIDER=openai but no API key found. "
+                "Set OPENAI_API_KEY in the environment "
+                "or configure openai_api_key in settings."
+            )
+
+        return ChatOpenAI(
+            model=get_model_for_provider("openai"),
+            api_key=api_key,
+        )
+    elif LLM_PROVIDER == "codex_cli":
+        from services.codex_cli_chat_model import CodexCliChatModel
+
+        return CodexCliChatModel(model_name=get_model_for_provider("codex_cli"))
     else:
         from langchain_ollama import ChatOllama
 

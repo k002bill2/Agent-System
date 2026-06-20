@@ -17,6 +17,7 @@ class LLMProvider(str, Enum):
     ANTHROPIC = "anthropic"
     GOOGLE = "google"
     OPENAI = "openai"
+    CODEX_CLI = "codex_cli"
     OLLAMA = "ollama"
 
 
@@ -206,6 +207,20 @@ _MODELS: list[LLMModelConfig] = [
         is_default=False,
         supports_tools=True,
         supports_vision=True,
+    ),
+    # ─────────────────────────────────────────────────────────
+    # Codex CLI (ChatGPT subscription-backed local CLI)
+    # ─────────────────────────────────────────────────────────
+    LLMModelConfig(
+        id="codex-cli",
+        display_name="Codex CLI",
+        provider=LLMProvider.CODEX_CLI,
+        context_window=200000,
+        input_price=0.0,
+        output_price=0.0,
+        is_default=True,
+        supports_tools=False,
+        supports_vision=False,
     ),
     # ─────────────────────────────────────────────────────────
     # Ollama (Local) Models
@@ -434,23 +449,19 @@ class LLMModelRegistry:
                 try:
                     provider = LLMProvider(provider)
                 except ValueError:
-                    return "gemini-3-flash-preview"  # Fallback
+                    return "codex-cli"  # Fallback
 
             models = cls.get_by_provider(provider)
             for m in models:
                 if m.is_default:
                     return m.id
-            return models[0].id if models else "gemini-3-flash-preview"
+            return models[0].id if models else "codex-cli"
 
-        # No provider specified - return based on available API keys
-        if os.getenv("GOOGLE_API_KEY"):
-            return cls.get_default(LLMProvider.GOOGLE)
-        elif os.getenv("ANTHROPIC_API_KEY"):
-            return cls.get_default(LLMProvider.ANTHROPIC)
-        elif os.getenv("OPENAI_API_KEY"):
-            return cls.get_default(LLMProvider.OPENAI)
-        else:
-            return cls.get_default(LLMProvider.OLLAMA)
+        # No provider specified - resolve from the configured provider so the
+        # registry default stays consistent with LLM_PROVIDER (headless deploys
+        # set google/openai; local dev defaults to codex_cli). `or` guards the
+        # empty-string case to avoid recursing back into this branch.
+        return cls.get_default(os.getenv("LLM_PROVIDER") or "codex_cli")
 
     @classmethod
     def get_pricing(cls, model_id: str) -> dict[str, float]:
@@ -503,6 +514,8 @@ class LLMModelRegistry:
             return bool(os.getenv("ANTHROPIC_API_KEY"))
         elif provider == LLMProvider.OPENAI:
             return bool(os.getenv("OPENAI_API_KEY"))
+        elif provider == LLMProvider.CODEX_CLI:
+            return True
         elif provider == LLMProvider.OLLAMA:
             return True  # Ollama is always "available" (local)
         return False

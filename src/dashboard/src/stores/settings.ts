@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 export type Theme = 'light' | 'dark' | 'system'
-export type LLMProvider = 'anthropic' | 'openai' | 'google' | 'local'
+export type LLMProvider = 'anthropic' | 'openai' | 'google' | 'codex_cli' | 'local'
 
 export type TerminalType = 'warp' | 'tmux' | 'terminal_app' | 'iterm2' | 'kitty' | 'alacritty' | 'ghostty' | 'wezterm' | 'cmux'
 
@@ -105,6 +105,7 @@ const fallbackModels: Record<LLMProvider, string[]> = {
   anthropic: ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
   google: ['gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite-preview', 'gemini-2.5-pro', 'gemini-2.5-flash'],
   openai: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano', 'o3', 'o4-mini'],
+  codex_cli: ['codex-cli'],
   local: ['exaone3.5:7.8b', 'llama3:8b', 'mistral:7b', 'codellama:7b'],
 }
 
@@ -144,8 +145,8 @@ export const useSettingsStore = create<SettingsState>()(
   persist(
     (set, get) => ({
       // Default values
-      llmProvider: 'google',
-      model: 'gemini-3-flash-preview',
+      llmProvider: 'codex_cli',
+      model: 'codex-cli',
       apiKey: '',
       backendUrl: 'http://localhost:8000',
       theme: 'light',

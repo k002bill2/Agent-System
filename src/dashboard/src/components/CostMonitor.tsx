@@ -153,6 +153,12 @@ const PROVIDER_COLORS: Record<LLMProvider, { bg: string; border: string; text: s
     text: 'text-purple-600 dark:text-purple-400',
     bar: 'bg-purple-500',
   },
+  codex_cli: {
+    bg: 'bg-purple-50 dark:bg-purple-900/20',
+    border: 'border-purple-200 dark:border-purple-800',
+    text: 'text-purple-600 dark:text-purple-400',
+    bar: 'bg-purple-500',
+  },
   unknown: {
     bg: 'bg-gray-50 dark:bg-gray-900/20',
     border: 'border-gray-200 dark:border-gray-700',

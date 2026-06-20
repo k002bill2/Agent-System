@@ -312,8 +312,9 @@ export function SettingsPage() {
                 Provider
               </label>
               <div className="flex gap-2">
-                {(['anthropic', 'google', 'openai', 'local'] as LLMProvider[]).map((provider) => {
+                {(['codex_cli', 'anthropic', 'google', 'openai', 'local'] as LLMProvider[]).map((provider) => {
                   const label: Record<LLMProvider, string> = {
+                    codex_cli: 'Codex CLI',
                     anthropic: 'Anthropic',
                     google: 'Gemini',
                     openai: 'OpenAI',

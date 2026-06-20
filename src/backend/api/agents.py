@@ -433,7 +433,7 @@ async def extract_text_from_image(
 
     # Vision 지원 + 사용 가능한 모델 자동 선택
     # LLM_PROVIDER 설정에 맞는 프로바이더를 우선 시도
-    preferred_provider = os.getenv("LLM_PROVIDER", "google")
+    preferred_provider = os.getenv("LLM_PROVIDER", "codex_cli")
     vision_model = None
     fallback_model = None
     for model in LLMModelRegistry.get_enabled():

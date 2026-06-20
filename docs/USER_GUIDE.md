@@ -91,9 +91,9 @@ cd "/Users/younghwankang/Work/Agent-System"
 
 # .env 파일 생성
 cat > src/backend/.env << EOF
-# LLM Provider (google/anthropic/ollama)
-LLM_PROVIDER=google
-GOOGLE_API_KEY=your_google_api_key
+# LLM Provider (codex_cli/openai/google/anthropic/ollama)
+LLM_PROVIDER=codex_cli
+# codex_cli는 OpenAI API 키 대신 `codex` CLI의 ChatGPT 로그인 세션 사용
 
 # Database (선택)
 DATABASE_URL=postgresql+asyncpg://aos:aos@localhost:5432/aos
@@ -851,7 +851,9 @@ cd src/dashboard && npm run dev
 
 | 변수 | 설명 | 기본값 |
 |------|------|--------|
-| LLM_PROVIDER | LLM 제공자 | google |
+| LLM_PROVIDER | LLM 제공자 | codex_cli |
+| CODEX_CLI_COMMAND | Codex CLI 실행 파일 | codex |
+| OPENAI_API_KEY | OpenAI API 키 | - |
 | GOOGLE_API_KEY | Google API 키 | - |
 | ANTHROPIC_API_KEY | Anthropic API 키 | - |
 | DATABASE_URL | PostgreSQL URL | - |

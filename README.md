@@ -45,7 +45,11 @@ open http://localhost:5173
 
 ```bash
 # LLM 프로바이더 선택 (하나만 필요)
-LLM_PROVIDER=google          # google, anthropic, ollama 중 선택
+LLM_PROVIDER=codex_cli       # codex_cli, openai, google, anthropic, ollama 중 선택
+# codex_cli는 OpenAI API 키 대신 `codex` CLI의 ChatGPT 로그인 세션 사용
+# 또는
+OPENAI_API_KEY=your_key      # OpenAI API (사용량 과금)
+# 또는
 GOOGLE_API_KEY=your_key      # Google Gemini
 # 또는
 ANTHROPIC_API_KEY=your_key   # Claude
@@ -175,7 +179,7 @@ npm run dev
 | Database | PostgreSQL 16 |
 | Cache/Queue | Redis 7 |
 | Vector DB | Qdrant (RAG) |
-| AI | Google Gemini (기본), Anthropic Claude, Ollama |
+| AI | Codex CLI (기본), OpenAI API, Google Gemini, Anthropic Claude, Ollama |
 
 ## API
 

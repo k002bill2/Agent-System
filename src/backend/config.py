@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     google_api_key: str = ""
 
     # LLM Provider Settings
-    llm_provider: str = "google"
+    llm_provider: str = "codex_cli"
     ollama_base_url: str = "http://localhost:11434"
     # DEPRECATED: Model selection now comes from DB via LLMModelRegistry.
     # These fields remain for backward compatibility but are no longer used.
