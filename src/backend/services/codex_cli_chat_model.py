@@ -115,13 +115,15 @@ class CodexCliChatModel(SimpleChatModel):
         # keeps existing execution paths functional without API tool billing.
         return self
 
-    def with_structured_output(
+    def with_structured_output(  # type: ignore[override]
         self,
         schema: dict[str, Any] | type,
         *,
         include_raw: bool = False,
         **kwargs: Any,
     ) -> _StructuredCodexRunnable:
+        # Intentional override divergence: Codex CLI cannot return a full
+        # LangChain Runnable, so we hand back a minimal ainvoke-only adapter.
         if include_raw:
             raise NotImplementedError("Codex CLI structured output does not support include_raw")
         return _StructuredCodexRunnable(self, schema)
