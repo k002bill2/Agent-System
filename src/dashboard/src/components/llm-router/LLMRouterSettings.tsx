@@ -47,6 +47,8 @@ interface LLMProvider {
   status: ProviderStatus
   consecutive_failures: number
   last_health_check: string | null
+  last_latency_ms: number | null
+  avg_latency_ms: number | null
 }
 
 interface RouterConfig {
@@ -473,6 +475,15 @@ export function LLMRouterSettings() {
                           provider.consecutive_failures > 0 ? 'text-red-500' : 'text-gray-900 dark:text-white'
                         )}>
                           {provider.consecutive_failures}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 col-span-2">
+                        <Clock className="w-4 h-4 text-gray-400" />
+                        <span className="text-gray-500 dark:text-gray-400">Latency (Last/Avg):</span>
+                        <span className="text-gray-900 dark:text-white">
+                          {provider.last_latency_ms != null ? `${provider.last_latency_ms}ms` : '—'}
+                          {' / '}
+                          {provider.avg_latency_ms != null ? `${Math.round(provider.avg_latency_ms)}ms` : '—'}
                         </span>
                       </div>
                     </div>

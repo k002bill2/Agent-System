@@ -60,17 +60,41 @@ class LLMRouterService:
         return provider
 
     @staticmethod
+    def _latency_for(provider_id: str) -> tuple[int | None, float | None]:
+        """Aggregate (most-recent, mean) latency in ms for a provider.
+
+        Reads the in-memory ``_latency_tracker`` window. Returns ``(None, None)``
+        when no samples have been recorded for the provider.
+        """
+        samples = _latency_tracker.get(provider_id)
+        if not samples:
+            return None, None
+        return int(samples[-1]), sum(samples) / len(samples)
+
+    @staticmethod
+    def _with_latency(provider: LLMProviderConfig) -> LLMProviderConfig:
+        """Return a copy of *provider* with latency fields populated.
+
+        Never mutates the stored object: latency is a derived read-time value, so
+        ``model_copy`` keeps the in-memory registry clean.
+        """
+        last, avg = LLMRouterService._latency_for(provider.id)
+        return provider.model_copy(update={"last_latency_ms": last, "avg_latency_ms": avg})
+
+    @staticmethod
     def get_provider(provider_id: str) -> LLMProviderConfig | None:
-        """Get a provider by ID."""
-        return _providers.get(provider_id)
+        """Get a provider by ID (with read-time latency populated)."""
+        provider = _providers.get(provider_id)
+        return LLMRouterService._with_latency(provider) if provider else None
 
     @staticmethod
     def list_providers() -> list[LLMProviderConfig]:
         """List all providers sorted by priority (highest first)."""
-        return sorted(
+        ordered = sorted(
             _providers.values(),
             key=lambda p: (-p.priority, p.created_at),
         )
+        return [LLMRouterService._with_latency(p) for p in ordered]
 
     @staticmethod
     def update_provider(
