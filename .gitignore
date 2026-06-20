@@ -109,3 +109,6 @@ dev/harness-legacy-scan/
 # AGENTS.md is intentionally NOT ignored (portable public doc, mirror of CLAUDE.md)
 .agents/
 .codex/
+
+# Harness intermediate artifacts (aos-feature-harness) — audit trail, not committed
+_workspace/
