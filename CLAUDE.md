@@ -55,6 +55,18 @@ cd src/dashboard && npm test
 - CORS 문제 발생 시 `.env`의 `CORS_ORIGINS` 확인
 - `docker compose` 명령은 `~/Work/shared-infra/docker-compose.yml`을 대상. `infra/docker/docker-compose.yml`은 더 이상 DB 스택 소스가 아님 (빌드/배포 참조용)
 
+## 하네스: AOS 기능 개발
+
+**목표:** 풀스택 기능을 계획→빌드(백엔드∥프론트)→통합검증→테스트→리뷰까지 전문 에이전트 팀으로 자동 조율.
+
+**트리거:** 풀스택/엔드투엔드 기능 개발·수정·부분 재실행 요청 시 `aos-feature-harness` 스킬을 사용하라. 단순 단일 파일 수정·질문은 직접 처리.
+
+**변경 이력:**
+| 날짜 | 변경 내용 | 대상 | 사유 |
+|------|----------|------|------|
+| 2026-06-20 | 초기 구성 (서브에이전트 모드, 기존 6 에이전트 재사용) | aos-feature-harness, integration-qa | 전문가 에이전트는 있으나 조율 레이어 부재 |
+| 2026-06-20 | Phase 7 진화: planner 영속화 명시, `_workspace/` gitignore, integration-qa 픽스처 fan-out 체크 추가 | SKILL.md, integration-qa.md, .gitignore | 드라이런 스모크 테스트가 드러낸 개선점 |
+
 ## Compact 시 보존
 
 현재 작업 파일 경로와 변경 의도, 실패한 검증 에러, `dev/active/` 진행 태스크, 미커밋 diff 요약, 합의한 설계 결정.
