@@ -20,6 +20,20 @@ from services.llm_router_service import LLMRouterService
 router = APIRouter(prefix="/llm-router", tags=["llm-router"])
 
 
+def _masked(provider: LLMProviderConfig) -> LLMProviderConfig:
+    """Return a copy of *provider* with its ``api_key`` masked for safe exposure.
+
+    Masking must never mutate the stored provider: the in-memory registry shares
+    object references, so in-place masking would corrupt the real key on the first
+    API call. ``model_copy`` keeps the stored object intact.
+    """
+    if not provider.api_key:
+        return provider
+    key = provider.api_key
+    masked = "***" + key[-4:] if len(key) > 4 else "***"
+    return provider.model_copy(update={"api_key": masked})
+
+
 # ─────────────────────────────────────────────────────────────
 # Provider Management
 # ─────────────────────────────────────────────────────────────
@@ -29,11 +43,8 @@ router = APIRouter(prefix="/llm-router", tags=["llm-router"])
 async def list_providers():
     """List all LLM providers."""
     providers = LLMRouterService.list_providers()
-    # Mask API keys in response
-    for p in providers:
-        if p.api_key:
-            p.api_key = "***" + p.api_key[-4:] if len(p.api_key) > 4 else "***"
-    return providers
+    # Mask API keys in response (on copies — never mutate the stored providers)
+    return [_masked(p) for p in providers]
 
 
 @router.post("/providers", response_model=LLMProviderConfig)
@@ -46,10 +57,8 @@ async def create_provider(data: LLMProviderConfigCreate):
         resource_id=provider.id,
         metadata={"operation": "created", "provider": provider.provider, "name": provider.name},
     )
-    # Mask API key in response
-    if provider.api_key:
-        provider.api_key = "***" + provider.api_key[-4:] if len(provider.api_key) > 4 else "***"
-    return provider
+    # Mask API key in response (on a copy — never mutate the stored provider)
+    return _masked(provider)
 
 
 @router.get("/providers/{provider_id}", response_model=LLMProviderConfig)
@@ -58,10 +67,8 @@ async def get_provider(provider_id: str):
     provider = LLMRouterService.get_provider(provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
-    # Mask API key in response
-    if provider.api_key:
-        provider.api_key = "***" + provider.api_key[-4:] if len(provider.api_key) > 4 else "***"
-    return provider
+    # Mask API key in response (on a copy — never mutate the stored provider)
+    return _masked(provider)
 
 
 @router.patch("/providers/{provider_id}", response_model=LLMProviderConfig)
@@ -76,10 +83,8 @@ async def update_provider(provider_id: str, data: LLMProviderConfigUpdate):
         resource_id=provider_id,
         metadata={"operation": "updated", "provider": provider.provider},
     )
-    # Mask API key in response
-    if provider.api_key:
-        provider.api_key = "***" + provider.api_key[-4:] if len(provider.api_key) > 4 else "***"
-    return provider
+    # Mask API key in response (on a copy — never mutate the stored provider)
+    return _masked(provider)
 
 
 @router.delete("/providers/{provider_id}")
@@ -224,11 +229,8 @@ async def update_router_config(data: UpdateRouterConfig):
 async def get_router_state():
     """Get the current router state."""
     state = LLMRouterService.get_router_state()
-    # Mask API keys in providers
-    for p in state.providers:
-        if p.api_key:
-            p.api_key = "***" + p.api_key[-4:] if len(p.api_key) > 4 else "***"
-    return state
+    # Mask API keys in providers (on copies — never mutate the stored providers)
+    return state.model_copy(update={"providers": [_masked(p) for p in state.providers]})
 
 
 @router.get("/stats", response_model=LLMRoutingStats)
