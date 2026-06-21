@@ -317,6 +317,37 @@ describe('SessionDetails', () => {
       expect(hoisted.transcriptViewerProps.targetTimestamp).toBe('2026-01-15T10:56:00Z')
     })
 
+    it('clears a stale deep-link target when the selected session changes', () => {
+      storeState.selectedSession = {
+        ...mockSession,
+        session_id: 'sess-A',
+        messages_truncated: false,
+        recent_messages: [
+          {
+            type: 'assistant',
+            timestamp: '2026-01-15T10:56:00Z',
+            content: 'partial text',
+            content_truncated: true,
+            full_length: 4200,
+          },
+        ] as SessionMessage[],
+      }
+      const { rerender } = render(<SessionDetails />)
+
+      // Deep-link from a message in session A → target set, transcript tab active
+      fireEvent.click(
+        screen.getByRole('button', { name: '전체 메시지를 Raw Transcript에서 보기' })
+      )
+      expect(hoisted.transcriptViewerProps.targetTimestamp).toBe('2026-01-15T10:56:00Z')
+
+      // Switch to a different session while still on the transcript tab
+      storeState.selectedSession = { ...mockSession, session_id: 'sess-B' }
+      rerender(<SessionDetails />)
+
+      // The stale target must be cleared so session B does not jump unexpectedly
+      expect(hoisted.transcriptViewerProps.targetTimestamp).toBeUndefined()
+    })
+
     it('exposes git branch and model via title tooltips', () => {
       storeState.selectedSession = {
         ...mockSession,

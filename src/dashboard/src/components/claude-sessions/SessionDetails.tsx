@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useClaudeSessionsStore } from '../../stores/claudeSessions'
 import { cn } from '../../lib/utils'
 import {
@@ -337,6 +337,13 @@ export function SessionDetails() {
   // Carries the timestamp of an Overview message the user wants to jump to in
   // the Raw Transcript (deep-link handoff). Undefined = open transcript plainly.
   const [transcriptTarget, setTranscriptTarget] = useState<string | undefined>(undefined)
+
+  // Selecting a different session must drop any pending deep-link target, else
+  // the viewer would jump to the new session's last page for a foreign message.
+  const sessionId = selectedSession?.session_id
+  useEffect(() => {
+    setTranscriptTarget(undefined)
+  }, [sessionId])
 
   if (isLoadingDetails) {
     return (
