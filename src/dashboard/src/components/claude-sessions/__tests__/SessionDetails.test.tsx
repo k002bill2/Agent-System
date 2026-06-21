@@ -22,9 +22,13 @@ vi.mock('lucide-react', () => ({
   Info: (props: Record<string, unknown>) => <span data-testid="icon-info" {...props} />,
 }))
 
-// Mock TranscriptViewer
+// Mock TranscriptViewer — capture props so we can assert the deep-link handoff
+const hoisted = vi.hoisted(() => ({ transcriptViewerProps: {} as Record<string, unknown> }))
 vi.mock('../TranscriptViewer', () => ({
-  TranscriptViewer: () => <div data-testid="transcript-viewer">Transcript Viewer</div>,
+  TranscriptViewer: (props: Record<string, unknown>) => {
+    hoisted.transcriptViewerProps = props
+    return <div data-testid="transcript-viewer">Transcript Viewer</div>
+  },
 }))
 
 const mockSession: ClaudeSessionDetail = {
@@ -90,6 +94,7 @@ describe('SessionDetails', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     storeState = { selectedSession: null, isLoadingDetails: false }
+    hoisted.transcriptViewerProps = {}
   })
 
   it('shows loading spinner when isLoadingDetails', () => {
@@ -266,6 +271,95 @@ describe('SessionDetails', () => {
       render(<SessionDetails />)
       expect(
         screen.getByRole('button', { name: '전체 메시지를 Raw Transcript에서 보기' })
+      ).toBeInTheDocument()
+    })
+  })
+
+  describe('display relaxation & deep-link handoff', () => {
+    it('exposes the full tool input via a title tooltip (hover reveal, not truncated)', () => {
+      const longCmd = 'git log --oneline --graph ' + 'a'.repeat(200)
+      storeState.selectedSession = {
+        ...mockSession,
+        recent_messages: [
+          {
+            type: 'tool_use',
+            timestamp: '2026-01-15T10:57:00Z',
+            tool_name: 'Bash',
+            tool_input: { command: longCmd },
+          },
+        ] as SessionMessage[],
+      }
+      const { container } = render(<SessionDetails />)
+      // The inline summary stays one-line, but its title carries the FULL command
+      const tooltipEl = container.querySelector(`[title="${longCmd}"]`)
+      expect(tooltipEl).toBeInTheDocument()
+    })
+
+    it('passes the clicked message timestamp to TranscriptViewer on per-message "view full"', () => {
+      storeState.selectedSession = {
+        ...mockSession,
+        messages_truncated: false,
+        recent_messages: [
+          {
+            type: 'assistant',
+            timestamp: '2026-01-15T10:56:00Z',
+            content: 'partial text',
+            content_truncated: true,
+            full_length: 4200,
+          },
+        ] as SessionMessage[],
+      }
+      render(<SessionDetails />)
+      fireEvent.click(
+        screen.getByRole('button', { name: '전체 메시지를 Raw Transcript에서 보기' })
+      )
+      expect(screen.getByTestId('transcript-viewer')).toBeInTheDocument()
+      expect(hoisted.transcriptViewerProps.targetTimestamp).toBe('2026-01-15T10:56:00Z')
+    })
+
+    it('clears a stale deep-link target when the selected session changes', () => {
+      storeState.selectedSession = {
+        ...mockSession,
+        session_id: 'sess-A',
+        messages_truncated: false,
+        recent_messages: [
+          {
+            type: 'assistant',
+            timestamp: '2026-01-15T10:56:00Z',
+            content: 'partial text',
+            content_truncated: true,
+            full_length: 4200,
+          },
+        ] as SessionMessage[],
+      }
+      const { rerender } = render(<SessionDetails />)
+
+      // Deep-link from a message in session A → target set, transcript tab active
+      fireEvent.click(
+        screen.getByRole('button', { name: '전체 메시지를 Raw Transcript에서 보기' })
+      )
+      expect(hoisted.transcriptViewerProps.targetTimestamp).toBe('2026-01-15T10:56:00Z')
+
+      // Switch to a different session while still on the transcript tab
+      storeState.selectedSession = { ...mockSession, session_id: 'sess-B' }
+      rerender(<SessionDetails />)
+
+      // The stale target must be cleared so session B does not jump unexpectedly
+      expect(hoisted.transcriptViewerProps.targetTimestamp).toBeUndefined()
+    })
+
+    it('exposes git branch and model via title tooltips', () => {
+      storeState.selectedSession = {
+        ...mockSession,
+        git_branch: 'feature/a-very-long-branch-name-that-would-be-clipped',
+        model: 'claude-opus-4-8-with-a-long-identifier',
+      }
+      const { container } = render(<SessionDetails />)
+      expect(
+        container.querySelector('[title="feature/a-very-long-branch-name-that-would-be-clipped"]')
+      ).toBeInTheDocument()
+      expect(
+        container.querySelector('[title="claude-opus-4-8-with-a-long-identifier"]')
       ).toBeInTheDocument()
     })
   })

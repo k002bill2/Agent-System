@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useClaudeSessionsStore } from '../../stores/claudeSessions'
 import { cn } from '../../lib/utils'
 import {
@@ -66,22 +66,50 @@ function MessageIcon({ type }: { type: MessageType }) {
   }
 }
 
-function formatToolInput(input: Record<string, unknown>): string {
-  // Extract key values for display
-  if (input.file_path) return String(input.file_path).split('/').slice(-2).join('/')
-  if (input.pattern) return `"${input.pattern}"`
-  if (input.command) return String(input.command).slice(0, 50) + (String(input.command).length > 50 ? '...' : '')
-  if (input.query) return String(input.query).slice(0, 40) + (String(input.query).length > 40 ? '...' : '')
-  if (input.content) return `${String(input.content).slice(0, 30)}...`
-  if (input.url) return String(input.url).slice(0, 40)
+// Inline summary stays a single clipped line; the full value is exposed via the
+// title tooltip (hover reveal) so nothing is silently lost in the Overview.
+const TOOL_INPUT_SUMMARY_LIMIT = 120
+
+function capSummary(text: string): string {
+  return text.length > TOOL_INPUT_SUMMARY_LIMIT
+    ? `${text.slice(0, TOOL_INPUT_SUMMARY_LIMIT)}...`
+    : text
+}
+
+function formatToolInput(input: Record<string, unknown>): { summary: string; full: string } {
+  // Extract key values for display. `full` is the untruncated value for the tooltip.
+  if (input.file_path) {
+    const full = String(input.file_path)
+    return { summary: full.split('/').slice(-2).join('/'), full }
+  }
+  if (input.pattern) {
+    const full = `"${input.pattern}"`
+    return { summary: capSummary(full), full }
+  }
+  if (input.command) {
+    const full = String(input.command)
+    return { summary: capSummary(full), full }
+  }
+  if (input.query) {
+    const full = String(input.query)
+    return { summary: capSummary(full), full }
+  }
+  if (input.content) {
+    const full = String(input.content)
+    return { summary: capSummary(full), full }
+  }
+  if (input.url) {
+    const full = String(input.url)
+    return { summary: capSummary(full), full }
+  }
   // Fallback: show first key-value
   const keys = Object.keys(input)
   if (keys.length > 0) {
     const firstKey = keys[0]
-    const value = String(input[firstKey]).slice(0, 30)
-    return `${firstKey}: ${value}${String(input[firstKey]).length > 30 ? '...' : ''}`
+    const fullVal = String(input[firstKey])
+    return { summary: `${firstKey}: ${capSummary(fullVal)}`, full: `${firstKey}: ${fullVal}` }
   }
-  return ''
+  return { summary: '', full: '' }
 }
 
 function MessageItem({
@@ -89,10 +117,10 @@ function MessageItem({
   onViewTranscript,
 }: {
   message: SessionMessage
-  onViewTranscript?: () => void
+  onViewTranscript?: (targetTimestamp?: string) => void
 }) {
   const time = new Date(message.timestamp).toLocaleTimeString()
-  const toolInputSummary = message.tool_input ? formatToolInput(message.tool_input) : null
+  const toolInput = message.tool_input ? formatToolInput(message.tool_input) : null
 
   return (
     <div className="flex gap-3 py-2 px-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50">
@@ -114,13 +142,13 @@ function MessageItem({
             </span>
           )}
         </div>
-        {/* Tool input summary */}
-        {toolInputSummary && (
+        {/* Tool input summary — one clipped line, full value on hover (title) */}
+        {toolInput && toolInput.summary && (
           <p
             className="mt-1 text-xs text-gray-500 dark:text-gray-400 truncate"
-            title={toolInputSummary}
+            title={toolInput.full}
           >
-            {toolInputSummary}
+            {toolInput.summary}
           </p>
         )}
         {message.content && (
@@ -132,7 +160,7 @@ function MessageItem({
         {message.content_truncated && (
           <button
             type="button"
-            onClick={onViewTranscript}
+            onClick={() => onViewTranscript?.(message.timestamp)}
             aria-label="전체 메시지를 Raw Transcript에서 보기"
             className="mt-1 text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 underline"
           >
@@ -149,7 +177,7 @@ function OverviewContent({
   onViewTranscript,
 }: {
   session: ClaudeSessionDetail
-  onViewTranscript: () => void
+  onViewTranscript: (targetTimestamp?: string) => void
 }) {
   return (
     <>
@@ -197,14 +225,18 @@ function OverviewContent({
           {session.git_branch && (
             <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
               <GitBranch className="w-4 h-4" />
-              <span className="truncate">{session.git_branch}</span>
+              <span className="truncate" title={session.git_branch}>
+                {session.git_branch}
+              </span>
             </div>
           )}
 
           {/* Model */}
           <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
             <Bot className="w-4 h-4" />
-            <span className="truncate text-xs">{session.model}</span>
+            <span className="truncate text-xs" title={session.model}>
+              {session.model}
+            </span>
           </div>
 
           {/* Version */}
@@ -270,7 +302,7 @@ function OverviewContent({
               </span>
               <button
                 type="button"
-                onClick={onViewTranscript}
+                onClick={() => onViewTranscript()}
                 aria-label="전체 대화를 Raw Transcript에서 보기"
                 className="font-medium underline hover:text-amber-800 dark:hover:text-amber-300 whitespace-nowrap"
               >
@@ -302,6 +334,16 @@ function OverviewContent({
 export function SessionDetails() {
   const { selectedSession, isLoadingDetails } = useClaudeSessionsStore()
   const [activeTab, setActiveTab] = useState<TabType>('overview')
+  // Carries the timestamp of an Overview message the user wants to jump to in
+  // the Raw Transcript (deep-link handoff). Undefined = open transcript plainly.
+  const [transcriptTarget, setTranscriptTarget] = useState<string | undefined>(undefined)
+
+  // Selecting a different session must drop any pending deep-link target, else
+  // the viewer would jump to the new session's last page for a foreign message.
+  const sessionId = selectedSession?.session_id
+  useEffect(() => {
+    setTranscriptTarget(undefined)
+  }, [sessionId])
 
   if (isLoadingDetails) {
     return (
@@ -354,9 +396,15 @@ export function SessionDetails() {
 
       {/* Tab Content */}
       {activeTab === 'overview' ? (
-        <OverviewContent session={session} onViewTranscript={() => setActiveTab('transcript')} />
+        <OverviewContent
+          session={session}
+          onViewTranscript={(ts) => {
+            setTranscriptTarget(ts)
+            setActiveTab('transcript')
+          }}
+        />
       ) : (
-        <TranscriptViewer />
+        <TranscriptViewer targetTimestamp={transcriptTarget} />
       )}
     </div>
   )
