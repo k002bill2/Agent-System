@@ -93,3 +93,53 @@ describe('TranscriptViewer — JsonString expand toggle', () => {
     expect(screen.queryByRole('button', { name: /전체 문자열 보기/ })).not.toBeInTheDocument()
   })
 })
+
+describe('TranscriptViewer — deep-link target handoff', () => {
+  // The transcript endpoint returns the raw JSONL timestamp (ms, 3 digits);
+  // the Overview path serializes via Pydantic datetime (6 digits). Same instant,
+  // different string — the join must compare by instant, not by ===.
+  const TRANSCRIPT_TS = '2026-06-06T10:00:00.123Z'
+  const OVERVIEW_TS = '2026-06-06T10:00:00.123000Z'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // jsdom does not implement scrollIntoView — stub it so the auto-scroll effect runs
+    Element.prototype.scrollIntoView = vi.fn()
+    storeState = {
+      selectedSessionId: 'sess-1',
+      transcriptEntries: [{ ...longEntry, timestamp: TRANSCRIPT_TS }],
+      transcriptTotalCount: 120, // 3 pages of 50
+      transcriptHasMore: true,
+      isLoadingTranscript: false,
+      fetchTranscript: vi.fn(),
+      clearTranscript: vi.fn(),
+    }
+  })
+
+  it('jumps to the last page when a targetTimestamp is provided', () => {
+    render(<TranscriptViewer targetTimestamp={OVERVIEW_TS} />)
+    // last page = ceil(120/50) = 3 -> offset (3-1)*50 = 100
+    expect(storeState.fetchTranscript).toHaveBeenCalledWith('sess-1', 100, 50)
+  })
+
+  it('auto-expands the matching entry by instant, even when ISO formats differ', () => {
+    // OVERVIEW_TS !== TRANSCRIPT_TS as strings, but they are the same instant.
+    render(<TranscriptViewer targetTimestamp={OVERVIEW_TS} />)
+    // The matched entry is expanded on arrival, so its inner "더 보기" toggle shows
+    expect(screen.getByRole('button', { name: /전체 문자열 보기/ })).toBeInTheDocument()
+  })
+
+  it('does not auto-expand when no target is provided', () => {
+    render(<TranscriptViewer />)
+    expect(
+      screen.queryByRole('button', { name: /전체 문자열 보기/ })
+    ).not.toBeInTheDocument()
+  })
+
+  it('does not jump pages when no target is provided', () => {
+    render(<TranscriptViewer />)
+    // only the initial page-1 fetch should have happened
+    expect(storeState.fetchTranscript).toHaveBeenCalledTimes(1)
+    expect(storeState.fetchTranscript).toHaveBeenCalledWith('sess-1', 0, 50)
+  })
+})

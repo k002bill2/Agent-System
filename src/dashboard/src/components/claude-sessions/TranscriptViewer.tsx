@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, useMemo } from 'react'
+import { memo, useEffect, useRef, useState, useMemo } from 'react'
 import { useClaudeSessionsStore } from '../../stores/claudeSessions'
 import { cn } from '../../lib/utils'
 import {
@@ -211,14 +211,32 @@ function JsonTree({ data, depth = 0, maxDepth = 12 }: JsonTreeProps) {
 interface TranscriptEntryItemProps {
   entry: TranscriptEntry
   index: number
+  highlight?: boolean
 }
 
-function TranscriptEntryItem({ entry, index }: TranscriptEntryItemProps) {
-  const [expanded, setExpanded] = useState(false)
+function TranscriptEntryItem({ entry, index, highlight = false }: TranscriptEntryItemProps) {
+  const [expanded, setExpanded] = useState(highlight)
   const { type, detail } = getEntryTypeLabel(entry)
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Deep-link arrival: auto-expand the matched entry and scroll it into view.
+  useEffect(() => {
+    if (highlight) {
+      setExpanded(true)
+      ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }, [highlight])
 
   return (
-    <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800">
+    <div
+      ref={ref}
+      className={cn(
+        'border rounded-lg overflow-hidden bg-white dark:bg-gray-800',
+        highlight
+          ? 'border-primary-500 ring-2 ring-primary-500'
+          : 'border-gray-200 dark:border-gray-700'
+      )}
+    >
       <button
         onClick={() => setExpanded(!expanded)}
         className={cn(
@@ -258,7 +276,28 @@ function TranscriptEntryItem({ entry, index }: TranscriptEntryItemProps) {
 
 const ITEMS_PER_PAGE = 50
 
-export function TranscriptViewer() {
+/**
+ * Compare two ISO timestamps by instant. The Overview path serializes timestamps
+ * via a Pydantic datetime (microsecond precision, e.g. `...123000Z`) while the
+ * transcript endpoint returns the raw JSONL string (`...123Z`). They denote the
+ * same moment but differ as strings, so an `===` join would never match.
+ */
+function sameInstant(a: string | undefined, b: string | undefined): boolean {
+  if (!a || !b) return false
+  const ta = new Date(a).getTime()
+  return Number.isFinite(ta) && ta === new Date(b).getTime()
+}
+
+interface TranscriptViewerProps {
+  /**
+   * Timestamp of an Overview message to deep-link to. When set, the viewer jumps
+   * to the last page (where the most recent Overview messages live) and the
+   * matching entry is auto-expanded, scrolled into view, and highlighted.
+   */
+  targetTimestamp?: string
+}
+
+export function TranscriptViewer({ targetTimestamp }: TranscriptViewerProps = {}) {
   const {
     selectedSessionId,
     transcriptEntries,
@@ -272,15 +311,38 @@ export function TranscriptViewer() {
   const [filter, setFilter] = useState<FilterType>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
+  // Tracks the target we've already jumped for, so manual paging isn't overridden.
+  const [jumpedFor, setJumpedFor] = useState<string | null>(null)
 
   // Fetch transcript when session changes
   useEffect(() => {
     if (selectedSessionId) {
       clearTranscript()
       setCurrentPage(1)
+      setJumpedFor(null)
       fetchTranscript(selectedSessionId, 0, ITEMS_PER_PAGE)
     }
   }, [selectedSessionId, fetchTranscript, clearTranscript])
+
+  // Deep-link handoff: once the total is known, jump to the last page for a
+  // fresh target. Runs once per target; manual pagination afterwards is kept.
+  useEffect(() => {
+    if (!targetTimestamp || jumpedFor === targetTimestamp) return
+    if (!selectedSessionId || transcriptTotalCount <= 0) return
+    const lastPage = Math.max(1, Math.ceil(transcriptTotalCount / ITEMS_PER_PAGE))
+    setJumpedFor(targetTimestamp)
+    if (lastPage !== currentPage) {
+      setCurrentPage(lastPage)
+      fetchTranscript(selectedSessionId, (lastPage - 1) * ITEMS_PER_PAGE, ITEMS_PER_PAGE)
+    }
+  }, [
+    targetTimestamp,
+    jumpedFor,
+    selectedSessionId,
+    transcriptTotalCount,
+    currentPage,
+    fetchTranscript,
+  ])
 
   // Filter and search entries
   const filteredEntries = useMemo(() => {
@@ -392,6 +454,7 @@ export function TranscriptViewer() {
               key={`${entry.timestamp}-${index}`}
               entry={entry}
               index={(currentPage - 1) * ITEMS_PER_PAGE + index}
+              highlight={sameInstant(entry.timestamp, targetTimestamp)}
             />
           ))
         )}

@@ -125,8 +125,8 @@ import { cn } from '@/lib/utils';
 |----------|------|
 | `SessionList` | 세션 목록 (정렬, 자동 새로고침) |
 | `SessionCard` | 세션 카드 (상태, 토큰, 비용) |
-| `SessionDetails` | 상세 정보 + Recent Activity (요약 윈도 시 "전체 Transcript 보기" 배너, 메시지별 잘림 표시) |
-| `TranscriptViewer` | Raw 트랜스크립트 (JSON Tree, 긴 문자열은 "더 보기" 토글로 전체 표시) |
+| `SessionDetails` | 상세 정보 + Recent Activity (요약 윈도 시 "전체 Transcript 보기" 배너, 메시지별 잘림 표시). 툴 인풋·메타데이터는 `title` 툴팁으로 전체값 hover 노출. "전체 보기" 클릭 시 해당 메시지 timestamp를 `TranscriptViewer`로 전달(딥링크) |
+| `TranscriptViewer` | Raw 트랜스크립트 (JSON Tree, 긴 문자열은 "더 보기" 토글로 전체 표시). `targetTimestamp` prop 수신 시 마지막(최신) 페이지로 점프, 그 페이지에 일치 entry가 있으면 instant 비교로 자동 펼침·스크롤·하이라이트 |
 | `ProcessCleanupPanel` | 프로세스 정리 패널 |
 
 ### Project Config Components
