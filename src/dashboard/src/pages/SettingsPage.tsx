@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useSettingsStore, getModelsForProvider as getFallbackModels, Theme, LLMProvider, TerminalType, TERMINAL_DISPLAY_NAMES } from '../stores/settings'
+import { useSettingsStore, Theme, TerminalType, TERMINAL_DISPLAY_NAMES } from '../stores/settings'
 import { useOrchestrationStore } from '../stores/orchestration'
 import { notificationService } from '../services/notificationService'
 import { cn } from '../lib/utils'
@@ -8,7 +8,6 @@ import {
   Server,
   Palette,
   Key,
-  Cpu,
   CheckCircle,
   XCircle,
   RefreshCw,
@@ -24,22 +23,15 @@ import { LLMAccountsSettings } from '../components/usage'
 
 export function SettingsPage() {
   const {
-    llmProvider,
-    model,
-    apiKey,
     backendUrl,
     theme,
     notifications,
-    setLLMProvider,
-    setModel,
-    setApiKey,
     setBackendUrl,
     setTheme,
     setNotificationSetting,
     preferredTerminal,
     setPreferredTerminal,
     fetchModels,
-    getModelsForProvider,
   } = useSettingsStore()
 
   const { connected, connect, disconnect } = useOrchestrationStore()
@@ -193,16 +185,10 @@ export function SettingsPage() {
     notificationService.playSound('approval')
   }
 
-  // Fetch models from API on mount
+  // Fetch models from API on mount (populates availableModels for MemberDetailPanel)
   useEffect(() => {
     fetchModels()
   }, [fetchModels])
-
-  // Use API models if available, fallback to hardcoded list
-  const apiModels = getModelsForProvider(llmProvider)
-  const models = apiModels.length > 0
-    ? apiModels.map(m => m.id)
-    : getFallbackModels(llmProvider)
 
   const handleReconnect = () => {
     disconnect()
@@ -299,83 +285,6 @@ export function SettingsPage() {
         <LLMAccountsSettings />
 
         {/* ── Row 2: Medium cards ── */}
-        {/* LLM Settings */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <Cpu className="w-5 h-5" />
-            LLM Configuration
-          </h3>
-          <div className="space-y-4">
-            {/* Provider */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Provider
-              </label>
-              <div className="flex gap-2">
-                {(['codex_cli', 'anthropic', 'google', 'openai', 'local'] as LLMProvider[]).map((provider) => {
-                  const label: Record<LLMProvider, string> = {
-                    codex_cli: 'Codex CLI',
-                    anthropic: 'Anthropic',
-                    google: 'Gemini',
-                    openai: 'OpenAI',
-                    local: 'Local',
-                  }
-                  return (
-                    <button
-                      key={provider}
-                      onClick={() => setLLMProvider(provider)}
-                      className={cn(
-                        'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                        llmProvider === provider
-                          ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
-                      )}
-                    >
-                      {label[provider]}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Model */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Model
-              </label>
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                {models.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* API Key */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-2">
-                <Key className="w-4 h-4" />
-                API Key
-              </label>
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                placeholder="sk-..."
-              />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                API key is stored in memory only and not persisted
-              </p>
-            </div>
-          </div>
-        </div>
-
         {/* Claude Code */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
