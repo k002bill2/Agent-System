@@ -63,11 +63,6 @@ const applyThemeToDocument = (theme: Theme) => {
 }
 
 interface SettingsState {
-  // LLM Settings
-  llmProvider: LLMProvider
-  model: string
-  apiKey: string
-
   // Connection
   backendUrl: string
 
@@ -86,9 +81,6 @@ interface SettingsState {
   modelsError: string | null
 
   // Actions
-  setLLMProvider: (provider: LLMProvider) => void
-  setModel: (model: string) => void
-  setApiKey: (key: string) => void
   setBackendUrl: (url: string) => void
   setTheme: (theme: Theme) => void
   setNotificationSetting: <K extends keyof NotificationSettings>(
@@ -145,9 +137,6 @@ export const useSettingsStore = create<SettingsState>()(
   persist(
     (set, get) => ({
       // Default values
-      llmProvider: 'codex_cli',
-      model: 'codex-cli',
-      apiKey: '',
       backendUrl: 'http://localhost:8000',
       theme: 'light',
       notifications: defaultNotifications,
@@ -159,18 +148,6 @@ export const useSettingsStore = create<SettingsState>()(
       modelsError: null,
 
       // Actions
-      setLLMProvider: (provider) => {
-        const state = get()
-        const providerModels = state.getModelsForProvider(provider)
-        const defaultModel = providerModels.find(m => m.is_default) || providerModels[0]
-        set({
-          llmProvider: provider,
-          model: defaultModel?.id || fallbackModels[provider]?.[0] || '',
-        })
-      },
-
-      setModel: (model) => set({ model }),
-      setApiKey: (apiKey) => set({ apiKey }),
       setBackendUrl: (backendUrl) => set({ backendUrl }),
 
       setTheme: (theme) => {
@@ -223,13 +200,10 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'agent-orchestration-service-settings',
       partialize: (state) => ({
-        llmProvider: state.llmProvider,
-        model: state.model,
         backendUrl: state.backendUrl,
         theme: state.theme,
         notifications: state.notifications,
         preferredTerminal: state.preferredTerminal,
-        // Note: apiKey is intentionally NOT persisted for security
         // Note: availableModels are fetched fresh, not persisted
       }),
     }

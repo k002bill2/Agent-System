@@ -4,9 +4,6 @@ import { SettingsPage } from './SettingsPage'
 
 // Use vi.hoisted to declare mock fns that vi.mock factories can reference
 const {
-  mockSetLLMProvider,
-  mockSetModel,
-  mockSetApiKey,
   mockSetBackendUrl,
   mockSetTheme,
   mockSetNotificationSetting,
@@ -23,9 +20,6 @@ const {
   let _settingsOverrides: Record<string, unknown> = {}
   let _orchestrationOverrides: Record<string, unknown> = {}
   return {
-    mockSetLLMProvider: vi.fn(),
-    mockSetModel: vi.fn(),
-    mockSetApiKey: vi.fn(),
     mockSetBackendUrl: vi.fn(),
     mockSetTheme: vi.fn(),
     mockSetNotificationSetting: vi.fn(),
@@ -63,27 +57,18 @@ vi.mock('../components/usage', () => ({
 // Store mocks
 vi.mock('../stores/settings', () => ({
   useSettingsStore: () => ({
-    llmProvider: 'google',
-    model: 'gemini-pro',
-    apiKey: '',
     backendUrl: 'http://localhost:8000',
     theme: 'system',
     notifications: defaultNotifications,
     preferredTerminal: 'warp',
-    setLLMProvider: mockSetLLMProvider,
-    setModel: mockSetModel,
-    setApiKey: mockSetApiKey,
     setBackendUrl: mockSetBackendUrl,
     setTheme: mockSetTheme,
     setNotificationSetting: mockSetNotificationSetting,
     setPreferredTerminal: mockSetPreferredTerminal,
     fetchModels: vi.fn(),
-    getModelsForProvider: () => [],
     ...getSettingsOverrides(),
   }),
-  getModelsForProvider: () => ['model-a', 'model-b'],
   Theme: {},
-  LLMProvider: {},
   TerminalType: {},
   TERMINAL_DISPLAY_NAMES: {
     warp: 'Warp',
@@ -162,11 +147,6 @@ describe('SettingsPage', () => {
     expect(screen.getByText('Connection')).toBeInTheDocument()
   })
 
-  it('renders LLM Configuration section', async () => {
-    await renderSettingsPage()
-    expect(screen.getByText('LLM Configuration')).toBeInTheDocument()
-  })
-
   it('renders Appearance section', async () => {
     await renderSettingsPage()
     expect(screen.getByText('Appearance')).toBeInTheDocument()
@@ -226,69 +206,6 @@ describe('SettingsPage', () => {
         fireEvent.change(input, { target: { value: 'http://example.com:9000' } })
       })
       expect(mockSetBackendUrl).toHaveBeenCalledWith('http://example.com:9000')
-    })
-  })
-
-  // ---- NEW: LLM Configuration ----
-
-  describe('LLM Configuration section', () => {
-    it('renders all four provider buttons', async () => {
-      await renderSettingsPage()
-      expect(screen.getByText('Anthropic')).toBeInTheDocument()
-      expect(screen.getByText('Gemini')).toBeInTheDocument()
-      expect(screen.getByText('OpenAI')).toBeInTheDocument()
-      expect(screen.getByText('Local')).toBeInTheDocument()
-    })
-
-    it('calls setLLMProvider when clicking a provider button', async () => {
-      await renderSettingsPage()
-      await act(async () => {
-        fireEvent.click(screen.getByText('Anthropic'))
-      })
-      expect(mockSetLLMProvider).toHaveBeenCalledWith('anthropic')
-    })
-
-    it('calls setLLMProvider for local provider', async () => {
-      await renderSettingsPage()
-      await act(async () => {
-        fireEvent.click(screen.getByText('Local'))
-      })
-      expect(mockSetLLMProvider).toHaveBeenCalledWith('local')
-    })
-
-    it('renders model dropdown with options from getModelsForProvider', async () => {
-      await renderSettingsPage()
-      const selects = screen.getAllByRole('combobox')
-      // First combobox is model select, second is terminal select
-      const modelSelect = selects[0]
-      const options = modelSelect.querySelectorAll('option')
-      expect(options).toHaveLength(2)
-      expect(options[0]).toHaveTextContent('model-a')
-      expect(options[1]).toHaveTextContent('model-b')
-    })
-
-    it('calls setModel when model selection changes', async () => {
-      await renderSettingsPage()
-      const selects = screen.getAllByRole('combobox')
-      const modelSelect = selects[0]
-      await act(async () => {
-        fireEvent.change(modelSelect, { target: { value: 'model-b' } })
-      })
-      expect(mockSetModel).toHaveBeenCalledWith('model-b')
-    })
-
-    it('calls setApiKey when API key input changes', async () => {
-      await renderSettingsPage()
-      const input = screen.getByPlaceholderText('sk-...')
-      await act(async () => {
-        fireEvent.change(input, { target: { value: 'sk-test-key-123' } })
-      })
-      expect(mockSetApiKey).toHaveBeenCalledWith('sk-test-key-123')
-    })
-
-    it('displays API key storage notice', async () => {
-      await renderSettingsPage()
-      expect(screen.getByText('API key is stored in memory only and not persisted')).toBeInTheDocument()
     })
   })
 

@@ -18,9 +18,6 @@ describe('settings store', () => {
   beforeEach(() => {
     // Reset store to default state
     useSettingsStore.setState({
-      llmProvider: 'anthropic',
-      model: 'claude-sonnet-4-6',
-      apiKey: '',
       backendUrl: 'http://localhost:8000',
       theme: 'light',
       notifications: {
@@ -39,11 +36,6 @@ describe('settings store', () => {
   })
 
   describe('initial state', () => {
-    it('has default llmProvider as anthropic', () => {
-      const state = useSettingsStore.getState()
-      expect(state.llmProvider).toBe('anthropic')
-    })
-
     it('has default theme as light', () => {
       const state = useSettingsStore.getState()
       expect(state.theme).toBe('light')
@@ -61,66 +53,6 @@ describe('settings store', () => {
       expect(notifications.notifyApprovalRequired).toBe(true)
       expect(notifications.notifyTaskCompleted).toBe(false)
       expect(notifications.soundVolume).toBe(50)
-    })
-  })
-
-  describe('setLLMProvider', () => {
-    it('selects codex cli model when switching to codex_cli', () => {
-      const { setLLMProvider } = useSettingsStore.getState()
-
-      setLLMProvider('codex_cli')
-
-      const state = useSettingsStore.getState()
-      expect(state.llmProvider).toBe('codex_cli')
-      expect(state.model).toBe('codex-cli')
-    })
-
-    it('updates provider and selects first model', () => {
-      const { setLLMProvider } = useSettingsStore.getState()
-
-      setLLMProvider('openai')
-
-      const state = useSettingsStore.getState()
-      expect(state.llmProvider).toBe('openai')
-      expect(state.model).toBe('gpt-4o-mini')
-    })
-
-    it('selects google/gemini models when switching to google', () => {
-      const { setLLMProvider } = useSettingsStore.getState()
-
-      setLLMProvider('google')
-
-      const state = useSettingsStore.getState()
-      expect(state.llmProvider).toBe('google')
-      expect(state.model).toBe('gemini-3-flash-preview')
-    })
-
-    it('selects local models when switching to local', () => {
-      const { setLLMProvider } = useSettingsStore.getState()
-
-      setLLMProvider('local')
-
-      const state = useSettingsStore.getState()
-      expect(state.llmProvider).toBe('local')
-      expect(state.model).toBe('exaone3.5:7.8b')
-    })
-  })
-
-  describe('setModel', () => {
-    it('updates model', () => {
-      const { setModel } = useSettingsStore.getState()
-
-      setModel('claude-opus-4-8')
-      expect(useSettingsStore.getState().model).toBe('claude-opus-4-8')
-    })
-  })
-
-  describe('setApiKey', () => {
-    it('updates apiKey', () => {
-      const { setApiKey } = useSettingsStore.getState()
-
-      setApiKey('sk-test-key')
-      expect(useSettingsStore.getState().apiKey).toBe('sk-test-key')
     })
   })
 
@@ -408,61 +340,6 @@ describe('settings store', () => {
     })
   })
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // setLLMProvider with availableModels populated
-  // ──────────────────────────────────────────────────────────────────────────
-  describe('setLLMProvider with availableModels populated', () => {
-    it('selects the is_default model when one exists for the provider', () => {
-      const nonDefault = makeModel({ id: 'claude-haiku', provider: 'anthropic' })
-      const defaultModel = makeModel({
-        id: 'claude-sonnet-4-6',
-        provider: 'anthropic',
-        is_default: true,
-      })
-      useSettingsStore.setState({ availableModels: [nonDefault, defaultModel] })
-
-      useSettingsStore.getState().setLLMProvider('anthropic')
-
-      expect(useSettingsStore.getState().model).toBe('claude-sonnet-4-6')
-    })
-
-    it('selects the first model when no is_default model exists for the provider', () => {
-      const first = makeModel({ id: 'claude-first', provider: 'anthropic' })
-      const second = makeModel({ id: 'claude-second', provider: 'anthropic' })
-      useSettingsStore.setState({ availableModels: [first, second] })
-
-      useSettingsStore.getState().setLLMProvider('anthropic')
-
-      expect(useSettingsStore.getState().model).toBe('claude-first')
-    })
-
-    it('falls back to static fallback model when availableModels has no match', () => {
-      // availableModels only has google models, so anthropic falls back to static list
-      useSettingsStore.setState({
-        availableModels: [makeModel({ id: 'gemini-3-flash-preview', provider: 'google' })],
-      })
-
-      useSettingsStore.getState().setLLMProvider('anthropic')
-
-      // Fallback for anthropic is 'claude-opus-4-8'
-      expect(useSettingsStore.getState().model).toBe('claude-opus-4-8')
-      expect(useSettingsStore.getState().llmProvider).toBe('anthropic')
-    })
-
-    it("maps 'local' provider to 'ollama' when selecting from availableModels", () => {
-      const ollamaDefault = makeModel({
-        id: 'exaone3.5:7.8b',
-        provider: 'ollama',
-        is_default: true,
-      })
-      useSettingsStore.setState({ availableModels: [ollamaDefault] })
-
-      useSettingsStore.getState().setLLMProvider('local')
-
-      expect(useSettingsStore.getState().llmProvider).toBe('local')
-      expect(useSettingsStore.getState().model).toBe('exaone3.5:7.8b')
-    })
-  })
 })
 
 describe('getModelsForProvider (legacy exported function)', () => {
