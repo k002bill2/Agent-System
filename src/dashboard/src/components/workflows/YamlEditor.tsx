@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import yaml from 'js-yaml'
+import * as yaml from 'js-yaml'
 import { AlertCircle, Eye, Code, Copy, Check } from 'lucide-react'
 
 interface YamlEditorProps {
