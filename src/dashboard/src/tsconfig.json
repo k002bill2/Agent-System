@@ -1,0 +1,11 @@
+{
+  // Vite 8(oxc) 전용 tsconfig.
+  // oxc 트랜스포머는 각 파일에 매칭되는 tsconfig(가장 가까운 것)를 요구하는데,
+  // 루트 tsconfig.json이 테스트/셋업 파일을 exclude하면 oxc가 vitest 트랜스폼 시
+  // "[TSCONFIG_ERROR] Tsconfig not found"로 실패한다(node 24+/최신 oxc 바이너리에서 발현).
+  // 이 파일은 src/ 하위 모든 파일(테스트 포함)을 커버해 oxc가 참조한다.
+  // tsc는 이 nested config를 자동 사용하지 않으므로 앱 타입체크(루트 tsconfig)는 영향 없음.
+  "extends": "../tsconfig.json",
+  "include": ["**/*"],
+  "exclude": []
+}
