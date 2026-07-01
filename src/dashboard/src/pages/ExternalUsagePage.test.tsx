@@ -50,6 +50,10 @@ vi.mock('../components/usage/DailyCostTrend', () => ({
   default: () => <div data-testid="daily-cost-trend">DailyCostTrend</div>,
 }))
 
+vi.mock('../components/usage/AdminKeyManager', () => ({
+  AdminKeyManager: () => <div data-testid="admin-key-manager">AdminKeyManager</div>,
+}))
+
 import { ExternalUsagePage } from './ExternalUsagePage'
 import { useExternalUsageStore } from '../stores/externalUsage'
 
@@ -154,10 +158,10 @@ describe('ExternalUsagePage', () => {
     expect(screen.getByText('Status')).toBeInTheDocument()
   })
 
-  it('renders provider configuration section', () => {
+  it('renders the admin key manager section', () => {
     render(<ExternalUsagePage />)
 
-    expect(screen.getByText('Provider Configuration')).toBeInTheDocument()
+    expect(screen.getByTestId('admin-key-manager')).toBeInTheDocument()
   })
 
   it('calls fetchSummary and fetchProviders on mount', () => {

@@ -69,3 +69,31 @@ class UserLLMCredentialModel(Base):
         UniqueConstraint("user_id", "provider", "key_name", name="uq_user_provider_key_name"),
         Index("ix_user_llm_cred_user_provider", "user_id", "provider"),
     )
+
+
+class DeploymentUsageCredentialModel(Base):
+    """Deployment-wide usage API credentials (encrypted at rest).
+
+    Distinct from :class:`UserLLMCredentialModel`: these are admin/manager-managed
+    org-level keys used solely to read External Usage (org usage / metrics) APIs.
+    One row per provider (``uq_deployment_usage_provider``).
+    """
+
+    __tablename__ = "deployment_usage_credentials"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    provider = Column(String(50), nullable=False)
+    api_key = Column(EncryptedString(1024), nullable=False)
+    label = Column(String(255), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    last_verified_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (UniqueConstraint("provider", name="uq_deployment_usage_provider"),)

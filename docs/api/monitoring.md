@@ -64,17 +64,32 @@
 
 ## External Usage (외부 LLM 사용량)
 
-| Method | Path | 설명 |
-|--------|------|------|
-| GET | `/api/external-usage/summary` | 외부 LLM 프로바이더 사용량 요약 |
-| GET | `/api/external-usage/providers` | 지원 프로바이더 목록 및 설정 상태 |
-| GET | `/api/external-usage/providers/{provider}/health` | 프로바이더 연결 상태 확인 |
-| POST | `/api/external-usage/sync` | 사용량 데이터 수동 동기화 |
+조회 엔드포인트는 **인증 필수**(`get_current_user`). org 단위 사용량/비용을 노출하므로 무인증 접근을 차단한다.
+
+| Method | Path | 인증 | 설명 |
+|--------|------|------|------|
+| GET | `/api/external-usage/summary` | user | 외부 LLM 프로바이더 사용량 요약 |
+| GET | `/api/external-usage/providers` | user | 지원 프로바이더 목록 및 설정 상태 |
+| GET | `/api/external-usage/providers/{provider}/health` | user | 프로바이더 연결 상태 확인 |
+| POST | `/api/external-usage/sync` | user | 사용량 데이터 수동 동기화 |
 
 **쿼리 파라미터** (`GET /summary`):
 - `start_time`: 시작 시간 (기본: 30일 전)
 - `end_time`: 종료 시간 (기본: 현재)
 - `providers`: 필터할 프로바이더 목록
+
+### Deployment Usage Keys (admin/manager 전용)
+
+org-level usage API용 admin 키(예: OpenAI `sk-admin-`)를 배포 단위로 DB에 저장한다. 수집 키 해석 우선순위는 **활성 DB 키 > `EXTERNAL_*_ADMIN_KEY` 환경변수 > 없음**. 채팅 키(`user_llm_credentials`)와 분리된 전용 테이블(`deployment_usage_credentials`, provider당 1행)을 쓴다. 응답의 `api_key`는 **항상 마스킹**된다.
+
+| Method | Path | 인증 | 설명 |
+|--------|------|------|------|
+| GET | `/api/external-usage/admin-keys` | admin/manager | provider별 usage 키 상태(`source`: db/env/none, 마스킹) |
+| PUT | `/api/external-usage/admin-keys/{provider}` | admin/manager | usage 키 등록/수정(upsert). `api_key` 생략 시 기존 키 보존(label·is_active만 수정), 신규 생성은 `api_key` 필수 |
+| DELETE | `/api/external-usage/admin-keys/{provider}` | admin/manager | usage 키 하드 삭제 |
+| POST | `/api/external-usage/admin-keys/{provider}/verify` | admin/manager | 실제 usage 엔드포인트 호출로 능력 검증(`usage_capable`). HTTP status만 관찰(스코프 문자열 미검사) |
+
+지원 provider: `openai`, `anthropic`, `github_copilot`. (auth 비활성 폴백 시 admin CRUD는 미정의 — 무인증 권한 접근 불가)
 
 ---
 

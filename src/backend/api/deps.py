@@ -178,6 +178,23 @@ async def get_current_admin_user(
     return current_user
 
 
+async def get_current_admin_or_manager_user(
+    current_user: UserModel = Depends(get_current_user),
+) -> UserModel:
+    """Get current user and verify they are an admin or manager.
+
+    Use this for endpoints managed by admins and managers (e.g. deployment-wide
+    usage credential CRUD). ``is_admin`` is a legacy fallback.
+    """
+    allowed = current_user.role in ("admin", "manager") or current_user.is_admin
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin or manager privileges required",
+        )
+    return current_user
+
+
 # ─────────────────────────────────────────────────────────────
 # Organization Role Dependencies
 # ─────────────────────────────────────────────────────────────

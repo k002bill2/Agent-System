@@ -23,6 +23,7 @@ import {
 import { useExternalUsageStore } from '../stores/externalUsage'
 import MemberUsageTable from '../components/usage/MemberUsageTable'
 import DailyCostTrend from '../components/usage/DailyCostTrend'
+import { AdminKeyManager } from '../components/usage/AdminKeyManager'
 
 const PROVIDER_COLORS: Record<string, string> = {
   openai: '#10a37f',
@@ -331,41 +332,8 @@ export function ExternalUsagePage() {
         </div>
       </div>
 
-      {/* Provider configuration guide */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
-        <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
-          <Settings className="w-4 h-4" />
-          Provider Configuration
-        </h2>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-          Set the following environment variables to enable usage monitoring:
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-            <div className="flex items-center gap-2 mb-2">
-              <span style={{ color: PROVIDER_COLORS.openai }} className="text-xs font-semibold">OpenAI</span>
-              {providers.find(p => p.provider === 'openai')?.enabled
-                ? <CheckCircle className="w-3.5 h-3.5 text-green-500" />
-                : <AlertCircle className="w-3.5 h-3.5 text-gray-400" />}
-            </div>
-            <code className="text-xs text-gray-600 dark:text-gray-300 block">
-              EXTERNAL_OPENAI_ADMIN_KEY=sk-admin-...
-            </code>
-          </div>
-          <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-            <div className="flex items-center gap-2 mb-2">
-              <span style={{ color: PROVIDER_COLORS.github_copilot }} className="text-xs font-semibold">GitHub Copilot</span>
-              {providers.find(p => p.provider === 'github_copilot')?.enabled
-                ? <CheckCircle className="w-3.5 h-3.5 text-green-500" />
-                : <AlertCircle className="w-3.5 h-3.5 text-gray-400" />}
-            </div>
-            <code className="text-xs text-gray-600 dark:text-gray-300 block">
-              EXTERNAL_GITHUB_TOKEN=ghp_...<br />
-              EXTERNAL_GITHUB_ORG=my-org
-            </code>
-          </div>
-        </div>
-      </div>
+      {/* Admin/manager usage key management (replaces the read-only env guide) */}
+      <AdminKeyManager />
     </div>
   )
 }
