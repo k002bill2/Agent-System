@@ -17,6 +17,10 @@ import pytest
 from models.external_usage import DeploymentUsageKeyUpsert, ExternalProvider
 from services import deployment_usage_credential_service as ducs
 
+# 이 저장소는 pytest 실행 시 rootdir이 repo 루트로 잡혀 src/backend/pyproject.toml의
+# asyncio_mode=auto가 적용되지 않는다(실질 STRICT). 기존 테스트 관례대로 명시적으로 마킹.
+pytestmark = pytest.mark.asyncio
+
 
 def _mock_client(status: int) -> AsyncMock:
     """Async-context-manager httpx client whose GET returns the given status."""

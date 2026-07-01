@@ -9,6 +9,10 @@ import pytest
 
 from services.external_usage_service import OpenAIUsageCollector
 
+# 이 저장소는 pytest 실행 시 rootdir이 repo 루트로 잡혀 src/backend/pyproject.toml의
+# asyncio_mode=auto가 적용되지 않는다(실질 STRICT). 기존 테스트 관례대로 명시적으로 마킹.
+pytestmark = pytest.mark.asyncio
+
 
 def _mock_client(payload: dict, status: int = 200) -> AsyncMock:
     """Build an async-context-manager httpx client mock returning a canned response."""
