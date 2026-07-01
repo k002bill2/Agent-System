@@ -48,6 +48,7 @@ from db.models.git import (
 
 # LLM
 from db.models.llm import (
+    DeploymentUsageCredentialModel,
     LLMModelConfigModel,
     UserLLMCredentialModel,
 )
@@ -149,6 +150,7 @@ __all__ = [
     # LLM
     "LLMModelConfigModel",
     "UserLLMCredentialModel",
+    "DeploymentUsageCredentialModel",
     # Config Version
     "ConfigVersionModel",
     # Playground

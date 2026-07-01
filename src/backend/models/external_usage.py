@@ -148,3 +148,46 @@ class LLMCredentialVerifyResponse(BaseModel):
     provider: ExternalProvider
     error_message: str | None = None
     latency_ms: float | None = None
+
+
+# ── Deployment Usage Credential 관련 스키마 ─────────────────────────
+# admin/manager 가 관리하는 org-level usage 전용 키. api_key 평문은 응답에
+# 절대 포함하지 않으며 항상 마스킹한다.
+
+
+class DeploymentUsageKeyResponse(BaseModel):
+    """배포 단위 usage 키 상태 응답 — api_key는 마스킹 처리."""
+
+    provider: ExternalProvider
+    has_db_key: bool
+    is_active: bool
+    source: str  # "db" | "env" | "none"
+    api_key_masked: str | None = None
+    label: str | None = None
+    last_verified_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class DeploymentUsageKeyUpsert(BaseModel):
+    """usage 키 등록/수정 요청 바디.
+
+    ``api_key`` 는 선택적: 제공 시에만 저장(길이 10..1024 검증), 생략/None 이면
+    기존 암호화 키를 보존한다(label·is_active 만 수정 — 설계 A5). 신규 생성에는
+    키가 필수이므로 서비스 계층이 거부(엔드포인트에서 HTTP 400)한다.
+    """
+
+    api_key: str | None = Field(default=None, min_length=10, max_length=1024)
+    label: str | None = Field(default=None, max_length=255)
+    is_active: bool = True
+
+
+class DeploymentUsageKeyVerifyResponse(BaseModel):
+    """usage 키 검증 결과 — HTTP status만 관찰(스코프 문자열 검사 없음)."""
+
+    provider: ExternalProvider
+    is_valid: bool
+    usage_capable: bool
+    status_code: int | None = None
+    error_message: str | None = None
+    latency_ms: float | None = None

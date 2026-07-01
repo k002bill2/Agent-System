@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 
 import httpx
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.external_usage import (
     ExternalProvider,
@@ -16,6 +17,7 @@ from models.external_usage import (
     UnifiedUsageRecord,
     UsageSummary,
 )
+from services.deployment_usage_credential_service import resolve_admin_key
 
 
 class BaseUsageCollector(ABC):
@@ -40,8 +42,30 @@ class OpenAIUsageCollector(BaseUsageCollector):
 
     BASE_URL = "https://api.openai.com/v1"
 
+    # Per-1K-token USD pricing (input, output), prefix-matched most-specific first
+    # so "gpt-4o-mini" wins over "gpt-4o". The org usage endpoint returns token
+    # counts only (no cost), so we price locally — same approach as
+    # AnthropicUsageCollector. Mirrors api/llm_proxy.py COST_TABLE; unlisted
+    # models fall back to $0 rather than fabricating a price.
+    _COST_TABLE: tuple[tuple[str, float, float], ...] = (
+        ("gpt-4o-mini", 0.00015, 0.0006),
+        ("gpt-4o", 0.005, 0.015),
+        ("o1-mini", 0.003, 0.012),
+        ("o1", 0.015, 0.060),
+    )
+
     def __init__(self, api_key: str) -> None:
         self._api_key = api_key
+
+    @classmethod
+    def _calc_cost(cls, model: str | None, input_tokens: int, output_tokens: int) -> float:
+        """Estimate USD cost from the local price table; 0.0 for unlisted models."""
+        if not model:
+            return 0.0
+        for prefix, cost_in, cost_out in cls._COST_TABLE:
+            if model.startswith(prefix):
+                return (input_tokens / 1000) * cost_in + (output_tokens / 1000) * cost_out
+        return 0.0
 
     def get_provider(self) -> ExternalProvider:
         return ExternalProvider.OPENAI
@@ -102,6 +126,7 @@ class OpenAIUsageCollector(BaseUsageCollector):
                     for result in bucket.get("results", []):
                         input_tok = result.get("input_tokens", 0) or 0
                         output_tok = result.get("output_tokens", 0) or 0
+                        model = result.get("model")
                         records.append(
                             UnifiedUsageRecord(
                                 provider=ExternalProvider.OPENAI,
@@ -110,8 +135,9 @@ class OpenAIUsageCollector(BaseUsageCollector):
                                 input_tokens=input_tok,
                                 output_tokens=output_tok,
                                 total_tokens=input_tok + output_tok,
+                                cost_usd=self._calc_cost(model, input_tok, output_tok),
                                 request_count=result.get("num_model_requests", 0) or 0,
-                                model=result.get("model"),
+                                model=model,
                                 user_id=result.get("user_id"),
                                 raw_data=result,
                             )
@@ -324,25 +350,32 @@ class ExternalUsageService:
     """Orchestrates usage collection from multiple external providers."""
 
     def __init__(self) -> None:
-        self._collectors: dict[ExternalProvider, BaseUsageCollector] = {}
         self._proxy_records: list[UnifiedUsageRecord] = []
-        self._init_collectors()
 
-    def _init_collectors(self) -> None:
-        openai_key = os.getenv("EXTERNAL_OPENAI_ADMIN_KEY")
+    async def _build_collectors(
+        self, db: AsyncSession
+    ) -> dict[ExternalProvider, BaseUsageCollector]:
+        """Build per-request collectors from resolved deployment usage keys.
+
+        Keys resolve via ``resolve_admin_key`` (active DB row > ``EXTERNAL_*`` env).
+        GitHub's token is DB-overridable; its org stays env-only.
+        """
+        collectors: dict[ExternalProvider, BaseUsageCollector] = {}
+
+        openai_key = await resolve_admin_key(db, ExternalProvider.OPENAI)
         if openai_key:
-            self._collectors[ExternalProvider.OPENAI] = OpenAIUsageCollector(openai_key)
+            collectors[ExternalProvider.OPENAI] = OpenAIUsageCollector(openai_key)
 
-        gh_token = os.getenv("EXTERNAL_GITHUB_TOKEN")
+        gh_token = await resolve_admin_key(db, ExternalProvider.GITHUB_COPILOT)
         gh_org = os.getenv("EXTERNAL_GITHUB_ORG")
         if gh_token and gh_org:
-            self._collectors[ExternalProvider.GITHUB_COPILOT] = GitHubCopilotCollector(
-                gh_token, gh_org
-            )
+            collectors[ExternalProvider.GITHUB_COPILOT] = GitHubCopilotCollector(gh_token, gh_org)
 
-        anthropic_key = os.getenv("EXTERNAL_ANTHROPIC_ADMIN_KEY")
+        anthropic_key = await resolve_admin_key(db, ExternalProvider.ANTHROPIC)
         if anthropic_key:
-            self._collectors[ExternalProvider.ANTHROPIC] = AnthropicUsageCollector(anthropic_key)
+            collectors[ExternalProvider.ANTHROPIC] = AnthropicUsageCollector(anthropic_key)
+
+        return collectors
 
     def add_record(self, record: UnifiedUsageRecord) -> None:
         """Add a proxy-collected record to in-memory store."""
@@ -356,6 +389,7 @@ class ExternalUsageService:
 
     async def get_summary(
         self,
+        db: AsyncSession,
         start_time: datetime,
         end_time: datetime,
         providers: list[ExternalProvider] | None = None,
@@ -363,8 +397,9 @@ class ExternalUsageService:
         all_records: list[UnifiedUsageRecord] = []
         summaries: list[UsageSummary] = []
 
+        collectors = await self._build_collectors(db)
         target_collectors = {
-            p: c for p, c in self._collectors.items() if providers is None or p in providers
+            p: c for p, c in collectors.items() if providers is None or p in providers
         }
 
         for provider, collector in target_collectors.items():
@@ -407,9 +442,10 @@ class ExternalUsageService:
             period_end=end_time,
         )
 
-    async def get_provider_health(self) -> list[ProviderHealthStatus]:
+    async def get_provider_health(self, db: AsyncSession) -> list[ProviderHealthStatus]:
         statuses: list[ProviderHealthStatus] = []
-        for collector in self._collectors.values():
+        collectors = await self._build_collectors(db)
+        for collector in collectors.values():
             try:
                 status = await collector.health_check()
                 statuses.append(status)
@@ -423,10 +459,10 @@ class ExternalUsageService:
                 )
         return statuses
 
-    async def get_configured_providers(self) -> list[ProviderConfig]:
+    async def get_configured_providers(self, db: AsyncSession) -> list[ProviderConfig]:
         configs: list[ProviderConfig] = []
 
-        openai_key = os.getenv("EXTERNAL_OPENAI_ADMIN_KEY")
+        openai_key = await resolve_admin_key(db, ExternalProvider.OPENAI)
         configs.append(
             ProviderConfig(
                 provider=ExternalProvider.OPENAI,
@@ -435,12 +471,12 @@ class ExternalUsageService:
             )
         )
 
-        gh_token = os.getenv("EXTERNAL_GITHUB_TOKEN")
+        gh_token = await resolve_admin_key(db, ExternalProvider.GITHUB_COPILOT)
         gh_org = os.getenv("EXTERNAL_GITHUB_ORG")
         configs.append(
             ProviderConfig(
                 provider=ExternalProvider.GITHUB_COPILOT,
-                enabled=bool(gh_token and gh_org),
+                enabled=bool(gh_token),
                 api_key_masked=self._mask_key(gh_token) if gh_token else None,
                 org_id=gh_org,
             )
@@ -453,7 +489,7 @@ class ExternalUsageService:
             )
         )
 
-        anthropic_key = os.getenv("EXTERNAL_ANTHROPIC_ADMIN_KEY")
+        anthropic_key = await resolve_admin_key(db, ExternalProvider.ANTHROPIC)
         configs.append(
             ProviderConfig(
                 provider=ExternalProvider.ANTHROPIC,

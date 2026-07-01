@@ -90,7 +90,8 @@ src/backend/
 │   ├── credential_service.py      # 자격증명 암호화/저장
 │   ├── encryption_service.py      # AES-256-GCM 암호화 서비스
 │   ├── environment_diagnostic_service.py  # 환경 진단 서비스 (Vault Health, 시스템 상태)
-│   ├── external_usage_service.py  # 외부 LLM 사용량 추적
+│   ├── deployment_usage_credential_service.py  # 배포 단위 usage admin 키(DB) 해석/CRUD/검증
+│   ├── external_usage_service.py  # 외부 LLM 사용량 추적 (요청별 키 해석: DB admin 키 > EXTERNAL_* env)
 │   ├── feedback_service.py        # RLHF 피드백
 │   ├── frontmatter_parser.py      # YAML Frontmatter 파싱 (SKILL.md, agent .md)
 │   ├── git_service.py             # Git 작업 관리 서비스
