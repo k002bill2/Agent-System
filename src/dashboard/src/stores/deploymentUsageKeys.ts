@@ -84,14 +84,16 @@ export const useDeploymentUsageKeyStore = create<DeploymentUsageKeyStore>((set) 
 
   upsertKey: async (provider, data) => {
     try {
-      // Build a clean payload: omit api_key when empty/undefined (keep current
-      // key on the backend); only include label/is_active when provided.
-      const payload: DeploymentUsageKeyUpsert = {}
-      if (data.api_key !== undefined && data.api_key.trim() !== '') {
-        payload.api_key = data.api_key.trim()
+      // Build a clean payload immutably: omit api_key when empty/undefined
+      // (keep current key on the backend); only include label/is_active when
+      // provided so the backend's partial-update preserves omitted fields.
+      const payload: DeploymentUsageKeyUpsert = {
+        ...(data.api_key !== undefined && data.api_key.trim() !== ''
+          ? { api_key: data.api_key.trim() }
+          : {}),
+        ...(data.label !== undefined ? { label: data.label } : {}),
+        ...(data.is_active !== undefined ? { is_active: data.is_active } : {}),
       }
-      if (data.label !== undefined) payload.label = data.label
-      if (data.is_active !== undefined) payload.is_active = data.is_active
 
       const updated = await apiClient.put<DeploymentUsageKey>(`${BASE_URL}/${provider}`, payload)
       set((s) => {

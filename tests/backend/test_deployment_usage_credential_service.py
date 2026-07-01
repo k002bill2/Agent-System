@@ -43,7 +43,7 @@ async def _verify_with_status(status: int) -> tuple[object, AsyncMock]:
     mock_client = _mock_client(status)
     with (
         patch.object(ducs, "resolve_admin_key", AsyncMock(return_value="sk-chat-key")),
-        patch.object(ducs, "_get_row", AsyncMock(return_value=None)),
+        patch.object(ducs, "_get_active_row", AsyncMock(return_value=None)),
         patch(
             "services.deployment_usage_credential_service.httpx.AsyncClient",
             return_value=mock_client,
@@ -97,6 +97,38 @@ async def test_no_key_configured_short_circuits() -> None:
     assert result.error_message == "No usage key configured"
 
 
+async def test_verify_stamps_only_active_db_row_not_env() -> None:
+    """#6: a valid probe stamps the ACTIVE DB row; an env-sourced key (no active
+    row) stamps nothing, so an inactive row can't look 'recently verified'."""
+    # Active DB row present → stamped.
+    row = MagicMock()
+    db_with_row = AsyncMock()
+    with (
+        patch.object(ducs, "resolve_admin_key", AsyncMock(return_value="sk-admin")),
+        patch.object(ducs, "_get_active_row", AsyncMock(return_value=row)),
+        patch(
+            "services.deployment_usage_credential_service.httpx.AsyncClient",
+            return_value=_mock_client(200),
+        ),
+    ):
+        await ducs.verify_deployment_key(db_with_row, ExternalProvider.OPENAI)
+    assert row.last_verified_at is not None
+    db_with_row.commit.assert_awaited()
+
+    # Env-sourced (no active row) → nothing stamped, no commit.
+    db_env = AsyncMock()
+    with (
+        patch.object(ducs, "resolve_admin_key", AsyncMock(return_value="sk-env")),
+        patch.object(ducs, "_get_active_row", AsyncMock(return_value=None)),
+        patch(
+            "services.deployment_usage_credential_service.httpx.AsyncClient",
+            return_value=_mock_client(200),
+        ),
+    ):
+        await ducs.verify_deployment_key(db_env, ExternalProvider.OPENAI)
+    db_env.commit.assert_not_awaited()
+
+
 # ── upsert: partial update preserves the encrypted key (design A5) ──
 
 
@@ -133,5 +165,42 @@ async def test_upsert_new_provider_without_key_is_rejected() -> None:
     with patch.object(ducs, "_get_row", AsyncMock(return_value=None)):
         with pytest.raises(ValueError, match="api_key is required"):
             await ducs.upsert_deployment_key(db, ExternalProvider.ANTHROPIC, data)
+
+    db.commit.assert_not_awaited()
+
+
+async def test_upsert_is_active_only_preserves_label() -> None:
+    """#3: an is_active-only toggle must not wipe the existing label (partial update)."""
+    row = SimpleNamespace(
+        provider=ExternalProvider.OPENAI.value,
+        api_key="sk-original-secret-1234567890",
+        label="keep-me",
+        is_active=True,
+        last_verified_at=None,
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        updated_at=None,
+    )
+    db = AsyncMock()
+    data = DeploymentUsageKeyUpsert(is_active=False)  # only is_active in fields_set
+
+    with patch.object(ducs, "_get_row", AsyncMock(return_value=row)):
+        await ducs.upsert_deployment_key(db, ExternalProvider.OPENAI, data)
+
+    assert row.label == "keep-me"  # label preserved, not overwritten with None
+    assert row.is_active is False
+
+
+async def test_upsert_new_key_rejected_when_encryption_disabled() -> None:
+    """#4 fail-closed: storing a new admin key without ENCRYPTION_MASTER_KEY is rejected."""
+    db = AsyncMock()
+    data = DeploymentUsageKeyUpsert(api_key="sk-admin-secret-123456", is_active=True)
+    fake_settings = SimpleNamespace(encryption_master_key="")
+
+    with (
+        patch.object(ducs, "_get_row", AsyncMock(return_value=None)),
+        patch.object(ducs, "get_settings", return_value=fake_settings),
+    ):
+        with pytest.raises(ValueError, match="ENCRYPTION_MASTER_KEY"):
+            await ducs.upsert_deployment_key(db, ExternalProvider.OPENAI, data)
 
     db.commit.assert_not_awaited()
