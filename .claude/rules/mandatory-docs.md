@@ -9,6 +9,7 @@
 | API 엔드포인트 추가/수정 | `docs/api-reference.md` (→ `docs/api/` 도메인별 인덱스) |
 | 새 기능 번호 추가 | `docs/features.md` |
 | Agent/Task 관련 모델 | `docs/ontology.md` |
+| LLM 키/자격증명 (프로바이더·프록시·usage admin) | `docs/llm-key-systems.md` |
 | Claude Code 통합 아키텍처 | `docs/architecture/claude-code-integration.md` |
 | 기능 구현 완료 후 | `docs/doc-update-rules.md` |
 
