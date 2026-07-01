@@ -251,6 +251,36 @@ describe('AdminKeyManager', () => {
     })
   })
 
+  describe('A5 partial update (no key re-entry needed)', () => {
+    it('toggles is_active inline without re-entering the key', async () => {
+      mockKeyState = baseKeyState({ keys: [openaiDbKey] })
+      mockUpsertKey.mockResolvedValueOnce({ ...openaiDbKey, is_active: false })
+
+      render(<AdminKeyManager />)
+      fireEvent.click(screen.getByLabelText('OpenAI 키 비활성화'))
+
+      await waitFor(() =>
+        expect(mockUpsertKey).toHaveBeenCalledWith('openai', { is_active: false })
+      )
+    })
+
+    it('saves an existing-key edit with a blank api_key field (keeps current key)', async () => {
+      mockKeyState = baseKeyState({ keys: [openaiDbKey] })
+      mockUpsertKey.mockResolvedValueOnce(openaiDbKey)
+
+      render(<AdminKeyManager />)
+      fireEvent.click(screen.getByLabelText('OpenAI 키 수정'))
+      // Leave the API key box empty and just submit — must NOT be blocked.
+      fireEvent.click(screen.getByLabelText('키 저장'))
+
+      await waitFor(() => expect(mockUpsertKey).toHaveBeenCalled())
+      const [prov, payload] = mockUpsertKey.mock.calls[0]
+      expect(prov).toBe('openai')
+      expect(payload.api_key).toBeUndefined()
+      expect(payload).toMatchObject({ label: 'org-admin', is_active: true })
+    })
+  })
+
   describe('delete', () => {
     it('calls removeKey for the provider', async () => {
       mockKeyState = baseKeyState({ keys: [openaiDbKey] })

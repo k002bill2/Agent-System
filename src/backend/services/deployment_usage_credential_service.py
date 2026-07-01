@@ -16,6 +16,7 @@ the HTTP status code; it never hardcodes or inspects scope strings.
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from datetime import UTC, datetime, timedelta
@@ -24,6 +25,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config import get_settings
 from db.models import DeploymentUsageCredentialModel
 from models.external_usage import (
     DeploymentUsageKeyResponse,
@@ -32,6 +34,8 @@ from models.external_usage import (
     ExternalProvider,
 )
 from utils.time import utcnow
+
+logger = logging.getLogger(__name__)
 
 # Provider → environment-variable fallback name.
 ENV_MAP: dict[ExternalProvider, str] = {
@@ -67,15 +71,22 @@ async def _get_row(
     return result.scalar_one_or_none()
 
 
-async def resolve_admin_key(db: AsyncSession, provider: ExternalProvider) -> str | None:
-    """Resolve the usage admin key: active DB row > env var > None."""
+async def _get_active_row(
+    db: AsyncSession, provider: ExternalProvider
+) -> DeploymentUsageCredentialModel | None:
+    """Return the ACTIVE credential row for a provider (used for collection)."""
     result = await db.execute(
         select(DeploymentUsageCredentialModel).where(
             DeploymentUsageCredentialModel.provider == provider.value,
             DeploymentUsageCredentialModel.is_active == True,  # noqa: E712
         )
     )
-    row = result.scalar_one_or_none()
+    return result.scalar_one_or_none()
+
+
+async def resolve_admin_key(db: AsyncSession, provider: ExternalProvider) -> str | None:
+    """Resolve the usage admin key: active DB row > env var > None."""
+    row = await _get_active_row(db, provider)
     if row is not None:
         return row.api_key  # decrypted automatically by EncryptedString
 
@@ -106,9 +117,12 @@ def _build_response(
     else:
         source = "none"
 
-    if row is not None:
+    # Mask the key that is actually the effective source — not merely whichever
+    # row exists. An inactive DB row with an env fallback reports source="env",
+    # so it must show the env key's mask, not the (unused) inactive DB key.
+    if source == "db" and row is not None:
         masked = _mask_key(row.api_key)
-    elif env_value:
+    elif source == "env" and env_value:
         masked = _mask_key(env_value)
     else:
         masked = None
@@ -140,16 +154,25 @@ async def upsert_deployment_key(
 ) -> DeploymentUsageKeyResponse:
     """Insert or update the single usage key for a provider.
 
-    ``data.api_key`` is optional (design A5): on an existing row, ``label`` and
-    ``is_active`` are always updated, but the encrypted key is overwritten **only
-    when a new key is provided** — omitting it preserves the current key (e.g. the
-    UI toggling ``is_active`` while holding only the masked key). Creating a new
-    row requires a key; ``None`` is rejected with ``ValueError``.
+    Partial-update semantics (design A5): only fields present in the request
+    body are written. ``api_key`` omitted preserves the current key; ``label``
+    / ``is_active`` omitted preserve their current values (so a label-only edit
+    never wipes ``is_active`` and an is_active-only toggle never wipes the
+    label). Creating a new row requires ``api_key``. Rejected when field
+    encryption is unavailable, so a high-privilege admin key is never written to
+    the DB in plaintext.
     """
+    fields = data.model_fields_set
     row = await _get_row(db, provider)
+
+    if row is None and data.api_key is None:
+        raise ValueError("api_key is required to create a new usage credential")
+    if (row is None or data.api_key is not None) and not get_settings().encryption_master_key:
+        raise ValueError(
+            "ENCRYPTION_MASTER_KEY must be configured before storing a usage admin key"
+        )
+
     if row is None:
-        if data.api_key is None:
-            raise ValueError("api_key is required to create a new usage credential")
         row = DeploymentUsageCredentialModel(
             provider=provider.value,
             api_key=data.api_key,
@@ -158,11 +181,12 @@ async def upsert_deployment_key(
         )
         db.add(row)
     else:
-        # Preserve the existing encrypted key unless a new one is supplied.
         if data.api_key is not None:
             row.api_key = data.api_key
-        row.label = data.label
-        row.is_active = data.is_active
+        if "label" in fields:
+            row.label = data.label
+        if "is_active" in fields:
+            row.is_active = data.is_active
         row.updated_at = utcnow()
 
     await db.commit()
@@ -195,6 +219,57 @@ def _classify_status(status_code: int) -> tuple[bool, bool]:
     return False, False
 
 
+def _status_result(status_code: int) -> tuple[int, str | None]:
+    return status_code, None if status_code == 200 else f"HTTP {status_code}"
+
+
+async def _probe_openai(
+    client: httpx.AsyncClient, api_key: str, start: datetime, now: datetime
+) -> tuple[int | None, str | None]:
+    resp = await client.get(
+        "https://api.openai.com/v1/organization/usage/completions",
+        headers={"Authorization": f"Bearer {api_key}"},
+        params={
+            "start_time": int(start.timestamp()),
+            "end_time": int(now.timestamp()),
+            "bucket_width": "1d",
+            "limit": 1,
+        },
+    )
+    return _status_result(resp.status_code)
+
+
+async def _probe_anthropic(
+    client: httpx.AsyncClient, api_key: str, start: datetime, now: datetime
+) -> tuple[int | None, str | None]:
+    resp = await client.get(
+        "https://api.anthropic.com/v1/organizations/usage_report/messages",
+        headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
+        params={
+            "starting_at": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "ending_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "bucket_width": "1d",
+            "limit": 1,
+        },
+    )
+    return _status_result(resp.status_code)
+
+
+async def _probe_github(client: httpx.AsyncClient, api_key: str) -> tuple[int | None, str | None]:
+    org = os.getenv("EXTERNAL_GITHUB_ORG")
+    if not org:
+        return None, "EXTERNAL_GITHUB_ORG not configured"
+    resp = await client.get(
+        f"https://api.github.com/orgs/{org}/copilot/metrics",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    return _status_result(resp.status_code)
+
+
 async def _probe_usage_endpoint(
     provider: ExternalProvider, api_key: str
 ) -> tuple[int | None, str | None]:
@@ -204,52 +279,27 @@ async def _probe_usage_endpoint(
     """
     now = datetime.now(tz=UTC)
     start = now - timedelta(days=1)
-
     async with httpx.AsyncClient(timeout=10) as client:
         if provider == ExternalProvider.OPENAI:
-            resp = await client.get(
-                "https://api.openai.com/v1/organization/usage/completions",
-                headers={"Authorization": f"Bearer {api_key}"},
-                params={
-                    "start_time": int(start.timestamp()),
-                    "end_time": int(now.timestamp()),
-                    "bucket_width": "1d",
-                    "limit": 1,
-                },
-            )
-            return resp.status_code, None if resp.status_code == 200 else f"HTTP {resp.status_code}"
-
+            return await _probe_openai(client, api_key, start, now)
         if provider == ExternalProvider.ANTHROPIC:
-            resp = await client.get(
-                "https://api.anthropic.com/v1/organizations/usage_report/messages",
-                headers={
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01",
-                },
-                params={
-                    "starting_at": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    "ending_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    "bucket_width": "1d",
-                    "limit": 1,
-                },
-            )
-            return resp.status_code, None if resp.status_code == 200 else f"HTTP {resp.status_code}"
-
+            return await _probe_anthropic(client, api_key, start, now)
         if provider == ExternalProvider.GITHUB_COPILOT:
-            org = os.getenv("EXTERNAL_GITHUB_ORG")
-            if not org:
-                return None, "EXTERNAL_GITHUB_ORG not configured"
-            resp = await client.get(
-                f"https://api.github.com/orgs/{org}/copilot/metrics",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Accept": "application/vnd.github+json",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                },
-            )
-            return resp.status_code, None if resp.status_code == 200 else f"HTTP {resp.status_code}"
-
+            return await _probe_github(client, api_key)
     return None, f"Unsupported provider for usage verification: {provider.value}"
+
+
+async def _record_verification(db: AsyncSession, provider: ExternalProvider) -> None:
+    """Stamp ``last_verified_at`` on the ACTIVE DB row only.
+
+    An env-sourced key has no active row, so nothing is stamped — this prevents
+    an inactive row from appearing "recently verified" when the env key was the
+    one actually probed.
+    """
+    row = await _get_active_row(db, provider)
+    if row is not None:
+        row.last_verified_at = utcnow()
+        await db.commit()
 
 
 async def verify_deployment_key(
@@ -269,35 +319,30 @@ async def verify_deployment_key(
     try:
         status_code, error_message = await _probe_usage_endpoint(provider, api_key)
     except Exception as exc:  # network/timeout/etc.
-        latency = (time.monotonic() - t0) * 1000
+        # Log detail server-side; never echo the exception (may embed the key).
+        logger.warning("Usage endpoint probe failed for %s: %s", provider.value, exc)
         return DeploymentUsageKeyVerifyResponse(
             provider=provider,
             is_valid=False,
             usage_capable=False,
-            error_message=str(exc),
-            latency_ms=round(latency, 1),
+            error_message="Usage endpoint request failed",
+            latency_ms=round((time.monotonic() - t0) * 1000, 1),
         )
 
-    latency = (time.monotonic() - t0) * 1000
-
+    latency = round((time.monotonic() - t0) * 1000, 1)
     if status_code is None:
-        # Misconfiguration (e.g. missing GitHub org) — cannot determine capability.
         return DeploymentUsageKeyVerifyResponse(
             provider=provider,
             is_valid=False,
             usage_capable=False,
             status_code=None,
             error_message=error_message,
-            latency_ms=round(latency, 1),
+            latency_ms=latency,
         )
 
     is_valid, usage_capable = _classify_status(status_code)
-
     if is_valid:
-        row = await _get_row(db, provider)
-        if row is not None:
-            row.last_verified_at = utcnow()
-            await db.commit()
+        await _record_verification(db, provider)
 
     return DeploymentUsageKeyVerifyResponse(
         provider=provider,
@@ -305,5 +350,5 @@ async def verify_deployment_key(
         usage_capable=usage_capable,
         status_code=status_code,
         error_message=error_message,
-        latency_ms=round(latency, 1),
+        latency_ms=latency,
     )

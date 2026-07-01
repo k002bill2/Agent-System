@@ -139,6 +139,31 @@ describe('deploymentUsageKeys store', () => {
       expect(keys.find((k) => k.provider === 'anthropic')).toEqual(anthropicEnv)
     })
 
+    it('omits api_key and label from the PUT body when not provided (design A5)', async () => {
+      useDeploymentUsageKeyStore.setState({ keys: [openaiKey] })
+      mockPut.mockResolvedValueOnce({ ...openaiKey, is_active: false })
+
+      await useDeploymentUsageKeyStore.getState().upsertKey('openai', { is_active: false })
+
+      const [, body] = mockPut.mock.calls[0]
+      // api_key + label absent → backend preserves the current key and label.
+      expect(body).toEqual({ is_active: false })
+      expect('api_key' in (body as object)).toBe(false)
+    })
+
+    it('omits an empty-string api_key so the current key is preserved', async () => {
+      useDeploymentUsageKeyStore.setState({ keys: [openaiKey] })
+      mockPut.mockResolvedValueOnce(openaiKey)
+
+      await useDeploymentUsageKeyStore
+        .getState()
+        .upsertKey('openai', { api_key: '', label: 'renamed', is_active: true })
+
+      const [, body] = mockPut.mock.calls[0]
+      expect(body).toEqual({ label: 'renamed', is_active: true })
+      expect('api_key' in (body as object)).toBe(false)
+    })
+
     it('appends when no row exists for the provider', async () => {
       const created: DeploymentUsageKey = { ...openaiKey, provider: 'github_copilot' }
       mockPut.mockResolvedValueOnce(created)

@@ -473,10 +473,13 @@ class ExternalUsageService:
 
         gh_token = await resolve_admin_key(db, ExternalProvider.GITHUB_COPILOT)
         gh_org = os.getenv("EXTERNAL_GITHUB_ORG")
+        # Collection needs BOTH token and org (see _build_collectors), so the
+        # badge must reflect both — a token alone would show "configured" while
+        # collection silently skips.
         configs.append(
             ProviderConfig(
                 provider=ExternalProvider.GITHUB_COPILOT,
-                enabled=bool(gh_token),
+                enabled=bool(gh_token and gh_org),
                 api_key_masked=self._mask_key(gh_token) if gh_token else None,
                 org_id=gh_org,
             )
