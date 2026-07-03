@@ -45,7 +45,7 @@ const makeRecord = (overrides?: Partial<UnifiedUsageRecord>): UnifiedUsageRecord
 describe('DailyCostTrend', () => {
   it('renders title', () => {
     render(<DailyCostTrend records={[]} />)
-    expect(screen.getByText('Daily Cost Trend')).toBeInTheDocument()
+    expect(screen.getByText('Daily Estimated Cost Trend')).toBeInTheDocument()
   })
 
   it('shows empty state when no records', () => {
@@ -63,12 +63,12 @@ describe('DailyCostTrend', () => {
       <DailyCostTrend
         records={[
           makeRecord({ provider: 'openai', cost_usd: 1.0 }),
-          makeRecord({ provider: 'anthropic', cost_usd: 0.5, id: 'rec-2' }),
+          makeRecord({ provider: 'codex_cli', cost_usd: 0.5, id: 'rec-2' }),
         ]}
       />
     )
     expect(screen.getByTestId('area-openai')).toBeInTheDocument()
-    expect(screen.getByTestId('area-anthropic')).toBeInTheDocument()
+    expect(screen.getByTestId('area-codex_cli')).toBeInTheDocument()
     expect(screen.queryByTestId('area-github_copilot')).not.toBeInTheDocument()
   })
 
