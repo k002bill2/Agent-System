@@ -18,21 +18,21 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
+from models.llm_usage import LLMUsageSource
 from models.playground import (
     PlaygroundExecuteRequest,
     PlaygroundMessage,
     PlaygroundSession,
     PlaygroundSessionCreate,
 )
-from services.llm_service import LLMResponse, LLMService, _build_messages
 from services import playground_service
+from services.llm_service import LLMResponse, LLMService, _build_messages
 from services.playground_service import (
     DEFAULT_SYSTEM_PROMPT,
     PlaygroundService,
     _coerce_llm_content,
     _to_lc_messages,
 )
-
 
 # ─────────────────────────────────────────────────────────────
 # Helpers / conversions
@@ -127,10 +127,12 @@ async def test_execute_retries_with_safe_default_when_saved_model_is_inaccessibl
     session.enabled_tools = ["web_search"]
 
     calls: list[str] = []
+    usage_contexts: list[dict] = []
 
     async def fake_invoke_with_tools(**kwargs):
         model_id = kwargs["model_id"]
         calls.append(model_id)
+        usage_contexts.append(kwargs["usage_context"])
         if model_id == "gpt-5.4":
             raise RuntimeError(
                 "LLM invocation with tools failed (gpt-5.4): "
@@ -146,9 +148,51 @@ async def test_execute_retries_with_safe_default_when_saved_model_is_inaccessibl
     )
 
     assert calls == ["gpt-5.4", "codex-cli"]
+    assert [ctx["source"] for ctx in usage_contexts] == [
+        LLMUsageSource.PLAYGROUND,
+        LLMUsageSource.PLAYGROUND,
+    ]
+    assert [ctx["session_id"] for ctx in usage_contexts] == [session.id, session.id]
     assert execution.status.value == "completed"
     assert execution.result == "fallback answer"
     assert session.model == "codex-cli"
+
+
+@pytest.mark.asyncio
+async def test_execute_passes_llm_access_to_usage_context(monkeypatch) -> None:
+    """API-provided LLM access should reach the LLM runtime resolver hook."""
+    from services.llm_access_service import default_access_response
+
+    playground_service._sessions.clear()
+    monkeypatch.setattr(playground_service, "_load_sessions", lambda: None)
+    monkeypatch.setattr(playground_service, "_save_sessions", lambda: None)
+
+    def close_background_coro(coro):
+        coro.close()
+
+    monkeypatch.setattr(playground_service, "_fire_and_forget", close_background_coro)
+
+    session = PlaygroundService.create_session(
+        PlaygroundSessionCreate(name="access", model="codex-cli", user_id="user-1")
+    )
+    access = default_access_response("user-1")
+    captured: dict = {}
+
+    async def fake_invoke(**kwargs):
+        captured["usage_context"] = kwargs["usage_context"]
+        return LLMResponse(content="answer", model=kwargs["model_id"], provider="codex_cli")
+
+    monkeypatch.setattr(LLMService, "invoke", fake_invoke)
+
+    execution = await PlaygroundService.execute(
+        session.id,
+        PlaygroundExecuteRequest(prompt="hello"),
+        llm_access=access,
+    )
+
+    assert execution.status.value == "completed"
+    assert captured["usage_context"]["user_id"] == "user-1"
+    assert captured["usage_context"]["llm_access"] == access
 
 
 # ─────────────────────────────────────────────────────────────
