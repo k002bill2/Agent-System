@@ -56,6 +56,31 @@ const mockSummaryResponse: ExternalUsageSummaryResponse = {
   records: [],
   period_start: '2025-01-01T00:00:00Z',
   period_end: '2025-01-31T23:59:59Z',
+  reconciliation: {
+    primary_source: 'internal_ledger',
+    provider_billing_enabled: false,
+    internal_total_tokens: 15000,
+    internal_total_cost_usd: 0.5,
+    internal_total_requests: 100,
+    provider_billing_total_tokens: 0,
+    provider_billing_total_cost_usd: 0,
+    provider_billing_total_requests: 0,
+    provider_billing_record_count: 0,
+    comparisons: [
+      {
+        provider: 'openai',
+        internal_total_tokens: 15000,
+        internal_total_cost_usd: 0.5,
+        internal_total_requests: 100,
+        provider_billing_total_tokens: 0,
+        provider_billing_total_cost_usd: 0,
+        provider_billing_total_requests: 0,
+        delta_tokens: -15000,
+        delta_cost_usd: -0.5,
+        status: 'ledger_only',
+      },
+    ],
+  },
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -117,6 +142,7 @@ describe('externalUsage store', () => {
 
       const state = useExternalUsageStore.getState()
       expect(state.summary).toEqual(mockSummaryResponse)
+      expect(state.summary?.reconciliation?.primary_source).toBe('internal_ledger')
       expect(state.isLoading).toBe(false)
       expect(state.error).toBeNull()
       expect(state.lastFetched).toBeInstanceOf(Date)
