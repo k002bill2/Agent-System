@@ -51,6 +51,7 @@ vi.mock('../components/llm-router', () => ({
   ModelUpdatePanel: () => <div data-testid="model-update-panel">ModelUpdatePanel</div>,
 }))
 vi.mock('../components/usage', () => ({
+  LLMAccessSettings: () => <div data-testid="llm-access">LLMAccessSettings</div>,
   LLMAccountsSettings: () => <div data-testid="llm-accounts">LLMAccountsSettings</div>,
 }))
 
@@ -170,6 +171,11 @@ describe('SettingsPage', () => {
   it('renders LLM Accounts settings component', async () => {
     await renderSettingsPage()
     expect(screen.getByTestId('llm-accounts')).toBeInTheDocument()
+  })
+
+  it('renders LLM Access settings component', async () => {
+    await renderSettingsPage()
+    expect(screen.getByTestId('llm-access')).toBeInTheDocument()
   })
 
   it('shows connected status for backend', async () => {
