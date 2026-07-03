@@ -6,10 +6,12 @@ from typing import Literal
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import get_current_user_optional
+from api.deps import get_current_user_optional, get_db_session
 from api.rag import trigger_background_indexing
 from db.models import UserModel
+from models.llm_access import LLMAccessResponse
 from models.playground import (
     PlaygroundCompareRequest,
     PlaygroundCompareResult,
@@ -20,6 +22,7 @@ from models.playground import (
     PlaygroundToolTest,
 )
 from models.project import PROJECTS_REGISTRY, get_project
+from services.llm_access_service import get_access_for_user
 from services.llm_service import LLMService
 from services.playground_context import build_effective_system_prompt
 from services.playground_service import PlaygroundService
@@ -27,6 +30,15 @@ from services.playground_service import PlaygroundService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/playground", tags=["playground"])
+
+
+async def _get_llm_access_for_playground(
+    current_user: UserModel | None,
+    db: AsyncSession,
+) -> LLMAccessResponse | None:
+    if current_user is None:
+        return None
+    return await get_access_for_user(db, str(current_user.id))
 
 
 # ─────────────────────────────────────────────────────────────
@@ -213,21 +225,37 @@ async def clear_session_history(session_id: str):
 
 
 @router.post("/sessions/{session_id}/execute", response_model=PlaygroundExecution)
-async def execute_prompt(session_id: str, request: PlaygroundExecuteRequest):
+async def execute_prompt(
+    session_id: str,
+    request: PlaygroundExecuteRequest,
+    current_user: UserModel | None = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db_session),
+):
     """Execute a prompt in the playground."""
     try:
-        return await PlaygroundService.execute(session_id, request)
+        llm_access = await _get_llm_access_for_playground(current_user, db)
+        return await PlaygroundService.execute(session_id, request, llm_access=llm_access)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.post("/sessions/{session_id}/execute/stream")
-async def execute_prompt_stream(session_id: str, request: PlaygroundExecuteRequest):
+async def execute_prompt_stream(
+    session_id: str,
+    request: PlaygroundExecuteRequest,
+    current_user: UserModel | None = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db_session),
+):
     """Execute a prompt with streaming response."""
+    llm_access = await _get_llm_access_for_playground(current_user, db)
 
     async def generate():
         try:
-            async for chunk in PlaygroundService.execute_stream(session_id, request):
+            async for chunk in PlaygroundService.execute_stream(
+                session_id,
+                request,
+                llm_access=llm_access,
+            ):
                 yield f"data: {chunk}\n\n"
             yield "data: [DONE]\n\n"
         except ValueError as e:

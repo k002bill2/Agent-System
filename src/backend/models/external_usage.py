@@ -14,10 +14,16 @@ from utils.time import utcnow
 class ExternalProvider(str, Enum):
     """Supported external LLM providers."""
 
+    CODEX_CLI = "codex_cli"
+    CLAUDE_CLI = "claude_cli"
+    INTERNAL_CLI = "internal_cli"
+    INTERNAL_API = "internal_api"
     OPENAI = "openai"
     GITHUB_COPILOT = "github_copilot"
+    GOOGLE = "google"
     GOOGLE_GEMINI = "google_gemini"
     ANTHROPIC = "anthropic"
+    OLLAMA = "ollama"
 
 
 class ProviderHealthStatus(BaseModel):
@@ -75,6 +81,36 @@ class UsageSummary(BaseModel):
     member_breakdown: dict[str, float] = Field(default_factory=dict)  # user_id -> cost_usd
 
 
+class UsageReconciliationComparison(BaseModel):
+    """Internal ledger vs provider billing comparison for one provider."""
+
+    provider: ExternalProvider
+    internal_total_tokens: int = 0
+    internal_total_cost_usd: float = 0.0
+    internal_total_requests: int = 0
+    provider_billing_total_tokens: int = 0
+    provider_billing_total_cost_usd: float = 0.0
+    provider_billing_total_requests: int = 0
+    delta_tokens: int = 0
+    delta_cost_usd: float = 0.0
+    status: str = "not_collected"
+
+
+class UsageReconciliationSummary(BaseModel):
+    """Summary metadata for comparing internal usage with optional provider billing."""
+
+    primary_source: str = "internal_ledger"
+    provider_billing_enabled: bool = False
+    internal_total_tokens: int = 0
+    internal_total_cost_usd: float = 0.0
+    internal_total_requests: int = 0
+    provider_billing_total_tokens: int = 0
+    provider_billing_total_cost_usd: float = 0.0
+    provider_billing_total_requests: int = 0
+    provider_billing_record_count: int = 0
+    comparisons: list[UsageReconciliationComparison] = Field(default_factory=list)
+
+
 class ExternalUsageSummaryResponse(BaseModel):
     """Combined external usage response."""
 
@@ -83,6 +119,7 @@ class ExternalUsageSummaryResponse(BaseModel):
     records: list[UnifiedUsageRecord] = Field(default_factory=list)
     period_start: datetime
     period_end: datetime
+    reconciliation: UsageReconciliationSummary | None = None
 
 
 class ProviderConfig(BaseModel):

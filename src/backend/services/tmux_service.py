@@ -10,20 +10,305 @@ Usage:
 """
 
 import asyncio
+import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import time
-from datetime import datetime
+from datetime import UTC, datetime
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from models.llm_usage import (
+    LLMRuntimeMode,
+    LLMUsageMeasurementMethod,
+    LLMUsageRecordCreate,
+    LLMUsageSource,
+    LLMUsageStatus,
+)
+from services.llm_usage_ledger_service import (
+    enforce_usage_quota_preflight_best_effort,
+    record_usage_best_effort,
+)
 from utils.time import utcnow
 
 logger = logging.getLogger(__name__)
+
+
+def _usage_context_value(usage_context: dict[str, Any] | None, key: str) -> Any:
+    if not usage_context:
+        return None
+    value = usage_context.get(key)
+    if isinstance(value, Enum):
+        return value.value
+    return value
+
+
+def _usage_context_metadata(usage_context: dict[str, Any] | None) -> dict[str, Any]:
+    if not usage_context:
+        return {}
+    metadata = usage_context.get("metadata")
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _estimate_prompt_tokens(prompt: str) -> int:
+    return max(1, len(prompt.split()) * 2)
+
+
+def _compact_text(value: str, *, limit: int = 2000) -> str:
+    return value.strip()[:limit]
+
+
+def _as_int(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, float):
+        return int(value) if value >= 0 else None
+    if isinstance(value, str):
+        cleaned = value.strip().replace(",", "")
+        if cleaned.isdigit():
+            return int(cleaned)
+    return None
+
+
+def _as_float(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return float(value) if value >= 0 else None
+    if isinstance(value, str):
+        cleaned = value.strip().replace(",", "").removeprefix("$")
+        try:
+            parsed = float(cleaned)
+        except ValueError:
+            return None
+        return parsed if parsed >= 0 else None
+    return None
+
+
+def _first_int(source: dict[str, Any], keys: tuple[str, ...]) -> int | None:
+    for key in keys:
+        value = _as_int(source.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _first_float(source: dict[str, Any], keys: tuple[str, ...]) -> float | None:
+    for key in keys:
+        value = _as_float(source.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _merge_usage_dict(target: dict[str, Any], source: dict[str, Any]) -> None:
+    input_tokens = _first_int(
+        source,
+        (
+            "input_tokens",
+            "prompt_tokens",
+            "input_token_count",
+            "inputTokenCount",
+        ),
+    )
+    output_tokens = _first_int(
+        source,
+        (
+            "output_tokens",
+            "completion_tokens",
+            "output_token_count",
+            "outputTokenCount",
+        ),
+    )
+    total_tokens = _first_int(
+        source,
+        (
+            "total_tokens",
+            "total_token_count",
+            "totalTokenCount",
+            "tokens",
+        ),
+    )
+    cost_usd = _first_float(
+        source,
+        (
+            "estimated_cost_usd",
+            "total_cost_usd",
+            "cost_usd",
+            "cost",
+        ),
+    )
+
+    if input_tokens is not None and target.get("input_tokens") is None:
+        target["input_tokens"] = input_tokens
+    if output_tokens is not None and target.get("output_tokens") is None:
+        target["output_tokens"] = output_tokens
+    if total_tokens is not None and target.get("total_tokens") is None:
+        target["total_tokens"] = total_tokens
+    if cost_usd is not None and target.get("estimated_cost_usd") is None:
+        target["estimated_cost_usd"] = cost_usd
+
+
+def _iter_usage_dicts(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, dict):
+        return []
+    candidates: list[dict[str, Any]] = [value]
+    for key in ("usage", "usage_metadata", "token_usage", "metrics"):
+        nested = value.get(key)
+        if isinstance(nested, dict):
+            candidates.extend(_iter_usage_dicts(nested))
+    return candidates
+
+
+def _extract_labeled_usage(text: str, target: dict[str, Any]) -> None:
+    patterns = {
+        "input_tokens": r"(?:input|prompt)[ _-]?tokens?\s*[:=]\s*([\d,]+)",
+        "output_tokens": r"(?:output|completion)[ _-]?tokens?\s*[:=]\s*([\d,]+)",
+        "total_tokens": r"total[ _-]?tokens?\s*[:=]\s*([\d,]+)",
+        "estimated_cost_usd": r"(?:estimated\s+)?(?:total\s+)?cost(?:\s+usd)?\s*[:=]\s*\$?([\d,.]+)",
+    }
+    for key, pattern in patterns.items():
+        if target.get(key) is not None:
+            continue
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        value = _as_float(match.group(1)) if key == "estimated_cost_usd" else _as_int(match.group(1))
+        if value is not None:
+            target[key] = value
+
+
+def parse_claude_cli_usage_metadata(transcript: str | None) -> dict[str, Any]:
+    """Extract token/cost metadata from Claude CLI transcript text."""
+    if not transcript:
+        return {}
+
+    usage: dict[str, Any] = {
+        "input_tokens": None,
+        "output_tokens": None,
+        "total_tokens": None,
+        "estimated_cost_usd": None,
+    }
+    for line in transcript.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("{"):
+            continue
+        try:
+            payload = json.loads(stripped)
+        except json.JSONDecodeError:
+            continue
+        for candidate in _iter_usage_dicts(payload):
+            _merge_usage_dict(usage, candidate)
+
+    _extract_labeled_usage(transcript, usage)
+    if usage["total_tokens"] is None and (
+        usage["input_tokens"] is not None or usage["output_tokens"] is not None
+    ):
+        usage["total_tokens"] = (usage["input_tokens"] or 0) + (
+            usage["output_tokens"] or 0
+        )
+
+    return {key: value for key, value in usage.items() if value is not None}
+
+
+async def _enforce_tmux_quota_preflight(
+    usage_context: dict[str, Any] | None,
+    prompt: str,
+) -> None:
+    await enforce_usage_quota_preflight_best_effort(
+        user_id=_usage_context_value(usage_context, "user_id"),
+        organization_id=_usage_context_value(usage_context, "organization_id"),
+        estimated_tokens=_estimate_prompt_tokens(prompt),
+    )
+
+
+async def _record_tmux_cli_usage(
+    *,
+    usage_context: dict[str, Any] | None,
+    analysis_id: str,
+    project_path: str,
+    branch_name: str | None,
+    session_name: str | None,
+    status: LLMUsageStatus,
+    started_at: datetime,
+    event: str = "tmux_execute_analysis_started",
+    prompt_chars: int | None = None,
+    cli_usage_metadata: dict[str, Any] | None = None,
+    error_message: str | None = None,
+) -> None:
+    source = _usage_context_value(usage_context, "source") or (
+        LLMUsageSource.TASK_ANALYZER_EXECUTION.value
+    )
+    metadata = {
+        "event": event,
+        "project_path": project_path,
+        "branch_name": branch_name,
+        "tmux_session": session_name,
+        "prompt_chars": prompt_chars,
+    }
+    if cli_usage_metadata:
+        metadata["cli_usage_metadata"] = cli_usage_metadata
+    metadata.update(_usage_context_metadata(usage_context))
+    metadata = {k: v for k, v in metadata.items() if v is not None}
+    measurement_method = (
+        LLMUsageMeasurementMethod.CLI_METADATA
+        if cli_usage_metadata
+        else LLMUsageMeasurementMethod.UNKNOWN
+    )
+
+    await record_usage_best_effort(
+        LLMUsageRecordCreate(
+            user_id=_usage_context_value(usage_context, "user_id"),
+            organization_id=_usage_context_value(usage_context, "organization_id"),
+            provider="claude_cli",
+            mode=LLMRuntimeMode.CLI,
+            source=source,
+            model="claude-code-cli",
+            input_tokens=cli_usage_metadata.get("input_tokens")
+            if cli_usage_metadata
+            else None,
+            output_tokens=cli_usage_metadata.get("output_tokens")
+            if cli_usage_metadata
+            else None,
+            total_tokens=cli_usage_metadata.get("total_tokens")
+            if cli_usage_metadata
+            else None,
+            measurement_method=measurement_method,
+            estimated_cost_usd=cli_usage_metadata.get("estimated_cost_usd")
+            if cli_usage_metadata
+            else None,
+            status=status,
+            session_id=session_name,
+            analysis_id=analysis_id,
+            project_id=_usage_context_value(usage_context, "project_id"),
+            error_message=error_message,
+            metadata=metadata,
+            started_at=started_at,
+            completed_at=datetime.now(tz=UTC),
+        )
+    )
+
+
+def _schedule_tmux_cli_usage(**kwargs) -> None:
+    """Schedule ledger writes from sync tmux lifecycle methods."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        try:
+            asyncio.run(_record_tmux_cli_usage(**kwargs))
+        except Exception:
+            logger.warning("tmux_cli_usage_record_failed", exc_info=True)
+        return
+
+    loop.create_task(_record_tmux_cli_usage(**kwargs))
 
 
 class ClaudeAuthStatus(BaseModel):
@@ -44,6 +329,10 @@ class TmuxSessionInfo(BaseModel):
     active: bool
     started_at: datetime
     task_input: str = ""
+    usage_context: dict[str, Any] = Field(default_factory=dict)
+    completion_recorded: bool = False
+    completed_at: datetime | None = None
+    transcript_path: str | None = None
 
 
 class TmuxService:
@@ -54,6 +343,50 @@ class TmuxService:
 
     def __init__(self):
         self._sessions: dict[str, TmuxSessionInfo] = {}
+
+    def _mark_session_completed(
+        self,
+        info: TmuxSessionInfo,
+        *,
+        status: LLMUsageStatus,
+        event: str,
+        error_message: str | None = None,
+    ) -> TmuxSessionInfo:
+        """Mark a tracked tmux session inactive and record one completion event."""
+        if info.completion_recorded:
+            return info.model_copy(update={"active": False})
+
+        completed = utcnow()
+        updated = info.model_copy(
+            update={
+                "active": False,
+                "completion_recorded": True,
+                "completed_at": completed,
+            }
+        )
+        transcript_text = self._read_session_transcript(info)
+        cli_usage_metadata = parse_claude_cli_usage_metadata(transcript_text)
+        _schedule_tmux_cli_usage(
+            usage_context=info.usage_context,
+            analysis_id=info.analysis_id,
+            project_path=info.project_path,
+            branch_name=None,
+            session_name=info.session_name,
+            status=status,
+            started_at=info.started_at,
+            event=event,
+            cli_usage_metadata=cli_usage_metadata,
+            error_message=error_message,
+        )
+        return updated
+
+    def _read_session_transcript(self, info: TmuxSessionInfo) -> str | None:
+        if info.transcript_path:
+            try:
+                return Path(info.transcript_path).read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                logger.debug("tmux_transcript_read_failed", exc_info=True)
+        return self.capture_output(info.session_name)
 
     # =========================================================================
     # tmux 기본 명령
@@ -251,6 +584,7 @@ class TmuxService:
 
     def kill_session(self, name: str) -> bool:
         """tmux 세션 종료."""
+        info = self._sessions.get(name)
         try:
             subprocess.run(
                 ["tmux", "kill-session", "-t", name],
@@ -258,6 +592,13 @@ class TmuxService:
                 capture_output=True,
                 text=True,
             )
+            if info:
+                self._mark_session_completed(
+                    info,
+                    status=LLMUsageStatus.CANCELLED,
+                    event="tmux_session_cancelled",
+                    error_message="Tmux session stopped by request",
+                )
             # 내부 추적에서도 제거
             self._sessions.pop(name, None)
             return True
@@ -284,7 +625,14 @@ class TmuxService:
         sessions = []
         for name, info in list(self._sessions.items()):
             is_alive = name in live_sessions
-            updated = info.model_copy(update={"active": is_alive})
+            if info.active and not is_alive:
+                updated = self._mark_session_completed(
+                    info,
+                    status=LLMUsageStatus.SUCCESS,
+                    event="tmux_session_completed",
+                )
+            else:
+                updated = info.model_copy(update={"active": is_alive})
             self._sessions[name] = updated
             sessions.append(updated)
 
@@ -402,6 +750,7 @@ class TmuxService:
         analysis: dict[str, Any],
         task_input: str,
         branch_name: str | None = None,
+        usage_context: dict[str, Any] | None = None,
     ) -> TmuxSessionInfo | None:
         """분석 결과를 tmux + Claude Code CLI로 실행.
 
@@ -411,16 +760,38 @@ class TmuxService:
             analysis: 분석 결과 데이터
             task_input: 원본 태스크 입력
             branch_name: 실행 전 생성할 feature branch (선택)
+            usage_context: Optional ledger context for CLI usage accounting
 
         Returns:
             TmuxSessionInfo 또는 실패 시 None
         """
+        started_at = datetime.now(tz=UTC)
         if not self.is_available():
             logger.error("tmux is not installed")
+            await _record_tmux_cli_usage(
+                usage_context=usage_context,
+                analysis_id=analysis_id,
+                project_path=project_path,
+                branch_name=branch_name,
+                session_name=None,
+                status=LLMUsageStatus.ERROR,
+                started_at=started_at,
+                error_message="tmux is not installed",
+            )
             return None
 
         if not self.is_claude_available():
             logger.error("Claude CLI is not installed")
+            await _record_tmux_cli_usage(
+                usage_context=usage_context,
+                analysis_id=analysis_id,
+                project_path=project_path,
+                branch_name=branch_name,
+                session_name=None,
+                status=LLMUsageStatus.ERROR,
+                started_at=started_at,
+                error_message="Claude CLI is not installed",
+            )
             return None
 
         # 세션 이름 생성
@@ -430,9 +801,21 @@ class TmuxService:
 
         # 프롬프트 생성
         prompt = self.build_claude_prompt(analysis, task_input)
+        await _enforce_tmux_quota_preflight(usage_context, prompt)
 
         # tmux 세션 생성
         if not self.create_session(session_name, project_path):
+            await _record_tmux_cli_usage(
+                usage_context=usage_context,
+                analysis_id=analysis_id,
+                project_path=project_path,
+                branch_name=branch_name,
+                session_name=session_name,
+                status=LLMUsageStatus.ERROR,
+                started_at=started_at,
+                prompt_chars=len(prompt),
+                error_message="Failed to create tmux session",
+            )
             return None
 
         # feature branch 생성 (요청된 경우)
@@ -456,16 +839,29 @@ class TmuxService:
 
         prompt_dir = Path(tempfile.mkdtemp(prefix="aos-"))
         prompt_file = prompt_dir / f"{session_name}.md"
+        transcript_file = prompt_dir / f"{session_name}.out"
         prompt_file.write_text(prompt, encoding="utf-8")
 
         # Claude CLI를 print mode(-p)로 실행
         # login shell(bash -l)로 감싸서 사용자 환경(PATH, 키체인 등) 상속
         # - print mode: 깔끔한 stdout 출력, TUI 아티팩트 없음
         # - login shell: tmux 세션에서도 인증 토큰 정상 접근
-        claude_cmd = f"bash -l -c 'cat \"{prompt_file}\" | claude -p'"
+        # - tee: 세션 종료 후에도 usage metadata를 원장 completion record에 반영
+        claude_cmd = f"bash -l -c 'cat \"{prompt_file}\" | claude -p 2>&1 | tee \"{transcript_file}\"'"
 
         if not self.send_command(session_name, claude_cmd):
             self.kill_session(session_name)
+            await _record_tmux_cli_usage(
+                usage_context=usage_context,
+                analysis_id=analysis_id,
+                project_path=project_path,
+                branch_name=branch_name,
+                session_name=session_name,
+                status=LLMUsageStatus.ERROR,
+                started_at=started_at,
+                prompt_chars=len(prompt),
+                error_message="Failed to send Claude CLI command",
+            )
             return None
 
         # 세션 정보 저장
@@ -476,8 +872,21 @@ class TmuxService:
             active=True,
             started_at=utcnow(),
             task_input=task_input,
+            usage_context=usage_context or {},
+            transcript_path=str(transcript_file),
         )
         self._sessions[session_name] = info
+
+        await _record_tmux_cli_usage(
+            usage_context=usage_context,
+            analysis_id=analysis_id,
+            project_path=project_path,
+            branch_name=branch_name,
+            session_name=session_name,
+            status=LLMUsageStatus.SUCCESS,
+            started_at=started_at,
+            prompt_chars=len(prompt),
+        )
 
         return info
 
@@ -490,7 +899,14 @@ class TmuxService:
         # 실제 tmux 세션 상태 확인
         is_alive = self.is_session_alive(session_name)
         if info.active != is_alive:
-            info = info.model_copy(update={"active": is_alive})
+            if info.active and not is_alive:
+                info = self._mark_session_completed(
+                    info,
+                    status=LLMUsageStatus.SUCCESS,
+                    event="tmux_session_completed",
+                )
+            else:
+                info = info.model_copy(update={"active": is_alive})
             self._sessions[session_name] = info
 
         return info

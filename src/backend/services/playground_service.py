@@ -12,7 +12,9 @@ from typing import Any
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from models.cost import calculate_cost, estimate_tokens
+from models.llm_access import LLMAccessResponse
 from models.llm_models import LLMModelRegistry
+from models.llm_usage import LLMUsageSource
 from models.playground import (
     PlaygroundCompareRequest,
     PlaygroundCompareResult,
@@ -117,6 +119,33 @@ def _coerce_llm_content(content: Any) -> str:
                 parts.append(str(item))
         return " ".join(parts)
     return str(content)
+
+
+def _playground_usage_context(
+    session: PlaygroundSession,
+    *,
+    execution: PlaygroundExecution | None = None,
+    metadata: dict[str, Any] | None = None,
+    llm_access: LLMAccessResponse | None = None,
+) -> dict[str, Any]:
+    context_metadata = {
+        "agent_id": session.agent_id,
+        "execution_id": execution.id if execution else None,
+    }
+    if metadata:
+        context_metadata.update(metadata)
+    user_id = session.user_id or (llm_access.user_id if llm_access else None)
+    context = {
+        "source": LLMUsageSource.PLAYGROUND,
+        "session_id": session.id,
+        "project_id": session.project_id,
+        "metadata": {k: v for k, v in context_metadata.items() if v is not None},
+    }
+    if user_id:
+        context["user_id"] = user_id
+    if llm_access:
+        context["llm_access"] = llm_access
+    return context
 
 
 def _is_inaccessible_model_error(error: Exception) -> bool:
@@ -450,6 +479,7 @@ class PlaygroundService:
     async def execute(
         session_id: str,
         request: PlaygroundExecuteRequest,
+        llm_access: LLMAccessResponse | None = None,
     ) -> PlaygroundExecution:
         """Execute a prompt in the playground."""
         _load_sessions()  # Ensure sessions are loaded
@@ -527,6 +557,12 @@ class PlaygroundService:
             # Compose the session system prompt with opt-in rules/memory once
             # per invocation (identical for tool and non-tool paths).
             effective_system_prompt = build_effective_system_prompt(session)
+            usage_context = _playground_usage_context(
+                session,
+                execution=execution,
+                metadata={"tools_enabled": bool(enabled_tools), "streaming": False},
+                llm_access=llm_access,
+            )
 
             if enabled_tools:
                 # Use tool-enabled LLM invocation
@@ -542,6 +578,7 @@ class PlaygroundService:
                     history=history,
                     rag_context=rag_context_str,
                     working_directory=session.working_directory,
+                    usage_context=usage_context,
                 )
 
                 # Add tool call messages if any
@@ -569,6 +606,7 @@ class PlaygroundService:
                     context=request.context or None,
                     history=history,
                     rag_context=rag_context_str,
+                    usage_context=usage_context,
                 )
 
             # Flatten multi-part content (Gemini) into a persistable string
@@ -624,6 +662,7 @@ class PlaygroundService:
     async def execute_stream(
         session_id: str,
         request: PlaygroundExecuteRequest,
+        llm_access: LLMAccessResponse | None = None,
     ) -> AsyncIterator[str]:
         """Execute with streaming response.
 
@@ -696,6 +735,11 @@ class PlaygroundService:
 
         # Compose once — shared by streaming and tool-enabled branches.
         effective_system_prompt = build_effective_system_prompt(session)
+        usage_context = _playground_usage_context(
+            session,
+            metadata={"tools_enabled": bool(enabled_tools), "streaming": True},
+            llm_access=llm_access,
+        )
 
         try:
             if enabled_tools:
@@ -712,6 +756,7 @@ class PlaygroundService:
                     history=history,
                     rag_context=rag_context_str,
                     working_directory=session.working_directory,
+                    usage_context=usage_context,
                 )
                 full_response = _coerce_llm_content(resp.content)
                 yield full_response
@@ -732,6 +777,7 @@ class PlaygroundService:
                     context=request.context or None,
                     history=history,
                     rag_context=rag_context_str,
+                    usage_context=usage_context,
                 ):
                     if info:
                         if info.get("error"):

@@ -2,8 +2,11 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.deps import get_current_user_optional, get_db_session
+from db.models import UserModel
 from models.git import (
     DEFAULT_PROTECTED_BRANCHES,
     AddRequest,
@@ -84,7 +87,10 @@ from models.git import (
     register_git_repository,
     update_git_repository,
 )
+from models.llm_access import LLMAccessResponse
+from models.llm_usage import LLMUsageSource
 from models.project import get_project
+from services.llm_access_service import get_access_for_user
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +193,15 @@ async def _get_db_session():
         return async_session_factory()
     except Exception:
         return None
+
+
+async def _get_llm_access_for_git(
+    current_user: UserModel | None,
+    db: AsyncSession | None,
+) -> LLMAccessResponse | None:
+    if not isinstance(current_user, UserModel) or not isinstance(db, AsyncSession):
+        return None
+    return await get_access_for_user(db, str(current_user.id))
 
 
 def get_github_service():
@@ -492,6 +507,24 @@ async def generate_draft_commits(
     project_id: str,
     request: DraftCommitsRequest,
     worktree_path: str | None = Query(None, description="Worktree path to target"),
+    current_user: UserModel | None = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db_session),
+):
+    llm_access = await _get_llm_access_for_git(current_user, db)
+    target_worktree = worktree_path if isinstance(worktree_path, str) else None
+    return await generate_draft_commits_for_project(
+        project_id,
+        request,
+        worktree_path=target_worktree,
+        llm_access=llm_access,
+    )
+
+
+async def generate_draft_commits_for_project(
+    project_id: str,
+    request: DraftCommitsRequest,
+    worktree_path: str | None = None,
+    llm_access: LLMAccessResponse | None = None,
 ):
     """Generate LLM-based draft commits from git diff.
 
@@ -538,6 +571,17 @@ Diff:
             system_prompt=DRAFT_COMMITS_SYSTEM_PROMPT,
             temperature=0.3,
             max_tokens=8192,
+            usage_context={
+                "source": LLMUsageSource.GIT_DRAFT_COMMIT,
+                "user_id": llm_access.user_id if llm_access else None,
+                "llm_access": llm_access,
+                "project_id": project_id,
+                "metadata": {
+                    "staged_only": request.staged_only,
+                    "changed_file_count": len(changed_files),
+                    "worktree_path": worktree_path,
+                },
+            },
         )
 
         # Parse JSON response - handle both string and list content

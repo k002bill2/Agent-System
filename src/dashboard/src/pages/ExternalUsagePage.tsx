@@ -3,7 +3,8 @@ import {
   AlertCircle,
   BarChart3,
   CheckCircle,
-  DollarSign,
+  GitCompareArrows,
+  Hash,
   RefreshCw,
   Settings,
 } from 'lucide-react'
@@ -26,18 +27,39 @@ import DailyCostTrend from '../components/usage/DailyCostTrend'
 import { AdminKeyManager } from '../components/usage/AdminKeyManager'
 
 const PROVIDER_COLORS: Record<string, string> = {
+  codex_cli: '#7c3aed',
+  claude_cli: '#d97706',
+  internal_cli: '#059669',
+  internal_api: '#64748b',
   openai: '#10a37f',
   github_copilot: '#6e7681',
+  google: '#4285f4',
   google_gemini: '#4285f4',
   anthropic: '#d97706',
+  ollama: '#16a34a',
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
+  codex_cli: 'Codex CLI',
+  claude_cli: 'Claude CLI',
+  internal_cli: 'Internal CLI',
+  internal_api: 'Internal API',
   openai: 'OpenAI',
   github_copilot: 'GitHub Copilot',
+  google: 'Google',
   google_gemini: 'Google Gemini',
   anthropic: 'Anthropic',
+  ollama: 'Ollama',
 }
+
+const DEFAULT_PROVIDER_KEYS = [
+  'codex_cli',
+  'claude_cli',
+  'openai',
+  'anthropic',
+  'google_gemini',
+  'github_copilot',
+]
 
 const PERIOD_OPTIONS = [
   { label: 'Last 7 days', days: 7 },
@@ -55,6 +77,37 @@ function formatTokens(tokens: number): string {
   if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`
   if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}K`
   return tokens.toString()
+}
+
+function totalTokens(inputTokens = 0, outputTokens = 0): number {
+  return inputTokens + outputTokens
+}
+
+function formatSignedTokens(tokens: number): string {
+  if (tokens === 0) return '0'
+  const sign = tokens > 0 ? '+' : '-'
+  return `${sign}${formatTokens(Math.abs(tokens))}`
+}
+
+function formatSignedCost(cost: number): string {
+  if (cost === 0) return '$0.00'
+  const sign = cost > 0 ? '+' : '-'
+  return `${sign}${formatCost(Math.abs(cost))}`
+}
+
+function reconciliationStatusLabel(status: string): string {
+  switch (status) {
+    case 'compared':
+      return 'Compared'
+    case 'ledger_only':
+      return 'Ledger only'
+    case 'provider_only':
+      return 'Provider only'
+    case 'provider_billing_disabled':
+      return 'Billing disabled'
+    default:
+      return 'Not collected'
+  }
 }
 
 export function ExternalUsagePage() {
@@ -75,6 +128,14 @@ export function ExternalUsagePage() {
     await syncProvider()
     setIsSyncing(false)
   }
+
+  const providerKeys = Array.from(
+    new Set([
+      ...DEFAULT_PROVIDER_KEYS,
+      ...providers.map(provider => provider.provider),
+      ...(summary?.providers ?? []).map(provider => provider.provider),
+    ]),
+  )
 
   // Pie chart data
   const pieData = (summary?.providers ?? [])
@@ -107,6 +168,14 @@ export function ExternalUsagePage() {
     return sumB - sumA
   })
 
+  const summaryTotalTokens = (summary?.providers ?? []).reduce(
+    (total, provider) => total + totalTokens(provider.total_input_tokens, provider.total_output_tokens),
+    0,
+  )
+  const reconciliation = summary?.reconciliation
+  const configuredReconciliationKeys = providers.filter(provider => provider.enabled).length
+  const comparisonRows = reconciliation?.comparisons.slice(0, 8) ?? []
+
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
       {/* Header */}
@@ -114,10 +183,10 @@ export function ExternalUsagePage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <BarChart3 className="w-7 h-7" />
-            External LLM Usage
+            LLM Usage
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Monitor AI costs across all external providers
+            Internal CLI subscription usage and API fallback tracking
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -150,24 +219,28 @@ export function ExternalUsagePage() {
         </div>
       )}
 
-      {/* Total cost + provider cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      {/* Total tokens + provider cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
         {/* Total */}
         <div className="md:col-span-1 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
           <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm mb-1">
-            <DollarSign className="w-4 h-4" />
-            Total Cost
+            <Hash className="w-4 h-4" />
+            Total Tokens
           </div>
           <div className="text-2xl font-bold text-gray-900 dark:text-white">
-            {isLoading ? '...' : formatCost(summary?.total_cost_usd ?? 0)}
+            {isLoading ? '...' : formatTokens(summaryTotalTokens)}
           </div>
-          <div className="text-xs text-gray-400 mt-1">Last {selectedPeriod} days</div>
+          <div className="text-xs text-gray-400 mt-1">
+            Estimated cost {formatCost(summary?.total_cost_usd ?? 0)} · Last {selectedPeriod} days
+          </div>
         </div>
 
         {/* Per-provider cards */}
-        {(['openai', 'github_copilot', 'google_gemini', 'anthropic'] as const).map(pkey => {
+        {providerKeys.map(pkey => {
           const pData = summary?.providers.find(p => p.provider === pkey)
           const pConf = providers.find(p => p.provider === pkey)
+          const isTracked = Boolean(pData?.total_requests)
+          const providerTokens = pData ? totalTokens(pData.total_input_tokens, pData.total_output_tokens) : 0
           return (
             <div
               key={pkey}
@@ -178,26 +251,126 @@ export function ExternalUsagePage() {
                   className="text-xs font-semibold uppercase tracking-wide"
                   style={{ color: PROVIDER_COLORS[pkey] }}
                 >
-                  {PROVIDER_LABELS[pkey]}
+                  {PROVIDER_LABELS[pkey] ?? pkey}
                 </span>
-                {pConf?.enabled ? (
+                {isTracked || pConf?.enabled ? (
                   <CheckCircle className="w-3.5 h-3.5 text-green-500" />
                 ) : (
                   <AlertCircle className="w-3.5 h-3.5 text-gray-400" />
                 )}
               </div>
               <div className="text-xl font-bold text-gray-900 dark:text-white">
-                {isLoading ? '...' : formatCost(pData?.total_cost_usd ?? 0)}
+                {isLoading ? '...' : formatTokens(providerTokens)}
               </div>
               <div className="text-xs text-gray-400 mt-0.5">
-                {pData ? `${formatTokens(pData.total_input_tokens + pData.total_output_tokens)} tokens` : pConf?.enabled ? 'No data' : 'Not configured'}
+                {pData ? `Estimated cost ${formatCost(pData.total_cost_usd)}` : pConf?.enabled ? 'No data' : 'Not tracked'}
               </div>
             </div>
           )
         })}
       </div>
 
-      {/* Daily Cost Trend */}
+      {/* Internal ledger vs optional provider billing reconciliation */}
+      {reconciliation && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                <GitCompareArrows className="w-4 h-4" />
+                Usage Reconciliation
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Primary usage totals come from the internal ledger.
+              </p>
+            </div>
+            <span className="inline-flex items-center rounded-md border border-gray-200 dark:border-gray-700 px-2.5 py-1 text-xs font-medium text-gray-600 dark:text-gray-300">
+              {reconciliation.provider_billing_enabled ? 'Provider billing enabled' : 'Provider billing disabled'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border-b border-gray-200 dark:border-gray-700">
+            <div className="p-4">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Primary source</div>
+              <div className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                Internal CLI ledger
+              </div>
+            </div>
+            <div className="p-4">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Ledger tokens</div>
+              <div className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                {formatTokens(reconciliation.internal_total_tokens)}
+              </div>
+              <div className="text-xs text-gray-400">
+                {reconciliation.internal_total_requests.toLocaleString()} requests
+              </div>
+            </div>
+            <div className="p-4">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Provider billing tokens</div>
+              <div className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                {formatTokens(reconciliation.provider_billing_total_tokens)}
+              </div>
+              <div className="text-xs text-gray-400">
+                {reconciliation.provider_billing_record_count.toLocaleString()} records
+              </div>
+            </div>
+            <div className="p-4">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Configured keys</div>
+              <div className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                {configuredReconciliationKeys}
+              </div>
+              <div className="text-xs text-gray-400">
+                Optional provider billing
+              </div>
+            </div>
+          </div>
+
+          {comparisonRows.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-700/50">
+                  <tr>
+                    {['Provider', 'Ledger Tokens', 'Billing Tokens', 'Token Delta', 'Cost Delta', 'Status'].map(h => (
+                      <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {comparisonRows.map(row => (
+                    <tr key={row.provider} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                      <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
+                        {PROVIDER_LABELS[row.provider] ?? row.provider}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
+                        {formatTokens(row.internal_total_tokens)}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
+                        {formatTokens(row.provider_billing_total_tokens)}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
+                        {formatSignedTokens(row.delta_tokens)}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
+                        {formatSignedCost(row.delta_cost_usd)}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
+                        {reconciliationStatusLabel(row.status)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="px-5 py-4 text-sm text-gray-500 dark:text-gray-400">
+              No reconciliation comparison rows for this period.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Daily estimated cost trend */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <DailyCostTrend records={summary?.records ?? []} />
       </div>
@@ -210,14 +383,14 @@ export function ExternalUsagePage() {
 
       {/* Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Cost by Provider - Pie */}
+        {/* Estimated cost by Provider - Pie */}
         <div className="p-5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-            Cost by Provider
+            Estimated Cost by Provider
           </h2>
           {pieData.length === 0 ? (
             <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
-              No cost data available
+              No estimated cost data available
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={220}>
@@ -242,10 +415,10 @@ export function ExternalUsagePage() {
           )}
         </div>
 
-        {/* Model Cost Breakdown - Bar */}
+        {/* Estimated model cost breakdown - Bar */}
         <div className="p-5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-            Cost by Model
+            Estimated Cost by Model
           </h2>
           {modelData.length === 0 ? (
             <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
@@ -278,7 +451,7 @@ export function ExternalUsagePage() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700/50">
               <tr>
-                {['Provider', 'Input Tokens', 'Output Tokens', 'Cost', 'Requests', 'Status'].map(h => (
+                {['Provider', 'Input Tokens', 'Output Tokens', 'Estimated Cost', 'Requests', 'Status'].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     {h}
                   </th>
@@ -286,9 +459,10 @@ export function ExternalUsagePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {(['openai', 'github_copilot', 'google_gemini', 'anthropic'] as const).map(pkey => {
+              {providerKeys.map(pkey => {
                 const pData = summary?.providers.find(p => p.provider === pkey)
                 const pConf = providers.find(p => p.provider === pkey)
+                const isTracked = Boolean(pData?.total_requests)
                 return (
                   <tr key={pkey} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                     <td className="px-4 py-3">
@@ -296,7 +470,7 @@ export function ExternalUsagePage() {
                         className="font-medium"
                         style={{ color: PROVIDER_COLORS[pkey] }}
                       >
-                        {PROVIDER_LABELS[pkey]}
+                        {PROVIDER_LABELS[pkey] ?? pkey}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
@@ -312,7 +486,12 @@ export function ExternalUsagePage() {
                       {pData ? pData.total_requests.toLocaleString() : '\u2014'}
                     </td>
                     <td className="px-4 py-3">
-                      {pConf?.enabled ? (
+                      {isTracked ? (
+                        <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400 text-xs">
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          Tracked
+                        </span>
+                      ) : pConf?.enabled ? (
                         <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400 text-xs">
                           <CheckCircle className="w-3.5 h-3.5" />
                           Configured
@@ -320,7 +499,7 @@ export function ExternalUsagePage() {
                       ) : (
                         <span className="inline-flex items-center gap-1 text-gray-400 text-xs">
                           <Settings className="w-3.5 h-3.5" />
-                          Not configured
+                          Not tracked
                         </span>
                       )}
                     </td>
@@ -332,7 +511,7 @@ export function ExternalUsagePage() {
         </div>
       </div>
 
-      {/* Admin/manager usage key management (replaces the read-only env guide) */}
+      {/* Optional provider billing reconciliation key management */}
       <AdminKeyManager />
     </div>
   )

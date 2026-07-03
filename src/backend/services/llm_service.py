@@ -13,10 +13,169 @@ from langchain_core.messages import (
     ToolMessage,
 )
 
+from models.llm_access import LLMAccessResponse
 from models.llm_models import LLMModelRegistry, get_model_configs
+from models.llm_usage import (
+    LLMRuntimeMode,
+    LLMUsageMeasurementMethod,
+    LLMUsageRecordCreate,
+    LLMUsageStatus,
+)
+from services.llm_runtime_resolver import (
+    LLMRuntimeRequest,
+    LLMRuntimeResolution,
+    LLMRuntimeResolutionError,
+    resolve_llm_runtime,
+)
+from services.llm_usage_ledger_service import (
+    LLMUsageQuotaExceededError,
+    enforce_usage_quota_preflight_best_effort,
+    record_usage_best_effort,
+)
 
 # Use central registry for model configurations
 MODEL_CONFIGS = get_model_configs()
+
+
+def _runtime_mode_for_provider(provider: str) -> LLMRuntimeMode:
+    if provider.endswith("_cli"):
+        return LLMRuntimeMode.CLI
+    if provider == "ollama":
+        return LLMRuntimeMode.LOCAL
+    return LLMRuntimeMode.API
+
+
+def _usage_context_value(usage_context: dict[str, Any] | None, key: str) -> Any:
+    if not usage_context:
+        return None
+    value = usage_context.get(key)
+    if hasattr(value, "value"):
+        return value.value
+    return value
+
+
+def _usage_context_metadata(usage_context: dict[str, Any] | None) -> dict[str, Any]:
+    if not usage_context:
+        return {}
+    metadata = usage_context.get("metadata")
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _usage_context_access(
+    usage_context: dict[str, Any] | None,
+) -> LLMAccessResponse | None:
+    if not usage_context:
+        return None
+    access = usage_context.get("llm_access")
+    if isinstance(access, LLMAccessResponse):
+        return access
+    if isinstance(access, dict):
+        return LLMAccessResponse.model_validate(access)
+    return None
+
+
+def _usage_context_with_runtime_resolution(
+    usage_context: dict[str, Any] | None,
+    resolution: LLMRuntimeResolution,
+) -> dict[str, Any] | None:
+    if usage_context is None:
+        return None
+    updated = dict(usage_context)
+    metadata = dict(_usage_context_metadata(usage_context))
+    metadata.update(resolution.usage_metadata())
+    updated["metadata"] = metadata
+    return updated
+
+
+def _resolve_runtime_from_context(
+    model_id: str,
+    usage_context: dict[str, Any] | None,
+) -> tuple[str, str, dict[str, Any] | None]:
+    access = _usage_context_access(usage_context)
+    source = _usage_context_value(usage_context, "source")
+    if not access or not source:
+        resolved_model = model_id or LLMModelRegistry.get_default()
+        config = MODEL_CONFIGS.get(resolved_model, {})
+        return resolved_model, config.get("provider", "unknown"), usage_context
+
+    resolution = resolve_llm_runtime(
+        access,
+        LLMRuntimeRequest(
+            user_id=_usage_context_value(usage_context, "user_id"),
+            organization_id=_usage_context_value(usage_context, "organization_id"),
+            source=source,
+            requested_model_id=model_id or None,
+        ),
+    )
+    return (
+        resolution.model_id,
+        resolution.provider,
+        _usage_context_with_runtime_resolution(usage_context, resolution),
+    )
+
+
+def _estimate_message_tokens(messages: list[BaseMessage], max_tokens: int) -> int:
+    input_tokens = sum(len(str(m.content).split()) for m in messages if hasattr(m, "content")) * 2
+    return input_tokens + max(max_tokens, 0)
+
+
+async def _enforce_quota_preflight_from_context(
+    usage_context: dict[str, Any] | None,
+    messages: list[BaseMessage],
+    max_tokens: int,
+) -> None:
+    await enforce_usage_quota_preflight_best_effort(
+        user_id=_usage_context_value(usage_context, "user_id"),
+        organization_id=_usage_context_value(usage_context, "organization_id"),
+        estimated_tokens=_estimate_message_tokens(messages, max_tokens),
+    )
+
+
+async def _record_usage_from_context(
+    *,
+    usage_context: dict[str, Any] | None,
+    provider: str,
+    model_id: str,
+    input_tokens: int | None,
+    output_tokens: int | None,
+    latency_ms: int | None,
+    measurement_method: LLMUsageMeasurementMethod,
+    status: LLMUsageStatus,
+    started_at: float,
+    error_message: str | None = None,
+) -> None:
+    source = _usage_context_value(usage_context, "source")
+    if not source:
+        return
+
+    from datetime import UTC, datetime
+
+    started_dt = datetime.fromtimestamp(started_at, tz=UTC)
+    completed_dt = datetime.now(tz=UTC)
+    await record_usage_best_effort(
+        LLMUsageRecordCreate(
+            user_id=_usage_context_value(usage_context, "user_id"),
+            organization_id=_usage_context_value(usage_context, "organization_id"),
+            provider=provider,
+            mode=_runtime_mode_for_provider(provider),
+            source=source,
+            model=model_id,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            measurement_method=measurement_method,
+            estimated_cost_usd=None,
+            status=status,
+            session_id=_usage_context_value(usage_context, "session_id"),
+            task_id=_usage_context_value(usage_context, "task_id"),
+            analysis_id=_usage_context_value(usage_context, "analysis_id"),
+            project_id=_usage_context_value(usage_context, "project_id"),
+            latency_ms=latency_ms,
+            error_message=error_message,
+            metadata=_usage_context_metadata(usage_context),
+            started_at=started_dt,
+            completed_at=completed_dt,
+        )
+    )
 
 
 class LLMResponse:
@@ -197,6 +356,7 @@ class LLMService:
         context: dict[str, Any] | None = None,
         history: list[BaseMessage] | None = None,
         rag_context: str | None = None,
+        usage_context: dict[str, Any] | None = None,
     ) -> LLMResponse:
         """
         Invoke an LLM with the given prompt.
@@ -212,14 +372,14 @@ class LLMService:
             rag_context: Retrieved project context injected as a separate
                 SystemMessage so the model treats it as authoritative.
         """
-        config = MODEL_CONFIGS.get(model_id, {})
-        provider = config.get("provider", "unknown")
+        model_id, provider, usage_context = _resolve_runtime_from_context(
+            model_id,
+            usage_context,
+        )
 
         start_time = time.time()
 
         try:
-            llm = cls._get_llm(model_id, temperature, max_tokens)
-
             messages = _build_messages(
                 system_prompt=system_prompt,
                 history=history,
@@ -227,6 +387,9 @@ class LLMService:
                 rag_context=rag_context,
                 extra_context=context,
             )
+            await _enforce_quota_preflight_from_context(usage_context, messages, max_tokens)
+
+            llm = cls._get_llm(model_id, temperature, max_tokens)
 
             # Invoke LLM
             response = await llm.ainvoke(messages)
@@ -236,24 +399,41 @@ class LLMService:
             # Extract token usage if available
             input_tokens = 0
             output_tokens = 0
+            measurement_method = LLMUsageMeasurementMethod.UNKNOWN
 
             if hasattr(response, "usage_metadata") and response.usage_metadata:
                 input_tokens = response.usage_metadata.get("input_tokens", 0)
                 output_tokens = response.usage_metadata.get("output_tokens", 0)
+                measurement_method = LLMUsageMeasurementMethod.PROVIDER_METADATA
             elif hasattr(response, "response_metadata"):
                 metadata = response.response_metadata
                 if "usage" in metadata:
                     usage = metadata["usage"]
                     input_tokens = usage.get("input_tokens", usage.get("prompt_tokens", 0))
                     output_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
+                    measurement_method = LLMUsageMeasurementMethod.PROVIDER_METADATA
 
             # Estimate if not available (sum across all messages — history +
             # rag + current turn — to reflect what the model actually saw)
             if input_tokens == 0:
                 approx = sum(len(str(m.content).split()) for m in messages if hasattr(m, "content"))
                 input_tokens = approx * 2
+                measurement_method = LLMUsageMeasurementMethod.ESTIMATED
             if output_tokens == 0:
                 output_tokens = len(str(response.content).split()) * 2
+                measurement_method = LLMUsageMeasurementMethod.ESTIMATED
+
+            await _record_usage_from_context(
+                usage_context=usage_context,
+                provider=provider,
+                model_id=model_id,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                latency_ms=latency_ms,
+                measurement_method=measurement_method,
+                status=LLMUsageStatus.SUCCESS,
+                started_at=start_time,
+            )
 
             return LLMResponse(
                 content=response.content,
@@ -264,8 +444,22 @@ class LLMService:
                 provider=provider,
             )
 
+        except (LLMUsageQuotaExceededError, LLMRuntimeResolutionError):
+            raise
         except Exception as e:
             latency_ms = int((time.time() - start_time) * 1000)
+            await _record_usage_from_context(
+                usage_context=usage_context,
+                provider=provider,
+                model_id=model_id,
+                input_tokens=None,
+                output_tokens=None,
+                latency_ms=latency_ms,
+                measurement_method=LLMUsageMeasurementMethod.UNKNOWN,
+                status=LLMUsageStatus.ERROR,
+                started_at=start_time,
+                error_message=str(e),
+            )
             raise RuntimeError(f"LLM invocation failed ({model_id}): {str(e)}")
 
     @classmethod
@@ -310,6 +504,7 @@ class LLMService:
         context: dict[str, Any] | None = None,
         history: list[BaseMessage] | None = None,
         rag_context: str | None = None,
+        usage_context: dict[str, Any] | None = None,
     ) -> AsyncIterator[tuple[str, dict | None]]:
         """
         Stream response from LLM with token information.
@@ -323,9 +518,13 @@ class LLMService:
             failure so callers can distinguish error payloads from streamed
             content.
         """
-        try:
-            llm = cls._get_llm(model_id, temperature, max_tokens)
+        model_id, provider, usage_context = _resolve_runtime_from_context(
+            model_id,
+            usage_context,
+        )
+        start_time = time.time()
 
+        try:
             messages = _build_messages(
                 system_prompt=system_prompt,
                 history=history,
@@ -333,8 +532,12 @@ class LLMService:
                 rag_context=rag_context,
                 extra_context=context,
             )
+            await _enforce_quota_preflight_from_context(usage_context, messages, max_tokens)
+
+            llm = cls._get_llm(model_id, temperature, max_tokens)
 
             token_info = None
+            measurement_method = LLMUsageMeasurementMethod.UNKNOWN
 
             # Use astream_events for token tracking
             async for event in llm.astream_events(messages, version="v2"):
@@ -359,12 +562,14 @@ class LLMService:
                                     "output_tokens": usage.get("output_tokens", 0),
                                     "model": model_id,
                                 }
+                                measurement_method = LLMUsageMeasurementMethod.PROVIDER_METADATA
                             else:
                                 token_info = {
                                     "input_tokens": getattr(usage, "input_tokens", 0),
                                     "output_tokens": getattr(usage, "output_tokens", 0),
                                     "model": model_id,
                                 }
+                                measurement_method = LLMUsageMeasurementMethod.PROVIDER_METADATA
                         elif hasattr(output, "response_metadata"):
                             metadata = output.response_metadata
                             usage = metadata.get("usage", {})
@@ -374,12 +579,40 @@ class LLMService:
                                     "output_tokens": usage.get("output_tokens", 0),
                                     "model": model_id,
                                 }
+                                measurement_method = LLMUsageMeasurementMethod.PROVIDER_METADATA
 
             # Yield final token info
             if token_info:
+                latency_ms = int((time.time() - start_time) * 1000)
+                await _record_usage_from_context(
+                    usage_context=usage_context,
+                    provider=provider,
+                    model_id=model_id,
+                    input_tokens=token_info.get("input_tokens", 0),
+                    output_tokens=token_info.get("output_tokens", 0),
+                    latency_ms=latency_ms,
+                    measurement_method=measurement_method,
+                    status=LLMUsageStatus.SUCCESS,
+                    started_at=start_time,
+                )
                 yield "", token_info
 
+        except (LLMUsageQuotaExceededError, LLMRuntimeResolutionError):
+            raise
         except Exception as e:
+            latency_ms = int((time.time() - start_time) * 1000)
+            await _record_usage_from_context(
+                usage_context=usage_context,
+                provider=provider,
+                model_id=model_id,
+                input_tokens=None,
+                output_tokens=None,
+                latency_ms=latency_ms,
+                measurement_method=LLMUsageMeasurementMethod.UNKNOWN,
+                status=LLMUsageStatus.ERROR,
+                started_at=start_time,
+                error_message=str(e),
+            )
             # Emit error with structured sentinel so callers can distinguish
             # an error payload from a streamed content chunk.
             yield f"\n\n[Error: {str(e)}]", {"error": True, "message": str(e)}
@@ -414,6 +647,7 @@ class LLMService:
         working_directory: str | None = None,
         history: list[BaseMessage] | None = None,
         rag_context: str | None = None,
+        usage_context: dict[str, Any] | None = None,
     ) -> LLMResponse:
         """
         Invoke an LLM with tool support.
@@ -427,12 +661,15 @@ class LLMService:
         """
         from services.playground_tools import TOOL_DEFINITIONS, execute_tool
 
-        config = MODEL_CONFIGS.get(model_id, {})
-        provider = config.get("provider", "unknown")
+        model_id, provider, usage_context = _resolve_runtime_from_context(
+            model_id,
+            usage_context,
+        )
 
         start_time = time.time()
         total_input_tokens = 0
         total_output_tokens = 0
+        measurement_method = LLMUsageMeasurementMethod.UNKNOWN
         all_tool_calls: list[dict[str, Any]] = []
         all_tool_results: list[dict[str, Any]] = []
 
@@ -444,6 +681,15 @@ class LLMService:
         )
 
         try:
+            messages = _build_messages(
+                system_prompt=system_prompt or default_tool_sys,
+                history=history,
+                prompt=prompt,
+                rag_context=rag_context,
+                extra_context=context,
+            )
+            await _enforce_quota_preflight_from_context(usage_context, messages, max_tokens)
+
             llm = cls._get_llm(model_id, temperature, max_tokens)
 
             # Filter tool definitions to only enabled tools
@@ -455,14 +701,6 @@ class LLMService:
             else:
                 llm_with_tools = llm
 
-            messages = _build_messages(
-                system_prompt=system_prompt or default_tool_sys,
-                history=history,
-                prompt=prompt,
-                rag_context=rag_context,
-                extra_context=context,
-            )
-
             # Iterate until we get a final response or hit max iterations
             for _iteration in range(max_tool_iterations):
                 # Invoke LLM
@@ -472,6 +710,7 @@ class LLMService:
                 if hasattr(response, "usage_metadata") and response.usage_metadata:
                     total_input_tokens += response.usage_metadata.get("input_tokens", 0)
                     total_output_tokens += response.usage_metadata.get("output_tokens", 0)
+                    measurement_method = LLMUsageMeasurementMethod.PROVIDER_METADATA
 
                 # Check for tool calls
                 tool_calls = getattr(response, "tool_calls", [])
@@ -486,8 +725,22 @@ class LLMService:
                             len(str(m.content).split()) for m in messages if hasattr(m, "content")
                         )
                         total_input_tokens = approx * 2
+                        measurement_method = LLMUsageMeasurementMethod.ESTIMATED
                     if total_output_tokens == 0:
                         total_output_tokens = len(str(response.content).split()) * 2
+                        measurement_method = LLMUsageMeasurementMethod.ESTIMATED
+
+                    await _record_usage_from_context(
+                        usage_context=usage_context,
+                        provider=provider,
+                        model_id=model_id,
+                        input_tokens=total_input_tokens,
+                        output_tokens=total_output_tokens,
+                        latency_ms=latency_ms,
+                        measurement_method=measurement_method,
+                        status=LLMUsageStatus.SUCCESS,
+                        started_at=start_time,
+                    )
 
                     return LLMResponse(
                         content=response.content,
@@ -519,7 +772,10 @@ class LLMService:
                     # Execute the tool
                     try:
                         result = await execute_tool(
-                            tool_name, tool_args, working_directory=working_directory
+                            tool_name,
+                            tool_args,
+                            working_directory=working_directory,
+                            usage_context=usage_context,
                         )
                         result_str = json.dumps(result, ensure_ascii=False, indent=2)
                     except Exception as e:
@@ -559,14 +815,29 @@ class LLMService:
             if hasattr(final_response, "usage_metadata") and final_response.usage_metadata:
                 total_input_tokens += final_response.usage_metadata.get("input_tokens", 0)
                 total_output_tokens += final_response.usage_metadata.get("output_tokens", 0)
+                measurement_method = LLMUsageMeasurementMethod.PROVIDER_METADATA
 
             latency_ms = int((time.time() - start_time) * 1000)
 
             if total_input_tokens == 0:
                 approx = sum(len(str(m.content).split()) for m in messages if hasattr(m, "content"))
                 total_input_tokens = approx * 2
+                measurement_method = LLMUsageMeasurementMethod.ESTIMATED
             if total_output_tokens == 0:
                 total_output_tokens = len(str(final_response.content).split()) * 2
+                measurement_method = LLMUsageMeasurementMethod.ESTIMATED
+
+            await _record_usage_from_context(
+                usage_context=usage_context,
+                provider=provider,
+                model_id=model_id,
+                input_tokens=total_input_tokens,
+                output_tokens=total_output_tokens,
+                latency_ms=latency_ms,
+                measurement_method=measurement_method,
+                status=LLMUsageStatus.SUCCESS,
+                started_at=start_time,
+            )
 
             return LLMResponse(
                 content=final_response.content,
@@ -579,6 +850,20 @@ class LLMService:
                 tool_results=all_tool_results,
             )
 
+        except (LLMUsageQuotaExceededError, LLMRuntimeResolutionError):
+            raise
         except Exception as e:
             latency_ms = int((time.time() - start_time) * 1000)
+            await _record_usage_from_context(
+                usage_context=usage_context,
+                provider=provider,
+                model_id=model_id,
+                input_tokens=None,
+                output_tokens=None,
+                latency_ms=latency_ms,
+                measurement_method=LLMUsageMeasurementMethod.UNKNOWN,
+                status=LLMUsageStatus.ERROR,
+                started_at=start_time,
+                error_message=str(e),
+            )
             raise RuntimeError(f"LLM invocation with tools failed ({model_id}): {str(e)}")
