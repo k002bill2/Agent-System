@@ -51,14 +51,14 @@ Agent Orchestration System (AOS)은 **LangGraph 기반 멀티 에이전트 오�
 완료
 ```
 
-### 지원 LLM 프로바이더
+### 지원 LLM Runtime
 
-| 프로바이더 | 모델 | Context 한도 |
-|-----------|------|-------------|
-| **Google Gemini** | gemini-2.0-flash (기본) | 1M tokens |
-| **Anthropic Claude** | claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5 | 200K tokens |
-| **Ollama** | 로컬 모델 (qwen2.5:7b 등) | 모델별 상이 |
-| **OpenAI** | gpt-4o, o1 | 128K~200K tokens |
+| Runtime | 용도 | 비고 |
+|-----------|------|------|
+| **Codex CLI** | 기본 LLM 실행 | `codex_cli`, ChatGPT CLI 구독 로그인 사용 |
+| **Claude CLI** | Task Analyzer tmux 실행, Warp launch intent | `claude_cli`, 일부 경로 계측 |
+| **Ollama** | 로컬 모델 실행 | API 과금 없음 |
+| **OpenAI / Anthropic / Google** | fallback 또는 OCR/vision 예외 경로 | `LLM_API_FALLBACK_ENABLED=true`와 entitlement 허용 필요 |
 
 ---
 
@@ -69,7 +69,7 @@ Agent Orchestration System (AOS)은 **LangGraph 기반 멀티 에이전트 오�
 - Python 3.11+
 - Node.js 20+
 - Docker & Docker Compose
-- LLM API Key (Google/Anthropic/OpenAI 중 하나)
+- LLM 실행 자격: 기본은 Codex CLI/ChatGPT 구독 로그인, API key는 fallback이 필요한 경우에만 사용
 
 ### 방법 1: 스크립트로 전체 시작
 
@@ -91,8 +91,11 @@ cd "/Users/younghwankang/Work/Agent-System"
 
 # .env 파일 생성
 cat > src/backend/.env << EOF
-# LLM Provider (codex_cli/openai/google/anthropic/ollama)
+# LLM runtime policy
 LLM_PROVIDER=codex_cli
+LLM_DEFAULT_MODE=cli
+LLM_USAGE_SOURCE=internal_ledger
+LLM_API_FALLBACK_ENABLED=false
 # codex_cli는 OpenAI API 키 대신 `codex` CLI의 ChatGPT 로그인 세션 사용
 
 # Database (선택)
@@ -188,7 +191,7 @@ npm run dev
 | **Project Management** | `/project-management` | DB 기반 프로젝트 레지스트리 (CRUD, soft-delete) |
 | **Organizations** | `/organizations` | 조직 관리 (멤버, 역할, 통계) |
 | **Workflows** | `/workflows` | 워크플로우 자동화 (CI/CD 파이프라인) |
-| **External Usage** | `/external-usage` | 외부 LLM 프로바이더 사용량 모니터링 |
+| **External Usage** | `/external-usage` | 내부 LLM ledger 기반 사용량과 provider billing reconciliation |
 | **Admin** | `/admin` | 관리자 (사용자 관리, 메뉴 설정, 시스템 정보) |
 | **Settings** | `/settings` | 시스템 설정 |
 
@@ -779,13 +782,15 @@ ws.onmessage = (event) => {
 3. CORS 설정 확인 (CORS_ORIGINS 환경변수 형식: 쉼표 구분 또는 JSON 배열)
 ```
 
-#### 2. API Key 에러
+#### 2. LLM 실행 에러
 ```
-증상: "API_KEY environment variable is not set"
+증상: CLI command not found, auth disconnected, API fallback denied, API_KEY environment variable is not set
 해결:
-1. src/backend/.env 파일 확인
-2. LLM_PROVIDER와 해당 API_KEY 설정 확인
-3. Backend 서버 재시작
+1. 기본값은 `LLM_PROVIDER=codex_cli`이므로 `codex` CLI 설치와 로그인 상태 확인
+2. Settings -> LLM Access에서 CLI profile health check 실행
+3. API fallback을 의도한 경우에만 `LLM_API_FALLBACK_ENABLED=true`와 해당 API key 설정
+4. fallback entitlement의 `allow_api_fallback=true` 확인
+5. Backend 서버 재시작
 ```
 
 #### 3. MCP 서버 연결 실패
@@ -852,10 +857,14 @@ cd src/dashboard && npm run dev
 | 변수 | 설명 | 기본값 |
 |------|------|--------|
 | LLM_PROVIDER | LLM 제공자 | codex_cli |
+| LLM_DEFAULT_MODE | 기본 실행 모드 | cli |
+| LLM_USAGE_SOURCE | 사용량 집계 소스 | internal_ledger |
+| LLM_API_FALLBACK_ENABLED | API fallback/proxy 허용 여부 | false |
 | CODEX_CLI_COMMAND | Codex CLI 실행 파일 | codex |
-| OPENAI_API_KEY | OpenAI API 키 | - |
-| GOOGLE_API_KEY | Google API 키 | - |
-| ANTHROPIC_API_KEY | Anthropic API 키 | - |
+| OPENAI_API_KEY | fallback 전용 API credential | - |
+| GOOGLE_API_KEY | fallback 전용 API credential | - |
+| ANTHROPIC_API_KEY | fallback 전용 API credential | - |
+| EXTERNAL_USAGE_INCLUDE_PROVIDER_BILLING | provider billing reconciliation 포함 여부 | false |
 | DATABASE_URL | PostgreSQL URL | - |
 | USE_DATABASE | DB 영구 저장 | false |
 | REDIS_URL | Redis URL | redis://localhost:6379 |

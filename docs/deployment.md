@@ -21,7 +21,7 @@
 ### 필수 계정
 - **GitHub** - 소스 코드 저장소
 - **Railway** 또는 **Render** - 호스팅 플랫폼
-- **LLM API 키** - Google AI (Gemini) 또는 Anthropic (Claude)
+- **LLM 실행 자격** - Self-host Docker는 CLI 구독 로그인, 헤드리스 PaaS는 명시적 fallback API 키
 
 ### 선택 사항
 - **Slack/Discord** - 알림 웹훅
@@ -52,9 +52,10 @@
 ### 배포 절차
 
 ```bash
-# 1. 환경 변수 설정 (LLM 키만 — 시크릿은 setup.sh가 자동 생성)
+# 1. 환경 변수 설정 (CLI-first 정책 — 시크릿은 setup.sh가 자동 생성)
 cp .env.example .env
-# .env 편집: GOOGLE_API_KEY (또는 ANTHROPIC_API_KEY) 설정
+# .env 편집: 기본은 LLM_PROVIDER=codex_cli, LLM_API_FALLBACK_ENABLED=false 유지
+# self-host 머신에서 Codex CLI를 먼저 로그인하고, 필요 시 CLI profile mount 설정
 
 # 2. 셋업 — 시크릿 자동 생성 + 빌드 + 전체 기동
 ./setup.sh
@@ -89,6 +90,70 @@ docker compose up -d postgres redis qdrant
 ### Ollama 연동 (Docker 환경)
 
 Docker 컨테이너 내부에서 호스트의 Ollama에 접근하려면 `localhost` 대신 `host.docker.internal`을 사용해야 합니다. 루트 `docker-compose.yml`에서는 이 값이 하드코딩되어 있어 `.env`의 `OLLAMA_BASE_URL` 설정과 무관하게 올바르게 동작합니다.
+
+### CLI 구독권과 사용자별 profile 격리
+
+AOS의 기본 LLM 운영은 API 과금 키가 아니라 CLI 구독권을 사용합니다. Settings의 LLM Access와 External Usage는 provider billing API가 아니라 AOS 내부 `llm_usage_ledger`를 같은 source of truth로 봅니다.
+
+현재 구현된 API, UI, 운영 절차는 [CLI 구독권 기반 LLM 운영 안내](guides/llm-cli-subscription-usage-guide.md)를 함께 참고하세요.
+
+기본 정책은 다음 값을 유지합니다.
+
+```bash
+LLM_PROVIDER=codex_cli
+LLM_DEFAULT_MODE=cli
+LLM_USAGE_SOURCE=internal_ledger
+LLM_API_FALLBACK_ENABLED=false
+LLM_USAGE_PREFLIGHT_QUOTA_ENABLED=false
+EXTERNAL_USAGE_INCLUDE_PROVIDER_BILLING=false
+```
+
+운영 모드는 두 가지로 나눕니다.
+
+| 모드 | 사용 상황 | CLI profile 소유권 | 사용량 해석 |
+|------|-----------|--------------------|-------------|
+| 단일 기본 profile | 개인 Docker, 소규모 신뢰 팀 | 배포 운영자 1개 profile | provider 계정은 하나지만 ledger는 AOS user/org별로 분리 |
+| 사용자별 profile | 개인/회사 사용자를 같은 인스턴스에서 분리 | `owner_user_id` 또는 `organization_id`별 profile | provider 계정과 AOS ledger를 모두 사용자/조직 단위로 분리 |
+
+단일 기본 profile은 가장 단순하지만 provider 입장에서는 하나의 CLI 계정으로 실행됩니다. 여러 독립 사용자나 회사 조직을 수용하려면 사용자별 또는 조직별 profile을 분리하세요.
+
+권장 디렉터리 구조:
+
+```text
+runtime/llm-profiles/
+  codex/default/
+  codex/users/<user-id>/
+  codex/orgs/<organization-id>/
+```
+
+Docker에는 전체 host home을 마운트하지 말고 CLI 인증/설정에 필요한 profile 디렉터리만 마운트합니다. CLI가 실행 중 쓰기 캐시를 만들지 않는 구성이면 read-only mount를 우선하고, 쓰기가 필요하면 사용자별 전용 디렉터리만 read-write로 둡니다.
+
+예시 override:
+
+```yaml
+services:
+  backend:
+    volumes:
+      # 컨테이너 실행 사용자 HOME 경로에 맞게 대상 경로를 조정하세요.
+      - ./runtime/llm-profiles/codex/default:/home/aos/.codex:ro
+```
+
+운영 절차:
+
+1. Self-host 머신에서 각 CLI 계정을 로그인하고 profile 디렉터리를 분리합니다.
+2. Settings -> LLM Access에서 CLI profile을 생성합니다.
+   - 개인 profile: `owner_user_id` 지정
+   - 조직 공용 profile: `organization_id` 지정, `owner_user_id` 비움
+   - command: `codex`
+   - args: `exec --sandbox read-only --color never`
+   - working directory: 해당 사용자/조직이 접근해도 되는 workspace
+3. profile health check를 실행합니다. API 경로는 `POST /api/llm-access/profiles/{profile_id}/health-check`입니다.
+4. 사용자 또는 조직 entitlement에 해당 profile을 매핑합니다.
+5. org monthly quota를 호출 전에 막아야 하는 운영 환경에서만 `LLM_USAGE_PREFLIGHT_QUOTA_ENABLED=true`를 켭니다.
+
+API fallback은 운영자가 명시적으로 승인한 예외 경로입니다. 전역 `LLM_API_FALLBACK_ENABLED=true`와 entitlement의 `allow_api_fallback=true`가 모두 필요하며, 이때도 사용량은 `mode=api`로 내부 ledger에 기록됩니다.
+
+Railway/Render 같은 헤드리스 PaaS는 대화형 CLI 로그인을 유지하기 어렵습니다. CLI profile을 안전하게 마운트할 수 없는 배포에서는 Self-host Docker를 사용하거나, 비용 발생을 감수하고 fallback API 정책을 별도로 승인해야 합니다.
 
 ---
 
@@ -154,7 +219,10 @@ USE_DATABASE=true
 SESSION_SECRET_KEY=<32자 이상 랜덤 문자열>
 FRONTEND_URL=https://<dashboard-service>.railway.app
 
-# LLM 설정 (헤드리스 배포는 API 프로바이더를 사용)
+# LLM 설정
+# CLI profile을 안전하게 마운트할 수 없는 헤드리스 PaaS에서는 fallback API 정책이 필요합니다.
+# API 사용은 비용이 발생하므로 Self-host CLI-first 운영을 우선 검토하세요.
+LLM_API_FALLBACK_ENABLED=true
 LLM_PROVIDER=google
 GOOGLE_API_KEY=<your-api-key>
 # 또는
@@ -163,8 +231,8 @@ GOOGLE_API_KEY=<your-api-key>
 # 또는
 # LLM_PROVIDER=anthropic
 # ANTHROPIC_API_KEY=<your-api-key>
-# 참고: codex_cli는 로컬 개발 전용입니다. Codex CLI 설치 + 대화형 ChatGPT
-# 로그인 세션이 필요해 헤드리스 배포 환경에서는 동작하지 않습니다.
+# 참고: codex_cli는 CLI 설치 + ChatGPT 로그인 세션 또는 profile mount가 필요합니다.
+# 이 조건을 만족하지 못하는 헤드리스 배포에서는 동작하지 않습니다.
 ```
 
 #### 6. 커스텀 도메인 (선택)
@@ -227,15 +295,21 @@ GOOGLE_API_KEY=<your-api-key>
 | `SESSION_SECRET_KEY` | JWT 서명 키 | (32자 이상 랜덤) |
 | `FRONTEND_URL` | 대시보드 URL | `https://aos.example.com` |
 | `LLM_PROVIDER` | LLM 제공자 | `codex_cli`, `openai`, `google`, `anthropic`, `ollama` |
+| `LLM_DEFAULT_MODE` | 기본 LLM 실행 모드 | `cli` |
+| `LLM_USAGE_SOURCE` | 사용량 기준 source | `internal_ledger` |
+| `LLM_API_FALLBACK_ENABLED` | API fallback 전역 허용 여부 | `false` |
 | `CODEX_CLI_COMMAND` | Codex CLI 실행 파일 | `codex` |
-| `OPENAI_API_KEY` | OpenAI API 키 | (OpenAI Platform) |
-| `GOOGLE_API_KEY` | Google AI API 키 | (Google Cloud Console) |
 
 ### 선택 환경 변수
 
 | 변수 | 설명 | 기본값 |
 |------|------|--------|
-| `ANTHROPIC_API_KEY` | Anthropic API 키 | - |
+| `CODEX_CLI_ARGS` | Codex CLI 비대화식 실행 인자 | `exec --sandbox read-only --color never` |
+| `CODEX_CLI_TIMEOUT_SECONDS` | Codex CLI timeout | `300` |
+| `OPENAI_API_KEY` | fallback 전용 OpenAI API 키 | - |
+| `GOOGLE_API_KEY` | fallback 전용 Google AI API 키 | - |
+| `ANTHROPIC_API_KEY` | fallback 전용 Anthropic API 키 | - |
+| `EXTERNAL_USAGE_INCLUDE_PROVIDER_BILLING` | provider billing reconciliation 포함 여부 | `false` |
 | `GOOGLE_CLIENT_ID` | Google OAuth 클라이언트 ID | - |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth 시크릿 | - |
 | `GITHUB_CLIENT_ID` | GitHub OAuth 클라이언트 ID | - |
@@ -374,16 +448,18 @@ Redis connection error
 - `REDIS_URL` 형식 확인: `redis://host:port/0`
 - TLS 필요 시: `rediss://...`
 
-#### 3. LLM API 오류
+#### 3. LLM 실행/API fallback 오류
 
 ```
 Invalid API key
 ```
 
 **해결책**:
-- API 키 유효성 확인
-- 결제 정보 확인 (무료 할당량 초과 시)
-- `LLM_PROVIDER`와 API 키 일치 확인
+- 기본 CLI-first 운영이면 API key가 아니라 `codex` CLI 설치, 로그인, profile mount 상태를 먼저 확인
+- API fallback을 의도한 경우에만 `LLM_API_FALLBACK_ENABLED=true` 확인
+- fallback entitlement의 `allow_api_fallback=true` 확인
+- fallback API 키 유효성 및 provider 일치 확인
+- External Usage provider billing 값만 확인하려는 경우 `EXTERNAL_USAGE_INCLUDE_PROVIDER_BILLING=true`와 reconciliation key 상태 확인
 
 #### 4. CORS 오류
 

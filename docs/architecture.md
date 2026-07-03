@@ -91,7 +91,10 @@ src/backend/
 │   ├── encryption_service.py      # AES-256-GCM 암호화 서비스
 │   ├── environment_diagnostic_service.py  # 환경 진단 서비스 (Vault Health, 시스템 상태)
 │   ├── deployment_usage_credential_service.py  # 배포 단위 usage admin 키(DB) 해석/CRUD/검증
-│   ├── external_usage_service.py  # 외부 LLM 사용량 추적 (요청별 키 해석: DB admin 키 > EXTERNAL_* env)
+│   ├── external_usage_service.py  # 내부 LLM ledger adapter + optional provider billing reconciliation
+│   ├── llm_access_service.py      # CLI profile/user entitlement 관리
+│   ├── llm_usage_ledger_service.py # 내부 LLM 사용량 원장 기록/집계
+│   ├── llm_runtime_resolver.py    # user/org/source 기반 runtime provider/mode 결정
 │   ├── feedback_service.py        # RLHF 피드백
 │   ├── frontmatter_parser.py      # YAML Frontmatter 파싱 (SKILL.md, agent .md)
 │   ├── git_service.py             # Git 작업 관리 서비스
@@ -297,11 +300,14 @@ container = client.containers.run(
 
 | Provider | 용도 | 설명 |
 |----------|------|------|
-| **Codex CLI** | 로컬 기본 LLM | `codex exec` 셸 호출, ChatGPT 구독 세션 사용 (도구 호출 미지원, 로컬 전용) |
-| **Google Gemini** | 헤드리스 배포 기본 | Gemini 3/2.5 시리즈 (1M context) |
-| **OpenAI GPT** | 사용량 과금 API | GPT-5 시리즈 (1M context) |
-| **Anthropic Claude** | 고성능 LLM | Claude 4 시리즈 (200K context) |
-| **Ollama** | 로컬 LLM | 로컬 모델 실행 |
+| **Codex CLI** | 기본 LLM runtime | `codex exec` 셸 호출, ChatGPT 구독 세션 사용 |
+| **Claude CLI** | Task Analyzer/Warp 일부 CLI runtime | tmux transcript 기반 사용량 계측 |
+| **Ollama** | 로컬 LLM | API 과금 없는 로컬 모델 실행 |
+| **OpenAI GPT** | fallback/API 예외 경로 | `LLM_API_FALLBACK_ENABLED=true`와 entitlement 허용 필요 |
+| **Google Gemini** | fallback/API 예외 경로 | OCR/vision 등 API가 필요한 예외 경로 |
+| **Anthropic Claude** | fallback/API 예외 경로 | Claude API 직접 호출이 필요한 경우 |
+
+기본 사용량 source는 provider billing API가 아니라 내부 `llm_usage_ledger`다. provider billing API는 `EXTERNAL_USAGE_INCLUDE_PROVIDER_BILLING=true`일 때 External Usage reconciliation 비교값으로만 포함한다.
 
 > ⚠️ **Firebase가 아닙니다!** PostgreSQL은 오픈소스 DB로 가입이 필요 없습니다.
 

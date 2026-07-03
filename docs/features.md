@@ -1246,25 +1246,27 @@ class SkillManager:
 
 ---
 
-## 47. External Usage Tracking (외부 LLM 사용량)
+## 47. LLM Usage Tracking (CLI 구독권 기반 사용량)
 
-외부 LLM 프로바이더(OpenAI, GitHub Copilot, Google Gemini, Anthropic) 사용량 통합 추적:
+Agent-System이 실행한 LLM 호출을 내부 `llm_usage_ledger`에 기록하고, External Usage 화면은 이 내부 ledger를 primary source로 사용한다. Provider billing API는 optional reconciliation 비교값이다.
 
 ```python
 class ExternalUsageService:
-    def get_usage_summary(start_time, end_time, providers) -> ExternalUsageSummary
+    def get_summary(db, start_time, end_time, providers) -> ExternalUsageSummaryResponse
     def get_provider_health(provider_id) -> ProviderHealth
     def sync_usage() -> SyncResult
 ```
 
 **기능**:
-- 멀티 프로바이더 비용 집계 (OpenAI, GitHub Copilot, Google Gemini, Anthropic)
-- 프로바이더별 비용 분석 및 트렌드
-- 멤버별 사용량 분석
+- CLI/API/local runtime 사용량 집계 (`codex_cli`, `claude_cli`, `openai`, `anthropic`, `google`, `ollama`, `internal_cli`)
+- provider/mode/source/model/status/measurement method breakdown
+- 멤버별 및 조직별 사용량 분석
+- estimated cost 보조 표시
 - 7/30/90일 기간 선택
-- 프로바이더 연결 상태 헬스체크
+- provider billing reconciliation key와 비교 summary
+- provider 연결 상태 헬스체크
 
-**Dashboard UI**: `ExternalUsagePage` - 프로바이더별 비용/토큰 현황, 트렌드 차트
+**Dashboard UI**: `ExternalUsagePage` - 내부 ledger 기반 토큰/비용 현황, 트렌드 차트, Usage Reconciliation 패널
 
 ---
 
