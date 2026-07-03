@@ -1,10 +1,12 @@
 # External LLM Usage Monitoring — Implementation Plan
 
+> **현재 상태(2026-07-04):** 이 문서는 API-key 중심 External Usage 기능의 과거 구현 계획이다. 현재 운영 기준은 CLI subscription runtime + 내부 `llm_usage_ledger`이며, 사용자 API key는 fallback/compatibility 경로, provider billing API는 optional reconciliation 경로로만 사용한다. 최신 운영 절차는 `docs/guides/llm-cli-subscription-usage-guide.md`를 기준으로 한다.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** 팀원이 각자 LLM API Key를 등록하고, 관리자는 사용자별 토큰 사용량을 모니터링하는 시스템 구현
+**Goal:** 팀원이 CLI profile/entitlement로 LLM 실행 권한을 부여받고, 관리자는 내부 ledger 기준 사용자별 토큰 사용량을 모니터링한다. API key 등록은 fallback/compatibility 경로로 유지한다.
 
-**Architecture:** 사용자가 Settings에서 OpenAI/Gemini/Claude API Key를 등록하면, AOS Proxy 호출 시 실시간 기록 + OpenAI/Anthropic Usage API 주기적 폴링으로 하이브리드 수집. 관리자는 ExternalUsagePage에서 사용자별/공급자별 집계 확인.
+**Architecture:** Settings의 LLM Access에서 CLI profile과 entitlement를 관리하고, AOS가 실행한 LLM 호출을 `llm_usage_ledger`에 기록한다. ExternalUsagePage는 내부 ledger를 primary로 표시하며, OpenAI/Anthropic/GitHub billing API는 optional reconciliation 비교값으로만 수집한다.
 
 **Tech Stack:** Python (FastAPI, SQLAlchemy, httpx), TypeScript (React, Zustand, Recharts, Tailwind CSS)
 
@@ -216,7 +218,7 @@ async def list_user_credentials(
 async def create_credential(
     db: AsyncSession, user_id: str, data: LLMCredentialCreate
 ) -> LLMCredentialResponse:
-    """Store a new LLM API Key (encrypted by EncryptedString column type)."""
+    """Store a fallback/compatibility API key (encrypted by EncryptedString column type)."""
     row = UserLLMCredentialModel(
         user_id=user_id,
         provider=data.provider.value,
