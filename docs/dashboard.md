@@ -69,7 +69,7 @@ import { cn } from '@/lib/utils';
 | `ProjectManagementPage` | `/project-management` | DB 기반 프로젝트 레지스트리 관리 (CRUD, soft-delete, 복원) |
 | `OrganizationsPage` | `/organizations` | 조직 관리 (Overview/Members/Settings 3탭, 소스 유저 매핑) |
 | `WorkflowsPage` | `/workflows` | 워크플로우 자동화 (CI/CD 파이프라인 관리) |
-| `ExternalUsagePage` | `/external-usage` | 외부 LLM 프로바이더 사용량 모니터링 (비용, 토큰, 프로바이더별 현황) |
+| `ExternalUsagePage` | `/external-usage` | 외부 LLM 프로바이더 + 로컬 CLI(Claude/Codex) 사용량 통합 모니터링 (비용·토큰, 누적/트렌드 지표는 토큰 기준, 프로바이더별 현황) |
 | `AdminPage` | `/admin` | 관리자 페이지 (사용자 관리, 메뉴 설정, 시스템 정보, External Sources) |
 | `SessionsPage` | `/sessions` | 세션 활동 뷰 (ClaudeCodeActivity 래핑) |
 | `SettingsPage` | `/settings` | 시스템 설정 (Claude Code OAuth 인증, 터미널 감지) |
@@ -301,9 +301,9 @@ import { cn } from '@/lib/utils';
 | `CostMonitor` | 비용 모니터링 패널 (provider별 소스 표기, Claude 주간 토큰 합산) |
 | `UsageProgressBar` | 사용량 진행바 |
 | `ClaudeUsageDashboard` | Claude 사용량 대시보드 (Codex 5시간/주간 한도 카드 + combined weekly tokens 통합) |
-| `DailyCostTrend` | 일간 비용 추이 차트 |
+| `DailyCostTrend` | 일간 사용량 추이 차트 ("Daily Usage Trend", 누적 지표 토큰 기준, `codex_cli` 시리즈 포함) |
 | `LLMAccountsSettings` | LLM 계정/API 키 설정 |
-| `MemberUsageTable` | 멤버별 사용량 테이블 |
+| `MemberUsageTable` | 멤버별 사용량 테이블 ("Total Usage": 비용 우선, 없으면 토큰 폴백 정렬, `codex_cli` 포함) |
 
 ### Terminal Components
 
