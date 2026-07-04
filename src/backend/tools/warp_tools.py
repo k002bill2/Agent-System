@@ -109,9 +109,7 @@ async def _record_warp_agent_usage(
     metadata.update(
         {
             "event": (
-                "warp_agent_completed"
-                if status == LLMUsageStatus.SUCCESS
-                else "warp_agent_failed"
+                "warp_agent_completed" if status == LLMUsageStatus.SUCCESS else "warp_agent_failed"
             ),
             "cwd": cwd,
             "timeout_seconds": timeout,
@@ -221,11 +219,7 @@ def _warp_agent_run_impl(
                 model=model,
                 timeout=timeout,
                 started_at=started_at,
-                status=(
-                    LLMUsageStatus.SUCCESS
-                    if result.returncode == 0
-                    else LLMUsageStatus.ERROR
-                ),
+                status=(LLMUsageStatus.SUCCESS if result.returncode == 0 else LLMUsageStatus.ERROR),
                 has_mcp=False,
                 exit_code=result.returncode,
                 error_message=result.stderr if result.returncode != 0 else None,
@@ -388,11 +382,7 @@ def _warp_agent_with_mcp_impl(
                 model=None,
                 timeout=timeout,
                 started_at=started_at,
-                status=(
-                    LLMUsageStatus.SUCCESS
-                    if result.returncode == 0
-                    else LLMUsageStatus.ERROR
-                ),
+                status=(LLMUsageStatus.SUCCESS if result.returncode == 0 else LLMUsageStatus.ERROR),
                 has_mcp=True,
                 exit_code=result.returncode,
                 error_message=result.stderr if result.returncode != 0 else None,
@@ -532,11 +522,7 @@ async def warp_agent_run_async(
             model=model,
             timeout=timeout,
             started_at=started_at,
-            status=(
-                LLMUsageStatus.SUCCESS
-                if process.returncode == 0
-                else LLMUsageStatus.ERROR
-            ),
+            status=(LLMUsageStatus.SUCCESS if process.returncode == 0 else LLMUsageStatus.ERROR),
             has_mcp=False,
             exit_code=process.returncode,
             error_message=stderr_str if process.returncode != 0 else None,

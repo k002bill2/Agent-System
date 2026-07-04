@@ -349,9 +349,7 @@ async def check_cli_profile_health(
     if db is None:
         return None
 
-    result = await db.execute(
-        select(LLMCLIProfileModel).where(LLMCLIProfileModel.id == profile_id)
-    )
+    result = await db.execute(select(LLMCLIProfileModel).where(LLMCLIProfileModel.id == profile_id))
     row = result.scalar_one_or_none()
     if row is None:
         return None
@@ -415,9 +413,7 @@ async def get_access_for_user(
     profile_result = await db.execute(profile_stmt)
     entitlement_result = await db.execute(entitlement_stmt)
     profiles = [cli_profile_to_response(row) for row in profile_result.scalars().all()]
-    entitlements = [
-        entitlement_to_response(row) for row in entitlement_result.scalars().all()
-    ]
+    entitlements = [entitlement_to_response(row) for row in entitlement_result.scalars().all()]
 
     defaults = default_access_response(user_id)
     if not _has_codex_cli_profile(profiles):
@@ -471,9 +467,7 @@ async def update_cli_profile(
     data: LLMCLIProfileUpdate,
 ) -> LLMCLIProfileResponse | None:
     """Patch a CLI profile."""
-    result = await db.execute(
-        select(LLMCLIProfileModel).where(LLMCLIProfileModel.id == profile_id)
-    )
+    result = await db.execute(select(LLMCLIProfileModel).where(LLMCLIProfileModel.id == profile_id))
     row = result.scalar_one_or_none()
     if row is None:
         return None
@@ -497,17 +491,13 @@ async def delete_cli_profile(
     if profile_id == DEFAULT_CODEX_PROFILE_ID:
         return False
 
-    result = await db.execute(
-        select(LLMCLIProfileModel).where(LLMCLIProfileModel.id == profile_id)
-    )
+    result = await db.execute(select(LLMCLIProfileModel).where(LLMCLIProfileModel.id == profile_id))
     row = result.scalar_one_or_none()
     if row is None:
         return False
 
     entitlement_result = await db.execute(
-        select(UserLLMEntitlementModel).where(
-            UserLLMEntitlementModel.cli_profile_id == profile_id
-        )
+        select(UserLLMEntitlementModel).where(UserLLMEntitlementModel.cli_profile_id == profile_id)
     )
     updated_at = _now()
     for entitlement in entitlement_result.scalars().all():

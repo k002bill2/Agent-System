@@ -329,9 +329,7 @@ class LeadOrchestratorAgent(BaseAgent):
         # 컨텍스트 준비
         context_str = ""
         prompt_context = {
-            key: value
-            for key, value in (context or {}).items()
-            if not str(key).startswith("_")
+            key: value for key, value in (context or {}).items() if not str(key).startswith("_")
         }
         if context:
             # 사용 가능한 에이전트 목록 추가

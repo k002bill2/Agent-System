@@ -565,7 +565,7 @@ export const useGitStore = create<GitState>((set, get) => ({
         { timeout: GIT_LONG_RUNNING_READ_TIMEOUT_MS }
       )
       set({ worktrees: data.worktrees })
-    } catch (error) {
+    } catch {
       // Worktree listing is non-critical; silently ignore
       set({ worktrees: [] })
     }

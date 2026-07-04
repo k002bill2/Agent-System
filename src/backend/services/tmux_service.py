@@ -181,7 +181,9 @@ def _extract_labeled_usage(text: str, target: dict[str, Any]) -> None:
         match = re.search(pattern, text, flags=re.IGNORECASE)
         if not match:
             continue
-        value = _as_float(match.group(1)) if key == "estimated_cost_usd" else _as_int(match.group(1))
+        value = (
+            _as_float(match.group(1)) if key == "estimated_cost_usd" else _as_int(match.group(1))
+        )
         if value is not None:
             target[key] = value
 
@@ -212,9 +214,7 @@ def parse_claude_cli_usage_metadata(transcript: str | None) -> dict[str, Any]:
     if usage["total_tokens"] is None and (
         usage["input_tokens"] is not None or usage["output_tokens"] is not None
     ):
-        usage["total_tokens"] = (usage["input_tokens"] or 0) + (
-            usage["output_tokens"] or 0
-        )
+        usage["total_tokens"] = (usage["input_tokens"] or 0) + (usage["output_tokens"] or 0)
 
     return {key: value for key, value in usage.items() if value is not None}
 
@@ -272,15 +272,9 @@ async def _record_tmux_cli_usage(
             mode=LLMRuntimeMode.CLI,
             source=source,
             model="claude-code-cli",
-            input_tokens=cli_usage_metadata.get("input_tokens")
-            if cli_usage_metadata
-            else None,
-            output_tokens=cli_usage_metadata.get("output_tokens")
-            if cli_usage_metadata
-            else None,
-            total_tokens=cli_usage_metadata.get("total_tokens")
-            if cli_usage_metadata
-            else None,
+            input_tokens=cli_usage_metadata.get("input_tokens") if cli_usage_metadata else None,
+            output_tokens=cli_usage_metadata.get("output_tokens") if cli_usage_metadata else None,
+            total_tokens=cli_usage_metadata.get("total_tokens") if cli_usage_metadata else None,
             measurement_method=measurement_method,
             estimated_cost_usd=cli_usage_metadata.get("estimated_cost_usd")
             if cli_usage_metadata
@@ -847,7 +841,9 @@ class TmuxService:
         # - print mode: 깔끔한 stdout 출력, TUI 아티팩트 없음
         # - login shell: tmux 세션에서도 인증 토큰 정상 접근
         # - tee: 세션 종료 후에도 usage metadata를 원장 completion record에 반영
-        claude_cmd = f"bash -l -c 'cat \"{prompt_file}\" | claude -p 2>&1 | tee \"{transcript_file}\"'"
+        claude_cmd = (
+            f'bash -l -c \'cat "{prompt_file}" | claude -p 2>&1 | tee "{transcript_file}"\''
+        )
 
         if not self.send_command(session_name, claude_cmd):
             self.kill_session(session_name)

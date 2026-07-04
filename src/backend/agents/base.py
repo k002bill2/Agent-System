@@ -97,7 +97,9 @@ def _usage_value(usage: Any, key: str) -> int:
     return int(getattr(usage, key, 0) or 0)
 
 
-def _extract_usage(response: Any, messages: list[Any], content: Any) -> tuple[int, int, LLMUsageMeasurementMethod]:
+def _extract_usage(
+    response: Any, messages: list[Any], content: Any
+) -> tuple[int, int, LLMUsageMeasurementMethod]:
     input_tokens = 0
     output_tokens = 0
     measurement_method = LLMUsageMeasurementMethod.UNKNOWN
@@ -112,13 +114,13 @@ def _extract_usage(response: Any, messages: list[Any], content: Any) -> tuple[in
         usage = response_metadata.get("usage", {}) if isinstance(response_metadata, dict) else {}
         if usage:
             input_tokens = int(usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0)
-            output_tokens = int(
-                usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0
-            )
+            output_tokens = int(usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0)
             measurement_method = LLMUsageMeasurementMethod.PROVIDER_METADATA
 
     if input_tokens == 0:
-        input_tokens = sum(len(str(m.content).split()) for m in messages if hasattr(m, "content")) * 2
+        input_tokens = (
+            sum(len(str(m.content).split()) for m in messages if hasattr(m, "content")) * 2
+        )
         measurement_method = LLMUsageMeasurementMethod.ESTIMATED
     if output_tokens == 0:
         output_tokens = len(str(content).split()) * 2
@@ -336,7 +338,9 @@ class BaseAgent(ABC):
                     text_parts.append(item)
             content = "".join(text_parts)
 
-        input_tokens, output_tokens, measurement_method = _extract_usage(response, messages, content)
+        input_tokens, output_tokens, measurement_method = _extract_usage(
+            response, messages, content
+        )
         await _record_agent_usage(
             usage_context=usage_context,
             model_name=model_name,

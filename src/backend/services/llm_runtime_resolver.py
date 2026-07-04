@@ -150,14 +150,10 @@ def resolve_llm_runtime(
     source = str(_enum_value(request.source))
     entitlements = _enabled_entitlements(access, request)
     if not entitlements:
-        raise LLMRuntimeResolutionError(
-            f"No enabled LLM entitlement for source={source}"
-        )
+        raise LLMRuntimeResolutionError(f"No enabled LLM entitlement for source={source}")
 
     requested_provider = _provider_for_requested_model(request.requested_model_id)
-    requested_mode = (
-        _runtime_mode_for_provider(requested_provider) if requested_provider else None
-    )
+    requested_mode = _runtime_mode_for_provider(requested_provider) if requested_provider else None
     entitlement = _select_entitlement(
         entitlements,
         provider=requested_provider,
@@ -170,9 +166,7 @@ def resolve_llm_runtime(
         raise LLMRuntimeResolutionError("API fallback is disabled for this entitlement")
 
     cli_profile = (
-        _profile_for_entitlement(access, entitlement)
-        if entitlement.mode == "cli"
-        else None
+        _profile_for_entitlement(access, entitlement) if entitlement.mode == "cli" else None
     )
     model_id = _model_for_resolution(request.requested_model_id, entitlement)
 
