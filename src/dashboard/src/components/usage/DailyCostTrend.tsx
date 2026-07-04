@@ -144,7 +144,7 @@ export default function DailyCostTrend({ records }: Props) {
       <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
         Daily Estimated Cost Trend
       </h2>
-      <ResponsiveContainer width="100%" height={260}>
+      <ResponsiveContainer width="100%" height={260} debounce={80}>
         <AreaChart data={data} margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
           <defs>
             {activeProviders.map(p => (

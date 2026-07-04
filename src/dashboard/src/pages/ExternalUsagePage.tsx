@@ -393,7 +393,7 @@ export function ExternalUsagePage() {
               No estimated cost data available
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={220} debounce={80}>
               <PieChart>
                 <Pie
                   data={pieData}
@@ -425,7 +425,7 @@ export function ExternalUsagePage() {
               No model breakdown available
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={220} debounce={80}>
               <BarChart data={modelData.slice(0, 8)} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={v => `$${v.toFixed(2)}`} />
