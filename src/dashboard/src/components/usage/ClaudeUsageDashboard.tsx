@@ -310,7 +310,7 @@ export function ClaudeUsageDashboard() {
           <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
             ChatGPT Codex & Claude Plan Limits
           </h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-1 xl:grid-cols-2 gap-3">
             {sessionLimit && (
               <UsageRadialMetric
                 label="Claude Session"
