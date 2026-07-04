@@ -487,10 +487,10 @@ function UsageRadialMetric({
         </div>
         <div className="min-w-0">
           <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
-          <p className="truncate text-base font-semibold text-gray-900 dark:text-white">
+          <p className="text-base font-semibold text-gray-900 dark:text-white">
             {value}
           </p>
-          <p className="truncate text-xs text-gray-500 dark:text-gray-400" title={detail}>
+          <p className="text-xs text-gray-500 dark:text-gray-400" title={detail}>
             {detail}
           </p>
         </div>
