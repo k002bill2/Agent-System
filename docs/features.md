@@ -1264,7 +1264,7 @@ class ExternalUsageService:
 - 7/30/90일 기간 선택
 - 프로바이더 연결 상태 헬스체크
 
-**Dashboard UI**: `ExternalUsagePage` - 프로바이더별 비용/토큰 현황, 트렌드 차트
+**Dashboard UI**: `ExternalUsagePage` - 외부 API 집계 + 로컬 CLI(Claude/Codex) 사용량을 클라이언트에서 합성(`/api/usage` + `/api/usage/codex-cli`, 조회 실패 시 external usage만으로 폴백)하여 함께 표시. `codex_cli`를 정식 프로바이더로 포함. 로컬 CLI엔 비용이 없어(`cost_usd=0`) 트렌드/멤버 테이블의 누적 지표는 비용 → 토큰 기준으로 전환(외부 API 프로바이더 비용은 계속 표기)
 
 ---
 
