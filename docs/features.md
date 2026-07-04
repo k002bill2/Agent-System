@@ -1523,3 +1523,32 @@ async def web_search(query: str, max_results: int = 5) -> dict[str, Any]:
 - 웹 검색 도구는 도구 토글에서 선택
 
 **테스트 커버리지** (`tests/backend/test_playground_*.py`): rag_k 전파, 히스토리 병합, 도구 호출, force-final, 레거시 호환.
+
+---
+
+## 56. Codex (ChatGPT) Usage 통합
+
+Claude 사용량 대시보드에 Codex(ChatGPT) 사용량을 통합. 로컬 토큰 카운터와 계정 플랜 한도는 데이터 소스가 달라 두 엔드포인트로 분리:
+
+```python
+class CodexCliUsageResponse(BaseModel):   # 로컬 Codex state DB (read-only)
+    available: bool
+    fiveHourTokens / weeklyTokens / totalTokens: int
+    byModel / bySource: list[CodexUsageBreakdown]
+    limitStatus: str = "not_exposed"      # 플랜 %는 로컬 DB에 없음
+
+class CodexPlanUsageResponse(BaseModel):  # Codex app-server (JSON-RPC)
+    available: bool
+    codexLimit: CodexPlanLimitSnapshot | None  # primary/secondary 윈도우
+    isCached: bool                        # stale 캐시 폴백 여부
+```
+
+**기능**:
+- `GET /api/usage/codex-cli`: 로컬 `state_5.sqlite`(read-only)에서 5시간/주간/전체 토큰·스레드, 모델별·소스별 breakdown
+- `GET /api/usage/codex-plan?refresh=<bool>`: Codex `app-server`(stdio JSON-RPC `account/rateLimits/read`)에서 ChatGPT 구독 잔여 플랜 한도(primary/secondary 윈도우). 5초 TTL 캐시, 타임아웃 시 stale 캐시 폴백
+- Codex 미설치/미로그인 시 `available:false` + 안내 메시지 (graceful degradation)
+- 비용 분석: `CostBreakdown.provider`(예: `codex_cli`, `anthropic`)로 런타임 provider 표기, 모델 미귀속 zero-usage 세션은 by-model/cost 집계에서 제외
+
+**환경 변수**: `CODEX_STATE_DB_PATH`, `CODEX_APP_SERVER_BIN`, `CODEX_APP_SERVER_TIMEOUT_SECONDS`, `CODEX_PLAN_CACHE_TTL_SECONDS`
+
+**Dashboard UI**: `ClaudeUsageDashboard`(Codex 5시간/주간 한도 카드 + 주간 토큰 통합), `CostMonitor`(provider별 소스 표기), `AnalyticsPage`(provider 식별 및 breakdown)

@@ -298,9 +298,9 @@ import { cn } from '@/lib/utils';
 | 컴포넌트 | 설명 |
 |----------|------|
 | `ContextWindowMeter` | Context 창 사용량 게이지 |
-| `CostMonitor` | 비용 모니터링 패널 |
+| `CostMonitor` | 비용 모니터링 패널 (provider별 소스 표기, Claude 주간 토큰 합산) |
 | `UsageProgressBar` | 사용량 진행바 |
-| `ClaudeUsageDashboard` | Claude 사용량 대시보드 |
+| `ClaudeUsageDashboard` | Claude 사용량 대시보드 (Codex 5시간/주간 한도 카드 + combined weekly tokens 통합) |
 | `DailyCostTrend` | 일간 비용 추이 차트 |
 | `LLMAccountsSettings` | LLM 계정/API 키 설정 |
 | `MemberUsageTable` | 멤버별 사용량 테이블 |
