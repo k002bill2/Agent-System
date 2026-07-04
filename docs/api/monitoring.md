@@ -11,7 +11,7 @@
 
 | Method | Path | 설명 |
 |--------|------|------|
-| GET | `/api/usage` | Claude Code 사용량 (Plan Limits + 토큰 통계) |
+| GET | `/api/usage` | Claude Code 사용량 (Plan Limits + 토큰 통계). `?refresh=true`로 캐시 우회 |
 | GET | `/api/usage/codex-cli` | Codex(ChatGPT) 로컬 CLI/Desktop 토큰 사용량 (state DB 기반) |
 | GET | `/api/usage/codex-plan` | Codex(ChatGPT) 구독 잔여 플랜 한도 (app-server 기반) |
 | GET | `/api/usage/raw` | Raw stats-cache.json 데이터 |
@@ -23,7 +23,8 @@
 - `planLimits`: Anthropic OAuth API 실시간 Plan Limits (session, weekly, model별)
 - `weeklyTotalTokens`, `weeklySonnetTokens`, `weeklyOpusTokens`: 로컬 stats-cache 기반 주간 토큰
 - `oauthAvailable`: OAuth 토큰 사용 가능 여부
-- `isCached`: 캐시 데이터 사용 여부
+- `isCached`: **라이브 API 실패로 stale 캐시를 폴백 중일 때만** `true` (경고 배너 트리거)
+- 캐싱: Anthropic OAuth usage 엔드포인트는 rate-limit(429)이 잦아, 서버가 5분 TTL 캐시(`CACHE_TTL_SECONDS`)를 우선 서빙하고 TTL 만료 시에만 API 호출. TTL 내 캐시는 라이브로 간주(`isCached:false`). `?refresh=true`(수동 새로고침 전용)로 우회. 429/에러 시 stale 캐시(≤1h)로 폴백하며 이때만 `isCached:true`.
 
 **환경 변수**: `CLAUDE_OAUTH_TOKEN`, `CLAUDE_STATS_CACHE_PATH`, `CLAUDE_USAGE_CACHE_PATH` ([배포 가이드](../deployment.md#claude-code-usage-환경-변수) 참조)
 

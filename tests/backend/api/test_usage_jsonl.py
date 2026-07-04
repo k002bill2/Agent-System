@@ -227,9 +227,7 @@ def test_returns_empty_when_projects_dir_missing(
     """Non-existent projects dir is handled without raising."""
     missing = tmp_path / "does-not-exist"
     monkeypatch.setattr(usage_mod, "CLAUDE_PROJECTS_DIR", missing)
-    monkeypatch.setattr(
-        usage_mod, "JSONL_TOKEN_CACHE_PATH", tmp_path / "cache.json"
-    )
+    monkeypatch.setattr(usage_mod, "JSONL_TOKEN_CACHE_PATH", tmp_path / "cache.json")
 
     result = usage_mod.aggregate_model_tokens_from_jsonl(days=7)
     assert result == []
@@ -275,9 +273,7 @@ async def test_response_marks_jsonl_fallback_when_stats_cache_empty(
             {
                 "lastComputedDate": old_date,
                 "dailyActivity": [],
-                "dailyModelTokens": [
-                    {"date": old_date, "tokensByModel": {"claude-opus-4-7": 100}}
-                ],
+                "dailyModelTokens": [{"date": old_date, "tokensByModel": {"claude-opus-4-7": 100}}],
                 "modelUsage": {},
                 "totalSessions": 1,
                 "totalMessages": 1,
@@ -321,9 +317,7 @@ async def test_response_marks_stats_cache_when_data_is_fresh(
             {
                 "lastComputedDate": today,
                 "dailyActivity": [],
-                "dailyModelTokens": [
-                    {"date": today, "tokensByModel": {"claude-opus-4-7": 555}}
-                ],
+                "dailyModelTokens": [{"date": today, "tokensByModel": {"claude-opus-4-7": 555}}],
                 "modelUsage": {},
                 "totalSessions": 1,
                 "totalMessages": 1,
@@ -558,3 +552,98 @@ def test_codex_plan_refresh_bypasses_cached_limit_snapshot(
     assert refreshed.codexLimit.secondary is not None
     assert refreshed.codexLimit.secondary.remainingPercent == 57
     assert calls["count"] == 2
+
+
+# ── /api/usage: honour the short-lived cache to avoid Anthropic 429s ──
+
+
+def _fresh_usage_cache(monkeypatch: pytest.MonkeyPatch, utilization: float) -> None:
+    """Prime a valid (unexpired) in-memory usage cache with one plan limit."""
+    now = datetime.now(UTC)
+    monkeypatch.setattr(
+        usage_mod,
+        "_usage_cache",
+        {
+            "data": {"five_hour": {"utilization": utilization, "resets_at": None}},
+            "timestamp": now.isoformat(),
+            "expires_at": (now + timedelta(seconds=200)).isoformat(),
+        },
+    )
+
+
+@pytest.mark.anyio
+async def test_get_usage_serves_fresh_cache_without_calling_anthropic(
+    stale_stats_cache: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A valid server cache must be served without hitting the rate-limited API."""
+    today = datetime.now().date().isoformat()
+    stale_stats_cache.write_text(
+        json.dumps(
+            {
+                "lastComputedDate": today,
+                "dailyActivity": [],
+                "dailyModelTokens": [],
+                "modelUsage": {},
+                "totalSessions": 1,
+                "totalMessages": 1,
+            }
+        )
+    )
+    _fresh_usage_cache(monkeypatch, utilization=42.0)
+
+    calls = {"count": 0}
+
+    async def _spy(_token: str) -> dict:
+        calls["count"] += 1
+        return {"five_hour": {"utilization": 99.0, "resets_at": None}}
+
+    monkeypatch.setattr(usage_mod, "fetch_usage_from_anthropic", _spy)
+    monkeypatch.setattr(usage_mod, "get_oauth_token", lambda: "tok")
+
+    response = await usage_mod.get_usage()
+
+    assert calls["count"] == 0  # fresh cache served, no Anthropic call
+    assert response.oauthAvailable is True
+    assert response.isCached is False  # fresh cache is "live enough", no warning banner
+    assert any(
+        limit.name == "fiveHour" and limit.utilization == 42.0 for limit in response.planLimits
+    )
+
+
+@pytest.mark.anyio
+async def test_get_usage_refresh_bypasses_fresh_cache(
+    stale_stats_cache: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """refresh=True must skip the cache and fetch live data from Anthropic."""
+    today = datetime.now().date().isoformat()
+    stale_stats_cache.write_text(
+        json.dumps(
+            {
+                "lastComputedDate": today,
+                "dailyActivity": [],
+                "dailyModelTokens": [],
+                "modelUsage": {},
+                "totalSessions": 1,
+                "totalMessages": 1,
+            }
+        )
+    )
+    _fresh_usage_cache(monkeypatch, utilization=42.0)
+
+    calls = {"count": 0}
+
+    async def _spy(_token: str) -> dict:
+        calls["count"] += 1
+        return {"five_hour": {"utilization": 99.0, "resets_at": None}}
+
+    monkeypatch.setattr(usage_mod, "fetch_usage_from_anthropic", _spy)
+    monkeypatch.setattr(usage_mod, "get_oauth_token", lambda: "tok")
+
+    response = await usage_mod.get_usage(refresh=True)
+
+    assert calls["count"] == 1  # refresh bypasses cache and hits the API
+    assert any(
+        limit.name == "fiveHour" and limit.utilization == 99.0 for limit in response.planLimits
+    )

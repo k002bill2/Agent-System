@@ -108,9 +108,9 @@ export function ClaudeUsageDashboard() {
     }
   }, [])
 
-  const refreshAllUsage = useCallback((forceCodexRefresh = false) => {
-    fetchUsage()
-    fetchCodexUsage(forceCodexRefresh)
+  const refreshAllUsage = useCallback((forceRefresh = false) => {
+    fetchUsage(forceRefresh)
+    fetchCodexUsage(forceRefresh)
   }, [fetchUsage, fetchCodexUsage])
 
   // Fetch on mount and set up auto-refresh
