@@ -841,7 +841,14 @@ def _cached_codex_plan_response() -> CodexPlanUsageResponse | None:
 
 
 @router.get("", response_model=UsageResponse)
-async def get_usage() -> UsageResponse:
+async def get_usage(
+    refresh: Annotated[
+        bool,
+        Query(
+            description="Bypass the short-lived server cache and fetch fresh limits from Anthropic.",
+        ),
+    ] = False,
+) -> UsageResponse:
     """
     Get Claude Code usage statistics.
 
@@ -956,17 +963,31 @@ async def get_usage() -> UsageResponse:
 
     token = get_oauth_token()
     if token:
-        # Try to fetch fresh data from Anthropic API
-        usage_data = await fetch_usage_from_anthropic(token)
+        # Serve the short-lived cache (5 min TTL) without hitting Anthropic's
+        # OAuth usage endpoint. That endpoint is aggressively rate-limited
+        # (429 rate_limit_error) when polled on every request, which forced a
+        # stale-cache fallback and made the dashboard look "not real-time".
+        # Fresh cache is treated as live (isCached stays False - no warning).
+        cached_fresh = None
+        if not refresh and _is_cache_valid():
+            cache = _load_usage_cache()
+            if cache and cache.get("data"):
+                cached_fresh = cache["data"]
 
-        if usage_data:
-            # Success - save to cache and use fresh data
+        if cached_fresh is not None:
             oauth_available = True
-            plan_limits = parse_usage_data(usage_data)
-            _save_usage_cache(usage_data)
+            plan_limits = parse_usage_data(cached_fresh)
         else:
+            # Cache expired (or manual refresh) - fetch fresh data from Anthropic
+            usage_data = await fetch_usage_from_anthropic(token)
+
+            if usage_data:
+                # Success - save to cache and use fresh data
+                oauth_available = True
+                plan_limits = parse_usage_data(usage_data)
+                _save_usage_cache(usage_data)
             # API failed - try to use cached data as fallback
-            if _is_cache_usable():
+            elif _is_cache_usable():
                 cache = _load_usage_cache()
                 if cache and cache.get("data"):
                     oauth_available = True

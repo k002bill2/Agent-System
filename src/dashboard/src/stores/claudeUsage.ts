@@ -10,7 +10,7 @@ interface ClaudeUsageState {
   lastFetched: Date | null
 
   // Actions
-  fetchUsage: () => Promise<void>
+  fetchUsage: (forceRefresh?: boolean) => Promise<void>
   clearError: () => void
 }
 
@@ -21,7 +21,7 @@ export const useClaudeUsageStore = create<ClaudeUsageState>((set, get) => ({
   error: null,
   lastFetched: null,
 
-  fetchUsage: async () => {
+  fetchUsage: async (forceRefresh = false) => {
     // Avoid duplicate requests
     const { isLoading } = get()
     if (isLoading) return
@@ -29,7 +29,10 @@ export const useClaudeUsageStore = create<ClaudeUsageState>((set, get) => ({
     set({ isLoading: true, error: null })
 
     try {
-      const data = await apiClient.get<ClaudeUsageResponse>('/api/usage')
+      // Only a manual refresh bypasses the server's 5-min cache; auto-polls
+      // reuse it so the rate-limited Anthropic endpoint isn't hammered.
+      const path = forceRefresh ? '/api/usage?refresh=true' : '/api/usage'
+      const data = await apiClient.get<ClaudeUsageResponse>(path)
       set({
         usage: data,
         isLoading: false,
