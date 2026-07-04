@@ -35,19 +35,11 @@ vi.mock('recharts', () => ({
 
 // Store mocks - imported later for vi.mocked() usage
 const mockFetchProjects = vi.fn()
-const mockFetchUsage = vi.fn()
 
 vi.mock('../stores/projects', () => ({
   useProjectsStore: vi.fn(() => ({
     projects: [],
     fetchProjects: mockFetchProjects,
-  })),
-}))
-
-vi.mock('../stores/claudeUsage', () => ({
-  useClaudeUsageStore: vi.fn(() => ({
-    usage: null,
-    fetchUsage: mockFetchUsage,
   })),
 }))
 
@@ -88,7 +80,7 @@ vi.mock('../lib/utils', () => ({
 
 import { AnalyticsPage } from './AnalyticsPage'
 import { useProjectsStore } from '../stores/projects'
-import { useClaudeUsageStore } from '../stores/claudeUsage'
+import { useExternalUsageStore } from '../stores/externalUsage'
 import { useAuthStore } from '../stores/auth'
 
 // ─────────────────────────────────────────────────────────────
@@ -135,8 +127,8 @@ const mockDashboardData = {
     avg_cost_per_task: 0.0625,
     by_agent: [],
     by_model: [
-      { category: 'model', value: 'gemini-2.0-flash', cost: 8.00, tokens: 300000, percentage: 64 },
-      { category: 'model', value: 'claude-3.5', cost: 4.50, tokens: 200000, percentage: 36 },
+      { category: 'model', value: 'gemini-2.0-flash', provider: 'google', cost: 8.00, tokens: 300000, percentage: 64 },
+      { category: 'model', value: 'claude-3.5', provider: 'anthropic', cost: 4.50, tokens: 200000, percentage: 36 },
     ],
     projected_monthly: 37.50,
   },
@@ -317,6 +309,10 @@ describe('AnalyticsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     setupFetchMock()
+    vi.mocked(useExternalUsageStore).mockReturnValue({
+      summary: { total_cost_usd: 5.25, providers: [], records: [], period_start: '', period_end: '' },
+      fetchSummary: mockFetchExternalSummary,
+    } as unknown as ReturnType<typeof useExternalUsageStore>)
   })
 
   // ── Basic rendering ──
@@ -392,6 +388,43 @@ describe('AnalyticsPage', () => {
 
     expect(screen.getByText('Test Agent')).toBeInTheDocument()
     expect(screen.getByText('general')).toBeInTheDocument()
+  })
+
+  it('hides zero-usage unknown model rows from model performance views', async () => {
+    setupFetchMock({
+      dashboardData: {
+        ...mockDashboardData,
+        agents: {
+          ...mockDashboardData.agents,
+          agents: [
+            ...mockDashboardData.agents.agents,
+            {
+              agent_id: 'unknown (no model info)',
+              agent_name: 'unknown (no model info)',
+              category: 'model',
+              total_tasks: 3,
+              completed_tasks: 3,
+              failed_tasks: 0,
+              success_rate: 100,
+              avg_duration_ms: 0,
+              total_tokens: 0,
+              total_cost: 0,
+            },
+          ],
+        },
+      },
+    })
+
+    await act(async () => {
+      render(<AnalyticsPage />)
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Model Performance')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('Test Agent')).toBeInTheDocument()
+    expect(screen.queryByText('unknown (no model info)')).not.toBeInTheDocument()
   })
 
   it('renders project comparison section', async () => {
@@ -1099,97 +1132,119 @@ describe('AnalyticsPage', () => {
     })
   })
 
-  // ── Claude Usage / Model Token Breakdown ──
+  // ── AOS LLM Usage / Model Token Breakdown ──
 
-  it('renders model token breakdown chart when claude usage data exists', async () => {
-    vi.mocked(useClaudeUsageStore).mockReturnValue({
-      usage: {
-        weeklyModelTokens: [
-          { date: '2026-02-15', tokensByModel: { 'claude-3.5': 10000, 'gemini-2.0': 20000 } },
-          { date: '2026-02-16', tokensByModel: { 'claude-3.5': 15000, 'gemini-2.0': 25000 } },
+  it('renders AOS model token breakdown from analytics costs', async () => {
+    await act(async () => {
+      render(<AnalyticsPage />)
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('AOS LLM Usage by Model')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('gemini-2.0-flash')).toBeInTheDocument()
+    expect(screen.getByText('claude-3.5')).toBeInTheDocument()
+    expect(screen.getByText('Google Gemini')).toBeInTheDocument()
+    expect(screen.getByText('Anthropic Claude')).toBeInTheDocument()
+    expect(screen.getByText('AOS 집계: 2 providers')).toBeInTheDocument()
+    expect(screen.queryByText('No AOS LLM token data available')).not.toBeInTheDocument()
+  })
+
+  it('prefers explicit provider metadata over model-name inference', async () => {
+    setupFetchMock({
+      dashboardData: {
+        ...mockDashboardData,
+        costs: {
+          ...mockDashboardData.costs,
+          by_model: [
+            {
+              category: 'model',
+              value: 'claude-opus-4-8',
+              provider: 'codex_cli',
+              cost: 4,
+              tokens: 123456,
+              percentage: 100,
+            },
+          ],
+        },
+      },
+    })
+
+    await act(async () => {
+      render(<AnalyticsPage />)
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('claude-opus-4-8')).toBeInTheDocument()
+    })
+
+    expect(screen.getAllByText('Codex CLI').length).toBeGreaterThan(0)
+    expect(screen.getByText('AOS 집계: Codex CLI')).toBeInTheDocument()
+    expect(screen.queryByText('Anthropic Claude')).not.toBeInTheDocument()
+  })
+
+  it('includes external usage records in the AOS model token breakdown', async () => {
+    vi.mocked(useExternalUsageStore).mockReturnValue({
+      summary: {
+        providers: [],
+        total_cost_usd: 0.25,
+        period_start: '2026-02-01T00:00:00Z',
+        period_end: '2026-02-02T00:00:00Z',
+        records: [
+          {
+            id: 'rec-1',
+            provider: 'openai',
+            timestamp: '2026-02-01T12:00:00Z',
+            bucket_width: '1d',
+            input_tokens: 10,
+            output_tokens: 20,
+            total_tokens: 30,
+            cost_usd: 0.25,
+            request_count: 1,
+            model: 'gpt-4.1',
+            user_id: null,
+            user_email: null,
+            project_id: null,
+            code_suggestions: null,
+            code_acceptances: null,
+            acceptance_rate: null,
+            collected_at: '2026-02-01T12:00:00Z',
+          },
         ],
       },
-      fetchUsage: mockFetchUsage,
-    } as unknown as ReturnType<typeof useClaudeUsageStore>)
+      fetchSummary: mockFetchExternalSummary,
+    } as unknown as ReturnType<typeof useExternalUsageStore>)
 
     await act(async () => {
       render(<AnalyticsPage />)
     })
 
     await waitFor(() => {
-      expect(screen.getByText('Model Token Breakdown (7 Days)')).toBeInTheDocument()
+      expect(screen.getByText('gpt-4.1')).toBeInTheDocument()
     })
 
-    // Should show bar charts, not the empty state
-    expect(screen.queryByText('No model token data available')).not.toBeInTheDocument()
+    expect(screen.getByText('OpenAI')).toBeInTheDocument()
+    expect(screen.getByText('AOS 집계: 3 providers')).toBeInTheDocument()
   })
 
-  it('shows empty state when no claude usage data', async () => {
-    vi.mocked(useClaudeUsageStore).mockReturnValue({
-      usage: null,
-      fetchUsage: mockFetchUsage,
-    } as unknown as ReturnType<typeof useClaudeUsageStore>)
-
-    await act(async () => {
-      render(<AnalyticsPage />)
-    })
-
-    await waitFor(() => {
-      expect(screen.getByText('No model token data available')).toBeInTheDocument()
-    })
-  })
-
-  it('shows empty state when weeklyModelTokens is null', async () => {
-    vi.mocked(useClaudeUsageStore).mockReturnValue({
-      usage: { weeklyModelTokens: null },
-      fetchUsage: mockFetchUsage,
-    } as unknown as ReturnType<typeof useClaudeUsageStore>)
-
-    await act(async () => {
-      render(<AnalyticsPage />)
-    })
-
-    await waitFor(() => {
-      expect(screen.getByText('No model token data available')).toBeInTheDocument()
-    })
-  })
-
-  it('shows empty state when weeklyModelTokens is an empty array', async () => {
-    // Regression: an empty array is truthy in JS, so the previous gate
-    // rendered an empty <BarChart> instead of the empty-state UI.
-    vi.mocked(useClaudeUsageStore).mockReturnValue({
-      usage: { weeklyModelTokens: [] },
-      fetchUsage: mockFetchUsage,
-    } as unknown as ReturnType<typeof useClaudeUsageStore>)
-
-    await act(async () => {
-      render(<AnalyticsPage />)
-    })
-
-    await waitFor(() => {
-      expect(screen.getByText('No model token data available')).toBeInTheDocument()
-    })
-  })
-
-  it('shows a "session logs" badge when token data came from JSONL fallback', async () => {
-    vi.mocked(useClaudeUsageStore).mockReturnValue({
-      usage: {
-        weeklyModelTokens: [
-          { date: '2026-04-30', tokensByModel: { 'claude-opus-4-7': 1000 } },
-        ],
-        weeklyModelTokensSource: 'jsonl-fallback',
-        statsCacheAgeDays: 27,
+  it('shows empty state when analytics has no model token data', async () => {
+    setupFetchMock({
+      dashboardData: {
+        ...mockDashboardData,
+        costs: {
+          ...mockDashboardData.costs,
+          by_model: [],
+        },
       },
-      fetchUsage: mockFetchUsage,
-    } as unknown as ReturnType<typeof useClaudeUsageStore>)
+    })
 
     await act(async () => {
       render(<AnalyticsPage />)
     })
 
     await waitFor(() => {
-      // The badge surfaces both the source ("session logs") and the staleness.
-      expect(screen.getByText(/세션 로그 기반/)).toBeInTheDocument()
+      expect(screen.getByText('No AOS LLM token data available')).toBeInTheDocument()
     })
   })
 
@@ -1314,7 +1369,7 @@ describe('AnalyticsPage', () => {
     expect(mockFetchProjects).toHaveBeenCalled()
   })
 
-  it('calls fetchUsage on mount', async () => {
+  it('calls fetchExternalSummary on mount', async () => {
     await act(async () => {
       render(<AnalyticsPage />)
     })
@@ -1323,7 +1378,7 @@ describe('AnalyticsPage', () => {
       expect(screen.getByText('Analytics Dashboard')).toBeInTheDocument()
     })
 
-    expect(mockFetchUsage).toHaveBeenCalled()
+    expect(mockFetchExternalSummary).toHaveBeenCalled()
   })
 
   // ── Eval stats colors based on thresholds ──

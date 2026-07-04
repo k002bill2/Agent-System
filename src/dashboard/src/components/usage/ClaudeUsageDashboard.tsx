@@ -1,28 +1,133 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useState } from 'react'
 import { BarChart3, RefreshCw, AlertCircle, CheckCircle2, XCircle, Clock } from 'lucide-react'
 import { useClaudeUsageStore } from '../../stores/claudeUsage'
-import { UsageProgressBar } from './UsageProgressBar'
+import type { PlanLimitInfo } from '../../types/claudeUsage'
+import { apiClient } from '../../services/apiClient'
 
 const REFRESH_INTERVAL = 5 * 60 * 1000 // 5 minutes
 
+interface CodexUsageBreakdown {
+  name: string
+  tokens: number
+  threads: number
+}
+
+interface CodexCliUsageResponse {
+  available: boolean
+  fiveHourTokens: number
+  fiveHourThreads: number
+  weeklyTokens: number
+  weeklyThreads: number
+  totalTokens: number
+  totalThreads: number
+  byModel: CodexUsageBreakdown[]
+  message?: string | null
+}
+
+interface CodexPlanWindow {
+  usedPercent: number
+  remainingPercent: number
+  windowDurationMins: number | null
+  resetsAt: number | null
+  resetsAtIso: string | null
+  resetsInMinutes: number | null
+}
+
+interface CodexPlanLimitSnapshot {
+  limitId: string | null
+  limitName: string | null
+  primary: CodexPlanWindow | null
+  secondary: CodexPlanWindow | null
+  planType: string | null
+  rateLimitReachedType: string | null
+}
+
+interface CodexPlanUsageResponse {
+  available: boolean
+  codexLimit: CodexPlanLimitSnapshot | null
+  rateLimitResetCredits: { availableCount?: number } | null
+  isCached: boolean
+  cacheAgeSeconds: number | null
+  message?: string | null
+}
+
+interface CodexUsageSummary {
+  available: boolean
+  fiveHourTokens: number
+  fiveHourThreads: number
+  weeklyTokens: number
+  weeklyThreads: number
+  totalTokens: number
+  totalThreads: number
+  modelCount: number
+  message?: string | null
+}
+
 export function ClaudeUsageDashboard() {
   const { usage, isLoading, error, lastFetched, fetchUsage, clearError } = useClaudeUsageStore()
+  const [codexUsage, setCodexUsage] = useState<CodexUsageSummary | null>(null)
+  const [codexPlan, setCodexPlan] = useState<CodexPlanUsageResponse | null>(null)
+  const [isCodexLoading, setIsCodexLoading] = useState(false)
+
+  const fetchCodexUsage = useCallback(async (forceRefresh = false) => {
+    setIsCodexLoading(true)
+    try {
+      const cacheBuster = `t=${Date.now()}`
+      const planPath = forceRefresh
+        ? `/api/usage/codex-plan?refresh=true&${cacheBuster}`
+        : `/api/usage/codex-plan?${cacheBuster}`
+      const [planResult, localResult] = await Promise.allSettled([
+        apiClient.get<CodexPlanUsageResponse>(planPath, {
+          timeout: 15_000,
+        }),
+        apiClient.get<CodexCliUsageResponse>('/api/usage/codex-cli', {
+          timeout: 10_000,
+        }),
+      ])
+
+      setCodexPlan(planResult.status === 'fulfilled' ? planResult.value : null)
+
+      if (localResult.status === 'fulfilled') {
+        const data = localResult.value
+        setCodexUsage({
+          available: data.available,
+          fiveHourTokens: data.fiveHourTokens,
+          fiveHourThreads: data.fiveHourThreads,
+          weeklyTokens: data.weeklyTokens,
+          weeklyThreads: data.weeklyThreads,
+          totalTokens: data.totalTokens,
+          totalThreads: data.totalThreads,
+          modelCount: data.byModel.filter((model) => model.tokens > 0).length,
+          message: data.message,
+        })
+      } else {
+        setCodexUsage(null)
+      }
+    } finally {
+      setIsCodexLoading(false)
+    }
+  }, [])
+
+  const refreshAllUsage = useCallback((forceCodexRefresh = false) => {
+    fetchUsage()
+    fetchCodexUsage(forceCodexRefresh)
+  }, [fetchUsage, fetchCodexUsage])
 
   // Fetch on mount and set up auto-refresh
   useEffect(() => {
-    fetchUsage()
+    refreshAllUsage()
 
     const interval = setInterval(() => {
-      fetchUsage()
+      refreshAllUsage()
     }, REFRESH_INTERVAL)
 
     return () => clearInterval(interval)
-  }, [fetchUsage])
+  }, [refreshAllUsage])
 
   const handleRefresh = useCallback(() => {
     clearError()
-    fetchUsage()
-  }, [fetchUsage, clearError])
+    refreshAllUsage(true)
+  }, [refreshAllUsage, clearError])
 
   // Format number with K/M suffix
   const formatTokenCount = (count: number) => {
@@ -42,7 +147,7 @@ export function ClaudeUsageDashboard() {
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
             <BarChart3 className="w-5 h-5" />
-            Claude Code Usage
+            Plan Usage Limits
           </h3>
           <button
             onClick={handleRefresh}
@@ -67,7 +172,7 @@ export function ClaudeUsageDashboard() {
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
             <BarChart3 className="w-5 h-5" />
-            Claude Code Usage
+            Plan Usage Limits
           </h3>
           <RefreshCw className="w-4 h-4 animate-spin text-gray-400" />
         </div>
@@ -88,7 +193,7 @@ export function ClaudeUsageDashboard() {
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
             <BarChart3 className="w-5 h-5" />
-            Claude Code Usage
+            Plan Usage Limits
           </h3>
         </div>
         <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -103,6 +208,12 @@ export function ClaudeUsageDashboard() {
   const allModelsLimit = usage.planLimits.find(l => l.name === 'sevenDay')
   const sonnetLimit = usage.planLimits.find(l => l.name === 'sevenDaySonnet')
   const opusLimit = usage.planLimits.find(l => l.name === 'sevenDayOpus')
+  const codexLimit = codexPlan?.available ? codexPlan.codexLimit : null
+  const codexFiveHourLimit = codexLimit?.primary ?? null
+  const codexWeeklyLimit = codexLimit?.secondary ?? null
+  const codexWeeklyTokens = codexUsage?.weeklyTokens ?? 0
+  const combinedWeeklyTokens = usage.weeklyTotalTokens + codexWeeklyTokens
+  const secondaryLimits = [sonnetLimit, opusLimit].filter(Boolean) as PlanLimitInfo[]
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 h-full flex flex-col">
@@ -113,23 +224,45 @@ export function ClaudeUsageDashboard() {
           Plan Usage Limits
         </h3>
         <div className="flex items-center gap-2">
-          {/* OAuth Status Indicator */}
+          {codexPlan?.available ? (
+            <span
+              className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400"
+              title={codexPlan.isCached ? 'Cached Codex plan data' : 'ChatGPT Codex plan data'}
+            >
+              <CheckCircle2 className="w-3 h-3" />
+              Codex {codexPlan.isCached ? 'Cached' : 'Live'}
+            </span>
+          ) : isCodexLoading ? (
+            <span className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
+              <RefreshCw className="w-3 h-3 animate-spin" />
+              Codex
+            </span>
+          ) : (
+            <span
+              className="flex items-center gap-1 text-xs text-yellow-600 dark:text-yellow-400"
+              title={codexPlan?.message || 'Codex plan limits unavailable'}
+            >
+              <XCircle className="w-3 h-3" />
+              Codex Offline
+            </span>
+          )}
+          {/* Claude OAuth Status Indicator */}
           {usage.oauthAvailable ? (
             usage.isCached ? (
               <span className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400" title={`Cached data (${usage.cacheAgeMinutes ?? 0}m ago)`}>
                 <Clock className="w-3 h-3" />
-                Cached
+                Claude Cached
               </span>
             ) : (
               <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400" title="Real-time data from Anthropic API">
                 <CheckCircle2 className="w-3 h-3" />
-                Live
+                Claude Live
               </span>
             )
           ) : (
             <span className="flex items-center gap-1 text-xs text-yellow-600 dark:text-yellow-400" title={usage.oauthError || 'OAuth not available'}>
               <XCircle className="w-3 h-3" />
-              Offline
+              Claude Offline
             </span>
           )}
           {lastFetched && (
@@ -159,61 +292,6 @@ export function ClaudeUsageDashboard() {
                 <span>Using cached data ({usage.cacheAgeMinutes}m ago) - API temporarily unavailable</span>
               </div>
             )}
-
-            {/* Current Session (5-hour limit) */}
-            {sessionLimit && (
-              <div className="pb-3 border-b border-gray-100 dark:border-gray-700">
-                <UsageProgressBar
-                  label={sessionLimit.displayName}
-                  percentUsed={sessionLimit.utilization}
-                  resetInHours={sessionLimit.resetsInHours ?? 0}
-                  resetInMinutes={sessionLimit.resetsInMinutes ?? 0}
-                />
-              </div>
-            )}
-
-            {/* Weekly Limits */}
-            <div>
-              <h4 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-3">
-                Weekly Limits
-              </h4>
-
-              <div className="space-y-3">
-                {/* All Models (7-day limit) */}
-                {allModelsLimit && (
-                  <UsageProgressBar
-                    label={allModelsLimit.displayName}
-                    percentUsed={allModelsLimit.utilization}
-                    resetInHours={allModelsLimit.resetsInHours ?? 0}
-                    resetInMinutes={allModelsLimit.resetsInMinutes ?? 0}
-                  />
-                )}
-
-                {/* Sonnet Only (7-day Sonnet limit) */}
-                {sonnetLimit && (
-                  <UsageProgressBar
-                    label={sonnetLimit.displayName}
-                    percentUsed={sonnetLimit.utilization}
-                    resetInHours={sonnetLimit.resetsInHours ?? 0}
-                    resetInMinutes={sonnetLimit.resetsInMinutes ?? 0}
-                    showInfo
-                    tooltip="Separate limit for Sonnet model usage"
-                  />
-                )}
-
-                {/* Opus Only (7-day Opus limit) */}
-                {opusLimit && (
-                  <UsageProgressBar
-                    label={opusLimit.displayName}
-                    percentUsed={opusLimit.utilization}
-                    resetInHours={opusLimit.resetsInHours ?? 0}
-                    resetInMinutes={opusLimit.resetsInMinutes ?? 0}
-                    showInfo
-                    tooltip="Separate limit for Opus model usage"
-                  />
-                )}
-              </div>
-            </div>
           </>
         ) : (
           /* Fallback - OAuth not available, show local stats */
@@ -224,21 +302,105 @@ export function ClaudeUsageDashboard() {
                 {usage.oauthError || 'Plan limits unavailable'}
               </span>
             </div>
-            <p>Showing local token statistics only.</p>
+            <p>Claude plan limits unavailable; Codex plan limits are checked separately.</p>
           </div>
         )}
+
+        <div>
+          <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+            ChatGPT Codex & Claude Plan Limits
+          </h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+            {sessionLimit && (
+              <UsageRadialMetric
+                label="Claude Session"
+                value={`${Math.round(sessionLimit.utilization)}%`}
+                detail={`${formatResetTime(sessionLimit)} reset`}
+                percent={sessionLimit.utilization}
+                tone={getLimitTone(sessionLimit.utilization)}
+              />
+            )}
+            {allModelsLimit && (
+              <UsageRadialMetric
+                label="Claude Weekly"
+                value={`${Math.round(allModelsLimit.utilization)}%`}
+                detail={`${formatResetTime(allModelsLimit)} reset`}
+                percent={allModelsLimit.utilization}
+                tone={getLimitTone(allModelsLimit.utilization)}
+              />
+            )}
+            {codexFiveHourLimit ? (
+              <UsageRadialMetric
+                label="Codex 5h"
+                value={`${Math.round(codexFiveHourLimit.remainingPercent)}% left`}
+                detail={formatCodexPlanDetail(codexFiveHourLimit, codexLimit?.planType)}
+                percent={codexFiveHourLimit.remainingPercent}
+                tone={getRemainingTone(codexFiveHourLimit.remainingPercent)}
+                centerText={`${Math.round(codexFiveHourLimit.remainingPercent)}%`}
+              />
+            ) : (
+              <UsageRadialMetric
+                label="Codex 5h"
+                value={isCodexLoading ? '...' : 'Unavailable'}
+                detail={formatCodexPlanUnavailable(codexPlan, isCodexLoading)}
+                percent={0}
+                tone="yellow"
+                centerText={isCodexLoading ? '...' : 'N/A'}
+              />
+            )}
+            {codexWeeklyLimit ? (
+              <UsageRadialMetric
+                label="Codex Weekly"
+                value={`${Math.round(codexWeeklyLimit.remainingPercent)}% left`}
+                detail={formatCodexPlanDetail(codexWeeklyLimit, codexLimit?.planType)}
+                percent={codexWeeklyLimit.remainingPercent}
+                tone={getRemainingTone(codexWeeklyLimit.remainingPercent)}
+                centerText={`${Math.round(codexWeeklyLimit.remainingPercent)}%`}
+              />
+            ) : (
+              <UsageRadialMetric
+                label="Codex Weekly"
+                value={isCodexLoading ? '...' : 'Unavailable'}
+                detail={formatCodexPlanUnavailable(codexPlan, isCodexLoading)}
+                percent={0}
+                tone="yellow"
+                centerText={isCodexLoading ? '...' : 'N/A'}
+              />
+            )}
+          </div>
+
+          {codexPlan?.available && codexPlan.rateLimitResetCredits?.availableCount !== undefined && (
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              Codex reset credits: {codexPlan.rateLimitResetCredits.availableCount}
+            </p>
+          )}
+
+          {secondaryLimits.length > 0 && (
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {secondaryLimits.map((limit) => (
+                <LimitPill key={limit.name} limit={limit} />
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Weekly Summary (always shown) */}
         <div className="pt-3 border-t border-gray-100 dark:border-gray-700">
           <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
-            Weekly Token Usage (Local)
+            Local Token Usage (diagnostic)
           </h4>
-          <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
             <div>
               <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                {formatTokenCount(usage.weeklyTotalTokens)}
+                {formatTokenCount(combinedWeeklyTokens)}
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400">Total</p>
+            </div>
+            <div>
+              <p className="text-lg font-semibold text-purple-600 dark:text-purple-400">
+                {isCodexLoading ? '...' : formatTokenCount(codexWeeklyTokens)}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Codex</p>
             </div>
             <div>
               <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">
@@ -257,4 +419,171 @@ export function ClaudeUsageDashboard() {
       </div>
     </div>
   )
+}
+
+type UsageTone = 'blue' | 'yellow' | 'red' | 'purple'
+
+const RADIAL_STROKE_CLASS: Record<UsageTone, string> = {
+  blue: 'stroke-primary-500',
+  yellow: 'stroke-yellow-500',
+  red: 'stroke-red-500',
+  purple: 'stroke-purple-500',
+}
+
+const RADIAL_TEXT_CLASS: Record<UsageTone, string> = {
+  blue: 'text-primary-600 dark:text-primary-400',
+  yellow: 'text-yellow-600 dark:text-yellow-400',
+  red: 'text-red-600 dark:text-red-400',
+  purple: 'text-purple-600 dark:text-purple-400',
+}
+
+function UsageRadialMetric({
+  label,
+  value,
+  detail,
+  percent,
+  tone,
+  centerText,
+}: {
+  label: string
+  value: string
+  detail: string
+  percent: number
+  tone: UsageTone
+  centerText?: string
+}) {
+  const radius = 28
+  const circumference = 2 * Math.PI * radius
+  const safePercent = Math.max(0, Math.min(100, percent))
+  const dashLength = (safePercent / 100) * circumference
+
+  return (
+    <div className="rounded-md bg-gray-50 dark:bg-gray-900/40 px-3 py-2.5">
+      <div className="flex items-center gap-3">
+        <div className="relative h-16 w-16 flex-shrink-0">
+          <svg className="h-16 w-16 -rotate-90" viewBox="0 0 72 72" aria-hidden="true">
+            <circle
+              cx="36"
+              cy="36"
+              r={radius}
+              className="fill-none stroke-gray-200 dark:stroke-gray-700"
+              strokeWidth="7"
+            />
+            <circle
+              cx="36"
+              cy="36"
+              r={radius}
+              className={`fill-none ${RADIAL_STROKE_CLASS[tone]} transition-all duration-300`}
+              strokeWidth="7"
+              strokeLinecap="round"
+              strokeDasharray={`${dashLength} ${circumference - dashLength}`}
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className={`text-xs font-semibold ${RADIAL_TEXT_CLASS[tone]}`}>
+              {centerText ?? `${Math.round(safePercent)}%`}
+            </span>
+          </div>
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
+          <p className="truncate text-base font-semibold text-gray-900 dark:text-white">
+            {value}
+          </p>
+          <p className="truncate text-xs text-gray-500 dark:text-gray-400" title={detail}>
+            {detail}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LimitPill({ limit }: { limit: PlanLimitInfo }) {
+  const tone = getLimitTone(limit.utilization)
+  return (
+    <div className="flex items-center justify-between rounded-md bg-gray-50 dark:bg-gray-900/40 px-3 py-2">
+      <div className="min-w-0">
+        <p className="truncate text-xs font-medium text-gray-700 dark:text-gray-300">
+          {limit.displayName}
+        </p>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          {formatResetTime(limit)} reset
+        </p>
+      </div>
+      <span className={`text-sm font-semibold ${RADIAL_TEXT_CLASS[tone]}`}>
+        {Math.round(limit.utilization)}%
+      </span>
+    </div>
+  )
+}
+
+function formatResetTime(limit: PlanLimitInfo): string {
+  const hours = Math.floor(limit.resetsInHours ?? 0)
+  const mins = Math.floor(limit.resetsInMinutes ?? 0)
+
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24)
+    const remainingHours = hours % 24
+    return `${days}d ${remainingHours}h`
+  }
+
+  if (hours > 0) return `${hours}h ${mins}m`
+  return `${mins}m`
+}
+
+function getLimitTone(percentUsed: number): UsageTone {
+  if (percentUsed >= 90) return 'red'
+  if (percentUsed >= 70) return 'yellow'
+  return 'blue'
+}
+
+function getRemainingTone(percentRemaining: number): UsageTone {
+  if (percentRemaining <= 10) return 'red'
+  if (percentRemaining <= 30) return 'yellow'
+  return 'purple'
+}
+
+function formatCodexPlanDetail(window: CodexPlanWindow, planType?: string | null): string {
+  const pieces = [
+    `${Math.round(window.usedPercent)}% used`,
+    `${formatCodexWindowReset(window)} reset`,
+  ]
+  if (planType) {
+    pieces.unshift(formatPlanName(planType))
+  }
+  return pieces.join(' / ')
+}
+
+function formatCodexWindowReset(window: CodexPlanWindow): string {
+  const minutes = Math.floor(window.resetsInMinutes ?? 0)
+
+  if (minutes <= 0) return 'soon'
+  if (minutes >= 60 * 24) {
+    const days = Math.floor(minutes / (60 * 24))
+    const hours = Math.floor((minutes % (60 * 24)) / 60)
+    return `${days}d ${hours}h`
+  }
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60)
+    const remainingMinutes = minutes % 60
+    return `${hours}h ${remainingMinutes}m`
+  }
+  return `${minutes}m`
+}
+
+function formatPlanName(planType: string): string {
+  if (!planType) return ''
+  return planType.charAt(0).toUpperCase() + planType.slice(1)
+}
+
+function formatCodexPlanUnavailable(
+  codexPlan: CodexPlanUsageResponse | null,
+  isLoading: boolean
+): string {
+  if (isLoading) return 'Loading ChatGPT Codex plan'
+  if (!codexPlan) return 'ChatGPT Codex plan unavailable'
+  if (!codexPlan.available) return codexPlan.message || 'ChatGPT Codex plan unavailable'
+
+  return 'ChatGPT Codex plan unavailable'
 }

@@ -148,6 +148,7 @@ class CostBreakdown(BaseModel):
 
     category: str  # e.g., "agent_name", "model", "session"
     value: str  # e.g., "web-ui-specialist", "claude-sonnet-4-6"
+    provider: str | None = None  # e.g., "codex_cli", "anthropic"
     cost: float
     tokens: int
     percentage: float = 0.0

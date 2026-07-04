@@ -6,14 +6,18 @@ Fetches real usage data from Anthropic OAuth API using macOS Keychain credential
 import json
 import logging
 import os
+import select
+import sqlite3
+import subprocess
 import sys
+import time
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from services.claude_config_service import (
@@ -52,6 +56,25 @@ JSONL_TOKEN_CACHE_PATH = Path(
     )
 )
 JSONL_TOKEN_CACHE_TTL_SECONDS = 300  # 5 minutes
+
+# Codex desktop/CLI local thread state. This stores local token accounting, not
+# the ChatGPT account plan-limit percentages shown in the Codex app menu.
+CODEX_STATE_DB_PATH = Path(
+    os.getenv(
+        "CODEX_STATE_DB_PATH",
+        str(Path.home() / ".codex" / "state_5.sqlite"),
+    )
+)
+
+# Codex app-server exposes the ChatGPT account plan-limit snapshot used by the
+# Codex desktop menu. This is different from the local state DB token counters.
+CODEX_APP_SERVER_BIN = os.getenv("CODEX_APP_SERVER_BIN", "codex")
+CODEX_APP_SERVER_TIMEOUT_SECONDS = float(os.getenv("CODEX_APP_SERVER_TIMEOUT_SECONDS", "8"))
+CODEX_PLAN_CACHE_TTL_SECONDS = int(os.getenv("CODEX_PLAN_CACHE_TTL_SECONDS", "5"))
+_codex_plan_cache: dict[str, Any] = {
+    "response": None,
+    "timestamp": None,
+}
 
 # Anthropic OAuth Usage API
 ANTHROPIC_USAGE_API = "https://api.anthropic.com/api/oauth/usage"
@@ -219,6 +242,73 @@ class UsageResponse(BaseModel):
     weeklyTotalTokens: int = 0
     weeklySonnetTokens: int = 0
     weeklyOpusTokens: int = 0
+
+
+class CodexUsageBreakdown(BaseModel):
+    """Codex local usage grouped by a label."""
+
+    name: str
+    tokens: int = 0
+    threads: int = 0
+
+
+class CodexCliUsageResponse(BaseModel):
+    """Local Codex CLI usage reconstructed from Codex state DB."""
+
+    available: bool
+    source: str = "codex-state-db"
+    fiveHourTokens: int = 0
+    fiveHourThreads: int = 0
+    weeklyTokens: int = 0
+    weeklyThreads: int = 0
+    totalTokens: int = 0
+    totalThreads: int = 0
+    byModel: list[CodexUsageBreakdown] = Field(default_factory=list)
+    bySource: list[CodexUsageBreakdown] = Field(default_factory=list)
+    updatedAt: str | None = None
+    limitStatus: str = "not_exposed"
+    message: str | None = (
+        "Codex CLI exposes local token usage here; account remaining plan "
+        "percentages are not present in the local state DB."
+    )
+
+
+class CodexPlanWindow(BaseModel):
+    """A Codex ChatGPT subscription rate-limit window."""
+
+    usedPercent: float = 0
+    remainingPercent: float = 100
+    windowDurationMins: int | None = None
+    resetsAt: int | None = None
+    resetsAtIso: str | None = None
+    resetsInMinutes: float | None = None
+
+
+class CodexPlanLimitSnapshot(BaseModel):
+    """Codex ChatGPT subscription limit snapshot."""
+
+    limitId: str | None = None
+    limitName: str | None = None
+    primary: CodexPlanWindow | None = None
+    secondary: CodexPlanWindow | None = None
+    credits: dict[str, Any] | None = None
+    individualLimit: dict[str, Any] | None = None
+    planType: str | None = None
+    rateLimitReachedType: str | None = None
+
+
+class CodexPlanUsageResponse(BaseModel):
+    """ChatGPT subscription Codex plan usage from Codex app-server."""
+
+    available: bool
+    source: str = "codex-app-server"
+    codexLimit: CodexPlanLimitSnapshot | None = None
+    limitsById: dict[str, CodexPlanLimitSnapshot] = Field(default_factory=dict)
+    rateLimitResetCredits: dict[str, Any] | None = None
+    updatedAt: str | None = None
+    isCached: bool = False
+    cacheAgeSeconds: int | None = None
+    message: str | None = None
 
 
 def load_stats_cache() -> dict[str, Any] | None:
@@ -436,6 +526,320 @@ def calculate_weekly_tokens(daily_tokens: list[dict]) -> tuple[int, int, int]:
     return total, sonnet, opus
 
 
+def _codex_source_name(source: str | None) -> str:
+    """Convert Codex thread source values into dashboard-friendly labels."""
+    if not source:
+        return "unknown"
+    trimmed = source.strip()
+    if not trimmed:
+        return "unknown"
+    try:
+        parsed = json.loads(trimmed)
+    except json.JSONDecodeError:
+        return trimmed
+    if isinstance(parsed, dict) and "subagent" in parsed:
+        return "subagent"
+    return trimmed
+
+
+def _codex_usage_totals(
+    conn: sqlite3.Connection, cutoff_ts: int | None = None
+) -> tuple[int, int, int | None]:
+    """Return (threads, tokens, latest_updated_at) for Codex/OpenAI threads."""
+    where = "WHERE lower(coalesce(model_provider, '')) = 'openai'"
+    params: tuple[int, ...] = ()
+    if cutoff_ts is not None:
+        where += " AND updated_at >= ?"
+        params = (cutoff_ts,)
+
+    row = conn.execute(
+        f"""
+        SELECT
+            COUNT(*) AS threads,
+            COALESCE(SUM(COALESCE(tokens_used, 0)), 0) AS tokens,
+            MAX(updated_at) AS updated_at
+        FROM threads
+        {where}
+        """,
+        params,
+    ).fetchone()
+    if not row:
+        return (0, 0, None)
+    return (int(row[0] or 0), int(row[1] or 0), int(row[2]) if row[2] else None)
+
+
+def _codex_usage_by_model(conn: sqlite3.Connection) -> list[CodexUsageBreakdown]:
+    rows = conn.execute(
+        """
+        SELECT
+            COALESCE(NULLIF(TRIM(model), ''), 'unspecified model') AS model_name,
+            COUNT(*) AS threads,
+            COALESCE(SUM(COALESCE(tokens_used, 0)), 0) AS tokens
+        FROM threads
+        WHERE lower(coalesce(model_provider, '')) = 'openai'
+        GROUP BY model_name
+        ORDER BY tokens DESC, threads DESC
+        LIMIT 10
+        """
+    ).fetchall()
+    return [
+        CodexUsageBreakdown(name=str(row[0]), threads=int(row[1] or 0), tokens=int(row[2] or 0))
+        for row in rows
+    ]
+
+
+def _codex_usage_by_source(conn: sqlite3.Connection) -> list[CodexUsageBreakdown]:
+    rows = conn.execute(
+        """
+        SELECT
+            source,
+            COUNT(*) AS threads,
+            COALESCE(SUM(COALESCE(tokens_used, 0)), 0) AS tokens
+        FROM threads
+        WHERE lower(coalesce(model_provider, '')) = 'openai'
+        GROUP BY source
+        ORDER BY tokens DESC, threads DESC
+        """
+    ).fetchall()
+
+    grouped: dict[str, CodexUsageBreakdown] = {}
+    for row in rows:
+        name = _codex_source_name(row[0])
+        item = grouped.setdefault(name, CodexUsageBreakdown(name=name))
+        item.threads += int(row[1] or 0)
+        item.tokens += int(row[2] or 0)
+
+    return sorted(grouped.values(), key=lambda item: (-item.tokens, -item.threads))[:10]
+
+
+def _coerce_percent(value: Any, default: float = 0) -> float:
+    """Return a percent clamped to [0, 100]."""
+    try:
+        percent = float(value)
+    except (TypeError, ValueError):
+        percent = default
+    return max(0, min(100, percent))
+
+
+def _parse_codex_rate_limit_window(raw: Any) -> CodexPlanWindow | None:
+    """Normalize a Codex app-server RateLimitWindow object."""
+    if not isinstance(raw, dict):
+        return None
+
+    used_percent = _coerce_percent(raw.get("usedPercent"))
+    remaining_percent = max(0, 100 - used_percent)
+
+    resets_at_raw = raw.get("resetsAt")
+    resets_at: int | None = None
+    resets_at_iso: str | None = None
+    resets_in_minutes: float | None = None
+    if resets_at_raw is not None:
+        try:
+            resets_at = int(resets_at_raw)
+            resets_at_dt = datetime.fromtimestamp(resets_at, UTC)
+            resets_at_iso = resets_at_dt.isoformat()
+            resets_in_minutes = max(
+                0,
+                (resets_at_dt - datetime.now(UTC)).total_seconds() / 60,
+            )
+        except (TypeError, ValueError, OSError):
+            resets_at = None
+
+    window_duration_raw = raw.get("windowDurationMins")
+    try:
+        window_duration = int(window_duration_raw) if window_duration_raw is not None else None
+    except (TypeError, ValueError):
+        window_duration = None
+
+    return CodexPlanWindow(
+        usedPercent=used_percent,
+        remainingPercent=remaining_percent,
+        windowDurationMins=window_duration,
+        resetsAt=resets_at,
+        resetsAtIso=resets_at_iso,
+        resetsInMinutes=resets_in_minutes,
+    )
+
+
+def _parse_codex_limit_snapshot(raw: Any) -> CodexPlanLimitSnapshot | None:
+    """Normalize a Codex app-server RateLimitSnapshot object."""
+    if not isinstance(raw, dict):
+        return None
+
+    return CodexPlanLimitSnapshot(
+        limitId=raw.get("limitId"),
+        limitName=raw.get("limitName"),
+        primary=_parse_codex_rate_limit_window(raw.get("primary")),
+        secondary=_parse_codex_rate_limit_window(raw.get("secondary")),
+        credits=raw.get("credits") if isinstance(raw.get("credits"), dict) else None,
+        individualLimit=(
+            raw.get("individualLimit") if isinstance(raw.get("individualLimit"), dict) else None
+        ),
+        planType=raw.get("planType"),
+        rateLimitReachedType=raw.get("rateLimitReachedType"),
+    )
+
+
+def _select_codex_limit_snapshot(
+    default_limit: CodexPlanLimitSnapshot | None,
+    limits_by_id: dict[str, CodexPlanLimitSnapshot],
+) -> CodexPlanLimitSnapshot | None:
+    """Pick the Codex bucket from a multi-bucket response."""
+    if "codex" in limits_by_id:
+        return limits_by_id["codex"]
+
+    for limit in limits_by_id.values():
+        if (limit.limitId or "").lower() == "codex":
+            return limit
+
+    return default_limit
+
+
+def _parse_codex_rate_limits_response(raw: dict[str, Any]) -> CodexPlanUsageResponse:
+    """Convert `account/rateLimits/read` into the dashboard API shape."""
+    default_limit = _parse_codex_limit_snapshot(raw.get("rateLimits"))
+    raw_limits_by_id = raw.get("rateLimitsByLimitId") or {}
+    limits_by_id: dict[str, CodexPlanLimitSnapshot] = {}
+
+    if isinstance(raw_limits_by_id, dict):
+        for key, value in raw_limits_by_id.items():
+            parsed = _parse_codex_limit_snapshot(value)
+            if parsed:
+                limits_by_id[str(key)] = parsed
+
+    codex_limit = _select_codex_limit_snapshot(default_limit, limits_by_id)
+
+    return CodexPlanUsageResponse(
+        available=codex_limit is not None,
+        codexLimit=codex_limit,
+        limitsById=limits_by_id,
+        rateLimitResetCredits=(
+            raw.get("rateLimitResetCredits")
+            if isinstance(raw.get("rateLimitResetCredits"), dict)
+            else None
+        ),
+        updatedAt=datetime.now(UTC).isoformat(),
+        message=None if codex_limit else "Codex rate-limit bucket was not present.",
+    )
+
+
+def _read_codex_app_server_rate_limits() -> dict[str, Any]:
+    """Read ChatGPT Codex rate limits from the local Codex app-server."""
+    payload_messages = [
+        {
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "clientInfo": {"name": "aos-dashboard", "version": "0.1.0"},
+                "capabilities": {
+                    "experimentalApi": True,
+                    "requestAttestation": False,
+                },
+            },
+        },
+        {"method": "initialized"},
+        {"id": 2, "method": "account/rateLimits/read"},
+    ]
+
+    process = subprocess.Popen(
+        [CODEX_APP_SERVER_BIN, "app-server", "--listen", "stdio://"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        stdin=subprocess.PIPE,
+    )
+    stdout_buffer = ""
+    stderr_buffer = b""
+    try:
+        if process.stdin is None or process.stdout is None or process.stderr is None:
+            raise RuntimeError("Codex app-server pipes were not available")
+
+        for message in payload_messages:
+            process.stdin.write((json.dumps(message) + "\n").encode())
+            process.stdin.flush()
+
+        deadline = time.monotonic() + CODEX_APP_SERVER_TIMEOUT_SECONDS
+        streams = [process.stdout, process.stderr]
+        while time.monotonic() < deadline:
+            timeout = max(0, min(0.2, deadline - time.monotonic()))
+            readable, _, _ = select.select(streams, [], [], timeout)
+            if not readable and process.poll() is not None:
+                break
+
+            for stream in readable:
+                chunk = os.read(stream.fileno(), 65536)
+                if not chunk:
+                    continue
+                if stream is process.stderr:
+                    stderr_buffer += chunk
+                    continue
+
+                stdout_buffer += chunk.decode(errors="replace")
+                while "\n" in stdout_buffer:
+                    line, stdout_buffer = stdout_buffer.split("\n", 1)
+                    response = _extract_codex_rate_limit_response_line(line)
+                    if response is not None:
+                        return response
+
+        if stdout_buffer.strip():
+            response = _extract_codex_rate_limit_response_line(stdout_buffer)
+            if response is not None:
+                return response
+
+        if process.poll() not in (None, 0):
+            raise RuntimeError(f"Codex app-server exited with {process.returncode}")
+        raise subprocess.TimeoutExpired(
+            [CODEX_APP_SERVER_BIN, "app-server", "--listen", "stdio://"],
+            CODEX_APP_SERVER_TIMEOUT_SECONDS,
+            output=stdout_buffer,
+            stderr=stderr_buffer,
+        )
+    finally:
+        try:
+            if process.stdin:
+                process.stdin.close()
+        except OSError:
+            pass
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                process.kill()
+
+
+def _extract_codex_rate_limit_response_line(line: str) -> dict[str, Any] | None:
+    """Return the id=2 rate-limit result from one app-server JSON line."""
+    if not line.strip():
+        return None
+    try:
+        message = json.loads(line)
+    except json.JSONDecodeError:
+        return None
+    if message.get("id") != 2:
+        return None
+    if "error" in message:
+        error = message.get("error") or {}
+        raise RuntimeError(str(error.get("message") or "Codex app-server returned an error"))
+    response = message.get("result")
+    if not isinstance(response, dict):
+        raise RuntimeError("Codex app-server returned an invalid rate-limit response")
+    return response
+
+
+def _cached_codex_plan_response() -> CodexPlanUsageResponse | None:
+    """Return a fresh cached Codex plan response if available."""
+    response = _codex_plan_cache.get("response")
+    timestamp = _codex_plan_cache.get("timestamp")
+    if not isinstance(response, CodexPlanUsageResponse) or not isinstance(timestamp, datetime):
+        return None
+
+    age_seconds = int((datetime.now(UTC) - timestamp).total_seconds())
+    if age_seconds > CODEX_PLAN_CACHE_TTL_SECONDS:
+        return None
+
+    return response.model_copy(update={"isCached": True, "cacheAgeSeconds": max(age_seconds, 0)})
+
+
 @router.get("", response_model=UsageResponse)
 async def get_usage() -> UsageResponse:
     """
@@ -484,6 +888,9 @@ async def get_usage() -> UsageResponse:
         weekly_model_tokens = aggregate_model_tokens_from_jsonl(days=7)
         if weekly_model_tokens:
             weekly_model_tokens_source = "jsonl-fallback"
+            weekly_total, weekly_sonnet, weekly_opus = calculate_weekly_tokens(
+                [entry.model_dump() for entry in weekly_model_tokens]
+            )
 
     # Compute how many days behind today the stats-cache reports — useful for
     # surfacing "the upstream cache stopped updating" to the UI.
@@ -596,6 +1003,109 @@ async def get_usage() -> UsageResponse:
         weeklySonnetTokens=weekly_sonnet,
         weeklyOpusTokens=weekly_opus,
     )
+
+
+@router.get("/codex-cli", response_model=CodexCliUsageResponse)
+def get_codex_cli_usage() -> CodexCliUsageResponse:
+    """Get local Codex CLI/Desktop token usage from Codex thread state."""
+    db_path = CODEX_STATE_DB_PATH.expanduser().resolve()
+    if not db_path.exists():
+        return CodexCliUsageResponse(
+            available=False,
+            source="codex-state-db",
+            message="Codex state DB not found. Run Codex CLI/Desktop with ChatGPT login first.",
+        )
+
+    now_ts = int(datetime.now(UTC).timestamp())
+    five_hour_cutoff = now_ts - (5 * 60 * 60)
+    weekly_cutoff = now_ts - (7 * 24 * 60 * 60)
+
+    try:
+        with sqlite3.connect(f"{db_path.as_uri()}?mode=ro", uri=True) as conn:
+            five_hour_threads, five_hour_tokens, _ = _codex_usage_totals(conn, five_hour_cutoff)
+            weekly_threads, weekly_tokens, _ = _codex_usage_totals(conn, weekly_cutoff)
+            total_threads, total_tokens, latest_updated_at = _codex_usage_totals(conn)
+            updated_at = (
+                datetime.fromtimestamp(latest_updated_at, UTC).isoformat()
+                if latest_updated_at
+                else None
+            )
+
+            return CodexCliUsageResponse(
+                available=True,
+                fiveHourTokens=five_hour_tokens,
+                fiveHourThreads=five_hour_threads,
+                weeklyTokens=weekly_tokens,
+                weeklyThreads=weekly_threads,
+                totalTokens=total_tokens,
+                totalThreads=total_threads,
+                byModel=_codex_usage_by_model(conn),
+                bySource=_codex_usage_by_source(conn),
+                updatedAt=updated_at,
+            )
+    except sqlite3.Error as exc:
+        logger.warning("Failed to read Codex state DB", exc_info=True)
+        return CodexCliUsageResponse(
+            available=False,
+            source="codex-state-db",
+            message=f"Codex state DB could not be read ({exc.__class__.__name__}).",
+        )
+
+
+@router.get("/codex-plan", response_model=CodexPlanUsageResponse)
+def get_codex_plan_usage(
+    refresh: Annotated[
+        bool,
+        Query(
+            description="Bypass the short-lived app-server cache and read fresh limits.",
+        ),
+    ] = False,
+) -> CodexPlanUsageResponse:
+    """Get ChatGPT subscription Codex remaining plan limits from Codex app-server."""
+    if not refresh:
+        cached = _cached_codex_plan_response()
+        if cached:
+            return cached
+
+    try:
+        raw_response = _read_codex_app_server_rate_limits()
+        response = _parse_codex_rate_limits_response(raw_response)
+        if response.available:
+            _codex_plan_cache["response"] = response
+            _codex_plan_cache["timestamp"] = datetime.now(UTC)
+        return response
+    except FileNotFoundError:
+        return CodexPlanUsageResponse(
+            available=False,
+            message="Codex CLI binary was not found. Install Codex and sign in with ChatGPT.",
+        )
+    except subprocess.TimeoutExpired:
+        stale_response = _codex_plan_cache.get("response")
+        if isinstance(stale_response, CodexPlanUsageResponse):
+            return stale_response.model_copy(
+                update={
+                    "isCached": True,
+                    "message": "Using cached Codex plan data after app-server timeout.",
+                }
+            )
+        return CodexPlanUsageResponse(
+            available=False,
+            message="Codex app-server timed out while reading ChatGPT plan limits.",
+        )
+    except Exception as exc:
+        logger.warning("Failed to read Codex app-server rate limits", exc_info=True)
+        stale_response = _codex_plan_cache.get("response")
+        if isinstance(stale_response, CodexPlanUsageResponse):
+            return stale_response.model_copy(
+                update={
+                    "isCached": True,
+                    "message": "Using cached Codex plan data after app-server error.",
+                }
+            )
+        return CodexPlanUsageResponse(
+            available=False,
+            message=f"Codex plan limits unavailable ({exc.__class__.__name__}).",
+        )
 
 
 @router.get("/raw")
