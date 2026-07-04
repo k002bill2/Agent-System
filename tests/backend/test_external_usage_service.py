@@ -266,9 +266,7 @@ async def test_get_summary_does_not_double_count_provider_billing(monkeypatch) -
 
     # Primary total reflects the ledger only — not ledger (1.0) + billing (1.0).
     assert response.total_cost_usd == pytest.approx(1.0)
-    openai_summaries = [
-        s for s in response.providers if s.provider == ExternalProvider.OPENAI
-    ]
+    openai_summaries = [s for s in response.providers if s.provider == ExternalProvider.OPENAI]
     assert len(openai_summaries) == 1
     assert openai_summaries[0].total_cost_usd == pytest.approx(1.0)
     # The records feed (re-aggregated by the dashboard) holds only the ledger row.

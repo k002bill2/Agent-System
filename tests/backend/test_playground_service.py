@@ -195,6 +195,43 @@ async def test_execute_passes_llm_access_to_usage_context(monkeypatch) -> None:
     assert captured["usage_context"]["llm_access"] == access
 
 
+def test_safe_fallback_resolves_entitled_model_for_authenticated_user(monkeypatch) -> None:
+    """Authenticated fallback must resolve the user's entitled model, not the
+    global env default — the runtime resolver gates by entitlement, so an
+    unentitled env default would just re-raise and break the fallback."""
+    from services.llm_access_service import default_access_response
+    from services.llm_runtime_resolver import LLMRuntimeRequest, resolve_llm_runtime
+    from services.playground_service import _safe_playground_fallback_model
+
+    # env default deliberately differs from the CLI-first entitled default.
+    monkeypatch.setenv("LLM_PROVIDER", "google")
+    access = default_access_response("user-1")
+    usage_context = {"llm_access": access, "user_id": "user-1"}
+    expected = resolve_llm_runtime(
+        access,
+        LLMRuntimeRequest(
+            user_id="user-1",
+            source=LLMUsageSource.PLAYGROUND.value,
+            requested_model_id=None,
+        ),
+    ).model_id
+
+    assert _safe_playground_fallback_model("stale-model-xyz", usage_context) == expected
+
+
+def test_safe_fallback_returns_none_when_authenticated_user_has_no_entitlement() -> None:
+    """An authenticated user with no usable entitlement gets None (no doomed
+    retry) instead of an env default the resolver would reject."""
+    from models.llm_access import LLMAccessResponse
+    from services.playground_service import _safe_playground_fallback_model
+
+    access = LLMAccessResponse(user_id="user-1", api_fallback_enabled=False)
+    fallback = _safe_playground_fallback_model(
+        "stale-model-xyz", {"llm_access": access, "user_id": "user-1"}
+    )
+    assert fallback is None
+
+
 # ─────────────────────────────────────────────────────────────
 # LLMService message building + force-final
 # ─────────────────────────────────────────────────────────────
@@ -240,9 +277,7 @@ async def test_invoke_with_tools_force_final_on_budget_exhaustion() -> None:
 
     always_tool_response = MagicMock()
     always_tool_response.content = ""
-    always_tool_response.tool_calls = [
-        {"name": "web_search", "args": {"query": "x"}, "id": "t1"}
-    ]
+    always_tool_response.tool_calls = [{"name": "web_search", "args": {"query": "x"}, "id": "t1"}]
     always_tool_response.usage_metadata = {"input_tokens": 10, "output_tokens": 2}
 
     # Raw llm.ainvoke (used for the force-final round) returns a clean answer.
