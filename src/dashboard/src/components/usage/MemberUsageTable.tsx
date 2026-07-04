@@ -66,12 +66,14 @@ function formatCost(cost: number): string {
 }
 
 function formatTokens(tokens: number): string {
+  if (tokens >= 1_000_000_000) return `${(tokens / 1_000_000_000).toFixed(1)}B`
   if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`
   if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}K`
   return tokens.toString()
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
+  codex_cli: 'Codex CLI',
   openai: 'OpenAI',
   github_copilot: 'GitHub Copilot',
   google_gemini: 'Google Gemini',
@@ -79,13 +81,14 @@ const PROVIDER_LABELS: Record<string, string> = {
 }
 
 const PROVIDER_COLORS: Record<string, string> = {
+  codex_cli: '#a855f7',
   openai: '#10a37f',
   github_copilot: '#6e7681',
   google_gemini: '#4285f4',
   anthropic: '#d97706',
 }
 
-const ALL_PROVIDERS = ['openai', 'github_copilot', 'google_gemini', 'anthropic']
+const ALL_PROVIDERS = ['codex_cli', 'anthropic', 'openai', 'github_copilot', 'google_gemini']
 
 interface Props {
   records: UnifiedUsageRecord[]
@@ -109,7 +112,11 @@ export default function MemberUsageTable({ records, isLoading }: Props) {
           m.key.toLowerCase().includes(q)
         )
       })
-      .sort((a, b) => sortAsc ? a.totalCost - b.totalCost : b.totalCost - a.totalCost)
+      .sort((a, b) => {
+        const aValue = a.totalCost > 0 ? a.totalCost : a.totalTokens
+        const bValue = b.totalCost > 0 ? b.totalCost : b.totalTokens
+        return sortAsc ? aValue - bValue : bValue - aValue
+      })
   }, [members, search, sortAsc])
 
   // Determine which providers have any data
@@ -176,7 +183,7 @@ export default function MemberUsageTable({ records, isLoading }: Props) {
                   onClick={() => setSortAsc(v => !v)}
                 >
                   <span className="flex items-center gap-1">
-                    Total Cost
+                    Total Usage
                     {sortAsc ? (
                       <ChevronUp className="w-3.5 h-3.5" />
                     ) : (

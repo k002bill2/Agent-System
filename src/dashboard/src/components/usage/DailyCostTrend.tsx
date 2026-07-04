@@ -11,10 +11,11 @@ import {
 } from 'recharts'
 import type { UnifiedUsageRecord } from '../../stores/externalUsage'
 
-type ProviderKey = 'openai' | 'github_copilot' | 'google_gemini' | 'anthropic'
+type ProviderKey = 'codex_cli' | 'openai' | 'github_copilot' | 'google_gemini' | 'anthropic'
 
 interface DailyPoint {
   date: string
+  codex_cli: number
   openai: number
   github_copilot: number
   google_gemini: number
@@ -22,6 +23,7 @@ interface DailyPoint {
 }
 
 const PROVIDER_COLORS: Record<string, string> = {
+  codex_cli: '#a855f7',
   openai: '#10a37f',
   github_copilot: '#6e7681',
   google_gemini: '#4285f4',
@@ -29,13 +31,14 @@ const PROVIDER_COLORS: Record<string, string> = {
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
+  codex_cli: 'Codex CLI',
   openai: 'OpenAI',
   github_copilot: 'GitHub Copilot',
   google_gemini: 'Google Gemini',
   anthropic: 'Anthropic',
 }
 
-const ALL_PROVIDERS: ProviderKey[] = ['openai', 'github_copilot', 'google_gemini', 'anthropic']
+const ALL_PROVIDERS: ProviderKey[] = ['codex_cli', 'anthropic', 'openai', 'github_copilot', 'google_gemini']
 
 const PROVIDER_SET = new Set<string>(ALL_PROVIDERS)
 
@@ -55,13 +58,14 @@ function buildDailyTrend(records: UnifiedUsageRecord[]): DailyPoint[] {
         github_copilot: 0,
         google_gemini: 0,
         anthropic: 0,
+        codex_cli: 0,
       })
     }
 
     const point = map.get(dateKey)!
     if (PROVIDER_SET.has(rec.provider)) {
       const key = rec.provider as ProviderKey
-      point[key] = point[key] + rec.cost_usd
+      point[key] = point[key] + rec.total_tokens
     }
   }
 
@@ -86,10 +90,11 @@ function buildDailyTrend(records: UnifiedUsageRecord[]): DailyPoint[] {
   })
 }
 
-function formatCostAxis(value: number): string {
-  if (value === 0) return '$0.00'
-  if (value < 0.01) return `$${value.toFixed(4)}`
-  return `$${value.toFixed(2)}`
+function formatTokenAxis(value: number): string {
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`
+  return value.toString()
 }
 
 interface Props {
@@ -109,7 +114,7 @@ export default function DailyCostTrend({ records }: Props) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
         <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-          Daily Cost Trend
+          Daily Usage Trend
         </h2>
         <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
           데이터 없음
@@ -121,7 +126,7 @@ export default function DailyCostTrend({ records }: Props) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
       <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-        Daily Cost Trend
+        Daily Usage Trend
       </h2>
       <ResponsiveContainer width="100%" height={260}>
         <AreaChart data={data} margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
@@ -144,12 +149,12 @@ export default function DailyCostTrend({ records }: Props) {
             tick={{ fontSize: 11, fill: '#9ca3af' }}
             axisLine={false}
             tickLine={false}
-            tickFormatter={formatCostAxis}
+            tickFormatter={formatTokenAxis}
             width={60}
           />
           <Tooltip
             formatter={(value, name) => [
-              formatCostAxis(Number(value)),
+              formatTokenAxis(Number(value)),
               PROVIDER_LABELS[String(name)] ?? String(name),
             ]}
             contentStyle={{

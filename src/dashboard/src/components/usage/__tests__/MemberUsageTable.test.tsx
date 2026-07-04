@@ -71,7 +71,7 @@ describe('MemberUsageTable', () => {
   it('renders provider column headers', () => {
     render(<MemberUsageTable records={[makeRecord()]} isLoading={false} />)
     expect(screen.getByText('OpenAI')).toBeInTheDocument()
-    expect(screen.getByText('Total Cost')).toBeInTheDocument()
+    expect(screen.getByText('Total Usage')).toBeInTheDocument()
   })
 
   it('renders search input', () => {
@@ -105,7 +105,7 @@ describe('MemberUsageTable', () => {
     expect(screen.getByText('No members match your search.')).toBeInTheDocument()
   })
 
-  it('sorts by total cost on header click', () => {
+  it('sorts by total usage on header click', () => {
     const records = [
       makeRecord({ user_email: 'cheap@test.com', cost_usd: 1, id: 'r1', user_id: 'u1' }),
       makeRecord({ user_email: 'expensive@test.com', cost_usd: 100, id: 'r2', user_id: 'u2' }),
@@ -119,7 +119,7 @@ describe('MemberUsageTable', () => {
     expect(rows[1]).toHaveTextContent('expensive@test.com')
 
     // Click to toggle sort
-    fireEvent.click(screen.getByText('Total Cost'))
+    fireEvent.click(screen.getByText('Total Usage'))
     const rowsAfter = screen.getAllByRole('row')
     expect(rowsAfter[1]).toHaveTextContent('cheap@test.com')
   })
