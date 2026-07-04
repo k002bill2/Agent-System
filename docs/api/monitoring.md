@@ -12,6 +12,8 @@
 | Method | Path | 설명 |
 |--------|------|------|
 | GET | `/api/usage` | Claude Code 사용량 (Plan Limits + 토큰 통계) |
+| GET | `/api/usage/codex-cli` | Codex(ChatGPT) 로컬 CLI/Desktop 토큰 사용량 (state DB 기반) |
+| GET | `/api/usage/codex-plan` | Codex(ChatGPT) 구독 잔여 플랜 한도 (app-server 기반) |
 | GET | `/api/usage/raw` | Raw stats-cache.json 데이터 |
 | GET | `/api/usage/oauth-test` | OAuth 토큰 진단 |
 | GET | `/api/usage/claude-config` | Claude 설정 조회 |
@@ -24,6 +26,25 @@
 - `isCached`: 캐시 데이터 사용 여부
 
 **환경 변수**: `CLAUDE_OAUTH_TOKEN`, `CLAUDE_STATS_CACHE_PATH`, `CLAUDE_USAGE_CACHE_PATH` ([배포 가이드](../deployment.md#claude-code-usage-환경-변수) 참조)
+
+### Codex (ChatGPT) Usage
+
+로컬 토큰 카운터(`codex-cli`)와 계정 플랜 잔여 %(codex-plan)는 서로 다른 데이터 소스라 엔드포인트를 분리한다. 둘 다 Codex 미설치/미로그인 시 `available:false` + 안내 `message`로 graceful degradation.
+
+**`GET /api/usage/codex-cli` 응답** (camelCase):
+- `available`, `source`(`codex-state-db`)
+- `fiveHourTokens`/`fiveHourThreads`, `weeklyTokens`/`weeklyThreads`, `totalTokens`/`totalThreads`
+- `byModel`, `bySource`: `{name, tokens, threads}` breakdown
+- `updatedAt`, `limitStatus`(`not_exposed`), `message`
+- 데이터 소스: 로컬 Codex `state_5.sqlite`를 **read-only**(`mode=ro`)로 열어 5시간/주간/전체 윈도우 집계. 플랜 % 는 로컬 state DB에 없음.
+
+**`GET /api/usage/codex-plan?refresh=<bool>` 응답** (camelCase):
+- `available`, `source`(`codex-app-server`)
+- `codexLimit`: `{limitId, limitName, primary, secondary, planType, ...}` (primary/secondary = `CodexPlanWindow`: `usedPercent`/`remainingPercent`/`resetsAtIso`/`resetsInMinutes` 등)
+- `limitsById`, `isCached`, `cacheAgeSeconds`, `updatedAt`, `message`
+- 데이터 소스: Codex `app-server`(stdio JSON-RPC `account/rateLimits/read`). 5초 TTL 캐시(`refresh=true`로 우회), 타임아웃/에러 시 stale 캐시 폴백(`isCached:true`).
+
+**환경 변수**: `CODEX_STATE_DB_PATH`, `CODEX_APP_SERVER_BIN`, `CODEX_APP_SERVER_TIMEOUT_SECONDS`, `CODEX_PLAN_CACHE_TTL_SECONDS` ([배포 가이드](../deployment.md#claude-code-usage-환경-변수) 참조)
 
 | Method | Path | 설명 |
 |--------|------|------|

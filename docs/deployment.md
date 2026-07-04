@@ -254,6 +254,15 @@ Plan Usage Limits 대시보드에서 사용하는 설정입니다. 로컬 개발
 | `CLAUDE_STATS_CACHE_PATH` | Claude Code stats-cache.json 경로 | `~/.claude/stats-cache.json` |
 | `CLAUDE_USAGE_CACHE_PATH` | Usage API 응답 캐시 경로 | `~/.claude/aos-usage-cache.json` |
 
+Codex(ChatGPT) 사용량 통합(`/api/usage/codex-cli`, `/api/usage/codex-plan`) 설정:
+
+| 변수 | 설명 | 기본값 |
+|------|------|--------|
+| `CODEX_STATE_DB_PATH` | Codex 로컬 state DB 경로 (read-only) | `~/.codex/state_5.sqlite` |
+| `CODEX_APP_SERVER_BIN` | Codex app-server 실행 파일 | `codex` |
+| `CODEX_APP_SERVER_TIMEOUT_SECONDS` | app-server 플랜 한도 조회 타임아웃 | `8` |
+| `CODEX_PLAN_CACHE_TTL_SECONDS` | 플랜 한도 응답 캐시 TTL | `5` |
+
 > **Note**: `CLAUDE_OAUTH_TOKEN`은 non-macOS 환경(Linux 서버, Docker 등)에서 필수입니다. macOS에서는 설정하지 않으면 Keychain에서 자동 추출됩니다.
 
 ### 모니터링 환경 변수
