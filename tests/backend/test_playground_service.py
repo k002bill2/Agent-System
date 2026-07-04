@@ -219,6 +219,66 @@ def test_safe_fallback_resolves_entitled_model_for_authenticated_user(monkeypatc
     assert _safe_playground_fallback_model("stale-model-xyz", usage_context) == expected
 
 
+@pytest.mark.asyncio
+async def test_execute_retries_on_resolver_entitlement_error_for_authenticated_user(
+    monkeypatch,
+) -> None:
+    """A raw LLMRuntimeResolutionError (resolver rejecting the stale model for the
+    user's entitlements) must trigger the fallback and retry with the entitled
+    model — not just the provider-side 'model_not_found' string."""
+    from services.llm_access_service import default_access_response
+    from services.llm_runtime_resolver import (
+        LLMRuntimeRequest,
+        LLMRuntimeResolutionError,
+        resolve_llm_runtime,
+    )
+
+    playground_service._sessions.clear()
+    monkeypatch.setattr(playground_service, "_load_sessions", lambda: None)
+    monkeypatch.setattr(playground_service, "_save_sessions", lambda: None)
+
+    def close_background_coro(coro):
+        coro.close()
+
+    monkeypatch.setattr(playground_service, "_fire_and_forget", close_background_coro)
+
+    access = default_access_response("user-1")
+    entitled = resolve_llm_runtime(
+        access,
+        LLMRuntimeRequest(
+            user_id="user-1",
+            source=LLMUsageSource.PLAYGROUND.value,
+            requested_model_id=None,
+        ),
+    ).model_id
+    session = PlaygroundService.create_session(
+        PlaygroundSessionCreate(name="stale", model="stale-model-xyz", user_id="user-1")
+    )
+
+    calls: list[str] = []
+
+    async def fake_invoke(**kwargs):
+        model_id = kwargs["model_id"]
+        calls.append(model_id)
+        if model_id == "stale-model-xyz":
+            raise LLMRuntimeResolutionError(
+                "No enabled LLM entitlement for provider=openai, mode=api"
+            )
+        return LLMResponse(content="ok", model=model_id, provider="codex_cli")
+
+    monkeypatch.setattr(LLMService, "invoke", fake_invoke)
+
+    execution = await PlaygroundService.execute(
+        session.id,
+        PlaygroundExecuteRequest(prompt="hi"),
+        llm_access=access,
+    )
+
+    assert calls == ["stale-model-xyz", entitled]
+    assert execution.status.value == "completed"
+    assert session.model == entitled
+
+
 def test_safe_fallback_returns_none_when_authenticated_user_has_no_entitlement() -> None:
     """An authenticated user with no usable entitlement gets None (no doomed
     retry) instead of an env default the resolver would reject."""

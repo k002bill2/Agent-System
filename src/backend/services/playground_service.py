@@ -154,7 +154,19 @@ def _playground_usage_context(
 
 
 def _is_inaccessible_model_error(error: Exception) -> bool:
-    """Detect provider errors caused by a model the current project cannot use."""
+    """Detect errors caused by a model the current caller cannot use.
+
+    Two distinct sources must trigger the stale-model fallback:
+    - provider-side errors (OpenAI/Anthropic "model_not_found", etc.), matched by
+      message, and
+    - the runtime resolver rejecting the requested model for the authenticated
+      user's entitlements. ``LLMService.invoke`` re-raises that
+      ``LLMRuntimeResolutionError`` raw, and its message ("No enabled LLM
+      entitlement for provider=...") matches none of the provider patterns — so
+      it must be recognized by type, or authenticated fallback never fires.
+    """
+    if isinstance(error, LLMRuntimeResolutionError):
+        return True
     message = str(error).lower()
     return (
         "model_not_found" in message
