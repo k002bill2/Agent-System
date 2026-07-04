@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from models.external_usage import ExternalProvider
+from models.external_usage import ExternalProvider, UnifiedUsageRecord
 from services.external_usage_service import (
     ExternalUsageService,
     OpenAIUsageCollector,
@@ -209,3 +209,71 @@ async def test_get_summary_includes_reconciliation_totals(monkeypatch) -> None:
     assert response.reconciliation.provider_billing_total_tokens == 0
     assert response.reconciliation.comparisons[0].provider == ExternalProvider.CLAUDE_CLI
     assert response.reconciliation.comparisons[0].status == "ledger_only"
+
+
+async def test_get_summary_does_not_double_count_provider_billing(monkeypatch) -> None:
+    """Provider billing measures the SAME usage as the internal ledger a second
+    way, so it must feed reconciliation only — never the primary summaries /
+    records / total (regression: double-count when billing is enabled)."""
+    start = datetime(2026, 7, 1, tzinfo=UTC)
+    end = datetime(2026, 7, 2, tzinfo=UTC)
+    ledger_row = SimpleNamespace(
+        id="ledger-1",
+        provider="openai",
+        mode="api",
+        source="agent",
+        model="gpt-5",
+        input_tokens=100,
+        output_tokens=0,
+        total_tokens=100,
+        estimated_cost_usd=1.0,
+        status="success",
+        measurement_method="api",
+        user_id="user-1",
+        organization_id="org-1",
+        project_id="project-1",
+        started_at=start,
+    )
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = [ledger_row]
+    db = AsyncMock()
+    db.execute.return_value = result
+
+    # Provider billing reports the same OpenAI usage a second way.
+    billing_record = UnifiedUsageRecord(
+        id="billing-1",
+        provider=ExternalProvider.OPENAI,
+        timestamp=start,
+        input_tokens=100,
+        output_tokens=0,
+        total_tokens=100,
+        cost_usd=1.0,
+        request_count=1,
+        model="gpt-5",
+        user_id="user-1",
+    )
+    collector = AsyncMock()
+    collector.collect = AsyncMock(return_value=[billing_record])
+
+    monkeypatch.setenv("EXTERNAL_USAGE_INCLUDE_PROVIDER_BILLING", "true")
+
+    with patch.object(
+        ExternalUsageService,
+        "_build_collectors",
+        AsyncMock(return_value={ExternalProvider.OPENAI: collector}),
+    ):
+        response = await ExternalUsageService().get_summary(db, start, end)
+
+    # Primary total reflects the ledger only — not ledger (1.0) + billing (1.0).
+    assert response.total_cost_usd == pytest.approx(1.0)
+    openai_summaries = [
+        s for s in response.providers if s.provider == ExternalProvider.OPENAI
+    ]
+    assert len(openai_summaries) == 1
+    assert openai_summaries[0].total_cost_usd == pytest.approx(1.0)
+    # The records feed (re-aggregated by the dashboard) holds only the ledger row.
+    assert len(response.records) == 1
+    assert response.records[0].raw_data["ledger_id"] == "ledger-1"
+    # Billing still reaches the UI, but via reconciliation only.
+    assert response.reconciliation.provider_billing_enabled is True
+    assert response.reconciliation.provider_billing_total_cost_usd == pytest.approx(1.0)
