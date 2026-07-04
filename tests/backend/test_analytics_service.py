@@ -364,6 +364,80 @@ class TestGetTrendsFromSessions:
         assert any(p.value == 1 for p in result.tasks)
 
 
+class TestGetAgentPerformanceFromSessions:
+    """Tests for AnalyticsService.get_agent_performance_from_sessions()."""
+
+    def _patch_sessions(self, sessions):
+        mock_monitor = MagicMock()
+        mock_monitor.discover_sessions.return_value = sessions
+        return patch(
+            "services.claude_session_monitor.get_monitor",
+            return_value=mock_monitor,
+        )
+
+    def test_excludes_zero_usage_sessions_without_model_metadata(self):
+        sessions = [
+            _make_mock_session(model="unknown", input_tokens=0, output_tokens=0, estimated_cost=0),
+            _make_mock_session(model="", input_tokens=0, output_tokens=0, estimated_cost=0),
+            _make_mock_session(
+                model="claude-fable-5",
+                input_tokens=1000,
+                output_tokens=500,
+                estimated_cost=0.1,
+            ),
+        ]
+
+        with self._patch_sessions(sessions):
+            result = AnalyticsService.get_agent_performance_from_sessions(TimeRange.ALL)
+
+        assert [agent.agent_name for agent in result.agents] == ["claude-fable-5"]
+
+
+class TestGetCostAnalyticsFromSessions:
+    """Tests for AnalyticsService.get_cost_analytics_from_sessions()."""
+
+    def _patch_sessions(self, sessions):
+        mock_monitor = MagicMock()
+        mock_monitor.discover_sessions.return_value = sessions
+        return patch(
+            "services.claude_session_monitor.get_monitor",
+            return_value=mock_monitor,
+        )
+
+    def test_model_breakdown_uses_runtime_provider_metadata(self, monkeypatch):
+        monkeypatch.setenv("LLM_PROVIDER", "codex_cli")
+        sessions = [
+            _make_mock_session(
+                model="claude-opus-4-8",
+                input_tokens=1000,
+                output_tokens=500,
+                estimated_cost=0.0,
+            )
+        ]
+
+        with self._patch_sessions(sessions):
+            result = AnalyticsService.get_cost_analytics_from_sessions(TimeRange.ALL)
+
+        assert result.by_model[0].value == "claude-opus-4-8"
+        assert result.by_model[0].provider == "codex_cli"
+
+    def test_model_breakdown_excludes_zero_usage_sessions_without_model_metadata(self):
+        sessions = [
+            _make_mock_session(model="unknown", input_tokens=0, output_tokens=0, estimated_cost=0),
+            _make_mock_session(
+                model="claude-opus-4-8",
+                input_tokens=1000,
+                output_tokens=500,
+                estimated_cost=0.1,
+            ),
+        ]
+
+        with self._patch_sessions(sessions):
+            result = AnalyticsService.get_cost_analytics_from_sessions(TimeRange.ALL)
+
+        assert [model.value for model in result.by_model] == ["claude-opus-4-8"]
+
+
 # ---------------------------------------------------------------------------
 # Async database method tests
 # ---------------------------------------------------------------------------

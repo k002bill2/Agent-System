@@ -48,8 +48,10 @@ import {
 import { cn } from '../lib/utils'
 import { computeHeatmapAlpha } from '../lib/heatmap'
 import { useProjectsStore, Project } from '../stores/projects'
-import { useClaudeUsageStore } from '../stores/claudeUsage'
-import { useExternalUsageStore } from '../stores/externalUsage'
+import {
+  useExternalUsageStore,
+  type ExternalUsageSummaryResponse,
+} from '../stores/externalUsage'
 import { useAuthStore } from '../stores/auth'
 import { ProjectMultiSelect } from '../components/analytics/ProjectMultiSelect'
 import type { TaskAnalysisHistory } from '../stores/agents'
@@ -106,6 +108,7 @@ interface AgentPerformance {
 interface CostBreakdown {
   category: string
   value: string
+  provider?: string | null
   cost: number
   tokens: number
   percentage: number
@@ -139,6 +142,16 @@ interface AnalyticsDashboard {
   agents: { agents: AgentPerformance[]; time_range: TimeRange }
   costs: CostAnalytics
   activity: ActivityHeatmap
+}
+
+interface ModelTokenBreakdown {
+  model: string
+  provider: string
+  providerLabel: string
+  tokens: number
+  cost: number
+  percentage: number
+  color: string
 }
 
 // Multi-Project Comparison Types
@@ -208,6 +221,26 @@ const CHART_COLORS = [
   '#EC4899', // pink
   '#06B6D4', // cyan
 ]
+
+const PROVIDER_COLORS: Record<string, string> = {
+  codex_cli: '#8B5CF6',
+  anthropic: '#F97316',
+  openai: '#10B981',
+  google: '#3B82F6',
+  github_copilot: '#111827',
+  ollama: '#64748B',
+  unknown: '#6B7280',
+}
+
+const PROVIDER_LABELS: Record<string, string> = {
+  codex_cli: 'Codex CLI',
+  anthropic: 'Anthropic Claude',
+  openai: 'OpenAI',
+  google: 'Google Gemini',
+  github_copilot: 'GitHub Copilot',
+  ollama: 'Ollama',
+  unknown: 'Unknown',
+}
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -315,9 +348,6 @@ export function AnalyticsPage() {
     ? projects
     : projects.filter((p: Project) => p.is_active !== false)
 
-  // Get Claude usage data from store
-  const { usage: claudeUsage, fetchUsage } = useClaudeUsageStore()
-
   // Get external (actual API billing) usage data
   const { summary: externalSummary, fetchSummary: fetchExternalSummary } = useExternalUsageStore()
 
@@ -325,11 +355,6 @@ export function AnalyticsPage() {
   useEffect(() => {
     fetchProjects()
   }, [fetchProjects])
-
-  // Fetch Claude usage on mount
-  useEffect(() => {
-    fetchUsage()
-  }, [fetchUsage])
 
   // Fetch external usage on mount
   useEffect(() => {
@@ -420,6 +445,9 @@ export function AnalyticsPage() {
   }
 
   if (!data) return null
+
+  const modelTokenBreakdown = buildModelTokenBreakdown(data.costs.by_model, externalSummary)
+  const modelPerformanceData = filterAttributedModelPerformance(data.agents.agents)
 
   return (
     <div className="flex-1 p-6 overflow-y-auto">
@@ -664,49 +692,78 @@ export function AnalyticsPage() {
           </ResponsiveContainer>
         </ChartCard>
 
-        {/* Model Token Breakdown (Weekly) */}
+        {/* AOS LLM Model Token Breakdown */}
         <ChartCard
-          title="Model Token Breakdown (7 Days)"
+          title="AOS LLM Usage by Model"
           icon={Users}
-          headerExtra={renderTokenSourceBadge(claudeUsage)}
+          headerExtra={renderAosModelSourceBadge(modelTokenBreakdown)}
         >
-          {claudeUsage?.weeklyModelTokens && claudeUsage.weeklyModelTokens.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={transformModelTokensData(claudeUsage.weeklyModelTokens)}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontSize: 12 }}
-                  className="text-gray-500"
-                />
-                <YAxis
-                  tick={{ fontSize: 12 }}
-                  className="text-gray-500"
-                  tickFormatter={formatTokenCount}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'var(--tooltip-bg, #fff)',
-                    borderColor: 'var(--tooltip-border, #e5e7eb)',
-                  }}
-                  formatter={(value) => [formatTokenCount(Number(value)), 'Tokens']}
-                />
-                <Legend />
-                {extractModelNames(claudeUsage.weeklyModelTokens).map((modelName, index) => (
-                  <Bar
-                    key={modelName}
-                    dataKey={modelName}
-                    stackId="tokens"
-                    fill={CHART_COLORS[index % CHART_COLORS.length]}
+          {modelTokenBreakdown.length > 0 ? (
+            <div className="space-y-3">
+              <ResponsiveContainer width="100%" height={210}>
+                <BarChart
+                  data={modelTokenBreakdown}
+                  layout="vertical"
+                  margin={{ top: 4, right: 24, left: 24, bottom: 4 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                  <XAxis
+                    type="number"
+                    tick={{ fontSize: 12 }}
+                    className="text-gray-500"
+                    tickFormatter={formatTokenCount}
                   />
+                  <YAxis
+                    type="category"
+                    dataKey="model"
+                    width={120}
+                    tick={{ fontSize: 11 }}
+                    className="text-gray-500"
+                    tickFormatter={(value) => truncateModelLabel(String(value))}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'var(--tooltip-bg, #fff)',
+                      borderColor: 'var(--tooltip-border, #e5e7eb)',
+                      borderRadius: '12px',
+                      padding: '8px 12px',
+                    }}
+                    formatter={(value) => [formatTokenCount(Number(value)), 'Tokens']}
+                    labelFormatter={(label) => String(label)}
+                  />
+                  <Bar dataKey="tokens" radius={[0, 4, 4, 0]}>
+                    {modelTokenBreakdown.map((entry) => (
+                      <Cell key={`${entry.provider}:${entry.model}`} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 border-t border-gray-100 dark:border-gray-700 pt-3">
+                {modelTokenBreakdown.slice(0, 6).map((entry) => (
+                  <div key={`${entry.provider}:${entry.model}`} className="min-w-0 flex items-center gap-2 text-xs">
+                    <span
+                      className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                      style={{ backgroundColor: entry.color }}
+                    />
+                    <span className="truncate text-gray-900 dark:text-white" title={entry.model}>
+                      {entry.model}
+                    </span>
+                    <span className="text-gray-400">·</span>
+                    <span className="text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                      {entry.providerLabel}
+                    </span>
+                    <span className="ml-auto text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                      {formatTokenCount(entry.tokens)}
+                    </span>
+                  </div>
                 ))}
-              </BarChart>
-            </ResponsiveContainer>
+              </div>
+            </div>
           ) : (
             <div className="h-[250px] flex items-center justify-center text-gray-500 dark:text-gray-400">
               <div className="text-center">
                 <Zap className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p>No model token data available</p>
+                <p>No AOS LLM token data available</p>
               </div>
             </div>
           )}
@@ -756,7 +813,7 @@ export function AnalyticsPage() {
         {/* Model Performance */}
         <ChartCard title="Model Performance" icon={Users}>
           <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={data.agents.agents} layout="vertical">
+            <BarChart data={modelPerformanceData} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 12 }} />
               <YAxis
@@ -898,7 +955,7 @@ export function AnalyticsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {data.agents.agents.map((agent) => {
+              {modelPerformanceData.map((agent) => {
                 const agentEval = evalStats?.by_agent?.find(
                   (a) => a.agent_id === agent.agent_id ||
                     a.agent_id === agent.agent_name.toLowerCase().replace(/\s+/g, '-')
@@ -1535,76 +1592,109 @@ function transformMultiSeriesData(
   return Array.from(dateMap.values())
 }
 
-/**
- * Render a small status badge above the Model Token Breakdown chart that
- * tells the user *why* the data looks the way it does — silent fallback is
- * confusing, especially when stats-cache.json has gone stale upstream.
- */
-function renderTokenSourceBadge(
-  usage: import('../types/claudeUsage').ClaudeUsageResponse | null
-): React.ReactNode {
-  if (!usage) return null
-  const source = usage.weeklyModelTokensSource
-  const ageDays = usage.statsCacheAgeDays ?? null
+function buildModelTokenBreakdown(
+  models: CostBreakdown[],
+  externalSummary: ExternalUsageSummaryResponse | null,
+): ModelTokenBreakdown[] {
+  const grouped = new Map<string, ModelTokenBreakdown>()
 
-  if (source === 'jsonl-fallback') {
-    const ageHint = ageDays != null && ageDays > 0 ? ` (Claude 캐시 ${ageDays}일 stale)` : ''
-    return (
-      <span
-        className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 whitespace-nowrap"
-        title={`stats-cache.json이 갱신되지 않아 세션 JSONL에서 직접 집계했습니다${ageHint}.`}
-      >
-        세션 로그 기반{ageHint}
-      </span>
-    )
-  }
+  const addEntry = (
+    modelName: string | null | undefined,
+    providerValue: string | null | undefined,
+    tokens: number,
+    cost: number,
+  ) => {
+    if (tokens <= 0) return
+    const model = modelName?.trim() || 'unknown'
+    const provider = normalizeProvider(providerValue, model)
+    const key = `${provider}:${model}`
+    const existing = grouped.get(key)
 
-  if (ageDays != null && ageDays >= 2) {
-    return (
-      <span
-        className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 whitespace-nowrap"
-        title="Claude Code의 stats-cache.json이 며칠째 갱신되지 않았습니다."
-      >
-        캐시 {ageDays}일 stale
-      </span>
-    )
-  }
-
-  return null
-}
-
-/**
- * Transform model tokens data for stacked bar chart
- * Converts from DailyModelTokens[] to Recharts format
- */
-function transformModelTokensData(
-  data: { date: string; tokensByModel: Record<string, number> }[]
-): Record<string, string | number>[] {
-  return data.map((day) => {
-    const dateKey = new Date(day.date).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-    })
-    return {
-      date: dateKey,
-      ...day.tokensByModel,
+    if (existing) {
+      existing.tokens += tokens
+      existing.cost += cost
+      return
     }
+
+    grouped.set(key, {
+      model,
+      provider,
+      providerLabel: PROVIDER_LABELS[provider] ?? provider,
+      tokens,
+      cost,
+      percentage: 0,
+      color: PROVIDER_COLORS[provider] ?? PROVIDER_COLORS.unknown,
+    })
+  }
+
+  models.forEach((model) => {
+    addEntry(model.value, model.provider, model.tokens, model.cost)
+  })
+
+  externalSummary?.records.forEach((record) => {
+    addEntry(record.model, record.provider, record.total_tokens, record.cost_usd)
+  })
+
+  const entries = Array.from(grouped.values())
+  const totalTokens = entries.reduce((sum, entry) => sum + entry.tokens, 0)
+  return entries
+    .map((entry) => ({
+      ...entry,
+      percentage: totalTokens > 0 ? Math.round((entry.tokens / totalTokens) * 1000) / 10 : 0,
+    }))
+    .sort((a, b) => b.tokens - a.tokens)
+}
+
+function filterAttributedModelPerformance(agents: AgentPerformance[]): AgentPerformance[] {
+  return agents.filter((agent) => {
+    const modelName = agent.agent_name.trim().toLowerCase()
+    return !(
+      modelName === 'unknown (no model info)'
+      && agent.total_tokens === 0
+      && agent.total_cost === 0
+    )
   })
 }
 
-/**
- * Extract all unique model names from weekly model tokens data
- */
-function extractModelNames(
-  data: { date: string; tokensByModel: Record<string, number> }[]
-): string[] {
-  const modelNamesSet = new Set<string>()
-  data.forEach((day) => {
-    Object.keys(day.tokensByModel).forEach((modelName) => {
-      modelNamesSet.add(modelName)
-    })
-  })
-  return Array.from(modelNamesSet)
+function normalizeProvider(provider: string | null | undefined, modelName: string): string {
+  const explicit = provider?.trim().toLowerCase()
+  if (explicit) {
+    if (explicit === 'codex') return 'codex_cli'
+    if (explicit === 'claude') return 'anthropic'
+    if (explicit === 'gemini' || explicit === 'vertex' || explicit === 'google_gemini') {
+      return 'google'
+    }
+    return explicit
+  }
+
+  const model = modelName.toLowerCase()
+  if (model.includes('codex')) return 'codex_cli'
+  if (model.includes('claude')) return 'anthropic'
+  if (model.includes('gpt') || model.includes('openai')) return 'openai'
+  if (model.includes('gemini') || model.includes('vertex')) return 'google'
+  if (model.includes('ollama') || model.includes('llama') || model.includes('mistral')) {
+    return 'ollama'
+  }
+  return 'unknown'
+}
+
+function renderAosModelSourceBadge(models: ModelTokenBreakdown[]): React.ReactNode {
+  if (models.length === 0) return null
+  const providers = Array.from(new Set(models.map((model) => model.providerLabel)))
+  const label = providers.length === 1 ? providers[0] : `${providers.length} providers`
+
+  return (
+    <span
+      className="text-[11px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200 whitespace-nowrap"
+      title="AOS analytics costs.by_model 기준의 모델별 LLM 사용량입니다."
+    >
+      AOS 집계: {label}
+    </span>
+  )
+}
+
+function truncateModelLabel(modelName: string): string {
+  return modelName.length > 18 ? `${modelName.slice(0, 17)}...` : modelName
 }
 
 export default AnalyticsPage

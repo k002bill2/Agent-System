@@ -17,6 +17,7 @@ const API_BASE = import.meta.env.VITE_API_URL || '/api'
 interface CostBreakdown {
   category: string
   value: string
+  provider?: string | null
   cost: number
   tokens: number
   percentage: number
@@ -29,6 +30,20 @@ interface CostAnalytics {
   by_agent: CostBreakdown[]
   by_model: CostBreakdown[]
   projected_monthly: number
+}
+
+interface ClaudePlanLimit {
+  name: string
+  displayName: string
+  utilization: number
+}
+
+interface ClaudeUsageSnapshot {
+  weeklyTotalTokens?: number
+  weeklyModelTokens?: Array<{ date: string; tokensByModel: Record<string, number> }>
+  weeklyModelTokensSource?: 'stats-cache' | 'jsonl-fallback' | 'empty'
+  planLimits?: ClaudePlanLimit[]
+  oauthAvailable?: boolean
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -78,6 +93,34 @@ function getModelFamily(model: string): string {
   return lower
 }
 
+function isLLMProvider(value: string | null | undefined): value is LLMProvider {
+  return Boolean(value && value in PROVIDER_CONFIG)
+}
+
+function getClaudeWeeklyTokens(usage: ClaudeUsageSnapshot | null): number {
+  if (!usage) return 0
+  if (usage.weeklyTotalTokens && usage.weeklyTotalTokens > 0) {
+    return usage.weeklyTotalTokens
+  }
+  return (usage.weeklyModelTokens ?? []).reduce((total, day) => (
+    total + Object.values(day.tokensByModel).reduce((sum, tokens) => sum + tokens, 0)
+  ), 0)
+}
+
+function getClaudePlanLabel(usage: ClaudeUsageSnapshot | null): string {
+  if (!usage) return 'Unavailable'
+  const sevenDay = usage.planLimits?.find((limit) => limit.name === 'sevenDay')
+  if (sevenDay) return `7d ${Math.round(sevenDay.utilization)}%`
+  return usage.oauthAvailable ? 'Live' : 'Local'
+}
+
+function getClaudeSourceLabel(usage: ClaudeUsageSnapshot | null): string {
+  if (!usage) return 'No data'
+  if (usage.weeklyModelTokensSource === 'jsonl-fallback') return 'JSONL'
+  if (usage.weeklyModelTokensSource === 'stats-cache') return 'Cache'
+  return 'No data'
+}
+
 /** Group by_model entries into provider-level usage. */
 function groupByProvider(byModel: CostBreakdown[]): Record<string, ProviderUsage> {
   const result: Record<string, ProviderUsage> = {}
@@ -86,7 +129,7 @@ function groupByProvider(byModel: CostBreakdown[]): Record<string, ProviderUsage
   for (const entry of byModel) {
     if (isIgnoredModel(entry.value)) continue
 
-    const provider = identifyProvider(entry.value)
+    const provider = isLLMProvider(entry.provider) ? entry.provider : identifyProvider(entry.value)
     const key = provider === 'unknown' ? `unknown:${entry.value}` : provider
     const family = getModelFamily(entry.value)
     const existing = result[key]
@@ -121,6 +164,12 @@ function groupByProvider(byModel: CostBreakdown[]): Record<string, ProviderUsage
 async function fetchCostAnalytics(): Promise<CostAnalytics> {
   const res = await fetch(`${API_BASE}/analytics/costs?time_range=all`)
   if (!res.ok) throw new Error('Failed to fetch cost analytics')
+  return res.json()
+}
+
+async function fetchClaudeUsage(): Promise<ClaudeUsageSnapshot> {
+  const res = await fetch(`${API_BASE}/usage`)
+  if (!res.ok) throw new Error('Failed to fetch Claude Code usage')
   return res.json()
 }
 
@@ -175,6 +224,24 @@ interface ProviderCardProps {
   usage: ProviderUsage
 }
 
+interface SourceRowProps {
+  label: string
+  value: string
+  meta: string
+}
+
+function SourceRow({ label, value, meta }: SourceRowProps) {
+  return (
+    <div className="flex items-center justify-between rounded-md border border-gray-100 dark:border-gray-700 px-3 py-2">
+      <div>
+        <div className="text-sm font-medium text-gray-900 dark:text-white">{label}</div>
+        <div className="text-xs text-gray-500 dark:text-gray-400">{meta}</div>
+      </div>
+      <div className="text-sm font-semibold text-gray-900 dark:text-white">{value}</div>
+    </div>
+  )
+}
+
 function ProviderCard({ usage }: ProviderCardProps) {
   const colors = PROVIDER_COLORS[usage.provider]
   const config = PROVIDER_CONFIG[usage.provider]
@@ -207,6 +274,7 @@ function ProviderCard({ usage }: ProviderCardProps) {
 
 export function CostMonitor() {
   const [data, setData] = useState<CostAnalytics | null>(null)
+  const [claudeUsage, setClaudeUsage] = useState<ClaudeUsageSnapshot | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -217,8 +285,12 @@ export function CostMonitor() {
     try {
       setLoading(true)
       setError(null)
-      const result = await fetchCostAnalytics()
+      const [result, claude] = await Promise.all([
+        fetchCostAnalytics(),
+        fetchClaudeUsage().catch(() => null),
+      ])
       setData(result)
+      setClaudeUsage(claude)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load')
     } finally {
@@ -240,6 +312,10 @@ export function CostMonitor() {
   const totalTokens = data?.total_tokens ?? 0
   const totalCost = data?.total_cost ?? 0
   const actualCost = externalSummary?.total_cost_usd ?? null
+  const runtimeProviders = sortedProviders
+    .map(([, usage]) => usage.displayName)
+    .join(', ') || 'No data'
+  const claudeWeeklyTokens = getClaudeWeeklyTokens(claudeUsage)
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
@@ -285,6 +361,25 @@ export function CostMonitor() {
               </span>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Source Split */}
+      <div className="mb-4">
+        <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-3">
+          By Source
+        </h4>
+        <div className="space-y-2">
+          <SourceRow
+            label="AOS Runtime"
+            value={formatTokens(totalTokens)}
+            meta={`${runtimeProviders} · ${formatCost(totalCost)}`}
+          />
+          <SourceRow
+            label="Claude Code"
+            value={claudeUsage ? formatTokens(claudeWeeklyTokens) : loading ? '...' : '0'}
+            meta={`${getClaudePlanLabel(claudeUsage)} · ${getClaudeSourceLabel(claudeUsage)}`}
+          />
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 """Analytics service for dashboard metrics."""
 
 import logging
+import os
 import random
 from collections import defaultdict
 from datetime import UTC, timedelta
@@ -8,6 +9,7 @@ from datetime import UTC, timedelta
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config import get_settings
 from db.models import AuditLogModel, SessionActivityModel, SessionModel, TaskModel
 from models.analytics import (
     ActivityHeatmap,
@@ -58,15 +60,32 @@ def _spread_session_hours(created_at, last_activity):
         cur += timedelta(hours=1)
 
 
+UNKNOWN_MODEL_NAME = "unknown (no model info)"
+
+
 def _normalize_model_name(model: str) -> str:
     """Normalize model name for display."""
     if not model or model == "unknown":
-        return "unknown (no model info)"
+        return UNKNOWN_MODEL_NAME
     if model.startswith("<") and model.endswith(">"):
         # e.g. "<synthetic>" → "synthetic (system-generated)"
         inner = model.strip("<>")
         return f"{inner} (system-generated)"
     return model
+
+
+def _has_attributed_model_usage(session) -> bool:
+    """Return False for zero-usage sessions without model metadata."""
+    model_name = _normalize_model_name(session.model or "unknown")
+    total_tokens = session.total_input_tokens + session.total_output_tokens
+    return not (
+        model_name == UNKNOWN_MODEL_NAME and total_tokens == 0 and session.estimated_cost == 0
+    )
+
+
+def _runtime_provider() -> str:
+    """Return the configured runtime provider used for local session analytics."""
+    return os.getenv("LLM_PROVIDER") or get_settings().llm_provider
 
 
 def _get_time_delta(time_range: TimeRange) -> timedelta:
@@ -616,6 +635,8 @@ class AnalyticsService:
         # Group by model
         by_model: dict[str, list] = defaultdict(list)
         for s in range_sessions:
+            if not _has_attributed_model_usage(s):
+                continue
             by_model[_normalize_model_name(s.model or "unknown")].append(s)
 
         agents = []
@@ -674,10 +695,13 @@ class AnalyticsService:
         total_cost = sum(s.estimated_cost for s in range_sessions)
         total_tokens = sum(s.total_input_tokens + s.total_output_tokens for s in range_sessions)
         total_sessions = len(range_sessions)
+        provider = _runtime_provider()
 
         # By model
         model_costs: dict[str, dict] = defaultdict(lambda: {"cost": 0.0, "tokens": 0})
         for s in range_sessions:
+            if not _has_attributed_model_usage(s):
+                continue
             model = _normalize_model_name(s.model or "unknown")
             model_costs[model]["cost"] += s.estimated_cost
             model_costs[model]["tokens"] += s.total_input_tokens + s.total_output_tokens
@@ -689,6 +713,7 @@ class AnalyticsService:
                 CostBreakdown(
                     category="model",
                     value=model,
+                    provider=provider,
                     cost=round(data["cost"], 4),
                     tokens=data["tokens"],
                     percentage=round(pct, 1),

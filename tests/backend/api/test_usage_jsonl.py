@@ -8,6 +8,7 @@ that cache, leaving the Model Token Breakdown chart empty).
 from __future__ import annotations
 
 import json
+import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -49,6 +50,42 @@ def _assistant_entry(*, ts: datetime, model: str, **usage_kwargs: int) -> dict:
             },
         },
     }
+
+
+def _write_codex_state_db(path: Path, rows: list[dict]) -> None:
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE threads (
+                model_provider TEXT,
+                model TEXT,
+                source TEXT,
+                tokens_used INTEGER,
+                updated_at INTEGER
+            )
+            """
+        )
+        conn.executemany(
+            """
+            INSERT INTO threads (
+                model_provider,
+                model,
+                source,
+                tokens_used,
+                updated_at
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    row.get("model_provider"),
+                    row.get("model"),
+                    row.get("source"),
+                    row.get("tokens_used"),
+                    row.get("updated_at"),
+                )
+                for row in rows
+            ],
+        )
 
 
 def test_aggregates_tokens_per_day_per_model(isolated_jsonl_env: Path) -> None:
@@ -266,6 +303,9 @@ async def test_response_marks_jsonl_fallback_when_stats_cache_empty(
     assert response.weeklyModelTokensSource == "jsonl-fallback"
     assert response.statsCacheAgeDays == 30
     assert any(r.tokensByModel.get("claude-opus-4-7", 0) == 42 for r in response.weeklyModelTokens)
+    assert response.weeklyTotalTokens == 42
+    assert response.weeklyOpusTokens == 42
+    assert response.weeklySonnetTokens == 0
 
 
 @pytest.mark.anyio
@@ -300,3 +340,221 @@ async def test_response_marks_stats_cache_when_data_is_fresh(
     response = await usage_mod.get_usage()
     assert response.weeklyModelTokensSource == "stats-cache"
     assert response.statsCacheAgeDays == 0
+
+
+def test_codex_cli_usage_reads_local_state_db(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Codex local token usage is read from the Codex state DB."""
+    now_ts = int(datetime.now(UTC).timestamp())
+    db_path = tmp_path / "state_5.sqlite"
+    _write_codex_state_db(
+        db_path,
+        [
+            {
+                "model_provider": "openai",
+                "model": "gpt-5.5",
+                "source": "vscode",
+                "tokens_used": 100,
+                "updated_at": now_ts - 60,
+            },
+            {
+                "model_provider": "openai",
+                "model": "codex-auto-review",
+                "source": json.dumps({"subagent": {"other": "guardian"}}),
+                "tokens_used": 50,
+                "updated_at": now_ts - (2 * 24 * 60 * 60),
+            },
+            {
+                "model_provider": "openai",
+                "model": "gpt-5.5",
+                "source": "exec",
+                "tokens_used": 25,
+                "updated_at": now_ts - (10 * 24 * 60 * 60),
+            },
+            {
+                "model_provider": "anthropic",
+                "model": "claude-opus-4-8",
+                "source": "claude",
+                "tokens_used": 999,
+                "updated_at": now_ts,
+            },
+        ],
+    )
+    monkeypatch.setattr(usage_mod, "CODEX_STATE_DB_PATH", db_path)
+
+    response = usage_mod.get_codex_cli_usage()
+
+    assert response.available is True
+    assert response.fiveHourTokens == 100
+    assert response.fiveHourThreads == 1
+    assert response.weeklyTokens == 150
+    assert response.weeklyThreads == 2
+    assert response.totalTokens == 175
+    assert response.totalThreads == 3
+    assert response.byModel[0].name == "gpt-5.5"
+    assert response.byModel[0].tokens == 125
+    assert {source.name for source in response.bySource} >= {"vscode", "subagent", "exec"}
+    assert response.limitStatus == "not_exposed"
+
+
+def test_codex_cli_usage_handles_missing_state_db(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Missing Codex DB returns an unavailable payload instead of raising."""
+    monkeypatch.setattr(usage_mod, "CODEX_STATE_DB_PATH", tmp_path / "missing.sqlite")
+
+    response = usage_mod.get_codex_cli_usage()
+
+    assert response.available is False
+    assert response.weeklyTokens == 0
+    assert "not found" in (response.message or "")
+
+
+def test_codex_plan_usage_reads_chatgpt_subscription_limits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Codex plan usage comes from app-server rate limits, not the local token DB."""
+    monkeypatch.setattr(
+        usage_mod,
+        "_codex_plan_cache",
+        {"response": None, "timestamp": None},
+    )
+
+    def _fake_read_rate_limits() -> dict:
+        return {
+            "rateLimits": {
+                "limitId": "codex",
+                "limitName": None,
+                "primary": {
+                    "usedPercent": 56,
+                    "windowDurationMins": 300,
+                    "resetsAt": 1783174155,
+                },
+                "secondary": {
+                    "usedPercent": 40,
+                    "windowDurationMins": 10080,
+                    "resetsAt": 1783706099,
+                },
+                "credits": {"hasCredits": False, "balance": "0"},
+                "individualLimit": None,
+                "planType": "plus",
+                "rateLimitReachedType": None,
+            },
+            "rateLimitsByLimitId": {
+                "codex": {
+                    "limitId": "codex",
+                    "primary": {
+                        "usedPercent": 56,
+                        "windowDurationMins": 300,
+                        "resetsAt": 1783174155,
+                    },
+                    "secondary": {
+                        "usedPercent": 40,
+                        "windowDurationMins": 10080,
+                        "resetsAt": 1783706099,
+                    },
+                    "credits": {"hasCredits": False, "balance": "0"},
+                    "individualLimit": None,
+                    "planType": "plus",
+                    "rateLimitReachedType": None,
+                }
+            },
+            "rateLimitResetCredits": {"availableCount": 1},
+        }
+
+    monkeypatch.setattr(usage_mod, "_read_codex_app_server_rate_limits", _fake_read_rate_limits)
+
+    response = usage_mod.get_codex_plan_usage()
+
+    assert response.available is True
+    assert response.source == "codex-app-server"
+    assert response.codexLimit is not None
+    assert response.codexLimit.planType == "plus"
+    assert response.codexLimit.primary is not None
+    assert response.codexLimit.primary.usedPercent == 56
+    assert response.codexLimit.primary.remainingPercent == 44
+    assert response.codexLimit.secondary is not None
+    assert response.codexLimit.secondary.remainingPercent == 60
+    assert response.rateLimitResetCredits == {"availableCount": 1}
+
+
+def test_codex_plan_usage_handles_missing_cli(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing Codex binary returns an unavailable payload."""
+    monkeypatch.setattr(
+        usage_mod,
+        "_codex_plan_cache",
+        {"response": None, "timestamp": None},
+    )
+
+    def _missing_read() -> dict:
+        raise FileNotFoundError
+
+    monkeypatch.setattr(usage_mod, "_read_codex_app_server_rate_limits", _missing_read)
+
+    response = usage_mod.get_codex_plan_usage()
+
+    assert response.available is False
+    assert "not found" in (response.message or "")
+
+
+def test_codex_plan_refresh_bypasses_cached_limit_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Manual refresh must not keep showing a stale 0% remaining Codex window."""
+    monkeypatch.setattr(
+        usage_mod,
+        "_codex_plan_cache",
+        {"response": None, "timestamp": None},
+    )
+
+    snapshots = [
+        {
+            "rateLimits": {
+                "limitId": "codex",
+                "primary": {"usedPercent": 100, "windowDurationMins": 300},
+                "secondary": {"usedPercent": 47, "windowDurationMins": 10080},
+                "planType": "plus",
+            },
+            "rateLimitsByLimitId": None,
+            "rateLimitResetCredits": {"availableCount": 1},
+        },
+        {
+            "rateLimits": {
+                "limitId": "codex",
+                "primary": {"usedPercent": 73, "windowDurationMins": 300},
+                "secondary": {"usedPercent": 43, "windowDurationMins": 10080},
+                "planType": "plus",
+            },
+            "rateLimitsByLimitId": None,
+            "rateLimitResetCredits": {"availableCount": 1},
+        },
+    ]
+    calls = {"count": 0}
+
+    def _read_rate_limits() -> dict:
+        index = min(calls["count"], len(snapshots) - 1)
+        calls["count"] += 1
+        return snapshots[index]
+
+    monkeypatch.setattr(usage_mod, "_read_codex_app_server_rate_limits", _read_rate_limits)
+
+    first = usage_mod.get_codex_plan_usage()
+    cached = usage_mod.get_codex_plan_usage()
+    refreshed = usage_mod.get_codex_plan_usage(refresh=True)
+
+    assert first.codexLimit is not None
+    assert first.codexLimit.primary is not None
+    assert first.codexLimit.primary.remainingPercent == 0
+    assert cached.codexLimit is not None
+    assert cached.codexLimit.primary is not None
+    assert cached.codexLimit.primary.remainingPercent == 0
+    assert cached.isCached is True
+    assert refreshed.codexLimit is not None
+    assert refreshed.codexLimit.primary is not None
+    assert refreshed.codexLimit.primary.remainingPercent == 27
+    assert refreshed.codexLimit.secondary is not None
+    assert refreshed.codexLimit.secondary.remainingPercent == 57
+    assert calls["count"] == 2

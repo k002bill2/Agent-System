@@ -32,6 +32,21 @@ function mockCostResponse(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function mockClaudeUsageResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    ok: true,
+    json: () =>
+      Promise.resolve({
+        weeklyTotalTokens: 0,
+        weeklyModelTokens: [],
+        weeklyModelTokensSource: 'empty',
+        planLimits: [],
+        oauthAvailable: false,
+        ...overrides,
+      }),
+  }
+}
+
 describe('CostMonitor', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -55,7 +70,7 @@ describe('CostMonitor', () => {
     render(<CostMonitor />)
 
     await waitFor(() => {
-      expect(screen.getByText('0')).toBeInTheDocument()
+      expect(screen.getAllByText('0').length).toBeGreaterThanOrEqual(1)
       expect(screen.getByText('FREE')).toBeInTheDocument()
     })
   })
@@ -75,8 +90,62 @@ describe('CostMonitor', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Anthropic Claude')).toBeInTheDocument()
-      // 1.5K appears in both Total and Provider card
-      expect(screen.getAllByText('1.5K')).toHaveLength(2)
+      expect(screen.getAllByText('1.5K').length).toBeGreaterThanOrEqual(2)
+    })
+  })
+
+  it('renders Claude Code usage as a separate source', async () => {
+    mockFetch.mockImplementation((url: string) => {
+      if (url.includes('/usage')) {
+        return Promise.resolve(mockClaudeUsageResponse({
+          weeklyTotalTokens: 42000,
+          weeklyModelTokensSource: 'jsonl-fallback',
+          planLimits: [{ name: 'sevenDay', displayName: 'All models', utilization: 50 }],
+          oauthAvailable: true,
+        }))
+      }
+      return Promise.resolve(mockCostResponse({
+        total_cost: 0,
+        total_tokens: 1500,
+        by_model: [
+          { category: 'model', value: 'claude-opus-4-8', provider: 'codex_cli', cost: 0, tokens: 1500, percentage: 100 },
+        ],
+      }))
+    })
+
+    render(<CostMonitor />)
+
+    await waitFor(() => {
+      expect(screen.getByText('AOS Runtime')).toBeInTheDocument()
+      expect(screen.getByText('Claude Code')).toBeInTheDocument()
+      expect(screen.getByText('42.0K')).toBeInTheDocument()
+      expect(screen.getByText('7d 50% · JSONL')).toBeInTheDocument()
+    })
+  })
+
+  it('uses explicit provider metadata before model-name inference', async () => {
+    mockFetch.mockResolvedValue(
+      mockCostResponse({
+        total_cost: 0,
+        total_tokens: 1500,
+        by_model: [
+          {
+            category: 'model',
+            value: 'claude-opus-4-8',
+            provider: 'codex_cli',
+            cost: 0,
+            tokens: 1500,
+            percentage: 100,
+          },
+        ],
+      }),
+    )
+
+    render(<CostMonitor />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Codex CLI')).toBeInTheDocument()
+      expect(screen.queryByText('Anthropic Claude')).not.toBeInTheDocument()
     })
   })
 
@@ -94,8 +163,7 @@ describe('CostMonitor', () => {
     render(<CostMonitor />)
 
     await waitFor(() => {
-      // 1.0M appears in both Total and Provider card
-      expect(screen.getAllByText('1.0M')).toHaveLength(2)
+      expect(screen.getAllByText('1.0M').length).toBeGreaterThanOrEqual(2)
     })
   })
 
