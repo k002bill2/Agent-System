@@ -5,11 +5,25 @@ Open projects in Warp terminal, check status, cleanup configs.
 
 import os
 import re
+from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
+from models.llm_usage import (
+    LLMRuntimeMode,
+    LLMUsageMeasurementMethod,
+    LLMUsageRecordCreate,
+    LLMUsageSource,
+    LLMUsageStatus,
+)
 from models.project import get_project
+from services.llm_usage_ledger_service import (
+    LLMUsageQuotaExceededError,
+    enforce_usage_quota_preflight_best_effort,
+    record_usage_best_effort,
+)
 from services.warp_service import get_warp_service
 
 # Docker mode: skip host filesystem validations
@@ -58,6 +72,71 @@ class WarpOpenResponse(BaseModel):
     opened_as: str | None = None  # "tab" or "window"
 
 
+def _project_value(project: Any, key: str) -> Any:
+    if isinstance(project, dict):
+        return project.get(key)
+    return getattr(project, key, None)
+
+
+def _estimate_warp_launch_tokens(command: str | None) -> int:
+    if not command:
+        return 1
+    return max(1, len(command.split()) * 2)
+
+
+async def _enforce_warp_launch_preflight(project: Any, command: str | None) -> int:
+    estimated_tokens = _estimate_warp_launch_tokens(command)
+    await enforce_usage_quota_preflight_best_effort(
+        user_id=None,
+        organization_id=_project_value(project, "organization_id"),
+        estimated_tokens=estimated_tokens,
+    )
+    return estimated_tokens
+
+
+async def _record_warp_launch_usage(
+    *,
+    project: Any,
+    request: WarpOpenRequest,
+    result: dict[str, Any],
+    estimated_tokens: int,
+    started_at: datetime,
+) -> None:
+    status = LLMUsageStatus.SUCCESS if result.get("success") else LLMUsageStatus.ERROR
+    await record_usage_best_effort(
+        LLMUsageRecordCreate(
+            user_id=None,
+            organization_id=_project_value(project, "organization_id"),
+            provider="claude_cli",
+            mode=LLMRuntimeMode.CLI,
+            source=LLMUsageSource.WARP_LAUNCH,
+            model="claude-code-cli",
+            input_tokens=estimated_tokens if request.command else None,
+            output_tokens=None,
+            measurement_method=(
+                LLMUsageMeasurementMethod.ESTIMATED
+                if request.command
+                else LLMUsageMeasurementMethod.UNKNOWN
+            ),
+            status=status,
+            project_id=request.project_id,
+            latency_ms=int((datetime.now(tz=UTC) - started_at).total_seconds() * 1000),
+            error_message=result.get("error"),
+            metadata={
+                "event": "warp_launch_created" if result.get("success") else "warp_launch_failed",
+                "opened_as": result.get("opened_as"),
+                "open_via_frontend": result.get("open_via_frontend", False),
+                "uri": result.get("uri"),
+                "branch_name": request.branch_name,
+                "has_prompt": bool(request.command),
+                "image_count": len(request.image_paths or []),
+            },
+            started_at=started_at,
+            completed_at=datetime.now(tz=UTC),
+        )
+    )
+
+
 @router.post("/warp/open", response_model=WarpOpenResponse)
 async def open_in_warp(request: WarpOpenRequest):
     """
@@ -91,9 +170,16 @@ async def open_in_warp(request: WarpOpenRequest):
             image_paths=request.image_paths,
         )
         tab_title = request.title or "Claude CLI"
+        try:
+            estimated_tokens = await _enforce_warp_launch_preflight(project, request.command)
+        except LLMUsageQuotaExceededError as exc:
+            raise HTTPException(status_code=429, detail=str(exc)) from exc
     else:
         actual_command = request.command
         tab_title = request.title
+        estimated_tokens = 0
+
+    started_at = datetime.now(tz=UTC)
 
     # Open Warp with or without command
     if actual_command:
@@ -108,6 +194,15 @@ async def open_in_warp(request: WarpOpenRequest):
         result = warp.open_path(
             path=project.path,
             new_window=request.new_window,
+        )
+
+    if request.use_claude_cli:
+        await _record_warp_launch_usage(
+            project=project,
+            request=request,
+            result=result,
+            estimated_tokens=estimated_tokens,
+            started_at=started_at,
         )
 
     return WarpOpenResponse(

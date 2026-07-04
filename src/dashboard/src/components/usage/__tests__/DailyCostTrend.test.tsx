@@ -45,7 +45,7 @@ const makeRecord = (overrides?: Partial<UnifiedUsageRecord>): UnifiedUsageRecord
 describe('DailyCostTrend', () => {
   it('renders title', () => {
     render(<DailyCostTrend records={[]} />)
-    expect(screen.getByText('Daily Usage Trend')).toBeInTheDocument()
+    expect(screen.getByText('Daily Estimated Cost Trend')).toBeInTheDocument()
   })
 
   it('shows empty state when no records', () => {
@@ -63,21 +63,22 @@ describe('DailyCostTrend', () => {
       <DailyCostTrend
         records={[
           makeRecord({ provider: 'openai', cost_usd: 1.0 }),
-          makeRecord({ provider: 'anthropic', cost_usd: 0.5, id: 'rec-2' }),
+          makeRecord({ provider: 'codex_cli', cost_usd: 0.5, id: 'rec-2' }),
         ]}
       />
     )
     expect(screen.getByTestId('area-openai')).toBeInTheDocument()
-    expect(screen.getByTestId('area-anthropic')).toBeInTheDocument()
+    expect(screen.getByTestId('area-codex_cli')).toBeInTheDocument()
     expect(screen.queryByTestId('area-github_copilot')).not.toBeInTheDocument()
   })
 
-  it('renders token usage even when cost is zero', () => {
+  it('does not render chart for empty cost records', () => {
     render(
       <DailyCostTrend
         records={[makeRecord({ cost_usd: 0 })]}
       />
     )
-    expect(screen.getByTestId('area-openai')).toBeInTheDocument()
+    // Provider with 0 cost should not get an Area
+    expect(screen.queryByTestId('area-openai')).not.toBeInTheDocument()
   })
 })

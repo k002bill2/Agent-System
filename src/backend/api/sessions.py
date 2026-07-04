@@ -6,10 +6,14 @@ task operations (submit, cancel, retry, pause, resume, delete, tree).
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import get_engine
+from api.deps import get_current_user_optional, get_db_session, get_engine
+from db.models import UserModel
+from models.llm_access import LLMAccessResponse
 from models.task import TaskCreate, TaskTree
 from orchestrator import OrchestrationEngine
+from services.llm_access_service import get_access_for_user
 
 router = APIRouter(tags=["orchestration"])
 
@@ -61,6 +65,21 @@ class PauseTaskRequest(BaseModel):
     reason: str | None = Field(None, description="Optional reason for pausing")
 
 
+async def _get_llm_access_for_session(
+    current_user: UserModel | None,
+    db: AsyncSession,
+    organization_id: str | None,
+) -> LLMAccessResponse | None:
+    """Resolve LLM access only for authenticated users."""
+    if not current_user:
+        return None
+    return await get_access_for_user(
+        db,
+        str(current_user.id),
+        organization_id=organization_id,
+    )
+
+
 # ─────────────────────────────────────────────────────────────
 # Health
 # ─────────────────────────────────────────────────────────────
@@ -81,12 +100,15 @@ async def health_check():
 async def create_session(
     request: SessionCreate = None,
     engine: OrchestrationEngine = Depends(get_engine),
+    current_user: UserModel | None = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Create a new orchestration session with optional project context."""
     from models.project import get_project
 
     project_id = request.project_id if request else None
     organization_id = request.organization_id if request else None
+    user_id = str(current_user.id) if current_user else None
 
     # Validate project if specified
     project = None
@@ -97,9 +119,16 @@ async def create_session(
 
     # Create session with quota enforcement
     try:
+        llm_access = await _get_llm_access_for_session(
+            current_user,
+            db,
+            organization_id,
+        )
         session_id = await engine.create_session(
+            user_id=user_id,
             project=project,
             organization_id=organization_id,
+            llm_access=llm_access,
         )
     except ValueError as e:
         # Quota exceeded
@@ -248,14 +277,26 @@ async def submit_task(
     session_id: str,
     task: TaskCreate,
     engine: OrchestrationEngine = Depends(get_engine),
+    current_user: UserModel | None = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Submit a task for orchestration."""
     state = await engine.get_session(session_id)
     if not state:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    llm_access = await _get_llm_access_for_session(
+        current_user,
+        db,
+        state.get("organization_id"),
+    )
+
     # Run orchestration
-    final_state = await engine.run(session_id, task.description)
+    final_state = await engine.run(
+        session_id,
+        task.description,
+        llm_access=llm_access,
+    )
 
     return TaskResponse(
         session_id=session_id,

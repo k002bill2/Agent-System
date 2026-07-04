@@ -730,6 +730,7 @@ async def execute_tool(
     tool_name: str,
     arguments: dict[str, Any],
     working_directory: str | None = None,
+    usage_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Execute a playground tool by name.
@@ -738,6 +739,7 @@ async def execute_tool(
         tool_name: Name of the tool to execute
         arguments: Tool arguments
         working_directory: Working directory for file/code operations
+        usage_context: Optional ledger context for LLM-backed tools
 
     Returns:
         Tool execution result

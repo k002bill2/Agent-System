@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { apiClient } from '../services/apiClient'
 
 export type Theme = 'light' | 'dark' | 'system'
 export type LLMProvider = 'anthropic' | 'openai' | 'google' | 'codex_cli' | 'local'
@@ -89,6 +90,7 @@ interface SettingsState {
   ) => void
   setPreferredTerminal: (terminal: TerminalType) => void
   fetchModels: () => Promise<void>
+  setDefaultModel: (modelId: string) => Promise<boolean>
   getModelsForProvider: (provider: LLMProvider) => LLMModel[]
 }
 
@@ -187,6 +189,32 @@ export const useSettingsStore = create<SettingsState>()(
             modelsLoading: false,
             modelsError: error instanceof Error ? error.message : 'Failed to fetch models',
           })
+        }
+      },
+
+      setDefaultModel: async (modelId) => {
+        set({ modelsError: null })
+
+        try {
+          const updated = await apiClient.patch<LLMModel>(
+            `/api/llm/models/${encodeURIComponent(modelId)}`,
+            { is_default: true },
+          )
+          set(current => ({
+            availableModels: current.availableModels.map(model => {
+              if (model.provider !== updated.provider) return model
+              return {
+                ...model,
+                is_default: model.id === updated.id,
+              }
+            }),
+          }))
+          return true
+        } catch (error) {
+          set({
+            modelsError: error instanceof Error ? error.message : 'Failed to set default model',
+          })
+          return false
         }
       },
 

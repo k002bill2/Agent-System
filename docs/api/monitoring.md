@@ -1,6 +1,6 @@
 # API Reference - Monitoring
 
-사용량/분석, 외부 LLM 사용량, 감사 로그, 헬스체크, 알림, 조직, 관리자, Rate Limit, 비용 할당, RLHF 피드백 API입니다.
+사용량/분석, 내부 LLM usage ledger, External Usage reconciliation, 감사 로그, 헬스체크, 알림, 조직, 관리자, Rate Limit, 비용 할당, RLHF 피드백 API입니다.
 
 ## Base URL
 - Development: `http://localhost:8000`
@@ -83,14 +83,14 @@
 
 ---
 
-## External Usage (외부 LLM 사용량)
+## External Usage / LLM Usage Reconciliation
 
-조회 엔드포인트는 **인증 필수**(`get_current_user`). org 단위 사용량/비용을 노출하므로 무인증 접근을 차단한다.
+조회 엔드포인트는 **인증 필수**(`get_current_user`). 기본 사용량 source는 외부 provider billing API가 아니라 내부 `llm_usage_ledger`다. org 단위 사용량/비용 추정치를 노출하므로 무인증 접근을 차단한다.
 
 | Method | Path | 인증 | 설명 |
 |--------|------|------|------|
-| GET | `/api/external-usage/summary` | user | 외부 LLM 프로바이더 사용량 요약 |
-| GET | `/api/external-usage/providers` | user | 지원 프로바이더 목록 및 설정 상태 |
+| GET | `/api/external-usage/summary` | user | 내부 LLM usage summary와 reconciliation metadata |
+| GET | `/api/external-usage/providers` | user | reconciliation provider 목록 및 설정 상태 |
 | GET | `/api/external-usage/providers/{provider}/health` | user | 프로바이더 연결 상태 확인 |
 | POST | `/api/external-usage/sync` | user | 사용량 데이터 수동 동기화 |
 
@@ -98,6 +98,8 @@
 - `start_time`: 시작 시간 (기본: 30일 전)
 - `end_time`: 종료 시간 (기본: 현재)
 - `providers`: 필터할 프로바이더 목록
+
+`GET /summary`의 primary usage source는 내부 `llm_usage_ledger`입니다. 응답에는 `reconciliation` 객체가 포함되며, `primary_source`, `provider_billing_enabled`, 내부 ledger totals, provider billing totals, provider별 `delta_tokens`/`delta_cost_usd`/`status`를 제공합니다. Provider billing 수집은 `EXTERNAL_USAGE_INCLUDE_PROVIDER_BILLING=true`일 때만 비교값으로 포함됩니다.
 
 ### Deployment Usage Keys (admin/manager 전용)
 

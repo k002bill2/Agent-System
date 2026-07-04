@@ -69,10 +69,10 @@ import { cn } from '@/lib/utils';
 | `ProjectManagementPage` | `/project-management` | DB 기반 프로젝트 레지스트리 관리 (CRUD, soft-delete, 복원) |
 | `OrganizationsPage` | `/organizations` | 조직 관리 (Overview/Members/Settings 3탭, 소스 유저 매핑) |
 | `WorkflowsPage` | `/workflows` | 워크플로우 자동화 (CI/CD 파이프라인 관리) |
-| `ExternalUsagePage` | `/external-usage` | 외부 LLM 프로바이더 + 로컬 CLI(Claude/Codex) 사용량 통합 모니터링 (비용·토큰, 누적/트렌드 지표는 토큰 기준, 프로바이더별 현황) |
+| `ExternalUsagePage` | `/external-usage` | 내부 LLM ledger 사용량과 optional provider billing reconciliation (codex_cli/claude_cli/internal_cli 포함, 프로바이더별 현황) |
 | `AdminPage` | `/admin` | 관리자 페이지 (사용자 관리, 메뉴 설정, 시스템 정보, External Sources) |
 | `SessionsPage` | `/sessions` | 세션 활동 뷰 (ClaudeCodeActivity 래핑) |
-| `SettingsPage` | `/settings` | 시스템 설정 (Claude Code OAuth 인증, 터미널 감지) |
+| `SettingsPage` | `/settings` | 시스템 설정 (LLM Access, CLI profile, fallback API 키, Claude Code OAuth, 터미널 감지) |
 | `LoginPage` | `/login` | OAuth/Email 로그인 |
 | `RegisterPage` | `/register` | 이메일/비밀번호 회원가입 |
 | `AuthCallbackPage` | `/auth/callback` | OAuth 콜백 처리 (App.tsx에서 eager 로딩) |
@@ -301,9 +301,11 @@ import { cn } from '@/lib/utils';
 | `CostMonitor` | 비용 모니터링 패널 (provider별 소스 표기, Claude 주간 토큰 합산) |
 | `UsageProgressBar` | 사용량 진행바 |
 | `ClaudeUsageDashboard` | Claude 사용량 대시보드 (Codex 5시간/주간 한도 카드 + combined weekly tokens 통합) |
-| `DailyCostTrend` | 일간 사용량 추이 차트 ("Daily Usage Trend", 누적 지표 토큰 기준, `codex_cli` 시리즈 포함) |
-| `LLMAccountsSettings` | LLM 계정/API 키 설정 |
-| `MemberUsageTable` | 멤버별 사용량 테이블 ("Total Usage": 비용 우선, 없으면 토큰 폴백 정렬, `codex_cli` 포함) |
+| `DailyCostTrend` | 일간 비용 추이 차트 |
+| `LLMAccessSettings` | CLI profile, entitlement, API fallback 정책 설정 |
+| `LLMAccountsSettings` | Advanced fallback/compatibility API 키 설정 |
+| `AdminKeyManager` | provider billing reconciliation key 관리 |
+| `MemberUsageTable` | 멤버별 사용량 테이블 |
 
 ### Terminal Components
 
@@ -383,8 +385,10 @@ import { cn } from '@/lib/utils';
 | `useMenuVisibilityStore` | `menuVisibility.ts` | 메뉴 가시성 및 순서 |
 | `useProjectAccessStore` | `projectAccess.ts` | 프로젝트별 멤버/역할 관리 |
 | `useWorkflowStore` | `workflows.ts` | 워크플로우 CRUD, 실행, 시크릿, 스케줄 |
-| `useExternalUsageStore` | `externalUsage.ts` | 외부 LLM 프로바이더 사용량 추적 |
-| `useLLMCredentialStore` | `llmCredentials.ts` | LLM 프로바이더 자격증명/API 키 관리 |
+| `useExternalUsageStore` | `externalUsage.ts` | 내부 ledger 기반 LLM Usage와 reconciliation summary |
+| `useLLMAccessStore` | `llmAccess.ts` | CLI profile과 user/org entitlement 관리 |
+| `useLLMUsageStore` | `llmUsage.ts` | 내부 `llm_usage_ledger` summary 조회 |
+| `useLLMCredentialStore` | `llmCredentials.ts` | fallback/compatibility API 키 관리 |
 | `useInfraStatusStore` | `infraStatus.ts` | 인프라 서비스 상태 관리 (Docker, 포트 체크) |
 
 ### Store Pattern
@@ -553,8 +557,11 @@ src/dashboard/
 │   │   │   ├── ClaudeUsageDashboard.tsx
 │   │   │   ├── UsageProgressBar.tsx
 │   │   │   ├── ContextWindowMeter.tsx
+│   │   │   ├── LLMAccessSettings.tsx
+│   │   │   ├── llm-access/
 │   │   │   ├── MemberUsageTable.tsx
 │   │   │   ├── DailyCostTrend.tsx
+│   │   │   ├── AdminKeyManager.tsx
 │   │   │   └── LLMAccountsSettings.tsx
 │   │   ├── admin/              # 관리자 설정
 │   │   │   ├── MenuSettingsTab.tsx

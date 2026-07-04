@@ -1,13 +1,12 @@
 """Tests for OrganizationService (in-memory mode, USE_DATABASE=false)."""
 
-import pytest
-from unittest.mock import patch, MagicMock
-from datetime import datetime, timedelta
+from datetime import timedelta
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from utils.time import utcnow
+import pytest
 
 import services.organization_service as org_module
-from services.organization_service import OrganizationService
 from models.organization import (
     PLAN_LIMITS,
     InviteMemberRequest,
@@ -20,11 +19,37 @@ from models.organization import (
     OrganizationStatus,
     OrganizationUpdate,
 )
-
+from services.organization_service import OrganizationService
+from utils.time import utcnow
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+class _FakeScalars:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def all(self):
+        return self._rows
+
+
+class _FakeResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def scalars(self):
+        return _FakeScalars(self._rows)
+
+
+class _FakeSingleResult:
+    def __init__(self, row):
+        self._row = row
+
+    def scalar_one_or_none(self):
+        return self._row
+
 
 def _reset_global_state():
     """Wipe all in-memory stores and indexes used by the service."""
@@ -683,6 +708,29 @@ class TestOrganizationService:
         result = OrganizationService.track_token_usage("bad-org", 100)
         assert result is False
 
+    @pytest.mark.asyncio
+    async def test_track_token_usage_async_can_skip_quota_and_commit_for_ledger_post_processing(self):
+        """Ledger post-processing updates counters inside the caller transaction."""
+        org = SimpleNamespace(id="org-1", tokens_used_this_month=100)
+        db = SimpleNamespace(
+            execute=AsyncMock(return_value=_FakeSingleResult(org)),
+            commit=AsyncMock(),
+        )
+
+        result = await OrganizationService.track_token_usage_async(
+            db,
+            "org-1",
+            500,
+            user_id="user-1",
+            commit=False,
+            enforce_quota=False,
+            record_member_usage=False,
+        )
+
+        assert result is True
+        assert org.tokens_used_this_month == 600
+        db.commit.assert_not_awaited()
+
     def test_reset_monthly_usage_zeroes_all_orgs(self):
         """reset_monthly_usage sets tokens_used_this_month=0 for every org."""
         org_a = _create_org(slug="org-a")
@@ -729,3 +777,91 @@ class TestOrganizationService:
         )
         assert owner_summary is not None
         assert owner_summary.tokens_used_this_month == 300
+
+    @pytest.mark.asyncio
+    async def test_get_member_usage_async_prefers_llm_usage_ledger(self):
+        """Async member usage should aggregate internal LLM ledger rows first."""
+        member = OrganizationMember(
+            id="member-1",
+            organization_id="org-1",
+            user_id="user-1",
+            email="user@example.com",
+            name="User One",
+            role=MemberRole.ADMIN,
+        )
+        row = SimpleNamespace(
+            id="ledger-1",
+            organization_id="org-1",
+            user_id="user-1",
+            input_tokens=120,
+            output_tokens=30,
+            total_tokens=150,
+            estimated_cost_usd=0.0,
+            session_id="session-1",
+            task_id=None,
+            analysis_id=None,
+            model="codex-cli",
+            started_at=utcnow(),
+        )
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=_FakeResult([row]))
+
+        with patch.object(
+            OrganizationService,
+            "get_members_async",
+            new=AsyncMock(return_value=[member]),
+        ):
+            response = await OrganizationService.get_member_usage_async(db, "org-1")
+
+        assert response.organization_id == "org-1"
+        assert response.total_tokens == 150
+        assert response.members[0].user_id == "user-1"
+        assert response.members[0].tokens_used_this_month == 150
+        assert response.members[0].sessions_this_month == 1
+
+    @pytest.mark.asyncio
+    async def test_get_member_usage_detail_async_prefers_llm_usage_ledger(self):
+        """Async member detail should expose daily/model breakdown from the ledger."""
+        member = OrganizationMember(
+            id="member-1",
+            organization_id="org-1",
+            user_id="user-1",
+            email="user@example.com",
+            name="User One",
+            role=MemberRole.ADMIN,
+        )
+        row = SimpleNamespace(
+            id="ledger-1",
+            organization_id="org-1",
+            user_id="user-1",
+            input_tokens=80,
+            output_tokens=20,
+            total_tokens=100,
+            estimated_cost_usd=0.01,
+            session_id="session-1",
+            task_id=None,
+            analysis_id=None,
+            model="gpt-5",
+            started_at=utcnow(),
+        )
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=_FakeResult([row]))
+
+        with patch.object(
+            OrganizationService,
+            "get_member_by_user_async",
+            new=AsyncMock(return_value=member),
+        ):
+            detail = await OrganizationService.get_member_usage_detail_async(
+                db,
+                "org-1",
+                "user-1",
+            )
+
+        assert detail is not None
+        assert detail.tokens_used_this_month == 100
+        assert detail.sessions_this_month == 1
+        assert detail.total_cost_usd == 0.01
+        assert detail.model_usage[0].model == "gpt-5"
+        assert detail.model_usage[0].tokens == 100
+        assert detail.daily_usage[0].tokens == 100

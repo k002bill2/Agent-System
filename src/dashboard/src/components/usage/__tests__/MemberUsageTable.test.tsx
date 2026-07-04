@@ -62,16 +62,22 @@ describe('MemberUsageTable', () => {
     expect(screen.getByText('alice@test.com')).toBeInTheDocument()
   })
 
-  it('renders cost column', () => {
+  it('renders token-first usage with estimated cost', () => {
     render(<MemberUsageTable records={[makeRecord()]} isLoading={false} />)
-    // "$5.00" appears in both the provider column and total column
-    expect(screen.getAllByText('$5.00').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('1.5K tokens').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Estimated cost $5.00').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('renders provider column headers', () => {
-    render(<MemberUsageTable records={[makeRecord()]} isLoading={false} />)
+  it('renders provider column headers including internal CLI providers', () => {
+    render(
+      <MemberUsageTable
+        records={[makeRecord(), makeRecord({ id: 'r2', provider: 'codex_cli' })]}
+        isLoading={false}
+      />
+    )
     expect(screen.getByText('OpenAI')).toBeInTheDocument()
-    expect(screen.getByText('Total Usage')).toBeInTheDocument()
+    expect(screen.getByText('Codex CLI')).toBeInTheDocument()
+    expect(screen.getByText('Total Tokens')).toBeInTheDocument()
   })
 
   it('renders search input', () => {
@@ -105,23 +111,23 @@ describe('MemberUsageTable', () => {
     expect(screen.getByText('No members match your search.')).toBeInTheDocument()
   })
 
-  it('sorts by total usage on header click', () => {
+  it('sorts by total tokens on header click', () => {
     const records = [
-      makeRecord({ user_email: 'cheap@test.com', cost_usd: 1, id: 'r1', user_id: 'u1' }),
-      makeRecord({ user_email: 'expensive@test.com', cost_usd: 100, id: 'r2', user_id: 'u2' }),
+      makeRecord({ user_email: 'small@test.com', total_tokens: 100, cost_usd: 1, id: 'r1', user_id: 'u1' }),
+      makeRecord({ user_email: 'large@test.com', total_tokens: 2000, cost_usd: 100, id: 'r2', user_id: 'u2' }),
     ]
 
     render(<MemberUsageTable records={records} isLoading={false} />)
 
-    // Default: descending (expensive first)
+    // Default: descending (largest token total first)
     const rows = screen.getAllByRole('row')
-    // rows[0] is header, rows[1] should be expensive
-    expect(rows[1]).toHaveTextContent('expensive@test.com')
+    // rows[0] is header, rows[1] should be largest
+    expect(rows[1]).toHaveTextContent('large@test.com')
 
     // Click to toggle sort
-    fireEvent.click(screen.getByText('Total Usage'))
+    fireEvent.click(screen.getByText('Total Tokens'))
     const rowsAfter = screen.getAllByRole('row')
-    expect(rowsAfter[1]).toHaveTextContent('cheap@test.com')
+    expect(rowsAfter[1]).toHaveTextContent('small@test.com')
   })
 
   it('shows warning icon for high cost members', () => {

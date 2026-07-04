@@ -2,6 +2,16 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { useSettingsStore, getModelsForProvider } from '../settings'
 import type { LLMModel } from '../settings'
 
+const { mockApiPatch } = vi.hoisted(() => ({
+  mockApiPatch: vi.fn(),
+}))
+
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    patch: mockApiPatch,
+  },
+}))
+
 // Helper to build a minimal LLMModel object
 const makeModel = (overrides: Partial<LLMModel> & { id: string; provider: string }): LLMModel => ({
   display_name: overrides.id,
@@ -16,6 +26,7 @@ const makeModel = (overrides: Partial<LLMModel> & { id: string; provider: string
 
 describe('settings store', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     // Reset store to default state
     useSettingsStore.setState({
       backendUrl: 'http://localhost:8000',
@@ -273,6 +284,56 @@ describe('settings store', () => {
       await useSettingsStore.getState().fetchModels()
 
       expect(mockFetch).toHaveBeenCalledWith('http://api.example.com:9000/api/llm/models')
+    })
+  })
+
+  describe('setDefaultModel', () => {
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    it('patches selected model as default and updates same-provider models locally', async () => {
+      const oldDefault = makeModel({
+        id: 'codex-cli',
+        provider: 'codex_cli',
+        is_default: true,
+      })
+      const newDefault = makeModel({
+        id: 'codex-cli-pro',
+        provider: 'codex_cli',
+        is_default: false,
+      })
+      const googleDefault = makeModel({
+        id: 'gemini-3-flash-preview',
+        provider: 'google',
+        is_default: true,
+      })
+      useSettingsStore.setState({
+        backendUrl: 'http://api.example.com:9000',
+        availableModels: [oldDefault, newDefault, googleDefault],
+      })
+
+      mockApiPatch.mockResolvedValueOnce({ ...newDefault, is_default: true })
+
+      const result = await useSettingsStore.getState().setDefaultModel('codex-cli-pro')
+
+      expect(result).toBe(true)
+      expect(mockApiPatch).toHaveBeenCalledWith('/api/llm/models/codex-cli-pro', {
+        is_default: true,
+      })
+      const models = useSettingsStore.getState().availableModels
+      expect(models.find(model => model.id === 'codex-cli')?.is_default).toBe(false)
+      expect(models.find(model => model.id === 'codex-cli-pro')?.is_default).toBe(true)
+      expect(models.find(model => model.id === 'gemini-3-flash-preview')?.is_default).toBe(true)
+    })
+
+    it('stores an error when default model update fails', async () => {
+      mockApiPatch.mockRejectedValueOnce(new Error('Forbidden'))
+
+      const result = await useSettingsStore.getState().setDefaultModel('codex-cli-pro')
+
+      expect(result).toBe(false)
+      expect(useSettingsStore.getState().modelsError).toBe('Forbidden')
     })
   })
 

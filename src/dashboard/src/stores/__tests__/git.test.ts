@@ -186,6 +186,10 @@ describe('git store', () => {
 
       expect(result).toEqual(status)
       expect(useGitStore.getState().workingStatus).toEqual(status)
+      expect(mockApiClient.get).toHaveBeenCalledWith(
+        '/api/git/projects/p1/working-status',
+        { timeout: 120_000 }
+      )
     })
   })
 
@@ -243,6 +247,11 @@ describe('git store', () => {
       expect(result).toEqual(drafts)
       expect(useGitStore.getState().draftCommits).toEqual(drafts)
       expect(useGitStore.getState().isGeneratingDrafts).toBe(false)
+      expect(mockApiClient.post).toHaveBeenCalledWith(
+        '/api/git/projects/p1/draft-commits',
+        { staged_only: false },
+        { timeout: 180_000 }
+      )
     })
 
     it('returns empty on failure', async () => {
@@ -306,6 +315,10 @@ describe('git store', () => {
       expect(useGitStore.getState().branches).toHaveLength(2)
       expect(useGitStore.getState().currentBranch).toBe('main')
       expect(useGitStore.getState().protectedBranches).toEqual(['main'])
+      expect(mockApiClient.get).toHaveBeenCalledWith(
+        '/api/git/projects/p1/branches',
+        { timeout: 120_000 }
+      )
     })
   })
 
@@ -347,6 +360,10 @@ describe('git store', () => {
       await useGitStore.getState().fetchCommits('p1', 'main')
 
       expect(useGitStore.getState().commits).toEqual(commits)
+      expect(mockApiClient.get).toHaveBeenCalledWith(
+        '/api/git/projects/p1/commits?branch=main&limit=50',
+        { timeout: 120_000 }
+      )
     })
   })
 
@@ -608,6 +625,10 @@ describe('git store', () => {
       expect(useGitStore.getState().remotes).toHaveLength(1)
       // Auto-detects github repo
       expect(useGitStore.getState().githubRepo).toBe('owner/repo')
+      expect(mockApiClient.get).toHaveBeenCalledWith(
+        '/api/git/projects/p1/remotes',
+        { timeout: 120_000 }
+      )
     })
 
     it('addRemote', async () => {
@@ -639,6 +660,11 @@ describe('git store', () => {
       const result = await useGitStore.getState().fetchRemote('p1')
 
       expect(result).toBe(true)
+      expect(mockApiClient.post).toHaveBeenCalledWith(
+        '/api/git/projects/p1/fetch?',
+        undefined,
+        { timeout: 180_000 }
+      )
     })
 
     it('pullRemote refreshes branches and commits', async () => {
@@ -650,6 +676,11 @@ describe('git store', () => {
       const result = await useGitStore.getState().pullRemote('p1', 'main')
 
       expect(result).toBe(true)
+      expect(mockApiClient.post).toHaveBeenCalledWith(
+        '/api/git/projects/p1/pull?branch=main',
+        undefined,
+        { timeout: 180_000 }
+      )
     })
 
     it('pushRemote', async () => {
@@ -659,6 +690,11 @@ describe('git store', () => {
       const result = await useGitStore.getState().pushRemote('p1', 'main')
 
       expect(result).toBe(true)
+      expect(mockApiClient.post).toHaveBeenCalledWith(
+        '/api/git/projects/p1/push?branch=main',
+        undefined,
+        { timeout: 180_000 }
+      )
     })
 
     it('fetchRemote handles failure', async () => {
@@ -681,6 +717,10 @@ describe('git store', () => {
       await useGitStore.getState().fetchBranchProtectionRules('p1')
 
       expect(useGitStore.getState().branchProtectionRules).toEqual(rules)
+      expect(mockApiClient.get).toHaveBeenCalledWith(
+        '/api/git/projects/p1/branch-protection',
+        { timeout: 120_000 }
+      )
     })
 
     it('createBranchProtectionRule', async () => {

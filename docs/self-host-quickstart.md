@@ -27,7 +27,7 @@
 | Docker Compose | 2.20+ (플러그인 `docker compose`) |
 | RAM | 4GB |
 | 디스크 | 10GB |
-| LLM API 키 | Google Gemini **또는** Anthropic Claude (Ollama는 로컬, 키 불필요) |
+| LLM 실행 자격 | 기본은 Codex CLI 구독 로그인, fallback API는 명시적으로 켠 경우에만 필요 |
 
 `python3` 또는 `openssl` 중 하나가 있으면 `setup.sh`가 시크릿을 자동 생성합니다
 (대부분의 macOS/Linux에 기본 포함).
@@ -41,9 +41,10 @@
 git clone https://github.com/k002bill2/Agent-System.git
 cd Agent-System
 
-# 2) 환경변수: LLM 키만 먼저 설정 (시크릿은 setup.sh가 자동 생성)
+# 2) 환경변수: CLI-first 정책 확인 (시크릿은 setup.sh가 자동 생성)
 cp .env.example .env
-#    .env 편집 → GOOGLE_API_KEY 또는 ANTHROPIC_API_KEY 입력
+#    기본값은 LLM_PROVIDER=codex_cli, LLM_API_FALLBACK_ENABLED=false
+#    시작 전 self-host 머신에서 codex CLI 로그인 또는 profile mount 준비
 
 # 3) 셋업: 시크릿 자동 생성 + 이미지 빌드 + 전체 기동 + 헬스 대기
 ./setup.sh
@@ -149,6 +150,10 @@ git pull && ./setup.sh            # setup.sh는 강한 시크릿을 덮어쓰지
 다른 사용자 체크아웃에는 포함되지 않습니다(신규 사용자 머신엔 해당 경로가 없으므로).
 연동이 필요 없으면 이 파일을 삭제하면 됩니다.
 
+LLM runtime으로 Codex CLI 구독권을 사용할 때도 전체 host home을 공유하지 말고,
+사용자/조직별 CLI profile 디렉터리만 분리해 마운트하세요. profile ownership과
+entitlement 매핑 절차는 [배포 가이드의 CLI profile 격리 섹션](./deployment.md#cli-구독권과-사용자별-profile-격리)을 따릅니다.
+
 ---
 
 ## 트러블슈팅
@@ -159,7 +164,7 @@ git pull && ./setup.sh            # setup.sh는 강한 시크릿을 덮어쓰지
 | `SESSION_SECRET_KEY ... insecure default` (백엔드 종료) | 시크릿 미설정 → `./setup.sh`로 생성 |
 | 원격 접속 시 로그인 실패 / CORS 에러 | `.env`의 `FRONTEND_URL`/`CORS_ORIGINS`를 외부 접근 URL로 설정 후 `docker compose up -d` |
 | 포트 충돌 | `.env`에서 `PG_PORT`/`REDIS_PORT`/`BACKEND_PORT`/`DASHBOARD_PORT`/`QDRANT_PORT` 오버라이드 |
-| LLM "Invalid API key" | `LLM_PROVIDER`와 해당 키 일치 확인, 결제/할당량 확인 |
+| LLM 실행 실패 | `LLM_PROVIDER=codex_cli`, CLI 로그인/profile mount, Settings LLM Access health check 확인. API fallback은 명시적으로 켠 경우에만 키 확인 |
 
 더 자세한 배포 옵션(Railway/Render, CI/CD, 모니터링, 롤백)은
 [docs/deployment.md](./deployment.md)를 참조하세요.
