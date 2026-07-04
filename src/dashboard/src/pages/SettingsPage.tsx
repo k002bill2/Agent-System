@@ -19,7 +19,7 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { LLMRouterSettings, ModelUpdatePanel } from '../components/llm-router'
-import { LLMAccountsSettings } from '../components/usage'
+import { LLMAccessSettings, LLMAccountsSettings } from '../components/usage'
 
 export function SettingsPage() {
   const {
@@ -280,6 +280,9 @@ export function SettingsPage() {
             </div>
           </div>
         </div>
+
+        {/* LLM Access */}
+        <LLMAccessSettings />
 
         {/* My LLM API Keys */}
         <LLMAccountsSettings />

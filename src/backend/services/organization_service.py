@@ -27,7 +27,7 @@ from models.organization import (
     OrganizationUpdate,
     TenantContext,
 )
-from utils.time import utcnow
+from utils.time import to_naive_utc, utcnow
 
 # ─────────────────────────────────────────────────────────────
 # Database Toggle
@@ -42,6 +42,7 @@ try:
 
     from db.models import (
         ClaudeSessionSnapshotModel,
+        LLMUsageLedgerModel,
         OrganizationInvitationModel,
         OrganizationMemberModel,
         OrganizationModel,
@@ -55,6 +56,7 @@ except ImportError:
     OrganizationModel = None  # type: ignore
     OrganizationMemberModel = None  # type: ignore
     OrganizationInvitationModel = None  # type: ignore
+    LLMUsageLedgerModel = None  # type: ignore
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1424,25 +1426,34 @@ class OrganizationService:
         user_id: str | None = None,
         session_id: str | None = None,
         model: str | None = None,
+        commit: bool = True,
+        enforce_quota: bool = True,
+        record_member_usage: bool = True,
     ) -> bool:
-        """Track token usage for an organization (async DB version)."""
+        """Track token usage for an organization (async DB version).
+
+        Ledger post-processing uses this with ``commit=False`` and
+        ``enforce_quota=False`` because the LLM call already happened and the
+        caller owns the transaction.
+        """
         result = await db.execute(select(OrganizationModel).where(OrganizationModel.id == org_id))
         org = result.scalar_one_or_none()
         if not org:
             return False
 
-        # Check limit via QuotaService
-        from services.quota_service import QuotaService
+        if enforce_quota:
+            # Check limit via QuotaService
+            from services.quota_service import QuotaService
 
-        org_pydantic = OrganizationService._org_model_to_pydantic(org)
-        check = QuotaService.check_token_quota(org_pydantic, tokens)
-        if not check.allowed:
-            return False  # Would exceed limit
+            org_pydantic = OrganizationService._org_model_to_pydantic(org)
+            check = QuotaService.check_token_quota(org_pydantic, tokens)
+            if not check.allowed:
+                return False  # Would exceed limit
 
         org.tokens_used_this_month += tokens
 
         # Record per-member usage if user_id provided
-        if user_id:
+        if user_id and record_member_usage:
             record = MemberUsageRecord(
                 organization_id=org_id,
                 user_id=user_id,
@@ -1453,7 +1464,8 @@ class OrganizationService:
             _member_usage[record.id] = record
             _save_member_usage(_member_usage)
 
-        await db.commit()
+        if commit:
+            await db.commit()
         return True
 
     @staticmethod
@@ -1467,6 +1479,29 @@ class OrganizationService:
             count += 1
         await db.commit()
         return count
+
+    @staticmethod
+    def _ledger_tokens(record) -> int:
+        total_tokens = getattr(record, "total_tokens", None)
+        if total_tokens is not None:
+            return total_tokens
+        return (getattr(record, "input_tokens", None) or 0) + (
+            getattr(record, "output_tokens", None) or 0
+        )
+
+    @staticmethod
+    def _ledger_started_at(record) -> datetime:
+        return to_naive_utc(getattr(record, "started_at", None) or utcnow())
+
+    @staticmethod
+    def _ledger_session_key(record) -> str:
+        return (
+            getattr(record, "session_id", None)
+            or getattr(record, "task_id", None)
+            or getattr(record, "analysis_id", None)
+            or getattr(record, "id", None)
+            or ""
+        )
 
     # ─────────────────────────────────────────────────────────────
     # Additional Async Methods (Phase 1-2 migration)
@@ -1765,6 +1800,82 @@ class OrganizationService:
             period_start = month_start
 
         members = await OrganizationService.get_members_async(db, org_id)
+        member_ids = {member.user_id for member in members}
+
+        ledger_start = min(today_start, month_start, period_start)
+        ledger_rows = []
+        if LLMUsageLedgerModel is not None:
+            result = await db.execute(
+                select(LLMUsageLedgerModel).where(
+                    LLMUsageLedgerModel.organization_id == org_id,
+                    LLMUsageLedgerModel.started_at >= ledger_start,
+                )
+            )
+            ledger_rows = result.scalars().all()
+
+        if ledger_rows:
+            user_tokens_today: dict[str, int] = {}
+            user_tokens_month: dict[str, int] = {}
+            user_tokens_period: dict[str, int] = {}
+            user_sessions_month: dict[str, set[str]] = {}
+            user_sessions_today: dict[str, set[str]] = {}
+            user_sessions_period: dict[str, set[str]] = {}
+            user_last_active: dict[str, datetime] = {}
+
+            for record in ledger_rows:
+                uid = getattr(record, "user_id", None)
+                if uid not in member_ids:
+                    continue
+                ts = OrganizationService._ledger_started_at(record)
+                tokens = OrganizationService._ledger_tokens(record)
+                session_key = OrganizationService._ledger_session_key(record)
+
+                if ts >= month_start:
+                    user_tokens_month[uid] = user_tokens_month.get(uid, 0) + tokens
+                    if session_key:
+                        user_sessions_month.setdefault(uid, set()).add(session_key)
+                if ts >= today_start:
+                    user_tokens_today[uid] = user_tokens_today.get(uid, 0) + tokens
+                    if session_key:
+                        user_sessions_today.setdefault(uid, set()).add(session_key)
+                if ts >= period_start:
+                    user_tokens_period[uid] = user_tokens_period.get(uid, 0) + tokens
+                    if session_key:
+                        user_sessions_period.setdefault(uid, set()).add(session_key)
+                if uid not in user_last_active or ts > user_last_active[uid]:
+                    user_last_active[uid] = ts
+
+            total_tokens = sum(user_tokens_period.values())
+            summaries: list[MemberUsageSummary] = []
+            for member in members:
+                uid = member.user_id
+                period_tokens = user_tokens_period.get(uid, 0)
+                pct = (period_tokens / total_tokens * 100) if total_tokens > 0 else 0.0
+                summaries.append(
+                    MemberUsageSummary(
+                        id=member.id,
+                        user_id=uid,
+                        email=member.email,
+                        name=member.name,
+                        role=member.role,
+                        tokens_used_today=user_tokens_today.get(uid, 0),
+                        tokens_used_this_month=user_tokens_month.get(uid, 0),
+                        tokens_used_period=period_tokens,
+                        sessions_today=len(user_sessions_today.get(uid, set())),
+                        sessions_this_month=len(user_sessions_month.get(uid, set())),
+                        sessions_period=len(user_sessions_period.get(uid, set())),
+                        last_active_at=user_last_active.get(uid),
+                        percentage_of_org=round(pct, 1),
+                    )
+                )
+            summaries.sort(key=lambda s: s.tokens_used_period, reverse=True)
+
+            return MemberUsageResponse(
+                organization_id=org_id,
+                period=period,
+                total_tokens=total_tokens,
+                members=summaries,
+            )
 
         # Resolve source_user for each member
         user_source: dict[str, str | None] = {}
@@ -1878,6 +1989,126 @@ class OrganizationService:
             member = member_pydantic
         if not member:
             return None
+
+        now = utcnow()
+        if period == "day":
+            cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif period == "week":
+            cutoff = now - timedelta(days=7)
+        else:
+            cutoff = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        ledger_rows = []
+        if LLMUsageLedgerModel is not None:
+            result = await db.execute(
+                select(LLMUsageLedgerModel).where(
+                    LLMUsageLedgerModel.organization_id == org_id,
+                    LLMUsageLedgerModel.started_at >= min(today_start, month_start, cutoff),
+                )
+            )
+            ledger_rows = result.scalars().all()
+
+        if ledger_rows:
+            daily_buckets: dict[str, dict[str, int | float]] = {}
+            model_tokens: dict[str, int] = {}
+            model_sessions: dict[str, set[str]] = {}
+            tokens_today = 0
+            tokens_month = 0
+            cost_month = 0.0
+            sessions_today: set[str] = set()
+            sessions_month: set[str] = set()
+            total_org_tokens = 0
+            last_active: datetime | None = None
+
+            for record in ledger_rows:
+                ts = OrganizationService._ledger_started_at(record)
+                tokens = OrganizationService._ledger_tokens(record)
+                if ts >= month_start:
+                    total_org_tokens += tokens
+
+                if getattr(record, "user_id", None) != user_id:
+                    continue
+
+                session_key = OrganizationService._ledger_session_key(record)
+                cost = getattr(record, "estimated_cost_usd", None) or 0.0
+
+                if ts >= month_start:
+                    tokens_month += tokens
+                    cost_month += cost
+                    if session_key:
+                        sessions_month.add(session_key)
+                if ts >= today_start:
+                    tokens_today += tokens
+                    if session_key:
+                        sessions_today.add(session_key)
+                if ts >= cutoff:
+                    date_key = ts.strftime("%Y-%m-%d")
+                    if date_key not in daily_buckets:
+                        daily_buckets[date_key] = {"tokens": 0, "sessions": 0, "cost": 0.0}
+                    daily_buckets[date_key]["tokens"] += tokens
+                    daily_buckets[date_key]["sessions"] += 1
+                    daily_buckets[date_key]["cost"] += cost
+
+                    model_name = getattr(record, "model", None) or "Unknown"
+                    model_tokens[model_name] = model_tokens.get(model_name, 0) + tokens
+                    if session_key:
+                        model_sessions.setdefault(model_name, set()).add(session_key)
+
+                if last_active is None or ts > last_active:
+                    last_active = ts
+
+            daily_usage = sorted(
+                [
+                    MemberDailyUsage(
+                        date=day,
+                        tokens=int(bucket["tokens"]),
+                        sessions=int(bucket["sessions"]),
+                        cost_usd=round(float(bucket["cost"]), 4),
+                    )
+                    for day, bucket in daily_buckets.items()
+                ],
+                key=lambda item: item.date,
+            )
+
+            total_model_tokens = sum(model_tokens.values()) or 1
+            model_usage = sorted(
+                [
+                    MemberModelUsage(
+                        model=model,
+                        tokens=tokens,
+                        sessions=len(model_sessions.get(model, set())),
+                        percentage=round(tokens / total_model_tokens * 100, 1),
+                    )
+                    for model, tokens in model_tokens.items()
+                ],
+                key=lambda item: item.tokens,
+                reverse=True,
+            )
+
+            pct = round(tokens_month / total_org_tokens * 100, 1) if total_org_tokens > 0 else 0.0
+
+            return MemberUsageDetail(
+                user_id=member.user_id,
+                email=member.email,
+                name=member.name,
+                role=member.role,
+                permissions=member.permissions,
+                is_active=member.is_active,
+                invited_by=member.invited_by,
+                joined_at=member.joined_at,
+                last_active_at=last_active or member.last_active_at,
+                tokens_used_today=tokens_today,
+                tokens_used_this_month=tokens_month,
+                sessions_today=len(sessions_today),
+                sessions_this_month=len(sessions_month),
+                total_cost_usd=round(cost_month, 4),
+                percentage_of_org=pct,
+                daily_usage=daily_usage,
+                model_usage=model_usage,
+            )
 
         # Resolve source_user for this member
         source_user = await OrganizationService._resolve_source_user(db, org_id, user_id)

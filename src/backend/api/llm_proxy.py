@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from datetime import UTC, datetime
 
@@ -10,8 +11,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.external_usage import ExternalProvider, UnifiedUsageRecord
+from models.llm_usage import (
+    LLMRuntimeMode,
+    LLMUsageMeasurementMethod,
+    LLMUsageRecordCreate,
+    LLMUsageSource,
+    LLMUsageStatus,
+)
 from services.credential_service import get_raw_key
 from services.external_usage_service import get_external_usage_service
+from services.llm_usage_ledger_service import record_usage_best_effort
 
 try:
     from api.deps import get_current_user, get_db_session
@@ -48,6 +57,15 @@ _PROVIDER_ENUM_MAP: dict[str, ExternalProvider] = {
     "anthropic": ExternalProvider.ANTHROPIC,
     "google_gemini": ExternalProvider.GOOGLE_GEMINI,
 }
+
+
+def _api_fallback_enabled() -> bool:
+    return os.getenv("LLM_API_FALLBACK_ENABLED", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def _calc_cost(model: str, input_tokens: int, output_tokens: int) -> float:
@@ -95,6 +113,58 @@ def _extract_usage(provider: str, response_json: dict) -> tuple[int, int, str]:
     )
 
 
+async def _record_internal_proxy_usage(
+    *,
+    provider_name: str,
+    user_id: str | None,
+    organization_id: str | None = None,
+    response_json: dict | None = None,
+    latency_ms: float | None = None,
+    status_code: int | None = None,
+    error_message: str | None = None,
+) -> None:
+    """Record API fallback/proxy usage into the internal LLM ledger."""
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    model: str | None = None
+    measurement_method = LLMUsageMeasurementMethod.UNKNOWN
+
+    if response_json is not None:
+        input_tok, output_tok, extracted_model = _extract_usage(provider_name, response_json)
+        input_tokens = input_tok
+        output_tokens = output_tok
+        model = extracted_model
+        if input_tok or output_tok:
+            measurement_method = LLMUsageMeasurementMethod.PROVIDER_METADATA
+
+    status = LLMUsageStatus.SUCCESS
+    if error_message or (status_code is not None and status_code >= 400):
+        status = LLMUsageStatus.ERROR
+
+    await record_usage_best_effort(
+        LLMUsageRecordCreate(
+            user_id=user_id,
+            organization_id=organization_id,
+            provider=provider_name,
+            mode=LLMRuntimeMode.API,
+            source=LLMUsageSource.API_FALLBACK_PROXY,
+            model=model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            measurement_method=measurement_method,
+            estimated_cost_usd=(
+                _calc_cost(model, input_tokens or 0, output_tokens or 0) if model else None
+            ),
+            status=status,
+            latency_ms=int(latency_ms) if latency_ms is not None else None,
+            error_message=error_message,
+            metadata={"status_code": status_code} if status_code is not None else {},
+            started_at=datetime.now(tz=UTC),
+            completed_at=datetime.now(tz=UTC),
+        )
+    )
+
+
 if AUTH_AVAILABLE:
 
     @router.post("/chat/completions")
@@ -115,6 +185,18 @@ if AUTH_AVAILABLE:
                 status_code=400,
                 detail=f"Unknown provider '{provider_name}'. Use one of: {list(PROVIDER_BASE_URLS)}",
             )
+
+        user_id = str(current_user.id)
+        organization_id = getattr(current_user, "organization_id", None)
+        if not _api_fallback_enabled():
+            await _record_internal_proxy_usage(
+                provider_name=provider_name,
+                user_id=user_id,
+                organization_id=organization_id,
+                status_code=403,
+                error_message="API fallback disabled by policy.",
+            )
+            raise HTTPException(status_code=403, detail="API fallback disabled by policy.")
 
         provider_enum = _PROVIDER_ENUM_MAP.get(provider_name, ExternalProvider.OPENAI)
         api_key = await get_raw_key(db, current_user.id, provider_enum)
@@ -138,13 +220,32 @@ if AUTH_AVAILABLE:
                     headers=_build_headers(provider_name, api_key),
                 )
         except httpx.TimeoutException:
+            latency_ms = (time.monotonic() - t0) * 1000
+            await _record_internal_proxy_usage(
+                provider_name=provider_name,
+                user_id=user_id,
+                organization_id=organization_id,
+                latency_ms=latency_ms,
+                status_code=504,
+                error_message="Upstream LLM request timed out.",
+            )
             raise HTTPException(status_code=504, detail="Upstream LLM request timed out.")
         except Exception as e:
+            latency_ms = (time.monotonic() - t0) * 1000
+            await _record_internal_proxy_usage(
+                provider_name=provider_name,
+                user_id=user_id,
+                organization_id=organization_id,
+                latency_ms=latency_ms,
+                status_code=502,
+                error_message=f"Upstream request failed: {e}",
+            )
             raise HTTPException(status_code=502, detail=f"Upstream request failed: {e}")
 
         latency_ms = (time.monotonic() - t0) * 1000
 
         # Best-effort: parse usage from response and record it
+        resp_json = None
         try:
             resp_json = upstream_resp.json()
             input_tok, output_tok, model = _extract_usage(provider_name, resp_json)
@@ -162,9 +263,22 @@ if AUTH_AVAILABLE:
                     cost_usd=cost,
                     request_count=1,
                     model=model,
-                    user_id=current_user.id,
+                    user_id=user_id,
                     raw_data={"latency_ms": round(latency_ms, 1)},
                 )
+            )
+        except Exception:
+            # Never let analytics errors break the proxy response
+            pass
+
+        try:
+            await _record_internal_proxy_usage(
+                provider_name=provider_name,
+                user_id=user_id,
+                organization_id=organization_id,
+                response_json=resp_json,
+                latency_ms=latency_ms,
+                status_code=upstream_resp.status_code,
             )
         except Exception:
             # Never let analytics errors break the proxy response

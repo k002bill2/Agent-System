@@ -42,12 +42,39 @@ export interface UsageSummary {
   member_breakdown: Record<string, number>
 }
 
+export interface UsageReconciliationComparison {
+  provider: string
+  internal_total_tokens: number
+  internal_total_cost_usd: number
+  internal_total_requests: number
+  provider_billing_total_tokens: number
+  provider_billing_total_cost_usd: number
+  provider_billing_total_requests: number
+  delta_tokens: number
+  delta_cost_usd: number
+  status: string
+}
+
+export interface UsageReconciliationSummary {
+  primary_source: string
+  provider_billing_enabled: boolean
+  internal_total_tokens: number
+  internal_total_cost_usd: number
+  internal_total_requests: number
+  provider_billing_total_tokens: number
+  provider_billing_total_cost_usd: number
+  provider_billing_total_requests: number
+  provider_billing_record_count: number
+  comparisons: UsageReconciliationComparison[]
+}
+
 export interface ExternalUsageSummaryResponse {
   providers: UsageSummary[]
   total_cost_usd: number
   records: UnifiedUsageRecord[]
   period_start: string
   period_end: string
+  reconciliation?: UsageReconciliationSummary | null
 }
 
 interface ExternalUsageStore {

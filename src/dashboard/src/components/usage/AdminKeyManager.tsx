@@ -26,7 +26,7 @@ import {
 } from '@/stores/deploymentUsageKeys'
 
 // ─────────────────────────────────────────────────────────────
-// Static config (usage-capable providers only — no Gemini collector)
+// Static config (provider billing reconciliation providers only — no Gemini collector)
 // ─────────────────────────────────────────────────────────────
 
 const PROVIDERS: ExternalProvider[] = ['openai', 'anthropic', 'github_copilot']
@@ -608,7 +608,8 @@ const ManagedKeysContent = memo(
   }) => (
     <>
       <p className="px-4 pt-3 text-xs text-gray-500 dark:text-gray-400">
-        provider별 usage 수집 키를 설정합니다. DB 키가 없으면 환경변수로 폴백합니다.
+        선택 사항인 provider billing reconciliation 키를 설정합니다. 내부 CLI usage ledger가 primary source이며,
+        DB 키가 없으면 환경변수로 폴백합니다.
       </p>
       {error && (
         <div
@@ -622,7 +623,7 @@ const ManagedKeysContent = memo(
       <KeyList keys={keys} isLoading={isLoading} />
       <div className="flex items-center gap-1.5 px-4 py-2.5 text-xs text-gray-400 dark:text-gray-500 border-t border-gray-100 dark:border-gray-700/50">
         <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
-        Verify는 실제 usage 엔드포인트 접근 권한(usage_capable)을 확인합니다.
+        Verify는 provider billing usage 엔드포인트 접근 권한(usage_capable)을 확인합니다. 내부 CLI 사용량 집계에는 필요하지 않습니다.
       </div>
     </>
   )
@@ -630,12 +631,12 @@ const ManagedKeysContent = memo(
 ManagedKeysContent.displayName = 'ManagedKeysContent'
 
 /**
- * Admin/manager-only manager for deployment-level usage admin keys.
+ * Admin/manager-only manager for deployment-level reconciliation keys.
  *
  * Replaces the read-only environment-variable guide on the External Usage page.
- * Lets admins/managers set, verify (usage-capability), toggle, and delete the
- * per-provider keys that drive usage collection. Non-privileged users see a
- * read-only notice and no key data is fetched.
+ * Lets admins/managers set, verify (usage-capability), toggle, and delete
+ * optional per-provider billing keys. Non-privileged users see a read-only
+ * notice and no key data is fetched.
  */
 export const AdminKeyManager = memo<AdminKeyManagerProps>(({ className }) => {
   const user = useAuthStore((s) => s.user)
@@ -653,7 +654,7 @@ export const AdminKeyManager = memo<AdminKeyManagerProps>(({ className }) => {
 
   return (
     <section
-      aria-label="Usage admin key 관리"
+      aria-label="Reconciliation keys"
       className={cn(
         'bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden',
         className
@@ -661,13 +662,13 @@ export const AdminKeyManager = memo<AdminKeyManagerProps>(({ className }) => {
     >
       <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
         <KeyRound className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Usage Admin Keys</h2>
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Reconciliation Keys</h2>
       </div>
 
       {!canManage ? (
         <div className="flex items-center gap-2 px-4 py-6 text-sm text-gray-500 dark:text-gray-400">
           <Lock className="w-4 h-4 flex-shrink-0" />
-          관리자 또는 매니저만 usage admin 키를 설정할 수 있습니다.
+          관리자 또는 매니저만 provider billing reconciliation 키를 설정할 수 있습니다.
         </div>
       ) : (
         <ManagedKeysContent keys={keys} isLoading={isLoading} error={error} />

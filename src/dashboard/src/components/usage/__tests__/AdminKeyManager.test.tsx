@@ -95,8 +95,9 @@ describe('AdminKeyManager', () => {
       mockAuthState = { user: { role: 'user', is_admin: false } }
       render(<AdminKeyManager />)
 
+      expect(screen.getByRole('region', { name: 'Reconciliation keys' })).toBeInTheDocument()
       expect(
-        screen.getByText('관리자 또는 매니저만 usage admin 키를 설정할 수 있습니다.')
+        screen.getByText('관리자 또는 매니저만 provider billing reconciliation 키를 설정할 수 있습니다.')
       ).toBeInTheDocument()
       expect(mockFetchKeys).not.toHaveBeenCalled()
     })
@@ -117,6 +118,10 @@ describe('AdminKeyManager', () => {
   describe('provider rendering', () => {
     it('renders all three usage-capable providers', () => {
       render(<AdminKeyManager />)
+      expect(screen.getByText('Reconciliation Keys')).toBeInTheDocument()
+      expect(
+        screen.getByText(/내부 CLI usage ledger가 primary source/)
+      ).toBeInTheDocument()
       expect(screen.getByText('OpenAI')).toBeInTheDocument()
       expect(screen.getByText('Anthropic')).toBeInTheDocument()
       expect(screen.getByText('GitHub Copilot')).toBeInTheDocument()

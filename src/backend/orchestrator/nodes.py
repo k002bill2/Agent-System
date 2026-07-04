@@ -16,6 +16,15 @@ from models.hitl import (
     ApprovalStatus,
     assess_operation_risk,
 )
+from models.llm_access import LLMAccessResponse
+from models.llm_models import LLMModelRegistry
+from models.llm_usage import (
+    LLMRuntimeMode,
+    LLMUsageMeasurementMethod,
+    LLMUsageRecordCreate,
+    LLMUsageSource,
+    LLMUsageStatus,
+)
 from models.task_plan import (
     PLANNER_SYSTEM_PROMPT,
     PLANNER_USER_TEMPLATE,
@@ -32,6 +41,13 @@ from services.audit_service import (
     audit_task_status_change,
     audit_tool_executed,
 )
+from services.llm_runtime_resolver import (
+    LLMRuntimeRequest,
+    LLMRuntimeResolution,
+    resolve_llm_runtime,
+)
+from services.llm_service import LLMService
+from services.llm_usage_ledger_service import record_usage_best_effort
 from utils.time import utcnow
 
 # Optional RAG service - gracefully handle missing dependencies
@@ -77,19 +93,129 @@ class BaseNode(ABC):
             "timestamp": utcnow().isoformat(),
         }
 
+    def _model_id_from_llm(self) -> str:
+        """Best-effort model id extraction from LangChain model objects."""
+        if not self.llm:
+            return ""
+        for attr in ("model_name", "model", "model_id"):
+            value = getattr(self.llm, attr, None)
+            if isinstance(value, str) and value:
+                return value
+        return ""
+
+    @staticmethod
+    def _state_llm_access(state: AgentState) -> LLMAccessResponse | None:
+        access = state.get("llm_access")
+        if isinstance(access, LLMAccessResponse):
+            return access
+        if isinstance(access, dict):
+            return LLMAccessResponse.model_validate(access)
+        return None
+
+    def _resolved_llm_for_state(
+        self,
+        state: AgentState,
+        *,
+        tools: list[BaseTool] | None = None,
+    ) -> tuple[Any, str | None, LLMRuntimeResolution | None]:
+        """Resolve a call-time LLM from session access policy when available."""
+        access = self._state_llm_access(state)
+        if not access:
+            llm = self.llm
+            if tools and llm:
+                return llm.bind_tools(tools), None, None
+            return llm, None, None
+
+        resolution = resolve_llm_runtime(
+            access,
+            LLMRuntimeRequest(
+                user_id=state.get("user_id"),
+                organization_id=state.get("organization_id"),
+                source=LLMUsageSource.ORCHESTRATOR,
+                requested_model_id=None,
+            ),
+        )
+        llm = LLMService._get_llm(model_id=resolution.model_id)
+        if tools:
+            llm = llm.bind_tools(tools)
+        return llm, resolution.model_id, resolution
+
+    @staticmethod
+    def _runtime_mode_for_provider(provider: str) -> LLMRuntimeMode:
+        if provider.endswith("_cli"):
+            return LLMRuntimeMode.CLI
+        if provider == "ollama":
+            return LLMRuntimeMode.LOCAL
+        return LLMRuntimeMode.API
+
+    async def _record_token_update_usage(
+        self,
+        token_update: dict[str, Any],
+        state: AgentState,
+        *,
+        task_id: str | None,
+    ) -> None:
+        """Record orchestrator node token updates into the internal usage ledger."""
+        last_update = token_update.get("_last_token_update") if token_update else None
+        if not last_update:
+            return
+
+        model = last_update.get("model") or self._model_id_from_llm() or None
+        provider = LLMModelRegistry.get_provider(model) if model else None
+        provider_value = provider.value if provider else "unknown"
+        project_id = state.get("project", {}).get("id")
+        metadata = {
+            "node": self.node_name,
+            "agent_name": last_update.get("agent_name"),
+        }
+        runtime_metadata = last_update.get("metadata")
+        if isinstance(runtime_metadata, dict):
+            metadata.update(runtime_metadata)
+
+        await record_usage_best_effort(
+            LLMUsageRecordCreate(
+                user_id=state.get("user_id"),
+                organization_id=state.get("organization_id"),
+                provider=provider_value,
+                mode=self._runtime_mode_for_provider(provider_value),
+                source=LLMUsageSource.ORCHESTRATOR,
+                model=model,
+                input_tokens=last_update.get("input_tokens"),
+                output_tokens=last_update.get("output_tokens"),
+                total_tokens=last_update.get("total_tokens"),
+                measurement_method=LLMUsageMeasurementMethod(
+                    last_update.get(
+                        "measurement_method",
+                        LLMUsageMeasurementMethod.UNKNOWN.value,
+                    )
+                ),
+                estimated_cost_usd=last_update.get("cost_usd"),
+                status=LLMUsageStatus.SUCCESS,
+                session_id=state.get("session_id"),
+                task_id=task_id,
+                project_id=project_id,
+                metadata=metadata,
+                started_at=utcnow(),
+                completed_at=utcnow(),
+            )
+        )
+
     def _extract_and_update_tokens(
         self,
         response: Any,
         state: AgentState,
         agent_name: str | None = None,
         model: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Extract token usage from LLM response and update state.
 
         Returns dict with token_usage updates for state.
         """
+        model = model or self._model_id_from_llm()
         usage = extract_token_usage(response, model or "")
+        measurement_method = LLMUsageMeasurementMethod.PROVIDER_METADATA
 
         if not usage:
             # Fallback: 추정값 사용
@@ -112,6 +238,7 @@ class BaseNode(ABC):
                     model=model or "",
                     cost_usd=0.0,  # 입력 토큰 없으므로 비용 0
                 )
+                measurement_method = LLMUsageMeasurementMethod.ESTIMATED
             else:
                 return {}
 
@@ -151,6 +278,8 @@ class BaseNode(ABC):
                 "total_tokens": usage.total_tokens,
                 "model": usage.model,
                 "cost_usd": usage.cost_usd,
+                "measurement_method": measurement_method.value,
+                "metadata": metadata or {},
             },
         }
 
@@ -507,11 +636,13 @@ class PlannerNode(BaseNode):
             project_context=project_context,
             available_tools=available_tools,
         )
+        llm, resolved_model, runtime_resolution = self._resolved_llm_for_state(state)
+        runtime_metadata = runtime_resolution.usage_metadata() if runtime_resolution else {}
 
         try:
             # Use structured output if available, otherwise parse JSON
-            if hasattr(self.llm, "with_structured_output"):
-                structured_llm = self.llm.with_structured_output(TaskPlanResult)
+            if hasattr(llm, "with_structured_output"):
+                structured_llm = llm.with_structured_output(TaskPlanResult)
                 plan_result: TaskPlanResult = await structured_llm.ainvoke(
                     [
                         SystemMessage(content=PLANNER_SYSTEM_PROMPT),
@@ -520,7 +651,7 @@ class PlannerNode(BaseNode):
                 )
             else:
                 # Fallback: Parse JSON from response
-                response = await self.llm.ainvoke(
+                response = await llm.ainvoke(
                     [
                         SystemMessage(
                             content=PLANNER_SYSTEM_PROMPT + "\n\nRespond with valid JSON only."
@@ -559,6 +690,22 @@ class PlannerNode(BaseNode):
                     )
                 ],
             )
+
+        token_updates = {}
+        if "response" in locals():
+            token_updates = self._extract_and_update_tokens(
+                response,
+                state,
+                "Planner",
+                model=resolved_model,
+                metadata=runtime_metadata,
+            )
+            if token_updates:
+                await self._record_token_update_usage(
+                    token_updates,
+                    state,
+                    task_id=None,
+                )
 
         # Create root task
         root_task_id = str(uuid.uuid4())
@@ -627,7 +774,7 @@ class PlannerNode(BaseNode):
                 project_id=project_id,
             )
 
-        return {
+        result = {
             "tasks": tasks,
             "root_task_id": root_task_id,
             "messages": [
@@ -649,6 +796,9 @@ class PlannerNode(BaseNode):
                 },
             },
         }
+        if token_updates:
+            result.update(token_updates)
+        return result
 
 
 class ExecutorNode(BaseNode):
@@ -701,7 +851,12 @@ After completing all necessary tool calls, provide a final summary."""
         else:
             self.llm_with_tools = self.llm
 
-    async def _execute_tool(self, tool_name: str, tool_args: dict) -> str:
+    async def _execute_tool(
+        self,
+        tool_name: str,
+        tool_args: dict,
+        usage_context: dict[str, Any] | None = None,
+    ) -> str:
         """
         Execute a tool and return the result.
 
@@ -736,6 +891,29 @@ After completing all necessary tool calls, provide a final summary."""
 
         tool = self._tools_by_name[tool_name]
         try:
+            if tool_name == "warp_agent_run":
+                from tools.warp_tools import _warp_agent_run_impl
+
+                timeout = int(tool_args.get("timeout") or 300)
+                return _warp_agent_run_impl(
+                    prompt=tool_args.get("prompt", ""),
+                    cwd=tool_args.get("cwd"),
+                    model=tool_args.get("model"),
+                    timeout=timeout,
+                    usage_context=usage_context,
+                )
+            if tool_name == "warp_agent_with_mcp":
+                from tools.warp_tools import _warp_agent_with_mcp_impl
+
+                timeout = int(tool_args.get("timeout") or 300)
+                return _warp_agent_with_mcp_impl(
+                    prompt=tool_args.get("prompt", ""),
+                    mcp_config=tool_args.get("mcp_config") or {},
+                    cwd=tool_args.get("cwd"),
+                    timeout=timeout,
+                    usage_context=usage_context,
+                )
+
             # Handle both sync and async tools
             result = await tool.ainvoke(tool_args)
             return str(result)
@@ -869,20 +1047,34 @@ After completing all necessary tool calls, provide a final summary."""
 
             # Track token usage across iterations
             accumulated_token_updates: dict[str, Any] = {}
+            llm, resolved_model, runtime_resolution = self._resolved_llm_for_state(state)
+            llm_with_tools = llm.bind_tools(self.tools) if self.tools and llm else llm
+            runtime_metadata = runtime_resolution.usage_metadata() if runtime_resolution else {}
 
             for _iteration in range(max_iterations):
                 # Get LLM response
                 if self.tools:
-                    response = await self.llm_with_tools.ainvoke(messages)
+                    response = await llm_with_tools.ainvoke(messages)
                 else:
-                    response = await self.llm.ainvoke(messages)
+                    response = await llm.ainvoke(messages)
 
                 messages.append(response)
 
                 # Extract and accumulate token usage
-                token_update = self._extract_and_update_tokens(response, state, "Executor")
+                token_update = self._extract_and_update_tokens(
+                    response,
+                    state,
+                    "Executor",
+                    model=resolved_model,
+                    metadata=runtime_metadata,
+                )
                 if token_update:
                     accumulated_token_updates = token_update
+                    await self._record_token_update_usage(
+                        token_update,
+                        state,
+                        task_id=current_task_id,
+                    )
 
                 # Check for tool calls
                 tool_calls = getattr(response, "tool_calls", None)
@@ -957,7 +1149,25 @@ After completing all necessary tool calls, provide a final summary."""
                             }
 
                     # Execute the tool
-                    result = await self._execute_tool(tool_name, tool_args)
+                    usage_context = {
+                        "source": LLMUsageSource.ORCHESTRATOR,
+                        "user_id": state.get("user_id"),
+                        "organization_id": state.get("organization_id"),
+                        "session_id": session_id,
+                        "task_id": current_task_id,
+                        "project_id": project_id,
+                        "llm_access": state.get("llm_access"),
+                        "metadata": {
+                            "node": self.node_name,
+                            "agent_id": agent_id,
+                            "tool_name": tool_name,
+                        },
+                    }
+                    result = await self._execute_tool(
+                        tool_name,
+                        tool_args,
+                        usage_context=usage_context,
+                    )
                     tool_results.append(
                         {
                             "tool": tool_name,
@@ -1316,8 +1526,12 @@ Previous Attempts: {task.retry_count}
 Error History: {task.error_history}
 """
 
+        llm, resolved_model, runtime_resolution = self._resolved_llm_for_state(state)
+        runtime_metadata = runtime_resolution.usage_metadata() if runtime_resolution else {}
+
         try:
-            if hasattr(self.llm, "with_structured_output"):
+            usage_response = None
+            if hasattr(llm, "with_structured_output"):
                 # Use structured output if available
                 from pydantic import BaseModel
 
@@ -1329,13 +1543,15 @@ Error History: {task.error_history}
                     should_retry: bool
                     confidence: str
 
-                structured_llm = self.llm.with_structured_output(CorrectionResult)
+                structured_llm = llm.with_structured_output(CorrectionResult)
                 response = await structured_llm.ainvoke(
                     [
                         SystemMessage(content=self.SYSTEM_PROMPT),
                         HumanMessage(content=error_context),
                     ]
                 )
+                if hasattr(response, "usage_metadata") or hasattr(response, "response_metadata"):
+                    usage_response = response
 
                 correction = {
                     "error_analysis": response.error_analysis,
@@ -1347,7 +1563,7 @@ Error History: {task.error_history}
                 }
             else:
                 # Fallback: Parse JSON from response
-                llm_response = await self.llm.ainvoke(
+                llm_response = await llm.ainvoke(
                     [
                         SystemMessage(
                             content=self.SYSTEM_PROMPT + "\n\nRespond with valid JSON only."
@@ -1367,12 +1583,19 @@ Error History: {task.error_history}
                         raise ValueError("No valid JSON found in response")
                 else:
                     raise ValueError(f"Unexpected response type: {type(content)}")
+                usage_response = llm_response
 
             # Extract token usage
-            token_updates = self._extract_and_update_tokens(
-                response if hasattr(response, "response_metadata") else llm_response,
-                state,
-                "SelfCorrection",
+            token_updates = (
+                self._extract_and_update_tokens(
+                    usage_response,
+                    state,
+                    "SelfCorrection",
+                    model=resolved_model,
+                    metadata=runtime_metadata,
+                )
+                if usage_response is not None
+                else {}
             )
 
         except Exception as e:
@@ -1386,6 +1609,13 @@ Error History: {task.error_history}
                 "confidence": "low",
             }
             token_updates = {}
+
+        if token_updates:
+            await self._record_token_update_usage(
+                token_updates,
+                state,
+                task_id=current_task_id,
+            )
 
         # Update task based on correction
         if correction.get("should_retry", False):

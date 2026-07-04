@@ -39,7 +39,7 @@ LLM 모델 레지스트리, 라우터, 자격증명, 프록시, Playground API�
 }
 ```
 
-**프로바이더**: `anthropic`, `google`, `openai`, `ollama`
+**프로바이더**: `codex_cli`, `claude_cli`, `anthropic`, `google`, `openai`, `ollama`
 
 > **Note**: 이 API는 중앙 레지스트리(`models/llm_models.py`)에서 모델 정보를 제공합니다.
 > 새 모델 추가 시 해당 파일만 수정하면 전체 시스템에 반영됩니다.
@@ -80,6 +80,32 @@ LLM 모델 레지스트리, 라우터, 자격증명, 프록시, Playground API�
 | DELETE | `/api/users/me/llm-credentials/{id}` | LLM 자격증명 삭제 |
 | POST | `/api/users/me/llm-credentials/{id}/verify` | 자격증명 연결 검증 |
 
+이 API는 CLI 구독권을 사용할 수 없는 fallback/compatibility 경로의 API key 관리용입니다. 기본 LLM 실행 권한은 아래 `LLM Access` API가 담당합니다.
+
+---
+
+## LLM Access
+
+CLI-first LLM profile과 user/org entitlement를 조회하고 관리합니다.
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/llm-access/me` | 현재 사용자의 LLM access 상태 조회 |
+| GET | `/api/llm-access/me?organization_id={id}` | 조직 범위를 포함한 현재 사용자 access 조회 |
+| GET | `/api/llm-access/profiles` | CLI profile 목록 조회 (admin/manager) |
+| POST | `/api/llm-access/profiles` | CLI profile 생성 (admin/manager) |
+| PATCH | `/api/llm-access/profiles/{profile_id}` | CLI profile 수정 (admin/manager) |
+| DELETE | `/api/llm-access/profiles/{profile_id}` | CLI profile 삭제 및 연결된 entitlement profile 매핑 해제 (admin/manager) |
+| GET | `/api/llm-access/entitlements` | LLM entitlement 목록 조회 (admin/manager) |
+| POST | `/api/llm-access/entitlements` | LLM entitlement 생성 (admin/manager) |
+| PATCH | `/api/llm-access/entitlements/{entitlement_id}` | LLM entitlement 수정 (admin/manager) |
+
+`/me`는 DB에 별도 설정이 없어도 `codex_cli` 기본 profile과 `mode=cli`, `source_scope=all` entitlement를 합성해서 반환합니다. `LLM_API_FALLBACK_ENABLED=false`가 기본이며, API fallback 허용 여부는 response의 `api_fallback_enabled`와 entitlement의 `allow_api_fallback`에 분리되어 표시됩니다.
+
+CLI profile은 command, args, working directory, auth status, metadata만 반환하며 CLI 로그인 토큰이나 API key 원문은 반환하지 않습니다. `organization_id`가 있고 `owner_user_id`가 없는 profile은 조직 공용 profile로 취급합니다.
+
+Settings UI에서 CLI profile을 생성하면 같은 provider/mode/source_scope의 persisted entitlement가 없는 경우 대상 사용자에게 `mode=cli`, `source_scope=all`, `allow_api_fallback=false` entitlement를 1개 자동 생성합니다. 조직 profile은 전체 조직에 일괄 권한을 부여하지 않고 profile owner 또는 현재 사용자 1명만 대상으로 합니다.
+
 ---
 
 ## LLM Proxy
@@ -87,6 +113,24 @@ LLM 모델 레지스트리, 라우터, 자격증명, 프록시, Playground API�
 | Method | Path | 설명 |
 |--------|------|------|
 | POST | `/api/proxy/chat/completions` | LLM 채팅 완료 프록시 (OpenAI 호환) |
+
+---
+
+## Internal LLM Usage Ledger
+
+CLI 구독권 중심 사용량의 내부 원장 조회 API입니다. External Usage의 새 primary source로 사용합니다.
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/llm-usage/summary` | 내부 LLM 사용량 요약 |
+| GET | `/api/llm-usage/records` | 내부 LLM 사용량 원장 레코드 목록 |
+
+공통 필터:
+
+- `start_time`, `end_time`
+- `provider`, `mode`, `source`
+- `user_id`, `organization_id`, `project_id`
+- `limit` (`/records` only)
 
 ---
 

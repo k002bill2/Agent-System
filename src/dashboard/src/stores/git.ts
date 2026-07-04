@@ -3,6 +3,10 @@ import { extractGitHubRepo } from '../utils/gitUtils'
 import { analytics } from '../services/analytics'
 import { apiClient } from '../services/apiClient'
 
+const GIT_LONG_RUNNING_READ_TIMEOUT_MS = 120_000
+const GIT_REMOTE_OPERATION_TIMEOUT_MS = 180_000
+const GIT_DRAFT_COMMITS_TIMEOUT_MS = 180_000
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -556,9 +560,12 @@ export const useGitStore = create<GitState>((set, get) => ({
   // Worktree Actions
   fetchWorktrees: async (projectId) => {
     try {
-      const data = await apiClient.get<{ worktrees: GitWorktree[]; total: number }>(`/api/git/projects/${projectId}/worktrees`)
+      const data = await apiClient.get<{ worktrees: GitWorktree[]; total: number }>(
+        `/api/git/projects/${projectId}/worktrees`,
+        { timeout: GIT_LONG_RUNNING_READ_TIMEOUT_MS }
+      )
       set({ worktrees: data.worktrees })
-    } catch (error) {
+    } catch {
       // Worktree listing is non-critical; silently ignore
       set({ worktrees: [] })
     }
@@ -596,7 +603,9 @@ export const useGitStore = create<GitState>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const url = appendWorktreePath(`/api/git/projects/${projectId}/working-status`, get().selectedWorktreePath)
-      const status = await apiClient.get<GitWorkingStatus>(url)
+      const status = await apiClient.get<GitWorkingStatus>(url, {
+        timeout: GIT_LONG_RUNNING_READ_TIMEOUT_MS,
+      })
       set({ workingStatus: status, isLoading: false })
       return status
     } catch (error) {
@@ -743,7 +752,11 @@ export const useGitStore = create<GitState>((set, get) => ({
     set({ isGeneratingDrafts: true, error: null })
     try {
       const url = appendWorktreePath(`/api/git/projects/${projectId}/draft-commits`, get().selectedWorktreePath)
-      const data = await apiClient.post<DraftCommitsResponse>(url, { staged_only: stagedOnly })
+      const data = await apiClient.post<DraftCommitsResponse>(
+        url,
+        { staged_only: stagedOnly },
+        { timeout: GIT_DRAFT_COMMITS_TIMEOUT_MS }
+      )
       set({ draftCommits: data.drafts, isGeneratingDrafts: false })
       return data.drafts
     } catch (error) {
@@ -808,7 +821,10 @@ export const useGitStore = create<GitState>((set, get) => ({
   fetchBranches: async (projectId) => {
     set({ isLoading: true, error: null })
     try {
-      const data = await apiClient.get<{ branches: GitBranch[]; current_branch: string; protected_branches: string[] }>(`/api/git/projects/${projectId}/branches`)
+      const data = await apiClient.get<{ branches: GitBranch[]; current_branch: string; protected_branches: string[] }>(
+        `/api/git/projects/${projectId}/branches`,
+        { timeout: GIT_LONG_RUNNING_READ_TIMEOUT_MS }
+      )
       set({
         branches: data.branches,
         currentBranch: data.current_branch,
@@ -894,7 +910,10 @@ export const useGitStore = create<GitState>((set, get) => ({
       if (branch) params.set('branch', branch)
       params.set('limit', String(limit))
 
-      const data = await apiClient.get<{ commits: GitCommit[] }>(`/api/git/projects/${projectId}/commits?${params}`)
+      const data = await apiClient.get<{ commits: GitCommit[] }>(
+        `/api/git/projects/${projectId}/commits?${params}`,
+        { timeout: GIT_LONG_RUNNING_READ_TIMEOUT_MS }
+      )
       set({ commits: data.commits, isLoading: false })
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })
@@ -1254,7 +1273,10 @@ export const useGitStore = create<GitState>((set, get) => ({
   fetchRemotes: async (projectId) => {
     set({ isLoading: true, error: null })
     try {
-      const data = await apiClient.get<{ remotes: GitRemote[] }>(`/api/git/projects/${projectId}/remotes`)
+      const data = await apiClient.get<{ remotes: GitRemote[] }>(
+        `/api/git/projects/${projectId}/remotes`,
+        { timeout: GIT_LONG_RUNNING_READ_TIMEOUT_MS }
+      )
       set({ remotes: data.remotes, isLoading: false })
 
       // Auto-detect GitHub repo from origin remote
@@ -1318,7 +1340,9 @@ export const useGitStore = create<GitState>((set, get) => ({
       const params = new URLSearchParams()
       if (remote) params.set('remote', remote)
 
-      await apiClient.post(`/api/git/projects/${projectId}/fetch?${params}`)
+      await apiClient.post(`/api/git/projects/${projectId}/fetch?${params}`, undefined, {
+        timeout: GIT_REMOTE_OPERATION_TIMEOUT_MS,
+      })
       await get().fetchBranches(projectId)
       set({ isLoading: false })
       return true
@@ -1335,7 +1359,9 @@ export const useGitStore = create<GitState>((set, get) => ({
       if (branch) params.set('branch', branch)
       if (remote) params.set('remote', remote)
 
-      await apiClient.post(`/api/git/projects/${projectId}/pull?${params}`)
+      await apiClient.post(`/api/git/projects/${projectId}/pull?${params}`, undefined, {
+        timeout: GIT_REMOTE_OPERATION_TIMEOUT_MS,
+      })
       await get().fetchBranches(projectId)
       await get().fetchCommits(projectId)
       set({ isLoading: false })
@@ -1354,7 +1380,9 @@ export const useGitStore = create<GitState>((set, get) => ({
       if (remote) params.set('remote', remote)
 
       const url = appendWorktreePath(`/api/git/projects/${projectId}/push?${params}`, get().selectedWorktreePath)
-      await apiClient.post(url)
+      await apiClient.post(url, undefined, {
+        timeout: GIT_REMOTE_OPERATION_TIMEOUT_MS,
+      })
       await get().fetchBranches(projectId)
       set({ isLoading: false })
       return true
@@ -1368,7 +1396,10 @@ export const useGitStore = create<GitState>((set, get) => ({
   fetchBranchProtectionRules: async (projectId) => {
     set({ isLoading: true, error: null })
     try {
-      const data = await apiClient.get<{ rules: BranchProtectionRule[] }>(`/api/git/projects/${projectId}/branch-protection`)
+      const data = await apiClient.get<{ rules: BranchProtectionRule[] }>(
+        `/api/git/projects/${projectId}/branch-protection`,
+        { timeout: GIT_LONG_RUNNING_READ_TIMEOUT_MS }
+      )
       set({ branchProtectionRules: data.rules, isLoading: false })
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false })

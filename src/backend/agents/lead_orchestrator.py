@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from agents.base import AgentConfig, AgentResult, BaseAgent
 from models.llm_models import LLMModelRegistry
+from models.llm_usage import LLMUsageSource
 from services.agent_registry import (
     EffortLevel,
     get_agent_registry,
@@ -327,6 +328,9 @@ class LeadOrchestratorAgent(BaseAgent):
         """태스크 분석 및 분해."""
         # 컨텍스트 준비
         context_str = ""
+        prompt_context = {
+            key: value for key, value in (context or {}).items() if not str(key).startswith("_")
+        }
         if context:
             # 사용 가능한 에이전트 목록 추가
             available_agents = self._registry.get_available()
@@ -336,7 +340,7 @@ class LeadOrchestratorAgent(BaseAgent):
 {agent_info}
 
 ## Additional Context
-{json.dumps(context, indent=2, default=str)}
+{json.dumps(prompt_context, indent=2, default=str)}
 """
 
         # LLM 호출
@@ -349,7 +353,20 @@ class LeadOrchestratorAgent(BaseAgent):
 
 Remember to respond with valid JSON only."""
 
-        response = await self._invoke_llm(prompt)
+        response = await self._invoke_llm(
+            prompt,
+            usage_context={
+                "source": LLMUsageSource.TASK_ANALYZER,
+                "project_id": context.get("project_id") if context else None,
+                "user_id": context.get("_user_id") if context else None,
+                "organization_id": context.get("_organization_id") if context else None,
+                "llm_access": context.get("_llm_access") if context else None,
+                "metadata": {
+                    "agent": self.name,
+                    "has_context": bool(context),
+                },
+            },
+        )
 
         # JSON 파싱
         try:

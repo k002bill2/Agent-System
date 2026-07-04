@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   AlertCircle,
   BarChart3,
   CheckCircle,
-  DollarSign,
+  GitCompareArrows,
+  Hash,
   RefreshCw,
   Settings,
 } from 'lucide-react'
@@ -20,61 +21,51 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { useExternalUsageStore, type ExternalUsageSummaryResponse, type UnifiedUsageRecord } from '../stores/externalUsage'
+import { useExternalUsageStore } from '../stores/externalUsage'
 import MemberUsageTable from '../components/usage/MemberUsageTable'
 import DailyCostTrend from '../components/usage/DailyCostTrend'
 import { AdminKeyManager } from '../components/usage/AdminKeyManager'
-import { apiClient } from '../services/apiClient'
 
 const PROVIDER_COLORS: Record<string, string> = {
-  codex_cli: '#a855f7',
+  codex_cli: '#7c3aed',
+  claude_cli: '#d97706',
+  internal_cli: '#059669',
+  internal_api: '#64748b',
   openai: '#10a37f',
   github_copilot: '#6e7681',
+  google: '#4285f4',
   google_gemini: '#4285f4',
   anthropic: '#d97706',
+  ollama: '#16a34a',
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
   codex_cli: 'Codex CLI',
+  claude_cli: 'Claude CLI',
+  internal_cli: 'Internal CLI',
+  internal_api: 'Internal API',
   openai: 'OpenAI',
   github_copilot: 'GitHub Copilot',
+  google: 'Google',
   google_gemini: 'Google Gemini',
   anthropic: 'Anthropic',
+  ollama: 'Ollama',
 }
 
-const PROVIDER_ORDER = ['codex_cli', 'anthropic', 'openai', 'github_copilot', 'google_gemini'] as const
+const DEFAULT_PROVIDER_KEYS = [
+  'codex_cli',
+  'claude_cli',
+  'openai',
+  'anthropic',
+  'google_gemini',
+  'github_copilot',
+]
 
 const PERIOD_OPTIONS = [
   { label: 'Last 7 days', days: 7 },
   { label: 'Last 30 days', days: 30 },
   { label: 'Last 90 days', days: 90 },
 ]
-
-interface ClaudeUsageSnapshot {
-  weeklyModelTokens?: Array<{ date: string; tokensByModel: Record<string, number> }>
-  weeklyTotalTokens?: number
-}
-
-interface CodexUsageBreakdown {
-  name: string
-  tokens: number
-  threads: number
-}
-
-interface CodexCliUsageSnapshot {
-  available: boolean
-  weeklyTokens?: number
-  weeklyThreads?: number
-  byModel?: CodexUsageBreakdown[]
-  updatedAt?: string
-}
-
-interface LocalUsageState {
-  claude: ClaudeUsageSnapshot | null
-  codex: CodexCliUsageSnapshot | null
-  isLoading: boolean
-  error: string | null
-}
 
 function formatCost(cost: number): string {
   if (cost === 0) return '$0.00'
@@ -83,130 +74,39 @@ function formatCost(cost: number): string {
 }
 
 function formatTokens(tokens: number): string {
-  if (tokens >= 1_000_000_000) return `${(tokens / 1_000_000_000).toFixed(1)}B`
   if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`
   if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}K`
   return tokens.toString()
 }
 
-function getPeriodStart(selectedPeriod: number): Date {
-  return new Date(Date.now() - selectedPeriod * 86_400_000)
+function totalTokens(inputTokens = 0, outputTokens = 0): number {
+  return inputTokens + outputTokens
 }
 
-function makeUsageRecord(
-  provider: string,
-  timestamp: string,
-  totalTokens: number,
-  model: string | null,
-  requestCount: number,
-): UnifiedUsageRecord {
-  return {
-    id: `${provider}-${model ?? 'unknown'}-${timestamp}`,
-    provider,
-    timestamp,
-    bucket_width: '1d',
-    input_tokens: totalTokens,
-    output_tokens: 0,
-    total_tokens: totalTokens,
-    cost_usd: 0,
-    request_count: requestCount,
-    model,
-    user_id: 'local-cli',
-    user_email: 'local-cli@aos',
-    project_id: null,
-    code_suggestions: null,
-    code_acceptances: null,
-    acceptance_rate: null,
-    collected_at: new Date().toISOString(),
-  }
+function formatSignedTokens(tokens: number): string {
+  if (tokens === 0) return '0'
+  const sign = tokens > 0 ? '+' : '-'
+  return `${sign}${formatTokens(Math.abs(tokens))}`
 }
 
-function buildLocalUsageRecords(
-  usage: Pick<LocalUsageState, 'claude' | 'codex'>,
-  selectedPeriod: number,
-): UnifiedUsageRecord[] {
-  const records: UnifiedUsageRecord[] = []
-  const periodStart = getPeriodStart(selectedPeriod).getTime()
-
-  for (const day of usage.claude?.weeklyModelTokens ?? []) {
-    const timestamp = new Date(`${day.date}T00:00:00.000Z`).toISOString()
-    if (new Date(timestamp).getTime() < periodStart) continue
-
-    for (const [model, tokens] of Object.entries(day.tokensByModel)) {
-      if (tokens <= 0) continue
-      records.push(makeUsageRecord('anthropic', timestamp, tokens, model, 1))
-    }
-  }
-
-  const codexTimestamp = usage.codex?.updatedAt ?? new Date().toISOString()
-  if (usage.codex?.available) {
-    const weeklyTokens = usage.codex.weeklyTokens ?? 0
-    if (weeklyTokens > 0) {
-      records.push(
-        makeUsageRecord(
-          'codex_cli',
-          codexTimestamp,
-          weeklyTokens,
-          'Codex CLI weekly',
-          usage.codex.weeklyThreads ?? 1,
-        ),
-      )
-    } else {
-      for (const model of usage.codex.byModel ?? []) {
-        if (model.tokens <= 0) continue
-        records.push(makeUsageRecord('codex_cli', codexTimestamp, model.tokens, model.name, model.threads))
-      }
-    }
-  }
-
-  return records
+function formatSignedCost(cost: number): string {
+  if (cost === 0) return '$0.00'
+  const sign = cost > 0 ? '+' : '-'
+  return `${sign}${formatCost(Math.abs(cost))}`
 }
 
-function buildSummaryFromRecords(
-  records: UnifiedUsageRecord[],
-  selectedPeriod: number,
-): ExternalUsageSummaryResponse {
-  const periodStart = getPeriodStart(selectedPeriod).toISOString()
-  const periodEnd = new Date().toISOString()
-  const summaries = new Map<string, ExternalUsageSummaryResponse['providers'][number]>()
-
-  for (const rec of records) {
-    if (!summaries.has(rec.provider)) {
-      summaries.set(rec.provider, {
-        provider: rec.provider,
-        period_start: periodStart,
-        period_end: periodEnd,
-        total_input_tokens: 0,
-        total_output_tokens: 0,
-        total_cost_usd: 0,
-        total_requests: 0,
-        model_breakdown: {},
-        member_breakdown: {},
-      })
-    }
-
-    const summary = summaries.get(rec.provider)!
-    summary.total_input_tokens += rec.input_tokens
-    summary.total_output_tokens += rec.output_tokens
-    summary.total_cost_usd += rec.cost_usd
-    summary.total_requests += rec.request_count
-    if (rec.model) {
-      summary.model_breakdown[rec.model] = (summary.model_breakdown[rec.model] ?? 0) + rec.total_tokens
-    }
-    const memberKey = rec.user_id ?? rec.user_email ?? 'unknown'
-    summary.member_breakdown[memberKey] = (summary.member_breakdown[memberKey] ?? 0) + rec.total_tokens
-  }
-
-  return {
-    providers: Array.from(summaries.values()).sort((a, b) => {
-      const aIndex = PROVIDER_ORDER.indexOf(a.provider as (typeof PROVIDER_ORDER)[number])
-      const bIndex = PROVIDER_ORDER.indexOf(b.provider as (typeof PROVIDER_ORDER)[number])
-      return (aIndex === -1 ? 99 : aIndex) - (bIndex === -1 ? 99 : bIndex)
-    }),
-    total_cost_usd: records.reduce((total, rec) => total + rec.cost_usd, 0),
-    records,
-    period_start: periodStart,
-    period_end: periodEnd,
+function reconciliationStatusLabel(status: string): string {
+  switch (status) {
+    case 'compared':
+      return 'Compared'
+    case 'ledger_only':
+      return 'Ledger only'
+    case 'provider_only':
+      return 'Provider only'
+    case 'provider_billing_disabled':
+      return 'Billing disabled'
+    default:
+      return 'Not collected'
   }
 }
 
@@ -215,87 +115,44 @@ export function ExternalUsagePage() {
     useExternalUsageStore()
   const [selectedPeriod, setSelectedPeriod] = useState(30)
   const [isSyncing, setIsSyncing] = useState(false)
-  const [localUsage, setLocalUsage] = useState<LocalUsageState>({
-    claude: null,
-    codex: null,
-    isLoading: true,
-    error: null,
-  })
-
-  const fetchLocalUsage = useCallback(async () => {
-    setLocalUsage(prev => (
-      prev.isLoading && prev.error === null ? prev : { ...prev, isLoading: true, error: null }
-    ))
-    try {
-      const [claude, codex] = await Promise.all([
-        apiClient.get<ClaudeUsageSnapshot>('/api/usage').catch(() => null),
-        apiClient.get<CodexCliUsageSnapshot>('/api/usage/codex-cli').catch(() => null),
-      ])
-      setLocalUsage({ claude, codex, isLoading: false, error: null })
-    } catch (err) {
-      setLocalUsage(prev => ({
-        ...prev,
-        isLoading: false,
-        error: err instanceof Error ? err.message : 'Failed to load local CLI usage',
-      }))
-    }
-  }, [])
 
   useEffect(() => {
     const endTime = new Date().toISOString()
     const startTime = new Date(Date.now() - selectedPeriod * 86_400_000).toISOString()
     fetchSummary(startTime, endTime)
     fetchProviders()
-    fetchLocalUsage()
-  }, [selectedPeriod, fetchSummary, fetchProviders, fetchLocalUsage])
+  }, [selectedPeriod, fetchSummary, fetchProviders])
 
   const handleSync = async () => {
     setIsSyncing(true)
-    await Promise.all([syncProvider(), fetchLocalUsage()])
+    await syncProvider()
     setIsSyncing(false)
   }
 
-  const localRecords = useMemo(
-    () => buildLocalUsageRecords(localUsage, selectedPeriod),
-    [localUsage, selectedPeriod],
+  const providerKeys = Array.from(
+    new Set([
+      ...DEFAULT_PROVIDER_KEYS,
+      ...providers.map(provider => provider.provider),
+      ...(summary?.providers ?? []).map(provider => provider.provider),
+    ]),
   )
-
-  const localSummary = useMemo(
-    () => buildSummaryFromRecords(localRecords, selectedPeriod),
-    [localRecords, selectedPeriod],
-  )
-
-  const displaySummary = localRecords.length > 0 ? localSummary : summary
-  const displayRecords = displaySummary?.records ?? []
-  const displayProviders = displaySummary?.providers ?? []
-  const displayTotalTokens = displayProviders.reduce((total, p) => (
-    total + p.total_input_tokens + p.total_output_tokens
-  ), 0)
-  const displayCost = displaySummary?.total_cost_usd ?? 0
-  const pageIsLoading = isLoading || localUsage.isLoading
-  const pageError = localUsage.error ?? error
-  const hasLocalCliUsage = localRecords.length > 0
 
   // Pie chart data
-  const pieData = displayProviders
+  const pieData = (summary?.providers ?? [])
+    .filter(p => p.total_cost_usd > 0)
     .map(p => ({
       name: PROVIDER_LABELS[p.provider] ?? p.provider,
-      value: p.total_input_tokens + p.total_output_tokens,
+      value: p.total_cost_usd,
       color: PROVIDER_COLORS[p.provider] ?? '#888',
-    }))
-    .filter(p => p.value > 0)
-    .map(p => ({
-      ...p,
-      label: `${p.name}: ${formatTokens(p.value)}`,
     }))
 
   // Model breakdown bar chart data
   const modelData: Array<{ model: string; [key: string]: string | number }> = []
   const modelMap: Record<string, Record<string, number>> = {}
-  for (const p of displayProviders) {
-    for (const [model, tokens] of Object.entries(p.model_breakdown)) {
+  for (const p of summary?.providers ?? []) {
+    for (const [model, cost] of Object.entries(p.model_breakdown)) {
       if (!modelMap[model]) modelMap[model] = {}
-      modelMap[model][p.provider] = tokens
+      modelMap[model][p.provider] = cost
     }
   }
   for (const [model, providerCosts] of Object.entries(modelMap)) {
@@ -311,6 +168,14 @@ export function ExternalUsagePage() {
     return sumB - sumA
   })
 
+  const summaryTotalTokens = (summary?.providers ?? []).reduce(
+    (total, provider) => total + totalTokens(provider.total_input_tokens, provider.total_output_tokens),
+    0,
+  )
+  const reconciliation = summary?.reconciliation
+  const configuredReconciliationKeys = providers.filter(provider => provider.enabled).length
+  const comparisonRows = reconciliation?.comparisons.slice(0, 8) ?? []
+
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
       {/* Header */}
@@ -318,10 +183,10 @@ export function ExternalUsagePage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <BarChart3 className="w-7 h-7" />
-            External LLM Usage
+            LLM Usage
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Monitor AOS local CLI usage first; deployment API billing keys remain available below
+            Internal CLI subscription usage and API fallback tracking
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -337,7 +202,7 @@ export function ExternalUsagePage() {
           </select>
           <button
             onClick={handleSync}
-            disabled={isSyncing || pageIsLoading}
+            disabled={isSyncing || isLoading}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm rounded-md transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
@@ -347,38 +212,35 @@ export function ExternalUsagePage() {
       </div>
 
       {/* Error banner */}
-      {pageError && (
+      {error && (
         <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-300 text-sm">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
-          {pageError}
+          {error}
         </div>
       )}
 
-      {/* Total cost + provider cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      {/* Total tokens + provider cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
         {/* Total */}
         <div className="md:col-span-1 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
           <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm mb-1">
-            <DollarSign className="w-4 h-4" />
+            <Hash className="w-4 h-4" />
             Total Tokens
           </div>
           <div className="text-2xl font-bold text-gray-900 dark:text-white">
-            {pageIsLoading ? '...' : formatTokens(displayTotalTokens)}
+            {isLoading ? '...' : formatTokens(summaryTotalTokens)}
           </div>
           <div className="text-xs text-gray-400 mt-1">
-            {hasLocalCliUsage ? 'Local CLI observed usage' : `Last ${selectedPeriod} days`}
-          </div>
-          <div className="text-xs text-green-600 dark:text-green-400 mt-1">
-            Actual billing: {formatCost(displayCost)} (subscription/free)
+            Estimated cost {formatCost(summary?.total_cost_usd ?? 0)} · Last {selectedPeriod} days
           </div>
         </div>
 
         {/* Per-provider cards */}
-        {PROVIDER_ORDER.map(pkey => {
-          const pData = displayProviders.find(p => p.provider === pkey)
+        {providerKeys.map(pkey => {
+          const pData = summary?.providers.find(p => p.provider === pkey)
           const pConf = providers.find(p => p.provider === pkey)
-          const totalTokens = (pData?.total_input_tokens ?? 0) + (pData?.total_output_tokens ?? 0)
-          const isLocalProvider = pkey === 'codex_cli' || pkey === 'anthropic'
+          const isTracked = Boolean(pData?.total_requests)
+          const providerTokens = pData ? totalTokens(pData.total_input_tokens, pData.total_output_tokens) : 0
           return (
             <div
               key={pkey}
@@ -389,46 +251,146 @@ export function ExternalUsagePage() {
                   className="text-xs font-semibold uppercase tracking-wide"
                   style={{ color: PROVIDER_COLORS[pkey] }}
                 >
-                  {PROVIDER_LABELS[pkey]}
+                  {PROVIDER_LABELS[pkey] ?? pkey}
                 </span>
-                {pConf?.enabled || (isLocalProvider && totalTokens > 0) ? (
+                {isTracked || pConf?.enabled ? (
                   <CheckCircle className="w-3.5 h-3.5 text-green-500" />
                 ) : (
                   <AlertCircle className="w-3.5 h-3.5 text-gray-400" />
                 )}
               </div>
               <div className="text-xl font-bold text-gray-900 dark:text-white">
-                {pageIsLoading ? '...' : formatTokens(totalTokens)}
+                {isLoading ? '...' : formatTokens(providerTokens)}
               </div>
               <div className="text-xs text-gray-400 mt-0.5">
-                {pData ? `${formatCost(pData.total_cost_usd)} actual cost` : pConf?.enabled ? 'No data' : 'Not configured'}
+                {pData ? `Estimated cost ${formatCost(pData.total_cost_usd)}` : pConf?.enabled ? 'No data' : 'Not tracked'}
               </div>
             </div>
           )
         })}
       </div>
 
-      {/* Daily Cost Trend */}
+      {/* Internal ledger vs optional provider billing reconciliation */}
+      {reconciliation && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                <GitCompareArrows className="w-4 h-4" />
+                Usage Reconciliation
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Primary usage totals come from the internal ledger.
+              </p>
+            </div>
+            <span className="inline-flex items-center rounded-md border border-gray-200 dark:border-gray-700 px-2.5 py-1 text-xs font-medium text-gray-600 dark:text-gray-300">
+              {reconciliation.provider_billing_enabled ? 'Provider billing enabled' : 'Provider billing disabled'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border-b border-gray-200 dark:border-gray-700">
+            <div className="p-4">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Primary source</div>
+              <div className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                Internal CLI ledger
+              </div>
+            </div>
+            <div className="p-4">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Ledger tokens</div>
+              <div className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                {formatTokens(reconciliation.internal_total_tokens)}
+              </div>
+              <div className="text-xs text-gray-400">
+                {reconciliation.internal_total_requests.toLocaleString()} requests
+              </div>
+            </div>
+            <div className="p-4">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Provider billing tokens</div>
+              <div className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                {formatTokens(reconciliation.provider_billing_total_tokens)}
+              </div>
+              <div className="text-xs text-gray-400">
+                {reconciliation.provider_billing_record_count.toLocaleString()} records
+              </div>
+            </div>
+            <div className="p-4">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Configured keys</div>
+              <div className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                {configuredReconciliationKeys}
+              </div>
+              <div className="text-xs text-gray-400">
+                Optional provider billing
+              </div>
+            </div>
+          </div>
+
+          {comparisonRows.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-700/50">
+                  <tr>
+                    {['Provider', 'Ledger Tokens', 'Billing Tokens', 'Token Delta', 'Cost Delta', 'Status'].map(h => (
+                      <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {comparisonRows.map(row => (
+                    <tr key={row.provider} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                      <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
+                        {PROVIDER_LABELS[row.provider] ?? row.provider}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
+                        {formatTokens(row.internal_total_tokens)}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
+                        {formatTokens(row.provider_billing_total_tokens)}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
+                        {formatSignedTokens(row.delta_tokens)}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
+                        {formatSignedCost(row.delta_cost_usd)}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
+                        {reconciliationStatusLabel(row.status)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="px-5 py-4 text-sm text-gray-500 dark:text-gray-400">
+              No reconciliation comparison rows for this period.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Daily estimated cost trend */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <DailyCostTrend records={displayRecords} />
+        <DailyCostTrend records={summary?.records ?? []} />
       </div>
 
       {/* Member Usage Table */}
       <MemberUsageTable
-        records={displayRecords}
-        isLoading={pageIsLoading}
+        records={summary?.records ?? []}
+        isLoading={isLoading}
       />
 
       {/* Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Cost by Provider - Pie */}
+        {/* Estimated cost by Provider - Pie */}
         <div className="p-5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-            Usage by Provider
+            Estimated Cost by Provider
           </h2>
           {pieData.length === 0 ? (
             <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
-              No usage data available
+              No estimated cost data available
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={220}>
@@ -439,24 +401,24 @@ export function ExternalUsagePage() {
                   cy="50%"
                   outerRadius={80}
                   dataKey="value"
-                  label={({ name, value }) => `${String(name ?? '')}: ${formatTokens(Number(value ?? 0))}`}
+                  label={({ name, value }) => `${name}: ${formatCost(value)}`}
                   labelLine={false}
                 >
                   {pieData.map((entry, i) => (
                     <Cell key={i} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(v) => formatTokens(Number(v ?? 0))} />
+                <Tooltip formatter={(v) => formatCost(Number(v ?? 0))} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
           )}
         </div>
 
-        {/* Model Cost Breakdown - Bar */}
+        {/* Estimated model cost breakdown - Bar */}
         <div className="p-5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-            Usage by Model
+            Estimated Cost by Model
           </h2>
           {modelData.length === 0 ? (
             <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
@@ -466,9 +428,9 @@ export function ExternalUsagePage() {
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={modelData.slice(0, 8)} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={v => formatTokens(Number(v ?? 0))} />
+                <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={v => `$${v.toFixed(2)}`} />
                 <YAxis type="category" dataKey="model" tick={{ fontSize: 10 }} width={100} />
-                <Tooltip formatter={(v) => formatTokens(Number(v ?? 0))} />
+                <Tooltip formatter={(v) => formatCost(Number(v ?? 0))} />
                 {Object.keys(PROVIDER_COLORS).map(p => (
                   <Bar key={p} dataKey={p} stackId="a" fill={PROVIDER_COLORS[p]} name={PROVIDER_LABELS[p]} />
                 ))}
@@ -489,7 +451,7 @@ export function ExternalUsagePage() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700/50">
               <tr>
-                {['Provider', 'Total Tokens', 'Output Tokens', 'Cost', 'Requests', 'Status'].map(h => (
+                {['Provider', 'Input Tokens', 'Output Tokens', 'Estimated Cost', 'Requests', 'Status'].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     {h}
                   </th>
@@ -497,11 +459,10 @@ export function ExternalUsagePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {PROVIDER_ORDER.map(pkey => {
-                const pData = displayProviders.find(p => p.provider === pkey)
+              {providerKeys.map(pkey => {
+                const pData = summary?.providers.find(p => p.provider === pkey)
                 const pConf = providers.find(p => p.provider === pkey)
-                const totalTokens = (pData?.total_input_tokens ?? 0) + (pData?.total_output_tokens ?? 0)
-                const isLocalProvider = pkey === 'codex_cli' || pkey === 'anthropic'
+                const isTracked = Boolean(pData?.total_requests)
                 return (
                   <tr key={pkey} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                     <td className="px-4 py-3">
@@ -509,11 +470,11 @@ export function ExternalUsagePage() {
                         className="font-medium"
                         style={{ color: PROVIDER_COLORS[pkey] }}
                       >
-                        {PROVIDER_LABELS[pkey]}
+                        {PROVIDER_LABELS[pkey] ?? pkey}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
-                      {pData ? formatTokens(totalTokens) : '\u2014'}
+                      {pData ? formatTokens(pData.total_input_tokens) : '\u2014'}
                     </td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
                       {pData ? formatTokens(pData.total_output_tokens) : '\u2014'}
@@ -525,10 +486,10 @@ export function ExternalUsagePage() {
                       {pData ? pData.total_requests.toLocaleString() : '\u2014'}
                     </td>
                     <td className="px-4 py-3">
-                      {isLocalProvider && totalTokens > 0 ? (
+                      {isTracked ? (
                         <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400 text-xs">
                           <CheckCircle className="w-3.5 h-3.5" />
-                          Local CLI
+                          Tracked
                         </span>
                       ) : pConf?.enabled ? (
                         <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400 text-xs">
@@ -538,7 +499,7 @@ export function ExternalUsagePage() {
                       ) : (
                         <span className="inline-flex items-center gap-1 text-gray-400 text-xs">
                           <Settings className="w-3.5 h-3.5" />
-                          Not configured
+                          Not tracked
                         </span>
                       )}
                     </td>
@@ -550,7 +511,7 @@ export function ExternalUsagePage() {
         </div>
       </div>
 
-      {/* Admin/manager usage key management (replaces the read-only env guide) */}
+      {/* Optional provider billing reconciliation key management */}
       <AdminKeyManager />
     </div>
   )

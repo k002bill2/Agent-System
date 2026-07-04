@@ -283,7 +283,8 @@ describe('agents store', () => {
         expect.stringContaining('/agents/orchestrate/analyze'),
         expect.objectContaining({
           task: 'Build a React component',
-        })
+        }),
+        { timeout: 180_000 }
       )
     })
 
@@ -707,6 +708,7 @@ describe('agents store', () => {
       expect(callUrl).toContain('analyze-with-images')
       const callOpts = fetchSpy.mock.calls[0][1] as RequestInit
       expect(callOpts.body).toBeInstanceOf(FormData)
+      expect(callOpts.signal).toBeInstanceOf(AbortSignal)
     })
 
     it('uses multipart/form-data when images are passed as argument', async () => {

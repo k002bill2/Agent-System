@@ -66,7 +66,6 @@ function formatCost(cost: number): string {
 }
 
 function formatTokens(tokens: number): string {
-  if (tokens >= 1_000_000_000) return `${(tokens / 1_000_000_000).toFixed(1)}B`
   if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`
   if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}K`
   return tokens.toString()
@@ -74,21 +73,53 @@ function formatTokens(tokens: number): string {
 
 const PROVIDER_LABELS: Record<string, string> = {
   codex_cli: 'Codex CLI',
+  claude_cli: 'Claude CLI',
+  internal_cli: 'Internal CLI',
+  internal_api: 'Internal API',
   openai: 'OpenAI',
   github_copilot: 'GitHub Copilot',
+  google: 'Google',
   google_gemini: 'Google Gemini',
   anthropic: 'Anthropic',
+  ollama: 'Ollama',
 }
 
 const PROVIDER_COLORS: Record<string, string> = {
-  codex_cli: '#a855f7',
+  codex_cli: '#7c3aed',
+  claude_cli: '#d97706',
+  internal_cli: '#059669',
+  internal_api: '#64748b',
   openai: '#10a37f',
   github_copilot: '#6e7681',
+  google: '#4285f4',
   google_gemini: '#4285f4',
   anthropic: '#d97706',
+  ollama: '#16a34a',
 }
 
-const ALL_PROVIDERS = ['codex_cli', 'anthropic', 'openai', 'github_copilot', 'google_gemini']
+const PROVIDER_ORDER = [
+  'codex_cli',
+  'claude_cli',
+  'internal_cli',
+  'internal_api',
+  'openai',
+  'anthropic',
+  'google',
+  'google_gemini',
+  'github_copilot',
+  'ollama',
+]
+
+function sortProviders(providers: Iterable<string>): string[] {
+  return Array.from(providers).sort((a, b) => {
+    const ai = PROVIDER_ORDER.indexOf(a)
+    const bi = PROVIDER_ORDER.indexOf(b)
+    if (ai !== -1 || bi !== -1) {
+      return (ai === -1 ? Number.MAX_SAFE_INTEGER : ai) - (bi === -1 ? Number.MAX_SAFE_INTEGER : bi)
+    }
+    return a.localeCompare(b)
+  })
+}
 
 interface Props {
   records: UnifiedUsageRecord[]
@@ -112,11 +143,7 @@ export default function MemberUsageTable({ records, isLoading }: Props) {
           m.key.toLowerCase().includes(q)
         )
       })
-      .sort((a, b) => {
-        const aValue = a.totalCost > 0 ? a.totalCost : a.totalTokens
-        const bValue = b.totalCost > 0 ? b.totalCost : b.totalTokens
-        return sortAsc ? aValue - bValue : bValue - aValue
-      })
+      .sort((a, b) => sortAsc ? a.totalTokens - b.totalTokens : b.totalTokens - a.totalTokens)
   }, [members, search, sortAsc])
 
   // Determine which providers have any data
@@ -127,7 +154,7 @@ export default function MemberUsageTable({ records, isLoading }: Props) {
         active.add(p)
       }
     }
-    return ALL_PROVIDERS.filter(p => active.has(p))
+    return sortProviders(active)
   }, [members])
 
   if (isLoading) {
@@ -183,7 +210,7 @@ export default function MemberUsageTable({ records, isLoading }: Props) {
                   onClick={() => setSortAsc(v => !v)}
                 >
                   <span className="flex items-center gap-1">
-                    Total Usage
+                    Total Tokens
                     {sortAsc ? (
                       <ChevronUp className="w-3.5 h-3.5" />
                     ) : (
@@ -231,21 +258,21 @@ export default function MemberUsageTable({ records, isLoading }: Props) {
                     }
                     return (
                       <td key={p} className="px-4 py-3 text-gray-600 dark:text-gray-300">
-                        <div className="text-xs font-medium">{formatCost(pd.cost)}</div>
-                        <div className="text-xs text-gray-400">{formatTokens(pd.tokens)} tokens</div>
+                        <div className="text-xs font-medium">{formatTokens(pd.tokens)} tokens</div>
+                        <div className="text-xs text-gray-400">Estimated cost {formatCost(pd.cost)}</div>
                       </td>
                     )
                   })}
 
-                  {/* Total cost */}
+                  {/* Total tokens */}
                   <td className="px-4 py-3">
                     <span className="flex items-center gap-1 font-semibold text-gray-900 dark:text-white text-xs">
                       {member.totalCost > 50 && (
                         <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                       )}
-                      {formatCost(member.totalCost)}
+                      {formatTokens(member.totalTokens)} tokens
                     </span>
-                    <div className="text-xs text-gray-400">{formatTokens(member.totalTokens)} tokens</div>
+                    <div className="text-xs text-gray-400">Estimated cost {formatCost(member.totalCost)}</div>
                   </td>
                 </tr>
               ))}

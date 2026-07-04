@@ -1,16 +1,16 @@
 # External LLM Usage Monitoring — Design Document
 
 **Date:** 2026-02-19
-**Status:** Approved
-**Approach:** A (개인 키 + 하이브리드 수집)
+**Status:** Superseded by CLI subscription runtime + internal `llm_usage_ledger`
+**Approach:** Historical A (개인 키 + 하이브리드 수집)
+
+> **현재 상태(2026-07-04):** 이 설계는 API-key 중심 초기 설계 이력이다. 현재 운영 기준은 CLI profile/entitlement와 내부 `llm_usage_ledger`이며, 사용자 API key는 fallback/compatibility, provider billing API는 optional reconciliation 용도로만 남아 있다. 최신 운영 절차는 `docs/guides/llm-cli-subscription-usage-guide.md`를 기준으로 한다.
 
 ---
 
 ## 1. 목적
 
-조직 팀원들이 OpenAI(Codex), Google Gemini, Anthropic Claude를 사용할 때
-토큰 사용량과 비용을 관리자가 사용자별로 모니터링할 수 있게 한다.
-사용자는 자신의 LLM API Key를 직접 등록하며, 관리자는 집계된 사용량을 조회한다.
+조직 팀원들이 Codex CLI/Claude CLI/Ollama/API fallback runtime을 사용할 때 토큰 사용량과 비용 추정치를 관리자가 사용자별로 모니터링할 수 있게 한다. 사용자는 기본적으로 CLI entitlement를 부여받으며, API key 등록은 fallback/compatibility 경로로만 사용한다.
 
 ---
 
@@ -19,15 +19,20 @@
 ```
 사용자                      AOS Backend                  LLM Provider
 ────────                    ───────────                  ────────────
-[My LLM Accounts]           [Credential Vault]
-  └─ API Key 등록  ──▶        (DB 암호화 저장)
+[LLM Access]                [CLI Profile/Entitlement]
+  └─ Profile 매핑  ──▶        (DB 저장)
 
-[외부 도구 사용]    ──폴링── [Usage Poller]    ──▶   OpenAI Usage API
-(Cursor 등)          주기적                          Anthropic Admin API
-                             │                        (Gemini: 불가)
+[My LLM Accounts]           [Credential Vault]
+  └─ fallback key 등록 ─▶     (DB 암호화 저장)
+
+[Provider Billing] ──선택── [Reconciliation] ──▶   OpenAI Usage API
+                         비교값                     Anthropic Admin API
+                             │                       GitHub Copilot API
 
 [AOS Proxy 호출]    ──▶     [LLM Proxy]       ──▶   OpenAI / Gemini / Claude
-                             │ 실시간 기록             (사용자 키 사용)
+                             │ fallback 기록           (사용자 키 사용)
+                             ▼
+[CLI Runtime]       ──▶     [LLM Usage Ledger]
                              ▼
 관리자 대시보드    ◀──     [Usage Aggregator]
 (ExternalUsagePage)          (per-user 집계)

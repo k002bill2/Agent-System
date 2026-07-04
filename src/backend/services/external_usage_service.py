@@ -3,21 +3,254 @@
 from __future__ import annotations
 
 import os
+import uuid
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
+from typing import Any
 
 import httpx
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from db.models import LLMUsageLedgerModel
 from models.external_usage import (
     ExternalProvider,
     ExternalUsageSummaryResponse,
     ProviderConfig,
     ProviderHealthStatus,
     UnifiedUsageRecord,
+    UsageReconciliationComparison,
+    UsageReconciliationSummary,
     UsageSummary,
 )
 from services.deployment_usage_credential_service import resolve_admin_key
+
+_PROVIDER_ALIASES: dict[str, ExternalProvider] = {
+    "google": ExternalProvider.GOOGLE_GEMINI,
+    "google_gemini": ExternalProvider.GOOGLE_GEMINI,
+}
+
+_LEDGER_PROVIDER_FILTERS: dict[ExternalProvider, set[str]] = {
+    ExternalProvider.CODEX_CLI: {"codex_cli"},
+    ExternalProvider.CLAUDE_CLI: {"claude_cli"},
+    ExternalProvider.OPENAI: {"openai"},
+    ExternalProvider.ANTHROPIC: {"anthropic"},
+    ExternalProvider.GOOGLE: {"google", "google_gemini"},
+    ExternalProvider.GOOGLE_GEMINI: {"google", "google_gemini"},
+    ExternalProvider.OLLAMA: {"ollama"},
+}
+
+
+def _bool_env(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+def _ledger_external_provider(provider: str | None, mode: str | None) -> ExternalProvider:
+    normalized = (provider or "").lower()
+    if normalized in _PROVIDER_ALIASES:
+        return _PROVIDER_ALIASES[normalized]
+    try:
+        return ExternalProvider(normalized)
+    except ValueError:
+        if mode == "cli":
+            return ExternalProvider.INTERNAL_CLI
+        if mode == "local":
+            return ExternalProvider.OLLAMA
+        return ExternalProvider.INTERNAL_API
+
+
+def _record_tokens(record: Any) -> tuple[int, int, int]:
+    input_tokens = getattr(record, "input_tokens", None) or 0
+    output_tokens = getattr(record, "output_tokens", None) or 0
+    total_tokens = getattr(record, "total_tokens", None)
+    if total_tokens is None:
+        total_tokens = input_tokens + output_tokens
+    return input_tokens, output_tokens, total_tokens
+
+
+def summarize_internal_ledger_records(
+    records: list[Any],
+    start_time: datetime,
+    end_time: datetime,
+) -> tuple[list[UnifiedUsageRecord], list[UsageSummary]]:
+    """Map internal LLM ledger rows onto the legacy External Usage contract."""
+    external_records: list[UnifiedUsageRecord] = []
+    summaries_by_provider: dict[ExternalProvider, UsageSummary] = {}
+
+    for record in records:
+        provider = _ledger_external_provider(
+            getattr(record, "provider", None),
+            getattr(record, "mode", None),
+        )
+        input_tokens, output_tokens, total_tokens = _record_tokens(record)
+        cost_usd = getattr(record, "estimated_cost_usd", None) or 0.0
+        timestamp = getattr(record, "started_at", None) or start_time
+        model = getattr(record, "model", None)
+        user_id = getattr(record, "user_id", None)
+        record_id = getattr(record, "id", None) or str(uuid.uuid4())
+
+        external_records.append(
+            UnifiedUsageRecord(
+                id=str(record_id),
+                provider=provider,
+                timestamp=timestamp,
+                bucket_width="event",
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=total_tokens,
+                cost_usd=cost_usd,
+                request_count=1,
+                model=model,
+                user_id=user_id,
+                project_id=getattr(record, "project_id", None),
+                raw_data={
+                    "ledger_id": getattr(record, "id", None),
+                    "source": getattr(record, "source", None),
+                    "mode": getattr(record, "mode", None),
+                    "status": getattr(record, "status", None),
+                    "measurement_method": getattr(record, "measurement_method", None),
+                    "organization_id": getattr(record, "organization_id", None),
+                },
+            )
+        )
+
+        summary = summaries_by_provider.setdefault(
+            provider,
+            UsageSummary(
+                provider=provider,
+                period_start=start_time,
+                period_end=end_time,
+            ),
+        )
+        summary.total_input_tokens += input_tokens
+        summary.total_output_tokens += output_tokens
+        summary.total_cost_usd += cost_usd
+        summary.total_requests += 1
+        if model:
+            summary.model_breakdown[model] = summary.model_breakdown.get(model, 0.0) + cost_usd
+        if user_id:
+            summary.member_breakdown[user_id] = (
+                summary.member_breakdown.get(user_id, 0.0) + cost_usd
+            )
+
+    return external_records, list(summaries_by_provider.values())
+
+
+def _summary_tokens(summary: UsageSummary | None) -> int:
+    if summary is None:
+        return 0
+    return summary.total_input_tokens + summary.total_output_tokens
+
+
+def _merge_summaries(summaries: list[UsageSummary]) -> dict[ExternalProvider, UsageSummary]:
+    merged: dict[ExternalProvider, UsageSummary] = {}
+    for summary in summaries:
+        target = merged.setdefault(
+            summary.provider,
+            UsageSummary(
+                provider=summary.provider,
+                period_start=summary.period_start,
+                period_end=summary.period_end,
+            ),
+        )
+        target.total_input_tokens += summary.total_input_tokens
+        target.total_output_tokens += summary.total_output_tokens
+        target.total_cost_usd += summary.total_cost_usd
+        target.total_requests += summary.total_requests
+        for model, cost in summary.model_breakdown.items():
+            target.model_breakdown[model] = target.model_breakdown.get(model, 0.0) + cost
+        for member, cost in summary.member_breakdown.items():
+            target.member_breakdown[member] = target.member_breakdown.get(member, 0.0) + cost
+    return merged
+
+
+def _comparison_status(
+    *,
+    provider_billing_enabled: bool,
+    internal_tokens: int,
+    internal_requests: int,
+    provider_tokens: int,
+    provider_requests: int,
+) -> str:
+    has_internal = internal_tokens > 0 or internal_requests > 0
+    has_provider = provider_tokens > 0 or provider_requests > 0
+    if has_internal and has_provider:
+        return "compared"
+    if has_internal:
+        return "ledger_only"
+    if has_provider:
+        return "provider_only"
+    return "not_collected" if provider_billing_enabled else "provider_billing_disabled"
+
+
+def build_reconciliation_summary(
+    *,
+    ledger_summaries: list[UsageSummary],
+    provider_billing_summaries: list[UsageSummary],
+    provider_billing_enabled: bool,
+    provider_billing_record_count: int,
+) -> UsageReconciliationSummary:
+    """Build read-only comparison metadata without changing the primary summary."""
+    ledger_by_provider = _merge_summaries(ledger_summaries)
+    provider_by_provider = _merge_summaries(provider_billing_summaries)
+    provider_keys = sorted(
+        set(ledger_by_provider) | set(provider_by_provider),
+        key=lambda provider: provider.value,
+    )
+
+    comparisons: list[UsageReconciliationComparison] = []
+    for provider in provider_keys:
+        internal_summary = ledger_by_provider.get(provider)
+        provider_summary = provider_by_provider.get(provider)
+        internal_tokens = _summary_tokens(internal_summary)
+        provider_tokens = _summary_tokens(provider_summary)
+        internal_cost = internal_summary.total_cost_usd if internal_summary else 0.0
+        provider_cost = provider_summary.total_cost_usd if provider_summary else 0.0
+        internal_requests = internal_summary.total_requests if internal_summary else 0
+        provider_requests = provider_summary.total_requests if provider_summary else 0
+
+        comparisons.append(
+            UsageReconciliationComparison(
+                provider=provider,
+                internal_total_tokens=internal_tokens,
+                internal_total_cost_usd=internal_cost,
+                internal_total_requests=internal_requests,
+                provider_billing_total_tokens=provider_tokens,
+                provider_billing_total_cost_usd=provider_cost,
+                provider_billing_total_requests=provider_requests,
+                delta_tokens=provider_tokens - internal_tokens,
+                delta_cost_usd=provider_cost - internal_cost,
+                status=_comparison_status(
+                    provider_billing_enabled=provider_billing_enabled,
+                    internal_tokens=internal_tokens,
+                    internal_requests=internal_requests,
+                    provider_tokens=provider_tokens,
+                    provider_requests=provider_requests,
+                ),
+            )
+        )
+
+    return UsageReconciliationSummary(
+        primary_source="internal_ledger",
+        provider_billing_enabled=provider_billing_enabled,
+        internal_total_tokens=sum(_summary_tokens(summary) for summary in ledger_summaries),
+        internal_total_cost_usd=sum(summary.total_cost_usd for summary in ledger_summaries),
+        internal_total_requests=sum(summary.total_requests for summary in ledger_summaries),
+        provider_billing_total_tokens=sum(
+            _summary_tokens(summary) for summary in provider_billing_summaries
+        ),
+        provider_billing_total_cost_usd=sum(
+            summary.total_cost_usd for summary in provider_billing_summaries
+        ),
+        provider_billing_total_requests=sum(
+            summary.total_requests for summary in provider_billing_summaries
+        ),
+        provider_billing_record_count=provider_billing_record_count,
+        comparisons=comparisons,
+    )
 
 
 class BaseUsageCollector(ABC):
@@ -387,6 +620,39 @@ class ExternalUsageService:
             return "***"
         return key[:8] + "..."
 
+    async def _collect_internal_ledger_records(
+        self,
+        db: AsyncSession,
+        start_time: datetime,
+        end_time: datetime,
+        providers: list[ExternalProvider] | None,
+    ) -> list[LLMUsageLedgerModel]:
+        stmt = select(LLMUsageLedgerModel).where(
+            LLMUsageLedgerModel.started_at >= start_time,
+            LLMUsageLedgerModel.started_at <= end_time,
+        )
+
+        if providers:
+            provider_values: set[str] = set()
+            mode_values: set[str] = set()
+            for provider in providers:
+                provider_values.update(_LEDGER_PROVIDER_FILTERS.get(provider, {provider.value}))
+                if provider == ExternalProvider.INTERNAL_CLI:
+                    mode_values.add("cli")
+                elif provider == ExternalProvider.INTERNAL_API:
+                    mode_values.add("api")
+
+            clauses = []
+            if provider_values:
+                clauses.append(LLMUsageLedgerModel.provider.in_(provider_values))
+            if mode_values:
+                clauses.append(LLMUsageLedgerModel.mode.in_(mode_values))
+            if clauses:
+                stmt = stmt.where(or_(*clauses))
+
+        result = await db.execute(stmt.order_by(LLMUsageLedgerModel.started_at.desc()))
+        return list(result.scalars().all())
+
     async def get_summary(
         self,
         db: AsyncSession,
@@ -396,42 +662,67 @@ class ExternalUsageService:
     ) -> ExternalUsageSummaryResponse:
         all_records: list[UnifiedUsageRecord] = []
         summaries: list[UsageSummary] = []
+        provider_billing_records: list[UnifiedUsageRecord] = []
+        provider_billing_summaries: list[UsageSummary] = []
 
-        collectors = await self._build_collectors(db)
-        target_collectors = {
-            p: c for p, c in collectors.items() if providers is None or p in providers
-        }
+        ledger_rows = await self._collect_internal_ledger_records(
+            db,
+            start_time,
+            end_time,
+            providers,
+        )
+        ledger_records, ledger_summaries = summarize_internal_ledger_records(
+            ledger_rows,
+            start_time,
+            end_time,
+        )
+        all_records.extend(ledger_records)
+        summaries.extend(ledger_summaries)
 
-        for provider, collector in target_collectors.items():
-            try:
-                records = await collector.collect(start_time, end_time)
-                all_records.extend(records)
+        provider_billing_enabled = _bool_env(
+            "EXTERNAL_USAGE_INCLUDE_PROVIDER_BILLING", default=False
+        )
+        if provider_billing_enabled:
+            collectors = await self._build_collectors(db)
+            target_collectors = {
+                p: c for p, c in collectors.items() if providers is None or p in providers
+            }
 
-                summary = UsageSummary(
-                    provider=provider,
-                    period_start=start_time,
-                    period_end=end_time,
-                )
-                for rec in records:
-                    summary.total_input_tokens += rec.input_tokens
-                    summary.total_output_tokens += rec.output_tokens
-                    summary.total_cost_usd += rec.cost_usd
-                    summary.total_requests += rec.request_count
-                    if rec.model:
-                        summary.model_breakdown[rec.model] = (
-                            summary.model_breakdown.get(rec.model, 0.0) + rec.cost_usd
-                        )
-                    if rec.user_id:
-                        summary.member_breakdown[rec.user_id] = (
-                            summary.member_breakdown.get(rec.user_id, 0.0) + rec.cost_usd
-                        )
-                summaries.append(summary)
-            except Exception:
-                continue
+            for provider, collector in target_collectors.items():
+                try:
+                    records = await collector.collect(start_time, end_time)
+                    provider_billing_records.extend(records)
+                    all_records.extend(records)
 
-        # Merge proxy-collected records within the requested period
-        filtered_proxy = [r for r in self._proxy_records if start_time <= r.timestamp <= end_time]
-        all_records.extend(filtered_proxy)
+                    summary = UsageSummary(
+                        provider=provider,
+                        period_start=start_time,
+                        period_end=end_time,
+                    )
+                    for rec in records:
+                        summary.total_input_tokens += rec.input_tokens
+                        summary.total_output_tokens += rec.output_tokens
+                        summary.total_cost_usd += rec.cost_usd
+                        summary.total_requests += rec.request_count
+                        if rec.model:
+                            summary.model_breakdown[rec.model] = (
+                                summary.model_breakdown.get(rec.model, 0.0) + rec.cost_usd
+                            )
+                        if rec.user_id:
+                            summary.member_breakdown[rec.user_id] = (
+                                summary.member_breakdown.get(rec.user_id, 0.0) + rec.cost_usd
+                            )
+                    provider_billing_summaries.append(summary)
+                    summaries.append(summary)
+                except Exception:
+                    continue
+
+        # Legacy fallback for deployments without the DB ledger enabled.
+        if not ledger_records:
+            filtered_proxy = [
+                r for r in self._proxy_records if start_time <= r.timestamp <= end_time
+            ]
+            all_records.extend(filtered_proxy)
 
         total_cost = sum(s.total_cost_usd for s in summaries)
         return ExternalUsageSummaryResponse(
@@ -440,6 +731,12 @@ class ExternalUsageService:
             records=all_records,
             period_start=start_time,
             period_end=end_time,
+            reconciliation=build_reconciliation_summary(
+                ledger_summaries=ledger_summaries,
+                provider_billing_summaries=provider_billing_summaries,
+                provider_billing_enabled=provider_billing_enabled,
+                provider_billing_record_count=len(provider_billing_records),
+            ),
         )
 
     async def get_provider_health(self, db: AsyncSession) -> list[ProviderHealthStatus]:

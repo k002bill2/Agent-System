@@ -10,6 +10,8 @@ import { getApiUrl } from '../config/api'
 import { useAuthStore } from './auth'
 import { useSettingsStore, TERMINAL_DISPLAY_NAMES } from './settings'
 
+const TASK_ANALYZER_TIMEOUT_MS = 180_000
+
 // Types
 export type AgentCategory = 'development' | 'orchestration' | 'quality' | 'research'
 export type AgentStatus = 'available' | 'busy' | 'unavailable' | 'error'
@@ -415,21 +417,38 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
           headers['Authorization'] = `Bearer ${accessToken}`
         }
 
-        const response = await fetch(`${API_BASE}/agents/orchestrate/analyze-with-images`, {
-          method: 'POST',
-          headers,
-          body: formData,
-        })
+        const controller = new AbortController()
+        const timeoutId = window.setTimeout(() => controller.abort(), TASK_ANALYZER_TIMEOUT_MS)
+        let response: Response
+        try {
+          response = await fetch(`${API_BASE}/agents/orchestrate/analyze-with-images`, {
+            method: 'POST',
+            headers,
+            body: formData,
+            signal: controller.signal,
+          })
+        } catch (error) {
+          if (error instanceof DOMException && error.name === 'AbortError') {
+            throw new Error('Request timed out', { cause: error })
+          }
+          throw error
+        } finally {
+          window.clearTimeout(timeoutId)
+        }
         if (!response.ok) {
           throw new Error(`Failed to analyze task: ${response.statusText}`)
         }
         result = await response.json()
       } else {
         // Use JSON endpoint when no images
-        result = await apiClient.post<TaskAnalysisResult>('/api/agents/orchestrate/analyze', {
-          task,
-          context: context || null,
-        })
+        result = await apiClient.post<TaskAnalysisResult>(
+          '/api/agents/orchestrate/analyze',
+          {
+            task,
+            context: context || null,
+          },
+          { timeout: TASK_ANALYZER_TIMEOUT_MS }
+        )
       }
 
       set({ lastAnalysis: result, isLoading: false, attachedImages: [], ocrStatuses: {}, attachedMdFiles: [], mdReadStatuses: {} })

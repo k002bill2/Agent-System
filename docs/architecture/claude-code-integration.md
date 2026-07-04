@@ -209,17 +209,18 @@ Model Context Protocol을 통한 외부 도구 연동.
 
 ## LLM 연동
 
-AOS는 자체 LLM Router를 통해 여러 프로바이더를 직접 연동합니다:
+AOS는 CLI-first 런타임을 기본으로 사용하고, 필요한 경우에만 API fallback provider를 사용합니다:
 
 ```
 Claude Code (Opus) ─── Claude Code 자체 LLM
         │
-AOS Backend ──┬── Google Gemini (기본)
-              ├── Anthropic Claude
-              └── Ollama (로컬)
+AOS Backend ──┬── Codex CLI (기본, ChatGPT 구독 세션)
+              ├── Claude CLI (Task Analyzer/Warp 일부 경로)
+              ├── Ollama (로컬)
+              └── OpenAI / Gemini / Anthropic (fallback)
 ```
 
-**설정**: `.env` 파일의 `LLM_PROVIDER` 환경변수로 프로바이더 선택.
+**설정**: `.env` 파일의 `LLM_PROVIDER=codex_cli`, `LLM_DEFAULT_MODE=cli`, `LLM_USAGE_SOURCE=internal_ledger`가 기본입니다. API fallback은 `LLM_API_FALLBACK_ENABLED=true`와 사용자 entitlement가 모두 허용된 경우에만 사용합니다.
 
 ---
 

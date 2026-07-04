@@ -3,6 +3,7 @@
 import os
 import uuid
 from collections.abc import AsyncIterator
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -75,6 +76,8 @@ def get_llm():
 
 
 from models.agent_state import AgentState
+from models.llm_access import LLMAccessResponse
+from models.llm_usage import LLMUsageSource
 from models.message import (
     AgentThinkingPayload,
     ApprovalRequiredPayload,
@@ -101,6 +104,19 @@ from services.audit_service import (
 from services.context_compressor import ContextCompressor
 from services.session_service import SessionService, get_session_service
 from tools import ALL_TOOLS
+
+
+def _serialize_llm_access(
+    llm_access: LLMAccessResponse | dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Return a JSON-serializable LLM access payload for session state."""
+    if llm_access is None:
+        return None
+    if isinstance(llm_access, LLMAccessResponse):
+        return llm_access.model_dump(mode="json")
+    if isinstance(llm_access, dict):
+        return LLMAccessResponse.model_validate(llm_access).model_dump(mode="json")
+    return None
 
 
 class OrchestrationEngine:
@@ -162,6 +178,33 @@ class OrchestrationEngine:
         # In-memory session cache (for fast access during execution)
         self._sessions: dict[str, AgentState] = {}
 
+    @staticmethod
+    def _apply_llm_access(
+        state: AgentState,
+        llm_access: LLMAccessResponse | dict[str, Any] | None,
+    ) -> bool:
+        access_payload = _serialize_llm_access(llm_access)
+        if not access_payload:
+            return False
+        state["llm_access"] = access_payload
+        state["user_id"] = state.get("user_id") or access_payload.get("user_id")
+        return True
+
+    @staticmethod
+    def _context_compression_usage_context(state: AgentState) -> dict[str, Any]:
+        project = state.get("project") if isinstance(state.get("project"), dict) else {}
+        context: dict[str, Any] = {
+            "source": LLMUsageSource.CONTEXT_COMPRESSION,
+            "user_id": state.get("user_id"),
+            "organization_id": state.get("organization_id"),
+            "session_id": state.get("session_id"),
+            "project_id": project.get("id"),
+            "metadata": {"event": "context_compression_summary"},
+        }
+        if state.get("llm_access"):
+            context["llm_access"] = state.get("llm_access")
+        return context
+
     async def create_session(
         self,
         user_id: str | None = None,
@@ -169,6 +212,7 @@ class OrchestrationEngine:
         project: Project | None = None,
         session_id: str | None = None,
         organization_id: str | None = None,
+        llm_access: LLMAccessResponse | dict[str, Any] | None = None,
     ) -> str:
         """Create a new orchestration session with optional project context."""
         # Create session via service (handles both memory and DB)
@@ -183,6 +227,8 @@ class OrchestrationEngine:
         # Also cache the state in memory for fast access
         state = await self.session_service.get_session(session_id)
         if state:
+            if self._apply_llm_access(state, llm_access):
+                await self.session_service.update_session(session_id, state)
             self._sessions[session_id] = state
 
         # Audit log: Session created
@@ -243,6 +289,7 @@ class OrchestrationEngine:
         self,
         session_id: str,
         user_message: str,
+        llm_access: LLMAccessResponse | dict[str, Any] | None = None,
     ) -> AgentState:
         """
         Run orchestration for a user message.
@@ -257,6 +304,8 @@ class OrchestrationEngine:
         state = await self.get_session(session_id)
         if not state:
             raise ValueError(f"Session not found: {session_id}")
+
+        self._apply_llm_access(state, llm_access)
 
         # Add user message to state
         user_msg = {
@@ -278,6 +327,7 @@ class OrchestrationEngine:
             state,
             provider=LLM_PROVIDER,
             model=get_model_for_provider(LLM_PROVIDER),
+            usage_context=self._context_compression_usage_context(state),
         )
 
         # Run the graph
@@ -293,6 +343,7 @@ class OrchestrationEngine:
         self,
         session_id: str,
         user_message: str,
+        llm_access: LLMAccessResponse | dict[str, Any] | None = None,
     ) -> AsyncIterator[Message]:
         """
         Stream orchestration events.
@@ -307,6 +358,8 @@ class OrchestrationEngine:
         state = await self.get_session(session_id)
         if not state:
             raise ValueError(f"Session not found: {session_id}")
+
+        self._apply_llm_access(state, llm_access)
 
         # Add user message
         user_msg = {
@@ -328,6 +381,7 @@ class OrchestrationEngine:
             state,
             provider=LLM_PROVIDER,
             model=get_model_for_provider(LLM_PROVIDER),
+            usage_context=self._context_compression_usage_context(state),
         )
         if compression.compressed:
             yield Message(

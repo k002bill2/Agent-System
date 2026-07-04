@@ -2,15 +2,40 @@
 
 import json
 import os
+import time
 import uuid
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import get_current_user
+from api.deps import get_current_user, get_db_session
 from db.models import UserModel
+from models.cost import estimate_tokens, extract_token_usage
+from models.llm_access import LLMAccessResponse
+from models.llm_models import LLMModelConfig, LLMModelRegistry
+from models.llm_usage import (
+    LLMRuntimeMode,
+    LLMUsageMeasurementMethod,
+    LLMUsageRecordCreate,
+    LLMUsageSource,
+    LLMUsageStatus,
+)
+from services.llm_runtime_resolver import (
+    LLMRuntimeRequest,
+    LLMRuntimeResolution,
+    LLMRuntimeResolutionError,
+    resolve_llm_runtime,
+)
+from services.llm_service import LLMService
+from services.llm_usage_ledger_service import (
+    LLMUsageQuotaExceededError,
+    enforce_usage_quota_preflight_best_effort,
+    record_usage_best_effort,
+)
+from utils.time import utcnow
 
 # Image upload directory
 UPLOAD_DIR = Path(os.getenv("AOS_UPLOAD_DIR", "/tmp/aos-uploads"))
@@ -33,6 +58,7 @@ from services.agent_registry import (
     EffortLevel,
     get_agent_registry,
 )
+from services.llm_access_service import get_access_for_user
 from services.mcp_manager import (
     MCPBatchToolCall,
     MCPToolCall,
@@ -42,6 +68,19 @@ from services.task_analysis_service import (
 )
 
 router = APIRouter(prefix="/agents", tags=["agents"])
+
+
+async def _task_analyzer_context_with_access(
+    context: dict[str, Any] | None,
+    user: UserModel,
+    db: AsyncSession,
+) -> dict[str, Any]:
+    analysis_context = dict(context or {})
+    analysis_context["_user_id"] = str(user.id)
+    analysis_context["_organization_id"] = getattr(user, "organization_id", None)
+    analysis_context["_llm_access"] = await get_access_for_user(db, str(user.id))
+    return analysis_context
+
 
 # Default workspace roots (configurable via AOS_WORKSPACE_ROOTS env)
 _DEFAULT_WORKSPACE_ROOTS = [
@@ -319,6 +358,165 @@ _MIME_TYPE_MAP = {
 }
 
 
+def _runtime_mode_for_provider(provider: str) -> LLMRuntimeMode:
+    if provider.endswith("_cli"):
+        return LLMRuntimeMode.CLI
+    if provider == "ollama":
+        return LLMRuntimeMode.LOCAL
+    return LLMRuntimeMode.API
+
+
+def _vision_model_candidates(preferred_provider: str) -> list[LLMModelConfig]:
+    candidates = [
+        model
+        for model in LLMModelRegistry.get_enabled()
+        if model.supports_vision and LLMModelRegistry.is_available(model.id)
+    ]
+    return sorted(
+        candidates,
+        key=lambda model: 0 if model.provider.value == preferred_provider else 1,
+    )
+
+
+def _resolve_ocr_runtime(
+    access: LLMAccessResponse,
+    *,
+    organization_id: str | None,
+    candidates: list[LLMModelConfig] | None = None,
+) -> tuple[LLMModelConfig, LLMRuntimeResolution]:
+    """Resolve an entitled vision runtime for Task Analyzer OCR."""
+    vision_candidates = candidates or _vision_model_candidates(
+        os.getenv("LLM_PROVIDER", "codex_cli")
+    )
+    if not vision_candidates:
+        raise LLMRuntimeResolutionError("No available vision-capable LLM model for OCR")
+
+    errors: list[str] = []
+    for model in vision_candidates:
+        try:
+            resolution = resolve_llm_runtime(
+                access,
+                LLMRuntimeRequest(
+                    user_id=access.user_id,
+                    organization_id=organization_id,
+                    source=LLMUsageSource.TASK_ANALYZER_OCR,
+                    requested_model_id=model.id,
+                ),
+            )
+        except LLMRuntimeResolutionError as exc:
+            errors.append(str(exc))
+            continue
+
+        resolved_model = LLMModelRegistry.get_by_id(resolution.model_id)
+        if resolved_model and resolved_model.supports_vision:
+            return resolved_model, resolution
+        errors.append(f"Resolved model does not support vision: {resolution.model_id}")
+
+    detail = "; ".join(errors[:2])
+    raise LLMRuntimeResolutionError(
+        f"OCR runtime is not allowed by current LLM access policy: {detail}"
+    )
+
+
+def _estimate_ocr_tokens(
+    *,
+    image_size_bytes: int,
+    extracted_text: str = "",
+    max_tokens: int = 4096,
+    model_id: str = "",
+) -> tuple[int, int]:
+    image_estimate = max(1, image_size_bytes // 1024)
+    input_tokens = estimate_tokens(OCR_PROMPT, model_id) + image_estimate
+    output_tokens = estimate_tokens(extracted_text, model_id) if extracted_text else 0
+    return input_tokens + max(max_tokens, 0), output_tokens
+
+
+def _extract_ocr_usage(
+    response: Any,
+    *,
+    model_id: str,
+    image_size_bytes: int,
+    extracted_text: str,
+) -> tuple[int, int, LLMUsageMeasurementMethod]:
+    usage = extract_token_usage(response, model_id)
+    if usage:
+        return (
+            usage.input_tokens,
+            usage.output_tokens,
+            LLMUsageMeasurementMethod.PROVIDER_METADATA,
+        )
+    input_tokens, output_tokens = _estimate_ocr_tokens(
+        image_size_bytes=image_size_bytes,
+        extracted_text=extracted_text,
+        max_tokens=0,
+        model_id=model_id,
+    )
+    return input_tokens, output_tokens, LLMUsageMeasurementMethod.ESTIMATED
+
+
+async def _record_ocr_usage(
+    *,
+    user_id: str,
+    organization_id: str | None,
+    resolution: LLMRuntimeResolution,
+    filename: str,
+    mime_type: str,
+    image_size_bytes: int,
+    latency_ms: int,
+    status: LLMUsageStatus,
+    response: Any | None = None,
+    extracted_text: str = "",
+    error_message: str | None = None,
+) -> None:
+    if response is not None:
+        input_tokens, output_tokens, measurement_method = _extract_ocr_usage(
+            response,
+            model_id=resolution.model_id,
+            image_size_bytes=image_size_bytes,
+            extracted_text=extracted_text,
+        )
+    else:
+        input_tokens, _output_tokens = _estimate_ocr_tokens(
+            image_size_bytes=image_size_bytes,
+            extracted_text="",
+            max_tokens=0,
+            model_id=resolution.model_id,
+        )
+        output_tokens = None
+        measurement_method = LLMUsageMeasurementMethod.ESTIMATED
+
+    total_tokens = input_tokens + output_tokens if output_tokens is not None else input_tokens
+    metadata = resolution.usage_metadata()
+    metadata.update(
+        {
+            "filename": filename,
+            "mime_type": mime_type,
+            "image_size_bytes": image_size_bytes,
+        }
+    )
+
+    await record_usage_best_effort(
+        LLMUsageRecordCreate(
+            user_id=user_id,
+            organization_id=organization_id,
+            provider=resolution.provider,
+            mode=_runtime_mode_for_provider(resolution.provider),
+            source=LLMUsageSource.TASK_ANALYZER_OCR,
+            model=resolution.model_id,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
+            measurement_method=measurement_method,
+            status=status,
+            latency_ms=latency_ms,
+            error_message=error_message,
+            metadata=metadata,
+            started_at=utcnow(),
+            completed_at=utcnow(),
+        )
+    )
+
+
 # ─────────────────────────────────────────────────────────────
 # Agent Registry API
 # ─────────────────────────────────────────────────────────────
@@ -394,6 +592,7 @@ async def get_registry_stats(_user: UserModel = Depends(get_current_user)):
 async def extract_text_from_image(
     image: UploadFile = File(..., description="OCR 대상 이미지"),
     _user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     이미지에서 텍스트를 추출합니다 (Vision LLM 기반 OCR).
@@ -405,9 +604,6 @@ async def extract_text_from_image(
     import base64
 
     from langchain_core.messages import HumanMessage
-
-    from models.llm_models import LLMModelRegistry
-    from services.llm_service import LLMService
 
     filename = image.filename or "image.png"
     ext = Path(filename).suffix.lower()
@@ -431,34 +627,50 @@ async def extract_text_from_image(
             detail=f"이미지 크기 초과: {len(content) / 1024 / 1024:.1f}MB (최대 {MAX_IMAGE_SIZE / 1024 / 1024:.0f}MB)",
         )
 
-    # Vision 지원 + 사용 가능한 모델 자동 선택
-    # LLM_PROVIDER 설정에 맞는 프로바이더를 우선 시도
-    preferred_provider = os.getenv("LLM_PROVIDER", "codex_cli")
-    vision_model = None
-    fallback_model = None
-    for model in LLMModelRegistry.get_enabled():
-        if model.supports_vision and LLMModelRegistry.is_available(model.id):
-            if model.provider.value == preferred_provider and vision_model is None:
-                vision_model = model
-            elif fallback_model is None:
-                fallback_model = model
-    if vision_model is None:
-        vision_model = fallback_model
-
-    if not vision_model:
+    organization_id = getattr(_user, "organization_id", None)
+    access = await get_access_for_user(
+        db,
+        str(_user.id),
+        organization_id=organization_id,
+    )
+    try:
+        _vision_model, runtime_resolution = _resolve_ocr_runtime(
+            access,
+            organization_id=organization_id,
+        )
+    except LLMRuntimeResolutionError as exc:
         return OCRResponse(
             success=False,
             filename=filename,
-            error="OCR 서비스 사용 불가 - Vision 지원 모델의 API 키를 설정하세요",
+            error=f"OCR 서비스 사용 불가 - {exc}",
         )
 
     # Base64 인코딩
     image_b64 = base64.b64encode(content).decode("utf-8")
     mime_type = _MIME_TYPE_MAP.get(ext, "image/png")
+    user_id = str(_user.id)
+    estimated_tokens, _ = _estimate_ocr_tokens(
+        image_size_bytes=len(content),
+        max_tokens=4096,
+        model_id=runtime_resolution.model_id,
+    )
+    try:
+        await enforce_usage_quota_preflight_best_effort(
+            user_id=user_id,
+            organization_id=organization_id,
+            estimated_tokens=estimated_tokens,
+        )
+    except LLMUsageQuotaExceededError as exc:
+        raise HTTPException(status_code=429, detail=str(exc))
 
     # LLM Vision 호출 (30초 타임아웃)
+    started_at = time.perf_counter()
     try:
-        llm = LLMService._get_llm(vision_model.id, temperature=0.0, max_tokens=4096)
+        llm = LLMService._get_llm(
+            runtime_resolution.model_id,
+            temperature=0.0,
+            max_tokens=4096,
+        )
 
         message = HumanMessage(
             content=[
@@ -480,25 +692,62 @@ async def extract_text_from_image(
         else:
             extracted_text = str(raw).strip()
 
+        latency_ms = int((time.perf_counter() - started_at) * 1000)
+        await _record_ocr_usage(
+            user_id=user_id,
+            organization_id=organization_id,
+            resolution=runtime_resolution,
+            filename=filename,
+            mime_type=mime_type,
+            image_size_bytes=len(content),
+            latency_ms=latency_ms,
+            status=LLMUsageStatus.SUCCESS,
+            response=response,
+            extracted_text=extracted_text,
+        )
         return OCRResponse(
             success=True,
             text=extracted_text,
             filename=filename,
-            model_used=vision_model.id,
+            model_used=runtime_resolution.model_id,
         )
     except TimeoutError:
+        latency_ms = int((time.perf_counter() - started_at) * 1000)
+        await _record_ocr_usage(
+            user_id=user_id,
+            organization_id=organization_id,
+            resolution=runtime_resolution,
+            filename=filename,
+            mime_type=mime_type,
+            image_size_bytes=len(content),
+            latency_ms=latency_ms,
+            status=LLMUsageStatus.TIMEOUT,
+            error_message="OCR timed out after 30 seconds",
+        )
         return OCRResponse(
             success=False,
             filename=filename,
             error="OCR 타임아웃 (30초 초과)",
-            model_used=vision_model.id,
+            model_used=runtime_resolution.model_id,
         )
     except Exception as e:
+        latency_ms = int((time.perf_counter() - started_at) * 1000)
+        await _record_ocr_usage(
+            user_id=user_id,
+            organization_id=organization_id,
+            resolution=runtime_resolution,
+            filename=filename,
+            mime_type=mime_type,
+            image_size_bytes=len(content),
+            latency_ms=latency_ms,
+            status=LLMUsageStatus.ERROR,
+            error_message=str(e),
+        )
         return OCRResponse(
             success=False,
             filename=filename,
             error=f"텍스트 추출 실패: {str(e)}",
-            model_used=vision_model.id,
+            model_used=runtime_resolution.model_id,
         )
 
 
@@ -572,7 +821,11 @@ async def update_agent_status(
 
 
 @router.post("/orchestrate/analyze", response_model=TaskAnalysisResponse)
-async def analyze_task(request: TaskAnalysisRequest, _user: UserModel = Depends(get_current_user)):
+async def analyze_task(
+    request: TaskAnalysisRequest,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
     """
     태스크 분석 및 실행 계획 생성.
 
@@ -586,11 +839,16 @@ async def analyze_task(request: TaskAnalysisRequest, _user: UserModel = Depends(
     """
     orchestrator = get_lead_orchestrator()
     analysis_service = get_task_analysis_service()
+    analysis_context = await _task_analyzer_context_with_access(
+        request.context,
+        current_user,
+        db,
+    )
 
     try:
         result = await orchestrator.execute(
             task=request.task,
-            context=request.context,
+            context=analysis_context,
         )
 
         # Extract project_id from context
@@ -956,7 +1214,7 @@ async def check_claude_auth_status(_user: UserModel = Depends(get_current_user))
 
 @router.post("/orchestrate/execute-with-tmux", response_model=TmuxSessionResponse)
 async def execute_with_tmux(
-    request: ExecuteWithTmuxRequest, _user: UserModel = Depends(get_current_user)
+    request: ExecuteWithTmuxRequest, current_user: UserModel = Depends(get_current_user)
 ):
     """
     분석 결과를 tmux + Claude Code CLI로 실행.
@@ -1018,13 +1276,26 @@ async def execute_with_tmux(
     project_path = str(validated_path)
 
     # tmux + Claude CLI 실행
-    info = await tmux.execute_analysis(
-        analysis_id=request.analysis_id,
-        project_path=project_path,
-        analysis=entry.analysis,
-        task_input=entry.task_input,
-        branch_name=request.branch_name,
-    )
+    from models.llm_usage import LLMUsageSource
+    from services.llm_usage_ledger_service import LLMUsageQuotaExceededError
+
+    try:
+        info = await tmux.execute_analysis(
+            analysis_id=request.analysis_id,
+            project_path=project_path,
+            analysis=entry.analysis,
+            task_input=entry.task_input,
+            branch_name=request.branch_name,
+            usage_context={
+                "source": LLMUsageSource.TASK_ANALYZER_EXECUTION,
+                "user_id": str(current_user.id),
+                "organization_id": getattr(current_user, "organization_id", None),
+                "project_id": project_id,
+                "metadata": {"api_endpoint": "execute-with-tmux"},
+            },
+        )
+    except LLMUsageQuotaExceededError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
 
     if not info:
         raise HTTPException(status_code=500, detail="Failed to create tmux session")

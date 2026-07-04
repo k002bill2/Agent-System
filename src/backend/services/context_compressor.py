@@ -135,6 +135,7 @@ class ContextCompressor:
         state: dict[str, Any],
         provider: str = "google",
         model: str = "",
+        usage_context: dict[str, Any] | None = None,
     ) -> CompressionResult:
         """Check context usage and compress messages if threshold exceeded.
 
@@ -177,6 +178,7 @@ class ContextCompressor:
             provider,
             model,
             tier,
+            usage_context,
         )
 
         tokens_after = estimate_messages_tokens(state["messages"]) + system_tokens + task_tokens
@@ -245,6 +247,7 @@ class ContextCompressor:
         provider: str,
         model: str,
         tier: str,
+        usage_context: dict[str, Any] | None = None,
     ) -> CompressionResult:
         """Compress oldest messages via LLM summary, keep recent ones.
 
@@ -258,7 +261,12 @@ class ContextCompressor:
         recent_messages = messages[-preserve:]
 
         # Always attempt LLM summary
-        summary = await self._generate_summary(old_messages, provider, model)
+        summary = await self._generate_summary(
+            old_messages,
+            provider,
+            model,
+            usage_context=usage_context,
+        )
 
         # Build the compressed message list
         summary_msg: dict[str, Any] = {
@@ -291,6 +299,7 @@ class ContextCompressor:
         messages: list[dict],
         provider: str,
         model: str,
+        usage_context: dict[str, Any] | None = None,
     ) -> str:
         """Generate a concise summary of messages via LLM.
 
@@ -315,9 +324,10 @@ class ContextCompressor:
 
             response = await LLMService.invoke(
                 prompt=prompt,
-                model_id=model or "",
+                model_id="" if usage_context and usage_context.get("llm_access") else model or "",
                 temperature=0.0,
                 max_tokens=512,
+                usage_context=usage_context,
             )
             return response.content.strip()
         except Exception as e:

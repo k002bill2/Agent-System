@@ -11,36 +11,60 @@ import {
 } from 'recharts'
 import type { UnifiedUsageRecord } from '../../stores/externalUsage'
 
-type ProviderKey = 'codex_cli' | 'openai' | 'github_copilot' | 'google_gemini' | 'anthropic'
-
 interface DailyPoint {
   date: string
-  codex_cli: number
-  openai: number
-  github_copilot: number
-  google_gemini: number
-  anthropic: number
+  [provider: string]: string | number
 }
 
 const PROVIDER_COLORS: Record<string, string> = {
-  codex_cli: '#a855f7',
+  codex_cli: '#7c3aed',
+  claude_cli: '#d97706',
+  internal_cli: '#059669',
+  internal_api: '#64748b',
   openai: '#10a37f',
   github_copilot: '#6e7681',
+  google: '#4285f4',
   google_gemini: '#4285f4',
   anthropic: '#d97706',
+  ollama: '#16a34a',
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
   codex_cli: 'Codex CLI',
+  claude_cli: 'Claude CLI',
+  internal_cli: 'Internal CLI',
+  internal_api: 'Internal API',
   openai: 'OpenAI',
   github_copilot: 'GitHub Copilot',
+  google: 'Google',
   google_gemini: 'Google Gemini',
   anthropic: 'Anthropic',
+  ollama: 'Ollama',
 }
 
-const ALL_PROVIDERS: ProviderKey[] = ['codex_cli', 'anthropic', 'openai', 'github_copilot', 'google_gemini']
+const PROVIDER_ORDER = [
+  'codex_cli',
+  'claude_cli',
+  'internal_cli',
+  'internal_api',
+  'openai',
+  'anthropic',
+  'google',
+  'google_gemini',
+  'github_copilot',
+  'ollama',
+]
 
-const PROVIDER_SET = new Set<string>(ALL_PROVIDERS)
+function sortProviders(providers: Iterable<string>): string[] {
+  return Array.from(providers).sort((a, b) => {
+    const ai = PROVIDER_ORDER.indexOf(a)
+    const bi = PROVIDER_ORDER.indexOf(b)
+    if (ai !== -1 || bi !== -1) {
+      return (ai === -1 ? Number.MAX_SAFE_INTEGER : ai) - (bi === -1 ? Number.MAX_SAFE_INTEGER : bi)
+    }
+    return a.localeCompare(b)
+  })
+}
 
 function buildDailyTrend(records: UnifiedUsageRecord[]): DailyPoint[] {
   const map = new Map<string, DailyPoint>()
@@ -54,19 +78,11 @@ function buildDailyTrend(records: UnifiedUsageRecord[]): DailyPoint[] {
     if (!map.has(dateKey)) {
       map.set(dateKey, {
         date: dateKey,
-        openai: 0,
-        github_copilot: 0,
-        google_gemini: 0,
-        anthropic: 0,
-        codex_cli: 0,
       })
     }
 
     const point = map.get(dateKey)!
-    if (PROVIDER_SET.has(rec.provider)) {
-      const key = rec.provider as ProviderKey
-      point[key] = point[key] + rec.total_tokens
-    }
+    point[rec.provider] = Number(point[rec.provider] ?? 0) + rec.cost_usd
   }
 
   // Sort chronologically using the earliest timestamp seen for each date bucket
@@ -90,11 +106,10 @@ function buildDailyTrend(records: UnifiedUsageRecord[]): DailyPoint[] {
   })
 }
 
-function formatTokenAxis(value: number): string {
-  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`
-  return value.toString()
+function formatCostAxis(value: number): string {
+  if (value === 0) return '$0.00'
+  if (value < 0.01) return `$${value.toFixed(4)}`
+  return `$${value.toFixed(2)}`
 }
 
 interface Props {
@@ -106,15 +121,16 @@ export default function DailyCostTrend({ records }: Props) {
 
   // Only render Area for providers that have at least one non-zero value
   const activeProviders = useMemo(
-    () => ALL_PROVIDERS.filter(p => data.some(d => d[p] > 0)),
-    [data],
+    () => sortProviders(new Set(records.map(record => record.provider)))
+      .filter(p => data.some(d => Number(d[p] ?? 0) > 0)),
+    [data, records],
   )
 
   if (data.length === 0) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
         <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-          Daily Usage Trend
+          Daily Estimated Cost Trend
         </h2>
         <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
           데이터 없음
@@ -126,15 +142,15 @@ export default function DailyCostTrend({ records }: Props) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
       <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-        Daily Usage Trend
+        Daily Estimated Cost Trend
       </h2>
       <ResponsiveContainer width="100%" height={260}>
         <AreaChart data={data} margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
           <defs>
-            {ALL_PROVIDERS.map(p => (
+            {activeProviders.map(p => (
               <linearGradient key={p} id={`grad-${p}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={PROVIDER_COLORS[p]} stopOpacity={0.25} />
-                <stop offset="95%" stopColor={PROVIDER_COLORS[p]} stopOpacity={0.02} />
+                <stop offset="5%" stopColor={PROVIDER_COLORS[p] ?? '#888'} stopOpacity={0.25} />
+                <stop offset="95%" stopColor={PROVIDER_COLORS[p] ?? '#888'} stopOpacity={0.02} />
               </linearGradient>
             ))}
           </defs>
@@ -149,12 +165,12 @@ export default function DailyCostTrend({ records }: Props) {
             tick={{ fontSize: 11, fill: '#9ca3af' }}
             axisLine={false}
             tickLine={false}
-            tickFormatter={formatTokenAxis}
+            tickFormatter={formatCostAxis}
             width={60}
           />
           <Tooltip
             formatter={(value, name) => [
-              formatTokenAxis(Number(value)),
+              formatCostAxis(Number(value)),
               PROVIDER_LABELS[String(name)] ?? String(name),
             ]}
             contentStyle={{
@@ -173,7 +189,7 @@ export default function DailyCostTrend({ records }: Props) {
               type="monotone"
               dataKey={p}
               stackId="stack"
-              stroke={PROVIDER_COLORS[p]}
+              stroke={PROVIDER_COLORS[p] ?? '#888'}
               fill={`url(#grad-${p})`}
               strokeWidth={2}
               name={p}
