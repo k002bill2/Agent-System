@@ -587,7 +587,7 @@ export function AnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Task Trend */}
         <ChartCard title="Task Volume" icon={BarChart3}>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={250} debounce={80}>
             <LineChart data={formatTrendData(data.trends.tasks, timeRange)}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis
@@ -617,7 +617,7 @@ export function AnalyticsPage() {
 
         {/* Success Rate Trend */}
         <ChartCard title="Success Rate Trend" icon={TrendingUp}>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={250} debounce={80}>
             <LineChart data={formatTrendData(data.trends.success_rate, timeRange)}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis
@@ -659,7 +659,7 @@ export function AnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Token Usage Trend */}
         <ChartCard title="Token Usage Trend" icon={Zap}>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={250} debounce={80}>
             <AreaChart data={formatTrendData(data.trends.tokens, timeRange)}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis
@@ -700,7 +700,7 @@ export function AnalyticsPage() {
         >
           {modelTokenBreakdown.length > 0 ? (
             <div className="space-y-3">
-              <ResponsiveContainer width="100%" height={210}>
+              <ResponsiveContainer width="100%" height={210} debounce={80}>
                 <BarChart
                   data={modelTokenBreakdown}
                   layout="vertical"
@@ -774,7 +774,7 @@ export function AnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Cost by Model */}
         <ChartCard title="Cost by Model" icon={DollarSign}>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={250} debounce={80}>
             <PieChart>
               <Pie
                 data={data.costs.by_model}
@@ -812,7 +812,7 @@ export function AnalyticsPage() {
 
         {/* Model Performance */}
         <ChartCard title="Model Performance" icon={Users}>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={250} debounce={80}>
             <BarChart data={modelPerformanceData} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 12 }} />
@@ -885,7 +885,7 @@ export function AnalyticsPage() {
               <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
             </div>
           ) : compareData ? (
-            <ResponsiveContainer width="100%" height={250}>
+            <ResponsiveContainer width="100%" height={250} debounce={80}>
               <LineChart data={transformMultiSeriesData(compareData)}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                 <XAxis

@@ -98,7 +98,7 @@ export function ConfigChartCard() {
 
       {barData.length > 0 ? (
         <div className="w-full" style={{ height: chartHeight }}>
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" debounce={80}>
             <BarChart data={barData} layout="vertical" margin={{ left: 0, right: 10 }}>
               <XAxis type="number" tick={{ fontSize: 10 }} />
               <YAxis
