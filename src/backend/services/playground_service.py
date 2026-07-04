@@ -26,6 +26,11 @@ from models.playground import (
     PlaygroundSessionCreate,
     PlaygroundToolTest,
 )
+from services.llm_runtime_resolver import (
+    LLMRuntimeRequest,
+    LLMRuntimeResolutionError,
+    resolve_llm_runtime,
+)
 from services.llm_service import LLMResponse, LLMService
 from services.playground_context import build_effective_system_prompt
 from utils.time import utcnow
@@ -149,7 +154,19 @@ def _playground_usage_context(
 
 
 def _is_inaccessible_model_error(error: Exception) -> bool:
-    """Detect provider errors caused by a model the current project cannot use."""
+    """Detect errors caused by a model the current caller cannot use.
+
+    Two distinct sources must trigger the stale-model fallback:
+    - provider-side errors (OpenAI/Anthropic "model_not_found", etc.), matched by
+      message, and
+    - the runtime resolver rejecting the requested model for the authenticated
+      user's entitlements. ``LLMService.invoke`` re-raises that
+      ``LLMRuntimeResolutionError`` raw, and its message ("No enabled LLM
+      entitlement for provider=...") matches none of the provider patterns — so
+      it must be recognized by type, or authenticated fallback never fires.
+    """
+    if isinstance(error, LLMRuntimeResolutionError):
+        return True
     message = str(error).lower()
     return (
         "model_not_found" in message
@@ -158,8 +175,38 @@ def _is_inaccessible_model_error(error: Exception) -> bool:
     )
 
 
-def _safe_playground_fallback_model(current_model: str) -> str | None:
-    """Pick a conservative fallback for stale persisted Playground sessions."""
+def _safe_playground_fallback_model(
+    current_model: str,
+    usage_context: dict[str, Any] | None = None,
+) -> str | None:
+    """Pick a conservative fallback for stale persisted Playground sessions.
+
+    For an authenticated user the runtime resolver gates models by entitlement,
+    so the fallback must be a model the user is actually entitled to. The global
+    env default may not be in their entitlements and would only trigger a fresh
+    ``LLMRuntimeResolutionError`` — breaking the fallback. Resolve the user's
+    entitled default instead; return ``None`` (no doomed retry) when they have no
+    usable entitlement. Anonymous sessions keep the env-default behaviour.
+    """
+    access = usage_context.get("llm_access") if usage_context else None
+    if isinstance(access, LLMAccessResponse):
+        try:
+            resolution = resolve_llm_runtime(
+                access,
+                LLMRuntimeRequest(
+                    user_id=usage_context.get("user_id") if usage_context else None,
+                    source=LLMUsageSource.PLAYGROUND.value,
+                    requested_model_id=None,
+                    organization_id=(
+                        usage_context.get("organization_id") if usage_context else None
+                    ),
+                ),
+            )
+        except LLMRuntimeResolutionError:
+            return None
+        entitled = resolution.model_id
+        return entitled if entitled and entitled != current_model else None
+
     configured_default = LLMModelRegistry.get_default(os.getenv("LLM_PROVIDER") or "codex_cli")
     fallback = configured_default or "codex-cli"
     return fallback if fallback and fallback != current_model else None
@@ -174,7 +221,7 @@ async def _invoke_with_model_fallback(
     try:
         return await invoke(model_id=session.model, **kwargs)
     except Exception as exc:
-        fallback_model = _safe_playground_fallback_model(session.model)
+        fallback_model = _safe_playground_fallback_model(session.model, kwargs.get("usage_context"))
         if not fallback_model or not _is_inaccessible_model_error(exc):
             raise
 

@@ -691,8 +691,11 @@ class ExternalUsageService:
             for provider, collector in target_collectors.items():
                 try:
                     records = await collector.collect(start_time, end_time)
+                    # Provider billing measures the SAME usage as the internal
+                    # ledger a second way. It must not enter the primary
+                    # summaries/records/total (that would double-count); it
+                    # reaches the UI only via `reconciliation` below.
                     provider_billing_records.extend(records)
-                    all_records.extend(records)
 
                     summary = UsageSummary(
                         provider=provider,
@@ -713,7 +716,6 @@ class ExternalUsageService:
                                 summary.member_breakdown.get(rec.user_id, 0.0) + rec.cost_usd
                             )
                     provider_billing_summaries.append(summary)
-                    summaries.append(summary)
                 except Exception:
                     continue
 
