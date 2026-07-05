@@ -654,10 +654,8 @@ export function SettingsPage() {
 
         {/* Model Version Updates */}
         <ModelUpdatePanel />
-      </div>
 
-      {/* LLM Auto-Switch — 전체 폭 (masonry 컬럼 밖) */}
-      <div className="mt-6">
+        {/* LLM Auto-Switch — masonry 컬럼 안(세로형)으로 남는 공간을 채운다 */}
         <LLMRouterSettings />
       </div>
     </div>

@@ -316,7 +316,7 @@ export function LLMRouterSettings() {
 
       {/* Stats Overview */}
       {stats && (
-        <div className="grid grid-cols-4 gap-3 mb-4">
+        <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
             <div className="text-xs text-gray-500 dark:text-gray-400">Total Requests</div>
             <div className="text-lg font-semibold text-gray-900 dark:text-white">
