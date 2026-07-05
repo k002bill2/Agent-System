@@ -185,6 +185,18 @@ async def _sync_sessions_to_db(sessions: list) -> None:
         logger.warning(f"Background session sync failed: {e}")
 
 
+async def scan_and_sync_claude_snapshots() -> int:
+    """Scan ~/.claude/projects and upsert Claude session snapshots.
+
+    Returns the number of discovered sessions. Used by External Usage /sync so
+    the CLAUDE_CLI card reflects the latest host sessions without requiring a
+    prior visit to the Claude Sessions page (snapshot freshness follow-up).
+    """
+    sessions = get_monitor().discover_sessions()
+    await _sync_sessions_to_db(sessions)
+    return len(sessions)
+
+
 @router.get("", response_model=ClaudeSessionResponse)
 async def list_sessions(
     status: SessionStatus | None = None,
