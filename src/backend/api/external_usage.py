@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -33,6 +34,8 @@ except ImportError:
     get_current_user = None  # type: ignore[assignment]
     get_current_admin_or_manager_user = None  # type: ignore[assignment]
     get_db_session = None  # type: ignore[assignment]
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/external-usage", tags=["external-usage"])
 
@@ -128,6 +131,19 @@ if AUTH_AVAILABLE:
         start = (body and body.start_time) or _default_start()
         end = (body and body.end_time) or _default_end()
         providers = [body.provider] if (body and body.provider) else None
+
+        # Refresh Claude session snapshots first so the CLAUDE_CLI card reflects
+        # the latest host sessions. Snapshots are otherwise only synced when the
+        # Claude Sessions page is opened, so a stale table can drop recently
+        # active sessions from the window (snapshot freshness follow-up).
+        # Best-effort: a scan failure must not break the usage summary.
+        try:
+            from api.claude_sessions import scan_and_sync_claude_snapshots
+
+            await scan_and_sync_claude_snapshots()
+        except Exception:
+            logger.warning("claude_snapshot_refresh_failed", exc_info=True)
+
         result = await svc.get_summary(db, start, end, providers)
         return _sync_response(result, start, end)
 
