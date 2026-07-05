@@ -202,8 +202,17 @@ export function SettingsPage() {
         Settings
       </h2>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* ── Row 1: Small cards ── */}
+      {/* LLM Access는 세로 높이가 커서 전용 컬럼 하나를 차지하고,
+          나머지 카드는 남는 폭에 masonry(Pinterest)로 분산 배치한다. */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        {/* LLM Access — 세로로 긴 전용 컬럼 */}
+        <div className="w-full lg:w-1/3 lg:shrink-0">
+          <LLMAccessSettings />
+        </div>
+
+        {/* 나머지 카드 — 남는 폭에 masonry로 분산 */}
+        <div className="flex-1 w-full columns-1 md:columns-2 gap-6 [&>*]:mb-6 [&>*]:break-inside-avoid">
+          {/* ── Small cards ── */}
         {/* Connection Status */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -281,13 +290,10 @@ export function SettingsPage() {
           </div>
         </div>
 
-        {/* LLM Access */}
-        <LLMAccessSettings />
-
         {/* My LLM API Keys */}
         <LLMAccountsSettings />
 
-        {/* ── Row 2: Medium cards ── */}
+        {/* ── Medium cards ── */}
         {/* Claude Code */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -573,7 +579,7 @@ export function SettingsPage() {
           </div>
         </div>
 
-        {/* ── Row 3: Large cards ── */}
+        {/* ── Large cards ── */}
         {/* Terminal */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -653,9 +659,8 @@ export function SettingsPage() {
         {/* Model Version Updates */}
         <ModelUpdatePanel />
 
-        {/* LLM Auto-Switch */}
-        <div className="lg:col-span-2">
-          <LLMRouterSettings />
+        {/* LLM Auto-Switch — masonry 컬럼 안(세로형)으로 남는 공간을 채운다 */}
+        <LLMRouterSettings />
         </div>
       </div>
     </div>
