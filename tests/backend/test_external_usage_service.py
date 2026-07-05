@@ -177,10 +177,10 @@ async def test_get_summary_includes_reconciliation_totals(monkeypatch) -> None:
     end = datetime(2026, 7, 2, tzinfo=UTC)
     row = SimpleNamespace(
         id="ledger-1",
-        provider="claude_cli",
+        provider="codex_cli",
         mode="cli",
         source="task_analyzer_execution",
-        model="claude-code-cli",
+        model="gpt-5",
         input_tokens=123,
         output_tokens=45,
         total_tokens=168,
@@ -199,7 +199,16 @@ async def test_get_summary_includes_reconciliation_totals(monkeypatch) -> None:
 
     monkeypatch.setenv("EXTERNAL_USAGE_INCLUDE_PROVIDER_BILLING", "false")
 
-    response = await ExternalUsageService().get_summary(db, start, end)
+    # Isolate the ledger path: the global db.execute mock would otherwise feed
+    # the same row into the snapshot collector too. Snapshots are covered by
+    # their own tests.
+    with patch.object(
+        ExternalUsageService,
+        "_collect_claude_snapshots",
+        AsyncMock(return_value=[]),
+        create=True,
+    ):
+        response = await ExternalUsageService().get_summary(db, start, end)
 
     assert response.reconciliation is not None
     assert response.reconciliation.primary_source == "internal_ledger"
@@ -208,7 +217,7 @@ async def test_get_summary_includes_reconciliation_totals(monkeypatch) -> None:
     assert response.reconciliation.internal_total_requests == 1
     assert response.reconciliation.internal_total_cost_usd == pytest.approx(0.0123)
     assert response.reconciliation.provider_billing_total_tokens == 0
-    assert response.reconciliation.comparisons[0].provider == ExternalProvider.CLAUDE_CLI
+    assert response.reconciliation.comparisons[0].provider == ExternalProvider.CODEX_CLI
     assert response.reconciliation.comparisons[0].status == "ledger_only"
 
 
@@ -258,10 +267,18 @@ async def test_get_summary_does_not_double_count_provider_billing(monkeypatch) -
 
     monkeypatch.setenv("EXTERNAL_USAGE_INCLUDE_PROVIDER_BILLING", "true")
 
-    with patch.object(
-        ExternalUsageService,
-        "_build_collectors",
-        AsyncMock(return_value={ExternalProvider.OPENAI: collector}),
+    with (
+        patch.object(
+            ExternalUsageService,
+            "_build_collectors",
+            AsyncMock(return_value={ExternalProvider.OPENAI: collector}),
+        ),
+        patch.object(
+            ExternalUsageService,
+            "_collect_claude_snapshots",
+            AsyncMock(return_value=[]),
+            create=True,
+        ),
     ):
         response = await ExternalUsageService().get_summary(db, start, end)
 
@@ -335,3 +352,48 @@ async def test_summarize_claude_snapshot_records_empty_returns_no_summary() -> N
 
     assert records == []
     assert summaries == []
+
+
+async def test_get_summary_excludes_claude_cli_ledger_rows(monkeypatch) -> None:
+    """claude_cli ledger rows must NOT feed CLAUDE_CLI summary — snapshots are the
+    single source of truth, so ledger claude_cli would double-count (regression)."""
+    start = datetime(2026, 7, 1, tzinfo=UTC)
+    end = datetime(2026, 7, 31, tzinfo=UTC)
+    claude_ledger_row = SimpleNamespace(
+        id="ledger-claude-1",
+        provider="claude_cli",
+        mode="cli",
+        source="task_analyzer_execution",
+        model="claude-code-cli",
+        input_tokens=999,
+        output_tokens=999,
+        total_tokens=1998,
+        estimated_cost_usd=9.99,
+        status="success",
+        measurement_method="cli_metadata",
+        user_id=None,
+        organization_id=None,
+        project_id=None,
+        started_at=start,
+    )
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = [claude_ledger_row]
+    db = AsyncMock()
+    db.execute.return_value = result
+
+    monkeypatch.setenv("EXTERNAL_USAGE_INCLUDE_PROVIDER_BILLING", "false")
+
+    # Snapshots collected separately; return empty so we isolate the ledger guard.
+    with patch.object(
+        ExternalUsageService,
+        "_collect_claude_snapshots",
+        AsyncMock(return_value=[]),
+        create=True,
+    ):
+        response = await ExternalUsageService().get_summary(db, start, end)
+
+    # No CLAUDE_CLI summary from the ledger row, and its tokens are not in the total.
+    claude_summaries = [s for s in response.providers if s.provider == ExternalProvider.CLAUDE_CLI]
+    assert claude_summaries == []
+    assert response.reconciliation.internal_total_tokens == 0
+    assert all(r.provider != ExternalProvider.CLAUDE_CLI for r in response.records)

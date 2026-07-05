@@ -709,7 +709,15 @@ class ExternalUsageService:
                 stmt = stmt.where(or_(*clauses))
 
         result = await db.execute(stmt.order_by(LLMUsageLedgerModel.started_at.desc()))
-        return list(result.scalars().all())
+        claude_cli_providers = _LEDGER_PROVIDER_FILTERS[ExternalProvider.CLAUDE_CLI]
+        # Claude CLI usage is sourced host-wide from session snapshots
+        # (launcher-independent). Drop ledger claude_cli rows so they never
+        # double-count against the snapshot summary.
+        return [
+            row
+            for row in result.scalars().all()
+            if getattr(row, "provider", None) not in claude_cli_providers
+        ]
 
     async def get_summary(
         self,
