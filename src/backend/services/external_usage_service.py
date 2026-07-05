@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 from abc import ABC, abstractmethod
@@ -39,6 +40,8 @@ _LEDGER_PROVIDER_FILTERS: dict[ExternalProvider, set[str]] = {
     ExternalProvider.GOOGLE_GEMINI: {"google", "google_gemini"},
     ExternalProvider.OLLAMA: {"ollama"},
 }
+
+logger = logging.getLogger(__name__)
 
 
 def _bool_env(name: str, default: bool = False) -> bool:
@@ -137,6 +140,64 @@ def summarize_internal_ledger_records(
             )
 
     return external_records, list(summaries_by_provider.values())
+
+
+def summarize_claude_snapshot_records(
+    rows: list[Any],
+    start_time: datetime,
+    end_time: datetime,
+) -> tuple[list[UnifiedUsageRecord], list[UsageSummary]]:
+    """Map Claude session snapshot rows onto the CLAUDE_CLI External Usage contract.
+
+    Snapshots are the host-wide, launcher-independent source of truth for
+    Claude CLI usage (cmux/tmux/iterm all leave transcripts that the session
+    monitor already aggregates). One snapshot == one session == one request.
+    """
+    external_records: list[UnifiedUsageRecord] = []
+    summary: UsageSummary | None = None
+
+    for row in rows:
+        input_tokens = getattr(row, "total_input_tokens", None) or 0
+        output_tokens = getattr(row, "total_output_tokens", None) or 0
+        cost_usd = getattr(row, "estimated_cost", None) or 0.0
+        timestamp = getattr(row, "session_last_activity", None) or start_time
+        model = getattr(row, "model", None)
+        record_id = getattr(row, "id", None) or str(uuid.uuid4())
+
+        external_records.append(
+            UnifiedUsageRecord(
+                id=str(record_id),
+                provider=ExternalProvider.CLAUDE_CLI,
+                timestamp=timestamp,
+                bucket_width="event",
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=input_tokens + output_tokens,
+                cost_usd=cost_usd,
+                request_count=1,
+                model=model,
+                raw_data={
+                    "snapshot_id": getattr(row, "id", None),
+                    "project_name": getattr(row, "project_name", None),
+                    "source_user": getattr(row, "source_user", None),
+                },
+            )
+        )
+
+        if summary is None:
+            summary = UsageSummary(
+                provider=ExternalProvider.CLAUDE_CLI,
+                period_start=start_time,
+                period_end=end_time,
+            )
+        summary.total_input_tokens += input_tokens
+        summary.total_output_tokens += output_tokens
+        summary.total_cost_usd += cost_usd
+        summary.total_requests += 1
+        if model:
+            summary.model_breakdown[model] = summary.model_breakdown.get(model, 0.0) + cost_usd
+
+    return external_records, ([summary] if summary is not None else [])
 
 
 def _summary_tokens(summary: UsageSummary | None) -> int:
@@ -651,7 +712,42 @@ class ExternalUsageService:
                 stmt = stmt.where(or_(*clauses))
 
         result = await db.execute(stmt.order_by(LLMUsageLedgerModel.started_at.desc()))
-        return list(result.scalars().all())
+        claude_cli_providers = _LEDGER_PROVIDER_FILTERS[ExternalProvider.CLAUDE_CLI]
+        # Claude CLI usage is sourced host-wide from session snapshots
+        # (launcher-independent). Drop ledger claude_cli rows so they never
+        # double-count against the snapshot summary.
+        return [
+            row
+            for row in result.scalars().all()
+            if getattr(row, "provider", None) not in claude_cli_providers
+        ]
+
+    async def _collect_claude_snapshots(
+        self,
+        db: AsyncSession,
+        start_time: datetime,
+        end_time: datetime,
+        providers: list[ExternalProvider] | None,
+    ) -> list[Any]:
+        """Fetch host-wide Claude session snapshots for the CLAUDE_CLI source.
+
+        Best-effort: returns [] when CLAUDE_CLI is filtered out or on any query
+        failure, so snapshot issues never break the primary ledger summary.
+        """
+        if providers is not None and ExternalProvider.CLAUDE_CLI not in providers:
+            return []
+        try:
+            from db.models.claude_session import ClaudeSessionSnapshotModel
+
+            stmt = select(ClaudeSessionSnapshotModel).where(
+                ClaudeSessionSnapshotModel.session_last_activity >= start_time,
+                ClaudeSessionSnapshotModel.session_last_activity <= end_time,
+            )
+            result = await db.execute(stmt)
+            return list(result.scalars().all())
+        except Exception:
+            logger.warning("claude_snapshot_collect_failed", exc_info=True)
+            return []
 
     async def get_summary(
         self,
@@ -678,6 +774,20 @@ class ExternalUsageService:
         )
         all_records.extend(ledger_records)
         summaries.extend(ledger_summaries)
+
+        snapshot_rows = await self._collect_claude_snapshots(
+            db,
+            start_time,
+            end_time,
+            providers,
+        )
+        snapshot_records, snapshot_summaries = summarize_claude_snapshot_records(
+            snapshot_rows,
+            start_time,
+            end_time,
+        )
+        all_records.extend(snapshot_records)
+        summaries.extend(snapshot_summaries)
 
         provider_billing_enabled = _bool_env(
             "EXTERNAL_USAGE_INCLUDE_PROVIDER_BILLING", default=False
@@ -734,7 +844,7 @@ class ExternalUsageService:
             period_start=start_time,
             period_end=end_time,
             reconciliation=build_reconciliation_summary(
-                ledger_summaries=ledger_summaries,
+                ledger_summaries=ledger_summaries + snapshot_summaries,
                 provider_billing_summaries=provider_billing_summaries,
                 provider_billing_enabled=provider_billing_enabled,
                 provider_billing_record_count=len(provider_billing_records),

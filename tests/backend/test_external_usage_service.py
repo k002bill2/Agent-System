@@ -12,6 +12,7 @@ from models.external_usage import ExternalProvider, UnifiedUsageRecord
 from services.external_usage_service import (
     ExternalUsageService,
     OpenAIUsageCollector,
+    summarize_claude_snapshot_records,
     summarize_internal_ledger_records,
 )
 
@@ -176,10 +177,10 @@ async def test_get_summary_includes_reconciliation_totals(monkeypatch) -> None:
     end = datetime(2026, 7, 2, tzinfo=UTC)
     row = SimpleNamespace(
         id="ledger-1",
-        provider="claude_cli",
+        provider="codex_cli",
         mode="cli",
         source="task_analyzer_execution",
-        model="claude-code-cli",
+        model="gpt-5",
         input_tokens=123,
         output_tokens=45,
         total_tokens=168,
@@ -198,7 +199,16 @@ async def test_get_summary_includes_reconciliation_totals(monkeypatch) -> None:
 
     monkeypatch.setenv("EXTERNAL_USAGE_INCLUDE_PROVIDER_BILLING", "false")
 
-    response = await ExternalUsageService().get_summary(db, start, end)
+    # Isolate the ledger path: the global db.execute mock would otherwise feed
+    # the same row into the snapshot collector too. Snapshots are covered by
+    # their own tests.
+    with patch.object(
+        ExternalUsageService,
+        "_collect_claude_snapshots",
+        AsyncMock(return_value=[]),
+        create=True,
+    ):
+        response = await ExternalUsageService().get_summary(db, start, end)
 
     assert response.reconciliation is not None
     assert response.reconciliation.primary_source == "internal_ledger"
@@ -207,7 +217,7 @@ async def test_get_summary_includes_reconciliation_totals(monkeypatch) -> None:
     assert response.reconciliation.internal_total_requests == 1
     assert response.reconciliation.internal_total_cost_usd == pytest.approx(0.0123)
     assert response.reconciliation.provider_billing_total_tokens == 0
-    assert response.reconciliation.comparisons[0].provider == ExternalProvider.CLAUDE_CLI
+    assert response.reconciliation.comparisons[0].provider == ExternalProvider.CODEX_CLI
     assert response.reconciliation.comparisons[0].status == "ledger_only"
 
 
@@ -257,10 +267,18 @@ async def test_get_summary_does_not_double_count_provider_billing(monkeypatch) -
 
     monkeypatch.setenv("EXTERNAL_USAGE_INCLUDE_PROVIDER_BILLING", "true")
 
-    with patch.object(
-        ExternalUsageService,
-        "_build_collectors",
-        AsyncMock(return_value={ExternalProvider.OPENAI: collector}),
+    with (
+        patch.object(
+            ExternalUsageService,
+            "_build_collectors",
+            AsyncMock(return_value={ExternalProvider.OPENAI: collector}),
+        ),
+        patch.object(
+            ExternalUsageService,
+            "_collect_claude_snapshots",
+            AsyncMock(return_value=[]),
+            create=True,
+        ),
     ):
         response = await ExternalUsageService().get_summary(db, start, end)
 
@@ -275,3 +293,162 @@ async def test_get_summary_does_not_double_count_provider_billing(monkeypatch) -
     # Billing still reaches the UI, but via reconciliation only.
     assert response.reconciliation.provider_billing_enabled is True
     assert response.reconciliation.provider_billing_total_cost_usd == pytest.approx(1.0)
+
+
+async def test_summarize_claude_snapshot_records_aggregates_host_usage() -> None:
+    """Claude session snapshots should map onto the CLAUDE_CLI external contract."""
+    start = datetime(2026, 7, 1, tzinfo=UTC)
+    end = datetime(2026, 7, 31, tzinfo=UTC)
+    rows = [
+        SimpleNamespace(
+            id="sess-1",
+            model="claude-sonnet-4",
+            total_input_tokens=1000,
+            total_output_tokens=200,
+            estimated_cost=0.5,
+            project_name="aos",
+            source_user="younghwan",
+            session_last_activity=datetime(2026, 7, 5, tzinfo=UTC),
+        ),
+        SimpleNamespace(
+            id="sess-2",
+            model="claude-sonnet-4",
+            total_input_tokens=300,
+            total_output_tokens=100,
+            estimated_cost=0.25,
+            project_name="other",
+            source_user="younghwan",
+            session_last_activity=datetime(2026, 7, 6, tzinfo=UTC),
+        ),
+    ]
+
+    records, summaries = summarize_claude_snapshot_records(rows, start, end)
+
+    assert len(records) == 2
+    assert records[0].provider == ExternalProvider.CLAUDE_CLI
+    assert records[0].input_tokens == 1000
+    assert records[0].output_tokens == 200
+    assert records[0].total_tokens == 1200
+    assert records[0].request_count == 1
+    assert records[0].cost_usd == pytest.approx(0.5)
+    assert records[0].raw_data["snapshot_id"] == "sess-1"
+
+    assert len(summaries) == 1
+    summary = summaries[0]
+    assert summary.provider == ExternalProvider.CLAUDE_CLI
+    assert summary.total_input_tokens == 1300
+    assert summary.total_output_tokens == 300
+    assert summary.total_requests == 2
+    assert summary.total_cost_usd == pytest.approx(0.75)
+    assert summary.model_breakdown["claude-sonnet-4"] == pytest.approx(0.75)
+
+
+async def test_summarize_claude_snapshot_records_empty_returns_no_summary() -> None:
+    """No snapshots must yield no CLAUDE_CLI summary (card stays absent, not zeroed)."""
+    start = datetime(2026, 7, 1, tzinfo=UTC)
+    end = datetime(2026, 7, 31, tzinfo=UTC)
+
+    records, summaries = summarize_claude_snapshot_records([], start, end)
+
+    assert records == []
+    assert summaries == []
+
+
+async def test_get_summary_excludes_claude_cli_ledger_rows(monkeypatch) -> None:
+    """claude_cli ledger rows must NOT feed CLAUDE_CLI summary — snapshots are the
+    single source of truth, so ledger claude_cli would double-count (regression)."""
+    start = datetime(2026, 7, 1, tzinfo=UTC)
+    end = datetime(2026, 7, 31, tzinfo=UTC)
+    claude_ledger_row = SimpleNamespace(
+        id="ledger-claude-1",
+        provider="claude_cli",
+        mode="cli",
+        source="task_analyzer_execution",
+        model="claude-code-cli",
+        input_tokens=999,
+        output_tokens=999,
+        total_tokens=1998,
+        estimated_cost_usd=9.99,
+        status="success",
+        measurement_method="cli_metadata",
+        user_id=None,
+        organization_id=None,
+        project_id=None,
+        started_at=start,
+    )
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = [claude_ledger_row]
+    db = AsyncMock()
+    db.execute.return_value = result
+
+    monkeypatch.setenv("EXTERNAL_USAGE_INCLUDE_PROVIDER_BILLING", "false")
+
+    # Snapshots collected separately; return empty so we isolate the ledger guard.
+    with patch.object(
+        ExternalUsageService,
+        "_collect_claude_snapshots",
+        AsyncMock(return_value=[]),
+        create=True,
+    ):
+        response = await ExternalUsageService().get_summary(db, start, end)
+
+    # No CLAUDE_CLI summary from the ledger row, and its tokens are not in the total.
+    claude_summaries = [s for s in response.providers if s.provider == ExternalProvider.CLAUDE_CLI]
+    assert claude_summaries == []
+    assert response.reconciliation.internal_total_tokens == 0
+    assert all(r.provider != ExternalProvider.CLAUDE_CLI for r in response.records)
+
+
+async def test_get_summary_includes_claude_snapshot_usage(monkeypatch) -> None:
+    """Snapshots must surface as CLAUDE_CLI tokens in the card and the total."""
+    start = datetime(2026, 7, 1, tzinfo=UTC)
+    end = datetime(2026, 7, 31, tzinfo=UTC)
+    # Ledger returns nothing; snapshots carry the Claude usage.
+    ledger_result = MagicMock()
+    ledger_result.scalars.return_value.all.return_value = []
+    db = AsyncMock()
+    db.execute.return_value = ledger_result
+
+    snapshot_row = SimpleNamespace(
+        id="sess-1",
+        model="claude-sonnet-4",
+        total_input_tokens=1000,
+        total_output_tokens=200,
+        estimated_cost=0.5,
+        project_name="aos",
+        source_user="younghwan",
+        session_last_activity=datetime(2026, 7, 5, tzinfo=UTC),
+    )
+
+    monkeypatch.setenv("EXTERNAL_USAGE_INCLUDE_PROVIDER_BILLING", "false")
+
+    with patch.object(
+        ExternalUsageService,
+        "_collect_claude_snapshots",
+        AsyncMock(return_value=[snapshot_row]),
+    ):
+        response = await ExternalUsageService().get_summary(db, start, end)
+
+    claude = [s for s in response.providers if s.provider == ExternalProvider.CLAUDE_CLI]
+    assert len(claude) == 1
+    assert claude[0].total_input_tokens == 1000
+    assert claude[0].total_output_tokens == 200
+    assert claude[0].total_cost_usd == pytest.approx(0.5)
+    assert response.total_cost_usd == pytest.approx(0.5)
+    assert response.reconciliation.internal_total_tokens == 1200
+    claude_records = [r for r in response.records if r.provider == ExternalProvider.CLAUDE_CLI]
+    assert len(claude_records) == 1
+
+
+async def test_collect_claude_snapshots_respects_provider_filter() -> None:
+    """When providers is restricted and excludes CLAUDE_CLI, skip the snapshot query."""
+    start = datetime(2026, 7, 1, tzinfo=UTC)
+    end = datetime(2026, 7, 31, tzinfo=UTC)
+    db = AsyncMock()
+
+    rows = await ExternalUsageService()._collect_claude_snapshots(
+        db, start, end, [ExternalProvider.CODEX_CLI]
+    )
+
+    assert rows == []
+    db.execute.assert_not_awaited()
