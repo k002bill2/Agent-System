@@ -12,6 +12,7 @@ from models.external_usage import ExternalProvider, UnifiedUsageRecord
 from services.external_usage_service import (
     ExternalUsageService,
     OpenAIUsageCollector,
+    summarize_claude_snapshot_records,
     summarize_internal_ledger_records,
 )
 
@@ -275,3 +276,62 @@ async def test_get_summary_does_not_double_count_provider_billing(monkeypatch) -
     # Billing still reaches the UI, but via reconciliation only.
     assert response.reconciliation.provider_billing_enabled is True
     assert response.reconciliation.provider_billing_total_cost_usd == pytest.approx(1.0)
+
+
+async def test_summarize_claude_snapshot_records_aggregates_host_usage() -> None:
+    """Claude session snapshots should map onto the CLAUDE_CLI external contract."""
+    start = datetime(2026, 7, 1, tzinfo=UTC)
+    end = datetime(2026, 7, 31, tzinfo=UTC)
+    rows = [
+        SimpleNamespace(
+            id="sess-1",
+            model="claude-sonnet-4",
+            total_input_tokens=1000,
+            total_output_tokens=200,
+            estimated_cost=0.5,
+            project_name="aos",
+            source_user="younghwan",
+            session_last_activity=datetime(2026, 7, 5, tzinfo=UTC),
+        ),
+        SimpleNamespace(
+            id="sess-2",
+            model="claude-sonnet-4",
+            total_input_tokens=300,
+            total_output_tokens=100,
+            estimated_cost=0.25,
+            project_name="other",
+            source_user="younghwan",
+            session_last_activity=datetime(2026, 7, 6, tzinfo=UTC),
+        ),
+    ]
+
+    records, summaries = summarize_claude_snapshot_records(rows, start, end)
+
+    assert len(records) == 2
+    assert records[0].provider == ExternalProvider.CLAUDE_CLI
+    assert records[0].input_tokens == 1000
+    assert records[0].output_tokens == 200
+    assert records[0].total_tokens == 1200
+    assert records[0].request_count == 1
+    assert records[0].cost_usd == pytest.approx(0.5)
+    assert records[0].raw_data["snapshot_id"] == "sess-1"
+
+    assert len(summaries) == 1
+    summary = summaries[0]
+    assert summary.provider == ExternalProvider.CLAUDE_CLI
+    assert summary.total_input_tokens == 1300
+    assert summary.total_output_tokens == 300
+    assert summary.total_requests == 2
+    assert summary.total_cost_usd == pytest.approx(0.75)
+    assert summary.model_breakdown["claude-sonnet-4"] == pytest.approx(0.75)
+
+
+async def test_summarize_claude_snapshot_records_empty_returns_no_summary() -> None:
+    """No snapshots must yield no CLAUDE_CLI summary (card stays absent, not zeroed)."""
+    start = datetime(2026, 7, 1, tzinfo=UTC)
+    end = datetime(2026, 7, 31, tzinfo=UTC)
+
+    records, summaries = summarize_claude_snapshot_records([], start, end)
+
+    assert records == []
+    assert summaries == []

@@ -139,6 +139,64 @@ def summarize_internal_ledger_records(
     return external_records, list(summaries_by_provider.values())
 
 
+def summarize_claude_snapshot_records(
+    rows: list[Any],
+    start_time: datetime,
+    end_time: datetime,
+) -> tuple[list[UnifiedUsageRecord], list[UsageSummary]]:
+    """Map Claude session snapshot rows onto the CLAUDE_CLI External Usage contract.
+
+    Snapshots are the host-wide, launcher-independent source of truth for
+    Claude CLI usage (cmux/tmux/iterm all leave transcripts that the session
+    monitor already aggregates). One snapshot == one session == one request.
+    """
+    external_records: list[UnifiedUsageRecord] = []
+    summary: UsageSummary | None = None
+
+    for row in rows:
+        input_tokens = getattr(row, "total_input_tokens", None) or 0
+        output_tokens = getattr(row, "total_output_tokens", None) or 0
+        cost_usd = getattr(row, "estimated_cost", None) or 0.0
+        timestamp = getattr(row, "session_last_activity", None) or start_time
+        model = getattr(row, "model", None)
+        record_id = getattr(row, "id", None) or str(uuid.uuid4())
+
+        external_records.append(
+            UnifiedUsageRecord(
+                id=str(record_id),
+                provider=ExternalProvider.CLAUDE_CLI,
+                timestamp=timestamp,
+                bucket_width="event",
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=input_tokens + output_tokens,
+                cost_usd=cost_usd,
+                request_count=1,
+                model=model,
+                raw_data={
+                    "snapshot_id": getattr(row, "id", None),
+                    "project_name": getattr(row, "project_name", None),
+                    "source_user": getattr(row, "source_user", None),
+                },
+            )
+        )
+
+        if summary is None:
+            summary = UsageSummary(
+                provider=ExternalProvider.CLAUDE_CLI,
+                period_start=start_time,
+                period_end=end_time,
+            )
+        summary.total_input_tokens += input_tokens
+        summary.total_output_tokens += output_tokens
+        summary.total_cost_usd += cost_usd
+        summary.total_requests += 1
+        if model:
+            summary.model_breakdown[model] = summary.model_breakdown.get(model, 0.0) + cost_usd
+
+    return external_records, ([summary] if summary is not None else [])
+
+
 def _summary_tokens(summary: UsageSummary | None) -> int:
     if summary is None:
         return 0
