@@ -202,8 +202,10 @@ export function SettingsPage() {
         Settings
       </h2>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* ── Row 1: Small cards ── */}
+      {/* 카드 높이 편차가 커(LLM Access가 특히 큼) 고정 그리드는 짧은 카드를 늘려
+          빈 공간을 만든다. masonry(CSS columns)로 높이별 촘촘히 채운다. */}
+      <div className="columns-1 md:columns-2 lg:columns-3 gap-6 [&>*]:mb-6 [&>*]:break-inside-avoid">
+        {/* ── Small cards ── */}
         {/* Connection Status */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -287,7 +289,7 @@ export function SettingsPage() {
         {/* My LLM API Keys */}
         <LLMAccountsSettings />
 
-        {/* ── Row 2: Medium cards ── */}
+        {/* ── Medium cards ── */}
         {/* Claude Code */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -573,7 +575,7 @@ export function SettingsPage() {
           </div>
         </div>
 
-        {/* ── Row 3: Large cards ── */}
+        {/* ── Large cards ── */}
         {/* Terminal */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -652,11 +654,11 @@ export function SettingsPage() {
 
         {/* Model Version Updates */}
         <ModelUpdatePanel />
+      </div>
 
-        {/* LLM Auto-Switch */}
-        <div className="lg:col-span-2">
-          <LLMRouterSettings />
-        </div>
+      {/* LLM Auto-Switch — 전체 폭 (masonry 컬럼 밖) */}
+      <div className="mt-6">
+        <LLMRouterSettings />
       </div>
     </div>
   )
