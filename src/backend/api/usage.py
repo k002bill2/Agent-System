@@ -3,6 +3,7 @@
 Fetches real usage data from Anthropic OAuth API using macOS Keychain credentials.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -93,6 +94,19 @@ _usage_cache: dict[str, Any] = {
 }
 CACHE_TTL_SECONDS = 300  # 5 minutes - cache is valid for this long
 CACHE_STALE_SECONDS = 3600  # 1 hour - stale cache can still be used as fallback
+
+# The Anthropic OAuth usage endpoint occasionally flakes on transient network
+# errors / 5xx. Retry those a bounded number of times with a short backoff.
+# 4xx (notably 429 rate_limit_error) is deliberately NOT retried — retrying a
+# rate limit only deepens it.
+#
+# Worst-case budget = MAX_ATTEMPTS * TIMEOUT + sum(BACKOFF) = 3*6 + 1.5 = 19.5s.
+# This MUST stay under the dashboard's 30s request timeout
+# (src/dashboard/src/services/apiClient.ts) — otherwise the frontend aborts
+# first and the retries waste work on a request nobody awaits.
+USAGE_FETCH_MAX_ATTEMPTS = 3
+USAGE_FETCH_TIMEOUT_SECONDS = 6.0  # per-attempt HTTP timeout
+USAGE_FETCH_BACKOFF_SECONDS = (0.5, 1.0)  # backoff before retry #1, #2
 
 
 def _load_usage_cache() -> dict[str, Any] | None:
@@ -447,28 +461,55 @@ async def fetch_usage_from_anthropic(token: str) -> dict[str, Any] | None:
     """
     Fetch usage data from Anthropic OAuth Usage API.
 
+    Transient failures (network errors, timeouts, 5xx) are retried a bounded
+    number of times with a short backoff so a single blip degrades to the
+    cached fallback instead of a hard error. 4xx responses — notably
+    ``429 rate_limit_error`` and ``401`` auth failures — are NOT retried and
+    return ``None`` immediately so the caller can fall back to cached data.
+
     Returns API response or None if failed.
     """
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(
-                ANTHROPIC_USAGE_API,
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "anthropic-beta": "oauth-2025-04-20",
-                    "User-Agent": "claude-code/2.0.31",
-                },
-            )
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "anthropic-beta": "oauth-2025-04-20",
+        "User-Agent": "claude-code/2.0.31",
+    }
+    last_error = "unknown error"
 
+    for attempt in range(USAGE_FETCH_MAX_ATTEMPTS):
+        try:
+            async with httpx.AsyncClient(timeout=USAGE_FETCH_TIMEOUT_SECONDS) as client:
+                response = await client.get(ANTHROPIC_USAGE_API, headers=headers)
+        except httpx.HTTPError as exc:
+            # Network error / timeout — transient, worth retrying.
+            last_error = f"{type(exc).__name__}: {exc}"
+        else:
             if response.status_code == 200:
-                return response.json()
-            else:
-                print(f"Anthropic API error: {response.status_code} - {response.text}")
+                try:
+                    return response.json()
+                except ValueError as exc:
+                    logger.error("Anthropic usage API returned invalid JSON: %s", exc)
+                    return None
+            if response.status_code < 500:
+                # 4xx (429 rate limit, 401 auth, ...) — retrying won't help.
+                logger.warning(
+                    "Anthropic usage API returned %s (not retrying): %s",
+                    response.status_code,
+                    response.text[:200],
+                )
                 return None
+            # 5xx — transient server error, worth retrying.
+            last_error = f"HTTP {response.status_code}: {response.text[:200]}"
 
-    except Exception as e:
-        print(f"Error fetching from Anthropic API: {e}")
-        return None
+        if attempt < USAGE_FETCH_MAX_ATTEMPTS - 1:
+            await asyncio.sleep(USAGE_FETCH_BACKOFF_SECONDS[attempt])
+
+    logger.error(
+        "Anthropic usage API failed after %d attempts: %s",
+        USAGE_FETCH_MAX_ATTEMPTS,
+        last_error,
+    )
+    return None
 
 
 def parse_reset_time(resets_at: str | None) -> tuple[float, float]:
