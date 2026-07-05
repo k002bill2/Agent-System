@@ -397,3 +397,58 @@ async def test_get_summary_excludes_claude_cli_ledger_rows(monkeypatch) -> None:
     assert claude_summaries == []
     assert response.reconciliation.internal_total_tokens == 0
     assert all(r.provider != ExternalProvider.CLAUDE_CLI for r in response.records)
+
+
+async def test_get_summary_includes_claude_snapshot_usage(monkeypatch) -> None:
+    """Snapshots must surface as CLAUDE_CLI tokens in the card and the total."""
+    start = datetime(2026, 7, 1, tzinfo=UTC)
+    end = datetime(2026, 7, 31, tzinfo=UTC)
+    # Ledger returns nothing; snapshots carry the Claude usage.
+    ledger_result = MagicMock()
+    ledger_result.scalars.return_value.all.return_value = []
+    db = AsyncMock()
+    db.execute.return_value = ledger_result
+
+    snapshot_row = SimpleNamespace(
+        id="sess-1",
+        model="claude-sonnet-4",
+        total_input_tokens=1000,
+        total_output_tokens=200,
+        estimated_cost=0.5,
+        project_name="aos",
+        source_user="younghwan",
+        session_last_activity=datetime(2026, 7, 5, tzinfo=UTC),
+    )
+
+    monkeypatch.setenv("EXTERNAL_USAGE_INCLUDE_PROVIDER_BILLING", "false")
+
+    with patch.object(
+        ExternalUsageService,
+        "_collect_claude_snapshots",
+        AsyncMock(return_value=[snapshot_row]),
+    ):
+        response = await ExternalUsageService().get_summary(db, start, end)
+
+    claude = [s for s in response.providers if s.provider == ExternalProvider.CLAUDE_CLI]
+    assert len(claude) == 1
+    assert claude[0].total_input_tokens == 1000
+    assert claude[0].total_output_tokens == 200
+    assert claude[0].total_cost_usd == pytest.approx(0.5)
+    assert response.total_cost_usd == pytest.approx(0.5)
+    assert response.reconciliation.internal_total_tokens == 1200
+    claude_records = [r for r in response.records if r.provider == ExternalProvider.CLAUDE_CLI]
+    assert len(claude_records) == 1
+
+
+async def test_collect_claude_snapshots_respects_provider_filter() -> None:
+    """When providers is restricted and excludes CLAUDE_CLI, skip the snapshot query."""
+    start = datetime(2026, 7, 1, tzinfo=UTC)
+    end = datetime(2026, 7, 31, tzinfo=UTC)
+    db = AsyncMock()
+
+    rows = await ExternalUsageService()._collect_claude_snapshots(
+        db, start, end, [ExternalProvider.CODEX_CLI]
+    )
+
+    assert rows == []
+    db.execute.assert_not_awaited()
