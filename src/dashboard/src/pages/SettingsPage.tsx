@@ -206,8 +206,10 @@ export function SettingsPage() {
           나머지 카드는 남는 폭에 masonry(Pinterest)로 분산 배치한다. */}
       <div className="flex flex-col lg:flex-row gap-6 items-start">
         {/* LLM Access — 세로로 긴 전용 컬럼 */}
-        <div className="w-full lg:w-1/3 lg:shrink-0">
+        <div className="w-full lg:w-1/3 lg:shrink-0 space-y-6">
           <LLMAccessSettings />
+          {/* LLM Auto-Switch — LLM Access 바로 아래 배치 */}
+          <LLMRouterSettings />
         </div>
 
         {/* 나머지 카드 — 남는 폭에 masonry로 분산 */}
@@ -661,9 +663,6 @@ export function SettingsPage() {
 
         {/* Model Version Updates */}
         <ModelUpdatePanel />
-
-        {/* LLM Auto-Switch — masonry 컬럼 안(세로형)으로 남는 공간을 채운다 */}
-        <LLMRouterSettings />
         </div>
       </div>
     </div>
