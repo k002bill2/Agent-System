@@ -1,7 +1,7 @@
 """Tests for claude-sonnet-5 registry entry, sync_to_db dual-default guard, and pricing."""
 
 import pytest
-from sqlalchemy import Update
+from sqlalchemy import Delete, Update
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql.dml import Insert
 
@@ -75,6 +75,7 @@ class _FakeSession:
         self._select_results = select_results
         self.inserts: list = []
         self.updates: list = []
+        self.deletes: list = []
         self.selects: list = []
         self.committed = False
 
@@ -84,6 +85,10 @@ class _FakeSession:
             return _FakeResult()
         if isinstance(stmt, Update):
             self.updates.append(stmt)
+            return _FakeResult()
+        if isinstance(stmt, Delete):
+            # Self-heal bulk delete: captured without consuming a select result.
+            self.deletes.append(stmt)
             return _FakeResult()
         self.selects.append(stmt)
         return self._select_results.pop(0)
@@ -109,6 +114,7 @@ async def test_sync_to_db_new_default_demoted_when_db_default_exists():
     provider already has a default row in DB (existing DB default respected)."""
     session = _FakeSession(
         select_results=[
+            _FakeResult([]),  # suppressed ids (none)
             # existing IDs: sonnet-5 is NEW, sonnet-4-6 already exists
             _FakeResult([("claude-sonnet-4-6",), ("claude-opus-4-8",)]),
             # providers that already have a DB default row
@@ -131,6 +137,7 @@ async def test_sync_to_db_new_default_kept_when_no_db_default():
     no default row in DB."""
     session = _FakeSession(
         select_results=[
+            _FakeResult([]),  # suppressed ids (none)
             _FakeResult([("claude-sonnet-4-6",)]),  # sonnet-5 is NEW
             _FakeResult([]),  # no provider has a DB default
             _FakeResult([]),  # final load_from_db select
@@ -149,6 +156,7 @@ async def test_sync_to_db_default_guard_ignores_disabled_db_defaults():
     whose only DB default is disabled still accepts the new code default."""
     session = _FakeSession(
         select_results=[
+            _FakeResult([]),  # suppressed ids (none)
             _FakeResult([("claude-sonnet-4-6",)]),  # sonnet-5 is NEW
             # Guard select returns no providers: the anthropic default row in
             # DB is disabled, so the is_enabled filter excludes it.
@@ -159,8 +167,9 @@ async def test_sync_to_db_default_guard_ignores_disabled_db_defaults():
 
     await LLMModelRegistry.sync_to_db(session)
 
-    # The guard query itself must filter on BOTH is_default and is_enabled
-    guard_select = session.selects[1]
+    # The guard query itself must filter on BOTH is_default and is_enabled.
+    # selects[0]=suppressed ids, [1]=existing ids, [2]=providers_with_db_default.
+    guard_select = session.selects[2]
     sql = str(guard_select.compile(dialect=postgresql.dialect()))
     assert "is_default" in sql
     assert "is_enabled" in sql
@@ -178,6 +187,7 @@ async def test_sync_to_db_clears_stale_disabled_default_before_new_default_inser
     re-enable해도 provider default가 2개가 되지 않도록."""
     session = _FakeSession(
         select_results=[
+            _FakeResult([]),  # suppressed ids (none)
             _FakeResult([("claude-sonnet-4-6",)]),  # sonnet-5 is NEW
             # anthropic의 유일한 default 행이 disabled → enabled 필터에 걸러져
             # 가드 통과 (신규 모델이 default로 INSERT되는 경로)
@@ -219,6 +229,7 @@ async def test_sync_to_db_no_default_clear_when_enabled_db_default_exists():
     발행되지 않는다 (admin default 행 보존)."""
     session = _FakeSession(
         select_results=[
+            _FakeResult([]),  # suppressed ids (none)
             _FakeResult([("claude-sonnet-4-6",)]),  # sonnet-5 is NEW
             _FakeResult([("anthropic",)]),  # anthropic enabled default 존재
             _FakeResult([]),
@@ -239,6 +250,7 @@ async def test_sync_to_db_on_conflict_preserves_admin_fields():
     """ON CONFLICT DO UPDATE must not touch is_default / is_enabled."""
     session = _FakeSession(
         select_results=[
+            _FakeResult([]),  # suppressed ids (none)
             _FakeResult([("claude-sonnet-5",)]),  # sonnet-5 already exists
             _FakeResult([("anthropic",)]),
             _FakeResult([]),
@@ -253,6 +265,139 @@ async def test_sync_to_db_on_conflict_preserves_admin_fields():
     update_clause = sql.split("DO UPDATE SET", 1)[1]
     assert "is_default" not in update_clause
     assert "is_enabled" not in update_clause
+
+
+# ─────────────────────────────────────────────────────────────
+# (a-suppression) startup re-INSERT guard: suppressed ids are skipped
+# ─────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_sync_to_db_skips_suppressed_model_id():
+    """Regression guard (a): a suppressed model id must NOT be re-INSERTed by
+    startup sync_to_db, even though it is still present in code _MODELS."""
+    session = _FakeSession(
+        select_results=[
+            _FakeResult([("claude-opus-4-8",)]),  # suppressed ids
+            _FakeResult([]),  # existing ids: table empty
+            _FakeResult([]),  # providers with a DB default
+            _FakeResult([]),  # final load_from_db select
+        ]
+    )
+
+    await LLMModelRegistry.sync_to_db(session)
+
+    inserted_ids = {_insert_params(s).get("id") for s in session.inserts}
+    # Suppressed model is NOT re-inserted...
+    assert "claude-opus-4-8" not in inserted_ids
+    # ...while other code models still sync normally.
+    assert "claude-sonnet-5" in inserted_ids
+
+
+@pytest.mark.asyncio
+async def test_sync_to_db_self_heals_suppressed_config_rows():
+    """P1-2 self-heal: sync_to_db must issue a bulk DELETE removing any config
+    row whose id is suppressed, recovering from a snapshot↔DELETE race that left
+    a stray config behind. Verified at the statement level (no real DB): the
+    DELETE targets llm_model_configs filtered by the suppressions subquery, with
+    synchronize_session=False so a real Postgres run cannot raise on the
+    non-evaluable subquery WHERE."""
+    session = _FakeSession(
+        select_results=[
+            _FakeResult([]),  # suppressed ids
+            _FakeResult([]),  # existing ids
+            _FakeResult([]),  # providers with DB default
+            _FakeResult([]),  # final load_from_db
+        ]
+    )
+
+    await LLMModelRegistry.sync_to_db(session)
+
+    assert session.deletes, "expected a self-heal DELETE on llm_model_configs"
+    compiled = session.deletes[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "DELETE FROM llm_model_configs" in sql
+    assert "llm_model_suppressions" in sql
+    assert session.deletes[0].get_execution_options().get("synchronize_session") is False
+
+
+# ─────────────────────────────────────────────────────────────
+# (P2) load_from_db: empty-success clears cache vs preserves fallback
+# ─────────────────────────────────────────────────────────────
+
+
+class _FakeLoadResult:
+    def __init__(self, rows: list):
+        self._rows = rows
+
+    def scalars(self):
+        return self
+
+    def all(self) -> list:
+        return self._rows
+
+
+class _FakeLoadSession:
+    def __init__(self, rows: list):
+        self._rows = rows
+
+    async def execute(self, stmt):
+        return _FakeLoadResult(self._rows)
+
+
+@pytest.mark.asyncio
+async def test_load_from_db_empty_clears_existing_db_cache():
+    """A successful EMPTY read while already in DB mode (cache is a list) must
+    clear the cache — otherwise a hard-deleted last model lingers stale."""
+    from models.llm_models import LLMModelConfig
+
+    LLMModelRegistry._db_cache = [
+        LLMModelConfig(
+            id="stale-model",
+            display_name="Stale",
+            provider=LLMProvider.OPENAI,
+            context_window=128000,
+            input_price=0.001,
+            output_price=0.002,
+        )
+    ]
+    LLMModelRegistry._db_index = {"stale-model": LLMModelRegistry._db_cache[0]}
+
+    await LLMModelRegistry.load_from_db(_FakeLoadSession(rows=[]))
+
+    assert LLMModelRegistry._db_cache == []
+    assert LLMModelRegistry.get_by_id("stale-model") is None
+
+
+@pytest.mark.asyncio
+async def test_load_from_db_empty_preserves_fallback_on_first_load():
+    """A successful EMPTY read on the FIRST load (no cache yet) must keep the
+    in-memory _MODELS fallback (cache stays None) so startup serves models even
+    before sync_to_db populates the table."""
+    LLMModelRegistry._db_cache = None
+    LLMModelRegistry._db_index = {}
+
+    await LLMModelRegistry.load_from_db(_FakeLoadSession(rows=[]))
+
+    assert LLMModelRegistry._db_cache is None
+    # Fallback still serves the code registry.
+    assert LLMModelRegistry.get_by_id("claude-sonnet-5") is not None
+
+
+def test_evict_reflects_in_none_cache_fallback():
+    """P2: evict must drop the id even with no DB cache (fallback mode). It
+    materializes the cache from _MODELS minus the id, so a failed post-delete
+    reload cannot let the in-memory fallback keep serving a hard-deleted model."""
+    LLMModelRegistry._db_cache = None
+    LLMModelRegistry._db_index = {}
+    # Present in the code registry before eviction.
+    assert LLMModelRegistry.get_by_id("gpt-5.4-nano") is not None
+
+    LLMModelRegistry.evict("gpt-5.4-nano")
+
+    assert LLMModelRegistry.get_by_id("gpt-5.4-nano") is None
+    # Other models remain reachable.
+    assert LLMModelRegistry.get_by_id("claude-sonnet-5") is not None
 
 
 # ─────────────────────────────────────────────────────────────

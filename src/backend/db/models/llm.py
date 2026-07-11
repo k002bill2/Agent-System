@@ -46,6 +46,29 @@ class LLMModelConfigModel(Base):
     __table_args__ = (Index("ix_llm_model_provider_enabled", "provider", "is_enabled"),)
 
 
+class LLMModelSuppressionModel(Base):
+    """Suppressed LLM model ids that must never be (re-)registered in the DB.
+
+    A model id present here is skipped by BOTH re-registration paths — startup
+    ``sync_to_db`` and the 24h ``model_update_service`` discovery — implementing
+    a durable "hard delete". The code ``_MODELS`` list (settlement/pricing source
+    of truth) is intentionally left intact; suppression acts only at the DB layer.
+    """
+
+    __tablename__ = "llm_model_suppressions"
+
+    # PK is the model id: it is already globally unique in llm_model_configs.
+    # ``provider`` is kept for lookup/reporting only (not a foreign key).
+    model_id = Column(String(100), primary_key=True)
+    provider = Column(String(50), nullable=False, index=True)
+    reason = Column(String(500), nullable=True)
+    suppressed_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+
 class UserLLMCredentialModel(Base):
     """User's personal LLM API credentials (encrypted at rest)."""
 

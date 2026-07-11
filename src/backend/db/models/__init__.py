@@ -51,6 +51,7 @@ from db.models.llm import (
     DeploymentUsageCredentialModel,
     LLMCLIProfileModel,
     LLMModelConfigModel,
+    LLMModelSuppressionModel,
     LLMUsageLedgerModel,
     UserLLMCredentialModel,
     UserLLMEntitlementModel,
@@ -152,6 +153,7 @@ __all__ = [
     "ClaudeSessionSnapshotModel",
     # LLM
     "LLMModelConfigModel",
+    "LLMModelSuppressionModel",
     "UserLLMCredentialModel",
     "DeploymentUsageCredentialModel",
     "UserLLMEntitlementModel",
