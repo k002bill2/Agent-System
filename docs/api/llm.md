@@ -17,6 +17,8 @@ LLM 모델 레지스트리, 라우터, 자격증명, 프록시, Playground API�
 | GET | `/api/llm/models/default` | 기본 모델 조회 |
 | GET | `/api/llm/models/{model_id}` | 특정 모델 상세 |
 | PATCH | `/api/llm/models/{model_id}` | 모델 설정 수정 |
+| DELETE | `/api/llm/models/{model_id}` | 모델 하드 삭제 (config 행 삭제 + suppression 기록, admin 전용) |
+| DELETE | `/api/llm/models/suppressions/{model_id}` | suppression 해제 (admin 전용) |
 | GET | `/api/llm/providers` | 지원 프로바이더 목록 |
 
 **응답 형식** (GET /api/llm/models):
@@ -47,9 +49,17 @@ LLM 모델 레지스트리, 라우터, 자격증명, 프록시, Playground API�
 > **`is_default` 마이그레이션 주의** (`USE_DATABASE=true` 배포): `sync_to_db`는
 > 이미 해당 provider의 default 행이 DB에 있으면, `_MODELS`에서 `is_default=True`로
 > 추가된 신규 모델을 `is_default=False`로 INSERT합니다(이중 default 방지). 즉 신규
-> 기본 모델 이관은 기존 배포에 자동 반영되지 않으며, admin이 Settings UI에서 직접
-> default를 전환해야 합니다. 인메모리 폴백(`USE_DATABASE` 미설정)에서는 `_MODELS`의
+> 기본 모델 이관은 기존 배포에 자동 반영되지 않으며, admin이 Settings의 Model
+> Management 패널에서 직접 default를 전환해야 합니다. 인메모리 폴백(`USE_DATABASE` 미설정)에서는 `_MODELS`의
 > `is_default`가 그대로 적용됩니다.
+>
+> **모델 하드 삭제 & suppression**: `DELETE /api/llm/models/{model_id}`는 config 행을
+> 삭제하고 `llm_model_suppressions` 테이블에 id를 기록합니다. suppression에 기록된 id는
+> startup `sync_to_db`와 24h 모델 discovery **양쪽에서 skip**되어 재등록되지 않습니다(진짜 삭제).
+> 코드 `_MODELS`(가격/정산 SSOT)는 보존되며 suppression은 DB 레이어에서만 동작합니다.
+> `is_default` 모델 삭제는 409로 거부되므로 먼저 default를 다른 모델로 이관해야 합니다.
+> `DELETE /api/llm/models/suppressions/{model_id}`로 suppression을 해제하면 다음
+> `sync_to_db`/discovery 실행 시 모델이 자동 재등록됩니다(즉시 재등록 아님).
 
 ---
 

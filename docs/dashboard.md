@@ -286,6 +286,7 @@ import { cn } from '@/lib/utils';
 | 컴포넌트 | 설명 |
 |----------|------|
 | `LLMRouterSettings` | LLM 라우터 설정 (프로바이더 관리, 통계 포함) |
+| `ModelManagementPanel` | admin 전용 모델 관리 패널 (provider별 그룹, Enable/Disable·Set default 토글, 비활성·비-default 행 하드 삭제(confirm)) |
 
 ### Version Control Components
 

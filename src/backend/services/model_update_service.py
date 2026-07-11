@@ -359,17 +359,36 @@ class ModelUpdateService:
         New models are inserted as disabled (is_enabled=False).
         Metadata updates are applied directly.
         """
-        from sqlalchemy import update
+        from sqlalchemy import delete, select, update
         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
         from db.database import async_session_factory
-        from db.models import LLMModelConfigModel
+        from db.models import LLMModelConfigModel, LLMModelSuppressionModel
 
         applied = 0
 
         async with async_session_factory() as session:
+            # Suppressed ids must never be re-registered. Discovery legitimately
+            # reports a suppressed model as "new" (it is absent from the registry
+            # after deletion) — the guard lives here at the INSERT point, not in
+            # _diff_models, so the "new" count stays accurate (regression b).
+            result = await session.execute(select(LLMModelSuppressionModel.model_id))
+            suppressed_ids = {row[0] for row in result.fetchall()}
+
+            # Self-heal: hard-remove any config row that is currently suppressed,
+            # recovering from a snapshot↔DELETE race where a stray config was
+            # re-INSERTed. synchronize_session=False: subquery WHERE cannot be
+            # evaluated in Python and this fresh session has no identity map.
+            await session.execute(
+                delete(LLMModelConfigModel)
+                .where(LLMModelConfigModel.id.in_(select(LLMModelSuppressionModel.model_id)))
+                .execution_options(synchronize_session=False)
+            )
+
             # Insert new models as disabled
             for change in new_models:
+                if change.model_id in suppressed_ids:
+                    continue
                 info = change.new_value or {}
                 values = {
                     "id": change.model_id,

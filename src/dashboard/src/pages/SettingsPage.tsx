@@ -18,7 +18,7 @@ import {
   Shield,
   AlertTriangle,
 } from 'lucide-react'
-import { LLMRouterSettings, ModelUpdatePanel } from '../components/llm-router'
+import { LLMRouterSettings, ModelUpdatePanel, ModelManagementPanel } from '../components/llm-router'
 import { LLMAccessSettings, LLMAccountsSettings } from '../components/usage'
 
 export function SettingsPage() {
@@ -655,6 +655,9 @@ export function SettingsPage() {
             })()}
           </div>
         </div>
+
+        {/* Model Management (admin only) */}
+        <ModelManagementPanel />
 
         {/* Model Version Updates */}
         <ModelUpdatePanel />

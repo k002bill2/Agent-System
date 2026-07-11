@@ -349,34 +349,61 @@ class LLMModelRegistry:
             result = await session.execute(select(LLMModelConfigModel))
             db_models = result.scalars().all()
 
-            if db_models:
-                loaded = []
-                for m in db_models:
-                    try:
-                        loaded.append(
-                            LLMModelConfig(
-                                id=m.id,
-                                display_name=m.display_name,
-                                provider=LLMProvider(m.provider),
-                                context_window=m.context_window,
-                                input_price=m.input_price,
-                                output_price=m.output_price,
-                                is_default=m.is_default,
-                                is_enabled=m.is_enabled,
-                                supports_tools=m.supports_tools,
-                                supports_vision=m.supports_vision,
-                            )
+            loaded = []
+            for m in db_models:
+                try:
+                    loaded.append(
+                        LLMModelConfig(
+                            id=m.id,
+                            display_name=m.display_name,
+                            provider=LLMProvider(m.provider),
+                            context_window=m.context_window,
+                            input_price=m.input_price,
+                            output_price=m.output_price,
+                            is_default=m.is_default,
+                            is_enabled=m.is_enabled,
+                            supports_tools=m.supports_tools,
+                            supports_vision=m.supports_vision,
                         )
-                    except Exception:
-                        continue  # Skip malformed rows
+                    )
+                except Exception:
+                    continue  # Skip malformed rows
 
+            if loaded:
                 cls._db_cache = loaded
                 cls._db_index = {m.id: m for m in loaded}
                 print(f"✅ LLMModelRegistry loaded {len(loaded)} models from DB")
+            elif cls._db_cache is not None:
+                # Empty but successful query while already in DB mode (e.g. the
+                # last models were deleted). Honor the now-empty table so the
+                # cache is not left stale — a successful empty result must clear
+                # the cache, distinct from an exception (handled below).
+                cls._db_cache = []
+                cls._db_index = {}
+                print("⚠️  llm_model_configs table is empty, cache cleared")
             else:
+                # First load on a fresh/empty DB (no cache yet): keep the
+                # in-memory _MODELS fallback rather than serving nothing.
                 print("⚠️  llm_model_configs table is empty, using in-memory fallback")
         except Exception as e:
+            # Exception (not an empty result): leave the existing cache/fallback
+            # untouched rather than clobbering it with a partial/failed read.
             print(f"⚠️  Failed to load models from DB: {e}. Using in-memory fallback.")
+
+    @classmethod
+    def evict(cls, model_id: str) -> None:
+        """Remove a single model id from the DB cache (immutable rebuild).
+
+        Belt-and-suspenders for the DELETE endpoint: if a post-delete
+        ``load_from_db`` fails to reflect the removal, the endpoint evicts the
+        id directly so a hard-deleted model never lingers in a stale cache.
+        Works even in in-memory fallback mode: when no DB cache exists yet, it
+        materializes one from ``_MODELS`` minus the evicted id, so a hard-deleted
+        model is not resurrected by the fallback path after a failed reload.
+        """
+        base = cls._db_cache if cls._db_cache is not None else _MODELS
+        cls._db_cache = [m for m in base if m.id != model_id]
+        cls._db_index = {m.id: m for m in cls._db_cache}
 
     @classmethod
     async def sync_to_db(cls, session: Any) -> dict[str, int]:
@@ -389,10 +416,28 @@ class LLMModelRegistry:
         Returns:
             Dict with 'inserted' and 'updated' counts.
         """
-        from sqlalchemy import select, update
+        from sqlalchemy import delete, select, update
         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-        from db.models import LLMModelConfigModel
+        from db.models import LLMModelConfigModel, LLMModelSuppressionModel
+
+        # Suppressed ids must never be re-registered (durable hard-delete).
+        # Queried first so downstream inserts/defaults ignore these models.
+        result = await session.execute(select(LLMModelSuppressionModel.model_id))
+        suppressed_ids = {row[0] for row in result.fetchall()}
+
+        # Self-heal: hard-remove any config row that is currently suppressed.
+        # Closes the snapshot↔DELETE race — if a concurrent DELETE commits after
+        # another path snapshotted suppressions and then re-INSERTed a config,
+        # this bulk delete on the *next* sync removes the stray row, making the
+        # "deleted stays deleted" invariant self-correcting.
+        # synchronize_session=False: the WHERE uses a subquery that cannot be
+        # evaluated in Python, and this fresh session has no identity map to sync.
+        await session.execute(
+            delete(LLMModelConfigModel)
+            .where(LLMModelConfigModel.id.in_(select(LLMModelSuppressionModel.model_id)))
+            .execution_options(synchronize_session=False)
+        )
 
         # Get existing IDs to distinguish insert vs update
         result = await session.execute(select(LLMModelConfigModel.id))
@@ -415,6 +460,11 @@ class LLMModelRegistry:
         updated = 0
 
         for model in _MODELS:
+            # Skip suppressed models entirely: no upsert, no count, no default
+            # clearing. This is the startup re-INSERT guard (regression a).
+            if model.id in suppressed_ids:
+                continue
+
             is_default = model.is_default
             if (
                 is_default

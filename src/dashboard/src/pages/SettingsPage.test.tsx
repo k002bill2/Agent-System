@@ -49,6 +49,7 @@ const defaultNotifications = {
 vi.mock('../components/llm-router', () => ({
   LLMRouterSettings: () => <div data-testid="llm-router-settings">LLMRouterSettings</div>,
   ModelUpdatePanel: () => <div data-testid="model-update-panel">ModelUpdatePanel</div>,
+  ModelManagementPanel: () => <div data-testid="model-management-panel">ModelManagementPanel</div>,
 }))
 vi.mock('../components/usage', () => ({
   LLMAccessSettings: () => <div data-testid="llm-access">LLMAccessSettings</div>,
@@ -166,6 +167,11 @@ describe('SettingsPage', () => {
   it('renders LLM Router settings component', async () => {
     await renderSettingsPage()
     expect(screen.getByTestId('llm-router-settings')).toBeInTheDocument()
+  })
+
+  it('renders Model Management panel', async () => {
+    await renderSettingsPage()
+    expect(screen.getByTestId('model-management-panel')).toBeInTheDocument()
   })
 
   it('renders LLM Accounts settings component', async () => {
