@@ -378,7 +378,7 @@ import { cn } from '@/lib/utils';
 | `useNavigationStore` | `navigation.ts` | 네비게이션 상태 |
 | `useUIStore` | `uiStore.ts` | UI 상태 (테마, 모달, 토스트) |
 | `useMonitoringStore` | `monitoring.ts` | 프로젝트 모니터링 |
-| `useSettingsStore` | `settings.ts` | 설정 상태 |
+| `useSettingsStore` | `settings.ts` | 설정 상태 + LLM 모델 카탈로그 (`availableModels`, `fetchModels` — App 마운트 시 전역 1회 로드해 모든 페이지에서 공유, in-flight dedup, API 실패 시 `fallbackModels` 주입, 백엔드 `_MODELS` 미러) |
 | `useGitStore` | `git.ts` | Git 브랜치/머지 관리, Worktree 관리 (`GitWorktree`, `worktrees`, `selectedWorktreePath`, `fetchWorktrees`, `setSelectedWorktree`), Staging 강화 (`fetchFileDiff`, `fetchFileHunks`, `stageHunks`, `fetchStagedDiff`), Draft Commits (`DraftCommit`, `generateDraftCommits`, `clearDraftCommits`), Remote 관리 (`fetchRemotes`, `addRemote`, `removeRemote`, `updateRemote`), Commit 상세 (`fetchCommitFiles`, `fetchCommitDiff`) |
 | `useOrganizationsStore` | `organizations.ts` | 조직/멤버 관리, 멤버 사용량 (`fetchMemberUsage`, `fetchMemberUsageDetail`), 소스 유저 매핑 |
 | `useAuditStore` | `audit.ts` | 감사 로그 |

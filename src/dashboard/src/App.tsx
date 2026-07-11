@@ -8,6 +8,7 @@ import { useOrchestrationStore } from './stores/orchestration'
 import { useNavigationStore, isPublicView } from './stores/navigation'
 import { useAuthStore } from './stores/auth'
 import { useMenuVisibilityStore } from './stores/menuVisibility'
+import { useSettingsStore } from './stores/settings'
 import { routes } from './routes'
 import { analytics } from './services/analytics'
 import {
@@ -82,6 +83,14 @@ export default function App() {
   // PostHog 초기화 (앱 마운트 시 1회)
   useEffect(() => {
     analytics.init()
+  }, [])
+
+  // LLM 모델 목록 로드 (앱 마운트 시 1회, 이미 로드/로딩 중이면 스킵)
+  useEffect(() => {
+    const { availableModels, modelsLoading, fetchModels } = useSettingsStore.getState()
+    if (availableModels.length === 0 && !modelsLoading) {
+      fetchModels()
+    }
   }, [])
 
   // 페이지뷰 추적

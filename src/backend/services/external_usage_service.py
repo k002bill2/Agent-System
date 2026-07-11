@@ -581,8 +581,17 @@ class AnthropicUsageCollector(BaseUsageCollector):
         records: list[UnifiedUsageRecord] = []
 
         costs: dict[str, tuple[float, float]] = {
+            "claude-sonnet-5": (0.003, 0.015),
+            "claude-opus-4-8": (0.005, 0.025),
+            # Opus price cut ($5/$25) applies from Opus 4.5 onward; these
+            # specific prefixes must precede the generic "claude-opus-4"
+            # (4-0/4-1 era $15/$75). Dict order == match order (startswith).
+            "claude-opus-4-7": (0.005, 0.025),
+            "claude-opus-4-6": (0.005, 0.025),
+            "claude-opus-4-5": (0.005, 0.025),
             "claude-opus-4": (0.015, 0.075),
             "claude-sonnet-4": (0.003, 0.015),
+            "claude-haiku-4-5": (0.001, 0.005),
             "claude-haiku-4": (0.00025, 0.00125),
         }
 

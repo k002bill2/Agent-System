@@ -58,13 +58,24 @@ _MODELS: list[LLMModelConfig] = [
         supports_vision=True,
     ),
     LLMModelConfig(
+        id="claude-sonnet-5",
+        display_name="Claude Sonnet 5",
+        provider=LLMProvider.ANTHROPIC,
+        context_window=1000000,  # 1M tokens
+        input_price=0.003,  # $3.00/1M tokens
+        output_price=0.015,  # $15.00/1M tokens
+        is_default=True,  # Default Anthropic model
+        supports_tools=True,
+        supports_vision=True,
+    ),
+    LLMModelConfig(
         id="claude-sonnet-4-6",
         display_name="Claude Sonnet 4.6",
         provider=LLMProvider.ANTHROPIC,
         context_window=1000000,  # 1M tokens
         input_price=0.003,  # $3.00/1M tokens
         output_price=0.015,  # $15.00/1M tokens
-        is_default=True,  # Default Anthropic model
+        is_default=False,
         supports_tools=True,
         supports_vision=True,
     ),
@@ -378,7 +389,7 @@ class LLMModelRegistry:
         Returns:
             Dict with 'inserted' and 'updated' counts.
         """
-        from sqlalchemy import select
+        from sqlalchemy import select, update
         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
         from db.models import LLMModelConfigModel
@@ -387,10 +398,55 @@ class LLMModelRegistry:
         result = await session.execute(select(LLMModelConfigModel.id))
         existing_ids = {row[0] for row in result.fetchall()}
 
+        # Providers that already have an ENABLED default row in DB.
+        # Guard: a NEW model with is_default=True must not create a second
+        # default for a provider whose DB default is admin-controlled.
+        # A disabled default row does not count — the new model should
+        # still become the provider default in that case.
+        result = await session.execute(
+            select(LLMModelConfigModel.provider).where(
+                LLMModelConfigModel.is_default.is_(True),
+                LLMModelConfigModel.is_enabled.is_(True),
+            )
+        )
+        providers_with_db_default = {row[0] for row in result.fetchall()}
+
         inserted = 0
         updated = 0
 
         for model in _MODELS:
+            is_default = model.is_default
+            if (
+                is_default
+                and model.id not in existing_ids
+                and model.provider.value in providers_with_db_default
+            ):
+                # Respect the existing DB default for this provider:
+                # insert the new model as non-default to avoid dual defaults.
+                is_default = False
+
+            if is_default and model.id not in existing_ids:
+                # This new model is about to be INSERTed as the provider
+                # default (the guard above passed, so any remaining default
+                # rows for this provider are disabled). Clear their
+                # is_default flag so a later admin re-enable of an old row
+                # cannot resurrect a second default for the provider.
+                # is_enabled=False is part of the WHERE on purpose: under
+                # READ COMMITTED an admin could re-enable the old default
+                # between the guard SELECT and this UPDATE, so the "only
+                # clear DISABLED defaults" invariant must live in the SQL
+                # itself, not just in the pre-check.
+                await session.execute(
+                    update(LLMModelConfigModel)
+                    .where(
+                        LLMModelConfigModel.provider == model.provider.value,
+                        LLMModelConfigModel.is_default.is_(True),
+                        LLMModelConfigModel.is_enabled.is_(False),
+                        LLMModelConfigModel.id != model.id,
+                    )
+                    .values(is_default=False)
+                )
+
             values = {
                 "id": model.id,
                 "display_name": model.display_name,
@@ -398,7 +454,7 @@ class LLMModelRegistry:
                 "context_window": model.context_window,
                 "input_price": model.input_price,
                 "output_price": model.output_price,
-                "is_default": model.is_default,
+                "is_default": is_default,
                 "is_enabled": model.is_enabled,
                 "supports_tools": model.supports_tools,
                 "supports_vision": model.supports_vision,

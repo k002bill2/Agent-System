@@ -24,10 +24,10 @@ LLM 모델 레지스트리, 라우터, 자격증명, 프록시, Playground API�
 {
   "models": [
     {
-      "id": "claude-sonnet-4-6",
-      "display_name": "Claude Sonnet 4.6",
+      "id": "claude-sonnet-5",
+      "display_name": "Claude Sonnet 5",
       "provider": "anthropic",
-      "context_window": 200000,
+      "context_window": 1000000,
       "pricing": {"input": 0.003, "output": 0.015},
       "available": true,
       "is_default": true,
@@ -43,6 +43,13 @@ LLM 모델 레지스트리, 라우터, 자격증명, 프록시, Playground API�
 
 > **Note**: 이 API는 중앙 레지스트리(`models/llm_models.py`)에서 모델 정보를 제공합니다.
 > 새 모델 추가 시 해당 파일만 수정하면 전체 시스템에 반영됩니다.
+>
+> **`is_default` 마이그레이션 주의** (`USE_DATABASE=true` 배포): `sync_to_db`는
+> 이미 해당 provider의 default 행이 DB에 있으면, `_MODELS`에서 `is_default=True`로
+> 추가된 신규 모델을 `is_default=False`로 INSERT합니다(이중 default 방지). 즉 신규
+> 기본 모델 이관은 기존 배포에 자동 반영되지 않으며, admin이 Settings UI에서 직접
+> default를 전환해야 합니다. 인메모리 폴백(`USE_DATABASE` 미설정)에서는 `_MODELS`의
+> `is_default`가 그대로 적용됩니다.
 
 ---
 

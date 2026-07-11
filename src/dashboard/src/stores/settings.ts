@@ -94,19 +94,45 @@ interface SettingsState {
   getModelsForProvider: (provider: LLMProvider) => LLMModel[]
 }
 
-// Fallback models when API is unavailable
+// Fallback models when API is unavailable.
+// Mirrors the enabled models in backend `_MODELS` (src/backend/models/llm_models.py).
+// Disabled backend models (gpt-5.5, gpt-5.4 family) are intentionally excluded.
+// Keep this list AND fallbackDefaultModelIds below in sync when the backend changes.
 const fallbackModels: Record<LLMProvider, string[]> = {
-  anthropic: ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
+  anthropic: ['claude-opus-4-8', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
   google: ['gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite-preview', 'gemini-2.5-pro', 'gemini-2.5-flash'],
   openai: ['gpt-4o-mini', 'gpt-4o', 'o3', 'o4-mini'],
   codex_cli: ['codex-cli'],
   local: ['exaone3.5:7.8b', 'llama3:8b', 'mistral:7b', 'codellama:7b'],
 }
 
-// Legacy function for backward compatibility
-export const getModelsForProvider = (provider: LLMProvider): string[] => {
-  return fallbackModels[provider] || []
-}
+// Per-provider default model ids, mirrored from backend `_MODELS` entries with
+// is_default=True (src/backend/models/llm_models.py). Update alongside fallbackModels.
+const fallbackDefaultModelIds: ReadonlySet<string> = new Set([
+  'claude-sonnet-5', // anthropic
+  'gemini-3-flash-preview', // google
+  'gpt-4o-mini', // openai
+  'codex-cli', // codex_cli
+  'exaone3.5:7.8b', // local (ollama)
+])
+
+// Build minimal LLMModel objects from fallbackModels for offline/API-failure use.
+// 'local' is mapped to 'ollama' to match the provider values returned by the API.
+const buildFallbackModels = (): LLMModel[] =>
+  (Object.entries(fallbackModels) as [LLMProvider, string[]][]).flatMap(
+    ([provider, ids]) =>
+      ids.map((id) => ({
+        id,
+        display_name: id,
+        provider: provider === 'local' ? 'ollama' : provider,
+        context_window: 0,
+        pricing: { input: 0, output: 0 },
+        available: true,
+        is_default: fallbackDefaultModelIds.has(id),
+        supports_tools: true,
+        supports_vision: false,
+      }))
+  )
 
 const defaultNotifications: NotificationSettings = {
   browserNotifications: true,
@@ -169,6 +195,9 @@ export const useSettingsStore = create<SettingsState>()(
 
       fetchModels: async () => {
         const state = get()
+        // In-flight dedup: skip if a fetch is already running
+        // (e.g. App mount and SettingsPage mount firing concurrently)
+        if (state.modelsLoading) return
         set({ modelsLoading: true, modelsError: null })
 
         try {
@@ -185,10 +214,14 @@ export const useSettingsStore = create<SettingsState>()(
           })
         } catch (error) {
           console.warn('Failed to fetch LLM models from API, using fallback:', error)
-          set({
+          set((current) => ({
+            // Keep previously loaded models; only inject fallbacks when empty
+            availableModels: current.availableModels.length > 0
+              ? current.availableModels
+              : buildFallbackModels(),
             modelsLoading: false,
             modelsError: error instanceof Error ? error.message : 'Failed to fetch models',
-          })
+          }))
         }
       },
 

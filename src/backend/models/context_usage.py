@@ -15,10 +15,14 @@ class LLMProvider(str, Enum):
     OLLAMA = "ollama"
 
 
-# Provider context window limits (tokens)
+# Legacy provider context window limits (tokens).
+# SSOT is LLMModelRegistry (models.llm_models); get_context_limit() consults
+# the registry first and only falls back here for model ids the registry
+# does not know (e.g. older gemini-1.5/gpt-3.5 ids).
 PROVIDER_CONTEXT_LIMITS = {
     LLMProvider.ANTHROPIC: {
         "claude-opus-4-8": 200_000,
+        "claude-sonnet-5": 200_000,
         "claude-sonnet-4-6": 200_000,
         "claude-haiku-4-5-20251001": 200_000,
         "default": 200_000,
@@ -119,7 +123,21 @@ class ContextUsage(BaseModel):
 
 
 def get_context_limit(provider: str, model: str) -> int:
-    """Get context window limit for a provider/model combination."""
+    """Get context window limit for a provider/model combination.
+
+    Resolution order:
+    1. LLMModelRegistry (SSOT — reflects code _MODELS and DB-loaded values).
+    2. Legacy PROVIDER_CONTEXT_LIMITS substring matching.
+    3. Provider default / 100_000 safe default.
+    """
+    # SSOT first: exact registry id match (used by AOS API-called sessions,
+    # where `model` comes from the registry, e.g. get_model_for_provider()).
+    from models.llm_models import LLMModelRegistry
+
+    registry_model = LLMModelRegistry.get_by_id(model)
+    if registry_model is not None:
+        return registry_model.context_window
+
     try:
         provider_enum = LLMProvider(provider.lower())
         limits = PROVIDER_CONTEXT_LIMITS.get(provider_enum, {})

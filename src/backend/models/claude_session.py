@@ -220,12 +220,14 @@ class TasksResponse(BaseModel):
 
 # Cost per 1K tokens for different models
 MODEL_COSTS = {
-    "claude-opus-4-8": {"input": 0.015, "output": 0.075},
+    "claude-opus-4-8": {"input": 0.005, "output": 0.025},
+    "claude-sonnet-5": {"input": 0.003, "output": 0.015},
     "claude-sonnet-4-6": {"input": 0.003, "output": 0.015},
     "claude-haiku-4-5-20251001": {"input": 0.001, "output": 0.005},
     # Legacy model IDs for backward compatibility
-    "claude-opus-4-6": {"input": 0.015, "output": 0.075},
-    "claude-opus-4-5-20251101": {"input": 0.015, "output": 0.075},
+    "claude-opus-4-7": {"input": 0.005, "output": 0.025},
+    "claude-opus-4-6": {"input": 0.005, "output": 0.025},
+    "claude-opus-4-5-20251101": {"input": 0.005, "output": 0.025},
     "claude-sonnet-4-20250514": {"input": 0.003, "output": 0.015},
     "claude-3-5-sonnet-20241022": {"input": 0.003, "output": 0.015},
     "claude-3-5-haiku-20241022": {"input": 0.001, "output": 0.005},
