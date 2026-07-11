@@ -1554,3 +1554,20 @@ class CodexPlanUsageResponse(BaseModel):  # Codex app-server (JSON-RPC)
 **환경 변수**: `CODEX_STATE_DB_PATH`, `CODEX_APP_SERVER_BIN`, `CODEX_APP_SERVER_TIMEOUT_SECONDS`, `CODEX_PLAN_CACHE_TTL_SECONDS`
 
 **Dashboard UI**: `ClaudeUsageDashboard`(Codex 5시간/주간 한도 카드 + 주간 토큰 통합), `CostMonitor`(provider별 소스 표기), `AnalyticsPage`(provider 식별 및 breakdown)
+
+---
+
+## 57. Admin 모델 관리 (하드 삭제 + Suppression 재등록 방지)
+
+Settings의 `ModelManagementPanel`(admin 전용)에서 LLM 모델을 provider별로 관리. 단순 disable과 달리 하드 삭제는 suppression 기록으로 자동 재등록까지 차단한다.
+
+**기능**:
+- `PATCH /api/llm/models/{model_id}`: enable/disable 토글, provider별 default 전환 (형제 default 자동 해제)
+- `DELETE /api/llm/models/{model_id}`: config 행 삭제 + `llm_model_suppressions` 테이블 기록 (admin 전용). suppressed id는 startup `sync_to_db`와 24h discovery 양쪽에서 skip되어 재등록되지 않음. `is_default` 모델 삭제는 409 거부 (default 이관 선행 필요)
+- `DELETE /api/llm/models/suppressions/{model_id}`: suppression 해제 → 다음 sync/discovery 시 자동 재등록 (즉시 아님)
+- 삭제 후 registry 캐시 reload: 빈 DB 결과는 캐시를 명시적으로 클리어하며, reload가 삭제를 반영하지 못하면 `evict()`로 직접 제거 (이중 방어)
+- 코드 `_MODELS`(가격/정산 SSOT)는 보존 — suppression은 DB 레이어에서만 동작
+
+**Dashboard UI**: `ModelManagementPanel` — provider별 그룹, Enable/Disable·Set default 토글, 비활성·비-default 행만 하드 삭제(confirm 2단계), disabled 모델 기본 숨김 토글. URL은 `useSettingsStore.backendUrl` 기준 (런타임 백엔드 변경 반영)
+
+**DB**: `llm_model_suppressions` (마이그레이션 `a7d3f1b9c2e4`)
