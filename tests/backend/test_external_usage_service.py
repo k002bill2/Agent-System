@@ -10,6 +10,7 @@ import pytest
 
 from models.external_usage import ExternalProvider, UnifiedUsageRecord
 from services.external_usage_service import (
+    AnthropicUsageCollector,
     ExternalUsageService,
     OpenAIUsageCollector,
     summarize_claude_snapshot_records,
@@ -114,6 +115,54 @@ async def test_openai_collect_unknown_model_zero_cost() -> None:
         )
 
     assert records[0].cost_usd == 0.0
+
+
+def _anthropic_usage_payload(model: str, input_tok: int, output_tok: int) -> dict:
+    return {
+        "data": [
+            {
+                "bucket_end_time": "2026-06-01T00:00:00Z",
+                "items": [
+                    {
+                        "model": model,
+                        "input_tokens": input_tok,
+                        "output_tokens": output_tok,
+                        "num_requests": 5,
+                    }
+                ],
+            }
+        ]
+    }
+
+
+async def test_anthropic_collect_opus_4_6_matches_post_price_cut_row() -> None:
+    """Opus 4.5+ price cut: opus-4-6 must hit $5/$25, not generic claude-opus-4 ($15/$75)."""
+    collector = AnthropicUsageCollector("sk-ant-admin-test")
+    with patch(
+        "services.external_usage_service.httpx.AsyncClient",
+        return_value=_mock_client(_anthropic_usage_payload("claude-opus-4-6", 1000, 1000)),
+    ):
+        records = await collector.collect(
+            datetime.now(tz=UTC) - timedelta(days=30), datetime.now(tz=UTC)
+        )
+
+    assert len(records) == 1
+    assert records[0].cost_usd == pytest.approx(0.005 + 0.025)
+
+
+async def test_anthropic_collect_opus_4_1_keeps_legacy_price() -> None:
+    """Opus 4.1 predates the price cut: must fall through to claude-opus-4 ($15/$75)."""
+    collector = AnthropicUsageCollector("sk-ant-admin-test")
+    with patch(
+        "services.external_usage_service.httpx.AsyncClient",
+        return_value=_mock_client(_anthropic_usage_payload("claude-opus-4-1", 1000, 1000)),
+    ):
+        records = await collector.collect(
+            datetime.now(tz=UTC) - timedelta(days=30), datetime.now(tz=UTC)
+        )
+
+    assert len(records) == 1
+    assert records[0].cost_usd == pytest.approx(0.015 + 0.075)
 
 
 async def test_openai_collect_none_model_zero_cost() -> None:

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
-import { useSettingsStore, getModelsForProvider } from '../settings'
-import type { LLMModel } from '../settings'
+import { useSettingsStore } from '../settings'
+import type { LLMModel, LLMProvider } from '../settings'
 
 const { mockApiPatch } = vi.hoisted(() => ({
   mockApiPatch: vi.fn(),
@@ -235,8 +235,121 @@ describe('settings store', () => {
       const state = useSettingsStore.getState()
       expect(state.modelsLoading).toBe(false)
       expect(state.modelsError).toBe('Network failure')
-      // availableModels should remain unchanged (empty from beforeEach reset)
-      expect(state.availableModels).toEqual([])
+      // Fallback models are injected when the API is unavailable
+      expect(state.availableModels.length).toBeGreaterThan(0)
+    })
+
+    it('injects fallback models (including claude-sonnet-5) when fetch fails and store is empty', async () => {
+      const mockFetch = vi.fn()
+      vi.stubGlobal('fetch', mockFetch)
+
+      mockFetch.mockRejectedValueOnce(new Error('Network failure'))
+
+      await useSettingsStore.getState().fetchModels()
+
+      const state = useSettingsStore.getState()
+      const ids = state.availableModels.map((m) => m.id)
+      expect(ids).toContain('claude-opus-4-8')
+      expect(ids).toContain('claude-sonnet-5')
+      expect(ids).toContain('claude-sonnet-4-6')
+      expect(ids).toContain('claude-haiku-4-5-20251001')
+      expect(ids).toContain('gpt-4o-mini')
+      expect(ids).toContain('codex-cli')
+      expect(ids).toContain('gemini-3-flash-preview')
+
+      // Each injected model is a fully-formed LLMModel; claude-sonnet-5 is the
+      // backend default for anthropic (mirrored from _MODELS is_default=True)
+      const sonnet5 = state.availableModels.find((m) => m.id === 'claude-sonnet-5')
+      expect(sonnet5).toMatchObject({
+        display_name: 'claude-sonnet-5',
+        provider: 'anthropic',
+        available: true,
+        is_default: true,
+      })
+
+      // Non-default models keep is_default: false
+      const opus = state.availableModels.find((m) => m.id === 'claude-opus-4-8')
+      expect(opus?.is_default).toBe(false)
+    })
+
+    it('marks the backend per-provider defaults as is_default in fallback models', async () => {
+      const mockFetch = vi.fn()
+      vi.stubGlobal('fetch', mockFetch)
+
+      mockFetch.mockRejectedValueOnce(new Error('Network failure'))
+
+      await useSettingsStore.getState().fetchModels()
+
+      const defaults = useSettingsStore
+        .getState()
+        .availableModels.filter((m) => m.is_default)
+        .map((m) => m.id)
+        .sort()
+      expect(defaults).toEqual(
+        ['claude-sonnet-5', 'codex-cli', 'exaone3.5:7.8b', 'gemini-3-flash-preview', 'gpt-4o-mini'].sort()
+      )
+    })
+
+    it('dedupes concurrent fetchModels calls while a request is in flight', async () => {
+      const mockFetch = vi.fn()
+      vi.stubGlobal('fetch', mockFetch)
+
+      let resolveResponse!: (value: Response) => void
+      mockFetch.mockReturnValueOnce(
+        new Promise<Response>((resolve) => {
+          resolveResponse = resolve
+        })
+      )
+
+      const first = useSettingsStore.getState().fetchModels()
+      expect(useSettingsStore.getState().modelsLoading).toBe(true)
+
+      // Second call while the first is in flight must early-return without fetching
+      await useSettingsStore.getState().fetchModels()
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+
+      resolveResponse(
+        new Response(JSON.stringify({ models: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+      await first
+
+      const state = useSettingsStore.getState()
+      expect(state.modelsLoading).toBe(false)
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+
+    it("maps fallback 'local' provider models to 'ollama' so getModelsForProvider works", async () => {
+      const mockFetch = vi.fn()
+      vi.stubGlobal('fetch', mockFetch)
+
+      mockFetch.mockRejectedValueOnce(new Error('Network failure'))
+
+      await useSettingsStore.getState().fetchModels()
+
+      const localModels = useSettingsStore.getState().getModelsForProvider('local')
+      expect(localModels.map((m) => m.id)).toContain('exaone3.5:7.8b')
+      expect(localModels.every((m) => m.provider === 'ollama')).toBe(true)
+    })
+
+    it('does NOT overwrite previously loaded models with fallbacks on fetch failure', async () => {
+      const mockFetch = vi.fn()
+      vi.stubGlobal('fetch', mockFetch)
+
+      const apiModels: LLMModel[] = [
+        makeModel({ id: 'claude-sonnet-4-6', provider: 'anthropic', is_default: true }),
+      ]
+      useSettingsStore.setState({ availableModels: apiModels })
+
+      mockFetch.mockRejectedValueOnce(new Error('Network failure'))
+
+      await useSettingsStore.getState().fetchModels()
+
+      const state = useSettingsStore.getState()
+      expect(state.modelsError).toBe('Network failure')
+      expect(state.availableModels).toEqual(apiModels)
     })
 
     it('sets modelsError when response status is not ok (non-200)', async () => {
@@ -403,35 +516,54 @@ describe('settings store', () => {
 
 })
 
-describe('getModelsForProvider (legacy exported function)', () => {
-  it('returns anthropic models', () => {
-    const models = getModelsForProvider('anthropic')
-    expect(models).toContain('claude-opus-4-8')
-    expect(models).toContain('claude-sonnet-4-6')
+describe('fallback models via store actions (after fetch failure)', () => {
+  beforeEach(async () => {
+    useSettingsStore.setState({
+      backendUrl: 'http://localhost:8000',
+      availableModels: [],
+      modelsLoading: false,
+      modelsError: null,
+    })
+    const mockFetch = vi.fn().mockRejectedValueOnce(new Error('API down'))
+    vi.stubGlobal('fetch', mockFetch)
+    await useSettingsStore.getState().fetchModels()
   })
 
-  it('returns openai models', () => {
-    const models = getModelsForProvider('openai')
-    expect(models).toContain('gpt-4o-mini')
-    expect(models).toContain('gpt-4o')
-    expect(models).not.toContain('gpt-5.4')
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
-  it('returns codex cli models', () => {
-    const models = getModelsForProvider('codex_cli')
-    expect(models).toContain('codex-cli')
+  const idsFor = (provider: LLMProvider) =>
+    useSettingsStore.getState().getModelsForProvider(provider).map((m) => m.id)
+
+  it('returns anthropic fallback models including claude-sonnet-5', () => {
+    const ids = idsFor('anthropic')
+    expect(ids).toContain('claude-opus-4-8')
+    expect(ids).toContain('claude-sonnet-5')
+    expect(ids).toContain('claude-sonnet-4-6')
   })
 
-  it('returns google/gemini models', () => {
-    const models = getModelsForProvider('google')
-    expect(models).toContain('gemini-3-flash-preview')
-    expect(models).toContain('gemini-2.5-pro')
+  it('returns openai fallback models', () => {
+    const ids = idsFor('openai')
+    expect(ids).toContain('gpt-4o-mini')
+    expect(ids).toContain('gpt-4o')
+    expect(ids).not.toContain('gpt-5.4')
   })
 
-  it('returns local models', () => {
-    const models = getModelsForProvider('local')
-    expect(models).toContain('exaone3.5:7.8b')
-    expect(models).toContain('llama3:8b')
+  it('returns codex cli fallback models', () => {
+    expect(idsFor('codex_cli')).toContain('codex-cli')
+  })
+
+  it('returns google/gemini fallback models', () => {
+    const ids = idsFor('google')
+    expect(ids).toContain('gemini-3-flash-preview')
+    expect(ids).toContain('gemini-2.5-pro')
+  })
+
+  it('returns local fallback models (mapped to ollama provider)', () => {
+    const ids = idsFor('local')
+    expect(ids).toContain('exaone3.5:7.8b')
+    expect(ids).toContain('llama3:8b')
   })
 })
 

@@ -29,8 +29,8 @@ class TestAgentRegistry:
         AgentRegistry._instance = registry
 
         # 기본 에이전트를 복사해서 등록 (상태 격리)
-        from services.agent_registry import DEFAULT_AGENTS
-        for agent in DEFAULT_AGENTS:
+        from services.agent_registry import _build_default_agents
+        for agent in _build_default_agents():
             # 깊은 복사를 통해 새 인스턴스 생성
             agent_copy = AgentMetadata(
                 id=agent.id,
@@ -169,6 +169,71 @@ class TestAgentMetadata:
         # 상태를 BUSY로 변경
         agent.status = AgentStatus.BUSY
         assert agent.is_available() is False
+
+    def test_default_model_resolved_from_registry(self, monkeypatch):
+        """model 기본값은 하드코딩이 아닌 LLMModelRegistry 기반 동적 해석."""
+        from models.llm_models import LLMModelRegistry
+
+        # 코드 레벨 _MODELS 기준으로 검증 (다른 테스트의 DB 캐시 영향 차단)
+        monkeypatch.setattr(LLMModelRegistry, "_db_cache", None)
+        monkeypatch.setenv("LLM_PROVIDER", "anthropic")
+        agent = AgentMetadata(
+            id="test-agent",
+            name="Test Agent",
+            description="Test",
+            category=AgentCategory.DEVELOPMENT,
+        )
+        assert agent.model == "claude-sonnet-5"
+
+        # 인스턴스 생성 시점 평가 확인 (import 시점 고정이 아님)
+        monkeypatch.setenv("LLM_PROVIDER", "codex_cli")
+        agent2 = AgentMetadata(
+            id="test-agent-2",
+            name="Test Agent 2",
+            description="Test",
+            category=AgentCategory.DEVELOPMENT,
+        )
+        assert agent2.model == "codex-cli"
+
+    def test_build_default_agents_reflects_registry_default_change(self, monkeypatch):
+        """기본 에이전트는 빌드 시점의 레지스트리 default를 따른다 (import 시점 고정 아님).
+
+        DB 로드로 admin default가 바뀐 상황을 _db_cache 주입으로 시뮬레이션하고,
+        _build_default_agents()가 매 호출 시점의 default를 반영하는지 검증.
+        """
+        from models.llm_models import LLMModelConfig, LLMModelRegistry
+        from models.llm_models import LLMProvider as ModelProvider
+        from services.agent_registry import _build_default_agents
+
+        monkeypatch.setenv("LLM_PROVIDER", "anthropic")
+
+        def _set_db_default(default_id: str) -> None:
+            db_models = [
+                LLMModelConfig(
+                    id=model_id,
+                    display_name=model_id,
+                    provider=ModelProvider.ANTHROPIC,
+                    context_window=1_000_000,
+                    input_price=0.003,
+                    output_price=0.015,
+                    is_default=(model_id == default_id),
+                )
+                for model_id in ("claude-sonnet-5", "claude-opus-4-8")
+            ]
+            monkeypatch.setattr(LLMModelRegistry, "_db_cache", db_models)
+            monkeypatch.setattr(
+                LLMModelRegistry, "_db_index", {m.id: m for m in db_models}
+            )
+
+        # DB-loaded admin default = opus → 빌드 결과에 반영
+        _set_db_default("claude-opus-4-8")
+        agents = _build_default_agents()
+        assert agents and all(a.model == "claude-opus-4-8" for a in agents)
+
+        # default 변경 후 새로 빌드하면 변경이 반영됨
+        _set_db_default("claude-sonnet-5")
+        agents2 = _build_default_agents()
+        assert agents2 and all(a.model == "claude-sonnet-5" for a in agents2)
 
     def test_matches_capability(self):
         """능력 매칭 테스트."""
