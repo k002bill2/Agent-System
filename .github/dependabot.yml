@@ -37,7 +37,7 @@ updates:
           - "minor"
           - "patch"
 
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/src/backend"
     schedule:
       interval: "weekly"
