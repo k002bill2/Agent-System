@@ -171,10 +171,14 @@ jobs:
     name: Verify Backup
     needs: backup
     runs-on: ubuntu-latest
+    # secrets 컨텍스트는 step-level if에서 사용 불가(워크플로우 전체 파싱 실패 유발)
+    # → job env로 옮겨 env 컨텍스트로 검사 (backup 잡과 동일 패턴)
+    env:
+      AWS_KEY: ${{ secrets.AWS_ACCESS_KEY_ID }}
 
     steps:
       - name: Download latest backup
-        if: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
+        if: env.AWS_KEY != ''
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -184,6 +188,7 @@ jobs:
           aws s3 cp "s3://${{ secrets.BACKUP_S3_BUCKET }}/backups/$LATEST" ./backup.sql.gz
 
       - name: Verify backup integrity
+        if: env.AWS_KEY != ''
         run: |
+          test -s ./backup.sql.gz
           gunzip -t ./backup.sql.gz && echo "Backup verified: OK"
-        continue-on-error: true
