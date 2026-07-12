@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react'
 import { ClaudeUsageDashboard } from '../ClaudeUsageDashboard'
 import type { ClaudeUsageResponse } from '../../../types/claudeUsage'
 
@@ -192,13 +192,18 @@ describe('ClaudeUsageDashboard', () => {
   it('shows ChatGPT Codex subscription remaining limits', async () => {
     mockUsage = makeUsageResponse({ weeklyTotalTokens: 200000 })
 
-    render(<ClaudeUsageDashboard />)
+    const { container } = render(<ClaudeUsageDashboard />)
+    const utils = within(container)
 
-    expect(await screen.findByText('Codex 5h')).toBeInTheDocument()
-    expect(screen.getByText('Codex Weekly')).toBeInTheDocument()
-    expect(screen.getByText('44% left')).toBeInTheDocument()
-    expect(screen.getByText('60% left')).toBeInTheDocument()
-    expect(screen.getByText('Codex reset credits: 1')).toBeInTheDocument()
+    // "Codex reset credits" renders only after the codex-plan fetch resolves,
+    // so awaiting it guarantees the async plan data has settled before we assert.
+    // Scoping to this render's container keeps the query immune to any dashboard
+    // leaked from a prior async test still lingering in document.body.
+    expect(await utils.findByText('Codex reset credits: 1')).toBeInTheDocument()
+    expect(utils.getByText('Codex 5h')).toBeInTheDocument()
+    expect(utils.getByText('Codex Weekly')).toBeInTheDocument()
+    expect(utils.getByText('44% left')).toBeInTheDocument()
+    expect(utils.getByText('60% left')).toBeInTheDocument()
   })
 
   it('shows local codex token usage as diagnostics', async () => {
@@ -222,10 +227,16 @@ describe('ClaudeUsageDashboard', () => {
       })
     })
 
-    render(<ClaudeUsageDashboard />)
+    const { container } = render(<ClaudeUsageDashboard />)
+    const utils = within(container)
 
-    expect(await screen.findByText('50.0K')).toBeInTheDocument()
-    expect(screen.getByText('Codex')).toBeInTheDocument()
+    // The diagnostic grid shows the codex weekly tokens (50000 → "50.0K") only
+    // after the codex-CLI fetch resolves. Opus is 50.0K by default, so once the
+    // codex value lands there are exactly two "50.0K" cells — waiting for that
+    // both settles the async fetch (no bleed into the next test) and verifies the
+    // codex diagnostic value. within(container) keeps it scoped to this render.
+    await waitFor(() => expect(utils.getAllByText('50.0K')).toHaveLength(2))
+    expect(utils.getByText('Codex')).toBeInTheDocument()
   })
 
   it('bypasses codex plan cache when refresh is clicked', async () => {
