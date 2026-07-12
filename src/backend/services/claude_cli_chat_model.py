@@ -9,6 +9,7 @@ channel: ``claude -p`` writes the assistant reply to **stdout** rather than to a
 
 import asyncio
 import json
+import logging
 import os
 import shlex
 import subprocess
@@ -18,6 +19,8 @@ from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models.chat_models import SimpleChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 
 def _message_role(message: BaseMessage) -> str:
@@ -151,10 +154,17 @@ class ClaudeCliChatModel(SimpleChatModel):
                 check=False,
             )
         except FileNotFoundError as exc:
+            # Never log the prompt body (may hold sensitive content); command only.
+            logger.warning("Claude CLI command not found: command=%s", self.command)
             raise RuntimeError(
                 f"Claude CLI command not found: {self.command}. Install Claude CLI and sign in."
             ) from exc
         except subprocess.TimeoutExpired as exc:
+            logger.warning(
+                "Claude CLI timed out: command=%s timeout_seconds=%s",
+                self.command,
+                self.timeout_seconds,
+            )
             raise RuntimeError(
                 f"Claude CLI timed out after {self.timeout_seconds} seconds"
             ) from exc
@@ -163,6 +173,11 @@ class ClaudeCliChatModel(SimpleChatModel):
             stderr = result.stderr.strip()
             stdout = result.stdout.strip()
             detail = stderr or stdout or f"exit code {result.returncode}"
+            logger.warning(
+                "Claude CLI invocation failed: command=%s exit_code=%s",
+                self.command,
+                result.returncode,
+            )
             raise RuntimeError(f"Claude CLI invocation failed: {detail}")
 
         # claude -p writes the assistant reply to stdout (no output file).
