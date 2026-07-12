@@ -12,8 +12,11 @@ Security features:
 - Constant-time password comparison to prevent timing attacks
 """
 
+import hashlib
 import hmac
 import logging
+import os
+import secrets
 import time
 from datetime import UTC, datetime, timedelta
 from enum import Enum
@@ -30,7 +33,21 @@ logger = logging.getLogger(__name__)
 # Configuration
 # ─────────────────────────────────────────────────────────────
 
-JWT_SECRET_KEY = "agent-registry-secret-key-change-in-production"
+_env_secret = os.getenv("AGENT_REGISTRY_JWT_SECRET", "")
+if _env_secret:
+    JWT_SECRET_KEY = _env_secret
+else:
+    _session_secret = os.getenv("SESSION_SECRET_KEY", "")
+    if _session_secret:
+        # 세션 시크릿에서 도메인 분리 파생 — 워커/레플리카 간 안정적이면서
+        # 세션 토큰 서명키와는 다른 키 (토큰 혼동 방지)
+        JWT_SECRET_KEY = hashlib.sha256(f"agent-registry:{_session_secret}".encode()).hexdigest()
+    else:
+        JWT_SECRET_KEY = secrets.token_hex(32)
+        logger.warning(
+            "AGENT_REGISTRY_JWT_SECRET/SESSION_SECRET_KEY not set; using ephemeral "
+            "random key (tokens invalidate on restart; NOT safe for multi-worker)"
+        )
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
