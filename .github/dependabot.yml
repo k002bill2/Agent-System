@@ -24,6 +24,9 @@ updates:
           - "eslint-plugin-*"
           - "typescript-eslint"
           - "@typescript-eslint/*"
+          # typescript-eslint peer 상한(예: <6.1.0)에 묶여 있어 단독 범프 시 ERESOLVE로
+          # npm ci가 깨짐(PR #169). typescript-eslint와 같은 그룹에서 동반 범프한다.
+          - "typescript"
       testing:
         patterns:
           - "@testing-library/*"
