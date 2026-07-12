@@ -15,9 +15,11 @@ RUN apt-get update && apt-get install -y \
 # Install uv for fast dependency management
 RUN pip install --no-cache-dir uv
 
-# Copy dependency file first for layer caching
-COPY pyproject.toml README.md* ./
-RUN touch README.md && uv pip install --system -e .
+# Copy dependency files first for layer caching
+COPY pyproject.toml uv.lock ./
+# Install dependencies from the lockfile (deps only; source is volume-mounted)
+RUN uv export --locked --no-dev --no-emit-project -o /tmp/requirements.lock \
+    && uv pip install --system -r /tmp/requirements.lock
 
 # Source code is mounted as volume — no COPY needed
 
