@@ -741,3 +741,67 @@ def test_verify_token_wrong_signature_raises_401():
         verify_token(forged_token, expected_type="access")
 
     assert exc_info.value.status_code == 401
+
+
+def test_env_secret_signs_tokens_after_reload(monkeypatch):
+    """Test 39: AGENT_REGISTRY_JWT_SECRET is used to sign tokens after reload."""
+    import importlib
+
+    from api.v1 import auth_middleware
+
+    env_secret = "env-provided-jwt-signing-key-abc123def456xyz789"
+    monkeypatch.setenv("AGENT_REGISTRY_JWT_SECRET", env_secret)
+    try:
+        importlib.reload(auth_middleware)
+
+        # Module constant reflects the env-provided key.
+        assert auth_middleware.JWT_SECRET_KEY == env_secret
+
+        # A token issued by the reloaded module verifies against the env key.
+        token = auth_middleware.create_access_token(
+            "usr_admin_001", "admin", auth_middleware.UserRole.ADMIN
+        )
+        decoded = jwt.decode(
+            token, env_secret, algorithms=[auth_middleware.JWT_ALGORITHM]
+        )
+        assert decoded["sub"] == "usr_admin_001"
+        assert decoded["token_type"] == "access"
+    finally:
+        # Restore original module state to avoid polluting other tests.
+        monkeypatch.delenv("AGENT_REGISTRY_JWT_SECRET", raising=False)
+        importlib.reload(auth_middleware)
+
+
+def test_session_secret_derived_key_after_reload(monkeypatch):
+    """Test 40: SESSION_SECRET_KEY derives a stable JWT key when the dedicated
+    env var is unset (multi-worker safe, distinct from the session key)."""
+    import hashlib
+    import importlib
+
+    from api.v1 import auth_middleware
+
+    session_secret = "session-secret-key-for-derivation-test-000111"
+    monkeypatch.delenv("AGENT_REGISTRY_JWT_SECRET", raising=False)
+    monkeypatch.setenv("SESSION_SECRET_KEY", session_secret)
+    try:
+        importlib.reload(auth_middleware)
+
+        derived = hashlib.sha256(
+            f"agent-registry:{session_secret}".encode()
+        ).hexdigest()
+        # Derived key is stable and NOT the raw session secret (no confusion).
+        assert auth_middleware.JWT_SECRET_KEY == derived
+        assert auth_middleware.JWT_SECRET_KEY != session_secret
+
+        # A token issued by the reloaded module verifies against the derived key.
+        token = auth_middleware.create_access_token(
+            "usr_admin_001", "admin", auth_middleware.UserRole.ADMIN
+        )
+        decoded = jwt.decode(
+            token, derived, algorithms=[auth_middleware.JWT_ALGORITHM]
+        )
+        assert decoded["sub"] == "usr_admin_001"
+    finally:
+        # Restore original module state to avoid polluting other tests.
+        monkeypatch.delenv("SESSION_SECRET_KEY", raising=False)
+        importlib.reload(auth_middleware)
