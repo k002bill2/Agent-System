@@ -18,9 +18,10 @@ RUN pip install --no-cache-dir uv
 # Copy source code first (needed for pyproject.toml readme reference)
 COPY . .
 
-# Install all dependencies (including heavy ML models)
-# Creates empty README.md if not exists (required by pyproject.toml)
-RUN touch README.md && uv pip install --system -e .
+# Install all dependencies (including heavy ML models) from the lockfile
+# (deps only; the app runs from WORKDIR so the project itself is not installed)
+RUN uv export --locked --no-dev --no-emit-project -o /tmp/requirements.lock \
+    && uv pip install --system -r /tmp/requirements.lock
 
 # Create data directories
 RUN mkdir -p /app/data/summaries

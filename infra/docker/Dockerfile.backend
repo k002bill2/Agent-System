@@ -15,10 +15,11 @@ RUN apt-get update && apt-get install -y \
 RUN pip install uv
 
 # Copy dependency files
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 
-# Install dependencies
-RUN uv pip install --system -e .
+# Install dependencies from the lockfile (deps only; the app runs from WORKDIR)
+RUN uv export --locked --no-dev --no-emit-project -o /tmp/requirements.lock \
+    && uv pip install --system -r /tmp/requirements.lock
 
 # Runtime stage
 FROM python:3.11-slim AS runtime
