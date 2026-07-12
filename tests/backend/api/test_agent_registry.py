@@ -7,10 +7,11 @@ Minimum 20 test cases required.
 
 import time
 
+import jwt
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 from api.v1.agent_registry import (
     router,
@@ -19,11 +20,13 @@ from api.v1.agent_registry import (
     _seed_default_agents,
 )
 from api.v1.auth_middleware import (
+    JWT_ALGORITHM,
     UserRole,
     create_access_token,
     create_token_pair,
     create_refresh_token,
     reset_user_store,
+    verify_token,
 )
 from api.v1.rate_limiter import get_rate_limiter
 
@@ -683,3 +686,58 @@ async def test_stats_response_structure(client):
     assert "avg_execution_time_ms" in data
     assert data["total_agents"] == 4
     assert data["by_category"]["development"] == 2
+
+
+# ─────────────────────────────────────────────────────────────
+# 36-38: Token verification unit tests (JWT encode/decode round-trip)
+# ─────────────────────────────────────────────────────────────
+
+
+def test_access_token_round_trip():
+    """Test 36: A freshly issued access token decodes back to its payload."""
+    token = create_access_token("usr_admin_001", "admin", UserRole.ADMIN)
+
+    payload = verify_token(token, expected_type="access")
+
+    assert payload["sub"] == "usr_admin_001"
+    assert payload["username"] == "admin"
+    assert payload["role"] == "admin"
+    assert payload["token_type"] == "access"
+
+
+def test_verify_expired_token_raises_401():
+    """Test 37: An expired access token is rejected with 401."""
+    from datetime import timedelta
+
+    token = create_access_token(
+        "usr_admin_001",
+        "admin",
+        UserRole.ADMIN,
+        expires_delta=timedelta(seconds=-10),  # Already expired
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        verify_token(token, expected_type="access")
+
+    assert exc_info.value.status_code == 401
+
+
+def test_verify_token_wrong_signature_raises_401():
+    """Test 38: A token signed with a different key is rejected with 401."""
+    now = time.time()
+    payload = {
+        "sub": "usr_admin_001",
+        "username": "admin",
+        "role": "admin",
+        "token_type": "access",
+        "exp": now + 3600,
+        "iat": now,
+    }
+    forged_token = jwt.encode(
+        payload, "a-different-secret-key-that-is-32-bytes-plus", algorithm=JWT_ALGORITHM
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        verify_token(forged_token, expected_type="access")
+
+    assert exc_info.value.status_code == 401
