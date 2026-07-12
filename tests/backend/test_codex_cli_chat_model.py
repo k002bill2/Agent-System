@@ -118,11 +118,15 @@ def test_call_detaches_stdin_to_avoid_interactive_hang() -> None:
 # ── _call: error paths ───────────────────────────────────────────────────────
 
 
-def test_call_raises_on_nonzero_exit() -> None:
+def test_call_raises_on_nonzero_exit(caplog: pytest.LogCaptureFixture) -> None:
     with patch(f"{MODULE}.subprocess.run",
                side_effect=_run_side_effect(returncode=1, stderr="boom")):
-        with pytest.raises(RuntimeError, match="boom"):
-            _model()._call([HumanMessage(content="q")])
+        with caplog.at_level("WARNING", logger=MODULE):
+            with pytest.raises(RuntimeError, match="boom"):
+                _model()._call([HumanMessage(content="q")])
+    # Structured failure log carries the exit code but never the prompt body.
+    assert "exit_code=1" in caplog.text
+    assert "invocation failed" in caplog.text
 
 
 def test_call_raises_when_command_not_found() -> None:

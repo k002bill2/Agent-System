@@ -6,6 +6,7 @@ out to ``codex exec`` instead of using OpenAI's usage-billed API.
 
 import asyncio
 import json
+import logging
 import os
 import shlex
 import subprocess
@@ -17,6 +18,8 @@ from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models.chat_models import SimpleChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 
 def _message_role(message: BaseMessage) -> str:
@@ -154,16 +157,28 @@ class CodexCliChatModel(SimpleChatModel):
                 check=False,
             )
         except FileNotFoundError as exc:
+            # Never log the prompt body (may hold sensitive content); command only.
+            logger.warning("Codex CLI command not found: command=%s", self.command)
             raise RuntimeError(
                 f"Codex CLI command not found: {self.command}. Install Codex CLI and sign in."
             ) from exc
         except subprocess.TimeoutExpired as exc:
+            logger.warning(
+                "Codex CLI timed out: command=%s timeout_seconds=%s",
+                self.command,
+                self.timeout_seconds,
+            )
             raise RuntimeError(f"Codex CLI timed out after {self.timeout_seconds} seconds") from exc
 
         if result.returncode != 0:
             stderr = result.stderr.strip()
             stdout = result.stdout.strip()
             detail = stderr or stdout or f"exit code {result.returncode}"
+            logger.warning(
+                "Codex CLI invocation failed: command=%s exit_code=%s",
+                self.command,
+                result.returncode,
+            )
             raise RuntimeError(f"Codex CLI invocation failed: {detail}")
 
         try:

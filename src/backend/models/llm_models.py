@@ -661,6 +661,12 @@ class LLMModelRegistry:
             return bool(os.getenv("ANTHROPIC_API_KEY"))
         elif provider == LLMProvider.OPENAI:
             return bool(os.getenv("OPENAI_API_KEY"))
+        # CLI providers report available=True to mean "no API key required"
+        # (subscription-backed local CLI), NOT "binary is installed". Binary
+        # presence is probed separately by LLM Access health checks. Do NOT
+        # "fix" this with a shutil.which() gate: it would change existing Codex
+        # API behavior and false-negative in CI where the binary is absent.
+        # Deliberate rejection of Codex review P2.
         elif provider == LLMProvider.CODEX_CLI:
             return True
         elif provider == LLMProvider.CLAUDE_CLI:
