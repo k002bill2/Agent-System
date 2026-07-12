@@ -34,7 +34,6 @@ htmlcov/
 
 # Test files
 tests/
-testing_requirements.txt
 
 # IDE
 .idea/
