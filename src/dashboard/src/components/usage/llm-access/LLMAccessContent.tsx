@@ -70,6 +70,7 @@ function LLMAccessLoadedContent({ model }: { model: LLMAccessSettingsModel }) {
           organizationMemberships={model.organizationMemberships}
           organizationMembers={model.organizationMembers}
           ownerUserId={model.profileForm.ownerUserId}
+          provider={model.profileForm.provider}
           command={model.profileForm.command}
           args={model.profileForm.args}
           workingDirectory={model.profileForm.workingDirectory}
@@ -77,6 +78,7 @@ function LLMAccessLoadedContent({ model }: { model: LLMAccessSettingsModel }) {
           onNameChange={model.profileForm.setName}
           onScopeChange={model.profileForm.setScope}
           onOwnerUserIdChange={model.profileForm.setOwnerUserId}
+          onProviderChange={model.profileForm.setProvider}
           onCommandChange={model.profileForm.setCommand}
           onArgsChange={model.profileForm.setArgs}
           onWorkingDirectoryChange={model.profileForm.setWorkingDirectory}

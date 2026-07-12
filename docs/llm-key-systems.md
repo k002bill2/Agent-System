@@ -28,6 +28,7 @@ AOS에는 **CLI 구독권 기반 런타임 관리**와 목적이 다른 LLM key 
 - **서비스/API**: `services/llm_access_service.py`, `api/llm_access.py`.
 - **UI**: Settings → `LLM Access`(`components/usage/LLMAccessSettings.tsx`, `stores/llmAccess.ts`).
 - **소비**: `services/llm_runtime_resolver.py`가 provider/mode/source별 실행 경로를 결정하고, `services/llm_usage_ledger_service.py`가 사용량을 `llm_usage_ledger`에 기록한다.
+- **실행 프로바이더**: CLI 런타임은 `codex_cli`(기본, 자동 시딩·`/me` 합성 대상)와 `claude_cli`(`services/claude_cli_chat_model.py`, `claude -p` stdout 어댑터) 2종. `claude_cli`는 자동 시딩 없이 **명시적 profile/entitlement로만** 선택되며, 모델 미지정 시 resolver는 codex_cli를 우선한다. env: `CLAUDE_CLI_COMMAND`(기본 `claude`) / `CLAUDE_CLI_ARGS`(기본 `-p --output-format text --permission-mode plan` — codex `--sandbox read-only`에 대응하는 읽기전용 장벽) / `CLAUDE_CLI_TIMEOUT_SECONDS`(기본 300). codex와 동일하게 profile의 command/args_json이 아니라 **env가 런타임 SSOT**다. ledger의 `claude_cli` 행이 CLAUDE_CLI External Usage 카드 집계에서 제외되는 기존 계약(아래 "핵심 함정")은 그대로 유지된다.
 - **정책**: 개인 Docker 배포는 개인 profile을 기본값으로 둘 수 있고, 다중 사용자 배포는 Organization 단위 entitlement와 quota로 분리한다.
 
 ## [1] 런타임 프로바이더 키
@@ -35,7 +36,7 @@ AOS에는 **CLI 구독권 기반 런타임 관리**와 목적이 다른 LLM key 
 AOS의 에이전트/오케스트레이터가 **기본 provider와 예외 fallback**을 결정할 때 사용.
 
 - **설정** (`config.py`): `LLM_PROVIDER`(기본 `codex_cli`, 로컬 우선), `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY`, 모델 변수.
-- **소비**: `services/llm_service.py` `create_llm()` → provider별 LangChain 모델(`ChatOpenAI`/`ChatAnthropic`/`ChatGoogleGenerativeAI`/`ChatOllama`/`CodexCliChatModel`) 생성, settings 키 주입. 라우팅/페일오버 `services/llm_router_service.py`.
+- **소비**: `services/llm_service.py` `create_llm()` → provider별 LangChain 모델(`ChatOpenAI`/`ChatAnthropic`/`ChatGoogleGenerativeAI`/`ChatOllama`/`CodexCliChatModel`/`ClaudeCliChatModel`) 생성, settings 키 주입. 라우팅/페일오버 `services/llm_router_service.py`.
 - **범위**: env는 배포 기본값과 fallback 정책을 제공한다. 사용자/조직별 CLI 실행 권한은 `llm_cli_profiles`와 `user_llm_entitlements`가 담당한다.
 
 ## [2] 유저 채팅 프록시 키

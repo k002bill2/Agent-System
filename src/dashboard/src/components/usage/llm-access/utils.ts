@@ -20,6 +20,21 @@ export const SANDBOX_PRESETS = [
 export const DEFAULT_CLI_COMMAND = 'codex'
 export const DEFAULT_CLI_ARGS = 'exec --color never'
 
+// CLI execution providers selectable when creating a profile. The `value` is the
+// backend enum literal (snake_case) sent verbatim as the profile `provider`.
+export const CLI_PROVIDER_OPTIONS = [
+  { value: 'codex_cli', label: 'Codex CLI' },
+  { value: 'claude_cli', label: 'Claude CLI' },
+] as const
+
+// Per-provider default command/args prefilled into the create form. Mirrors each
+// provider's backend env defaults (CODEX_CLI_* / CLAUDE_CLI_*) so a new profile is
+// coherent with its provider; the user can still override before creating.
+export const CLI_PROVIDER_DEFAULTS: Record<string, { command: string; args: string }> = {
+  codex_cli: { command: DEFAULT_CLI_COMMAND, args: DEFAULT_CLI_ARGS },
+  claude_cli: { command: 'claude', args: '-p --output-format text' },
+}
+
 export type SandboxPreset = (typeof SANDBOX_PRESETS)[number]
 
 export function formatCompactNumber(value: number | null | undefined): string {

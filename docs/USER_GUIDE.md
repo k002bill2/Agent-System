@@ -56,7 +56,7 @@ Agent Orchestration System (AOS)은 **LangGraph 기반 멀티 에이전트 오�
 | Runtime | 용도 | 비고 |
 |-----------|------|------|
 | **Codex CLI** | 기본 LLM 실행 | `codex_cli`, ChatGPT CLI 구독 로그인 사용 |
-| **Claude CLI** | Task Analyzer tmux 실행, Warp launch intent | `claude_cli`, 일부 경로 계측 |
+| **Claude CLI** | opt-in LLM 실행 (CLI profile/entitlement 선택 시) | `claude_cli`, Claude CLI 구독 로그인 사용. Task Analyzer tmux/Warp 계측 경로 포함 |
 | **Ollama** | 로컬 모델 실행 | API 과금 없음 |
 | **OpenAI / Anthropic / Google** | fallback 또는 OCR/vision 예외 경로 | `LLM_API_FALLBACK_ENABLED=true`와 entitlement 허용 필요 |
 

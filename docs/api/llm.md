@@ -117,7 +117,7 @@ CLI-first LLM profile과 user/org entitlement를 조회하고 관리합니다.
 | POST | `/api/llm-access/entitlements` | LLM entitlement 생성 (admin/manager) |
 | PATCH | `/api/llm-access/entitlements/{entitlement_id}` | LLM entitlement 수정 (admin/manager) |
 
-`/me`는 DB에 별도 설정이 없어도 `codex_cli` 기본 profile과 `mode=cli`, `source_scope=all` entitlement를 합성해서 반환합니다. `LLM_API_FALLBACK_ENABLED=false`가 기본이며, API fallback 허용 여부는 response의 `api_fallback_enabled`와 entitlement의 `allow_api_fallback`에 분리되어 표시됩니다.
+`/me`는 DB에 별도 설정이 없어도 `codex_cli` 기본 profile과 `mode=cli`, `source_scope=all` entitlement를 합성해서 반환합니다. `claude_cli`는 이 합성/자동 시딩 대상이 아니며, Settings의 CLI profile 생성 폼(provider 셀렉트)으로 명시적으로 생성해야 실행 경로로 선택됩니다(entitlement 자동 생성 규칙은 provider와 무관하게 동일 적용). `LLM_API_FALLBACK_ENABLED=false`가 기본이며, API fallback 허용 여부는 response의 `api_fallback_enabled`와 entitlement의 `allow_api_fallback`에 분리되어 표시됩니다.
 
 CLI profile은 command, args, working directory, auth status, metadata만 반환하며 CLI 로그인 토큰이나 API key 원문은 반환하지 않습니다. `organization_id`가 있고 `owner_user_id`가 없는 profile은 조직 공용 profile로 취급합니다.
 

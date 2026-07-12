@@ -153,6 +153,60 @@ describe('llmAccess store', () => {
     expect(useLLMAccessStore.getState().access?.entitlements[1].id).toBe('ent-2')
   })
 
+  it('creates a claude_cli profile and threads the provider through the auto entitlement', async () => {
+    mockGet.mockResolvedValueOnce(accessResponse)
+    await useLLMAccessStore.getState().fetchAccess()
+
+    const createdProfile = {
+      ...accessResponse.profiles[0],
+      id: 'profile-claude',
+      provider: 'claude_cli',
+      profile_name: 'Team Claude CLI',
+      command: 'claude',
+      args_json: ['-p', '--output-format', 'text'],
+      owner_user_id: 'user-1',
+    }
+    const createdEntitlement = {
+      ...accessResponse.entitlements[0],
+      id: 'ent-claude',
+      provider: 'claude_cli',
+      cli_profile_id: 'profile-claude',
+    }
+    mockPost
+      .mockResolvedValueOnce(createdProfile)
+      .mockResolvedValueOnce(createdEntitlement)
+
+    await useLLMAccessStore.getState().createProfile({
+      provider: 'claude_cli',
+      profile_name: 'Team Claude CLI',
+      command: 'claude',
+      args_json: ['-p', '--output-format', 'text'],
+      owner_user_id: 'user-1',
+    })
+
+    // The provider literal must reach the backend verbatim on both the profile
+    // create and the derived auto-entitlement (provider-generic store path).
+    expect(mockPost).toHaveBeenCalledWith('/api/llm-access/profiles', {
+      provider: 'claude_cli',
+      profile_name: 'Team Claude CLI',
+      command: 'claude',
+      args_json: ['-p', '--output-format', 'text'],
+      owner_user_id: 'user-1',
+    })
+    expect(mockPost).toHaveBeenCalledWith('/api/llm-access/entitlements', {
+      user_id: 'user-1',
+      organization_id: null,
+      provider: 'claude_cli',
+      mode: 'cli',
+      source_scope: 'all',
+      enabled: true,
+      cli_profile_id: 'profile-claude',
+      allow_api_fallback: false,
+    })
+    expect(useLLMAccessStore.getState().access?.profiles[1].provider).toBe('claude_cli')
+    expect(useLLMAccessStore.getState().access?.entitlements[1].provider).toBe('claude_cli')
+  })
+
   it('does not auto-create an entitlement when a persisted match already exists', async () => {
     const accessWithPersistedEntitlement = {
       ...accessResponse,

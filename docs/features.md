@@ -38,7 +38,7 @@ TOOL_RISK_CONFIG = {
 class LLMModelConfig(BaseModel):
     id: str              # "claude-sonnet-4-6"
     display_name: str    # "Claude Sonnet 4"
-    provider: LLMProvider  # codex_cli, anthropic, google, openai, ollama
+    provider: LLMProvider  # codex_cli, claude_cli, anthropic, google, openai, ollama
     context_window: int  # Max context window size
     input_price: float   # USD per 1K tokens
     output_price: float  # USD per 1K tokens
@@ -1571,3 +1571,20 @@ Settings의 `ModelManagementPanel`(admin 전용)에서 LLM 모델을 provider별
 **Dashboard UI**: `ModelManagementPanel` — provider별 그룹, Enable/Disable·Set default 토글, 비활성·비-default 행만 하드 삭제(confirm 2단계), disabled 모델 기본 숨김 토글. URL은 `useSettingsStore.backendUrl` 기준 (런타임 백엔드 변경 반영)
 
 **DB**: `llm_model_suppressions` (마이그레이션 `a7d3f1b9c2e4`)
+
+---
+
+## 58. Claude CLI 실행 프로바이더
+
+Claude 구독(CLI 로그인) 세션으로 LLM 호출을 실행하는 opt-in 런타임 프로바이더. `codex_cli`와 대칭인 로컬 CLI 어댑터로, API 과금 없이 `claude -p`(print 모드)를 셸 호출한다.
+
+**기능**:
+- `services/claude_cli_chat_model.py`: `ClaudeCliChatModel(SimpleChatModel)` — `codex_cli_chat_model.py` 미러. 유일한 구조적 차이는 출력 채널(codex: `--output-last-message` 임시파일 read, claude: **stdout** 직접 read). `stdin=DEVNULL`로 비인터랙티브 강제
+- 레지스트리(`models/llm_models.py`): `claude-cli` 모델 — provider `claude_cli`, $0 구독 가격, context 200K, `supports_tools=False`. CLI라 API 키 불필요, 항상 available
+- 선택 경로: 자동 시딩/`/me` 합성 없음. **명시적 CLI profile + entitlement로만** 선택되며, 모델 미지정 시 resolver는 codex_cli 우선 (codex+claude 동시 보유 시 codex 우선)
+- `bind_tools()` no-op(graceful degradation), `with_structured_output()` → ainvoke-only JSON 어댑터
+- ledger `claude_cli` 행의 CLAUDE_CLI External Usage 카드 집계 제외는 그대로 유지 (카드 source는 `claude_session_snapshots`, 이중집계 방지)
+
+**환경 변수**: `CLAUDE_CLI_COMMAND`(기본 `claude`), `CLAUDE_CLI_ARGS`(기본 `-p --output-format text --permission-mode plan` — codex `--sandbox read-only`에 대응하는 읽기전용 장벽), `CLAUDE_CLI_TIMEOUT_SECONDS`(기본 300). profile의 command/args_json이 아닌 env가 런타임 SSOT (codex 동일)
+
+**Dashboard UI**: `ProfileCreateForm` provider 셀렉트(Codex CLI 기본, 전환 시 command/args 프리필 리셋), `PROVIDER_CONFIG`/`PROVIDER_LABELS`/`PROVIDER_COLORS` 등 provider 맵에 `claude_cli`("Claude CLI", orange) 추가 (`CostMonitor`, `MemberDetailPanel`, `AnalyticsPage`, `ModelManagementPanel`)

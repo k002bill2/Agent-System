@@ -2,7 +2,7 @@ import { Plus } from 'lucide-react'
 
 import type { OrganizationMember } from '@/stores/organizations'
 
-import { SANDBOX_PRESETS } from './utils'
+import { CLI_PROVIDER_OPTIONS, SANDBOX_PRESETS } from './utils'
 
 type TextInputFieldProps = {
   label: string
@@ -18,6 +18,7 @@ type ProfileCreateFormProps = {
   organizationMemberships: OrganizationMember[]
   organizationMembers: OrganizationMember[]
   ownerUserId: string
+  provider: string
   command: string
   args: string
   workingDirectory: string
@@ -25,6 +26,7 @@ type ProfileCreateFormProps = {
   onNameChange: (value: string) => void
   onScopeChange: (value: string) => void
   onOwnerUserIdChange: (value: string) => void
+  onProviderChange: (value: string) => void
   onCommandChange: (value: string) => void
   onArgsChange: (value: string) => void
   onWorkingDirectoryChange: (value: string) => void
@@ -51,6 +53,34 @@ function TextInputField({
         onChange={event => onChange(event.target.value)}
         className="mt-1 w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
       />
+    </label>
+  )
+}
+
+function ProviderSelect({
+  provider,
+  onProviderChange,
+}: {
+  provider: string
+  onProviderChange: (value: string) => void
+}) {
+  return (
+    <label className="block min-w-0">
+      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+        Provider
+      </span>
+      <select
+        aria-label="New CLI profile provider"
+        value={provider}
+        onChange={event => onProviderChange(event.target.value)}
+        className="mt-1 w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+      >
+        {CLI_PROVIDER_OPTIONS.map(option => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
     </label>
   )
 }
@@ -175,9 +205,11 @@ function ProfileIdentityFields({
   organizationMemberships,
   organizationMembers,
   ownerUserId,
+  provider,
   onNameChange,
   onScopeChange,
   onOwnerUserIdChange,
+  onProviderChange,
 }: Pick<
   ProfileCreateFormProps,
   | 'name'
@@ -185,12 +217,15 @@ function ProfileIdentityFields({
   | 'organizationMemberships'
   | 'organizationMembers'
   | 'ownerUserId'
+  | 'provider'
   | 'onNameChange'
   | 'onScopeChange'
   | 'onOwnerUserIdChange'
+  | 'onProviderChange'
 >) {
   return (
     <>
+      <ProviderSelect provider={provider} onProviderChange={onProviderChange} />
       <TextInputField
         label="Profile name"
         ariaLabel="New CLI profile name"

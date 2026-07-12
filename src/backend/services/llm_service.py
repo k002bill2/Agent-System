@@ -329,6 +329,11 @@ class LLMService:
 
             llm = CodexCliChatModel(model_name=config["model"])
 
+        elif provider == "claude_cli":
+            from services.claude_cli_chat_model import ClaudeCliChatModel
+
+            llm = ClaudeCliChatModel(model_name=config["model"])
+
         elif provider == "ollama":
             from langchain_ollama import ChatOllama
 

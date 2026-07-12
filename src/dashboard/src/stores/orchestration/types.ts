@@ -93,7 +93,7 @@ export interface TokenUsage {
 }
 
 // Provider identification
-export type LLMProvider = 'google' | 'anthropic' | 'ollama' | 'openai' | 'codex_cli' | 'unknown'
+export type LLMProvider = 'google' | 'anthropic' | 'ollama' | 'openai' | 'codex_cli' | 'claude_cli' | 'unknown'
 
 export interface ProviderUsage {
   provider: LLMProvider
@@ -112,12 +112,17 @@ export const PROVIDER_CONFIG: Record<LLMProvider, { displayName: string; color: 
   ollama: { displayName: 'Ollama (Local)', color: 'green', icon: '🟢' },
   openai: { displayName: 'OpenAI GPT', color: 'purple', icon: '🟣' },
   codex_cli: { displayName: 'Codex CLI', color: 'purple', icon: '🟣' },
+  claude_cli: { displayName: 'Claude CLI', color: 'orange', icon: '🟠' },
   unknown: { displayName: 'Unknown', color: 'gray', icon: '⚪' },
 }
 
 // Helper function to identify provider from model name
 export function identifyProvider(model: string): LLMProvider {
   const modelLower = model.toLowerCase()
+
+  // Claude CLI model (must precede the generic `claude` check, which would
+  // otherwise swallow "claude-cli" into anthropic)
+  if (modelLower.includes('claude-cli')) return 'claude_cli'
 
   // Anthropic models
   if (modelLower.includes('claude')) return 'anthropic'
