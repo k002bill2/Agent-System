@@ -19,9 +19,9 @@ from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import Any
 
+import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -271,7 +271,7 @@ def verify_token(token: str, expected_type: str = "access") -> dict[str, Any]:
     """
     try:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-    except JWTError as e:
+    except jwt.PyJWTError as e:
         logger.warning("JWT decode error: %s", str(e))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -288,7 +288,7 @@ def verify_token(token: str, expected_type: str = "access") -> dict[str, Any]:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Check expiration explicitly (belt-and-suspenders with jose library)
+    # Check expiration explicitly (belt-and-suspenders)
     exp = payload.get("exp", 0)
     if time.time() > exp:
         raise HTTPException(
