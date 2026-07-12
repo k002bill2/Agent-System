@@ -303,7 +303,7 @@ import { cn } from '@/lib/utils';
 | `UsageProgressBar` | 사용량 진행바 |
 | `ClaudeUsageDashboard` | Claude 사용량 대시보드 (Codex 5시간/주간 한도 카드 + combined weekly tokens 통합) |
 | `DailyCostTrend` | 일간 비용 추이 차트 |
-| `LLMAccessSettings` | CLI profile, entitlement, API fallback 정책 설정 |
+| `LLMAccessSettings` | CLI profile, entitlement, API fallback 정책 설정 (profile 생성 폼 provider 셀렉트: Codex CLI 기본·Claude CLI, 전환 시 command/args 프리필 리셋) |
 | `LLMAccountsSettings` | Advanced fallback/compatibility API 키 설정 |
 | `AdminKeyManager` | provider billing reconciliation key 관리 |
 | `MemberUsageTable` | 멤버별 사용량 테이블 |

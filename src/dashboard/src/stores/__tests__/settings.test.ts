@@ -255,6 +255,7 @@ describe('settings store', () => {
       expect(ids).toContain('claude-haiku-4-5-20251001')
       expect(ids).toContain('gpt-4o-mini')
       expect(ids).toContain('codex-cli')
+      expect(ids).toContain('claude-cli')
       expect(ids).toContain('gemini-3-flash-preview')
 
       // Each injected model is a fully-formed LLMModel; claude-sonnet-5 is the
@@ -286,7 +287,14 @@ describe('settings store', () => {
         .map((m) => m.id)
         .sort()
       expect(defaults).toEqual(
-        ['claude-sonnet-5', 'codex-cli', 'exaone3.5:7.8b', 'gemini-3-flash-preview', 'gpt-4o-mini'].sort()
+        [
+          'claude-cli',
+          'claude-sonnet-5',
+          'codex-cli',
+          'exaone3.5:7.8b',
+          'gemini-3-flash-preview',
+          'gpt-4o-mini',
+        ].sort()
       )
     })
 
@@ -552,6 +560,10 @@ describe('fallback models via store actions (after fetch failure)', () => {
 
   it('returns codex cli fallback models', () => {
     expect(idsFor('codex_cli')).toContain('codex-cli')
+  })
+
+  it('returns claude cli fallback models', () => {
+    expect(idsFor('claude_cli')).toContain('claude-cli')
   })
 
   it('returns google/gemini fallback models', () => {

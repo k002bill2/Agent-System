@@ -584,6 +584,38 @@ describe('LLMAccessSettings', () => {
     })
   })
 
+  it('creates a Claude CLI profile when the provider select is switched', () => {
+    setMockAccessStoreState({
+      access,
+      isLoading: false,
+      error: null,
+      fetchAccess: mockFetchAccess,
+      updateEntitlement: mockUpdateEntitlement,
+      createProfile: mockCreateProfile,
+      updateProfile: mockUpdateProfile,
+      deleteProfile: mockDeleteProfile,
+      checkProfileHealth: mockCheckProfileHealth,
+    })
+    render(<LLMAccessSettings />)
+
+    // Switching the provider prefills the claude CLI command/args defaults.
+    fireEvent.change(screen.getByLabelText('New CLI profile provider'), {
+      target: { value: 'claude_cli' },
+    })
+    fireEvent.change(screen.getByLabelText('New CLI profile name'), {
+      target: { value: 'Team Claude CLI' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Create CLI profile' }))
+
+    expect(mockCreateProfile).toHaveBeenCalledWith({
+      provider: 'claude_cli',
+      profile_name: 'Team Claude CLI',
+      command: 'claude',
+      args_json: ['-p', '--output-format', 'text'],
+      owner_user_id: 'user-1',
+    })
+  })
+
   it('loads organization memberships for managers', () => {
     render(<LLMAccessSettings />)
     expect(mockFetchUserMemberships).toHaveBeenCalledWith('admin-1')

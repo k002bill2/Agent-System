@@ -34,6 +34,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   google: 'Google (Gemini)',
   openai: 'OpenAI (GPT)',
   codex_cli: 'Codex CLI',
+  claude_cli: 'Claude CLI',
   ollama: 'Ollama (Local)',
 }
 

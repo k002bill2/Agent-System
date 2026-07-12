@@ -113,6 +113,11 @@ describe('orchestration store', () => {
       expect(identifyProvider('Claude-3.5-Haiku')).toBe('anthropic')
     })
 
+    it('identifies the Claude CLI model without falling through to anthropic', () => {
+      expect(identifyProvider('claude-cli')).toBe('claude_cli')
+      expect(identifyProvider('Claude-CLI')).toBe('claude_cli')
+    })
+
     it('identifies Google models', () => {
       expect(identifyProvider('gemini-pro')).toBe('google')
       expect(identifyProvider('Gemini-1.5-Flash')).toBe('google')
@@ -144,6 +149,8 @@ describe('orchestration store', () => {
       expect(PROVIDER_CONFIG.anthropic).toBeDefined()
       expect(PROVIDER_CONFIG.ollama).toBeDefined()
       expect(PROVIDER_CONFIG.openai).toBeDefined()
+      expect(PROVIDER_CONFIG.codex_cli).toBeDefined()
+      expect(PROVIDER_CONFIG.claude_cli).toBeDefined()
       expect(PROVIDER_CONFIG.unknown).toBeDefined()
     })
 

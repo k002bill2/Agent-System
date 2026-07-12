@@ -301,7 +301,7 @@ container = client.containers.run(
 | Provider | 용도 | 설명 |
 |----------|------|------|
 | **Codex CLI** | 기본 LLM runtime | `codex exec` 셸 호출, ChatGPT 구독 세션 사용 |
-| **Claude CLI** | Task Analyzer/Warp 일부 CLI runtime | tmux transcript 기반 사용량 계측 |
+| **Claude CLI** | opt-in LLM runtime | `claude -p` 셸 호출, Claude 구독 세션 사용. 자동 시딩 없이 명시적 profile/entitlement로만 선택 (Task Analyzer/Warp 사용량 계측 경로 포함) |
 | **Ollama** | 로컬 LLM | API 과금 없는 로컬 모델 실행 |
 | **OpenAI GPT** | fallback/API 예외 경로 | `LLM_API_FALLBACK_ENABLED=true`와 entitlement 허용 필요 |
 | **Google Gemini** | fallback/API 예외 경로 | OCR/vision 등 API가 필요한 예외 경로 |

@@ -50,6 +50,41 @@ class TestSonnet5RegistryEntry:
 
 
 # ─────────────────────────────────────────────────────────────
+# (a2) claude-cli exists (codex_cli-symmetric subscription runtime)
+# ─────────────────────────────────────────────────────────────
+
+
+class TestClaudeCliRegistryEntry:
+    def test_claude_cli_exists_with_expected_spec(self):
+        model = LLMModelRegistry.get_by_id("claude-cli")
+        assert model is not None
+        assert model.display_name == "Claude CLI"
+        assert model.provider == LLMProvider.CLAUDE_CLI
+        assert model.context_window == 200_000
+        assert model.input_price == 0.0  # $0 subscription-backed runtime
+        assert model.output_price == 0.0
+        assert model.supports_tools is False  # CLI cannot emit LangChain tool calls
+        assert model.supports_vision is False
+        assert model.is_enabled is True
+
+    def test_claude_cli_is_provider_default(self):
+        # Only model under the claude_cli provider → it is the provider default.
+        assert LLMModelRegistry.get_default("claude_cli") == "claude-cli"
+
+    def test_claude_cli_provider_has_exactly_one_code_default(self):
+        defaults = [
+            m.id
+            for m in _MODELS
+            if m.provider == LLMProvider.CLAUDE_CLI and m.is_default
+        ]
+        assert defaults == ["claude-cli"]
+
+    def test_claude_cli_is_always_available(self):
+        # CLI subscription runtime needs no API key → always available (like codex_cli).
+        assert LLMModelRegistry.is_available("claude-cli") is True
+
+
+# ─────────────────────────────────────────────────────────────
 # (b) sync_to_db dual-default guard
 # ─────────────────────────────────────────────────────────────
 

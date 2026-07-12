@@ -87,7 +87,7 @@ CLI runtime unavailable
 | Provider | Mode | 1차 범위 | 설명 |
 |---|---|---:|---|
 | `codex_cli` | `cli` | Yes | 기본 LLM runtime. `codex exec` 사용 |
-| `claude_cli` | `cli` | Partial | Task Analyzer tmux 실행과 Warp launch intent 계측 |
+| `claude_cli` | `cli` | Yes | opt-in 실행 runtime. `claude -p` 사용, 명시적 profile/entitlement로만 선택 (Task Analyzer tmux/Warp launch intent 계측 포함) |
 | `warp_ai` | `cli` | Tool only | Warp CLI `agent run` 도구 실행. ChatGPT/Claude CLI subscription과 분리 |
 | `ollama` | `local` | Existing | 로컬 runtime. API 과금 없음 |
 | `openai` | `api` | Fallback only | emergency / compatibility |

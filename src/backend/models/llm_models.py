@@ -18,6 +18,7 @@ class LLMProvider(str, Enum):
     GOOGLE = "google"
     OPENAI = "openai"
     CODEX_CLI = "codex_cli"
+    CLAUDE_CLI = "claude_cli"
     OLLAMA = "ollama"
 
 
@@ -252,6 +253,20 @@ _MODELS: list[LLMModelConfig] = [
         id="codex-cli",
         display_name="Codex CLI",
         provider=LLMProvider.CODEX_CLI,
+        context_window=200000,
+        input_price=0.0,
+        output_price=0.0,
+        is_default=True,
+        supports_tools=False,
+        supports_vision=False,
+    ),
+    # ─────────────────────────────────────────────────────────
+    # Claude CLI (Claude subscription-backed local CLI)
+    # ─────────────────────────────────────────────────────────
+    LLMModelConfig(
+        id="claude-cli",
+        display_name="Claude CLI",
+        provider=LLMProvider.CLAUDE_CLI,
         context_window=200000,
         input_price=0.0,
         output_price=0.0,
@@ -648,6 +663,8 @@ class LLMModelRegistry:
             return bool(os.getenv("OPENAI_API_KEY"))
         elif provider == LLMProvider.CODEX_CLI:
             return True
+        elif provider == LLMProvider.CLAUDE_CLI:
+            return True  # CLI subscription runtime is always "available" (local)
         elif provider == LLMProvider.OLLAMA:
             return True  # Ollama is always "available" (local)
         return False

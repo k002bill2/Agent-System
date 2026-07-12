@@ -24,15 +24,19 @@ import { useSettingsStore, type LLMModel } from '@/stores/settings'
 import {
   buildCLIProfileCreatePayload,
   canManageLLMAccess,
+  CLI_PROVIDER_DEFAULTS,
   DEFAULT_CLI_ARGS,
   DEFAULT_CLI_COMMAND,
   uniqueOrganizationMemberships,
 } from './utils'
 
+const DEFAULT_CLI_PROVIDER = 'codex_cli'
+
 type ProfileFormState = {
   name: string
   scope: string
   ownerUserId: string
+  provider: string
   command: string
   args: string
   workingDirectory: string
@@ -40,6 +44,7 @@ type ProfileFormState = {
   setName: (value: string) => void
   setScope: (value: string) => void
   setOwnerUserId: (value: string) => void
+  setProvider: (value: string) => void
   setCommand: (value: string) => void
   setArgs: (value: string) => void
   setWorkingDirectory: (value: string) => void
@@ -85,15 +90,28 @@ function useProfileFormState(): ProfileFormState {
   const [name, setName] = useState('')
   const [scope, setScope] = useState('personal')
   const [ownerUserId, setOwnerUserId] = useState('shared')
+  const [provider, setProviderState] = useState(DEFAULT_CLI_PROVIDER)
   const [command, setCommand] = useState(DEFAULT_CLI_COMMAND)
   const [args, setArgs] = useState(DEFAULT_CLI_ARGS)
   const [workingDirectory, setWorkingDirectory] = useState('')
   const [sandboxPreset, setSandboxPreset] = useState('none')
 
+  // Switching provider resets command/args to that provider's CLI defaults so a
+  // claude_cli profile can't silently inherit codex's command; still editable after.
+  const setProvider = (value: string) => {
+    setProviderState(value)
+    const defaults = CLI_PROVIDER_DEFAULTS[value]
+    if (defaults) {
+      setCommand(defaults.command)
+      setArgs(defaults.args)
+    }
+  }
+
   return {
     name,
     scope,
     ownerUserId,
+    provider,
     command,
     args,
     workingDirectory,
@@ -101,6 +119,7 @@ function useProfileFormState(): ProfileFormState {
     setName,
     setScope,
     setOwnerUserId,
+    setProvider,
     setCommand,
     setArgs,
     setWorkingDirectory,
@@ -236,12 +255,10 @@ function createProfileFromForm({
   stores,
   profileForm,
   isManager,
-  activeProvider,
 }: {
   stores: StoreBindings
   profileForm: ProfileFormState
   isManager: boolean
-  activeProvider: string
 }) {
   const access = stores.accessStore.access
   const profileName = profileForm.name.trim()
@@ -256,7 +273,7 @@ function createProfileFromForm({
 
   void stores.accessStore.createProfile(
     buildCLIProfileCreatePayload({
-      activeProvider,
+      activeProvider: profileForm.provider,
       profileName,
       command,
       args: profileForm.args,
@@ -275,14 +292,12 @@ function createLLMAccessActions({
   usageScope,
   setUsageScope,
   isManager,
-  activeProvider,
 }: {
   stores: StoreBindings
   profileForm: ProfileFormState
   usageScope: string
   setUsageScope: (scope: string) => void
   isManager: boolean
-  activeProvider: string
 }) {
   return {
     handleRefresh: () => {
@@ -295,7 +310,6 @@ function createLLMAccessActions({
         stores,
         profileForm,
         isManager,
-        activeProvider,
       }),
     handleDefaultModelChange: (modelId: string) => {
       void stores.settingsStore.setDefaultModel(modelId)
@@ -346,7 +360,6 @@ export function useLLMAccessSettingsModel(): LLMAccessSettingsModel {
     usageScope,
     setUsageScope,
     isManager,
-    activeProvider: derivedState.activeProvider,
   })
 
   return {

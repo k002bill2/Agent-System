@@ -208,6 +208,12 @@ const PROVIDER_COLORS: Record<LLMProvider, { bg: string; border: string; text: s
     text: 'text-purple-600 dark:text-purple-400',
     bar: 'bg-purple-500',
   },
+  claude_cli: {
+    bg: 'bg-orange-50 dark:bg-orange-900/20',
+    border: 'border-orange-200 dark:border-orange-800',
+    text: 'text-orange-600 dark:text-orange-400',
+    bar: 'bg-orange-500',
+  },
   unknown: {
     bg: 'bg-gray-50 dark:bg-gray-900/20',
     border: 'border-gray-200 dark:border-gray-700',

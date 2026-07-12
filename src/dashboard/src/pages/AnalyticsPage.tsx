@@ -224,6 +224,7 @@ const CHART_COLORS = [
 
 const PROVIDER_COLORS: Record<string, string> = {
   codex_cli: '#8B5CF6',
+  claude_cli: '#F59E0B',
   anthropic: '#F97316',
   openai: '#10B981',
   google: '#3B82F6',
@@ -234,6 +235,7 @@ const PROVIDER_COLORS: Record<string, string> = {
 
 const PROVIDER_LABELS: Record<string, string> = {
   codex_cli: 'Codex CLI',
+  claude_cli: 'Claude CLI',
   anthropic: 'Anthropic Claude',
   openai: 'OpenAI',
   google: 'Google Gemini',

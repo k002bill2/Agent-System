@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware'
 import { apiClient } from '../services/apiClient'
 
 export type Theme = 'light' | 'dark' | 'system'
-export type LLMProvider = 'anthropic' | 'openai' | 'google' | 'codex_cli' | 'local'
+export type LLMProvider = 'anthropic' | 'openai' | 'google' | 'codex_cli' | 'claude_cli' | 'local'
 
 export type TerminalType = 'warp' | 'tmux' | 'terminal_app' | 'iterm2' | 'kitty' | 'alacritty' | 'ghostty' | 'wezterm' | 'cmux'
 
@@ -103,6 +103,7 @@ const fallbackModels: Record<LLMProvider, string[]> = {
   google: ['gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite-preview', 'gemini-2.5-pro', 'gemini-2.5-flash'],
   openai: ['gpt-4o-mini', 'gpt-4o', 'o3', 'o4-mini'],
   codex_cli: ['codex-cli'],
+  claude_cli: ['claude-cli'],
   local: ['exaone3.5:7.8b', 'llama3:8b', 'mistral:7b', 'codellama:7b'],
 }
 
@@ -113,6 +114,7 @@ const fallbackDefaultModelIds: ReadonlySet<string> = new Set([
   'gemini-3-flash-preview', // google
   'gpt-4o-mini', // openai
   'codex-cli', // codex_cli
+  'claude-cli', // claude_cli
   'exaone3.5:7.8b', // local (ollama)
 ])
 
