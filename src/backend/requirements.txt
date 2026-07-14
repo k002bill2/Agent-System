@@ -5,7 +5,7 @@
 langgraph>=0.2.0
 langchain>=0.3.0
 langchain-core>=0.3.0
-langchain-google-genai>=2.0.0
+langchain-google-genai>=4.2.7
 
 # API Framework
 fastapi>=0.115.0
