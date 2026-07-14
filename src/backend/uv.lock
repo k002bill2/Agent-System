@@ -82,9 +82,9 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "langchain", specifier = ">=0.3.0" },
     { name = "langchain-anthropic", specifier = ">=0.3.0" },
-    { name = "langchain-google-genai", specifier = ">=2.0.0" },
+    { name = "langchain-google-genai", specifier = ">=4.2.7" },
     { name = "langchain-huggingface", specifier = ">=0.1.0" },
-    { name = "langchain-ollama", specifier = ">=0.2.0" },
+    { name = "langchain-ollama", specifier = ">=1.1.0" },
     { name = "langchain-openai", specifier = ">=0.2.0" },
     { name = "langchain-qdrant", specifier = ">=0.2.0" },
     { name = "langgraph", specifier = ">=0.2.0" },
@@ -910,15 +910,15 @@ wheels = [
 
 [[package]]
 name = "google-auth"
-version = "2.47.0"
+version = "2.56.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "cryptography" },
     { name = "pyasn1-modules" },
-    { name = "rsa" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/60/3c/ec64b9a275ca22fa1cd3b6e77fefcf837b0732c890aa32d2bd21313d9b33/google_auth-2.47.0.tar.gz", hash = "sha256:833229070a9dfee1a353ae9877dcd2dec069a8281a4e72e72f77d4a70ff945da", size = 323719, upload-time = "2026-01-06T21:55:31.045Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/58/66/b4ba60005743e01933e22b4f62313e063f7460458b7d8a358427b4930013/google_auth-2.56.0.tar.gz", hash = "sha256:f90fa030b569a92654b9d690665a073841df33d57487be53db583a9a0867a553", size = 364629, upload-time = "2026-07-13T19:09:57.143Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/db/18/79e9008530b79527e0d5f79e7eef08d3b179b7f851cfd3a2f27822fbdfa9/google_auth-2.47.0-py3-none-any.whl", hash = "sha256:c516d68336bfde7cf0da26aab674a36fedcf04b37ac4edd59c597178760c3498", size = 234867, upload-time = "2026-01-06T21:55:28.6Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/7d/cd3e187f14ce832e419e70709bfcc40cb0dc11517d5d03c9d3919bcc3101/google_auth-2.56.0-py3-none-any.whl", hash = "sha256:6e88c10217e07a92bfd01cac8ee99e32ccfb08414c3102e6c5b8d58f37a0d1e0", size = 257976, upload-time = "2026-07-13T19:09:42.685Z" },
 ]
 
 [package.optional-dependencies]
@@ -928,7 +928,7 @@ requests = [
 
 [[package]]
 name = "google-genai"
-version = "1.59.0"
+version = "2.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -942,9 +942,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/40/34/c03bcbc759d67ac3d96077838cdc1eac85417de6ea3b65b313fe53043eee/google_genai-1.59.0.tar.gz", hash = "sha256:0b7a2dc24582850ae57294209d8dfc2c4f5fcfde0a3f11d81dc5aca75fb619e2", size = 487374, upload-time = "2026-01-15T20:29:46.619Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a6/01/e7b5f3aac89200c78318ed7643401e7f5ed3131b0cd353c07483606b1e61/google_genai-2.11.0.tar.gz", hash = "sha256:4c5e524d24b145c96be327f9a7f8f04b0fe4efee0533877795e9848afed01749", size = 622366, upload-time = "2026-07-09T17:49:43.862Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/aa/53/6d00692fe50d73409b3406ae90c71bc4499c8ae7fac377ba16e283da917c/google_genai-1.59.0-py3-none-any.whl", hash = "sha256:59fc01a225d074fe9d1e626c3433da292f33249dadce4deb34edea698305a6df", size = 719099, upload-time = "2026-01-15T20:29:44.604Z" },
+    { url = "https://files.pythonhosted.org/packages/93/ef/d296c23390160a8b0b1dafb36dd3cb36a39ed40c81cd27e04e6233334186/google_genai-2.11.0-py3-none-any.whl", hash = "sha256:5bc8186100e1d34d691fbe0cba392b7e04e98d286ca952323a6672d054accf95", size = 984162, upload-time = "2026-07-09T17:49:42.15Z" },
 ]
 
 [[package]]
@@ -1431,7 +1431,7 @@ wheels = [
 
 [[package]]
 name = "langchain-google-genai"
-version = "4.2.0"
+version = "4.2.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filetype" },
@@ -1439,9 +1439,9 @@ dependencies = [
     { name = "langchain-core" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d8/0b/eae2305e207574dc633983a8a82a745e0ede1bce1f3a9daff24d2341fadc/langchain_google_genai-4.2.0.tar.gz", hash = "sha256:9a8d9bfc35354983ed29079cefff53c3e7c9c2a44b6ba75cc8f13a0cf8b55c33", size = 277361, upload-time = "2026-01-13T20:41:17.63Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1d/0c/bc60dabc362ca7c6ffe8c4bcc2f724c7e566b43eb230cee51419f88f784c/langchain_google_genai-4.2.7.tar.gz", hash = "sha256:03b1463ffe4d42435f43c7870467f2215f684bb46400d2543435d10157c80ac7", size = 281605, upload-time = "2026-07-06T13:51:58.724Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/22/51/39942c0083139652494bb354dddf0ed397703a4882302f7b48aeca531c96/langchain_google_genai-4.2.0-py3-none-any.whl", hash = "sha256:856041aaafceff65a4ef0d5acf5731f2db95229ff041132af011aec51e8279d9", size = 66452, upload-time = "2026-01-13T20:41:16.296Z" },
+    { url = "https://files.pythonhosted.org/packages/b2/f9/d73d1e712591723aaddb7a7b1e94978cd2320c29acfe0d26b6169a2f26f0/langchain_google_genai-4.2.7-py3-none-any.whl", hash = "sha256:0d9c388d0e6c629718fca6abb19c6fdca728a9a7873d0324c1ec821288b5b571", size = 70702, upload-time = "2026-07-06T13:51:57.499Z" },
 ]
 
 [[package]]
@@ -1460,15 +1460,15 @@ wheels = [
 
 [[package]]
 name = "langchain-ollama"
-version = "1.0.1"
+version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "langchain-core" },
     { name = "ollama" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/73/51/72cd04d74278f3575f921084f34280e2f837211dc008c9671c268c578afe/langchain_ollama-1.0.1.tar.gz", hash = "sha256:e37880c2f41cdb0895e863b1cfd0c2c840a117868b3f32e44fef42569e367443", size = 153850, upload-time = "2025-12-12T21:48:28.68Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/9b/6641afe8a5bf807e454fd464eddfc7eb2f2df53cb0b29744381171f9c609/langchain_ollama-1.1.0.tar.gz", hash = "sha256:f776f56f6782ae4da7692579b94a6575906118318d1023b455d7207f9d059811", size = 133075, upload-time = "2026-04-07T02:48:00.873Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e3/46/f2907da16dc5a5a6c679f83b7de21176178afad8d2ca635a581429580ef6/langchain_ollama-1.0.1-py3-none-any.whl", hash = "sha256:37eb939a4718a0255fe31e19fbb0def044746c717b01b97d397606ebc3e9b440", size = 29207, upload-time = "2025-12-12T21:48:27.832Z" },
+    { url = "https://files.pythonhosted.org/packages/2c/b2/c2acb076590a98bee2816ed5f285e00df162a34238f9e276e175e14ebc35/langchain_ollama-1.1.0-py3-none-any.whl", hash = "sha256:43ac83a6eacb0f43855810739794dd55019e0d9b17bdcf3ecb3b1991ac3b59dd", size = 31413, upload-time = "2026-04-07T02:47:59.642Z" },
 ]
 
 [[package]]
@@ -2950,18 +2950,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c0/8f/0722ca900cc807c13a6a0c696dacf35430f72e0ec571c4275d2371fca3e9/rich-15.0.0.tar.gz", hash = "sha256:edd07a4824c6b40189fb7ac9bc4c52536e9780fbbfbddf6f1e2502c31b068c36", size = 230680, upload-time = "2026-04-12T08:24:00.75Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/82/3b/64d4899d73f91ba49a8c18a8ff3f0ea8f1c1d75481760df8c68ef5235bf5/rich-15.0.0-py3-none-any.whl", hash = "sha256:33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb", size = 310654, upload-time = "2026-04-12T08:24:02.83Z" },
-]
-
-[[package]]
-name = "rsa"
-version = "4.9.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pyasn1" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/da/8a/22b7beea3ee0d44b1916c0c1cb0ee3af23b700b6da9f04991899d0c555d4/rsa-4.9.1.tar.gz", hash = "sha256:e7bdbfdb5497da4c07dfd35530e1a902659db6ff241e39d9953cad06ebd0ae75", size = 29034, upload-time = "2025-04-16T09:51:18.218Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/64/8d/0133e4eb4beed9e425d9a98ed6e081a55d195481b7632472be1af08d2f6b/rsa-4.9.1-py3-none-any.whl", hash = "sha256:68635866661c6836b8d39430f97a996acbd61bfa49406748ea243539fe239762", size = 34696, upload-time = "2025-04-16T09:51:17.142Z" },
 ]
 
 [[package]]
