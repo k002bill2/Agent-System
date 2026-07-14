@@ -393,7 +393,9 @@ class TestMCPManagerBatchCall:
         assert len(result.results) == 2
         # 두 번째는 서버가 없어서 실패
         assert result.results[1].success is False
-        assert result.total_execution_time_ms > 0
+        # 두 호출 모두 실패(가짜 command라 mock-server1도 시작 실패) — 결정론적 검증.
+        # total_execution_time_ms 는 1ms 미만이면 0으로 절삭되어 타이밍 의존 flaky 유발.
+        assert result.failure_count == 2
 
     @pytest.mark.asyncio
     async def test_call_tools_batch_respects_max_concurrent(self):
