@@ -200,10 +200,52 @@ describe('ClaudeUsageDashboard', () => {
     // Scoping to this render's container keeps the query immune to any dashboard
     // leaked from a prior async test still lingering in document.body.
     expect(await utils.findByText('Codex reset credits: 1')).toBeInTheDocument()
+    // primary(300분)→"Codex 5h", secondary(10080분)→"Codex Weekly"로 창 길이 기준 라벨링된다.
     expect(utils.getByText('Codex 5h')).toBeInTheDocument()
     expect(utils.getByText('Codex Weekly')).toBeInTheDocument()
     expect(utils.getByText('44% left')).toBeInTheDocument()
     expect(utils.getByText('60% left')).toBeInTheDocument()
+  })
+
+  it('labels a weekly-only codex window as "Codex Weekly" (5h window removed)', async () => {
+    // Real-world after OpenAI removed the 5-hour window: the app-server returns a
+    // single weekly window (windowDurationMins: 10080) in the *primary* slot and
+    // leaves secondary null. Labeling must follow window duration, not slot position,
+    // so the surviving window renders as "Codex Weekly" — never "Codex 5h".
+    mockUsage = makeUsageResponse({ weeklyTotalTokens: 200000 })
+    mockApiGet.mockImplementation((url: string) => {
+      if (url.includes('/api/usage/codex-plan')) {
+        return Promise.resolve({
+          available: true,
+          codexLimit: {
+            limitId: 'codex',
+            limitName: null,
+            primary: {
+              usedPercent: 75,
+              remainingPercent: 25,
+              windowDurationMins: 10080,
+              resetsAt: 1784488253,
+              resetsAtIso: '2026-07-19T19:10:53+00:00',
+              resetsInMinutes: 7542,
+            },
+            secondary: null,
+            planType: 'plus',
+            rateLimitReachedType: null,
+          },
+          rateLimitResetCredits: { availableCount: 1 },
+          isCached: true,
+          cacheAgeSeconds: 2,
+        })
+      }
+      return Promise.resolve(defaultCodexCli)
+    })
+
+    const { container } = render(<ClaudeUsageDashboard />)
+    const utils = within(container)
+
+    expect(await utils.findByText('Codex Weekly')).toBeInTheDocument()
+    expect(utils.getByText('25% left')).toBeInTheDocument()
+    expect(utils.queryByText('Codex 5h')).not.toBeInTheDocument()
   })
 
   it('shows local codex token usage as diagnostics', async () => {
