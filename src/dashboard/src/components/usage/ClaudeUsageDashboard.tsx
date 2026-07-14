@@ -209,8 +209,11 @@ export function ClaudeUsageDashboard() {
   const sonnetLimit = usage.planLimits.find(l => l.name === 'sevenDaySonnet')
   const opusLimit = usage.planLimits.find(l => l.name === 'sevenDayOpus')
   const codexLimit = codexPlan?.available ? codexPlan.codexLimit : null
-  const codexFiveHourLimit = codexLimit?.primary ?? null
-  const codexWeeklyLimit = codexLimit?.secondary ?? null
+  // Codex 사용량 창은 슬롯 위치(primary/secondary)가 아니라 창 길이(windowDurationMins)로 라벨을 정한다.
+  // OpenAI가 5시간창을 제거하면서 앱서버가 주간창 하나만 primary 슬롯에 반환하는 등 슬롯 매핑이 유동적이기 때문.
+  const codexWindows = [codexLimit?.primary, codexLimit?.secondary].filter(
+    (window): window is CodexPlanWindow => window != null,
+  )
   const codexWeeklyTokens = codexUsage?.weeklyTokens ?? 0
   const combinedWeeklyTokens = usage.weeklyTotalTokens + codexWeeklyTokens
   const secondaryLimits = [sonnetLimit, opusLimit].filter(Boolean) as PlanLimitInfo[]
@@ -329,37 +332,21 @@ export function ClaudeUsageDashboard() {
                 tone={getLimitTone(allModelsLimit.utilization)}
               />
             )}
-            {codexFiveHourLimit ? (
-              <UsageRadialMetric
-                label="Codex 5h"
-                value={`${Math.round(codexFiveHourLimit.remainingPercent)}% left`}
-                detail={formatCodexPlanDetail(codexFiveHourLimit, codexLimit?.planType)}
-                percent={codexFiveHourLimit.remainingPercent}
-                tone={getRemainingTone(codexFiveHourLimit.remainingPercent)}
-                centerText={`${Math.round(codexFiveHourLimit.remainingPercent)}%`}
-              />
+            {codexWindows.length > 0 ? (
+              codexWindows.map((window, idx) => (
+                <UsageRadialMetric
+                  key={window.windowDurationMins ?? idx}
+                  label={formatCodexWindowLabel(window)}
+                  value={`${Math.round(window.remainingPercent)}% left`}
+                  detail={formatCodexPlanDetail(window, codexLimit?.planType)}
+                  percent={window.remainingPercent}
+                  tone={getRemainingTone(window.remainingPercent)}
+                  centerText={`${Math.round(window.remainingPercent)}%`}
+                />
+              ))
             ) : (
               <UsageRadialMetric
-                label="Codex 5h"
-                value={isCodexLoading ? '...' : 'Unavailable'}
-                detail={formatCodexPlanUnavailable(codexPlan, isCodexLoading)}
-                percent={0}
-                tone="yellow"
-                centerText={isCodexLoading ? '...' : 'N/A'}
-              />
-            )}
-            {codexWeeklyLimit ? (
-              <UsageRadialMetric
-                label="Codex Weekly"
-                value={`${Math.round(codexWeeklyLimit.remainingPercent)}% left`}
-                detail={formatCodexPlanDetail(codexWeeklyLimit, codexLimit?.planType)}
-                percent={codexWeeklyLimit.remainingPercent}
-                tone={getRemainingTone(codexWeeklyLimit.remainingPercent)}
-                centerText={`${Math.round(codexWeeklyLimit.remainingPercent)}%`}
-              />
-            ) : (
-              <UsageRadialMetric
-                label="Codex Weekly"
+                label="Codex"
                 value={isCodexLoading ? '...' : 'Unavailable'}
                 detail={formatCodexPlanUnavailable(codexPlan, isCodexLoading)}
                 percent={0}
@@ -542,6 +529,19 @@ function getRemainingTone(percentRemaining: number): UsageTone {
   if (percentRemaining <= 10) return 'red'
   if (percentRemaining <= 30) return 'yellow'
   return 'purple'
+}
+
+/**
+ * Codex 사용량 창 라벨을 창 길이(windowDurationMins) 기준으로 결정한다.
+ * 슬롯 위치(primary/secondary)는 OpenAI 정책 변화에 따라 유동적이므로 데이터 속성으로 라벨링한다.
+ * 300분→"Codex 5h", 10080분(7일)→"Codex Weekly", 그 외는 시간/일 단위로 일반화.
+ */
+function formatCodexWindowLabel(window: CodexPlanWindow): string {
+  const mins = window.windowDurationMins
+  if (mins == null) return 'Codex'
+  if (mins === 10080) return 'Codex Weekly'
+  if (mins < 60 * 24) return `Codex ${Math.round(mins / 60)}h`
+  return `Codex ${Math.round(mins / (60 * 24))}d`
 }
 
 function formatCodexPlanDetail(window: CodexPlanWindow, planType?: string | null): string {
