@@ -216,27 +216,7 @@ describe('SessionCard', () => {
 
 ## Test Configuration
 
-```typescript
-// vitest.config.ts
-import { defineConfig } from 'vitest/config';
-
-export default defineConfig({
-  test: {
-    globals: true,
-    environment: 'jsdom',
-    setupFiles: ['./src/test/setup.ts'],
-    coverage: {
-      reporter: ['text', 'json', 'html'],
-      thresholds: {
-        statements: 75,
-        branches: 60,
-        functions: 70,
-        lines: 75
-      }
-    }
-  }
-});
-```
+실제 설정은 `src/dashboard/vitest.config.ts`가 SSOT다 — jsdom 환경, setup 파일, `@` alias, `coverage.thresholds`(임계치 수치의 유일한 정의처)가 모두 거기 있다. 예시 config를 이 문서에 복제하지 않는다(과거 복제본이 실제 값과 어긋나는 드리프트가 있었다). 반드시 실제 파일을 Read하여 확인한다.
 
 ## Best Practices
 

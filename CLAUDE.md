@@ -68,6 +68,8 @@ cd src/dashboard && npm test
 | 2026-06-20 | Phase 7 진화: planner 영속화 명시, `_workspace/` gitignore, integration-qa 픽스처 fan-out 체크 추가 | SKILL.md, integration-qa.md, .gitignore | 드라이런 스모크 테스트가 드러낸 개선점 |
 | 2026-06-20 | docs-sync 에이전트 추가 (Phase G: F 게이트 통과 후 변경 델타↔mandatory-docs 매핑으로 docs/ 자동 동기화) | docs-sync.md, SKILL.md | 구현 후 문서 갱신 Phase 부재 (mandatory-docs 갭) |
 | 2026-06-20 | 정비: B-2에 `verify-frontend` 배선(B-1의 verify-backend와 대칭 복원) | SKILL.md | 감사에서 프론트 패턴검증 스킬 미배선 비대칭 발견 |
+| 2026-07-17 | 신뢰성 강화(P0/P1): Phase F를 풀스택 게이트로(BE ruff+mypy+pytest, FE tsc+lint+vitest run+build, 전 명령 CWD 명시, 루트 test no-op 제거), Phase 산출물 완결성 관문+`{phase}_SKIPPED.md` 사유 계약, Phase C 2회 실패 시 BLOCKED(D~G 금지) 정책 통일, 커버리지 SSOT=vitest.config.ts(문서 수치 제거), 미배선 Learning Protocol 프롬프트 절 삭제(훅 구현 `.claude/hooks/agentLearnings.js`는 미등록·비활성으로 잔존), 읽기 전용 에이전트 산출물 반환→오케스트레이터 저장 일반화, Phase D 백엔드 테스트 소유권·pytest 결과 계약 명시 | verification-loop, aos-feature-harness SKILL.md, agents 5종, quality-reference.md, test-automation SKILL.md, aos-backend.md, package.json, commands 3종(test-coverage·check-health·verify-loop) | 2026-07 하네스 심층 감사 — F 게이트 백엔드 미검증(P0)·D 산출물 무검증 완주(P0) 등 |
+| 2026-07-17 | Codex 리뷰 반영: 실패의 SKIPPED 우회 차단(SKIPPED=NOT_APPLICABLE 사전 선언 전용, 적용 대상 Phase 2회 실패=BLOCKED·이후 Phase 금지), verify-loop 게이트를 CI·verification-loop와 정합(uv 허용, BE ruff+format+mypy 추가, FE 커버리지), check-health 커버리지 주장은 test:coverage 실행으로만, pytest rootdir=repo 루트·asyncio STRICT 실측 문구, Learning Protocol 비활성(구현 잔존·미배선) 상태를 README/아키텍처 HTML/훅 파일에 명시 | aos-feature-harness SKILL.md, verify-loop.md, check-health.md, verification-loop SKILL.md, agentLearnings.js, .claude/README.md, claude-code-system-architecture.html | Codex 적대 리뷰 — 필수 Phase 실패가 SKIPPED로 완주 가능(P0) 등 |
 
 ## Compact 시 보존
 

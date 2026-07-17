@@ -44,18 +44,22 @@ npm run lint
 
 ### 3. Test Suite
 ```bash
+# 원샷 테스트 (루트 스크립트 → src/dashboard `vitest run` 위임 — 커버리지 미포함)
 npm test
+
+# 커버리지 검증 — 커버리지 임계치를 주장하려면 반드시 이 명령을 실행해야 한다
+cd src/dashboard && npm run test:coverage
 ```
 
 **What it checks**:
-- All unit tests pass
+- All unit tests pass (`npm test`)
 - No broken tests
-- Test coverage thresholds met
+- Coverage thresholds — **`npm run test:coverage`만 검증한다** (임계치 SSOT: `src/dashboard/vitest.config.ts`의 `coverage.thresholds`). 일반 `npm test`는 커버리지를 산출하지 않으므로 그 출력으로 커버리지 충족을 주장하지 않는다
 
 **Common Issues & Fixes**:
 - `Test suite failed to run` → Check for syntax errors in test files
 - `Expected X but received Y` → Update test expectations or fix implementation
-- `Coverage for X (50%) does not meet threshold (75%)` → Add more tests
+- `Coverage for X does not meet threshold` (임계치 수치는 vitest.config.ts 참조) → Add more tests
 
 ### 4. Build Verification
 ```bash
@@ -109,7 +113,7 @@ npm audit
 ## ❌ Failed Checks (2/6)
 
 5. ❌ **Test Coverage**: Below threshold
-   - Current: 72% statements (target: 75%)
+   - Current: 72% statements (vitest.config.ts `coverage.thresholds` 미달)
    - Files below threshold: 8
    - Recommendation: Run `/test-coverage` command
 
@@ -122,7 +126,7 @@ npm audit
 **Overall Health**: 🟡 **Good** (4/6 passing)
 
 **Action Items**:
-1. Add tests to improve coverage to 75%
+1. Add tests to meet the `vitest.config.ts` coverage thresholds
 2. Update axios to patch security vulnerability
 3. Commit changes before proceeding with new features
 
@@ -133,7 +137,7 @@ npm audit
 npm audit fix
 
 # Check updated coverage
-npm test -- --coverage
+cd src/dashboard && npm run test:coverage
 
 # Verify build still works
 npm run build
@@ -178,28 +182,8 @@ Health Score = (Passed Checks / Total Checks) × 100
 ```
 
 ### CI/CD Integration
-```yaml
-# .github/workflows/health-check.yml
-name: Project Health Check
 
-on: [pull_request]
-
-jobs:
-  health:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install dependencies
-        run: npm install
-      - name: TypeScript Check
-        run: npm run type-check
-      - name: Lint Check
-        run: npm run lint
-      - name: Test Suite
-        run: npm test -- --coverage
-      - name: Build Verification
-        run: npm run build
-```
+실제 CI 정의는 `.github/workflows/ci.yml`이 유일한 진실원이다 — 예시 YAML을 이 문서에 복제하지 않는다. CI의 7개 job(backend-lint/typecheck/test, frontend-lint/typecheck/test/build)이 이 헬스 체크의 게이트와 대응한다.
 
 ## Detailed Check Descriptions
 
@@ -214,7 +198,8 @@ jobs:
 - Ensures React best practices (hooks dependencies, etc.)
 
 ### Test Suite (`npm test`)
-- Runs all Jest tests in `src/**/__tests__/`
+- Vitest 원샷 실행 — 루트 스크립트가 `src/dashboard`의 `vitest run`으로 위임한다 (커버리지 미포함)
+- 커버리지 검증은 별도 명령: `cd src/dashboard && npm run test:coverage`
 - Verifies business logic correctness
 - Checks UI component rendering
 

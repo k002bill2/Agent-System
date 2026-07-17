@@ -20,6 +20,11 @@
 - async/await 일관 사용 (sync 호출로 이벤트 루프 차단 금지)
 - asyncpg prepared statement 캐시 충돌 주의
 
+## Pytest
+- 새 async 테스트는 `@pytest.mark.asyncio`(또는 모듈 상단 `pytestmark = pytest.mark.asyncio`) 필수 — pytest rootdir가 repo 루트로 잡히면 `src/backend/pyproject.toml`의 `asyncio_mode = "auto"`가 적용되지 않아(실질 STRICT) 마커 없는 async 테스트는 CI Backend Tests에서 "async not supported"로 실패한다
+- 실행: CWD `src/backend`에서 `uv run pytest ../../tests/backend -v --tb=short` (CI Backend Tests와 동일 경로·명령)
+- 하네스 Phase D 계약: 백엔드 테스트 코드의 소유자는 backend-integration-specialist(Phase B에서 구현과 함께 작성), Phase D는 실행·보고
+
 ## Error Handling
 - `HTTPException` with 적절한 status code
 - `logging.getLogger(__name__)` 사용

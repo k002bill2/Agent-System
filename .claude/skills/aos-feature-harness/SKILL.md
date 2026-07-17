@@ -28,14 +28,15 @@ Agent(
 
     [작업] {이 Phase의 구체 작업}
     [입력] {이전 Phase 산출물 경로}
-    [출력] 결과를 `_workspace/{phase}_{agent}_{artifact}.md`에 저장하고, 반환값으로 요약 보고.
+    [출력] {Write 가능 에이전트: 결과를 `_workspace/{phase}_{agent}_{artifact}.md`에 저장하고 반환값으로 요약 보고.
+           읽기 전용 에이전트: 산출물 전문을 반환값으로 제출 (파일 저장 지시 금지 — 아래 일반 규칙 참조)}
   """
 )
 ```
 
 `{agent-name}`은 아래 표의 에이전트 파일명. `model: "opus"`는 모든 호출에 명시 (test-automation-specialist 포함 — 추론 품질 우선).
 
-> **읽기 전용 에이전트 주의:** `planner`는 Write/Edit 도구가 없다(읽기 전용). 따라서 `[출력]`에 "파일로 저장"을 지시해도 스스로 저장하지 못한다. 이런 에이전트는 산출물을 **반환값으로 제출**하게 하고, **오케스트레이터가 받아서 `_workspace/`에 저장**한다.
+> **읽기 전용 에이전트 (일반 규칙):** 역할 `.md` frontmatter `tools:`에 Write가 없는 에이전트 — `planner`, `integration-qa`, `code-reviewer`, `security-reviewer` — 는 `[출력]`에 "파일로 저장"을 지시해도 스스로 저장하지 못한다. 이런 에이전트는 산출물 전문을 **반환값으로 제출**하게 하고, **오케스트레이터가 받아서 아래 표의 `_workspace/` 경로에 Write로 저장**한다. Write가 있는 에이전트(backend/web-ui/test-automation-specialist, docs-sync)만 직접 저장한다. 어느 쪽이든 산출물 파일 실존이 Phase 전환 조건이다(아래 "Phase 전환 관문").
 
 ## 에이전트 구성 (기존 재사용 + integration-qa·docs-sync 2개 신규)
 
@@ -45,11 +46,24 @@ Agent(
 | B-1 | `backend-integration-specialist` | FastAPI/SQLAlchemy/LangGraph 구현 | verify-backend | `_workspace/B_backend_impl.md` |
 | B-2 | `web-ui-specialist` | React/Tailwind/Zustand 구현 | react-web-development, verify-frontend | `_workspace/B_frontend_impl.md` |
 | C | `integration-qa` ★신규 | API↔훅 경계면 교차 검증 | — | `_workspace/C_integration_report.md` |
-| D | `test-automation-specialist` | Vitest/pytest 테스트 작성·커버리지 | test-automation | `_workspace/D_test_report.md` |
+| D | `test-automation-specialist` | Vitest 테스트 작성·실행 + pytest 실행·결과 보고 (백엔드 테스트 작성은 B-1 소유) | test-automation | `_workspace/D_test_report.md` |
 | E-1 | `code-reviewer` | 품질·유지보수성 리뷰 | — | `_workspace/E_code_review.md` |
 | E-2 | `security-reviewer` | 보안 취약점 감사 | — | `_workspace/E_security_review.md` |
-| F | (스킬) `verification-loop` | tsc+lint+test+build 최종 게이트 | verification-loop | — |
+| F | (스킬) `verification-loop` | 풀스택 최종 게이트 (FE: tsc+lint+vitest run+build / BE: ruff+mypy+pytest) | verification-loop | `_workspace/F_verification.md` (오케스트레이터 저장) |
 | G | `docs-sync` ★신규 | 변경 델타↔mandatory-docs 매핑 후 문서 동기화 | — | docs/ 직접 수정 + `_workspace/G_docs_sync.md` |
+
+A·C·E-1·E-2 산출물은 담당 에이전트가 읽기 전용이므로 **오케스트레이터가 반환값을 받아 저장**한다(위 일반 규칙). F는 오케스트레이터 자신이 스킬을 실행하므로 게이트 요약을 직접 저장한다.
+
+## Phase 전환 관문 (산출물 완결성 · 필수)
+
+각 Phase 종료 시, 다음 Phase로 넘어가기 **전에** 오케스트레이터는 위 표의 해당 산출물 파일이 `_workspace/`에 실존하는지 Glob/Read로 확인한다. 에이전트의 "저장했다" 보고를 그대로 믿지 않는다:
+
+1. **산출물 실존** → 다음 Phase 진행
+2. **반환값만 있음** (읽기 전용 에이전트 포함) → 오케스트레이터가 반환값을 해당 경로에 Write로 저장한 뒤 진행
+3. **Phase 생략 (NOT_APPLICABLE · 사전 선언 전용)** → 반드시 `_workspace/{phase}_SKIPPED.md`를 먼저 작성하고 진행. 파일에 (1) 생략 사유, (2) 판단 근거(예: 변경 파일 목록, "프론트 전용 기능이라 경계면 없음"), (3) 결정 주체(각 Phase에 명시된 생략 조건 자동 적용 / 사용자 지시)를 기록한다. 생략이 허용되는 경우는 **각 Phase 절에 명시된 사전 선언 조건뿐**이다 (B: 단일 영역이라 팬아웃 생략, C: 한쪽 영역만 변경, G: docs 매핑 영역 미접촉). **실행 실패는 SKIPPED 사유가 될 수 없다** — 적용 대상 Phase의 에이전트가 재시도 후에도 실패하면 그 Phase는 **BLOCKED**이며 이후 Phase 진행 금지(에러 핸들링 표). SKIPPED 파일은 "해당 없음"의 기록이지 "실패"의 기록이 아니다
+4. **산출물도 SKIPPED 기록도 없음** → 다음 Phase 진행 금지. 해당 Phase를 재실행하거나(에러 핸들링 표 참조) 사용자에게 보고한다
+
+최종 보고에 Phase별 산출물/SKIPPED 현황 표를 포함한다. "산출물 없이 완주"는 이 계약 하에서 정의상 발생할 수 없어야 한다 (과거 실측: 3회 실행 중 2회가 D 산출물 없이 G까지 완주 — 이 관문이 그 재발 방지책이다).
 
 ## 워크플로우
 
@@ -68,35 +82,39 @@ Agent(
 
 ### Phase A: 계획 [순차]
 - `planner` 1개 호출 (run_in_background: false). 산출 계획을 사용자에게 보여주고 **명시적 승인**을 받는다 (planner의 원칙). 승인 전 Phase B로 진행 금지.
-- planner는 read-only(Write 없음)이므로 계획을 **반환값으로** 제출한다. 오케스트레이터가 그 반환값을 받아 `_workspace/A_planner_plan.md`에 Write로 저장한다.
+- planner는 읽기 전용이므로 일반 규칙대로 계획을 **반환값으로** 제출하고, 오케스트레이터가 `_workspace/A_planner_plan.md`에 저장한다.
 
 ### Phase B: 빌드 [팬아웃 · 병렬]
 - 계획의 영향 영역에 따라 **단일 메시지에서 동시 호출**:
   - 백엔드 변경 있음 → `backend-integration-specialist` (run_in_background: true)
   - 프론트 변경 있음 → `web-ui-specialist` (run_in_background: true)
 - 두 에이전트는 같은 계획(`_workspace/A_planner_plan.md`)을 입력으로 받되, **계약(API shape·필드명)을 계획서에 명시된 대로** 구현하도록 프롬프트에 강조 (경계면 사전 정렬)
-- 한쪽 영역만 있으면 해당 에이전트 1개만 호출 (팬아웃 생략)
+- 한쪽 영역만 있으면 해당 에이전트 1개만 호출 (팬아웃 생략. 미실행 트랙은 `_workspace/B_SKIPPED.md`에 사유 기록 — Phase 전환 관문)
 
 ### Phase C: 통합 검증 [생성-검증]
 - `integration-qa` 1개 호출 (run_in_background: false). 입력: `_workspace/B_backend_impl.md` + `_workspace/B_frontend_impl.md` + 실제 변경 파일
-- 🔴 FAIL이 있으면 → 해당 담당 에이전트(backend/frontend)를 **재호출하여 수정**(Phase B 부분 재실행), 그 후 Phase C 재검증. 최대 2회 반복 후에도 FAIL이면 리포트에 명시하고 진행
-- 백엔드·프론트 중 한쪽만 변경된 기능이면 경계면이 없으므로 Phase C 생략 가능 (단, 기존 경계면을 건드렸으면 수행)
+- integration-qa는 읽기 전용이므로 리포트를 반환값으로 받아 오케스트레이터가 `_workspace/C_integration_report.md`에 저장한다
+- 🔴 FAIL이 있으면 → 해당 담당 에이전트(backend/frontend)를 **재호출하여 수정**(Phase B 부분 재실행), 그 후 Phase C 재검증. **최대 2회 반복 후에도 FAIL이면 BLOCKED — Phase D~G 진행 금지.** FAIL 항목을 리포트와 최종 보고에 명시하고 사용자 판단을 요청하며, 결과는 '완료'가 아닌 '미완(BLOCKED)'으로 종료한다 (에러 핸들링 표와 동일 정책 — 경계면 FAIL은 컴파일·단위테스트가 전부 녹색인 채 런타임에 깨지는 유형이라, 진행하면 D~F가 통과해도 파손 기능이 완료 선언된다)
+- 백엔드·프론트 중 한쪽만 변경된 기능이면 경계면이 없으므로 Phase C 생략 가능 (단, 기존 경계면을 건드렸으면 수행. 생략 시 `_workspace/C_SKIPPED.md`에 사유 기록 — Phase 전환 관문)
 
 ### Phase D: 테스트 [순차]
-- `test-automation-specialist` 1개 호출. Phase B 구현 + Phase C 통과분에 대해 단위/통합 테스트 작성, 커버리지 임계치(quality-reference.md: stmt 75%/func 70%/branch 60%/line 75%) 충족
+- **소유권 분담**: 프론트 테스트(Vitest)는 `test-automation-specialist`가 작성·실행한다. 백엔드 테스트(pytest)는 `backend-integration-specialist`가 **Phase B에서 구현과 함께 작성**한다 — test-automation-specialist는 대시보드 전용이며 백엔드 테스트 코드를 작성하지 않는다
+- `test-automation-specialist` 1개 호출. Phase B 구현 + Phase C 통과분에 대해 프론트 단위/통합 테스트 작성, 커버리지 임계치 충족 (임계치 SSOT: `src/dashboard/vitest.config.ts`의 `coverage.thresholds` — 문서에 수치를 복제하지 않는다)
+- **pytest 결과 계약**: 백엔드 변경이 있는 기능이면 `_workspace/D_test_report.md`에 반드시 pytest 실행 결과를 포함한다 — 실행 명령(CWD `src/backend`에서 `uv run pytest ../../tests/backend -v --tb=short`), passed/failed/skipped 개수, 실패 시 에러 요약. pytest 실패 시 테스트 소유자인 `backend-integration-specialist`를 재호출하여 수정 후 재실행한다. 새 async 테스트는 `@pytest.mark.asyncio` 필수(`.claude/rules/aos-backend.md` Pytest 규칙)
 
 ### Phase E: 리뷰 [팬인 · 병렬]
 - **단일 메시지에서 동시 호출**: `code-reviewer` + `security-reviewer` (둘 다 run_in_background: true)
-- 두 리포트를 Read로 수집, CRITICAL/HIGH 이슈는 담당 에이전트 재호출로 수정
+- 두 리뷰어는 읽기 전용이므로 리포트를 반환값으로 받아 오케스트레이터가 `_workspace/E_code_review.md` / `_workspace/E_security_review.md`에 저장한다. CRITICAL/HIGH 이슈는 담당 에이전트 재호출로 수정
 
 ### Phase F: 최종 게이트
-- `verification-loop` 스킬 실행 (tsc --noEmit → ESLint/ruff → vitest/pytest → build). 실패 시 자동 재시도(최대 3회). 0 에러 확인 후에만 완료 선언
+- `verification-loop` 스킬 실행 — **풀스택 게이트**: 백엔드 변경 시 백엔드 트랙(CWD `src/backend`: ruff → mypy → pytest), 프론트 변경 시 프론트 트랙(CWD `src/dashboard`: tsc --noEmit → ESLint → vitest run → build). 트랙 선택·명령·CWD는 verification-loop 스킬 정의를 따른다. 실패 시 자동 재시도(최대 3회). 0 에러 확인 후에만 완료 선언
+- 게이트 실행 요약(트랙별 명령·결과 표)을 오케스트레이터가 `_workspace/F_verification.md`에 저장한다
 
 ### Phase G: 문서 동기화 [순차]
 - `docs-sync` 1개 호출 (run_in_background: false). **Phase F 게이트 통과 후** 실행 — 빌드/테스트가 녹색일 때만 문서를 확정한다 (테스트 통과 전 문서 갱신은 시기상조)
 - 입력: `_workspace/00_base_changed.txt`(baseline) + `_workspace/A·B·C` 산출물 + 현재 `git status`
 - docs-sync는 **(현재 변경 − baseline) 델타**로 이번 기능이 건드린 파일만 식별 → `.claude/rules/mandatory-docs.md` 매핑표대로 영향 docs/만 surgical 갱신. raw `git diff` 전체를 신뢰하지 않는다(워킹트리의 무관한 기존 수정 혼입 방지)
-- 결과를 `_workspace/G_docs_sync.md`로 보고. 갱신할 문서가 없으면(델타 0 또는 신규 정보 없음) "문서 갱신 불필요"로 정상 통과. **백엔드/프론트 어느 쪽도 docs 매핑 영역을 건드리지 않았으면 Phase G 생략 가능**
+- 결과를 `_workspace/G_docs_sync.md`로 보고. 갱신할 문서가 없으면(델타 0 또는 신규 정보 없음) "문서 갱신 불필요"로 정상 통과. **백엔드/프론트 어느 쪽도 docs 매핑 영역을 건드리지 않았으면 Phase G 생략 가능** (생략 시 `_workspace/G_SKIPPED.md`에 사유 기록 — Phase 전환 관문)
 
 ### Phase 정리
 1. `_workspace/` 보존 (감사 추적용 — 삭제 금지). `.gitignore`에 `_workspace/`가 등록되어 있어 untracked 잔여물로 뜨지 않는다 (미등록 시 먼저 추가).
@@ -121,7 +139,7 @@ Phase D: test-automation-specialist → D_test_report.md
           ↓
 Phase E: code-reviewer ∥ security-reviewer  (병렬 팬인)
           ↓ (CRITICAL 수정)
-Phase F: verification-loop (tsc+lint+test+build) → 0 에러
+Phase F: verification-loop (FE: tsc+lint+vitest+build ∥ BE: ruff+mypy+pytest) → 0 에러
           ↓
 Phase G: docs-sync (변경 델타 → mandatory-docs 매핑 → docs/ surgical 갱신)
           ↓
@@ -138,9 +156,9 @@ Phase G: docs-sync (변경 델타 → mandatory-docs 매핑 → docs/ surgical �
 
 | 상황 | 전략 |
 |------|------|
-| 에이전트 1개 실패 | 1회 재시도. 재실패 시 누락 명시하고 다음 Phase 진행 |
-| Phase B 한쪽 실패 | 성공한 쪽은 보존, 실패한 영역만 재호출. 경계면 검증(C)에서 미완 표시 |
-| Phase C FAIL 반복(2회 초과) | 수정 중단, FAIL 항목을 최종 보고에 명시하고 사용자 판단 요청 |
+| 에이전트 1개 실패 | 1회 재시도. 재실패(2회 실패) 시 **BLOCKED** — 해당 Phase가 적용 대상(사전 선언 생략 조건 미충족)이면 다음 Phase 진행 금지. 실패를 `{phase}_SKIPPED.md`로 기록해 우회하는 것 금지(SKIPPED는 NOT_APPLICABLE 전용). 실패 내용을 최종 보고에 명시하고 사용자 판단 요청, '미완(BLOCKED)'으로 종료 |
+| Phase B 한쪽 실패 | 성공한 쪽은 보존, 실패한 영역만 1회 재호출. 재실패(2회 실패) 시 **BLOCKED** — 그 트랙이 계획상 적용 대상이면 Phase C 이하 진행 금지('에이전트 1개 실패' 행과 동일 정책). 실패 내용을 최종 보고에 명시하고 사용자 판단 요청, '미완(BLOCKED)'으로 종료 |
+| Phase C FAIL 반복(2회 초과) | **BLOCKED**: Phase D~G 진행 금지. FAIL 항목을 최종 보고에 명시하고 사용자 판단 요청, '완료' 대신 '미완(BLOCKED)'으로 종료 |
 | Phase F 게이트 3회 실패 | 빌드 깨진 채 완료 선언 금지. 실제 에러 출력과 함께 사용자에게 보고 |
 | 상충하는 리뷰 의견 | 출처 병기, 임의 삭제 금지 |
 

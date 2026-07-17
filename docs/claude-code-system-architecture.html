@@ -705,7 +705,7 @@ footer {
     <!-- Step 7 -->
     <div class="flow-node glow-rose" style="border-color: var(--rose);">
       <h4 style="color: var(--rose);">7. PostToolUse Hooks</h4>
-      <p>verificationGuard.js (tsc/ruff) · agentLearnings.js (학습 축적)</p>
+      <p>verificationGuard.js (tsc/ruff) · agentLearnings.js (학습 축적 — 비활성·미배선)</p>
     </div>
     <div class="flow-arrow"></div>
 
@@ -727,10 +727,10 @@ footer {
 <!-- ═══════════════════════════════════════ 3. HOOKS ═══════════════════════════════════════════ -->
 <section class="section" id="hooks">
   <h2 class="section-title">Hook System</h2>
-  <p class="section-desc">13가지 이벤트에 반응하는 훅으로 보안 검증, 자동 포맷팅, 학습 축적을 수행합니다. hooks.json에서 설정합니다.</p>
+  <p class="section-desc">13가지 이벤트에 반응하는 훅으로 보안 검증, 자동 포맷팅을 수행합니다 (학습 축적 훅은 비활성·미배선). hooks.json에서 설정합니다.</p>
 
   <!-- Active Hooks -->
-  <h3 style="font-size: 1rem; margin-bottom: 1rem; color: var(--rose);">Active Hooks (5)</h3>
+  <h3 style="font-size: 1rem; margin-bottom: 1rem; color: var(--rose);">Active Hooks (4) · Inactive (1)</h3>
   <div class="card-grid grid-2" style="margin-bottom: 2rem;">
     <div class="card card-rose">
       <div class="card-icon rose">&#x1f6e1;</div>
@@ -753,8 +753,8 @@ footer {
     <div class="card card-cyan">
       <div class="card-icon cyan">&#x1f4da;</div>
       <h3>SubagentStop</h3>
-      <p>agentLearnings.js — 서브에이전트 종료 시 [LEARNING:agent] 패턴을 추출하여 agent-memory/learnings.md에 축적</p>
-      <span class="tag tag-cyan">LEARNING</span>
+      <p>agentLearnings.js — 서브에이전트 종료 시 [LEARNING:agent] 패턴을 추출하여 agent-memory/learnings.md에 축적 (비활성 — 훅 미등록·프롬프트 절 제거됨)</p>
+      <span class="tag tag-cyan">INACTIVE</span>
     </div>
     <div class="card card-sky">
       <div class="card-icon sky">&#x1f514;</div>
@@ -777,7 +777,7 @@ footer {
       <tr><td class="mono">PostToolUse</td><td>Post</td><td>도구 실행 후 검증/포맷팅</td></tr>
       <tr><td class="mono">PostToolUseFailure</td><td>Post</td><td>도구 실행 실패 시 에러 처리</td></tr>
       <tr><td class="mono">SubagentStart</td><td>Runtime</td><td>서브에이전트 생성 시 초기화</td></tr>
-      <tr><td class="mono">SubagentStop</td><td>Runtime</td><td>서브에이전트 종료 시 학습 추출</td></tr>
+      <tr><td class="mono">SubagentStop</td><td>Runtime</td><td>서브에이전트 종료 시 처리 — 학습 추출 훅(agentLearnings)은 비활성·미배선</td></tr>
       <tr><td class="mono">PermissionRequest</td><td>Runtime</td><td>민감 작업 권한 요청 처리</td></tr>
       <tr><td class="mono">Notification</td><td>Runtime</td><td>데스크탑 알림 전송</td></tr>
       <tr><td class="mono">PreCompact</td><td>Runtime</td><td>컨텍스트 압축 전 상태 저장</td></tr>
@@ -812,7 +812,7 @@ footer {
     <div class="card card-purple">
       <div class="card-icon purple">&#x1f9ea;</div>
       <h3>test-automation</h3>
-      <p>Vitest + React Testing Library 기반 테스트 생성. 75% 커버리지 목표, 모킹 전략 가이드</p>
+      <p>Vitest + React Testing Library 기반 테스트 생성. 커버리지 목표는 src/dashboard/vitest.config.ts의 coverage.thresholds(수치 SSOT) 참조, 모킹 전략 가이드</p>
       <span class="tag tag-purple">Vitest</span><span class="tag tag-purple">RTL</span>
     </div>
     <div class="card card-purple">
@@ -1003,7 +1003,7 @@ footer {
     <div class="card card-cyan">
       <div class="card-icon cyan">&#x1f9ea;</div>
       <h3>test-automation-specialist</h3>
-      <p>Vitest 테스트 작성. 비용 최적화를 위해 Haiku 모델 사용. 75% 커버리지 목표</p>
+      <p>Vitest 테스트 작성. 비용 최적화를 위해 Haiku 모델 사용. 커버리지 목표는 src/dashboard/vitest.config.ts의 coverage.thresholds(수치 SSOT) 참조</p>
       <span class="tag tag-lime">haiku</span><span class="tag tag-purple">Full Tools</span>
     </div>
     <div class="card card-cyan">
@@ -1072,7 +1072,7 @@ footer {
         <span style="color: var(--emerald); font-size: 1.1rem;">&#x2714;</span>
         <div>
           <div style="font-size: 0.8rem; font-weight: 600;">Coverage</div>
-          <div style="font-size: 0.7rem; color: var(--text-secondary);">75% statements, 70% functions, 60% branches</div>
+          <div style="font-size: 0.7rem; color: var(--text-secondary);">src/dashboard/vitest.config.ts coverage.thresholds 충족 (수치 SSOT)</div>
         </div>
       </div>
       <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem;">
@@ -1093,7 +1093,7 @@ footer {
         <span style="color: var(--emerald); font-size: 1.1rem;">&#x2714;</span>
         <div>
           <div style="font-size: 0.8rem; font-weight: 600;">Learning</div>
-          <div style="font-size: 0.7rem; color: var(--text-secondary);">[LEARNING:agent] 패턴으로 학습 축적</div>
+          <div style="font-size: 0.7rem; color: var(--text-secondary);">[LEARNING:agent] 패턴으로 학습 축적 (비활성·미배선)</div>
         </div>
       </div>
     </div>

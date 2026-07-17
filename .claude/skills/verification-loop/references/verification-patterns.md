@@ -95,7 +95,7 @@ it('should handle empty arrival data', () => {
 
 ## 패턴 5: 실패 복구
 
-### TypeScript 에러
+### TypeScript 에러 (CWD: src/dashboard)
 ```bash
 # 에러 위치 확인
 npm run type-check 2>&1 | grep "error TS"
@@ -104,44 +104,33 @@ npm run type-check 2>&1 | grep "error TS"
 npm run type-check
 ```
 
-### 테스트 실패
+### 테스트 실패 (CWD: src/dashboard)
 ```bash
 # 실패한 테스트만 재실행
-npm test -- --testPathPattern="실패한테스트"
+npx vitest run 실패한테스트파일명
 
-# 전체 재검증
-npm test
+# 전체 재검증 (watch 모드 금지)
+npm run test:run
 ```
 
-### 커버리지 미달
+### 커버리지 미달 (CWD: src/dashboard)
 ```bash
-# 커버리지 상세 확인
-npm test -- --coverage --coverageReporters="text"
+# 커버리지 상세 확인 (임계치 SSOT: vitest.config.ts)
+npm run test:coverage
+```
 
-# 미커버 파일 식별
-# /test-coverage 실행
+### 백엔드 실패 (CWD: src/backend)
+```bash
+# 린트/타입 재검증
+uv run ruff check . && uv run mypy . --ignore-missing-imports
+
+# 실패한 테스트만 재실행
+uv run pytest ../../tests/backend -k "실패한테스트" --tb=short
 ```
 
 ## 패턴 6: CI/CD 연동
 
-### GitHub Actions 예시
-```yaml
-name: Verification Loop
-
-on: [push, pull_request]
-
-jobs:
-  verify:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-      - run: npm ci
-      - run: npm run type-check
-      - run: npm run lint
-      - run: npm test -- --coverage
-      - run: npm run build:development
-```
+실제 CI 정의는 `.github/workflows/ci.yml`이 유일한 진실원이다 — 예시 YAML을 복제하지 않는다. CI는 7개 job(backend-lint / backend-typecheck / backend-test / frontend-lint / frontend-typecheck / frontend-test / frontend-build)으로 구성되며, verification-loop의 Level 2 트랙 명령이 각 job과 1:1 대응한다.
 
 ### 로컬과 동일한 검증
 - CI와 로컬 검증 기준 일치

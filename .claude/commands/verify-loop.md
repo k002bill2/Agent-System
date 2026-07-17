@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(npm:*), Bash(npx:*), Bash(python:*), Bash(git:*), Read, Edit, Grep, Glob
+allowed-tools: Bash(npm:*), Bash(npx:*), Bash(uv:*), Bash(python:*), Bash(git:*), Read, Edit, Grep, Glob
 description: 자동 재검증 루프 (최대 3회 재시도, 실패 시 자동 수정)
 argument-hint: [의도 설명] [--max-retries N] [--only build|test|lint]
 ---
@@ -21,23 +21,29 @@ argument-hint: [의도 설명] [--max-retries N] [--only build|test|lint]
    - 로직 오류, 엣지 케이스
    - 보안 취약점
 
-2. **자동화 검증** (AOS 프로젝트):
-   - Backend: `cd src/backend && python -m pytest ../../tests/backend`
-   - Dashboard: `cd src/dashboard && npm run build && npm test`
+2. **자동화 검증** (AOS 프로젝트 — verification-loop 스킬·CI(`.github/workflows/ci.yml`)와 동일 게이트):
+   - Backend Lint/Format: `cd src/backend && uv run ruff check . && uv run ruff format --check .`
+   - Backend Type: `cd src/backend && uv run mypy . --ignore-missing-imports`
+   - Backend Test: `cd src/backend && uv run pytest ../../tests/backend --tb=short`
+   - Dashboard Build: `cd src/dashboard && npm run build`
+   - Dashboard Test+Coverage: `cd src/dashboard && npm run test:coverage` (임계치 SSOT: vitest.config.ts)
    - TypeScript: `cd src/dashboard && npx tsc --noEmit`
    - Lint: `cd src/dashboard && npm run lint`
 
 3. **결과 출력**:
    ```
-   ├── Build: PASS/FAIL
-   ├── Test: PASS/FAIL (N errors)
-   ├── Lint: PASS/WARN (N fixable)
-   └── TypeCheck: PASS/FAIL
+   ├── BE Ruff/Format: PASS/FAIL
+   ├── BE MyPy: PASS/FAIL
+   ├── BE pytest: PASS/FAIL (N failed)
+   ├── FE Build: PASS/FAIL
+   ├── FE Test+Coverage: PASS/FAIL
+   ├── FE Lint: PASS/WARN (N fixable)
+   └── FE TypeCheck: PASS/FAIL
    ```
 
 ### 3단계: 실패 시 자동 수정
 - import 누락 → 자동 추가
-- 린트 포맷 → eslint --fix
+- 린트 포맷 → FE `eslint --fix` / BE `uv run ruff check . --fix`
 - 미사용 변수 → 삭제
 - 타입 단순 오류 → 수정
 
