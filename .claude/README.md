@@ -10,9 +10,9 @@ Claude Code configuration for AOS (Agent Orchestration Service) Dashboard.
 ├── agents/           # 5개 서브 에이전트
 │   └── shared/       # 공유 프레임워크 (Quality Gates 등)
 ├── commands/         # 5개 슬래시 명령어
-├── hooks/            # 훅 스크립트 (ethicalValidator + verificationGuard + agentLearnings)
+├── hooks/            # 훅 스크립트 (ethicalValidator·verificationGuard 등 + agentLearnings[비활성·미배선])
 ├── evals/            # 평가 시스템 (10 tasks, 4 rubrics)
-├── hooks.json        # 훅 설정 (5개: security + path protection + verification + learnings + notification)
+├── hooks.json        # 훅 설정 (security·path protection·verification·notification — learnings 훅은 미등록)
 ├── settings.json     # 로컬 설정
 └── mcp.json          # MCP 서버 설정
 ```

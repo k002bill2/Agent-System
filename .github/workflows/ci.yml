@@ -134,8 +134,12 @@ jobs:
           USE_DATABASE: "true"
           SESSION_SECRET_KEY: test-secret-key
           LLM_PROVIDER: google
-        # HF offline mode + network-marker exclusion are enforced for every
-        # pytest run by tests/backend/conftest.py and pyproject addopts.
+        # HF offline mode is enforced for every pytest run by
+        # tests/backend/conftest.py (HF_HUB_OFFLINE/TRANSFORMERS_OFFLINE env).
+        # NOTE: pyproject's addopts "-m 'not network'" is NOT applied to this
+        # invocation — pytest resolves no config file here (rootdir = repo
+        # root), and this command passes no -m filter. The offline env alone
+        # guards network access; no network-marked tests exist today.
         run: |
           uv run pytest ../../tests/backend -v --tb=short --cov=. --cov-report=xml
 

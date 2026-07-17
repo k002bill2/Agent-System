@@ -2,6 +2,12 @@
 /**
  * SubagentStop hook: Extract and persist agent learnings.
  *
+ * ⚠️ INACTIVE — 미배선 레거시 (2026-07-17 확인).
+ * 이 훅은 어떤 훅 설정에도 등록되어 있지 않다: .claude/settings.json에는 hooks 항목이 없고,
+ * .claude/hooks.json(백엔드 소비용)에도 SubagentStop 항목이 없다. 따라서 현재 실행되지 않는다.
+ * 이 훅이 소비하던 에이전트 프롬프트의 Learning Protocol 절도 2026-07-17 하네스 정비에서
+ * 제거되었다. 재활성화하려면 settings.json SubagentStop 등록 + 프롬프트 절 복원이 함께 필요하다.
+ *
  * Parses [LEARNING:agent-name] category: description from subagent output
  * and appends to .claude/agent-memory/learnings.md with deduplication.
  */

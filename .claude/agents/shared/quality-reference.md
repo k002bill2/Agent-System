@@ -10,12 +10,17 @@ All agents MUST pass these quality gates before marking work as complete.
 ## Automated Checks
 
 ```bash
-# Quick validation
+# Frontend quick validation (CWD: src/dashboard)
 npm run lint && npm run type-check
 
-# Full validation (before PR)
-npm run lint && npm run type-check && npm test -- --coverage
+# Frontend full validation (CWD: src/dashboard, before PR)
+npm run lint && npm run type-check && npm run test:coverage
+
+# Backend validation (CWD: src/backend)
+uv run ruff check . && uv run mypy . --ignore-missing-imports && uv run pytest ../../tests/backend --tb=short
 ```
+
+Always run these from the directory noted above — never from the repo root (root scripts are thin delegation wrappers, not the gate).
 
 ## Quality Gate Requirements
 
@@ -30,12 +35,8 @@ npm run lint && npm run type-check && npm test -- --coverage
 - No disabled ESLint rules without justification comment
 
 ### 3. Test Coverage Thresholds
-| Metric | Minimum |
-|--------|---------|
-| Statements | 75% |
-| Functions | 70% |
-| Branches | 60% |
-| Lines | 75% |
+- **SSOT: `src/dashboard/vitest.config.ts` — the `coverage.thresholds` block is the only place threshold numbers live.** Do not copy numbers into docs; Read the config when you need the values.
+- Pass/fail is determined by running `npm run test:coverage` (CWD: `src/dashboard`) — it fails automatically when thresholds are not met.
 
 ### 4. Security
 - No hardcoded API keys or secrets

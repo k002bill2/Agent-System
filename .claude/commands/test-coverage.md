@@ -12,13 +12,11 @@ Run the complete test suite with coverage reporting, analyze the results, and pr
 
 1. **Run Tests with Coverage**
    ```bash
-   npm test -- --coverage
+   cd src/dashboard && npm run test:coverage
    ```
 
 2. **Analyze Coverage Report**
-   - Identify files with < 75% statement coverage
-   - Identify files with < 70% function coverage
-   - Identify files with < 60% branch coverage
+   - Identify files below the thresholds in `src/dashboard/vitest.config.ts` (`coverage.thresholds` — 임계치 수치의 SSOT, 이 문서에 수치를 복제하지 않는다)
    - List completely untested files
 
 3. **Prioritize Coverage Gaps**
@@ -42,10 +40,11 @@ Run the complete test suite with coverage reporting, analyze the results, and pr
 
 ## Summary
 - Overall Coverage: X%
-- Statements: X% (target: 75%)
-- Branches: X% (target: 60%)
-- Functions: X% (target: 70%)
-- Lines: X% (target: 75%)
+- Statements: X%
+- Branches: X%
+- Functions: X%
+- Lines: X%
+- Targets: `src/dashboard/vitest.config.ts`의 `coverage.thresholds` (SSOT)
 
 ## Files Below Coverage Threshold
 

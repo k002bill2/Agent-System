@@ -1,6 +1,6 @@
 ---
 name: test-automation
-description: "Vitest/React Testing Library 테스트 전문 스킬. 컴포넌트 테스트 작성, 스토어 테스트, 커스텀 훅 테스트, 테스트 커버리지 75% 이상 개선, TDD 워크플로우, 실패하는 테스트 디버깅 등에 사용. '테스트 작성해줘', '커버리지 올려줘', 'TDD로', '테스트 실패 디버깅', 'vi.mock 패턴', 'act() 래핑', '스냅샷 테스트' 등의 요청에 트리거. pytest 백엔드 테스트가 아닌 AOS Dashboard(React/TypeScript) 프론트엔드 테스트에 특화."
+description: "Vitest/React Testing Library 테스트 전문 스킬. 컴포넌트 테스트 작성, 스토어 테스트, 커스텀 훅 테스트, 커버리지 임계치(vitest.config.ts) 미달 개선, TDD 워크플로우, 실패하는 테스트 디버깅 등에 사용. '테스트 작성해줘', '커버리지 올려줘', 'TDD로', '테스트 실패 디버깅', 'vi.mock 패턴', 'act() 래핑', '스냅샷 테스트' 등의 요청에 트리거. pytest 백엔드 테스트가 아닌 AOS Dashboard(React/TypeScript) 프론트엔드 테스트에 특화."
 ---
 
 # Test Automation
@@ -13,12 +13,7 @@ AOS Dashboard의 React 컴포넌트, 훅, 스토어에 대한 Vitest 테스트�
 
 ## Coverage Requirements
 
-| Metric | Minimum |
-|--------|---------|
-| Statements | 75% |
-| Lines | 75% |
-| Functions | 70% |
-| Branches | 60% |
+**SSOT: `src/dashboard/vitest.config.ts`의 `coverage.thresholds`** — 임계치 수치는 그 config에만 존재한다. 이 문서에 수치를 복제하지 않는다; 값이 필요하면 config를 Read하고, 충족 여부는 `npm run test:coverage`(CWD: `src/dashboard`)의 통과/실패로 판정한다.
 
 ## Project Conventions
 
@@ -64,7 +59,7 @@ See `references/vitest-patterns.md` for component, hook, service, and common pat
 
 ### Step 6: Verify Coverage
 ```bash
-cd src/dashboard && npm test -- --coverage
+cd src/dashboard && npm run test:coverage
 ```
 
 Check coverage report and add tests for uncovered lines.

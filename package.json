@@ -4,7 +4,7 @@
   "private": true,
   "description": "AOS Monitor placeholder",
   "scripts": {
-    "test": "echo 'No tests configured yet'",
+    "test": "cd src/dashboard && npm run test:run",
     "lint": "cd src/dashboard && npm run lint",
     "type-check": "cd src/dashboard && npx tsc --noEmit",
     "build": "cd src/dashboard && npm run build",
