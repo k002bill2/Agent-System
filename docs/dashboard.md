@@ -334,6 +334,12 @@ import { cn } from '@/lib/utils';
 |----------|------|
 | `ProcessMonitorWidget` | 프로세스 모니터 위젯 |
 
+### Health Components
+
+| 컴포넌트 | 설명 |
+|----------|------|
+| `HealthBadge` | 헤더 백엔드 헬스 배지 (`GET /api/health` 30s 폴링, healthy/degraded/unhealthy/offline/checking 5개 상태, version suffix + status/version/uptime/last-checked native 툴팁, `role="status"`/`aria-live`) |
+
 ### Common Components
 
 | 컴포넌트 | 설명 |
@@ -606,17 +612,20 @@ src/dashboard/
 │   │   └── api.ts
 │   ├── hooks/                  # 커스텀 훅
 │   │   ├── useErrorHandler.ts
-│   │   └── useRealtimeMonitor.ts
+│   │   ├── useRealtimeMonitor.ts
+│   │   └── useBackendHealth.ts  # 백엔드 헬스 폴링
 │   ├── services/               # API 서비스 레이어
 │   │   ├── apiClient.ts        # 중앙 HTTP 클라이언트 (인증 자동화)
 │   │   ├── agentService.ts     # Agent API 호출
 │   │   ├── analytics.ts        # PostHog 분석 통합
 │   │   ├── errors.ts           # 에러 타입/핸들링
-│   │   └── notificationService.ts # 알림 API
+│   │   ├── notificationService.ts # 알림 API
+│   │   └── health.ts           # 백엔드 헬스 폴링 (raw fetch + getApiUrl, 5s 타임아웃, never throws)
 │   ├── lib/                    # 유틸리티
 │   │   ├── utils.ts            # cn() 등 헬퍼 함수
 │   │   ├── cookieStorage.ts    # 쿠키 기반 스토리지
-│   │   └── fileAttachment.ts   # 파일 첨부 유틸리티
+│   │   ├── fileAttachment.ts   # 파일 첨부 유틸리티
+│   │   └── formatUptime.ts     # uptime 초 → 사람이 읽는 문자열 (2d 3h / 3h 42m / 42m / 45s / —)
 │   ├── utils/                  # 도메인 유틸리티
 │   │   ├── diffParser.ts       # diff 파싱
 │   │   ├── gitErrorMessages.ts # Git 에러 메시지 매핑
@@ -645,6 +654,7 @@ src/dashboard/
 |------|------|------|
 | `useErrorHandler` | `useErrorHandler.ts` | 에러 핸들링 유틸리티 훅 |
 | `useRealtimeMonitor` | `useRealtimeMonitor.ts` | 실시간 모니터링 WebSocket 훅 |
+| `useBackendHealth` | `useBackendHealth.ts` | 백엔드 헬스 폴링 훅 (마운트 즉시 1회 + 30s 인터벌, unmount cleanup 가드) |
 
 ---
 
