@@ -65,19 +65,36 @@ A·C·E-1·E-2 산출물은 담당 에이전트가 읽기 전용이므로 **오�
 
 최종 보고에 Phase별 산출물/SKIPPED 현황 표를 포함한다. "산출물 없이 완주"는 이 계약 하에서 정의상 발생할 수 없어야 한다 (과거 실측: 3회 실행 중 2회가 D 산출물 없이 G까지 완주 — 이 관문이 그 재발 방지책이다).
 
+## 실행 상태 매니페스트 (`_workspace/RUN_STATE.md` · 필수)
+
+오케스트레이터는 각 Phase **시작 직전과 종료 직후**(상태 변화 시마다) `_workspace/RUN_STATE.md`를 갱신한다:
+
+```markdown
+| Phase | 상태 | 시도 | 시작 | 종료 | 산출물/비고 |
+|-------|------|------|------|------|------------|
+| A | DONE | 1 | 12:01:03 | 12:04:22 | A_planner_plan.md |
+| B | DONE | 1 | 12:05:10 | 12:19:44 | B_backend_impl.md, B_frontend_impl.md |
+| C | BLOCKED | 3 | 12:20:01 | 12:41:12 | FAIL 2회 초과 — 사용자 판단 대기 |
+```
+
+- 상태 값: `PENDING` / `RUNNING` / `DONE` / `SKIPPED`(NOT_APPLICABLE — 사유는 `{phase}_SKIPPED.md`) / `BLOCKED`
+- 타임스탬프는 `date +%H:%M:%S`로 생성한다 (암산 금지)
+- **재개 판별의 진실원**: Phase 0에서 `_workspace/`가 존재하면 산출물 파일 존재 추론에 앞서 RUN_STATE.md를 먼저 Read하여 재개 지점을 결정한다. RUN_STATE.md 부재(구버전 런) 시에만 파일 존재 추론으로 폴백
+- Phase 전환 관문의 판정 결과(산출물 실존/SKIPPED/BLOCKED)도 이 표에 남는다 — 런 종료 시 Phase별 소요 시간·재시도 횟수 요약이 이 파일 하나로 확보된다 (관측성 최소 배선)
+
 ## 워크플로우
 
 ### Phase 0: 컨텍스트 확인 (후속 작업 지원)
 
-1. `_workspace/` 존재 여부 확인
+1. `_workspace/` 존재 여부 확인. 존재하면 `_workspace/RUN_STATE.md`를 **먼저 Read**하여 이전 런의 Phase별 상태·재개 지점을 파악한다 (부재 시 구버전 런 — 산출물 파일 존재 추론으로 폴백)
 2. 실행 모드 결정:
    - **미존재** → 초기 실행. Phase 1로
-   - **존재 + 부분 수정 요청**(예: "백엔드만 다시") → 부분 재실행. 해당 Phase 에이전트만 재호출, 프롬프트에 기존 산출물 경로 + 사용자 피드백 포함
+   - **존재 + 부분 수정 요청**(예: "백엔드만 다시") → 부분 재실행. RUN_STATE.md 기준으로 해당 Phase 에이전트만 재호출, 프롬프트에 기존 산출물 경로 + 사용자 피드백 포함
    - **존재 + 새 기능 입력** → 새 실행. `_workspace/`를 `_workspace_{타임스탬프}/`로 이동 후 초기 실행 (타임스탬프는 `date +%Y%m%d_%H%M%S`로 생성, 암산 금지)
 
 ### Phase 1: 준비
 1. 사용자 요청에서 기능 범위·영향 영역(백엔드/프론트/양쪽) 파악
-2. `_workspace/` 생성, 입력을 `_workspace/00_input.md`에 저장. **기능 시작 시점 baseline 스냅샷 저장**: `git status --porcelain > _workspace/00_base_changed.txt` (Phase G `docs-sync`가 이번 기능의 변경 파일을 무관한 기존 워킹트리 수정과 분리하는 기준 — 미저장 시 docs-sync가 변경 범위를 단정 못 함)
+2. `_workspace/` 생성, 입력을 `_workspace/00_input.md`에 저장. **기능 시작 시점 baseline 스냅샷 저장**: `git status --porcelain > _workspace/00_base_changed.txt` (Phase E 리뷰어와 Phase G `docs-sync`가 이번 기능의 변경 파일을 무관한 기존 워킹트리 수정과 분리하는 기준 — 미저장 시 변경 범위를 단정 못 함). `_workspace/RUN_STATE.md` 초기화(전 Phase `PENDING`)
 3. **복잡도 판정** (`.claude/rules/aos-workflow.md` 기준): Trivial(0 에이전트, 하네스 불필요) / Simple(1) / Moderate(2-3). Trivial이면 사용자에게 "이건 직접 처리가 빠릅니다" 제안 후 중단
 
 ### Phase A: 계획 [순차]
@@ -104,6 +121,7 @@ A·C·E-1·E-2 산출물은 담당 에이전트가 읽기 전용이므로 **오�
 
 ### Phase E: 리뷰 [팬인 · 병렬]
 - **단일 메시지에서 동시 호출**: `code-reviewer` + `security-reviewer` (둘 다 run_in_background: true)
+- **리뷰 범위 델타화**: 두 리뷰어의 입력에 `_workspace/00_base_changed.txt`(baseline) + 현재 `git status --porcelain` + B·C 산출물을 포함하고, **"(현재 변경 − baseline) 델타 파일만 리뷰"**를 프롬프트에 명시한다 (docs-sync와 동일한 델타 규칙 — 다중 세션 워킹트리의 무관한 기존 수정이 리뷰에 혼입되는 것 방지). baseline 부재 시 B·C 산출물이 명시한 파일만 대상으로 하고 리포트에 UNVERIFIED로 표기
 - 두 리뷰어는 읽기 전용이므로 리포트를 반환값으로 받아 오케스트레이터가 `_workspace/E_code_review.md` / `_workspace/E_security_review.md`에 저장한다. CRITICAL/HIGH 이슈는 담당 에이전트 재호출로 수정
 
 ### Phase F: 최종 게이트
@@ -118,7 +136,8 @@ A·C·E-1·E-2 산출물은 담당 에이전트가 읽기 전용이므로 **오�
 
 ### Phase 정리
 1. `_workspace/` 보존 (감사 추적용 — 삭제 금지). `.gitignore`에 `_workspace/`가 등록되어 있어 untracked 잔여물로 뜨지 않는다 (미등록 시 먼저 추가).
-2. 사용자에게 결과 요약: 변경 파일, 테스트 결과, 리뷰 findings, 게이트 통과 증거
+2. `RUN_STATE.md` 최종 갱신 — 전 Phase의 상태·시도·소요가 채워졌는지 확인
+3. 사용자에게 결과 요약: 변경 파일, 테스트 결과, 리뷰 findings, 게이트 통과 증거, **RUN_STATE 기반 Phase별 소요·재시도 표**
 3. **Phase 7 진화**: "결과나 워크플로우에서 바꿀 점이 있나요?" 피드백 기회 제공
 
 ## 데이터 흐름

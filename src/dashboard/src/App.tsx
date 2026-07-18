@@ -3,6 +3,7 @@ import { Sidebar } from './components/Sidebar'
 import { ChatInput } from './components/ChatInput'
 import { ApprovalBanner } from './components/ApprovalModal'
 import { CostBadge } from './components/CostMonitor'
+import { HealthBadge } from './components/HealthBadge'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useOrchestrationStore } from './stores/orchestration'
 import { useNavigationStore, isPublicView } from './stores/navigation'
@@ -271,6 +272,7 @@ export default function App() {
                 <Skeleton className="h-6 w-32" />
                 <div className="ml-auto flex items-center gap-4">
                   <Skeleton className="h-6 w-24" />
+                  <Skeleton className="h-6 w-24" />
                   <Skeleton className="h-4 w-32" />
                   <Skeleton className="w-2 h-2 rounded-full" />
                 </div>
@@ -281,6 +283,7 @@ export default function App() {
                   {viewTitles[currentView] || 'Agent Orchestration Service'}
                 </h1>
                 <div className="ml-auto flex items-center gap-4">
+                  <HealthBadge />
                   <CostBadge />
                   <span className="text-sm text-gray-500 dark:text-gray-400">
                     Session: {sessionId ? sessionId.slice(0, 8) : 'Not connected'}

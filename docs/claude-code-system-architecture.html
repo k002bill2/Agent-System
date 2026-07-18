@@ -705,7 +705,7 @@ footer {
     <!-- Step 7 -->
     <div class="flow-node glow-rose" style="border-color: var(--rose);">
       <h4 style="color: var(--rose);">7. PostToolUse Hooks</h4>
-      <p>verificationGuard.js (tsc/ruff) · agentLearnings.js (학습 축적 — 비활성·미배선)</p>
+      <p>verificationGuard.js (tsc/ruff)</p>
     </div>
     <div class="flow-arrow"></div>
 
@@ -753,8 +753,8 @@ footer {
     <div class="card card-cyan">
       <div class="card-icon cyan">&#x1f4da;</div>
       <h3>SubagentStop</h3>
-      <p>agentLearnings.js — 서브에이전트 종료 시 [LEARNING:agent] 패턴을 추출하여 agent-memory/learnings.md에 축적 (비활성 — 훅 미등록·프롬프트 절 제거됨)</p>
-      <span class="tag tag-cyan">INACTIVE</span>
+      <p>등록된 훅 없음 — 학습 추출 훅(agentLearnings.js)은 사문화 판정으로 2026-07 감사에서 제거됨</p>
+      <span class="tag tag-cyan">REMOVED</span>
     </div>
     <div class="card card-sky">
       <div class="card-icon sky">&#x1f514;</div>
@@ -777,7 +777,7 @@ footer {
       <tr><td class="mono">PostToolUse</td><td>Post</td><td>도구 실행 후 검증/포맷팅</td></tr>
       <tr><td class="mono">PostToolUseFailure</td><td>Post</td><td>도구 실행 실패 시 에러 처리</td></tr>
       <tr><td class="mono">SubagentStart</td><td>Runtime</td><td>서브에이전트 생성 시 초기화</td></tr>
-      <tr><td class="mono">SubagentStop</td><td>Runtime</td><td>서브에이전트 종료 시 처리 — 학습 추출 훅(agentLearnings)은 비활성·미배선</td></tr>
+      <tr><td class="mono">SubagentStop</td><td>Runtime</td><td>서브에이전트 종료 시 처리 — 학습 추출 훅은 사문화 판정으로 제거됨(미사용)</td></tr>
       <tr><td class="mono">PermissionRequest</td><td>Runtime</td><td>민감 작업 권한 요청 처리</td></tr>
       <tr><td class="mono">Notification</td><td>Runtime</td><td>데스크탑 알림 전송</td></tr>
       <tr><td class="mono">PreCompact</td><td>Runtime</td><td>컨텍스트 압축 전 상태 저장</td></tr>
