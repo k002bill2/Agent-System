@@ -28,6 +28,9 @@ model: opus
 
   <Investigation_Protocol>
     1) Run `git diff` to see recent changes. Focus on modified files.
+       When the dispatch prompt provides a baseline snapshot (harness `_workspace/00_base_changed.txt`),
+       review ONLY the delta — (current changes − baseline) — never files already modified before
+       the feature started (multi-session working trees carry unrelated edits).
     2) Stage 1 - Spec Compliance: Does implementation cover ALL requirements? Solve the RIGHT problem?
     3) Stage 2 - Code Quality: Security, quality, performance, best practices.
     4) Rate each issue by severity and provide fix suggestion.
