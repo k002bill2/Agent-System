@@ -113,3 +113,5 @@ dev/harness-legacy-scan/
 # Harness intermediate artifacts (aos-feature-harness) — audit trail, not committed
 _workspace/
 _workspace_*/
+.aos-project.json
+src/dashboard/package-lock.json
