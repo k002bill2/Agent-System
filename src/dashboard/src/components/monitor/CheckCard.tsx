@@ -7,6 +7,7 @@ import {
   Play,
 } from 'lucide-react'
 import { CheckType, CheckStatus } from '../../types/monitoring'
+import { formatDurationMs } from '../../lib/formatDuration'
 
 interface CheckCardProps {
   checkType: CheckType
@@ -73,13 +74,7 @@ export function CheckCard({
     }
   }
 
-  const formatDuration = (ms: number | null) => {
-    if (ms === null) return null
-    if (ms < 1000) return `${ms}ms`
-    return `${(ms / 1000).toFixed(1)}s`
-  }
-
-  const duration = formatDuration(durationMs)
+  const duration = formatDurationMs(durationMs)
 
   return (
     <div

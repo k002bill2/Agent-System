@@ -17,7 +17,7 @@ const STATUS_CONFIG: Record<string, { icon: typeof CheckCircle; color: string; b
 }
 
 function formatDuration(seconds?: number): string {
-  if (!seconds) return '-'
+  if (seconds == null || !Number.isFinite(seconds)) return '-'
   if (seconds < 60) return `${seconds.toFixed(1)}s`
   const m = Math.floor(seconds / 60)
   const s = Math.round(seconds % 60)
