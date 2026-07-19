@@ -54,3 +54,5 @@ echo ""
 
 [ "$FAIL" -eq 0 ] && echo "  ALL CHECKS PASSED" || echo "  $FAIL CHECK(S) FAILED"
 echo ""
+
+exit "$FAIL"

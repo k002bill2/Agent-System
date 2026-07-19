@@ -30,23 +30,23 @@ echo ""
 
 # 1. 반환 타입 힌트 누락
 check "Type hints (return)" \
-  "grep -rn 'def .*(.*):' \"$SRC\" --include='*.py' | grep -v '\->' | grep -v '__pycache__' | grep -v 'test_' | grep -v '__init__'"
+  "grep -rn 'def .*(.*):' \"$SRC\" --include='*.py' --exclude-dir=.venv --exclude-dir=__pycache__ | grep -v '\->' | grep -v '__pycache__' | grep -v 'test_' | grep -v '__init__'"
 
 # 2. bare except
 check "Bare except" \
-  "grep -rn 'except:' \"$SRC\" --include='*.py' | grep -v 'except Exception' | grep -v '__pycache__'"
+  "grep -rn 'except:' \"$SRC\" --include='*.py' --exclude-dir=.venv --exclude-dir=__pycache__ | grep -v 'except Exception' | grep -v '__pycache__'"
 
 # 3. 하드코딩된 시크릿
 check "Hardcoded secrets" \
-  "grep -rn 'password\s*=\s*[\"'\''].\+[\"'\'']\|api_key\s*=\s*[\"'\''].\+[\"'\'']\|secret\s*=\s*[\"'\''].\+[\"'\'']' \"$SRC\" --include='*.py' | grep -v '__pycache__' | grep -v 'test_' | grep -v '\.env' | grep -v 'config'"
+  "grep -rn 'password\s*=\s*[\"'\''].\+[\"'\'']\|api_key\s*=\s*[\"'\''].\+[\"'\'']\|secret\s*=\s*[\"'\''].\+[\"'\'']' \"$SRC\" --include='*.py' --exclude-dir=.venv --exclude-dir=__pycache__ | grep -v '__pycache__' | grep -v 'test_' | grep -v '\.env' | grep -v 'config'"
 
 # 4. sync I/O 호출
 check "Sync I/O calls" \
-  "grep -rn 'requests\.\(get\|post\|put\|delete\)\|time\.sleep\b' \"$SRC\" --include='*.py' | grep -v '__pycache__' | grep -v 'test_'"
+  "grep -rn 'requests\.\(get\|post\|put\|delete\)\|time\.sleep\b' \"$SRC\" --include='*.py' --exclude-dir=.venv --exclude-dir=__pycache__ | grep -v '__pycache__' | grep -v 'test_'"
 
 # 5. print() 사용
 check "Print statements" \
-  "grep -rn '^\s*print(' \"$SRC\" --include='*.py' | grep -v '__pycache__' | grep -v 'test_' | grep -v 'cli'"
+  "grep -rn '^\s*print(' \"$SRC\" --include='*.py' --exclude-dir=.venv --exclude-dir=__pycache__ | grep -v '__pycache__' | grep -v 'test_' | grep -v 'cli'"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 printf "  Total: %d  Pass: %d  Fail: %d\n" "$TOTAL" "$PASS" "$FAIL"
@@ -54,3 +54,5 @@ echo ""
 
 [ "$FAIL" -eq 0 ] && echo "  ALL CHECKS PASSED" || echo "  $FAIL CHECK(S) FAILED"
 echo ""
+
+exit "$FAIL"

@@ -38,17 +38,18 @@ function main() {
       // TypeScript 파일 → tsc 경량 체크
       if (/\.(ts|tsx)$/.test(filePath) && filePath.includes('src/dashboard')) {
         try {
-          execSync('cd src/dashboard && npx tsc --noEmit --pretty false 2>&1 | head -20', {
+          execSync('set -o pipefail; cd src/dashboard && npx tsc --noEmit --pretty false 2>&1 | head -20', {
             timeout: 12000,
             stdio: ['pipe', 'pipe', 'pipe'],
-            cwd: process.cwd()
+            cwd: process.cwd(),
+            shell: '/bin/bash'
           });
         } catch (err) {
           const output = (err.stdout || '').toString().trim();
           if (output) {
             const errorCount = (output.match(/error TS/g) || []).length;
             if (errorCount >= TS_ERROR_THRESHOLD) {
-              console.log(
+              console.error(
                 `\n[BLOCKED] TypeScript: ${errorCount} error(s) detected (threshold: ${TS_ERROR_THRESHOLD})\n` +
                 `${output.split('\n').slice(0, 5).join('\n')}\n` +
                 `ACTION: 타입 에러를 먼저 수정하세요. /build-fix 사용 권장.\n`
@@ -64,22 +65,23 @@ function main() {
       // Python 파일 → ruff 경량 체크
       if (/\.py$/.test(filePath) && filePath.includes('src/backend')) {
         try {
-          execSync(`ruff check "${filePath}" --select E,F --no-fix --quiet 2>&1 | head -10`, {
+          execSync(`set -o pipefail; ruff check "${filePath}" --no-fix --quiet --output-format concise 2>&1 | head -10`, {
             timeout: 5000,
-            stdio: ['pipe', 'pipe', 'pipe']
+            stdio: ['pipe', 'pipe', 'pipe'],
+            shell: '/bin/bash'
           });
         } catch (err) {
           const output = (err.stdout || '').toString().trim();
           if (output) {
-            const errorCount = output.split('\n').filter(l => l.trim()).length;
+            const errorCount = output.split('\n').filter(l => /:\d+:\d+: /.test(l)).length;
             if (errorCount >= PY_ERROR_THRESHOLD) {
-              console.log(
+              console.error(
                 `\n[BLOCKED] Python lint: ${errorCount} issue(s) in ${filePath.split('/').pop()} (threshold: ${PY_ERROR_THRESHOLD})\n` +
                 `${output.split('\n').slice(0, 5).join('\n')}\n` +
                 `ACTION: lint 에러를 먼저 수정하세요.\n`
               );
               shouldBlock = true;
-            } else {
+            } else if (errorCount > 0) {
               console.log(`[Verification] Python lint: ${errorCount} issue(s) — threshold(${PY_ERROR_THRESHOLD}) 미만, 경고`);
             }
           }
