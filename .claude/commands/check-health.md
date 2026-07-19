@@ -8,6 +8,8 @@ disable-model-invocation: true
 
 Perform a comprehensive health check of the AOS Dashboard project, running all quality gates and reporting any issues with actionable fixes.
 
+> **게이트 SSOT**: 빌드/타입/린트/테스트 게이트 명령의 유일한 정의는 `verification-loop` 스킬이다 (BE/FE 트랙·CWD·통과 기준 포함). 이 커맨드는 그 게이트 위에 **의존성 audit·프로젝트 구조 검증·헬스 스코어 리포트**를 얹은 대시보드 중심 뷰다. 게이트 명령이 바뀌면 verification-loop만 갱신하고, 백엔드 변경 검증은 verification-loop의 백엔드 트랙을 따른다.
+
 ## Steps
 
 ### 1. TypeScript Type Check
@@ -93,7 +95,7 @@ npm audit
 ### 6. Project Structure Validation
 
 **What it checks**:
-- Required files exist (CLAUDE.md, .claudecode.json, etc.)
+- Required files exist (CLAUDE.md, .claude/settings.json, docs/ 등)
 - Skills and Agents are properly configured
 - Git status is clean (no uncommitted sensitive files)
 

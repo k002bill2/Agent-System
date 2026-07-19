@@ -100,6 +100,7 @@ A·C·E-1·E-2 산출물은 담당 에이전트가 읽기 전용이므로 **오�
 ### Phase A: 계획 [순차]
 - `planner` 1개 호출 (run_in_background: false). 산출 계획을 사용자에게 보여주고 **명시적 승인**을 받는다 (planner의 원칙). 승인 전 Phase B로 진행 금지.
 - planner는 읽기 전용이므로 일반 규칙대로 계획을 **반환값으로** 제출하고, 오케스트레이터가 `_workspace/A_planner_plan.md`에 저장한다.
+- **승인 무응답(AFK) 정책**: 승인 질문에 ~5분 무응답이면 — (a) **저위험 계획**(가역적·소규모·기존 API/스키마 계약 내·외부 발신 없음)이고 이번 실행 자체가 사용자로부터 사전 위임된 경우 → 원안 자동 승인으로 진행하되, RUN_STATE와 최종 보고에 "AFK 자동 승인(사후 거부권)"을 명시. (b) **고위험 계획**(DB 스키마 변경·데이터 이동/삭제·외부 서비스 발신·비가역 작업 포함) → 진행 금지, Phase A를 BLOCKED로 두고 사용자 응답 대기. 판단이 모호하면 고위험으로 취급한다
 
 ### Phase B: 빌드 [팬아웃 · 병렬]
 - 계획의 영향 영역에 따라 **단일 메시지에서 동시 호출**:
@@ -123,6 +124,8 @@ A·C·E-1·E-2 산출물은 담당 에이전트가 읽기 전용이므로 **오�
 - **단일 메시지에서 동시 호출**: `code-reviewer` + `security-reviewer` (둘 다 run_in_background: true)
 - **리뷰 범위 델타화**: 두 리뷰어의 입력에 `_workspace/00_base_changed.txt`(baseline) + 현재 `git status --porcelain` + B·C 산출물을 포함하고, **"(현재 변경 − baseline) 델타 파일만 리뷰"**를 프롬프트에 명시한다 (docs-sync와 동일한 델타 규칙 — 다중 세션 워킹트리의 무관한 기존 수정이 리뷰에 혼입되는 것 방지). baseline 부재 시 B·C 산출물이 명시한 파일만 대상으로 하고 리포트에 UNVERIFIED로 표기
 - 두 리뷰어는 읽기 전용이므로 리포트를 반환값으로 받아 오케스트레이터가 `_workspace/E_code_review.md` / `_workspace/E_security_review.md`에 저장한다. CRITICAL/HIGH 이슈는 담당 에이전트 재호출로 수정
+- **E-3 (옵션): Codex 적대 검증** — E-1/E-2는 Claude가 Claude를 리뷰하므로 동일 모델 계열의 상관된 맹점이 남는다. 사용자가 요청했거나 변경 규모가 크면(3+ 파일 또는 보안 민감 영역) 외부 시점을 추가한다:
+  `node ~/.claude/plugins/cache/openai-codex/codex/*/scripts/codex-companion.mjs review --scope working-tree` 를 Bash로 실행 (장시간 예상 시 `nohup ... & disown` 후 로그 폴링 — verification-loop의 detach 패턴과 동일). 결과를 오케스트레이터가 `_workspace/E_codex_review.md`에 저장하고, CRITICAL/HIGH는 E-1/E-2와 동일하게 담당 에이전트 재호출로 수정. 실행하지 않으면 `_workspace/E3_SKIPPED.md`에 사유(예: "소규모 변경 — 옵션 조건 미충족") 기록
 
 ### Phase F: 최종 게이트
 - `verification-loop` 스킬 실행 — **풀스택 게이트**: 백엔드 변경 시 백엔드 트랙(CWD `src/backend`: ruff → mypy → pytest), 프론트 변경 시 프론트 트랙(CWD `src/dashboard`: tsc --noEmit → ESLint → vitest run → build). 트랙 선택·명령·CWD는 verification-loop 스킬 정의를 따른다. 실패 시 자동 재시도(최대 3회). 0 에러 확인 후에만 완료 선언

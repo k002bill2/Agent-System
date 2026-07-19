@@ -17,12 +17,10 @@
 | Simple | 1 | 2-3 파일, 한 영역 |
 | Moderate | 2-3 | UI+API 또는 크로스 영역 |
 
-## 배포 전 검증 체크리스트
-1. `tsc --noEmit` (TypeScript 타입 체크)
-2. `lint` (ESLint/ruff)
-3. `pytest` / `npm test` (테스트)
-4. `npm run build` (빌드)
-5. 에러 0 확인 후 커밋
+※ 하네스(`aos-feature-harness`) 사용 시 예외: 표의 수치는 **Phase B 빌드 에이전트 수** 기준이다. 하네스는 여기에 계획·통합QA·테스트·리뷰·문서 전문 에이전트를 추가로 조율하므로 총 스폰 수는 이 표를 초과할 수 있다 (모순 아님).
+
+## 배포 전 검증
+게이트 명령의 유일한 정의(SSOT)는 `verification-loop` 스킬이다 — BE(ruff+mypy+pytest)/FE(tsc+lint+vitest run+build) 트랙, 명령·CWD·통과 기준 포함. 배포·커밋 전에는 그 스킬의 Level 2(변경 트랙) 또는 Level 3(PR 전, 두 트랙 전체)를 실행하고 에러 0을 확인한다. 이 문서에 게이트 명령을 복제하지 않는다.
 
 ## Dev Docs 3-파일 시스템
 대규모 작업 시:
