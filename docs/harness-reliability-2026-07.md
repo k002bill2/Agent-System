@@ -41,4 +41,13 @@
 | ⑥ | 스테일 정리 | test-automation-specialist: `model: haiku`→`opus`, Jest→Vitest 잔재 2곳, `.temp/agent_workspaces` 제거, proposals 문구→하네스 용어, Last Updated 갱신. check-health `.claudecode.json`(부재 파일)→실존 파일. aos-workflow 복잡도표에 "하네스 예외(표=Phase B 빌드 에이전트 수)" 명시 | **완료** |
 | ⑦ | duration util 통합 | 전수 6개 조사 → **byte-identical 그룹(CheckCard+WorkflowCheckCard)만** `lib/formatDuration.ts`로 통합(출력 보존). `!seconds→'-'` 0초 버그는 WorkflowRunsTable·InteractiveDAG 2곳에만 실존 — 제자리 수정+Red-Green 회귀 테스트. 나머지 4곳은 출력 상이로 의도적 미통합(표 기록) | **완료(보수적)** |
 | ⑧ | 죽은 `/health` 마운트 | **제거 금지로 판정 변경**: bare 마운트는 `/health` 한 경로만 스텁에 가려질 뿐 `/health/live`·`/health/ready` 등 프로브용 하위 경로를 단독 서빙. → app.py 스텁·마운트 양쪽에 섀도잉 경고 주석 추가(동작 변화 0). 완전 정리는 외부 프로브 의존 감사 후에만 가능 | **완료(주석 명시)** |
-| ⑨ | 커버리지 임계치 상향 | 실측 71.4% vs 60 — 래칫 상향은 사용자 결정 사항 | **보류 (사용자: 유지)** |
+| ⑨ | 커버리지 임계치 상향 | 실측 71.4% vs 60 — 래칫 상향은 사용자 결정 사항 | **완료** (아래 잔여 3건) |
+
+## 5. 잔여 3건 처리 (2026-07-19, 사용자 지시)
+
+| 항목 | 내용 | 결과 |
+|------|------|------|
+| 커버리지 래칫 | `vitest.config.ts` thresholds 60/50/55/60 → **65/60/60/65** (실측 71.5/66.2/67.6/72.7 대비 5~7%p 여유). `test:coverage` 4348 passed·임계치 충족 확인 | 완료 |
+| Codex CLI | `npm i -g @openai/codex` → **0.144.6 설치**, companion status 정상. E-3 배선을 이번 변경 diff에 대한 적대 리뷰 실행으로 end-to-end 실증 | 완료 |
+| `/health` 근본 정리 | **프로브 의존 감사 결과**: helm이 liveness·readiness **둘 다** bare `/health`(항상 200 스텁)를 가리켜 프로브가 무력화 상태였고, Docker HEALTHCHECK류도 동일. 스텁을 그냥 제거하면 liveness가 의존성 검사(rich 핸들러)에 물려 **DB 장애 시 파드 재시작 루프** 위험 → **프로브 분리 먼저**: liveness→`/health/live`(항상 200, `liveness_probe()` 무의존성 확인), readiness/HEALTHCHECK→`/health/ready`(`readiness_probe()`가 실제 의존성 검사·HEALTHY/DEGRADED만 통과 확인). 그 후 app-level 스텁 제거 — bare `/health` = rich 핸들러(status/version/uptime, 200/503)로 `/api/health`와 통일. `railway_mode` 필드는 소비자 0 확인 후 소멸 | 완료 |
+| ↳ Codex E-3 적대 리뷰 반영 | 1차 감사(infra/ grep)가 놓친 소비자를 Codex 교차 조사가 노출 → **루트 `docker-compose.yml`**, **`infra/k8s/base/backend-deployment.yaml`**(helm과 별개 raw 매니페스트, liveness·readiness 둘 다 /health), **`src/backend/Dockerfile.full`** 추가 수정. **`src/backend/railway.toml`(healthcheckPath=/health)은 의도적 무변경** — railway는 `Dockerfile`→`app_railway:app`(별도 경량 앱, 자체 항상-200 `/health` 보유·`/health/ready` 없음)를 서빙하므로 변경 시 404로 파손. helm test-connection(wget /health)·docs 예시(curl -f /health)는 rich 200 응답과 호환(무변경) | 완료 |

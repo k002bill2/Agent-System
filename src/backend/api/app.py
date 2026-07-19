@@ -482,15 +482,11 @@ else:
 
             app.add_middleware(RequestLoggingMiddleware)
 
-        # Health check endpoint (always available).
-        # NOTE(shadowing): this stub is registered BEFORE the health_router mounts
-        # below, so the exact path GET /health always resolves here (no version/
-        # uptime, always 200) and NEVER reaches health.py's rich handler. Clients
-        # needing status/version/uptime must call GET /api/health. Do not "fix"
-        # by removing either side without auditing external probes first.
-        @app.get("/health")
-        async def health_check():
-            return {"status": "healthy", "railway_mode": False}
+        # NOTE(2026-07): the always-200 /health stub that used to live here was
+        # removed after a probe-dependency audit. GET /health now resolves to
+        # api/health.py's rich handler (status/version/uptime, 200/503) via the
+        # bare router mount below. Probes were migrated off it first:
+        # k8s liveness -> /health/live, readiness/Docker HEALTHCHECK -> /health/ready.
 
         # Root endpoint
         @app.get("/")
@@ -560,11 +556,10 @@ else:
         if cost_allocation_router:
             app.include_router(cost_allocation_router, prefix="/api")
         if health_router:
-            # Bare mount: GET /health itself is shadowed by the stub above, but
-            # the sub-routes (/health/live, /health/ready, /health/detailed, ...)
-            # are served ONLY through this mount — external probes may depend on
-            # them, so keep it. The /api mount serves the same routes for the
-            # dashboard (vite proxy covers /api only).
+            # Bare mount serves /health and its sub-routes (/health/live,
+            # /health/ready, /health/detailed, ...) for external probes; the
+            # /api mount serves the same routes for the dashboard (vite proxy
+            # covers /api only). Keep both.
             app.include_router(health_router)
             app.include_router(health_router, prefix="/api")
         if git_router:

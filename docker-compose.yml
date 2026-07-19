@@ -79,7 +79,8 @@ services:
     networks:
       - aos-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      # readiness 시맨틱 — 핵심 의존성 검사 (unready 시 unhealthy, 의존 서비스 게이팅)
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/ready"]
       interval: 30s
       timeout: 10s
       retries: 3
