@@ -55,6 +55,7 @@ import {
 import { useAuthStore } from '../stores/auth'
 import { ProjectMultiSelect } from '../components/analytics/ProjectMultiSelect'
 import type { TaskAnalysisHistory } from '../stores/agents'
+import { getApiUrl } from '@/config/api'
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -202,8 +203,6 @@ interface TaskEvaluation {
 // Constants
 // ─────────────────────────────────────────────────────────────
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api'
-
 const TIME_RANGES: { label: string; value: TimeRange }[] = [
   { label: '1 Hour', value: '1h' },
   { label: '24 Hours', value: '24h' },
@@ -253,7 +252,7 @@ const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 async function fetchDashboard(timeRange: TimeRange, projectId?: string): Promise<AnalyticsDashboard> {
   const params = new URLSearchParams({ time_range: timeRange })
   if (projectId) params.append('project_id', projectId)
-  const res = await fetch(`${API_BASE}/analytics/dashboard?${params}`)
+  const res = await fetch(getApiUrl(`/api/analytics/dashboard?${params}`))
   if (!res.ok) throw new Error('Failed to fetch analytics')
   return res.json()
 }
@@ -262,7 +261,7 @@ async function fetchTaskEvalStats(projectId?: string): Promise<TaskEvalStats> {
   const params = new URLSearchParams()
   if (projectId) params.set('project_id', projectId)
   const qs = params.toString()
-  const res = await fetch(`${API_BASE}/feedback/task-evaluation/stats${qs ? `?${qs}` : ''}`)
+  const res = await fetch(getApiUrl(`/api/feedback/task-evaluation/stats${qs ? `?${qs}` : ''}`))
   if (!res.ok) throw new Error('Failed to fetch evaluation stats')
   return res.json()
 }
@@ -275,14 +274,14 @@ async function fetchTaskEvalList(
   const params = new URLSearchParams({ limit: String(limit) })
   if (agentId) params.set('agent_id', agentId)
   if (projectId) params.set('project_id', projectId)
-  const res = await fetch(`${API_BASE}/feedback/task-evaluation/list?${params}`)
+  const res = await fetch(getApiUrl(`/api/feedback/task-evaluation/list?${params}`))
   if (!res.ok) throw new Error('Failed to fetch evaluation list')
   return res.json()
 }
 
 async function fetchAnalysisDetail(analysisId: string): Promise<TaskAnalysisHistory | null> {
   try {
-    const res = await fetch(`${API_BASE}/agents/orchestrate/analyses/${analysisId}`)
+    const res = await fetch(getApiUrl(`/api/agents/orchestrate/analyses/${analysisId}`))
     if (!res.ok) return null
     return res.json()
   } catch {
@@ -311,7 +310,7 @@ async function fetchMultiProjectTrends(
 ): Promise<MultiProjectTrendsResponse> {
   const params = new URLSearchParams({ metric, time_range: timeRange })
   projectIds.forEach((id) => params.append('project_ids', id))
-  const res = await fetch(`${API_BASE}/analytics/trends/compare?${params}`)
+  const res = await fetch(getApiUrl(`/api/analytics/trends/compare?${params}`))
   if (!res.ok) throw new Error('Failed to fetch multi-project trends')
   return res.json()
 }

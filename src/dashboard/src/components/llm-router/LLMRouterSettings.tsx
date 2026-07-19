@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react'
 import { cn } from '../../lib/utils'
+import { getApiUrl } from '@/config/api'
 import {
   Server,
   Plus,
@@ -85,22 +86,20 @@ interface RouterStats {
 // API Functions
 // ─────────────────────────────────────────────────────────────
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api'
-
 async function fetchProviders(): Promise<LLMProvider[]> {
-  const res = await fetch(`${API_BASE}/llm-router/providers`)
+  const res = await fetch(getApiUrl('/api/llm-router/providers'))
   if (!res.ok) throw new Error('Failed to fetch providers')
   return res.json()
 }
 
 async function fetchRouterConfig(): Promise<RouterConfig> {
-  const res = await fetch(`${API_BASE}/llm-router/config`)
+  const res = await fetch(getApiUrl('/api/llm-router/config'))
   if (!res.ok) throw new Error('Failed to fetch config')
   return res.json()
 }
 
 async function updateRouterConfig(config: Partial<RouterConfig>): Promise<RouterConfig> {
-  const res = await fetch(`${API_BASE}/llm-router/config`, {
+  const res = await fetch(getApiUrl('/api/llm-router/config'), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
@@ -110,19 +109,19 @@ async function updateRouterConfig(config: Partial<RouterConfig>): Promise<Router
 }
 
 async function checkHealth(): Promise<HealthCheck[]> {
-  const res = await fetch(`${API_BASE}/llm-router/health`)
+  const res = await fetch(getApiUrl('/api/llm-router/health'))
   if (!res.ok) throw new Error('Failed to check health')
   return res.json()
 }
 
 async function fetchStats(): Promise<RouterStats> {
-  const res = await fetch(`${API_BASE}/llm-router/stats`)
+  const res = await fetch(getApiUrl('/api/llm-router/stats'))
   if (!res.ok) throw new Error('Failed to fetch stats')
   return res.json()
 }
 
 async function toggleProvider(providerId: string): Promise<{ enabled: boolean }> {
-  const res = await fetch(`${API_BASE}/llm-router/providers/${providerId}/toggle`, {
+  const res = await fetch(getApiUrl(`/api/llm-router/providers/${providerId}/toggle`), {
     method: 'POST',
   })
   if (!res.ok) throw new Error('Failed to toggle provider')
@@ -130,14 +129,14 @@ async function toggleProvider(providerId: string): Promise<{ enabled: boolean }>
 }
 
 async function deleteProvider(providerId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/llm-router/providers/${providerId}`, {
+  const res = await fetch(getApiUrl(`/api/llm-router/providers/${providerId}`), {
     method: 'DELETE',
   })
   if (!res.ok) throw new Error('Failed to delete provider')
 }
 
 async function initializeProviders(): Promise<void> {
-  const res = await fetch(`${API_BASE}/llm-router/initialize`, {
+  const res = await fetch(getApiUrl('/api/llm-router/initialize'), {
     method: 'POST',
   })
   if (!res.ok) throw new Error('Failed to initialize providers')

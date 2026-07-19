@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, Lock, X, Shield, ShieldAlert } from 'lucide-react'
 import { useAuthStore, authFetch } from '../../stores/auth'
+import { getApiUrl } from '@/config/api'
 
 interface Secret {
   id: string
@@ -15,8 +16,6 @@ interface Secret {
 interface SecretsManagerProps {
   onClose?: () => void
 }
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
 export function SecretsManager({ onClose }: SecretsManagerProps) {
   const user = useAuthStore((s) => s.user)
@@ -41,7 +40,7 @@ export function SecretsManager({ onClose }: SecretsManagerProps) {
   const fetchSecrets = async () => {
     setIsLoading(true)
     try {
-      const res = await authFetch(`${API_BASE}/secrets`)
+      const res = await authFetch(getApiUrl('/api/secrets'))
       if (res.ok) {
         const data = await res.json()
         setSecrets(data.secrets || [])
@@ -56,7 +55,7 @@ export function SecretsManager({ onClose }: SecretsManagerProps) {
     if (!newName.trim() || !newValue.trim()) return
     setError(null)
     try {
-      const res = await authFetch(`${API_BASE}/secrets`, {
+      const res = await authFetch(getApiUrl('/api/secrets'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName, value: newValue, scope: newScope }),
@@ -77,7 +76,7 @@ export function SecretsManager({ onClose }: SecretsManagerProps) {
 
   const handleDelete = async (id: string) => {
     try {
-      const res = await authFetch(`${API_BASE}/secrets/${id}`, { method: 'DELETE' })
+      const res = await authFetch(getApiUrl(`/api/secrets/${id}`), { method: 'DELETE' })
       if (res.ok) {
         setSecrets(prev => prev.filter(s => s.id !== id))
       }

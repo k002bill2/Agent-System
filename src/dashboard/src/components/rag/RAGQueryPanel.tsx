@@ -20,8 +20,7 @@ import {
   Info,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
-
-const API_BASE = import.meta.env.VITE_API_URL || ''
+import { getApiUrl } from '@/config/api'
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -64,7 +63,7 @@ async function queryRAG(
   k: number = 5,
   filterPriority?: string
 ): Promise<QueryResult> {
-  const res = await fetch(`${API_BASE}/api/rag/projects/${projectId}/query`, {
+  const res = await fetch(getApiUrl(`/api/rag/projects/${projectId}/query`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -81,7 +80,7 @@ async function queryRAG(
 }
 
 async function getRAGStats(projectId: string): Promise<RAGStats> {
-  const res = await fetch(`${API_BASE}/api/rag/projects/${projectId}/stats`)
+  const res = await fetch(getApiUrl(`/api/rag/projects/${projectId}/stats`))
   if (!res.ok) {
     const error = await res.json()
     throw new Error(error.detail || 'Failed to get stats')
@@ -90,7 +89,7 @@ async function getRAGStats(projectId: string): Promise<RAGStats> {
 }
 
 async function deleteRAGIndex(projectId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/rag/projects/${projectId}/index`, {
+  const res = await fetch(getApiUrl(`/api/rag/projects/${projectId}/index`), {
     method: 'DELETE',
   })
   if (!res.ok) {
@@ -100,7 +99,7 @@ async function deleteRAGIndex(projectId: string): Promise<void> {
 }
 
 async function reindexProject(projectId: string, forceReindex: boolean = true): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/rag/projects/${projectId}/index`, {
+  const res = await fetch(getApiUrl(`/api/rag/projects/${projectId}/index`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ force_reindex: forceReindex }),

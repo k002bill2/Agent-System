@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { useProjectsStore } from '../../stores/projects'
 import { useWorkflowStore } from '../../stores/workflows'
+import { getApiUrl } from '@/config/api'
 
 export interface Template {
   id: string
@@ -50,8 +51,6 @@ const ICON_MAP: Record<string, LucideIcon> = {
   'git-branch': GitBranch,
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api'
-
 export function TemplateGallery({ onSelect, onClose }: TemplateGalleryProps) {
   const [templates, setTemplates] = useState<Template[]>([])
   const [search, setSearch] = useState('')
@@ -79,7 +78,7 @@ export function TemplateGallery({ onSelect, onClose }: TemplateGalleryProps) {
       const params = new URLSearchParams()
       if (category) params.set('category', category)
       if (search) params.set('search', search)
-      const res = await fetch(`${API_BASE}/workflows/templates?${params}`)
+      const res = await fetch(getApiUrl(`/api/workflows/templates?${params}`))
       if (res.ok) {
         const data = await res.json()
         setTemplates(data.templates || [])

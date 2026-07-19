@@ -12,6 +12,7 @@ import { useMenuVisibilityStore } from './stores/menuVisibility'
 import { useSettingsStore } from './stores/settings'
 import { routes } from './routes'
 import { analytics } from './services/analytics'
+import { getApiUrl } from '@/config/api'
 import {
   SidebarSkeleton,
   DashboardSkeleton,
@@ -103,8 +104,7 @@ export default function App() {
   useEffect(() => {
     const checkAuthStatus = async () => {
       try {
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
-        const response = await fetch(`${API_BASE_URL}/auth/status`)
+        const response = await fetch(getApiUrl('/api/auth/status'))
         if (response.ok) {
           const data = await response.json()
           setAuthStatus(data)

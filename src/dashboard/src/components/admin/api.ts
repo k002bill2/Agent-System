@@ -1,6 +1,6 @@
 import { authFetch } from '../../stores/auth'
 import type { AdminUser, MenuVisibility, SystemInfo, UserListResponse } from './types'
-import { API_BASE } from './types'
+import { getApiUrl } from '@/config/api'
 
 export async function fetchUsers(params: {
   search?: string
@@ -21,7 +21,7 @@ export async function fetchUsers(params: {
   query.append('limit', String(params.limit))
   query.append('offset', String(params.offset))
 
-  const res = await authFetch(`${API_BASE}/admin/users?${query}`)
+  const res = await authFetch(getApiUrl(`/api/admin/users?${query}`))
   if (!res.ok) throw new Error(`Failed to fetch users: ${res.statusText}`)
   return res.json()
 }
@@ -30,7 +30,7 @@ export async function updateUser(
   userId: string,
   update: { is_active?: boolean; is_admin?: boolean; role?: string; name?: string }
 ): Promise<AdminUser> {
-  const res = await authFetch(`${API_BASE}/admin/users/${userId}`, {
+  const res = await authFetch(getApiUrl(`/api/admin/users/${userId}`), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(update),
@@ -43,7 +43,7 @@ export async function updateUser(
 }
 
 export async function deleteUser(userId: string): Promise<void> {
-  const res = await authFetch(`${API_BASE}/admin/users/${userId}`, {
+  const res = await authFetch(getApiUrl(`/api/admin/users/${userId}`), {
     method: 'DELETE',
   })
   if (!res.ok) {
@@ -53,7 +53,7 @@ export async function deleteUser(userId: string): Promise<void> {
 }
 
 export async function fetchSystemInfo(): Promise<SystemInfo> {
-  const res = await authFetch(`${API_BASE}/admin/system-info`)
+  const res = await authFetch(getApiUrl('/api/admin/system-info'))
   if (!res.ok) throw new Error(`Failed to fetch system info: ${res.statusText}`)
   return res.json()
 }
@@ -64,7 +64,7 @@ export interface MenuVisibilityData {
 }
 
 export async function fetchMenuVisibilityData(): Promise<MenuVisibilityData> {
-  const res = await authFetch(`${API_BASE}/admin/menu-visibility`)
+  const res = await authFetch(getApiUrl('/api/admin/menu-visibility'))
   if (!res.ok) throw new Error(`Failed to fetch menu visibility: ${res.statusText}`)
   return res.json()
 }
@@ -78,7 +78,7 @@ export async function saveMenuVisibility(
   visibility: MenuVisibility,
   menuOrder?: string[],
 ): Promise<MenuVisibilityData> {
-  const res = await authFetch(`${API_BASE}/admin/menu-visibility`, {
+  const res = await authFetch(getApiUrl('/api/admin/menu-visibility'), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ visibility, menu_order: menuOrder }),
@@ -93,13 +93,13 @@ export interface ExternalSourcePathsResponse {
 }
 
 export async function fetchExternalSourcePaths(): Promise<ExternalSourcePathsResponse> {
-  const res = await authFetch(`${API_BASE}/claude-sessions/external-paths`)
+  const res = await authFetch(getApiUrl('/api/claude-sessions/external-paths'))
   if (!res.ok) throw new Error(`Failed to fetch external paths: ${res.statusText}`)
   return res.json()
 }
 
 export async function addExternalSourcePath(path: string): Promise<ExternalSourcePathsResponse> {
-  const res = await authFetch(`${API_BASE}/claude-sessions/external-paths`, {
+  const res = await authFetch(getApiUrl('/api/claude-sessions/external-paths'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path }),
@@ -113,7 +113,7 @@ export async function addExternalSourcePath(path: string): Promise<ExternalSourc
 
 export async function removeExternalSourcePath(path: string): Promise<ExternalSourcePathsResponse> {
   const encoded = encodeURIComponent(path)
-  const res = await authFetch(`${API_BASE}/claude-sessions/external-paths/${encoded}`, {
+  const res = await authFetch(getApiUrl(`/api/claude-sessions/external-paths/${encoded}`), {
     method: 'DELETE',
   })
   if (!res.ok) {

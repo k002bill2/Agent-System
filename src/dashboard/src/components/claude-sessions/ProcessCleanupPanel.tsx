@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { getApiUrl } from '@/config/api'
 
 interface ProcessInfo {
   pid: number
@@ -28,8 +29,6 @@ interface ProcessKillResponse {
   message: string
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
 export function ProcessCleanupPanel() {
   const [processes, setProcesses] = useState<ProcessInfo[]>([])
   const [totalCount, setTotalCount] = useState(0)
@@ -43,7 +42,7 @@ export function ProcessCleanupPanel() {
   const fetchProcesses = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/api/claude-sessions/processes`)
+      const res = await fetch(getApiUrl('/api/claude-sessions/processes'))
       if (!res.ok) throw new Error('Failed to fetch processes')
       const data: ProcessListResponse = await res.json()
       setProcesses(data.processes)
@@ -65,7 +64,7 @@ export function ProcessCleanupPanel() {
     setCleaning(true)
     setMessage(null)
     try {
-      const res = await fetch(`${API_BASE}/api/claude-sessions/processes/cleanup-stale`, {
+      const res = await fetch(getApiUrl('/api/claude-sessions/processes/cleanup-stale'), {
         method: 'POST',
       })
       if (!res.ok) throw new Error('Cleanup failed')
@@ -88,7 +87,7 @@ export function ProcessCleanupPanel() {
     setMessage(null)
     try {
       const res = await fetch(
-        `${API_BASE}/api/claude-sessions/processes/cleanup-stale?include_foreground=true`,
+        getApiUrl('/api/claude-sessions/processes/cleanup-stale?include_foreground=true'),
         { method: 'POST' },
       )
       if (!res.ok) throw new Error('Kill all failed')
@@ -112,7 +111,7 @@ export function ProcessCleanupPanel() {
     setCleaning(true)
     setMessage(null)
     try {
-      const res = await fetch(`${API_BASE}/api/claude-sessions/processes/kill`, {
+      const res = await fetch(getApiUrl('/api/claude-sessions/processes/kill'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pids: Array.from(selectedPids) }),

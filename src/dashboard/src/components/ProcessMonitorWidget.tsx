@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Cpu, Trash2, RefreshCw } from 'lucide-react'
+import { getApiUrl } from '@/config/api'
 
 interface ProcessInfo {
   pid: number
@@ -18,8 +19,6 @@ interface ProcessListResponse {
   background_count: number
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
 export function ProcessMonitorWidget() {
   const [processes, setProcesses] = useState<ProcessInfo[]>([])
   const [totalCount, setTotalCount] = useState(0)
@@ -31,7 +30,7 @@ export function ProcessMonitorWidget() {
   const fetchProcesses = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/api/claude-sessions/processes`)
+      const res = await fetch(getApiUrl('/api/claude-sessions/processes'))
       if (!res.ok) return
       const data: ProcessListResponse = await res.json()
       setProcesses(data.processes)
@@ -56,8 +55,8 @@ export function ProcessMonitorWidget() {
     setCleaning(true)
     try {
       const url = includeAll
-        ? `${API_BASE}/api/claude-sessions/processes/cleanup-stale?include_foreground=true`
-        : `${API_BASE}/api/claude-sessions/processes/cleanup-stale`
+        ? getApiUrl('/api/claude-sessions/processes/cleanup-stale?include_foreground=true')
+        : getApiUrl('/api/claude-sessions/processes/cleanup-stale')
       const res = await fetch(url, { method: 'POST' })
       if (res.ok) {
         await fetchProcesses()
