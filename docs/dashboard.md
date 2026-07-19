@@ -625,7 +625,8 @@ src/dashboard/
 │   │   ├── utils.ts            # cn() 등 헬퍼 함수
 │   │   ├── cookieStorage.ts    # 쿠키 기반 스토리지
 │   │   ├── fileAttachment.ts   # 파일 첨부 유틸리티
-│   │   └── formatUptime.ts     # uptime 초 → 사람이 읽는 문자열 (2d 3h / 3h 42m / 42m / 45s / —)
+│   │   ├── formatUptime.ts     # uptime 초 → 사람이 읽는 문자열 (2d 3h / 3h 42m / 42m / 45s / —)
+│   │   └── formatDuration.ts   # duration ms → 문자열 (500ms / 3.5s), 모니터 카드 공용 (null→숨김)
 │   ├── utils/                  # 도메인 유틸리티
 │   │   ├── diffParser.ts       # diff 파싱
 │   │   ├── gitErrorMessages.ts # Git 에러 메시지 매핑

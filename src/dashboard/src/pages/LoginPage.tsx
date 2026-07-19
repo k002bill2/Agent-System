@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getGoogleAuthUrl, getGitHubAuthUrl, loginWithEmail, useAuthStore } from '../stores/auth'
 import { useNavigationStore } from '../stores/navigation'
+import { getApiUrl } from '@/config/api'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
@@ -21,8 +22,7 @@ export function LoginPage() {
   useEffect(() => {
     const fetchAuthStatus = async () => {
       try {
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
-        const response = await fetch(`${API_BASE_URL}/auth/status`)
+        const response = await fetch(getApiUrl('/api/auth/status'))
         if (response.ok) {
           setAuthStatus(await response.json())
         }

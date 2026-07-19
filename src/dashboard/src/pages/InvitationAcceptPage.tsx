@@ -4,8 +4,7 @@ import { useOrganizationsStore } from '../stores/organizations'
 import { useProjectAccessStore } from '../stores/projectAccess'
 import { useAuthStore } from '../stores/auth'
 import { useNavigationStore } from '../stores/navigation'
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { getApiUrl } from '@/config/api'
 
 interface ProjectInvitationPreview {
   project_id: string
@@ -53,7 +52,7 @@ export function InvitationAcceptPage() {
 
     if (isProjectInvitation) {
       // Fetch project invitation preview
-      fetch(`${API_BASE}/api/invitations/${token}`)
+      fetch(getApiUrl(`/api/invitations/${token}`))
         .then((r) => r.json())
         .then((data: ProjectInvitationPreview) => {
           if (!data.valid) {

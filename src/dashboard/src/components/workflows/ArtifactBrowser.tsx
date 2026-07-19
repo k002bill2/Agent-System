@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react'
 import { File, Download, Trash2, FileText, Image, Archive, RefreshCw } from 'lucide-react'
 import type { Artifact } from '../../types/workflow'
+import { getApiUrl } from '@/config/api'
 
 interface ArtifactBrowserProps {
   runId: string
 }
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -33,7 +32,7 @@ export function ArtifactBrowser({ runId }: ArtifactBrowserProps) {
   const fetchArtifacts = async () => {
     setIsLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/workflows/runs/${runId}/artifacts`)
+      const res = await fetch(getApiUrl(`/api/workflows/runs/${runId}/artifacts`))
       if (res.ok) {
         const data = await res.json()
         setArtifacts(data.artifacts || [])
@@ -46,7 +45,7 @@ export function ArtifactBrowser({ runId }: ArtifactBrowserProps) {
 
   const handleDelete = async (artifactId: string) => {
     try {
-      const res = await fetch(`${API_BASE}/workflows/artifacts/${artifactId}`, { method: 'DELETE' })
+      const res = await fetch(getApiUrl(`/api/workflows/artifacts/${artifactId}`), { method: 'DELETE' })
       if (res.ok) {
         setArtifacts(prev => prev.filter(a => a.id !== artifactId))
       }
@@ -97,7 +96,7 @@ export function ArtifactBrowser({ runId }: ArtifactBrowserProps) {
                 </div>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <a
-                    href={`${API_BASE}/workflows/artifacts/${artifact.id}/download`}
+                    href={getApiUrl(`/api/workflows/artifacts/${artifact.id}/download`)}
                     className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded"
                     title="Download"
                   >

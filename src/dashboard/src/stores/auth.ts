@@ -6,11 +6,7 @@ import {
   clearAllAuthStorage,
 } from '../lib/cookieStorage'
 import { analytics } from '../services/analytics'
-
-// Empty fallback = relative paths (/api/...), proxied by nginx (prod) or Vite (dev).
-// A hardcoded host breaks remote self-host: the browser would hit ITS OWN localhost.
-// Matches the canonical pattern in config/api.ts. Set VITE_API_URL to override.
-const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+import { getApiUrl } from '@/config/api'
 
 // ─────────────────────────────────────────────────────────────
 // Constants
@@ -126,7 +122,7 @@ export const useAuthStore = create<AuthState>()(
         }
 
         try {
-          const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+          const response = await fetch(getApiUrl('/api/auth/refresh'), {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -174,7 +170,7 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null })
 
         try {
-          const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+          const response = await fetch(getApiUrl('/api/auth/me'), {
             headers: {
               Authorization: `Bearer ${get().accessToken}`,
             },
@@ -307,14 +303,14 @@ export async function authFetch(
  * Get Google OAuth redirect URL
  */
 export function getGoogleAuthUrl(): string {
-  return `${API_BASE_URL}/api/auth/google`
+  return getApiUrl('/api/auth/google')
 }
 
 /**
  * Get GitHub OAuth redirect URL
  */
 export function getGitHubAuthUrl(): string {
-  return `${API_BASE_URL}/api/auth/github`
+  return getApiUrl('/api/auth/github')
 }
 
 /**
@@ -325,7 +321,7 @@ export async function exchangeOAuthCode(
   code: string,
   redirectUri: string
 ): Promise<{ user: User; accessToken: string; refreshToken: string; expiresIn: number }> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/${provider}/callback`, {
+  const response = await fetch(getApiUrl(`/api/auth/${provider}/callback`), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -362,7 +358,7 @@ export async function registerWithEmail(
   password: string,
   name?: string
 ): Promise<{ user: User; accessToken: string; refreshToken: string; expiresIn: number }> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+  const response = await fetch(getApiUrl('/api/auth/register'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -391,7 +387,7 @@ export async function loginWithEmail(
   email: string,
   password: string
 ): Promise<{ user: User; accessToken: string; refreshToken: string; expiresIn: number }> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+  const response = await fetch(getApiUrl('/api/auth/login'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

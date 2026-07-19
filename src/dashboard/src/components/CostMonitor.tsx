@@ -7,8 +7,7 @@ import {
   identifyProvider,
 } from '../stores/orchestration'
 import { useExternalUsageStore } from '../stores/externalUsage'
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api'
+import { getApiUrl } from '@/config/api'
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -162,13 +161,13 @@ function groupByProvider(byModel: CostBreakdown[]): Record<string, ProviderUsage
 }
 
 async function fetchCostAnalytics(): Promise<CostAnalytics> {
-  const res = await fetch(`${API_BASE}/analytics/costs?time_range=all`)
+  const res = await fetch(getApiUrl('/api/analytics/costs?time_range=all'))
   if (!res.ok) throw new Error('Failed to fetch cost analytics')
   return res.json()
 }
 
 async function fetchClaudeUsage(): Promise<ClaudeUsageSnapshot> {
-  const res = await fetch(`${API_BASE}/usage`)
+  const res = await fetch(getApiUrl('/api/usage'))
   if (!res.ok) throw new Error('Failed to fetch Claude Code usage')
   return res.json()
 }

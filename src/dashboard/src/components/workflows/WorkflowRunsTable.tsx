@@ -12,7 +12,7 @@ const statusConfig: Record<string, { icon: React.ReactNode; color: string }> = {
 }
 
 function formatDuration(seconds: number | undefined | null): string {
-  if (!seconds) return '-'
+  if (seconds == null || !Number.isFinite(seconds)) return '-'
   if (seconds < 60) return `${Math.round(seconds)}s`
   const m = Math.floor(seconds / 60)
   const s = Math.round(seconds % 60)

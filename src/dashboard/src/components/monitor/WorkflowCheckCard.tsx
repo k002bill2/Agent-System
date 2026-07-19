@@ -8,6 +8,7 @@ import {
   Workflow,
 } from 'lucide-react'
 import { WorkflowCheck } from '../../types/monitoring'
+import { formatDurationMs } from '../../lib/formatDuration'
 
 interface WorkflowCheckCardProps {
   workflow: WorkflowCheck
@@ -65,13 +66,10 @@ export function WorkflowCheckCard({
     }
   }
 
-  const formatDuration = (seconds: number | null) => {
-    if (seconds === null) return null
-    if (seconds < 1) return `${Math.round(seconds * 1000)}ms`
-    return `${seconds.toFixed(1)}s`
-  }
-
-  const duration = formatDuration(workflow.lastRunDuration)
+  const duration =
+    workflow.lastRunDuration === null
+      ? null
+      : formatDurationMs(workflow.lastRunDuration * 1000)
 
   return (
     <div

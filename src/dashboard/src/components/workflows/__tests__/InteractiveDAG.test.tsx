@@ -76,6 +76,23 @@ describe('InteractiveDAG', () => {
     expect(screen.getByText('1m 30s')).toBeInTheDocument()
   })
 
+  it('shows 0.0s (not dash) for a zero-second job duration', () => {
+    const zeroJob: WorkflowJob[] = [
+      {
+        id: 'jz',
+        run_id: 'r1',
+        name: 'instant',
+        status: 'success',
+        runner: 'local',
+        needs: [],
+        duration_seconds: 0,
+        steps: [],
+      },
+    ]
+    render(<InteractiveDAG jobs={zeroJob} />)
+    expect(screen.getByText('0.0s')).toBeInTheDocument()
+  })
+
   it('expands job node to show steps on click', () => {
     render(<InteractiveDAG jobs={mockJobs} />)
     // Click the build job button to expand

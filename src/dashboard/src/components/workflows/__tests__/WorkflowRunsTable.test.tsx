@@ -96,6 +96,13 @@ describe('WorkflowRunsTable', () => {
     expect(screen.getAllByText('-').length).toBeGreaterThanOrEqual(1)
   })
 
+  it('shows 0s (not dash) for a zero-second duration', () => {
+    const zeroRun: WorkflowRun[] = [{ ...mockRuns[0], id: 'r0', duration_seconds: 0 }]
+    render(<WorkflowRunsTable runs={zeroRun} />)
+    expect(screen.getByText('0s')).toBeInTheDocument()
+    expect(screen.queryByText('-')).not.toBeInTheDocument()
+  })
+
   it('formats cost with 4 decimal places', () => {
     render(<WorkflowRunsTable runs={mockRuns} />)
     expect(screen.getByText('$0.0125')).toBeInTheDocument()
