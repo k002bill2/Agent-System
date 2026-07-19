@@ -39,7 +39,8 @@ spec:
               memory: 1Gi
           livenessProbe:
             httpGet:
-              path: /health
+              # 프로세스 생존만 확인 (의존성 미검사) — DB 장애 시 재시작 루프 방지
+              path: /health/live
               port: 8000
             initialDelaySeconds: 30
             periodSeconds: 10
@@ -47,7 +48,8 @@ spec:
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /health
+              # 트래픽 수용 가능 여부 (핵심 의존성 검사)
+              path: /health/ready
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 5

@@ -38,9 +38,9 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE $PORT
 
-# Health check
+# Health check — readiness 시맨틱 (핵심 의존성 검사, unready 시 unhealthy)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:8000/health/ready || exit 1
 
 # Run the application
 CMD ["uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000"]
