@@ -92,6 +92,9 @@ eval 시스템 상세는 [references/eval-guide.md](references/eval-guide.md) �
 - **성공률**: 66.7%
 ```
 
+> **Deterministic veto**: 결정론적 게이트(`tests_pass`/`type_check`/`lint`)가 하나라도 fail이면
+> 가중 점수와 무관하게 해당 run은 **FAIL(veto)**로 확정된다(veto된 run은 pass@k에서 fail로 집계).
+
 ## Batch Evaluation Output
 
 ```markdown

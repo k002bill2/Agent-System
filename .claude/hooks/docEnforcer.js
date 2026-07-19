@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 // docEnforcer.js — 조건부 필수 문서 참조 강제
 // UserPromptSubmit 훅: 프롬프트 키워드 감지 → 필수 Read 지시 주입
+//
+// 등록: .claude/hooks.json 전용(백엔드 대시보드 표시용) — Claude Code 세션에서는 미발효.
+//       CC 발효는 .claude/settings.json 등록 필요 (ADR-017 참조).
 
 const fs = require('fs');
 

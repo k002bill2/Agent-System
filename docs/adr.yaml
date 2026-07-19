@@ -495,3 +495,41 @@ decisions:
         - "파일 관리 오버헤드"
         - "팀원이 Dev Docs 업데이트를 잊을 수 있음"
     tags: [workflow, context-management, dev-docs, claude-code]
+
+  # ---------------------------------------------------------------------------
+  # ADR-017: 훅 이중 런타임 구분 (hooks.json vs settings.json)
+  # ---------------------------------------------------------------------------
+  - id: ADR-017
+    title: "훅 이중 런타임 구분: hooks.json(백엔드 레지스트리) vs settings.json(Claude Code 실행)"
+    status: accepted
+    date: "2026-07"
+    context: |
+      ADR-013은 ".claude/settings.json 내의 hooks 섹션(= hooks.json)"이라는
+      표기로 두 파일을 동일시했으나, 2026-07 감사에서 실제 런타임이 서로
+      다름이 확인되었다. Claude Code는 .claude/settings.json /
+      settings.local.json의 hooks만 실행하고 .claude/hooks.json은 읽지 않는다.
+      hooks.json은 AOS 백엔드가 대시보드 표시·편집용으로 소비하는 레지스트리다.
+      따라서 hooks.json에만 등록된 가드(hardGateGuard, tddGuard, skillGateGuard,
+      verificationGuard, docEnforcer, ethicalValidator, componentPatternChecker)는
+      Claude Code 세션에서 전부 미발효였다.
+    decision: |
+      두 파일의 런타임 역할을 명시적으로 분리한다.
+      - .claude/hooks.json = 백엔드 대시보드 훅 레지스트리의 SSOT
+        (ADR-013의 실질 범위, 백엔드가 읽고 재작성한다).
+      - Claude Code 실행 훅 = .claude/settings.json / settings.local.json이
+        유일한 발효 표면.
+      2026-07-20부로 verificationGuard를 settings.json의
+      PostToolUse(Edit|Write)에 등록해 발효시킨다. 나머지 가드
+      (hardGateGuard·tddGuard·skillGateGuard·docEnforcer·ethicalValidator·
+      componentPatternChecker)는 hooks.json 전용(미발효)으로 유지한다 —
+      활성화하려면 알려진 결함(cooldown 우회, /tmp 세션 공유)을 먼저 수리한
+      뒤 settings.json에 등록해야 한다.
+    consequences:
+      positive:
+        - "두 파일의 런타임 역할 혼동 제거"
+        - "실제 발효되는 훅 표면이 settings.json으로 명확해짐"
+        - "verificationGuard 발효로 편집 시 경량 검증 차단 시맨틱 확보"
+      negative:
+        - "가드별 등록 위치를 이원 관리해야 함"
+        - "미발효 가드 활성화에 결함 수리 선행 필요"
+    tags: [hooks, configuration, runtime, claude-code, ssot]

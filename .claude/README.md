@@ -10,9 +10,9 @@ Claude Code configuration for AOS (Agent Orchestration Service) Dashboard.
 ├── agents/           # 13개 서브 에이전트
 │   └── shared/       # 공유 프레임워크 (Quality Gates 등)
 ├── commands/         # 18개 슬래시 명령어
-├── hooks/            # 훅 스크립트 (ethicalValidator·verificationGuard 등 — learnings 훅은 2026-07 감사로 제거)
+├── hooks/            # 훅 스크립트 — CC 발효는 settings.json 등록분(현재 verificationGuard)만, 나머지는 백엔드 표시용 (ADR-017; learnings 훅은 2026-07 감사로 제거)
 ├── evals/            # 평가 시스템 (17 tasks, 6 rubrics)
-├── hooks.json        # 훅 설정 (security·path protection·verification·notification)
+├── hooks.json        # 백엔드 대시보드 훅 레지스트리(표시·편집용) — CC 미실행, CC 발효 훅은 settings.json (ADR-017)
 ├── settings.json     # 로컬 설정
 └── mcp.json          # MCP 서버 설정
 ```
@@ -79,7 +79,7 @@ Claude Code configuration for AOS (Agent Orchestration Service) Dashboard.
 |-------|-------|-----------|
 | `web-ui-specialist` | inherit | React Web UI/UX (Tailwind CSS) |
 | `backend-integration-specialist` | inherit | FastAPI, SQLAlchemy, LangGraph |
-| `test-automation-specialist` | haiku | 테스트 자동화 |
+| `test-automation-specialist` | opus | 테스트 자동화 |
 | `eval-grader` | inherit | 평가 채점 (코드 검사 + LLM 루브릭) |
 | `eval-task-runner` | inherit | 평가 실행 및 pass@k 계산 |
 | `architect` | opus | 시스템 설계·확장성·기술 결정 |

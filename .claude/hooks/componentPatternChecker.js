@@ -14,6 +14,9 @@
  * @version 1.0.0
  * @hook-config
  * {"event": "PostToolUse", "matcher": "Write|Edit", "command": "node .claude/hooks/componentPatternChecker.js", "timeout": 5}
+ *
+ * 등록: .claude/hooks.json 전용(백엔드 대시보드 표시용) — Claude Code 세션에서는 미발효.
+ *       CC 발효는 .claude/settings.json 등록 필요 (ADR-017 참조).
  */
 
 const fs = require('fs');
