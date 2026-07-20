@@ -15,7 +15,7 @@ dependencies = [
     # API Framework
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
-    "websockets>=14.0",
+    "websockets>=16.1.1",
     # Database
     "sqlalchemy>=2.0.51",
     "asyncpg>=0.30.0",
