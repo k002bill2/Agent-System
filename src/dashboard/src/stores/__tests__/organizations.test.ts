@@ -754,7 +754,7 @@ describe('organizations store', () => {
       await useOrganizationsStore.getState().fetchUserMemberships('user-abc')
 
       expect(mockApiClient.get).toHaveBeenCalledWith(
-        '/api/organizations/user/user-abc/organizations'
+        '/api/organizations/user/user-abc/memberships'
       )
     })
   })

@@ -430,7 +430,7 @@ export const useOrganizationsStore = create<OrganizationsState>((set, get) => ({
   fetchUserMemberships: async (userId) => {
     try {
       const data = await apiClient.get<OrganizationMember[]>(
-        `/api/organizations/user/${userId}/organizations`
+        `/api/organizations/user/${userId}/memberships`
       )
       set({ userMemberships: data })
     } catch (error) {
