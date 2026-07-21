@@ -17,6 +17,7 @@ import os
 import shlex
 import shutil
 import subprocess
+import sys
 import time
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -605,6 +606,20 @@ _ORCA_UNREGISTERED_ERROR_CODES = frozenset(
 )
 
 
+def _resolve_orca_command() -> str:
+    """Return the Orca CLI executable name for this platform.
+
+    On Linux a bare ``orca`` is the GNOME screen reader, not this app, so
+    the IDE ships its CLI as ``orca-ide``. ``ORCA_CLI_COMMAND`` overrides
+    both for non-standard installs. Resolved per call so environment and
+    platform changes are picked up without reimporting.
+    """
+    override = os.getenv("ORCA_CLI_COMMAND")
+    if override:
+        return override
+    return "orca" if sys.platform == "darwin" else "orca-ide"
+
+
 class _OrcaResult(NamedTuple):
     """Outcome of a single ``orca ... --json`` invocation."""
 
@@ -651,6 +666,19 @@ def _parse_orca_payload(stdout: str, stderr: str, returncode: int | None) -> _Or
     return _OrcaResult(False, code, message or f"orca command failed (exit {returncode})")
 
 
+async def _terminate_orca_process(proc: asyncio.subprocess.Process) -> None:
+    """Kill and reap a child that outlived its timeout.
+
+    Without this the abandoned ``orca`` process keeps running and can
+    create the terminal *after* the API already reported failure.
+    """
+    try:
+        proc.kill()
+    except ProcessLookupError:
+        return  # already exited; nothing to reap
+    await proc.wait()
+
+
 async def _run_orca_json(args: list[str]) -> _OrcaResult:
     """Run an ``orca`` CLI command with ``--json`` and parse its response.
 
@@ -664,14 +692,21 @@ async def _run_orca_json(args: list[str]) -> _OrcaResult:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
+    except OSError as e:
+        logger.error("Failed to launch orca: %s", e)
+        return _OrcaResult(False, None, str(e))
+
+    try:
         raw_out, raw_err = await asyncio.wait_for(
             proc.communicate(), timeout=_ORCA_TIMEOUT_SECONDS
         )
     except TimeoutError:
         logger.error("orca command timed out after %ss", _ORCA_TIMEOUT_SECONDS)
+        await _terminate_orca_process(proc)
         return _OrcaResult(False, None, f"orca command timed out after {_ORCA_TIMEOUT_SECONDS}s")
     except OSError as e:
-        logger.error("Failed to launch orca: %s", e)
+        logger.error("orca command failed while reading output: %s", e)
+        await _terminate_orca_process(proc)
         return _OrcaResult(False, None, str(e))
 
     stdout = raw_out.decode().strip() if raw_out else ""
@@ -687,7 +722,7 @@ class OrcaAdapter(TerminalAdapter):
     """
 
     async def is_available(self) -> bool:
-        return shutil.which("orca") is not None
+        return shutil.which(_resolve_orca_command()) is not None
 
     async def execute(
         self,
@@ -699,8 +734,9 @@ class OrcaAdapter(TerminalAdapter):
     ) -> dict:
         exec_script = _write_exec_script(project_path, command, branch_name, image_paths)
 
+        orca_cmd = _resolve_orca_command()
         create_args = [
-            "orca",
+            orca_cmd,
             "terminal",
             "create",
             "--worktree",
@@ -716,7 +752,9 @@ class OrcaAdapter(TerminalAdapter):
 
         # Recover once from an unregistered repo by adding it, then retrying.
         if not result.ok and _is_unregistered_worktree_error(result):
-            added = await _run_orca_json(["orca", "repo", "add", "--path", project_path, "--json"])
+            added = await _run_orca_json(
+                [orca_cmd, "repo", "add", "--path", project_path, "--json"]
+            )
             if added.ok:
                 result = await _run_orca_json(create_args)
             else:

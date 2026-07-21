@@ -19,6 +19,7 @@ from services.terminal_service import (
     TERMINAL_INFO,
     TerminalService,
     TerminalType,
+    _resolve_orca_command,
 )
 
 MODULE = "services.terminal_service"
@@ -27,11 +28,22 @@ FAKE_SCRIPT = Path("/tmp/aos-exec-test.sh")
 PROJECT_PATH = "/Users/tester/Work/demo"
 
 
+@pytest.fixture(autouse=True)
+def _pin_orca_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin the CLI name so argv assertions hold on macOS and Linux alike.
+
+    Resolution itself is covered by the dedicated tests below, which
+    override this fixture's env var.
+    """
+    monkeypatch.setenv("ORCA_CLI_COMMAND", "orca")
+
+
 def _proc(stdout: str = "", stderr: str = "", returncode: int = 0) -> MagicMock:
     """Build a mock asyncio subprocess whose communicate() returns given output."""
     proc = MagicMock()
     proc.returncode = returncode
     proc.communicate = AsyncMock(return_value=(stdout.encode(), stderr.encode()))
+    proc.wait = AsyncMock(return_value=returncode)
     return proc
 
 
@@ -54,6 +66,18 @@ def _err_json(code: str, message: str | None = None) -> str:
 async def test_is_available_true_when_cli_on_path() -> None:
     with patch(f"{MODULE}.shutil.which", return_value="/usr/local/bin/orca"):
         assert await OrcaAdapter().is_available() is True
+
+
+@pytest.mark.asyncio
+async def test_is_available_probes_resolved_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Availability must probe the platform-resolved binary, not a bare 'orca'."""
+    monkeypatch.delenv("ORCA_CLI_COMMAND", raising=False)
+    monkeypatch.setattr(f"{MODULE}.sys.platform", "linux")
+
+    with patch(f"{MODULE}.shutil.which", return_value=None) as which_mock:
+        assert await OrcaAdapter().is_available() is False
+
+    which_mock.assert_called_once_with("orca-ide")
 
 
 @pytest.mark.asyncio
@@ -177,8 +201,14 @@ async def test_execute_failure_on_unparsable_json() -> None:
 
 
 @pytest.mark.asyncio
-async def test_execute_failure_on_timeout() -> None:
-    exec_mock = AsyncMock(return_value=_proc(stdout=_ok_json()))
+async def test_execute_failure_on_timeout_kills_and_reaps_child() -> None:
+    """A timed-out orca must be killed and reaped.
+
+    Otherwise the orphan keeps running and can open the terminal *after*
+    the API has already reported failure.
+    """
+    hung = _proc(stdout=_ok_json())
+    exec_mock = AsyncMock(return_value=hung)
 
     with (
         patch(f"{MODULE}._write_exec_script", return_value=FAKE_SCRIPT),
@@ -189,6 +219,26 @@ async def test_execute_failure_on_timeout() -> None:
 
     assert result["success"] is False
     assert "timed out" in result["error"].lower()
+    hung.kill.assert_called_once_with()
+    hung.wait.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_timeout_tolerates_already_exited_child() -> None:
+    """kill() racing a natural exit must not surface as a new error."""
+    gone = _proc(stdout=_ok_json())
+    gone.kill.side_effect = ProcessLookupError
+
+    with (
+        patch(f"{MODULE}._write_exec_script", return_value=FAKE_SCRIPT),
+        patch(f"{MODULE}.asyncio.create_subprocess_exec", AsyncMock(return_value=gone)),
+        patch(f"{MODULE}.asyncio.wait_for", side_effect=TimeoutError),
+    ):
+        result = await OrcaAdapter().execute(PROJECT_PATH, "cmd")
+
+    assert result["success"] is False
+    assert "timed out" in result["error"].lower()
+    gone.wait.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -274,6 +324,62 @@ async def test_execute_no_retry_when_repo_add_fails() -> None:
     assert result["success"] is False
     assert exec_mock.await_count == 2
     assert "path is not a git repo" in result["error"]
+
+
+# ---------------------------------------------------------------------------
+# CLI executable resolution
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_orca_command_prefers_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ORCA_CLI_COMMAND", "/opt/orca/bin/orca-custom")
+    monkeypatch.setattr(f"{MODULE}.sys.platform", "linux")
+    assert _resolve_orca_command() == "/opt/orca/bin/orca-custom"
+
+
+def test_resolve_orca_command_on_macos(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ORCA_CLI_COMMAND", raising=False)
+    monkeypatch.setattr(f"{MODULE}.sys.platform", "darwin")
+    assert _resolve_orca_command() == "orca"
+
+
+def test_resolve_orca_command_off_macos_avoids_screen_reader(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """On Linux a bare 'orca' is the GNOME screen reader, so use orca-ide."""
+    monkeypatch.delenv("ORCA_CLI_COMMAND", raising=False)
+    monkeypatch.setattr(f"{MODULE}.sys.platform", "linux")
+    assert _resolve_orca_command() == "orca-ide"
+
+
+@pytest.mark.asyncio
+async def test_execute_uses_resolved_command_for_create_and_repo_add(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both the create and the recovery repo-add argv use the resolved binary."""
+    monkeypatch.delenv("ORCA_CLI_COMMAND", raising=False)
+    monkeypatch.setattr(f"{MODULE}.sys.platform", "linux")
+
+    exec_mock = AsyncMock(
+        side_effect=[
+            _proc(stdout=_err_json("selector_not_found"), returncode=1),
+            _proc(stdout=_ok_json()),
+            _proc(stdout=_ok_json()),
+        ]
+    )
+
+    with (
+        patch(f"{MODULE}._write_exec_script", return_value=FAKE_SCRIPT),
+        patch(f"{MODULE}.asyncio.create_subprocess_exec", exec_mock),
+    ):
+        result = await OrcaAdapter().execute(PROJECT_PATH, "cmd")
+
+    assert result["success"] is True
+    assert [call[0][0] for call in exec_mock.await_args_list] == [
+        "orca-ide",
+        "orca-ide",
+        "orca-ide",
+    ]
 
 
 # ---------------------------------------------------------------------------
