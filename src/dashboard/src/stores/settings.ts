@@ -5,7 +5,7 @@ import { apiClient } from '../services/apiClient'
 export type Theme = 'light' | 'dark' | 'system'
 export type LLMProvider = 'anthropic' | 'openai' | 'google' | 'codex_cli' | 'claude_cli' | 'local'
 
-export type TerminalType = 'warp' | 'tmux' | 'terminal_app' | 'iterm2' | 'kitty' | 'alacritty' | 'ghostty' | 'wezterm' | 'cmux'
+export type TerminalType = 'warp' | 'tmux' | 'terminal_app' | 'iterm2' | 'kitty' | 'alacritty' | 'ghostty' | 'wezterm' | 'cmux' | 'orca'
 
 export const TERMINAL_DISPLAY_NAMES: Record<TerminalType, string> = {
   warp: 'Warp',
@@ -17,6 +17,7 @@ export const TERMINAL_DISPLAY_NAMES: Record<TerminalType, string> = {
   ghostty: 'Ghostty',
   wezterm: 'WezTerm',
   cmux: 'cmux',
+  orca: 'Orca',
 }
 
 export interface NotificationSettings {

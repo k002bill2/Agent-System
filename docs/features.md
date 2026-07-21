@@ -875,6 +875,7 @@ class TerminalType(str, Enum):
 - `ITermAdapter`, `TerminalAppAdapter`: AppleScript 기반 실행
 - `KittyAdapter`, `AlacrittyAdapter`, `WezTermAdapter`: CLI 기반 실행
 - `GhosttyAdapter`: System Events 키스트로크 기반 실행
+- `OrcaAdapter`: `orca terminal create` CLI 기반 실행 (기존 체크아웃에 터미널 스폰, 미등록 저장소는 `orca repo add` 후 1회 재시도)
 
 ---
 
