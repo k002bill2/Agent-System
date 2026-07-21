@@ -2,13 +2,13 @@
  * TerminalSelector Component
  *
  * Task Analyzer에서 실행 터미널을 선택하는 세그먼트 토글.
- * Warp / Tmux 중 선택 가능하며, 선택은 localStorage에 영속.
+ * Warp / Tmux / Orca 중 선택 가능하며, 선택은 localStorage에 영속.
  */
 
 import { memo } from 'react'
 import { cn } from '../lib/utils'
 import { useSettingsStore, type TerminalType } from '../stores/settings'
-import { Terminal, SquareTerminal } from 'lucide-react'
+import { Terminal, SquareTerminal, PanelsTopLeft } from 'lucide-react'
 
 interface TerminalOption {
   type: TerminalType
@@ -19,11 +19,13 @@ interface TerminalOption {
 const TERMINAL_OPTIONS: TerminalOption[] = [
   { type: 'warp', label: 'Warp', description: 'Warp 터미널에서 실행' },
   { type: 'tmux', label: 'tmux', description: 'tmux 세션에서 실행' },
+  { type: 'orca', label: 'Orca', description: 'Orca 워크스페이스에서 실행' },
 ]
 
 const ICONS: Record<string, typeof Terminal> = {
   warp: Terminal,
   tmux: SquareTerminal,
+  orca: PanelsTopLeft,
 }
 
 /** 터미널 타입 선택 세그먼트 토글. */

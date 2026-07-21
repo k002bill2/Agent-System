@@ -312,7 +312,7 @@ import { cn } from '@/lib/utils';
 
 | 컴포넌트 | 설명 |
 |----------|------|
-| `TerminalSelector` | 실행 터미널 선택 (Warp/tmux 토글) |
+| `TerminalSelector` | 실행 터미널 선택 (Warp/tmux/Orca 토글) |
 
 ### Admin Components
 
