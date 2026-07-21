@@ -697,9 +697,7 @@ async def _run_orca_json(args: list[str]) -> _OrcaResult:
         return _OrcaResult(False, None, str(e))
 
     try:
-        raw_out, raw_err = await asyncio.wait_for(
-            proc.communicate(), timeout=_ORCA_TIMEOUT_SECONDS
-        )
+        raw_out, raw_err = await asyncio.wait_for(proc.communicate(), timeout=_ORCA_TIMEOUT_SECONDS)
     except TimeoutError:
         logger.error("orca command timed out after %ss", _ORCA_TIMEOUT_SECONDS)
         await _terminate_orca_process(proc)
