@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react'
 import { cn } from '../../lib/utils'
-import { getApiUrl } from '@/config/api'
+import { apiClient } from '@/services/apiClient'
 import {
   Server,
   Plus,
@@ -87,59 +87,39 @@ interface RouterStats {
 // ─────────────────────────────────────────────────────────────
 
 async function fetchProviders(): Promise<LLMProvider[]> {
-  const res = await fetch(getApiUrl('/api/llm-router/providers'))
-  if (!res.ok) throw new Error('Failed to fetch providers')
-  return res.json()
+  return apiClient.get<LLMProvider[]>('/api/llm-router/providers')
 }
 
 async function fetchRouterConfig(): Promise<RouterConfig> {
-  const res = await fetch(getApiUrl('/api/llm-router/config'))
-  if (!res.ok) throw new Error('Failed to fetch config')
-  return res.json()
+  return apiClient.get<RouterConfig>('/api/llm-router/config')
 }
 
 async function updateRouterConfig(config: Partial<RouterConfig>): Promise<RouterConfig> {
-  const res = await fetch(getApiUrl('/api/llm-router/config'), {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(config),
-  })
-  if (!res.ok) throw new Error('Failed to update config')
-  return res.json()
+  return apiClient.patch<RouterConfig>('/api/llm-router/config', config)
 }
 
 async function checkHealth(): Promise<HealthCheck[]> {
-  const res = await fetch(getApiUrl('/api/llm-router/health'))
-  if (!res.ok) throw new Error('Failed to check health')
-  return res.json()
+  return apiClient.get<HealthCheck[]>('/api/llm-router/health')
 }
 
 async function fetchStats(): Promise<RouterStats> {
-  const res = await fetch(getApiUrl('/api/llm-router/stats'))
-  if (!res.ok) throw new Error('Failed to fetch stats')
-  return res.json()
+  return apiClient.get<RouterStats>('/api/llm-router/stats')
 }
 
 async function toggleProvider(providerId: string): Promise<{ enabled: boolean }> {
-  const res = await fetch(getApiUrl(`/api/llm-router/providers/${providerId}/toggle`), {
-    method: 'POST',
-  })
-  if (!res.ok) throw new Error('Failed to toggle provider')
-  return res.json()
+  return apiClient.post<{ enabled: boolean }>(
+    `/api/llm-router/providers/${providerId}/toggle`,
+    undefined,
+    { skipRetry: true }
+  )
 }
 
 async function deleteProvider(providerId: string): Promise<void> {
-  const res = await fetch(getApiUrl(`/api/llm-router/providers/${providerId}`), {
-    method: 'DELETE',
-  })
-  if (!res.ok) throw new Error('Failed to delete provider')
+  await apiClient.delete(`/api/llm-router/providers/${providerId}`)
 }
 
 async function initializeProviders(): Promise<void> {
-  const res = await fetch(getApiUrl('/api/llm-router/initialize'), {
-    method: 'POST',
-  })
-  if (!res.ok) throw new Error('Failed to initialize providers')
+  await apiClient.post('/api/llm-router/initialize', undefined, { skipRetry: true })
 }
 
 // ─────────────────────────────────────────────────────────────

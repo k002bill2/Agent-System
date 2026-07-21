@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import { useProjectsStore } from '../../stores/projects'
 import { useWorkflowStore } from '../../stores/workflows'
-import { getApiUrl } from '@/config/api'
+import { apiClient } from '@/services/apiClient'
 
 export interface Template {
   id: string
@@ -78,11 +78,10 @@ export function TemplateGallery({ onSelect, onClose }: TemplateGalleryProps) {
       const params = new URLSearchParams()
       if (category) params.set('category', category)
       if (search) params.set('search', search)
-      const res = await fetch(getApiUrl(`/api/workflows/templates?${params}`))
-      if (res.ok) {
-        const data = await res.json()
-        setTemplates(data.templates || [])
-      }
+      const data = await apiClient.get<{ templates?: Template[] }>(
+        `/api/workflows/templates?${params}`
+      )
+      setTemplates(data.templates || [])
     } catch (e) {
       console.error('Failed to fetch templates:', e)
     }

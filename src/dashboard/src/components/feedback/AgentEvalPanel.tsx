@@ -16,6 +16,7 @@ import {
   BarChart3,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
+import { apiClient } from '@/services/apiClient'
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -41,12 +42,8 @@ interface TaskEvalStats {
 // API
 // ─────────────────────────────────────────────────────────────
 
-const API_BASE = 'http://localhost:8000/api/feedback'
-
 async function fetchEvalStats(): Promise<TaskEvalStats> {
-  const res = await fetch(`${API_BASE}/task-evaluation/stats`)
-  if (!res.ok) throw new Error('Failed to fetch evaluation stats')
-  return res.json()
+  return apiClient.get<TaskEvalStats>('/api/feedback/task-evaluation/stats')
 }
 
 // ─────────────────────────────────────────────────────────────

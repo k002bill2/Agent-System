@@ -1,6 +1,8 @@
 // WebSocket connection management: connect, reconnect, disconnect, heartbeat
 
 import { notificationService } from '../../services/notificationService'
+import { apiClient } from '../../services/apiClient'
+import { ApiError } from '../../services/errors'
 import type { OrchestrationState, LLMProvider, ProviderUsage } from './types'
 import { RECONNECT_CONFIG, calculateBackoff } from './types'
 import { handleMessage, transformTask } from './wsHandler'
@@ -8,6 +10,18 @@ import type { Task } from './types'
 
 type SetFn = (state: Partial<OrchestrationState> | ((state: OrchestrationState) => Partial<OrchestrationState>)) => void
 type GetFn = () => OrchestrationState
+
+/** Server payload returned by GET /api/sessions/{id}/sync */
+interface SessionSyncResponse {
+  session_info: OrchestrationState['sessionInfo']
+  tasks?: Record<string, unknown>
+  root_task_id: OrchestrationState['rootTaskId']
+  agents?: OrchestrationState['agents']
+  pending_approvals?: OrchestrationState['pendingApprovals']
+  waiting_for_approval?: boolean
+  token_usage?: OrchestrationState['tokenUsage']
+  total_cost?: number
+}
 
 // Setup WebSocket event handlers (shared between connect and reconnect)
 function setupWebSocketHandlers(
@@ -108,21 +122,14 @@ export async function connectWebSocket(set: SetFn, get: GetFn) {
   // Create session via REST API first (with project context)
   let sessionId: string
   try {
-    const res = await fetch('/api/sessions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const data = await apiClient.post<{ session_id: string }>(
+      '/api/sessions',
+      {
         project_id: selectedProjectId,
         organization_id: organizationId,
-      }),
-    })
-    if (!res.ok) {
-      const error = await res.json()
-      console.error('Failed to create session:', error.detail || error)
-      set({ isInitialLoading: false })
-      return
-    }
-    const data = await res.json()
+      },
+      { skipRetry: true }
+    )
     sessionId = data.session_id
   } catch (e) {
     console.error('Failed to create session:', e)
@@ -157,9 +164,29 @@ export async function reconnectWebSocket(set: SetFn, get: GetFn) {
 
   // Sync session state from server (validates session and gets latest tasks)
   try {
-    const syncRes = await fetch(`/api/sessions/${sessionId}/sync`)
+    // Sync server state to local
+    const syncData = await apiClient.get<SessionSyncResponse>(`/api/sessions/${sessionId}/sync`)
 
-    if (!syncRes.ok) {
+    // Transform and merge tasks from server
+    const serverTasks: Record<string, Task> = {}
+    for (const [id, raw] of Object.entries(syncData.tasks || {})) {
+      serverTasks[id] = transformTask(raw as Record<string, unknown>)
+    }
+
+    set({
+      sessionInfo: syncData.session_info,
+      tasks: serverTasks,
+      rootTaskId: syncData.root_task_id,
+      agents: syncData.agents || {},
+      pendingApprovals: syncData.pending_approvals || {},
+      waitingForApproval: syncData.waiting_for_approval || false,
+      tokenUsage: syncData.token_usage || {},
+      totalCost: syncData.total_cost || 0,
+    })
+  } catch (e) {
+    // An HTTP error response means the session expired or was not found.
+    // (status 0 = network/parse failure, handled by the narrower reset below.)
+    if (e instanceof ApiError && e.status > 0) {
       // Session expired or not found - clear local state
       set({
         sessionId: null,
@@ -182,26 +209,6 @@ export async function reconnectWebSocket(set: SetFn, get: GetFn) {
       return
     }
 
-    // Sync server state to local
-    const syncData = await syncRes.json()
-
-    // Transform and merge tasks from server
-    const serverTasks: Record<string, Task> = {}
-    for (const [id, raw] of Object.entries(syncData.tasks || {})) {
-      serverTasks[id] = transformTask(raw as Record<string, unknown>)
-    }
-
-    set({
-      sessionInfo: syncData.session_info,
-      tasks: serverTasks,
-      rootTaskId: syncData.root_task_id,
-      agents: syncData.agents || {},
-      pendingApprovals: syncData.pending_approvals || {},
-      waitingForApproval: syncData.waiting_for_approval || false,
-      tokenUsage: syncData.token_usage || {},
-      totalCost: syncData.total_cost || 0,
-    })
-  } catch (e) {
     console.error('[Session] Failed to sync session:', e)
     set({
       sessionId: null,

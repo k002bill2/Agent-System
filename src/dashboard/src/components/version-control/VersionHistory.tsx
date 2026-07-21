@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react'
 import { cn } from '../../lib/utils'
-import { getApiUrl } from '@/config/api'
+import { apiClient } from '@/services/apiClient'
 import {
   History,
   GitBranch,
@@ -71,25 +71,24 @@ interface VersionCompare {
 // ─────────────────────────────────────────────────────────────
 
 async function fetchHistory(configType: ConfigType, configId: string): Promise<VersionHistoryResponse> {
-  const res = await fetch(getApiUrl(`/api/config-versions/history/${configType}/${configId}`))
-  if (!res.ok) throw new Error('Failed to fetch history')
-  return res.json()
+  return apiClient.get<VersionHistoryResponse>(
+    `/api/config-versions/history/${configType}/${configId}`
+  )
 }
 
 async function compareVersions(versionIdA: string, versionIdB: string): Promise<VersionCompare> {
-  const res = await fetch(getApiUrl(`/api/config-versions/compare/${versionIdA}/${versionIdB}`))
-  if (!res.ok) throw new Error('Failed to compare versions')
-  return res.json()
+  return apiClient.get<VersionCompare>(`/api/config-versions/compare/${versionIdA}/${versionIdB}`)
 }
 
 async function rollbackToVersion(targetVersionId: string, reason?: string): Promise<{ success: boolean; message: string }> {
-  const res = await fetch(getApiUrl('/api/config-versions/rollback'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ target_version_id: targetVersionId, reason }),
-  })
-  if (!res.ok) throw new Error('Failed to rollback')
-  return res.json()
+  return apiClient.post<{ success: boolean; message: string }>(
+    '/api/config-versions/rollback',
+    {
+      target_version_id: targetVersionId,
+      reason,
+    },
+    { skipRetry: true }
+  )
 }
 
 // ─────────────────────────────────────────────────────────────

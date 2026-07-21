@@ -46,7 +46,7 @@ describe('AgentEvalPanel', () => {
     render(<AgentEvalPanel />)
 
     await waitFor(() => {
-      expect(screen.getByText('Network error')).toBeInTheDocument()
+      expect(screen.getByText('Error: Network error')).toBeInTheDocument()
     })
   })
 
@@ -169,7 +169,8 @@ describe('AgentEvalPanel', () => {
     vi.mocked(global.fetch).mockResolvedValue({
       ok: false,
       status: 500,
-    } as Response)
+      json: () => Promise.resolve({ detail: 'Failed to fetch evaluation stats' }),
+    } as unknown as Response)
 
     render(<AgentEvalPanel />)
 

@@ -20,7 +20,7 @@ import {
   Info,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
-import { getApiUrl } from '@/config/api'
+import { apiClient } from '@/services/apiClient'
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -63,51 +63,31 @@ async function queryRAG(
   k: number = 5,
   filterPriority?: string
 ): Promise<QueryResult> {
-  const res = await fetch(getApiUrl(`/api/rag/projects/${projectId}/query`), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  return apiClient.post<QueryResult>(
+    `/api/rag/projects/${projectId}/query`,
+    {
       query,
       k,
       filter_priority: filterPriority || null,
-    }),
-  })
-  if (!res.ok) {
-    const error = await res.json()
-    throw new Error(error.detail || 'Query failed')
-  }
-  return res.json()
+    },
+    { skipRetry: true }
+  )
 }
 
 async function getRAGStats(projectId: string): Promise<RAGStats> {
-  const res = await fetch(getApiUrl(`/api/rag/projects/${projectId}/stats`))
-  if (!res.ok) {
-    const error = await res.json()
-    throw new Error(error.detail || 'Failed to get stats')
-  }
-  return res.json()
+  return apiClient.get<RAGStats>(`/api/rag/projects/${projectId}/stats`)
 }
 
 async function deleteRAGIndex(projectId: string): Promise<void> {
-  const res = await fetch(getApiUrl(`/api/rag/projects/${projectId}/index`), {
-    method: 'DELETE',
-  })
-  if (!res.ok) {
-    const error = await res.json()
-    throw new Error(error.detail || 'Failed to delete index')
-  }
+  await apiClient.delete(`/api/rag/projects/${projectId}/index`)
 }
 
 async function reindexProject(projectId: string, forceReindex: boolean = true): Promise<void> {
-  const res = await fetch(getApiUrl(`/api/rag/projects/${projectId}/index`), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ force_reindex: forceReindex }),
-  })
-  if (!res.ok) {
-    const error = await res.json()
-    throw new Error(error.detail || 'Failed to index project')
-  }
+  await apiClient.post(
+    `/api/rag/projects/${projectId}/index`,
+    { force_reindex: forceReindex },
+    { skipRetry: true }
+  )
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -66,7 +66,8 @@ describe('ProcessMonitorWidget', () => {
       render(<ProcessMonitorWidget />)
     })
     expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/claude-sessions/processes')
+      expect.stringContaining('/api/claude-sessions/processes'),
+      expect.objectContaining({ method: 'GET' })
     )
   })
 

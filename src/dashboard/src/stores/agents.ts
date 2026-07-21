@@ -6,8 +6,6 @@
 
 import { create } from 'zustand'
 import { apiClient } from '../services/apiClient'
-import { getApiUrl } from '../config/api'
-import { useAuthStore } from './auth'
 import { useSettingsStore, TERMINAL_DISPLAY_NAMES } from './settings'
 
 const TASK_ANALYZER_TIMEOUT_MS = 180_000
@@ -173,8 +171,6 @@ interface AgentsState {
   deleteAnalysis: (id: string) => Promise<boolean>
   selectHistoryItem: (item: TaskAnalysisHistory | null) => void
 }
-
-const API_BASE = getApiUrl('/api')
 
 /**
  * 태스크 입력에서 git 브랜치명을 자동 생성.
@@ -401,7 +397,6 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
 
       if (attachedImages.length > 0) {
         // Use multipart/form-data endpoint when images are attached
-        // (raw fetch needed for FormData uploads)
         const formData = new FormData()
         formData.append('task', task)
         if (context) {
@@ -411,34 +406,11 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
           formData.append('images', img)
         }
 
-        const headers: Record<string, string> = {}
-        const { accessToken } = useAuthStore.getState()
-        if (accessToken) {
-          headers['Authorization'] = `Bearer ${accessToken}`
-        }
-
-        const controller = new AbortController()
-        const timeoutId = window.setTimeout(() => controller.abort(), TASK_ANALYZER_TIMEOUT_MS)
-        let response: Response
-        try {
-          response = await fetch(`${API_BASE}/agents/orchestrate/analyze-with-images`, {
-            method: 'POST',
-            headers,
-            body: formData,
-            signal: controller.signal,
-          })
-        } catch (error) {
-          if (error instanceof DOMException && error.name === 'AbortError') {
-            throw new Error('Request timed out', { cause: error })
-          }
-          throw error
-        } finally {
-          window.clearTimeout(timeoutId)
-        }
-        if (!response.ok) {
-          throw new Error(`Failed to analyze task: ${response.statusText}`)
-        }
-        result = await response.json()
+        result = await apiClient.post<TaskAnalysisResult>(
+          '/api/agents/orchestrate/analyze-with-images',
+          formData,
+          { timeout: TASK_ANALYZER_TIMEOUT_MS, skipRetry: true }
+        )
       } else {
         // Use JSON endpoint when no images
         result = await apiClient.post<TaskAnalysisResult>(
@@ -542,23 +514,11 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
       const formData = new FormData()
       formData.append('image', file)
 
-      const ocrHeaders: Record<string, string> = {}
-      const { accessToken: ocrToken } = useAuthStore.getState()
-      if (ocrToken) {
-        ocrHeaders['Authorization'] = `Bearer ${ocrToken}`
-      }
-
-      const response = await fetch(`${API_BASE}/agents/ocr`, {
-        method: 'POST',
-        headers: ocrHeaders,
-        body: formData,
-      })
-
-      if (!response.ok) {
-        throw new Error(`OCR failed: ${response.statusText}`)
-      }
-
-      const result = await response.json()
+      const result = await apiClient.post<{ success: boolean; text?: string; error?: string }>(
+        '/api/agents/ocr',
+        formData,
+        { skipRetry: true }
+      )
 
       if (!result.success) {
         console.error('OCR error:', result.error)

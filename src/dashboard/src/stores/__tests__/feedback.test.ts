@@ -23,10 +23,6 @@ import { apiClient } from '../../services/apiClient'
 
 const mockApiClient = vi.mocked(apiClient)
 
-// Mock global.fetch for exportDataset (only method that still uses raw fetch)
-const mockFetch = vi.fn()
-global.fetch = mockFetch
-
 // Mock crypto.randomUUID
 vi.stubGlobal('crypto', { randomUUID: () => 'mock-uuid' })
 
@@ -52,7 +48,6 @@ describe('feedback store', () => {
   beforeEach(() => {
     resetStore()
     vi.clearAllMocks()
-    mockFetch.mockReset()
   })
 
   // ── Initial State ──────────────────────────────────────
@@ -313,24 +308,32 @@ describe('feedback store', () => {
   })
 
   // ── exportDataset ──────────────────────────────────────
-  // Note: exportDataset still uses raw fetch (not apiClient)
+  // Note: exportDataset reads a text response through apiClient
 
   describe('exportDataset', () => {
     it('exports dataset as text', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        text: () => Promise.resolve('{"line":"1"}\n{"line":"2"}'),
-      })
+      mockApiClient.get.mockResolvedValueOnce('{"line":"1"}\n{"line":"2"}')
 
       const result = await useFeedbackStore.getState().exportDataset({ format: 'jsonl' })
 
       expect(result).toContain('line')
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockApiClient.get.mock.calls[0][0]
       expect(url).toContain('format=jsonl')
     })
 
+    it('requests a text response', async () => {
+      mockApiClient.get.mockResolvedValueOnce('data')
+
+      await useFeedbackStore.getState().exportDataset()
+
+      expect(mockApiClient.get).toHaveBeenCalledWith(
+        expect.stringContaining('/api/feedback/dataset/export'),
+        { responseType: 'text' }
+      )
+    })
+
     it('returns null on error', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false, statusText: 'Error' })
+      mockApiClient.get.mockRejectedValueOnce(new Error('Error'))
 
       const result = await useFeedbackStore.getState().exportDataset()
 
@@ -455,66 +458,65 @@ describe('exportDataset - all options', () => {
   beforeEach(() => {
     resetStore()
     vi.clearAllMocks()
-    mockFetch.mockReset()
   })
 
   it('includes include_negative=true in URL', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, text: () => Promise.resolve('data') })
+    mockApiClient.get.mockResolvedValueOnce('data')
 
     await useFeedbackStore.getState().exportDataset({ include_negative: true })
 
-    const url = mockFetch.mock.calls[0][0] as string
+    const url = mockApiClient.get.mock.calls[0][0]
     expect(url).toContain('include_negative=true')
   })
 
   it('includes include_negative=false in URL', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, text: () => Promise.resolve('data') })
+    mockApiClient.get.mockResolvedValueOnce('data')
 
     await useFeedbackStore.getState().exportDataset({ include_negative: false })
 
-    const url = mockFetch.mock.calls[0][0] as string
+    const url = mockApiClient.get.mock.calls[0][0]
     expect(url).toContain('include_negative=false')
   })
 
   it('includes include_implicit=true in URL', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, text: () => Promise.resolve('data') })
+    mockApiClient.get.mockResolvedValueOnce('data')
 
     await useFeedbackStore.getState().exportDataset({ include_implicit: true })
 
-    const url = mockFetch.mock.calls[0][0] as string
+    const url = mockApiClient.get.mock.calls[0][0]
     expect(url).toContain('include_implicit=true')
   })
 
   it('includes agent_filter joined by comma in URL', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, text: () => Promise.resolve('data') })
+    mockApiClient.get.mockResolvedValueOnce('data')
 
     await useFeedbackStore.getState().exportDataset({ agent_filter: ['agent-a', 'agent-b'] })
 
-    const url = mockFetch.mock.calls[0][0] as string
+    const url = mockApiClient.get.mock.calls[0][0]
     expect(url).toContain('agent_filter=agent-a%2Cagent-b')
   })
 
   it('does NOT include agent_filter when array is empty', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, text: () => Promise.resolve('data') })
+    mockApiClient.get.mockResolvedValueOnce('data')
 
     await useFeedbackStore.getState().exportDataset({ agent_filter: [] })
 
-    const url = mockFetch.mock.calls[0][0] as string
+    const url = mockApiClient.get.mock.calls[0][0]
     expect(url).not.toContain('agent_filter')
   })
 
   it('includes start_date and end_date in URL', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, text: () => Promise.resolve('data') })
+    mockApiClient.get.mockResolvedValueOnce('data')
 
     await useFeedbackStore.getState().exportDataset({ start_date: '2025-01-01', end_date: '2025-12-31' })
 
-    const url = mockFetch.mock.calls[0][0] as string
+    const url = mockApiClient.get.mock.calls[0][0]
     expect(url).toContain('start_date=2025-01-01')
     expect(url).toContain('end_date=2025-12-31')
   })
 
   it('includes all options together', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, text: () => Promise.resolve('combined') })
+    mockApiClient.get.mockResolvedValueOnce('combined')
 
     const result = await useFeedbackStore.getState().exportDataset({
       format: 'csv',
@@ -526,7 +528,7 @@ describe('exportDataset - all options', () => {
     })
 
     expect(result).toBe('combined')
-    const url = mockFetch.mock.calls[0][0] as string
+    const url = mockApiClient.get.mock.calls[0][0]
     expect(url).toContain('format=csv')
     expect(url).toContain('include_negative=true')
     expect(url).toContain('include_implicit=false')

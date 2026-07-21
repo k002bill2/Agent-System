@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getApiUrl } from '@/config/api'
+import { apiClient } from '@/services/apiClient'
 
 interface ProcessInfo {
   pid: number
@@ -42,9 +42,7 @@ export function ProcessCleanupPanel() {
   const fetchProcesses = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(getApiUrl('/api/claude-sessions/processes'))
-      if (!res.ok) throw new Error('Failed to fetch processes')
-      const data: ProcessListResponse = await res.json()
+      const data = await apiClient.get<ProcessListResponse>('/api/claude-sessions/processes')
       setProcesses(data.processes)
       setTotalCount(data.total_count)
       setForegroundCount(data.foreground_count)
@@ -64,11 +62,11 @@ export function ProcessCleanupPanel() {
     setCleaning(true)
     setMessage(null)
     try {
-      const res = await fetch(getApiUrl('/api/claude-sessions/processes/cleanup-stale'), {
-        method: 'POST',
-      })
-      if (!res.ok) throw new Error('Cleanup failed')
-      const data: ProcessKillResponse = await res.json()
+      const data = await apiClient.post<ProcessKillResponse>(
+        '/api/claude-sessions/processes/cleanup-stale',
+        undefined,
+        { skipRetry: true }
+      )
       setMessage({
         type: data.success ? 'success' : 'error',
         text: data.message,
@@ -86,12 +84,11 @@ export function ProcessCleanupPanel() {
     setCleaning(true)
     setMessage(null)
     try {
-      const res = await fetch(
-        getApiUrl('/api/claude-sessions/processes/cleanup-stale?include_foreground=true'),
-        { method: 'POST' },
+      const data = await apiClient.post<ProcessKillResponse>(
+        '/api/claude-sessions/processes/cleanup-stale?include_foreground=true',
+        undefined,
+        { skipRetry: true },
       )
-      if (!res.ok) throw new Error('Kill all failed')
-      const data: ProcessKillResponse = await res.json()
       setMessage({
         type: data.success ? 'success' : 'error',
         text: data.message,
@@ -111,13 +108,11 @@ export function ProcessCleanupPanel() {
     setCleaning(true)
     setMessage(null)
     try {
-      const res = await fetch(getApiUrl('/api/claude-sessions/processes/kill'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pids: Array.from(selectedPids) }),
-      })
-      if (!res.ok) throw new Error('Kill failed')
-      const data: ProcessKillResponse = await res.json()
+      const data = await apiClient.post<ProcessKillResponse>(
+        '/api/claude-sessions/processes/kill',
+        { pids: Array.from(selectedPids) },
+        { skipRetry: true }
+      )
       setMessage({
         type: data.success ? 'success' : 'error',
         text: data.message,

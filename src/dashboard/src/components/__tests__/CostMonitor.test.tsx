@@ -168,7 +168,12 @@ describe('CostMonitor', () => {
   })
 
   it('shows error when fetch fails', async () => {
-    mockFetch.mockResolvedValue({ ok: false })
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Server Error',
+      json: () => Promise.resolve({ detail: 'Failed to fetch cost analytics' }),
+    })
 
     render(<CostMonitor />)
 

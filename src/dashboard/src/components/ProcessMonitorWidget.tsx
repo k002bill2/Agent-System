@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Cpu, Trash2, RefreshCw } from 'lucide-react'
-import { getApiUrl } from '@/config/api'
+import { apiClient } from '@/services/apiClient'
 
 interface ProcessInfo {
   pid: number
@@ -30,9 +30,7 @@ export function ProcessMonitorWidget() {
   const fetchProcesses = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(getApiUrl('/api/claude-sessions/processes'))
-      if (!res.ok) return
-      const data: ProcessListResponse = await res.json()
+      const data = await apiClient.get<ProcessListResponse>('/api/claude-sessions/processes')
       setProcesses(data.processes)
       setTotalCount(data.total_count)
       setForegroundCount(data.foreground_count)
@@ -55,12 +53,10 @@ export function ProcessMonitorWidget() {
     setCleaning(true)
     try {
       const url = includeAll
-        ? getApiUrl('/api/claude-sessions/processes/cleanup-stale?include_foreground=true')
-        : getApiUrl('/api/claude-sessions/processes/cleanup-stale')
-      const res = await fetch(url, { method: 'POST' })
-      if (res.ok) {
-        await fetchProcesses()
-      }
+        ? '/api/claude-sessions/processes/cleanup-stale?include_foreground=true'
+        : '/api/claude-sessions/processes/cleanup-stale'
+      await apiClient.post(url, undefined, { skipRetry: true })
+      await fetchProcesses()
     } catch {
       // Silently fail
     } finally {

@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { cn } from '../../lib/utils'
 import { AlertCircle, AlertTriangle, Info } from 'lucide-react'
+import { apiClient } from '@/services/apiClient'
+import { ApiError } from '@/services/errors'
 
 export type ContextUsageLevel = 'normal' | 'warning' | 'critical'
 
@@ -65,17 +67,14 @@ export function ContextWindowMeter({
     setError(null)
 
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/context-usage`)
-      if (!res.ok) {
-        if (res.status === 404) {
-          setUsage(null)
-          return
-        }
-        throw new Error('Failed to fetch context usage')
-      }
-      const data = await res.json()
+      const data = await apiClient.get<ContextUsage>(`/api/sessions/${sessionId}/context-usage`)
       setUsage(data)
     } catch (e) {
+      // A missing session is not an error state — it simply has no usage yet.
+      if (e instanceof ApiError && e.status === 404) {
+        setUsage(null)
+        return
+      }
       setError(e instanceof Error ? e.message : 'Unknown error')
     } finally {
       setLoading(false)

@@ -311,11 +311,11 @@ describe('NotificationRuleEditor', () => {
     render(<NotificationRuleEditor />)
 
     await waitFor(() => {
-      expect(screen.getByText('Server error')).toBeInTheDocument()
+      expect(screen.getByText('Error: Server error')).toBeInTheDocument()
     })
 
     // Dismiss the error
-    const dismissButton = screen.getByText('Server error').closest('div')!.querySelector('button')!
+    const dismissButton = screen.getByText('Error: Server error').closest('div')!.querySelector('button')!
     fireEvent.click(dismissButton)
 
     await waitFor(() => {
@@ -520,7 +520,7 @@ describe('NotificationRuleEditor', () => {
 
     it('shows error when create rule fails', async () => {
       await renderAndWait(mockRules, mockChannels, [
-        { ok: false, json: () => Promise.resolve({}) } as Response,
+        { ok: false, json: () => Promise.resolve({ detail: 'Failed to create rule' }) } as Response,
       ])
 
       fireEvent.click(screen.getByText('Add Rule'))
@@ -662,7 +662,7 @@ describe('NotificationRuleEditor', () => {
 
     it('shows error when delete fails', async () => {
       await renderAndWait(mockRules, mockChannels, [
-        { ok: false, json: () => Promise.resolve({}) } as Response,
+        { ok: false, json: () => Promise.resolve({ detail: 'Failed to delete rule' }) } as Response,
       ])
 
       const ruleCards = screen.getByText('Alert on failures').closest('div[class*="p-4"]')!
@@ -703,7 +703,7 @@ describe('NotificationRuleEditor', () => {
 
     it('shows error when toggle fails', async () => {
       await renderAndWait(mockRules, mockChannels, [
-        { ok: false, json: () => Promise.resolve({}) } as Response,
+        { ok: false, json: () => Promise.resolve({ detail: 'Failed to toggle rule' }) } as Response,
       ])
 
       const ruleRow = screen.getByText('Alert on failures').closest('div[class*="p-4"]')!
@@ -821,7 +821,7 @@ describe('NotificationRuleEditor', () => {
 
     it('shows error when save edit fails', async () => {
       await renderAndWait(mockRules, mockChannels, [
-        { ok: false, json: () => Promise.resolve({}) } as Response,
+        { ok: false, json: () => Promise.resolve({ detail: 'Failed to update rule' }) } as Response,
       ])
 
       // Open edit mode
@@ -1220,7 +1220,7 @@ describe('NotificationRuleEditor', () => {
       fireEvent.click(screen.getByText('2. Test').closest('button')!)
 
       await waitFor(() => {
-        expect(screen.getByText('error: Network error')).toBeInTheDocument()
+        expect(screen.getByText('error: Error: Network error')).toBeInTheDocument()
       })
     })
 

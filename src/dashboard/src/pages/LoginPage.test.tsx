@@ -8,10 +8,14 @@ const mockSetUser = vi.fn()
 const mockSetView = vi.fn()
 
 vi.mock('../stores/auth', () => ({
-  useAuthStore: () => ({
-    setTokens: mockSetTokens,
-    setUser: mockSetUser,
-  }),
+  // `getState` is required by the apiClient auth interceptor.
+  useAuthStore: Object.assign(
+    () => ({
+      setTokens: mockSetTokens,
+      setUser: mockSetUser,
+    }),
+    { getState: () => ({ accessToken: null }) }
+  ),
   getGoogleAuthUrl: () => 'https://google.com/auth',
   getGitHubAuthUrl: () => 'https://github.com/auth',
   loginWithEmail: vi.fn(),

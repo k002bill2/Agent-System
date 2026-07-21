@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getGoogleAuthUrl, getGitHubAuthUrl, loginWithEmail, useAuthStore } from '../stores/auth'
 import { useNavigationStore } from '../stores/navigation'
-import { getApiUrl } from '@/config/api'
+import { apiClient } from '@/services/apiClient'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
@@ -22,10 +22,7 @@ export function LoginPage() {
   useEffect(() => {
     const fetchAuthStatus = async () => {
       try {
-        const response = await fetch(getApiUrl('/api/auth/status'))
-        if (response.ok) {
-          setAuthStatus(await response.json())
-        }
+        setAuthStatus(await apiClient.get('/api/auth/status'))
       } catch {
         // Default: show email only
         setAuthStatus({ oauth_enabled: false, google_enabled: false, github_enabled: false, email_enabled: true })

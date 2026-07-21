@@ -7,7 +7,7 @@ import {
   identifyProvider,
 } from '../stores/orchestration'
 import { useExternalUsageStore } from '../stores/externalUsage'
-import { getApiUrl } from '@/config/api'
+import { apiClient } from '@/services/apiClient'
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -161,15 +161,11 @@ function groupByProvider(byModel: CostBreakdown[]): Record<string, ProviderUsage
 }
 
 async function fetchCostAnalytics(): Promise<CostAnalytics> {
-  const res = await fetch(getApiUrl('/api/analytics/costs?time_range=all'))
-  if (!res.ok) throw new Error('Failed to fetch cost analytics')
-  return res.json()
+  return apiClient.get<CostAnalytics>('/api/analytics/costs?time_range=all')
 }
 
 async function fetchClaudeUsage(): Promise<ClaudeUsageSnapshot> {
-  const res = await fetch(getApiUrl('/api/usage'))
-  if (!res.ok) throw new Error('Failed to fetch Claude Code usage')
-  return res.json()
+  return apiClient.get<ClaudeUsageSnapshot>('/api/usage')
 }
 
 // ─────────────────────────────────────────────────────────────

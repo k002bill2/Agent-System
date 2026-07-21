@@ -53,10 +53,14 @@ vi.mock('../stores/externalUsage', () => ({
 }))
 
 vi.mock('../stores/auth', () => ({
-  useAuthStore: vi.fn((selector?: (s: unknown) => unknown) => {
-    const state = { user: { id: 'u1', is_admin: false } }
-    return selector ? selector(state) : state
-  }),
+  // `getState` is required by the apiClient auth interceptor.
+  useAuthStore: Object.assign(
+    vi.fn((selector?: (s: unknown) => unknown) => {
+      const state = { user: { id: 'u1', is_admin: false } }
+      return selector ? selector(state) : state
+    }),
+    { getState: () => ({ accessToken: null }) }
+  ),
 }))
 
 // Mock ProjectMultiSelect component - captures props for testing
@@ -242,7 +246,10 @@ function setupFetchMock(overrides?: {
 
     if (urlStr.includes('/analytics/dashboard')) {
       if (overrides?.dashboardError) {
-        return Promise.resolve({ ok: false, json: () => Promise.resolve({}) } as Response)
+        return Promise.resolve({
+          ok: false,
+          json: () => Promise.resolve({ detail: 'Failed to fetch analytics' }),
+        } as Response)
       }
       return Promise.resolve({
         ok: true,
@@ -479,7 +486,7 @@ describe('AnalyticsPage', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByText('Network error')).toBeInTheDocument()
+      expect(screen.getByText('Error: Network error')).toBeInTheDocument()
     })
 
     expect(screen.getByText('Retry')).toBeInTheDocument()
@@ -537,7 +544,7 @@ describe('AnalyticsPage', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByText('Server down')).toBeInTheDocument()
+      expect(screen.getByText('Error: Server down')).toBeInTheDocument()
     })
 
     // Click Retry
