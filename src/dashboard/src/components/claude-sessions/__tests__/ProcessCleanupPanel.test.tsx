@@ -84,7 +84,8 @@ describe('ProcessCleanupPanel', () => {
     render(<ProcessCleanupPanel />)
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/claude-sessions/processes')
+        expect.stringContaining('/api/claude-sessions/processes'),
+        expect.objectContaining({ method: 'GET' })
       )
     })
   })

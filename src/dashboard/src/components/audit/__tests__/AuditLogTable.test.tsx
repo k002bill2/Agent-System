@@ -166,7 +166,9 @@ describe('AuditLogTable', () => {
       if (url.includes('/api/audit?') || url === '/api/audit') {
         return Promise.resolve({
           ok: false,
+          status: 500,
           statusText: 'Server Error',
+          json: () => Promise.resolve({ detail: 'Failed to fetch audit logs' }),
         })
       }
       return Promise.resolve({

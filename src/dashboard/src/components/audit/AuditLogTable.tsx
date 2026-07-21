@@ -12,6 +12,7 @@ import {
   Filter,
   Loader2,
 } from 'lucide-react'
+import { apiClient } from '@/services/apiClient'
 
 // Types
 export interface AuditLogEntry {
@@ -141,10 +142,7 @@ export function AuditLogTable({ sessionId, projectId, includeGlobal = true, clas
       params.set('limit', String(pageSize))
       params.set('offset', String(page * pageSize))
 
-      const res = await fetch(`/api/audit?${params}`)
-      if (!res.ok) throw new Error('Failed to fetch audit logs')
-
-      const data: AuditLogResponse = await res.json()
+      const data = await apiClient.get<AuditLogResponse>(`/api/audit?${params}`)
       setLogs(data.logs)
       setTotal(data.total)
     } catch (e) {

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { File, Download, Trash2, FileText, Image, Archive, RefreshCw } from 'lucide-react'
 import type { Artifact } from '../../types/workflow'
 import { getApiUrl } from '@/config/api'
+import { apiClient } from '@/services/apiClient'
 
 interface ArtifactBrowserProps {
   runId: string
@@ -32,11 +33,10 @@ export function ArtifactBrowser({ runId }: ArtifactBrowserProps) {
   const fetchArtifacts = async () => {
     setIsLoading(true)
     try {
-      const res = await fetch(getApiUrl(`/api/workflows/runs/${runId}/artifacts`))
-      if (res.ok) {
-        const data = await res.json()
-        setArtifacts(data.artifacts || [])
-      }
+      const data = await apiClient.get<{ artifacts?: Artifact[] }>(
+        `/api/workflows/runs/${runId}/artifacts`
+      )
+      setArtifacts(data.artifacts || [])
     } catch (e) {
       console.error('Failed to fetch artifacts:', e)
     }
@@ -45,10 +45,8 @@ export function ArtifactBrowser({ runId }: ArtifactBrowserProps) {
 
   const handleDelete = async (artifactId: string) => {
     try {
-      const res = await fetch(getApiUrl(`/api/workflows/artifacts/${artifactId}`), { method: 'DELETE' })
-      if (res.ok) {
-        setArtifacts(prev => prev.filter(a => a.id !== artifactId))
-      }
+      await apiClient.delete(`/api/workflows/artifacts/${artifactId}`)
+      setArtifacts(prev => prev.filter(a => a.id !== artifactId))
     } catch (e) {
       console.error('Failed to delete artifact:', e)
     }

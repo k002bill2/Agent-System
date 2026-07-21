@@ -692,10 +692,8 @@ describe('agents store', () => {
     }
 
     it('uses multipart/form-data when images are attached via store state', async () => {
-      // analyzeTask with images uses raw fetch, not apiClient
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify(mockAnalysisResult))
-      )
+      // analyzeTask with images posts FormData through apiClient
+      mockApiClient.post.mockResolvedValueOnce(mockAnalysisResult)
       // fetchAnalysisHistory after success uses apiClient.get
       mockApiClient.get.mockResolvedValueOnce({ items: [], total: 0, has_more: false })
 
@@ -704,38 +702,33 @@ describe('agents store', () => {
 
       await useAgentsStore.getState().analyzeTask('Analyze this UI')
 
-      const callUrl = fetchSpy.mock.calls[0][0] as string
+      const [callUrl, callBody, callOpts] = mockApiClient.post.mock.calls[0]
       expect(callUrl).toContain('analyze-with-images')
-      const callOpts = fetchSpy.mock.calls[0][1] as RequestInit
-      expect(callOpts.body).toBeInstanceOf(FormData)
-      expect(callOpts.signal).toBeInstanceOf(AbortSignal)
+      expect(callBody).toBeInstanceOf(FormData)
+      expect(callOpts).toEqual(expect.objectContaining({ timeout: expect.any(Number) }))
     })
 
     it('uses multipart/form-data when images are passed as argument', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify(mockAnalysisResult))
-      )
+      mockApiClient.post.mockResolvedValueOnce(mockAnalysisResult)
       mockApiClient.get.mockResolvedValueOnce({ items: [], total: 0, has_more: false })
 
       const images = [new File(['imgdata'], 'test.png', { type: 'image/png' })]
 
       await useAgentsStore.getState().analyzeTask('Test task', undefined, images)
 
-      const callUrl = fetchSpy.mock.calls[0][0] as string
+      const callUrl = mockApiClient.post.mock.calls[0][0]
       expect(callUrl).toContain('analyze-with-images')
     })
 
     it('includes context in FormData when images present and context provided', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify(mockAnalysisResult))
-      )
+      mockApiClient.post.mockResolvedValueOnce(mockAnalysisResult)
       mockApiClient.get.mockResolvedValueOnce({ items: [], total: 0, has_more: false })
 
       const images = [new File(['imgdata'], 'test.png', { type: 'image/png' })]
 
       await useAgentsStore.getState().analyzeTask('Test', { project_id: 'p1' }, images)
 
-      const formData = fetchSpy.mock.calls[0][1]?.body as FormData
+      const formData = mockApiClient.post.mock.calls[0][1] as FormData
       expect(formData.get('task')).toBe('Test')
       expect(formData.get('context')).toBe(JSON.stringify({ project_id: 'p1' }))
     })
@@ -788,13 +781,11 @@ describe('agents store', () => {
   })
 
   // ── extractTextFromImage ──────────────────────────────
-  // Note: extractTextFromImage uses raw fetch, not apiClient
+  // Note: extractTextFromImage posts FormData through apiClient
 
   describe('extractTextFromImage', () => {
     it('returns extracted text on success', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify({ success: true, text: 'Hello world' }))
-      )
+      mockApiClient.post.mockResolvedValueOnce({ success: true, text: 'Hello world' })
 
       const file = new File(['imgdata'], 'test.png', { type: 'image/png' })
       const result = await useAgentsStore.getState().extractTextFromImage(file)
@@ -803,37 +794,34 @@ describe('agents store', () => {
     })
 
     it('sends image via FormData', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify({ success: true, text: 'text' }))
-      )
+      mockApiClient.post.mockResolvedValueOnce({ success: true, text: 'text' })
 
       const file = new File(['imgdata'], 'test.png', { type: 'image/png' })
       await useAgentsStore.getState().extractTextFromImage(file)
 
-      expect(fetchSpy).toHaveBeenCalledWith(
+      expect(mockApiClient.post).toHaveBeenCalledWith(
         expect.stringContaining('/agents/ocr'),
-        expect.objectContaining({ method: 'POST' })
+        expect.any(FormData),
+        { skipRetry: true }
       )
-      const body = fetchSpy.mock.calls[0][1]?.body as FormData
+      const body = mockApiClient.post.mock.calls[0][1] as FormData
       expect(body.get('image')).toBe(file)
     })
 
     it('returns null when HTTP response is not ok', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(null, { status: 500, statusText: 'Server Error' })
-      )
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      mockApiClient.post.mockRejectedValueOnce(new Error('Server Error'))
 
       const file = new File(['imgdata'], 'test.png', { type: 'image/png' })
       const result = await useAgentsStore.getState().extractTextFromImage(file)
 
       expect(result).toBeNull()
+      expect(consoleSpy).toHaveBeenCalledWith('OCR request failed:', expect.any(Error))
     })
 
     it('returns null when result.success is false', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify({ success: false, error: 'OCR failed' }))
-      )
+      mockApiClient.post.mockResolvedValueOnce({ success: false, error: 'OCR failed' })
 
       const file = new File(['imgdata'], 'test.png', { type: 'image/png' })
       const result = await useAgentsStore.getState().extractTextFromImage(file)
@@ -844,7 +832,7 @@ describe('agents store', () => {
 
     it('returns null on network error', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      vi.spyOn(global, 'fetch').mockRejectedValue(new Error('Network error'))
+      mockApiClient.post.mockRejectedValueOnce(new Error('Network error'))
 
       const file = new File(['imgdata'], 'test.png', { type: 'image/png' })
       const result = await useAgentsStore.getState().extractTextFromImage(file)

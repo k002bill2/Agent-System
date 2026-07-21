@@ -12,7 +12,7 @@ import { useMenuVisibilityStore } from './stores/menuVisibility'
 import { useSettingsStore } from './stores/settings'
 import { routes } from './routes'
 import { analytics } from './services/analytics'
-import { getApiUrl } from '@/config/api'
+import { apiClient } from '@/services/apiClient'
 import {
   SidebarSkeleton,
   DashboardSkeleton,
@@ -104,13 +104,7 @@ export default function App() {
   useEffect(() => {
     const checkAuthStatus = async () => {
       try {
-        const response = await fetch(getApiUrl('/api/auth/status'))
-        if (response.ok) {
-          const data = await response.json()
-          setAuthStatus(data)
-        } else {
-          setAuthStatus({ oauth_enabled: false, google_enabled: false, github_enabled: false, email_enabled: true })
-        }
+        setAuthStatus(await apiClient.get('/api/auth/status'))
       } catch {
         setAuthStatus({ oauth_enabled: false, google_enabled: false, github_enabled: false, email_enabled: true })
       }

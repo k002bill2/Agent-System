@@ -55,7 +55,7 @@ import {
 import { useAuthStore } from '../stores/auth'
 import { ProjectMultiSelect } from '../components/analytics/ProjectMultiSelect'
 import type { TaskAnalysisHistory } from '../stores/agents'
-import { getApiUrl } from '@/config/api'
+import { apiClient } from '@/services/apiClient'
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -252,18 +252,14 @@ const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 async function fetchDashboard(timeRange: TimeRange, projectId?: string): Promise<AnalyticsDashboard> {
   const params = new URLSearchParams({ time_range: timeRange })
   if (projectId) params.append('project_id', projectId)
-  const res = await fetch(getApiUrl(`/api/analytics/dashboard?${params}`))
-  if (!res.ok) throw new Error('Failed to fetch analytics')
-  return res.json()
+  return apiClient.get<AnalyticsDashboard>(`/api/analytics/dashboard?${params}`)
 }
 
 async function fetchTaskEvalStats(projectId?: string): Promise<TaskEvalStats> {
   const params = new URLSearchParams()
   if (projectId) params.set('project_id', projectId)
   const qs = params.toString()
-  const res = await fetch(getApiUrl(`/api/feedback/task-evaluation/stats${qs ? `?${qs}` : ''}`))
-  if (!res.ok) throw new Error('Failed to fetch evaluation stats')
-  return res.json()
+  return apiClient.get<TaskEvalStats>(`/api/feedback/task-evaluation/stats${qs ? `?${qs}` : ''}`)
 }
 
 async function fetchTaskEvalList(
@@ -274,16 +270,12 @@ async function fetchTaskEvalList(
   const params = new URLSearchParams({ limit: String(limit) })
   if (agentId) params.set('agent_id', agentId)
   if (projectId) params.set('project_id', projectId)
-  const res = await fetch(getApiUrl(`/api/feedback/task-evaluation/list?${params}`))
-  if (!res.ok) throw new Error('Failed to fetch evaluation list')
-  return res.json()
+  return apiClient.get<TaskEvaluation[]>(`/api/feedback/task-evaluation/list?${params}`)
 }
 
 async function fetchAnalysisDetail(analysisId: string): Promise<TaskAnalysisHistory | null> {
   try {
-    const res = await fetch(getApiUrl(`/api/agents/orchestrate/analyses/${analysisId}`))
-    if (!res.ok) return null
-    return res.json()
+    return await apiClient.get<TaskAnalysisHistory>(`/api/agents/orchestrate/analyses/${analysisId}`)
   } catch {
     return null
   }
@@ -310,9 +302,7 @@ async function fetchMultiProjectTrends(
 ): Promise<MultiProjectTrendsResponse> {
   const params = new URLSearchParams({ metric, time_range: timeRange })
   projectIds.forEach((id) => params.append('project_ids', id))
-  const res = await fetch(getApiUrl(`/api/analytics/trends/compare?${params}`))
-  if (!res.ok) throw new Error('Failed to fetch multi-project trends')
-  return res.json()
+  return apiClient.get<MultiProjectTrendsResponse>(`/api/analytics/trends/compare?${params}`)
 }
 
 // ─────────────────────────────────────────────────────────────

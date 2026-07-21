@@ -252,4 +252,49 @@ describe('ApiClient', () => {
       expect((err as ApiError).code).toBe(ApiErrorCode.NETWORK_ERROR)
     }
   })
+
+  // ── 11. FormData body ─────────────────────────────────────
+
+  it('sends FormData untouched and omits Content-Type', async () => {
+    mockFetch(async () => jsonResponse({ ok: true }))
+
+    const formData = new FormData()
+    formData.append('image', new File(['data'], 'shot.png', { type: 'image/png' }))
+
+    await client.post('/api/agents/ocr', formData)
+
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [
+      string,
+      RequestInit,
+    ]
+    expect(init.body).toBe(formData)
+    // Browser must set multipart boundary itself
+    const headerNames = Object.keys(init.headers as Record<string, string>)
+    expect(headerNames.some((name) => name.toLowerCase() === 'content-type')).toBe(false)
+  })
+
+  it('still JSON-encodes plain object bodies and keeps Content-Type', async () => {
+    mockFetch(async () => jsonResponse({ ok: true }))
+
+    await client.post('/api/agents', { name: 'Agent A' })
+
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [
+      string,
+      RequestInit,
+    ]
+    expect(init.body).toBe(JSON.stringify({ name: 'Agent A' }))
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json')
+  })
+
+  // ── 12. Text response type ────────────────────────────────
+
+  it('returns the raw body when responseType is text', async () => {
+    mockFetch(async () => new Response('id,name\n1,Agent A', { status: 200 }))
+
+    const result = await client.get<string>('/api/feedback/dataset/export', {
+      responseType: 'text',
+    })
+
+    expect(result).toBe('id,name\n1,Agent A')
+  })
 })

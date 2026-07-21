@@ -7,7 +7,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { apiClient } from '../services/apiClient'
-import { getApiUrl } from '../config/api'
 
 // ============================================================================
 // Types
@@ -421,14 +420,10 @@ export const useFeedbackStore = create<FeedbackState>()(
           if (options?.start_date) queryParams.append('start_date', options.start_date)
           if (options?.end_date) queryParams.append('end_date', options.end_date)
 
-          const url = getApiUrl(`/api/feedback/dataset/export?${queryParams}`)
-          const response = await fetch(url)
-
-          if (!response.ok) {
-            throw new Error(`Failed to export dataset: ${response.statusText}`)
-          }
-
-          const content = await response.text()
+          const content = await apiClient.get<string>(
+            `/api/feedback/dataset/export?${queryParams}`,
+            { responseType: 'text' }
+          )
           set({ isLoading: false })
 
           return content

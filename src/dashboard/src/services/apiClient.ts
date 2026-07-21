@@ -31,6 +31,8 @@ export interface RequestConfig {
   timeout?: number
   /** Disable retry for this specific request */
   skipRetry?: boolean
+  /** How to parse a successful response body (default: 'json') */
+  responseType?: 'json' | 'text'
 }
 
 export interface RequestInterceptor {
@@ -53,6 +55,23 @@ function isNetworkError(err: unknown): boolean {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * FormData is passed through untouched so the browser can set the
+ * multipart boundary itself; everything else is JSON-encoded.
+ */
+function serializeBody(data: unknown): string | FormData | undefined {
+  if (data === undefined) return undefined
+  if (data instanceof FormData) return data
+  return JSON.stringify(data)
+}
+
+/** Drop Content-Type (case-insensitive) so the browser derives it from FormData. */
+function omitContentType(headers: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers).filter(([key]) => key.toLowerCase() !== 'content-type')
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +118,7 @@ class ApiClient {
       url,
       method: 'POST',
       headers: {},
-      body: data !== undefined ? JSON.stringify(data) : undefined,
+      body: serializeBody(data),
     })
   }
 
@@ -109,7 +128,7 @@ class ApiClient {
       url,
       method: 'PUT',
       headers: {},
-      body: data !== undefined ? JSON.stringify(data) : undefined,
+      body: serializeBody(data),
     })
   }
 
@@ -119,7 +138,7 @@ class ApiClient {
       url,
       method: 'PATCH',
       headers: {},
-      body: data !== undefined ? JSON.stringify(data) : undefined,
+      body: serializeBody(data),
     })
   }
 
@@ -131,10 +150,12 @@ class ApiClient {
 
   private async request<T>(reqConfig: RequestConfig): Promise<T> {
     // Merge default headers
+    const mergedHeaders = { ...this.config.headers, ...reqConfig.headers }
     const mergedConfig: RequestConfig = {
       ...reqConfig,
       url: `${this.config.baseURL}${reqConfig.url}`,
-      headers: { ...this.config.headers, ...reqConfig.headers },
+      headers:
+        reqConfig.body instanceof FormData ? omitContentType(mergedHeaders) : mergedHeaders,
       timeout: reqConfig.timeout ?? this.config.timeout,
     }
 
@@ -220,6 +241,10 @@ class ApiClient {
       // 204 No Content
       if (processed.status === 204) {
         return undefined as T
+      }
+
+      if (config.responseType === 'text') {
+        return (await processed.text()) as T
       }
 
       return (await processed.json()) as T

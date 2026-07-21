@@ -188,7 +188,8 @@ describe('LLMRouterSettings', () => {
     fireEvent.click(screen.getByText('Health Check'))
     await waitFor(() => {
       expect(vi.mocked(global.fetch)).toHaveBeenCalledWith(
-        expect.stringContaining('/llm-router/health')
+        expect.stringContaining('/llm-router/health'),
+        expect.objectContaining({ method: 'GET' })
       )
     })
   })

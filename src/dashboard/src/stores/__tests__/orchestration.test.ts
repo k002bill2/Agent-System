@@ -17,6 +17,7 @@ import {
   PROVIDER_CONFIG,
 } from '../orchestration'
 import { apiClient } from '../../services/apiClient'
+import { ApiError } from '../../services/errors'
 
 const mockApiClient = vi.mocked(apiClient)
 
@@ -886,10 +887,7 @@ describe('orchestration store', () => {
   describe('connect', () => {
     // Helper: start connect and manually trigger WS onopen
     async function connectAndOpen(sessionId = 'sess-new') {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ session_id: sessionId }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ session_id: sessionId })
 
       const connectPromise = useOrchestrationStore.getState().connect()
       await connectPromise
@@ -907,9 +905,11 @@ describe('orchestration store', () => {
 
       const ws = await connectAndOpen('sess-new')
 
-      expect(mockFetch).toHaveBeenCalledWith('/api/sessions', expect.objectContaining({
-        method: 'POST',
-      }))
+      expect(mockApiClient.post).toHaveBeenCalledWith(
+        '/api/sessions',
+        expect.objectContaining({ project_id: 'p1' }),
+        { skipRetry: true }
+      )
 
       const state = useOrchestrationStore.getState()
       expect(state.connected).toBe(true)
@@ -926,10 +926,7 @@ describe('orchestration store', () => {
     it('handles session creation failure (non-ok response)', async () => {
       useOrchestrationStore.setState({ selectedProjectId: 'p1' })
 
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ detail: 'Unauthorized' }),
-      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('Unauthorized'))
 
       await useOrchestrationStore.getState().connect()
 
@@ -940,7 +937,7 @@ describe('orchestration store', () => {
     it('handles session creation network error', async () => {
       useOrchestrationStore.setState({ selectedProjectId: 'p1' })
 
-      mockFetch.mockRejectedValueOnce(new Error('Network'))
+      mockApiClient.post.mockRejectedValueOnce(new Error('Network'))
 
       await useOrchestrationStore.getState().connect()
 
@@ -1066,7 +1063,7 @@ describe('orchestration store', () => {
       await useOrchestrationStore.getState().reconnect()
 
       // Should not have called fetch
-      expect(mockFetch).not.toHaveBeenCalled()
+      expect(mockApiClient.get).not.toHaveBeenCalledWith(expect.stringContaining('/sync'))
     })
 
     it('does nothing when already connecting', async () => {
@@ -1077,7 +1074,7 @@ describe('orchestration store', () => {
 
       await useOrchestrationStore.getState().reconnect()
 
-      expect(mockFetch).not.toHaveBeenCalled()
+      expect(mockApiClient.get).not.toHaveBeenCalledWith(expect.stringContaining('/sync'))
     })
 
     it('clears state when no session to reconnect', async () => {
@@ -1095,7 +1092,9 @@ describe('orchestration store', () => {
         tasks: { t1: { id: 't1' } as any },
       })
 
-      mockFetch.mockResolvedValueOnce({ ok: false })
+      mockApiClient.get.mockRejectedValueOnce(
+        new ApiError({ message: 'Not Found', status: 404, code: 'NOT_FOUND' })
+      )
 
       await useOrchestrationStore.getState().reconnect()
 
@@ -1112,7 +1111,7 @@ describe('orchestration store', () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       useOrchestrationStore.setState({ sessionId: 'sess-neterr' })
 
-      mockFetch.mockRejectedValueOnce(new Error('Network'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Network'))
 
       await useOrchestrationStore.getState().reconnect()
 
@@ -1148,10 +1147,7 @@ describe('orchestration store', () => {
         total_cost: 0.01,
       }
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(syncData),
-      })
+      mockApiClient.get.mockResolvedValueOnce(syncData)
 
       const reconnectPromise = useOrchestrationStore.getState().reconnect()
       await reconnectPromise
@@ -1180,18 +1176,15 @@ describe('orchestration store', () => {
     it('handles WebSocket close during reconnect (auto-reconnect)', async () => {
       useOrchestrationStore.setState({ sessionId: 'sess-reclose' })
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({
-          session_info: null,
-          tasks: {},
-          root_task_id: null,
-          agents: {},
-          pending_approvals: {},
-          waiting_for_approval: false,
-          token_usage: {},
-          total_cost: 0,
-        }),
+      mockApiClient.get.mockResolvedValueOnce({
+        session_info: null,
+        tasks: {},
+        root_task_id: null,
+        agents: {},
+        pending_approvals: {},
+        waiting_for_approval: false,
+        token_usage: {},
+        total_cost: 0,
       })
 
       await useOrchestrationStore.getState().reconnect()
@@ -1209,18 +1202,15 @@ describe('orchestration store', () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       useOrchestrationStore.setState({ sessionId: 'sess-reconerr' })
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({
-          session_info: null,
-          tasks: {},
-          root_task_id: null,
-          agents: {},
-          pending_approvals: {},
-          waiting_for_approval: false,
-          token_usage: {},
-          total_cost: 0,
-        }),
+      mockApiClient.get.mockResolvedValueOnce({
+        session_info: null,
+        tasks: {},
+        root_task_id: null,
+        agents: {},
+        pending_approvals: {},
+        waiting_for_approval: false,
+        token_usage: {},
+        total_cost: 0,
       })
 
       await useOrchestrationStore.getState().reconnect()
@@ -1236,18 +1226,15 @@ describe('orchestration store', () => {
     it('handles incoming messages during reconnect', async () => {
       useOrchestrationStore.setState({ sessionId: 'sess-reconmsg' })
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({
-          session_info: null,
-          tasks: {},
-          root_task_id: null,
-          agents: {},
-          pending_approvals: {},
-          waiting_for_approval: false,
-          token_usage: {},
-          total_cost: 0,
-        }),
+      mockApiClient.get.mockResolvedValueOnce({
+        session_info: null,
+        tasks: {},
+        root_task_id: null,
+        agents: {},
+        pending_approvals: {},
+        waiting_for_approval: false,
+        token_usage: {},
+        total_cost: 0,
       })
 
       await useOrchestrationStore.getState().reconnect()
@@ -1267,18 +1254,15 @@ describe('orchestration store', () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       useOrchestrationStore.setState({ sessionId: 'sess-reconbad' })
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({
-          session_info: null,
-          tasks: {},
-          root_task_id: null,
-          agents: {},
-          pending_approvals: {},
-          waiting_for_approval: false,
-          token_usage: {},
-          total_cost: 0,
-        }),
+      mockApiClient.get.mockResolvedValueOnce({
+        session_info: null,
+        tasks: {},
+        root_task_id: null,
+        agents: {},
+        pending_approvals: {},
+        waiting_for_approval: false,
+        token_usage: {},
+        total_cost: 0,
       })
 
       await useOrchestrationStore.getState().reconnect()
@@ -1303,10 +1287,7 @@ describe('orchestration store', () => {
     async function connectAndGetWs() {
       useOrchestrationStore.setState({ selectedProjectId: 'p1' })
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ session_id: 'sess-hm' }),
-      })
+      mockApiClient.post.mockResolvedValueOnce({ session_id: 'sess-hm' })
 
       await useOrchestrationStore.getState().connect()
 
