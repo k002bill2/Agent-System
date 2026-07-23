@@ -1,6 +1,6 @@
 # API Reference - Automation
 
-워크플로우(CI/CD), 시크릿, 웹훅, 아티팩트, 템플릿, 자동화 루프, 파이프라인, Warp 터미널, MCP Protocol, RAG API입니다.
+워크플로우(CI/CD), 시크릿, 웹훅, 아티팩트, 템플릿, 자동화 루프, 파이프라인, 터미널 연동, Warp 터미널, MCP Protocol, RAG API입니다.
 
 ## Base URL
 - Development: `http://localhost:8000`
@@ -54,6 +54,7 @@
 |--------|------|------|
 | GET | `/api/workflows/runs/{run_id}/artifacts` | 실행별 아티팩트 목록 |
 | POST | `/api/workflows/runs/{run_id}/artifacts` | 아티팩트 업로드 (multipart) |
+| GET | `/api/workflows/artifacts/{id}` | 아티팩트 메타데이터 조회 |
 | GET | `/api/workflows/artifacts/{id}/download` | 아티팩트 다운로드 |
 | DELETE | `/api/workflows/artifacts/{id}` | 아티팩트 삭제 |
 
@@ -66,11 +67,14 @@
 | GET | `/api/workflows/templates` | 템플릿 목록 (`?category=`, `?search=`) |
 | POST | `/api/workflows/templates` | 템플릿 생성 |
 | GET | `/api/workflows/templates/{id}` | 템플릿 상세 |
+| DELETE | `/api/workflows/templates/{id}` | 템플릿 삭제 |
 | POST | `/api/workflows/from-template/{id}` | 템플릿으로 워크플로우 생성 |
 
 ---
 
 ## Automation (자동화 루프)
+
+> ⚠️ **현재 미마운트**: 라우터 구현(`src/backend/api/automation.py`)은 존재하나 `app.py`/`routes.py` 어디에도 등록되지 않아 런타임에 접근 불가합니다. 아래 스펙은 구현 예정/보류 상태의 참조용입니다.
 
 | Method | Path | 설명 |
 |--------|------|------|
@@ -116,6 +120,8 @@
 
 ## Pipelines (데이터 파이프라인)
 
+> ⚠️ **현재 미마운트**: 라우터 구현(`src/backend/api/pipelines.py`)은 존재하나 `app.py`/`routes.py` 어디에도 등록되지 않아 런타임에 접근 불가합니다. 아래 스펙은 구현 예정/보류 상태의 참조용입니다.
+
 | Method | Path | 설명 |
 |--------|------|------|
 | POST | `/api/pipelines` | 파이프라인 정의 생성 |
@@ -143,6 +149,36 @@
 **내장 스테이지 타입**: `collect`, `transform`, `analyze`, `output`
 
 **에러 전략**: `fail_fast`, `continue`, `retry`
+
+---
+
+## Terminal Integration (공용)
+
+`api.warp`의 Warp 전용 경로를 보완하는 범용 터미널 실행 API입니다.
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/terminal/available` | 터미널 타입별 설치/사용 가능 여부 조회 |
+| POST | `/api/terminal/execute` | 선택한 터미널에서 명령/프롬프트 실행 |
+
+**터미널 타입**: `warp`, `tmux`, `terminal_app`, `iterm2`, `kitty`, `alacritty`, `ghostty`, `wezterm`, `cmux`, `orca`
+
+**실행 요청 본문** (`POST /api/terminal/execute`):
+```json
+{
+  "terminal": "warp",
+  "project_id": "project-uuid",
+  "command": "npm test",
+  "title": "Tab Title",
+  "branch_name": "feature/my-branch",
+  "image_paths": ["/path/to/screenshot.png"],
+  "use_claude_cli": true
+}
+```
+
+- `branch_name` 지정 시 실행 전 `git checkout -b` 수행
+
+> ⚠️ `use_claude_cli`(기본 `true`)는 요청 스키마에 존재하지만 현재 핸들러가 어댑터로 전달하지 않아 **무시된다**(`api/terminal.py:110-115`). 값과 무관하게 명령은 항상 `claude --dangerously-skip-permissions`로 감싸 실행된다.
 
 ---
 

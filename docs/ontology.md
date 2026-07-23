@@ -55,6 +55,36 @@ Resource
 └── DataResource               # 데이터
 ```
 
+### Tenancy Hierarchy
+
+멀티테넌시는 Organization → Project → Session 의 2단계 소속 구조다.
+
+```
+Organization                   # 최상위 테넌트 (조직)
+├── OrganizationMember         # 조직 구성원 (role/permissions 보유)
+├── OrganizationInvitation     # 조직 초대
+└── Project                    # 조직에 속한 프로젝트 (organization_id)
+    ├── ProjectAccess          # 프로젝트 RBAC 부여
+    ├── ProjectInvitation      # 프로젝트 초대
+    └── Session                # 프로젝트 컨텍스트의 세션
+```
+
+### LLM Access Hierarchy
+
+LLM 실행 권한·자격증명·사용량은 별도 계층으로 분리되어 있다.
+
+```
+LLMAccess
+├── LLMModelConfig             # 모델 레지스트리 (가격/컨텍스트/능력)
+│   └── LLMModelSuppression    # DB 재등록 금지 목록 (hard delete)
+├── Credential                 # 자격증명 (암호화 저장)
+│   ├── UserLLMCredential      # 사용자 개인 API 키
+│   └── DeploymentUsageCredential  # 배포 단위 usage 조회 전용 키
+├── UserLLMEntitlement         # 사용자/조직의 실행 모드·범위 권한
+│   └── LLMCLIProfile          # 구독형 CLI 실행 프로파일
+└── LLMUsageLedger             # AOS 발생 LLM 사용량의 내부 정본 원장
+```
+
 ---
 
 ## 속성 (Property) - 관계와 값
@@ -86,7 +116,7 @@ Resource
 | Property | Domain | Range | Description |
 |----------|--------|-------|-------------|
 | `sessionId` | Session | string | 고유 식별자 |
-| `sessionStatus` | Session | SessionStatus | 현재 상태 |
+| `sessionStatus` | Session | SessionStatus | 현재 상태 (핵심 `sessions` 테이블은 Enum이 아닌 자유 문자열 — 아래 Status Enumerations 주석 참조) |
 | `totalCost` | Session | float | 누적 비용 |
 | `tokenUsage` | Session | TokenUsage | 토큰 사용량 |
 
@@ -156,7 +186,16 @@ assigned-to (할당)
 belongs-to (소속)
 ├── Agent belongs-to Session
 ├── Task belongs-to Session
-└── User belongs-to Organization
+├── User belongs-to Organization
+├── Project belongs-to Organization
+└── Session belongs-to Project
+
+entitled-to (권한)
+├── User entitled-to LLMRuntimeMode
+└── UserLLMEntitlement references LLMCLIProfile
+
+records (기록)
+└── LLMUsageLedger records LLMInvocation
 
 monitors (모니터링)
 ├── OrchestratorAgent monitors SpecialistAgent
@@ -190,28 +229,58 @@ monitors (모니터링)
 ### Status Enumerations
 
 ```python
+# SSOT: src/backend/models/agent_state.py
 TaskStatus = {
     PENDING,      # 대기 중
     IN_PROGRESS,  # 진행 중
+    WAITING,      # 대기(의존성/외부 응답 대기)
     PAUSED,       # 일시정지
     COMPLETED,    # 완료
     FAILED,       # 실패
     CANCELLED     # 취소
 }
 
+# SSOT: src/backend/models/hitl.py
+ApprovalStatus = {
+    PENDING,      # 승인 대기
+    APPROVED,     # 승인됨
+    DENIED,       # 거부됨
+    EXPIRED       # 만료
+}
+
+# 주의: AgentStatus는 코드에 단일 SSOT가 없다. 두 정의가 공존한다.
+# (1) 레지스트리 계열 — src/backend/services/agent_registry.py,
+#     api/v1/agents.py, api/v1/agent_registry.py
 AgentStatus = {
-    IDLE,         # 유휴
+    AVAILABLE,    # 가용
     BUSY,         # 작업 중
-    BLOCKED,      # 차단됨
+    UNAVAILABLE,  # 비가용
     ERROR         # 오류
 }
 
+# (2) 모니터 계열 — src/backend/api/v1/agent_monitor.py
+AgentMonitorStatus = {
+    IDLE,         # 유휴
+    RUNNING,      # 실행 중
+    ERROR,        # 오류
+    OFFLINE       # 오프라인
+}
+# BLOCKED는 어느 정의에도 존재하지 않는다 (문서상 값, 코드 미사용).
+
+# 주의: 핵심 Session(`sessions` 테이블)의 status는 Enum이 아닌
+# String(50) 자유 문자열이며 default="active"로 생성된다. 코드가 이 컬럼에
+# 다른 값을 기록하는 곳은 없고, 읽는 쪽도 == "active" 비교뿐이다
+# (db/repository.py, services/analytics_service.py).
+# "completed" 계열 상태는 별개 개념 — Task는 TaskStatus,
+# Claude 세션 스냅샷은 아래 SessionStatus를 쓴다. 혼동 주의.
+# 아래 Enum은 Claude 세션 스냅샷 전용 — src/backend/models/claude_session.py
 SessionStatus = {
     ACTIVE,       # 활성
     IDLE,         # 유휴
     COMPLETED,    # 완료
-    EXPIRED       # 만료
+    UNKNOWN       # 판별 불가
 }
+# EXPIRED는 두 경로(핵심 세션 / 스냅샷) 어디에서도 확인되지 않았다 — 확인 필요.
 ```
 
 ---

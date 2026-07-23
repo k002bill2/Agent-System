@@ -19,6 +19,9 @@ LLM 모델 레지스트리, 라우터, 자격증명, 프록시, Playground API�
 | PATCH | `/api/llm/models/{model_id}` | 모델 설정 수정 |
 | DELETE | `/api/llm/models/{model_id}` | 모델 하드 삭제 (config 행 삭제 + suppression 기록, admin 전용) |
 | DELETE | `/api/llm/models/suppressions/{model_id}` | suppression 해제 (admin 전용) |
+| POST | `/api/llm/models/check-updates` | 모델 업데이트 체크 수동 실행 |
+| GET | `/api/llm/models/update-status` | 모델 업데이트 체크 현재 상태 |
+| GET | `/api/llm/models/update-history` | 모델 업데이트 체크 이력 |
 | GET | `/api/llm/providers` | 지원 프로바이더 목록 |
 
 **응답 형식** (GET /api/llm/models):
@@ -81,6 +84,7 @@ LLM 모델 레지스트리, 라우터, 자격증명, 프록시, Playground API�
 | PATCH | `/api/llm-router/config` | 라우터 설정 업데이트 |
 | GET | `/api/llm-router/state` | 라우터 상태 |
 | GET | `/api/llm-router/stats` | 라우팅 통계 |
+| POST | `/api/llm-router/stats/reset` | 라우팅 통계 초기화 |
 | POST | `/api/llm-router/initialize` | 환경변수에서 초기화 |
 
 **라우팅 전략**: `priority`, `round_robin`, `least_cost`, `least_latency`, `fallback_chain`
@@ -113,6 +117,7 @@ CLI-first LLM profile과 user/org entitlement를 조회하고 관리합니다.
 | POST | `/api/llm-access/profiles` | CLI profile 생성 (admin/manager) |
 | PATCH | `/api/llm-access/profiles/{profile_id}` | CLI profile 수정 (admin/manager) |
 | DELETE | `/api/llm-access/profiles/{profile_id}` | CLI profile 삭제 및 연결된 entitlement profile 매핑 해제 (admin/manager) |
+| POST | `/api/llm-access/profiles/{profile_id}/health-check` | CLI 인증/명령 헬스체크 실행 |
 | GET | `/api/llm-access/entitlements` | LLM entitlement 목록 조회 (admin/manager) |
 | POST | `/api/llm-access/entitlements` | LLM entitlement 생성 (admin/manager) |
 | PATCH | `/api/llm-access/entitlements/{entitlement_id}` | LLM entitlement 수정 (admin/manager) |
@@ -168,8 +173,11 @@ CLI 구독권 중심 사용량의 내부 원장 조회 API입니다. External Us
 |--------|------|------|
 | PATCH | `/api/playground/sessions/{id}/settings` | 세션 설정 변경 |
 | POST | `/api/playground/sessions/{id}/clear` | 대화 이력 초기화 |
+| POST | `/api/playground/sessions/{id}/execute` | 프롬프트 실행 |
 | POST | `/api/playground/sessions/{id}/execute/stream` | 스트리밍 실행 |
 | GET | `/api/playground/sessions/{id}/history` | 대화 이력 조회 |
+| DELETE | `/api/playground/sessions/{id}/messages/{message_id}` | 세션 내 특정 메시지 삭제 |
+| GET | `/api/playground/sessions/{id}/effective-system-prompt` | 최종 전송될 시스템 프롬프트 미리보기 |
 | GET | `/api/playground/tools` | 사용 가능 도구 목록 |
 | POST | `/api/playground/tools/test` | 도구 테스트 실행 |
 | POST | `/api/playground/compare` | 에이전트 비교 실행 |

@@ -162,6 +162,8 @@ org-level usage API용 admin 키(예: OpenAI `sk-admin-`)를 배포 단위로 DB
 | GET | `/api/health/services` | 서비스 상태 조회 |
 | GET | `/api/health/services/conflicts` | 포트 충돌 조회 |
 
+> **Note**: health 라우터는 `app.py`에서 prefix 없이 한 번 더 마운트됩니다. 따라서 위 경로들은 인프라 프로브용으로 `/health`, `/health/live` 처럼 `/api` 없이도 동일하게 서빙됩니다.
+
 ---
 
 ## Notifications

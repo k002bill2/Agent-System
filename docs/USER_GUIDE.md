@@ -86,11 +86,12 @@ cd infra/scripts && ./start-all.sh
 #### 1단계: 환경 설정
 
 ```bash
-# 프로젝트 디렉토리로 이동
-cd "/Users/younghwankang/Work/Agent-System"
+# 프로젝트 루트로 이동 (클론한 경로)
+cd Agent-System
 
-# .env 파일 생성
-cat > src/backend/.env << EOF
+# .env 파일은 프로젝트 루트에 생성합니다.
+# src/backend/.env 는 루트 .env 로의 심링크이며, dev.sh/start-all.sh 도 루트 .env 를 읽습니다.
+cat > .env << EOF
 # LLM runtime policy
 LLM_PROVIDER=codex_cli
 LLM_DEFAULT_MODE=cli
@@ -177,10 +178,8 @@ npm run dev
 | **Dashboard** | `/` | 메인 대시보드 (세션 상태, 태스크 요약) |
 | **Projects** | `/projects` | 프로젝트 목록 및 관리, RAG 검색 |
 | **Project Configs** | `/project-configs` | Skills, Agents, MCP, Hooks, Commands 관리 |
-| **Tasks** | `/tasks` | 태스크 트리 뷰, 상세 정보 |
 | **Sessions** | `/sessions` | 세션 활동 뷰 |
 | **Agents** | `/agents` | 에이전트 레지스트리, MCP, RLHF |
-| **Activity** | `/activity` | 실시간 활동 로그 |
 | **Monitor** | `/monitor` | 프로젝트 헬스 체크 (test, lint, build, typecheck) |
 | **Claude Sessions** | `/claude-sessions` | Claude Code 세션 모니터링 |
 | **Git** | `/git` | 브랜치/머지/PR 관리 |
@@ -194,6 +193,8 @@ npm run dev
 | **External Usage** | `/external-usage` | 내부 LLM ledger 기반 사용량과 provider billing reconciliation |
 | **Admin** | `/admin` | 관리자 (사용자 관리, 메뉴 설정, 시스템 정보) |
 | **Settings** | `/settings` | 시스템 설정 |
+
+> `TasksPage`·`ActivityPage` 컴포넌트는 코드에 남아 있으나 현재 `routes.tsx`에 라우트가 등록되지 않아 사이드바에서 접근할 수 없습니다 (태스크는 Dashboard/Sessions에, 활동 로그는 Monitor/Claude Sessions에 통합).
 
 ### Task Tree 상태
 
@@ -874,16 +875,19 @@ cd src/dashboard && npm run dev
 
 ### Claude Code 슬래시 명령어
 
+프로젝트 커맨드는 `.claude/commands/`에 있습니다 (전체 목록은 [claude-code-integration.md](./architecture/claude-code-integration.md) 참조).
+
 | 명령어 | 설명 |
 |--------|------|
 | `/check-health` | 타입체크, 린트, 테스트, 빌드 종합 검증 |
-| `/verify-app` | Boris Cherny 스타일 검증 루프 |
+| `/verify-loop` | 자동 재검증 루프 (최대 3회 재시도) |
 | `/test-coverage` | 테스트 커버리지 분석 |
-| `/commit-push-pr` | Git 워크플로우 자동화 |
 | `/start-all` | 전체 서비스 시작 |
 | `/stop-all` | 전체 서비스 중지 |
-| `/save-and-compact` | 컨텍스트 저장 후 /compact |
-| `/resume` | 이전 세션 컨텍스트 복원 |
+| `/session-wrap` | 세션 종료 시 문서·패턴·후속작업 정리 |
+| `/wip-save` | 작업 상태 저장/복원 (WIP 커밋) |
+
+> `commit-push-pr`·`draft-commits` 등 Git 워크플로우 커맨드는 이 리포가 아니라 사용자 전역 설정(`~/.claude/commands/`)에서 제공됩니다.
 
 ### 참고 링크
 

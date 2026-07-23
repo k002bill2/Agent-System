@@ -89,6 +89,7 @@ Git 상태, 브랜치, 커밋, 머지, MR, 브랜치 보호, GitHub 통합 API�
 | DELETE | `/api/git/projects/{id}/branches/{name}` | 브랜치 삭제 |
 | POST | `/api/git/projects/{id}/branches/{name}/checkout` | 브랜치 체크아웃 |
 | GET | `/api/git/projects/{id}/branches/{name}/diff` | 브랜치 diff (base 대비) |
+| POST | `/api/git/projects/{id}/branches/prune-merged` | GitHub PR이 머지된 로컬 브랜치 정리 |
 | GET | `/api/git/projects/{id}/commits` | 커밋 히스토리 |
 | GET | `/api/git/projects/{id}/commits/{sha}` | 커밋 상세 조회 |
 | GET | `/api/git/projects/{id}/commits/{sha}/files` | 커밋 파일 목록 |

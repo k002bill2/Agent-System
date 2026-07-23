@@ -36,7 +36,7 @@ AOS에는 **CLI 구독권 기반 런타임 관리**와 목적이 다른 LLM key 
 AOS의 에이전트/오케스트레이터가 **기본 provider와 예외 fallback**을 결정할 때 사용.
 
 - **설정** (`config.py`): `LLM_PROVIDER`(기본 `codex_cli`, 로컬 우선), `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY`, 모델 변수.
-- **소비**: `services/llm_service.py` `create_llm()` → provider별 LangChain 모델(`ChatOpenAI`/`ChatAnthropic`/`ChatGoogleGenerativeAI`/`ChatOllama`/`CodexCliChatModel`/`ClaudeCliChatModel`) 생성, settings 키 주입. 라우팅/페일오버 `services/llm_router_service.py`.
+- **소비**: `services/llm_service.py` `LLMService._get_llm()` → provider별 LangChain 모델(`ChatOpenAI`/`ChatAnthropic`/`ChatGoogleGenerativeAI`/`ChatOllama`/`CodexCliChatModel`/`ClaudeCliChatModel`) 생성, settings 키 주입. 라우팅/페일오버 `services/llm_router_service.py`.
 - **범위**: env는 배포 기본값과 fallback 정책을 제공한다. 사용자/조직별 CLI 실행 권한은 `llm_cli_profiles`와 `user_llm_entitlements`가 담당한다.
 
 ## [2] 유저 채팅 프록시 키
