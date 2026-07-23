@@ -1,6 +1,6 @@
 # AOS Database ERD
 
-> 38개 테이블 · `src/backend/db/models/` 기준 · 2026-03-08
+> 46개 테이블 · `src/backend/db/models/` 기준 · 2026-07-23
 
 ```mermaid
 erDiagram
@@ -148,7 +148,7 @@ erDiagram
     token_blacklist {
         string id PK
         string jti UK
-        string user_id FK
+        string user_id
         string token_type
         datetime expires_at
         datetime revoked_at
@@ -221,8 +221,10 @@ erDiagram
         string role
         string invited_by
         string token UK
+        text message
         datetime expires_at
         boolean accepted
+        datetime accepted_at
         datetime created_at
     }
 
@@ -489,6 +491,7 @@ erDiagram
         string merged_by
         string closed_by
         datetime created_at
+        datetime updated_at
         datetime merged_at
         datetime closed_at
     }
@@ -528,6 +531,13 @@ erDiagram
         datetime updated_at
     }
 
+    llm_model_suppressions {
+        string model_id PK
+        string provider
+        string reason
+        datetime suppressed_at
+    }
+
     user_llm_credentials {
         string id PK
         string user_id
@@ -538,6 +548,146 @@ erDiagram
         datetime last_verified_at
         datetime created_at
         datetime updated_at
+    }
+
+    deployment_usage_credentials {
+        string id PK
+        string provider UK
+        string api_key "encrypted"
+        string label
+        boolean is_active
+        datetime last_verified_at
+        datetime created_at
+        datetime updated_at
+    }
+
+    user_llm_entitlements {
+        string id PK
+        string user_id
+        string organization_id
+        string provider
+        string mode
+        string source_scope
+        boolean enabled
+        string cli_profile_id
+        boolean allow_api_fallback
+        string quota_policy_id
+        datetime created_at
+        datetime updated_at
+    }
+
+    llm_cli_profiles {
+        string id PK
+        string owner_user_id
+        string organization_id
+        string provider
+        string profile_name
+        string command
+        jsonb args_json
+        string working_directory
+        string auth_status
+        jsonb metadata_json
+        datetime created_at
+        datetime updated_at
+    }
+
+    llm_usage_ledger {
+        string id PK
+        string user_id
+        string organization_id
+        string provider
+        string mode
+        string source
+        string model
+        int input_tokens
+        int output_tokens
+        int total_tokens
+        string measurement_method
+        float estimated_cost_usd
+        string status
+        string session_id
+        string task_id
+        string analysis_id
+        string project_id
+        int latency_ms
+        text error_message
+        jsonb metadata_json
+        datetime started_at
+        datetime completed_at
+        datetime created_at
+    }
+
+    llm_model_update_logs {
+        string id PK
+        string provider
+        string status
+        int models_discovered
+        int new_models_found
+        int updates_found
+        int updates_applied
+        boolean is_manual
+        jsonb changes
+        text error_message
+        string triggered_by
+        datetime checked_at
+    }
+
+    %% ═══════════════════════════════════════════
+    %% Playground Domain
+    %% ═══════════════════════════════════════════
+
+    playground_sessions {
+        string id PK
+        string name
+        text description
+        string user_id
+        string project_id
+        string working_directory
+        string agent_id
+        string model
+        float temperature
+        int max_tokens
+        text system_prompt
+        boolean rag_enabled
+        int rag_k
+        boolean rag_hybrid_override
+        boolean rag_rerank_override
+        boolean rag_include_shared
+        string rules_mode
+        string memory_mode
+        jsonb selected_rule_ids
+        jsonb selected_memory_ids
+        int context_budget_tokens
+        jsonb available_tools
+        jsonb enabled_tools
+        jsonb messages
+        jsonb executions
+        int total_executions
+        int total_tokens
+        float total_cost
+        datetime created_at
+        datetime updated_at
+    }
+
+    %% ═══════════════════════════════════════════
+    %% Config Domain
+    %% ═══════════════════════════════════════════
+
+    config_versions {
+        string id PK
+        string config_type
+        string config_id
+        int version
+        string label
+        jsonb data
+        jsonb diff_from_previous
+        string status
+        text changes_summary
+        string created_by
+        text description
+        string rolled_back_from
+        datetime rolled_back_at
+        datetime created_at
     }
 
     %% ═══════════════════════════════════════════
@@ -556,6 +706,9 @@ erDiagram
         int version
         string created_by
         datetime created_at
+        datetime updated_at
+        datetime last_run_at
+        string last_run_status
     }
 
     workflow_runs {
@@ -615,6 +768,7 @@ erDiagram
         string scope_id
         string created_by FK
         datetime created_at
+        datetime updated_at
     }
 
     workflow_webhooks {
@@ -651,6 +805,7 @@ erDiagram
         string icon
         int popularity
         datetime created_at
+        datetime updated_at
     }
 
     %% ═══════════════════════════════════════════
@@ -723,10 +878,12 @@ erDiagram
 | Activity | 2 | task_analyses, session_activities |
 | Audit | 1 | audit_logs |
 | RBAC | 1 | menu_visibility |
-| LLM | 2 | llm_model_configs, user_llm_credentials |
+| LLM | 8 | llm_model_configs, llm_model_suppressions, user_llm_credentials, deployment_usage_credentials, user_llm_entitlements, llm_cli_profiles, llm_usage_ledger, llm_model_update_logs |
 | Git | 2 | merge_requests, branch_protection_rules |
+| Playground | 1 | playground_sessions |
+| Config | 1 | config_versions |
 | Workflow | 8 | workflow_definitions, workflow_runs, workflow_jobs, workflow_steps, workflow_secrets, workflow_webhooks, workflow_artifacts, workflow_templates |
-| **합계** | **38** | |
+| **합계** | **46** | |
 
 ## 관계 범례
 
@@ -738,4 +895,4 @@ erDiagram
 | PK | Primary Key |
 | UK | Unique Key |
 
-> **참고**: `feedbacks`, `task_evaluations`, `task_analyses` 등 일부 테이블은 `session_id`/`task_id`를 단순 문자열로 저장하며 DB-level FK를 사용하지 않습니다. 이 논리적 관계는 ERD에 표시하지 않았습니다.
+> **참고**: `feedbacks`, `task_evaluations`, `task_analyses`, `llm_usage_ledger` 등 일부 테이블은 `session_id`/`task_id`를 단순 문자열로 저장하며 DB-level FK를 사용하지 않습니다. 이 논리적 관계는 ERD에 표시하지 않았습니다. LLM 도메인(`llm_*`, `*_credentials`, `user_llm_entitlements`)과 `playground_sessions`, `config_versions`도 DB-level FK가 없어 관계선을 그리지 않았습니다.

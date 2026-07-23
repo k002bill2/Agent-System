@@ -103,17 +103,17 @@ sequenceDiagram
 
 | 카테고리 | 스킬 | 설명 |
 |---------|------|------|
-| **개발** | `react-web-development` | React/TS/Tailwind/Zustand |
-| **개발** | `test-automation` | Vitest 테스트 생성 |
-| **품질** | `verification-loop` | Boris Cherny 검증 루프 |
-| **메타** | `skill-creator` | 스킬 생성 |
-| **메타** | `hook-creator` | 훅 생성 |
-| **메타** | `subagent-creator` | 에이전트 생성 |
-| **메타** | `slash-command-creator` | 커맨드 생성 |
-| **운영** | `parallel-coordinator` | 병렬 실행 조율 |
-| **운영** | `cli-orchestration` | CLI 오케스트레이션 |
-| **관측** | `agent-observability` | 에이전트 추적 |
-| **관측** | `agent-improvement` | 에이전트 개선 |
+| **개발** | `react-web-development` | React/TS/Tailwind/Zustand 개발 가이드 |
+| **개발** | `test-automation` | Vitest/RTL 테스트 생성 및 커버리지 개선 |
+| **품질** | `verification-loop` | 풀스택 검증 피드백 루프 (게이트 명령 SSOT) |
+| **품질** | `verify-backend` | FastAPI/LangGraph/SQLAlchemy 패턴 검증 |
+| **품질** | `verify-frontend` | React/TS/Tailwind 패턴 검증 (memo/displayName 등) |
+| **운영** | `aos-feature-harness` | 풀스택 기능 개발 오케스트레이터 (계획→빌드→검증→리뷰→문서) |
+| **운영** | `merge-worktree` | worktree 브랜치 squash-merge |
+| **운영** | `update-llm-models` | LLM 모델 레지스트리 갱신 절차 |
+| **관측** | `agent-observability` | 에이전트 트레이싱/메트릭 수집 |
+| **관측** | `agent-improvement` | 에이전트 실패 진단 및 개선 |
+| **평가** | `run-eval` | 에이전트 성능 벤치마크 실행 (pass@k 지표) |
 
 **스킬 구조**:
 ```
@@ -129,18 +129,28 @@ sequenceDiagram
 
 | 카테고리 | 커맨드 | 설명 |
 |---------|--------|------|
-| **개발** | `/commit-push-pr` | Git 워크플로우 자동화 |
-| **개발** | `/deploy-with-tests` | 테스트 후 배포 |
-| **개발** | `/draft-commits` | 커밋 초안 생성 |
-| **품질** | `/verify-app` | 종합 검증 (tsc+ruff+pytest+build) |
-| **품질** | `/check-health` | 프로젝트 건강 검진 |
-| **품질** | `/test-coverage` | 테스트 커버리지 분석 |
-| **품질** | `/review` | 코드 리뷰 |
-| **운영** | `/dev-docs` | Dev Docs 3-파일 시스템 |
-| **운영** | `/save-and-compact` | 컨텍스트 저장 + 압축 |
-| **운영** | `/resume` | 이전 세션 복원 |
-| **운영** | `/sync-registry` | 레지스트리 동기화 |
-| **평가** | `/run-eval` | 에이전트 평가 실행 |
+| **개발** | `/plan` | planner 에이전트로 구현 계획 수립 |
+| **개발** | `/tdd` | tdd-guide 에이전트로 TDD 워크플로우 진행 |
+| **개발** | `/explore` | 코드베이스 탐색으로 구조 파악 (`--deps` 의존성 추적) |
+| **개발** | `/execute-tasks-file` | `dev/active/<phase>/*-tasks.md` 웨이브 순차 + 태스크 병렬 실행 |
+| **개발** | `/quick-commit` | 검증 스킵 빠른 커밋 (문서·설정·단순 수정 전용) |
+| **품질** | `/check-health` | 프로젝트 건강 검진 (게이트 + 의존성 audit + 헬스 스코어) |
+| **품질** | `/verify-loop` | 자동 재검증 루프 (최대 3회 재시도, 실패 시 자동 수정) |
+| **품질** | `/build-fix` | 빌드·타입 에러를 최소 변경으로 점진 수정 |
+| **품질** | `/code-review` | 미커밋 변경을 네이티브 코드 리뷰 + 보안 리뷰로 검사 |
+| **품질** | `/test-coverage` | 커버리지 리포트 실행 및 보강 필요 영역 식별 |
+| **운영** | `/start-all` | 전체 서비스 시작 (인프라 + Backend + Dashboard) |
+| **운영** | `/stop-all` | 전체 서비스 중지 |
+| **운영** | `/start-dashboard` | React 대시보드 개발 서버 실행 |
+| **운영** | `/backup` | 전체 서비스 백업 (Postgres + Redis + Qdrant) |
+| **운영** | `/restore` | 백업 디렉토리에서 전체 서비스 복원 |
+| **운영** | `/session-wrap` | 세션 종료 시 4개 병렬 에이전트로 문서·패턴·후속작업 정리 |
+| **운영** | `/wip-save` | 작업 상태 저장/복원 (WIP 커밋, 구 `/checkpoint`) |
+| **운영** | `/update-llm-models` | LLM 모델 레지스트리 갱신 (`update-llm-models` 스킬 실행) |
+
+> 참고: 에이전트 평가는 커맨드가 아니라 `.claude/skills/run-eval` **스킬**로 제공된다.
+> `commit-push-pr`·`draft-commits`·`review`도 이 리포의 `.claude/commands/` 에는 없고,
+> 전역 스킬(`~/.claude/skills/`) 또는 플러그인 커맨드(예: `/codex:review`)로 제공된다.
 
 ### Sub-agents (서브에이전트)
 
@@ -148,14 +158,19 @@ sequenceDiagram
 
 | 에이전트 | 모델 | 역할 |
 |---------|------|------|
-| `aos-orchestrator` | opus | 멀티에이전트 조율 |
-| `web-ui-specialist` | inherit | React/Tailwind UI |
-| `backend-integration-specialist` | inherit | FastAPI/LangGraph |
-| `test-automation-specialist` | haiku | 테스트 자동화 |
-| `performance-optimizer` | haiku | 성능 최적화 |
-| `quality-validator` | haiku | 품질 검증 |
-| `eval-task-runner` | inherit | 평가 태스크 실행 |
-| `eval-grader` | inherit | 평가 채점 |
+| `architect` | opus | 시스템 설계·기술 결정 |
+| `backend-integration-specialist` | inherit | FastAPI/SQLAlchemy/LangGraph 통합 |
+| `build-error-resolver` | sonnet | 빌드·타입 에러 최소 수정 |
+| `code-reviewer` | opus | 품질·보안·유지보수성 리뷰 |
+| `docs-sync` | opus | 변경 코드↔`docs/` 동기화 |
+| `eval-grader` | inherit | 루브릭 기반 평가 채점 |
+| `eval-task-runner` | inherit | 평가 실행·pass@k 산출 |
+| `integration-qa` | opus | FastAPI↔React 계약 교차검증 |
+| `planner` | opus | 기능·리팩터링 계획 수립 |
+| `security-reviewer` | opus | 보안 취약점 탐지·조치 |
+| `tdd-guide` | opus | 테스트 우선(TDD) 방법론 강제 |
+| `test-automation-specialist` | opus | Vitest/RTL 테스트·커버리지 |
+| `web-ui-specialist` | inherit | React/Tailwind UI·UX |
 
 **에이전트 파일 위치**: `.claude/agents/`
 **공유 프로토콜**: `.claude/agents/shared/quality-reference.md`
@@ -164,11 +179,11 @@ sequenceDiagram
 
 Model Context Protocol을 통한 외부 도구 연동.
 
-| 서버 | 용도 |
-|------|------|
-| `filesystem` | 파일 시스템 접근 |
-| `github` | GitHub API (PR, Issue) |
-| `playwright` | 브라우저 자동화, E2E 테스트 |
+**이 리포의 `.claude/mcp.json` 은 `{"mcpServers": {}}` 로 비어 있다.** 공통 MCP 서버는 커밋 `f77bbeb`
+("공통 MCP 서버 11개를 글로벌 마이그레이션")에서 사용자 전역 설정(`~/.claude.json`)으로 옮겨졌기 때문이다.
+따라서 MCP 서버 목록은 프로젝트가 아니라 **개발자 환경별로 결정**되며, 이 문서에 고정 목록을 두지 않는다.
+
+프로젝트 전용 MCP 서버가 필요해지면 `.claude/mcp.json` 의 `mcpServers` 에 추가한다 (전역 설정과 병합됨).
 
 ---
 
@@ -228,11 +243,11 @@ AOS Backend ──┬── Codex CLI (기본, ChatGPT 구독 세션)
 
 | 구성요소 | 수량 | 위치 |
 |---------|------|------|
-| **Hook Events** | 13 | `settings.json` |
-| **Skills** | 16+ | `.claude/skills/` |
-| **Commands** | 22+ | `.claude/commands/` |
-| **Sub-agents** | 8+ | `.claude/agents/` |
-| **MCP Servers** | 3 | `.claude/settings.json` |
+| **Hook Events** | 13 종 지원 / **1 종 등록** | 플랫폼이 지원하는 이벤트 타입은 13종이나, `.claude/settings.json` 에 실제 등록된 것은 `PostToolUse` 하나뿐 |
+| **Skills** | 11 | `.claude/skills/` |
+| **Commands** | 18 | `.claude/commands/` |
+| **Sub-agents** | 13 | `.claude/agents/` |
+| **MCP Servers** | 0 | `.claude/mcp.json` (프로젝트 등록 서버 없음) |
 | **Shared Protocols** | 1 | `.claude/agents/shared/` |
 
 ---
@@ -241,7 +256,10 @@ AOS Backend ──┬── Codex CLI (기본, ChatGPT 구독 세션)
 
 - `CLAUDE.md` - 프로젝트 메인 가이드
 - `docs/architecture.md` - AOS 시스템 아키텍처
-- `.claude/skills/hook-creator/` - 훅 생성 스킬
-- `.claude/skills/subagent-creator/` - 에이전트 생성 스킬
-- `.claude/skills/slash-command-creator/` - 커맨드 생성 스킬
+- `.claude/skills/aos-feature-harness/SKILL.md` - 풀스택 기능 개발 오케스트레이터
+- `.claude/skills/verification-loop/SKILL.md` - 게이트 명령 SSOT
 - `docs/guides/boris-cherny-workflow-guide.md` - Boris Cherny 워크플로우
+
+> 참고: `hook-creator`, `subagent-creator`, `slash-command-creator`, `skill-creator` 등 메타 스킬은
+> 이 리포의 활성 `.claude/skills/` 에 설치되어 있지 않다. 원본은 `claude-workspace-template/core/.claude/skills/`
+> 템플릿에만 존재하므로, 필요하면 템플릿에서 복사해 사용한다.

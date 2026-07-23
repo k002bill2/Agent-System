@@ -50,18 +50,16 @@ LLM_API_FALLBACK_ENABLED=false
 
 ### 3. 인프라 실행 (PostgreSQL, Redis, Qdrant)
 
-```bash
-# 프로젝트 루트에서 실행
-docker compose up -d postgres redis qdrant
-```
-
-또는 dev.sh 스크립트 사용:
+개발 환경에서는 `~/Work/shared-infra`의 공용 DB 스택을 사용합니다 (ppt-maker, image-maker 등 다른 프로젝트와 공유). AOS는 자체 DB 스택을 띄우지 않습니다.
 
 ```bash
-./infra/scripts/dev.sh
+cd infra/scripts && ./dev.sh
 ```
 
-> **참고**: Qdrant는 컨테이너 내부에 curl/wget이 없어 Docker healthcheck을 지원하지 않습니다. `service_started` 조건으로 시작되며, 보통 수 초 내에 준비됩니다. PostgreSQL과 Redis는 healthcheck이 설정되어 있습니다.
+`dev.sh`는 `~/Work/shared-infra/docker-compose.yml`을 대상으로 PostgreSQL·Redis·Qdrant를 기동합니다. shared-infra가 없으면 스크립트가 먼저 클론/생성하라고 안내합니다.
+
+> **참고**: 프로젝트 루트의 `docker-compose.yml`은 **self-host 전체 스택 배포**(앱 + DB)용이며, 개발용 인프라 소스가 아닙니다. 이 파일은 `POSTGRES_PASSWORD:?` 같은 시크릿 가드가 걸려 있어 `docker compose up -d postgres`를 직접 실행하면 시크릿 없이 실패합니다 — self-host는 `./setup.sh`를 사용하세요 ([self-host 퀵스타트](./self-host-quickstart.md)).
+> Qdrant는 컨테이너 내부에 curl/wget이 없어 Docker healthcheck을 지원하지 않습니다. `service_started` 조건으로 시작되며, 보통 수 초 내에 준비됩니다. PostgreSQL과 Redis는 healthcheck이 설정되어 있습니다.
 
 ### 4. Backend 실행
 
@@ -159,7 +157,7 @@ http://localhost:5173
 2. **LLM 실행 에러**: `codex` CLI 로그인 상태와 `LLM_PROVIDER=codex_cli` 확인. API fallback을 의도한 경우에만 `LLM_API_FALLBACK_ENABLED=true`와 해당 key 확인
 3. **CORS 에러**: `CORS_ORIGINS` 형식 확인 (쉼표 구분: `a.com,b.com` 또는 JSON 배열)
 4. **UI 에러**: `npm install` 후 재시작
-5. **DB 에러**: `USE_DATABASE=false`로 설정하거나 `docker compose up -d postgres redis qdrant` 실행
+5. **DB 에러**: `USE_DATABASE=false`로 설정하거나 `cd infra/scripts && ./dev.sh`로 shared-infra DB 스택을 기동
 6. **Qdrant 연결 안됨**: 컨테이너 시작 후 수 초 대기 필요 (healthcheck 없이 `service_started`로 시작됨)
 
 자세한 내용은 [USER_GUIDE.md](./USER_GUIDE.md) 참조

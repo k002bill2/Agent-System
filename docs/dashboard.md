@@ -75,7 +75,7 @@ import { cn } from '@/lib/utils';
 | `SettingsPage` | `/settings` | 시스템 설정 (LLM Access, CLI profile, fallback API 키, Claude Code OAuth, 터미널 감지) |
 | `LoginPage` | `/login` | OAuth/Email 로그인 |
 | `RegisterPage` | `/register` | 이메일/비밀번호 회원가입 |
-| `AuthCallbackPage` | `/auth/callback` | OAuth 콜백 처리 (App.tsx에서 eager 로딩) |
+| `AuthCallbackPage` | `/auth/callback/google`, `/auth/callback/github` | OAuth 콜백 처리 (routes.tsx 미등록, App.tsx에서 provider별 eager 로딩) |
 | `InvitationAcceptPage` | `/invitations/accept` | 조직 초대 수락 페이지 |
 
 ---
@@ -299,7 +299,8 @@ import { cn } from '@/lib/utils';
 | 컴포넌트 | 설명 |
 |----------|------|
 | `ContextWindowMeter` | Context 창 사용량 게이지 |
-| `CostMonitor` | 비용 모니터링 패널 (provider별 소스 표기, Claude 주간 토큰 합산) |
+| `CostMonitor` | 비용 모니터링 패널 (provider별 소스 표기, Claude 주간 토큰 합산) — 파일은 `components/CostMonitor.tsx` (usage/ 하위 아님), DashboardPage에서 사용 |
+| `CostBadge` | 헤더 비용 요약 배지 — `components/CostMonitor.tsx`의 동일 파일 내 별도 export, App.tsx에서 사용 |
 | `UsageProgressBar` | 사용량 진행바 |
 | `ClaudeUsageDashboard` | Claude 사용량 대시보드 (Codex 5시간/주간 한도 카드 + combined weekly tokens 통합) |
 | `DailyCostTrend` | 일간 비용 추이 차트 |
@@ -397,6 +398,8 @@ import { cn } from '@/lib/utils';
 | `useLLMUsageStore` | `llmUsage.ts` | 내부 `llm_usage_ledger` summary 조회 |
 | `useLLMCredentialStore` | `llmCredentials.ts` | fallback/compatibility API 키 관리 |
 | `useInfraStatusStore` | `infraStatus.ts` | 인프라 서비스 상태 관리 (Docker, 포트 체크) |
+| `useDeploymentUsageKeyStore` | `deploymentUsageKeys.ts` | 배포 단위 usage admin 키 CRUD (`/external-usage/admin-keys`, provider별 db/env 소스 표기, 마스킹된 키) |
+| `useDiagnosticsStore` | `diagnostics.ts` | 프로젝트별 진단 결과 조회 및 fix 액션 실행 (`diagnosticsMap`, `fetchDiagnostics`, `executeFix`) |
 
 ### Store Pattern
 
@@ -578,8 +581,7 @@ src/dashboard/
 │   │   │   └── types.ts
 │   │   └── analytics/          # Analytics
 │   │       └── ProjectMultiSelect.tsx
-│   ├── services/               # API 서비스 레이어
-│   ├── stores/                 # Zustand 스토어 (27개 + index.ts)
+│   ├── stores/                 # Zustand 스토어 (31개 + index.ts)
 │   │   ├── orchestration/      # 리팩토링: index.ts, types.ts, wsConnection.ts, wsHandler.ts
 │   │   ├── orchestration.ts    # 재export
 │   │   ├── projects.ts
@@ -605,7 +607,11 @@ src/dashboard/
 │   │   ├── menuVisibility.ts
 │   │   ├── projectAccess.ts
 │   │   ├── externalUsage.ts
+│   │   ├── llmAccess.ts
+│   │   ├── llmUsage.ts
 │   │   ├── llmCredentials.ts
+│   │   ├── deploymentUsageKeys.ts
+│   │   ├── diagnostics.ts
 │   │   ├── infraStatus.ts
 │   │   └── workflows.ts
 │   ├── config/                 # 설정 (API 엔드포인트 등)

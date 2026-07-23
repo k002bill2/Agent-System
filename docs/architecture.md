@@ -69,12 +69,10 @@ src/backend/
 ├── orchestrator/
 │   ├── engine.py            # 메인 실행 엔진
 │   ├── graph.py             # LangGraph 그래프 구성
-│   ├── nodes.py             # 6가지 노드 구현
-│   ├── parallel_executor.py # 병렬 실행
+│   ├── nodes.py             # BaseNode + 5개 노드 (Orchestrator/Planner/Executor/Reviewer/SelfCorrection)
+│   ├── parallel_executor.py # ParallelExecutorNode (병렬 실행)
 │   └── tools.py             # MCP 도구 실행자
-├── services/                    # 72개 서비스/매니저 모듈
-│   ├── adapters/               # 어댑터 패턴 구현 (비어있음)
-│   ├── cache/                  # 캐싱 레이어 (비어있음)
+├── services/                    # 74개 서비스/매니저 모듈 (services/*.py 75개 중 __init__.py 제외, pipeline/ 패키지는 별도)
 │   ├── agent_manager.py           # 에이전트 인스턴스 관리
 │   ├── agent_registry.py          # 에이전트 등록소
 │   ├── alerting_service.py        # 알림/경고 서비스
@@ -153,8 +151,8 @@ src/backend/
 │           ├── transform_stage.py # 데이터 변환 단계
 │           ├── analyze_stage.py   # 데이터 분석 단계
 │           └── output_stage.py    # 결과 출력 단계
-├── api/                     # FastAPI 라우터 (45개 모듈)
-│   └── v1/                  # v1 API (agent_monitor, agent_registry, auth_middleware 등)
+├── api/                     # FastAPI 라우터 (48개 모듈, api/*.py 기준 __init__.py 제외)
+│   └── v1/                  # v1 API (6개 모듈: agent_monitor, agent_registry, agents, auth_middleware, rate_limiter, stations)
 │       ├── agents.py        # 에이전트 CRUD API
 │       ├── rate_limiter.py  # API 속도 제한
 │       └── stations.py      # 스테이션 관리 API
@@ -186,12 +184,15 @@ src/backend/
 │       ├── activity.py      # SessionActivityModel
 │       ├── config_version.py # ConfigVersionModel (설정 버전 스냅샷/롤백)
 │       ├── playground.py    # PlaygroundSessionModel (에이전트 테스트 세션)
+│       ├── audit.py         # AuditLogModel (감사 로그)
+│       ├── model_update.py  # ModelUpdateLogModel (모델 자동 발견/갱신 이력)
 │       └── base.py          # Base, TimestampMixin
-├── models/                  # Pydantic 데이터 모델 (32개)
+├── models/                  # Pydantic 데이터 모델 (35개, models/*.py 기준 __init__.py 제외)
 ├── middleware/
 │   └── rate_limit.py        # RateLimitMiddleware (per-user/IP, tier-based)
 ├── utils/
 │   └── time.py              # utcnow() - timezone-aware UTC (datetime.utcnow() 대체)
+├── phase_runner/            # tasks.md 웨이브 실행기 (runner, migrate, checkbox_sync, schema)
 ├── data/                    # 데이터 파일 (시드, 설정 등)
 ├── scripts/                 # 유틸리티 스크립트
 ├── config.py                # 앱 설정 (환경변수 로드)

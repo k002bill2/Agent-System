@@ -1,6 +1,6 @@
 # API Reference - Projects
 
-프로젝트 레지스트리, 오케스트레이션, 설정(Skills/Agents/MCP/Hooks/Commands), 버전 관리, 접근제어, 초대, 모니터링 API입니다.
+프로젝트 레지스트리, 오케스트레이션, 설정(Skills/Agents/MCP/Hooks/Commands), 버전 관리, 접근제어, 초대, 모니터링, 진단 API입니다.
 
 ## Base URL
 - Development: `http://localhost:8000`
@@ -17,6 +17,7 @@
 | GET | `/api/project-registry/{id}` | 프로젝트 상세 |
 | PUT | `/api/project-registry/{id}` | 프로젝트 수정 |
 | DELETE | `/api/project-registry/{id}` | 프로젝트 비활성화 (soft-delete) |
+| DELETE | `/api/project-registry/{id}/permanent` | 프로젝트 영구 삭제 (hard-delete, admin 전용) |
 | POST | `/api/project-registry/{id}/restore` | 프로젝트 복원 |
 
 ### Project Members
@@ -83,7 +84,7 @@
 | POST | `/api/project-configs/{project_id}/skills` | 스킬 생성 |
 | PUT | `/api/project-configs/{project_id}/skills/{skill_id}` | 스킬 수정 |
 | DELETE | `/api/project-configs/{project_id}/skills/{skill_id}` | 스킬 삭제 |
-| POST | `/api/project-configs/{project_id}/skills/copy` | 스킬 복사 (다른 프로젝트에서) |
+| POST | `/api/project-configs/{project_id}/skills/{skill_id}/copy` | 스킬 복사 (다른 프로젝트로) |
 
 ### Agents
 
@@ -93,7 +94,7 @@
 | POST | `/api/project-configs/{project_id}/agents` | 에이전트 생성 |
 | PUT | `/api/project-configs/{project_id}/agents/{agent_id}` | 에이전트 수정 |
 | DELETE | `/api/project-configs/{project_id}/agents/{agent_id}` | 에이전트 삭제 |
-| POST | `/api/project-configs/{project_id}/agents/copy` | 에이전트 복사 |
+| POST | `/api/project-configs/{project_id}/agents/{agent_id}/copy` | 에이전트 복사 (다른 프로젝트로) |
 
 ### MCP Servers
 
@@ -103,17 +104,20 @@
 | POST | `/api/project-configs/{project_id}/mcp` | MCP 서버 추가 |
 | PUT | `/api/project-configs/{project_id}/mcp/{server_id}` | MCP 서버 수정 |
 | DELETE | `/api/project-configs/{project_id}/mcp/{server_id}` | MCP 서버 삭제 |
-| POST | `/api/project-configs/{project_id}/mcp/copy` | MCP 서버 복사 |
+| POST | `/api/project-configs/{project_id}/mcp/{server_id}/enable` | MCP 서버 활성화 |
+| POST | `/api/project-configs/{project_id}/mcp/{server_id}/disable` | MCP 서버 비활성화 |
+| POST | `/api/project-configs/{project_id}/mcp/{server_id}/toggle` | MCP 서버 활성/비활성 토글 |
+| POST | `/api/project-configs/{project_id}/mcp/{server_id}/copy` | MCP 서버 복사 (다른 프로젝트로) |
 
 ### Hooks
 
 | Method | Path | 설명 |
 |--------|------|------|
-| GET | `/api/project-configs/{project_id}/hooks` | Hook 목록 |
-| POST | `/api/project-configs/{project_id}/hooks` | Hook 생성 |
-| PUT | `/api/project-configs/{project_id}/hooks/{hook_id}` | Hook 수정 |
-| DELETE | `/api/project-configs/{project_id}/hooks/{hook_id}` | Hook 삭제 |
-| POST | `/api/project-configs/{project_id}/hooks/copy` | Hook 복사 |
+| GET | `/api/project-configs/{project_id}/hooks` | Hook 설정 조회 |
+| PUT | `/api/project-configs/{project_id}/hooks` | hooks.json 전체 내용 수정 |
+| POST | `/api/project-configs/{project_id}/hooks/events/{event}` | 이벤트에 Hook 엔트리 추가 |
+| DELETE | `/api/project-configs/{project_id}/hooks/{event}/{index}` | 이벤트/인덱스로 Hook 엔트리 삭제 |
+| POST | `/api/project-configs/{project_id}/hooks/{event}/{index}/copy` | Hook 복사 (다른 프로젝트로) |
 
 **Hook 이벤트 타입**: `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Notification`, `UserPromptSubmit`, `SessionStart`, `SessionEnd`, `Stop`, `SubagentStart`, `SubagentStop`, `PreCompact`, `PermissionRequest`, `Setup`
 
@@ -266,3 +270,19 @@
 | GET | `/api/projects/{id}/checks/{check_type}` | 특정 체크 실행 (SSE) |
 
 **체크 타입**: `test`, `lint`, `build`, `type_check`
+
+---
+
+## Project Diagnostics
+
+프로젝트 환경 진단 및 self-healing API입니다.
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/projects/{project_id}/diagnostics` | 전체 환경 진단 실행 |
+| GET | `/api/projects/{project_id}/diagnostics/{category}` | 단일 카테고리 진단 실행 |
+| POST | `/api/projects/{project_id}/diagnostics/fix` | self-healing 수정 액션 실행 |
+
+**진단 카테고리**: `workspace`, `mcp`, `git`, `quota`
+
+**수정 액션** (`POST .../diagnostics/fix`): `create_aos_config`, `create_claude_md`, `enable_mcp_servers`
