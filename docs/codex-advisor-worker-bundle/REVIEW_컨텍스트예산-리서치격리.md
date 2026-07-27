@@ -153,7 +153,8 @@ GSD 비활성                          →  HANDOFF.md 1장 작성
 ### 3.1 계산
 
 ```
-baseline  := 세션에서 처음 관측한 current_tokens (세션별 상태파일에 래치)
+baseline  := 예산 기준점  (세션별 상태파일 …-base 에 래치)
+prev      := 직전 관측값  (세션별 상태파일 …-prev — 재래치 판정 전용)
 delta     := current_tokens - baseline
 BUDGET    := 59_000        # 조언자 세션의 실작업 예산
 ```
@@ -166,8 +167,21 @@ BUDGET    := 59_000        # 조언자 세션의 실작업 예산
   실측 환산 — 이 세션에서 도구 무거운 오리엔테이션 24턴에 delta 49k였으므로
   59k ≈ **조사 위주 약 29턴** 분량. 창 사용률은 어디까지나 역산의 입력이고,
   실제 판정 기준은 창 크기와 무관한 델타다(아래 참조).
-- **compact 후 재래치:** `current < baseline` 이면 `baseline := current`.
-  compact/새 세션 후 델타가 음수로 새는 것을 1줄로 막는다.
+- **compact 후 재래치 — 기준은 baseline 이 아니라 `prev`(직전 관측값)다.**
+
+  ```
+  prev 없음 또는 base 없음   → base := current, (최초 관측/상태파일 유실)
+  current < prev            → base := current   ← 관측값 하락 = compact 발생
+  그 외                      → 유지
+  항상 마지막에               prev := current
+  ```
+
+  **`current < baseline` 을 쓰면 안 되는 이유 (Codex 5라운드 지적 A):** compact 는 시스템 프롬프트·
+  CLAUDE.md·도구 스키마(= baseline 을 구성하는 고정 비용)를 그대로 두고 대화만 요약으로 대체한다.
+  결과는 `baseline + 요약` 이라 **대개 baseline 보다 크다** → 조건이 영원히 거짓 → 예산이 리셋되지
+  않고 compact 이전 delta 를 그대로 물려받아 **compact 직후 즉시 재발동**한다(디바운스 상태도 승계).
+  실측(구버전 코드): 50,905 → 109,905 → **62,000(compact)** 시퀀스에서 잔량이 100 이 아니라 **86**,
+  다음 관측 113,000 에서 **22**(이미 CRITICAL). prev 기반으로 고치면 각각 **100 / 36** 이다.
 - **재래치 시 디바운스 상태도 함께 지운다** (필수 — 안 하면 compact 후 첫 5회 경고가 삼켜진다):
 
   ```bash
@@ -224,6 +238,18 @@ gsd-context-monitor.js  ← 이미 PostToolUse 에 등록돼 있음. 무수정
    ▼
 ~/.claude/CLAUDE.md 번들 블록의 규칙이 대응을 규정 (§6)
 ```
+
+**대상 스크립트가 만족해야 할 앵커 2종 (수동 삽입 시에도 동일):**
+
+| 앵커 | 역할 | 불만족 시 |
+|---|---|---|
+| `^CURRENT_USAGE=` | 삽입 위치(이 줄 뒤) + 토큰 합산값의 출처 | 대상에서 제외 |
+| `^input=` | 삽입 블록이 참조하는 stdin 변수명이 `input` 임을 보장 | 대상에서 제외(경고 후 skip) — 다른 이름(`payload=$(cat)` 등)이면 블록이 미정의 `$input` 을 읽어 브리지가 조용히 죽고 stderr 에 `unbound variable` 이 매 렌더마다 새어나온다 |
+
+stdin 을 다른 변수명으로 받는 statusline 을 쓴다면, 위 블록의 `"$input"` 을 그 변수명으로 바꿔 수동 삽입한다.
+
+**심링크 대상:** statusline 이 dotfiles 저장소로의 심링크면 설치기가 **실제 경로까지 해석(최대 5홉)한 뒤**
+그 파일에 쓴다. 심링크 자체를 일반 파일로 갈아치우지 않는다(연결이 조용히 끊어지는 것을 막는다).
 
 **남의 파일 수정 문제:** `awesome-statusline.sh`는 번들 소유가 아니다.
 번들이 CLAUDE.md에 쓰는 것과 동일한 **마커 블록 + 백업** 기법을 그대로 적용한다

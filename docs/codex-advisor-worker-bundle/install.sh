@@ -31,6 +31,17 @@ CTX_MARK_END='# <<< codex-advisor-worker-bundle:ctx-budget:end -->>>'
 # 브리지 값을 읽는 GSD 훅의 핀 버전. 불일치 시 경고만 하고 설치는 계속한다.
 GSD_HOOK_PIN='1.26.0'
 
+# statusline 이 stdin 을 'input' 변수로 받는지 판정하는 앵커 (grep -E).
+# **이 판정 하나가 두 동작을 가른다** — 통과하면 '삽입 대상', 실패하면 '정리 경로'다.
+# 따라서 좁게 잡으면 정상 동작하던 스크립트(export input=$(cat) 등)가 정리 대상으로 흘러들어가
+# 잘 돌던 브리지가 삭제된다. 정의를 한 곳에만 두는 이유도 그것 — 두 곳에 쓰면 언젠가 갈라진다.
+# 허용: 선행 공백, export / declare -x / local / typeset 접두사.
+CTX_INPUT_ANCHOR='^[[:space:]]*(export[[:space:]]+|declare[[:space:]]+-[a-zA-Z]+[[:space:]]+|local[[:space:]]+|typeset[[:space:]]+)?input='
+
+ctx_has_input_anchor() {
+  grep -qE "${CTX_INPUT_ANCHOR}" "$1" 2>/dev/null
+}
+
 mkdir -p "${AGENTS_DIR}"
 
 # 백업된 파일 경로 누적 (bash 3.2 호환: 배열 대신 개행 구분 문자열)
@@ -121,6 +132,106 @@ check_gsd_hook_version() {
   fi
 }
 
+# ── statusline 조작 공용 헬퍼 (삽입 경로·구 블록 정리 경로가 함께 쓴다) ──────────
+#
+# 심링크를 실제 경로까지 해석한다. 성공 시 결과를 전역 CTX_RESOLVED 에 넣고 0 을 반환하며,
+# 이 값은 **호출 직후에만 유효**하다(다음 호출이 덮어쓴다). 해석 불가면 비0 반환 + CTX_RESOLVED 미갱신.
+# install_file_preserve_mode 의 'mv -f tmp target' 은 target 이 심링크면 심링크 자체를
+# 일반 파일로 갈아치운다 → dotfiles 저장소 연결이 조용히 끊어진다. 그래서 쓰기 전에 해석한다.
+# readlink -f 는 BSD/macOS 구버전에 없으므로 직접 최대 5홉까지 따라간다.
+ctx_resolve_link() {
+  ctx_rl_path="$1"
+  ctx_rl_hops=0
+  while [ -L "${ctx_rl_path}" ] && [ "${ctx_rl_hops}" -lt 5 ]; do
+    ctx_rl_link="$(readlink "${ctx_rl_path}")"
+    case "${ctx_rl_link}" in
+      /*) ctx_rl_path="${ctx_rl_link}" ;;
+      *)  ctx_rl_path="$(dirname "${ctx_rl_path}")/${ctx_rl_link}" ;;  # 상대 심링크는 대상 디렉토리 기준
+    esac
+    ctx_rl_hops=$(( ctx_rl_hops + 1 ))
+  done
+  if [ -L "${ctx_rl_path}" ]; then
+    echo "  ⚠ 심링크 체인이 너무 깊습니다(5홉 초과) → 건너뜀: ${ctx_rl_path}"
+    return 1
+  fi
+  if [ ! -f "${ctx_rl_path}" ]; then
+    echo "  ⚠ 심링크 해석 결과가 일반 파일이 아닙니다 → 건너뜀: ${ctx_rl_path}"
+    return 1
+  fi
+  if [ "${ctx_rl_hops}" -gt 0 ]; then
+    echo "  심링크 해석(${ctx_rl_hops}홉) → 실제 파일: ${ctx_rl_path}"
+  fi
+  CTX_RESOLVED="${ctx_rl_path}"
+  return 0
+}
+
+# 마커 구조 검증: 없음(0쌍) 또는 정확히 1쌍(start가 end보다 앞)만 정상. 비정상이면 비0.
+# 정리 경로에서 특히 중요하다 — start 만 있고 end 가 없는 파일에 ctx_strip_markers 를 돌리면
+# 블록 시작 이후 전부가 삭제된다(사용자 스크립트 파손).
+ctx_markers_sane() {
+  ctx_ms_file="$1"
+  ctx_ms_n_start="$(grep -cF "${CTX_MARK_START}" "${ctx_ms_file}" || true)"
+  ctx_ms_n_end="$(grep -cF "${CTX_MARK_END}" "${ctx_ms_file}" || true)"
+  if [ "${ctx_ms_n_start}" -ne "${ctx_ms_n_end}" ] || [ "${ctx_ms_n_start}" -gt 1 ]; then
+    echo "  ⚠ 브리지 마커 구조 비정상(start=${ctx_ms_n_start}, end=${ctx_ms_n_end}) → 건너뜀"
+    echo "    ${ctx_ms_file} 에서 마커를 수동 정리 후 재실행하세요."
+    return 1
+  fi
+  if [ "${ctx_ms_n_start}" -eq 1 ]; then
+    ctx_ms_l_start="$(grep -nF "${CTX_MARK_START}" "${ctx_ms_file}" | head -1 | cut -d: -f1)"
+    ctx_ms_l_end="$(grep -nF "${CTX_MARK_END}" "${ctx_ms_file}" | head -1 | cut -d: -f1)"
+    if [ "${ctx_ms_l_start}" -ge "${ctx_ms_l_end}" ]; then
+      echo "  ⚠ 브리지 마커 순서 역전(start=${ctx_ms_l_start}, end=${ctx_ms_l_end}) → 건너뜀"
+      return 1
+    fi
+  fi
+  return 0
+}
+
+# 마커 블록 '본문이' "$input" / "${input}" 을 참조하면 0(= 깨진 구 버전 블록).
+# 판정 범위를 마커 사이로 한정하는 것이 핵심 — 파일 다른 곳의 input 문자열(주석·다른 변수)에
+# 반응하면 정상 블록을 파괴한다. ctx_strip_markers 의 awk 를 뒤집어(버리는 대신 출력) 본문만 뽑는다.
+ctx_block_uses_input() {
+  awk -v s="${CTX_MARK_START}" -v e="${CTX_MARK_END}" '
+    $0 == s { inblock=1; next }
+    $0 == e { inblock=0; next }
+    inblock { print }
+  ' "$1" | grep -qE '\$\{input\}|\$input([^A-Za-z0-9_]|$)'
+}
+
+# 마커 블록만 제거한 내용을 $2 에 쓴다 (마커 밖은 바이트 그대로 보존).
+ctx_strip_markers() {
+  awk -v s="${CTX_MARK_START}" -v e="${CTX_MARK_END}" '
+    $0 == s { inblock=1; next }
+    $0 == e { inblock=0; next }
+    inblock { next }
+    { print }
+  ' "$1" > "$2"
+}
+
+# 지원 불가로 skip 하는 스크립트에 구 버전이 심어둔 브리지 블록이 남아 있으면 제거한다.
+# 구 버전은 '^CURRENT_USAGE=' 앵커만 봤으므로 stdin 을 다른 이름(payload=$(cat) 등)으로 받는
+# 스크립트에도 블록을 심었다. 그 블록은 "$input" 을 참조하므로 매 렌더 unbound variable 로
+# 죽는다 — 삽입 대상에서 빼기만 하면 업데이트가 고장을 고치지 못한다. 삽입은 안 하되 제거는 한다.
+ctx_cleanup_stale_block() {
+  ctx_resolve_link "$1" || return 0
+  ctx_cs_file="${CTX_RESOLVED}"
+  grep -qF "${CTX_MARK_START}" "${ctx_cs_file}" 2>/dev/null || return 0
+  ctx_markers_sane "${ctx_cs_file}" || return 0
+  # 수동 수리본은 보존한다. 위 경고는 사용자에게 수동 삽입을 안내하므로(REVIEW §4), 사용자가
+  # 블록 안의 "$input" 을 자기 변수명으로 고쳐 정상 동작시키는 것은 **지원되는 시나리오**다.
+  # 마커가 있다는 이유만으로 지우면 잘 돌던 설정을 재실행마다 파괴하고 경고를 꺼버린다.
+  if ! ctx_block_uses_input "${ctx_cs_file}"; then
+    echo "  마커 블록이 있으나 \$input 참조가 없어 수동 수리본으로 보고 보존합니다."
+    return 0
+  fi
+  echo "  구 버전이 설치한 브리지 블록을 발견했습니다 → 백업 후 제거합니다(마커 밖은 보존)."
+  ctx_cs_tmp="$(mktemp)"
+  ctx_strip_markers "${ctx_cs_file}" "${ctx_cs_tmp}"
+  install_file_preserve_mode "${ctx_cs_file}" "${ctx_cs_tmp}"
+  echo "    ↳ 구 블록 제거 완료 (블록을 새로 삽입하지는 않습니다)"
+}
+
 # 활성 statusline 스크립트에 컨텍스트 예산 브리지 블록을 삽입한다.
 # settings.json 은 읽기만 하고 절대 쓰지 않는다. 전제가 하나라도 어긋나면 경고 후 skip.
 install_ctx_bridge() {
@@ -146,11 +257,16 @@ install_ctx_bridge() {
   # 래퍼 커맨드 대응: 첫 토큰이 아니라 토큰을 순회하며 대상을 고른다.
   #   "bash ~/statusline.sh" / "env FOO=1 ~/statusline.sh" / "/bin/zsh ~/statusline.sh"
   # 첫 토큰만 보면 인터프리터(bash/env)를 대상으로 잡아 앵커를 못 찾고 조용히 skip 된다.
-  # 후보 조건: 선행 '~' 를 $HOME 으로 확장한 뒤 실제 파일(-f)이고 앵커를 포함한 첫 파일.
+  # 후보 조건: 선행 '~' 를 $HOME 으로 확장한 뒤 실제 파일(-f)이고 앵커 2종을 모두 포함한 첫 파일.
   #   - 'bash'·'env' 같은 PATH 실행파일은 상대경로라 -f 에서 탈락
   #   - '/bin/bash' 처럼 절대경로로 와도 앵커 검사에서 탈락
   #   - 'FOO=1' 같은 env 대입도 -f 에서 탈락
+  # 앵커가 2종인 이유: '^CURRENT_USAGE=' 는 삽입 위치(앵커 줄 뒤)를 정하고,
+  # CTX_INPUT_ANCHOR 는 삽입 블록이 참조하는 stdin 변수명이 실제로 'input' 임을 보장한다.
+  # 후자를 확인하지 않으면 stdin 을 다른 이름(예: payload=$(cat))으로 받는 스크립트에서
+  # 블록이 미정의 "$input" 을 읽고, 대상이 set -u 면 렌더링 전체가 죽는다.
   ctx_script=""
+  ctx_partial=""   # CURRENT_USAGE= 는 있으나 input= 앵커가 없는 후보 (경고 문구 분기용)
   for ctx_tok in ${ctx_cmd}; do
     # Claude Code 는 이 커맨드를 셸로 실행하므로 '$HOME/...' 형태도 정상 설정이다.
     # 공백 포함·따옴표 감싼 경로는 단어 분리로 이미 깨지므로 다루지 않는다.
@@ -161,36 +277,37 @@ install_ctx_bridge() {
       '${HOME}/'*) ctx_tok="${HOME}/${ctx_tok#\$\{HOME\}/}" ;;
     esac
     [ -f "${ctx_tok}" ] || continue
-    if grep -q '^CURRENT_USAGE=' "${ctx_tok}" 2>/dev/null; then
-      ctx_script="${ctx_tok}"
-      break
+    grep -q '^CURRENT_USAGE=' "${ctx_tok}" 2>/dev/null || continue
+    if ! ctx_has_input_anchor "${ctx_tok}"; then
+      [ -n "${ctx_partial}" ] || ctx_partial="${ctx_tok}"
+      continue
     fi
+    ctx_script="${ctx_tok}"
+    break
   done
   if [ -z "${ctx_script}" ]; then
-    echo "  ⚠ statusLine 커맨드에서 앵커(^CURRENT_USAGE=)를 가진 스크립트를 찾지 못했습니다."
-    echo "    커맨드: ${ctx_cmd}"
-    echo "    컨텍스트 예산 경고가 동작하지 않습니다. statusline 스크립트 경로를 공백 없는"
-    echo "    '~/' 또는 '\$HOME/' 형태로 두거나, 블록을 수동 삽입하세요(REVIEW 문서 §4 참조)."
+    if [ -n "${ctx_partial}" ]; then
+      echo "  ⚠ 대상 스크립트가 stdin 을 'input' 변수로 받지 않습니다(브리지 블록이 \$input 을 참조)."
+      echo "    대상: ${ctx_partial}"
+      echo "    컨텍스트 예산 경고가 설치되지 않았습니다. REVIEW 문서 §4 를 보고 수동 삽입하세요."
+      # skip 과 정리는 별개 결정이다 — 구 버전이 심어둔 깨진 블록은 여기서 치운다.
+      ctx_cleanup_stale_block "${ctx_partial}"
+    else
+      echo "  ⚠ statusLine 커맨드에서 앵커(^CURRENT_USAGE= 와 input= 선언)를 가진 스크립트를 찾지 못했습니다."
+      echo "    커맨드: ${ctx_cmd}"
+      echo "    컨텍스트 예산 경고가 동작하지 않습니다. statusline 스크립트 경로를 공백 없는"
+      echo "    '~/' 또는 '\$HOME/' 형태로 두거나, 블록을 수동 삽입하세요(REVIEW 문서 §4 참조)."
+    fi
     return 0
   fi
   echo "  대상 statusline: ${ctx_script}"
 
+  # 심링크는 쓰기 전에 실제 경로로 해석한다(임시본도 해석된 경로와 같은 디렉토리에 생긴다).
+  ctx_resolve_link "${ctx_script}" || return 0
+  ctx_script="${CTX_RESOLVED}"
+
   # 마커 구조 검증: 없음(0쌍) 또는 정확히 1쌍(start가 end보다 앞)만 허용.
-  ctx_n_start="$(grep -cF "${CTX_MARK_START}" "${ctx_script}" || true)"
-  ctx_n_end="$(grep -cF "${CTX_MARK_END}" "${ctx_script}" || true)"
-  if [ "${ctx_n_start}" -ne "${ctx_n_end}" ] || [ "${ctx_n_start}" -gt 1 ]; then
-    echo "  ⚠ 브리지 마커 구조 비정상(start=${ctx_n_start}, end=${ctx_n_end}) → 건너뜀"
-    echo "    ${ctx_script} 에서 마커를 수동 정리 후 재실행하세요."
-    return 0
-  fi
-  if [ "${ctx_n_start}" -eq 1 ]; then
-    ctx_l_start="$(grep -nF "${CTX_MARK_START}" "${ctx_script}" | head -1 | cut -d: -f1)"
-    ctx_l_end="$(grep -nF "${CTX_MARK_END}" "${ctx_script}" | head -1 | cut -d: -f1)"
-    if [ "${ctx_l_start}" -ge "${ctx_l_end}" ]; then
-      echo "  ⚠ 브리지 마커 순서 역전(start=${ctx_l_start}, end=${ctx_l_end}) → 건너뜀"
-      return 0
-    fi
-  fi
+  ctx_markers_sane "${ctx_script}" || return 0
 
   # 브리지 본문. POSIX sh 호환이고 표준출력에 아무것도 쓰지 않는다(statusline 표시가 깨진다).
   ctx_body="$(mktemp)"
@@ -205,15 +322,31 @@ if [ -n "$__ctx_sid" ] && [ "$CURRENT_USAGE" != "null" ]; then
   case "$__ctx_now" in ''|*[!0-9]*) __ctx_now=0 ;; esac
   if [ "$__ctx_now" -gt 0 ]; then
     __ctx_dir="${TMPDIR:-/tmp}"; __ctx_dir="${__ctx_dir%/}"
-    __ctx_base_f="${__ctx_dir}/claude-ctx-${__ctx_sid}-base"
+    __ctx_base_f="${__ctx_dir}/claude-ctx-${__ctx_sid}-base"   # 예산 기준점
+    __ctx_prev_f="${__ctx_dir}/claude-ctx-${__ctx_sid}-prev"   # 직전 관측값
     __ctx_base=$(cat "$__ctx_base_f" 2>/dev/null || true)
     case "$__ctx_base" in ''|*[!0-9]*) __ctx_base=0 ;; esac
-    # 최초 관측이거나 compact 후(현재<기존)면 재래치 + 디바운스 상태 제거
-    if [ "$__ctx_base" -eq 0 ] || [ "$__ctx_now" -lt "$__ctx_base" ]; then
+    __ctx_prev=$(cat "$__ctx_prev_f" 2>/dev/null || true)
+    case "$__ctx_prev" in ''|*[!0-9]*) __ctx_prev=0 ;; esac
+    # 재래치 판정은 baseline 이 아니라 '직전 관측값' 과 비교한다.
+    # compact 는 시스템 프롬프트·CLAUDE.md·도구 스키마(= baseline 구성요소)를 그대로 두고
+    # 대화만 요약으로 대체하므로 결과는 대개 'baseline + 요약' 이다 → 'now < baseline' 은
+    # 영원히 거짓이 되어 예산이 리셋되지 않는다(compact 직후 즉시 재발동).
+    # 관측값이 '떨어지는 것' 이 compact 의 신호다.
+    __ctx_relatch=0
+    if [ "$__ctx_base" -eq 0 ] || [ "$__ctx_prev" -eq 0 ]; then
+      __ctx_relatch=1                       # 최초 관측 (또는 상태파일 유실)
+    elif [ "$__ctx_now" -lt "$__ctx_prev" ]; then
+      __ctx_relatch=1                       # 관측값 하락 = compact 발생
+    fi
+    # 재래치 시 디바운스 상태도 함께 지운다 — 안 지우면 compact 전 lastLevel 이 승계돼
+    # 재발동 시 초기 경고가 5회 삼켜진다(REVIEW §3.1).
+    if [ "$__ctx_relatch" -eq 1 ]; then
       __ctx_base="$__ctx_now"
       printf '%s' "$__ctx_base" > "$__ctx_base_f" 2>/dev/null || true
       rm -f "${__ctx_dir}/claude-ctx-${__ctx_sid}-warned.json" 2>/dev/null || true
     fi
+    printf '%s' "$__ctx_now" > "$__ctx_prev_f" 2>/dev/null || true
     __ctx_delta=$(( __ctx_now - __ctx_base ))
     # BUDGET_RAW=78666 → CRITICAL(잔량 25%)이 delta 59,000 에서 발동, WARNING(35%)은 51,133
     # 78666 = floor(59000/0.75). 반올림한 78667 을 쓰면 $(( )) 의 정수 truncation 때문에
@@ -232,12 +365,7 @@ CTXBRIDGE
   # 멱등성: 매 실행마다 (1) 기존 마커 블록 제거 → (2) 앵커 뒤에 새 블록 삽입.
   # 최초 삽입과 재삽입이 같은 코드 경로를 타므로 2회 실행 결과가 바이트 동일해진다.
   ctx_stripped="$(mktemp)"
-  awk -v s="${CTX_MARK_START}" -v e="${CTX_MARK_END}" '
-    $0 == s { inblock=1; next }
-    $0 == e { inblock=0; next }
-    inblock { next }
-    { print }
-  ' "${ctx_script}" > "${ctx_stripped}"
+  ctx_strip_markers "${ctx_script}" "${ctx_stripped}"
 
   ctx_new="$(mktemp)"
   awk -v s="${CTX_MARK_START}" -v e="${CTX_MARK_END}" -v bf="${ctx_body}" '

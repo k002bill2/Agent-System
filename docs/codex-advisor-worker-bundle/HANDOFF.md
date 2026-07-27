@@ -5,16 +5,20 @@
 > `.planning/STATE.md` 가 존재하나 그것은 GSD 워크플로우 상태이고 **이 작업을 추적하지 않는다.**
 > 따라서 `/gsd:pause-work` 대신 이 문서를 쓴다 (규칙의 의도 = 이미 추적되는 것을 중복 저장하지 않기).
 
-## 상태: 구현 완료 · Codex 3라운드 검증 대기
+## 상태: 구현 완료 · Codex 5라운드 지적(A/B/C) 반영 후 재검증 대기
 
-## 산출물 (미커밋)
+## 산출물
+
+브랜치 `feat/ctx-budget-trigger` · 초기 구현은 **커밋됨**(`f41ae81`):
 
 ```
-M  docs/codex-advisor-worker-bundle/install.sh                      (+245줄 규모)
-M  docs/codex-advisor-worker-bundle/README_조언자-작업자-전략.md
-?? docs/codex-advisor-worker-bundle/REVIEW_컨텍스트예산-리서치격리.md   ← 설계 근거 정본
-?? docs/codex-advisor-worker-bundle/HANDOFF.md                       ← 이 문서
+docs/codex-advisor-worker-bundle/install.sh                      ← 브리지 삽입 함수 + 에이전트 heredoc
+docs/codex-advisor-worker-bundle/README_조언자-작업자-전략.md
+docs/codex-advisor-worker-bundle/REVIEW_컨텍스트예산-리서치격리.md   ← 설계 근거 정본
+docs/codex-advisor-worker-bundle/HANDOFF.md                       ← 이 문서
 ```
+
+5라운드 지적 반영분(install.sh + 위 문서 2종)은 **미커밋** — Codex 재검증 후 처리.
 
 실환경(`~/.claude/`)에는 이미 설치 반영됨: `agents/researcher.md` 신설,
 `agents/architect.md` tools 축소, `awesome-statusline.sh` 에 마커 블록 삽입,
@@ -28,30 +32,142 @@ M  docs/codex-advisor-worker-bundle/README_조언자-작업자-전략.md
 - 저장 포맷 **신설 안 함** — GSD/HANDOFF/`wip-save` 중 상황에 맞는 것에 위임
 - 역할: `researcher`(sonnet, 외부 조사) 신설 / `analyzer`(haiku) 로컬 전담 / `architect` 웹도구 제거
 
-## 검증 완료 (전부 조언자가 직접 재현)
+## 검증 완료
+
+> 1~4라운드 행은 조언자가 직접 재현. **5라운드 3행(재래치·심링크·`input` 앵커)은 worker 실행 결과이며
+> Codex 재검증 전이다.** 재현 하네스는 `mktemp -d` 스크래치에서 렌더마다 별도 프로세스로 실행했다
+> (실행 중 세션의 실제 `claude-ctx-*` 파일과 격리).
 
 | 항목 | 결과 |
 |---|---|
-| 브리지 경계값 | delta 51,133→35, delta 59,000→25, 재래치→100 + `-warned.json` 삭제 |
+| 브리지 경계값 | delta 51,132→36 / **51,133→35**(WARNING) / 58,999→26 / **59,000→25**(CRITICAL) / 78,666→0 (clamp) |
+| **compact 재래치 (prev 기반)** | 50,905→100 · 109,905→25 · **62,000→100**(하락 감지·재래치·`-warned.json` 삭제) · 113,000→36. 구버전 코드로 같은 시퀀스: 62,000→**86**, 113,000→**22** (RED) |
+| ↳ 실제 `awesome-statusline.sh` 로 재현 | 같은 4단계를 **설치된 실파일**에 stdin 을 흘려 실행 → 100/25/100/36, ③에서 `-warned.json` 삭제, **전 렌더 stderr 0바이트**. 설치된 블록 == install.sh heredoc (`diff` 0) |
+| 심링크 statusline | 상대 심링크(`sl.sh → real/actual.sh`) 대상 설치 후에도 `test -L` 참, 마커는 **실제 파일**에 1개, 퍼미션 755 보존. 구버전: 심링크가 일반 파일로 대체됨(RED) |
+| `input` 앵커 | `payload=$(cat)` 스크립트에 설치 시도 → 경고 후 skip, **md5 무변경**. 구버전: 삽입돼 매 렌더 stderr `input: unbound variable` + 브리지 파일 0건(기능 사망) |
+| **구 블록 정리 (업그레이드 경로)** | 구 버전이 `payload=$(cat)` 스크립트에 심어둔 블록으로 시작(마커 1, `unbound variable` 재현) → 새 설치기 실행 → **마커 0 · unbound 0 · 원본과 바이트 동일 · 백업 생성 · 퍼미션 755 · tmp 잔여 0**. RED(정리 호출 1줄 제거): 마커 **1 유지**, unbound **재현** |
+| ↳ 정리 경로 안전 가드 | `start` 만 있고 `end` 없음(1/0) → 경고 후 skip, **md5 무변경 · 사용자 코드 생존**(가드 없으면 블록 시작 이후 전부 삭제됨). 정상 마커 **2쌍**(2/2) → 동일하게 skip, md5 무변경, 줄수 11→11 |
+| **수동 수리본 보존 (3-way)** | (a) 구 블록(`$input`) → **제거**(마커 0·백업 1·블록 없는 원본과 `cmp` 일치) / (b) 수리본(`$input`→`$payload`) → **보존**(마커 1·md5 무변경·렌더 시 unbound 0·브리지 json 생성) / (c) 블록 없음 → 경고만·md5 무변경. **RED**(가드 제거): (b) 가 **파괴됨** — 마커 0·md5 변경·브리지 json 0(경고 기능 사망) |
+| ↳ 판정 범위·표기 | 마커 **밖**에만 `$input` 이 있는 수리본 → **보존**(범위 한정 확인) / 블록 안 `${input}` 중괄호 표기 → **제거**(두 표기 모두 인식) |
+| **선언 형태 매트릭스** | 구 블록 심은 상태로 설치 → `input=$(cat)` **마커 1** / `export input=$(cat)` **마커 1**(삭제 안 됨) / `  input=$(cat)`(선행 공백) **마커 1** / `payload=$(cat)` **마커 0·백업 1**(제거). **RED**(좁은 `^input=`): `export`·선행공백 케이스가 **마커 0** — 동작하던 브리지가 삭제됨 |
+| ↳ 앵커 정규식 단위 | MATCH: `input=` `export input=` `  input=` `declare -x input=` `local input=` `typeset input=` / no: `payload=` `# input=주석` `sinput=` `myinput=` |
 | **Red-Green 종단 주입** | GREEN: `CONTEXT CRITICAL` 실제 주입 / RED: 삭제 시 소멸 |
-| `set -e` 회귀 | GREEN `OK` 생존 / RED(`\|\| true` 제거) 출력 `[]` 사망 |
+| `set -e` 회귀 | GREEN `OK` 생존 / RED(`\|\| true` 제거) 출력 `[]` 사망 — **픽스처 기준.** 실환경 `awesome-statusline.sh` 자체에는 `set -` 선언이 없어(확인함) 이 방어는 다른 사용자의 `set -e` statusline 대비용이다 |
 | statusLine 5형태 | `~/…`, `bash ~/…`, `env FOO=1 ~/…`, `bash $HOME/…`, `${HOME}/…` 전부 마커 1개 |
 | 원자성 | 퍼미션 755 보존, tmp 잔여 0, **rename 실패 시 원본 md5 동일 + exit 1** |
-| 멱등성 | 미설치→삽입→재실행 `diff -r` 0, 마커 수 1 |
+| 멱등성 | 픽스처: 미설치→삽입→재실행 `diff` 0, 마커 1, 마커 밖 커스터마이징 보존. **실환경**: 재실행 시 `변경 없음 → 건너뜀`, md5 동일, 새 `.bak` 0개, 마커 1, `settings.json` md5 무변경 |
 | 실전 발동 | 2026-07-27 세션에서 WARNING 자연 발동 확인 |
 
 ## Codex 검증 이력
 
 - 1라운드 P2×2: 래퍼 커맨드 파싱 / `set -e` 사망 → 반영·재현 확인
 - 2라운드 P2×2: 비원자적 덮어쓰기 / `$HOME` 미확장 → 반영·재현 확인
-- **3라운드: 실행 중** (`scratchpad/codex-review3.log`)
+- 3라운드: 결과 미기록 / 4라운드: 프로세스 사망(툴 실패, 코드 결함 아님)
+- 5라운드 P0/P1×3: compact 재래치 무력화 / 심링크 파손 / `$input` 변수명 가정 → 반영 완료(아래), 조언자 재현 검증 통과
+- 6라운드 P1×1: `^input=` skip 이 구 버전의 깨진 블록을 방치(업그레이드가 고장을 못 고침) → 반영 완료(아래), 조언자 재현 검증 통과
+- 7라운드 P2×1: 정리 경로가 사용자의 수동 수리본까지 파괴 → 반영 완료(아래), 조언자 3-way 재현 검증 통과
+- **8라운드 ×1: `^input=` 앵커가 `export input=` 등 유효 선언을 놓쳐 동작 중인 브리지를 삭제 → 반영 완료(아래), 재검증 대기**
 
 ## 다음 단계
 
-1. 3라운드 결과 확인 — 새로 만진 코드의 실질 결함이면 반영, 무관한 사소 지적이면 승인(무한 루프 방지)
-2. 승인 시 `TaskStop ctx-budget-worker`
+1. **Codex 재검증** — `node ~/.claude/plugins/cache/openai-codex/codex/1.0.5/scripts/codex-companion.mjs review --scope working-tree`
+   (5~8라운드 반영분은 워킹트리 미커밋 상태. 브랜치 전체를 볼 때는 `--scope branch --base main`)
+2. 통과 시 `TaskStop ctx-budget-fix5`
 3. 커밋 (사용자 지시 대기 중). 제안 메시지:
-   `feat(bundle): 컨텍스트 예산 트리거 배선 + researcher 에이전트 신설`
+   `fix(bundle): compact 재래치를 직전 관측값 기준으로 교정 + 심링크/입력변수 앵커 보강`
+
+## Codex 5라운드 지적 3건 — 반영 완료 (미커밋)
+
+착수 확인용: `grep -cE 'ctx_prev|readlink|\^input=' install.sh` 가 0 이면 미착수.
+
+1. **[최우선] compact 후 예산이 리셋되지 않던 결함.** 재래치 조건이 `current < __ctx_base` 였는데
+   compact 후 토큰 수는 `baseline + 요약` 이라 baseline 보다 커서 조건이 영원히 거짓이었다.
+   → `…-prev` 파일로 직전 관측값을 추적하고 **값이 하락하면** 재래치(+`-warned.json` 삭제).
+   회귀는 baseline **보다 큰** 하락값(62,000)으로 재현했고 구버전과 값이 갈린다(검증표 참조).
+2. **심링크 statusline 파손.** → 쓰기 전에 `readlink` 로 최대 5홉 해석(상대 심링크는 대상
+   디렉토리 기준 결합), 해석 실패·5홉 초과·비정규파일이면 경고 후 skip.
+3. **`$input` 변수명 가정.** → 대상 선정 조건에 `^input=` 앵커를 AND 로 추가. 두 앵커를 모두
+   가진 파일만 대상. `CURRENT_USAGE=` 만 있는 경우 사유를 명시한 경고 후 skip(파일 무수정).
+
+브리프 의사코드에서 **의도적으로 벗어난 1건**: 최초 관측(base/prev 없음) 경로에서도 `-warned.json`
+을 지운다. 브리프는 하락 경로에만 명시했으나, 구버전(`base -eq 0` 분기)이 이미 지우고 있어
+생략하면 조용한 동작 회귀가 된다. 두 경로를 `__ctx_relatch` 플래그로 합쳐 비대칭을 없앴다.
+
+## Codex 6라운드 지적 1건 — 반영 완료 (미커밋)
+
+착수 확인용: `grep -c 'ctx_cleanup_stale_block "\${ctx_partial}"' install.sh` 가 0 이면 미착수.
+(정의가 아니라 **호출**을 센다 — 호출 1줄만 지운 상태가 바로 아래 RED 조건이다.)
+
+**지적 D — `^input=` 앵커 skip 이 구 버전의 깨진 블록을 방치한다.** 구 버전은 `^CURRENT_USAGE=`
+앵커만 봤으므로 stdin 을 `payload=$(cat)` 등으로 받는 스크립트에도 블록을 심었고, 그 블록은
+`$input` 을 참조해 매 렌더 죽는다. 5라운드 수정으로 그런 파일이 **대상에서 제외되면서**
+재실행해도 경고만 뜨고 깨진 블록이 그대로 남았다 — 업데이트가 고장을 못 고치는 상태.
+
+→ skip 하기 전에 `ctx_cleanup_stale_block` 을 호출한다: 마커가 있으면 **백업 후 블록만 제거**하고
+(마커 밖 100% 보존) 안내한다. **블록을 새로 삽입하지는 않는다**(skip 유지).
+후보로 잡힌 파일(= `^CURRENT_USAGE=` 보유)에만 적용하므로, 스크립트를 아예 못 찾은 경우엔 무동작.
+
+**새 경로를 만들지 않고 공용 헬퍼로 추출해 양쪽이 같은 코드를 탄다** (지시대로):
+
+| 헬퍼 | 역할 | 사용처 |
+|---|---|---|
+| `ctx_resolve_link` | 심링크 5홉 해석 + 5홉초과/비정규파일 거부 | 삽입 · 정리 |
+| `ctx_markers_sane` | 마커 0쌍 또는 정상 1쌍만 통과 | 삽입 · 정리 |
+| `ctx_strip_markers` | 마커 블록만 제거 | 삽입(재삽입 전) · 정리 |
+| `install_file_preserve_mode` | 백업 + `cp -p`/`mv` 원자적 교체 | 삽입 · 정리 (기존) |
+
+`ctx_markers_sane` 를 정리 경로에도 태운 것이 핵심 안전장치다 — `start` 만 있고 `end` 가 없는
+손상 파일에 strip 을 돌리면 `inblock` 이 끝까지 유지돼 **블록 시작 이후 사용자 코드가 통째로
+사라진다.** 해당 케이스는 경고 후 무동작임을 회귀로 확인했다(검증표 참조).
+
+## Codex 7라운드 지적 1건 — 반영 완료 (미커밋)
+
+착수 확인용: `grep -c 'if ! ctx_block_uses_input' install.sh` 가 0 이면 미착수.
+(6라운드와 동일하게 정의가 아니라 **호출**을 센다 — 정의만 남기고 호출을 지운 상태가 아래 RED 조건이다.)
+
+**지적 E — 정리 경로가 "수동 수리된 블록"까지 지운다.** 6라운드에서 추가한 경고는 사용자에게
+**수동 삽입을 안내**한다(REVIEW §4). 즉 `payload=$(cat)` 스크립트에서 사용자가 블록의 `$input` 을
+자기 변수명으로 고쳐 정상 동작시키는 것은 **지원되는 시나리오**다. 그런데 정리 경로가 **마커 존재만**
+보고 지우면, 재실행할 때마다 잘 돌던 수리본을 파괴하고 그 환경의 컨텍스트 경고를 꺼버린다.
+
+→ `ctx_block_uses_input` 추가: **마커 사이 본문이** `$input` / `${input}` 을 참조할 때만 제거한다.
+참조가 없으면 수동 수리본으로 보고 보존 + 안내. 마커가 없으면 지금처럼 경고만.
+
+설계 요점 2가지:
+
+- **판정 범위를 마커 사이로 한정한다.** 파일 어디든 `input` 문자열이 있으면 반응하는 구현은
+  사용자가 주석에 `$input` 을 적었다는 이유로 정상 블록을 파괴한다. `ctx_strip_markers` 의 awk 를
+  뒤집어(버리는 대신 출력) 본문만 뽑는다 — 검증표의 "마커 밖에만 `$input`" 행이 이 경계를 친다.
+- **두 표기를 모두 잡는다.** `\$\{input\}|\$input([^A-Za-z0-9_]|$)` — `${input}` 을 놓치면
+  깨진 블록이 수리본으로 오인돼 영구히 남는다. 경계문자 조건은 `$input_data` 같은 다른 변수에
+  오탐하지 않기 위한 것이다.
+
+마커는 **소유권**을 말하지 **건강 상태**를 말하지 않는다 — 자동 정리의 판정 기준을 위치 표식에서
+내용 속성으로 옮긴 수정이다.
+
+## Codex 8라운드 지적 1건 — 반영 완료 (미커밋)
+
+착수 확인용: `grep -c '^CTX_INPUT_ANCHOR=' install.sh` 가 0 이면 미착수.
+
+**지적 F — `^input=` 앵커가 유효한 선언 형태를 놓친다.** `export input=$(cat)` 처럼 `$input` 이
+**정상 정의되는** 스크립트는 구 버전이 심은 브리지가 잘 돌고 있는데, 좁은 앵커가 이를 "미지원" 으로
+분류하고 6라운드의 정리 로직이 **동작하던 브리지를 삭제**했다. 업그레이드가 멀쩡한 기능을 끄는 셈.
+
+→ 앵커를 단일 정의 `CTX_INPUT_ANCHOR` + `ctx_has_input_anchor()` 로 뽑고 범위를 넓혔다:
+
+```
+^[[:space:]]*(export[[:space:]]+|declare[[:space:]]+-[a-zA-Z]+[[:space:]]+|local[[:space:]]+|typeset[[:space:]]+)?input=
+```
+
+**왜 한 곳만 고치면 두 문제가 닫히는가:** 이 판정 하나가 분기를 가른다 — 통과하면 '삽입 대상',
+실패하면 '정리 경로'다. `ctx_partial` 은 앵커 실패의 **부산물**이므로, 앵커가 좁으면 정상 파일이
+정리 대상으로 흘러들어간다. 그래서 정의는 반드시 한 곳뿐이어야 하고(두 곳에 쓰면 갈라진다),
+하드코딩된 `'^input='` 은 코드에 0건 남아 있다.
+
+7라운드의 `$input` 참조 기반 수리본 보존 로직은 **그대로 유지**된다(3-way 무회귀 확인).
+
+5~8라운드는 모두 **앵커/판정 정밀도**라는 한 계열이었다: 앵커를 좁히면 정상 파일이 정리 경로로
+새고(F), 정리를 넓히면 수리본을 파괴한다(E). 판정을 단일 정의로 모은 것이 계열 전체의 봉합이다.
 
 ## 알려진 잔여 사항
 
@@ -59,3 +175,23 @@ M  docs/codex-advisor-worker-bundle/README_조언자-작업자-전략.md
 - `isGsdActive` 판정은 신뢰 불가 — `.planning/STATE.md` 가 실재해도 비-GSD 분기가 떴다(`data.cwd` 가 프로젝트 루트가 아님). REVIEW §1.3 정정 블록 참조
 - 서브에이전트 `tools:` 필드의 MCP 와일드카드 지원 여부 **미검증** — `researcher` 는 `WebSearch, WebFetch, Read, Grep, Glob` 만 부여
 - `~/.claude/hooks/universal/contextMonitor.js` 폐기 검토 = 별도 후속 과제(범위 밖)
+- **업그레이드 시 진행 중 세션은 예산이 1회 리셋된다** — 기존 세션에는 `-base` 만 있고 `-prev` 가
+  없어 재설치 후 첫 렌더가 '최초 관측' 경로를 타고 `base := 현재값`(이미 커진 값)으로 재래치된다.
+  prev 도입의 직접적 귀결이며 다음 세션부터는 정상. 디바운스 상태는 함께 지워지므로 경고 유실은 없다
+- `^input=` 앵커는 **존재만** 확인하고 위치는 보지 않는다. `CURRENT_USAGE=` 가 `input=` 보다 앞선
+  스크립트라면 블록이 `input` 대입 전에 놓일 수 있다(현실적으로 `CURRENT_USAGE` 는 `$input` 에서
+  파생되므로 발생하지 않는다). 순서 검사는 미구현
+- 실환경 `~/.claude/awesome-statusline.sh` 는 일반 파일이라 심링크 경로는 **가짜 HOME 픽스처로만**
+  검증됐다(실사용 경로는 미경유)
+- **구 블록 정리의 사각지대 2건(의도적 범위 밖)**: ① `jq` 미설치 환경은 함수 최상단에서 return 하므로
+  정리도 못 한다(브리지 본문 자체가 jq 를 쓰므로 그 환경에선 애초에 동작 불가) ② `^CURRENT_USAGE=`
+  까지 개명해 **후보로도 안 잡히는** 스크립트는 손댈 파일을 특정할 수 없다. 둘 다 남은 블록은
+  수동 제거가 필요하다
+- 마커가 **2쌍 이상**이거나 `start`/`end` 짝이 안 맞는 파일은 삽입·정리 **양쪽 다 무동작**(경고만).
+  자동 판단이 사용자 코드를 지울 위험이 있어 "수동 정리 후 재실행" 을 안내한다 — 확인된 동작이다
+- 백업 파일명 타임스탬프가 **초 단위**(`date -u +%Y%m%dT%H%M%SZ`)라 같은 초에 두 번 설치하면
+  뒤 백업이 앞 백업을 덮어쓴다. 기존 동작이며 실사용(연속 재실행)에서는 문제되지 않으나,
+  테스트에서 백업 개수를 세면 1개로 보일 수 있다
+- **`REVIEW_…md` §4 앵커 표가 8라운드 기준으로 스테일** — `^input=` 로 적혀 있고 `export`·선행 공백
+  허용이 반영되지 않았다. 7라운드의 "수동 수리본은 재설치에서 보존된다" 안내도 §4 에 없다.
+  설치기 경고가 사용자를 §4 로 보내므로 갱신이 필요하다(라운드 범위가 install.sh+HANDOFF 라 미수정)
