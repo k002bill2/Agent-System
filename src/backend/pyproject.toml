@@ -46,7 +46,7 @@ dependencies = [
     # Docker (for sandbox)
     "docker>=7.2.0",
     # Git integration
-    "gitpython>=3.1.52",
+    "gitpython>=3.1.54",
     "PyGithub>=2.1.1",
     # Security / Encryption
     "cryptography>=42.0.0",
