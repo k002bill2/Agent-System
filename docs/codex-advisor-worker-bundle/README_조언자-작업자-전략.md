@@ -8,6 +8,9 @@
 ~/.claude/
 ├── CLAUDE.md              # 전략·원칙 (규칙 파일, 모든 프로젝트 공통)
 ├── awesome-statusline.sh  # (기존 파일) 컨텍스트 예산 브리지 마커 블록이 삽입됨
+├── settings.json          # (기존 파일) hooks.PostToolUse 에 아래 훅 엔트리가 멱등 병합됨
+├── hooks/
+│   └── advisor-context-budget.js  # 컨텍스트 예산 훅 (번들 소유 — 브리지 델타로 경고 주입)
 └── agents/
     ├── architect.md       # 조언자 — 설계·위임 브리프 작성   (opus 별칭)
     ├── worker.md          # 작업자 — 구현·테스트            (Opus, 비용 우선 시 Sonnet)
@@ -33,7 +36,7 @@
 | **검증 — 코드 리뷰·적대적 검토** | **Codex 플러그인** | `/codex:review`, `/codex:adversarial-review` |
 | 로컬 조사·요약 — 코드베이스·로그·파일 (토큰 절약) | `analyzer` | Haiku |
 | **외부 조사 — 웹·라이브러리 문서·릴리스 노트** | **`researcher`** | **Sonnet** |
-| 컨텍스트 예산 감시 | statusline 브리지 → GSD 모니터 훅 | — |
+| 컨텍스트 예산 감시 | statusline 브리지 → `advisor-context-budget.js` (번들 소유 훅) | — |
 
 > 참고 실험(출처 문서, 교차검증 대상 · **과거 Fable 5 조언자 구성 기준이며 현재 구성의 수치가 아니다**):
 > Fable 5 조언자 + Opus 작업자 ≈ $7.5·9분(최고 효율), Sonnet 단독 ≈ $20·59분(최악).
@@ -106,10 +109,11 @@ Claude Code 안에서 Codex로 코드 리뷰·작업 위임을 하는 공식 플
   (하드 차단은 불가능하다. `permissions.deny` 는 서브에이전트의 도구까지 함께 죽인다 → 규칙 기반 소프트 강제)
 - **컨텍스트 예산 (조언자 세션):** 세션 시작 시점 대비 **+59k 토큰**을 쓰면 새 작업을 시작하지 않는다
   (베이스라인 50,905 기준 200k 창 사용률로는 약 55% 시점).
-  `CONTEXT WARNING`/`CONTEXT CRITICAL` 이 주입되면 ① 진행 중 작업 마무리 → ② 상태 저장
+  `CONTEXT BUDGET WARNING`/`CONTEXT BUDGET CRITICAL` 이 주입되면 ① 진행 중 작업 마무리 → ② 상태 저장
   (`.planning/STATE.md` 있으면 `/gsd:pause-work` 제안, 없으면 HANDOFF.md 작성. 코드가 더러우면 `/wip-save` 병행)
   → ③ **새 세션 권고**(compact 보다 우선 — 무엇을 남길지 조언자가 직접 고를 수 있다).
-  저장 포맷을 새로 만들지 않는다. 주입 문구의 숫자는 창 사용률이 아니라 **예산 소진율**이다.
+  저장 포맷을 새로 만들지 않는다. 경고는 예산 소진(세션 시작 대비 델타)과 컨텍스트 창 사용률을
+  **함께** 표시한다 — 둘은 다른 지표이고, 창에 여유가 있어도 예산을 넘으면 정지 대상이다.
 - 큰 변경 리뷰는 `/codex:review --background` 후 `/codex:status`·`/codex:result` 로 확인.
 - **worker 보고 수신:** 가능하면 동기 실행으로 결과를 직접 받는다. 백그라운드 실행 시 완료 보고
   텍스트가 조언자에게 전달되지 않을 수 있으므로, 보고를 기다리지 말고 산출물(staged diff·테스트 실행)을 직접 검증한다.
@@ -139,18 +143,31 @@ bash install.sh                                        # 번들 폴더 안에서
 #    /model   → opus 별칭/ID 확인 후 architect의 model 값과 일치시키기
 ```
 
-`install.sh` 가 하는 일: `~/.claude/CLAUDE.md` 의 **번들 마커 블록만 갱신**(블록 밖 개인 내용 보존, 마커 없는 구버전은 백업 후 전체 생성), `agents/{architect,worker,analyzer,researcher}.md` 생성(내용 동일 시 백업 없이 건너뜀), 구버전 `reviewer.md` 백업 후 제거, **활성 statusline 스크립트에 컨텍스트 예산 브리지 블록 삽입**(마커 관리·백업, 아래 설명), **GSD 컨텍스트 모니터 훅 버전 대조**(불일치 시 경고만), Node/Codex 확인 및 `@openai/codex` 설치 시도, `~/.codex/config.toml` 검증 기본값(effort=high) 템플릿 생성.
+`install.sh` 가 하는 일: `~/.claude/CLAUDE.md` 의 **번들 마커 블록만 갱신**(블록 밖 개인 내용 보존, 마커 없는 구버전은 백업 후 전체 생성), `agents/{architect,worker,analyzer,researcher}.md` 생성(내용 동일 시 백업 없이 건너뜀), 구버전 `reviewer.md` 백업 후 제거, **활성 statusline 스크립트에 컨텍스트 예산 브리지 블록 삽입**(마커 관리·백업, 아래 설명), **`hooks/advisor-context-budget.js` 설치**, **`settings.json` 의 `hooks.PostToolUse` 에 그 훅을 멱등 병합**(파싱→수정→재출력·백업·유효성 게이트, 아래 설명), Node/Codex 확인 및 `@openai/codex` 설치 시도, `~/.codex/config.toml` 검증 기본값(effort=high) 템플릿 생성.
 
-**컨텍스트 예산 브리지 (새 훅 0개, `settings.json` 무수정):** 설치기는 `settings.json` 의
-`.statusLine.command` 를 **읽기 전용**으로 파싱해 활성 statusline 스크립트를 찾고, `CURRENT_USAGE=` 줄
-바로 뒤에 마커 블록을 삽입한다(기존 퍼미션·실행 비트 보존). 이 블록은 세션 첫 관측치를 baseline 으로
-래치하고 그 **델타**를 예산 잔량(%)으로 합성해 `$TMPDIR/claude-ctx-{session_id}.json` 에 기록한다.
-이미 `PostToolUse` 에 등록돼 있던 `~/.claude/hooks/gsd-context-monitor.js` 가 그 값을 읽어
-잔량 ≤35% 에서 `CONTEXT WARNING`, ≤25% 에서 `CONTEXT CRITICAL` 을 컨텍스트에 주입한다.
+**컨텍스트 예산 트리거 (번들 소유 훅 1개):** 설치기는 `settings.json` 의 `.statusLine.command` 를
+파싱해 활성 statusline 스크립트를 찾고, `CURRENT_USAGE=` 줄 바로 뒤에 마커 블록을 삽입한다
+(기존 퍼미션·실행 비트 보존). 이 블록은 세션 첫 관측치를 baseline 으로 래치하고 **사실값만**
+`$TMPDIR/claude-ctx-advisor-{session_id}.json` 에 기록한다 —
+`{baseline, current, delta, window, window_pct, timestamp}`. 합성 퍼센트는 쓰지 않는다.
+`~/.claude/hooks/advisor-context-budget.js`(PostToolUse) 가 그 `delta` 를 직접 보고
+**51,133** 에서 `CONTEXT BUDGET WARNING`, **59,000** 에서 `CONTEXT BUDGET CRITICAL` 을 주입한다.
 
 - **왜 퍼센트가 아니라 델타인가:** 베이스라인(시스템 프롬프트+CLAUDE.md+스킬+도구 스키마)만으로
   이미 200k 창의 ~25% 를 쓴다. "창의 25%" 임계치는 첫 턴부터 참이 되어 무한 발동한다.
   델타 기준은 **창 크기와 무관**하게(200k든 1M이든) 같은 시점에 걸린다.
+- **왜 번들이 훅을 소유하는가:** 이전 배선은 합성 잔량을 GSD 플러그인 소유
+  `gsd-context-monitor.js` 에 태웠다. 플러그인 업데이트로 임계치·스키마가 바뀌면 조용히 깨지고(R1),
+  주입문의 `Usage at X%` 가 창 사용률이 아니라 예산 소진율이라 상태줄과 어긋나 보였다(R3).
+  자기 훅을 가지면 둘 다 사라진다. 경고문은 **예산 델타와 창 사용률을 분리 표기**하고
+  "고갈 아님"을 명시한다. GSD 훅은 무수정이며 브리지 파일명이 달라 자연히 휴면한다.
+- **`settings.json` 병합 규율:** 문자열 치환이 아니라 `python3`/`jq` 로 파싱→수정→재출력하고,
+  멱등 판정은 커맨드 부분문자열(`advisor-context-budget.js`) 기준이라 재실행해도 중복되지 않는다.
+  쓰기 전 백업 → 같은 디렉토리 임시본 → 원자적 `mv` → **재파싱 유효성 게이트**(실패 시 백업 복원 후
+  `exit 1`). `python3`/`jq` 둘 다 없으면 경고 후 skip 한다.
+- **구 `Stop` 훅 `contextMonitor.js` 조건부 제거:** 횟수 기반이라 토큰 기반 트리거와 개념이 충돌하고
+  존재하지 않는 `/save-and-compact` 를 권고한다. 단 **`~/.claude/commands/save-and-compact.md` 가
+  없음을 확인했을 때만** 제거하며, 같은 배열 원소의 다른 훅은 **내부 훅 단위**로 걷어내 보존한다.
 - **전제가 어긋나면 조용히 skip:** jq 없음 / `settings.json` 없음 / `.statusLine` 없음 /
   스크립트 부재 / 앵커(`CURRENT_USAGE=`) 없음 / 마커 구조 비정상 → 경고만 하고 설치는 계속된다.
 - **statusline 은 메인 세션에만 렌더된다** → 서브에이전트는 감시 대상이 아니다. 이는 의도된 설계다.
