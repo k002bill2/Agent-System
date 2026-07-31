@@ -56,7 +56,7 @@ CI 8/8 pass(Frontend 4잡 포함 = Linux `npm ci` 정합 증명), Codex 리뷰 �
 
 ### Blockers/Concerns
 - Gemini Bridge 파일 크기 초과 (1,126줄 > 800줄 제한) — 리팩토링 필요
-- **knip 미배선** — 미사용 의존성 탐지기가 `package.json` 스크립트에만 있고 CI 워크플로우에 없다. 미사용 `react-router-dom`이 오래 남아 HIGH 보안 경고로 자라난 구조적 원인. CI 게이트 추가 검토 대상
+- ~~knip 미배선~~ — **해소됨** (PR #224, `2898eaf`). `frontend-knip` 블로킹 잡 + `ci-success.needs` 등록. 범위는 의존성 소견만(`knip --dependencies`); exports·types·files·duplicates는 설계 판단 영역이라 의도적으로 제외했다
 - **다중 세션 워킹트리 공유 위험(이번 세션 실측)** — worker가 브랜치를 조작하는 동안 메인 세션이 같은 워킹트리의 파일을 편집해 stash 충돌 발생. Codex 리뷰도 같은 이유로 1차 실행이 엉뚱한 diff를 리뷰함. 병행 시 검증 도구는 `git worktree add --detach`로 격리할 것
 
 ## Session Continuity
