@@ -176,6 +176,29 @@ jobs:
       - name: ESLint
         run: npm run lint
 
+  frontend-knip:
+    name: Frontend Knip
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/dashboard
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: src/dashboard/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Knip (dependencies)
+        run: npm run knip
+
   frontend-typecheck:
     name: Frontend Type Check
     runs-on: ubuntu-latest
@@ -262,6 +285,7 @@ jobs:
       - backend-typecheck
       - backend-test
       - frontend-lint
+      - frontend-knip
       - frontend-typecheck
       - frontend-test
       - frontend-build
