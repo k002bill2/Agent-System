@@ -1,0 +1,24 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "project": ["src/**/*.{ts,tsx}"],
+  "ignore": [
+    "src/vite-env.d.ts",
+    // 테스트 파일 본체만 제외한다. src/test/ (vitest setupFiles)는 제외하지 않는다 —
+    // 제외하면 그 파일이 쓰는 @testing-library/jest-dom 이 미사용으로 오탐된다.
+    "src/**/*.test.{ts,tsx}",
+    "src/**/*.spec.{ts,tsx}"
+  ],
+  "ignoreDependencies": [
+    // postcss: 기존 설정에서 이어받은 항목. 제거하면 미사용으로 보고된다(범위 밖).
+    "postcss"
+  ],
+  // knip 5.88.1 은 vitest.config.ts 의 setupFiles 경로를 해석하지 못한다.
+  // 파일은 실존하며(src/test/setup.ts) 경로 표기(`./` 유무)·tsconfig exclude 조정으로도
+  // 재현되는 knip 측 해석 한계라 실측 확인 후 예외 처리한다.
+  // 아래 vitest.entry 로 실제 파일은 그래프에 포함시키므로 의존성 탐지에는 구멍이 없다.
+  "ignoreUnresolved": ["./src/test/setup.ts"],
+  "vitest": {
+    // setupFiles 를 명시 entry 로 등록해 @testing-library/jest-dom 사용처를 인식시킨다.
+    "entry": ["src/test/setup.ts"]
+  }
+}
