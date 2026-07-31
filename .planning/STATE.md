@@ -3,11 +3,12 @@
 ## Project Reference
 See: `.planning/PROJECT.md`
 **Core value:** Claude Code 에이전트 체계적 협업
-**Current focus:** Power Stack 통합 완료 (GSD+Superpowers+Gstack 글로벌 설치)
+**Current focus:** 리포지토리 유지보수 — Dependabot 보안 경고 2건 해소 (Task 7, 미착수)
 
 ## Current Position
-Phase: Power Stack 통합 (완료)
-Last activity: 2026-04-05
+Phase: maintenance (PR/브랜치 정리 + Dependabot) — 6/7, `paused`
+Last activity: 2026-07-31
+Live handoff: `.planning/HANDOFF.json` — 소비되지 않음(Task 7 미착수). 재개 시 이 파일이 진실원.
 
 ## Accumulated Context
 
@@ -41,8 +42,9 @@ Last activity: 2026-04-05
 
 ### Blockers/Concerns
 - Gemini Bridge 파일 크기 초과 (1,126줄 > 800줄 제한) — 리팩토링 필요
+- Dependabot 보안 경고 미해결 (HIGH/LOW) — 상세·현황은 `.planning/HANDOFF.json` Task 7
 
 ## Session Continuity
-Last session: 2026-04-05
-Stopped at: Power Stack 통합 완료
-Resume hint: `docs/guides/power-stack-integration.md`에서 워크플로우 파이프라인 및 라우팅 매트릭스 확인
+Last session: 2026-07-31
+Stopped at: maintenance Task 6까지 완료·검증(main `a2c3b14` CI 8/8 success). Task 7(보안 경고 2건)은 사용자 결정으로 새 세션 이관.
+Resume hint: `.planning/HANDOFF.json` + `.planning/.continue-here.md` 참조. 다중 세션 환경이라 재개 전 `git fetch` 필수 — 이 두 파일의 로컬 사본은 stale일 수 있다(2026-07-31 실사례).
