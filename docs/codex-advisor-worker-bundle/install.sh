@@ -66,7 +66,14 @@ def _ctx_toks(command):
         toks = str(command).split()   # 따옴표 불균형 → 토큰에 따옴표가 잔류한다
     out = []
     for t in toks:
-        # sh -c "node …" 는 경로가 한 토큰 안에 낱말로 들어온다 → 다시 쪼갠다.
+        # 토큰 소스는 가산적이다 (jq 의 ctx_toks 와 같은 계약).
+        # 1) shlex 가 만든 온전한 토큰을 먼저 보존한다 — HOME 에 공백이 있는 머신
+        #    (/Users/Jane Doe/…)에서는 아래 재분해가 경로를 낱말로 갈라놓으므로 이것이 유일하게
+        #    온전한 형태다. 보존하지 않으면 설치기가 자기 훅조차 못 찾아 found:0 → 미전환이 된다.
+        #    따옴표 불균형 폴백에서는 따옴표가 남아 어차피 매칭되지 않는다 — 그 경우는 2) 가 덮는다.
+        if t:
+            out.append(str(t))
+        # 2) sh -c "node …" 는 경로가 한 토큰 안에 낱말로 들어온다 → 다시 쪼갠다.
         for w in str(t).split():
             w = w.strip(_CTX_QUOTES)  # 확장 전에 벗긴다 (폴백 토큰의 잔류 따옴표)
             if w:
@@ -83,11 +90,24 @@ def ctx_is_ours(command, key):
 # '문자열 동치 집합'(절대경로 · ~/… · $HOME/… · ${HOME}/…)으로만 대응한다.
 # 이것도 탐색·계수 양쪽에 같은 정의를 주입한다.
 CTX_JQ_MATCH='def cmd_is_ours($c): any($keys[]; . as $k | $c | contains($k));
-# 삭제(dedupe)용 촘촘한 판정. contains 는 접미사가 붙은 남의 경로(.js.disabled 등)도
-# 우리 것으로 오인하는데, 갱신은 몰라도 삭제까지 그 느슨함을 물려받으면 남의 엔트리가
-# 사라진다. 그래서 지울 때만 토큰 완전일치를 요구한다 (python 의 realpath 완전일치에 대응).
+# 토큰 완전일치 판정 (python 의 realpath 완전일치에 대응). contains 는 접미사가 붙은
+# 남의 경로(.js.disabled 등)도 우리 것으로 오인하므로 **탐색·계수·삭제 판정은 전부 이것을 쓴다** —
+# 한 곳이라도 느슨하게 남기면 사용자가 비활성화해 둔 훅을 우리 엔트리로 덮어쓴다.
+# cmd_is_ours(느슨)가 남는 곳은 갱신 대상 수집($hits) 하나뿐이다. 거기서는 exact 를 우선
+# 선택하고 비-exact 는 손대지 않고 통과시키므로 과잉매칭이 파일을 바꾸지 못한다.
 # 홑따옴표는 \u0027 이스케이프로 쓴다 — bash 홑따옴표 문자열이라 리터럴은 인자를 쪼갠다.
-def ctx_toks($c): [$c | splits("[ \t]+")] | map(gsub("^[\"\u0027]+|[\"\u0027]+$"; ""));
+# 토큰 소스는 두 가지이고 **가산적**이다 (python 의 shlex.split 에 대응).
+#   1) 인용 구간 통째로 — 설치기 커맨드는 "<node>" "<hookpath>" 형식이라(ms_cmd 참조)
+#      HOME 에 공백이 있는 머신(/Users/Jane Doe/...)에서는 이것이 유일하게 온전한 경로다.
+#      whitespace 로만 쪼개면 /Users/Jane 과 Doe/.claude/... 로 갈라져 설치기가 자기 훅조차
+#      못 찾고 found:0 -> settings 복원 -> 브리지 미전환이 된다.
+#   2) whitespace 재분해 + 앞뒤 따옴표 strip — sh -c "node ..." 처럼 경로가 인용 구간 안의
+#      낱말로 들어오는 표기와 따옴표 불균형 표기를 덮는다. 1) 만 남기면 이 둘이 깨진다 —
+#      **둘 중 어느 쪽도 제거하지 말 것.**
+# 판정은 여전히 완전일치이므로 토큰을 넓혀도 남의 훅(.js.disabled 등)은 매칭되지 않는다.
+def ctx_toks($c): ([$c | splits("[ \t]+")] | map(gsub("^[\"\u0027]+|[\"\u0027]+$"; "")))
+                  + [$c | scan("\"[^\"]*\"") | .[1:-1]]
+                  + [$c | scan("\u0027[^\u0027]*\u0027") | .[1:-1]];
 def cmd_is_exact_ours($c): (ctx_toks($c)) as $t | any($keys[]; . as $k | $t | any(. == $k));'
 
 # statusline 이 stdin 을 'input' 변수로 받는지 판정하는 앵커 (grep -E).
@@ -667,8 +687,18 @@ PYMERGE
       ms_rc=4
     elif jq --arg cmd "${ms_cmd}" --argjson keys "$(ctx_hook_keys_json)" --argjson rmcm "${ms_rm_cm}" --argjson doadd "${ms_do_add}" \
         "${CTX_JQ_MATCH}"'
-        def has_key: (.hooks? // []) | any(type == "object" and cmd_is_ours(.command? // ""));
-        def has_cm:  (.hooks? // []) | any(type == "object" and ((.command? // "") | contains("hooks/universal/contextMonitor.js")));
+        # 두 판정 모두 .hooks 배열 타입을 가드한다. 배열이 아닌 그룹(예: {"hooks":"x"})을
+        # 만나면 any 가 던져 jq 프로그램 전체가 죽고 병합이 rc=3 으로 중단되기 때문이다.
+        # python 은 isinstance(group.get(...), list) 로 그런 그룹을 건너뛰고 계속하므로,
+        # 같은 계약으로 false 를 돌려준다(그룹은 무접촉 보존).
+        def has_key: (.hooks? // [])
+                     | if type == "array"
+                       then any(type == "object" and cmd_is_exact_ours(.command? // ""))
+                       else false end;
+        def has_cm:  (.hooks? // [])
+                     | if type == "array"
+                       then any(type == "object" and ((.command? // "") | contains("hooks/universal/contextMonitor.js")))
+                       else false end;
         # 가드를 통과했으므로 여기 도달 = 키가 없거나 타입이 맞다. 없을 때만 만든다(치환 금지).
         (if has("hooks") then . else .hooks = {} end)
         | (if (.hooks | has("PostToolUse")) then . else .hooks.PostToolUse = [] end)
@@ -686,9 +716,12 @@ PYMERGE
                             | select((.value | type) == "object" and cmd_is_ours(.value.command? // ""))
                             | {pos: [$gi, .key], exact: cmd_is_exact_ours(.value.command? // "")})
                      else empty end ]) as $hits
-                # 갱신 대상은 촘촘히 일치하는 첫 엔트리. 그런 게 없으면(과잉매칭뿐이면)
-                # 기존 동작대로 첫 느슨한 일치를 갱신한다 — 여기서 폴백을 빼면 갱신 대상이
-                # 사라져 stale 로 설치가 중단된다(기존 결함을 새 실패로 바꾸게 된다).
+                # 갱신 대상은 촘촘히 일치하는 첫 엔트리. has_key 가 (완전일치 + 배열 가드)라
+                # 이 분기 도달 = 그 그룹이 객체이고 .hooks 가 배열이며 exact 히트가 있다는 뜻이고,
+                # $hits 수집 조건도 같으므로(exact 이면 반드시 loose 이다) 뒤의 // 폴백은
+                # 도달하지 않는다. 그래도 남기는 이유는 $keep 이 null 이 되면 아래 루프가
+                # [gi,hj] == null 을 전부 실패시켜 우리 엔트리를 갱신이 아니라 empty 로 지우기
+                # 때문이다 — 무동작이 아니라 데이터 손실이라 한 토큰짜리 방어를 유지한다.
                 | ((([$hits[] | select(.exact)] | first) // ($hits | first)) | .pos) as $keep
                 | .hooks.PostToolUse = [ .hooks.PostToolUse | to_entries[]
                     | .key as $gi | .value | (has_key) as $had
@@ -845,7 +878,8 @@ PYMERGE
 # 왜 부분일치가 아니라 완전일치인가 — 업그레이드에서 낡은 node 경로를 갱신해야 하는데,
 # "advisor-context-budget.js 가 들어있는가"만 보면 갱신이 실패해 낡은 커맨드가 남아도
 # 성공으로 통과한다. 실행 불가능한 훅 + 전환된 브리지 = 경고 전면 중단.
-# 원칙: 쓰기 결과를 믿지 말고 읽어서 확인한다. (탐색용 부분일치는 그대로 두고, '성공 판정'만 완전일치)
+# 원칙: 쓰기 결과를 믿지 말고 읽어서 확인한다.
+# (엔트리 '판정'은 탐색·계수 모두 토큰 완전일치이고, 여기서는 커맨드 문자열까지 완전일치를 요구한다)
 ms_verify_registered() {
   ms_vr_file="$1"
   ms_vr_cmd="$2"
@@ -905,7 +939,7 @@ else:
   elif command -v jq >/dev/null 2>&1; then
     jq -r --argjson keys "$(ctx_hook_keys_json)" --arg want "$2" \
       "${CTX_JQ_MATCH}"'
-       [.hooks.PostToolUse[]?.hooks[]?.command? // "" | select(cmd_is_ours(.))] as $c
+       [.hooks.PostToolUse[]?.hooks[]?.command? // "" | select(cmd_is_exact_ours(.))] as $c
        | if ($c|length) == 0 then "found:0"
          elif ($c|length) > 1 then "dup:" + (($c|length)|tostring)
          elif $c[0] != $want then "stale:1"
