@@ -3,12 +3,12 @@
 ## Project Reference
 See: `.planning/PROJECT.md`
 **Core value:** Claude Code 에이전트 체계적 협업
-**Current focus:** 리포지토리 유지보수 — Dependabot 보안 경고 2건 해소 (Task 7, 미착수)
+**Current focus:** 리포지토리 유지보수 — Dependabot 보안 경고 2건 해소 (Task 7, 착수)
 
 ## Current Position
-Phase: maintenance (PR/브랜치 정리 + Dependabot) — 6/7, `paused`
+Phase: maintenance (PR/브랜치 정리 + Dependabot) — 7/7, `in_progress`
 Last activity: 2026-07-31
-Live handoff: `.planning/HANDOFF.json` — 소비되지 않음(Task 7 미착수). 재개 시 이 파일이 진실원.
+Live handoff: `.planning/HANDOFF.json` — Task 7 착수로 소비됨. 아래 "Task 7 재조사 결과"가 최신 판단이며 HANDOFF.json의 next_action보다 우선한다.
 
 ## Accumulated Context
 
@@ -40,11 +40,21 @@ Live handoff: `.planning/HANDOFF.json` — 소비되지 않음(Task 7 미착수)
 - `.planning/`: GSD 상태 관리 ✅
 - 상세: `docs/guides/power-stack-integration.md` 참조
 
+### Task 7 재조사 결과 (2026-07-31, 착수 시점)
+
+HANDOFF.json의 전제 두 가지가 실측으로 뒤집혔다.
+
+- **HIGH `react-router` (알림 #85)는 메이저 업그레이드 건이 아니다.** `react-router-dom`은 **미사용 의존성**이다 — `src/dashboard` 전체에서 `react-router` 문자열은 `package.json:32` 한 줄뿐이고 소스 import 0건. 대시보드는 Zustand 기반 자체 네비게이션(`src/stores/navigation.ts` + `src/routes.ts`)을 쓴다. 따라서 7→8 업그레이드가 아니라 **제거**가 정답이며, 알림은 `dismissed`가 아니라 `fixed`로 닫힌다.
+- **"Dependabot에 위임" 지침은 이 2건에 적용 불가.** security updates는 enabled·not paused인데도 30일간 PR이 0건이다. `@babel/core`는 부모(`eslint-plugin-react-hooks@7.1.1`)가 이미 최신이라 올릴 대상이 없고 Dependabot은 `overrides`를 추가하지 않는다. `react-router`는 수정본이 메이저 경계 너머(8.3.0)라 제약 만족 범위 밖이다.
+- **`npm audit fix` 금지.** lock 전체 재해석이 macOS에서 플랫폼별 optional dependency(`@emnapi/*` 등)를 잘라내 Linux CI `npm ci`를 깨뜨린다(PR #134 실패 원인). 게이트는 lock diff의 `-` 라인에 플랫폼 엔트리가 없을 것: `git diff -U0 -- package-lock.json | grep '^-' | grep -Ei 'emnapi|@rollup/rollup-|@esbuild/|-linux-|-darwin-|-win32-'` → 빈 출력.
+- 부수 발견: `knip`(미사용 의존성 탐지기)이 **CI에 배선돼 있지 않다**. 미사용 `react-router-dom`이 오래 남은 구조적 원인.
+
 ### Blockers/Concerns
 - Gemini Bridge 파일 크기 초과 (1,126줄 > 800줄 제한) — 리팩토링 필요
-- Dependabot 보안 경고 미해결 (HIGH/LOW) — 상세·현황은 `.planning/HANDOFF.json` Task 7
+- Dependabot 보안 경고 2건 — 브랜치 `chore/security-alerts-babel-router`에서 처리 중. 완료 판정은 `npm ls`가 아니라 알림 상태: `gh api repos/:owner/:repo/dependabot/alerts/59`(및 `/85`) `.state == "fixed"`
+- knip 미배선 (CI에 미사용 의존성 게이트 없음) — 후속 검토 대상
 
 ## Session Continuity
 Last session: 2026-07-31
-Stopped at: maintenance Task 6까지 완료·검증(main `a2c3b14` CI 8/8 success). Task 7(보안 경고 2건)은 사용자 결정으로 새 세션 이관.
-Resume hint: `.planning/HANDOFF.json` + `.planning/.continue-here.md` 참조. 다중 세션 환경이라 재개 전 `git fetch` 필수 — 이 두 파일의 로컬 사본은 stale일 수 있다(2026-07-31 실사례).
+Stopped at: Task 7 착수. 재조사로 HIGH 건 범위가 "메이저 업그레이드"에서 "미사용 의존성 제거"로 축소됨. 사용자 결정: LOW·HIGH를 한 PR로 묶어 처리. worker가 브랜치 `chore/security-alerts-babel-router`(base = `origin/main`)에서 구현 중.
+Resume hint: 로컬 `main`이 origin보다 1커밋 앞섬(`065a32f docs(state)`, 미푸시) — 작업 브랜치는 반드시 `origin/main`에서 딸 것. 다중 세션 환경이라 재개 전 `git fetch` 필수(2026-07-31 실사례).
