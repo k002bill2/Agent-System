@@ -6,8 +6,8 @@
   "phase_dir": ".planning",
   "plan": 1,
   "task": 6,
-  "total_tasks": 6,
-  "status": "completed",
+  "total_tasks": 7,
+  "status": "paused",
   "note_on_phase": "이 프로젝트에는 .planning/phases/ 구조가 없다(STATE.md/PROJECT.md만 존재, 마지막 갱신 2026-04-05 'Power Stack 통합 완료'). 이번 작업은 GSD phase 작업이 아닌 리포지토리 유지보수이므로 핸드오프를 .planning/ 루트에 배치했다.",
   "completed_tasks": [
     {
@@ -48,7 +48,15 @@
       "note": "이 세션이 아닌 외부 경로로 머지됨(핸드오프 작성 직후 발견). CI/Build 모두 success — 우려했던 jest-dom 7의 테스트 스위트 파손은 발생하지 않았다. 결과적으로 Dependabot 열린 PR 0건."
     }
   ],
-  "remaining_tasks": [],
+  "remaining_tasks": [
+    {
+      "id": 7,
+      "name": "Dependabot 보안 경고 2건 해소 (HIGH react-router CSRF, LOW @babel/core 임의파일읽기)",
+      "status": "not_started",
+      "detail": "정기 PR과 별개 트랙이라 PR 백로그를 소진해도 남았다. 실측: 둘 다 직접 의존성이 아님 — package.json에는 react-router-dom ^7.18.1만 있고 react-router(7.18.1)·@babel/core(7.29.0)는 transitive. HIGH는 react-router-dom을 8.x로 올려야 해소되는 메이저 점프(자동 PR이 안 열린 이유로 추정). LOW는 7.29.0→7.29.6 패치라 npm audit fix 또는 overrides로 분리 처리 가능.",
+      "user_decision": "2026-07-31 사용자가 '새 세션에서 처리' 결정"
+    }
+  ],
   "blockers": [],
   "human_actions_pending": [],
   "decisions": [
@@ -79,6 +87,6 @@
     }
   ],
   "uncommitted_files": [],
-  "next_action": "이 작업 단위는 완료됐다. 남은 필수 작업 없음. 후속으로 볼 만한 것: (1) jest-dom 7 머지 후 `cd src/dashboard && npm test` 로컬 실측 — CI는 green이지만 로컬 환경 차이 확인용, (2) 다음 Dependabot 주기(매주 월요일)에 새 PR이 열리면 동일 절차 적용.",
+  "next_action": "@babel/core LOW 건부터 처리 (7.29.0→7.29.6 패치 레벨 transitive, npm audit fix 또는 overrides로 빠르게 닫힌다). 그다음 react-router HIGH 건 — react-router-dom ^7.18.1 → 8.x 메이저 업그레이드가 필요하므로 breaking change 조사 → 라우팅 코드 영향 범위 파악 → 업그레이드 → `cd src/dashboard && npm test` + `npm run build` 순. 선택적: jest-dom 7 로컬 실측, 다음 Dependabot 주기(월요일) 신규 PR 동일 절차 적용.",
   "context_notes": "세션 컨텍스트가 시작 대비 +155k로 CRITICAL 경고 상태여서 중단했으나, 중단 직전 메이저 2건이 외부 경로로 머지되어 작업 단위 자체는 완결됐다. 이번에 드러난 rebase vs recreate 함정은 메모리 project_dependabot_batch_merge_rebase에 반영 완료. 워킹트리 clean, 열린 Dependabot PR 0건. 로컬 main은 이 WIP 커밋 1개만큼 origin보다 앞선 상태로 푸시됨."
 }
