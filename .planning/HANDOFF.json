@@ -1,0 +1,84 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-07-31T04:37:43.432Z",
+  "phase": "maintenance",
+  "phase_name": "PR/브랜치 정리 + Dependabot 일괄 머지",
+  "phase_dir": ".planning",
+  "plan": 1,
+  "task": 6,
+  "total_tasks": 6,
+  "status": "completed",
+  "note_on_phase": "이 프로젝트에는 .planning/phases/ 구조가 없다(STATE.md/PROJECT.md만 존재, 마지막 갱신 2026-04-05 'Power Stack 통합 완료'). 이번 작업은 GSD phase 작업이 아닌 리포지토리 유지보수이므로 핸드오프를 .planning/ 루트에 배치했다.",
+  "completed_tasks": [
+    {
+      "id": 1,
+      "name": "머지된 로컬 stale 브랜치 삭제 (feat/ctx-budget-trigger, feat/ctx-own-hook)",
+      "status": "done",
+      "commit": "n/a (브랜치 삭제)"
+    },
+    {
+      "id": 2,
+      "name": "원격 stale ref prune (origin/fix/ctx-jq-fallback-parity)",
+      "status": "done",
+      "commit": "n/a"
+    },
+    {
+      "id": 3,
+      "name": "Dependabot PR 9건 순차 머지 (#208 #213 #214 #206 #209 #210 #217 #215 #222)",
+      "status": "done",
+      "commit": "08effe1"
+    },
+    {
+      "id": 4,
+      "name": "무효 PR 처리 — #218 close(역행), #212 recreate→#222",
+      "status": "done",
+      "commit": "n/a"
+    },
+    {
+      "id": 5,
+      "name": "main CI 최종 검증 (08effe1 = completed/success)",
+      "status": "done",
+      "commit": "08effe1"
+    },
+    {
+      "id": 6,
+      "name": "메이저 범프 2건 머지 (#211 jest-dom 6.9.1→7.0.0, #207 setuptools 80.9.0→83.0.0)",
+      "status": "done",
+      "commit": "a2c3b14",
+      "note": "이 세션이 아닌 외부 경로로 머지됨(핸드오프 작성 직후 발견). CI/Build 모두 success — 우려했던 jest-dom 7의 테스트 스위트 파손은 발생하지 않았다. 결과적으로 Dependabot 열린 PR 0건."
+    }
+  ],
+  "remaining_tasks": [],
+  "blockers": [],
+  "human_actions_pending": [],
+  "decisions": [
+    {
+      "decision": "squash 머지 브랜치의 안착 검증은 `git branch --merged`가 아니라 로컬 HEAD SHA == PR headRefOid + state=MERGED 대조로 수행",
+      "rationale": "squash는 새 커밋을 만들어 원본 SHA가 main 조상이 아니므로 도달성 기반 검사가 false negative를 낸다. SHA 대조는 미푸시 커밋 부재까지 동시에 증명한다.",
+      "phase": "maintenance"
+    },
+    {
+      "decision": "연속 머지 중 중간 커밋 CI의 cancelled는 정상으로 간주하고 최종 커밋 CI만 판정자로 사용",
+      "rationale": "concurrency group이 후속 push 시 이전 run을 취소한다. 누적 lock 병합의 정합성은 최종 커밋 CI(--locked 잡)만이 증명한다.",
+      "phase": "maintenance"
+    },
+    {
+      "decision": "#218(gitpython 3.1.52→3.1.54)은 rebase가 아니라 close",
+      "rationale": "main의 pyproject가 이미 gitpython>=3.1.57 (#214 그룹이 올림). 머지하면 역행이라 어떤 rebase로도 의미가 생기지 않음. gh pr close 대신 @dependabot close를 써야 봇이 처리됨으로 기록하고 다음 주기에 재생성하지 않는다.",
+      "phase": "maintenance"
+    },
+    {
+      "decision": "#212(6개 그룹)는 rebase가 아니라 recreate",
+      "rationale": "js-yaml만 #217로 먼저 착지해 부분 중복. rebase는 기존 의존성 집합을 새 base에 재생하므로 같은 충돌을 재현(3회 시도 모두 DIRTY 유지). recreate는 현재 main에서 그룹을 재해석해 js-yaml을 제외한 5개로 lock 재생성 → 새 PR 번호 #222로 생성됨.",
+      "phase": "maintenance"
+    },
+    {
+      "decision": "메이저 범프 2건(#207 #211)은 일괄 머지 배치에서 제외",
+      "rationale": "빌드 도구·테스트 API 변경이라 실패 시 원인 분리가 필요. 사용자 승인 하에 별도 세션으로 이관.",
+      "phase": "maintenance"
+    }
+  ],
+  "uncommitted_files": [],
+  "next_action": "이 작업 단위는 완료됐다. 남은 필수 작업 없음. 후속으로 볼 만한 것: (1) jest-dom 7 머지 후 `cd src/dashboard && npm test` 로컬 실측 — CI는 green이지만 로컬 환경 차이 확인용, (2) 다음 Dependabot 주기(매주 월요일)에 새 PR이 열리면 동일 절차 적용.",
+  "context_notes": "세션 컨텍스트가 시작 대비 +155k로 CRITICAL 경고 상태여서 중단했으나, 중단 직전 메이저 2건이 외부 경로로 머지되어 작업 단위 자체는 완결됐다. 이번에 드러난 rebase vs recreate 함정은 메모리 project_dependabot_batch_merge_rebase에 반영 완료. 워킹트리 clean, 열린 Dependabot PR 0건. 로컬 main은 이 WIP 커밋 1개만큼 origin보다 앞선 상태로 푸시됨."
+}
