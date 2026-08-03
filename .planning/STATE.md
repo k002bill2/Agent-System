@@ -78,10 +78,26 @@ SkillSpector v2.5.1로 스킬 33개 + 커맨드 18개 스캔. **악의적 패턴
 이번엔 래핑해 스캔했고 새 신호 0건이었으나, 정기 스캔에서는 계속 빠지는 사각지대다.
 
 ## Session Continuity
-Last session: 2026-08-03
-Stopped at: **Phase A 승인 게이트 fail-closed 전환 미완** — Codex 6라운드가 전부 직전 수정의 부작용을
-지적해(P1 3건 포함) 6차 미반영 상태로 중단. 미커밋 3파일은 5차까지 반영돼 보존됨.
-상세·재개 지점은 `.planning/.continue-here.md` 참조.
-Resume hint: 다중 세션 환경이라 재개 전 `git fetch` 필수. 커밋 시 `docs/codex-advisor-worker-bundle/install.sh`는
-**제외**할 것(사용자가 컨텍스트 예산 규칙을 창 비례로 갱신한 별건). 7차에도 P1이면 분기 나열을 접고
-상태 전이표(BLOCKED 사유 × 입력 유형 → 행동)로 재작성할 것.
+Last session: 2026-08-04 (재개)
+Stopped at: Task 3 재개 진행 중 — **상태 전이표 방식으로 전환 결정**(사용자 선택). worker에 위임.
+
+### 2026-08-04 재개 시 정정된 전제 2건
+
+- **"미커밋 3파일"은 유실 아님.** wip 커밋 `88fb3c2`(로컬 브랜치 `wip/phase-a-fail-closed`, 미푸시)에
+  보존돼 있다. 워킹트리에 남은 2파일은 핸드오프가 제외 대상으로 지정한 사용자 별건
+  (`docs/codex-advisor-worker-bundle/{HANDOFF.md,install.sh}`)이다
+- **`--scope working-tree`로 재검증하면 오작동한다.** `codex-companion.mjs:260`에서 이 스코프는
+  `{type:"uncommittedChanges"}`로 매핑되므로, 3파일이 커밋된 지금은 **별건 2파일만** 리뷰하고
+  로그는 "지적 0건"처럼 읽힌다. `--scope branch --base main`을 쓸 것
+
+### 재개 결정 (2026-08-04)
+
+Codex 6차 P1/P2는 개별 케이스 누락이 아니라 **클래스**의 인스턴스다 — 최우선 분기의 진입 조건은
+상태 catch-all인데 하위 케이스는 입력 유형의 불완전 열거이고 first-match라 fallthrough가 없다.
+케이스 2개 추가는 7차에 세 번째 인스턴스를 부른다. 따라서 회피책을 **지금** 적용해
+(BLOCKED 사유 3행 × 입력 유형 7열) 상태 전이표 + "그 외" 기본행으로 재작성한다.
+부수 요구: Phase 0 표와 Phase A "승인 재개 규칙"의 **라우팅 중복 제거**(표가 SSOT, Phase A는 실행 세부만)
+— 5·6차 드리프트의 온상이었다.
+
+Codex 1~6차 로그·skillspector 리포트는 이전 세션 scratchpad에서 회수해 현 세션 scratchpad에 보관 중
+(휘발성 — 장기 보존이 필요하면 레포로 옮길 것).
