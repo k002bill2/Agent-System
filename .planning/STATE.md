@@ -3,12 +3,12 @@
 ## Project Reference
 See: `.planning/PROJECT.md`
 **Core value:** Claude Code 에이전트 체계적 협업
-**Current focus:** 하네스 스킬 보안 감사 → Phase A 승인 게이트 fail-closed 전환 (3/3 완료, PR 대기)
+**Current focus:** 하네스 스킬 보안 감사 → Phase A 승인 게이트 fail-closed 전환 (3/3 완료, **PR #232** 리뷰 대기)
 
 ## Current Position
-Phase: adhoc — 스킬 보안 감사(Task 1·2 완료·머지) + Phase A 정책 전환(Task 3 완료, 미머지)
+Phase: adhoc — 스킬 보안 감사(Task 1·2 완료·머지 `af29e7f`) + Phase A 정책 전환(Task 3 완료, PR #232)
 Last activity: 2026-08-04
-Live handoff: **없음** — 재개 아티팩트는 소비 후 제거됨. 브랜치 `wip/phase-a-fail-closed`가 진실원
+Live handoff: **없음** — 재개 아티팩트는 소비 후 제거됨. PR #232 (`wip/phase-a-fail-closed`)가 진실원
 
 ## Accumulated Context
 
