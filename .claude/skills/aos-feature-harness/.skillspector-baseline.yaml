@@ -1,0 +1,11 @@
+# SkillSpector baseline — findings listed here are suppressed on future scans.
+# Edit 'reason' fields and add glob 'rules' as needed. See docs/SUPPRESSION.md.
+version: 2
+scanner_version: 2.5.1
+rules: []
+fingerprints:
+- hash: sha256:0ada464fdea9c9b19ad04292cbe080af8e3d4815e4ff578dbf6d97db61fd8a43
+  rule_id: RA2
+  file: SKILL.md
+  reason: 'False positive: nohup is command detach to survive this environment''s
+    ~150s process kill, not cross-session persistence. Verified 2026-08-03.'

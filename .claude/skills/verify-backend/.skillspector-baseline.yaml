@@ -1,0 +1,18 @@
+# SkillSpector baseline — findings listed here are suppressed on future scans.
+# Edit 'reason' fields and add glob 'rules' as needed. See docs/SUPPRESSION.md.
+version: 2
+scanner_version: 2.5.1
+rules: []
+fingerprints:
+- hash: sha256:dded5d374f64582f8deeff7eb3afa1dc69fc2d7dc9a7974b855ace5427a5a62d
+  rule_id: LP1
+  file: scripts/verify.sh
+  reason: 'False positive: .env at verify.sh:41 sits behind grep -v as an EXCLUSION
+    filter, not credential access; script contains zero network calls (requests.get
+    is a search pattern being checked for). Verified 2026-08-03.'
+- hash: sha256:40f6632caa27605e4f4c439aac021a48864d45a2814c37c0860d64b4639180c1
+  rule_id: PE3
+  file: scripts/verify.sh
+  reason: 'False positive: .env at verify.sh:41 sits behind grep -v as an EXCLUSION
+    filter, not credential access; script contains zero network calls (requests.get
+    is a search pattern being checked for). Verified 2026-08-03.'

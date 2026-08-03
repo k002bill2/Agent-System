@@ -1,0 +1,16 @@
+# SkillSpector baseline — findings listed here are suppressed on future scans.
+# Edit 'reason' fields and add glob 'rules' as needed. See docs/SUPPRESSION.md.
+version: 2
+scanner_version: 2.5.1
+rules: []
+fingerprints:
+- hash: sha256:b1f31126f6904d98b80a7c28b2bc6bfd975e22dd41a076d9bcd9c30b4e12ffe3
+  rule_id: RP1
+  file: references/verification-patterns.md
+  reason: 'False positive: npx resolves to a local node_modules binary; nohup is command
+    detach for this environment''s ~150s process kill. Verified 2026-08-03.'
+- hash: sha256:24d6cd3ec8f6dad79a23eb7046b329839909b701f6191c28d77506ec534c0ecf
+  rule_id: RA2
+  file: SKILL.md
+  reason: 'False positive: npx resolves to a local node_modules binary; nohup is command
+    detach for this environment''s ~150s process kill. Verified 2026-08-03.'
