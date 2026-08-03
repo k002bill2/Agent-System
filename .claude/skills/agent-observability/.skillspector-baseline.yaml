@@ -1,0 +1,11 @@
+# SkillSpector baseline — findings listed here are suppressed on future scans.
+# Edit 'reason' fields and add glob 'rules' as needed. See docs/SUPPRESSION.md.
+version: 2
+scanner_version: 2.5.1
+rules: []
+fingerprints:
+- hash: sha256:c51b33bd10071d7122be12c627cec8de404520b99e1417de2a1a427341bb1950
+  rule_id: AS3
+  file: SKILL.md
+  reason: 'False positive: References section names one specific sibling skill path;
+    no wildcard enumeration of the skills directory. Verified 2026-08-03.'

@@ -1,0 +1,16 @@
+# SkillSpector baseline — findings listed here are suppressed on future scans.
+# Edit 'reason' fields and add glob 'rules' as needed. See docs/SUPPRESSION.md.
+version: 2
+scanner_version: 2.5.1
+rules: []
+fingerprints:
+- hash: sha256:b73246c21080967b1a13e2c5904a1ee4ad7923fdd1d39e21261a6bc34064561f
+  rule_id: RP1
+  file: SKILL.md
+  reason: 'False positive: npx tsc / npx vitest resolve to local node_modules binaries,
+    not an MCP server invocation (npx -y @vendor/mcp-server). Verified 2026-08-03.'
+- hash: sha256:70dac811f365c592e41b287801f1e45b3c2924f84016c7c0b8638b1bb2d38a37
+  rule_id: RP1
+  file: SKILL.md
+  reason: 'False positive: npx tsc / npx vitest resolve to local node_modules binaries,
+    not an MCP server invocation (npx -y @vendor/mcp-server). Verified 2026-08-03.'
