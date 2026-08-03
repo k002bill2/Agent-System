@@ -1,0 +1,98 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-08-03T15:11:34.157Z",
+  "phase": "adhoc",
+  "phase_name": "skill-security-audit → Phase A 승인 게이트 fail-closed 전환",
+  "phase_dir": ".planning",
+  "plan": 1,
+  "task": 3,
+  "total_tasks": 3,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": 1,
+      "name": "스킬 보안 스캔 (SkillSpector 정적 + LLM 의미 계층)",
+      "status": "done",
+      "commit": "af29e7f",
+      "detail": "스킬 33개(.claude/skills 11 + .agents/skills 22) + 커맨드 18개 스캔. 고유 14건 전부 소스 대조로 오탐 판정. LLM 계층이 6건 기각(수동 판정과 일치)·3건 신규 탐지"
+    },
+    {
+      "id": 2,
+      "name": "baseline 7종 생성 + PR #231 머지",
+      "status": "done",
+      "commit": "af29e7f",
+      "detail": "재귀 스캔 --baseline 미지원 우회해 스킬별 생성. Red-Green 검증 7/7 → 0건. CI 9/9 pass"
+    },
+    {
+      "id": 3,
+      "name": "Phase A 승인 게이트 fail-closed 전환",
+      "status": "in_progress",
+      "progress": "Codex 5라운드까지 반영, 6차 지적 미반영. 미커밋 3파일"
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": 3.1,
+      "name": "최우선 분기에 '승인 없는 순수 수정 요청' 케이스 추가",
+      "status": "not_started",
+      "detail": "예: '마이그레이션 빼고 다시 짜줘' → Phase A 재실행(계획 갱신 → 재승인). 현재 어느 케이스에도 안 맞아 영구 BLOCKED"
+    },
+    {
+      "id": 3.2,
+      "name": "최우선 분기에 '취소/포기 + 무관한 새 기능' 케이스 추가",
+      "status": "not_started",
+      "detail": "_workspace/ 타임스탬프 아카이브 후 초기 실행. 현재 최우선 분기가 가로채 '새 기능' 분기 도달 불가"
+    },
+    {
+      "id": 3.3,
+      "name": "Codex 재검증 → 통과 시 3파일 커밋 → 브랜치 → PR",
+      "status": "not_started",
+      "detail": "install.sh는 제외(사용자 별건). 7차에도 P1이면 상태 전이표로 재작성"
+    }
+  ],
+  "blockers": [
+    {
+      "description": "Codex 6라운드가 전부 직전 수정의 부작용을 지적 — 연속 판단으로 수렴하지 않음",
+      "type": "technical",
+      "workaround": "새 세션에서 재개. 7차에도 P1이면 분기 나열이 아니라 상태 전이표(BLOCKED 사유 × 입력 유형 → 행동)로 재작성"
+    },
+    {
+      "description": "컨텍스트 예산 초과 (1M 창 20% 임계 크게 초과)",
+      "type": "technical",
+      "workaround": "새 세션 시작"
+    }
+  ],
+  "human_actions_pending": [],
+  "decisions": [
+    {
+      "decision": "Phase A AFK 정책을 「명시적 위임 토큰」 방식으로 전환",
+      "rationale": "자기 판정 2개(위험등급·위임 여부) 중 위임 추론을 제거. 사용자가 3개 옵션 중 선택 — ①AFK 완전 제거(기능 상실) ③독립 위험 판정 에이전트(런당 +1) 대비 비용 대비 효과",
+      "phase": "adhoc"
+    },
+    {
+      "decision": "타이머('~5분 무응답 후 BLOCKED') 제거하고 승인 요청 시점에 즉시 BLOCKED 기록",
+      "rationale": "턴이 끝나면 상태를 전환할 에이전트가 없어 실행 주체 부재. RUNNING으로 남으면 늦은 승인이 새 실행으로 오인됨 (Codex 3차 P1)",
+      "phase": "adhoc"
+    },
+    {
+      "decision": "baseline은 --no-llm으로 생성",
+      "rationale": "정적 오탐만 억제하고 LLM 의미 계층 findings(Phase A 지적)는 표면에 남기기 위함. fingerprint가 스킬 전체 콘텐츠 해시 기반이라 스킬 수정 시 억제가 풀리는 fail-closed 특성 실측 확인",
+      "phase": "adhoc"
+    },
+    {
+      "decision": "docs/harness-reliability-2026-07.md는 이력 보존 + 개정 표기",
+      "rationale": "2026-07 시점 기록이므로 과거 사실을 고치지 않고, 현행 정책은 SKILL.md 참조로 안내",
+      "phase": "adhoc"
+    }
+  ],
+  "uncommitted_files": [
+    ".claude/skills/aos-feature-harness/SKILL.md",
+    "CLAUDE.md",
+    "docs/harness-reliability-2026-07.md"
+  ],
+  "excluded_from_commit": [
+    "docs/codex-advisor-worker-bundle/install.sh (사용자가 컨텍스트 예산 규칙을 창 비례 15%/20%로 갱신한 별건)"
+  ],
+  "next_action": "HANDOFF.md 또는 .continue-here.md를 읽고, SKILL.md Phase 0 '[최우선] 존재 + Phase A가 BLOCKED' 분기에 케이스 2개(승인 없는 순수 수정 요청 / 취소·포기 후 새 기능) 추가 → Codex 재검증",
+  "context_notes": "정책 한 줄의 기본값(fail-open→fail-closed)을 뒤집자 BLOCKED 상태의 생애주기 전체가 연쇄로 흔들렸다. Codex 6라운드 지적은 순서대로 출구 미정의 → 출구의 결함 → 상태 영속화 주체 부재(P1) → 분기 선점(P1) → 조건 도달 불가 → 선점의 반작용(P1). 4차 수정이 5차·6차에서 정반대 방향의 문제를 각각 만들었다. 문서 기반 정책도 상태 기계이며, 한 전이만 바꿔도 전체 재검토가 필요하다는 게 이번 교훈. 원 지적(하네스의 다른 게이트는 전부 fail-closed인데 승인만 fail-open) 자체는 유효하므로 폐기하지 말 것."
+}
