@@ -3,12 +3,12 @@
 ## Project Reference
 See: `.planning/PROJECT.md`
 **Core value:** Claude Code 에이전트 체계적 협업
-**Current focus:** 하네스 스킬 보안 감사 → Phase A 승인 게이트 fail-closed 전환 (3/3 중 Task 3 진행 중, `paused`)
+**Current focus:** 하네스 스킬 보안 감사 → Phase A 승인 게이트 fail-closed 전환 (3/3 완료, PR 대기)
 
 ## Current Position
-Phase: adhoc — 스킬 보안 감사(Task 1·2 완료·머지) + Phase A 정책 전환(Task 3 미완)
-Last activity: 2026-08-03
-Live handoff: **있음** — `.planning/HANDOFF.json` + `.planning/.continue-here.md` (재개 시 `/gsd:resume-work`)
+Phase: adhoc — 스킬 보안 감사(Task 1·2 완료·머지) + Phase A 정책 전환(Task 3 완료, 미머지)
+Last activity: 2026-08-04
+Live handoff: **없음** — 재개 아티팩트는 소비 후 제거됨. 브랜치 `wip/phase-a-fail-closed`가 진실원
 
 ## Accumulated Context
 
@@ -78,8 +78,10 @@ SkillSpector v2.5.1로 스킬 33개 + 커맨드 18개 스캔. **악의적 패턴
 이번엔 래핑해 스캔했고 새 신호 0건이었으나, 정기 스캔에서는 계속 빠지는 사각지대다.
 
 ## Session Continuity
-Last session: 2026-08-04 (재개)
-Stopped at: Task 3 재개 진행 중 — **상태 전이표 방식으로 전환 결정**(사용자 선택). worker에 위임.
+Last session: 2026-08-04
+Stopped at: **Task 3 완료** — 상태 전이표 재작성 후 Codex 7차에서 **정책 본문 지적 0건**(P1 0건).
+재개 아티팩트(`HANDOFF.json`·`.continue-here.md`)는 소비 완료로 제거했다 — GSD 규칙상 일회용이며,
+커밋된 채 두면 다음 세션이 이미 끝난 3.1·3.2를 반복한다(Codex 7차 P2가 정확히 이 지적).
 
 ### 2026-08-04 재개 시 정정된 전제 2건
 
