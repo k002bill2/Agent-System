@@ -3,12 +3,12 @@
 ## Project Reference
 See: `.planning/PROJECT.md`
 **Core value:** Claude Code 에이전트 체계적 협업
-**Current focus:** 하네스 스킬 보안 감사 → Phase A 승인 게이트 fail-closed 전환 (3/3 완료, **PR #232** 리뷰 대기)
+**Current focus:** **없음 — 진행 중 작업 없다.** 직전 작업(하네스 스킬 보안 감사 + Phase A fail-closed 전환)은 3/3 완료·머지됨
 
 ## Current Position
-Phase: adhoc — 스킬 보안 감사(Task 1·2 완료·머지 `af29e7f`) + Phase A 정책 전환(Task 3 완료, PR #232)
+Phase: adhoc — **완료** (Task 1·2 머지 `af29e7f` / Task 3 머지 `a1db58f`, PR #232)
 Last activity: 2026-08-04
-Live handoff: **없음** — 재개 아티팩트는 소비 후 제거됨. PR #232 (`wip/phase-a-fail-closed`)가 진실원
+Live handoff: **없음** — 재개 아티팩트는 소비 후 제거됨. `main`이 진실원
 
 ## Accumulated Context
 
@@ -77,29 +77,38 @@ SkillSpector v2.5.1로 스킬 33개 + 커맨드 18개 스캔. **악의적 패턴
 부수 발견: `.claude/commands/` 18개는 `SKILL.md`가 없어 **스캐너가 구조적으로 인식하지 못한다**.
 이번엔 래핑해 스캔했고 새 신호 0건이었으나, 정기 스캔에서는 계속 빠지는 사각지대다.
 
+### Phase A 승인 게이트 fail-closed 전환 (2026-08-04) — PR #232, merge `a1db58f`
+
+SkillSpector LLM 의미 분석이 문서의 **내적 모순**을 지적했다 — 다른 게이트는 전부 fail-closed인데
+Phase A 승인만 fail-open이었다(무응답=승인, 위임 여부는 오케스트레이터 자기 추론). 정책을 뒤집자
+BLOCKED 상태의 생애주기 전체가 연쇄로 흔들려 Codex 리뷰가 **6라운드 동안 수렴하지 않았다**.
+
+**수렴시킨 것은 판단이 아니라 구조였다.** 최우선 분기의 진입 조건은 상태 catch-all("사유 불문")인데
+하위 케이스는 *입력 유형*의 불완전 열거였고, first-match라 fallthrough가 없어 **열거되지 않은 입력 =
+영구 BLOCKED**였다. Codex의 P1·P2는 그 클래스의 인스턴스 2개일 뿐 — 2개를 메우면 7차에 3번째가 나온다.
+케이스 추가 대신 **(BLOCKED 사유 3행 × 입력 유형 7열) 상태 전이표 + `⑦ 그 외/판별 불가` 기본행**으로
+클래스를 닫자, 이후 지적이 셀 *내부*의 실행 세부로 국소화되고 재발이 멎었다(7차 P2 1 → 8차 2 → 9차 1 → 10차 0).
+
+교훈: **문서 기반 정책도 상태 기계이며, 필요한 것은 케이스 수가 아니라 totality(전역성)다.**
+그리고 셀에 올바른 *행동*을 적는 것만으로 부족하고 *순서*까지 지정해야 한다 — "`_workspace/` 이동 후
+RUN_STATE 기록"은 이동 후 경로가 없어 빈 워크스페이스를 재생성, 다음 요청이 손상된 재개 런으로 오인된다.
+
+**검증 층위에 대한 발견 2건 (재발 성질):**
+
+- **`codex review --scope working-tree`는 커밋된 변경을 못 본다** (`codex-companion.mjs:260`에서
+  `{type:"uncommittedChanges"}`로 매핑). `/wip-save` 후 핸드오프에 적힌 명령을 그대로 쓰면 무관한
+  잔여 파일만 리뷰하고 로그가 **"지적 0건"처럼 읽힌다**. 브랜치 작업은 `--scope branch --base main`
+- **Codex 통과가 최종 근거는 아니다.** 10차가 "internally consistent"로 통과시킨 뒤, 파일 직독에서
+  선점 조건 드리프트를 잡았다(92줄 "사유 불문" vs 106줄 "승인 대기" — planner 실패 + 범위 지정 입력이
+  전이표를 우회해 승인 없이 Phase B로 가는 경로). 라우팅을 두 곳에서 진술하면 한쪽이 좁아진다
+
+**운영 주의:** 재개 아티팩트(`HANDOFF.json`·`.continue-here.md`)는 GSD `resume-project.md`상 **일회용**이다.
+재개 성공 후 제거하지 않고 커밋해두면 다음 세션이 이미 끝난 작업을 반복한다(Codex 7차가 이걸 잡았다).
+Codex 1~10차 로그는 세션 scratchpad에만 있어 **휘발됐다** — 장기 보존이 필요하면 레포로 옮길 것.
+
 ## Session Continuity
 Last session: 2026-08-04
-Stopped at: **Task 3 완료** — 상태 전이표 재작성 후 Codex 7차에서 **정책 본문 지적 0건**(P1 0건).
-재개 아티팩트(`HANDOFF.json`·`.continue-here.md`)는 소비 완료로 제거했다 — GSD 규칙상 일회용이며,
-커밋된 채 두면 다음 세션이 이미 끝난 3.1·3.2를 반복한다(Codex 7차 P2가 정확히 이 지적).
-
-### 2026-08-04 재개 시 정정된 전제 2건
-
-- **"미커밋 3파일"은 유실 아님.** wip 커밋 `88fb3c2`(로컬 브랜치 `wip/phase-a-fail-closed`, 미푸시)에
-  보존돼 있다. 워킹트리에 남은 2파일은 핸드오프가 제외 대상으로 지정한 사용자 별건
-  (`docs/codex-advisor-worker-bundle/{HANDOFF.md,install.sh}`)이다
-- **`--scope working-tree`로 재검증하면 오작동한다.** `codex-companion.mjs:260`에서 이 스코프는
-  `{type:"uncommittedChanges"}`로 매핑되므로, 3파일이 커밋된 지금은 **별건 2파일만** 리뷰하고
-  로그는 "지적 0건"처럼 읽힌다. `--scope branch --base main`을 쓸 것
-
-### 재개 결정 (2026-08-04)
-
-Codex 6차 P1/P2는 개별 케이스 누락이 아니라 **클래스**의 인스턴스다 — 최우선 분기의 진입 조건은
-상태 catch-all인데 하위 케이스는 입력 유형의 불완전 열거이고 first-match라 fallthrough가 없다.
-케이스 2개 추가는 7차에 세 번째 인스턴스를 부른다. 따라서 회피책을 **지금** 적용해
-(BLOCKED 사유 3행 × 입력 유형 7열) 상태 전이표 + "그 외" 기본행으로 재작성한다.
-부수 요구: Phase 0 표와 Phase A "승인 재개 규칙"의 **라우팅 중복 제거**(표가 SSOT, Phase A는 실행 세부만)
-— 5·6차 드리프트의 온상이었다.
-
-Codex 1~6차 로그·skillspector 리포트는 이전 세션 scratchpad에서 회수해 현 세션 scratchpad에 보관 중
-(휘발성 — 장기 보존이 필요하면 레포로 옮길 것).
+Stopped at: **진행 중 작업 없음.** Phase A fail-closed 전환이 PR #232로 머지(`a1db58f`)되며 adhoc phase 종료.
+main 실물 대조 완료(전이표 5행×8셀, ⑦열 3셀, 구 문구 잔재 0, 재개 아티팩트 부재). CI 9/9 pass.
+Resume hint: 새 작업은 초기 상태에서 시작하면 된다. 미해결 항목은 위 Blockers/Concerns 참조
+(Gemini Bridge 1,126줄 파일 크기 초과, `.claude/commands/` 18개가 SkillSpector 정기 스캔 사각지대).
