@@ -34,7 +34,7 @@
 | # | 항목 | 내용 | 상태 (2026-07-19) |
 |---|------|------|------|
 | ① | 헤더 배지 URL 관례 분열 | 3종 폴백 관례(`'/api'` 9곳=prod 파손형 F1 동일, `''` 2곳=정상, `localhost:8000` 3곳=dev 프록시 우회)를 전수 조사 후 **16파일 전부 `getApiUrl('/api/...')`로 통일** (+70/−87). admin `API_BASE` export 제거. raw `VITE_API_URL` 잔여 0건(grep), 전체 4342 tests 0 failed | **완료** |
-| ② | Phase A 승인 AFK 정책 | "~5분 무응답 시: 저위험+사전 위임=원안 자동 승인(RUN_STATE·최종 보고 명시, 사후 거부권) / 고위험(스키마·데이터·외부 발신·비가역)=BLOCKED 대기, 모호하면 고위험" 명문화 | **완료** (SKILL.md Phase A) |
+| ② | Phase A 승인 AFK 정책 | "~5분 무응답 시: 저위험+사전 위임=원안 자동 승인(RUN_STATE·최종 보고 명시, 사후 거부권) / 고위험(스키마·데이터·외부 발신·비가역)=BLOCKED 대기, 모호하면 고위험" 명문화 | **완료** (SKILL.md Phase A) → **2026-08-03 개정**: fail-closed 전환. 무응답 기본값이 BLOCKED이고, AFK 자동 승인은 사용자 입력에 명시적 허용 문구가 있을 때만 활성(위임 추론 금지). 현행 정책은 SKILL.md Phase A 참조 |
 | ③ | F 게이트 detach 패턴 | "2분+ 명령은 `nohup ... & disown` 후 로그의 종결 산출로 판정, 부분 로그 ≠ 통과" 명문화 | **완료** (verification-loop) |
 | ④ | Codex E-3 배선 | 옵션 E-3(3+ 파일·보안 민감·사용자 요청 시) — companion 스크립트 실행, `E_codex_review.md` 저장, 미실행 시 `E3_SKIPPED.md`. **주의: 현 워크스페이스엔 Codex CLI 미설치**(`npm i -g @openai/codex` + `/codex:setup` 필요) | **완료(배선)** / 실행환경 미비 |
 | ⑤ | 게이트 4중 정의 통합 | verification-loop = 유일 SSOT 선언. aos-workflow "배포 전 검증"과 check-health 상단을 포인터화(check-health 고유 가치=audit·구조검증·스코어만 유지) | **완료** |
