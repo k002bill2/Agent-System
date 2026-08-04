@@ -27,11 +27,11 @@ Live handoff: **없음** — 재개 아티팩트는 소비 후 제거됨. `main`
 - MemberCard/MemberList/MemberUsagePanel: memo() + displayName
 - 커밋: `da99352`, `8255621`
 
-**3. Gemini Review 파이프라인**
-- `.claude/hooks/gemini-bridge.js` (1,126줄): Gemini CLI 통합 브릿지
-- geminiAutoTrigger.js → gemini-bridge.js spawn 구조
-- 리뷰 결과: `.claude/gemini-bridge/reviews/`
-- 리팩토링 계획 존재: `dev/active/gemini-bridge-refactor/` (미착수)
+**3. Gemini Review 파이프라인** — **제거됨** (`9611c31`, 2026-06-06)
+- Gemini **CLI 서비스 종료** 대응으로 하네스 전체 삭제 (23파일 −1,854줄): 훅·데몬·스크립트,
+  `hooks.json` PostToolUse 등록, `GEMINI.md`, `.gemini/`, 템플릿 addon, `.gitignore` 규칙
+- 설계 실패가 아니라 **외부 의존 소멸**이 사유다 — 되살릴 근거가 생기지 않는 한 재도입 검토 불필요
+- 제품 **Gemini LLM 프로바이더(API 기반)는 보존**됐다. CLI 종료와 무관하므로 혼동하지 말 것
 
 **4. Power Stack 통합** ✅
 - GSD: `~/.claude/commands/gsd/` (v1.26.0, 42+ 명령어)
@@ -55,7 +55,10 @@ CI 8/8 pass(Frontend 4잡 포함 = Linux `npm ci` 정합 증명), Codex 리뷰 �
 - 부수 발견: `knip`(미사용 의존성 탐지기)이 **CI에 배선돼 있지 않다**. 미사용 `react-router-dom`이 오래 남은 구조적 원인.
 
 ### Blockers/Concerns
-- Gemini Bridge 파일 크기 초과 (1,126줄 > 800줄 제한) — 리팩토링 필요
+- ~~Gemini Bridge 파일 크기 초과~~ — **무효** (2026-08-04 확인). 해당 파일은 `9611c31`(2026-06-06)에서
+  하네스째 삭제돼 약 2개월간 stale한 항목이었다. 대신 **실재하는 800줄 초과 파일이 15개 이상**
+  (최대 `organization_service.py` 2,229줄) 있으며 미착수다 — 별도 판단 필요(테스트 파일에 한도를
+  적용할지 포함)
 - ~~knip 미배선~~ — **해소됨** (PR #224, `2898eaf`). `frontend-knip` 블로킹 잡 + `ci-success.needs` 등록. 범위는 의존성 소견만(`knip --dependencies`); exports·types·files·duplicates는 설계 판단 영역이라 의도적으로 제외했다
 - **다중 세션 워킹트리 공유 위험(이번 세션 실측)** — worker가 브랜치를 조작하는 동안 메인 세션이 같은 워킹트리의 파일을 편집해 stash 충돌 발생. Codex 리뷰도 같은 이유로 1차 실행이 엉뚱한 diff를 리뷰함. 병행 시 검증 도구는 `git worktree add --detach`로 격리할 것
 
@@ -111,4 +114,4 @@ Last session: 2026-08-04
 Stopped at: **진행 중 작업 없음.** Phase A fail-closed 전환이 PR #232로 머지(`a1db58f`)되며 adhoc phase 종료.
 main 실물 대조 완료(전이표 5행×8셀, ⑦열 3셀, 구 문구 잔재 0, 재개 아티팩트 부재). CI 9/9 pass.
 Resume hint: 새 작업은 초기 상태에서 시작하면 된다. 미해결 항목은 위 Blockers/Concerns 참조
-(Gemini Bridge 1,126줄 파일 크기 초과, `.claude/commands/` 18개가 SkillSpector 정기 스캔 사각지대).
+(800줄 초과 파일 15개 이상 — 판단 미결, `.claude/commands/` 18개가 SkillSpector 정기 스캔 사각지대).
