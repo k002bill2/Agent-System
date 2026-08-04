@@ -200,7 +200,11 @@ _IGNORED_METHODS = frozenset({"HEAD", "OPTIONS"})
 
 
 def snapshot(router: APIRouter) -> list[list[str]]:
-    """(method, path, endpoint name) 목록을 정렬해 반환한다.
+    """(method, path, endpoint name) 목록을 **등록 순서 그대로** 반환한다.
+
+    정렬하지 않는 것이 핵심이다. FastAPI는 먼저 등록된 경로를 먼저 매칭하므로
+    등록 순서 자체가 동작 계약이다. 정렬해 버리면 모듈을 다른 순서로
+    include_router 했을 때 스냅샷이 동일해져 순서 회귀를 놓친다.
 
     name까지 포함하는 이유: 핸들러를 다른 모듈로 옮길 때 함수명이 바뀌면
     operationId가 달라져 OpenAPI 소비자가 깨진다. 경로만 보면 놓친다.
@@ -211,26 +215,36 @@ def snapshot(router: APIRouter) -> list[list[str]]:
             if method in _IGNORED_METHODS:
                 continue
             rows.append([method, route.path, route.name])
-    return sorted(rows)
+    return rows
 ```
 
 - [ ] **Step 3: 현재 라우트 테이블을 베이스라인으로 생성**
 
+`tests/backend/api/`에는 이미 `__init__.py`가 있어 **패키지**다(실측 2026-08-04). 따라서 `sys.path` 주입 후 형제 모듈을 최상위로 import 하면 안 된다 — 그 패키지명이 `src/backend/api`와 충돌할 수 있다. **생성 단계에서는 헬퍼를 import 하지 말고 로직을 인라인**한다:
+
 Run (CWD `src/backend`):
 ```bash
 uv run python -c "
-import json, sys
-sys.path.insert(0, '../../tests/backend/api')
-from route_table import snapshot
+import json
 from api.git import router
-print(json.dumps(snapshot(router), indent=2, ensure_ascii=False))
+rows = [
+    [m, r.path, r.name]
+    for r in router.routes
+    for m in sorted(getattr(r, 'methods', set()))
+    if m not in ('HEAD', 'OPTIONS')
+]   # 정렬하지 않는다 — 등록 순서가 곧 매칭 계약이다
+print(json.dumps(rows, indent=2, ensure_ascii=False))
 " > ../../tests/backend/api/git_route_table.json
 ```
+(테스트 파일 쪽은 Step 5에서 **상대 import** `from .route_table import snapshot`을 쓴다 — `__init__.py`가 있으므로 유효하다.)
 
 - [ ] **Step 4: 생성된 베이스라인 검수**
 
-Run: `python3 -c "import json;d=json.load(open('tests/backend/api/git_route_table.json'));print(len(d))"` (CWD = repo 루트)
-Expected: **63**. 다르면 데코레이터를 여러 줄로 쓴 라우트가 있거나 헬퍼가 잘못된 것이다 — 수를 맞춘 뒤 진행한다.
+Run (CWD = repo 루트): `python3 -c "import json;d=json.load(open('tests/backend/api/git_route_table.json'));print(len(d))"`
+
+Expected: **63** (2026-08-04 실측값 — `@router.` 데코레이터 63개와 일치하며 복수 메서드 라우트는 없음).
+
+행 수가 63과 다르면 그 자체로는 오류가 아니다. 스냅샷은 `(method, path, name)` **쌍**을 세므로 한 핸들러가 `methods=["GET","POST"]`처럼 복수 메서드를 가지면 63을 넘는다. 판정 기준은 "63"이 아니라 **`grep -c '^@router\.' api/git/_legacy.py` 이상이고, 라우트 경로 목록이 육안으로 완전한가**이다. 63보다 *적으면* 반드시 원인을 찾는다.
 
 - [ ] **Step 5: 테스트 작성**
 
@@ -242,12 +256,14 @@ import json
 from pathlib import Path
 
 from api.git import router
-from route_table import snapshot
+
+from .route_table import snapshot  # 상대 import — tests/backend/api 는 패키지다
 
 BASELINE = Path(__file__).parent / "git_route_table.json"
 
 
 def test_git_route_table_unchanged() -> None:
+    """라우트 유실·추가·개명을 잡는다."""
     expected = json.loads(BASELINE.read_text(encoding="utf-8"))
     actual = snapshot(router)
 
@@ -256,6 +272,24 @@ def test_git_route_table_unchanged() -> None:
 
     assert not missing, f"분할 과정에서 사라진 라우트: {missing}"
     assert not added, f"분할 과정에서 생긴 라우트: {added}"
+
+
+def test_git_route_registration_order_unchanged() -> None:
+    """등록 **순서**를 잡는다.
+
+    위 테스트는 집합 비교라 순서에 눈이 멀다. FastAPI는 먼저 등록된 경로를
+    먼저 매칭하므로, 모듈을 다른 순서로 include_router 하면 라우트 집합은
+    같은데 매칭 결과가 달라진다 — 예: `/projects/{id}/merge` 가
+    `/projects/{id}/merge/status` 보다 앞서면 후자가 영영 도달 불가일 수 있다.
+    이 회귀는 프로덕션 라우팅을 조용히 깨므로 순서까지 고정한다.
+    """
+    expected = json.loads(BASELINE.read_text(encoding="utf-8"))
+    actual = snapshot(router)
+
+    assert actual == expected, (
+        "라우트 등록 순서가 바뀌었다. __init__.py 의 include_router 호출 순서를 "
+        "원본 api/git.py 의 선언 순서와 일치시킬 것."
+    )
 
 
 def test_router_prefix_and_tags_unchanged() -> None:
@@ -397,10 +431,12 @@ grep -n '^@router\.' api/git/_legacy.py | grep -E '<ROUTES 정규식>'
 
 from fastapi import APIRouter
 
-from ._shared import *  # noqa: F403  ← 실제로는 필요한 이름만 명시적으로 import 할 것
+from ._shared import get_git_service, ProjectRef   # ← 이 모듈이 실제로 쓰는 이름만 나열
 
 router = APIRouter()
 ```
+
+**star import(`from ._shared import *`)를 쓰지 않는다.** ruff가 F403/F405로 잡아 R6 게이트에서 실패한다 — 즉 레시피가 자기 검증 단계를 통과하지 못한다. 필요한 이름은 R1에서 식별한 핸들러 본문을 읽어 그대로 나열한다.
 그 다음 R1에서 식별한 핸들러를 **한 글자도 바꾸지 않고** 잘라 붙인다. 데코레이터의 경로 문자열, 함수명, 시그니처, 본문 모두 원문 유지 — 이름이 바뀌면 Task 1의 테스트가 잡는다.
 
 - [ ] **R3: 공용 의존성을 `_shared.py`로 승격**
