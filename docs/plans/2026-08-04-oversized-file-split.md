@@ -142,25 +142,25 @@ src/backend/api/git/                       ← 신설 패키지
 ├── __init__.py          집계 라우터 + 재노출.       목표 ~60줄
 ├── _shared.py           공용 의존성·헬퍼·Pydantic 모델.  목표 ~150줄
 ├── repositories.py      GET/POST /repositories, {repo_id} CRUD          5 라우트
-├── github.py            /github/{owner}/{repo}/* (info·branches·pulls)  5 라우트
-├── branches.py          /projects/{id}/branches/*, branch-protection/*  8 라우트
+├── github.py            /github/{owner}/{repo}/* (pulls·info·branches)  8 라우트
+├── branches.py          /projects/{id}/branches/*, branch-protection/* 10 라우트
 ├── commits.py           /projects/{id}/commits/*, draft-commits         5 라우트
 ├── remotes.py           /projects/{id}/remotes/*                        4 라우트
-├── merge_requests.py    /projects/{id}/merge-requests/*                 8 라우트
+├── merge_requests.py    /projects/{id}/merge-requests/*                 9 라우트
 ├── merge.py             /projects/{id}/merge, merge/*                   8 라우트
-└── working_tree.py      status·add·unstage·stage-hunks·staged-diff·
-                         file-diff·file-hunks·working-status·commit·
-                         push·pull·fetch·git-path·worktrees             20 라우트
+└── working_tree.py      status·git-path·worktrees·working-status·add·
+                         commit·unstage·file-diff·staged-diff·file-hunks·
+                         stage-hunks·fetch·pull·push                    14 라우트
 ```
 
-각 모듈 목표 150~350줄. `working_tree.py`가 가장 크므로(20 라우트) 350줄을 넘으면 `staging.py`(add·unstage·stage-hunks·staged-diff·file-hunks)와 `sync.py`(push·pull·fetch·remotes 연동)로 한 번 더 가른다.
+각 모듈 목표 150~350줄. 라우트 수는 2026-08-05 실측이며 합계 63으로 검산된다. `branches.py`(10)와 `merge_requests.py`(9)가 가장 크다 — 350줄을 넘으면 `branches.py`는 `branch_protection.py`를 분리하고, `working_tree.py`는 `staging.py`(add·unstage·stage-hunks·staged-diff·file-hunks·file-diff)와 `sync.py`(fetch·pull·push)로 가른다.
 
 **책임 경계 근거**: 위 그룹은 임의 분류가 아니라 실제 URL 경로의 도메인 세그먼트다(2026-08-04 실측). 같이 바뀌는 것이 같이 있게 된다.
 
 ### Interfaces
 
 - **Produces (B2 이후가 의존):**
-  - `tests/backend/api/route_table.py` — `snapshot(router) -> list[list[str]]` 헬퍼. 임의 `APIRouter`의 (method, path, name) 목록을 정렬해 반환한다. B2의 5개 파일이 그대로 재사용한다.
+  - `tests/backend/api/route_table.py` — 헬퍼 2종. `snapshot(router) -> list[list[str]]`은 임의 `APIRouter`의 (method, path, name) 목록을 등록 순서대로 반환하고(비교는 집합으로 한다), `shadowing_pairs(router) -> list[tuple[str, str]]`은 앞선 라우트가 뒤 라우트를 가려 도달 불가로 만드는 쌍을 찾는다. B2의 5개 파일이 그대로 재사용한다.
   - `src/backend/api/git/__init__.py`의 `router` — 기존 `api.git.router`와 **동일한 이름·동일한 라우트 테이블**.
 - **Consumes:** 없음 (첫 배치)
 
@@ -193,18 +193,28 @@ Expected: ruff/mypy 0 에러. pytest는 `test_embedding_model_consistency` 1건 
 B1(api/git.py) 이후 B2의 라우트 나열 파일들이 그대로 재사용한다.
 """
 
+import re
+
 from fastapi import APIRouter
 
 # 프레임워크가 자동 부여하는 메서드는 계약이 아니므로 제외한다.
 _IGNORED_METHODS = frozenset({"HEAD", "OPTIONS"})
 
+# `/projects/{project_id}/status` → `/projects/X/status`
+_PARAM = re.compile(r"\{[^}]+\}")
+
 
 def snapshot(router: APIRouter) -> list[list[str]]:
     """(method, path, endpoint name) 목록을 **등록 순서 그대로** 반환한다.
 
-    정렬하지 않는 것이 핵심이다. FastAPI는 먼저 등록된 경로를 먼저 매칭하므로
-    등록 순서 자체가 동작 계약이다. 정렬해 버리면 모듈을 다른 순서로
-    include_router 했을 때 스냅샷이 동일해져 순서 회귀를 놓친다.
+    정렬하지 않는 것은 진단 편의 때문이다(실패 메시지가 원본 배치를 보여준다).
+    비교는 집합으로 한다 — 전역 등록 순서는 동작 계약이 아니기 때문이다.
+    분할은 도메인 모듈을 통째로 include_router 하므로 원본에서 흩어져 있던
+    같은 도메인의 라우트가 한 덩어리로 뭉친다. 실측(2026-08-04) 결과
+    branch-protection·draft-commits·fetch/pull/push가 자기 도메인 그룹과
+    떨어져 선언돼 있어 전역 순서 복원은 애초에 불가능하다.
+
+    순서가 실제로 문제되는 유일한 경우는 `shadowing_pairs()`가 잡는다.
 
     name까지 포함하는 이유: 핸들러를 다른 모듈로 옮길 때 함수명이 바뀌면
     operationId가 달라져 OpenAPI 소비자가 깨진다. 경로만 보면 놓친다.
@@ -216,6 +226,33 @@ def snapshot(router: APIRouter) -> list[list[str]]:
                 continue
             rows.append([method, route.path, route.name])
     return rows
+
+
+def shadowing_pairs(router: APIRouter) -> list[tuple[str, str]]:
+    """먼저 등록된 라우트가 뒤 라우트를 영영 가려버리는 쌍을 찾는다.
+
+    Starlette는 등록 순서대로 **전체 경로**를 정규식 매칭한다. 따라서
+    `/projects/{id}/merge`가 `/projects/{id}/merge/status`를 가리는 일은
+    없다(세그먼트 수가 다르다). 실제 가림은 같은 모양일 때만 생긴다 —
+    `/branches/{branch_name}`가 뒤따르는 `/branches/current`를 삼키는 식.
+
+    판정: 두 라우트의 HTTP 메서드가 겹치고, 뒤 라우트의 경로 파라미터를
+    임의 리터럴로 채운 결과가 앞 라우트의 정규식에 걸리면 가림이다.
+
+    실측(2026-08-04): 현재 63개 라우트에 이런 쌍은 **0건**이다. 이 함수는
+    분할이 그 성질을 깨지 않았음을 보증한다.
+    """
+    routes = [r for r in router.routes if hasattr(r, "path_regex")]
+    pairs: list[tuple[str, str]] = []
+    for index, earlier in enumerate(routes):
+        earlier_methods = set(getattr(earlier, "methods", set())) - _IGNORED_METHODS
+        for later in routes[index + 1 :]:
+            later_methods = set(getattr(later, "methods", set())) - _IGNORED_METHODS
+            if not (earlier_methods & later_methods):
+                continue
+            if earlier.path_regex.fullmatch(_PARAM.sub("X", later.path)):
+                pairs.append((earlier.path, later.path))
+    return pairs
 ```
 
 - [ ] **Step 3: 현재 라우트 테이블을 베이스라인으로 생성**
@@ -242,9 +279,9 @@ print(json.dumps(rows, indent=2, ensure_ascii=False))
 
 Run (CWD = repo 루트): `python3 -c "import json;d=json.load(open('tests/backend/api/git_route_table.json'));print(len(d))"`
 
-Expected: **63** (2026-08-04 실측값 — `@router.` 데코레이터 63개와 일치하며 복수 메서드 라우트는 없음).
+Expected: **63** (2026-08-05 재실측 확인 — `@router.` 데코레이터 63개, 복수 메서드 라우트 0건, WebSocket 라우트 0건, 중첩 `include_router` 0건).
 
-행 수가 63과 다르면 그 자체로는 오류가 아니다. 스냅샷은 `(method, path, name)` **쌍**을 세므로 한 핸들러가 `methods=["GET","POST"]`처럼 복수 메서드를 가지면 63을 넘는다. 판정 기준은 "63"이 아니라 **`grep -c '^@router\.' api/git/_legacy.py` 이상이고, 라우트 경로 목록이 육안으로 완전한가**이다. 63보다 *적으면* 반드시 원인을 찾는다.
+행 수가 63과 다르면 그 자체로는 오류가 아니다. 스냅샷은 `(method, path, name)` **쌍**을 세므로 한 핸들러가 `methods=["GET","POST"]`처럼 복수 메서드를 가지면 63을 넘는다. 판정 기준은 "63"이 아니라 **`grep -c '^@router\.' api/git.py` 이상이고, 라우트 경로 목록이 육안으로 완전한가**이다(이 시점에는 아직 `api/git.py`다 — `_legacy.py`는 Task 2에서 생긴다). 63보다 *적으면* 반드시 원인을 찾는다.
 
 - [ ] **Step 5: 테스트 작성**
 
@@ -257,7 +294,7 @@ from pathlib import Path
 
 from api.git import router
 
-from .route_table import snapshot  # 상대 import — tests/backend/api 는 패키지다
+from .route_table import shadowing_pairs, snapshot  # 상대 import — 패키지다
 
 BASELINE = Path(__file__).parent / "git_route_table.json"
 
@@ -274,21 +311,25 @@ def test_git_route_table_unchanged() -> None:
     assert not added, f"분할 과정에서 생긴 라우트: {added}"
 
 
-def test_git_route_registration_order_unchanged() -> None:
-    """등록 **순서**를 잡는다.
+def test_no_shadowing_route_pairs() -> None:
+    """먼저 등록된 경로가 뒤 경로를 가리지 않음을 보증한다.
 
-    위 테스트는 집합 비교라 순서에 눈이 멀다. FastAPI는 먼저 등록된 경로를
-    먼저 매칭하므로, 모듈을 다른 순서로 include_router 하면 라우트 집합은
-    같은데 매칭 결과가 달라진다 — 예: `/projects/{id}/merge` 가
-    `/projects/{id}/merge/status` 보다 앞서면 후자가 영영 도달 불가일 수 있다.
-    이 회귀는 프로덕션 라우팅을 조용히 깨므로 순서까지 고정한다.
+    위 테스트는 집합 비교라 순서에 눈이 멀다. 그런데 **전역 등록 순서는
+    동작 계약이 아니다** — 분할은 도메인 모듈을 통째로 include_router 하므로
+    원본에서 흩어져 있던 같은 도메인 라우트가 뭉치고, 전역 순서는 반드시
+    바뀐다(실측 2026-08-05: branch-protection·draft-commits·fetch/pull/push가
+    자기 도메인과 떨어져 선언돼 있어 원본 순서 복원은 불가능하다).
+
+    순서가 실제로 동작을 바꾸는 경우는 하나뿐이다: 앞선 라우트의 정규식이
+    뒤 라우트의 구체 경로를 삼켜 후자가 영영 도달 불가가 되는 것. 현재
+    63개 라우트에 그런 쌍은 0건이며(실측), 분할이 이를 깨면 안 된다.
     """
-    expected = json.loads(BASELINE.read_text(encoding="utf-8"))
-    actual = snapshot(router)
+    pairs = shadowing_pairs(router)
 
-    assert actual == expected, (
-        "라우트 등록 순서가 바뀌었다. __init__.py 의 include_router 호출 순서를 "
-        "원본 api/git.py 의 선언 순서와 일치시킬 것."
+    assert pairs == [], (
+        f"경로 가림 발생 — 뒤 라우트가 도달 불가다: {pairs}. "
+        "__init__.py 의 include_router 순서에서 구체 경로 모듈을 "
+        "파라미터 경로 모듈보다 앞에 둘 것."
     )
 
 
@@ -301,7 +342,9 @@ def test_router_prefix_and_tags_unchanged() -> None:
 - [ ] **Step 6: 테스트 실행 — PASS 확인**
 
 Run (CWD `src/backend`): `uv run pytest ../../tests/backend/api/test_git_route_table.py -v`
-Expected: 2 passed. (characterization이므로 처음부터 통과가 정상이다)
+Expected: **failed 0 — 이 파일의 모든 테스트가 통과**. (characterization이므로 처음부터 통과가 정상이다)
+
+숫자를 기준으로 삼지 않는다. "N passed"를 맞추려고 테스트를 지우거나 더하는 것은 이 스텝의 목적을 뒤집는다.
 
 - [ ] **Step 7: Red-Green 검증 — 테스트가 실제로 유실을 잡는지 증명**
 
@@ -315,7 +358,7 @@ FAIL이 나오지 않으면 테스트가 무용하다. 원인을 찾아 고친 �
 - [ ] **Step 8: 주석 처리 되돌리고 PASS 재확인**
 
 Run: `git checkout -- src/backend/api/git.py` 후 `uv run pytest ../../tests/backend/api/test_git_route_table.py -v`
-Expected: 2 passed.
+Expected: failed 0 — 이 파일의 모든 테스트가 다시 통과.
 
 - [ ] **Step 9: 커밋**
 
@@ -324,8 +367,10 @@ git add tests/backend/api/route_table.py tests/backend/api/test_git_route_table.
 git commit -m "test(api): git 라우트 테이블 characterization 테스트 추가
 
 분할 리팩터링 전 안전망. (method, path, name) 63건을 베이스라인으로
-고정하고 유실·추가·개명을 잡는다. Red-Green 검증 완료 — 라우트 1건을
-임시 제거하면 FAIL하고 복원하면 PASS한다.
+고정하고 유실·추가·개명을 잡는다. 전역 등록 순서 대신 경로 가림
+(shadowing) 쌍 0건을 불변식으로 고정한다 — 순서는 계약이 아니지만
+앞선 라우트가 뒤 라우트를 삼키는 것은 계약 위반이다.
+Red-Green 검증 완료 — 라우트 1건을 임시 제거하면 FAIL하고 복원하면 PASS한다.
 
 route_table.snapshot() 헬퍼는 나머지 라우트 나열 파일
 (project_configs 60·agents 29·claude_sessions 25·projects 14·
@@ -451,12 +496,14 @@ from . import <MODULE>
 
 router.include_router(<MODULE>.router)
 ```
-**등록 순서가 중요하다.** FastAPI는 먼저 등록된 경로가 먼저 매칭되므로, 구체 경로(`/projects/{id}/merge/status`)가 광범위 경로(`/projects/{id}/merge`)보다 앞에 와야 한다. 원본 `_legacy.py`의 선언 순서를 그대로 재현한다.
+**전역 등록 순서를 원본과 일치시키려 하지 않는다.** Starlette는 등록 순서대로 **전체 경로**를 매칭하므로 세그먼트 수가 다른 경로는 서로를 가리지 않는다 — `/projects/{id}/merge`는 `/projects/{id}/merge/status`를 가리지 못한다. 게다가 원본은 도메인 그룹이 불연속이라(branch-protection·draft-commits·fetch/pull/push) 순서 복원 자체가 불가능하다.
+
+지켜야 할 것은 하나다: **같은 모양 경로에서 파라미터 쪽이 구체 쪽보다 앞서면 안 된다**(`/branches/{name}`이 `/branches/current`보다 앞이면 후자는 도달 불가). R5의 `test_no_shadowing_route_pairs`가 이를 검사한다.
 
 - [ ] **R5: 라우트 테이블 테스트로 즉시 검증**
 
 Run (CWD `src/backend`): `uv run pytest ../../tests/backend/api/test_git_route_table.py -v`
-Expected: 2 passed. **FAIL이면 다음 스텝으로 넘어가지 않는다** — 실패 메시지가 사라졌거나 늘어난 라우트를 정확히 알려준다.
+Expected: failed 0 — 이 파일의 모든 테스트 통과. **FAIL이면 다음 스텝으로 넘어가지 않는다** — 실패 메시지가 사라졌거나 늘어난 라우트, 또는 새로 생긴 경로 가림 쌍을 정확히 알려준다.
 
 - [ ] **R6: 전체 게이트**
 
@@ -483,20 +530,24 @@ git commit -m "refactor(api): git <MODULE> 라우트를 전용 모듈로 추출
 
 #### 태스크별 파라미터
 
-| 태스크 | `<MODULE>` | 라우트 수 | 경로 패턴 |
-|---|---|---:|---|
-| Task 3 | `repositories` | 5 | `/repositories`, `/repositories/{repo_id}` |
-| Task 4 | `github` | 5 | `/github/{repo_owner}/{repo_name}/...` |
-| Task 5 | `remotes` | 4 | `/projects/{project_id}/remotes...` |
-| Task 6 | `branches` | 8 | `/projects/{project_id}/branches...`, `/branch-protection...` |
-| Task 7 | `commits` | 5 | `/projects/{project_id}/commits...`, `/draft-commits` |
-| Task 8 | `merge_requests` | 8 | `/projects/{project_id}/merge-requests...` |
-| Task 9 | `merge` | 8 | `/projects/{project_id}/merge`, `/merge/...` |
-| Task 10 | `working_tree` | 20 | 나머지 전부 (status·add·unstage·stage-hunks·staged-diff·file-diff·file-hunks·working-status·commit·push·pull·fetch·git-path·worktrees) |
+라우트 수는 **2026-08-05 실측**이다(원본 선언 인덱스 병기). 합계 63으로 검산된다.
+
+| 태스크 | `<MODULE>` | 라우트 수 | 원본 인덱스 | 경로 패턴 |
+|---|---|---:|---|---|
+| Task 3 | `repositories` | 5 | 58–62 | `/repositories`, `/repositories/{repo_id}` |
+| Task 4 | `github` | 8 | 50–57 | `/github/{repo_owner}/{repo_name}/...` (pulls 6 + info + branches) |
+| Task 5 | `remotes` | 4 | 43–46 | `/projects/{project_id}/remotes...` |
+| Task 6 | `branches` | 10 | 12–17, 39–42 | `/projects/{project_id}/branches...` 6 + `/branch-protection...` 4 |
+| Task 7 | `commits` | 5 | 18–21, 11 | `/projects/{project_id}/commits...` 4 + `/draft-commits` 1 |
+| Task 8 | `merge_requests` | 9 | 30–38 | `/projects/{project_id}/merge-requests...` |
+| Task 9 | `merge` | 8 | 22–29 | `/projects/{project_id}/merge`, `/merge/...` |
+| Task 10 | `working_tree` | 14 | 0–10, 47–49 | status·git-path·worktrees·working-status·add·commit·unstage·file-diff·staged-diff·file-hunks·stage-hunks + fetch·pull·push |
+
+**원본 인덱스가 불연속인 모듈(branches·commits·working_tree)이 있다는 것이 핵심 사실이다.** 이것이 전역 등록 순서 복원을 불가능하게 만들고, Task 1의 `test_no_shadowing_route_pairs`가 순서 assert를 대신하는 이유다.
 
 **Task 3을 가장 작고 독립적인 `repositories`로 시작하는 이유**: 레시피 자체를 가장 싼 대상에서 검증한다. 여기서 레시피에 결함이 드러나면 5개 라우트만 되돌리면 된다.
 
-**Task 10 주의**: 추출 후 `working_tree.py`가 800줄을 넘으면 `staging.py`(add·unstage·stage-hunks·staged-diff·file-hunks·file-diff)와 `sync.py`(push·pull·fetch)로 한 번 더 가른 뒤 커밋한다.
+**Task 6·10 주의**: 추출 후 `branches.py`(10 라우트)가 800줄을 넘으면 `branch_protection.py`(4 라우트)를 분리하고, `working_tree.py`(14 라우트)가 넘으면 `staging.py`(add·unstage·stage-hunks·staged-diff·file-hunks·file-diff)와 `sync.py`(fetch·pull·push)로 한 번 더 가른 뒤 커밋한다.
 
 ---
 
@@ -524,7 +575,9 @@ from . import branches, commits, github, merge, merge_requests, remotes, reposit
 
 router = APIRouter(prefix="/git", tags=["git"])
 
-# 등록 순서 = 원본 api/git.py의 선언 순서. 구체 경로가 광범위 경로보다 앞이어야 한다.
+# 등록 순서는 원본 선언 순서를 재현하지 않는다(도메인 그룹이 불연속이라 불가능).
+# 계약은 test_no_shadowing_route_pairs 가 검사하는 것뿐이다:
+# 같은 모양 경로에서 파라미터 쪽이 구체 쪽보다 앞서지 않을 것.
 router.include_router(repositories.router)
 router.include_router(github.router)
 router.include_router(branches.router)
@@ -544,7 +597,7 @@ Run (CWD `src/backend`):
 uv run pytest ../../tests/backend/api/test_git_route_table.py -v
 uv run ruff check . && uv run ruff format --check . && uv run mypy . --ignore-missing-imports --no-error-summary && uv run pytest ../../tests/backend -q --tb=line
 ```
-Expected: 라우트 테이블 2 passed(63건 동일), 게이트 실패 0(알려진 플레이크 제외).
+Expected: 라우트 테이블 테스트 failed 0(63건 동일·가림 쌍 0건), 게이트 실패 0(알려진 플레이크 제외).
 
 - [ ] **Step 5: 줄 수 최종 확인**
 
