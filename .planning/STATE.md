@@ -56,9 +56,11 @@ CI 8/8 pass(Frontend 4잡 포함 = Linux `npm ci` 정합 증명), Codex 리뷰 �
 
 ### Blockers/Concerns
 - ~~Gemini Bridge 파일 크기 초과~~ — **무효** (2026-08-04 확인). 해당 파일은 `9611c31`(2026-06-06)에서
-  하네스째 삭제돼 약 2개월간 stale한 항목이었다. 대신 **실재하는 800줄 초과 파일이 15개 이상**
-  (최대 `organization_service.py` 2,229줄) 있으며 미착수다 — 별도 판단 필요(테스트 파일에 한도를
-  적용할지 포함)
+  하네스째 삭제돼 약 2개월간 stale한 항목이었다
+- **800줄 초과 파일 33개 / 43,621줄** — 계획 수립 완료, **실행 미착수**.
+  계획서: `docs/plans/2026-08-04-oversized-file-split.md` (프로그램 6배치 + Batch 1 실행 가능 태스크).
+  테스트 파일은 한도 제외(사용자 결정 2026-08-04). Batch 1 = `api/git.py` 2,022줄 → 8개 도메인 모듈.
+  재개 시 그 문서의 Task 1부터 시작하면 된다 — 착수 전 게이트 green 확인이 Step 1이다
 - ~~knip 미배선~~ — **해소됨** (PR #224, `2898eaf`). `frontend-knip` 블로킹 잡 + `ci-success.needs` 등록. 범위는 의존성 소견만(`knip --dependencies`); exports·types·files·duplicates는 설계 판단 영역이라 의도적으로 제외했다
 - **다중 세션 워킹트리 공유 위험(이번 세션 실측)** — worker가 브랜치를 조작하는 동안 메인 세션이 같은 워킹트리의 파일을 편집해 stash 충돌 발생. Codex 리뷰도 같은 이유로 1차 실행이 엉뚱한 diff를 리뷰함. 병행 시 검증 도구는 `git worktree add --detach`로 격리할 것
 
