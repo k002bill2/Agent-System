@@ -74,10 +74,15 @@ docs/codex-advisor-worker-bundle/HANDOFF.md                       ← 이 문서
 
 ## 설계 요약 (상세는 REVIEW 문서)
 
-- 임계치 = **베이스라인 델타 59k** (퍼센트 아님 — 실측 baseline 50,905 = 200k 창의 25.5%라 퍼센트는 양쪽 끝에서 깨짐). 59k 는 사용자 지정 "200k 창 사용률 50~55%" 에서 역산한 값 = `200,000 × 0.55 − 50,905`
+- 임계치 = **베이스라인 델타를 창 크기에 비례 판정** (WARNING `window×15%` / CRITICAL `window×20%`, 2026-08-03 전환).
+  판정 **대상**은 여전히 delta 다 — 창 *사용률* 퍼센트가 아니다(실측 baseline 50,905 = 200k 창의 25.5%라
+  사용률 임계치는 양쪽 끝에서 깨진다). 구 고정값 59k 는 사용자 지정 "200k 창 사용률 50~55%" 역산값
+  (`200,000 × 0.55 − 50,905`)이었으나, 1M 창에서 창의 6% 지점에 울려 정상 작업 하나가 경고를 2회
+  띄우는 사문화 직전 상태였다 → 창 비례로 전환
 - **[현행]** 배선 = `awesome-statusline.sh` 마커 블록 → `$TMPDIR/claude-ctx-advisor-{sid}.json`(사실만 기록:
   `baseline/current/delta/window/window_pct`) → **번들 소유 훅** `~/.claude/hooks/advisor-context-budget.js`
-  (settings.json `hooks.PostToolUse` 에 등록). 임계는 훅이 직접 판정: `delta>=51133` WARNING / `delta>=59000` CRITICAL.
+  (settings.json `hooks.PostToolUse` 에 등록). 임계는 훅이 직접 판정:
+  `delta >= window×0.15` WARNING / `delta >= window×0.20` CRITICAL (window 필드 부재·이상 시 200k 폴백).
   디바운스 5회 + 승격 시 즉시 발화는 훅이 자체 구현(구 GSD 훅에서 공짜로 받던 것)
 - **[폐기됨 — 이력]** 구 배선은 `claude-ctx-{sid}.json` 에 `remaining_percentage = 100 - delta*100/78666` 를
   **합성**해 GSD 플러그인 훅에 태웠다. 그 기교(`78666 = floor(59000/0.75)`, 정수 나눗셈 경계 보정)는
@@ -911,3 +916,40 @@ W-① RED 는 정의상 실 `/tmp` 로 쓴다 → 세션 고유 SID + 쓰였음�
 **설치기를 실행하지 않았다.** settings.json·statusline·훅 md5 전부 무변경, 새 `.bak` 0,
 `.settings.presnap.*` 0, advisor 엔트리 1. 적용은 Codex 승인 후 별도 단계
 (지금 적용하면 statusline·훅이 갱신되어 "무변경" 기준을 스스로 깬다).
+
+## 2026-08-03 임계치 창 비례 전환 — 반영 완료
+
+**바뀐 것: 임계 수치만.** 소유권·배선·디바운스는 그대로다 (2026-07-29 섹션의 원칙 준수 —
+두 가지를 동시에 바꾸면 회귀 원인을 가린다).
+
+| 항목 | 이전 | 이후 |
+|------|------|------|
+| WARNING | `51133` 고정 | `floor(window × 0.15)` |
+| CRITICAL | `59000` 고정 | `floor(window × 0.20)` |
+| 1M 창 | 51k / 59k | **150k / 200k** |
+| 200k 창 | 51k / 59k | **30k / 40k** |
+| window 부재·이상 | — | `FALLBACK_WINDOW = 200000` |
+
+**계기(실측).** 1M 창에서 고정 59k 는 창의 **6% 지점**에 울렸다. 영상 2편 전사·요약이라는
+정상 작업 **하나**를 끝내는 동안 WARNING 2회 + CRITICAL 1회가 발화 — 이 하네스의 반복 실패
+양식인 **"경고 사문화"** 직전이었다. 판정 대상은 여전히 delta(0에서 시작)이므로 창 사용률
+임계치의 "턴 0 발동" 함정은 전환 후에도 없다.
+
+**폴백이 필수인 이유.** `window` 를 못 읽고 0 으로 계산하면 임계가 0 이 되어 **매 턴 발화**한다.
+경고가 꺼지는 것보다 나쁘다(무시 학습). 그래서 `Number.isFinite && > 0` 검사 후 200k 폴백.
+
+**동기화 지점 5곳** — 하나라도 빠지면 재설치 시 조용히 롤백된다(번들의 정본은 `install.sh` heredoc):
+
+| 대상 | 정본 | 실파일 |
+|------|------|--------|
+| 훅 로직 | `install.sh` 훅 heredoc | `~/.claude/hooks/advisor-context-budget.js` |
+| 운영 규칙 | `install.sh` CLAUDE.md heredoc | `~/.claude/CLAUDE.md` |
+| statusline 주석 | `install.sh` statusline heredoc | `~/.claude/awesome-statusline.sh` |
+
+**검증.** 경계 10건 PASS — 1M(149,999 clear / 150,000 WARNING / 199,999 WARNING / 200,000 CRITICAL),
+200k(29,999 clear / 30,000 WARNING / 40,000 CRITICAL), 폴백(window 없음·0 → 30,000 WARNING).
+Red-Green: `delta 51,529` 는 구 임계로 **실제 발화했고** 신 임계로 clear — 인과 확정.
+`node --check` · `bash -n` · Codex 리뷰(지적 0건) 통과.
+
+**정본↔실파일 대조법.** 눈으로 훑지 말고 불변식 문자열 카운트로 본다. 실제로 이 방법이
+`install.sh` CLAUDE.md heredoc 미수정(실파일 1 / 정본 0)을 잡아냈다.

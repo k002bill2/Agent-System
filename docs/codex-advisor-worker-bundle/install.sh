@@ -249,17 +249,22 @@ install_ctx_hook() {
 //
 // 판정은 창 사용률이 아니라 '세션 베이스라인 대비 델타'다. 베이스라인(시스템 프롬프트 +
 // CLAUDE.md + 도구 스키마)이 이미 창의 25% 를 차지하므로 창 퍼센트 임계는 양쪽 끝에서 깨진다.
-// 창 크기와 무관하게 같은 작업량 시점에 발동한다(200k 든 1M 이든 동일).
+// 판정은 창 사용률이 아니라 baseline 델타로 한다(베이스라인이 창의 25%를 먹으므로
+// 창 퍼센트 임계치는 200k 에서 턴 0 에 발동한다).
 //
-// 임계: delta >= 51,133 WARNING / delta >= 59,000 CRITICAL (사용자 지정값)
+// 임계: 창 크기 비례 — delta >= window*15% WARNING / >= window*20% CRITICAL.
+//   고정 상수(51133/59000)는 200k 창 시절 값이라 1M 창에서 창의 6% 지점에 울렸다.
+//   정상 작업 하나가 경고를 여러 번 띄우면 규칙이 사문화된다 → 창에 비례시킨다.
+//   delta 기준이므로(0에서 시작) 창 사용률 임계치의 "턴 0 발동" 함정은 없다.
 // 디바운스: 경고 사이 도구 호출 5회. 단 WARNING → CRITICAL 승격은 즉시 발화.
 // 어떤 예외에서도 도구 실행을 막지 않는다.
 
 const fs = require('fs');
 const path = require('path');
 
-const WARNING_DELTA = 51133;
-const CRITICAL_DELTA = 59000;
+const WARNING_RATIO = 0.15;
+const CRITICAL_RATIO = 0.20;
+const FALLBACK_WINDOW = 200000;   // window 필드 부재/이상 시 (구 statusline 호환)
 const STALE_SECONDS = 60;   // 60초 지난 지표는 무시 (statusline 이 안 돌고 있는 상태)
 const DEBOUNCE_CALLS = 5;
 
@@ -340,6 +345,13 @@ process.stdin.on('end', () => {
 
     const delta = Number(metrics.delta);
     if (!Number.isFinite(delta)) process.exit(0);
+
+    // 임계는 창 크기에 비례한다. 브리지의 window 를 쓰되 이상값이면 폴백 —
+    // 창을 모른 채 0 으로 나눠 임계가 0 이 되면 매 턴 경고가 터진다.
+    const winRaw = Number(metrics.window);
+    const windowSize = Number.isFinite(winRaw) && winRaw > 0 ? winRaw : FALLBACK_WINDOW;
+    const WARNING_DELTA = Math.floor(windowSize * WARNING_RATIO);
+    const CRITICAL_DELTA = Math.floor(windowSize * CRITICAL_RATIO);
 
     // 임계 미만이면 디바운스 파일을 건드리지 않고 종료한다 —
     // 여기서 카운터를 올리면 경고 이력이 없는 세션에서도 디바운스가 소진된다.
@@ -1221,7 +1233,7 @@ if [ -n "$__ctx_sid" ] && [ "$CURRENT_USAGE" != "null" ]; then
     __ctx_write "$__ctx_prev_f" "$__ctx_now" || true
     __ctx_delta=$(( __ctx_now - __ctx_base ))
     __ctx_wpct=$(( __ctx_now * 100 / __ctx_win ))
-    # 사실만 기록한다. 임계 판정(51133 / 59000)은 훅이 delta 로 직접 수행한다.
+    # 사실만 기록한다. 임계 판정(창 비례 15% / 20%)은 훅이 delta 와 window 로 직접 수행한다.
     __ctx_json=$(printf '{"session_id":"%s","baseline":%s,"current":%s,"delta":%s,"window":%s,"window_pct":%s,"timestamp":%s}' \
       "$__ctx_sid" "$__ctx_base" "$__ctx_now" "$__ctx_delta" "$__ctx_win" "$__ctx_wpct" "$(date +%s)" 2>/dev/null || true)
     __ctx_write "${__ctx_dir}/claude-ctx-advisor-${__ctx_sid}.json" "$__ctx_json" || true
@@ -1330,7 +1342,7 @@ Opus 소진 후 경로는 둘: (a) 두 에이전트의 model: 을 sonnet 으로 
 규모가 큰 구현·버그 조사는 /codex:rescue 로 Codex에 위임할 수 있다.
 
 ## 컨텍스트 예산 (조언자 세션)
-세션 시작 시점 대비 +59k 토큰을 쓰면 새 작업을 시작하지 않는다.
+세션 시작 시점 대비 컨텍스트 창의 20%를 쓰면 새 작업을 시작하지 않는다(1M 창 = +200k, 200k 창 = +40k).
 컨텍스트 경고(CONTEXT BUDGET WARNING / CONTEXT BUDGET CRITICAL)가 주입되면 즉시:
 1. 진행 중 작업을 자연스러운 지점에서 마무리
 2. 상태 저장 — `.planning/STATE.md` 가 있으면 `/gsd:pause-work` 를 제안하고, 없으면 HANDOFF.md 작성(설계 결정·완료 기준·검증 상태·다음 단계). 코드가 더러우면 `/wip-save` 병행
@@ -1338,7 +1350,10 @@ Opus 소진 후 경로는 둘: (a) 두 에이전트의 model: 을 sonnet 으로 
 저장 포맷을 새로 만들지 않는다. 위 경로 중 하나를 쓴다.
 경고는 예산 소진(세션 시작 대비 델타)과 컨텍스트 창 사용률을 함께 표시한다.
 둘은 다른 지표다 — 창에 여유가 있어도 예산을 넘으면 정지 대상이다.
-기준은 델타(토큰)다. 베이스라인 50,905 기준 200k 창 사용률로는 약 55% 시점이며, 1M 창에서는 같은 작업량 시점에 울린다(창 사용률로는 약 11%).
+기준은 델타(토큰)이되 임계치는 창 크기에 비례한다 — WARNING 15% / CRITICAL 20% (2026-08-03 변경).
+이전의 고정 상수(51,133 / 59,000)는 200k 창 시절 값이라 1M 창에서 창의 6% 지점에 울렸고,
+정상 작업 하나가 경고를 여러 번 띄워 규칙이 사문화될 위험이 있었다. 델타 기준이므로(0에서 시작)
+창 사용률 임계치의 "턴 0 발동" 함정은 여전히 없다.
 
 ## 리서치·외부 도구는 메인에서 직접 호출하지 않는다
 메인 세션(모드 A의 조언자)은 WebSearch·WebFetch·tavily·context7 을 직접 부르지 않는다.
