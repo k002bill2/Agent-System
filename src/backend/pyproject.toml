@@ -22,7 +22,7 @@ dependencies = [
     "alembic>=1.18.5",
     "greenlet>=3.5.4", # SQLAlchemy async 필수
     # Redis
-    "redis>=8.0.1",
+    "redis>=8.1.0",
     # Utilities
     "pydantic[email]>=2.10.0",
     "pydantic-settings>=2.6.0",
@@ -42,7 +42,7 @@ dependencies = [
     "langchain-huggingface>=0.1.0",
     "rank_bm25>=0.2.2",
     # Web search tool backend
-    "tavily-python>=0.7.26",
+    "tavily-python>=0.7.27",
     # Docker (for sandbox)
     "docker>=7.2.0",
     # Git integration
@@ -61,7 +61,7 @@ dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
-    "ruff>=0.16.0",
+    "ruff>=0.16.1",
     "mypy>=2.3.0",
 ]
 monitoring = [
