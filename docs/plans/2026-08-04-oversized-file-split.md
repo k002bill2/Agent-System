@@ -23,7 +23,8 @@
 6. **새 백엔드 async 테스트에는 `@pytest.mark.asyncio` 필수.** pytest rootdir이 repo 루트로 잡혀 `src/backend/pyproject.toml`의 `asyncio_mode = "auto"`가 적용되지 않는다(실질 STRICT). 빠뜨리면 CI에서 "async not supported"로 실패한다.
 7. **mandatory-docs.md 적용.** `src/backend/` 수정 태스크는 착수 전 `docs/architecture.md`를 Read한다. `src/dashboard/` 수정은 `docs/dashboard.md`. API 모듈 레이아웃이 바뀌면 `docs/api-reference.md`도 갱신 대상이다. 문서 읽기는 그것이 필요한 태스크 안에 접어 넣는다(별도 태스크로 분리하지 않는다).
 8. **새 의존성 추가 금지.** 분할은 코드 이동이지 도입이 아니다.
-9. **커밋은 Conventional Commits**, 타입은 `refactor:`. 한 태스크 = 한 커밋.
+9. **커밋은 Conventional Commits.** 코드를 옮기는 분할·이동 커밋은 `refactor:`, 분할 전에 안전망을 깔아두는 characterization 테스트 커밋은 `test:`. 한 태스크 = 한 커밋.
+   - 근거(2026-08-05 결정): characterization 태스크는 프로덕션 코드를 한 줄도 바꾸지 않고 테스트만 추가한다. 이를 `refactor:`로 부르면 커밋 타입이 변경의 성격을 잘못 전달한다. Task 1 리뷰가 이 문면 충돌을 지적해 사용자가 확정했다.
 
 ---
 
