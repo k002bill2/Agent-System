@@ -17,7 +17,9 @@
 1. **동작 보존이 유일한 성공 기준이다.** 이 계획의 어떤 태스크도 기능을 추가·수정·삭제하지 않는다. 리팩터링 중 발견한 버그는 고치지 말고 별도 이슈로 기록한다 (Surgical Changes).
 2. **공개 import 경로는 불변이다.** 분할 전 유효했던 모든 import가 분할 후에도 유효해야 한다. 예: `from api.git import router`, `from services.organization_service import OrganizationService`, `import { useGitStore } from '@/stores/git'`. 패키지 `__init__.py` / `index.ts` 재노출로 보장하고, **분할 전에 `grep -rn`으로 실제 소비자를 전수 조사해 목록을 남긴다.**
 3. **한도 = 파일 800줄** (golden-principles.md). 분할 결과 모든 산출 파일이 800줄 미만이어야 한다. 목표는 200~400줄 (coding-style.md 권장).
-4. **테스트 파일은 이 계획의 대상이 아니다** (사용자 결정, 2026-08-04). 테스트는 응집도보다 망라성이 우선이라 한도를 적용하지 않는다.
+4. **테스트 파일은 이 계획의 *분할* 대상이 아니다** (사용자 결정, 2026-08-04). 테스트는 응집도보다 망라성이 우선이라 800줄 한도를 적용하지 않는다.
+   - **단, 테스트가 불변인 것은 아니다.** 테스트가 문자열로 모듈 내부를 참조하는 경우(`patch("api.git.foo")`, `monkeypatch.setattr("api.git.foo", ...)`) 그 함수가 다른 모듈로 이동하면 패치 타깃 문자열을 반드시 갱신해야 한다. **이 갱신은 이 계획이 명시적으로 허용하는 수반 변경이다** — 동작을 바꾸는 것이 아니라, 테스트가 내부 구조를 참조하기 때문에 구조가 바뀌면 따라가야 하는 것이다. 이를 "범위 초과"로 보지 않는다.
+   - 대안(핸들러가 `from . import _shared` 후 `_shared.foo()`로 호출하도록 바꿔 패치 지점을 한 곳에 고정하는 방식)은 **채택하지 않았다.** 핸들러 본문의 호출 방식을 바꾸게 되는데, "핸들러를 한 글자도 바꾸지 않는다"는 것이 Task 1의 라우트 테이블 테스트를 충분한 안전망으로 만드는 근거다. 테스트 편집 횟수를 줄이려고 그 근거를 버리는 것은 손해다. 패치 타깃 23곳은 두 번 편집된다(Task 2 → `_legacy`, Task 6·7 → 최종 모듈). 이는 의도된 것이며 "최적화" 대상이 아니다.
 5. **게이트 명령의 SSOT는 `verification-loop` 스킬이다.** 이 문서에 명령을 복제하지 않는다. 백엔드 트랙 = ruff + ruff format + mypy + pytest, 프론트 트랙 = tsc --noEmit + ESLint + vitest run + build.
    - **알려진 로컬 플레이크**: `test_embedding_model_consistency` 1건은 `.env`의 `RAG_EMBEDDING_MODEL` 오버라이드 때문에 로컬에서만 실패한다(CI는 통과). **이 1건만 실패하면 게이트 통과로 간주**한다. 다른 실패가 하나라도 섞이면 통과가 아니다.
 6. **새 백엔드 async 테스트에는 `@pytest.mark.asyncio` 필수.** pytest rootdir이 repo 루트로 잡혀 `src/backend/pyproject.toml`의 `asyncio_mode = "auto"`가 적용되지 않는다(실질 STRICT). 빠뜨리면 CI에서 "async not supported"로 실패한다.
@@ -461,6 +463,25 @@ __all__ = [
 
 **`__all__`은 소비자 목록에서 역산한다.** 분할이 진행되면서 이 두 함수는 Task 7(`commits` 모듈)로 이동하는데, 그때도 `__init__.py`의 재노출은 유지해야 한다 — import 출처만 `._legacy`에서 `.commits`로 바뀐다.
 
+- [ ] **Step 4b: 문자열 패치 타깃을 `_legacy`로 갱신 (필수 — 이걸 빼면 게이트가 9건 실패한다)**
+
+이동으로 핸들러가 `api/git/_legacy.py`로 옮겨졌으므로, 핸들러 모듈의 속성을 문자열로 패치하는 테스트는 타깃을 따라가야 한다. `__init__.py` 재노출로는 해결되지 않는다(위 "문자열 패치 타깃" 절 참조).
+
+Run (CWD = repo 루트):
+```bash
+grep -rln '"api\.git\.' --include='*.py' tests/backend | xargs sed -i '' 's/"api\.git\./"api.git._legacy./g'
+grep -rn '"api\.git\.' --include='*.py' tests/backend
+```
+
+두 번째 grep 결과가 모두 `"api.git._legacy.<name>"` 형태여야 한다. 치환 대상은 3종 23곳이다:
+- `api.git.get_git_service_for_project` → `api.git._legacy.get_git_service_for_project` (9곳)
+- `api.git.get_github_service` → `api.git._legacy.get_github_service` (7곳)
+- `api.git._get_db_session` → `api.git._legacy._get_db_session` (7곳)
+
+`safe_import("api.git", "router")`(`app.py:106`)는 **건드리지 않는다** — 모듈 경로이지 속성 패치가 아니고, 위 sed 패턴(`"api.git.`, 마침표 포함)에 걸리지 않는다. 치환 후 `src/backend/api/app.py`가 변경되지 않았는지 `git status`로 확인하라.
+
+**예상 실패 (이 스텝 전에 게이트를 돌리면 나온다):** `test_api_git_prune.py` 7건 + `test_llm_usage_instrumentation.py` 2건 + 알려진 플레이크 1건 = `10 failed, 1327 passed`. 이 9건은 **예상된 것이며 이 스텝으로 해결된다.** 게이트가 빨갛다고 이동을 되돌리지 마라.
+
 - [ ] **Step 5: 게이트 실행 — 여기서 이미 green이어야 한다**
 
 먼저 재노출 계약을 직접 확인한다 (CWD `src/backend`):
@@ -476,14 +497,17 @@ Expected: `reexport ok: /git ['git'] 63`. 세 이름이 모두 import 돼야 한
 ```bash
 uv run ruff check . && uv run ruff format --check . && uv run mypy . --ignore-missing-imports --no-error-summary && uv run pytest ../../tests/backend -q --tb=line
 ```
-Expected: Task 1 Step 1과 동일한 결과(알려진 플레이크 1건 외 실패 0). **라우트 테이블 테스트가 통과해야 한다** — 통과하면 패키지 승격이 HTTP 표면을 건드리지 않았다는 뜻이다.
+Expected: **`1 failed, 1336 passed, 2 skipped`** — Task 1 완료 시점과 동일한 수치이며, 유일한 실패는 알려진 플레이크다. 수치가 이보다 적으면 테스트가 collection 단계에서 사라진 것이니 원인을 찾는다.
 
-`test_llm_usage_instrumentation.py`도 통과해야 한다 — 이것이 핸들러 함수 재노출을 실제로 검증하는 유일한 테스트다.
+**반드시 통과해야 하는 것들:**
+- `test_git_route_table.py` 3건 — 통과하면 패키지 승격이 HTTP 표면을 건드리지 않았다는 뜻이다.
+- `test_llm_usage_instrumentation.py` 2건 — 핸들러 함수 재노출(Step 4)과 패치 타깃 갱신(Step 4b)을 동시에 검증하는 유일한 테스트다.
+- `test_api_git_prune.py` 7건 — 패치 타깃 갱신(Step 4b)의 주 검증 대상이다.
 
 - [ ] **Step 6: 커밋**
 
 ```bash
-git add -A src/backend/api/git
+git add -A src/backend/api/git tests/backend
 git commit -m "refactor(api): git.py를 패키지로 승격 (내용 무변경)
 
 파일을 api/git/_legacy.py로 옮기고 __init__.py가 공개 이름 3개를 재노출한다:
@@ -492,7 +516,14 @@ router, generate_draft_commits, generate_draft_commits_for_project.
 router만 재노출하면 깨진다(전수 조사 2026-08-05).
 
 git.py 내부에 상대 import 가 없어(실측 0건) 패키지 깊이 변화의 영향이 없다 —
-이 커밋은 옮겨진 코드를 한 줄도 바꾸지 않는다. 이후 도메인별 추출의 발판이다."
+이 커밋은 옮겨진 코드를 한 줄도 바꾸지 않는다.
+
+테스트의 문자열 패치 타깃 23곳을 api.git.X → api.git._legacy.X 로 갱신했다.
+핸들러가 _legacy 네임스페이스로 이동하므로 __init__.py 재노출로는 패치가
+먹지 않는다 — 재노출은 import 를 살리지만 패치 지점은 살리지 못한다.
+동작 변경이 아니라 테스트가 내부 구조를 참조하는 데 따른 수반 변경이다.
+
+이후 도메인별 추출의 발판이다."
 ```
 
 ---
@@ -544,6 +575,20 @@ router.include_router(<MODULE>.router)
 **전역 등록 순서를 원본과 일치시키려 하지 않는다.** Starlette는 등록 순서대로 **전체 경로**를 매칭하므로 세그먼트 수가 다른 경로는 서로를 가리지 않는다 — `/projects/{id}/merge`는 `/projects/{id}/merge/status`를 가리지 못한다. 게다가 원본은 도메인 그룹이 불연속이라(branch-protection·draft-commits·fetch/pull/push) 순서 복원 자체가 불가능하다.
 
 지켜야 할 것은 하나다: **같은 모양 경로에서 파라미터 쪽이 구체 쪽보다 앞서면 안 된다**(`/branches/{name}`이 `/branches/current`보다 앞이면 후자는 도달 불가). R5의 `test_no_shadowing_route_pairs`가 이를 검사한다.
+
+- [ ] **R4b: 이 태스크가 옮긴 핸들러를 문자열로 패치하는 테스트의 타깃 갱신**
+
+Run (CWD = repo 루트): `grep -rn '"api\.git\._legacy\.' --include='*.py' tests/backend`
+
+출력된 패치 지점 중 **이 태스크가 옮긴 핸들러를 대상으로 하는 것만** `api.git.<MODULE>.<name>`으로 바꾼다. 아직 `_legacy`에 남아 있는 핸들러용 패치는 그대로 둔다.
+
+**패치 지점은 헬퍼가 정의된 모듈이 아니라 핸들러가 사는 모듈이다.** 핸들러가 `from ._shared import get_git_service_for_project`로 이름을 자기 네임스페이스에 바인딩하므로 `api.git._shared.get_git_service_for_project` 패치는 먹지 않는다. `api.git.<MODULE>.get_git_service_for_project`여야 한다.
+
+해당 태스크 (나머지 태스크는 이 스텝이 no-op):
+- **Task 6 (`branches`)** — `tests/backend/api/test_api_git_prune.py` 21곳(`get_git_service_for_project` 7 · `get_github_service` 7 · `_get_db_session` 7). `POST /branches/prune-merged` 핸들러가 이 태스크에서 이동한다.
+- **Task 7 (`commits`)** — `tests/backend/test_llm_usage_instrumentation.py` 2곳(`get_git_service_for_project`). draft-commits 핸들러가 이 태스크에서 이동한다.
+
+이 스텝을 빠뜨리면 R6 게이트가 해당 테스트에서 `AttributeError: module 'api.git.<MODULE>' has no attribute ...` 또는 패치 무효로 실패한다. **실패를 보고 추출을 되돌리지 마라** — 이 스텝을 수행하는 것이 정답이다.
 
 - [ ] **R5: 라우트 테이블 테스트로 즉시 검증**
 
@@ -689,6 +734,24 @@ PR 본문에 포함할 것: 분할 전후 `wc -l` 비교표, 라우트 테이블
 | `tests/backend/api/test_api_git_prune.py:19` | 함수 내 정적 | `router` |
 
 `src/backend/api/git.py` 내부에는 상대 import가 **0건**이다(실측). 따라서 패키지로 한 단계 깊어져도 내부 import를 고칠 것이 없고, Task 2의 "코드를 한 줄도 바꾸지 않는다"는 문면 그대로 참이다.
+
+### 문자열 패치 타깃 — 정적 import가 아니어서 첫 조사에서 놓쳤다
+
+정적 import만으로는 소비자를 다 못 찾는다. 아래는 **문자열로 모듈 속성을 패치**하는 지점이며, Task 2를 실제로 실행해 보고서야 드러났다(2026-08-05 진단, 실패 9건).
+
+| 패치 타깃 | 사용처 | 횟수 | 최종 안착 태스크 |
+|---|---|---:|---|
+| `api.git.get_git_service_for_project` | `test_api_git_prune.py` 7, `test_llm_usage_instrumentation.py` 2 | 9 | Task 6 / Task 7 |
+| `api.git.get_github_service` | `test_api_git_prune.py` | 7 | Task 6 |
+| `api.git._get_db_session` | `test_api_git_prune.py` | 7 | Task 6 |
+
+테스트 파일 → 태스크 매핑: `test_api_git_prune.py`는 `POST /branches/prune-merged`를 테스트하므로 **Task 6(branches)**, `test_llm_usage_instrumentation.py`는 draft-commits를 테스트하므로 **Task 7(commits)**.
+
+**왜 `__init__.py` 재노출로 해결되지 않는가**: 이동 후 핸들러는 `api/git/_legacy.py`에 살고 자기 모듈 네임스페이스의 이름을 참조한다. `api.git`(패키지 `__init__`)의 속성을 패치해도 `_legacy`의 네임스페이스는 그대로다. **재노출은 import를 살리지만 패치 지점은 살리지 못한다** — 계획 초안이 "import 경로"와 "패치 지점"을 같은 것으로 취급한 오류다.
+
+**패치 지점 규칙**: 패치 대상은 헬퍼가 *정의된* 모듈이 아니라 **핸들러가 *사는* 모듈**이다. 핸들러가 `from ._shared import get_git_service_for_project`로 이름을 자기 네임스페이스에 바인딩하므로, `api.git._shared.get_git_service_for_project`를 패치해도 먹지 않는다.
+
+세 헬퍼 모두 `Depends()`가 아니라 **핸들러 본문 안의 평범한 호출**이다(실측: `Depends(` 형태 0건). `get_git_service_for_project` 24곳, `_get_db_session` 16곳, `get_github_service` 1곳에서 호출되며 여러 도메인 모듈에 걸친다.
 
 ### ⚠️ 이 프로그램 전체의 최대 위험 — `safe_import`가 실패를 삼킨다
 
