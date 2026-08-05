@@ -126,6 +126,14 @@
 |---|---|---:|---|
 | **B1** | `api/git.py` | 2,022 | 라우트 나열 + 최대 크기. **여기서 만드는 라우트 테이블 테스트가 B2 전체에 재사용된다** |
 | **B2** | `api/project_configs.py`, `api/agents.py`, `api/claude_sessions.py`, `api/projects.py`, `api/v1/agent_registry.py` | 6,590 | 동일 이음매. B1의 레시피·테스트 도구를 그대로 적용 |
+
+> **B2 착수 조건 — `shadowing_pairs()`의 알려진 한계 (Codex 지적, 2026-08-05, 유예 결정)**
+>
+> `shadowing_pairs()`는 **완전 가림**(뒤 라우트가 절대 도달 불가)만 탐지한다. **부분 겹침**은 놓친다 — 앞 `GET /items/{id:int}`와 뒤 `GET /items/{value:float}`는 `/items/1`에서 겹쳐 순서를 바꾸면 정수 입력의 처리 핸들러가 달라지지만, `_concrete_path`가 float를 `1.0`으로 채우므로 int 정규식에 걸리지 않아 쌍이 보고되지 않는다.
+>
+> **B1에서 고치지 않은 이유**: (1) 백엔드 전체에 제약 컨버터가 `{branch_name:path}` 3건뿐이고 int·float·uuid는 **0건**이라 이 시나리오가 존재하지 않는다(실측). (2) 부분 겹침을 가림으로 보고하면 의도적 폴백 설계(`{id:int}` 먼저, `{slug:str}` 나중)를 거짓 경보로 잡는다 — 무시당하는 안전망은 없는 것보다 나쁘다. (3) 헬퍼를 범용 라우팅 검증 도구로 만드는 것은 이 계획의 범위가 아니다(YAGNI).
+>
+> **B2 착수 시 반드시 실측하라**: `grep -rhoE '\{[a-zA-Z_][a-zA-Z0-9_]*:[a-z]+\}' <대상파일>`로 대상 파일의 컨버터 사용을 확인한다. `int`·`float`·`uuid`가 **하나라도 나오면** 이 유예는 무효이며, `shadowing_pairs()`를 정규식 교집합 방식으로 강화한 뒤 진행한다. `test_convertor_samples_cover_starlette_and_are_valid`는 Starlette가 컨버터 종류를 늘릴 때만 깨지며, 코드베이스가 제약 컨버터를 **쓰기 시작하는 것**은 잡지 못한다.
 | **B3** | 프론트 스토어 3종 (`git.ts`, `projectConfigs.ts`, `claudeSessions.ts`) | 3,811 | `stores/orchestration/` 선례가 그대로 적용됨. 테스트 3,400줄 |
 | **B4** | 프론트 페이지·컴포넌트 4종 (테스트 있는 것) | 5,547 | 컴포넌트/훅 추출. 판단이 들어가지만 안전망 두꺼움 |
 | **B5** | 백엔드 다중클래스 9종 | 11,320 | 클래스 단위 이동. 테스트 없는 것은 characterization 선행 |
@@ -389,8 +397,10 @@ agent_registry 8)에도 재사용한다."
 **Files:**
 - Read: `docs/architecture.md` (mandatory-docs.md — `src/backend/` 수정 태스크)
 - Create: `src/backend/api/git/__init__.py`
-- Create: `src/backend/api/git/_shared.py`
 - Modify: `src/backend/api/git.py` → `src/backend/api/git/_legacy.py`로 이동(임시)
+- Modify: `tests/backend/api/test_api_git_prune.py`, `tests/backend/test_llm_usage_instrumentation.py` (Step 4b 패치 타깃)
+
+**`_shared.py`는 이 태스크에서 만들지 않는다.** 공용 정의를 옮기는 것은 Task 3 이후 추출 레시피의 R3 단계다. 이 태스크에서 빈 파일을 만들면 의미 없는 파일이 커밋된다. (초안에는 이 태스크의 Create 목록에 있었으나 Step 1~6 어디에도 생성 지시가 없어 모순이었다 — Task 2 리뷰가 지적해 2026-08-05에 제거했다.)
 
 - [ ] **Step 1: `docs/architecture.md` 읽기**
 
@@ -702,9 +712,22 @@ grep -rn "api\.git\|api/git" --include='*.py' src/backend tests/backend | grep -
 ```
 Task 2 Step 2에서 기록한 목록과 대조한다. 모든 import가 그대로 유효해야 한다.
 
-- [ ] **Step 7: 문서 동기화**
+- [ ] **Step 7: 문서·설정의 경로 참조 동기화**
 
 `docs/architecture.md`와 `docs/api-reference.md`에서 `api/git.py`를 단일 파일로 서술한 부분을 패키지 구조로 갱신한다. **API 엔드포인트 자체는 하나도 바뀌지 않았으므로 엔드포인트 목록은 손대지 않는다.**
+
+**코드 밖의 경로 참조도 함께 고친다.** Task 2 실행 후 실측(2026-08-05)한 잔여 참조:
+
+| 파일 | 내용 | 조치 |
+|---|---|---|
+| `.claude/skill-evals/verify-backend-workspace/evals/evals.json:20` | `"files": ["src/backend/api/git.py"]` | 실제 파일 경로 — 갱신 필요 |
+| `.claude/skill-evals/verify-backend-workspace/evals/evals.json:18` | 프롬프트 본문의 `api/git.py` | 산문이므로 선택 |
+| `.claude/skill-evals/verify-backend-workspace/trigger-eval.json:3` | 프롬프트 본문 | 산문이므로 선택 |
+| `.claude/skill-evals/verify-frontend-workspace/trigger-eval.json:12` | 프롬프트 본문 | 산문이므로 선택 |
+
+`"files"` 배열은 eval 러너가 실제로 여는 경로이므로 갱신하지 않으면 그 eval이 깨진다. 프롬프트 본문의 언급은 사람이 읽는 예시라 필수는 아니다.
+
+**빌드는 영향 없음**(실측): Dockerfile 8종 모두 `COPY . .` 방식이라 파일 경로를 명시하지 않는다. `src/backend/Dockerfile`은 `api/app_railway.py`만 복사하므로 무관하다.
 
 - [ ] **Step 8: 커밋 + PR**
 
