@@ -398,10 +398,15 @@ Read `docs/architecture.md`. API 레이어 구조 서술이 `api/git.py`를 단�
 
 Run (CWD = repo 루트):
 ```bash
-grep -rn "api\.git\|api/git\|from api import git" --include='*.py' src/backend tests/backend | grep -v '^src/backend/api/git' > /tmp/git_importers.txt
-cat /tmp/git_importers.txt
+grep -rn "from \.git import\|from \. import git\|from api\.git import\|import api\.git\|from api import git\|safe_import(\"api\.git\"" \
+  --include='*.py' src/backend tests/backend | grep -v '^src/backend/api/git'
 ```
-결과를 이 계획서 하단 "Batch 1 소비자 목록"에 붙여넣는다. 각 import가 분할 후에도 유효해야 한다 (Global Constraints 2).
+
+**상대 import 형태(`from .git import`)를 반드시 포함한다.** 계획 초안의 `api\.git|api/git` 패턴만으로는 같은 패키지 내부의 상대 import를 놓치고, 그러면 가장 중요한 소비자가 "0건"으로 기록된다.
+
+결과를 이 계획서 하단 "Batch 1 소비자 목록"에 채운다(임시 파일이 아니라 **추적되는 계획서에** 남긴다 — Task 11 Step 6이 이 목록과 대조하는데 세션이 바뀌면 `/tmp`는 사라진다). 각 import가 분할 후에도 유효해야 한다 (Global Constraints 2).
+
+**전수 조사는 2026-08-05에 이미 수행됐다 — 하단 목록 참조.** 이 스텝에서는 그 목록이 여전히 정확한지만 재확인한다(다중 세션 환경이라 그 사이 소비자가 늘었을 수 있다).
 
 - [ ] **Step 3: 패키지로 승격 (내용은 아직 그대로)**
 
@@ -412,10 +417,19 @@ git mv git.py git/_legacy.py
 ```
 (`git.py`와 `git/`는 서로 다른 이름이라 충돌하지 않는다 — macOS APFS 대소문자 비구분 환경에서 1단계 이동이 동작함을 스크래치 레포로 실측 확인했다, 2026-08-04.)
 
-`__pycache__/git.cpython-*.pyc`가 남아 있으면 stale 모듈이 새 패키지를 가릴 수 있다. 이동 직후 정리한다:
+`__pycache__/git.cpython-*.pyc`가 남아 있으면 stale 모듈이 새 패키지를 가릴 수 있다. 이동 직후 정리한다. `.mypy_cache`도 함께 지운다 — `pyproject.toml`이 `explicit_package_bases` + `mypy_path = "."`를 쓰므로 `api.git`을 **모듈**로 기록한 증분 캐시가 이제 **패키지**가 된 것과 충돌해 가짜 에러를 낸다. 스테일 캐시 오탐은 진짜 패키징 오류와 똑같이 생겼다:
 ```bash
 find src/backend -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
+rm -rf src/backend/.mypy_cache
 ```
+
+- [ ] **Step 3b: 이동이 rename으로 스테이징됐는지 확인 (필수)**
+
+Run (CWD = repo 루트): `git status --short src/backend/api/`
+
+Expected: `R  src/backend/api/git.py -> src/backend/api/git/_legacy.py`
+
+**`git.py`가 새 `git/` 패키지와 나란히 살아남으면 안 된다.** 그 상태에서는 Python이 패키지를 먼저 해석해 모듈을 가리므로 **라우트 테이블 테스트를 포함한 모든 테스트가 그대로 통과하면서** 800줄 파일은 추적된 채 남는다 — 목표를 하나도 달성하지 못했는데 모든 신호가 초록이다. 다른 어떤 검사도 이 두 상태를 구분하지 못한다.
 
 - [ ] **Step 4: `__init__.py` 작성 — 재노출만**
 
@@ -424,21 +438,47 @@ find src/backend -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || tr
 """Git API 패키지.
 
 `api/git.py`(2,022줄)를 도메인별 모듈로 분할한 결과. 소비자의 import 경로
-(`from api.git import router`)는 분할 전과 동일하게 유지된다.
+는 분할 전과 동일하게 유지된다.
+
+재노출 대상은 `router` 하나가 아니다 — 실측(2026-08-05) 결과
+`tests/backend/test_llm_usage_instrumentation.py`가 핸들러 함수 두 개를
+직접 import 한다. `router`만 재노출하면 그 두 import 가 ImportError 로
+깨진다(Global Constraints 2 위반).
 """
 
-from ._legacy import router
+from ._legacy import (
+    generate_draft_commits,
+    generate_draft_commits_for_project,
+    router,
+)
 
-__all__ = ["router"]
+__all__ = [
+    "generate_draft_commits",
+    "generate_draft_commits_for_project",
+    "router",
+]
 ```
+
+**`__all__`은 소비자 목록에서 역산한다.** 분할이 진행되면서 이 두 함수는 Task 7(`commits` 모듈)로 이동하는데, 그때도 `__init__.py`의 재노출은 유지해야 한다 — import 출처만 `._legacy`에서 `.commits`로 바뀐다.
 
 - [ ] **Step 5: 게이트 실행 — 여기서 이미 green이어야 한다**
 
-Run (CWD `src/backend`):
+먼저 재노출 계약을 직접 확인한다 (CWD `src/backend`):
 ```bash
-uv run ruff check . && uv run mypy . --ignore-missing-imports --no-error-summary && uv run pytest ../../tests/backend -q --tb=line
+uv run python -c "
+from api.git import router, generate_draft_commits, generate_draft_commits_for_project
+print('reexport ok:', router.prefix, router.tags, len(router.routes))
+"
+```
+Expected: `reexport ok: /git ['git'] 63`. 세 이름이 모두 import 돼야 한다 — 하나라도 빠지면 소비자 목록의 import가 깨진 것이다.
+
+그다음 전체 게이트 (CWD `src/backend`):
+```bash
+uv run ruff check . && uv run ruff format --check . && uv run mypy . --ignore-missing-imports --no-error-summary && uv run pytest ../../tests/backend -q --tb=line
 ```
 Expected: Task 1 Step 1과 동일한 결과(알려진 플레이크 1건 외 실패 0). **라우트 테이블 테스트가 통과해야 한다** — 통과하면 패키지 승격이 HTTP 표면을 건드리지 않았다는 뜻이다.
+
+`test_llm_usage_instrumentation.py`도 통과해야 한다 — 이것이 핸들러 함수 재노출을 실제로 검증하는 유일한 테스트다.
 
 - [ ] **Step 6: 커밋**
 
@@ -446,9 +486,13 @@ Expected: Task 1 Step 1과 동일한 결과(알려진 플레이크 1건 외 실�
 git add -A src/backend/api/git
 git commit -m "refactor(api): git.py를 패키지로 승격 (내용 무변경)
 
-파일을 api/git/_legacy.py로 옮기고 __init__.py가 router를 재노출한다.
-소비자 import 경로(from api.git import router)는 그대로다.
-이 커밋은 코드를 한 줄도 바꾸지 않는다 — 이후 도메인별 추출의 발판이다."
+파일을 api/git/_legacy.py로 옮기고 __init__.py가 공개 이름 3개를 재노출한다:
+router, generate_draft_commits, generate_draft_commits_for_project.
+뒤 두 개는 test_llm_usage_instrumentation.py 가 직접 import 하므로
+router만 재노출하면 깨진다(전수 조사 2026-08-05).
+
+git.py 내부에 상대 import 가 없어(실측 0건) 패키지 깊이 변화의 영향이 없다 —
+이 커밋은 옮겨진 코드를 한 줄도 바꾸지 않는다. 이후 도메인별 추출의 발판이다."
 ```
 
 ---
@@ -634,7 +678,31 @@ PR 본문에 포함할 것: 분할 전후 `wc -l` 비교표, 라우트 테이블
 
 ## Batch 1 소비자 목록
 
-> Task 2 Step 2에서 채운다. 실행 전에는 비어 있다.
+전수 조사 실측 2026-08-05 (상대 import 형태·동적 import 포함). Task 11 Step 6이 이 목록과 대조한다.
+
+| 소비자 | 형태 | import 대상 |
+|---|---|---|
+| `src/backend/api/app.py:106` | 동적 — `safe_import("api.git", "router")` | `router` |
+| `tests/backend/test_llm_usage_instrumentation.py:286` | 함수 내 정적 | `generate_draft_commits` |
+| `tests/backend/test_llm_usage_instrumentation.py:322` | 함수 내 정적 | `generate_draft_commits_for_project` |
+| `tests/backend/api/test_git_route_table.py:6` | 모듈 최상단 정적 | `router` |
+| `tests/backend/api/test_api_git_prune.py:19` | 함수 내 정적 | `router` |
+
+`src/backend/api/git.py` 내부에는 상대 import가 **0건**이다(실측). 따라서 패키지로 한 단계 깊어져도 내부 import를 고칠 것이 없고, Task 2의 "코드를 한 줄도 바꾸지 않는다"는 문면 그대로 참이다.
+
+### ⚠️ 이 프로그램 전체의 최대 위험 — `safe_import`가 실패를 삼킨다
+
+`src/backend/api/app.py:71-81`의 `safe_import()`는 `except ImportError`뿐 아니라 **`except Exception`까지** 잡아 `None`을 반환하고, 호출부(`app.py:565`)는 `if git_router:`로 조용히 건너뛴다.
+
+즉 분할 중 `api/git/__init__.py`가 어떤 이유로든 깨지면:
+- 앱은 **정상 기동**한다
+- git API 라우트 63개가 **통째로 사라진다**
+- 로그에 `⚠️ api.git disabled: ...` 한 줄만 남는다
+
+이 실패 양상은 배포 전에 발견하기 어렵다. **유일한 안전망은 `tests/backend/api/test_git_route_table.py:6`의 모듈 최상단 정적 import다** — collection 단계에서 ImportError로 즉시 FAIL한다. 그러므로:
+
+- 이 import를 **절대 함수 내부로 옮기지 마라.** 지연 import로 바꾸면 이 프로그램의 조기 경보가 사라진다.
+- 각 태스크의 게이트에서 pytest 실행은 선택이 아니다. `api/git` 패키지가 성립하는지를 확인하는 유일한 수단이다.
 
 ---
 
