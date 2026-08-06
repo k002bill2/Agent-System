@@ -548,11 +548,26 @@ git.py 내부에 상대 import 가 없어(실측 0건) 패키지 깊이 변화�
 
 - [ ] **R1: 대상 핸들러 식별**
 
-Run (CWD `src/backend`):
+**소스 텍스트 grep을 1차 수단으로 쓰지 않는다.** 데코레이터가 여러 줄에 걸치면 경로 문자열이 `@router.` 줄에 없어서 `grep -n '^@router\.'`가 그 핸들러를 **조용히 놓친다**(2026-08-07 Task 4에서 실측: github 8개 중 3개가 멀티라인이라 grep은 5개만 잡았다). **런타임 라우터 객체가 진실이다.**
+
+Run (CWD `src/backend`) — 대상 라우트와 함수명을 먼저 확정한다:
 ```bash
-grep -n '^@router\.' api/git/_legacy.py | grep -E '<ROUTES 정규식>'
+uv run python -c "
+import sys; sys.path.insert(0, '../../tests/backend/api')
+from api.git import router
+from route_table import snapshot
+rows = [r for r in snapshot(router) if '<경로조각>' in r[1]]
+print('개수:', len(rows))
+for m, p, n in rows: print(f'  {m:6s} {p}  -> {n}')
+"
 ```
-출력된 줄 번호가 각 핸들러의 시작이다. 핸들러 본문은 다음 `@router.` 또는 파일 끝까지다.
+개수가 태스크별 파라미터 표의 라우트 수와 일치하는지 확인한다. 다르면 멈추고 원인을 찾는다.
+
+그다음 **함수명으로** 소스 위치를 찾는다(데코레이터 형태와 무관하게 정확하다):
+```bash
+grep -nE '^(async )?def (<함수명1>|<함수명2>|...)\(' api/git/_legacy.py
+```
+각 핸들러의 시작은 그 `def` 줄 **위에 붙은 데코레이터 첫 줄**이고, 끝은 다음 데코레이터 직전 또는 파일 끝이다. 도메인 구역이 연속이면 섹션 배너 주석(`# ==== ... ====`)이 자연스러운 경계가 되므로 그것부터 통째로 옮긴다.
 
 - [ ] **R2: 새 모듈 생성**
 
