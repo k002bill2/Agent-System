@@ -9,11 +9,14 @@
 깨진다(Global Constraints 2 위반).
 """
 
+from . import repositories
 from ._legacy import (
     generate_draft_commits,
     generate_draft_commits_for_project,
     router,
 )
+
+router.include_router(repositories.router)
 
 __all__ = [
     "generate_draft_commits",
