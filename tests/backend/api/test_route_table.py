@@ -13,7 +13,8 @@ projects·agent_registry)에서 재사용되므로, 재사용 전에 탐지 능�
 import re
 
 import pytest
-from fastapi import APIRouter
+from fastapi import APIRouter, FastAPI
+from fastapi.testclient import TestClient
 from starlette.convertors import CONVERTOR_TYPES
 
 from .route_table import _CONVERTOR_SAMPLES, _concrete_path, shadowing_pairs, snapshot
@@ -30,6 +31,22 @@ def _make_router(*routes: tuple[str, str]) -> APIRouter:
     for method, path in routes:
         router.add_api_route(path, _endpoint, methods=[method])
     return router
+
+
+def _make_two_level_nesting() -> APIRouter:
+    """`include_router`가 **2단계** 겹친 조부모 라우터를 만든다 — 유효 경로는 `/gp/p/c/leaf`.
+
+    prefix가 네 군데에서 온다: 조부모 자신(`/gp`), 부모 자신(`/p`),
+    부모가 자식을 포함할 때 준 인자(`/c`), 그리고 자식의 `route.path`(`/leaf`).
+    경로 파라미터를 넣지 않는 것은 의도적이다 — 도달성 테스트가 이 경로로
+    **실제 요청을 보내야** 하므로 URL 조립이 필요 없어야 한다.
+    """
+    grandparent = APIRouter(prefix="/gp")
+    parent = APIRouter(prefix="/p")
+    child = _make_router(("GET", "/leaf"))
+    parent.include_router(child, prefix="/c")
+    grandparent.include_router(parent)
+    return grandparent
 
 
 def test_detects_shadowing_with_constrained_convertor() -> None:
@@ -125,6 +142,62 @@ def test_shadowing_pairs_descends_into_included_routers() -> None:
     parent.include_router(child)
 
     assert shadowing_pairs(parent) == [("/parent/{name}", "/parent/current")]
+
+
+def test_snapshot_accumulates_nested_prefixes_without_double_counting() -> None:
+    """2단계 중첩에서 prefix가 **한 번씩만** 누적된다.
+
+    위 두 테스트는 `include_router`가 **1단계**인 라우터만 구성하는데,
+    1단계에서는 `include_context.prefix`가 "그 지점의 로컬 prefix"라는 가설과
+    "루트부터의 누적 prefix"라는 가설이 **같은 값을 내므로 서로 구별되지 않는다.**
+    두 가설이 갈라지는 것은 깊이 2부터다 — 누적값 가설이 참이라면
+    `_iter_routes()`의 `prefix + ...`가 조상 prefix를 두 번 더해
+    `/gp/gp/p/c/leaf` 같은 경로가 나온다.
+
+    실측(fastapi 0.139.0 / starlette 1.3.1)은 **로컬** 가설이 참임을 보였다:
+    깊이 1의 `include_context.prefix`는 `/p/c`(부모 자신 + include 인자)이지
+    조부모의 `/gp`를 포함하지 않는다. 이 테스트가 그 사실을 고정한다 —
+    1회성 실측은 Starlette가 의미를 바꾸는 순간 아무것도 막지 못한다.
+
+    가정이 아니라 예정된 구조다: 계획서의 Task 6(`branch_protection.py`)과
+    Task 10(`staging.py`/`sync.py`)에서 손자 라우터가 생기며, 그때
+    `api.git.router`는 정확히 2단계 중첩을 갖는다.
+    """
+    grandparent = _make_two_level_nesting()
+
+    assert snapshot(grandparent) == [["GET", "/gp/p/c/leaf", "_endpoint"]], (
+        "2단계 중첩의 유효 경로가 어긋났다 — prefix 조각이 중복되면 "
+        "`/gp/gp/p/c/leaf`처럼 조상 prefix가 두 번 들어간다"
+    )
+
+
+def test_snapshot_paths_are_actually_reachable() -> None:
+    """스냅샷이 낸 경로로 **실제 요청이 도달**한다 — 헬퍼와 라우팅을 한 쌍으로 묶는다.
+
+    위 테스트보다 강한 불변식이다. 헬퍼는 `include_context`·`original_router`
+    같은 라우터 **내부 구조**를 들여다봐서 경로를 재구성한다. 프레임워크가 그
+    구조나 조립 규칙을 바꾸면 헬퍼가 계산한 경로와 실제 라우팅이 **갈라질 수
+    있는데**, 그때 스냅샷 비교는 여전히 자기 자신과 일관되므로 조용히 통과하고
+    API만 깨진 상태가 된다. 이 테스트는 계산된 경로를 실제 서버에 던져 그
+    분기를 막는다.
+
+    요청 URL을 리터럴로 쓰지 않고 `snapshot()` 출력에서 뽑는 것이 요점이다 —
+    하드코딩하면 두 개의 독립된 단언이 될 뿐 둘을 묶지 못한다.
+    """
+    grandparent = _make_two_level_nesting()
+    app = FastAPI()
+    app.include_router(grandparent)
+    # 스냅샷은 라우터에만 건다. `app.router`를 쓰면 /openapi.json·/docs 등
+    # 프레임워크 기본 라우트가 섞여 대상이 흐려진다.
+    [[method, path, _name]] = snapshot(grandparent)
+
+    response = TestClient(app).request(method, path)
+
+    assert response.status_code == 200, (
+        f"스냅샷이 낸 {method} {path}에 실제로는 도달할 수 없다 "
+        f"(status={response.status_code}) — 헬퍼의 경로 재구성과 프레임워크 "
+        f"라우팅이 갈라졌다"
+    )
 
 
 def test_convertor_samples_cover_starlette_and_are_valid() -> None:
