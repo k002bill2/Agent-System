@@ -5,8 +5,10 @@ B1(api/git.py) 이후 B2의 라우트 나열 파일들이 그대로 재사용한
 """
 
 import re
+from collections.abc import Iterator
 
 from fastapi import APIRouter
+from starlette.routing import BaseRoute, compile_path
 
 # 프레임워크가 자동 부여하는 메서드는 계약이 아니므로 제외한다.
 _IGNORED_METHODS = frozenset({"HEAD", "OPTIONS"})
@@ -56,6 +58,41 @@ def _concrete_path(path: str) -> str:
     return _PARAM.sub(replace, path)
 
 
+def _iter_routes(router: APIRouter, prefix: str = "") -> Iterator[tuple[str, BaseRoute]]:
+    """중첩 라우터를 평탄화해 `(유효 경로, route 객체)`를 **매칭 순서 그대로** 낸다.
+
+    fastapi 0.139.0 / starlette 1.3.1의 `include_router`는 하위 라우트를 부모의
+    `routes`로 복사하지 않고 `_IncludedRouter` 래퍼를 넣어 **지연 해석**한다.
+    그래서 `router.routes`를 한 겹만 훑으면 하위 라우트가 통째로 보이지 않는다.
+
+    구조가 비대칭이라 경로 조립 방식이 두 갈래다:
+
+    | 등록 방식        | 경로가 있는 곳                  | prefix 위치                |
+    |------------------|--------------------------------|----------------------------|
+    | 직접 등록        | `route.path` (prefix **포함**) | 등록 시 이미 적용됨        |
+    | `include_router` | 하위 `route.path` (prefix 없음)| `include_context.prefix`   |
+
+    `include_context.prefix`는 **부모 쪽** prefix(부모 자신 + include 인자)를 담고,
+    하위 라우터 **자신의** prefix는 하위 `route.path`에 이미 박혀 있다. 따라서
+    누적 prefix에 `route.path`를 잇기만 하면 중첩이 깊어져도 이중 계산이 없다
+    (실측: 3단 중첩 `/parent` → `/child` → `/leaf` = `/parent/child/leaf`).
+
+    **래퍼 판별을 클래스명 문자열로 하지 않는 이유**: `type(route).__name__ ==
+    "_IncludedRouter"`는 private 클래스 이름에 의존하므로, Starlette가 이름을
+    바꾸면 판별이 조용히 실패하고 헬퍼가 예전의 눈먼 동작으로 되돌아간다 —
+    이 파일에서 이미 한 번 고친 false-negative(컨버터 sentinel)와 같은 종류의
+    실패다. 덕 타이핑으로 판별하면 속성 이름이 바뀌는 순간 `else` 가지가 래퍼에
+    없는 `.path`를 읽어 `AttributeError`로 **시끄럽게** 깨진다.
+    """
+    for route in router.routes:
+        if hasattr(route, "include_context") and hasattr(route, "original_router"):
+            yield from _iter_routes(
+                route.original_router, prefix + (route.include_context.prefix or "")
+            )
+        else:
+            yield prefix + route.path, route
+
+
 def snapshot(router: APIRouter) -> list[list[str]]:
     """(method, path, endpoint name) 목록을 **등록 순서 그대로** 반환한다.
 
@@ -70,13 +107,16 @@ def snapshot(router: APIRouter) -> list[list[str]]:
 
     name까지 포함하는 이유: 핸들러를 다른 모듈로 옮길 때 함수명이 바뀌면
     operationId가 달라져 OpenAPI 소비자가 깨진다. 경로만 보면 놓친다.
+
+    경로는 `_iter_routes()`가 계산한 **유효 경로**다 — 하위 라우터의
+    `route.path`에는 prefix가 빠져 있어 그대로 쓰면 베이스라인과 어긋난다.
     """
     rows: list[list[str]] = []
-    for route in router.routes:
+    for path, route in _iter_routes(router):
         for method in sorted(getattr(route, "methods", set())):
             if method in _IGNORED_METHODS:
                 continue
-            rows.append([method, route.path, route.name])
+            rows.append([method, path, route.name])
     return rows
 
 
@@ -95,15 +135,26 @@ def shadowing_pairs(router: APIRouter) -> list[tuple[str, str]]:
 
     실측(2026-08-04): 현재 63개 라우트에 이런 쌍은 **0건**이다. 이 함수는
     분할이 그 성질을 깨지 않았음을 보증한다.
+
+    비교 대상은 `_iter_routes()`로 평탄화한 전 라우트이며, 판정에 쓰는 경로도
+    **유효 경로**다. 분할은 도메인 모듈을 통째로 `include_router` 하므로 추출된
+    라우트가 매칭 순서의 **뒤로** 밀린다 — 평탄화하지 않으면 남은 `_legacy`
+    라우트끼리만 비교하고 정작 위험한 모듈 간 가림을 영영 보지 못한다.
+
+    라우트가 들고 있는 `path_regex`는 하위 라우터의 **prefix 없는** 경로로
+    컴파일돼 있어 유효 경로와 맞지 않는다. 그래서 유효 경로로 다시 컴파일한다 —
+    `Route.__init__`이 쓰는 함수와 동일한 `compile_path`이므로, 같은 전체 경로로
+    직접 등록했을 때의 정규식과 정확히 같다.
     """
-    routes = [r for r in router.routes if hasattr(r, "path_regex")]
+    routes = [
+        (path, set(getattr(route, "methods", set())) - _IGNORED_METHODS, compile_path(path)[0])
+        for path, route in _iter_routes(router)
+    ]
     pairs: list[tuple[str, str]] = []
-    for index, earlier in enumerate(routes):
-        earlier_methods = set(getattr(earlier, "methods", set())) - _IGNORED_METHODS
-        for later in routes[index + 1 :]:
-            later_methods = set(getattr(later, "methods", set())) - _IGNORED_METHODS
+    for index, (earlier_path, earlier_methods, earlier_regex) in enumerate(routes):
+        for later_path, later_methods, _ in routes[index + 1 :]:
             if not (earlier_methods & later_methods):
                 continue
-            if earlier.path_regex.fullmatch(_concrete_path(later.path)):
-                pairs.append((earlier.path, later.path))
+            if earlier_regex.fullmatch(_concrete_path(later_path)):
+                pairs.append((earlier_path, later_path))
     return pairs

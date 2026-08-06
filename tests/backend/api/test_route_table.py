@@ -16,7 +16,7 @@ import pytest
 from fastapi import APIRouter
 from starlette.convertors import CONVERTOR_TYPES
 
-from .route_table import _CONVERTOR_SAMPLES, _concrete_path, shadowing_pairs
+from .route_table import _CONVERTOR_SAMPLES, _concrete_path, shadowing_pairs, snapshot
 
 
 def _endpoint() -> dict[str, str]:
@@ -85,6 +85,46 @@ def test_unknown_convertor_raises_instead_of_guessing() -> None:
     """
     with pytest.raises(ValueError, match="alien"):
         _concrete_path("/items/{id:alien}")
+
+
+def test_snapshot_descends_into_included_routers() -> None:
+    """`include_router`로 붙인 하위 라우트가 **최종 경로로** 스냅샷에 나타난다.
+
+    fastapi 0.139.0 / starlette 1.3.1의 `include_router`는 하위 라우트를
+    부모의 `routes`로 복사하지 않고 `_IncludedRouter` 래퍼를 넣어 지연
+    해석한다. 래퍼에는 `methods`도 `path`도 없으므로, 평탄화 없이
+    `router.routes`만 훑으면 **하위 라우트가 통째로 사라진다** — 분할이
+    라우트를 잃어도 안전망이 침묵한다.
+
+    래퍼 판별을 클래스명 문자열(`_IncludedRouter`)로 하면 Starlette가
+    이름을 바꾸는 순간 헬퍼가 조용히 예전의 깨진 동작으로 되돌아간다.
+    덕 타이핑(`include_context`/`original_router`)으로 판별하면 그때
+    `else` 가지에서 래퍼에 없는 `.path`를 읽어 AttributeError로 **시끄럽게**
+    깨진다. 이 테스트가 그 경보다.
+    """
+    parent = APIRouter(prefix="/parent")
+    child = _make_router(("GET", "/items"))
+    parent.include_router(child)
+
+    assert snapshot(parent) == [["GET", "/parent/items", "_endpoint"]]
+
+
+def test_shadowing_pairs_descends_into_included_routers() -> None:
+    """모듈 경계를 넘는 가림도 탐지한다 — 분할 후에는 이것이 유일한 순서 위험이다.
+
+    분할은 도메인 모듈을 통째로 `include_router` 하므로, 추출된 구체 경로가
+    남아 있는 파라미터 경로보다 **뒤로** 밀린다. 평탄화하지 않으면 헬퍼는
+    `_legacy`의 라우트끼리만 비교하고 이 가림을 영영 보지 못한다.
+
+    가림 판정에 쓰는 경로는 `route.path`(prefix 미포함, 예: `/current`)가
+    아니라 **유효 경로**(`/parent/current`)여야 한다.
+    """
+    parent = APIRouter(prefix="/parent")
+    parent.add_api_route("/{name}", _endpoint, methods=["GET"])
+    child = _make_router(("GET", "/current"))
+    parent.include_router(child)
+
+    assert shadowing_pairs(parent) == [("/parent/{name}", "/parent/current")]
 
 
 def test_convertor_samples_cover_starlette_and_are_valid() -> None:
