@@ -720,12 +720,14 @@ Task 2 Step 2에서 기록한 목록과 대조한다. 모든 import가 그대로
 
 | 파일 | 내용 | 조치 |
 |---|---|---|
-| `.claude/skill-evals/verify-backend-workspace/evals/evals.json:20` | `"files": ["src/backend/api/git.py"]` | 실제 파일 경로 — 갱신 필요 |
+| `.claude/skill-evals/verify-backend-workspace/evals/evals.json:20` | `"files": ["src/backend/api/git.py"]` | 실제 파일 경로 — **`src/backend/api/git/branches.py`로 갱신** |
 | `.claude/skill-evals/verify-backend-workspace/evals/evals.json:18` | 프롬프트 본문의 `api/git.py` | 산문이므로 선택 |
 | `.claude/skill-evals/verify-backend-workspace/trigger-eval.json:3` | 프롬프트 본문 | 산문이므로 선택 |
 | `.claude/skill-evals/verify-frontend-workspace/trigger-eval.json:12` | 프롬프트 본문 | 산문이므로 선택 |
 
 `"files"` 배열은 eval 러너가 실제로 여는 경로이므로 갱신하지 않으면 그 eval이 깨진다. 프롬프트 본문의 언급은 사람이 읽는 예시라 필수는 아니다.
+
+**최종 경로가 `branches.py`인 근거**: 그 eval의 프롬프트는 `delete_branch` 엔드포인트를 다루고(`evals.json:18`), `delete_branch`는 `DELETE /projects/{id}/branches/{branch_name}`이므로 **Task 6(`branches`)**에서 안착한다. Task 6 완료 전에 고치면 `_legacy.py`를 가리켰다가 다시 바꿔야 하므로, **Task 11에서 한 번에 최종 경로로 갱신한다**(Codex가 Task 2·3 리뷰에서 두 번 지적했으나 같은 이유로 유예했다 — 이 브랜치는 미머지 상태라 main의 eval은 영향받지 않는다).
 
 **빌드는 영향 없음**(실측): Dockerfile 8종 모두 `COPY . .` 방식이라 파일 경로를 명시하지 않는다. `src/backend/Dockerfile`은 `api/app_railway.py`만 복사하므로 무관하다.
 
