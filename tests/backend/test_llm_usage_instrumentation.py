@@ -301,7 +301,7 @@ async def test_git_draft_commits_passes_usage_context(monkeypatch) -> None:
             provider="codex_cli",
         )
 
-    monkeypatch.setattr("api.git._legacy.get_git_service_for_project", MagicMock(return_value=git_service))
+    monkeypatch.setattr("api.git.commits.get_git_service_for_project", MagicMock(return_value=git_service))
     monkeypatch.setattr(LLMService, "invoke", fake_invoke)
 
     result = await generate_draft_commits(
@@ -337,7 +337,7 @@ async def test_git_draft_commits_passes_llm_access_context(monkeypatch) -> None:
             provider="codex_cli",
         )
 
-    monkeypatch.setattr("api.git._legacy.get_git_service_for_project", MagicMock(return_value=git_service))
+    monkeypatch.setattr("api.git.commits.get_git_service_for_project", MagicMock(return_value=git_service))
     monkeypatch.setattr(LLMService, "invoke", fake_invoke)
 
     result = await generate_draft_commits_for_project(
