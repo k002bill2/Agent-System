@@ -52,7 +52,7 @@ User action
 | Task Analyzer 터미널 실행 | `api/agents.py` | `services/tmux_service.py` -> `claude -p` | `task_analyzer_execution` | LangChain을 거치지 않는 CLI 실행 경로 |
 | Warp Claude launch | `api/warp.py` | `services/warp_service.py` -> Warp launch config -> host `claude` | `warp_launch` | AOS는 launch prompt 입력 추정치만 기록, 후속 Warp 세션 token은 미계상 |
 | Warp AI agent tool | `tools/warp_tools.py` | Warp CLI `agent run` subprocess | `warp_agent` | Warp 자체 AI agent 실행. ExecutorNode 경로는 user/org/project context를 전달 |
-| Git draft commits | `api/git.py` | `LLMService.invoke()` | `git_draft_commit` | 응답의 `total_tokens`를 API response에도 반환 |
+| Git draft commits | `api/git/commits.py` | `LLMService.invoke()` | `git_draft_commit` | 응답의 `total_tokens`를 API response에도 반환 |
 | Session / LangGraph | `api/sessions.py` -> `orchestrator/engine.py` | state `llm_access` -> graph nodes -> resolver -> `LLMService._get_llm()` -> `ainvoke()` | `orchestrator` | access context가 없으면 기존 engine 기본 LLM을 사용 |
 | Agent execution | `agents/base.py` | `LLMService._get_llm()` -> `ainvoke()` | `agent` | agent name을 ledger metadata에 넣어야 함 |
 | Context compressor | `orchestrator/engine.py` -> `services/context_compressor.py` | state access context -> `LLMService.invoke()` | `context_compression` | 세션 압축 summary 사용량을 background/utility로 분류 |

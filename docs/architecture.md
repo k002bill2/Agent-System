@@ -151,7 +151,11 @@ src/backend/
 │           ├── transform_stage.py # 데이터 변환 단계
 │           ├── analyze_stage.py   # 데이터 분석 단계
 │           └── output_stage.py    # 결과 출력 단계
-├── api/                     # FastAPI 라우터 (48개 모듈, api/*.py 기준 __init__.py 제외)
+├── api/                     # FastAPI 라우터 (47개 모듈 + 패키지 2종, api/*.py 기준 __init__.py 제외)
+│   ├── git/                 # Git API 패키지 — 원래 단일 git.py(2,022줄)를 도메인별로 분할
+│   │                        #   branches·commits·github·merge·merge_requests·remotes·
+│   │                        #   repositories·working_tree (8모듈) + _shared(공용 의존성).
+│   │                        #   __init__.py 가 라우터를 집계하며 import 경로는 `api.git` 불변
 │   └── v1/                  # v1 API (6개 모듈: agent_monitor, agent_registry, agents, auth_middleware, rate_limiter, stations)
 │       ├── agents.py        # 에이전트 CRUD API
 │       ├── rate_limiter.py  # API 속도 제한

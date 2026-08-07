@@ -9,6 +9,8 @@
 깨진다(Global Constraints 2 위반).
 """
 
+from fastapi import APIRouter
+
 from . import (
     branches,
     commits,
@@ -19,9 +21,14 @@ from . import (
     repositories,
     working_tree,
 )
-from ._legacy import router
 from .commits import generate_draft_commits, generate_draft_commits_for_project
 
+router = APIRouter(prefix="/git", tags=["git"])
+
+# 등록 순서는 원본 선언 순서를 재현하지 않는다 — 원본은 도메인 그룹이 불연속이라
+# (branch-protection·draft-commits·fetch/pull/push) 복원 자체가 불가능하다.
+# 지켜야 할 계약은 test_no_shadowing_route_pairs 가 검사하는 것 하나뿐이다:
+# 같은 모양 경로에서 파라미터 쪽이 구체 쪽보다 앞서지 않을 것.
 router.include_router(branches.router)
 router.include_router(commits.router)
 router.include_router(github.router)
