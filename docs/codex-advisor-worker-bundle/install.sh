@@ -249,10 +249,14 @@ install_ctx_hook() {
 //
 // 판정은 창 사용률이 아니라 '세션 베이스라인 대비 델타'다. 베이스라인(시스템 프롬프트 +
 // CLAUDE.md + 도구 스키마)이 이미 창의 25% 를 차지하므로 창 퍼센트 임계는 양쪽 끝에서 깨진다.
-// 판정은 창 사용률이 아니라 baseline 델타로 한다(베이스라인이 창의 25%를 먹으므로
-// 창 퍼센트 임계치는 200k 에서 턴 0 에 발동한다).
 //
-// 임계: 창 크기 비례 — delta >= window*15% WARNING / >= window*20% CRITICAL.
+// 임계: 창 크기 비례. 단 비율은 창 티어별로 다르다 (2026-08-08).
+//   소형 창(< 500k): delta >= window*15% WARNING / >= window*20% CRITICAL.
+//   대형 창(>= 500k): delta >= window*40% WARNING / >= window*55% CRITICAL.
+//   대형 창을 완화하는 근거: Opus 5 는 1M 전 구간에서 instruction following·tool calling·
+//     reasoning 을 유지한다. 1M 에 15/20% 를 그대로 적용하면 델타 200k 에서 정지해
+//     남은 800k 를 쓰지 못한다. 반대로 40/55% 를 소형 창에 적용하면 200k 창에서
+//     베이스라인 포함 창의 80% 까지 진행돼 'Context 75% Rule' 을 넘는다 → 티어 분리.
 //   고정 상수(51133/59000)는 200k 창 시절 값이라 1M 창에서 창의 6% 지점에 울렸다.
 //   정상 작업 하나가 경고를 여러 번 띄우면 규칙이 사문화된다 → 창에 비례시킨다.
 //   delta 기준이므로(0에서 시작) 창 사용률 임계치의 "턴 0 발동" 함정은 없다.
@@ -262,8 +266,11 @@ install_ctx_hook() {
 const fs = require('fs');
 const path = require('path');
 
-const WARNING_RATIO = 0.15;
-const CRITICAL_RATIO = 0.20;
+const LARGE_WINDOW_MIN = 500000;  // 이 이상을 '대형 창'으로 본다 (1M 계열)
+const WARNING_RATIO_SMALL = 0.15;
+const CRITICAL_RATIO_SMALL = 0.20;
+const WARNING_RATIO_LARGE = 0.40;
+const CRITICAL_RATIO_LARGE = 0.55;
 const FALLBACK_WINDOW = 200000;   // window 필드 부재/이상 시 (구 statusline 호환)
 const STALE_SECONDS = 60;   // 60초 지난 지표는 무시 (statusline 이 안 돌고 있는 상태)
 const DEBOUNCE_CALLS = 5;
@@ -350,8 +357,12 @@ process.stdin.on('end', () => {
     // 창을 모른 채 0 으로 나눠 임계가 0 이 되면 매 턴 경고가 터진다.
     const winRaw = Number(metrics.window);
     const windowSize = Number.isFinite(winRaw) && winRaw > 0 ? winRaw : FALLBACK_WINDOW;
-    const WARNING_DELTA = Math.floor(windowSize * WARNING_RATIO);
-    const CRITICAL_DELTA = Math.floor(windowSize * CRITICAL_RATIO);
+    // 폴백(창 미상)은 200000 이므로 소형 티어로 떨어진다 — 모를 때는 보수적으로.
+    const isLargeWindow = windowSize >= LARGE_WINDOW_MIN;
+    const warnRatio = isLargeWindow ? WARNING_RATIO_LARGE : WARNING_RATIO_SMALL;
+    const critRatio = isLargeWindow ? CRITICAL_RATIO_LARGE : CRITICAL_RATIO_SMALL;
+    const WARNING_DELTA = Math.floor(windowSize * warnRatio);
+    const CRITICAL_DELTA = Math.floor(windowSize * critRatio);
 
     // 임계 미만이면 디바운스 파일을 건드리지 않고 종료한다 —
     // 여기서 카운터를 올리면 경고 이력이 없는 세션에서도 디바운스가 소진된다.
@@ -1296,7 +1307,7 @@ cat > "${TMP_BLOCK}" <<'CLAUDEMD'
 > `~/.claude/agents/` 서브에이전트의 `model:` 필드로 강제한다. 검증은 Codex 플러그인이 담당한다.
 
 ## 핵심: 조언자–작업자–검증 (Advisor–Worker–Codex)
-- 조언자(Advisor · Opus): 설계·판단·위임·최종 결정. 직접 코딩하지 않는다.
+- 조언자(Advisor · Opus): 설계·판단·최종 결정. 구현은 아래 "위임 판단" 절의 조건으로 직접/위임을 고른다.
 - 작업자(Worker · Opus): 조언자의 브리프대로 구현·테스트만. 범위 확장·무한 리팩터링 금지.
 - 검증(Codex): 작업자 결과는 조언자가 직접 보지 않고 Codex 리뷰로 검증한다.
   - 표준 검증: /codex:review
@@ -1307,25 +1318,43 @@ cat > "${TMP_BLOCK}" <<'CLAUDEMD'
 작업자의 "완료" 보고를 그대로 믿지 않는다. /codex:review(또는 /codex:adversarial-review)를 실행해
 diff를 실제로 검토한 뒤, 조언자가 지적사항 반영을 지시하고 통과했을 때만 승인한다.
 
-## 조언자 직접 코딩 금지의 범위
-- 구현은 worker 위임이 기본값. "브리프 작성 비용이 구현과 비슷하다"는 위임 회피 사유가 아니다.
-- 예외(조언자 직접 처리 허용): 단일 파일이며 30줄 이내의 문서·설정 수정. 예외여도 Codex 검증은 동일하게 적용한다.
-- 예외 2: 컨텍스트 핸드오프 문서(HANDOFF / pause-work) 작성 — 줄 수 제한 없음. 저장 대상이 메인 세션 컨텍스트에만 존재해 위임이 원리적으로 불가능하다.
+## 위임 판단 (2026-08-08 개정 — 이전 "조언자 직접 코딩 금지"를 대체)
+위임은 기본값이 아니라 **조건부 선택지**다. 서브에이전트는 `model:` 값과 무관하게 200k 창이므로
+(Agent 도구 model enum 에 `[1m]` 변형 없음), 1M 메인이 위임할 때마다 작업자의 창은 오히려 좁아진다.
 
-## 작업 순서 기본형
+**위임 상한 — 다음은 위임하지 않고 메인 루프에서 직접 한다:**
+- 도구 호출 몇 번이면 끝나는 일 (단일 파일 편집, 좁은 grep, 설정 한 줄)
+- **검증·리뷰·재확인** — 검증은 메인 에이전트 루프에 속한다
+  (Codex 게이트는 예외: 다른 모델·독립 컨텍스트라 '자기 검증'이 아니다. 아래 "검증은 무조건" 참조)
+- 메인이 이미 읽어 컨텍스트에 있는 내용을 서브에이전트가 다시 읽어야 하는 일
+
+**위임이 이득인 조건 — 하나라도 해당하면 worker 위임이 기본값:**
+- 서로 독립인 작업 2건 이상을 병렬로 돌릴 수 있을 때
+- 메인 창을 실제로 위협하는 대량 원문 (수십만 토큰 규모, 추정 아닌 실측)
+- 워크트리 격리가 필요한 동시 파일 변경
+- 장시간 실행이라 메인 루프를 점유하면 곤란할 때
+
+직접 처리하든 위임하든 Codex 검증은 동일하게 적용한다.
+핸드오프 문서(HANDOFF / pause-work)는 저장 대상이 메인 컨텍스트에만 존재하므로 항상 직접 작성한다.
+
+## 작업 순서 기본형 (위임 조건에 해당할 때)
+위임 조건에 해당하지 않으면 1·3·4 만 남는다 — 설계 → 직접 구현 → Codex 검증 → 반영.
 1. architect(조언자) — 설계 + 브리프(완료 기준·검증 방법·시도 상한)
-2. worker(작업자·Opus) — 구현 + diff/테스트 보고
-3. Codex 검증 — /codex:review (설계 도전 필요 시 /codex:adversarial-review)
+2. (위임 시에만) worker(작업자·Opus) — 구현 + diff/테스트 보고. 위임 조건 미충족이면 메인이 직접 구현한다
+3. Codex 검증 — /codex:review (설계 도전 필요 시 /codex:adversarial-review). **직접 구현이든 위임이든 생략 없음**
 4. 조언자 — Codex 지적 반영 지시 → 통과 시 승인
-5. 조언자 — 승인 후 서브에이전트 정리(TaskStop) — idle 상주 에이전트를 남기지 않는다
+5. (위임 시에만) 조언자 — 승인 후 서브에이전트 정리(TaskStop) — idle 상주 에이전트를 남기지 않는다
 
 worker 보고 수신: 가능하면 동기 실행으로 결과를 직접 받는다. 백그라운드 실행 시 완료 보고
 텍스트가 조언자에게 전달되지 않을 수 있으므로, 보고를 기다리지 말고 산출물(staged diff·테스트
 실행)을 직접 검증한다.
 
 ## 운용 모드
-- 모드 A(기본): 메인 세션 = 조언자(Opus). 구현은 worker(Opus), 검증은 /codex:review.
-- 모드 B(비용 최소): 메인은 Sonnet. 설계는 architect 버스트(Opus), 구현은 worker(Opus), 검증은 Codex.
+- 모드 A(기본): 메인 세션 = 조언자(Opus, 1M). 구현은 **"위임 판단" 절의 조건으로 직접/worker 를 고른다**
+  — 조건 미충족이면 메인이 직접 구현한다. 검증은 /codex:review.
+- 모드 B(비용 최소): 메인은 Sonnet. 설계는 architect 버스트(Opus), 구현은 worker(Opus) 위임이 기본, 검증은 Codex.
+  모드 B 에서 위임 상한을 적용하지 않는 이유: "위임 판단"의 상한은 *메인이 Opus 5* 라서 위임이 티어·창
+  양쪽에서 손해라는 전제 위에 있다. 메인이 Sonnet 이면 worker(Opus) 위임은 티어 상향이므로 전제가 뒤집힌다.
 - (옵션) 자동 검증: /codex:setup --enable-review-gate — 종료 전 Codex 자동 리뷰. 사용량 소모 큼, 감시하며 사용.
 
 ## 모델 고정
@@ -1334,15 +1363,28 @@ worker 보고 수신: 가능하면 동기 실행으로 결과를 직접 받는�
 모드 B는 소진 "대비" 절약책이지 소진 "후" 대책이 아니다 — 모드 B에서도 architect·worker는 그대로 opus를 호출한다.
 Opus 소진 후 경로는 둘: (a) 두 에이전트의 model: 을 sonnet 으로 임시 하향, (b) /codex:rescue 로 Codex(별도 한도)에 위임.
 
+**상향 경로 — Fable 5 (2026-08-08 신설, 명시적 opt-in 전용):**
+Agent 도구 model enum 에 `fable` 이 있으나 기본 구성 어디에서도 쓰지 않는다. 단가가 Opus 5 의
+2배($10/$50 per 1M)이므로 자동 승격은 두지 않고, 다음 두 경우에 한해 사용자가 명시적으로 지시할 때만 쓴다:
+- 실패 비용이 큰 1회성 최난도 판단 (되돌리기 어려운 마이그레이션 설계, 아키텍처 분기 결정)
+- 감독 없이 오래 도는 장기 자율 실행
+그 외에는 Opus 5 가 기본이다. "어려워 보인다"는 승격 사유가 아니다 — effort 를 먼저 올린다.
+
 ## Reasoning effort
 - Claude 기본 high. Codex 검증 effort는 ~/.codex/config.toml 의 model_reasoning_effort 로 조절(high 권장).
 
-## 토큰 무거운 작업은 분리
-코드베이스 분석·긴 로그·대량 요약은 analyzer(Haiku)에 먼저 위임하고 압축 결론만 넘긴다.
+## 토큰 무거운 작업 (2026-08-08 개정)
+**1M 메인이 직접 읽는 것이 기본값이다.** "코드베이스 분석·긴 로그·대량 요약은 analyzer 에 먼저
+위임한다"는 의무는 폐기한다 — analyzer 는 200k(Haiku 4.5)이므로 1M 메인이 대량 입력을 넘기는 것은
+구조적 역전이고, 요약 과정에서 정보가 손실된다.
+위임은 실측 근거가 있을 때만 한다: 대상이 메인 창을 실제로 위협하는 규모이거나, 독립 작업 병렬화가 필요할 때.
 규모가 큰 구현·버그 조사는 /codex:rescue 로 Codex에 위임할 수 있다.
+(미결: `model: inherit` 이 `opus[1m]` 의 1M 창을 상속하는지 미검증. 확인 전까지 analyzer 의 티어는
+ haiku 로 둔다 — 티어만 올리고 창이 200k 그대로면 이득이 0 이다.)
 
 ## 컨텍스트 예산 (조언자 세션)
-세션 시작 시점 대비 컨텍스트 창의 20%를 쓰면 새 작업을 시작하지 않는다(1M 창 = +200k, 200k 창 = +40k).
+세션 시작 시점 대비 델타가 임계치를 넘으면 새 작업을 시작하지 않는다
+(1M 창 = +550k, 200k 창 = +40k — 아래 티어 참조).
 컨텍스트 경고(CONTEXT BUDGET WARNING / CONTEXT BUDGET CRITICAL)가 주입되면 즉시:
 1. 진행 중 작업을 자연스러운 지점에서 마무리
 2. 상태 저장 — `.planning/STATE.md` 가 있으면 `/gsd:pause-work` 를 제안하고, 없으면 HANDOFF.md 작성(설계 결정·완료 기준·검증 상태·다음 단계). 코드가 더러우면 `/wip-save` 병행
@@ -1350,15 +1392,25 @@ Opus 소진 후 경로는 둘: (a) 두 에이전트의 model: 을 sonnet 으로 
 저장 포맷을 새로 만들지 않는다. 위 경로 중 하나를 쓴다.
 경고는 예산 소진(세션 시작 대비 델타)과 컨텍스트 창 사용률을 함께 표시한다.
 둘은 다른 지표다 — 창에 여유가 있어도 예산을 넘으면 정지 대상이다.
-기준은 델타(토큰)이되 임계치는 창 크기에 비례한다 — WARNING 15% / CRITICAL 20% (2026-08-03 변경).
+기준은 델타(토큰)이되 임계치는 창 크기에 비례하며, 비율은 **창 티어별로 다르다** (2026-08-08 변경):
+- 소형 창(< 500k): WARNING 15% / CRITICAL 20% — 200k 창 = +30k / +40k
+- 대형 창(>= 500k): WARNING 40% / CRITICAL 55% — 1M 창 = +400k / +550k
+대형 창을 완화한 근거: Opus 5 는 1M 전 구간에서 instruction following·tool calling·reasoning 을
+유지한다. 15/20% 를 그대로 적용하면 델타 200k 에서 정지해 남은 800k 를 쓰지 못했다.
+반대로 40/55% 를 소형 창에 적용하면 200k 창에서 베이스라인 포함 창의 80% 까지 진행돼
+'Context 75% Rule' 을 넘는다 — 그래서 하나의 비율이 아니라 티어로 나눈다.
+창 크기를 모를 때(브리지 window 필드 부재)는 200k 로 폴백해 소형 티어를 적용한다 — 모르면 보수적으로.
 이전의 고정 상수(51,133 / 59,000)는 200k 창 시절 값이라 1M 창에서 창의 6% 지점에 울렸고,
 정상 작업 하나가 경고를 여러 번 띄워 규칙이 사문화될 위험이 있었다. 델타 기준이므로(0에서 시작)
 창 사용률 임계치의 "턴 0 발동" 함정은 여전히 없다.
 
-## 리서치·외부 도구는 메인에서 직접 호출하지 않는다
-메인 세션(모드 A의 조언자)은 WebSearch·WebFetch·tavily·context7 을 직접 부르지 않는다.
-researcher 에게 위임하고 결론+출처 요약만 받는다. 로컬 대량 입력은 analyzer.
-서브에이전트가 이 도구들을 갖는 것은 모순이 아니다 — 컨텍스트가 분리되기 때문이다.
+## 리서치·외부 도구 (2026-08-08 완화)
+메인 세션이 WebSearch·WebFetch·tavily·context7 을 직접 부르는 것을 **금지하지 않는다**.
+- 직접 호출이 기본: 문서 한두 건 확인, 특정 API 시그니처, 라이브러리 버전 같은 좁은 조회.
+- researcher 위임은 조건부: 출처 5건 이상을 훑어야 하거나 원문이 대량일 때.
+완화 근거: 원래 논거는 컨텍스트 보호였는데 1M 창에서 약해졌고, researcher 는 sonnet 이라
+메인(Opus 5)보다 낮은 판단력으로 출처를 선별·요약한다 — 위임 자체가 정보 손실 지점이다.
+서브에이전트가 이 도구들을 갖는 것은 여전히 모순이 아니다 — 컨텍스트가 분리되기 때문이다.
 
 ## 출력 규약
 요약 → 근거 → 주의/가정 → 다음 단계. 근거 수준 L1/L2/L3, 불확실성 High/Medium/Low 표시.
