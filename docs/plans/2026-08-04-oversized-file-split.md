@@ -124,7 +124,7 @@
 
 | 배치 | 대상 | 줄수 | 근거 |
 |---|---|---:|---|
-| **B1** | `api/git.py` | 2,022 | 라우트 나열 + 최대 크기. **여기서 만드는 라우트 테이블 테스트가 B2 전체에 재사용된다** |
+| **B1** ✅ **완료 (2026-08-08)** | `api/git.py` | 2,022 | 라우트 나열 + 최대 크기. **여기서 만드는 라우트 테이블 테스트가 B2 전체에 재사용된다** |
 | **B2** | `api/project_configs.py`, `api/agents.py`, `api/claude_sessions.py`, `api/projects.py`, `api/v1/agent_registry.py` | 6,590 | 동일 이음매. B1의 레시피·테스트 도구를 그대로 적용 |
 
 > **B2 착수 조건 — `shadowing_pairs()`의 알려진 한계 (Codex 지적, 2026-08-05, 유예 결정)**
@@ -144,6 +144,38 @@
 ---
 
 ## Batch 1 — `src/backend/api/git.py` 분할
+
+> ## ✅ Batch 1 완료 (2026-08-08, 브랜치 `refactor/split-api-git`)
+>
+> Task 1~11 전부 실행됨. 레시피 체크박스는 8회 반복분을 공유하므로 체크하지 않았다 —
+> **진척의 진실원은 이 블록과 git log다.**
+>
+> | 태스크 | 커밋 | 산출 |
+> |---|---|---|
+> | 1 characterization / 2 패키지 승격 | `4482b3c`·`225a9c7` / `66daffc` | `route_table.py`, `_legacy.py` |
+> | 3~7 repositories·github·remotes·branches·commits | `5958087`·`35f9ec9`·`7aa2166`·`7591c10`·`942bbc6` | 5 모듈 |
+> | 8~10 merge_requests·merge·working_tree | `02206d9`·`4fd31ba`·`cc8ec9c` | 3 모듈 |
+> | 11 `_legacy` 소멸 + 문서 동기화 | `6daebb4` | 패키지 완성 |
+>
+> **최종 형태** — 2,022줄 단일 파일 → 9파일 합계 2,168줄(+7.2%), 최대 402줄:
+> `branches` 402 · `commits` 372 · `working_tree` 332 · `merge_requests` 326 · `merge` 204 ·
+> `github` 199 · `repositories` 109 · `_shared` 108 · `remotes` 71 · `__init__` 45
+>
+> **+7.2%가 코드 복제가 아닌 근거**: 함수 정의 중복 **0건**(실측). 증가분은 8개 모듈이
+> 각자 독스트링·import·`router = APIRouter()`를 갖는 경계 비용이다. 계획의 ±5% 기준
+> (Task 11 Step 5)을 넘지만 원인이 규명됐으므로 통과로 판정한다.
+>
+> **검증**: 라우트 63건 동일·가림 쌍 0건(매 태스크), pytest 1,340 passed(알려진 로컬
+> 플레이크 1건 제외), ruff·ruff format·mypy 0, 소비자 import 5건 전부 유효(하단 목록 대조),
+> Codex 리뷰 4회 지적 0건, wheel 패키징에 `api/git/` 8모듈 포함 확인.
+>
+> **한계**: 브랜치 미푸시 상태라 **CI 검증은 없다.** 새 테스트·의존성·pyproject 변경이
+> 없어 위험은 낮지만(`@pytest.mark.asyncio` 노출 없음, `uv.lock` 무변경), "로컬 게이트
+> green"이 "CI green"은 아니다. PR이 이를 해소한다.
+>
+> **B2 착수 전 필수**: 위 "B2 착수 조건"(컨버터 실측)을 반드시 먼저 수행하라.
+> B1 통과는 `shadowing_pairs()`가 **완전 가림** 부재만 증명했을 뿐, 부분 겹침은
+> 여전히 미탐지다.
 
 ### File Structure
 
