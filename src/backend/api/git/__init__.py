@@ -9,7 +9,7 @@
 깨진다(Global Constraints 2 위반).
 """
 
-from . import github, repositories
+from . import github, remotes, repositories
 from ._legacy import (
     generate_draft_commits,
     generate_draft_commits_for_project,
@@ -17,6 +17,7 @@ from ._legacy import (
 )
 
 router.include_router(github.router)
+router.include_router(remotes.router)
 router.include_router(repositories.router)
 
 __all__ = [

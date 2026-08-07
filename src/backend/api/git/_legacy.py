@@ -60,10 +60,6 @@ from models.git import (
     PruneRequest,
     PullResult,
     PushResult,
-    RemoteAddRequest,
-    RemoteListResponse,
-    RemoteOperationResult,
-    RemoteUpdateRequest,
     StageHunksRequest,
     ThreeWayDiff,
     UnstageRequest,
@@ -75,7 +71,11 @@ from models.llm_usage import LLMUsageSource
 from models.project import get_project
 from services.llm_access_service import get_access_for_user
 
-from ._shared import get_github_service
+from ._shared import (
+    get_effective_git_path,
+    get_git_service_for_project,
+    get_github_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -85,54 +85,6 @@ router = APIRouter(prefix="/git", tags=["git"])
 # =============================================================================
 # Dependencies
 # =============================================================================
-
-
-def get_effective_git_path(project) -> str:
-    """Get the effective Git path for a project."""
-    return project.git_path or project.path
-
-
-def get_git_service_for_project(project_id: str, worktree_path: str | None = None):
-    """Get GitService for a project, optionally targeting a specific worktree.
-
-    Args:
-        project_id: Project identifier
-        worktree_path: Optional worktree path. Validated against actual worktree list.
-    """
-    from pathlib import Path
-
-    from services.git_service import get_git_service
-
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
-
-    git_path = get_effective_git_path(project)
-    service = get_git_service(git_path)
-    if not service:
-        raise HTTPException(
-            status_code=400, detail=f"Project '{project_id}' is not a Git repository"
-        )
-
-    if worktree_path:
-        # Security: validate worktree_path against actual worktree list
-        resolved_requested = str(Path(worktree_path).resolve())
-        valid_paths = {str(Path(wt.path).resolve()) for wt in service.list_worktrees()}
-        if resolved_requested not in valid_paths:
-            raise HTTPException(
-                status_code=403,
-                detail="Invalid worktree path: not a registered worktree",
-            )
-        # Return a GitService instance pointing to the worktree
-        wt_service = get_git_service(resolved_requested)
-        if not wt_service:
-            raise HTTPException(
-                status_code=400,
-                detail="Worktree path is not a valid Git working directory",
-            )
-        return wt_service
-
-    return service
 
 
 def get_merge_service_for_project(project_id: str):
@@ -1621,63 +1573,6 @@ async def delete_branch_protection_rule(
         if not success:
             raise HTTPException(status_code=404, detail="Rule not found")
         return {"success": True, "message": "Rule deleted"}
-
-
-# =============================================================================
-# Remote Management Endpoints
-# =============================================================================
-
-
-@router.get("/projects/{project_id}/remotes", response_model=RemoteListResponse)
-async def list_remotes(project_id: str):
-    """List all remotes for a project."""
-    git_service = get_git_service_for_project(project_id)
-    remotes = git_service.list_remotes()
-    return RemoteListResponse(remotes=remotes)
-
-
-@router.post("/projects/{project_id}/remotes", response_model=RemoteOperationResult)
-async def add_remote(project_id: str, request: RemoteAddRequest):
-    """Add a new remote."""
-    git_service = get_git_service_for_project(project_id)
-    result = git_service.add_remote(name=request.name, url=request.url)
-    if not result.success:
-        raise HTTPException(status_code=400, detail=result.message)
-    return result
-
-
-@router.delete("/projects/{project_id}/remotes/{remote_name}", response_model=RemoteOperationResult)
-async def remove_remote(project_id: str, remote_name: str):
-    """Remove a remote."""
-    git_service = get_git_service_for_project(project_id)
-    result = git_service.remove_remote(name=remote_name)
-    if not result.success:
-        raise HTTPException(status_code=400, detail=result.message)
-    return result
-
-
-@router.put("/projects/{project_id}/remotes/{remote_name}", response_model=RemoteOperationResult)
-async def update_remote(project_id: str, remote_name: str, request: RemoteUpdateRequest):
-    """Update a remote (rename or change URL)."""
-    git_service = get_git_service_for_project(project_id)
-
-    # Update URL first if provided
-    if request.url:
-        result = git_service.set_remote_url(name=remote_name, url=request.url)
-        if not result.success:
-            raise HTTPException(status_code=400, detail=result.message)
-
-    # Then rename if provided
-    if request.new_name:
-        result = git_service.rename_remote(name=remote_name, new_name=request.new_name)
-        if not result.success:
-            raise HTTPException(status_code=400, detail=result.message)
-        return result
-
-    if request.url:
-        return RemoteOperationResult(success=True, message=f"Remote '{remote_name}' updated")
-
-    return RemoteOperationResult(success=True, message="No changes requested")
 
 
 # =============================================================================
