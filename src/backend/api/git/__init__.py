@@ -9,13 +9,14 @@
 깨진다(Global Constraints 2 위반).
 """
 
-from . import branches, commits, github, remotes, repositories
+from . import branches, commits, github, merge_requests, remotes, repositories
 from ._legacy import router
 from .commits import generate_draft_commits, generate_draft_commits_for_project
 
 router.include_router(branches.router)
 router.include_router(commits.router)
 router.include_router(github.router)
+router.include_router(merge_requests.router)
 router.include_router(remotes.router)
 router.include_router(repositories.router)
 
