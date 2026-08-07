@@ -503,6 +503,17 @@ print('reexport ok:', router.prefix, router.tags, len(router.routes))
 ```
 Expected: `reexport ok: /git ['git'] 63`. 세 이름이 모두 import 돼야 한다 — 하나라도 빠지면 소비자 목록의 import가 깨진 것이다.
 
+> **⚠️ 라우트 수 `63`은 이 스텝(include_router 0개) 시점에만 맞다** (Task 7 실측 2026-08-08).
+> 이 레포의 FastAPI 버전은 `include_router()`가 하위 라우트를 상위로 **평탄화 복사하지 않고**
+> `_IncludedRouter` 래퍼 객체 하나만 `router.routes`에 넣는다(순회 시
+> `AttributeError: '_IncludedRouter' object has no attribute 'path'`로 드러난다).
+> 따라서 도메인 모듈을 추출할수록 `len(router.routes)`는 **줄어든다** — Task 7 완료 시점은
+> `31(_legacy 잔여) + 5(서브라우터 5개) = 36`이고, Task 11 완료 시점은 `8`(서브라우터 8개)이다.
+>
+> **라우트 수 검산은 반드시 `snapshot(router)`로 한다** — 그 헬퍼는 `4482b3c`에서
+> include_router 하위를 하강하도록 수정돼 63을 정확히 반환한다. `len(router.routes)`를
+> 그대로 63과 비교하면 **정상 상태를 실패로 오판**한다.
+
 그다음 전체 게이트 (CWD `src/backend`):
 ```bash
 uv run ruff check . && uv run ruff format --check . && uv run mypy . --ignore-missing-imports --no-error-summary && uv run pytest ../../tests/backend -q --tb=line
