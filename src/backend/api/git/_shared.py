@@ -9,6 +9,10 @@ from fastapi import HTTPException
 
 from models.project import get_project
 
+# =============================================================================
+# Service Factories & Path Helpers
+# =============================================================================
+
 
 def get_github_service():
     """Get GitHubService instance."""
@@ -70,3 +74,35 @@ def get_git_service_for_project(project_id: str, worktree_path: str | None = Non
         return wt_service
 
     return service
+
+
+def get_mr_service_for_project(project_id: str, db_session=None):
+    """Get MergeRequestService for a project."""
+    from services.merge_service import MergeRequestService, get_merge_service
+
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
+
+    git_path = get_effective_git_path(project)
+    merge_service = get_merge_service(git_path)
+    return MergeRequestService(project_id, merge_service, db_session=db_session)
+
+
+# =============================================================================
+# DB Session
+# =============================================================================
+
+
+async def _get_db_session():
+    """Get optional DB session (returns None if DB not configured)."""
+    import os
+
+    if os.getenv("USE_DATABASE", "false").lower() != "true":
+        return None
+    try:
+        from db.database import async_session_factory
+
+        return async_session_factory()
+    except Exception:
+        return None
