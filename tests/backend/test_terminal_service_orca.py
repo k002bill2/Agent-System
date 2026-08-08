@@ -22,7 +22,7 @@ from services.terminal_service import (
     _resolve_orca_command,
 )
 
-MODULE = "services.terminal_service"
+MODULE = "services.terminal_service.orca"
 
 FAKE_SCRIPT = Path("/tmp/aos-exec-test.sh")
 PROJECT_PATH = "/Users/tester/Work/demo"
