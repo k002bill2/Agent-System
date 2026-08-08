@@ -45,7 +45,9 @@ export async function fetchBranches(set: SetFn, get: GetFn, projectId: string) {
 | `tsc --noEmit` | 86개 소비자 파일 전부에서 export 유실·개명·타입 불일치 | 값 변경, 동작 변경 |
 | 기존 테스트 3,400줄 | 액션 동작 회귀 | **테스트가 호출하지 않는 액션** (실측: git 18개 · projectConfigs 37개 · claudeSessions 0개) |
 | **스토어 표면 스냅샷** (Task 1 신설) | 상태 키·액션 **이름** 집합, **초기 상태 값** | 액션 본문 동작, 스텁 배선 |
-| **위임 이름 검사** (Task 5 신설) | 스텁이 **같은 이름**의 impl을 위임하는지 — 커버리지와 무관하게 **전수** | 위임은 맞는데 impl 본문이 틀린 경우 |
+| **위임 이름 검사** (Task 5 신설) | 스텁이 **같은 이름**의 impl을 위임하는지 — 커버리지와 무관하게 **전수** | 인자 개수·순서, 기본값, 본문 |
+| **arity 검사** (Task 8 승격) | 스텁 선언 파라미터 = 전달 인자 = impl 파라미터 (개수·순서) | impl 파라미터 **순서가 원본과** 다른 경우, 기본값 |
+| **원본 대조 3종** (1회성, Task 5·8) | impl 파라미터 이름·순서 · 기본값 · 본문 텍스트를 **분할 전 소스**와 대조 | (분할 전 ref 가 필요해 상시 테스트가 될 수 없다) |
 
 > **2026-08-08 정정.** 이 표의 초판은 표면 스냅샷이 "스텁 오배선 · 초기값 변경 · no-op화"
 > 3가지를 잡는다고 적었다. **틀렸다** — Task 1 리뷰가 지적했다. `surface()`는 액션을
@@ -62,6 +64,29 @@ export async function fetchBranches(set: SetFn, get: GetFn, projectId: string) {
 `isGhostSession`)가 가장 노출된 형태다 — `get()` 참조가 틀리면 예외가 아니라 **그럴듯한
 잘못된 값**을 반환한다. 다만 실측 결과 claudeSessions는 액션 35개 전부가 기존 테스트에
 호출되므로(100%) Task 2에는 이 구멍이 적용되지 않는다.
+
+> **2026-08-08 2차 정정 — 위임 이름 검사도 충분하지 않다.**
+> Task 5 구현자와 리뷰어가 **결함을 심고 실측**해, 위 표의 앞 네 겹을 **전부 통과하는**
+> 결함 유형 셋을 찾았다. 컨트롤러가 그중 첫 번째를 독립 재현했다.
+>
+> | 결함 | tsc | 표면 | 위임 | arity | 축자본문 |
+> |---|---|---|---|---|---|
+> | 스텁이 뒤 인자를 **절단** (`(a) => f(set,get,a)` ↔ impl `(set,get,a,b,c)`) | 통과 | 통과 | 통과 | **잡음** | 통과 |
+> | impl 파라미터 **순서가 원본과** 뒤바뀜 (같은 타입) | 통과 | 통과 | 통과 | 통과 | 통과 |
+> | **기본값 드리프트** (`all = false` → `all = true`) | 통과 | 통과 | 통과 | 통과 | 통과 |
+>
+> 첫 줄이 통과하는 이유: **TypeScript 는 파라미터가 적은 함수를 많은 시그니처에 할당하는 것을
+> 허용한다**(콜백에서 뒤 인자를 무시할 수 있어야 하므로 의도된 설계다). 실측: 결함 주입 후
+> `tsc --noEmit` 에러 0건 · 표면·위임 테스트 4 passed.
+>
+> 아래 두 줄이 통과하는 이유: 현재-시제 검사(스텁 ↔ impl)로는 볼 수 없다. 스텁이 impl 의
+> **바뀐** 순서에 맞춰 쓰이므로 둘은 서로 일치한다. **분할 전 원본 시그니처와 대조해야만**
+> 잡히고, 따라서 상시 테스트가 아니라 1회성 마이그레이션 검사다.
+>
+> **수명으로 처우를 가른다** (Task 5 리뷰 I-3 지적 — 셋 중 가장 약한 위임 검사만 `__tests__/`
+> 로 승격되고 더 강한 둘은 스크래치에 남는 비대칭이었다):
+> - **arity = 상시 불변식** → `__tests__/` 에 vitest 테스트로 승격·커밋 (Task 8)
+> - **원본 대조 3종 = 1회성 증명** → 워크스페이스 스크립트로 실행·보고만 (커밋 안 함)
 
 ---
 
@@ -761,6 +786,56 @@ Red-Green: activeTab 'overview'→'skills' → FAIL → 원복 → PASS.
   테스트에 호출되지 않으므로**(실측 49% 커버리지), 그 37개에는 이 전수 검사가 유일한 자동 그물이다
 - Step 7 Expected: `index.ts` ~170줄. **300줄을 넘으면 멈춘다**
 - **주의**: 모달 UI 상태 액션(`openSkillModal` · `closeSkillModal` 등)은 해당 도메인 모듈에 함께 둔다. 기술 계층(UI vs API)이 아니라 도메인으로 가르는 것이 이 계획의 규칙이다
+
+#### Step 6c: arity 검사를 상시 테스트로 승격 (Task 8 신설, 두 스토어 공통)
+
+Task 5 가 만든 `task-5-audit-arity.mjs` 는 **상시 참인 불변식**을 검사한다 —
+"스텁 선언 파라미터 = 전달 인자 = impl 파라미터(개수·순서)". 워크스페이스에 두면
+최종 청소 때 사라지고 회귀도 못 막으므로, `delegation.ts` 가 간 곳으로 승격한다.
+
+- Create: `src/dashboard/src/stores/__tests__/arity.ts` — 스크립트 로직을 함수로 정리.
+  `export function parseStubArity(indexSource: string, moduleSources: Record<string, string>)`
+- Create: `src/dashboard/src/stores/__tests__/git.arity.test.ts` (액션 **63**)
+- Create: `src/dashboard/src/stores/__tests__/projectConfigs.arity.test.ts` (액션 **72**)
+
+`git` 쪽도 함께 만드는 이유: 이 불변식은 이미 분할된 스토어에도 영구히 참이고, 회귀는
+`git` 쪽에서도 날 수 있다. 한 곳에서 두 스토어를 덮는 것이 싸다.
+
+**소스 파일 경로는 CWD 에 의존하지 않게 쓴다** (Task 5 리뷰 M-1):
+
+```ts
+// ❌ readFileSync('src/stores/git/index.ts', 'utf8')  — repo 루트에서 실행하면 ENOENT
+// ✅
+const SOURCE = readFileSync(new URL('../git/index.ts', import.meta.url), 'utf8')
+```
+
+여기서는 `import.meta.url` 을 써도 된다 — **읽기**는 Vite 가 해석한 URL 로도 동작한다.
+금지된 것은 `node:fs` 로 **쓰기**다(Task 1 Step 2 참조). `git.delegation.test.ts:13` 도
+같은 형태로 함께 고친다.
+
+Red-Green 필수: 스텁 하나의 뒤 인자를 절단 → FAIL 확인 → 원복 → PASS.
+
+#### Step 6d: 원본 대조 3종 실행 (1회성, 커밋하지 않음)
+
+Task 5 의 구현자와 리뷰어가 작성해 워크스페이스에 남긴 스크립트를 그대로 돌린다.
+**이 스크립트들은 `.superpowers/sdd/.gitignore` 안이라 커밋할 수 없다** — 최종
+워크스페이스 청소 전에 소비해야 한다.
+
+```bash
+# CWD = src/dashboard, WS = .superpowers/sdd/2026-08-08-oversized-file-split-b3
+git show <Task 7 커밋>:src/dashboard/src/stores/projectConfigs/index.ts > /tmp/orig_pc.ts
+node ../../$WS/task-5-review-audit-param-order.mjs /tmp/orig_pc.ts src/stores/projectConfigs
+node ../../$WS/task-5-review-audit-defaults.mjs    /tmp/orig_pc.ts src/stores/projectConfigs
+node ../../$WS/task-5-audit-verbatim.mjs           /tmp/orig_pc.ts src/stores/projectConfigs
+```
+
+Expected: 72/72 일치, 불일치 0건. **각 스크립트가 비어있지 않음을 증명할 것** — 사본에
+인위적 결함을 주입해 그 스크립트가 잡는지 보이고 결과를 보고서에 quote 한다. Task 5 가
+같은 증명을 했다(파라미터 절단·순서 뒤바뀜·문자열 리터럴 변경·조건 반전).
+
+**왜 필요한가**: 위 세 유형은 arity 검사를 포함한 상시 그물 전부를 통과한다.
+`projectConfigs` 는 액션 72개 중 **37개가 기존 테스트에 호출되지 않아**(커버리지 49%)
+노출이 `git`(18/63)의 두 배다.
 
 ---
 
