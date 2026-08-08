@@ -240,6 +240,34 @@ param2 = [r for r in rows if r[1].count('/') == 2 and '{' in r[1]]
 **B2 완결.** 4파일 5,774줄이 전부 800줄 한도 이내로 들어갔고 HTTP 표면 128개 라우트가
 전부 보존됐다(라우트 테이블 characterization 4벌 + `split_audit` AST 대조).
 
+### 소급 감사 — B1 포함 5개 패키지 전수 (2026-08-08)
+
+`split_audit` 을 만든 뒤 **이전에 분할한 패키지에도 소급 적용**했다. 그때도 라인 범위
+슬라이스를 썼으므로 같은 종류의 유실이 남아 있을 수 있었기 때문이다.
+
+| 패키지 | 원본 정의 | 결과 |
+|---|---:|---|
+| `api/git/` (B1) | 73 | ✅ 0건 |
+| `api/projects/` | 18 | ✅ 0건 |
+| `api/agents/` | 33 | ⚠️ 본문 불일치 1건 — 아래 |
+| `api/claude_sessions/` | 35 | ✅ 0건 |
+| `api/project_configs/` | 61 | ✅ 0건 |
+
+**`agents.tmux.execute_with_tmux` 편차 (되돌리지 않음).** 커밋 `2198086` 이 함수 **내부**의
+`from models.llm_usage import LLMUsageSource` · `from services.llm_usage_ledger_service import
+LLMUsageQuotaExceededError` 두 줄을 잃었다. 판정:
+
+- 두 이름은 `tmux.py` **모듈 상단**에서 import 되어 사용처(210·217행)가 정상 해석된다
+- 두 모듈은 `api` 를 역참조하지 않아 순환 import 위험이 없다 (`api.agents` 단독 import 성공,
+  OpenAPI 에 `/api/agents` 28경로 = 29라우트 − 다중메서드 1 마운트 확인)
+- 레포 전역에서 이 둘의 import 는 **모듈 상단 25건 / 함수 내부 0건** — 원본의 지연 import 가
+  오히려 관례 이탈 잔재였고 호이스팅이 관례에 맞춘 것이다
+- 되돌리면 모듈 상단 import 와 중복돼 ruff 가 다시 제거한다. 되돌리는 쪽이 순증 위험이다
+
+Codex 브랜치 리뷰(`--scope branch --base main`, 로그 74줄·실명령 수십 건)도 **지적 0건**이며,
+독립적으로 `execute_with_tmux` 를 base 와 diff 한 뒤 "handler implementations preserved" 로
+판정했다 — 두 도구가 같은 지점에서 수렴했다.
+
 문서 동기화 불필요로 판정: `docs/api/*.md` 는 **엔드포인트 경로**만 기술하고 소스 파일
 레이아웃을 언급하지 않는다. HTTP 표면이 불변임이 증명됐으므로 문서는 그대로 정확하다.
 
