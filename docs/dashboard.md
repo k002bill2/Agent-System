@@ -267,6 +267,11 @@ import { cn } from '@/lib/utils';
 |----------|------|
 | `ProjectMultiSelect` | 멀티 프로젝트 선택 (최대 5개, 색상 표시) |
 
+> **Note**: `components/analytics/`에는 위 공개 컴포넌트 외에 `AnalyticsPage`를 분할한
+> 12개 파일이 함께 있습니다 (타입·상수·API·헬퍼 + 서브컴포넌트 5종 + 차트 그리드 섹션 3종).
+> 소비자가 `AnalyticsPage` 하나뿐인 **내부 전용**이라 `index.ts`는 `ProjectMultiSelect`만
+> 재노출합니다 — 외부에서 쓰려면 먼저 공개 대상인지 판단해야 합니다.
+
 > **Note**: Analytics 데이터는 Claude 세션 파일에서 직접 수집됩니다 (DB 모드와 무관). 트렌드 차트는 세션 `created_at` 기준으로 버킷팅되며, 에이전트 성능은 실제 모델명(claude-opus-4-6 등)으로 그룹화됩니다.
 
 ### Audit Components
@@ -524,6 +529,10 @@ src/dashboard/
 │   │   ├── git/                # Git 관리
 │   │   │   ├── GitSetup.tsx
 │   │   │   ├── WorkingDirectory.tsx
+│   │   │   ├── working-directory/  # WorkingDirectory 분할: FileItem,
+│   │   │   │                       # StagedDiffReviewPanel, SensitiveFilesDialog,
+│   │   │   │                       # HunkStagingPanel, constants, types
+│   │   │   │                       # (index.ts 미재노출, 내부 전용)
 │   │   │   ├── BranchList.tsx
 │   │   │   ├── CommitHistory.tsx
 │   │   │   ├── MergeRequestCard.tsx
@@ -580,7 +589,11 @@ src/dashboard/
 │   │   │   ├── api.ts
 │   │   │   └── types.ts
 │   │   └── analytics/          # Analytics
-│   │       └── ProjectMultiSelect.tsx
+│   │       ├── ProjectMultiSelect.tsx
+│   │       └── (AnalyticsPage 분할 12파일: types, constants, api, utils,
+│   │            MetricCard, CostComparisonCard, ChartCard, EvalDetailView,
+│   │            ActivityHeatmapChart, TrendChartsRow, TokenUsageRow,
+│   │            CostPerformanceRow — index.ts 미재노출, 페이지 내부 전용)
 │   ├── stores/                 # Zustand 스토어 (31개 + index.ts)
 │   │   ├── orchestration/      # 리팩토링: index.ts, types.ts, wsConnection.ts, wsHandler.ts
 │   │   ├── orchestration.ts    # 재export
