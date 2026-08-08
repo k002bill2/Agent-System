@@ -6,7 +6,16 @@ See: `.planning/PROJECT.md`
 **Current focus:** **800줄 초과 파일 분할 프로그램 — B4 머지 완료, B5 계획 완료·구현 미착수**
 
 ## Current Position
-Phase: **B5** (백엔드 분할) — **계획서 작성 완료, 구현 미착수**
+Phase: **B5** (백엔드 분할) — **Task 1/5 완료, Task 2 대기**
+
+| Task | 대상 | 결과 | 커밋 |
+|---|---|---|---|
+| 1 | `models/git.py` 991 | → 10모듈 (최대 189) + `__init__` 재노출 | 승격 `ff20c2f` → 분할 `c2ed1fa` |
+| 2 | `api/usage.py` 1,245 | 캐시 2종 주의, 그물 3겹 | 미착수 |
+| 3 | `orchestrator/nodes.py` 1,715 | **테스트 문자열 패치 4종 갱신 동반** | 미착수 |
+| 4 | `external_usage_service.py` 933 | `__init__`에 `import httpx` 유지 | 미착수 |
+| 5 | `terminal_service.py` 868 | 안전망 411로 최박 | 미착수 |
+
 - 계획: `docs/plans/2026-08-09-oversized-file-split-b5.md` (착수 전 실측 6항목 완료)
 - 브랜치: `refactor/split-backend-b5` (main `2ae6eb9`에서 분기, 미푸시)
 - 완료 배치: **B1**(PR #238) · **B2**(PR #241·#242) · **B3**(PR #243) · **B4**(PR #246, squash `2ae6eb9`) — 전부 머지됨
@@ -157,10 +166,22 @@ Codex 1~10차 로그는 세션 scratchpad에만 있어 **휘발됐다** — 장�
 Last session: 2026-08-09
 Stopped at: **B4 머지 완료(PR #246, CI 9/9) + B5 계획서 작성 완료.**
 
-### B5 재개 지점 (구현부터 시작하면 된다)
+### B5 재개 지점 — **Task 2(`api/usage.py`)부터**
 
-계획서 `docs/plans/2026-08-09-oversized-file-split-b5.md`의 **Task 1(`orchestrator/nodes.py`)**부터.
-착수 전 실측은 전부 끝났고 계획서에 있다. 요점 4가지:
+계획서: `docs/plans/2026-08-09-oversized-file-split-b5.md`.
+**Task 1에서 검증된 레시피**(그대로 재사용):
+
+1. `git mv X.py X/__init__.py` → 단독 커밋 (`0 insertions, 0 deletions` 확인) → **SHA 기록**
+2. **AST 이름 기반 분할 스크립트** — `sed` 라인 슬라이스 금지(도메인별로 묶으면 정의가 흩어진다).
+   스크립트에 **커버리지 단언**(최상위 이름 배정 누락·중복 시 즉시 실패)과
+   **import 역산**(정의가 실제 참조하는 이름에서 계산, 눈으로 훑지 않음)을 넣는다.
+   Task 1 스크립트가 세션 scratchpad에 있었으므로 **휘발됐다** — 다시 쓰되 위 두 요소를 반드시 포함.
+3. `__init__.py`는 원본 공개 표면 **전체** 재노출(`__all__` = 원본 최상위 이름 전부).
+   원본에 `__all__`이 없었으면 모든 이름이 import 가능했으므로 그것을 보존해야 한다.
+4. 게이트: `split_audit.py <승격SHA>` → `ruff check --fix` + `ruff format` →
+   **`split_audit` 재실행**(포매터가 본문을 건드리지 않았는지) → `mypy` → `pytest`
+
+기타 요점:
 
 - **분류축이 교체됐다.** 상위 계획서의 "다중클래스 9종"은 무효 — 클래스 갯수가 아니라
   **집중도(최대 클래스/파일 줄수)**가 지표다. 상위 계획서 배치 표도 함께 고쳤다.
