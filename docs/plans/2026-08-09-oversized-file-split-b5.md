@@ -90,12 +90,22 @@ B4에서 인벤토리는 0번 틀렸고 **처방·분류가 두 번 틀렸다**(
   | `orchestrator.nodes` | **0건** ✅ |
   | `services.external_usage_service` | **1종 / 7회** ⚠️ `services.external_usage_service.httpx.AsyncClient` |
 
-  > **⚠️ `external_usage_service` 만 계약이 있다.** 패치 대상이 `httpx.AsyncClient` 이므로
-  > 엄밀히는 전역 `httpx` 모듈 속성을 건드리는 형태지만, **`services.external_usage_service`
-  > 에 `httpx` 속성이 존재해야** 패치가 성립한다. 패키지 승격 시 `__init__.py` 가
-  > `import httpx` 를 유지하거나, HTTP 호출 코드가 그 경로에 남아야 한다.
-  > 재노출(`from .x import y`)로는 살아나지 않는 패치 유형이 별도로 존재하므로
-  > (`module_split_string_patch_targets` 기록), **분할 후 해당 7개 테스트를 반드시 실행**한다.
+  > **⚠️ `external_usage_service` 의 계약은 관대한 쪽이다 — 형태를 확인했다.**
+  > 7건 전부 `tests/backend/test_external_usage_service.py` 에 있고 형태는
+  > `patch("services.external_usage_service.httpx.AsyncClient")` 다. 소스는
+  > `external_usage_service.py:12` 의 `import httpx` 다.
+  >
+  > 이건 **모듈 *속성* 패치**다 — `httpx` 를 그 모듈을 통해 해석한 뒤 **공유 `httpx` 모듈
+  > 객체**의 `AsyncClient` 를 갈아끼운다. 따라서 실제 HTTP 호출이 어느 서브모듈에서
+  > 일어나든 패치가 먹는다. **유일한 요구는 `services.external_usage_service` 가 `httpx`
+  > 속성을 노출하는 것**이며, 패키지 승격 시 `__init__.py` 에 `import httpx` 한 줄이면 된다.
+  > "HTTP 호출 코드가 그 경로에 남아야 한다"는 제약은 **없다** — 분할 자유도를 불필요하게
+  > 묶지 마라.
+  >
+  > 관대하지 않은 쪽은 `patch("services.X.AsyncClient")` 처럼 **모듈 지역 이름**을 겨냥하는
+  > 형태다(`module_split_string_patch_targets` 기록 — 재노출로 살아나지 않는다). 이번 대상
+  > 5개에는 그 형태가 없지만, 다음 배치에서는 형태부터 확인할 것.
+  > 어느 쪽이든 **분할 후 해당 7개 테스트를 개별 실행**해 확인한다.
 
 - [x] **모듈 레벨 가변 상태 전수** — B5 의 하중 지지대다. 아래 참조.
 - [x] **`models/git.py` 클래스 성격** → **Pydantic 이다** (63× `BaseModel` + 6× `str, Enum`).
@@ -135,6 +145,13 @@ B4 의 지지대가 "훅 호출 순서를 바꾸지 않는다"였다면, B5 의 
 | `api/usage.py` | `_usage_cache`(90) · `_codex_plan_cache`(75) | `_load/_save_usage_cache` · `_is_cache_valid` · `_is_cache_usable` · `_get_cache_age_minutes` · `get_usage` / `_cached_codex_plan_response` · `get_codex_plan_usage` |
 | `models/git.py` | **`GIT_REPOSITORIES = {}`(848)** | `register_git_repository` · `get_git_repository` · `list_git_repositories` · `update_git_repository` · `delete_git_repository` · `sync_git_repositories_from_projects` (851–990, 연속 구간) |
 | `services/terminal_service.py` | `_terminal_service = None`(859) | `get_terminal_service`(862–867) |
+
+> **`TERMINAL_INFO`(terminal_service.py:48)는 가변 dict 지만 안전하다 — 확인했다.**
+> 사용처 전수가 **읽기뿐**이다(`terminal_service.py:791,842` · `api/terminal.py:103` ·
+> `test_terminal_service_orca.py:401` — 전부 `TERMINAL_INFO[...]` 첨자 읽기).
+> import 시점에 확장·변이하는 코드가 없으므로 어댑터를 모듈별로 갈라도 분할 순서가 계약이
+> 되지 않는다. **단 `api/terminal.py:16` 과 테스트가 이 이름을 직접 import 하므로**
+> `services.terminal_service` 에서 계속 import 가능해야 한다(`__init__.py` 재노출 대상).
 | `services/external_usage_service.py` | `_service_instance = None`(924) | `get_external_usage_service`(927–932) |
 | `orchestrator/nodes.py` | **없음** | — |
 
@@ -165,6 +182,13 @@ B5 는 여기에 축이 하나 더 있다 — **모듈 상태가 없는 것부�
    소비자의 `from api.usage import Y` 는 패키지 해석으로 그대로 유효하다.
    **이 커밋의 SHA 를 기록한다** — `split_audit.py` 의 `<분할전-ref>` 는 **승격 직전** 커밋이어야
    한다(승격 이후를 쓰면 이미 옮겨진 상태와 비교하게 된다).
+
+   > **B4 의 "메인 파일을 옮기지 않는다" 규칙과 정면으로 어긋나 보이지만, 여기서는 승격이 맞다.**
+   > 그 규칙은 프론트에서 테스트의 `'../X'` 와 배럴의 `'./X'` 가 디렉토리 → `index.tsx` 해석에
+   > 의존하게 되는 것을 피하려는 것이었다. 백엔드는 사정이 다르다 — B1·B2 가 `api/git.py` →
+   > `api/git/__init__.py` 로 이미 승격했고 `api.git` import 가 그대로 살아남는 것이 **실증됐다**.
+   > 게다가 `split_audit.py` 는 원본 파일 ↔ **패키지 디렉토리** 비교를 전제하므로 승격 없이는
+   > 이 배치의 주력 그물을 쓸 수 없다. STATE.md 의 레이아웃 규칙은 프론트 한정으로 읽을 것.
 2. **정의 이동** — 클래스·함수를 도메인별 모듈로. **본문을 한 글자도 바꾸지 않는다.**
    위 "하중 지지대" 표의 상태·함수 묶음은 **가르지 않는다.**
 3. **`__init__.py` 재노출** — `__all__` 은 **소비자 목록에서 역산한다**(B1 교훈).
