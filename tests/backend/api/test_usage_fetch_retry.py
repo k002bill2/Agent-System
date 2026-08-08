@@ -22,7 +22,7 @@ from typing import Any
 import httpx
 import pytest
 
-from api import usage as usage_mod
+from api.usage import anthropic as anthropic_mod
 
 pytestmark = pytest.mark.asyncio
 
@@ -79,14 +79,14 @@ def _no_backoff_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
         return None
 
     # Patch the real asyncio module (shared singleton) so it applies whether or
-    # not usage_mod has bound ``asyncio`` yet — keeps the Red failures on the
+    # not anthropic_mod has bound ``asyncio`` yet — keeps the Red failures on the
     # assertions rather than a fixture-setup AttributeError.
     monkeypatch.setattr(asyncio, "sleep", _instant)
 
 
 def _install_client(monkeypatch: pytest.MonkeyPatch, outcomes: list[Any]) -> _ClientFactory:
     factory = _ClientFactory(outcomes)
-    monkeypatch.setattr(usage_mod.httpx, "AsyncClient", factory)
+    monkeypatch.setattr(anthropic_mod.httpx, "AsyncClient", factory)
     return factory
 
 
@@ -94,7 +94,7 @@ async def test_success_returns_data_without_retry(monkeypatch: pytest.MonkeyPatc
     data = {"five_hour": {"utilization": 39.0}}
     factory = _install_client(monkeypatch, [_FakeResponse(200, json_data=data)])
 
-    result = await usage_mod.fetch_usage_from_anthropic("tok")
+    result = await anthropic_mod.fetch_usage_from_anthropic("tok")
 
     assert result == data
     assert factory.calls == 1
@@ -108,7 +108,7 @@ async def test_rate_limit_429_is_not_retried(monkeypatch: pytest.MonkeyPatch) ->
         [_FakeResponse(429, text="rate_limit_error"), _FakeResponse(200, json_data={"ok": True})],
     )
 
-    result = await usage_mod.fetch_usage_from_anthropic("tok")
+    result = await anthropic_mod.fetch_usage_from_anthropic("tok")
 
     assert result is None
     assert factory.calls == 1
@@ -121,7 +121,7 @@ async def test_timeout_then_success_is_retried(monkeypatch: pytest.MonkeyPatch) 
         [httpx.ReadTimeout("timed out"), _FakeResponse(200, json_data=data)],
     )
 
-    result = await usage_mod.fetch_usage_from_anthropic("tok")
+    result = await anthropic_mod.fetch_usage_from_anthropic("tok")
 
     assert result == data
     assert factory.calls == 2
@@ -134,7 +134,7 @@ async def test_server_error_5xx_then_success_is_retried(monkeypatch: pytest.Monk
         [_FakeResponse(503, text="service unavailable"), _FakeResponse(200, json_data=data)],
     )
 
-    result = await usage_mod.fetch_usage_from_anthropic("tok")
+    result = await anthropic_mod.fetch_usage_from_anthropic("tok")
 
     assert result == data
     assert factory.calls == 2
@@ -149,7 +149,7 @@ async def test_persistent_timeout_gives_up_after_bounded_attempts(
         [httpx.ConnectError("boom")] * 10,
     )
 
-    result = await usage_mod.fetch_usage_from_anthropic("tok")
+    result = await anthropic_mod.fetch_usage_from_anthropic("tok")
 
     assert result is None
     assert 1 < factory.calls <= 5
@@ -165,10 +165,10 @@ async def test_retry_budget_stays_under_dashboard_timeout() -> None:
     """
     dashboard_timeout_seconds = 30.0
     worst_case = (
-        usage_mod.USAGE_FETCH_MAX_ATTEMPTS * usage_mod.USAGE_FETCH_TIMEOUT_SECONDS
-        + sum(usage_mod.USAGE_FETCH_BACKOFF_SECONDS)
+        anthropic_mod.USAGE_FETCH_MAX_ATTEMPTS * anthropic_mod.USAGE_FETCH_TIMEOUT_SECONDS
+        + sum(anthropic_mod.USAGE_FETCH_BACKOFF_SECONDS)
     )
-    assert len(usage_mod.USAGE_FETCH_BACKOFF_SECONDS) >= usage_mod.USAGE_FETCH_MAX_ATTEMPTS - 1
+    assert len(anthropic_mod.USAGE_FETCH_BACKOFF_SECONDS) >= anthropic_mod.USAGE_FETCH_MAX_ATTEMPTS - 1
     assert worst_case <= dashboard_timeout_seconds - 5.0, (
         f"retry budget {worst_case}s leaves too little margin under "
         f"{dashboard_timeout_seconds}s dashboard timeout"
