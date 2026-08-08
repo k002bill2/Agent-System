@@ -10,6 +10,22 @@
 Pydantic 모델은 이 패키지가 아니라 `models/project_config.py` 에 있다.
 """
 
+from . import agents, mcp, skills
 from ._legacy import router
+
+# **include 순서가 계약이다.** 실측(2026-08-08) 완전 가림 제약 10건 중 모듈
+# 간에 걸리는 것은 둘이다:
+#
+#   1. `GET /{project_id}` 가 `/global` · `/paths` · `/stream` · `/by-path` 를 삼킨다
+#   2. `{project_id}/rules` 계열이 `global/rules` 계열을 삼킨다
+#      (`{project_id}` 자리에 리터럴 `global` 이 들어가 모양이 같아진다)
+#
+# 따라서 전역 설정 모듈이 프로젝트 규칙·요약 모듈보다 **먼저** 와야 한다.
+# 알파벳 순 정렬을 하지 마라. test_no_shadowing_route_pairs 가 이를 잡는다.
+#
+# `skills` · `agents` · `mcp` 는 전부 3세그먼트 이상이라 순서 제약이 없다.
+router.include_router(skills.router)
+router.include_router(agents.router)
+router.include_router(mcp.router)
 
 __all__ = ["router"]
