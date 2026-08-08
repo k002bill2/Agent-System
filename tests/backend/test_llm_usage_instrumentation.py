@@ -946,9 +946,9 @@ async def test_orchestrator_executor_records_token_update_usage(monkeypatch) -> 
     fake_llm.ainvoke = AsyncMock(return_value=response)
     recorder = AsyncMock()
 
-    monkeypatch.setattr("orchestrator.nodes.record_usage_best_effort", recorder)
-    monkeypatch.setattr("orchestrator.nodes.AuditService.log", MagicMock())
-    monkeypatch.setattr("orchestrator.nodes.audit_task_status_change", MagicMock())
+    monkeypatch.setattr("orchestrator.nodes.base.record_usage_best_effort", recorder)
+    monkeypatch.setattr("orchestrator.nodes.executor.AuditService.log", MagicMock())
+    monkeypatch.setattr("orchestrator.nodes.executor.audit_task_status_change", MagicMock())
 
     state = create_initial_state(session_id="session-1")
     task = TaskNode(
@@ -1122,10 +1122,10 @@ async def test_orchestrator_executor_uses_llm_access_resolver(monkeypatch) -> No
     get_llm = MagicMock(return_value=resolved_llm)
     recorder = AsyncMock()
 
-    monkeypatch.setattr("orchestrator.nodes.LLMService._get_llm", get_llm)
-    monkeypatch.setattr("orchestrator.nodes.record_usage_best_effort", recorder)
-    monkeypatch.setattr("orchestrator.nodes.AuditService.log", MagicMock())
-    monkeypatch.setattr("orchestrator.nodes.audit_task_status_change", MagicMock())
+    monkeypatch.setattr("orchestrator.nodes.base.LLMService._get_llm", get_llm)
+    monkeypatch.setattr("orchestrator.nodes.base.record_usage_best_effort", recorder)
+    monkeypatch.setattr("orchestrator.nodes.executor.AuditService.log", MagicMock())
+    monkeypatch.setattr("orchestrator.nodes.executor.audit_task_status_change", MagicMock())
 
     state = create_initial_state(
         session_id="session-1",
