@@ -49,10 +49,15 @@ Agent(
 | D | `test-automation-specialist` | Vitest 테스트 작성·실행 + pytest 실행·결과 보고 (백엔드 테스트 작성은 B-1 소유) | test-automation | `_workspace/D_test_report.md` |
 | E-1 | `code-reviewer` | 품질·유지보수성 리뷰 | — | `_workspace/E_code_review.md` |
 | E-2 | `security-reviewer` | 보안 취약점 감사 | — | `_workspace/E_security_review.md` |
+| E-3 | (외부 CLI) `codex-companion review` | Claude 계열 밖의 외부 시점 검증 (기본 실행) | — | `_workspace/E_codex_review.md` (오케스트레이터 저장) |
 | F | (스킬) `verification-loop` | 풀스택 최종 게이트 (FE: tsc+lint+vitest run+build / BE: ruff+mypy+pytest) | verification-loop | `_workspace/F_verification.md` (오케스트레이터 저장) |
 | G | `docs-sync` ★신규 | 변경 델타↔mandatory-docs 매핑 후 문서 동기화 | — | docs/ 직접 수정 + `_workspace/G_docs_sync.md` |
 
-A·C·E-1·E-2 산출물은 담당 에이전트가 읽기 전용이므로 **오케스트레이터가 반환값을 받아 저장**한다(위 일반 규칙). F는 오케스트레이터 자신이 스킬을 실행하므로 게이트 요약을 직접 저장한다.
+A·C·E-1·E-2 산출물은 담당 에이전트가 읽기 전용이므로 **오케스트레이터가 반환값을 받아 저장**한다(위 일반 규칙). E-3·F는 오케스트레이터 자신이 외부 명령/스킬을 실행하므로 결과를 직접 저장한다.
+
+**E-3는 다른 필수 Phase와 동일한 관문 대상이다** — Phase F로 넘어가기 전에 `_workspace/E_codex_review.md` 또는 `_workspace/E3_SKIPPED.md` 중 하나가 반드시 실존해야 한다. **파일 실존만으로는 부족하다**: 이전 런의 산출물이나 수정 전 리포트가 남아 있으면 그대로 관문을 통과시킨다. 신선도 기준은 **델타 패치 해시**다 — 지금 계산한 `git diff --binary B0 B1 | shasum` 이 산출물 머리에 적힌 해시와 같아야 한다(양쪽 모두 `--binary` 형태로 통일한다. 한쪽만 붙이면 바이너리 변경이 있을 때 정상 리포트가 해시 불일치로 거부된다). 파일 목록이나 base SHA 로는 부족하다: E-3 지적을 반영해 같은 파일을 수정하면 목록도 base 도 그대로라 **수정 전 리포트가 그대로 통과한다**. 따라서 **CRITICAL/HIGH 수정 후에는 반드시 E-3 를 재실행**하고, 해시가 일치할 때까지 이 루프를 돈다.
+
+**신선도 계약은 `E3_SKIPPED.md` 에도 똑같이 적용된다** — SKIPPED 도 관문을 통과시키는 증거이므로 같은 헤더(`B0`/`B1` SHA·델타 패치 해시)를 기록하고 같은 방식으로 대조한다. 보호를 성공 산출물에만 걸면 SKIPPED 가 우회로가 된다: 이전 런의 "델타 0건" 또는 "Codex CLI 미설치" 파일이 남아 있으면, 재개 런에서 코드가 추가된 뒤에도 그 파일이 그대로 F 로 넘겨준다. 해시가 다르면 스테일이므로 파일을 무효화하고 E-3 를 실행한다. 실행 명령이 에러로 죽었거나 base 지정이 잘못돼 결과가 없으면 그것은 SKIPPED가 아니라 **재시도 대상**이고, 2회 실패 시 BLOCKED다(아래 "Phase 전환 관문" 3·4항과 에러 핸들링 표를 그대로 적용). E3_SKIPPED가 허용되는 사전 선언 조건은 두 가지뿐: (1) 리뷰 대상 변경 0건, (2) Codex CLI 미설치·미로그인.
 
 ## Phase 전환 관문 (산출물 완결성 · 필수)
 
@@ -108,7 +113,11 @@ A·C·E-1·E-2 산출물은 담당 에이전트가 읽기 전용이므로 **오�
 
 ### Phase 1: 준비
 1. 사용자 요청에서 기능 범위·영향 영역(백엔드/프론트/양쪽) 파악
-2. `_workspace/` 생성, 입력을 `_workspace/00_input.md`에 저장. **기능 시작 시점 baseline 스냅샷 저장**: `git status --porcelain > _workspace/00_base_changed.txt` (Phase E 리뷰어와 Phase G `docs-sync`가 이번 기능의 변경 파일을 무관한 기존 워킹트리 수정과 분리하는 기준 — 미저장 시 변경 범위를 단정 못 함). `_workspace/RUN_STATE.md` 초기화(전 Phase `PENDING`)
+2. `_workspace/` 생성, 입력을 `_workspace/00_input.md`에 저장. **기능 시작 시점 baseline 스냅샷 저장**: `git status --porcelain > _workspace/00_base_changed.txt` (Phase E 리뷰어와 Phase G `docs-sync`가 이번 기능의 변경 파일을 무관한 기존 워킹트리 수정과 분리하는 기준 — 미저장 시 변경 범위를 단정 못 함). **시작 시점 base ref + baseline 워킹트리 스냅샷 저장**: base SHA / 브랜치명 / baseline 스냅샷 `B0` 세 줄을 `_workspace/00_base_ref.txt`에 기록한다. `B0`는 아래 헬퍼로 만든다 — `git stash create`는 **untracked 파일을 트리에서 누락**하므로 쓰지 않는다(실측 확인). 이 방식은 워킹트리를 건드리지 않고 커밋 객체만 만들어 다른 세션에 영향이 없다:
+```bash
+snap() { local i=$(mktemp -u); GIT_INDEX_FILE="$i" git add -A; local t=$(GIT_INDEX_FILE="$i" git write-tree); rm -f "$i"; git commit-tree "$t" -p HEAD -m snap; }
+{ git rev-parse HEAD; git rev-parse --abbrev-ref HEAD; snap; } > _workspace/00_base_ref.txt
+``` 둘 다 사후 복원이 불가하다 — base 는 기능 브랜치가 `main`이 아닌 다른 작업 브랜치 위에서 갈라졌을 때 `main`을 잡으면 남의 커밋이 리뷰에 섞이고, `B0` 없이는 "이미 더러웠던 파일을 이번 기능이 또 고친 경우"의 델타를 내용 기준으로 계산할 수 없다. `_workspace/RUN_STATE.md` 초기화(전 Phase `PENDING`)
 3. **복잡도 판정** (`.claude/rules/aos-workflow.md` 기준): Trivial(0 에이전트, 하네스 불필요) / Simple(1) / Moderate(2-3). Trivial이면 사용자에게 "이건 직접 처리가 빠릅니다" 제안 후 중단
 
 ### Phase A: 계획 [순차]
@@ -143,8 +152,27 @@ A·C·E-1·E-2 산출물은 담당 에이전트가 읽기 전용이므로 **오�
 - **단일 메시지에서 동시 호출**: `code-reviewer` + `security-reviewer` (둘 다 run_in_background: true)
 - **리뷰 범위 델타화**: 두 리뷰어의 입력에 `_workspace/00_base_changed.txt`(baseline) + 현재 `git status --porcelain` + B·C 산출물을 포함하고, **"(현재 변경 − baseline) 델타 파일만 리뷰"**를 프롬프트에 명시한다 (docs-sync와 동일한 델타 규칙 — 다중 세션 워킹트리의 무관한 기존 수정이 리뷰에 혼입되는 것 방지). baseline 부재 시 B·C 산출물이 명시한 파일만 대상으로 하고 리포트에 UNVERIFIED로 표기
 - 두 리뷰어는 읽기 전용이므로 리포트를 반환값으로 받아 오케스트레이터가 `_workspace/E_code_review.md` / `_workspace/E_security_review.md`에 저장한다. CRITICAL/HIGH 이슈는 담당 에이전트 재호출로 수정
-- **E-3 (옵션): Codex 적대 검증** — E-1/E-2는 Claude가 Claude를 리뷰하므로 동일 모델 계열의 상관된 맹점이 남는다. 사용자가 요청했거나 변경 규모가 크면(3+ 파일 또는 보안 민감 영역) 외부 시점을 추가한다:
-  `node ~/.claude/plugins/cache/openai-codex/codex/*/scripts/codex-companion.mjs review --scope working-tree` 를 Bash로 실행 (장시간 예상 시 `nohup ... & disown` 후 로그 폴링 — verification-loop의 detach 패턴과 동일). 결과를 오케스트레이터가 `_workspace/E_codex_review.md`에 저장하고, CRITICAL/HIGH는 E-1/E-2와 동일하게 담당 에이전트 재호출로 수정. 실행하지 않으면 `_workspace/E3_SKIPPED.md`에 사유(예: "소규모 변경 — 옵션 조건 미충족") 기록
+- **E-3 (기본, 2026-08-08 옵션→기본 승격): Codex 외부 검증** — E-1/E-2는 Claude가 Claude를 리뷰하므로 동일 모델 계열의 상관된 맹점이 남는다. 이 맹점은 모델 성능으로 대체되지 않으므로 외부 시점을 **매 실행 붙인다**:
+  실행 명령은 `node "$SCRIPT" review --scope branch --base <base>` 이며, **`$SCRIPT` 는 글롭이 아니라 단일 경로로 확정한다**: `SCRIPT=$(ls ~/.claude/plugins/cache/openai-codex/codex/*/scripts/codex-companion.mjs | sort -V | tail -1)`. 캐시에 Codex 버전이 둘 이상 남아 있으면 따옴표 없는 `*` 가 여러 경로로 확장돼 node 가 두 번째 경로를 서브커맨드로 해석하고 즉시 종료한다 — 산출물 없이 필수 Phase 가 막힌다. 아래 격리 절차 안에서 Bash로 실행. 결과를 오케스트레이터가 `_workspace/E_codex_review.md`에 저장하고, CRITICAL/HIGH는 E-1/E-2와 동일하게 담당 에이전트 재호출로 수정. **기본이므로 "소규모 변경"은 생략 사유가 아니다** — `E3_SKIPPED.md`는 아래 절차 3단계(델타 0건)에서만 쓴다. Codex CLI 미설치·미로그인으로 실행 자체가 불가한 경우에는 그 사실을 `E3_SKIPPED.md`에 기록하고 Phase F로 진행한다(설치 상태는 통제 밖이므로 BLOCKED로 보지 않는다)
+  - **격리 트리에서 단일 scope 로 실행한다 (유일 경로 · 현재 트리에서 직접 실행 금지)**. 이유는 도구 능력의 한계다: `--scope working-tree` 는 staged/unstaged/untracked **전부**를 리뷰하며 baseline 파일이나 필터 목록을 받지 않는다. 즉 "baseline 제외 델타만 본다"는 약속을 현재 트리에서는 **지킬 수단이 없다** — 다중 세션 워킹트리의 남의 변경이 그대로 Codex 에 들어가 무관한 지적이 수정 루프로 흘러든다. 반대로 `--scope branch` 로 도망가면 미커밋 기능 변경을 통째로 놓친다. 두 사각을 동시에 없애는 방법은 **리뷰 대상만 담긴 깨끗한 트리를 만드는 것**뿐이다:
+
+    스냅샷 헬퍼(양쪽 시점에 동일하게 쓴다). `git stash create` 를 쓰면 **untracked 신규 파일이 트리에서 빠져** 기능이 추가한 파일을 통째로 놓치므로(실측 확인), 임시 인덱스 + `write-tree` 를 쓴다:
+    ```bash
+    snap() { local i=$(mktemp -u); GIT_INDEX_FILE="$i" git add -A; local t=$(GIT_INDEX_FILE="$i" git write-tree); rm -f "$i"; git commit-tree "$t" -p HEAD -m snap; }
+    ```
+    1. **base·baseline 스냅샷 확보** — `_workspace/00_base_ref.txt`(Phase 1 기록)에서 base SHA 와 baseline 워킹트리 스냅샷 커밋 `B0`. 파일이 없는 구버전 런이면 base 는 `git merge-base <출발브랜치> HEAD`, `B0` 는 base 로 대용하고 리포트에 `UNVERIFIED(base·baseline 추정)` 표기
+    2. **델타 패치 산출 — 경로 뺄셈 금지, 내용 diff 로 한다** — `B1=$(snap)` 후 `git diff --binary "$B0" "$B1" > <패치>`. **baseline 의 파일 *경로* 를 빼는 방식은 틀린다**: Phase 1 에 이미 수정돼 있던 파일을 이번 기능이 또 고치면 경로 뺄셈이 그 기능 변경까지 통째로 지워, Codex 가 base 버전을 리뷰하고 "이상 없음"을 반환한다. 내용 diff 는 baseline 이후 변경분만 정확히 남긴다 (`00_base_changed.txt` 는 사람이 읽는 참고용으로만 남는다). `--binary` 는 필수다 — 없으면 바이너리 변경이 적용 불가한 마커로만 나와 5단계가 깨진다
+    3. **델타 패치가 비면** `E3_SKIPPED.md` 에 "델타 0건" + `B0`/`B1` SHA + 델타 패치 해시를 기록하고 종료 (CLI 미설치로 인한 SKIPPED 도 같은 헤더를 기록한다 — 관문이 신선도를 대조한다)
+    4. **격리 트리를 `<base>` 가 아니라 `B0` 에서 생성** — `git worktree add --detach <임시경로> "$B0"`. **`<base>` 에서 만들면 안 된다**: 패치의 preimage 가 `B0` 이므로 baseline 수정이 없는 트리에 적용하면, baseline 과 기능이 같은 hunk 를 건드린 경우 `git apply` 가 실패한다 — 하필 이 절차가 존재하는 이유인 "더러운 baseline" 상황에서만 깨진다
+    5. **델타만 이식** — 격리 트리에서 `git apply <패치>` 후 `git add -A && git commit -m "e3 delta"`. 이 트리는 이제 `B0` + 기능 델타다(baseline 내용은 컨텍스트로 존재하되 리뷰 범위 밖). `git apply` 실패는 이식 실패이므로 **재시도 대상**이지 SKIPPED 가 아니다
+    6. **1회 실행** — 격리 트리에서 `--scope branch --base "$B0"`. scope 분기도, 2회 실행도, 산출물 2개도 없다
+    7. **정리** — 결과 저장 후 `git worktree remove <임시경로>`
+
+    > 이 절차는 격리 샌드박스에서 e2e 실측했다(2026-08-08): 순수 baseline 파일은 델타에서 제외, baseline+기능 동시 수정 파일은 기능 hunk 만 델타로, untracked 신규 파일·기능 커밋 모두 포함, `git apply` 성공, `B0..HEAD` 리뷰 범위가 기능 델타와 정확히 일치.
+
+    `E_codex_review.md` 머리에 **base SHA · `B0`/`B1` SHA · 델타 패치 해시(`git diff --binary B0 B1 | shasum`) · 델타 파일 수 · Codex 가 실제로 검토한 파일 수**를 기록한다. **델타 파일 수와 검토 파일 수가 다르면 통과가 아니다** — 이식 누락이므로 재실행한다. 이 절차는 메인 워킹트리의 HEAD 를 건드리지 않으므로 동시 작업 중인 다른 세션도 방해하지 않는다
+  - **"지적 0건"은 통과 증거가 아니다**: 로그가 3줄 이하로 끝났거나 리뷰 대상 파일 수가 0이면 그것은 *미실행*이다. 실행 로그에 실제 검토 파일 목록이 있는지 확인한 뒤에만 통과로 기록한다
+  - **detach + 단독 실행**: 장시간 예상 시 `nohup ... & disown` 후 로그 폴링(verification-loop의 detach 패턴과 동일). 단, **같은 응답에서 TaskStop을 함께 호출하지 않는다** — codex review가 조기 종료된다. 발사는 단독 응답으로 하고, 서브에이전트 정리는 결과 수령 후 별도 응답에서 한다
 
 ### Phase F: 최종 게이트
 - `verification-loop` 스킬 실행 — **풀스택 게이트**: 백엔드 변경 시 백엔드 트랙(CWD `src/backend`: ruff → mypy → pytest), 프론트 변경 시 프론트 트랙(CWD `src/dashboard`: tsc --noEmit → ESLint → vitest run → build). 트랙 선택·명령·CWD는 verification-loop 스킬 정의를 따른다. 실패 시 자동 재시도(최대 3회). 0 에러 확인 후에만 완료 선언
@@ -178,8 +206,10 @@ Phase C: integration-qa (양쪽 동시 읽기) → FAIL이면 B로 되돌림
           ↓ (PASS)
 Phase D: test-automation-specialist → D_test_report.md
           ↓
-Phase E: code-reviewer ∥ security-reviewer  (병렬 팬인)
+Phase E-1/E-2: code-reviewer ∥ security-reviewer  (병렬 팬인)
           ↓ (CRITICAL 수정)
+Phase E-3: Codex 외부 검증 (격리 트리 · 기본 실행 · 관문 대상)
+          ↓ (CRITICAL 수정 시 델타가 바뀌므로 E-3 재실행 — 패치 해시 일치까지)
 Phase F: verification-loop (FE: tsc+lint+vitest+build ∥ BE: ruff+mypy+pytest) → 0 에러
           ↓
 Phase G: docs-sync (변경 델타 → mandatory-docs 매핑 → docs/ surgical 갱신)
