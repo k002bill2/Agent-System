@@ -235,13 +235,41 @@ param2 = [r for r in rows if r[1].count('/') == 2 and '{' in r[1]]
 | 1 | `projects` | ✅ 완료 | `c896514`·`767479d`·`8a3c2c8` — 873줄 → registry·members |
 | 2 | `agents` | ✅ 완료 | `afbe745`~`ecd8e47` — 1,731줄 → core·mcp·ocr·orchestrate·tmux |
 | 3 | `claude_sessions` | ✅ 완료 | `4c85a37`~`8b1a06c` — 1,352줄 → 8모듈 (최대 452줄) |
-| 4 | `project_configs` | ⬜ 미착수 | 1,818줄 · 60라우트 · 테스트 0건 |
+| 4 | `project_configs` | ✅ 완료 | `070cd4d`~`f03ff95` — 1,818줄 → 11모듈 (최대 269줄) |
 
-`project_configs` 착수 전 재실측할 것 (계획 12~22행의 착수 조건은 4파일 합산이었다):
+**B2 완결.** 4파일 5,774줄이 전부 800줄 한도 이내로 들어갔고 HTTP 표면 128개 라우트가
+전부 보존됐다(라우트 테이블 characterization 4벌 + `split_audit` AST 대조).
 
-- 경로 컨버터 `int`/`float`/`uuid` 가 이 파일에 0건인지 — 60라우트 중 `{id:int}` 하나가
-  숨어 있으면 `shadowing_pairs()` 의 부분 겹침 유예가 더는 유효하지 않다
-- 잘못된 include 순서 시뮬레이션으로 가림 쌍 수를 먼저 센 뒤 그룹을 정한다 (위 델타 5)
+문서 동기화 불필요로 판정: `docs/api/*.md` 는 **엔드포인트 경로**만 기술하고 소스 파일
+레이아웃을 언급하지 않는다. HTTP 표면이 불변임이 증명됐으므로 문서는 그대로 정확하다.
+
+### `project_configs` 착수 시 재실측 결과 (2026-08-08)
+
+- 경로 컨버터: **0건** (60라우트 전부 기본 `str`) → 부분 겹침 유예 유효
+- 모듈 객체 패치: **0건** → R4b no-op
+- 완전 가림 제약 **10건** · `shadowing_pairs()` 가 못 잡는 부분 겹침 **1건**
+  (`DELETE /external-paths/{path_encoded}` ~ `DELETE /{project_id}/remove`)
+  → 후자는 `test_external_paths_precedes_project_remove` 로 따로 고정했다
+
+### `project_configs` 에서 바꾼 것: 추출도 이름 기반으로
+
+`claude_sessions` 의 `return` 유실 사고 이후 **검증만 고치지 않고 추출 방식 자체를 바꿨다.**
+사람이 라인 범위를 고르는 대신 AST 가 계산한 `(데코레이터 시작, end_lineno)` 로 잘라낸다.
+스크래치패드 스크립트로 충분하다 (핵심 20줄):
+
+```python
+def spans(path):  # 이름 -> (0-based 시작줄, 1-based 끝줄)
+    out = {}
+    for node in ast.parse(path.read_text()).body:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            start = min([d.lineno for d in node.decorator_list] + [node.lineno]) - 1
+            out[node.name] = (start, node.end_lineno)
+    return out
+```
+
+각 새 모듈에는 **원본 import 블록을 통째로** 넣고 `ruff check --fix` 로 가지치기한다.
+이 레포는 `select = ["E","F","I","N","W","B","UP"]` 라 F401(미사용)과 F821(미정의)이 둘 다
+켜져 있어, 잉여와 누락이 양쪽으로 걸린다 — import 를 손으로 고를 이유가 없다.
 
 ---
 
