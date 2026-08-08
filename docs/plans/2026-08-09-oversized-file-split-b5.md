@@ -79,16 +79,38 @@
 B4에서 인벤토리는 0번 틀렸고 **처방·분류가 두 번 틀렸다**(AnalyticsPage 훅 추출 폐기,
 "타입·상수"에 API 레이어 혼입 ×2). 아래를 실측했고 그 결과 배치 구성 자체가 바뀌었다.
 
-- [x] **`patch()` 문자열 타깃 전수** — 모듈 경로 접두 정확 매칭. **import grep 으로는 절대
+- [x] **문자열 패치 타깃 전수** — 모듈 경로 접두 정확 매칭. **import grep 으로는 절대
       안 잡히는 것**이며 B5 최대 함정이다.
 
-  | 대상 | patch 타깃 |
-  |---|---|
-  | `api.usage` | **0건** ✅ |
-  | `models.git` | **0건** ✅ |
-  | `services.terminal_service` | **0건** ✅ |
-  | `orchestrator.nodes` | **0건** ✅ |
-  | `services.external_usage_service` | **1종 / 7회** ⚠️ `services.external_usage_service.httpx.AsyncClient` |
+  > **⚠️ 이 실측은 한 번 틀렸다 (2026-08-09 교정).** 처음 스캔이 `patch(...)`·
+  > `patch.object(...)` 만 찾아 `orchestrator.nodes` 를 "0건"으로 보고했으나, 실제로는
+  > **`monkeypatch.setattr("...")`** 로 4종 7회가 있었다. 같은 함정의 다른 API 다.
+  > **스캔 패턴은 반드시 세 형태를 모두 포함한다** — `patch(`/`patch.object(`,
+  > `monkeypatch.setattr(`, `mocker.patch(`. 첫 두 문자가 다르다고 다른 함정이 아니다.
+
+  | 대상 | 문자열 패치 타깃 | 비고 |
+  |---|---|---|
+  | `api.usage` | **0건** ✅ | |
+  | `models.git` | **0건** ✅ | |
+  | `services.terminal_service` | **0건** ✅ | |
+  | `services.external_usage_service` | 1종 / 7회 | **관대** (모듈 속성 — 아래) |
+  | `orchestrator.nodes` | **4종 / 7회** ⚠️ | **B5 에서 유일하게 비관대 타깃 보유** |
+
+  **`orchestrator.nodes` 상세** (전부 `tests/backend/test_llm_usage_instrumentation.py`):
+
+  | 타깃 | 회 | 유형 | 분할 후 |
+  |---|---:|---|---|
+  | `orchestrator.nodes.record_usage_best_effort` | 2 | **⚠️ 모듈 지역** | `BaseNode` 가 쓰므로 → `orchestrator.nodes.base.record_usage_best_effort` |
+  | `orchestrator.nodes.audit_task_status_change` | 2 | **⚠️ 모듈 지역** | `ExecutorNode` 가 쓰므로 → `orchestrator.nodes.executor.audit_task_status_change` |
+  | `orchestrator.nodes.AuditService.log` | 2 | 관대(클래스 속성) | 단 `__init__.py` 가 `AuditService` 를 노출해야 `setattr` 이 `AttributeError` 를 안 낸다 |
+  | `orchestrator.nodes.LLMService._get_llm` | 1 | 관대(클래스 속성) | 위와 동일 |
+
+  > **모듈 지역 타깃은 `__init__.py` 재노출로 살아나지 않는다.** 패키지 `__init__` 에 속성을
+  > 심어도 `executor.py` 의 전역 조회는 원본을 찾는다. **테스트의 문자열을 새 모듈 경로로
+  > 갱신하는 것이 유일한 해법**이며, 이는 분할의 필연적 귀결이지 범위 확장이 아니다
+  > (`module_split_string_patch_targets` 기록 — B1·B2 에서 같은 처리를 했다).
+  > 다행히 이 유형은 *조용한* 오작동이 아니다 — 패치가 안 먹으면 recorder 가 호출되지 않아
+  > 테스트가 실패한다. `AuditService` 미노출은 `AttributeError` 로 즉시 드러난다.
 
   > **⚠️ `external_usage_service` 의 계약은 관대한 쪽이다 — 형태를 확인했다.**
   > 7건 전부 `tests/backend/test_external_usage_service.py` 에 있고 형태는
@@ -166,13 +188,33 @@ B4 의 지지대가 "훅 호출 순서를 바꾸지 않는다"였다면, B5 의 
 B1→B4 의 **"레시피를 가장 깨끗한 대상에서, 가장 두꺼운 그물 아래서 검증한다"**를 계승한다.
 B5 는 여기에 축이 하나 더 있다 — **모듈 상태가 없는 것부터 한다.**
 
-| 순서 | 파일 | 줄수 | 상태 | 그물 | 근거 |
-|---|---|---:|---|---|---|
-| **1** | `orchestrator/nodes.py` | 1,715 | **없음** | 테스트 1,514 + `split_audit` | 클래스 6개가 전부인 순수 구조. 모듈 상태 0·patch 0·등록 순서 계약 밖. **레시피 검증에 가장 깨끗하다** |
-| **2** | `models/git.py` | 991 | `GIT_REPOSITORIES` | 테스트 **4,623** + `split_audit` | 69클래스 집중도 4%로 기계적. 그물이 가장 두꺼워 상태 함정을 여기서 만나는 게 안전하다 |
-| **3** | `api/usage.py` | 1,245 | 캐시 2종 | 테스트 4,168 + `split_audit` + **`route_table`** | 유일하게 HTTP 표면이 있어 그물이 3겹. 캐시 2종이 최대 난이도 |
-| **4** | `services/external_usage_service.py` | 933 | `_service_instance` | 테스트 504 + `split_audit` | **patch 계약 1종**. 분할 후 해당 7개 테스트 개별 실행 필수 |
-| **5** | `services/terminal_service.py` | 868 | `_terminal_service` | 테스트 **411** + `split_audit` | 안전망이 가장 얇다. 레시피가 네 번 검증된 뒤 착수 |
+> **순서가 2026-08-09 교정됐다.** 처음에는 `orchestrator/nodes.py` 를 "모듈 상태 0·patch 0"
+> 근거로 Task 1 에 뒀으나, 문자열 패치 재스캔에서 **B5 에서 유일하게 비관대 타깃을 가진
+> 파일**임이 드러났다. 가장 깨끗한 대상이 아니라 **테스트 수정이 동반되는 유일한 대상**이다.
+
+| 순서 | 파일 | 줄수 | 패치 | 상태 | 그물 | 근거 |
+|---|---|---:|---|---|---|---|
+| **1** | `models/git.py` | 991 | **0** | `GIT_REPOSITORIES` (848–990 **연속**) | 테스트 **4,623** + `split_audit` | 69클래스 집중도 4%로 가장 기계적, 패치 0, 그물 최두꺼움. 상태도 연속 구간이라 "함께 남긴다"가 자명하다. **레시피 검증에 최적** |
+| **2** | `api/usage.py` | 1,245 | **0** | 캐시 2종 | 테스트 4,168 + `split_audit` + **`route_table`** | 유일하게 HTTP 표면이 있어 그물이 **3겹**. 캐시 2종이 상태 난이도 최대 |
+| **3** | `orchestrator/nodes.py` | 1,715 | **4종 7회 (2 비관대)** | 없음 | 테스트 1,514 + `split_audit` | **테스트 문자열 갱신 동반**. 레시피가 두 번 검증된 뒤 착수. 클래스 6개 구조 자체는 단순하다 |
+| **4** | `services/external_usage_service.py` | 933 | 1종 (관대) | `_service_instance` | 테스트 504 + `split_audit` | `__init__.py` 에 `import httpx` 유지. 분할 후 해당 7개 테스트 개별 실행 |
+| **5** | `services/terminal_service.py` | 868 | **0** | `_terminal_service` | 테스트 **411** + `split_audit` | 안전망이 가장 얇다. 레시피가 네 번 검증된 뒤 착수 |
+
+### Task 3(`orchestrator/nodes.py`) 착수 시 이미 확보된 실측
+
+- **클래스별 의존을 AST 로 계산해뒀다.** 눈으로 훑지 말 것 — B4 에서 그렇게 하다
+  `formatTrendData` 를 놓쳤다.
+- **스캔이 `try/except ImportError` 안을 봐야 한다.** `nodes.py:53–72` 에 graceful degradation
+  블록이 있어 `RAG_AVAILABLE` · `get_project_context` · `MCP_AVAILABLE` · `MCPToolExecutor`
+  4개가 `ast.Try` 안에서 정의된다. 최상위 `tree.body` 만 순회하는 스캔에는 **존재하지 않는
+  것처럼 보인다**(실제로 한 번 놓쳤다). `get_project_context` 는 `PlannerNode` 가,
+  `MCPToolExecutor`·`MCP_AVAILABLE` 은 `ExecutorNode` 가 쓴다.
+- **소비자가 요구하는 이름은 6종**: `BaseNode` · `OrchestratorNode` · `PlannerNode` ·
+  `ExecutorNode` · `ReviewerNode` · `SelfCorrectionNode`
+  (`graph.py:8` · `engine.py:91` · `parallel_executor.py:10` · `orchestrator/__init__.py:5` +
+  테스트 2개). 여기에 위 패치 표의 `AuditService` · `LLMService` 노출이 추가된다.
+- 분할 후 예상: `base` 210 · `executor` 478 · `planner` 377 · `self_correction` 362 ·
+  `orchestrator` 136 · `reviewer` 67 — 전부 800 이내.
 
 합 **5,752줄** → 목표 전부 800 이내.
 
