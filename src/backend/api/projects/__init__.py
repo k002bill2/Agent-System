@@ -13,7 +13,11 @@
 실제로는 공개 계약이며, `router` 만 재노출하면 세 모듈이 ImportError 로 깨진다.
 """
 
-from ._legacy import _get_admin_org_ids, router
+from . import members
+from ._legacy import router
+from ._shared import _get_admin_org_ids
+
+router.include_router(members.router)
 
 __all__ = [
     "_get_admin_org_ids",
