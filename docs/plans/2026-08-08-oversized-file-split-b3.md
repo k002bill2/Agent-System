@@ -43,16 +43,25 @@ export async function fetchBranches(set: SetFn, get: GetFn, projectId: string) {
 | 그물 | 잡는 것 | 못 잡는 것 |
 |---|---|---|
 | `tsc --noEmit` | 86개 소비자 파일 전부에서 export 유실·개명·타입 불일치 | 값 변경, 동작 변경 |
-| 기존 테스트 3,400줄 | 액션 동작 회귀 | 테스트가 없는 액션 |
-| **스토어 표면 스냅샷** (Task 1에서 신설) | 상태 키·액션 이름 집합, **초기 상태 값** | 액션 본문 동작 |
+| 기존 테스트 3,400줄 | 액션 동작 회귀 | **테스트가 호출하지 않는 액션** (실측: git 18개 · projectConfigs 37개 · claudeSessions 0개) |
+| **스토어 표면 스냅샷** (Task 1 신설) | 상태 키·액션 **이름** 집합, **초기 상태 값** | 액션 본문 동작, 스텁 배선 |
+| **위임 이름 검사** (Task 5 신설) | 스텁이 **같은 이름**의 impl을 위임하는지 — 커버리지와 무관하게 **전수** | 위임은 맞는데 impl 본문이 틀린 경우 |
 
-세 번째가 이 배치의 신규 산출물이다. `tsc`가 못 잡는 것을 잡는다:
+> **2026-08-08 정정.** 이 표의 초판은 표면 스냅샷이 "스텁 오배선 · 초기값 변경 · no-op화"
+> 3가지를 잡는다고 적었다. **틀렸다** — Task 1 리뷰가 지적했다. `surface()`는 액션을
+> **호출하지 않고** 이름과 초기값만 스냅샷하므로, 잡는 것은 **초기값 변경과 이름 수준의
+> 변화뿐**이다. 오배선과 no-op화는 이름·타입이 그대로라 구조적으로 보이지 않는다.
+>
+> 그 구멍을 메우는 것이 네 번째 그물이다. 이 리팩터링이 실제로 만들 수 있는 배선 실패는
+> 좁다 — 액션 본문은 원문 그대로 옮기므로 (a) 스텁이 **다른 이름**의 impl을 부르거나
+> (b) 스텁이 **아무것도 위임하지 않는** 두 경우다. 둘 다 `index.ts`를 파싱해
+> `프로퍼티 이름 === 위임 대상 함수 이름`을 확인하면 잡힌다. 테스트 커버리지와 무관하게
+> 전수라서, 미커버 55개 액션도 함께 보호된다.
 
-- 액션을 추출했는데 스텁이 **다른 impl에 배선**된 경우 (타입은 맞고 동작만 뒤바뀜)
-- 같은 타입 안에서 **초기값이 바뀐** 경우 (`[]` → `null`, `'desc'` → `'asc'`, `0` → `-1`)
-- 액션이 조용히 **no-op이 된** 경우
-
-세 번째가 B2의 `return results` 유실에 해당하는 실패 모드다. `claudeSessions`의 파생 게터(`getFilteredSessions` · `getEmptySessionsCount` · `isGhostSession`)가 가장 노출돼 있다 — `get()` 참조가 틀리면 예외가 아니라 **그럴듯한 잘못된 값**을 반환한다.
+`claudeSessions`의 파생 게터(`getFilteredSessions` · `getEmptySessionsCount` ·
+`isGhostSession`)가 가장 노출된 형태다 — `get()` 참조가 틀리면 예외가 아니라 **그럴듯한
+잘못된 값**을 반환한다. 다만 실측 결과 claudeSessions는 액션 35개 전부가 기존 테스트에
+호출되므로(100%) Task 2에는 이 구멍이 적용되지 않는다.
 
 ---
 
@@ -345,6 +354,29 @@ Red-Green 2건: sortOrder 'desc'→'asc' 뒤집기 → FAIL, clearError 제거 �
 - Consumes: Task 1의 `surface()` · `claudeSessions.surface.json`
 - Produces: `stores/claudeSessions/types.ts`가 `SortField` · `SortOrder` · `ClaudeSessionsState`를 export한다. `index.ts`가 `useClaudeSessionsStore` · `SortField`를 재노출한다 (소비자 실측 목록).
 
+- [ ] **Step 0: Task 1이 남긴 틀린 주장을 정정한다**
+
+`src/dashboard/src/stores/__tests__/storeSurface.ts`의 `StoreSurface` 독스트링에 "세 가지를
+못 잡는다"로 시작하는 목록이 있다. **그 주장은 틀렸다** — Task 1 리뷰가 지적했다. 아래로
+교체한다:
+
+```ts
+/**
+ * Zustand 스토어의 공개 표면을 스냅샷으로 고정하는 헬퍼.
+ *
+ * 액션을 **호출하지 않고** 이름과 초기값만 본다. 따라서 잡는 것은:
+ *   - 상태 키·액션 **이름**의 유실·추가·개명 (`tsc` 가 소비자 쪽에서 잡는 것과 중복이지만,
+ *     소비자가 함께 수정된 경우에도 남는 그물이다)
+ *   - 같은 타입 안에서 **초기값이 바뀐** 경우 (`[]` → `null`, `'desc'` → `'asc'`)
+ *
+ * **못 잡는 것**: 스텁이 다른 이름의 impl 을 부르는 오배선, 액션이 no-op 이 된 경우.
+ * 이름·타입이 그대로라 호출 없이는 구조적으로 보이지 않는다. 그 둘은
+ * `delegation.ts` 의 위임 이름 검사가 전수로 잡는다 (Task 5 신설).
+ */
+```
+
+이 파일 하나만 이 스텝에서 수정한다. 나머지 스텝은 `claudeSessions` 분할이다.
+
 - [ ] **Step 1: 디렉토리 생성 + 파일 이동 (git 이 rename 으로 인식하게)**
 
 ```bash
@@ -521,6 +553,110 @@ Expected: 전체 통과, 0 failed.
 
 `workspace` · `staging` · `repositories` · `commits` · `merge` · `mergeRequests` · `github` · `remotes` · `branchProtection`. 각 모듈마다 Step 2~5를 그대로 수행한다. 모듈 하나를 끝낼 때마다 Step 4·5를 돌려 **어느 모듈에서 깨졌는지 즉시 알 수 있게 한다** — 10개를 다 옮기고 나서 한 번에 돌리면 원인 추적이 10배로 비싸진다.
 
+- [ ] **Step 6b: 위임 이름 검사 신설 (전수 그물)**
+
+10개 모듈을 다 옮긴 뒤 한 번 만든다. 표면 스냅샷이 못 잡는 **스텁 오배선·비위임**을
+커버리지와 무관하게 전수로 잡는다(근거는 "B3의 안전망 3겹" 절의 정정 블록).
+
+`src/dashboard/src/stores/__tests__/delegation.ts`:
+
+```ts
+/**
+ * 액션 스텁이 **같은 이름**의 impl 을 위임하는지 전수 검사한다.
+ *
+ * `surface()` 는 액션을 호출하지 않고 이름과 초기값만 보므로 두 가지를 못 잡는다:
+ *   (a) 스텁이 다른 이름의 impl 을 부르는 오배선 — 이름·타입이 그대로라 안 보인다
+ *   (b) 스텁이 아무것도 위임하지 않는 no-op
+ * 기존 테스트가 그 액션을 호출하지 않으면(실측: git 18개 · projectConfigs 37개)
+ * 아무 그물도 없다. 이 검사는 커버리지와 무관하게 전수로 본다.
+ */
+export interface Delegation {
+  /** `create()` 안의 프로퍼티 이름 */
+  stub: string
+  /** `<모듈별칭>.<함수>(set, get, ...)` 의 함수 이름. 위임이 없으면 null */
+  target: string | null
+}
+
+/** `index.ts` 원문에서 액션 스텁과 그 위임 대상을 뽑는다. */
+export function parseDelegations(source: string): Delegation[] {
+  const lines = source.split('\n')
+  const start = lines.findIndex((l) => /=\s*create[<(]/.test(l))
+  const body = lines.slice(start)
+
+  // 프로퍼티 시작 줄의 인덱스를 모아 각 스텁의 텍스트 범위를 만든다.
+  // 멀티라인 스텁이 있어도 다음 프로퍼티 직전까지가 그 스텁의 본문이다.
+  const heads: { name: string; at: number }[] = []
+  body.forEach((line, i) => {
+    const m = line.match(/^ {2}([a-zA-Z_][a-zA-Z0-9_]*): (?:async )?\(/)
+    if (m) heads.push({ name: m[1], at: i })
+  })
+
+  return heads.map(({ name, at }, i) => {
+    const until = i + 1 < heads.length ? heads[i + 1].at : body.length
+    const text = body.slice(at, until).join('\n')
+    // `mod.fn(set, get` 또는 `mod.fn(set,get` — 위임 호출의 형태
+    const call = text.match(/\b[a-zA-Z_][a-zA-Z0-9_]*\.([a-zA-Z_][a-zA-Z0-9_]*)\(\s*set\s*,\s*get\b/)
+    return { stub: name, target: call ? call[1] : null }
+  })
+}
+```
+
+`src/dashboard/src/stores/__tests__/git.delegation.test.ts`:
+
+```ts
+/**
+ * git 스토어의 액션 스텁 63개가 모두 같은 이름의 impl 을 위임함을 보증한다.
+ *
+ * **`INLINE_ALLOWED` 를 편의로 늘리지 마라.** 여기 이름을 추가하는 것은
+ * "이 액션은 전수 그물에서 빼겠다"는 선언이다. 늘려야 한다고 느끼면 그 액션을
+ * 도메인 모듈로 옮기는 것이 정답이다.
+ */
+import { readFileSync } from 'node:fs'
+import { describe, expect, it } from 'vitest'
+import { parseDelegations } from './delegation'
+
+// Vitest 의 CWD 는 `src/dashboard` 다.
+const SOURCE = readFileSync('src/stores/git/index.ts', 'utf8')
+
+/** 도메인 모듈로 옮기지 않고 index.ts 에 남기기로 **의식적으로** 결정한 스텁. */
+const INLINE_ALLOWED: readonly string[] = []
+
+describe('git 액션 스텁 위임', () => {
+  it('스텁 이름과 위임 대상 함수 이름이 같다', () => {
+    const mismatched = parseDelegations(SOURCE)
+      .filter((d) => d.target !== null && d.target !== d.stub)
+      .map((d) => `${d.stub} → ${d.target}`)
+
+    expect(mismatched).toEqual([])
+  })
+
+  it('허용 목록 밖의 스텁은 반드시 위임한다', () => {
+    const notDelegating = parseDelegations(SOURCE)
+      .filter((d) => d.target === null && !INLINE_ALLOWED.includes(d.stub))
+      .map((d) => d.stub)
+
+    expect(notDelegating).toEqual([])
+  })
+
+  it('액션 63개 전부를 검사 대상으로 잡았다', () => {
+    // 파서가 조용히 절반만 잡으면 위 두 테스트가 통과해도 그물이 아니다.
+    expect(parseDelegations(SOURCE)).toHaveLength(63)
+  })
+})
+```
+
+Run (CWD `src/dashboard`): `npx vitest run src/stores/__tests__/git.delegation.test.ts`
+Expected: 3 passed.
+
+**Red-Green 증명 (필수)**: `index.ts`의 스텁 하나를 다른 impl로 임시 오배선한다 —
+예 `fetchBranches: (id) => branches.createBranch(set, get, id)`.
+Expected: **첫 번째 테스트 FAIL** with `["fetchBranches → createBranch"]`.
+그다음 그 스텁의 위임을 제거한다 — `fetchBranches: () => {}`.
+Expected: **두 번째 테스트 FAIL** with `["fetchBranches"]`.
+확인 후 `git checkout src/dashboard/src/stores/git/index.ts` 로 원복하고 3 passed 재확인.
+
+세 번째 테스트의 기대 개수(63)는 Step 1에서 실측한 수와 같아야 한다. 다르면 실측 수로 고친다.
+
 - [ ] **Step 7: 줄 수 확인**
 
 Run: `wc -l src/dashboard/src/stores/git/*.ts`
@@ -586,6 +722,13 @@ Red-Green: activeTab 'overview'→'skills' → FAIL → 원복 → PASS.
 
 **Task 5의 Step 1~8 절차**를 아래 파라미터로 수행한다.
 - 도메인 9개는 File Structure 절의 표를 따른다 (`projects` · `skills` · `agents` · `mcp` · `hooks` · `commands` · `rules` · `memories` · `dbProjects`)
+- Step 6b: **`delegation.ts` 헬퍼는 Task 5가 이미 만들었다 — 재사용한다.** 새로 만들 것은
+  `src/dashboard/src/stores/__tests__/projectConfigs.delegation.test.ts` 하나이며, Task 5의
+  `git.delegation.test.ts`와 다른 점은 세 곳뿐이다: `readFileSync('src/stores/projectConfigs/index.ts', 'utf8')`,
+  describe 제목, 그리고 개수 기대치 **72**. `INLINE_ALLOWED`는 빈 배열로 시작한다.
+  Red-Green 증명도 동일하게 수행한다(오배선 1건 → 첫 테스트 FAIL, 위임 제거 → 두 번째 FAIL, 원복 후 3 passed).
+  **이 검사가 이 태스크에서 특히 중요하다** — projectConfigs는 액션 72개 중 **37개가 기존
+  테스트에 호출되지 않으므로**(실측 49% 커버리지), 그 37개에는 이 전수 검사가 유일한 자동 그물이다
 - Step 7 Expected: `index.ts` ~170줄. **300줄을 넘으면 멈춘다**
 - **주의**: 모달 UI 상태 액션(`openSkillModal` · `closeSkillModal` 등)은 해당 도메인 모듈에 함께 둔다. 기술 계층(UI vs API)이 아니라 도메인으로 가르는 것이 이 계획의 규칙이다
 
