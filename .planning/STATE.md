@@ -204,8 +204,12 @@ Stopped at: **B5 Task 2(`api/usage.py`) 분할 완료 — 게이트 4종 통과,
 B1(`api/git`, 63개)은 서브라우터가 필수였지만 usage(7개)는 아니었다.
 
 **6. scratchpad 는 세션 도중에도 비워진다** (03:55 실측 — 분할 스크립트와 원본
-스냅샷이 동시에 사라져 재작성했다). 재사용할 스크립트는 레포에 두거나, 최소한
-"휘발되면 다시 쓴다"를 전제로 짧게 유지할 것.
+스냅샷이 동시에 사라져 재작성했다). **해소됨**: 분할 실행 스크립트를
+`tests/backend/api/split_usage.py` 로 커밋했다(사용자 승인). Task 3·4·5 는
+`ASSIGNMENT`·`DOCSTRINGS` 만 교체해 재사용한다 — 나머지 네 요소(커버리지 단언 ·
+import 역산 · AnnAssign 분기 · split_audit 과 동일한 텍스트 추출 규칙)는 대상과
+무관하다. **Task 3 은 `_walk_body` 형태로 확장 필요** — `nodes.py:53–72` 의
+`try/except ImportError` 안 정의 4종이 `tree.body` 순회에는 보이지 않는다.
 
 ### B5 재개 지점 — **Task 3(`orchestrator/nodes.py`)부터**
 
