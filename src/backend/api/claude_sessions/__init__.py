@@ -20,7 +20,8 @@ import 경로는 분할 전과 동일하게 유지된다.
 """
 
 from . import activity, sessions
-from ._legacy import router, scan_and_sync_claude_snapshots
+from ._legacy import router
+from .sync import scan_and_sync_claude_snapshots
 
 # **include 순서가 계약이다.** Starlette 는 등록 순서대로 전체 경로를 매칭하고
 # `include_router` 는 하위 라우트를 리스트 끝에 붙인다. `sessions` 의
