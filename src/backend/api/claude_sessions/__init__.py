@@ -19,7 +19,19 @@ import 경로는 분할 전과 동일하게 유지된다.
 그 테스트는 실제 바인딩 모듈을 직접 패치한다.
 """
 
+from . import activity, sessions
 from ._legacy import router, scan_and_sync_claude_snapshots
+
+# **include 순서가 계약이다.** Starlette 는 등록 순서대로 전체 경로를 매칭하고
+# `include_router` 는 하위 라우트를 리스트 끝에 붙인다. `sessions` 의
+# `GET/DELETE /{session_id}` 는 2세그먼트 파라미터 경로라 구체 경로
+# `/external-paths` · `/source-users` · `/projects` · `/processes` · `/ghost`
+# 5개를 전부 가린다(실측 확인). 따라서 파라미터 경로 모듈은 **항상 마지막**이다.
+#
+# 알파벳 순 정렬이나 "정리" 목적의 재배치를 하지 마라 — 라우트 5개가 조용히
+# 도달 불가가 된다. test_no_shadowing_route_pairs 가 이를 잡는다.
+router.include_router(sessions.router)
+router.include_router(activity.router)
 
 __all__ = [
     "router",
