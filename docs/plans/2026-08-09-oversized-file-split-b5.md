@@ -5,9 +5,16 @@
 > **상위 계획**: `docs/plans/2026-08-04-oversized-file-split.md` (B1·B2·B3·B4 완료)
 > **직전 배치**: `docs/plans/2026-08-09-oversized-file-split-b4.md` — 그 문서의 "AnalyticsPage 처방 정정" 절을 먼저 읽을 것. 인벤토리 수치를 근사치로만 쓰는 습관이 거기서 나왔다.
 
-**상태: 착수 준비 완료 (2026-08-09).** 인벤토리·`patch()` 타깃·모듈 상태·안전망 실측이 끝났고
-태스크 순서가 확정됐다. **실측 결과 상위 계획서의 B5 분류축이 무효가 됐다** — "다중클래스 9종"이
-아니라 집중도 기준으로 재구성했다. 아래 "배치 구성 정정" 참조.
+**상태: 배치 완료 (2026-08-09). 5/5 태스크, 대상 5,748줄 전부 800 이내.**
+최대치 189 · 435 · 518 · 350 · 433. 매 태스크 게이트 4종(ruff·format·mypy·pytest)을
+실측했고 pytest 는 0 failed 가 아니라 **베이스라인 일치**로 판정했다. Task 1~3 시점
+Codex 리뷰는 지적 0건.
+
+**착수 전 실측이 확정한 분류축**: 상위 계획서의 "다중클래스 9종" 이 아니라 집중도
+기준으로 재구성했다(아래 "배치 구성 정정"). **다만 이 계획서의 패치 스캔은 두 번
+틀렸다** — 문자열 3형태만 세어 모듈 객체 형태(Task 2, 19건)와 상수 조립 형태
+(Task 5)를 놓쳤다. 형태 다섯 가지 전수는 `.planning/STATE.md` 의
+"B5 Task 4·5 에서 배운 것" 표 참조.
 
 **Goal:** 800줄 한도를 넘는 백엔드 파일 중 **클래스·정의 단위 이동만으로** 한도에 들어가는
 5개(5,752줄)를 동작 보존 분할로 되돌린다.
@@ -215,8 +222,8 @@ B5 는 여기에 축이 하나 더 있다 — **모듈 상태가 없는 것부�
 | **1** | `models/git.py` | 991 | **0** | `GIT_REPOSITORIES` (848–990 **연속**) | 테스트 **4,623** + `split_audit` | 69클래스 집중도 4%로 가장 기계적, 패치 0, 그물 최두꺼움. 상태도 연속 구간이라 "함께 남긴다"가 자명하다. **레시피 검증에 최적** |
 | **2** ✅ | `api/usage.py` | 1,244 | **0** (모듈 객체 19) | 캐시 2종 | 테스트 4,168 + `split_audit` + **`route_table`** | 유일하게 HTTP 표면이 있어 그물이 **3겹**. 캐시 2종이 상태 난이도 최대 |
 | **3** ✅ | `orchestrator/nodes.py` | 1,714 | **4종 7회 (2 비관대)** | 없음 | 테스트 1,514 + `split_audit` + **optional 플래그** | **테스트 문자열 갱신 동반**(7회 전부, 예상과 일치). 상태 0건이지만 `try/except ImportError` 블록이 원자 단위라 배정 단위를 최상위 문장으로 올렸다. 라우트가 없어 `route_table` 대신 **optional 의존 플래그 테스트**를 세 번째 그물로 신설 — `except ImportError` 가 순환 import 도 삼켜 다른 게이트 전부를 통과하는 회귀를 만든다 |
-| **4** | `services/external_usage_service.py` | 933 | 1종 (관대) | `_service_instance` | 테스트 504 + `split_audit` | `__init__.py` 에 `import httpx` 유지. 분할 후 해당 7개 테스트 개별 실행 |
-| **5** | `services/terminal_service.py` | 868 | **0** | `_terminal_service` | 테스트 **411** + `split_audit` | 안전망이 가장 얇다. 레시피가 네 번 검증된 뒤 착수 |
+| **4** ✅ | `services/external_usage_service.py` | 932 | 1종 7회 (관대) | `_service_instance` | 테스트 504 + `split_audit` | `import httpx` 유지 대신 **패치를 `collectors` 경로로 갱신**했다 — 좁은 재노출 원칙과 충돌하고 배럴에 ruff F401 이 나며, httpx 를 쓰지 않는 모듈에 이름을 두는 셈이다. httpx 사용은 컬렉터 3종뿐(AST 실측) |
+| **5** ✅ | `services/terminal_service.py` | 867 | **0 이 아니다 — 상수 조립 형태** | `_terminal_service` | 테스트 **411** + `split_audit` | 안전망이 가장 얇다. **패치 0 건이라는 이 표의 값이 틀렸다**: 테스트가 `MODULE = "services.terminal_service"` 상수로 `f"{MODULE}.shutil.which"` 등을 조립하므로 **타깃 문자열 grep 으로도 안 잡힌다**. 갱신은 그 상수 한 줄(19 failed → 23 passed) |
 
 ### Task 3(`orchestrator/nodes.py`) 착수 시 이미 확보된 실측
 

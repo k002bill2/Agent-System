@@ -79,7 +79,7 @@ src/backend/
 │   │                        #   tests/backend/test_orchestrator_nodes_optional_deps.py 가 잡는다
 │   ├── parallel_executor.py # ParallelExecutorNode (병렬 실행)
 │   └── tools.py             # MCP 도구 실행자
-├── services/                    # 74개 서비스/매니저 모듈 (services/*.py 75개 중 __init__.py 제외, pipeline/ 패키지는 별도)
+├── services/                    # 72개 모듈 + 패키지 3종 (external_usage_service/, terminal_service/, pipeline/)
 │   ├── agent_manager.py           # 에이전트 인스턴스 관리
 │   ├── agent_registry.py          # 에이전트 등록소
 │   ├── alerting_service.py        # 알림/경고 서비스
@@ -96,7 +96,12 @@ src/backend/
 │   ├── encryption_service.py      # AES-256-GCM 암호화 서비스
 │   ├── environment_diagnostic_service.py  # 환경 진단 서비스 (Vault Health, 시스템 상태)
 │   ├── deployment_usage_credential_service.py  # 배포 단위 usage admin 키(DB) 해석/CRUD/검증
-│   ├── external_usage_service.py  # 내부 LLM ledger adapter + optional provider billing reconciliation
+│   ├── external_usage_service/    # 내부 LLM ledger adapter + optional provider billing reconciliation
+│   │                              #   원래 단일 932줄 → summaries·collectors·service (3모듈).
+│   │                              #   httpx 를 쓰는 것은 collectors 뿐이며 테스트 패치도
+│   │                              #   그 경로를 겨냥한다. _service_instance 싱글턴은
+│   │                              #   global 재바인딩이라 get_external_usage_service 와
+│   │                              #   같은 모듈(service)에 있다
 │   ├── llm_access_service.py      # CLI profile/user entitlement 관리
 │   ├── llm_usage_ledger_service.py # 내부 LLM 사용량 원장 기록/집계
 │   ├── llm_runtime_resolver.py    # user/org/source 기반 runtime provider/mode 결정
@@ -148,7 +153,13 @@ src/backend/
 │   ├── workflow_yaml_parser.py    # 워크플로우 YAML 파싱
 │   ├── automation_loop_service.py # 주기적 조건 모니터링 + 자동 액션 실행 루프
 │   ├── context_compressor.py      # 컨텍스트 압축 서비스
-│   ├── terminal_service.py        # 터미널 세션 관리 서비스
+│   ├── terminal_service/          # 터미널 세션 관리 서비스
+│   │                              #   원래 단일 867줄 → base·adapters·orca·service (4모듈).
+│   │                              #   TERMINAL_INFO 는 읽기 전용 사용이라 모듈을 갈라도
+│   │                              #   안전하며 base 에 있다(api/terminal.py 가 직접 import).
+│   │                              #   orca 테스트의 MODULE 상수는 이 패키지의 orca 모듈을
+│   │                              #   겨냥한다 — shutil·sys·asyncio·_write_exec_script
+│   │                              #   패치 타깃이 전부 거기 모여 있다
 │   └── pipeline/                  # 모듈형 데이터 파이프라인
 │       ├── pipeline_service.py    # 파이프라인 오케스트레이터
 │       ├── models.py              # PipelineConfig, PipelineResult 등 모델

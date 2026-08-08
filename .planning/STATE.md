@@ -6,15 +6,23 @@ See: `.planning/PROJECT.md`
 **Current focus:** **800줄 초과 파일 분할 프로그램 — B4 머지 완료, B5 계획 완료·구현 미착수**
 
 ## Current Position
-Phase: **B5** (백엔드 분할) — **Task 3/5 완료, Task 4 대기**
+Phase: **B5** (백엔드 분할) — **5/5 완료. 배치 전체 완료** (브랜치 미푸시)
 
 | Task | 대상 | 결과 | 커밋 |
 |---|---|---|---|
 | 1 | `models/git.py` 991 | → 10모듈 (최대 189) + `__init__` 재노출 | 승격 `ff20c2f` → 분할 `c2ed1fa` |
 | 2 | `api/usage.py` 1,244 | → 5모듈 (최대 435) + 테스트 41건 갱신 | 베이스라인 `fa9f711` → 승격 `521787a` → 분할 `571182f` |
 | 3 | `orchestrator/nodes.py` 1,714 | → 6모듈 (최대 518) + 문자열 패치 7회 갱신 | 베이스라인 `97fa48b` → 엔진 `7b2bcb4` → 승격 `d3cce14` → 분할 `1445ccf` |
-| 4 | `external_usage_service.py` 933 | `__init__`에 `import httpx` 유지 | 미착수 |
-| 5 | `terminal_service.py` 868 | 안전망 411로 최박 | 미착수 |
+| 4 | `external_usage_service.py` 932 | → 3모듈 (최대 350) + httpx 패치 7회 갱신 | 배정표 `de30fbf` → 승격 `028aa9e` → 분할 `634740f` |
+| 5 | `terminal_service.py` 867 | → 4모듈 (최대 433) + `MODULE` 상수 1줄 갱신 | 배정표 `517537a` → 승격 `a3bbdec` → 분할 `6160bff` |
+
+**B5 대상 5개 5,748줄이 전부 800 이내로 들어왔다.** 최대치: 189(models/git) ·
+435(api/usage) · 518(nodes) · 350(external_usage) · 433(terminal).
+Codex 리뷰는 Task 1~3 시점에 **지적 0건**으로 통과했고, Task 4·5는 최종 리뷰 대기.
+
+**800줄 초과 백엔드 파일: 20개 → 15개** (실측 2026-08-09, 테스트 제외).
+남은 15개는 전부 집중도 48% 이상이거나 `api/v1`(죽은 코드, 제외 결정)이며,
+계획서의 B5.5(48~65% 혼합 5개) · B6(70% 이상) 대상이다.
 
 - 계획: `docs/plans/2026-08-09-oversized-file-split-b5.md` (착수 전 실측 6항목 완료)
 - 브랜치: `refactor/split-backend-b5` (main `2ae6eb9`에서 분기, 미푸시)
@@ -108,10 +116,13 @@ CI 8/8 pass(Frontend 4잡 포함 = Linux `npm ci` 정합 증명), Codex 리뷰 �
 ### Blockers/Concerns
 - ~~Gemini Bridge 파일 크기 초과~~ — **무효** (2026-08-04 확인). 해당 파일은 `9611c31`(2026-06-06)에서
   하네스째 삭제돼 약 2개월간 stale한 항목이었다
-- **800줄 초과 파일 33개 / 43,621줄** — 계획 수립 완료, **실행 미착수**.
-  계획서: `docs/plans/2026-08-04-oversized-file-split.md` (프로그램 6배치 + Batch 1 실행 가능 태스크).
-  테스트 파일은 한도 제외(사용자 결정 2026-08-04). Batch 1 = `api/git.py` 2,022줄 → 8개 도메인 모듈.
-  재개 시 그 문서의 Task 1부터 시작하면 된다 — 착수 전 게이트 green 확인이 Step 1이다
+- **800줄 초과 파일** — 프로그램 진행 중. **B1~B5 완료**, 백엔드 잔여 **15개**(실측 2026-08-09).
+  상위 계획서: `docs/plans/2026-08-04-oversized-file-split.md`. 테스트 파일은 한도 제외(사용자 결정 2026-08-04).
+  잔여 15개는 전부 집중도 48% 이상(B5.5·B6 대상)이거나 `api/v1/agent_registry.py`(프로덕션
+  소비자 0건이라 제외 결정). **이들은 "정의 이동만" 으로 안 되고 메서드 추출이 필요하다** —
+  그 신호가 나오면 멈추고 재판정하는 것이 B5 계획서의 계약이다.
+  ⚠️ **상위 계획서 배치 표가 낡았다** — B1 만 "✅ 완료" 이고 B2~B5 는 미표시라 STATE.md 와
+  진실원이 갈린다. B5.5 착수 전 정리할 것(B5 착수 전에도 같은 항목이 있었으나 미이행)
 - ~~knip 미배선~~ — **해소됨** (PR #224, `2898eaf`). `frontend-knip` 블로킹 잡 + `ci-success.needs` 등록. 범위는 의존성 소견만(`knip --dependencies`); exports·types·files·duplicates는 설계 판단 영역이라 의도적으로 제외했다
 - **다중 세션 워킹트리 공유 위험(이번 세션 실측)** — worker가 브랜치를 조작하는 동안 메인 세션이 같은 워킹트리의 파일을 편집해 stash 충돌 발생. Codex 리뷰도 같은 이유로 1차 실행이 엉뚱한 diff를 리뷰함. 병행 시 검증 도구는 `git worktree add --detach`로 격리할 것
 
@@ -164,8 +175,36 @@ Codex 1~10차 로그는 세션 scratchpad에만 있어 **휘발됐다** — 장�
 
 ## Session Continuity
 Last session: 2026-08-09
-Stopped at: **B5 Task 3(`orchestrator/nodes.py`) 분할 완료 — 게이트 4종 통과, Codex 검증 대기.**
-(Task 2 는 Codex 리뷰 **지적 0건**으로 통과했다.)
+Stopped at: **B5 배치 전체 완료 (5/5) — 매 태스크 게이트 4종 실측 통과. 브랜치 미푸시.**
+Task 1~3 시점 Codex 리뷰는 **지적 0건**으로 통과했고, Task 4·5 포함 최종 리뷰가 남았다.
+
+### B5 Task 4·5 에서 배운 것 — 패치 스캔의 완전한 형태 목록
+
+**B5 에서 확인된 테스트 패치 형태는 다섯 가지다.** 처음 계획서는 ①②만 셌고,
+Task 2 에서 ③④, Task 5 에서 ⑤가 나왔다. 다음 배치는 **다섯 개를 전부** 스캔한다:
+
+| # | 형태 | 스캔 방법 |
+|---|---|---|
+| ① | `patch("mod.name")` · `patch.object` | 타깃 문자열 `"mod.` grep |
+| ② | `monkeypatch.setattr("mod.name", ...)` · `mocker.patch` | 동일 |
+| ③ | 모듈 **객체** `setattr(mod_alias, "name", ...)` | `setattr\(\s*<별칭>` + `<별칭>\.NAME` |
+| ④ | ①~③을 여러 줄로 쪼갠 것 | **`patch(` 를 앵커로 쓰지 말 것** |
+| ⑤ | 상수 조립 `f"{MODULE}.name"` | **모듈 경로 상수(`MODULE = "..."`)를 먼저 찾을 것** |
+
+**④는 이 세션에서 두 번 걸렸다.** Task 2 에서 겪고도 패턴을 고치지 않아 Task 4 에서
+재발했다 — 계획서의 "httpx 1종 7회" 가 옳았고 내 스캔이 0건을 냈다. 교훈:
+**함수명을 정규식 앵커로 쓰는 순간 줄바꿈에 취약해진다.** 타깃 문자열만 찾을 것.
+
+**⑤는 grep 으로 원리적으로 못 잡는다** — 소스에 완성된 경로가 존재하지 않는다.
+역설적으로 갱신은 가장 쉬웠다(상수 한 줄). 단 그건 패치 타깃이 **한 모듈에 모여
+있을 때만** 성립하므로, 배정 단계에서 그렇게 되도록 설계해야 한다.
+
+**관대/비관대 판정은 형태가 아니라 대상으로 한다:**
+- 공유 모듈 객체(`shutil`·`sys`·`asyncio`·`httpx`)의 속성 → **관대**. 어느 서브모듈에서
+  쓰든 먹는다. 요구사항은 패치 경로가 그 이름을 노출하는 것뿐.
+- 모듈 지역 이름(함수·상수·`from X import Y` 바인딩) → **비관대**. 경로가 정확히
+  "그 이름을 읽는 코드가 사는 모듈" 이어야 한다.
+- 클래스 속성(`AuditService.log`) → 관대하지만 **일관성을 위해 실제 사용처로 맞춘다**.
 
 ### B5 Task 3 에서 배운 것
 
@@ -246,20 +285,24 @@ import 역산 · AnnAssign 분기 · split_audit 과 동일한 텍스트 추출 
 무관하다. **Task 3 은 `_walk_body` 형태로 확장 필요** — `nodes.py:53–72` 의
 `try/except ImportError` 안 정의 4종이 `tree.body` 순회에는 보이지 않는다.
 
-### B5 재개 지점 — **Task 4(`services/external_usage_service.py` 932줄)부터**
+### 다음 선택지 (B5 완료 후)
 
-Task 4·5 는 계획서 표(195~201행) 참조. 착수 전 확인할 것:
-- **`_service_instance`(Task 4) · `_terminal_service`(Task 5) 싱글턴 홀더** —
-  `global` 재바인딩이므로 `get_*_service()` 와 같은 모듈에 남긴다.
-- **Task 4 의 `httpx` 패치 7건은 관대한 형태**(`patch("services.external_usage_service.httpx.AsyncClient")`
-  — 공유 `httpx` 모듈 객체). `__init__.py` 가 `httpx` 속성을 노출하기만 하면 되며,
-  HTTP 호출 코드가 어느 서브모듈에 있어도 무관하다. 단 좁은 재노출 원칙과 충돌하므로
-  `import httpx` 를 배럴에 두면 ruff F401 이 난다 — **분할 후 그 7개 테스트를 개별 실행**해
-  확인하고, 필요하면 테스트를 서브모듈 경로로 갱신하는 쪽을 택한다.
-- **Task 5 는 안전망이 가장 얇다**(테스트 411줄). `TERMINAL_INFO` 는 읽기 전용이라
-  안전하지만 `api/terminal.py:16` 과 테스트가 직접 import 하므로 재노출 대상이다.
+1. **이 브랜치를 푸시·PR** — 커밋 14개(B5 Task 1~5 + 도구 + 문서). 최종 Codex 리뷰
+   통과가 선행 조건이다.
+2. **B5.5** — 계획서의 48~65% 혼합 5개(`merge_service` 1,331 · `audit_service` 985 ·
+   `playground_service` 1,249 · `tmux_service` 920 · `notification_service` 1,017).
+   B4 의 3a/3b 처럼 **2단계**(클래스 이동 → 메서드 추출)가 필요하고, `audit_service`(153줄)·
+   `merge_service`(347줄)는 안전망도 얇다.
+3. **B6** — 70% 이상 집중도 8개. 파일 분할이 아니라 **메서드 추출·설계 재검토** 성질이다.
+   `rag_service`(1,534)는 테스트가 `rag_mod` 별칭으로 모듈 객체 패치를 20건 이상 쓰므로
+   위 스캔 형태 ③이 최대 함정이다.
 
-### (완료) Task 3 착수 시 썼던 레시피
+**B5.5·B6 에 그대로 쓰는 도구** (`tests/backend/api/`):
+`split_module.py`(엔진) · `split_audit.py`(본문 대조) · `route_table.py`(HTTP 표면) +
+배정표 4종(`split_usage`·`split_nodes`·`split_external_usage`·`split_terminal`).
+새 배정표는 그중 하나를 본떠 `ASSIGNMENT`·`DOCSTRINGS`·`BARREL` 만 바꾼다.
+
+### (완료) B5 에서 확립된 레시피
 
 계획서: `docs/plans/2026-08-09-oversized-file-split-b5.md`.
 **Task 1에서 검증된 레시피**(그대로 재사용):
