@@ -76,8 +76,8 @@
 | `api/project_configs.py` | 1,818 | 라우트 60 | **없음** |
 | `api/agents.py` | 1,731 | 라우트 29 | 1파일 568줄 |
 | `api/claude_sessions.py` | 1,352 | 라우트 25 | **없음** |
-| `api/projects.py` | 873 | 라우트 14 | **없음** |
-| `api/v1/agent_registry.py` | 816 | 라우트 8 | 2파일 1,078줄 |
+| `api/projects.py` | 873 | 라우트 14 | **없음** ※1 |
+| `api/v1/agent_registry.py` | 816 | 라우트 8 | ~~2파일 1,078줄~~ → **1파일 807줄** ※2 |
 | `api/usage.py` | 1,244 | 다중클래스 11 | 6파일 3,175줄 |
 | `models/git.py` | 990 | 다중클래스 69 | 4파일 1,383줄 |
 | `services/claude_session_monitor.py` | 1,927 | 다중클래스 5 | 1파일 118줄 |
@@ -112,6 +112,20 @@
 | `components/TaskAnalyzer.tsx` | 1,064 | useState 6 / 컴포넌트 2 | **없음** |
 
 **프론트엔드는 8개 중 7개가 실질적 테스트를 갖고 있다 — 백엔드(25개 중 13개만)보다 안전망이 훨씬 좋다.**
+
+> **※ B2 착수 시 실측으로 드러난 정정 (2026-08-08)** — 상세는 `docs/plans/2026-08-08-oversized-file-split-b2.md`
+>
+> **※1 `api/projects.py`**: "없음"이 맞다. 다만 파일명 문자열 grep(`api/projects`)은 `test_e2e_api.py`를
+> 안전망으로 오인시킨다 — 그 테스트가 부르는 `/api/projects`는 **`orchestration` 태그의 다른 라우터**
+> 소유다(OpenAPI 실측). 이 파일은 `/project-registry`를 서빙한다.
+>
+> **※2 `api/v1/agent_registry.py`**: 직접 테스트는 **1파일 807줄**(`tests/backend/api/test_agent_registry.py`)이다.
+> 나머지 271줄(`tests/backend/test_agent_registry.py`)은 `services.agent_registry`를 테스트하며 API 라우터와 무관하다.
+> **더 중요한 것**: 이 파일은 **앱에 마운트되지 않는다**(`app.py`가 한 번도 `api.v1`을 마운트한 적 없음 —
+> `git log -S` 무출력). `api/v1/` 6개 모듈 전부 프로덕션 소비자 0건이다. 따라서 **B2에서 제외**했다.
+>
+> **교훈**: 이 인벤토리의 "직접 테스트" 열은 파일명 근접성으로 셌기 때문에 두 방향 모두로 틀릴 수 있다.
+> 각 배치 착수 시 **테스트가 실제로 그 라우터의 경로를 호출하는지** 실측하라.
 
 ### 커버리지 게이트의 성격 (태스크 크기를 결정함)
 
