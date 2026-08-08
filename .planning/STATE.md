@@ -3,13 +3,13 @@
 ## Project Reference
 See: `.planning/PROJECT.md`
 **Core value:** Claude Code 에이전트 체계적 협업
-**Current focus:** **800줄 초과 파일 분할 프로그램 — Batch 4 진행 중 (일시정지)**
+**Current focus:** **800줄 초과 파일 분할 프로그램 — B4 머지 완료, B5 계획 완료·구현 미착수**
 
 ## Current Position
-Phase: **B4** (프론트 페이지·컴포넌트 분할) — **전 태스크 완료, 미푸시·PR 미생성**
-- 계획: `docs/plans/2026-08-09-oversized-file-split-b4.md`
-- 브랜치: `refactor/split-components-b4` (미푸시 — `docs/plan-b4-frontend-split`에서 개명, 2026-08-09 사용자 결정)
-- 완료 배치: **B1**(api/git.py, PR #238) · **B2**(projects·agents·claude_sessions·project_configs, PR #241·#242) · **B3**(Zustand 스토어 3종, PR #243) — 전부 머지됨
+Phase: **B5** (백엔드 분할) — **계획서 작성 완료, 구현 미착수**
+- 계획: `docs/plans/2026-08-09-oversized-file-split-b5.md` (착수 전 실측 6항목 완료)
+- 브랜치: `refactor/split-backend-b5` (main `2ae6eb9`에서 분기, 미푸시)
+- 완료 배치: **B1**(PR #238) · **B2**(PR #241·#242) · **B3**(PR #243) · **B4**(PR #246, squash `2ae6eb9`) — 전부 머지됨
 
 Last activity: 2026-08-09
 Live handoff: **없음** — 재개 아티팩트는 제거했다. 다음 작업은 B4 브랜치를
@@ -155,7 +155,28 @@ Codex 1~10차 로그는 세션 scratchpad에만 있어 **휘발됐다** — 장�
 
 ## Session Continuity
 Last session: 2026-08-09
-Stopped at: **B4 배치 전체 완료** (Task 2 `3ebc73d` · 3a `14c4e38` · 3b `06dfc7f`).
+Stopped at: **B4 머지 완료(PR #246, CI 9/9) + B5 계획서 작성 완료.**
+
+### B5 재개 지점 (구현부터 시작하면 된다)
+
+계획서 `docs/plans/2026-08-09-oversized-file-split-b5.md`의 **Task 1(`orchestrator/nodes.py`)**부터.
+착수 전 실측은 전부 끝났고 계획서에 있다. 요점 4가지:
+
+- **분류축이 교체됐다.** 상위 계획서의 "다중클래스 9종"은 무효 — 클래스 갯수가 아니라
+  **집중도(최대 클래스/파일 줄수)**가 지표다. 상위 계획서 배치 표도 함께 고쳤다.
+- **B5의 하중 지지대는 모듈 레벨 가변 상태다.** `_usage_cache`·`GIT_REPOSITORIES`·
+  `_terminal_service`·`_service_instance`가 `global`로 재바인딩되므로, 상태와 그것을 읽고 쓰는
+  함수를 **가르면 사본이 분열**된다(ruff·mypy 통과, 테스트도 한쪽만 타면 통과).
+  `orchestrator/nodes.py`만 상태 0건이라 Task 1이다.
+- **B4와 달리 그물이 둘 다 있다** — `split_audit.py`(AST 이름 매칭)와 `route_table.py`
+  (`api/usage.py`가 라우트 7개). B4에서는 `.tsx`라 둘 다 못 썼다.
+- **pytest 베이스라인 = `1 failed, 1357 passed, 2 skipped`.** 그 1건은 `.env`의
+  `RAG_EMBEDDING_MODEL` 오버라이드에서 오는 알려진 플레이크다. 통과 기준은 0 failed가 아니라
+  **베이스라인 일치**다. main이 움직였으면 다시 잡을 것.
+
+---
+
+이전 기록: **B4 배치 전체 완료** (Task 2 `3ebc73d` · 3a `14c4e38` · 3b `06dfc7f`, squash `2ae6eb9`).
 게이트는 매 태스크마다 4종 전부 실측했고 마지막 상태는 tsc 0 · ESLint 0(`--max-warnings=0`) ·
 vitest **205 파일 4,365 테스트 전부 통과**(세 태스크 내내 동일 수치 — collection 유실 없음) ·
 build exit 0. 게이트는 핸드오프에 적힌 좁은 스코프가 아니라 `verification-loop` 정본대로
