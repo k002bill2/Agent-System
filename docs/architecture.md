@@ -69,7 +69,14 @@ src/backend/
 ├── orchestrator/
 │   ├── engine.py            # 메인 실행 엔진
 │   ├── graph.py             # LangGraph 그래프 구성
-│   ├── nodes.py             # BaseNode + 5개 노드 (Orchestrator/Planner/Executor/Reviewer/SelfCorrection)
+│   ├── nodes/               # 노드 패키지 — 원래 단일 nodes.py(1,714줄)를 노드별로 분할
+│   │                        #   base·orchestrator·planner·executor·reviewer·
+│   │                        #   self_correction (6모듈). __init__.py 는 노드 클래스
+│   │                        #   6종만 재노출하며 import 경로는 `orchestrator.nodes` 불변.
+│   │                        #   optional 의존 블록(try/except ImportError)은 원자 단위라
+│   │                        #   쓰는 클래스를 따라간다 — RAG→planner, MCP→executor.
+│   │                        #   그 블록이 순환 import 로 조용히 fallback 되는 것은
+│   │                        #   tests/backend/test_orchestrator_nodes_optional_deps.py 가 잡는다
 │   ├── parallel_executor.py # ParallelExecutorNode (병렬 실행)
 │   └── tools.py             # MCP 도구 실행자
 ├── services/                    # 74개 서비스/매니저 모듈 (services/*.py 75개 중 __init__.py 제외, pipeline/ 패키지는 별도)

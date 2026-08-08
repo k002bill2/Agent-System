@@ -6,13 +6,13 @@ See: `.planning/PROJECT.md`
 **Current focus:** **800줄 초과 파일 분할 프로그램 — B4 머지 완료, B5 계획 완료·구현 미착수**
 
 ## Current Position
-Phase: **B5** (백엔드 분할) — **Task 2/5 완료, Task 3 대기**
+Phase: **B5** (백엔드 분할) — **Task 3/5 완료, Task 4 대기**
 
 | Task | 대상 | 결과 | 커밋 |
 |---|---|---|---|
 | 1 | `models/git.py` 991 | → 10모듈 (최대 189) + `__init__` 재노출 | 승격 `ff20c2f` → 분할 `c2ed1fa` |
 | 2 | `api/usage.py` 1,244 | → 5모듈 (최대 435) + 테스트 41건 갱신 | 베이스라인 `fa9f711` → 승격 `521787a` → 분할 `571182f` |
-| 3 | `orchestrator/nodes.py` 1,715 | **테스트 문자열 패치 4종 갱신 동반** | 미착수 |
+| 3 | `orchestrator/nodes.py` 1,714 | → 6모듈 (최대 518) + 문자열 패치 7회 갱신 | 베이스라인 `97fa48b` → 엔진 `7b2bcb4` → 승격 `d3cce14` → 분할 `1445ccf` |
 | 4 | `external_usage_service.py` 933 | `__init__`에 `import httpx` 유지 | 미착수 |
 | 5 | `terminal_service.py` 868 | 안전망 411로 최박 | 미착수 |
 
@@ -164,9 +164,44 @@ Codex 1~10차 로그는 세션 scratchpad에만 있어 **휘발됐다** — 장�
 
 ## Session Continuity
 Last session: 2026-08-09
-Stopped at: **B5 Task 2(`api/usage.py`) 분할 완료 — 게이트 4종 통과, Codex 검증 대기.**
+Stopped at: **B5 Task 3(`orchestrator/nodes.py`) 분할 완료 — 게이트 4종 통과, Codex 검증 대기.**
+(Task 2 는 Codex 리뷰 **지적 0건**으로 통과했다.)
 
-### B5 Task 2 에서 배운 것 — Task 3·4·5 에 그대로 적용된다
+### B5 Task 3 에서 배운 것
+
+**1. `try/except ImportError` 블록은 원자 단위 — 배정 단위를 '정의'에서 '최상위 문장'으로 올렸다.**
+`RAG_AVAILABLE` 과 `get_project_context` 를 다른 모듈로 보내면 graceful degradation
+구조가 깨진다. `split_module.py` 가 **"한 문장이 정의하는 모든 이름은 같은 모듈로
+간다"**를 단언해 기계적으로 막는다. 중복 판정도 문장 인지형이어야 한다 —
+`RAG_AVAILABLE` 은 try·except 양쪽에 나오지만 **같은 문장 안**이라 중복이 아니다.
+Task 2 의 판정(이름 단순 카운트)을 그대로 쓰면 정상 코드를 중복으로 오보한다.
+
+**2. `except ImportError` 는 순환 import 도 삼킨다 — 이것이 이 대상의 세 번째 그물이다.**
+분할이 순환 import 를 만들면 플래그가 조용히 `False` 가 되고 fallback 이 빈 문자열을
+돌려준다. **이 회귀는 게이트를 전부 통과한다** — ruff·mypy 는 무관하고, `split_audit`
+은 블록 텍스트가 동일해 0건이며, pytest 도 플래그를 단언하는 테스트가 없으면 통과한다.
+`api/usage` 에서는 `route_table` 이 그 자리였지만 `nodes` 에는 라우트가 없다.
+→ `tests/backend/test_orchestrator_nodes_optional_deps.py` 신설(`97fa48b`).
+**플래그를 `True` 로 하드코딩하지 않는다** — 의존이 없는 환경에서는 `False` 가 정상이다.
+단언 조건은 "의존을 import 할 수 있는데도 플래그가 False" 이며 그것만이 순환 import 신호다.
+**Task 4·5 도 optional 의존이나 조건부 import 가 있으면 같은 테스트를 먼저 만들 것.**
+
+**3. 분할 엔진을 `tests/backend/api/split_module.py` 로 추출했다.**
+Task 4·5 는 `split_usage.py`/`split_nodes.py` 를 본떠 **배정표만** 새로 쓴다. 로직
+버그 수정 지점이 한 곳으로 모인다. 일반화가 Task 2 산출물을 바꾸지 않았음을
+재현성 검증으로 확인했다(재분할 결과가 `571182f` 와 바이트 동일).
+
+**4. 클래스 속성 패치와 모듈 지역 패치는 다르지만 처리는 통일한다.**
+`AuditService.log` 처럼 클래스 속성을 겨냥하는 패치는 어느 경로로 찾든 같은 객체라
+재노출로도 동작한다. 모듈 지역(`record_usage_best_effort`)은 안 된다. 그럼에도 **넷 다
+실제 사용처 경로로 맞췄다** — `__init__` 재노출을 좁게 유지하는 것이 갱신 누락을
+`AttributeError` 로 드러내는 유일한 수단이기 때문이다(Task 2 교훈 3번과 같은 근거).
+
+**5. 셸 CWD 함정에 이 세션에서 3회 걸렸다.** `cd src/backend` 이후 `src/backend/...`
+경로가 "No such file"을 낸다. **모든 Bash 호출을 `cd <repo루트> &&` 로 시작할 것** —
+계획서 운용 교훈 3번이 경고했는데도 반복됐다.
+
+### B5 Task 2 에서 배운 것 — Task 4·5 에 그대로 적용된다
 
 **1. 계획서의 "문자열 패치 0건 ✅"은 스캔 형태가 좁아서 나온 값이다.**
 `api.usage` 는 `patch("...")`·`monkeypatch.setattr("...")` 문자열 형태가 0건인 게
@@ -211,7 +246,20 @@ import 역산 · AnnAssign 분기 · split_audit 과 동일한 텍스트 추출 
 무관하다. **Task 3 은 `_walk_body` 형태로 확장 필요** — `nodes.py:53–72` 의
 `try/except ImportError` 안 정의 4종이 `tree.body` 순회에는 보이지 않는다.
 
-### B5 재개 지점 — **Task 3(`orchestrator/nodes.py`)부터**
+### B5 재개 지점 — **Task 4(`services/external_usage_service.py` 932줄)부터**
+
+Task 4·5 는 계획서 표(195~201행) 참조. 착수 전 확인할 것:
+- **`_service_instance`(Task 4) · `_terminal_service`(Task 5) 싱글턴 홀더** —
+  `global` 재바인딩이므로 `get_*_service()` 와 같은 모듈에 남긴다.
+- **Task 4 의 `httpx` 패치 7건은 관대한 형태**(`patch("services.external_usage_service.httpx.AsyncClient")`
+  — 공유 `httpx` 모듈 객체). `__init__.py` 가 `httpx` 속성을 노출하기만 하면 되며,
+  HTTP 호출 코드가 어느 서브모듈에 있어도 무관하다. 단 좁은 재노출 원칙과 충돌하므로
+  `import httpx` 를 배럴에 두면 ruff F401 이 난다 — **분할 후 그 7개 테스트를 개별 실행**해
+  확인하고, 필요하면 테스트를 서브모듈 경로로 갱신하는 쪽을 택한다.
+- **Task 5 는 안전망이 가장 얇다**(테스트 411줄). `TERMINAL_INFO` 는 읽기 전용이라
+  안전하지만 `api/terminal.py:16` 과 테스트가 직접 import 하므로 재노출 대상이다.
+
+### (완료) Task 3 착수 시 썼던 레시피
 
 계획서: `docs/plans/2026-08-09-oversized-file-split-b5.md`.
 **Task 1에서 검증된 레시피**(그대로 재사용):

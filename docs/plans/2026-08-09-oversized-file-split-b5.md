@@ -214,7 +214,7 @@ B5 는 여기에 축이 하나 더 있다 — **모듈 상태가 없는 것부�
 |---|---|---:|---|---|---|---|
 | **1** | `models/git.py` | 991 | **0** | `GIT_REPOSITORIES` (848–990 **연속**) | 테스트 **4,623** + `split_audit` | 69클래스 집중도 4%로 가장 기계적, 패치 0, 그물 최두꺼움. 상태도 연속 구간이라 "함께 남긴다"가 자명하다. **레시피 검증에 최적** |
 | **2** ✅ | `api/usage.py` | 1,244 | **0** (모듈 객체 19) | 캐시 2종 | 테스트 4,168 + `split_audit` + **`route_table`** | 유일하게 HTTP 표면이 있어 그물이 **3겹**. 캐시 2종이 상태 난이도 최대 |
-| **3** | `orchestrator/nodes.py` | 1,715 | **4종 7회 (2 비관대)** | 없음 | 테스트 1,514 + `split_audit` | **테스트 문자열 갱신 동반**. 레시피가 두 번 검증된 뒤 착수. 클래스 6개 구조 자체는 단순하다 |
+| **3** ✅ | `orchestrator/nodes.py` | 1,714 | **4종 7회 (2 비관대)** | 없음 | 테스트 1,514 + `split_audit` + **optional 플래그** | **테스트 문자열 갱신 동반**(7회 전부, 예상과 일치). 상태 0건이지만 `try/except ImportError` 블록이 원자 단위라 배정 단위를 최상위 문장으로 올렸다. 라우트가 없어 `route_table` 대신 **optional 의존 플래그 테스트**를 세 번째 그물로 신설 — `except ImportError` 가 순환 import 도 삼켜 다른 게이트 전부를 통과하는 회귀를 만든다 |
 | **4** | `services/external_usage_service.py` | 933 | 1종 (관대) | `_service_instance` | 테스트 504 + `split_audit` | `__init__.py` 에 `import httpx` 유지. 분할 후 해당 7개 테스트 개별 실행 |
 | **5** | `services/terminal_service.py` | 868 | **0** | `_terminal_service` | 테스트 **411** + `split_audit` | 안전망이 가장 얇다. 레시피가 네 번 검증된 뒤 착수 |
 
