@@ -18,19 +18,24 @@
 테스트 2파일이 ImportError·AttributeError 로 깨진다.
 """
 
-from . import mcp
+from . import mcp, orchestrate, tmux
 from ._legacy import (
-    ALLOWED_WORKSPACE_ROOTS,
     _resolve_ocr_runtime,
-    _validate_project_path,
     extract_text_from_image,
-    get_allowed_workspace_roots,
     router,
 )
+from .tmux import (
+    ALLOWED_WORKSPACE_ROOTS,
+    _validate_project_path,
+    get_allowed_workspace_roots,
+)
 
-# mcp 라우트는 전부 3세그먼트 이상(`/agents/mcp/...`)이라 2세그먼트인
-# `/agents/{agent_id}` 와 겹치지 않는다 — 등록 순서가 자유롭다.
+# 도메인 모듈의 라우트는 전부 3세그먼트 이상(`/agents/mcp/...`,
+# `/agents/orchestrate/...`)이라 2세그먼트인 `/agents/{agent_id}` 와 겹치지
+# 않는다 — 등록 순서가 자유롭다. 계약 검사는 test_no_shadowing_route_pairs 가 한다.
 router.include_router(mcp.router)
+router.include_router(orchestrate.router)
+router.include_router(tmux.router)
 
 __all__ = [
     "ALLOWED_WORKSPACE_ROOTS",
