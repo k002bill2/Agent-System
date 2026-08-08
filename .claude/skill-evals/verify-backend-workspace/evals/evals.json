@@ -17,7 +17,7 @@
       "id": 2,
       "prompt": "api/git.py의 delete_branch 엔드포인트에 remove_worktree 쿼리 파라미터 추가했어. FastAPI 패턴 맞는지, 동기 I/O 차단은 없는지 백엔드 검증해줘",
       "expected_output": "Query 파라미터 사용, async/await 일관성, HTTPException 적절한 사용 검증",
-      "files": ["src/backend/api/git.py"],
+      "files": ["src/backend/api/git/branches.py"],
       "expectations": [
         "async def로 선언된 엔드포인트에서 sync I/O 차단 호출이 없는지 확인한다",
         "HTTPException의 status_code가 적절한지 확인한다",

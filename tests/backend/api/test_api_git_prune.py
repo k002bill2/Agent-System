@@ -87,9 +87,9 @@ class TestPruneMergedEndpoint:
         git_service.prune_merged_branches = MagicMock()
 
         with (
-            patch("api.git.get_git_service_for_project", return_value=git_service),
-            patch("api.git.get_github_service", return_value=MagicMock()),
-            patch("api.git._get_db_session", new=AsyncMock(return_value=None)),
+            patch("api.git.branches.get_git_service_for_project", return_value=git_service),
+            patch("api.git.branches.get_github_service", return_value=MagicMock()),
+            patch("api.git.branches._get_db_session", new=AsyncMock(return_value=None)),
         ):
             resp = await client.post(PRUNE_PATH, json={"dry_run": True})
 
@@ -112,9 +112,9 @@ class TestPruneMergedEndpoint:
         )
 
         with (
-            patch("api.git.get_git_service_for_project", return_value=git_service),
-            patch("api.git.get_github_service", return_value=MagicMock()),
-            patch("api.git._get_db_session", new=AsyncMock(return_value=None)),
+            patch("api.git.branches.get_git_service_for_project", return_value=git_service),
+            patch("api.git.branches.get_github_service", return_value=MagicMock()),
+            patch("api.git.branches._get_db_session", new=AsyncMock(return_value=None)),
         ):
             resp = await client.post(PRUNE_PATH, json={"dry_run": False})
 
@@ -139,9 +139,9 @@ class TestPruneMergedEndpoint:
         )
 
         with (
-            patch("api.git.get_git_service_for_project", return_value=git_service),
-            patch("api.git.get_github_service", return_value=MagicMock()),
-            patch("api.git._get_db_session", new=AsyncMock(return_value=None)),
+            patch("api.git.branches.get_git_service_for_project", return_value=git_service),
+            patch("api.git.branches.get_github_service", return_value=MagicMock()),
+            patch("api.git.branches._get_db_session", new=AsyncMock(return_value=None)),
         ):
             resp = await client.post(PRUNE_PATH, json={"dry_run": False})
 
@@ -160,9 +160,9 @@ class TestPruneMergedEndpoint:
             raise HTTPException(status_code=503, detail="GitHub service not available")
 
         with (
-            patch("api.git.get_git_service_for_project", return_value=git_service),
-            patch("api.git.get_github_service", side_effect=raise_503),
-            patch("api.git._get_db_session", new=AsyncMock(return_value=None)),
+            patch("api.git.branches.get_git_service_for_project", return_value=git_service),
+            patch("api.git.branches.get_github_service", side_effect=raise_503),
+            patch("api.git.branches._get_db_session", new=AsyncMock(return_value=None)),
         ):
             resp = await client.post(PRUNE_PATH, json={"dry_run": True})
 
@@ -175,9 +175,9 @@ class TestPruneMergedEndpoint:
         git_service.find_prune_candidates.return_value = _make_scan_result()
 
         with (
-            patch("api.git.get_git_service_for_project", return_value=git_service),
-            patch("api.git.get_github_service", return_value=MagicMock()),
-            patch("api.git._get_db_session", new=AsyncMock(return_value=None)),
+            patch("api.git.branches.get_git_service_for_project", return_value=git_service),
+            patch("api.git.branches.get_github_service", return_value=MagicMock()),
+            patch("api.git.branches._get_db_session", new=AsyncMock(return_value=None)),
         ):
             resp = await client.post(
                 PRUNE_PATH,
@@ -196,9 +196,9 @@ class TestPruneMergedEndpoint:
         git_service.prune_merged_branches = MagicMock()
 
         with (
-            patch("api.git.get_git_service_for_project", return_value=git_service),
-            patch("api.git.get_github_service", return_value=MagicMock()),
-            patch("api.git._get_db_session", new=AsyncMock(return_value=None)),
+            patch("api.git.branches.get_git_service_for_project", return_value=git_service),
+            patch("api.git.branches.get_github_service", return_value=MagicMock()),
+            patch("api.git.branches._get_db_session", new=AsyncMock(return_value=None)),
         ):
             resp = await client.post(PRUNE_PATH, json={})
 
@@ -214,9 +214,9 @@ class TestPruneMergedEndpoint:
         git_service.find_prune_candidates.side_effect = GitServiceError("bad repo")
 
         with (
-            patch("api.git.get_git_service_for_project", return_value=git_service),
-            patch("api.git.get_github_service", return_value=MagicMock()),
-            patch("api.git._get_db_session", new=AsyncMock(return_value=None)),
+            patch("api.git.branches.get_git_service_for_project", return_value=git_service),
+            patch("api.git.branches.get_github_service", return_value=MagicMock()),
+            patch("api.git.branches._get_db_session", new=AsyncMock(return_value=None)),
         ):
             resp = await client.post(PRUNE_PATH, json={"dry_run": True})
 
