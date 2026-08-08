@@ -71,13 +71,22 @@ export async function fetchBranches(set: SetFn, get: GetFn, projectId: string) {
 >
 > | 결함 | tsc | 표면 | 위임 | arity | 축자본문 |
 > |---|---|---|---|---|---|
-> | 스텁이 뒤 인자를 **절단** (`(a) => f(set,get,a)` ↔ impl `(set,get,a,b,c)`) | 통과 | 통과 | 통과 | **잡음** | 통과 |
+> | 스텁이 **후행 옵셔널** 인자를 절단 (`(a) => f(set,get,a)` ↔ impl `(set,get,a,b?,c?)`) | 통과 | 통과 | 통과 | **잡음** | 통과 |
+> | 스텁이 **필수** 인자를 절단 | **잡음** (`TS2554`) | — | — | — | — |
 > | impl 파라미터 **순서가 원본과** 뒤바뀜 (같은 타입) | 통과 | 통과 | 통과 | 통과 | 통과 |
 > | **기본값 드리프트** (`all = false` → `all = true`) | 통과 | 통과 | 통과 | 통과 | 통과 |
 >
 > 첫 줄이 통과하는 이유: **TypeScript 는 파라미터가 적은 함수를 많은 시그니처에 할당하는 것을
 > 허용한다**(콜백에서 뒤 인자를 무시할 수 있어야 하므로 의도된 설계다). 실측: 결함 주입 후
 > `tsc --noEmit` 에러 0건 · 표면·위임 테스트 4 passed.
+>
+> **단 이는 절단된 인자가 옵셔널일 때만이다** (2026-08-08 Task 8 정정, 컨트롤러 재현 확인).
+> 필수 인자를 절단하면 `tsc` 가 `TS2554: Expected 5 arguments, but got 3` 로 잡는다.
+> 따라서 arity 검사의 실질 가치는 **"후행 옵셔널 ∩ 기존 테스트 미커버"** 교집합이다 —
+> `projectConfigs` 에서는 정확히 `openCommandModal` · `openRuleModal` · `openMemoryModal` 셋이며,
+> Task 8 이 그 교집합에 Red 케이스를 만들어 `tsc` 0 · 표면·위임 4 passed · 707줄 스위트 61 passed
+> 인데 **arity 만 발화**함을 실증했다. 초판은 "tsc 가 절단을 못 잡는다"고 무조건으로 적었는데
+> 과일반화였다.
 >
 > 아래 두 줄이 통과하는 이유: 현재-시제 검사(스텁 ↔ impl)로는 볼 수 없다. 스텁이 impl 의
 > **바뀐** 순서에 맞춰 쓰이므로 둘은 서로 일치한다. **분할 전 원본 시그니처와 대조해야만**
@@ -805,13 +814,21 @@ Task 5 가 만든 `task-5-audit-arity.mjs` 는 **상시 참인 불변식**을 �
 
 ```ts
 // ❌ readFileSync('src/stores/git/index.ts', 'utf8')  — repo 루트에서 실행하면 ENOENT
-// ✅
-const SOURCE = readFileSync(new URL('../git/index.ts', import.meta.url), 'utf8')
+// ❌ readFileSync(new URL('../git/index.ts', import.meta.url), 'utf8')
+//    → TypeError: The URL must be of scheme file
+// ✅ Vite 의 ?raw 로 원문을 가져온다 — 번들러가 해석하므로 CWD 와 무관하다
+import INDEX from '../git/index.ts?raw'
+import branches from '../git/branches.ts?raw'
 ```
 
-여기서는 `import.meta.url` 을 써도 된다 — **읽기**는 Vite 가 해석한 URL 로도 동작한다.
-금지된 것은 `node:fs` 로 **쓰기**다(Task 1 Step 2 참조). `git.delegation.test.ts:13` 도
-같은 형태로 함께 고친다.
+> **2026-08-08 정정.** 이 절의 초판은 "읽기는 `import.meta.url` 로도 동작한다"고 적었다.
+> **틀렸다** — Task 8 이 실측했고 컨트롤러가 재현했다. Vite 에서 `import.meta.url` 은
+> `file:` 이 아니라 **`http:` URL** 이라 `node:fs` 는 읽기·쓰기 **양쪽 모두** 거부한다.
+> Task 1 Step 2 의 "쓰기 금지" 는 맞았지만 "읽기는 된다" 는 근거 없는 확장이었다.
+> Task 8 은 `?raw` 로 바꾼 뒤 **repo 루트에서 실행해 6 passed** 로 CWD 무관성을 증명했다
+> (기존 형태였다면 ENOENT).
+
+`git.delegation.test.ts` 도 같은 형태로 함께 고친다.
 
 Red-Green 필수: 스텁 하나의 뒤 인자를 절단 → FAIL 확인 → 원복 → PASS.
 
