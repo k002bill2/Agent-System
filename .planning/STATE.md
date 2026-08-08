@@ -3,12 +3,19 @@
 ## Project Reference
 See: `.planning/PROJECT.md`
 **Core value:** Claude Code 에이전트 체계적 협업
-**Current focus:** **없음 — 진행 중 작업 없다.** 직전 작업(하네스 스킬 보안 감사 + Phase A fail-closed 전환)은 3/3 완료·머지됨
+**Current focus:** **800줄 초과 파일 분할 프로그램 — Batch 4 진행 중 (일시정지)**
 
 ## Current Position
-Phase: adhoc — **완료** (Task 1·2 머지 `af29e7f` / Task 3 머지 `a1db58f`, PR #232)
-Last activity: 2026-08-04
-Live handoff: **없음** — 재개 아티팩트는 소비 후 제거됨. `main`이 진실원
+Phase: **B4** (프론트 페이지·컴포넌트 분할) — Task 1/4 완료, Task 2 대기
+- 계획: `docs/plans/2026-08-09-oversized-file-split-b4.md`
+- 브랜치: `docs/plan-b4-frontend-split` (미푸시, 커밋 3건)
+- 완료 배치: **B1**(api/git.py, PR #238) · **B2**(projects·agents·claude_sessions·project_configs, PR #241·#242) · **B3**(Zustand 스토어 3종, PR #243) — 전부 머지됨
+
+Last activity: 2026-08-09
+Live handoff: **있음** — `.planning/.continue-here.md` + `.planning/HANDOFF.json`. 재개는 `/gsd:resume-work`
+
+> 이 프로그램은 GSD `.planning/phases/` 구조를 쓰지 않는다. 계획은 `docs/plans/`에 있고
+> 배치(B1~B6)가 phase 역할을 한다. 상위 계획: `docs/plans/2026-08-04-oversized-file-split.md`
 
 ## Accumulated Context
 
