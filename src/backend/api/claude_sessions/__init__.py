@@ -19,7 +19,7 @@ import 경로는 분할 전과 동일하게 유지된다.
 그 테스트는 실제 바인딩 모듈을 직접 패치한다.
 """
 
-from . import activity, sessions
+from . import activity, discovery, sessions, sources
 from ._legacy import router
 from .sync import scan_and_sync_claude_snapshots
 
@@ -31,6 +31,8 @@ from .sync import scan_and_sync_claude_snapshots
 #
 # 알파벳 순 정렬이나 "정리" 목적의 재배치를 하지 마라 — 라우트 5개가 조용히
 # 도달 불가가 된다. test_no_shadowing_route_pairs 가 이를 잡는다.
+router.include_router(sources.router)
+router.include_router(discovery.router)
 router.include_router(sessions.router)
 router.include_router(activity.router)
 
