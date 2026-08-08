@@ -144,6 +144,8 @@ export const useProjectConfigsStore = create<ProjectConfigsState>((set, get) => 
   deleteAgent: (projectId, agentId) => agents.deleteAgent(set, get, projectId, agentId),
 
   // Hooks CRUD actions
+  // `hooksArg` 는 impl 쪽 `hooks` 를 **의도적으로 개명**한 것이다 — 위 `import * as hooks` 를
+  // 가리지 않으려면 여기서만 이름이 달라야 한다. "일관성" 을 이유로 `hooks` 로 되돌리지 마라.
   addHookEntry: (projectId, event, matcher, hooksArg) =>
     hooks.addHookEntry(set, get, projectId, event, matcher, hooksArg),
   deleteHook: (projectId, event, index) => hooks.deleteHook(set, get, projectId, event, index),

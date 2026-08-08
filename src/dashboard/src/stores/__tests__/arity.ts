@@ -14,6 +14,19 @@
  * Task 5 실측(2026-08-08): 두 결함을 심은 트리에 `tsc --noEmit` → **에러 0건**.
  * 즉 이 검사는 tsc 와 중복이 아니라 tsc 가 구조적으로 못 보는 층위를 본다.
  * 이 불변식은 이미 분할된 스토어에도 영구히 참이므로 `git` · `projectConfigs` 양쪽에 건다.
+ *
+ * ── impl 대조의 기계적 사정 (2026-08-09 최종 리뷰 F-1 로 보강) ─────────────────
+ *
+ * 1. **개수 검사 → (개수가 같을 때만) 이름·순서 검사** 순으로 잇는다. 대체하지 않는다.
+ *    개수가 다르면 `"N개 전달하지만 K개 받는다"` 라는 구체적인 메시지가 남아야 하기 때문이다
+ *    (Task 8 이 후행 옵셔널 절단으로 Red-Green 한 그 메시지다). 개수가 같을 때만 순서를 보므로
+ *    진짜 결함이 두 줄로 중복 보고되지도 않는다.
+ * 2. **후행 `?` 를 정규화한다.** `paramNames` 가 `[:=]` 로 자르므로 impl 의 `authorName?: string`
+ *    은 `authorName?` 로 남는데, 스텁 쪽엔 타입도 `?` 도 없어 정규화 없이는 영영 불일치한다
+ *    (정규화 없이 넣으면 두 스토어 합계 위반 18건 → 레드 2건. 실측).
+ * 3. **구조분해 파라미터(`{ a, b }: Foo`)는 오탐이 난다.** `paramNames` 가 이름을 `{ a, b }` 로
+ *    내보내 전달 측 식별자와 절대 일치하지 않는다. 현재 두 스토어에 그런 파라미터는 0건이지만,
+ *    새로 생기면 `paramNames` 를 먼저 고쳐야 한다.
  */
 export interface ArityReport {
   /** `index.ts` 에서 찾은 액션 스텁 수. 파서가 조용히 절반만 보면 여기서 드러난다. */
@@ -62,6 +75,24 @@ const paramNames = (s: string): string[] =>
   splitTop(s)
     .map((p) => p.split(/[:=]/)[0].trim())
     .filter(Boolean)
+
+/** 후행 옵셔널 마커 제거 (헤더 2번). impl 의 `authorName?` ↔ 스텁의 `authorName`. */
+const stripOptional = (names: string[]): string[] => names.map((p) => p.replace(/\?$/, ''))
+
+/**
+ * 스텁 파라미터명 ≠ impl 파라미터명인 **의도적** 개명. 파라미터 이름은 관측 가능한 계약이
+ * 아니므로 개명이 동작 보존을 깨지 않는다.
+ *
+ *   `addHookEntry`: `projectConfigs/index.ts` 에 `import * as hooks from './hooks'` 가 있어
+ *   스텁 파라미터를 `hooks` 로 두면 모듈 별칭을 가린다(TS2339) → 스텁만 `hooksArg`.
+ *
+ * **액션을 통째로 예외 처리하지 마라.** `if (name !== 'addHookEntry')` 형태로 건너뛰면 이
+ * 액션의 개수·이름·순서 대조가 전부 사라지는데, 하필 4파라미터라 순서 뒤바뀜에 가장
+ * 취약한 형태다. 대가는 액션 하나가 아니라 **파라미터 이름 하나**여야 한다.
+ */
+const RENAMES: Record<string, Record<string, string>> = {
+  addHookEntry: { hooksArg: 'hooks' },
+}
 
 /**
  * @param indexSource `<store>/index.ts` 원문
@@ -121,6 +152,16 @@ export function parseStubArity(indexSource: string, moduleSources: Record<string
       problems.push(
         `${name}: ${forwarded.length}개 전달하지만 ${key} 는 ${implParams.length}개 받는다 (${implParams.join(', ')})`
       )
+    } else {
+      // 개수가 같을 때만 이름·순서를 본다 (헤더 1번). 같은 타입 파라미터의 순서 뒤바뀜은
+      // tsc · 표면 스냅샷 · 위임 이름 검사가 전부 못 보는 층위이므로 여기서만 잡힌다.
+      const forwardedNames = stripOptional(forwarded).map((p) => RENAMES[name]?.[p] ?? p)
+      const implNames = stripOptional(implParams)
+      if (forwardedNames.join('|') !== implNames.join('|')) {
+        problems.push(
+          `${name}: 전달 (${forwardedNames.join(', ')}) 이 ${key} 의 (${implNames.join(', ')}) 와 순서·이름 불일치`
+        )
+      }
     }
   })
 
