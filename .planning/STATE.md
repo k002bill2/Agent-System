@@ -6,32 +6,48 @@ See: `.planning/PROJECT.md`
 **Current focus:** **800줄 초과 파일 분할 프로그램 — Batch 4 진행 중 (일시정지)**
 
 ## Current Position
-Phase: **B4** (프론트 페이지·컴포넌트 분할) — Task 2/4 완료, **Task 3a 대기**
+Phase: **B4** (프론트 페이지·컴포넌트 분할) — **전 태스크 완료, 미푸시·PR 미생성**
 - 계획: `docs/plans/2026-08-09-oversized-file-split-b4.md`
 - 브랜치: `refactor/split-components-b4` (미푸시 — `docs/plan-b4-frontend-split`에서 개명, 2026-08-09 사용자 결정)
 - 완료 배치: **B1**(api/git.py, PR #238) · **B2**(projects·agents·claude_sessions·project_configs, PR #241·#242) · **B3**(Zustand 스토어 3종, PR #243) — 전부 머지됨
 
 Last activity: 2026-08-09
-Live handoff: **없음** — B4 Task 2 완료 시점에 재개 아티팩트를 제거했다.
-다음 세션은 계획서의 Task 3a부터 시작하면 된다.
+Live handoff: **없음** — 재개 아티팩트는 제거했다. 다음 작업은 B4 브랜치를
+푸시·PR 하거나, 상위 계획서의 **B5**로 넘어가는 것이다.
 
-### B4 진행 (브랜치 미푸시, PR 미생성)
+### B4 진행 — 완료 (브랜치 미푸시, PR 미생성)
 | Task | 대상 | 결과 | 커밋 |
 |---|---|---|---|
 | 0 | 착수 전 실측 5건 | 훅 추출 처방 폐기 → 섹션 추출 | `c653d0d` |
 | 1 | `NotificationRuleEditor` 1,156 | → 734 (5파일) | `0d22bd1` |
 | 2 | `WorkingDirectory` 952 | → **530** (7파일) | `3ebc73d` |
-| 3a | `AnalyticsPage` 1,691 | → 941 (한도 초과가 의도) | 미착수 |
-| 3b | `AnalyticsPage` 섹션 추출 | → 687 | 미착수 |
+| 3a | `AnalyticsPage` 1,691 → 정의 이동(기계적) | → 958 (10파일, 한도 초과가 의도) | `14c4e38` |
+| 3b | `AnalyticsPage` 차트 그리드 3섹션 추출 | → **708** (13파일) | `06dfc7f` |
 
-**Task 2에서 확정된 레이아웃 규칙 (Task 3a가 같은 질문에 부딪힌다).**
-분할 대상이 **여러 컴포넌트를 공유하는 디렉토리** 안에 있으면 `types.ts`·`constants.ts`를
-그 루트에 두지 않는다 — 이름이 어느 컴포넌트 것인지 모호해진다. 선례는
-`components/usage/llm-access/`다: 메인(`LLMAccessSettings.tsx`)은 부모 루트에 남기고
-부품만 kebab-case 중첩 디렉토리로 내린다. **메인이 제자리에 남는 것이 핵심** —
-테스트의 `'../WorkingDirectory'`와 `index.ts`의 `'./WorkingDirectory'`가 글자 그대로
-유효해서 패키지 승격(`X.tsx` → `X/index.tsx`)이 불필요해진다.
-Task 1(`notifications/`, 컴포넌트 1개 디렉토리)의 평면 배치와 갈리는 지점이 이것이다.
+**B4 대상 3파일 3,799줄이 전부 800 이내로 들어왔다** (734 · 530 · 708).
+`PlaygroundPage`(1,748줄)는 착수 전 사용자 결정으로 제외 — `useState` 26개인
+단일 거대 컴포넌트라 파일 분할이 아니라 상태 구조 재설계 문제이고 B6 성질이다.
+
+**B4에서 확정된 레이아웃 규칙 (B5·B6가 같은 질문에 부딪힌다).**
+공통 원칙은 **메인 파일을 옮기지 않는 것**이다 — 그래야 테스트의 `'../X'`와 배럴의
+`'./X'`가 글자 그대로 유효해서 패키지 승격(`X.tsx` → `X/index.tsx`)이 통째로 불필요해진다.
+부품의 위치는 대상이 어디 있느냐로 갈린다:
+
+| 상황 | 배치 | 사례 |
+|---|---|---|
+| 컴포넌트 1개짜리 디렉토리 | 같은 디렉토리에 평면 | Task 1 `components/notifications/` |
+| **여러 컴포넌트를 공유하는** 디렉토리 | kebab-case 중첩 디렉토리 | Task 2 `components/git/working-directory/` (선례 `components/usage/llm-access/`) |
+| `pages/`의 페이지 | `components/<도메인>/` | Task 3 `components/analytics/` |
+
+세 번째 행이 중요하다. `pages/`에는 하위 디렉토리가 **하나도 없어서** `pages/analytics/`
+쪽이 오히려 신설 관례가 되고, 이 레포의 지배적 관용은 "페이지의 부품은
+`components/<도메인>/`에 산다"이다 (`project-configs` 탭 9종 · `workflows` ·
+`organizations` · `monitor`가 전부 그 형태).
+
+**계획서 인벤토리가 두 번 같은 오차를 냈다.** Task 1과 Task 3a 모두 "타입·상수"로 묶은
+구간에 실제로는 **API 호출 레이어가 섞여** 있었다(`api.ts` 분리로 대응). 3a에서는 상수
+2종이 API 함수들 *사이에* 끼어 있기까지 했다 — **섹션 배너가 아니라 정의 단위 경계로
+잘라야 하는 이유**다. B5 착수 시 인벤토리의 "타입·상수 N줄"은 근사치로만 쓸 것.
 
 > 이 프로그램은 GSD `.planning/phases/` 구조를 쓰지 않는다. 계획은 `docs/plans/`에 있고
 > 배치(B1~B6)가 phase 역할을 한다. 상위 계획: `docs/plans/2026-08-04-oversized-file-split.md`
@@ -139,12 +155,18 @@ Codex 1~10차 로그는 세션 scratchpad에만 있어 **휘발됐다** — 장�
 
 ## Session Continuity
 Last session: 2026-08-09
-Stopped at: **B4 Task 2 완료 (`3ebc73d`).** 사용자가 이 세션의 범위를 Task 2 하나로 지정했다.
-게이트 4종 실측: tsc 0 · ESLint 0(`--max-warnings=0`) · vitest **205 파일 4,365 테스트 전부 통과** ·
-build exit 0. 게이트는 핸드오프에 적힌 `src/components/git` 스코프가 아니라 `verification-loop`
-정본대로 **전체 스위트**로 돌렸다.
-Resume hint: 계획서 `docs/plans/2026-08-09-oversized-file-split-b4.md`의 **Task 3a**부터.
-착수 전 위 "Task 2에서 확정된 레이아웃 규칙"을 읽을 것 — `AnalyticsPage`도 `pages/`(24개 공유
-디렉토리)에 있어 같은 질문에 부딪힌다. 그리고 계획서가 경고한 대로 `routes.tsx:59`의 `as` 캐스트
-때문에 **`AnalyticsPage` named export 유실을 tsc가 잡지 못한다**.
+Stopped at: **B4 배치 전체 완료** (Task 2 `3ebc73d` · 3a `14c4e38` · 3b `06dfc7f`).
+게이트는 매 태스크마다 4종 전부 실측했고 마지막 상태는 tsc 0 · ESLint 0(`--max-warnings=0`) ·
+vitest **205 파일 4,365 테스트 전부 통과**(세 태스크 내내 동일 수치 — collection 유실 없음) ·
+build exit 0. 게이트는 핸드오프에 적힌 좁은 스코프가 아니라 `verification-loop` 정본대로
+**전체 스위트**로 돌렸다.
+
+`AnalyticsPage`는 lazy 로딩(`routes.tsx:59`)이라 **빌드 산출물의 청크 분리**도 확인했다
+(`dist/assets/AnalyticsPage-*.js` 50.9 kB, `INEFFECTIVE_DYNAMIC_IMPORT` 경고 없음). 부품이
+어디선가 정적 import되면 청크가 메인 번들로 합쳐지는데, 이건 tsc·테스트로는 안 잡히는 층위다.
+
+Resume hint: 남은 선택지는 둘이다 — (a) 이 브랜치를 푸시·PR, (b) 상위 계획서
+`docs/plans/2026-08-04-oversized-file-split.md`의 **B5**로 진행.
+**상위 계획서의 배치 표가 낡았다** — B1만 "✅ 완료"이고 B2·B3·B4는 미표시라 STATE.md와
+진실원이 갈린다. B5 착수 전 정리할 것.
 미해결 항목은 위 Blockers/Concerns 참조.
