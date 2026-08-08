@@ -10,8 +10,18 @@
 Pydantic 모델은 이 패키지가 아니라 `models/project_config.py` 에 있다.
 """
 
-from . import agents, commands, hooks, mcp, memories, rules, skills
-from ._legacy import router
+from . import (
+    agents,
+    commands,
+    global_configs,
+    hooks,
+    mcp,
+    memories,
+    monitoring,
+    rules,
+    skills,
+)
+from .core import router
 
 # **include 순서가 계약이다.** 실측(2026-08-08) 완전 가림 제약 10건 중 모듈
 # 간에 걸리는 것은 둘이다:
@@ -28,6 +38,8 @@ from ._legacy import router
 #
 # `memories` 의 제약(`/{memory_id}` 가 `/index` 를 삼킨다)은 **모듈 안**이라
 # 여기서 풀 수 없다 — 그 모듈의 핸들러 선언 순서가 계약이다.
+router.include_router(global_configs.router)
+router.include_router(monitoring.router)
 router.include_router(skills.router)
 router.include_router(agents.router)
 router.include_router(mcp.router)
