@@ -97,11 +97,41 @@ export async function fetchBranches(set: SetFn, get: GetFn, projectId: string) {
 
 `index.ts`가 **반드시** 재노출해야 하는 목록이다. 하나라도 빠지면 `tsc`가 즉시 잡지만, 미리 알고 쓰는 편이 왕복이 적다.
 
-- **`stores/git`** (23): `useGitStore`, `BranchProtectionRule`, `CommitFile`, `ConflictFile`, `ConflictStatus`, `DiffHunk`, `DraftCommit`, `FileStatusType`, `GitBranch`, `GitCommit`, `GitHubPRReview`, `GitHubPullRequest`, `GitRemote`, `GitStatus`, `GitStatusFile`, `GitTab`, `GitWorkingStatus`, `GitWorktree`, `MergePreview`, `MergeRequest`, `MergeRequestStatus`, `MergeStatus`, `PruneExecuteResult`
+- **`stores/git`** (27): `useGitStore`, `BranchProtectionRule`, `CommitFile`, `ConflictFile`, `ConflictStatus`, `DiffHunk`, `DraftCommit`, `FileStatusType`, `GitBranch`, `GitCommit`, `GitHubPRReview`, `GitHubPullRequest`, `GitRemote`, `GitStatus`, `GitStatusFile`, `GitTab`, `GitWorkingStatus`, `GitWorktree`, `MergePreview`, `MergeRequest`, `MergeRequestStatus`, `MergeStatus`, `PruneCandidate`, `PruneExecuteResult`, `PruneSkipReason`, `PruneSkipped`, `ResolutionStrategy`
 - **`stores/projectConfigs`** (12): `useProjectConfigsStore`, `AgentConfig`, `CommandConfig`, `DBProject`, `HookConfig`, `MCPServerConfig`, `MemoryConfig`, `ProjectConfigSummary`, `ProjectInfo`, `RuleConfig`, `SkillConfig`, `TabType`
 - **`stores/claudeSessions`** (2): `useClaudeSessionsStore`, `SortField`
 
 > `index.ts`에는 위 목록 **외의 이름을 추가로 재노출하지 않는다.** 필요 없는 이름을 노출하면 다음 분할에서 "쓰이는 이름"과 "쓰이지 않는 이름"을 구별할 수 없게 된다.
+
+> **⚠️ 이 목록은 한 줄짜리 grep 으로 뽑지 마라 (2026-08-08 실패 기록).**
+> 초판의 `git` 목록은 23개였고 **4개가 빠져 있었다** — `PruneCandidate` ·
+> `PruneSkipReason` · `PruneSkipped` · `ResolutionStrategy`. 쓴 정규식이
+> `import (type )?\{[^}]*\} from '...'` 라 **한 줄 안에 닫히는 import 만** 잡았고,
+> `PruneMergedModal.tsx` · `ConflictResolverPanel.tsx` 의 **여러 줄에 걸친 import** 를
+> 조용히 놓쳤다. Task 4 에서 `tsc` 가 TS2305 로 잡아 복구했다.
+>
+> 상위 계획이 B1 에서 이미 같은 함정을 기록했다 — "멀티라인 데코레이터가 있으면
+> `grep -n '^@router\.'` 가 그 핸들러를 조용히 놓친다". 언어만 바뀌었을 뿐 같은 실패다.
+>
+> 올바른 측정: 파일 전체를 읽어 **dotall(`s`) 플래그**로 매칭한다.
+>
+> ```bash
+> # CWD = src/dashboard/src
+> node -e "
+> const fs=require('fs'),path=require('path');
+> function walk(d,a=[]){for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=path.join(d,e.name);
+>   if(e.isDirectory())walk(p,a); else if(/\.tsx?\$/.test(e.name))a.push(p);} return a;}
+> const store='projectConfigs', names=new Set();
+> const re=new RegExp(\"import\\\\s+(?:type\\\\s+)?\\\\{([^}]*)\\\\}\\\\s+from\\\\s+['\\\"][^'\\\"]*stores/\"+store+\"['\\\"]\",'gs');
+> for(const f of walk('.')){ if(f.includes('/stores/'+store)) continue;
+>   const t=fs.readFileSync(f,'utf8'); let m;
+>   while((m=re.exec(t))!==null) m[1].split(',').map(s=>s.trim().replace(/^type\s+/,'')).filter(Boolean).forEach(n=>names.add(n)); }
+> console.log([...names].sort().join(' '));
+> "
+> ```
+>
+> 이 방식으로 재측정한 결과(2026-08-08): `git` 27 · `projectConfigs` 12 · `claudeSessions` 2.
+> **틀렸던 것은 `git` 하나뿐이고 나머지 둘은 초판이 맞았다** — Task 7 의 12개 목록은 그대로 유효하다.
 
 ---
 
