@@ -191,7 +191,15 @@ src/backend/
 │       ├── audit.py         # AuditLogModel (감사 로그)
 │       ├── model_update.py  # ModelUpdateLogModel (모델 자동 발견/갱신 이력)
 │       └── base.py          # Base, TimestampMixin
-├── models/                  # Pydantic 데이터 모델 (35개, models/*.py 기준 __init__.py 제외)
+├── models/                  # Pydantic 데이터 모델 (34개 모듈 + 패키지 1종, models/*.py 기준 __init__.py 제외)
+│   └── git/                 # Git 모델 패키지 — 원래 단일 git.py(991줄)를 도메인별로 분할
+│                            #   branches·commits·enums·github·merge·merge_requests·
+│                            #   permissions·remotes·repository·working_tree (10모듈).
+│                            #   __init__.py 가 최상위 이름 81종을 전부 재노출하며
+│                            #   import 경로는 `models.git` 불변. 도메인 구획은 api/git/ 과 대칭.
+│                            #   GIT_REPOSITORIES(인메모리 레지스트리)와 그것을 읽고 쓰는
+│                            #   함수 6종은 repository.py 에 함께 둔다 — 가르면 global
+│                            #   재바인딩으로 상태 사본이 분열된다
 ├── middleware/
 │   └── rate_limit.py        # RateLimitMiddleware (per-user/IP, tier-based)
 ├── utils/
