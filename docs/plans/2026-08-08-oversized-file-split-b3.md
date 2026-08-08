@@ -63,6 +63,8 @@ export async function fetchBranches(set: SetFn, get: GetFn, projectId: string) {
 1. **동작 보존이 유일한 성공 기준이다.** 기능 추가·수정·삭제 없음. 리팩터링 중 발견한 버그는 고치지 말고 별도 이슈로 기록한다 (Surgical Changes).
 2. **공개 import 경로는 불변이다.** `import { useGitStore } from '@/stores/git'`와 `import type { GitBranch } from '@/stores/git'`가 분할 후에도 유효해야 한다. `index.ts` 재노출로 보장한다.
 3. **한도 = 파일 800줄** (golden-principles.md). 목표는 200~400줄.
+   - **적용 시점은 각 스토어의 마지막 태스크다**(claudeSessions=Task 2 · git=Task 5 · projectConfigs=Task 8). 승격+타입 추출 태스크(Task 4·7)는 `index.ts`가 의도적으로 한도를 넘긴 상태로 끝난다 — 액션 승격이 다음 태스크이기 때문이다. 해당 태스크 본문에 기대 줄수를 명시했다.
+   - 이는 완화가 아니라 **분할 단계 구분**이다. 각 스토어의 마지막 태스크에서 산출 파일 전부가 800 미만이어야 한다.
 4. **테스트 파일은 분할 대상이 아니다.** 단 스토어 표면 스냅샷 테스트는 이 계획이 **추가**한다.
    - 실측(2026-08-08): 세 테스트 파일은 **훅 하나와 `apiClient`만 import한다.** B2의 `patch.object` 같은 내부 구조 참조가 0건이라 패치 타깃 갱신이 필요 없다.
    - `vi.mock('../../services/apiClient', ...)`은 경로 문자열이 아니라 **해석된 모듈 ID**로 모킹하므로, 추출된 모듈이 다른 상대 경로로 import해도 모킹이 유지된다. **Task 1의 S5b에서 실증한다** — 가정으로 두지 않는다.
