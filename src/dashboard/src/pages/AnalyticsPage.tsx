@@ -7,25 +7,17 @@ import { useEffect, useState } from 'react'
 import {
   LineChart,
   Line,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   Legend,
   ResponsiveContainer,
-  AreaChart,
-  Area,
 } from 'recharts'
 import {
   BarChart3,
   TrendingUp,
   TrendingDown,
-  DollarSign,
   Zap,
   Clock,
   RefreshCw,
@@ -55,7 +47,7 @@ import {
   fetchTaskEvalList,
   fetchTaskEvalStats,
 } from '../components/analytics/api'
-import { CHART_COLORS, TIME_RANGES } from '../components/analytics/constants'
+import { TIME_RANGES } from '../components/analytics/constants'
 import type {
   AnalyticsDashboard,
   CompareMetric,
@@ -69,17 +61,16 @@ import {
   filterAttributedModelPerformance,
   formatDuration,
   formatNumber,
-  formatTokenCount,
-  formatTrendData,
-  renderAosModelSourceBadge,
   transformMultiSeriesData,
-  truncateModelLabel,
 } from '../components/analytics/utils'
 import { ActivityHeatmapChart } from '../components/analytics/ActivityHeatmapChart'
 import { ChartCard } from '../components/analytics/ChartCard'
 import { CostComparisonCard } from '../components/analytics/CostComparisonCard'
 import { EvalDetailView } from '../components/analytics/EvalDetailView'
 import { MetricCard } from '../components/analytics/MetricCard'
+import { CostPerformanceRow } from '../components/analytics/CostPerformanceRow'
+import { TokenUsageRow } from '../components/analytics/TokenUsageRow'
+import { TrendChartsRow } from '../components/analytics/TrendChartsRow'
 
 export function AnalyticsPage() {
   const [timeRange, setTimeRange] = useState<TimeRange>('7d')
@@ -346,259 +337,18 @@ export function AnalyticsPage() {
         </div>
       )}
 
-      {/* Charts Row 1 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {/* Task Trend */}
-        <ChartCard title="Task Volume" icon={BarChart3}>
-          <ResponsiveContainer width="100%" height={250} debounce={80}>
-            <LineChart data={formatTrendData(data.trends.tasks, timeRange)}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-              <XAxis
-                dataKey="label"
-                tick={{ fontSize: 12 }}
-                className="text-gray-500"
-              />
-              <YAxis tick={{ fontSize: 12 }} className="text-gray-500" />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--tooltip-bg, #fff)',
-                  borderColor: 'var(--tooltip-border, #e5e7eb)',
-                  borderRadius: '12px',
-                  padding: '8px 12px',
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="value"
-                stroke={CHART_COLORS[0]}
-                strokeWidth={2}
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </ChartCard>
+      <TrendChartsRow trends={data.trends} timeRange={timeRange} />
 
-        {/* Success Rate Trend */}
-        <ChartCard title="Success Rate Trend" icon={TrendingUp}>
-          <ResponsiveContainer width="100%" height={250} debounce={80}>
-            <LineChart data={formatTrendData(data.trends.success_rate, timeRange)}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-              <XAxis
-                dataKey="label"
-                tick={{ fontSize: 12 }}
-                className="text-gray-500"
-              />
-              <YAxis
-                domain={[0, 100]}
-                tick={{ fontSize: 12 }}
-                className="text-gray-500"
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--tooltip-bg, #fff)',
-                  borderColor: 'var(--tooltip-border, #e5e7eb)',
-                  borderRadius: '12px',
-                  padding: '8px 12px',
-                }}
-                formatter={(value) => [
-                  value != null ? `${Number(value).toFixed(1)}%` : 'No data',
-                  'Success Rate',
-                ]}
-              />
-              <Line
-                type="monotone"
-                dataKey="value"
-                stroke={CHART_COLORS[1]}
-                strokeWidth={2}
-                dot={false}
-                connectNulls
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </ChartCard>
-      </div>
+      <TokenUsageRow
+        trends={data.trends}
+        timeRange={timeRange}
+        modelTokenBreakdown={modelTokenBreakdown}
+      />
 
-      {/* Token Usage Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {/* Token Usage Trend */}
-        <ChartCard title="Token Usage Trend" icon={Zap}>
-          <ResponsiveContainer width="100%" height={250} debounce={80}>
-            <AreaChart data={formatTrendData(data.trends.tokens, timeRange)}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-              <XAxis
-                dataKey="label"
-                tick={{ fontSize: 12 }}
-                className="text-gray-500"
-              />
-              <YAxis
-                tick={{ fontSize: 12 }}
-                className="text-gray-500"
-                tickFormatter={formatTokenCount}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--tooltip-bg, #fff)',
-                  borderColor: 'var(--tooltip-border, #e5e7eb)',
-                  borderRadius: '12px',
-                  padding: '8px 12px',
-                }}
-                formatter={(value) => [formatTokenCount(Number(value)), 'Tokens']}
-              />
-              <Area
-                type="monotone"
-                dataKey="value"
-                stroke={CHART_COLORS[4]}
-                fill={CHART_COLORS[4]}
-                fillOpacity={0.3}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* AOS LLM Model Token Breakdown */}
-        <ChartCard
-          title="AOS LLM Usage by Model"
-          icon={Users}
-          headerExtra={renderAosModelSourceBadge(modelTokenBreakdown)}
-        >
-          {modelTokenBreakdown.length > 0 ? (
-            <div className="space-y-3">
-              <ResponsiveContainer width="100%" height={210} debounce={80}>
-                <BarChart
-                  data={modelTokenBreakdown}
-                  layout="vertical"
-                  margin={{ top: 4, right: 24, left: 24, bottom: 4 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                  <XAxis
-                    type="number"
-                    tick={{ fontSize: 12 }}
-                    className="text-gray-500"
-                    tickFormatter={formatTokenCount}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="model"
-                    width={120}
-                    tick={{ fontSize: 11 }}
-                    className="text-gray-500"
-                    tickFormatter={(value) => truncateModelLabel(String(value))}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'var(--tooltip-bg, #fff)',
-                      borderColor: 'var(--tooltip-border, #e5e7eb)',
-                      borderRadius: '12px',
-                      padding: '8px 12px',
-                    }}
-                    formatter={(value) => [formatTokenCount(Number(value)), 'Tokens']}
-                    labelFormatter={(label) => String(label)}
-                  />
-                  <Bar dataKey="tokens" radius={[0, 4, 4, 0]}>
-                    {modelTokenBreakdown.map((entry) => (
-                      <Cell key={`${entry.provider}:${entry.model}`} fill={entry.color} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 border-t border-gray-100 dark:border-gray-700 pt-3">
-                {modelTokenBreakdown.slice(0, 6).map((entry) => (
-                  <div key={`${entry.provider}:${entry.model}`} className="min-w-0 flex items-center gap-2 text-xs">
-                    <span
-                      className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
-                      style={{ backgroundColor: entry.color }}
-                    />
-                    <span className="truncate text-gray-900 dark:text-white" title={entry.model}>
-                      {entry.model}
-                    </span>
-                    <span className="text-gray-400">·</span>
-                    <span className="text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                      {entry.providerLabel}
-                    </span>
-                    <span className="ml-auto text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                      {formatTokenCount(entry.tokens)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="h-[250px] flex items-center justify-center text-gray-500 dark:text-gray-400">
-              <div className="text-center">
-                <Zap className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p>No AOS LLM token data available</p>
-              </div>
-            </div>
-          )}
-        </ChartCard>
-      </div>
-
-      {/* Charts Row 2 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {/* Cost by Model */}
-        <ChartCard title="Cost by Model" icon={DollarSign}>
-          <ResponsiveContainer width="100%" height={250} debounce={80}>
-            <PieChart>
-              <Pie
-                data={data.costs.by_model}
-                cx="35%"
-                cy="50%"
-                innerRadius={70}
-                outerRadius={90}
-                paddingAngle={2}
-                dataKey="cost"
-                nameKey="value"
-                label={({ value }) => `$${value.toFixed(2)}`}
-              >
-                {data.costs.by_model.map((_, index) => (
-                  <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--tooltip-bg, #fff)',
-                  borderColor: 'var(--tooltip-border, #e5e7eb)',
-                  borderRadius: '12px',
-                  padding: '8px 12px',
-                }}
-                formatter={(value) => [`$${Number(value).toFixed(2)}`, 'Cost']}
-              />
-              <Legend
-                layout="vertical"
-                align="right"
-                verticalAlign="middle"
-                wrapperStyle={{ fontSize: '12px', paddingLeft: '8px', left: '60%' }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Model Performance */}
-        <ChartCard title="Model Performance" icon={Users}>
-          <ResponsiveContainer width="100%" height={250} debounce={80}>
-            <BarChart data={modelPerformanceData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-              <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 12 }} />
-              <YAxis
-                type="category"
-                dataKey="agent_name"
-                width={150}
-                tick={{ fontSize: 11 }}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--tooltip-bg, #fff)',
-                  borderColor: 'var(--tooltip-border, #e5e7eb)',
-                  borderRadius: '12px',
-                  padding: '8px 12px',
-                }}
-                formatter={(value) => [`${Number(value).toFixed(1)}%`, 'Success Rate']}
-              />
-              <Bar dataKey="success_rate" fill={CHART_COLORS[1]} radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-      </div>
+      <CostPerformanceRow
+        costsByModel={data.costs.by_model}
+        modelPerformanceData={modelPerformanceData}
+      />
 
       {/* Multi-Project Comparison + Activity Heatmap Row (3:1) */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-6">
