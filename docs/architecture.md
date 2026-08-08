@@ -151,11 +151,24 @@ src/backend/
 │           ├── transform_stage.py # 데이터 변환 단계
 │           ├── analyze_stage.py   # 데이터 분석 단계
 │           └── output_stage.py    # 결과 출력 단계
-├── api/                     # FastAPI 라우터 (47개 모듈 + 패키지 2종, api/*.py 기준 __init__.py 제외)
+├── api/                     # FastAPI 라우터 (42개 모듈 + 패키지 7종, api/*.py 기준 __init__.py 제외)
 │   ├── git/                 # Git API 패키지 — 원래 단일 git.py(2,022줄)를 도메인별로 분할
 │   │                        #   branches·commits·github·merge·merge_requests·remotes·
 │   │                        #   repositories·working_tree (8모듈) + _shared(공용 의존성).
 │   │                        #   __init__.py 가 라우터를 집계하며 import 경로는 `api.git` 불변
+│   ├── usage/               # Usage API 패키지 — 원래 단일 usage.py(1,244줄)를 분할
+│   │                        #   models·jsonl·anthropic·codex·routes (5모듈).
+│   │                        #   라우트 7개는 routes.py 한 곳에 원본 선언 순서대로 둔다 —
+│   │                        #   include_router 조립이 없어 등록 순서가 완전히 보존된다.
+│   │                        #   응답 캐시는 그것을 **재바인딩하는 쪽과 같은 모듈**에 둔다:
+│   │                        #   _usage_cache 는 anthropic(_load/_save 와 함께),
+│   │                        #   _codex_plan_cache 는 routes(테스트가 dict 를 통째로
+│   │                        #   갈아끼우므로 읽는 라우트와 갈리면 한쪽이 옛 dict 를 본다).
+│   │                        #   __init__.py 는 router 만 재노출한다 — 이동한 이름까지
+│   │                        #   재노출하면 monkeypatch.setattr 이 별칭만 갈아끼워
+│   │                        #   테스트가 실물 경로를 읽은 채 조용히 통과한다
+│   ├── agents/, projects/, claude_sessions/, project_configs/
+│   │                        # Batch 2 도메인 분할 패키지. import 경로는 분할 전과 동일
 │   └── v1/                  # v1 API (6개 모듈: agent_monitor, agent_registry, agents, auth_middleware, rate_limiter, stations)
 │       ├── agents.py        # 에이전트 CRUD API
 │       ├── rate_limiter.py  # API 속도 제한

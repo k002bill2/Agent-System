@@ -88,9 +88,27 @@ B4에서 인벤토리는 0번 틀렸고 **처방·분류가 두 번 틀렸다**(
   > **스캔 패턴은 반드시 세 형태를 모두 포함한다** — `patch(`/`patch.object(`,
   > `monkeypatch.setattr(`, `mocker.patch(`. 첫 두 문자가 다르다고 다른 함정이 아니다.
 
+  > **⚠️ 이 실측은 두 번째로 틀렸다 (2026-08-09, Task 2 착수 시 교정).**
+  > 위 세 형태는 전부 **문자열 타깃**이다. 스캔이 통째로 놓친 네 번째 형태가 있다 —
+  > **모듈 *객체* 를 넘기는 `monkeypatch.setattr(usage_mod, "X", ...)`.**
+  > `api.usage` 는 문자열 0건이 맞지만 이 형태가 **19건**이었고, 여러 줄로 쪼개진
+  > 것(`setattr(\n    usage_mod,\n    "X",`)까지 있어 한 줄 grep 은 4건을 더 놓쳤다.
+  > 직접 참조(`usage_mod.get_usage()`)까지 합쳐 **최종 갱신은 41건**이다.
+  >
+  > **스캔은 네 형태를 모두 포함해야 한다** — 문자열 3형태 +
+  > `setattr\(\s*<모듈별칭>\s*,` + `<별칭>\.NAME` 직접 참조.
+  > 판정 규칙: 모듈 객체 패치는 **"그 이름을 *읽는 함수* 가 사는 모듈"** 을 겨냥해야
+  > 한다(함수의 전역 조회는 자기 모듈 `__dict__` 를 본다). 정의된 모듈이 아니다.
+  >
+  > **재스캔 결과(2026-08-09): Task 3·4·5 대상은 이 형태가 0건이다.**
+  > `orchestrator.nodes` · `services.terminal_service` ·
+  > `services.external_usage_service` 는 테스트가 전부 `from X import (구체 이름)`
+  > 형태를 써서 모듈 별칭을 만들지 않는다. **단 `services.rag_service`(B6, 1,535줄)는
+  > `rag_mod` 별칭으로 20건 이상 쓴다** — 그 배치의 최대 함정이다.
+
   | 대상 | 문자열 패치 타깃 | 비고 |
   |---|---|---|
-  | `api.usage` | **0건** ✅ | |
+  | `api.usage` | **0건** ✅ | 단 **모듈 객체** 형태 19건 — 위 교정 참조 |
   | `models.git` | **0건** ✅ | |
   | `services.terminal_service` | **0건** ✅ | |
   | `services.external_usage_service` | 1종 / 7회 | **관대** (모듈 속성 — 아래) |
@@ -195,7 +213,7 @@ B5 는 여기에 축이 하나 더 있다 — **모듈 상태가 없는 것부�
 | 순서 | 파일 | 줄수 | 패치 | 상태 | 그물 | 근거 |
 |---|---|---:|---|---|---|---|
 | **1** | `models/git.py` | 991 | **0** | `GIT_REPOSITORIES` (848–990 **연속**) | 테스트 **4,623** + `split_audit` | 69클래스 집중도 4%로 가장 기계적, 패치 0, 그물 최두꺼움. 상태도 연속 구간이라 "함께 남긴다"가 자명하다. **레시피 검증에 최적** |
-| **2** | `api/usage.py` | 1,245 | **0** | 캐시 2종 | 테스트 4,168 + `split_audit` + **`route_table`** | 유일하게 HTTP 표면이 있어 그물이 **3겹**. 캐시 2종이 상태 난이도 최대 |
+| **2** ✅ | `api/usage.py` | 1,244 | **0** (모듈 객체 19) | 캐시 2종 | 테스트 4,168 + `split_audit` + **`route_table`** | 유일하게 HTTP 표면이 있어 그물이 **3겹**. 캐시 2종이 상태 난이도 최대 |
 | **3** | `orchestrator/nodes.py` | 1,715 | **4종 7회 (2 비관대)** | 없음 | 테스트 1,514 + `split_audit` | **테스트 문자열 갱신 동반**. 레시피가 두 번 검증된 뒤 착수. 클래스 6개 구조 자체는 단순하다 |
 | **4** | `services/external_usage_service.py` | 933 | 1종 (관대) | `_service_instance` | 테스트 504 + `split_audit` | `__init__.py` 에 `import httpx` 유지. 분할 후 해당 7개 테스트 개별 실행 |
 | **5** | `services/terminal_service.py` | 868 | **0** | `_terminal_service` | 테스트 **411** + `split_audit` | 안전망이 가장 얇다. 레시피가 네 번 검증된 뒤 착수 |

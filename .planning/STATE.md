@@ -6,12 +6,12 @@ See: `.planning/PROJECT.md`
 **Current focus:** **800줄 초과 파일 분할 프로그램 — B4 머지 완료, B5 계획 완료·구현 미착수**
 
 ## Current Position
-Phase: **B5** (백엔드 분할) — **Task 1/5 완료, Task 2 대기**
+Phase: **B5** (백엔드 분할) — **Task 2/5 완료, Task 3 대기**
 
 | Task | 대상 | 결과 | 커밋 |
 |---|---|---|---|
 | 1 | `models/git.py` 991 | → 10모듈 (최대 189) + `__init__` 재노출 | 승격 `ff20c2f` → 분할 `c2ed1fa` |
-| 2 | `api/usage.py` 1,245 | 캐시 2종 주의, 그물 3겹 | 미착수 |
+| 2 | `api/usage.py` 1,244 | → 5모듈 (최대 435) + 테스트 41건 갱신 | 베이스라인 `fa9f711` → 승격 `521787a` → 분할 `571182f` |
 | 3 | `orchestrator/nodes.py` 1,715 | **테스트 문자열 패치 4종 갱신 동반** | 미착수 |
 | 4 | `external_usage_service.py` 933 | `__init__`에 `import httpx` 유지 | 미착수 |
 | 5 | `terminal_service.py` 868 | 안전망 411로 최박 | 미착수 |
@@ -164,9 +164,50 @@ Codex 1~10차 로그는 세션 scratchpad에만 있어 **휘발됐다** — 장�
 
 ## Session Continuity
 Last session: 2026-08-09
-Stopped at: **B4 머지 완료(PR #246, CI 9/9) + B5 계획서 작성 완료.**
+Stopped at: **B5 Task 2(`api/usage.py`) 분할 완료 — 게이트 4종 통과, Codex 검증 대기.**
 
-### B5 재개 지점 — **Task 2(`api/usage.py`)부터**
+### B5 Task 2 에서 배운 것 — Task 3·4·5 에 그대로 적용된다
+
+**1. 계획서의 "문자열 패치 0건 ✅"은 스캔 형태가 좁아서 나온 값이다.**
+`api.usage` 는 `patch("...")`·`monkeypatch.setattr("...")` 문자열 형태가 0건인 게
+맞지만, **모듈 *객체* 를 넘기는 형태**(`monkeypatch.setattr(usage_mod, "X", ...)`)가
+**19건** 있었다. 여기에 여러 줄로 쪼개진 형태
+(`setattr(\n    usage_mod,\n    "X",`)까지 있어 한 줄 grep 으로는 4건을 더 놓쳤다.
+최종 갱신은 41건이다. **스캔 패턴에 `setattr(\s*<모듈별칭>` 과 `<별칭>.NAME` 직접
+참조를 반드시 포함할 것** — Task 4(`external_usage_service`)·5(`terminal_service`)도
+같은 형태를 쓸 수 있다.
+
+**2. 하중 지지대 판정에 테스트의 재바인딩을 포함해야 한다.**
+소스만 보면 `_codex_plan_cache` 는 첨자 대입뿐이라(모듈에 `global` 문 없음) 분열
+위험이 없어 보인다. 그런데 **테스트가 dict 를 통째로 갈아끼운다**
+(`monkeypatch.setattr(usage_mod, "_codex_plan_cache", {...})`, 3곳). 재바인딩이
+개입하면 "그 이름을 읽는 함수 전부가 같은 모듈" 제약이 되살아난다 — 첫 배정에서
+`_cached_codex_plan_response`(codex)와 `get_codex_plan_usage`(routes)를 갈랐다가
+재분할했다. **판정 근거는 소스의 mutation 패턴이 아니라 `읽는 함수 ∪ 재바인딩하는 쪽`이다.**
+
+**3. `__init__.py` 재노출은 좁게 — 계획서 3번("공개 표면 전체 재노출")의 예외다.**
+전체 재노출을 하면 `__init__` 이 이동한 이름의 **별칭**을 만든다. 그러면
+`monkeypatch.setattr(usage_mod, "CLAUDE_PROJECTS_DIR", tmp)` 가 **성공**하고
+(별칭만 갈아끼움), 정작 그 이름을 읽는 `jsonl` 모듈은 원본을 계속 봐서 테스트가
+**실제 홈 디렉토리를 스캔한 채 통과**한다. 좁게 두면 갱신을 잊은 지점이
+`AttributeError` 로 즉시 드러난다 — 실측으로 18곳이 전부 시끄럽게 실패했다.
+재노출 목록은 **소비자 grep 에서 역산**한다(usage 는 `api/app.py:89` 의 `router` 하나).
+
+**4. `split_audit.py` 는 `__init__.py` 를 스캔에서 제외한다** (`_collect_package` 의
+`skip` 기본값, `audit()` 에 우회 파라미터 없음). 따라서 **`__init__.py` 에 정의를
+남기는 설계는 이 그물과 양립하지 않는다** — 남긴 정의가 전부 "유실"로 보고된다.
+정의 0개 배럴로 두는 것이 도구와 맞는 유일한 형태다.
+
+**5. 라우트는 한 모듈에 모으는 편이 낫다** (라우트 수가 적을 때). `routes.py` 하나에
+원본 선언 순서대로 두면 `include_router` 조립이 없어 등록 순서가 **완전히** 보존되고,
+`fastapi_include_order_is_contract` 가 경고한 순서 계약을 새로 만들지 않는다.
+B1(`api/git`, 63개)은 서브라우터가 필수였지만 usage(7개)는 아니었다.
+
+**6. scratchpad 는 세션 도중에도 비워진다** (03:55 실측 — 분할 스크립트와 원본
+스냅샷이 동시에 사라져 재작성했다). 재사용할 스크립트는 레포에 두거나, 최소한
+"휘발되면 다시 쓴다"를 전제로 짧게 유지할 것.
+
+### B5 재개 지점 — **Task 3(`orchestrator/nodes.py`)부터**
 
 계획서: `docs/plans/2026-08-09-oversized-file-split-b5.md`.
 **Task 1에서 검증된 레시피**(그대로 재사용):
@@ -176,8 +217,14 @@ Stopped at: **B4 머지 완료(PR #246, CI 9/9) + B5 계획서 작성 완료.**
    스크립트에 **커버리지 단언**(최상위 이름 배정 누락·중복 시 즉시 실패)과
    **import 역산**(정의가 실제 참조하는 이름에서 계산, 눈으로 훑지 않음)을 넣는다.
    Task 1 스크립트가 세션 scratchpad에 있었으므로 **휘발됐다** — 다시 쓰되 위 두 요소를 반드시 포함.
-3. `__init__.py`는 원본 공개 표면 **전체** 재노출(`__all__` = 원본 최상위 이름 전부).
-   원본에 `__all__`이 없었으면 모든 이름이 import 가능했으므로 그것을 보존해야 한다.
+3. `__init__.py`의 `__all__`은 **소비자 grep 에서 역산한다** — 계획서와 같은 규칙이며,
+   이 줄에 있던 "원본 공개 표면 **전체** 재노출"은 **Task 2 에서 틀린 것으로 판명돼
+   교체했다**. 전체 재노출은 이동한 이름의 **별칭**을 만들어,
+   `monkeypatch.setattr(pkg, "X", ...)` 가 별칭만 갈아끼우고 정작 X 를 읽는
+   서브모듈은 원본을 계속 보게 한다 — 테스트가 실물 경로를 읽은 채 조용히 통과한다.
+   좁게 두면 갱신 누락이 `AttributeError` 로 즉시 드러난다.
+   (모듈 객체 패치가 없는 대상이라면 전체 재노출이 무해할 수 있으나,
+    있는지 없는지는 **네 형태 전부 스캔한 뒤에야** 안다 — 위 "배운 것 1" 참조.)
 4. 게이트: `split_audit.py <승격SHA>` → `ruff check --fix` + `ruff format` →
    **`split_audit` 재실행**(포매터가 본문을 건드리지 않았는지) → `mypy` → `pytest`
 
