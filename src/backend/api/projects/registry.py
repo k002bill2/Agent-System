@@ -1,6 +1,12 @@
-"""Projects CRUD API for DB-managed project registry.
+"""registry 관련 Project Registry API 라우트.
 
-Replaces filesystem-based project discovery with explicit DB registration.
+DB 관리 프로젝트 레지스트리의 CRUD 와 생명주기(비활성화·복원·영구삭제).
+파일시스템 기반 프로젝트 탐색을 명시적 DB 등록으로 대체한다.
+
+**등록 순서 주의**: `GET /all` 은 `GET /{project_id}` 보다 **앞에** 있어야 한다.
+뒤로 가면 `{project_id}` 가 `all` 을 삼켜 영영 도달 불가가 된다. 이 모듈 안에
+둘 다 있으므로 선언 순서가 곧 계약이며, `test_no_shadowing_route_pairs` 가
+이를 검사한다.
 """
 
 import logging
@@ -25,6 +31,11 @@ from ._shared import _get_admin_org_ids
 
 logger = logging.getLogger(__name__)
 
+# 이 모듈이 패키지의 집계 라우터를 소유한다 — `__init__.py` 가 이것을 이어받아
+# members 를 include 한다. 대칭적으로 prefix 없는 APIRouter() 를 쓸 수 없는 이유:
+# 아래 `@router.post("")`·`@router.get("")` 은 경로가 비어 있어 prefix 까지 비면
+# FastAPI 가 "Prefix and path cannot be both empty" 로 거부한다. 경로 문자열을
+# "/" 로 바꾸는 것은 동작 변경이므로 하지 않는다.
 router = APIRouter(prefix="/project-registry", tags=["project-registry"])
 
 

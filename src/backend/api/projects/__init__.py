@@ -14,9 +14,15 @@
 """
 
 from . import members
-from ._legacy import router
 from ._shared import _get_admin_org_ids
+from .registry import router
 
+# 집계 라우터는 `registry` 모듈이 소유한다(그쪽 주석 참조 — 빈 경로 라우트가
+# 있어 prefix 없는 APIRouter 를 쓸 수 없다). 여기서는 members 만 얹는다.
+#
+# `GET /all` 과 `GET /{project_id}` 는 둘 다 registry 안에 있어 선언 순서가
+# 그대로 유지되므로 가림이 없다 — 두 라우트를 같은 모듈에 둔 것이 이 배치의
+# 요점이다. 계약 검사는 test_no_shadowing_route_pairs 가 한다.
 router.include_router(members.router)
 
 __all__ = [
