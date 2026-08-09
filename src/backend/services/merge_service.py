@@ -187,9 +187,6 @@ class MergeService:
                     parts = line.split()
                     if len(parts) > 3:
                         conflict_files.append(parts[-1])
-                elif "+<<<<<<<" in line or "+=======":
-                    # Git merge-tree shows conflicts with + prefix
-                    pass
 
             # Alternative: look for files with merge conflict status
             if not conflict_files and "<<<<<<" in output:
