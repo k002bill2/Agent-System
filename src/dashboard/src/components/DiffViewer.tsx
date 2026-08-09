@@ -389,4 +389,3 @@ export function DiffPanel({ className }: { className?: string }) {
   );
 }
 
-export default DiffViewer;

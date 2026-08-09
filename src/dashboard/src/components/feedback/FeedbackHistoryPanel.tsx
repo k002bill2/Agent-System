@@ -376,4 +376,3 @@ function FeedbackRow({ feedback, onProcess, isLoading }: FeedbackRowProps) {
   )
 }
 
-export default FeedbackHistoryPanel

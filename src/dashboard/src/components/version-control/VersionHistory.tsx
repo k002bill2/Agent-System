@@ -404,4 +404,3 @@ export function VersionHistory({ configType, configId, className }: VersionHisto
   )
 }
 
-export default VersionHistory

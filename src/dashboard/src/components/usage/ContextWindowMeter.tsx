@@ -264,4 +264,3 @@ function BreakdownRow({ label, tokens, total }: BreakdownRowProps) {
   )
 }
 
-export default ContextWindowMeter

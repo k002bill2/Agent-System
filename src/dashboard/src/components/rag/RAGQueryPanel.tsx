@@ -552,4 +552,3 @@ export function RAGQueryPanel({ projectId, projectName, className, onClose }: RA
   )
 }
 
-export default RAGQueryPanel

@@ -192,4 +192,3 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   },
 }))
 
-export default useAuditStore

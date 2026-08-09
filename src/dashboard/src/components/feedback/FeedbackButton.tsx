@@ -301,4 +301,3 @@ function NegativeFeedbackModal({ onSubmit, onClose, isSubmitting }: NegativeFeed
   )
 }
 
-export default FeedbackButton

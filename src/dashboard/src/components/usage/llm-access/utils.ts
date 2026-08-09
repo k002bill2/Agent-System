@@ -70,14 +70,14 @@ export function canManageLLMAccess(user: {
   )
 }
 
-export function splitArgs(value: string): string[] {
+function splitArgs(value: string): string[] {
   return value
     .trim()
     .split(/\s+/)
     .filter(Boolean)
 }
 
-export function applySandboxPreset(args: string[], preset: string): string[] {
+function applySandboxPreset(args: string[], preset: string): string[] {
   const cleaned: string[] = []
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index]

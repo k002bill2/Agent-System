@@ -200,4 +200,3 @@ export function FeedbackModal({
   )
 }
 
-export default FeedbackModal

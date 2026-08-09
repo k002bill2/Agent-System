@@ -515,4 +515,3 @@ function ActionBreakdown({ data }: { data: Record<string, number> }) {
   )
 }
 
-export default AuditPage

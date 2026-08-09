@@ -705,4 +705,3 @@ export function AnalyticsPage() {
   )
 }
 
-export default AnalyticsPage

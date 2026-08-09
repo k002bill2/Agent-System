@@ -115,21 +115,3 @@ export const routes: RouteConfig[] = [
   { path: '/admin', view: 'admin', element: AdminPage },
   { path: '/settings', view: 'settings', element: SettingsPage },
 ]
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Map ViewType → URL path */
-export function viewToPath(view: ViewType): string {
-  if (view === 'dashboard') return '/'
-  const route = routes.find((r) => r.view === view)
-  return route?.path ?? '/'
-}
-
-/** Map URL path → ViewType */
-export function pathToView(path: string): ViewType {
-  if (path === '/') return 'dashboard'
-  const route = routes.find((r) => r.path === path)
-  return route?.view ?? 'dashboard'
-}

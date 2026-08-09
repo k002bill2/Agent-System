@@ -69,11 +69,6 @@ export async function fetchMenuVisibilityData(): Promise<MenuVisibilityData> {
   return res.json()
 }
 
-export async function fetchMenuVisibility(): Promise<MenuVisibility> {
-  const data = await fetchMenuVisibilityData()
-  return data.visibility
-}
-
 export async function saveMenuVisibility(
   visibility: MenuVisibility,
   menuOrder?: string[],

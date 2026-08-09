@@ -196,7 +196,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Knip (dependencies)
+      - name: Knip (dependencies + unused files)
         run: npm run knip
 
   frontend-typecheck:

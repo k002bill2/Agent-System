@@ -35,7 +35,7 @@ export function formatDuration(ms: number): string {
   return `${(ms / 60000).toFixed(1)}m`
 }
 
-export function formatTrendLabel(timestamp: string, timeRange: TimeRange): string {
+function formatTrendLabel(timestamp: string, timeRange: TimeRange): string {
   const date = new Date(timestamp)
   switch (timeRange) {
     case '1h':
@@ -148,7 +148,7 @@ export function filterAttributedModelPerformance(agents: AgentPerformance[]): Ag
   })
 }
 
-export function normalizeProvider(provider: string | null | undefined, modelName: string): string {
+function normalizeProvider(provider: string | null | undefined, modelName: string): string {
   const explicit = provider?.trim().toLowerCase()
   if (explicit) {
     if (explicit === 'codex') return 'codex_cli'
