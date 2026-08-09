@@ -14,43 +14,17 @@ import {
 } from 'lucide-react'
 import { apiClient } from '@/services/apiClient'
 
-// Types
-export interface AuditLogEntry {
-  id: string
-  session_id: string | null
-  user_id: string | null
-  project_id: string | null
-  action: string
-  resource_type: string
-  resource_id: string | null
-  old_value: Record<string, unknown> | null
-  new_value: Record<string, unknown> | null
-  changes: Record<string, unknown> | null
-  agent_id: string | null
-  ip_address: string | null
-  user_agent: string | null
-  metadata: Record<string, unknown>
-  status: string
-  error_message: string | null
-  created_at: string
-}
+// 감사 로그 타입의 단일 출처는 스토어다. 컴포넌트가 같은 API 응답을 다시
+// 타이핑하면 필드가 소리 없이 어긋난다 — 실제로 AuditLogFilter 가 스토어에만
+// include_global 이 있는 상태로 갈려 있었다.
+import type { AuditLogEntry, AuditLogFilter } from '@/stores/audit'
 
+// Types
 export interface AuditLogResponse {
   logs: AuditLogEntry[]
   total: number
   limit: number
   offset: number
-}
-
-export interface AuditLogFilter {
-  session_id?: string
-  user_id?: string
-  project_id?: string
-  action?: string
-  resource_type?: string
-  status?: string
-  start_date?: string
-  end_date?: string
 }
 
 interface AuditLogTableProps {
