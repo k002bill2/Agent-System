@@ -58,7 +58,7 @@ async def test_openai_collect_computes_cost_for_known_model() -> None:
     """Priced models must produce a non-zero cost_usd from the local price table."""
     collector = OpenAIUsageCollector("sk-admin-test")
     with patch(
-        "services.external_usage_service.httpx.AsyncClient",
+        "services.external_usage_service.collectors.httpx.AsyncClient",
         return_value=_mock_client(_usage_payload("gpt-4o-2024-08-06", 1000, 1000)),
     ):
         records = await collector.collect(
@@ -77,7 +77,7 @@ async def test_openai_collect_mini_prefix_matches_before_base() -> None:
     """gpt-4o-mini must match its own (cheaper) price, not gpt-4o."""
     collector = OpenAIUsageCollector("sk-admin-test")
     with patch(
-        "services.external_usage_service.httpx.AsyncClient",
+        "services.external_usage_service.collectors.httpx.AsyncClient",
         return_value=_mock_client(_usage_payload("gpt-4o-mini-2024-07-18", 1000, 1000)),
     ):
         records = await collector.collect(
@@ -92,7 +92,7 @@ async def test_openai_collect_o1_mini_prefix_matches_before_base() -> None:
     """o1-mini must match its own price, not the pricier o1 row above it in the table."""
     collector = OpenAIUsageCollector("sk-admin-test")
     with patch(
-        "services.external_usage_service.httpx.AsyncClient",
+        "services.external_usage_service.collectors.httpx.AsyncClient",
         return_value=_mock_client(_usage_payload("o1-mini-2024-09-12", 1000, 1000)),
     ):
         records = await collector.collect(
@@ -107,7 +107,7 @@ async def test_openai_collect_unknown_model_zero_cost() -> None:
     """Unlisted models fall back to zero cost (no fabricated pricing)."""
     collector = OpenAIUsageCollector("sk-admin-test")
     with patch(
-        "services.external_usage_service.httpx.AsyncClient",
+        "services.external_usage_service.collectors.httpx.AsyncClient",
         return_value=_mock_client(_usage_payload("some-unlisted-model", 1000, 1000)),
     ):
         records = await collector.collect(
@@ -139,7 +139,7 @@ async def test_anthropic_collect_opus_4_6_matches_post_price_cut_row() -> None:
     """Opus 4.5+ price cut: opus-4-6 must hit $5/$25, not generic claude-opus-4 ($15/$75)."""
     collector = AnthropicUsageCollector("sk-ant-admin-test")
     with patch(
-        "services.external_usage_service.httpx.AsyncClient",
+        "services.external_usage_service.collectors.httpx.AsyncClient",
         return_value=_mock_client(_anthropic_usage_payload("claude-opus-4-6", 1000, 1000)),
     ):
         records = await collector.collect(
@@ -154,7 +154,7 @@ async def test_anthropic_collect_opus_4_1_keeps_legacy_price() -> None:
     """Opus 4.1 predates the price cut: must fall through to claude-opus-4 ($15/$75)."""
     collector = AnthropicUsageCollector("sk-ant-admin-test")
     with patch(
-        "services.external_usage_service.httpx.AsyncClient",
+        "services.external_usage_service.collectors.httpx.AsyncClient",
         return_value=_mock_client(_anthropic_usage_payload("claude-opus-4-1", 1000, 1000)),
     ):
         records = await collector.collect(
@@ -169,7 +169,7 @@ async def test_openai_collect_none_model_zero_cost() -> None:
     """A missing/None model name must short-circuit to zero cost, not raise."""
     collector = OpenAIUsageCollector("sk-admin-test")
     with patch(
-        "services.external_usage_service.httpx.AsyncClient",
+        "services.external_usage_service.collectors.httpx.AsyncClient",
         return_value=_mock_client(_usage_payload(None, 1000, 1000)),
     ):
         records = await collector.collect(

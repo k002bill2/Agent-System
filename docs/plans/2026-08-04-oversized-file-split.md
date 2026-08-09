@@ -139,7 +139,7 @@
 | 배치 | 대상 | 줄수 | 근거 |
 |---|---|---:|---|
 | **B1** ✅ **완료 (2026-08-08)** | `api/git.py` | 2,022 | 라우트 나열 + 최대 크기. **여기서 만드는 라우트 테이블 테스트가 B2 전체에 재사용된다** |
-| **B2** | `api/project_configs.py`, `api/agents.py`, `api/claude_sessions.py`, `api/projects.py`, `api/v1/agent_registry.py` | 6,590 | 동일 이음매. B1의 레시피·테스트 도구를 그대로 적용 |
+| **B2** ✅ **완료 (2026-08-08, PR #241·#242)** | `api/project_configs.py`, `api/agents.py`, `api/claude_sessions.py`, `api/projects.py`, ~~`api/v1/agent_registry.py`~~ | 6,590 | 동일 이음매. B1의 레시피·테스트 도구를 그대로 적용. `api/v1/agent_registry.py`는 **프로덕션 소비자 0건**으로 착수 시 제외됨 |
 
 > **B2 착수 조건 — `shadowing_pairs()`의 알려진 한계 (Codex 지적, 2026-08-05, 유예 결정)**
 >
@@ -148,12 +148,24 @@
 > **B1에서 고치지 않은 이유**: (1) 백엔드 전체에 제약 컨버터가 `{branch_name:path}` 3건뿐이고 int·float·uuid는 **0건**이라 이 시나리오가 존재하지 않는다(실측). (2) 부분 겹침을 가림으로 보고하면 의도적 폴백 설계(`{id:int}` 먼저, `{slug:str}` 나중)를 거짓 경보로 잡는다 — 무시당하는 안전망은 없는 것보다 나쁘다. (3) 헬퍼를 범용 라우팅 검증 도구로 만드는 것은 이 계획의 범위가 아니다(YAGNI).
 >
 > **B2 착수 시 반드시 실측하라**: `grep -rhoE '\{[a-zA-Z_][a-zA-Z0-9_]*:[a-z]+\}' <대상파일>`로 대상 파일의 컨버터 사용을 확인한다. `int`·`float`·`uuid`가 **하나라도 나오면** 이 유예는 무효이며, `shadowing_pairs()`를 정규식 교집합 방식으로 강화한 뒤 진행한다. `test_convertor_samples_cover_starlette_and_are_valid`는 Starlette가 컨버터 종류를 늘릴 때만 깨지며, 코드베이스가 제약 컨버터를 **쓰기 시작하는 것**은 잡지 못한다.
-| **B3** | 프론트 스토어 3종 (`git.ts`, `projectConfigs.ts`, `claudeSessions.ts`) | 3,811 | `stores/orchestration/` 선례가 그대로 적용됨. 테스트 3,400줄 |
-| **B4** | 프론트 페이지·컴포넌트 4종 (테스트 있는 것) | 5,547 | 컴포넌트/훅 추출. 판단이 들어가지만 안전망 두꺼움 |
-| **B5** | 백엔드 다중클래스 9종 | 11,320 | 클래스 단위 이동. 테스트 없는 것은 characterization 선행 |
-| **B6** | 단일 거대 클래스 5종 + `TaskAnalyzer.tsx` | 8,311 | **분할 여부부터 재검토.** 응집된 클래스를 한도 때문에 가르는 것이 손해일 수 있다 |
+| **B3** ✅ **완료 (2026-08-08, PR #243)** | 프론트 스토어 3종 (`git.ts`, `projectConfigs.ts`, `claudeSessions.ts`) | 3,811 | `stores/orchestration/` 선례가 그대로 적용됨. 테스트 3,400줄 |
+| **B4** ✅ **완료 (2026-08-09, PR #246)** | 프론트 페이지·컴포넌트 **3종** (`NotificationRuleEditor` · `WorkingDirectory` · `AnalyticsPage`) | 3,799 | 계획: `docs/plans/2026-08-09-oversized-file-split-b4.md`. `PlaygroundPage.tsx`(1,748)는 **사용자 결정으로 제외** — `useState` 26개인 단일 거대 컴포넌트라 B6 성질 |
+| **B5** ✅ **완료 (2026-08-09, 브랜치 `refactor/split-backend-b5` 미푸시)** | 백엔드 **집중도 <35% 5종** (`models/git.py` · `api/usage.py` · `orchestrator/nodes.py` · `external_usage_service.py` · `terminal_service.py`) | 5,748 | 계획: `docs/plans/2026-08-09-oversized-file-split-b5.md`. 클래스·정의 단위 이동만으로 한도 진입 — 5개 전부 800 이내(최대 189·435·518·350·433). Codex 지적 0건. **테스트 패치 형태가 계획서 예상보다 많았다**(모듈 객체·상수 조립 — 다섯 형태 전수는 B5 계획서와 STATE.md 참조) |
+| **B5.5** | 백엔드 집중도 48~65% 5종 (`merge` · `audit` · `playground` · `tmux` · `notification` service) | 5,507 | 클래스 이동만으로 부족 — B4의 3a/3b처럼 **2단계**(이동 → 메서드 추출) 필요. 미착수·미약속 |
+| **B6** | 백엔드 집중도 70%+ 9종 + `PlaygroundPage.tsx` + `TaskAnalyzer.tsx` | — | **분할 여부부터 재검토.** 응집된 클래스를 한도 때문에 가르는 것이 손해일 수 있다 |
+
+> **⚠️ B5/B6 분류축이 2026-08-09 실측으로 교체됐다.** 원래 "백엔드 다중클래스 9종 / 단일 거대
+> 클래스 5종"이었으나, **클래스 갯수는 판정 지표가 아니다** — `claude_session_monitor.py`는
+> 클래스 5개인데 하나가 79%를 차지하고 `git_service.py`는 2개인데 95%다. 이들은 클래스 단위
+> 이동으로 해결되지 않는다. 반대로 `models/git.py`는 69개인데 최대가 4%라 기계적으로 쪼개진다.
+> **진짜 지표는 집중도 = 최대 클래스 줄수 / 파일 줄수**이며, 실측 데이터에 29% → 48% 간극이
+> 있어 35%가 자연스러운 컷이다. 전수 표는 B5 계획서에 있다.
+> (B4에서 판정 지표가 줄수가 아니라 "섹션 줄수 / 읽는 state 수" 비율이었던 것과 같은 구조.)
 
 **B6는 착수 전 별도 판단이 필요하다.** 이 계획은 B6를 "분할한다"고 약속하지 않는다.
+**B5.5도 마찬가지다** — 그중 `audit_service`(테스트 153줄)·`merge_service`(347줄)는 안전망이 얇고,
+B6의 `project_config_monitor`·`cost_allocation_service`·`feedback_service`는 **테스트가 0줄**이라
+characterization 선행이 필수다.
 
 ---
 

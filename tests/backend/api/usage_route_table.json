@@ -1,0 +1,37 @@
+[
+  [
+    "GET",
+    "/usage",
+    "get_usage"
+  ],
+  [
+    "GET",
+    "/usage/codex-cli",
+    "get_codex_cli_usage"
+  ],
+  [
+    "GET",
+    "/usage/codex-plan",
+    "get_codex_plan_usage"
+  ],
+  [
+    "GET",
+    "/usage/raw",
+    "get_raw_stats"
+  ],
+  [
+    "GET",
+    "/usage/oauth-test",
+    "test_oauth"
+  ],
+  [
+    "GET",
+    "/usage/claude-config",
+    "get_config"
+  ],
+  [
+    "PUT",
+    "/usage/claude-config",
+    "put_config"
+  ]
+]

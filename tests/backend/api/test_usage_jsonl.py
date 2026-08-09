@@ -24,8 +24,8 @@ def isolated_jsonl_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     projects_dir.mkdir()
     cache_path = tmp_path / "aos-jsonl-token-cache.json"
 
-    monkeypatch.setattr(usage_mod, "CLAUDE_PROJECTS_DIR", projects_dir)
-    monkeypatch.setattr(usage_mod, "JSONL_TOKEN_CACHE_PATH", cache_path)
+    monkeypatch.setattr(usage_mod.jsonl, "CLAUDE_PROJECTS_DIR", projects_dir)
+    monkeypatch.setattr(usage_mod.jsonl, "JSONL_TOKEN_CACHE_PATH", cache_path)
     return projects_dir
 
 
@@ -118,7 +118,7 @@ def test_aggregates_tokens_per_day_per_model(isolated_jsonl_env: Path) -> None:
         ],
     )
 
-    result = usage_mod.aggregate_model_tokens_from_jsonl(days=7)
+    result = usage_mod.jsonl.aggregate_model_tokens_from_jsonl(days=7)
     by_date = {r.date: r.tokensByModel for r in result}
 
     assert today.isoformat() in by_date
@@ -147,7 +147,7 @@ def test_excludes_entries_outside_window(isolated_jsonl_env: Path) -> None:
         ],
     )
 
-    result = usage_mod.aggregate_model_tokens_from_jsonl(days=7)
+    result = usage_mod.jsonl.aggregate_model_tokens_from_jsonl(days=7)
     total_opus = sum(r.tokensByModel.get("claude-opus-4-7", 0) for r in result)
     assert total_opus == 42
 
@@ -178,7 +178,7 @@ def test_ignores_non_assistant_entries(isolated_jsonl_env: Path) -> None:
         ],
     )
 
-    result = usage_mod.aggregate_model_tokens_from_jsonl(days=7)
+    result = usage_mod.jsonl.aggregate_model_tokens_from_jsonl(days=7)
     total = sum(r.tokensByModel.get("claude-opus-4-7", 0) for r in result)
     assert total == 7
 
@@ -195,7 +195,7 @@ def test_walks_subagent_subdirectories(isolated_jsonl_env: Path) -> None:
         [_assistant_entry(ts=now, model="claude-opus-4-7", output_tokens=20)],
     )
 
-    result = usage_mod.aggregate_model_tokens_from_jsonl(days=7)
+    result = usage_mod.jsonl.aggregate_model_tokens_from_jsonl(days=7)
     total = sum(r.tokensByModel.get("claude-opus-4-7", 0) for r in result)
     assert total == 30
 
@@ -209,7 +209,7 @@ def test_cache_hit_avoids_rescanning(isolated_jsonl_env: Path) -> None:
         [_assistant_entry(ts=now, model="claude-opus-4-7", input_tokens=5)],
     )
 
-    first = usage_mod.aggregate_model_tokens_from_jsonl(days=7)
+    first = usage_mod.jsonl.aggregate_model_tokens_from_jsonl(days=7)
     assert sum(r.tokensByModel.get("claude-opus-4-7", 0) for r in first) == 5
 
     # Mutate the file. Cached call must NOT see the new entry.
@@ -217,7 +217,7 @@ def test_cache_hit_avoids_rescanning(isolated_jsonl_env: Path) -> None:
         jsonl,
         [_assistant_entry(ts=now, model="claude-opus-4-7", input_tokens=999)],
     )
-    second = usage_mod.aggregate_model_tokens_from_jsonl(days=7)
+    second = usage_mod.jsonl.aggregate_model_tokens_from_jsonl(days=7)
     assert sum(r.tokensByModel.get("claude-opus-4-7", 0) for r in second) == 5
 
 
@@ -226,10 +226,10 @@ def test_returns_empty_when_projects_dir_missing(
 ) -> None:
     """Non-existent projects dir is handled without raising."""
     missing = tmp_path / "does-not-exist"
-    monkeypatch.setattr(usage_mod, "CLAUDE_PROJECTS_DIR", missing)
-    monkeypatch.setattr(usage_mod, "JSONL_TOKEN_CACHE_PATH", tmp_path / "cache.json")
+    monkeypatch.setattr(usage_mod.jsonl, "CLAUDE_PROJECTS_DIR", missing)
+    monkeypatch.setattr(usage_mod.jsonl, "JSONL_TOKEN_CACHE_PATH", tmp_path / "cache.json")
 
-    result = usage_mod.aggregate_model_tokens_from_jsonl(days=7)
+    result = usage_mod.jsonl.aggregate_model_tokens_from_jsonl(days=7)
     assert result == []
 
 
@@ -244,7 +244,7 @@ def test_skips_zero_token_entries(isolated_jsonl_env: Path) -> None:
         ],
     )
 
-    result = usage_mod.aggregate_model_tokens_from_jsonl(days=7)
+    result = usage_mod.jsonl.aggregate_model_tokens_from_jsonl(days=7)
     assert sum(r.tokensByModel.get("claude-opus-4-7", 0) for r in result) == 1
 
 
@@ -255,7 +255,7 @@ def test_skips_zero_token_entries(isolated_jsonl_env: Path) -> None:
 def stale_stats_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Point STATS_CACHE_PATH at a temp file that callers can populate."""
     cache_file = tmp_path / "stats-cache.json"
-    monkeypatch.setattr(usage_mod, "STATS_CACHE_PATH", cache_file)
+    monkeypatch.setattr(usage_mod.jsonl, "STATS_CACHE_PATH", cache_file)
     return cache_file
 
 
@@ -292,10 +292,10 @@ async def test_response_marks_jsonl_fallback_when_stats_cache_empty(
     async def _no_oauth(_token: str) -> None:
         return None
 
-    monkeypatch.setattr(usage_mod, "fetch_usage_from_anthropic", _no_oauth)
-    monkeypatch.setattr(usage_mod, "get_oauth_token", lambda: None)
+    monkeypatch.setattr(usage_mod.routes, "fetch_usage_from_anthropic", _no_oauth)
+    monkeypatch.setattr(usage_mod.routes, "get_oauth_token", lambda: None)
 
-    response = await usage_mod.get_usage()
+    response = await usage_mod.routes.get_usage()
     assert response.weeklyModelTokensSource == "jsonl-fallback"
     assert response.statsCacheAgeDays == 30
     assert any(r.tokensByModel.get("claude-opus-4-7", 0) == 42 for r in response.weeklyModelTokens)
@@ -328,10 +328,10 @@ async def test_response_marks_stats_cache_when_data_is_fresh(
     async def _no_oauth(_token: str) -> None:
         return None
 
-    monkeypatch.setattr(usage_mod, "fetch_usage_from_anthropic", _no_oauth)
-    monkeypatch.setattr(usage_mod, "get_oauth_token", lambda: None)
+    monkeypatch.setattr(usage_mod.routes, "fetch_usage_from_anthropic", _no_oauth)
+    monkeypatch.setattr(usage_mod.routes, "get_oauth_token", lambda: None)
 
-    response = await usage_mod.get_usage()
+    response = await usage_mod.routes.get_usage()
     assert response.weeklyModelTokensSource == "stats-cache"
     assert response.statsCacheAgeDays == 0
 
@@ -375,9 +375,9 @@ def test_codex_cli_usage_reads_local_state_db(
             },
         ],
     )
-    monkeypatch.setattr(usage_mod, "CODEX_STATE_DB_PATH", db_path)
+    monkeypatch.setattr(usage_mod.routes, "CODEX_STATE_DB_PATH", db_path)
 
-    response = usage_mod.get_codex_cli_usage()
+    response = usage_mod.routes.get_codex_cli_usage()
 
     assert response.available is True
     assert response.fiveHourTokens == 100
@@ -396,9 +396,9 @@ def test_codex_cli_usage_handles_missing_state_db(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Missing Codex DB returns an unavailable payload instead of raising."""
-    monkeypatch.setattr(usage_mod, "CODEX_STATE_DB_PATH", tmp_path / "missing.sqlite")
+    monkeypatch.setattr(usage_mod.routes, "CODEX_STATE_DB_PATH", tmp_path / "missing.sqlite")
 
-    response = usage_mod.get_codex_cli_usage()
+    response = usage_mod.routes.get_codex_cli_usage()
 
     assert response.available is False
     assert response.weeklyTokens == 0
@@ -410,7 +410,7 @@ def test_codex_plan_usage_reads_chatgpt_subscription_limits(
 ) -> None:
     """Codex plan usage comes from app-server rate limits, not the local token DB."""
     monkeypatch.setattr(
-        usage_mod,
+        usage_mod.routes,
         "_codex_plan_cache",
         {"response": None, "timestamp": None},
     )
@@ -457,9 +457,9 @@ def test_codex_plan_usage_reads_chatgpt_subscription_limits(
             "rateLimitResetCredits": {"availableCount": 1},
         }
 
-    monkeypatch.setattr(usage_mod, "_read_codex_app_server_rate_limits", _fake_read_rate_limits)
+    monkeypatch.setattr(usage_mod.routes, "_read_codex_app_server_rate_limits", _fake_read_rate_limits)
 
-    response = usage_mod.get_codex_plan_usage()
+    response = usage_mod.routes.get_codex_plan_usage()
 
     assert response.available is True
     assert response.source == "codex-app-server"
@@ -478,7 +478,7 @@ def test_codex_plan_usage_handles_missing_cli(
 ) -> None:
     """Missing Codex binary returns an unavailable payload."""
     monkeypatch.setattr(
-        usage_mod,
+        usage_mod.routes,
         "_codex_plan_cache",
         {"response": None, "timestamp": None},
     )
@@ -486,9 +486,9 @@ def test_codex_plan_usage_handles_missing_cli(
     def _missing_read() -> dict:
         raise FileNotFoundError
 
-    monkeypatch.setattr(usage_mod, "_read_codex_app_server_rate_limits", _missing_read)
+    monkeypatch.setattr(usage_mod.routes, "_read_codex_app_server_rate_limits", _missing_read)
 
-    response = usage_mod.get_codex_plan_usage()
+    response = usage_mod.routes.get_codex_plan_usage()
 
     assert response.available is False
     assert "not found" in (response.message or "")
@@ -499,7 +499,7 @@ def test_codex_plan_refresh_bypasses_cached_limit_snapshot(
 ) -> None:
     """Manual refresh must not keep showing a stale 0% remaining Codex window."""
     monkeypatch.setattr(
-        usage_mod,
+        usage_mod.routes,
         "_codex_plan_cache",
         {"response": None, "timestamp": None},
     )
@@ -533,11 +533,11 @@ def test_codex_plan_refresh_bypasses_cached_limit_snapshot(
         calls["count"] += 1
         return snapshots[index]
 
-    monkeypatch.setattr(usage_mod, "_read_codex_app_server_rate_limits", _read_rate_limits)
+    monkeypatch.setattr(usage_mod.routes, "_read_codex_app_server_rate_limits", _read_rate_limits)
 
-    first = usage_mod.get_codex_plan_usage()
-    cached = usage_mod.get_codex_plan_usage()
-    refreshed = usage_mod.get_codex_plan_usage(refresh=True)
+    first = usage_mod.routes.get_codex_plan_usage()
+    cached = usage_mod.routes.get_codex_plan_usage()
+    refreshed = usage_mod.routes.get_codex_plan_usage(refresh=True)
 
     assert first.codexLimit is not None
     assert first.codexLimit.primary is not None
@@ -561,7 +561,7 @@ def _fresh_usage_cache(monkeypatch: pytest.MonkeyPatch, utilization: float) -> N
     """Prime a valid (unexpired) in-memory usage cache with one plan limit."""
     now = datetime.now(UTC)
     monkeypatch.setattr(
-        usage_mod,
+        usage_mod.anthropic,
         "_usage_cache",
         {
             "data": {"five_hour": {"utilization": utilization, "resets_at": None}},
@@ -598,10 +598,10 @@ async def test_get_usage_serves_fresh_cache_without_calling_anthropic(
         calls["count"] += 1
         return {"five_hour": {"utilization": 99.0, "resets_at": None}}
 
-    monkeypatch.setattr(usage_mod, "fetch_usage_from_anthropic", _spy)
-    monkeypatch.setattr(usage_mod, "get_oauth_token", lambda: "tok")
+    monkeypatch.setattr(usage_mod.routes, "fetch_usage_from_anthropic", _spy)
+    monkeypatch.setattr(usage_mod.routes, "get_oauth_token", lambda: "tok")
 
-    response = await usage_mod.get_usage()
+    response = await usage_mod.routes.get_usage()
 
     assert calls["count"] == 0  # fresh cache served, no Anthropic call
     assert response.oauthAvailable is True
@@ -638,10 +638,10 @@ async def test_get_usage_refresh_bypasses_fresh_cache(
         calls["count"] += 1
         return {"five_hour": {"utilization": 99.0, "resets_at": None}}
 
-    monkeypatch.setattr(usage_mod, "fetch_usage_from_anthropic", _spy)
-    monkeypatch.setattr(usage_mod, "get_oauth_token", lambda: "tok")
+    monkeypatch.setattr(usage_mod.routes, "fetch_usage_from_anthropic", _spy)
+    monkeypatch.setattr(usage_mod.routes, "get_oauth_token", lambda: "tok")
 
-    response = await usage_mod.get_usage(refresh=True)
+    response = await usage_mod.routes.get_usage(refresh=True)
 
     assert calls["count"] == 1  # refresh bypasses cache and hits the API
     assert any(

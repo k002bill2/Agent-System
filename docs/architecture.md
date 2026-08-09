@@ -69,10 +69,17 @@ src/backend/
 ├── orchestrator/
 │   ├── engine.py            # 메인 실행 엔진
 │   ├── graph.py             # LangGraph 그래프 구성
-│   ├── nodes.py             # BaseNode + 5개 노드 (Orchestrator/Planner/Executor/Reviewer/SelfCorrection)
+│   ├── nodes/               # 노드 패키지 — 원래 단일 nodes.py(1,714줄)를 노드별로 분할
+│   │                        #   base·orchestrator·planner·executor·reviewer·
+│   │                        #   self_correction (6모듈). __init__.py 는 노드 클래스
+│   │                        #   6종만 재노출하며 import 경로는 `orchestrator.nodes` 불변.
+│   │                        #   optional 의존 블록(try/except ImportError)은 원자 단위라
+│   │                        #   쓰는 클래스를 따라간다 — RAG→planner, MCP→executor.
+│   │                        #   그 블록이 순환 import 로 조용히 fallback 되는 것은
+│   │                        #   tests/backend/test_orchestrator_nodes_optional_deps.py 가 잡는다
 │   ├── parallel_executor.py # ParallelExecutorNode (병렬 실행)
 │   └── tools.py             # MCP 도구 실행자
-├── services/                    # 74개 서비스/매니저 모듈 (services/*.py 75개 중 __init__.py 제외, pipeline/ 패키지는 별도)
+├── services/                    # 72개 모듈 + 패키지 3종 (external_usage_service/, terminal_service/, pipeline/)
 │   ├── agent_manager.py           # 에이전트 인스턴스 관리
 │   ├── agent_registry.py          # 에이전트 등록소
 │   ├── alerting_service.py        # 알림/경고 서비스
@@ -89,7 +96,12 @@ src/backend/
 │   ├── encryption_service.py      # AES-256-GCM 암호화 서비스
 │   ├── environment_diagnostic_service.py  # 환경 진단 서비스 (Vault Health, 시스템 상태)
 │   ├── deployment_usage_credential_service.py  # 배포 단위 usage admin 키(DB) 해석/CRUD/검증
-│   ├── external_usage_service.py  # 내부 LLM ledger adapter + optional provider billing reconciliation
+│   ├── external_usage_service/    # 내부 LLM ledger adapter + optional provider billing reconciliation
+│   │                              #   원래 단일 932줄 → summaries·collectors·service (3모듈).
+│   │                              #   httpx 를 쓰는 것은 collectors 뿐이며 테스트 패치도
+│   │                              #   그 경로를 겨냥한다. _service_instance 싱글턴은
+│   │                              #   global 재바인딩이라 get_external_usage_service 와
+│   │                              #   같은 모듈(service)에 있다
 │   ├── llm_access_service.py      # CLI profile/user entitlement 관리
 │   ├── llm_usage_ledger_service.py # 내부 LLM 사용량 원장 기록/집계
 │   ├── llm_runtime_resolver.py    # user/org/source 기반 runtime provider/mode 결정
@@ -141,7 +153,13 @@ src/backend/
 │   ├── workflow_yaml_parser.py    # 워크플로우 YAML 파싱
 │   ├── automation_loop_service.py # 주기적 조건 모니터링 + 자동 액션 실행 루프
 │   ├── context_compressor.py      # 컨텍스트 압축 서비스
-│   ├── terminal_service.py        # 터미널 세션 관리 서비스
+│   ├── terminal_service/          # 터미널 세션 관리 서비스
+│   │                              #   원래 단일 867줄 → base·adapters·orca·service (4모듈).
+│   │                              #   TERMINAL_INFO 는 읽기 전용 사용이라 모듈을 갈라도
+│   │                              #   안전하며 base 에 있다(api/terminal.py 가 직접 import).
+│   │                              #   orca 테스트의 MODULE 상수는 이 패키지의 orca 모듈을
+│   │                              #   겨냥한다 — shutil·sys·asyncio·_write_exec_script
+│   │                              #   패치 타깃이 전부 거기 모여 있다
 │   └── pipeline/                  # 모듈형 데이터 파이프라인
 │       ├── pipeline_service.py    # 파이프라인 오케스트레이터
 │       ├── models.py              # PipelineConfig, PipelineResult 등 모델
@@ -151,11 +169,24 @@ src/backend/
 │           ├── transform_stage.py # 데이터 변환 단계
 │           ├── analyze_stage.py   # 데이터 분석 단계
 │           └── output_stage.py    # 결과 출력 단계
-├── api/                     # FastAPI 라우터 (47개 모듈 + 패키지 2종, api/*.py 기준 __init__.py 제외)
+├── api/                     # FastAPI 라우터 (42개 모듈 + 패키지 7종, api/*.py 기준 __init__.py 제외)
 │   ├── git/                 # Git API 패키지 — 원래 단일 git.py(2,022줄)를 도메인별로 분할
 │   │                        #   branches·commits·github·merge·merge_requests·remotes·
 │   │                        #   repositories·working_tree (8모듈) + _shared(공용 의존성).
 │   │                        #   __init__.py 가 라우터를 집계하며 import 경로는 `api.git` 불변
+│   ├── usage/               # Usage API 패키지 — 원래 단일 usage.py(1,244줄)를 분할
+│   │                        #   models·jsonl·anthropic·codex·routes (5모듈).
+│   │                        #   라우트 7개는 routes.py 한 곳에 원본 선언 순서대로 둔다 —
+│   │                        #   include_router 조립이 없어 등록 순서가 완전히 보존된다.
+│   │                        #   응답 캐시는 그것을 **재바인딩하는 쪽과 같은 모듈**에 둔다:
+│   │                        #   _usage_cache 는 anthropic(_load/_save 와 함께),
+│   │                        #   _codex_plan_cache 는 routes(테스트가 dict 를 통째로
+│   │                        #   갈아끼우므로 읽는 라우트와 갈리면 한쪽이 옛 dict 를 본다).
+│   │                        #   __init__.py 는 router 만 재노출한다 — 이동한 이름까지
+│   │                        #   재노출하면 monkeypatch.setattr 이 별칭만 갈아끼워
+│   │                        #   테스트가 실물 경로를 읽은 채 조용히 통과한다
+│   ├── agents/, projects/, claude_sessions/, project_configs/
+│   │                        # Batch 2 도메인 분할 패키지. import 경로는 분할 전과 동일
 │   └── v1/                  # v1 API (6개 모듈: agent_monitor, agent_registry, agents, auth_middleware, rate_limiter, stations)
 │       ├── agents.py        # 에이전트 CRUD API
 │       ├── rate_limiter.py  # API 속도 제한
@@ -191,7 +222,15 @@ src/backend/
 │       ├── audit.py         # AuditLogModel (감사 로그)
 │       ├── model_update.py  # ModelUpdateLogModel (모델 자동 발견/갱신 이력)
 │       └── base.py          # Base, TimestampMixin
-├── models/                  # Pydantic 데이터 모델 (35개, models/*.py 기준 __init__.py 제외)
+├── models/                  # Pydantic 데이터 모델 (34개 모듈 + 패키지 1종, models/*.py 기준 __init__.py 제외)
+│   └── git/                 # Git 모델 패키지 — 원래 단일 git.py(991줄)를 도메인별로 분할
+│                            #   branches·commits·enums·github·merge·merge_requests·
+│                            #   permissions·remotes·repository·working_tree (10모듈).
+│                            #   __init__.py 가 최상위 이름 81종을 전부 재노출하며
+│                            #   import 경로는 `models.git` 불변. 도메인 구획은 api/git/ 과 대칭.
+│                            #   GIT_REPOSITORIES(인메모리 레지스트리)와 그것을 읽고 쓰는
+│                            #   함수 6종은 repository.py 에 함께 둔다 — 가르면 global
+│                            #   재바인딩으로 상태 사본이 분열된다
 ├── middleware/
 │   └── rate_limit.py        # RateLimitMiddleware (per-user/IP, tier-based)
 ├── utils/
