@@ -667,67 +667,13 @@ describe('processFeedback - processed=0 branch', () => {
 // directly to the store state, which exercises lines 598-603.
 
 describe('selectors', () => {
-  // selector functions mirroring feedback.ts lines 598-603
-  const feedbackCountSelector = (state: ReturnType<typeof useFeedbackStore.getState>) =>
-    state.feedbacks.length
-  const pendingCountSelector = (state: ReturnType<typeof useFeedbackStore.getState>) =>
-    state.feedbacks.filter((f) => f.status === 'pending').length
-  const positiveRateSelector = (state: ReturnType<typeof useFeedbackStore.getState>) =>
-    state.stats?.positive_rate ?? 0
+  // selector function mirroring usePendingFeedbackCount in feedback.ts
   const pendingFeedbackCountSelector = (state: ReturnType<typeof useFeedbackStore.getState>) =>
     state.pendingFeedbacks.length + state.pendingEvaluations.length
 
   beforeEach(() => {
     resetStore()
     vi.clearAllMocks()
-  })
-
-  it('useFeedbackCount selector returns total number of feedbacks', () => {
-    useFeedbackStore.setState({
-      feedbacks: [{ id: 'f1' } as any, { id: 'f2' } as any, { id: 'f3' } as any],
-    })
-    expect(feedbackCountSelector(useFeedbackStore.getState())).toBe(3)
-  })
-
-  it('useFeedbackCount selector returns 0 when feedbacks empty', () => {
-    useFeedbackStore.setState({ feedbacks: [] })
-    expect(feedbackCountSelector(useFeedbackStore.getState())).toBe(0)
-  })
-
-  it('usePendingCount selector returns count of feedbacks with status=pending', () => {
-    useFeedbackStore.setState({
-      feedbacks: [
-        { id: 'f1', status: 'pending' } as any,
-        { id: 'f2', status: 'processed' } as any,
-        { id: 'f3', status: 'pending' } as any,
-      ],
-    })
-    expect(pendingCountSelector(useFeedbackStore.getState())).toBe(2)
-  })
-
-  it('usePendingCount selector returns 0 when no feedbacks have pending status', () => {
-    useFeedbackStore.setState({
-      feedbacks: [
-        { id: 'f1', status: 'processed' } as any,
-        { id: 'f2', status: 'skipped' } as any,
-      ],
-    })
-    expect(pendingCountSelector(useFeedbackStore.getState())).toBe(0)
-  })
-
-  it('usePositiveRate selector returns stats.positive_rate when stats is set', () => {
-    useFeedbackStore.setState({ stats: { positive_rate: 0.85 } as any })
-    expect(positiveRateSelector(useFeedbackStore.getState())).toBe(0.85)
-  })
-
-  it('usePositiveRate selector returns 0 when stats is null', () => {
-    useFeedbackStore.setState({ stats: null })
-    expect(positiveRateSelector(useFeedbackStore.getState())).toBe(0)
-  })
-
-  it('usePositiveRate selector returns 0 when positive_rate is 0', () => {
-    useFeedbackStore.setState({ stats: { positive_rate: 0 } as any })
-    expect(positiveRateSelector(useFeedbackStore.getState())).toBe(0)
   })
 
   it('usePendingFeedbackCount selector returns sum of pendingFeedbacks and pendingEvaluations', () => {
