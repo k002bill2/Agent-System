@@ -268,4 +268,3 @@ function PermissionRow({ permission, loading, onToggle }: PermissionRowProps) {
   )
 }
 
-export default PermissionTogglePanel

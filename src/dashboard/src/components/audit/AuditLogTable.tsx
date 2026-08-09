@@ -451,4 +451,3 @@ function AuditLogRow({ log, expanded, onToggle }: AuditLogRowProps) {
   )
 }
 
-export default AuditLogTable

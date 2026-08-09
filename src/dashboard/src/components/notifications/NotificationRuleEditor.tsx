@@ -731,4 +731,3 @@ export function NotificationRuleEditor({ className }: NotificationRuleEditorProp
     </div>
   )
 }
-export default NotificationRuleEditor

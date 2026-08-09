@@ -24,6 +24,8 @@ npm run dev
 | `npm run lint` | ESLint |
 | `npm run type-check` | TypeScript 검사 |
 | `npm run build` | 프로덕션 빌드 |
+| `npm run knip` | 미사용 **의존성 + 파일** 검사 (CI 게이트 `frontend-knip`과 동일) |
+| `npm run knip:all` | 전체 리포터 — 미사용 파일·export·타입까지 조사 (수동 전용, CI 미배선) |
 
 ## Path Aliases
 

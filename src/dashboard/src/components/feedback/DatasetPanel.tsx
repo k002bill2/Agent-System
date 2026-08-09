@@ -322,4 +322,3 @@ function StatCard({ label, value, icon, color }: StatCardProps) {
   )
 }
 
-export default DatasetPanel

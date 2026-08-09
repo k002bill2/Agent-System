@@ -1745,4 +1745,3 @@ function MessageBubble({ message, onCopy, onDelete, copied, sessionId, agentId, 
   )
 }
 
-export default PlaygroundPage

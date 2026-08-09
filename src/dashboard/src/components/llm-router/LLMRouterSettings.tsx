@@ -510,4 +510,3 @@ export function LLMRouterSettings() {
   )
 }
 
-export default LLMRouterSettings
