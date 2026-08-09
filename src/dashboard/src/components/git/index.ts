@@ -1,5 +1,5 @@
 export { BranchList } from './BranchList'
-export { MergeRequestCard, MergeRequestList } from './MergeRequestCard'
+export { MergeRequestList } from './MergeRequestCard'
 export { MergePreviewPanel } from './MergePreviewPanel'
 export { PullRequestList, PRReviewPanel } from './PullRequestList'
 export { CommitHistory } from './CommitHistory'

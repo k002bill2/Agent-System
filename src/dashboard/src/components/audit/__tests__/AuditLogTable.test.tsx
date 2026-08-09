@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
-import type { AuditLogEntry } from '../AuditLogTable'
+import type { AuditLogEntry } from '@/stores/audit'
 
 // Mock lucide-react icons
 vi.mock('lucide-react', () => ({

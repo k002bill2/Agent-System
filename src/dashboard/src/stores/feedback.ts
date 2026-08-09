@@ -590,10 +590,6 @@ if (typeof window !== 'undefined') {
 // Selectors
 // ============================================================================
 
-export const useFeedbackCount = () => useFeedbackStore((state) => state.feedbacks.length)
-export const usePendingCount = () =>
-  useFeedbackStore((state) => state.feedbacks.filter((f) => f.status === 'pending').length)
-export const usePositiveRate = () => useFeedbackStore((state) => state.stats?.positive_rate ?? 0)
 export const usePendingFeedbackCount = () =>
   useFeedbackStore((state) => state.pendingFeedbacks.length + state.pendingEvaluations.length)
 

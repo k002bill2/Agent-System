@@ -24,13 +24,9 @@ export type {
 } from './types'
 
 export {
-  RECONNECT_CONFIG,
-  calculateBackoff,
   PROVIDER_CONFIG,
   identifyProvider,
 } from './types'
-
-export { transformTask, handleMessage } from './wsHandler'
 
 export const useOrchestrationStore = create<OrchestrationState>()(
   persist(
