@@ -150,7 +150,7 @@
 > **B2 착수 시 반드시 실측하라**: `grep -rhoE '\{[a-zA-Z_][a-zA-Z0-9_]*:[a-z]+\}' <대상파일>`로 대상 파일의 컨버터 사용을 확인한다. `int`·`float`·`uuid`가 **하나라도 나오면** 이 유예는 무효이며, `shadowing_pairs()`를 정규식 교집합 방식으로 강화한 뒤 진행한다. `test_convertor_samples_cover_starlette_and_are_valid`는 Starlette가 컨버터 종류를 늘릴 때만 깨지며, 코드베이스가 제약 컨버터를 **쓰기 시작하는 것**은 잡지 못한다.
 | **B3** ✅ **완료 (2026-08-08, PR #243)** | 프론트 스토어 3종 (`git.ts`, `projectConfigs.ts`, `claudeSessions.ts`) | 3,811 | `stores/orchestration/` 선례가 그대로 적용됨. 테스트 3,400줄 |
 | **B4** ✅ **완료 (2026-08-09, PR #246)** | 프론트 페이지·컴포넌트 **3종** (`NotificationRuleEditor` · `WorkingDirectory` · `AnalyticsPage`) | 3,799 | 계획: `docs/plans/2026-08-09-oversized-file-split-b4.md`. `PlaygroundPage.tsx`(1,748)는 **사용자 결정으로 제외** — `useState` 26개인 단일 거대 컴포넌트라 B6 성질 |
-| **B5** | 백엔드 **집중도 <35% 5종** (`orchestrator/nodes.py` · `models/git.py` · `api/usage.py` · `external_usage_service.py` · `terminal_service.py`) | 5,752 | 계획: `docs/plans/2026-08-09-oversized-file-split-b5.md`. 클래스·정의 단위 이동만으로 한도 진입 |
+| **B5** ✅ **완료 (2026-08-09, 브랜치 `refactor/split-backend-b5` 미푸시)** | 백엔드 **집중도 <35% 5종** (`models/git.py` · `api/usage.py` · `orchestrator/nodes.py` · `external_usage_service.py` · `terminal_service.py`) | 5,748 | 계획: `docs/plans/2026-08-09-oversized-file-split-b5.md`. 클래스·정의 단위 이동만으로 한도 진입 — 5개 전부 800 이내(최대 189·435·518·350·433). Codex 지적 0건. **테스트 패치 형태가 계획서 예상보다 많았다**(모듈 객체·상수 조립 — 다섯 형태 전수는 B5 계획서와 STATE.md 참조) |
 | **B5.5** | 백엔드 집중도 48~65% 5종 (`merge` · `audit` · `playground` · `tmux` · `notification` service) | 5,507 | 클래스 이동만으로 부족 — B4의 3a/3b처럼 **2단계**(이동 → 메서드 추출) 필요. 미착수·미약속 |
 | **B6** | 백엔드 집중도 70%+ 9종 + `PlaygroundPage.tsx` + `TaskAnalyzer.tsx` | — | **분할 여부부터 재검토.** 응집된 클래스를 한도 때문에 가르는 것이 손해일 수 있다 |
 
