@@ -6,7 +6,12 @@ See: `.planning/PROJECT.md`
 **Current focus:** **800줄 초과 파일 분할 프로그램 — B4 머지 완료, B5 계획 완료·구현 미착수**
 
 ## Current Position
-Phase: **B5** (백엔드 분할) — **5/5 완료. 배치 전체 완료** (브랜치 미푸시)
+Phase: **B5** (백엔드 분할) — **5/5 완료. PR #247 · CI 9/9 통과 · 머지 대기**
+https://github.com/k002bill2/Agent-System/pull/247 · 브랜치 `refactor/split-backend-b5`
+CI 실측: Backend Lint 30s · Backend Tests **2m36s** · Backend Type Check 1m28s ·
+Frontend Build/Knip/Lint/Tests(**2m47s**)/Type Check · CI Success — 전부 pass.
+Linux CI 에서 백엔드 테스트가 통과했다는 것은 로컬의 유일한 실패(RAG 플레이크)가
+환경 문제였음을 재확인한다.
 
 | Task | 대상 | 결과 | 커밋 |
 |---|---|---|---|
