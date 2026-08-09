@@ -160,23 +160,3 @@ export function lazyWithBoundary(
   LazyWithBoundary.displayName = 'lazyWithBoundary'
   return LazyWithBoundary
 }
-
-// ---------------------------------------------------------------------------
-// Code-split page examples
-// ---------------------------------------------------------------------------
-
-export const LazyDashboardPage = React.lazy(() =>
-  import('../pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
-)
-export const LazyAgentsPage = React.lazy(() =>
-  import('../pages/AgentsPage').then((m) => ({ default: m.AgentsPage })),
-)
-export const LazyWorkflowsPage = React.lazy(() =>
-  import('../pages/WorkflowsPage').then((m) => ({ default: m.WorkflowsPage })),
-)
-export const LazyMonitorPage = React.lazy(() =>
-  import('../pages/MonitorPage').then((m) => ({ default: m.MonitorPage })),
-)
-export const LazySettingsPage = React.lazy(() =>
-  import('../pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
-)
