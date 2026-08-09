@@ -109,6 +109,9 @@ dev/harness-legacy-scan/
 # AGENTS.md is intentionally NOT ignored (portable public doc, mirror of CLAUDE.md)
 .agents/
 .codex/
+# 외부 도구가 작업 디렉토리에 떨구는 빈 설정 파일. 레포 내 소비자 0건(실측 2026-08-09)인데
+# pre-commit 훅이 무관한 커밋에 쓸어 담은 사례가 있어(B4) 아예 시야에서 제외한다.
+paseo.json
 
 # Harness intermediate artifacts (aos-feature-harness) — audit trail, not committed
 _workspace/
