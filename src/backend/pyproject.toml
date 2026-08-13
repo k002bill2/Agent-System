@@ -19,7 +19,7 @@ dependencies = [
     # Database
     "sqlalchemy>=2.0.51",
     "asyncpg>=0.30.0",
-    "alembic>=1.18.5",
+    "alembic>=1.19.0",
     "greenlet>=3.5.4", # SQLAlchemy async 필수
     # Redis
     "redis>=8.1.0",
