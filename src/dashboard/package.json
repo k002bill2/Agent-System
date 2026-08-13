@@ -24,8 +24,8 @@
     "clsx": "^2.1.1",
     "diff": "^9.0.0",
     "js-yaml": "^5.2.3",
-    "lucide-react": "^1.28.0",
-    "posthog-js": "^1.409.5",
+    "lucide-react": "^1.31.0",
+    "posthog-js": "^1.414.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "recharts": "^3.10.1",
@@ -42,13 +42,13 @@
     "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^10.8.0",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "globals": "^17.8.0",
+    "globals": "^17.9.0",
     "jsdom": "^30.0.1",
-    "knip": "^6.31.0",
+    "knip": "^6.32.0",
     "tailwindcss": "^4.2.2",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.66.0",
-    "vite": "^8.2.0",
+    "vite": "^8.2.1",
     "vitest": "^4.0.18"
   }
 }
