@@ -20,7 +20,7 @@ dependencies = [
     "sqlalchemy>=2.0.52",
     "asyncpg>=0.30.0",
     "alembic>=1.19.1",
-    "greenlet>=3.5.4", # SQLAlchemy async 필수
+    "greenlet>=3.5.5", # SQLAlchemy async 필수
     # Redis
     "redis>=8.1.0",
     # Utilities
@@ -46,7 +46,7 @@ dependencies = [
     # Docker (for sandbox)
     "docker>=7.2.0",
     # Git integration
-    "gitpython>=3.1.58",
+    "gitpython>=3.1.59",
     "PyGithub>=2.1.1",
     # Security / Encryption
     "cryptography>=50.0.0",
@@ -61,7 +61,7 @@ dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
-    "ruff>=0.16.1",
+    "ruff>=0.16.3",
     "mypy>=2.3.0",
 ]
 monitoring = [
