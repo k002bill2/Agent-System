@@ -15,7 +15,7 @@ cd src/backend && uv pip install -e . && uvicorn api.app:app --reload
 cd src/dashboard && npm install && npm run dev
 ```
 
-Backend: `localhost:8000` | Dashboard: `localhost:5173` | 환경변수: @.env.example 참조
+Backend: `localhost:8000` | Dashboard: `localhost:5173` | 환경변수: `.env.example` (전체 목록 — 필요할 때 Read)
 
 AOS는 자체 DB 스택을 띄우지 않고 `~/Work/shared-infra`를 공유합니다 (ppt-maker, image-maker도 동일). `dev.sh`/`start-all.sh`/`stop-all.sh`는 모두 shared-infra를 대상으로 동작합니다.
 
