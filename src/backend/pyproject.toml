@@ -65,7 +65,7 @@ dev = [
     "mypy>=2.3.0",
 ]
 monitoring = [
-    "sentry-sdk[fastapi]>=2.66.1",
+    "sentry-sdk[fastapi]>=2.68.0",
 ]
 
 [build-system]
