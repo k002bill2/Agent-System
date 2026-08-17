@@ -208,7 +208,9 @@ Codex 1~10차 로그는 세션 scratchpad에만 있어 **휘발됐다** — 장�
   롤백 위험은 없었으나, 이 50개를 **소유·재생성하는 스크립트가 없었다**(유실 시 복구 경로 부재)
   → **2026-08-18 해소**: `Universal-Environment-Setup` 브랜치 `k002bill2/skill-overrides-safety-net`
   (`d6d7e8e`, **main 미머지 — 머지해야 실효**)에 정본 스냅샷 조각 +`install_global_settings()` 추가.
-  살아 있으면 무시·사라졌을 때만 복원되는 병합이라 멱등하고 사용자 편집을 덮지 않는다.
+  살아 있으면 무시·**최상위 키 자체가 없을 때만** 복원되는 병합이라 멱등하고 사용자 편집을 덮지 않는다.
+  단 **부분 유실(항목 일부만 삭제)은 미커버**이며, 설정 변경 시 조각 갱신은 수동이다(드리프트 검사 없음):
+  `jq '{skillOverrides}' ~/.claude/settings.json > global/settings-fragments/skill-overrides.json`
   회귀 테스트 Test G 포함(79 PASS/0 FAIL, Red-Green 확인). Codex 검증 지적 0건
 
 → 스킬 쪽 잔여 절감은 최대 1~2k 로 노이즈 ±1,400 에 묻힌다. **다음 레버는 스킬이 아니라
@@ -217,6 +219,8 @@ aos-frontend.md 에서 진행 중이다(이 세션은 해당 미커밋 변경에
 상세는 메모리 `project_skill_memory_diet_backlog`.
 
 남은 후속과제: ① 형제 레포(APFS·LiveMetro·Universal-Environment-Setup) `install.sh` 드리프트 동기화.
+위 `d6d7e8e` 가 이 간극을 넓혔다 — `install_global_settings()` 함수와 `global/settings-fragments/`
+경로가 새로 생겼으므로, APFS·LiveMetro 를 동기화할 때 함께 옮길 것.
 
 ### 파일 분할 프로그램 (이전 트랙)
 Last session: 2026-08-09
