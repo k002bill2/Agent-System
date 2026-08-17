@@ -1,3 +1,9 @@
+---
+paths:
+  - src/backend/**
+  - tests/backend/**
+---
+
 # AOS Backend Rules
 
 ## FastAPI Patterns

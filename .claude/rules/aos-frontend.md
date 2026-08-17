@@ -1,3 +1,8 @@
+---
+paths:
+  - src/dashboard/**
+---
+
 # AOS Frontend Rules
 
 ## React Component Pattern
