@@ -57,11 +57,10 @@ class Base(DeclarativeBase):
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """Get database session.
+    """Get database session (FastAPI dependency).
 
     Usage:
-        async with get_db() as session:
-            # use session
+        async def handler(db: AsyncSession = Depends(get_db)) -> ...: ...
     """
     async with async_session_factory() as session:
         try:

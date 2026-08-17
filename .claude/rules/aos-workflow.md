@@ -6,9 +6,11 @@
 | 작업 유형 | 스킬 |
 |-----------|------|
 | React/UI/컴포넌트 | `react-web-development` |
-| 테스트/커버리지 | `test-automation` |
+| 프론트 테스트/커버리지 (Vitest) | `test-automation` |
 | 구현 완료 검증 | `verification-loop` |
 | 에이전트 평가 | `run-eval` |
+
+백엔드 pytest는 라우팅할 전용 스킬이 없다 — `aos-backend.md`의 Pytest 규칙과 게이트 SSOT `verification-loop`를 따른다.
 
 ## 복잡도별 에이전트 수
 | 복잡도 | 에이전트 수 | 기준 |
@@ -21,6 +23,11 @@
 
 ## 배포 전 검증
 게이트 명령의 유일한 정의(SSOT)는 `verification-loop` 스킬이다 — BE(ruff+mypy+pytest)/FE(tsc+lint+vitest run+build) 트랙, 명령·CWD·통과 기준 포함. 배포·커밋 전에는 그 스킬의 Level 2(변경 트랙) 또는 Level 3(PR 전, 두 트랙 전체)를 실행하고 에러 0을 확인한다. 이 문서에 게이트 명령을 복제하지 않는다.
+
+## 리치 스펙 (스펙은 마크다운에 한정하지 않는다)
+- UI 스펙: 마크다운 서술 대신 HTML 목업 1장을 첨부한다 — 모델에겐 분석 가능한 코드, 사람에겐 보이는 화면.
+- 동작 스펙: 실패하는 테스트가 곧 요구사항(spec-as-test). 포팅·마이그레이션은 참조 구현("이 함수와 똑같이 동작")을 지정한다.
+- 리뷰 기준이 주관적이면 루브릭(`.claude/evals/rubrics/` 형식)을 스펙에 첨부해 검증 에이전트가 채점하게 한다.
 
 ## Dev Docs 3-파일 시스템
 대규모 작업 시:

@@ -122,7 +122,9 @@ decisions:
       - asyncpg 드라이버로 PostgreSQL 비동기 연결
       - Service Layer 패턴: Router -> Service -> Repository
       - Pydantic 모델로 request/response 자동 검증
-      - Dependency Injection: Depends(get_session)
+      - Dependency Injection: Depends(get_db) (from db.database import get_db)
+        예외(인증 라우트) — get_current_user 계열은 get_db_session 세션을 이미 소유.
+        handler 독립 DB 작업이 필요할 때만 get_db 병용, 같은 트랜잭션 필요 시 dependency 통합은 별도 리팩터링
       - Alembic으로 DB 마이그레이션 관리
     consequences:
       positive:

@@ -7,7 +7,7 @@
   {"query": "LangGraph 노드 3개 수정했어. state 타입이 AgentState 맞는지, async def 패턴 따르는지 백엔드 검증", "should_trigger": true},
   {"query": "auth_service.py에서 OAuth 토큰 검증 로직 바꿨는데 민감 정보 로깅 안 하는지 확인해줘", "should_trigger": true},
   {"query": "claude_sessions.py 수정 후 SQLAlchemy async 세션 패턴 맞나 봐줘. selectinload 쓰고 있는지도", "should_trigger": true},
-  {"query": "새로운 FastAPI 라우터 파일 만들었어. Depends(get_session) 패턴이랑 Pydantic 모델 검증해줘", "should_trigger": true},
+  {"query": "새로운 FastAPI 라우터 파일 만들었어. Depends(get_db) 패턴이랑 Pydantic 모델 검증해줘", "should_trigger": true},
   {"query": "BranchList.tsx에 FolderGit import 추가하고 다크모드 검증해줘", "should_trigger": false},
   {"query": "React 컴포넌트에서 memo랑 displayName 빠진 거 확인해줘", "should_trigger": false},
   {"query": "BranchList 컴포넌트 Vitest 테스트 작성해줘", "should_trigger": false},

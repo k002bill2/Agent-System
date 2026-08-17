@@ -102,24 +102,26 @@ Claude Code 안에서 Codex로 코드 리뷰·작업 위임을 하는 공식 플
 - 작업자의 "완료" 보고를 믿지 말고 **`/codex:review` 로 검증**한다.
 - 작업자는 스스로 "완료"를 확정하지 않는다 → 조언자가 완료 기준으로 중단시키고 Codex가 검증한다.
   (작업자를 저렴한 모델로 내릴수록 이 통제가 더 중요해진다.)
-- 토큰 무거운 **로컬** 작업(코드베이스 분석·긴 로그·대량 요약)은 `analyzer`가 먼저 압축한다.
-- **리서치·외부 도구는 메인에서 직접 호출하지 않는다:** 메인 세션(모드 A의 조언자)은
-  WebSearch·WebFetch·tavily·context7 을 직접 부르지 않고 `researcher` 에게 위임해 **결론+출처 요약만** 받는다.
-  서브에이전트가 이 도구들을 갖는 것은 모순이 아니다 — 컨텍스트가 분리되기 때문이다.
-  (하드 차단은 불가능하다. `permissions.deny` 는 서브에이전트의 도구까지 함께 죽인다 → 규칙 기반 소프트 강제)
-- **컨텍스트 예산 (조언자 세션):** 세션 시작 시점 대비 **+59k 토큰**을 쓰면 새 작업을 시작하지 않는다
-  (베이스라인 50,905 기준 200k 창 사용률로는 약 55% 시점).
-  `CONTEXT BUDGET WARNING`/`CONTEXT BUDGET CRITICAL` 이 주입되면 ① 진행 중 작업 마무리 → ② 상태 저장
-  (`.planning/STATE.md` 있으면 `/gsd:pause-work` 제안, 없으면 HANDOFF.md 작성. 코드가 더러우면 `/wip-save` 병행)
-  → ③ **새 세션 권고**(compact 보다 우선 — 무엇을 남길지 조언자가 직접 고를 수 있다).
-  저장 포맷을 새로 만들지 않는다. 경고는 예산 소진(세션 시작 대비 델타)과 컨텍스트 창 사용률을
-  **함께** 표시한다 — 둘은 다른 지표이고, 창에 여유가 있어도 예산을 넘으면 정지 대상이다.
+- 토큰 무거운 **로컬** 작업도 **1M 메인이 직접 읽는 것이 기본값**이다. `analyzer` 위임은 실측 근거가
+  있을 때만 — 대상이 메인 창을 실제로 위협하는 규모이거나, 독립 작업 병렬화가 필요할 때.
+- **리서치·외부 도구는 직접 호출이 기본:** 문서 한두 건·특정 API 시그니처·라이브러리 버전 같은 좁은 조회는
+  메인이 WebSearch·WebFetch·tavily·context7 을 직접 부른다. `researcher` 위임은 조건부 —
+  출처 5건 이상을 훑어야 하거나 원문이 대량일 때만 (**결론+출처 요약만** 받는다).
+- **컨텍스트 예산 (조언자 세션):** 세션 시작 대비 델타가 창 티어별 임계치를 넘으면 새 작업을 시작하지 않는다
+  — 소형 창(< 500k): WARNING 15% / CRITICAL 20% (200k 창 = +30k / +40k),
+  대형 창(>= 500k): WARNING 40% / CRITICAL 55% (1M 창 = +400k / +550k).
+  경고 주입 시 ① 진행 중 작업 마무리 → ② 상태 저장(`.planning/phases/<phase>/` 에 대응 `*-SUMMARY.md` 없는
+  `*-PLAN.md`(미완료 plan) 있으면 `/gsd:pause-work`, 아니면 STATE.md 있으면 그 파일 갱신, 둘 다 없으면
+  HANDOFF.md) → ③ **새 세션 권고**(compact 보다 우선).
+  상세·정본은 글로벌 `~/.claude/CLAUDE.md`의 "컨텍스트 예산" 절.
 - 큰 변경 리뷰는 `/codex:review --background` 후 `/codex:status`·`/codex:result` 로 확인.
 - **worker 보고 수신:** 가능하면 동기 실행으로 결과를 직접 받는다. 백그라운드 실행 시 완료 보고
   텍스트가 조언자에게 전달되지 않을 수 있으므로, 보고를 기다리지 말고 산출물(staged diff·테스트 실행)을 직접 검증한다.
-- **조언자 직접 코딩 금지:** 구현은 worker 위임이 기본값. 예외는 ① 단일 파일·30줄 이내 문서/설정 수정,
-  ② **컨텍스트 핸드오프 문서(HANDOFF / pause-work) 작성 — 줄 수 제한 없음**(저장 대상이 메인 세션
-  컨텍스트에만 존재해 위임이 원리적으로 불가능). 예외여도 Codex 검증은 동일 적용.
+- **구현은 조건부 위임:** 좁은 단일 작업(도구 호출 몇 번이면 끝나는 수정)과 검증·리뷰는 메인이 직접 하고,
+  독립 작업 2건 이상 병렬·실측 대량 원문·워크트리 격리·장시간 실행이면 worker 위임이 기본값
+  (정본은 글로벌 `~/.claude/CLAUDE.md` "위임 판단" 절). 직접이든 위임이든 Codex 검증은 동일 적용.
+  **컨텍스트 핸드오프 문서(HANDOFF / pause-work)는 항상 직접 작성**(저장 대상이 메인 세션
+  컨텍스트에만 존재해 위임이 원리적으로 불가능).
 - **승인 후 정리:** 서브에이전트는 과제 완료 후에도 idle로 상주한다. 승인이 끝나면 TaskStop(또는
   `ctrl+x ctrl+k`)으로 종료해 상주 에이전트를 남기지 않는다.
 
@@ -143,19 +145,20 @@ bash install.sh                                        # 번들 폴더 안에서
 #    /model   → opus 별칭/ID 확인 후 architect의 model 값과 일치시키기
 ```
 
-`install.sh` 가 하는 일: `~/.claude/CLAUDE.md` 의 **번들 마커 블록만 갱신**(블록 밖 개인 내용 보존, 마커 없는 구버전은 백업 후 전체 생성), `agents/{architect,worker,analyzer,researcher}.md` 생성(내용 동일 시 백업 없이 건너뜀), 구버전 `reviewer.md` 백업 후 제거, **활성 statusline 스크립트에 컨텍스트 예산 브리지 블록 삽입**(마커 관리·백업, 아래 설명), **`hooks/advisor-context-budget.js` 설치**, **`settings.json` 의 `hooks.PostToolUse` 에 그 훅을 멱등 병합**(파싱→수정→재출력·백업·유효성 게이트, 아래 설명), Node/Codex 확인 및 `@openai/codex` 설치 시도, `~/.codex/config.toml` 검증 기본값(effort=high) 템플릿 생성.
+`install.sh` 가 하는 일: `~/.claude/CLAUDE.md` 의 **번들 마커 블록만 갱신**(블록 밖 개인 내용 보존, 마커 없는 구버전은 백업 후 전체 생성), **`~/.claude/HISTORY.md` 동기화**(CLAUDE.md 이력 포인터의 대상 — 동일하면 건너뜀, 다르면 기존 파일 백업 후 교체, source 부재 시 중단), `agents/{architect,worker,analyzer,researcher}.md` 생성(내용 동일 시 백업 없이 건너뜀), 구버전 `reviewer.md` 백업 후 제거, **활성 statusline 스크립트에 컨텍스트 예산 브리지 블록 삽입**(마커 관리·백업, 아래 설명), **`hooks/advisor-context-budget.js` 설치**, **`settings.json` 의 `hooks.PostToolUse` 에 그 훅을 멱등 병합**(파싱→수정→재출력·백업·유효성 게이트, 아래 설명), Node/Codex 확인 및 `@openai/codex` 설치 시도, `~/.codex/config.toml` 검증 기본값(effort=high) 템플릿 생성.
 
 **컨텍스트 예산 트리거 (번들 소유 훅 1개):** 설치기는 `settings.json` 의 `.statusLine.command` 를
 파싱해 활성 statusline 스크립트를 찾고, `CURRENT_USAGE=` 줄 바로 뒤에 마커 블록을 삽입한다
 (기존 퍼미션·실행 비트 보존). 이 블록은 세션 첫 관측치를 baseline 으로 래치하고 **사실값만**
 `$TMPDIR/claude-ctx-advisor-{session_id}.json` 에 기록한다 —
 `{baseline, current, delta, window, window_pct, timestamp}`. 합성 퍼센트는 쓰지 않는다.
-`~/.claude/hooks/advisor-context-budget.js`(PostToolUse) 가 그 `delta` 를 직접 보고
-**51,133** 에서 `CONTEXT BUDGET WARNING`, **59,000** 에서 `CONTEXT BUDGET CRITICAL` 을 주입한다.
+`~/.claude/hooks/advisor-context-budget.js`(PostToolUse) 가 그 `delta` 와 `window` 로 창 티어별
+임계치를 계산해 주입한다 — 소형 창(< 500k): WARNING 15% / CRITICAL 20% (200k 창 = +30k / +40k),
+대형 창(>= 500k): WARNING 40% / CRITICAL 55% (1M 창 = +400k / +550k). `window` 부재 시 200k 소형 티어 폴백.
 
 - **왜 퍼센트가 아니라 델타인가:** 베이스라인(시스템 프롬프트+CLAUDE.md+스킬+도구 스키마)만으로
   이미 200k 창의 ~25% 를 쓴다. "창의 25%" 임계치는 첫 턴부터 참이 되어 무한 발동한다.
-  델타 기준은 **창 크기와 무관**하게(200k든 1M이든) 같은 시점에 걸린다.
+  기준은 델타이되 임계치는 창 크기 티어에 비례한다 — 정본은 글로벌 `~/.claude/CLAUDE.md` "컨텍스트 예산" 절.
 - **왜 번들이 훅을 소유하는가:** 이전 배선은 합성 잔량을 GSD 플러그인 소유
   `gsd-context-monitor.js` 에 태웠다. 플러그인 업데이트로 임계치·스키마가 바뀌면 조용히 깨지고(R1),
   주입문의 `Usage at X%` 가 창 사용률이 아니라 예산 소진율이라 상태줄과 어긋나 보였다(R3).
@@ -188,7 +191,7 @@ bash install.sh                                        # 번들 폴더 안에서
 # 검증은 무조건: worker "완료" 보고를 믿지 말고 /codex:review 로 diff 검토 후 승인.
 # 운용 A: 메인=조언자(Opus), 구현=worker, 검증=/codex:review
 # 운용 B: 메인=sonnet, 설계=architect 버스트, 구현=worker(Opus), 검증=Codex
-# 토큰 무거운 작업은 analyzer(Haiku)로 분리, 큰 작업은 /codex:rescue 위임
+# 토큰 무거운 작업도 1M 메인 직접 읽기가 기본 — 실측 창 위협·독립 병렬화 때만 analyzer 위임, 큰 작업은 /codex:rescue 가능
 ```
 > (전체 원문은 `install.sh` 가 생성하는 `~/.claude/CLAUDE.md` 참고)
 

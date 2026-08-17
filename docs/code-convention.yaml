@@ -144,20 +144,20 @@ frontend:
 # -----------------------------------------------------------------------------
 backend:
   fastapi:
-    - rule: "Router 패턴: APIRouter(prefix='/api/...', tags=[...]) + Depends(get_session)"
+    - rule: "Router 패턴: APIRouter(prefix='/api/...', tags=[...]) + Depends(get_db) — from db.database import get_db. 예외(인증 라우트): get_current_user 계열이 get_db_session 세션을 이미 소유 — handler 독립 DB 작업이 필요할 때만 get_db 병용(요청당 세션 2개), 같은 트랜잭션 필요 시 dependency 통합은 별도 리팩터링"
       severity: error
     - rule: "비즈니스 로직은 Service 클래스로 분리 — Router에 로직 직접 작성 금지"
       severity: error
       examples:
         bad: |
           @router.post("/projects")
-          async def create(req: Request, db: AsyncSession = Depends(get_session)):
+          async def create(req: Request, db: AsyncSession = Depends(get_db)):
               project = Project(name=req.name)
               db.add(project)
               await db.commit()
         good: |
           @router.post("/projects")
-          async def create(req: Request, db: AsyncSession = Depends(get_session)):
+          async def create(req: Request, db: AsyncSession = Depends(get_db)):
               return await ProjectService(db).create(req)
     - rule: "Pydantic 모델로 request/response 검증 필수"
       severity: error

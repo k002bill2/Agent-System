@@ -255,5 +255,5 @@ Phase G: docs-sync (변경 델타 → mandatory-docs 매핑 → docs/ surgical �
 
 ## 진화 (Phase 7)
 - 같은 유형 피드백 2회 반복 시 → 해당 에이전트의 스킬/정의 수정 제안
-- 변경은 `CLAUDE.md`의 "하네스: AOS 기능 개발" 변경 이력 테이블에 기록
+- 변경은 `docs/harness-changelog.md` 이력 표에 새 행으로 추가 기록(날짜·변경 내용·대상·사유 — append-only, CLAUDE.md에는 포인터만 유지)
 - 에이전트가 반복 실패하는 패턴 발견 시 진화 제안
