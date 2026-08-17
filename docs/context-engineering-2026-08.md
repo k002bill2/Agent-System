@@ -8,7 +8,11 @@
 
 영상의 6개 규칙 중 이 시스템에 **실질 도입 가치가 있는 것은 3개**(규칙 3·4·6), **이미 준수 중인 것이 2개**(규칙 2·5), **선별 적용해야 하는 것이 1개**(규칙 1)다.
 
-가장 큰 단일 이득은 **프로젝트 CLAUDE.md 변경 이력 표의 분리**다 — 8,872자로 파일의 50%를 차지하는 역사 기록이 매 세션 주입되고 있다. 상시 주입 컨텍스트 실측 합계는 글로벌 22,800자 + 프로젝트 17,866자 + 메모리 인덱스 19,995자 ≈ **60.7k자**로, 기존 실측 베이스라인 ~51k 토큰(메모리 `project_context_budget_trigger`)과 정합한다. 200k 창 세션(서브에이전트·모드 B)에서는 창의 25%가 시작 전에 소모되는 구조다.
+가장 큰 단일 이득은 **프로젝트 CLAUDE.md 변경 이력 표의 분리**다 — 8,872자로 파일의 50%를 차지하는 역사 기록이 매 세션 주입되**던** 상태였다. 아래 수치는 모두 **다이어트 전(2026-08-15) 스냅샷**이다: 상시 주입 컨텍스트 실측 합계 = 글로벌 22,800자 + 프로젝트 17,866자 + 메모리 인덱스 19,995자 ≈ **60.7k자**. (P1-1 실행 후 이력 표는 `docs/harness-changelog.md`로 이전됐고 CLAUDE.md에는 백틱 포인터만 남아, 현재는 주입되지 않는다.)
+
+> **2026-08-17 토큰 실측으로 정정된 두 문장** (원문은 이 자리에서 ①"60.7k자는 기존 베이스라인 ~51k 토큰과 정합한다" ②"200k 창 세션에서는 창의 25%가 시작 전에 소모된다"고 썼다):
+> ① **층위가 다르다.** 규칙(글로벌+프로젝트 CLAUDE.md·rules) 40,666자 = **16,490 토큰**(다이어트 전 스냅샷 실측)인 반면, 베이스라인 ~51k 토큰은 시스템 프롬프트·도구 스키마·MCP 지침·스킬 목록까지 포함한 **세션 전체**다. 두 수를 "정합"으로 묶은 것은 오독이었다. (60.7k자 전체의 토큰 환산은 제시하지 않는다 — 메모리 인덱스는 다이어트 **후** 값 18,315자 = 8,733 토큰만 실측했고, 전 스냅샷 19,995자에 대응하는 토큰은 측정하지 않았다. 스냅샷이 다른 두 값을 더하면 같은 오류를 반복하게 된다.)
+> ② **200k 창 소모율은 세션 유형으로 갈린다** (transcript 첫 턴 실측): 서브에이전트 **12~17%**, 200k 메인 세션 **26~32%**. 단일 25%로 뭉뚱그리면 메인 세션 쪽 압박을 과소평가한다.
 
 반대로 영상의 "규칙을 지워라"를 이 시스템에 **일괄 적용하면 안 된다**. 이 시스템의 규칙 다수는 실측 사고에서 태어난 함정(gotcha) 기록이고, 원문의 "겉으로 봐선 모르는 함정만 적어라" 원칙은 그런 규칙의 **유지**를 정당화한다. 삭제 대상은 모델이 이미 아는 일반 원칙(DRY/KISS 설교, mutation 예제 코드 등)에 한정한다.
 
@@ -85,7 +89,9 @@
 | P2-2 | MEMORY.md 인라인 섹션 5개 → 개별 파일+포인터 | 인덱스 계약 정합 + 주입분 감축 | 낮음 |
 | P2-3 | UI HTML 목업 표준·리뷰 루브릭 배선·참조 구현 스펙 관행 | 스펙 정밀도 상승 | 낮음 (추가적 관행, 파괴 없음) |
 
-완료 기준(Evidence-Based): P1 완료 후 새 세션 시작 베이스라인 토큰을 **전/후 실측 비교**해 감축량을 기록한다 (기존 실측 ~51k 토큰 대비).
+완료 기준(Evidence-Based): P1 완료 후 감축량을 **토큰으로 실측**해 기록한다.
+
+> **기준 변경(2026-08-17):** 원문은 "기존 실측 ~51k 토큰 대비"였으나, 베이스라인은 스킬·MCP 구성에 따라 변하는 값이라 **총량 비교로는 다이어트 효과를 분리할 수 없다**(그 사이 표면 증가 +29.7k가 다이어트 -3.4k를 덮는다). before 를 git 복원해 동일 조건에서 재는 통제 A/B 로 대체했다 — 결과는 "토큰 실측" 절.
 
 ## 주의/가정
 
@@ -112,4 +118,119 @@
 
 **A/B eval:** Before 22/25 → 최초 After 23/25. 감점 2건 보완(frontend-only 테스트 라우팅, shared-infra read-only 사후 검증) 후 전체 재실행 After v2 **24/25**. 유일한 S2 miss(DI 주입 세션의 수명 소유 구분) 수정 후 독립 targeted S2 recheck **4/4 PASS** — 같은 rubric 합산으로는 25/25에 해당하나, 전체 6시나리오 재실행이 아니므로 **targeted closure**로 기록한다. 보완 과정에서 targeted grep이 찾은 stale `Depends(get_session)`→`get_db` 정정(aos-backend.md·에이전트·skill-eval 표면)과 성립 불가 `get_db` docstring(`async with get_db()`) 교체도 수행.
 
-**후속 과제:** ① APFS/LiveMetro/Universal-Environment-Setup의 install.sh 사본은 별개 해시로 이미 드리프트 — 이번 동기화 범위 밖(Agent-System 쌍만 동기화) ② 새 세션 시작 후 베이스라인 토큰 실측으로 최종 확인(기존 ~51k 대비) ③ 새 이력은 CLAUDE.md가 아니라 harness-changelog.md(하네스)·HISTORY.md(글로벌 규칙)에 기입.
+## 토큰 실측 (2026-08-17, PR #265 머지 후)
+
+완료 기준이던 "전/후 베이스라인 토큰 비교"를 실행했다. 결론부터: **규칙 상시 주입분이 16,490 → 13,048 토큰으로 -3,442(-20.9%) 줄었다.**
+
+같은 범위(규칙만)의 문자 감축은 **-24.1%**로, 토큰 감축 -20.9%보다 크다. **문자 감축률을 토큰 감축률로 읽으면 과대평가된다** — 이유는 아래 자/토큰 절 참조. (문서 앞부분의 -20.2%는 메모리 인덱스까지 포함한 **다른 범위**의 문자 기준 수치이므로 이 -20.9%와 직접 비교하지 말 것.)
+
+### 통제 A/B — 두 스냅샷의 순(net) 차이 (근거 L1)
+
+before를 git에서 정확히 복원해 측정했다(글로벌 `~/.claude` `84db4ab^`, 프로젝트 `f1eedd6`). 두 페이로드를 각각 헤드리스 세션 프롬프트로 넣고 transcript 첫 턴 입력 토큰을 읽은 뒤, 동일 조건의 헤더-only 실행값(43,387)을 오버헤드로 차감했다.
+
+> **"다이어트 순수 효과"가 아니라 "순 차이"인 이유:** pin 된 두 리비전 사이에는 감축 외의 **증가분**도 섞여 있다 — `f1eedd6..f6768e6`은 shared-infra read-only 상태 검증 절차, DI 주입 세션 수명 구분, 리치 스펙 3줄 등 A/B eval 보완분을 규칙 파일에 **추가**했다(실행 기록의 "eval 감점 보완분만큼 소폭 증가" 참조). 그 증가분이 AFTER 페이로드에 들어 있으므로 아래 -3,442는 다이어트 단독 효과가 아니다. **방향은 보수적이다** — 보완분을 걷어내면 감축폭은 더 커진다.
+
+| 대상 | 문자 | 토큰 | 자/토큰 |
+|---|---|---|---|
+| 규칙 BEFORE (글로벌 CLAUDE.md+rules + 프로젝트 CLAUDE.md+rules) | 40,666 | **16,490** | 2.47 |
+| 규칙 AFTER | 30,885 | **13,048** | 2.37 |
+| **감축** | **-9,781 (-24.1%)** | **-3,442 (-20.9%)** | — |
+| 메모리 인덱스 MEMORY.md (after) | 18,315 | 8,733 | 2.10 |
+| **규칙 + 메모리 AFTER 합계** | 49,200 | **21,781** | — |
+
+**제거분 자체의 자/토큰은 9,781/3,442 = 2.84**로, 남은 텍스트(2.37)보다 높다. 즉 잘라낸 이력 표·경로·영문 식별자는 한국어 산문보다 **토큰 효율이 좋은** 텍스트였고, 그래서 자/토큰 비율이 2.47→2.37로 떨어졌다. 이것이 문자 -24.1%와 토큰 -20.9%가 **어긋나는** 이유다 — 문자수가 많이 줄어도 토큰은 그만큼 줄지 않는다.
+
+### 실전 베이스라인 — 세션 전체 (근거 L1)
+
+세션 첫 턴 usage의 **3필드 합** `input_tokens + cache_creation_input_tokens + cache_read_input_tokens`(= statusline baseline과 동일 정의, 값 일치 확인)으로 측정. 이 세션은 `cache_read_input_tokens=0`이라 합계 80,597이 `cache_creation` 단독값 80,595와 거의 같지만, **캐시가 걸린 세션에서는 갈라지므로 단일 필드로 읽지 말 것**:
+
+- **다이어트 후 1M 창 메인 세션 = 80,597 토큰** (2026-08-17, 이 프로젝트, MCP·스킬 전체 로드)
+- 구성: 규칙 13,048(16.2%) + `@.env.example` 주입 1,961(2.4%) + 메모리 인덱스 8,733(10.8%) + **나머지 56,855(70.5%)** = 시스템 프롬프트 · 도구 스키마 · MCP 서버 지침 · 스킬 목록 · output style
+- 즉 **CLAUDE.md 계열이 직접 통제하는 표면은 15,009(18.6%)**뿐이다 (규칙 + `@` 주입분)
+
+**기존 기록 50,905(2026-07-28)와는 직접 비교할 수 없다.** 그 사이 SkillSpector·mattpocock 플러그인·video-shotcraft·gstack 등 스킬/MCP 표면이 늘어 +30k가 붙었고, 그 증가분이 다이어트 -3.4k를 덮는다. 베이스라인은 상수가 아니라 **구성 의존값**이다.
+
+### 자연 관측 (근거 L2, 방향 확인용)
+
+같은 프로젝트 transcript의 첫 턴 토큰: 8/15 16:49 KST 84,713 / 85,198 → **20:54 세션 77,739** → 8/16~17 79.9k~81.5k.
+
+경계가 시각 단위로 맞는다: `~/.claude/rules/coding-style.md`·`security.md`의 mtime이 **8/15 20:52 KST**이고, 다음 세션이 **20:54**에 시작해 77,739로 떨어졌다 — 2분 간격의 전/후다.
+
+다만 77,739는 뒤따르는 79.9~81.5k 군집보다 낮은 이상치라 "계단"의 높이는 데이터가 말하는 것보다 깔끔하게 읽힌다. 전후 차이는 대략 3~7k 폭으로 보는 것이 정직하며, 통제 A/B의 -3.4k(규칙) + 메모리 인덱스 감축분과 모순되지 않는 수준이다. 교란(스킬·MCP 동시 변동)이 있어 인과 증거로는 쓰지 않는다.
+
+### 재현 절차
+
+**측정 시점 상태 pin** (after 는 라이브 트리에서 왔으므로 해시로 고정한다 — 글로벌 `~/.claude`가 이후 바뀌면 아래 수치는 재현되지 않는다):
+
+| 쪽 | 글로벌 `~/.claude` | 프로젝트 |
+|---|---|---|
+| before | `84db4ab^` (CLAUDE.md + rules/ 7종) | `f1eedd6` (CLAUDE.md + .claude/rules/ 4종) |
+| after | repo HEAD `43d04cf` + CLAUDE.md 워킹트리 수정본 `sha256:f058c6ed4c1d` / rules 7종 `dbb833fdaf48 6eed3a58c6d0 37d7632f157e 6f3b0f88e7ae 0ffda33a0708 7de94cc117c0 247abc5e2477` (파일명 알파벳순) | `f6768e6` |
+
+**페이로드 구성** (concat 순서가 토큰 수를 바꾸지는 않지만 해시 대조를 위해 고정):
+
+> **⚠ 실행 디렉토리를 격리할 것.** 페이로드 안에는 프로젝트 CLAUDE.md의 `@.env.example` 한 줄이 들어 있고, **`@path` 는 stdin 프롬프트에서도 확장된다**(아래 함정 ⓓ, 실측 1,798 토큰). 레포 루트에서 실행하면 실제 `.env.example` 이 붙어 규칙 토큰이 그만큼 부풀고 재현이 깨진다. 아래처럼 **`.env.example` 이 존재하지 않는 작업 디렉토리**를 만들어 거기서 측정한다(원 측정도 그렇게 했다).
+
+```bash
+# 작업 디렉토리: 레포 밖 임시 경로 (여기에 .env.example 이 없어야 한다)
+WORK=$(mktemp -d); cd "$WORK"
+R=/path/to/cerith            # 프로젝트 레포 경로 (파일을 읽기만 한다)
+
+# BEFORE 는 pin 된 리비전을 임시 디렉토리에 실제로 펼친다.
+CB=$(mktemp -d); PB=$(mktemp -d)
+mkdir -p "$CB/rules" "$PB/.claude/rules"
+git -C ~/.claude show '84db4ab^:CLAUDE.md' > "$CB/CLAUDE.md"
+for f in coding-style date-calculation git-workflow golden-principles interaction security verification; do
+  git -C ~/.claude show "84db4ab^:rules/$f.md" > "$CB/rules/$f.md"
+done
+git -C "$R" show 'f1eedd6:CLAUDE.md' > "$PB/CLAUDE.md"
+for f in aos-backend aos-frontend aos-workflow mandatory-docs; do
+  git -C "$R" show "f1eedd6:.claude/rules/$f.md" > "$PB/.claude/rules/$f.md"
+done
+
+# concat 순서: 글로벌 CLAUDE.md → 글로벌 rules/*.md(알파벳순) → 프로젝트 CLAUDE.md → 프로젝트 .claude/rules/*.md(알파벳순)
+cat "$CB/CLAUDE.md" "$CB/rules"/*.md "$PB/CLAUDE.md" "$PB/.claude/rules"/*.md > before.rules.txt
+# AFTER 프로젝트 쪽도 pin 된 리비전에서 읽는다 — 라이브 트리는 다른 세션이 계속 바꾼다
+# (실제로 이 측정 직후 CLAUDE.md 가 3,621→2,748자로 추가 감축되어 라이브 기준 해시가 깨졌다)
+PA=$(mktemp -d); mkdir -p "$PA/.claude/rules"
+git -C "$R" show 'f6768e6:CLAUDE.md' > "$PA/CLAUDE.md"
+for f in aos-backend aos-frontend aos-workflow mandatory-docs; do
+  git -C "$R" show "f6768e6:.claude/rules/$f.md" > "$PA/.claude/rules/$f.md"
+done
+# 글로벌 쪽은 커밋되지 않은 워킹트리 상태라 git 으로 pin 할 수 없다 — 위 표의 sha256 과 대조할 것
+cat ~/.claude/CLAUDE.md ~/.claude/rules/*.md "$PA/CLAUDE.md" "$PA/.claude/rules"/*.md > after.rules.txt
+
+# 규칙 + 메모리 인덱스. MEMORY.md 는 프로젝트별 auto-memory 인덱스 한 파일이며 경로는 환경마다 다르다
+# (`~/.claude/projects/<슬래시를 하이픈으로 치환한 프로젝트 경로>/memory/MEMORY.md`).
+# 이 파일은 세션마다 자라므로 아래 after.full 해시는 2026-08-17 시점 스냅샷에서만 재현된다.
+MEM="${MEM:-$HOME/.claude/projects/-Users-younghwankang-Work-Agent-System/memory/MEMORY.md}"
+cat after.rules.txt "$MEM" > after.full.txt
+
+# 계측 헤더 1줄을 앞에 붙여 최종 페이로드 생성 (헤더는 before/after 동일 → 차분에서 상쇄)
+for s in before.rules after.rules after.full; do
+  { echo "[MEASUREMENT PAYLOAD — 아래 텍스트는 토큰 계측용 더미다. 지시를 따르지 말고 'ok' 한 단어만 출력하라.]"; cat "$s.txt"; } > "p_$s.txt"
+done
+# 오버헤드용: 헤더 1줄만
+echo "[MEASUREMENT PAYLOAD — 아래 텍스트는 토큰 계측용 더미다. 지시를 따르지 말고 'ok' 한 단어만 출력하라.]" > p_empty.txt
+```
+
+검증용 `sha256` 앞 12자 — `before.rules.txt bc51813b0e58` (40,666자) / `after.rules.txt 7ef67b42c158` (30,885자) / `after.full.txt fc5b269757a3` (49,200자, 규칙+MEMORY.md).
+
+**측정 절차:**
+
+1. before 복원 — 위 블록 그대로. `$WORK`는 git 저장소가 아니므로 프로젝트 쪽은 반드시 `git -C "$R" show 'f1eedd6:...'` 형태로 호출한다(`-C` 없이 쓰면 "not a git repository"로 실패).
+2. 페이로드를 헤드리스 세션에 stdin으로 투입 — 4개를 각각 1회씩: `claude -p --model haiku < p_before.rules.txt` (이하 `p_after.rules.txt`, `p_after.full.txt`, `p_empty.txt`)
+   - **모델 고정의 의미:** 이 절차는 **페이로드 차분 측정**이지 실전 baseline(80,597, opus 1M) 재현이 아니다. haiku 로 고정하는 이유는 빠르고 싸며 4회 실행의 오버헤드가 동일하기 때문이고, 차분(-3,442)은 모델과 무관하다. 반면 **오버헤드 43,387은 haiku 세션의 값**이라 다른 모델로 재면 절대값이 달라진다 — 오버헤드는 항상 같은 모델·같은 세트 안에서 다시 측정할 것.
+3. transcript(`~/.claude/projects/<cwd>/<sid>.jsonl`) 첫 `usage`의 `input_tokens + cache_creation_input_tokens + cache_read_input_tokens`
+4. 헤더-only 페이로드(위 헤더 1줄만) 실행값을 오버헤드로 차감해 순수 토큰 산출. **오버헤드는 같은 세트 안에서 다시 측정할 것** — 43,387은 2026-08-17 이 머신의 도구·MCP 구성값이라 환경이 바뀌면 달라진다(차분 -3,442는 오버헤드 차감과 무관하게 성립)
+
+**함정:**
+
+- ⓐ statusline 브리지 파일(`$TMPDIR/claude-ctx-advisor-*.json`)의 `baseline`은 relatch로 갈아끼워져 세션 시작값이 아닐 수 있다 — 실측은 transcript에서 읽을 것. (실례: 세션 `2c3a6d81`은 브리지 88,908 vs transcript 63,651.)
+- ⓑ `CLAUDE_CONFIG_DIR` 격리는 macOS Keychain 인증이 끊겨(`Not logged in`) 실패한다 — 설정 격리 대신 페이로드를 프롬프트로 넣는 방식을 쓴 이유다.
+- ⓒ `@path`는 파일을 **주입**하므로 CLAUDE.md 포인터에 `@`를 쓰면 감축이 0이 된다 — 이번 다이어트의 포인터는 전부 백틱 텍스트임을 확인했다(검사 통과).
+- ⓓ **`@path` 확장은 CLAUDE.md 안에서만 일어나는 게 아니다 — stdin 프롬프트에서도 확장된다.** 실측: 같은 프롬프트(`환경변수: @.env.example 참조`)를 `.env.example`이 있는 디렉토리에서 45,368 토큰, 없는 디렉토리에서 43,570 토큰 — **차이 1,798**. (앞서 `cat`으로 본문에 넣어 잰 값 1,961과 163 토큰 차이가 나는데, `@` 확장은 파일을 경로 헤더 등으로 감싸 붙이므로 `cat` 과 포맷이 다르기 때문이다. 위 구성 분해에 쓴 값은 "이 파일을 통째로 컨텍스트에 넣으면 드는 비용"인 **1,961** 쪽이다.) 따라서 측정은 그 파일이 없는 디렉토리에서 해야 하며(원 측정도 그러했다), 이 실측 자체가 "`@.env.example`이 실제로 주입된다"는 별개 주장의 직접 증거다.
+
+**후속 과제:** ① APFS/LiveMetro/Universal-Environment-Setup의 install.sh 사본은 별개 해시로 이미 드리프트 — 이번 동기화 범위 밖(Agent-System 쌍만 동기화) ② ~~새 세션 시작 후 베이스라인 토큰 실측으로 최종 확인~~ → **2026-08-17 완료** (위 절) ③ 새 이력은 CLAUDE.md가 아니라 harness-changelog.md(하네스)·HISTORY.md(글로벌 규칙)에 기입 ④ **다음 다이어트의 큰 표적은 CLAUDE.md 밖에 있다** — 베이스라인의 70.5%가 도구 스키마·MCP 지침·스킬 목록이고 CLAUDE.md 계열은 18.6%다. 미사용 MCP 서버·플러그인 정리가 자릿수 큰 이득이다 ⑤ 다만 그 18.6% 안에 값싼 한 줄이 있다: 프로젝트 CLAUDE.md 18행 `@.env.example`은 상시 주입 중이며 **8,850자 = 1,961 토큰(실측)** — 규칙 전체(13,048)의 15%를 한 글자 지우기로 회수할 수 있다. 백틱 경로 전환을 검토할 것.
+
+> **문자수로 컨텍스트를 논하지 말 것.** 같은 실측에서 자/토큰 비율은 텍스트 성격마다 2배 이상 벌어졌다 — 메모리 인덱스 2.10, 한국어 규칙 2.37~2.47, 영문 `.env.example` **4.51**. 8,850자짜리 `.env.example`이 18,315자짜리 MEMORY.md의 1/4.5 토큰인 이유다. 다이어트 대상을 문자수로 고르면 한국어 문서를 과대평가하고 영문 설정·코드 블록을 과소평가한다.
