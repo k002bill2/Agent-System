@@ -182,6 +182,48 @@ RUN_STATE 기록"은 이동 후 경로가 없어 빈 워크스페이스를 재�
 Codex 1~10차 로그는 세션 scratchpad에만 있어 **휘발됐다** — 장기 보존이 필요하면 레포로 옮길 것.
 
 ## Session Continuity
+
+### 2026-08-17 세션 — 컨텍스트 다이어트 실측 트랙 (파일 분할과 별개 트랙)
+
+머지 완료: **PR #267**(토큰 실측) · **PR #269**(`.env` 차단 발견 → 주장 철회). 문서 정본은
+`docs/context-engineering-2026-08.md` "토큰 실측" 절.
+
+- 다이어트 순 효과 **규칙 16,490 → 13,048 토큰(-3,442, -20.9%)**, 베이스라인 **80,597**(1M 창)
+- 구성: 규칙 16.2% + 메모리 인덱스 10.8% + **나머지 73.0%**(도구·MCP·스킬 목록)
+- MCP 도구 스키마는 `ToolSearch` deferred라 **서버 정리의 토큰 이득 0** → 실제 레버는 스킬 목록·메모리
+
+**후속과제 ④ 실행분(스킬 목록 정리) — 2026-08-17 재실측으로 종결. 삭제는 하지 않았다(불필요).**
+이전 기록의 전제("개인 스킬 70개 미사용 = 10.6k 토큰 미청구 절감분")는 **틀렸다**. 그 절감은
+`~/.claude/settings.json` 의 `skillOverrides`(`off` 39 + `user-invocable-only` 11 = 50개)로
+**이미 실현된 상태**였고, 위 베이스라인 80,597 도 그 적용 후 값이다. 미청구 잔액은 없다.
+
+- 주입은 디스크와 다른 집합이다 — 필터 3겹: 플러그인 enable · `skillOverrides` · SKILL.md 의
+  `disable-model-invocation`. 개인 스킬 76개 중 **주입은 17개**, mattpocock 캐시 35개 중 주입 11개
+- 주입 실측 ≈**4.7k 토큰**(개인 17개 1,319 · 프로젝트 11개 945 · `commands/gsd/` 42개 916 ·
+  superpowers 510 · mattpocock 500 · 기타 550). 이미 차단된 분량 ≈15k
+- **플러그인 캐시 중복·disabled 플러그인·꺼둔 개인 스킬 디렉토리 삭제는 전부 0 토큰** — MCP 서버
+  정리와 같은 함정. 게다가 개인 스킬 19개는 `Universal-Environment-Setup/install.sh` 의
+  `global/skills/` 번들 소유라 재설치 시 되살아난다
+- `skillOverrides` 내구성: 두 install.sh 모두 **프로젝트** `.claude/settings.json` 만 딥머지하므로
+  롤백 위험은 없었으나, 이 50개를 **소유·재생성하는 스크립트가 없었다**(유실 시 복구 경로 부재)
+  → **2026-08-18 해소·안착**: `Universal-Environment-Setup` **main `aac63c1`**(ff-only 머지 완료)에
+  정본 스냅샷 조각 + `install_global_settings()` 추가. 머지 후 main 기준 79 PASS/0 FAIL,
+  실환경 dry-run `UNCHANGED`(무해) 확인.
+  살아 있으면 무시·**최상위 키 자체가 없을 때만** 복원되는 병합이라 멱등하고 사용자 편집을 덮지 않는다.
+  단 **부분 유실(항목 일부만 삭제)은 미커버**이며, 설정 변경 시 조각 갱신은 수동이다(드리프트 검사 없음):
+  `jq '{skillOverrides}' ~/.claude/settings.json > global/settings-fragments/skill-overrides.json`
+  회귀 테스트 Test G 포함(79 PASS/0 FAIL, Red-Green 확인). Codex 검증 지적 0건
+
+→ 스킬 쪽 잔여 절감은 최대 1~2k 로 노이즈 ±1,400 에 묻힌다. **다음 레버는 스킬이 아니라
+경로 스코프 규칙**(`.claude/rules/*.md` frontmatter `paths:`)이며, 별도 세션이 aos-backend.md ·
+aos-frontend.md 에서 진행 중이다(이 세션은 해당 미커밋 변경에 손대지 않았다).
+상세는 메모리 `project_skill_memory_diet_backlog`.
+
+남은 후속과제: ① 형제 레포(APFS·LiveMetro·Universal-Environment-Setup) `install.sh` 드리프트 동기화.
+위 `d6d7e8e` 가 이 간극을 넓혔다 — `install_global_settings()` 함수와 `global/settings-fragments/`
+경로가 새로 생겼으므로, APFS·LiveMetro 를 동기화할 때 함께 옮길 것.
+
+### 파일 분할 프로그램 (이전 트랙)
 Last session: 2026-08-09
 Stopped at: **B5 배치 전체 완료 (5/5) — 매 태스크 게이트 4종 실측 통과. 브랜치 미푸시.**
 Task 1~3 시점 Codex 리뷰는 **지적 0건**으로 통과했고, Task 4·5 포함 최종 리뷰가 남았다.
