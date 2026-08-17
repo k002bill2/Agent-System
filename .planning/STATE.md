@@ -205,7 +205,11 @@ Codex 1~10차 로그는 세션 scratchpad에만 있어 **휘발됐다** — 장�
   정리와 같은 함정. 게다가 개인 스킬 19개는 `Universal-Environment-Setup/install.sh` 의
   `global/skills/` 번들 소유라 재설치 시 되살아난다
 - `skillOverrides` 내구성: 두 install.sh 모두 **프로젝트** `.claude/settings.json` 만 딥머지하므로
-  롤백 위험은 없으나, 이 50개를 **소유·재생성하는 스크립트가 없다**(유실 시 복구 경로 부재)
+  롤백 위험은 없었으나, 이 50개를 **소유·재생성하는 스크립트가 없었다**(유실 시 복구 경로 부재)
+  → **2026-08-18 해소**: `Universal-Environment-Setup` 브랜치 `k002bill2/skill-overrides-safety-net`
+  (`d6d7e8e`, **main 미머지 — 머지해야 실효**)에 정본 스냅샷 조각 +`install_global_settings()` 추가.
+  살아 있으면 무시·사라졌을 때만 복원되는 병합이라 멱등하고 사용자 편집을 덮지 않는다.
+  회귀 테스트 Test G 포함(79 PASS/0 FAIL, Red-Green 확인). Codex 검증 지적 0건
 
 → 스킬 쪽 잔여 절감은 최대 1~2k 로 노이즈 ±1,400 에 묻힌다. **다음 레버는 스킬이 아니라
 경로 스코프 규칙**(`.claude/rules/*.md` frontmatter `paths:`)이며, 별도 세션이 aos-backend.md ·
