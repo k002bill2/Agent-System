@@ -115,38 +115,77 @@ cmd_status() {
         echo -e "  Template:  ${GREEN}current${NC}"
     fi
 
-    # Per-service result of the most recent run. The job exits 0 even when a service
-    # is skipped, so "it ran" is not evidence that anything was backed up.
-    MANIFEST="$PROJECT_ROOT/infra/backups/latest/manifest.json"
-    if [[ -f "$MANIFEST" ]]; then
-        # Count entries as well as failures: a truncated manifest has zero status
-        # entries, and "no failures found" must not be reported as healthy.
-        # `|| true`: grep exits 1 on no match, which would abort us under `set -e`.
-        TOTAL=$(grep -c '"status":' "$MANIFEST" || true)
-        OK_COUNT=$(grep -c '"status": *"ok"' "$MANIFEST" || true)
-        if [[ "$TOTAL" != "$EXPECTED_SERVICES" ]]; then
-            echo -e "  Services:  ${RED}unknown${NC} — manifest has $TOTAL/$EXPECTED_SERVICES entries (truncated?): $MANIFEST"
-        elif [[ "$OK_COUNT" == "$EXPECTED_SERVICES" ]]; then
-            echo -e "  Services:  ${GREEN}all ok${NC}"
-        else
-            echo -e "  Services:  ${RED}$((EXPECTED_SERVICES - OK_COUNT)) service(s) not backed up${NC} — see $MANIFEST"
+    # Resolve the backup set once, before reporting anything: the per-service verdict
+    # and the "latest" line must describe the *same* backup. Reading the `latest`
+    # symlink while listing by mtime lets them disagree when a run aborts before
+    # updating the symlink — status would show the failed attempt while reporting the
+    # previous run's "all ok".
+    #
+    # Count both layouts: backup-all.sh writes timestamped directories, while the
+    # legacy backup-db.sh path (still reachable via the cmd_run fallback) writes
+    # aos_backup_*.dump files. Matching only the legacy pattern reported
+    # "no backups yet" on every run regardless of how many backups existed.
+    # Sort by mtime, not name — a name sort would rank every '20*' directory above
+    # every 'aos_backup_*' file regardless of age. `find` exits 0 when nothing
+    # matches, unlike ls/grep under `set -e`.
+    BACKUP_DIR="$PROJECT_ROOT/infra/backups"
+    COUNT=0
+    LATEST=""
+    if [[ -d "$BACKUP_DIR" ]]; then
+        FIND_BACKUPS=(find "$BACKUP_DIR" -maxdepth 1
+            \( -type d -name '20*' -o -type f -name 'aos_backup_*.dump' \))
+        COUNT=$("${FIND_BACKUPS[@]}" 2>/dev/null | wc -l | tr -d ' ')
+        if [[ "$COUNT" -gt 0 ]]; then
+            # Guarded by COUNT: `xargs ls` with empty input would list the cwd.
+            # Take the first line in the shell instead of piping to `head`, which can
+            # close the pipe mid-write and surface as a SIGPIPE failure under pipefail.
+            LATEST=$("${FIND_BACKUPS[@]}" -print0 2>/dev/null | xargs -0 ls -td)
+            LATEST=${LATEST%%$'\n'*}
         fi
     fi
 
-    # Show recent backups
-    BACKUP_DIR="$PROJECT_ROOT/infra/backups"
-    if [[ -d "$BACKUP_DIR" ]]; then
-        LATEST=$(find "$BACKUP_DIR" -maxdepth 1 -name "aos_backup_*.dump" -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -1 || true)
-        if [[ -n "$LATEST" ]]; then
-            SIZE=$(du -h "$LATEST" | cut -f1)
-            MOD=$(stat -f '%Sm' -t '%Y-%m-%d %H:%M' "$LATEST")
-            echo "  Latest:    $(basename "$LATEST") ($SIZE, $MOD)"
+    # Per-service result of that backup. The job exits 0 even when a service is
+    # skipped, so "it ran" is not evidence that anything was backed up.
+    if [[ -d "$LATEST" ]]; then
+        MANIFEST="$LATEST/manifest.json"
+        # Parse the JSON rather than counting matching lines. A manifest truncated
+        # after its status lines still yields the expected count by grep while being
+        # unusable to restore-all.sh, which would report a broken backup as healthy.
+        if [[ ! -f "$MANIFEST" ]]; then
+            SERVICE_STATE="nomanifest"
         else
-            echo "  Latest:    no backups yet"
+        SERVICE_STATE=$(python3 -c '
+import json, sys
+try:
+    services = json.load(open(sys.argv[1]))["services"]
+except Exception:
+    print("unparseable"); raise SystemExit
+if len(services) != int(sys.argv[2]):
+    print("incomplete:%d" % len(services)); raise SystemExit
+bad = sorted(k for k, v in services.items() if v.get("status") != "ok")
+print("ok" if not bad else "failed:" + ",".join(bad))
+' "$MANIFEST" "$EXPECTED_SERVICES" 2>/dev/null || echo "unparseable")
         fi
-        COUNT=$(find "$BACKUP_DIR" -name "aos_backup_*.dump" -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')
-        echo "  Total:     $COUNT backup(s)"
+
+        case "$SERVICE_STATE" in
+            ok)           echo -e "  Services:  ${GREEN}all ok${NC}" ;;
+            failed:*)     echo -e "  Services:  ${RED}not backed up: ${SERVICE_STATE#failed:}${NC} — see $MANIFEST" ;;
+            incomplete:*) echo -e "  Services:  ${RED}incomplete${NC} — ${SERVICE_STATE#incomplete:}/$EXPECTED_SERVICES entries: $MANIFEST" ;;
+            nomanifest)   echo -e "  Services:  ${RED}incomplete${NC} — no manifest in $(basename "$LATEST") (run aborted?)" ;;
+            *)            echo -e "  Services:  ${RED}unreadable manifest${NC} — $MANIFEST" ;;
+        esac
+    elif [[ -n "$LATEST" ]]; then
+        echo -e "  Services:  ${YELLOW}n/a${NC} — latest backup is a legacy single-file dump"
     fi
+
+    if [[ -n "$LATEST" ]]; then
+        SIZE=$(du -sh "$LATEST" | cut -f1)
+        MOD=$(stat -f '%Sm' -t '%Y-%m-%d %H:%M' "$LATEST")
+        echo "  Latest:    $(basename "$LATEST") ($SIZE, $MOD)"
+    else
+        echo "  Latest:    no backups yet"
+    fi
+    echo "  Total:     $COUNT backup(s)"
 
     # Show recent log
     if [[ -d "$LOG_DIR" ]]; then
