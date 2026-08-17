@@ -14,6 +14,8 @@ LABEL="com.aos.db-backup"
 PLIST_SRC="$SCRIPT_DIR/com.aos.db-backup.plist"
 PLIST_DST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG_DIR="$PROJECT_ROOT/infra/backups/logs"
+# backup-all.sh writes one manifest entry per service (postgres, redis, qdrant).
+EXPECTED_SERVICES=3
 
 # Colors
 GREEN='\033[0;32m'
@@ -101,6 +103,35 @@ cmd_status() {
 
     # Show schedule
     echo "  Schedule:  daily at 03:00"
+
+    # Installed plist vs template — an agent installed before a template change keeps
+    # running the old copy. A stale CONTAINER_NAME override once skipped every
+    # PostgreSQL backup for the full retention window without failing the job.
+    EXPECTED=$(sed -e "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" -e "s|__LOG_DIR__|$LOG_DIR|g" "$PLIST_SRC")
+    if [[ "$EXPECTED" != "$(cat "$PLIST_DST")" ]]; then
+        echo -e "  Template:  ${RED}stale${NC} — installed plist differs from $PLIST_SRC"
+        echo -e "             ${YELLOW}Run '$0 install' to regenerate and reload.${NC}"
+    else
+        echo -e "  Template:  ${GREEN}current${NC}"
+    fi
+
+    # Per-service result of the most recent run. The job exits 0 even when a service
+    # is skipped, so "it ran" is not evidence that anything was backed up.
+    MANIFEST="$PROJECT_ROOT/infra/backups/latest/manifest.json"
+    if [[ -f "$MANIFEST" ]]; then
+        # Count entries as well as failures: a truncated manifest has zero status
+        # entries, and "no failures found" must not be reported as healthy.
+        # `|| true`: grep exits 1 on no match, which would abort us under `set -e`.
+        TOTAL=$(grep -c '"status":' "$MANIFEST" || true)
+        OK_COUNT=$(grep -c '"status": *"ok"' "$MANIFEST" || true)
+        if [[ "$TOTAL" != "$EXPECTED_SERVICES" ]]; then
+            echo -e "  Services:  ${RED}unknown${NC} — manifest has $TOTAL/$EXPECTED_SERVICES entries (truncated?): $MANIFEST"
+        elif [[ "$OK_COUNT" == "$EXPECTED_SERVICES" ]]; then
+            echo -e "  Services:  ${GREEN}all ok${NC}"
+        else
+            echo -e "  Services:  ${RED}$((EXPECTED_SERVICES - OK_COUNT)) service(s) not backed up${NC} — see $MANIFEST"
+        fi
+    fi
 
     # Show recent backups
     BACKUP_DIR="$PROJECT_ROOT/infra/backups"
