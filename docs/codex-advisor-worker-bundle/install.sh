@@ -2,6 +2,7 @@
 #
 # 조언자–작업자–Codex 검증 번들 · 원샷 설치기
 # ─ ~/.claude/CLAUDE.md 의 번들 마커 블록 갱신 (블록 밖 개인 내용은 보존)
+# ─ ~/.claude/HISTORY.md 동기화 (CLAUDE.md 이력 포인터의 대상 — source 부재 시 중단)
 # ─ ~/.claude/agents/{architect,worker,analyzer,researcher}.md 생성 (내용 동일 시 건너뜀)
 # ─ 구버전 reviewer.md 백업 후 제거(검증은 Codex로 대체)
 # ─ 활성 statusline 스크립트에 컨텍스트 예산 브리지 블록 삽입 (마커 관리·백업)
@@ -18,6 +19,8 @@ set -euo pipefail
 CLAUDE_DIR="${HOME}/.claude"
 AGENTS_DIR="${CLAUDE_DIR}/agents"
 CODEX_DIR="${HOME}/.codex"
+# 번들 디렉토리 — HISTORY.md 등 동반 파일의 source 위치 (이 스크립트 파일 기준)
+BUNDLE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 
 # CLAUDE.md 번들 블록 마커 — 이 블록 안만 설치기가 관리한다.
 # 개인 추가 내용은 반드시 블록 밖에 작성할 것 (재설치 시 보존됨).
@@ -411,10 +414,11 @@ process.stdin.on('end', () => {
     if (isCritical) {
       message =
         `CONTEXT BUDGET CRITICAL: 세션 시작 대비 +${fmt(delta)} 토큰 사용 (${winText} — 고갈 아님). ` +
-        '작업을 자연스러운 지점에서 마무리하고 상태를 저장하세요 — `.planning/STATE.md` 가 있으면 ' +
-        '`/gsd:pause-work` 를 사용자에게 제안하고, 없으면 HANDOFF.md 를 작성하세요(설계 결정·완료 기준·' +
-        '검증 상태·다음 단계). 코드가 더러우면 `/wip-save` 병행. 이어서 할 때는 compact 보다 새 세션을 ' +
-        '권고하세요. 저장 포맷을 새로 만들지 마세요.';
+        '작업을 자연스러운 지점에서 마무리하고 상태를 저장하세요 — `.planning/phases/<phase>/` 에 대응 ' +
+        '`*-SUMMARY.md` 가 없는 `*-PLAN.md`(미완료 plan)가 있으면 `/gsd:pause-work` 를 사용자에게 제안, ' +
+        '아니면(전부 완료 포함) `.planning/STATE.md` 가 있으면 STATE.md 의 Current Position·Session ' +
+        'Continuity 를 갱신, 둘 다 없으면 HANDOFF.md 를 작성하세요(설계 결정·완료 기준·검증 상태·다음 단계). ' +
+        '코드가 더러우면 `/wip-save` 병행. 이어서 할 때는 compact 보다 새 세션을 권고하세요. 저장 포맷을 새로 만들지 마세요.';
     } else {
       message =
         `CONTEXT BUDGET WARNING: 세션 시작 대비 +${fmt(delta)} 토큰 사용 (${winText} — 고갈 아님). ` +
@@ -1298,6 +1302,18 @@ CTXBRIDGE
   return 0
 }
 
+echo "▶ ~/.claude/HISTORY.md 동기화 (CLAUDE.md 이력 포인터의 대상)"
+# 포인터가 어느 프로젝트에서든 해석되도록 이력을 글로벌 위치로 복사한다.
+# source 부재는 fail-closed — 포인터가 깨진 채 설치를 계속하지 않는다.
+if [ ! -s "${BUNDLE_DIR}/HISTORY.md" ]; then
+  echo "  ✗ ${BUNDLE_DIR}/HISTORY.md 없음 — 번들이 불완전합니다. 중단." >&2
+  exit 1
+fi
+# install_file 계약 재사용: 동일하면 건너뜀, 다르면 기존 파일 백업(.bak.<UTC타임스탬프>) 후 교체.
+TMP_HISTORY="$(mktemp)"
+cp "${BUNDLE_DIR}/HISTORY.md" "${TMP_HISTORY}"
+install_file "${CLAUDE_DIR}/HISTORY.md" "${TMP_HISTORY}"
+
 echo "▶ ~/.claude/CLAUDE.md 번들 블록 갱신"
 TMP_BLOCK="$(mktemp)"
 cat > "${TMP_BLOCK}" <<'CLAUDEMD'
@@ -1305,6 +1321,7 @@ cat > "${TMP_BLOCK}" <<'CLAUDEMD'
 
 > `~/.claude/CLAUDE.md`. 이 지침은 권고(context)이며, 실제 모델 고정은
 > `~/.claude/agents/` 서브에이전트의 `model:` 필드로 강제한다. 검증은 Codex 플러그인이 담당한다.
+> 개정 이력·근거 서사는 `~/.claude/HISTORY.md` (install.sh 가 번들 HISTORY.md 를 동기화 — 필요할 때만 읽기).
 
 ## 핵심: 조언자–작업자–검증 (Advisor–Worker–Codex)
 - 조언자(Advisor · Opus): 설계·판단·최종 결정. 구현은 아래 "위임 판단" 절의 조건으로 직접/위임을 고른다.
@@ -1318,9 +1335,9 @@ cat > "${TMP_BLOCK}" <<'CLAUDEMD'
 작업자의 "완료" 보고를 그대로 믿지 않는다. /codex:review(또는 /codex:adversarial-review)를 실행해
 diff를 실제로 검토한 뒤, 조언자가 지적사항 반영을 지시하고 통과했을 때만 승인한다.
 
-## 위임 판단 (2026-08-08 개정 — 이전 "조언자 직접 코딩 금지"를 대체)
-위임은 기본값이 아니라 **조건부 선택지**다. 서브에이전트는 `model:` 값과 무관하게 200k 창이므로
-(Agent 도구 model enum 에 `[1m]` 변형 없음), 1M 메인이 위임할 때마다 작업자의 창은 오히려 좁아진다.
+## 위임 판단
+위임은 기본값이 아니라 **조건부 선택지**다. 서브에이전트는 부모의 1M 창을 그대로 상속하므로(실측 2026-08-09, L2)
+위임 상한의 근거는 창 손실이 아니라 **컨텍스트 재적재 비용과 정보 손실**(메인이 이미 읽은 것을 다시 읽음, 요약 유실)이다.
 
 **위임 상한 — 다음은 위임하지 않고 메인 루프에서 직접 한다:**
 - 도구 호출 몇 번이면 끝나는 일 (단일 파일 편집, 좁은 grep, 설정 한 줄)
@@ -1353,8 +1370,7 @@ worker 보고 수신: 가능하면 동기 실행으로 결과를 직접 받는�
 - 모드 A(기본): 메인 세션 = 조언자(Opus, 1M). 구현은 **"위임 판단" 절의 조건으로 직접/worker 를 고른다**
   — 조건 미충족이면 메인이 직접 구현한다. 검증은 /codex:review.
 - 모드 B(비용 최소): 메인은 Sonnet. 설계는 architect 버스트(Opus), 구현은 worker(Opus) 위임이 기본, 검증은 Codex.
-  모드 B 에서 위임 상한을 적용하지 않는 이유: "위임 판단"의 상한은 *메인이 Opus 5* 라서 위임이 티어·창
-  양쪽에서 손해라는 전제 위에 있다. 메인이 Sonnet 이면 worker(Opus) 위임은 티어 상향이므로 전제가 뒤집힌다.
+  모드 B에서는 위임 상한을 적용하지 않는다 — 메인이 Sonnet이면 worker(Opus) 위임이 티어 상향이라 상한의 전제가 뒤집힌다.
 - (옵션) 자동 검증: /codex:setup --enable-review-gate — 종료 전 Codex 자동 리뷰. 사용량 소모 큼, 감시하며 사용.
 
 ## 모델 고정
@@ -1363,7 +1379,7 @@ worker 보고 수신: 가능하면 동기 실행으로 결과를 직접 받는�
 모드 B는 소진 "대비" 절약책이지 소진 "후" 대책이 아니다 — 모드 B에서도 architect·worker는 그대로 opus를 호출한다.
 Opus 소진 후 경로는 둘: (a) 두 에이전트의 model: 을 sonnet 으로 임시 하향, (b) /codex:rescue 로 Codex(별도 한도)에 위임.
 
-**상향 경로 — Fable 5 (2026-08-08 신설, 명시적 opt-in 전용):**
+**상향 경로 — Fable 5 (명시적 opt-in 전용):**
 Agent 도구 model enum 에 `fable` 이 있으나 기본 구성 어디에서도 쓰지 않는다. 단가가 Opus 5 의
 2배($10/$50 per 1M)이므로 자동 승격은 두지 않고, 다음 두 경우에 한해 사용자가 명시적으로 지시할 때만 쓴다:
 - 실패 비용이 큰 1회성 최난도 판단 (되돌리기 어려운 마이그레이션 설계, 아키텍처 분기 결정)
@@ -1373,44 +1389,37 @@ Agent 도구 model enum 에 `fable` 이 있으나 기본 구성 어디에서도 
 ## Reasoning effort
 - Claude 기본 high. Codex 검증 effort는 ~/.codex/config.toml 의 model_reasoning_effort 로 조절(high 권장).
 
-## 토큰 무거운 작업 (2026-08-08 개정)
-**1M 메인이 직접 읽는 것이 기본값이다.** "코드베이스 분석·긴 로그·대량 요약은 analyzer 에 먼저
-위임한다"는 의무는 폐기한다 — analyzer 는 200k(Haiku 4.5)이므로 1M 메인이 대량 입력을 넘기는 것은
-구조적 역전이고, 요약 과정에서 정보가 손실된다.
-위임은 실측 근거가 있을 때만 한다: 대상이 메인 창을 실제로 위협하는 규모이거나, 독립 작업 병렬화가 필요할 때.
-규모가 큰 구현·버그 조사는 /codex:rescue 로 Codex에 위임할 수 있다.
-(미결: `model: inherit` 이 `opus[1m]` 의 1M 창을 상속하는지 미검증. 확인 전까지 analyzer 의 티어는
- haiku 로 둔다 — 티어만 올리고 창이 200k 그대로면 이득이 0 이다.)
+## 토큰 무거운 작업
+**1M 메인이 직접 읽는 것이 기본값이다.** 대량 입력을 analyzer 등에 먼저 위임하는 의무는 폐기했다 —
+요약 과정에서 정보가 손실된다. 위임은 실측 근거가 있을 때만 한다: 대상이 메인 창을 실제로 위협하는
+규모이거나, 독립 작업 병렬화가 필요할 때. 규모가 큰 구현·버그 조사는 /codex:rescue 로 Codex에 위임할 수 있다.
 
 ## 컨텍스트 예산 (조언자 세션)
 세션 시작 시점 대비 델타가 임계치를 넘으면 새 작업을 시작하지 않는다
 (1M 창 = +550k, 200k 창 = +40k — 아래 티어 참조).
 컨텍스트 경고(CONTEXT BUDGET WARNING / CONTEXT BUDGET CRITICAL)가 주입되면 즉시:
 1. 진행 중 작업을 자연스러운 지점에서 마무리
-2. 상태 저장 — `.planning/STATE.md` 가 있으면 `/gsd:pause-work` 를 제안하고, 없으면 HANDOFF.md 작성(설계 결정·완료 기준·검증 상태·다음 단계). 코드가 더러우면 `/wip-save` 병행
+2. 상태 저장 — 분기 조건은 STATE.md 가 아니라 **미완료 plan 의 실존**이다.
+   `/gsd:pause-work` 는 `.planning/phases/<phase>/*-PLAN.md` 를 찾아 동작하며 STATE.md 를 읽지 않는다.
+   미완료 판정은 GSD 관례대로 **대응 `*-SUMMARY.md` 부재**다 — plan 이 전부 SUMMARY 를 가진 phase 는
+   완료된 것이라, 보내면 끝난 phase 의 핸드오프를 만들거나 빈 손으로 phase 를 되묻는다:
+   - `.planning/phases/<phase>/` 에 대응 `*-SUMMARY.md` 없는 `*-PLAN.md` 있음 → `/gsd:pause-work`
+   - 그 외(전부 완료 포함) `.planning/STATE.md` 있음 → STATE.md 의 `Current Position`·`Session Continuity` 갱신
+   - 둘 다 없음 → HANDOFF.md 작성(설계 결정·완료 기준·검증 상태·다음 단계)
+   코드가 더러우면 `/wip-save` 병행
 3. 새 세션을 권고한다 (compact 보다 우선 — 무엇을 남길지 조언자가 직접 고를 수 있다)
 저장 포맷을 새로 만들지 않는다. 위 경로 중 하나를 쓴다.
 경고는 예산 소진(세션 시작 대비 델타)과 컨텍스트 창 사용률을 함께 표시한다.
 둘은 다른 지표다 — 창에 여유가 있어도 예산을 넘으면 정지 대상이다.
-기준은 델타(토큰)이되 임계치는 창 크기에 비례하며, 비율은 **창 티어별로 다르다** (2026-08-08 변경):
+기준은 델타(토큰)이되 임계치는 창 크기에 비례하며, 비율은 **창 티어별로 다르다**:
 - 소형 창(< 500k): WARNING 15% / CRITICAL 20% — 200k 창 = +30k / +40k
 - 대형 창(>= 500k): WARNING 40% / CRITICAL 55% — 1M 창 = +400k / +550k
-대형 창을 완화한 근거: Opus 5 는 1M 전 구간에서 instruction following·tool calling·reasoning 을
-유지한다. 15/20% 를 그대로 적용하면 델타 200k 에서 정지해 남은 800k 를 쓰지 못했다.
-반대로 40/55% 를 소형 창에 적용하면 200k 창에서 베이스라인 포함 창의 80% 까지 진행돼
-'Context 75% Rule' 을 넘는다 — 그래서 하나의 비율이 아니라 티어로 나눈다.
 창 크기를 모를 때(브리지 window 필드 부재)는 200k 로 폴백해 소형 티어를 적용한다 — 모르면 보수적으로.
-이전의 고정 상수(51,133 / 59,000)는 200k 창 시절 값이라 1M 창에서 창의 6% 지점에 울렸고,
-정상 작업 하나가 경고를 여러 번 띄워 규칙이 사문화될 위험이 있었다. 델타 기준이므로(0에서 시작)
-창 사용률 임계치의 "턴 0 발동" 함정은 여전히 없다.
 
-## 리서치·외부 도구 (2026-08-08 완화)
+## 리서치·외부 도구
 메인 세션이 WebSearch·WebFetch·tavily·context7 을 직접 부르는 것을 **금지하지 않는다**.
 - 직접 호출이 기본: 문서 한두 건 확인, 특정 API 시그니처, 라이브러리 버전 같은 좁은 조회.
 - researcher 위임은 조건부: 출처 5건 이상을 훑어야 하거나 원문이 대량일 때.
-완화 근거: 원래 논거는 컨텍스트 보호였는데 1M 창에서 약해졌고, researcher 는 sonnet 이라
-메인(Opus 5)보다 낮은 판단력으로 출처를 선별·요약한다 — 위임 자체가 정보 손실 지점이다.
-서브에이전트가 이 도구들을 갖는 것은 여전히 모순이 아니다 — 컨텍스트가 분리되기 때문이다.
 
 ## 출력 규약
 요약 → 근거 → 주의/가정 → 다음 단계. 근거 수준 L1/L2/L3, 불확실성 High/Medium/Low 표시.

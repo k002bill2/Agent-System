@@ -63,7 +63,7 @@ Always follow the project's router pattern:
 ```python
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from ..db.session import get_session
+from db.database import get_db
 from ..models.agent import AgentCreate, AgentResponse
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
@@ -71,7 +71,7 @@ router = APIRouter(prefix="/api/agents", tags=["agents"])
 @router.post("/", response_model=AgentResponse)
 async def create_agent(
     data: AgentCreate,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     service = AgentService(session)
     try:
@@ -169,7 +169,7 @@ def fetch_data():
 ```python
 # Good - session from dependency injection
 @router.get("/{id}")
-async def get_item(id: str, session: AsyncSession = Depends(get_session)):
+async def get_item(id: str, session: AsyncSession = Depends(get_db)):
     ...
 
 # Bad - creating session manually

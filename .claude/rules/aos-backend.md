@@ -1,7 +1,8 @@
 # AOS Backend Rules
 
 ## FastAPI Patterns
-- Router: `APIRouter(prefix="/api/...", tags=[...])` + `Depends(get_session)`
+- Router: `APIRouter(prefix="/api/...", tags=[...])` + `Depends(get_db)` (`from db.database import get_db`)
+- 인증 라우트 주의: `Depends(get_current_user)`/`get_current_user_optional`은 내부에서 이미 `get_db_session`(`api/deps.py`)으로 세션을 연다 — handler에 `Depends(get_db)`를 함께 쓰면 요청당 서로 다른 세션·트랜잭션 2개가 열린다. handler가 독립 DB 작업을 정말 필요로 할 때만 병용하고, 같은 트랜잭션이 필요하면 임의로 섞지 말 것 — dependency 통합은 별도 리팩터링으로 설계한다
 - Service Layer: 비즈니스 로직은 Service 클래스로 분리
 - Pydantic models: request/response 검증 필수
 

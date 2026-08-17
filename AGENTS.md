@@ -51,7 +51,7 @@ cd src/dashboard && npm test
 - Docker 포트 충돌 시 `.env`의 `PG_PORT`, `REDIS_PORT` 등으로 오버라이드
 - Vite proxy 설정(`vite.config.ts`)이 `/api` → `localhost:8000`으로 프록시함
 - Zustand store 테스트 시 각 테스트마다 store 리셋 필요 (격리)
-- SQLAlchemy async session은 반드시 `async with` 패턴 사용 (수동 close 금지)
+- SQLAlchemy async session: 코드가 직접 생성할 때만(`async_session_factory()`) `async with`로 수명 관리. `Depends(get_db)`로 주입된 세션은 dependency가 수명·commit/rollback을 소유 — handler에서 재차 `async with`·수동 close 금지
 - CORS 문제 발생 시 `.env`의 `CORS_ORIGINS` 확인
 - `docker compose` 명령은 `~/Work/shared-infra/docker-compose.yml`을 대상. `infra/docker/docker-compose.yml`은 더 이상 DB 스택 소스가 아님 (빌드/배포 참조용)
 
