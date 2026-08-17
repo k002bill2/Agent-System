@@ -15,29 +15,19 @@ cd src/backend && uv pip install -e . && uvicorn api.app:app --reload
 cd src/dashboard && npm install && npm run dev
 ```
 
-Backend: `localhost:8000` | Dashboard: `localhost:5173` | 환경변수: @.env.example 참조
+Backend: `localhost:8000` | Dashboard: `localhost:5173` | 환경변수: `.env.example` (전체 목록 — 필요할 때 Read)
 
 AOS는 자체 DB 스택을 띄우지 않고 `~/Work/shared-infra`를 공유합니다 (ppt-maker, image-maker도 동일). `dev.sh`/`start-all.sh`/`stop-all.sh`는 모두 shared-infra를 대상으로 동작합니다.
 
-## 새 프로젝트를 shared-infra에 합치기
-
-기존 DB를 보존하면서 새 프로젝트용 DB만 추가합니다.
-
-```bash
-cd ~/Work/shared-infra
-./add-project.sh <db_name> <redis_db_number>
-# 예: ./add-project.sh livemetro 3
-```
-
-스크립트가 `init-databases.sql` append + 실행 중인 `shared-postgres`에 idempotent SQL 적용. 기존 aos/elitedeck/image_maker 데이터는 건드리지 않음.
-
 **절대 금지**: `docker compose down -v`, `docker volume rm shared-infra_*` — 모든 프로젝트 데이터 소실.
+
+새 프로젝트 추가 절차와 장애 후 상태 검증 명령은 `docs/shared-infra.md` 참조.
 
 ## Testing
 
 ```bash
-# Backend
-cd src/backend && pytest ../../tests/backend
+# Backend (CI Backend Tests와 동일 — 상세는 .claude/rules/aos-backend.md)
+cd src/backend && uv run pytest ../../tests/backend -v --tb=short
 
 # Dashboard (Vitest)
 cd src/dashboard && npm test
