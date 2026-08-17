@@ -206,8 +206,9 @@ Codex 1~10차 로그는 세션 scratchpad에만 있어 **휘발됐다** — 장�
   `global/skills/` 번들 소유라 재설치 시 되살아난다
 - `skillOverrides` 내구성: 두 install.sh 모두 **프로젝트** `.claude/settings.json` 만 딥머지하므로
   롤백 위험은 없었으나, 이 50개를 **소유·재생성하는 스크립트가 없었다**(유실 시 복구 경로 부재)
-  → **2026-08-18 해소**: `Universal-Environment-Setup` 브랜치 `k002bill2/skill-overrides-safety-net`
-  (`d6d7e8e`, **main 미머지 — 머지해야 실효**)에 정본 스냅샷 조각 +`install_global_settings()` 추가.
+  → **2026-08-18 해소·안착**: `Universal-Environment-Setup` **main `aac63c1`**(ff-only 머지 완료)에
+  정본 스냅샷 조각 + `install_global_settings()` 추가. 머지 후 main 기준 79 PASS/0 FAIL,
+  실환경 dry-run `UNCHANGED`(무해) 확인.
   살아 있으면 무시·**최상위 키 자체가 없을 때만** 복원되는 병합이라 멱등하고 사용자 편집을 덮지 않는다.
   단 **부분 유실(항목 일부만 삭제)은 미커버**이며, 설정 변경 시 조각 갱신은 수동이다(드리프트 검사 없음):
   `jq '{skillOverrides}' ~/.claude/settings.json > global/settings-fragments/skill-overrides.json`
