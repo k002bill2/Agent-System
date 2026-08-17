@@ -10,6 +10,7 @@
 | 새 기능 번호 추가 | `docs/features.md` |
 | Agent/Task 관련 모델 | `docs/ontology.md` |
 | LLM 키/자격증명 (프로바이더·프록시·usage admin) | `docs/llm-key-systems.md` |
+| shared-infra / DB 스택 / 인프라 장애 대응 | `docs/shared-infra.md` |
 | Claude Code 통합 아키텍처 | `docs/architecture/claude-code-integration.md` |
 | 기능 구현 완료 후 | `docs/doc-update-rules.md` |
 
