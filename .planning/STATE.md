@@ -192,13 +192,25 @@ Codex 1~10차 로그는 세션 scratchpad에만 있어 **휘발됐다** — 장�
 - 구성: 규칙 16.2% + 메모리 인덱스 10.8% + **나머지 73.0%**(도구·MCP·스킬 목록)
 - MCP 도구 스키마는 `ToolSearch` deferred라 **서버 정리의 토큰 이득 0** → 실제 레버는 스킬 목록·메모리
 
-**중단 지점(다음 세션이 이어받을 것): 후속과제 ④ 실행분 — 스킬 목록·메모리 정리.**
-조사만 완료하고 삭제는 착수하지 않았다(컨텍스트 예산 경고 +479k에서 정지).
-실측 수치·정리 후보·착수 전 함정은 메모리 `project_skill_memory_diet_backlog` 에 있다.
-요지: 개인 스킬 76개 중 **70개가 사용 0회**(desc 10.6k 토큰), `example-skills`가 **3중 캐시**
-(활성 `f6656c1256d5`). **호출 0회를 미사용으로 단정하지 말 것** — Skill 도구 호출과 슬래시
-호출이 다른 형태로 기록되므로 두 소스를 합산해야 하고, 전후 검증은 세션 노이즈 ±1,400 토큰보다
-큰 변화만 유의미하다.
+**후속과제 ④ 실행분(스킬 목록 정리) — 2026-08-17 재실측으로 종결. 삭제는 하지 않았다(불필요).**
+이전 기록의 전제("개인 스킬 70개 미사용 = 10.6k 토큰 미청구 절감분")는 **틀렸다**. 그 절감은
+`~/.claude/settings.json` 의 `skillOverrides`(`off` 39 + `user-invocable-only` 11 = 50개)로
+**이미 실현된 상태**였고, 위 베이스라인 80,597 도 그 적용 후 값이다. 미청구 잔액은 없다.
+
+- 주입은 디스크와 다른 집합이다 — 필터 3겹: 플러그인 enable · `skillOverrides` · SKILL.md 의
+  `disable-model-invocation`. 개인 스킬 76개 중 **주입은 17개**, mattpocock 캐시 35개 중 주입 11개
+- 주입 실측 ≈**4.7k 토큰**(개인 17개 1,319 · 프로젝트 11개 945 · `commands/gsd/` 42개 916 ·
+  superpowers 510 · mattpocock 500 · 기타 550). 이미 차단된 분량 ≈15k
+- **플러그인 캐시 중복·disabled 플러그인·꺼둔 개인 스킬 디렉토리 삭제는 전부 0 토큰** — MCP 서버
+  정리와 같은 함정. 게다가 개인 스킬 19개는 `Universal-Environment-Setup/install.sh` 의
+  `global/skills/` 번들 소유라 재설치 시 되살아난다
+- `skillOverrides` 내구성: 두 install.sh 모두 **프로젝트** `.claude/settings.json` 만 딥머지하므로
+  롤백 위험은 없으나, 이 50개를 **소유·재생성하는 스크립트가 없다**(유실 시 복구 경로 부재)
+
+→ 스킬 쪽 잔여 절감은 최대 1~2k 로 노이즈 ±1,400 에 묻힌다. **다음 레버는 스킬이 아니라
+경로 스코프 규칙**(`.claude/rules/*.md` frontmatter `paths:`)이며, 별도 세션이 aos-backend.md ·
+aos-frontend.md 에서 진행 중이다(이 세션은 해당 미커밋 변경에 손대지 않았다).
+상세는 메모리 `project_skill_memory_diet_backlog`.
 
 남은 후속과제: ① 형제 레포(APFS·LiveMetro·Universal-Environment-Setup) `install.sh` 드리프트 동기화.
 
