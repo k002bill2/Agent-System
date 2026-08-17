@@ -15,7 +15,7 @@ websockets>=14.0
 # Database (lightweight - for session management)
 sqlalchemy>=2.0.52
 asyncpg>=0.30.0
-greenlet>=3.5.4
+greenlet>=3.5.5
 
 # Utilities
 pydantic>=2.10.0
