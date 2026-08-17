@@ -17,9 +17,9 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
     "websockets>=14.0",
     # Database
-    "sqlalchemy>=2.0.51",
+    "sqlalchemy>=2.0.52",
     "asyncpg>=0.30.0",
-    "alembic>=1.19.0",
+    "alembic>=1.19.1",
     "greenlet>=3.5.4", # SQLAlchemy async 필수
     # Redis
     "redis>=8.1.0",
