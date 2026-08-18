@@ -183,6 +183,46 @@ Codex 1~10차 로그는 세션 scratchpad에만 있어 **휘발됐다** — 장�
 
 ## Session Continuity
 
+### 2026-08-18 세션 — 감사 문서 청산 → 이슈 트래커 이관 → 결함 2건 수정
+
+**한 일 (완료)**
+1. `_workspace*/` 3개 + `dev/active/` 완료 태스크 5개 삭제. 판정은 체크박스가 아니라
+   코드 실측으로 했다 — 3개 디렉터리는 체크박스가 미완료인 채 main 에 안착해 있었다
+   (react 19.2.8 / tailwind 4.2.2 / `ALL_CHECK_TYPES` 참조 0건 / PR #113).
+2. 감사 문서 3종(harness-audit-2026-06, harness-modernization-2026-06-14,
+   project-ecosystem-audit-2026-07-26)의 미조치 항목을 전수 재검증 후 **이슈로 이관하고 원본 삭제**.
+   삭제 근거: `nodes.py` 패키지 분할로 줄 앵커가 전부 무효 + 해결된 항목이 섞여 매번 재검증 필요.
+3. PR #277 머지 (`7d4ff24`) — 프로젝트 id slug 검증(GHSA-3pcq-fpg2-892q) + render.yaml
+   중복 `services:` 키. Codex 3회 검증(1차 P1·2차 P2 반영 후 0건). CI 9/9.
+
+**이관 결과 — 열린 이슈 3건**
+| 이슈 | 성격 | 상태 |
+|---|---|---|
+| #273 `_merge_results` 가 `agents` 키 미병합 | 기계적 | 미착수. executor 는 `:477` 에서 `agents` 반환, 병합기 return dict(`parallel_executor.py:170-183`)에 키 없음 |
+| #274 승인이 도구 호출에 미바인딩 | **보안 성격** | 미착수. 별도 PR 필수 |
+| #275 Executor 멀티 iteration 토큰 유실 | 기계적 | 미착수. `executor.py:309` 가 루프 안 `=` 대입 |
+| #276 safety_flags 계약 | 버그 아님 | 재정의 완료. 문서화 후 종료(A) vs 아키텍처 과제(B) 선택 필요 |
+
+**#274 가 이번 세션 최대 발견 (다음 세션 최우선)**
+승인이 "이 작업"이 아니라 "이 task"에 붙어 있다:
+- `executor.py:181` `approval_id = uuid4()` — 도구 이름·인자와 무관한 난수
+- `:380` 실제 승인 대상을 `pending_tool_call` 로 저장하나 **읽는 곳 0건**
+- `api/hitl.py:91` 승인 시 `engine.run(session_id, "")` 로 LLM 재호출
+- `:338` 재진입 시 `pending_approvals.get(task.pending_approval_id)` — 방금 만든 호출과 무관한 조회
+- `:340-344` APPROVED 면 `pass` → **현재 도구 호출을 실행**
+
+→ 재호출된 LLM 이 다른 도구 호출을 만들어도 이전 승인 권한으로 실행된다.
+설계 결정 2안(대조 후 재승인 / 저장된 호출 직접 실행)은 이슈 #274 본문에 기록.
+
+**다음 세션 시작점**
+- 권고 순서: #273+#275 를 한 PR(기계적, 안전) → #274 를 단독 PR(동작 변경) → #276 결정.
+- **#274 를 #273/#275 와 같은 PR 에 넣지 말 것** — 보안 동작 변경을 기계적 병합과 섞으면
+  리뷰·되돌리기가 어려워진다.
+- GHSA-3pcq-fpg2-892q 는 draft 유지(사용자 결정). 패치는 이미 머지됨.
+- 전역 하네스 미조치 2건(권한 포스처·cli-orchestrator 2단계)은 리포 밖이라
+  메모리 `project_global_harness_pending_decisions.md` 에 있다.
+
+
 ### 2026-08-17 세션 — 컨텍스트 다이어트 실측 트랙 (파일 분할과 별개 트랙)
 
 머지 완료: **PR #267**(토큰 실측) · **PR #269**(`.env` 차단 발견 → 주장 철회). 문서 정본은
