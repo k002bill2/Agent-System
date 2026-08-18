@@ -90,6 +90,7 @@ class ParallelExecutorNode(BaseNode):
             Merged state update
         """
         merged_tasks = dict(state.get("tasks", {}))
+        merged_agents = dict(state.get("agents", {}))
         all_messages = []
         all_errors = list(state.get("errors", []))
         waiting_for_approval = False
@@ -114,6 +115,15 @@ class ParallelExecutorNode(BaseNode):
                         completed_count += 1
                     elif task.status == TaskStatus.FAILED:
                         failed_count += 1
+
+            # Merge agent updates.
+            #
+            # Conflict policy: last-write-wins per agent id. ExecutorNode derives
+            # its agent id from the task id (`executor-{task_id[:8]}`), so parallel
+            # branches produce disjoint keys and no real conflict occurs. If that
+            # id rule ever changes, this merge needs an explicit conflict strategy.
+            if "agents" in result:
+                merged_agents.update(result["agents"])
 
             # Collect messages
             if "messages" in result:
@@ -168,6 +178,7 @@ class ParallelExecutorNode(BaseNode):
 
         return {
             "tasks": merged_tasks,
+            "agents": merged_agents,
             "messages": all_messages,
             "errors": all_errors,
             "waiting_for_approval": waiting_for_approval,
