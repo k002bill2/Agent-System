@@ -67,6 +67,16 @@ services:
     autoDeploy: true
     branch: main
 
+  # ─────────────────────────────────────────────────────────────
+  # Redis
+  # ─────────────────────────────────────────────────────────────
+  - type: redis
+    name: aos-redis
+    region: oregon
+    plan: starter
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
+
 # ─────────────────────────────────────────────────────────────
 # Databases
 # ─────────────────────────────────────────────────────────────
@@ -77,15 +87,4 @@ databases:
     region: oregon
     plan: starter
     postgresMajorVersion: "16"
-    ipAllowList: []
-
-# ─────────────────────────────────────────────────────────────
-# Redis
-# ─────────────────────────────────────────────────────────────
-services:
-  - type: redis
-    name: aos-redis
-    region: oregon
-    plan: starter
-    maxmemoryPolicy: allkeys-lru
     ipAllowList: []

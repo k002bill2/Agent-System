@@ -67,6 +67,20 @@
 | GET | `/api/projects/{id}/context` | 프로젝트 컨텍스트 (CLAUDE.md, dev docs) |
 | GET | `/api/projects/{id}/claude-md` | CLAUDE.md 내용 조회 |
 
+### 프로젝트 id 제약 (요청 본문)
+
+`POST /api/projects`, `POST /api/projects/create`, `POST /api/projects/link` 세 엔드포인트의
+요청 본문 `id`는 **slug 로 제한**된다 — `^[A-Za-z0-9][A-Za-z0-9_-]*$`, 최대 36자
+(`models/project.py` 의 `PROJECT_ID_PATTERN` / `PROJECT_ID_MAX_LENGTH`).
+상한 36자는 DB 컬럼 폭(`db/models/project.py` 의 `ProjectModel.id = String(36)`)과 맞춘 값이다 —
+더 길게 허용하면 검증은 통과하는데 DB insert 에서 실패해 파일시스템 레지스트리와 DB 가 어긋난다.
+
+id 는 `projects/<id>` 경로 세그먼트로 그대로 쓰여 심볼릭 링크·디렉터리 생성 대상이 되므로,
+경로 구분자(`/` `\`)·상위 참조(`..`)·절대경로·공백이 포함되면 422 로 거부된다.
+제약 위반 시 Pydantic 검증 단계에서 막히며 핸들러에 도달하지 않는다.
+
+> 회귀 테스트: `tests/backend/test_project_id_path_traversal.py`
+
 ---
 
 ## Project Configs
