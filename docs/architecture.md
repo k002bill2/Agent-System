@@ -286,6 +286,30 @@ class LeadOrchestratorAgent(BaseAgent):
 - `medium`: 중간 복잡도 (4-6)
 - `thorough`: 복잡한 태스크 (7-10)
 
+### LeadOrchestrator 분석 결과의 전파 경로
+
+`LeadOrchestratorAgent` 의 태스크 분석 결과는 **두 갈래로 나뉘어 흐르며, 갈래마다 도달 범위가 다르다.**
+
+| 산출물 | 경로 | 도달 지점 |
+|--------|------|-----------|
+| `execution_plan` | `POST /api/agents/orchestrate/execute-analysis` 가 `plan_metadata.pre_analyzed_execution_plan` 으로 주입(`api/agents/orchestrate.py:467`) | `PlannerNode` 가 읽어 LLM 계획 수립을 건너뛴다(`orchestrator/nodes/planner.py:229`) |
+| `safety_flags` | Claude Code CLI 프롬프트의 `## Safety Warnings` 섹션 생성 | `services/tmux_service.py:639 build_claude_prompt` 와 그 프론트엔드 포팅 `src/dashboard/src/stores/agents.ts:205 buildClaudePrompt` |
+
+즉 노드 그래프와 LeadOrchestrator 는 **직접 import 가 없을 뿐**(`grep -rn "LeadOrchestrator" src/backend/orchestrator` → 0건)
+`plan_metadata` 를 경유해 이미 결합돼 있다. 심볼 grep 은 이 데이터 경유 결합을 잡지 못하므로
+"두 서브시스템은 무관하다"고 결론내지 말 것.
+
+**전파되지 않는 것은 `safety_flags` 하나다.** 주입 코드가 `entry.analysis.get("execution_plan", {})`
+만 넘기므로 flags 는 노드 그래프에 도달하지 않는다.
+
+노드 그래프의 위험 판단은 `safety_flags` 가 아니라 HITL 승인 게이트가 담당한다 —
+`orchestrator/nodes/executor.py` 의 `_check_approval_required` 가 `models/hitl.py` 의
+`assess_operation_risk`(`TOOL_RISK_CONFIG` 기반)를 호출한다. 따라서 **노드 그래프에
+`safety_flags` 가 없다는 사실이 승인 게이트 부재를 뜻하지 않는다.**
+
+flags 를 노드에 전파하는 것 자체는 기존 주입 경로에 키를 추가하는 작은 변경이다.
+설계가 필요한 부분은 전파가 아니라 **노드가 flags 를 위험 판단에 어떻게 반영할지**다.
+
 ## MCP Service
 
 ```python
