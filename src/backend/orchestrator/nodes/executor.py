@@ -346,16 +346,29 @@ After completing all necessary tool calls, provide a final summary."""
                     )
 
                     if requires_approval and approval_request:
-                        # Check if this was already approved
+                        # 승인은 "이 task"가 아니라 "이 도구 호출"에 바인딩된다.
+                        #
+                        # 승인 후 재진입한 executor 는 LLM 을 다시 호출하므로 모델이
+                        # 승인받은 것과 다른 호출을 만들 수 있다. status 만 보고 통과시키면
+                        # 이전 승인의 권한으로 그 호출이 실행된다(승인 바이패스).
+                        # 승인 요청 객체가 tool_name/tool_args 를 담고 있으므로 그것이
+                        # 바인딩의 정본이다 — `pending_approvals` 는 AgentState 의 정식
+                        # 필드라 LangGraph 채널을 통과해 재진입 시에도 남는다.
                         approval_id = approval_request["id"]
                         existing_approval = pending_approvals.get(task.pending_approval_id)
 
-                        if (
+                        approval_matches_call = bool(
                             existing_approval
                             and existing_approval.get("status") == ApprovalStatus.APPROVED.value
-                        ):
-                            # Already approved - proceed with execution
-                            pass
+                            and existing_approval.get("tool_name") == tool_name
+                            and existing_approval.get("tool_args") == tool_args
+                        )
+
+                        if approval_matches_call:
+                            # 승인 대상과 동일한 호출 — 실행을 허용하고 승인을 소비한다.
+                            # 승인은 1회용이다: 바인딩을 끊지 않으면 이후 iteration 에서
+                            # 같은 승인으로 다시 실행할 수 있다.
+                            task.pending_approval_id = None
                         else:
                             # Need approval - pause execution
                             task.status = TaskStatus.WAITING
@@ -389,13 +402,6 @@ After completing all necessary tool calls, provide a final summary."""
                                         f"Approval required for {tool_name}: {approval_request['risk_description']}",
                                     )
                                 ],
-                                # Store pending tool call for resume
-                                "pending_tool_call": {
-                                    "tool_name": tool_name,
-                                    "tool_args": tool_args,
-                                    "tool_id": tool_id,
-                                    "approval_id": approval_id,
-                                },
                             }
 
                     # Execute the tool
