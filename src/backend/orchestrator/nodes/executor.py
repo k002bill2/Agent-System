@@ -9,7 +9,7 @@ MCP 는 optional 의존이다(위 planner 의 RAG 와 같은 구조·같은 주�
 
 import json
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
@@ -282,8 +282,11 @@ After completing all necessary tool calls, provide a final summary."""
             final_result = None
             pending_approvals = dict(state.get("pending_approvals", {}))
 
-            # Track token usage across iterations
+            # Track token usage across iterations.
+            # `_extract_and_update_tokens` 는 넘겨받은 state 의 누계 위에 이번 회차를
+            # 더해 새 dict 를 돌려준다. 기준선을 회차마다 굴려야 누계가 쌓인다.
             accumulated_token_updates: dict[str, Any] = {}
+            token_baseline: AgentState = state
             llm, resolved_model, runtime_resolution = self._resolved_llm_for_state(state)
             llm_with_tools = llm.bind_tools(self.tools) if self.tools and llm else llm
             runtime_metadata = runtime_resolution.usage_metadata() if runtime_resolution else {}
@@ -300,13 +303,23 @@ After completing all necessary tool calls, provide a final summary."""
                 # Extract and accumulate token usage
                 token_update = self._extract_and_update_tokens(
                     response,
-                    state,
+                    token_baseline,
                     "Executor",
                     model=resolved_model,
                     metadata=runtime_metadata,
                 )
                 if token_update:
                     accumulated_token_updates = token_update
+                    token_baseline = cast(
+                        AgentState,
+                        {
+                            **token_baseline,
+                            "token_usage": token_update["token_usage"],
+                            "total_cost": token_update["total_cost"],
+                        },
+                    )
+                    # 원장에는 회차 델타(`_last_token_update`)만 기록되므로
+                    # 원본 state 를 그대로 넘긴다 — 누적 기준선과 무관하다.
                     await self._record_token_update_usage(
                         token_update,
                         state,
