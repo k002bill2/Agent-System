@@ -167,3 +167,59 @@ async def test_approval_is_single_use(monkeypatch, hitl_env):
 
     assert execute_tool.await_count == 1
     assert second["waiting_for_approval"] is True
+
+
+@pytest.mark.asyncio
+async def test_approval_match_is_order_insensitive_but_value_sensitive(monkeypatch, hitl_env):
+    """대조 정책 고정: args 는 dict 동등성으로 비교한다.
+
+    키 순서가 달라도 같은 호출로 인정하고(파이썬 dict 비교는 순서 무관),
+    값이나 타입이 다르면 다른 호출로 본다.
+    """
+    same_args_reordered = {
+        "name": "execute_bash",
+        "args": {"timeout": 30, "command": "rm -rf /tmp/scratch"},
+        "id": "call-3",
+    }
+    approved = {
+        "name": "execute_bash",
+        "args": {"command": "rm -rf /tmp/scratch", "timeout": 30},
+        "id": "call-1",
+    }
+    node, execute_tool = _build_node(
+        monkeypatch,
+        [_response("", [approved]), _response("", [same_args_reordered]), _response("done", [])],
+    )
+    state = _state_with_task()
+
+    first = await node.run(state)
+    _apply(state, first)
+    _approve(state, next(iter(state["pending_approvals"])))
+
+    await node.run(state)
+
+    execute_tool.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_approval_rejects_type_changed_args(monkeypatch, hitl_env):
+    """값의 타입만 달라도 다른 호출이다(True vs 1 등)."""
+    approved = {"name": "execute_bash", "args": {"command": "ls", "force": True}, "id": "call-1"}
+    type_changed = {
+        "name": "execute_bash",
+        "args": {"command": "ls", "force": "true"},
+        "id": "call-2",
+    }
+    node, execute_tool = _build_node(
+        monkeypatch, [_response("", [approved]), _response("", [type_changed])]
+    )
+    state = _state_with_task()
+
+    first = await node.run(state)
+    _apply(state, first)
+    _approve(state, next(iter(state["pending_approvals"])))
+
+    second = await node.run(state)
+
+    execute_tool.assert_not_awaited()
+    assert second["waiting_for_approval"] is True
