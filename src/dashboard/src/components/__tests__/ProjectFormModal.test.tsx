@@ -200,4 +200,32 @@ describe('ProjectFormModal', () => {
     expect(screen.getByDisplayValue('Some desc')).toBeInTheDocument()
     expect(screen.getByDisplayValue('/my/path')).toBeInTheDocument()
   })
+
+  // 백엔드 계약(models/project.py: PROJECT_ID_PATTERN / PROJECT_ID_MAX_LENGTH=36)과
+  // 폼 제약이 어긋나면 제출 후 422 로만 드러난다. 아래 3건이 그 간극을 잡는다.
+  describe('project ID constraints mirror the backend contract', () => {
+    const getIdInput = () => screen.getByPlaceholderText('my-project') as HTMLInputElement
+
+    it('caps the ID input at the backend max length', () => {
+      storeState.modalMode = 'create'
+      render(<ProjectFormModal />)
+      expect(getIdInput().maxLength).toBe(36)
+    })
+
+    it('requires the ID to start with an alphanumeric character', () => {
+      storeState.modalMode = 'create'
+      render(<ProjectFormModal />)
+      // 선행 하이픈은 백엔드가 거부하므로 폼 pattern 도 허용하면 안 된다
+      expect(new RegExp(`^(?:${getIdInput().pattern})$`).test('-leading')).toBe(false)
+      expect(new RegExp(`^(?:${getIdInput().pattern})$`).test('my-project')).toBe(true)
+    })
+
+    it('truncates the auto-generated ID from a long project name', () => {
+      storeState.modalMode = 'create'
+      render(<ProjectFormModal />)
+      const longName = 'A'.repeat(80)
+      fireEvent.change(screen.getByPlaceholderText('My Project'), { target: { value: longName } })
+      expect(getIdInput().value.length).toBeLessThanOrEqual(36)
+    })
+  })
 })

@@ -12,6 +12,13 @@ logger = logging.getLogger(__name__)
 # Metadata file name stored in project root
 AOS_METADATA_FILE = ".aos-project.json"
 
+# 프로젝트 id 는 `projects/<id>` 경로 세그먼트로 그대로 쓰이므로 slug 로 제한한다.
+# 경로 구분자(/ \), 상위 참조(..), 절대경로, 공백을 모두 배제해 projects/ 밖 이탈을 차단.
+PROJECT_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_-]*$"
+# 상한은 DB 컬럼 폭과 일치해야 한다 — db/models/project.py 의 ProjectModel.id = String(36).
+# 더 길게 두면 검증은 통과하는데 DB insert 에서 실패해 레지스트리 불일치가 생긴다.
+PROJECT_ID_MAX_LENGTH = 36
+
 
 def normalize_path(path: str) -> str:
     """Normalize filesystem path by removing shell escape characters.
@@ -109,7 +116,12 @@ class Project(BaseModel):
 class ProjectCreate(BaseModel):
     """Project registration request."""
 
-    id: str = Field(..., description="Unique project identifier")
+    id: str = Field(
+        ...,
+        pattern=PROJECT_ID_PATTERN,
+        max_length=PROJECT_ID_MAX_LENGTH,
+        description="Unique project identifier (slug; used as a path segment)",
+    )
     path: str = Field(..., description="Filesystem path to project")
     organization_id: str | None = Field(None, description="Organization ID")
 
@@ -143,14 +155,24 @@ class ProjectUpdate(BaseModel):
 class ProjectLinkRequest(BaseModel):
     """Request to link an external project via symlink."""
 
-    id: str = Field(..., description="Unique project identifier")
+    id: str = Field(
+        ...,
+        pattern=PROJECT_ID_PATTERN,
+        max_length=PROJECT_ID_MAX_LENGTH,
+        description="Unique project identifier (slug; used as a path segment)",
+    )
     source_path: str = Field(..., description="Absolute path to source project")
 
 
 class ProjectCreateFromTemplate(BaseModel):
     """Request to create a new project from template."""
 
-    id: str = Field(..., description="Unique project identifier")
+    id: str = Field(
+        ...,
+        pattern=PROJECT_ID_PATTERN,
+        max_length=PROJECT_ID_MAX_LENGTH,
+        description="Unique project identifier (slug; used as a path segment)",
+    )
     name: str = Field(..., description="Project display name")
     description: str = ""
     template: str = Field(

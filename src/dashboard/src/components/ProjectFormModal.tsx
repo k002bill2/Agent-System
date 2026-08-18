@@ -3,6 +3,11 @@ import { X, Loader2, FolderPlus, Link, Pencil, FolderOpen } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useProjectsStore } from '../stores/projects'
 
+// 백엔드 계약과 일치시켜야 하는 값 — src/backend/models/project.py 의
+// PROJECT_ID_MAX_LENGTH (DB 컬럼 ProjectModel.id = String(36) 에 맞춘 상한).
+// 어긋나면 폼은 통과하고 제출 후 422 로만 드러난다.
+const PROJECT_ID_MAX_LENGTH = 36
+
 export function ProjectFormModal() {
   const {
     modalMode,
@@ -49,6 +54,8 @@ export function ProjectFormModal() {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '')
+        .slice(0, PROJECT_ID_MAX_LENGTH)
+        .replace(/-$/, '')
       setId(generatedId)
     }
   }
@@ -192,14 +199,23 @@ export function ProjectFormModal() {
               <input
                 type="text"
                 value={id}
-                onChange={(e) => setId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                onChange={(e) =>
+                  setId(
+                    e.target.value
+                      .toLowerCase()
+                      .replace(/[^a-z0-9-]/g, '')
+                      .slice(0, PROJECT_ID_MAX_LENGTH)
+                  )
+                }
                 placeholder="my-project"
                 required
-                pattern="[a-z0-9-]+"
+                maxLength={PROJECT_ID_MAX_LENGTH}
+                pattern="[a-z0-9][a-z0-9-]*"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Lowercase letters, numbers, and hyphens only
+                Lowercase letters, numbers, and hyphens only. Must start with a letter or
+                number, max {PROJECT_ID_MAX_LENGTH} characters.
               </p>
             </div>
           )}
