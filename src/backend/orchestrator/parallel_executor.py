@@ -9,6 +9,7 @@ from langchain_core.tools import BaseTool
 from models.agent_state import AgentState, TaskNode, TaskStatus
 from models.hitl import is_task_resumable_after_approval
 from orchestrator.nodes import BaseNode, ExecutorNode
+from services.session_service import SessionService
 from utils.time import utcnow
 
 # Maximum concurrent tasks (configurable)
@@ -29,6 +30,7 @@ class ParallelExecutorNode(BaseNode):
         llm: BaseChatModel | None = None,
         tools: list[BaseTool] | None = None,
         max_concurrent: int = DEFAULT_MAX_CONCURRENT_TASKS,
+        session_service: SessionService | None = None,
     ):
         """
         Initialize the parallel executor.
@@ -37,13 +39,14 @@ class ParallelExecutorNode(BaseNode):
             llm: Language model for task execution
             tools: Available tools for execution
             max_concurrent: Maximum number of concurrent task executions
+            session_service: 승인 소비를 기록할 저장소(내부 executor 로 전달)
         """
         super().__init__(llm)
         self.tools = tools or []
         self.max_concurrent = max_concurrent
 
         # Create a single-task executor for reuse
-        self.executor = ExecutorNode(llm=llm, tools=tools)
+        self.executor = ExecutorNode(llm=llm, tools=tools, session_service=session_service)
 
     async def _execute_with_semaphore(
         self,

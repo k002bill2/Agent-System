@@ -68,6 +68,11 @@ HITL 엔드포인트는 세션 컨텍스트 하에 동작합니다. 승인 요�
 
 **승인 요청 응답 필드**: `approval_id`, `task_id`, `tool_name`, `tool_args`, `risk_level`, `risk_description`, `created_at`, `status`
 
+**승인 상태**: `pending` → `approved` → `consumed`(실제 도구 호출에 사용됨) / `denied` / `expired`.
+목록 조회는 `pending` 만 돌려줍니다. 이미 해소된 승인에 approve/deny 를 다시 호출하면 400 이며,
+같은 승인에 대한 동시 요청은 한 건만 통과합니다(전이는 세션당 직렬화·즉시 영속화).
+승인은 **1회용**이라 소비된 뒤 같은 도구 호출이 다시 나오면 새 승인이 필요합니다.
+
 **승인/거부 요청 본문** (선택 사항):
 ```json
 {

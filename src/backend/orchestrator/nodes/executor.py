@@ -8,6 +8,7 @@ MCP 는 optional 의존이다(위 planner 의 RAG 와 같은 구조·같은 주�
 """
 
 import json
+import logging
 import uuid
 from typing import Any, cast
 
@@ -16,7 +17,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 
 from models.agent_state import AgentInfo, AgentRole, AgentState, TaskStatus
-from models.hitl import ApprovalStatus, assess_operation_risk
+from models.hitl import APPROVAL_STATE_LOCK, ApprovalStatus, assess_operation_risk
 from models.llm_usage import LLMUsageSource
 from services.audit_service import (
     AuditAction,
@@ -25,9 +26,12 @@ from services.audit_service import (
     audit_task_status_change,
     audit_tool_executed,
 )
+from services.session_service import SessionService, get_session_service
 from utils.time import utcnow
 
 from .base import BaseNode
+
+logger = logging.getLogger(__name__)
 
 try:
     from orchestrator.tools import MCPToolExecutor
@@ -71,9 +75,20 @@ When you need to perform an action, use the appropriate tool.
 Think step by step and use tools as needed to complete the task.
 After completing all necessary tool calls, provide a final summary."""
 
-    def __init__(self, llm: BaseChatModel | None = None, tools: list[BaseTool] | None = None):
-        """Initialize ExecutorNode with LLM and tools."""
+    def __init__(
+        self,
+        llm: BaseChatModel | None = None,
+        tools: list[BaseTool] | None = None,
+        session_service: SessionService | None = None,
+    ):
+        """Initialize ExecutorNode with LLM and tools.
+
+        `session_service` 는 승인 소비를 기록할 저장소다. 엔진이 커스텀 서비스를
+        주입받았는데 노드가 전역 인스턴스에 쓰면, 소비 기록이 엔진이 읽는 곳과
+        **다른 저장소**로 가서 재시작 후 승인이 다시 살아난다.
+        """
         super().__init__(llm)
+        self.session_service = session_service
         self.tools = tools or []
         self._tools_by_name = {tool.name: tool for tool in self.tools}
 
@@ -156,6 +171,118 @@ After completing all necessary tool calls, provide a final summary."""
             return str(result)
         except Exception as e:
             return f"Error executing {tool_name}: {str(e)}"
+
+    async def _consume_approval(
+        self,
+        state: AgentState,
+        pending_approvals: dict[str, Any],
+        approval: dict[str, Any],
+    ) -> bool:
+        """승인을 1회용으로 소비한다. 소비에 성공했을 때만 True.
+
+        승인은 1회용이다 — 바인딩을 끊지 않으면 이후 iteration 이나 다른 실행이
+        같은 승인으로 다시 도구를 돌릴 수 있다. 바인딩은 `task.pending_approval_id`
+        를 지우는 대신 승인 레코드를 `CONSUMED` 로 전이해 끊는다. 대조가
+        `status == APPROVED` 를 요구하므로 효과는 같고, 포인터를 남기면 실행 도중
+        죽었을 때 "어느 승인으로 무엇을 하다 멈췄는지"가 남아 스케줄러가 잔재를
+        실패로 정리할 수 있다(`is_task_orphaned_by_consumed_approval`).
+
+        락 안에서 상태를 **다시 확인**하는 compare-and-set 이다. 병렬 배치
+        (`execute_batch`)는 여러 executor 가 같은 세션에 동시에 쓰는데
+        `update_session` 은 세션 JSON 전체를 덮으므로, 직렬화하지 않으면 늦게
+        도착한 낡은 스냅샷이 다른 소비를 `approved` 로 되돌린다.
+
+        사본이 아니라 **레코드 자체를** 바꾼다. 이 dict 는 `state["pending_approvals"]`
+        를 거쳐 엔진 캐시가 들고 있는 바로 그 객체다 — 사본에만 쓰면 저장소는
+        `consumed`, 캐시는 `approved` 로 갈라지고, 그래프가 최종 state 를 저장하기
+        전에 실패하면 다음 시도가 낡은 캐시를 읽어 다시 승인한다.
+
+        메모리 사본만 보지 않고 **저장소의 승인 상태를 다시 읽는다**. 캐시가 빈
+        상태에서 같은 세션에 그래프 실행 둘이 겹치면 각자 독립된 `approved` 사본을
+        들고 오므로, 로컬 사본만 보는 검사는 둘 다 통과시킨다.
+
+        영속화가 실패하면 전이를 되돌리고 예외를 올린다 — 소비는 도구 실행 **전**에
+        기록하므로 저장이 실패한 시점에는 도구가 아직 실행되지 않았다. 되돌려야
+        나중에 정당하게 재시도할 수 있다. 저장이 실제로는 반영됐는데 예외만 올라온
+        경우(타임아웃 등)는 위 재검증이 걸러낸다.
+        """
+        async with APPROVAL_STATE_LOCK.lock():
+            if approval.get("status") != ApprovalStatus.APPROVED.value:
+                return False  # 다른 실행이 먼저 소비했다
+
+            if not await self._approval_is_claimable_in_storage(state, approval):
+                return False  # 다른 실행이 저장소에서 먼저 가져갔다
+
+            before = dict(approval)
+            approval["status"] = ApprovalStatus.CONSUMED.value
+            approval["consumed_at"] = utcnow().isoformat()
+            try:
+                await self._persist_approval_consumption(state, pending_approvals)
+            except Exception:
+                approval.clear()
+                approval.update(before)
+                raise
+
+        return True
+
+    async def _approval_is_claimable_in_storage(
+        self,
+        state: AgentState,
+        approval: dict[str, Any],
+    ) -> bool:
+        """저장소에 남은 승인이 아직 `approved` 인가.
+
+        저장소에서 **세션 자체**를 찾을 수 없으면(서비스를 거치지 않고 만든 state·
+        이미 삭제된 세션) 판정 근거가 없으므로 막지 않는다 — 그런 세션은 재시작 시
+        통째로 사라져 재실행 창도 함께 사라진다.
+
+        반대로 세션은 있는데 그 승인만 없으면 **막는다**. 그건 "영속 저장소가 없다"가
+        아니라 "이 승인은 더 이상 유효하지 않다"는 뜻이고, 그대로 진행하면 뒤이은
+        전체 state 저장이 없어진 승인을 되살린 뒤 도구까지 실행한다.
+        """
+        session_id = state.get("session_id", "")
+        if not session_id:
+            return True
+
+        service = self.session_service or get_session_service()
+        stored = await service.get_session(session_id)
+        if not stored:
+            return True
+
+        stored_approval = stored.get("pending_approvals", {}).get(approval.get("id"))
+        if not stored_approval:
+            return False
+
+        return bool(stored_approval.get("status") == ApprovalStatus.APPROVED.value)
+
+    async def _persist_approval_consumption(
+        self,
+        state: AgentState,
+        pending_approvals: dict[str, Any],
+    ) -> None:
+        """승인 소비를 즉시 저장한다 — 반드시 도구 실행 **전에** 호출한다.
+
+        그래프 전체가 끝난 뒤의 일괄 저장(`engine.run`)에만 기대면, 도구가
+        비가역 부수효과를 낸 뒤 저장 전에 프로세스가 죽었을 때 재시작 후 승인이
+        다시 살아나 같은 작업이 재실행된다.
+
+        저장 실패(예외)는 삼키지 않는다 — 소비를 기록할 수 없으면 실행해서도
+        안 된다. 호출자의 try/except 가 task 실패로 처리한다.
+        """
+        session_id = state.get("session_id", "")
+        service = self.session_service or get_session_service()
+        persisted = await service.update_session(
+            session_id,
+            cast(AgentState, {**state, "pending_approvals": pending_approvals}),
+        )
+        if not persisted:
+            # 저장소에 없는 세션이다(이미 삭제됐거나 서비스를 거치지 않고 만든 state).
+            # 재시작하면 세션 자체가 사라지므로 재실행 창도 함께 사라진다 —
+            # 실행을 막을 이유는 없으나 조용히 넘기지는 않는다.
+            logger.warning(
+                "Approval consumption was not persisted (session=%s)",
+                session_id,
+            )
 
     def _check_approval_required(
         self,
@@ -260,6 +387,10 @@ After completing all necessary tool calls, provide a final summary."""
             metadata={"task_id": current_task_id, "role": AgentRole.EXECUTOR.value},
         )
 
+        # try 밖에서 바인딩한다 — except 절이 이 값을 결과에 실어 보내므로,
+        # 루프 진입 전에 예외가 나면 unbound 가 된다.
+        pending_approvals = dict(state.get("pending_approvals", {}))
+
         try:
             # Build message history for this execution
             messages = [
@@ -280,7 +411,6 @@ After completing all necessary tool calls, provide a final summary."""
             max_iterations = 10
             tool_results = []
             final_result = None
-            pending_approvals = dict(state.get("pending_approvals", {}))
 
             # Track token usage across iterations.
             # `_extract_and_update_tokens` 는 넘겨받은 state 의 누계 위에 이번 회차를
@@ -364,12 +494,14 @@ After completing all necessary tool calls, provide a final summary."""
                             and existing_approval.get("tool_args") == tool_args
                         )
 
-                        if approval_matches_call:
-                            # 승인 대상과 동일한 호출 — 실행을 허용하고 승인을 소비한다.
-                            # 승인은 1회용이다: 바인딩을 끊지 않으면 이후 iteration 에서
-                            # 같은 승인으로 다시 실행할 수 있다.
-                            task.pending_approval_id = None
-                        else:
+                        # 승인 대상과 동일한 호출이면 소비하고 실행을 허용한다.
+                        consumed = approval_matches_call and await self._consume_approval(
+                            state,
+                            pending_approvals,
+                            cast(dict[str, Any], existing_approval),
+                        )
+
+                        if not consumed:
                             # Need approval - pause execution
                             task.status = TaskStatus.WAITING
                             task.pending_approval_id = approval_id
@@ -495,6 +627,9 @@ After completing all necessary tool calls, provide a final summary."""
                 "agents": agents,
                 "messages": [self._create_message("assistant", f"Completed task: {task.title}")],
                 "tool_results": tool_results,
+                # 소비된 승인을 채널에 돌려보낸다. 빠뜨리면 그래프 종료 시의 전체
+                # state 저장이 `consumed` 를 `approved` 로 되돌려 놓는다.
+                "pending_approvals": pending_approvals,
             }
 
             # Include token usage updates
@@ -528,6 +663,8 @@ After completing all necessary tool calls, provide a final summary."""
                 "agents": agents,
                 "last_error": str(e),
                 "errors": state.get("errors", []) + [str(e)],
+                # 실패 경로에서도 소비 기록은 유지해야 한다 — 위와 같은 이유다.
+                "pending_approvals": pending_approvals,
             }
 
             # Include token usage even on failure

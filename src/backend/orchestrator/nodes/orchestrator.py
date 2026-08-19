@@ -3,7 +3,12 @@
 from typing import Any
 
 from models.agent_state import AgentState, TaskNode, TaskStatus
-from models.hitl import is_task_resumable_after_approval
+from models.hitl import (
+    ORPHANED_APPROVAL_ERROR,
+    is_task_orphaned_by_consumed_approval,
+    is_task_resumable_after_approval,
+)
+from utils.time import utcnow
 
 from .base import BaseNode
 
@@ -61,6 +66,30 @@ Respond with a JSON object containing:
         # Check task statuses
         tasks = state.get("tasks", {})
         root_task_id = state.get("root_task_id")
+        pending_approvals = state.get("pending_approvals", {})
+
+        # 소비된 승인에 매달린 잔재 정리.
+        # executor 는 승인을 도구 실행 **전에** `consumed` 로 전이·영속화하므로,
+        # 실행 도중 프로세스가 죽으면 소비 기록만 남고 결과는 남지 않는다.
+        # 도구가 실제로 부수효과를 냈는지 알 수 없으니 재개는 금지다 — 다만
+        # 조용히 멈추면 세션이 영영 끝나지 않으므로 실패로 드러낸다.
+        orphaned = {
+            task_id: task
+            for task_id, task in tasks.items()
+            if is_task_orphaned_by_consumed_approval(task, pending_approvals)
+        }
+        if orphaned:
+            for task in orphaned.values():
+                task.status = TaskStatus.FAILED
+                task.error = ORPHANED_APPROVAL_ERROR
+                task.updated_at = utcnow()
+
+            return {
+                "tasks": orphaned,
+                "next_action": None,
+                "iteration_count": iteration_count,
+                "errors": state.get("errors", []) + [ORPHANED_APPROVAL_ERROR],
+            }
 
         if root_task_id and root_task_id in tasks:
             root_task = tasks[root_task_id]
@@ -75,7 +104,6 @@ Respond with a JSON object containing:
             # 승인이 끝난 WAITING task 도 실행 대상이다 — 승인 대기 중에는 status 가
             # PENDING 이 아니라 WAITING 이라, 이 조건이 없으면 승인해도 executor 로
             # 돌아가지 못하고 그래프가 그대로 끝난다.
-            pending_approvals = state.get("pending_approvals", {})
             pending_tasks = [
                 t
                 for t in tasks.values()
