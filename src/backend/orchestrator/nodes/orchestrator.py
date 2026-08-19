@@ -3,6 +3,7 @@
 from typing import Any
 
 from models.agent_state import AgentState, TaskNode, TaskStatus
+from models.hitl import is_task_resumable_after_approval
 
 from .base import BaseNode
 
@@ -71,10 +72,18 @@ Respond with a JSON object containing:
                 }
 
             # Find next task to execute (respecting dependencies)
+            # 승인이 끝난 WAITING task 도 실행 대상이다 — 승인 대기 중에는 status 가
+            # PENDING 이 아니라 WAITING 이라, 이 조건이 없으면 승인해도 executor 로
+            # 돌아가지 못하고 그래프가 그대로 끝난다.
+            pending_approvals = state.get("pending_approvals", {})
             pending_tasks = [
                 t
                 for t in tasks.values()
-                if t.status == TaskStatus.PENDING and t.parent_id == root_task_id
+                if t.parent_id == root_task_id
+                and (
+                    t.status == TaskStatus.PENDING
+                    or is_task_resumable_after_approval(t, pending_approvals)
+                )
             ]
 
             # Get dependency map from plan_metadata if available

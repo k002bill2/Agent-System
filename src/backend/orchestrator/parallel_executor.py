@@ -7,6 +7,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool
 
 from models.agent_state import AgentState, TaskNode, TaskStatus
+from models.hitl import is_task_resumable_after_approval
 from orchestrator.nodes import BaseNode, ExecutorNode
 from utils.time import utcnow
 
@@ -207,11 +208,18 @@ class ParallelExecutorNode(BaseNode):
         batch_task_ids = state.get("batch_task_ids", [])
         tasks = state.get("tasks", {})
 
-        # Validate batch tasks
+        # Validate batch tasks.
+        # 순차 경로(OrchestratorNode)와 같은 조건을 써야 한다 — 승인이 끝난 WAITING
+        # task 가 배치에 들어와도 여기서 걸러지면 그 task 만 조용히 실행되지 않는다.
+        pending_approvals = state.get("pending_approvals", {})
         valid_task_ids = [
             tid
             for tid in batch_task_ids
-            if tid in tasks and tasks[tid].status == TaskStatus.PENDING
+            if tid in tasks
+            and (
+                tasks[tid].status == TaskStatus.PENDING
+                or is_task_resumable_after_approval(tasks[tid], pending_approvals)
+            )
         ]
 
         if not valid_task_ids:

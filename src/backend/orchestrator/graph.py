@@ -20,7 +20,11 @@ async def waiting_node(state: AgentState) -> dict[str, Any]:
     Waiting node for HITL approval.
 
     This node is a passthrough that maintains the waiting state.
-    The graph will be resumed from this point after approval/denial.
+
+    승인/거부 후 그래프는 이 지점이 아니라 진입점(orchestrator)부터 다시 돈다 —
+    checkpointer 가 없어 중단 지점이 보존되지 않는다. 재개된 실행이 승인된 task 를
+    다시 고르는 것은 `OrchestratorNode` 의 선택 조건(WAITING + 승인 APPROVED)이
+    담당한다.
     """
     return {
         "waiting_for_approval": state.get("waiting_for_approval", True),

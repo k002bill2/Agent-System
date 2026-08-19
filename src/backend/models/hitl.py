@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from models.agent_state import TaskNode, TaskStatus
 from utils.time import utcnow
 
 
@@ -124,6 +125,29 @@ DEFAULT_RISK = OperationRisk(
     requires_approval=False,
     description="Unknown operation",
 )
+
+
+def is_task_resumable_after_approval(
+    task: TaskNode,
+    pending_approvals: dict[str, Any],
+) -> bool:
+    """승인이 완료돼 실행을 재개해야 하는 승인 대기 task 인가.
+
+    승인 대기 task 는 `TaskStatus.WAITING` 이라 PENDING 만 보는 스케줄러에서
+    누락된다. 승인 후 그래프를 다시 돌려도 executor 로 돌아가지 못하는 원인이다.
+
+    `APPROVED` 일 때만 True 다 — "PENDING 이 아님"이 아니라 "APPROVED 임"으로
+    판정한다. DENIED/EXPIRED/PENDING, 승인 레코드 부재, `pending_approval_id`
+    부재는 모두 False.
+    """
+    if task.status != TaskStatus.WAITING or not task.pending_approval_id:
+        return False
+
+    approval = pending_approvals.get(task.pending_approval_id)
+    if not approval:
+        return False
+
+    return bool(approval.get("status") == ApprovalStatus.APPROVED.value)
 
 
 def get_tool_risk(tool_name: str) -> OperationRisk:
