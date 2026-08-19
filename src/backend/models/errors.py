@@ -11,7 +11,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any, ClassVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from utils.time import utcnow
 
@@ -139,6 +139,10 @@ class StructuredError(BaseModel):
             elif error.category == ErrorCategory.TRANSIENT:
                 # Simple retry without LLM
     """
+
+    # TaskNode.structured_errors 로 세션 state 에 실려 영속화된다. 중첩 모델도
+    # extra 를 보존해야 왕복에서 미지 필드가 사라지지 않는다.
+    model_config = ConfigDict(extra="allow")
 
     category: ErrorCategory
     severity: ErrorSeverity

@@ -9,7 +9,13 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from db.database import async_session_factory
-from db.repository import ApprovalRepository, MessageRepository, SessionRepository, TaskRepository
+from db.repository import (
+    ApprovalRepository,
+    MessageRepository,
+    SessionRepository,
+    TaskRepository,
+    deserialize_state,
+)
 from models.agent_state import AgentState, create_initial_state, migrate_state
 from models.project import Project
 from utils.time import utcnow
@@ -184,6 +190,12 @@ class SessionService:
 
         # Migrate from older schema versions if needed
         state = migrate_state(state)
+
+        # DB 경로는 JSON 을 돌려주므로 tasks/agents 가 raw dict 다. 노드들은
+        # `task.status` 처럼 속성으로 접근하므로 여기서 모델로 되돌린다.
+        # 저장 백엔드를 추상화하는 유일한 관문이라 memory 경로에도 함께 적용한다
+        # (이미 모델이면 그대로 통과 — deserialize_state 는 재적용에 안전).
+        state = deserialize_state(state)
 
         # Restore or create metadata
         metadata = self._session_metadata.get(session_id)

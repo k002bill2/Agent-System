@@ -15,6 +15,7 @@ from db.models import (
     SessionModel,
     TaskModel,
 )
+from models.agent_state import AgentInfo, TaskNode
 from utils.time import utcnow
 
 
@@ -50,6 +51,39 @@ def serialize_state(state: dict[str, Any]) -> dict[str, Any]:
         else:
             serialized[key] = serialize_value(value)
     return serialized
+
+
+def deserialize_state(state: dict[str, Any]) -> dict[str, Any]:
+    """Restore domain models from a JSON state dict (inverse of serialize_state).
+
+    `state_json` 은 JSON 이므로 읽어오면 `tasks`/`agents` 값이 raw dict 다.
+    노드들은 `task.status` 처럼 속성으로 접근하므로 여기서 모델로 되돌리지 않으면
+    캐시 미스·프로세스 재시작 시 오케스트레이션이 AttributeError 로 깨진다.
+
+    복원할 값이 없으면 입력을 그대로 돌려준다. in-memory 저장 경로는 이미 모델을
+    담고 있는데, 거기서 복사본을 만들면 반환된 state 를 직접 수정하는 호출자
+    (`api/hitl.py` 등)의 변경이 저장된 세션에 반영되지 않는다.
+
+    모델이 모르는 필드는 `extra="allow"`(TaskNode·AgentInfo·StructuredError)로
+    보존된다 — 버리면 다음 저장 때 `model_dump()` 결과가 쓰여 영구 삭제된다.
+    """
+    restored: dict[str, Any] | None = None
+
+    for key, model in (("tasks", TaskNode), ("agents", AgentInfo)):
+        value = state.get(key)
+        if not isinstance(value, dict):
+            continue
+        if not any(isinstance(item, dict) for item in value.values()):
+            continue  # 이미 전부 모델 — 복사할 이유가 없다
+
+        if restored is None:
+            restored = dict(state)
+        restored[key] = {
+            item_id: (model.model_validate(item) if isinstance(item, dict) else item)
+            for item_id, item in value.items()
+        }
+
+    return restored if restored is not None else state
 
 
 class SessionRepository:

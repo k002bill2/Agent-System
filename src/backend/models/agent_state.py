@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Annotated, Any, TypedDict
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from utils.time import utcnow
 
@@ -36,6 +36,11 @@ class AgentRole(str, Enum):
 class AgentInfo(BaseModel):
     """Information about an individual agent."""
 
+    # 세션 state 는 JSON 으로 영속화되고 다시 모델로 복원된다. extra 를 버리면
+    # 구/신 버전이 남긴 필드가 복원→저장 왕복에서 영구 삭제되므로 보존한다
+    # (`db/repository.py` 의 serialize_state/deserialize_state 짝).
+    model_config = ConfigDict(extra="allow")
+
     id: str
     role: AgentRole
     name: str
@@ -47,6 +52,9 @@ class AgentInfo(BaseModel):
 
 class TaskNode(BaseModel):
     """A node in the task tree."""
+
+    # AgentInfo 와 같은 이유로 extra 를 보존한다 — 상세는 그쪽 주석 참조.
+    model_config = ConfigDict(extra="allow")
 
     id: str
     parent_id: str | None = None
