@@ -13,6 +13,7 @@ from models.agent_state import (
     TaskStatus,
     create_initial_state,
 )
+from models.errors import ErrorCategory, ErrorSeverity, StructuredError
 from models.project import Project
 from orchestrator.nodes.orchestrator import OrchestratorNode
 from services.session_service import (
@@ -704,3 +705,84 @@ class TestSessionStateRehydration:
         got = await service.get_session(sid)
 
         assert got is service._memory_sessions[sid]
+
+    @pytest.mark.asyncio
+    async def test_unknown_task_fields_survive_read_modify_write(self, monkeypatch):
+        """미지 필드가 read→modify→write 왕복에서 지워지면 안 된다.
+
+        `TaskNode` 는 extra="ignore"(Pydantic 기본)라 model_validate 가 모르는 키를
+        버린다. 복원 후 다시 저장하면 `model_dump()` 결과가 쓰이므로 그 키는 영구
+        삭제된다. `engine.cancel` 처럼 노드를 돌리지 않는 read-modify-write 경로가
+        실제로 있어 가정이 아니다.
+        """
+        state = create_initial_state(session_id="s1")
+        state["tasks"]["t1"] = _full_task()
+        raw = serialize_state(state)
+        raw["tasks"]["t1"]["future_field"] = "keep me"
+
+        service = _db_service_returning(raw, monkeypatch)
+        restored = await service.get_session("s1")
+
+        restored["next_action"] = None  # 무관한 필드 수정
+        written = serialize_state(restored)
+
+        assert written["tasks"]["t1"].get("future_field") == "keep me"
+
+    @pytest.mark.asyncio
+    async def test_task_with_unknown_fields_is_still_a_model(self, monkeypatch):
+        """미지 필드가 있어도 모델로 복원된다.
+
+        `OrchestratorNode` 는 `tasks.values()` 전체를 순회하며 `t.status` 를 읽으므로
+        raw dict 를 하나라도 남기면 세션 전체 실행이 멈춘다. extra 보존은 모델
+        설정(`extra="allow"`)이 맡고, 복원 경로는 예외를 두지 않는다.
+        """
+        state = create_initial_state(session_id="s1")
+        state["tasks"]["t1"] = _full_task()
+        raw = serialize_state(state)
+        raw["tasks"]["t1"]["future_field"] = "keep me"
+
+        service = _db_service_returning(raw, monkeypatch)
+        restored = await service.get_session("s1")
+
+        assert isinstance(restored["tasks"]["t1"], TaskNode)
+
+    @pytest.mark.asyncio
+    async def test_unknown_agent_fields_survive_read_modify_write(self, monkeypatch):
+        """agents 도 같은 정책을 따른다."""
+        state = create_initial_state(session_id="s1")
+        state["agents"]["executor-t1"] = _full_agent()
+        raw = serialize_state(state)
+        raw["agents"]["executor-t1"]["future_field"] = "keep me"
+
+        service = _db_service_returning(raw, monkeypatch)
+        restored = await service.get_session("s1")
+        written = serialize_state(restored)
+
+        assert written["agents"]["executor-t1"].get("future_field") == "keep me"
+
+    @pytest.mark.asyncio
+    async def test_unknown_fields_inside_structured_errors_survive(self, monkeypatch):
+        """중첩 모델(TaskNode.structured_errors)의 미지 필드도 왕복에서 살아남는다.
+
+        최상위 키만 검사해서는 닿을 수 없는 지점이다 — `structured_errors` 는 알려진
+        필드라 통과하고, 그 안의 StructuredError 가 extra 를 버리면 조용히 사라진다.
+        """
+        state = create_initial_state(session_id="s1")
+        task = TaskNode(id="t1", title="t")
+        task.structured_errors = [
+            StructuredError(
+                category=ErrorCategory.TRANSIENT,
+                severity=ErrorSeverity.MEDIUM,
+                message="boom",
+                original_type="RuntimeError",
+            )
+        ]
+        state["tasks"]["t1"] = task
+        raw = serialize_state(state)
+        raw["tasks"]["t1"]["structured_errors"][0]["future_field"] = "keep me"
+
+        service = _db_service_returning(raw, monkeypatch)
+        restored = await service.get_session("s1")
+        written = serialize_state(restored)
+
+        assert written["tasks"]["t1"]["structured_errors"][0].get("future_field") == "keep me"

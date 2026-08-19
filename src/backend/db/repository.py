@@ -63,6 +63,9 @@ def deserialize_state(state: dict[str, Any]) -> dict[str, Any]:
     복원할 값이 없으면 입력을 그대로 돌려준다. in-memory 저장 경로는 이미 모델을
     담고 있는데, 거기서 복사본을 만들면 반환된 state 를 직접 수정하는 호출자
     (`api/hitl.py` 등)의 변경이 저장된 세션에 반영되지 않는다.
+
+    모델이 모르는 필드는 `extra="allow"`(TaskNode·AgentInfo·StructuredError)로
+    보존된다 — 버리면 다음 저장 때 `model_dump()` 결과가 쓰여 영구 삭제된다.
     """
     restored: dict[str, Any] | None = None
 
