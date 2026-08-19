@@ -91,17 +91,26 @@ async def get_project_context(
     # Get current session info if available
     session_info = None
 
-    # Check if there's an active session for this project
-    for session_id, state in engine._sessions.items():
-        if state.get("project_id") == project_id:
-            session_info = {
-                "session_id": session_id,
-                "tasks_count": len(state.get("tasks", {})),
-                "agents_count": len(state.get("agents", {})),
-                "iteration_count": state.get("iteration_count", 0),
-                "current_task_id": state.get("current_task_id"),
-            }
-            break
+    # Check if there's an active session for this project.
+    #
+    # 엔진 캐시(`engine._sessions`)를 직접 순회하면 만료된 세션이 걸러지지 않는다.
+    # 서비스 목록으로 후보를 찾고 `engine.get_session` 으로 다시 읽어 만료 검사를
+    # 거치게 한다. state 의 프로젝트 식별자는 `project_id` 가 아니라
+    # `project.id` 다(코드베이스 공통 관행).
+    sessions = await engine.session_service.list_sessions()
+    for candidate in (s for s in sessions if s.get("project_id") == project_id):
+        # 목록에는 만료된 항목도 남아 있다 — 살아 있는 첫 세션을 찾을 때까지 본다.
+        state = await engine.get_session(candidate["id"])
+        if not state:
+            continue
+        session_info = {
+            "session_id": candidate["id"],
+            "tasks_count": len(state.get("tasks", {})),
+            "agents_count": len(state.get("agents", {})),
+            "iteration_count": state.get("iteration_count", 0),
+            "current_task_id": state.get("current_task_id"),
+        }
+        break
 
     return ProjectContextResponse(
         project_id=project.id,

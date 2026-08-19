@@ -467,8 +467,9 @@ async def execute_analysis(
             "pre_analyzed_execution_plan": entry.analysis.get("execution_plan", {}),
             "analysis_id": request.analysis_id,
         }
-        # 세션 업데이트
-        engine._sessions[session_id] = state
+        # 세션 업데이트 (캐시와 영속 저장소 함께 — 캐시만 갱신하면 재시작 후
+        # 계획이 사라져 PlannerNode 가 일반 LLM 계획으로 떨어진다)
+        await engine.save_session(session_id, state)
 
     return ExecuteAnalysisResponse(
         success=True,
