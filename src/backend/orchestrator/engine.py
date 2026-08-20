@@ -255,9 +255,12 @@ class OrchestrationEngine:
 
     async def get_session(self, session_id: str) -> AgentState | None:
         """Get session state."""
-        # Check memory cache first
-        if session_id in self._sessions:
+        # 캐시는 TTL 을 모른다 — 서비스에 만료 여부를 물어 확인한다.
+        # 만료(또는 메타데이터 부재)면 캐시를 버리고 서비스 경로로 떨어뜨려
+        # 판정과 정리를 서비스 한 곳에 맡긴다.
+        if session_id in self._sessions and not self.session_service.is_session_expired(session_id):
             return self._sessions[session_id]
+        self._sessions.pop(session_id, None)
 
         # Fall back to service (database)
         state = await self.session_service.get_session(session_id)

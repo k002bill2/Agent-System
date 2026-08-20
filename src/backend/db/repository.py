@@ -172,11 +172,14 @@ class SessionRepository:
         organization_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
+        project_id: str | None = None,
     ) -> list[SessionModel]:
-        """List sessions for a user, optionally filtered by organization."""
+        """List sessions for a user, optionally filtered by organization/project."""
         query = select(SessionModel).where(SessionModel.user_id == user_id)
         if organization_id:
             query = query.where(SessionModel.organization_id == organization_id)
+        if project_id:
+            query = query.where(SessionModel.project_id == project_id)
         query = query.order_by(SessionModel.created_at.desc()).limit(limit).offset(offset)
         result = await self.db.execute(query)
         return list(result.scalars().all())
@@ -198,14 +201,18 @@ class SessionRepository:
     async def list_active(
         self,
         limit: int = 100,
+        project_id: str | None = None,
     ) -> list[SessionModel]:
-        """List active sessions."""
-        result = await self.db.execute(
-            select(SessionModel)
-            .where(SessionModel.status == "active")
-            .order_by(SessionModel.updated_at.desc())
-            .limit(limit)
-        )
+        """List active sessions, optionally scoped to one project.
+
+        프로젝트 필터는 질의에 있어야 한다 — 호출자가 결과를 걸러내면 `limit` 이
+        먼저 적용돼 대상 프로젝트 세션이 상위 N 개 밖으로 밀려날 수 있다.
+        """
+        query = select(SessionModel).where(SessionModel.status == "active")
+        if project_id:
+            query = query.where(SessionModel.project_id == project_id)
+        query = query.order_by(SessionModel.updated_at.desc()).limit(limit)
+        result = await self.db.execute(query)
         return list(result.scalars().all())
 
     async def delete_by_project(self, project_id: str) -> int:

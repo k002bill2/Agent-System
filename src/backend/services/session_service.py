@@ -230,6 +230,25 @@ class SessionService:
                 return True
             return False
 
+    def is_session_expired(self, session_id: str) -> bool:
+        """세션이 TTL 을 넘겼는지 — 메타데이터만 보므로 state 로드 없이 저렴하다.
+
+        메타데이터가 없으면 만료로 본다. 결정적인 이유는 **삭제**다 —
+        `delete_session` 이 메타데이터를 지우므로, 서비스 경로에서 만료로 삭제된
+        세션은 메타데이터가 없는 상태로 남는다(`refresh_session` 이 그 경로를
+        탄다). 부재를 "살아 있음"으로 보면 호출자의 캐시가 이미 삭제된 세션을
+        계속 내주게 된다.
+
+        만료로 보면 호출자는 캐시를 버리고 정식 조회 경로로 떨어지며, 거기서
+        세션이 없으면 None 이 나온다. 메타데이터 없는 레거시 state 는 매번
+        저장소로 떨어지지만 그건 성능 비용이고, `create_session` 이 언제나
+        `state["_metadata"]` 를 써왔으므로 사실상 도달하지 않는다.
+        """
+        metadata = self._session_metadata.get(session_id)
+        if not metadata:
+            return True
+        return metadata.is_expired()
+
     async def delete_session(self, session_id: str) -> bool:
         """Delete a session."""
         # Remove metadata
@@ -350,15 +369,21 @@ class SessionService:
         self,
         user_id: str | None = None,
         limit: int = 50,
+        project_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        """List sessions."""
+        """List sessions, optionally scoped to one project.
+
+        `project_id` 는 저장소 질의로 내려간다. 호출자가 결과 목록을 걸러내면
+        `limit` 이 필터보다 먼저 적용돼, 대상 프로젝트의 세션이 상위 `limit` 개
+        밖에 있으면 없는 것처럼 보인다.
+        """
         if self.use_database:
             async with async_session_factory() as db:
                 repo = SessionRepository(db)
                 if user_id:
-                    sessions = await repo.list_by_user(user_id, limit=limit)
+                    sessions = await repo.list_by_user(user_id, limit=limit, project_id=project_id)
                 else:
-                    sessions = await repo.list_active(limit=limit)
+                    sessions = await repo.list_active(limit=limit, project_id=project_id)
                 return [
                     {
                         "id": s.id,
@@ -373,7 +398,11 @@ class SessionService:
                 ]
         else:
             sessions = []
-            for sid, state in list(self._memory_sessions.items())[:limit]:
+            for sid, state in list(self._memory_sessions.items()):
+                if len(sessions) >= limit:
+                    break
+                if project_id and state.get("project", {}).get("id") != project_id:
+                    continue
                 sessions.append(
                     {
                         "id": sid,
