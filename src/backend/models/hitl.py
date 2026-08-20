@@ -8,7 +8,19 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from models.agent_state import TaskNode, TaskStatus
+from utils.locks import LoopBoundLockPool
 from utils.time import utcnow
+
+# 승인 상태를 바꾸는 **모든** 경로가 공유하는 락:
+# REST·WebSocket 전이(`api/hitl.py`)와 executor 의 소비(`nodes/executor.py`).
+#
+# 두 경로 모두 세션 JSON 전체를 덮어쓰며 저장한다. 직렬화하지 않으면 늦게 도착한
+# 낡은 스냅샷이 다른 전이를 되돌린다 — 병렬 배치(`execute_batch`)에서 승인된
+# 위험 task 가 둘 이상이면 실제로 겹친다.
+#
+# 락 안에서 그래프를 돌리지 말 것(교착) — 승인 API 는 저장까지만 잡고 놓은 뒤
+# `engine.run` 을 호출하며, 그 안에서 executor 가 같은 락을 다시 잡는다.
+APPROVAL_STATE_LOCK = LoopBoundLockPool()
 
 
 class RiskLevel(str, Enum):
@@ -27,6 +39,9 @@ class ApprovalStatus(str, Enum):
     APPROVED = "approved"
     DENIED = "denied"
     EXPIRED = "expired"
+    # 승인이 실제 도구 호출에 쓰였음. executor 가 도구 실행 **전에** 전이·영속화하며,
+    # 이 상태가 되면 같은 승인으로는 다시 실행할 수 없다(1회용 보장의 정본).
+    CONSUMED = "consumed"
 
 
 class OperationRisk(BaseModel):
@@ -148,6 +163,34 @@ def is_task_resumable_after_approval(
         return False
 
     return bool(approval.get("status") == ApprovalStatus.APPROVED.value)
+
+
+ORPHANED_APPROVAL_ERROR = "승인이 이미 소비됐다 — 실행 결과를 알 수 없어 재승인이 필요하다"
+
+
+def is_task_orphaned_by_consumed_approval(
+    task: TaskNode,
+    pending_approvals: dict[str, Any],
+) -> bool:
+    """소비된 승인에 매달린 채 남은 task 인가.
+
+    승인 소비는 도구 실행 **전에** 영속화되므로, 실행 도중 프로세스가 죽으면
+    `consumed` 승인 + 실행 중(IN_PROGRESS)이거나 대기 중(WAITING)인 task 가
+    남는다. 도구가 실제로 부수효과를 냈는지는 알 수 없다 — 자동 재개는
+    금지이고(비가역 작업 중복 실행), 그렇다고 조용히 멈추면 세션이 영영
+    끝나지 않는다. 스케줄러는 이 판정으로 잔재를 실패로 드러낸다.
+    """
+    if task.status not in (TaskStatus.IN_PROGRESS, TaskStatus.WAITING):
+        return False
+
+    if not task.pending_approval_id:
+        return False
+
+    approval = pending_approvals.get(task.pending_approval_id)
+    if not approval:
+        return False
+
+    return bool(approval.get("status") == ApprovalStatus.CONSUMED.value)
 
 
 def get_tool_risk(tool_name: str) -> OperationRisk:

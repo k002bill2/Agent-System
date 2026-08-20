@@ -54,6 +54,52 @@ pending → in_progress → completed
                      ↘ waiting → (unblock) → in_progress
 ```
 
+## HITL 승인 생명주기
+
+```
+pending ──(POST /approve)──> approved ──(executor 가 도구 호출과 대조)──> consumed
+   │                                                                        (실행)
+   └────(POST /deny)────> denied ──> task FAILED
+```
+
+승인은 **task 가 아니라 도구 호출에 바인딩**된다(`tool_name` + `tool_args` 대조).
+재진입한 executor 는 LLM 을 다시 호출하므로 승인받은 것과 다른 호출이 나올 수 있고,
+status 만 보고 통과시키면 이전 승인의 권한으로 그 호출이 실행된다.
+
+**at-most-once 보장** — 비가역 도구(`execute_bash` 등)가 같은 승인으로 두 번
+실행되지 않게 하는 세 가지 계약:
+
+| 계약 | 위치 | 없으면 |
+|------|------|--------|
+| 전이의 관문은 하나다 (REST·WebSocket 공용) | `api/hitl.py` 의 `resolve_approval` | WebSocket 경로에 PENDING 검사가 없어 소비된 승인이 다시 `approved` 로 열림 |
+| 전이는 세션 조회부터 저장까지 직렬화된다 | 같은 함수의 루프별 전이 락 | 캐시 미스 동시 요청 두 건이 각자 사본에서 PENDING 을 보고 둘 다 통과 |
+| 전이는 `engine.run` **전에** 영속화된다 | `resolve_approval` → `engine.save_session` | 그래프 실행 실패·프로세스 종료 시 승인이 통째로 사라짐 |
+| 소비(`consumed`)는 도구 실행 **전에** 영속화된다 | `orchestrator/nodes/executor.py` 의 `_consume_approval` | 실행 후 저장 전 종료 시 재시작 후 같은 승인으로 재실행 |
+| 소비는 락 안에서 상태를 다시 확인하는 compare-and-set 이다 | 같은 함수 (`APPROVAL_STATE_LOCK`) | 병렬 배치에서 낡은 스냅샷이 늦게 커밋돼 다른 소비를 `approved` 로 되돌림 |
+| 소비는 승인 레코드를 **제자리에서** 바꾼다 | 같은 함수 | 저장소는 `consumed`, 엔진 캐시는 `approved` 로 갈라져 낡은 캐시가 재승인 |
+| 소비 직전에 **저장소의** 승인 상태를 다시 읽는다 | `_approval_is_claimable_in_storage` | 캐시가 빈 상태에서 겹친 두 실행이 각자 `approved` 사본을 들고 둘 다 실행 |
+| 영속화가 실패하면 전이를 되돌린다 | `resolve_approval` · `_consume_approval` | 캐시 `approved` / 저장소 `pending` 으로 갈려 재시도가 400 — 승인이 영영 해소 불가 |
+| 소비 기록은 엔진이 읽는 저장소에 쓴다 | `ExecutorNode(session_service=...)` (엔진이 주입) | 커스텀 서비스 주입 시 소비가 다른 저장소로 가 재시작 후 승인이 부활 |
+
+소비 기록만 남고 결과가 남지 않은 잔재(실행 도중 종료)는 `OrchestratorNode` 가
+`is_task_orphaned_by_consumed_approval` 로 찾아 **실패로 정리**한다. 실행 여부를 알 수
+없으므로 자동 재개는 하지 않고, 그렇다고 조용히 멈추지도 않는다.
+
+`pending_approvals` 를 반환하지 않는 노드 결과는 그래프 종료 시의 전체 state 저장이
+`consumed` 를 되돌려 놓는다 — executor 의 모든 반환 경로가 이 키를 실어 보내는 이유다.
+
+승인 전이와 소비는 **같은 락**(`models/hitl.py` 의 `APPROVAL_STATE_LOCK`)을 공유한다 —
+둘 다 세션 JSON 전체를 덮어쓰므로 따로 잠그면 서로의 쓰기를 되돌린다. 락 안에서
+그래프를 돌리면 교착이므로, 승인 API 는 저장까지만 잡고 놓은 뒤 `engine.run` 을 부른다.
+
+승인 후 그래프 실행이 실패해 task 가 `WAITING` + `approved` 로 남으면, 다음 그래프 실행에서
+스케줄러가 그 task 를 집어 재개한다(`is_task_resumable_after_approval`). 승인 API 를 다시
+호출하는 방식의 재개는 없다 — 중복 승인 요청과 구분할 수 없기 때문이다.
+
+크로스 프로세스 원자성(다중 워커)은 아직 없다. 현재 배포는 단일 인스턴스이고
+(`render.yaml`, `--workers` 없음) `approvals` 테이블을 진실의 출처로 쓰는 조건부
+UPDATE 는 다중 워커 도입 시점의 과제다.
+
 ## Directory Structure (Backend)
 
 ```

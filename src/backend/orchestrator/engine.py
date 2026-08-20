@@ -144,16 +144,24 @@ class OrchestrationEngine:
         self.tools = tools if tools is not None else ALL_TOOLS
         print(f"🔧 Loaded {len(self.tools)} tools: {[t.name for t in self.tools]}")
 
+        # Session service for persistence.
+        # 노드 생성보다 먼저 확정한다 — executor 가 승인 소비를 기록할 저장소가
+        # 엔진이 읽는 저장소와 같아야 한다.
+        self.session_service = session_service or get_session_service()
+
         # Initialize nodes
         self.orchestrator_node = OrchestratorNode(self.llm)
         self.planner_node = PlannerNode(self.llm, tools=self.tools)
-        self.executor_node = ExecutorNode(self.llm, tools=self.tools)
+        self.executor_node = ExecutorNode(
+            self.llm, tools=self.tools, session_service=self.session_service
+        )
         self.reviewer_node = ReviewerNode(self.llm)
         self.self_correction_node = SelfCorrectionNode(self.llm)
         self.parallel_executor_node = ParallelExecutorNode(
             llm=self.llm,
             tools=self.tools,
             max_concurrent=3,
+            session_service=self.session_service,
         )
 
         # Create and compile graph with self-correction and parallel execution support
@@ -168,9 +176,6 @@ class OrchestrationEngine:
         self.compiled_graph = compile_graph(self.graph)
         print("✅ Self-correction enabled")
         print("✅ Parallel execution enabled (max 3 concurrent tasks)")
-
-        # Session service for persistence
-        self.session_service = session_service or get_session_service()
 
         # Context compressor — closes the token economy gap
         self._compressor = ContextCompressor()
@@ -259,6 +264,17 @@ class OrchestrationEngine:
         if state:
             self._sessions[session_id] = state
         return state
+
+    async def save_session(self, session_id: str, state: AgentState) -> None:
+        """세션 상태를 캐시와 영속 저장소에 함께 반영한다.
+
+        캐시만 갱신하면 프로세스 재시작이나 다른 인스턴스의 캐시 미스 이후에
+        변경이 사라진다. HITL 승인처럼 **그래프 실행 밖에서** 일어나는 전이는
+        `run` 의 일괄 저장을 기다리지 말고 이 경로로 즉시 저장해야 한다 —
+        `run` 이 실패하면 그 저장은 아예 일어나지 않는다.
+        """
+        self._sessions[session_id] = state
+        await self.session_service.update_session(session_id, state)
 
     async def delete_session(self, session_id: str) -> bool:
         """Delete a session."""

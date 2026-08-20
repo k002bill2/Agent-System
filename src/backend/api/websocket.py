@@ -3,11 +3,11 @@
 import asyncio
 import os
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from api.deps import get_engine
-from models.hitl import ApprovalStatus
+from api.hitl import resolve_approval
 from models.message import (
     ApprovalDeniedPayload,
     ApprovalGrantedPayload,
@@ -16,7 +16,6 @@ from models.message import (
     MessageType,
     TaskCreatePayload,
 )
-from services.audit_service import AuditAction, AuditService, ResourceType
 
 # Heartbeat configuration
 WS_HEARTBEAT_INTERVAL = int(os.getenv("WS_HEARTBEAT_INTERVAL", "20"))
@@ -170,107 +169,65 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     await manager.send_message(session_id, event)
 
             elif message.type == MessageType.APPROVAL_RESPONSE:
-                # Handle HITL approval/denial from client
+                # Handle HITL approval/denial from client.
+                #
+                # 전이 자체는 `api.hitl.resolve_approval` 한 곳에서만 한다. 이 경로가
+                # 승인 레코드를 직접 쓰면 PENDING 검사·직렬화·영속화가 REST 에만 걸려,
+                # 중복 응답 한 번으로 이미 소비된(`consumed`) 승인이 다시 `approved` 로
+                # 되돌아간다 — 같은 위험 도구가 다시 실행되는 경로다.
                 try:
                     payload = ApprovalResponsePayload(**message.payload)
-                    state = await engine.get_session(session_id)
-
-                    if state:
-                        pending_approvals = state.get("pending_approvals", {})
-                        project_id = state.get("project", {}).get("id")
-                        if payload.approval_id in pending_approvals:
-                            approval = pending_approvals[payload.approval_id]
-
-                            if payload.approved:
-                                # Approve and resume
-                                approval["status"] = ApprovalStatus.APPROVED.value
-                                approval["resolver_note"] = payload.note
-                                state["waiting_for_approval"] = False
-
-                                # Audit: Log approval granted
-                                AuditService.log(
-                                    action=AuditAction.APPROVAL_GRANTED,
-                                    resource_type=ResourceType.APPROVAL,
-                                    resource_id=payload.approval_id,
-                                    session_id=session_id,
-                                    project_id=project_id,
-                                    metadata={
-                                        "task_id": approval["task_id"],
-                                        "tool_name": approval.get("tool_name"),
-                                        "note": payload.note,
-                                    },
-                                )
-
-                                # Send confirmation
-                                await manager.send_message(
-                                    session_id,
-                                    Message(
-                                        type=MessageType.APPROVAL_GRANTED,
-                                        payload=ApprovalGrantedPayload(
-                                            approval_id=payload.approval_id,
-                                            task_id=approval["task_id"],
-                                        ).model_dump(),
-                                        session_id=session_id,
+                    try:
+                        _, approval = await resolve_approval(
+                            engine,
+                            session_id,
+                            payload.approval_id,
+                            approved=payload.approved,
+                            note=payload.note,
+                        )
+                    except HTTPException as exc:
+                        await manager.send_message(
+                            session_id,
+                            Message(
+                                type=MessageType.ERROR,
+                                payload={
+                                    "code": (
+                                        "APPROVAL_NOT_FOUND"
+                                        if exc.status_code == 404
+                                        else "APPROVAL_CONFLICT"
                                     ),
-                                )
-
-                                # Resume execution
-                                async for event in engine.stream(session_id, ""):
-                                    await manager.send_message(session_id, event)
-
-                            else:
-                                # Deny
-                                approval["status"] = ApprovalStatus.DENIED.value
-                                approval["resolver_note"] = payload.note or "Denied by user"
-                                state["waiting_for_approval"] = False
-
-                                # Audit: Log approval denied
-                                AuditService.log(
-                                    action=AuditAction.APPROVAL_DENIED,
-                                    resource_type=ResourceType.APPROVAL,
-                                    resource_id=payload.approval_id,
+                                    "message": str(exc.detail),
+                                },
+                                session_id=session_id,
+                            ),
+                        )
+                    else:
+                        if payload.approved:
+                            await manager.send_message(
+                                session_id,
+                                Message(
+                                    type=MessageType.APPROVAL_GRANTED,
+                                    payload=ApprovalGrantedPayload(
+                                        approval_id=payload.approval_id,
+                                        task_id=approval["task_id"],
+                                    ).model_dump(),
                                     session_id=session_id,
-                                    project_id=project_id,
-                                    metadata={
-                                        "task_id": approval["task_id"],
-                                        "tool_name": approval.get("tool_name"),
-                                        "note": approval["resolver_note"],
-                                    },
-                                )
+                                ),
+                            )
 
-                                # Update task status
-                                task_id = approval["task_id"]
-                                tasks = state.get("tasks", {})
-                                if task_id in tasks:
-                                    from models.agent_state import TaskStatus
-
-                                    task = tasks[task_id]
-                                    task.status = TaskStatus.FAILED
-                                    task.error = f"Denied: {approval['resolver_note']}"
-                                    task.pending_approval_id = None
-
-                                # Send denial confirmation
-                                await manager.send_message(
-                                    session_id,
-                                    Message(
-                                        type=MessageType.APPROVAL_DENIED,
-                                        payload=ApprovalDeniedPayload(
-                                            approval_id=payload.approval_id,
-                                            task_id=approval["task_id"],
-                                            note=approval["resolver_note"],
-                                        ).model_dump(),
-                                        session_id=session_id,
-                                    ),
-                                )
+                            # Resume execution
+                            async for event in engine.stream(session_id, ""):
+                                await manager.send_message(session_id, event)
                         else:
                             await manager.send_message(
                                 session_id,
                                 Message(
-                                    type=MessageType.ERROR,
-                                    payload={
-                                        "code": "APPROVAL_NOT_FOUND",
-                                        "message": f"Approval {payload.approval_id} not found",
-                                    },
+                                    type=MessageType.APPROVAL_DENIED,
+                                    payload=ApprovalDeniedPayload(
+                                        approval_id=payload.approval_id,
+                                        task_id=approval["task_id"],
+                                        note=approval["resolver_note"],
+                                    ).model_dump(),
                                     session_id=session_id,
                                 ),
                             )
