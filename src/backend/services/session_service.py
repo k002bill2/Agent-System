@@ -369,15 +369,21 @@ class SessionService:
         self,
         user_id: str | None = None,
         limit: int = 50,
+        project_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        """List sessions."""
+        """List sessions, optionally scoped to one project.
+
+        `project_id` 는 저장소 질의로 내려간다. 호출자가 결과 목록을 걸러내면
+        `limit` 이 필터보다 먼저 적용돼, 대상 프로젝트의 세션이 상위 `limit` 개
+        밖에 있으면 없는 것처럼 보인다.
+        """
         if self.use_database:
             async with async_session_factory() as db:
                 repo = SessionRepository(db)
                 if user_id:
-                    sessions = await repo.list_by_user(user_id, limit=limit)
+                    sessions = await repo.list_by_user(user_id, limit=limit, project_id=project_id)
                 else:
-                    sessions = await repo.list_active(limit=limit)
+                    sessions = await repo.list_active(limit=limit, project_id=project_id)
                 return [
                     {
                         "id": s.id,
@@ -392,7 +398,11 @@ class SessionService:
                 ]
         else:
             sessions = []
-            for sid, state in list(self._memory_sessions.items())[:limit]:
+            for sid, state in list(self._memory_sessions.items()):
+                if len(sessions) >= limit:
+                    break
+                if project_id and state.get("project", {}).get("id") != project_id:
+                    continue
                 sessions.append(
                     {
                         "id": sid,

@@ -172,3 +172,26 @@ class TestProjectContextSessionLookup:
 
         assert response.session_info is not None
         assert response.session_info["session_id"] == live_id
+
+    @pytest.mark.asyncio
+    async def test_project_session_found_beyond_default_list_limit(
+        self, monkeypatch, tmp_path, isolated_engine
+    ):
+        """다른 프로젝트 세션이 기본 limit 을 채워도 대상 프로젝트 세션을 찾는다.
+
+        `list_sessions()` 의 기본 `limit=50` 이 프로젝트 필터보다 먼저 적용되면
+        대상 세션이 잘려 나간다. 필터는 저장소 질의에 있어야 한다.
+        """
+        project = _project()
+        project.path = str(tmp_path)
+        monkeypatch.setattr("api.context.get_project", lambda pid: project)
+
+        engine = isolated_engine
+        for index in range(50):
+            await engine.create_session(project=_project(f"p-other-{index}"))
+        session_id = await engine.create_session(project=project)
+
+        response = await get_project_context(project.id, engine)
+
+        assert response.session_info is not None
+        assert response.session_info["session_id"] == session_id

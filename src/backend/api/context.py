@@ -95,9 +95,12 @@ async def get_project_context(
     #
     # 엔진 캐시(`engine._sessions`)를 직접 순회하면 만료된 세션이 걸러지지 않는다.
     # 서비스 목록으로 후보를 찾고 `engine.get_session` 으로 다시 읽어 만료 검사를
-    # 거치게 한다. state 의 프로젝트 식별자는 `project_id` 가 아니라
-    # `project.id` 다(코드베이스 공통 관행).
-    sessions = await engine.session_service.list_sessions()
+    # 거치게 한다. 프로젝트 필터는 `list_sessions` 에 넘긴다 — 여기서 걸러내면
+    # 서비스의 `limit` 이 먼저 적용돼 대상 세션이 잘려 나간다.
+    #
+    # 아래 `project_id` 재확인은 중복이지만 남긴다. 서비스가 필터를 놓치면 이
+    # 엔드포인트가 *다른 프로젝트의* 세션을 내주게 되고, 그건 누락보다 나쁘다.
+    sessions = await engine.session_service.list_sessions(project_id=project_id)
     for candidate in (s for s in sessions if s.get("project_id") == project_id):
         # 목록에는 만료된 항목도 남아 있다 — 살아 있는 첫 세션을 찾을 때까지 본다.
         state = await engine.get_session(candidate["id"])
