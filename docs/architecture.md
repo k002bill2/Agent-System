@@ -54,6 +54,24 @@ pending → in_progress → completed
                      ↘ waiting → (unblock) → in_progress
 ```
 
+## 세션 캐시 경계
+
+`OrchestrationEngine._sessions` 는 `SessionService` 앞의 프로세스 로컬 캐시다.
+TTL·삭제·영속화는 전부 서비스가 소유하므로, 캐시가 서비스를 우회하면 그 판정이
+통째로 건너뛰어진다.
+
+| 계약 | 위치 | 없으면 |
+|------|------|--------|
+| 캐시 히트도 만료를 확인한다 | `engine.get_session` → `SessionService.is_session_expired` | 만료된 세션이 캐시에서 무기한 서빙됨 |
+| 메타데이터 부재는 **만료**로 본다 | `SessionService.is_session_expired` | `delete_session` 이 메타데이터를 지우므로, 삭제된 세션을 캐시가 계속 내줌 |
+| 캐시 갱신은 영속화와 쌍을 이룬다 | `engine.save_session` | 재시작·다른 인스턴스의 캐시 미스 이후 변경이 사라짐 |
+| 외부 호출자는 캐시를 직접 순회하지 않는다 | `api/context.py` → `list_sessions()` + `engine.get_session()` | 만료 세션이 걸러지지 않고 응답에 실림 |
+| 목록 필터는 저장소 질의에 있다 | `SessionService.list_sessions(project_id=...)` | `limit` 이 필터보다 먼저 적용돼 대상 세션이 상위 N 개 밖으로 밀려남 |
+
+`is_session_expired` 는 프로세스 로컬 메타데이터만 본다 — 다중 인스턴스 배포에서는
+다른 인스턴스의 `refresh_session` 갱신을 보지 못해 유효한 세션을 만료로 볼 수 있다.
+단일 인스턴스 전제이며, 해소하려면 만료 판정을 공유 저장소로 옮겨야 한다.
+
 ## HITL 승인 생명주기
 
 ```
