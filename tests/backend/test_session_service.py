@@ -50,6 +50,19 @@ def _make_service() -> SessionService:
     return SessionService(use_database=False)
 
 
+def _patch_metadata(service: SessionService, session_id: str, **changes) -> None:
+    """로컬 사본과 저장된 state 의 메타데이터를 함께 바꾼다.
+
+    `get_session` 은 저장소의 `_metadata` 로 재수화하므로(issue #289) 로컬
+    사본만 바꾸면 다음 읽기에서 그대로 되돌아간다. 테스트가 "이 세션은
+    만료됐다"고 말하려면 저장소 쪽에도 그렇게 적혀 있어야 한다.
+    """
+    metadata = service._session_metadata[session_id]
+    for field, value in changes.items():
+        setattr(metadata, field, value)
+    service._memory_sessions[session_id]["_metadata"] = metadata.to_dict()
+
+
 # ---------------------------------------------------------------------------
 # SessionMetadata unit tests
 # ---------------------------------------------------------------------------
@@ -211,9 +224,8 @@ class TestSessionServiceLifecycle:
     @pytest.mark.asyncio
     async def test_get_session_skips_activity_update_when_disabled(self):
         sid = await self.service.create_session()
-        meta = self.service._session_metadata[sid]
-        meta.last_activity = utcnow() - timedelta(minutes=10)
-        frozen = meta.last_activity
+        frozen = utcnow() - timedelta(minutes=10)
+        _patch_metadata(self.service, sid, last_activity=frozen)
 
         await self.service.get_session(sid, update_activity=False)
         assert self.service._session_metadata[sid].last_activity == frozen
@@ -287,13 +299,38 @@ class TestSessionServiceExpiration:
     @pytest.mark.asyncio
     async def test_get_session_returns_none_for_expired_session(self):
         sid = await self.service.create_session(ttl_days=1)
-        # Manually expire
-        self.service._session_metadata[sid].expires_at = utcnow() - timedelta(seconds=1)
+        # Manually expire — 저장소 쪽도 함께 만료시켜야 한다 (issue #289)
+        _patch_metadata(self.service, sid, expires_at=utcnow() - timedelta(seconds=1))
 
         result = await self.service.get_session(sid)
         assert result is None
         # Also verify the session was auto-cleaned from memory
         assert sid not in self.service._memory_sessions
+
+    @pytest.mark.asyncio
+    async def test_stored_metadata_wins_over_stale_local_copy(self):
+        """저장소의 메타데이터가 프로세스 로컬 사본보다 우선한다 (issue #289).
+
+        다른 인스턴스가 `refresh_session` 으로 TTL 을 연장하면 그 값은 저장소에
+        들어간다. 이쪽 프로세스가 낡은 사본을 계속 믿으면 살아 있는 세션을
+        만료로 보고 **삭제**한다.
+        """
+        sid = await self.service.create_session(ttl_days=1)
+
+        # 다른 인스턴스가 TTL 을 연장해 저장소에 기록한 상태
+        stored = self.service._memory_sessions[sid]
+        refreshed = SessionMetadata.from_dict(stored["_metadata"])
+        refreshed.expires_at = utcnow() + timedelta(days=7)
+        stored["_metadata"] = refreshed.to_dict()
+
+        # 이쪽 프로세스는 연장 이전의 낡은 사본을 들고 있다
+        self.service._session_metadata[sid].expires_at = utcnow() - timedelta(seconds=1)
+
+        result = await self.service.get_session(sid)
+
+        assert result is not None
+        # 반환값보다 이쪽이 핵심 — 결함의 실체는 낡은 판정에 의한 삭제다
+        assert sid in self.service._memory_sessions
 
     @pytest.mark.asyncio
     async def test_cleanup_expired_sessions_removes_expired(self):
@@ -374,6 +411,22 @@ class TestSessionServiceRefreshAndInfo:
         assert new_expiry > old_expiry
 
     @pytest.mark.asyncio
+    async def test_refresh_session_rolls_back_when_persist_fails(self):
+        """영속화가 실패하면 메모리만 연장된 상태로 두지 않는다 (issue #289).
+
+        저장소에 안 써진 연장을 메모리가 들고 있으면 저장소와 갈라지고,
+        다음 읽기가 저장소 값으로 되돌리면서 호출자의 "연장됨" 이 뒤집힌다.
+        """
+        sid = await self.service.create_session(ttl_days=1)
+        original = self.service._session_metadata[sid].expires_at
+
+        with patch.object(self.service, "update_session", AsyncMock(return_value=False)):
+            refreshed = await self.service.refresh_session(sid, extend_days=7)
+
+        assert refreshed is False
+        assert self.service._session_metadata[sid].expires_at == original
+
+    @pytest.mark.asyncio
     async def test_refresh_session_returns_false_for_unknown_id(self):
         result = await self.service.refresh_session("ghost-sid")
         assert result is False
@@ -394,9 +447,7 @@ class TestSessionServiceRefreshAndInfo:
     @pytest.mark.asyncio
     async def test_get_session_info_returns_none_for_expired(self):
         sid = await self.service.create_session()
-        self.service._session_metadata[sid].expires_at = (
-            utcnow() - timedelta(seconds=1)
-        )
+        _patch_metadata(self.service, sid, expires_at=utcnow() - timedelta(seconds=1))
         info = await self.service.get_session_info(sid)
         assert info is None
 
