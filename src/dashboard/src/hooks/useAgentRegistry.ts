@@ -29,6 +29,10 @@ export interface UseAgentRegistryResult {
 
 const FALLBACK_ERROR = '에이전트 목록을 불러오지 못했습니다.'
 
+/** 배경 갱신 주기. 레지스트리는 프로세스 내 조회라 DB·외부 I/O 가 없다
+ *  (`services/agent_registry.py`) — 증폭 계수 1 의 가벼운 요청이다. */
+export const AGENT_REGISTRY_POLL_INTERVAL_MS = 15_000
+
 /**
  * Read the agent registry from `GET /api/agents` via the shared apiClient
  * (its request interceptor attaches the auth token — this endpoint requires it).
@@ -80,6 +84,18 @@ export function useAgentRegistry(): UseAgentRegistryResult {
     return () => {
       mountedRef.current = false
     }
+  }, [load])
+
+  // 보드가 열려 있는 동안 배경 갱신한다. 이것이 없으면 "실시간 상태" 라는
+  // 이름과 달리 마운트 시점의 스냅샷이 무기한 남는다 — 화면이 스스로
+  // 사실이 아닌 것을 말하게 된다. 탭이 가려져 있으면 건너뛴다(보이지 않는
+  // 화면을 위해 인증 요청을 계속 보낼 이유가 없다).
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      void load()
+    }, AGENT_REGISTRY_POLL_INTERVAL_MS)
+    return () => clearInterval(timer)
   }, [load])
 
   const refresh = useCallback((): void => {

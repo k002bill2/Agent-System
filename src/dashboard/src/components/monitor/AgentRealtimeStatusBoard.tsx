@@ -147,16 +147,9 @@ const CircularGauge: React.FC<CircularGaugeProps> = memo(({
   const strokeDashoffset = circumference - (percentage / 100) * circumference
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
+    <button
+      type="button"
       onClick={onClick}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onClick()
-        }
-      }}
       aria-label={`필터: ${config.label} 상태 에이전트 ${count}개. 선택하려면 누르세요.`}
       aria-pressed={isSelected}
       className={cn(
@@ -211,7 +204,7 @@ const CircularGauge: React.FC<CircularGaugeProps> = memo(({
           {count} <span className="text-xs font-normal text-gray-500">개</span>
         </p>
       </div>
-    </div>
+    </button>
   )
 })
 CircularGauge.displayName = 'CircularGauge'
@@ -232,16 +225,9 @@ const AgentActivityCard: React.FC<AgentActivityCardProps> = memo(({
   const StatusIcon = config.icon
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
+    <button
+      type="button"
       onClick={onClick}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onClick?.()
-        }
-      }}
       aria-label={`에이전트 ${agent.name}, 상태 ${config.label}, 성공률 ${formatSuccessRate(agent.success_rate, agent.total_tasks_completed)} (완료 ${agent.total_tasks_completed}건)`}
       aria-pressed={isSelected}
       className={cn(
@@ -331,10 +317,248 @@ const AgentActivityCard: React.FC<AgentActivityCardProps> = memo(({
           <ChevronRight className="w-4 h-4 text-gray-400 opacity-0 -translate-x-1 transition-all group-hover:opacity-100 group-hover:translate-x-0 hidden md:block" />
         </div>
       </div>
-    </div>
+    </button>
   )
 })
 AgentActivityCard.displayName = 'AgentActivityCard'
+
+
+// ─────────────────────────────────────────────────────────────
+// Presentational sections
+//
+// 보드가 데이터 배선(훅)과 표현을 한 함수에 담고 있으면 함수 하나가 250 줄을
+// 넘어 저장소 한도(함수 50 줄)를 크게 벗어나고, 상태별 화면을 따로 테스트하기도
+// 어렵다. 아래는 전부 순수 표현 컴포넌트다 — 상태를 갖지 않고 props 만 읽는다.
+// ─────────────────────────────────────────────────────────────
+
+interface BoardHeaderProps {
+  lastUpdatedAt: number | null
+  isRefreshing: boolean
+  onRefresh: () => void
+}
+
+const BoardHeader: React.FC<BoardHeaderProps> = memo(({ lastUpdatedAt, isRefreshing, onRefresh }) => (
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div>
+        <div className="flex items-center gap-2">
+          <Activity className="w-5 h-5 text-primary-500" />
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+            Agent 실시간 상태 모니터링 현황판
+          </h2>
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          에이전트 레지스트리에 등록된 에이전트의 상태와 실행 지표를 조회합니다.
+        </p>
+      </div>
+      {/* Refresh control & last-updated stamp */}
+      <div className="flex items-center gap-2 bg-white dark:bg-zinc-800 px-3 py-1.5 rounded-lg border border-gray-200/80 dark:border-zinc-700/60 text-xs">
+        <span className="font-medium text-gray-500 dark:text-gray-400">
+          {lastUpdatedAt !== null ? `마지막 갱신 ${formatUpdatedAt(lastUpdatedAt)}` : '갱신 이력 없음'}
+        </span>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          className="ml-1 hover:bg-gray-100 dark:hover:bg-zinc-700 p-1 rounded transition-colors text-gray-400 hover:text-gray-700 dark:hover:text-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          aria-label="에이전트 목록 새로고침"
+        >
+          <RefreshCw className={cn('w-3.5 h-3.5', isRefreshing && 'animate-spin')} />
+        </button>
+      </div>
+    </div>
+))
+BoardHeader.displayName = 'BoardHeader'
+
+const RegistryLoading: React.FC = memo(() => (
+      <div
+        role="status"
+        className="flex flex-col items-center justify-center py-12 px-4 border border-dashed border-gray-200 dark:border-zinc-800 rounded-xl text-center bg-white dark:bg-zinc-800/20"
+      >
+        <Loader2 className="w-8 h-8 text-primary-500 animate-spin mb-3" />
+        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+          에이전트 목록을 불러오는 중...
+        </p>
+      </div>
+))
+RegistryLoading.displayName = 'RegistryLoading'
+
+interface RegistryErrorProps {
+  error: string | null
+  isRefreshing: boolean
+  onRetry: () => void
+}
+
+const RegistryErrorPanel: React.FC<RegistryErrorProps> = memo(({ error, isRefreshing, onRetry }) => (
+      <div
+        role="alert"
+        className="flex flex-col items-center justify-center py-12 px-4 border border-rose-200 dark:border-rose-800/50 rounded-xl text-center bg-rose-50 dark:bg-rose-950/20"
+      >
+        <AlertTriangle className="w-8 h-8 text-rose-500 dark:text-rose-400 mb-3" />
+        <p className="text-xs font-semibold text-rose-700 dark:text-rose-400">
+          에이전트 목록을 불러오지 못했습니다
+        </p>
+        {error && (
+          <p className="text-[10px] text-rose-600/80 dark:text-rose-400/70 mt-1">{error}</p>
+        )}
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={isRefreshing}
+          className="mt-4 px-3 py-1.5 text-[10px] font-semibold rounded-lg bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          aria-label="에이전트 목록 다시 불러오기"
+        >
+          다시 시도
+        </button>
+      </div>
+))
+RegistryErrorPanel.displayName = 'RegistryErrorPanel'
+
+const StaleDataBanner: React.FC<RegistryErrorProps> = memo(({ error, isRefreshing, onRetry }) => (
+      <div
+        role="alert"
+        className="flex items-center gap-2 px-3 py-2 mb-3 rounded-lg border border-rose-200 dark:border-rose-800/50 bg-rose-50 dark:bg-rose-950/20"
+      >
+        <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500 dark:text-rose-400" />
+        <p className="flex-1 text-[10px] text-rose-700 dark:text-rose-400">
+          갱신에 실패해 이전 목록을 보여 주고 있습니다{error ? ` — ${error}` : ''}
+        </p>
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={isRefreshing}
+          className="px-2 py-1 text-[10px] font-semibold rounded-md bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          aria-label="에이전트 목록 다시 불러오기"
+        >
+          다시 시도
+        </button>
+      </div>
+))
+StaleDataBanner.displayName = 'StaleDataBanner'
+
+interface RegistryEmptyProps {
+  isRefreshing: boolean
+  onRefresh: () => void
+}
+
+const RegistryEmpty: React.FC<RegistryEmptyProps> = memo(({ isRefreshing, onRefresh }) => (
+      <div className="flex flex-col items-center justify-center py-12 px-4 border border-dashed border-gray-200 dark:border-zinc-800 rounded-xl text-center bg-white dark:bg-zinc-800/20">
+        <Activity className="w-8 h-8 text-gray-300 dark:text-gray-700 mb-3" />
+        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+          등록된 에이전트가 없습니다
+        </p>
+        <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+          레지스트리에 에이전트가 등록되면 이곳에 표시됩니다.
+        </p>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          className="mt-4 px-3 py-1.5 text-[10px] font-semibold rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-zinc-800 dark:text-gray-300 dark:hover:bg-zinc-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          aria-label="에이전트 목록 새로고침"
+        >
+          새로고침
+        </button>
+      </div>
+))
+RegistryEmpty.displayName = 'RegistryEmpty'
+
+interface BoardContentProps {
+  agents: Agent[]
+  filteredAgents: Agent[]
+  stateCounts: Record<AgentState, number>
+  selectedStateFilter: 'all' | AgentState
+  onStateGaugeClick: (next: AgentState) => void
+  onResetStateFilter: () => void
+  searchQuery: string
+  onSearchQueryChange: (next: string) => void
+  selectedCardId: string | null
+  onCardClick: (id: string) => void
+}
+
+const BoardContent: React.FC<BoardContentProps> = memo(({
+  agents,
+  filteredAgents,
+  stateCounts,
+  selectedStateFilter,
+  onStateGaugeClick,
+  onResetStateFilter,
+  searchQuery,
+  onSearchQueryChange,
+  selectedCardId,
+  onCardClick,
+}) => (
+      <>
+        {/* SVG Circular Gauges Row */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {STATE_ORDER.map((gaugeState) => (
+            <CircularGauge
+              key={gaugeState}
+              state={gaugeState}
+              count={stateCounts[gaugeState]}
+              total={agents.length}
+              isSelected={selectedStateFilter === gaugeState}
+              onClick={() => onStateGaugeClick(gaugeState)}
+            />
+          ))}
+        </div>
+        {/* Filter / Search Bar */}
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between bg-white dark:bg-zinc-800/80 p-3 rounded-xl border border-gray-100 dark:border-zinc-800">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="에이전트 이름, 설명, 또는 카테고리 검색..."
+              value={searchQuery}
+              onChange={(e) => onSearchQueryChange(e.target.value)}
+              className="w-full pl-9 pr-4 py-1.5 text-xs bg-slate-50/50 dark:bg-zinc-900/60 border border-gray-200 dark:border-zinc-700/60 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-shadow"
+              aria-label="에이전트 이름, 설명, 카테고리 검색"
+            />
+          </div>
+          {/* Filter Quick Reset */}
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            {selectedStateFilter !== 'all' && (
+              <button
+                type="button"
+                onClick={onResetStateFilter}
+                className="text-[10px] font-semibold text-primary-500 hover:text-primary-600 flex items-center gap-1 px-2 py-1 rounded hover:bg-primary-50 dark:hover:bg-primary-950/20 transition-colors"
+                aria-label="상태 필터 초기화"
+              >
+                <Filter className="w-3 h-3" />
+                필터 초기화
+              </button>
+            )}
+            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">
+              조회된 에이전트: {filteredAgents.length} / {agents.length} 개
+            </span>
+          </div>
+        </div>
+        {/* Agents List */}
+        <div className="flex flex-col gap-2.5 max-h-[380px] overflow-y-auto pr-1 select-none">
+          {filteredAgents.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 px-4 border border-dashed border-gray-200 dark:border-zinc-800 rounded-xl text-center bg-white dark:bg-zinc-800/20">
+              <Search className="w-8 h-8 text-gray-300 dark:text-gray-700 mb-2.5" />
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                일치하는 에이전트가 없습니다
+              </p>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+                검색어나 상단 상태 필터를 조정해 보세요.
+              </p>
+            </div>
+          ) : (
+            filteredAgents.map((agent) => (
+              <AgentActivityCard
+                key={agent.id}
+                agent={agent}
+                isSelected={selectedCardId === agent.id}
+                onClick={() => onCardClick(agent.id)}
+              />
+            ))
+          )}
+        </div>
+      </>
+))
+BoardContent.displayName = 'BoardContent'
+
 
 // ─────────────────────────────────────────────────────────────
 // Main Component
@@ -392,6 +616,10 @@ export const AgentRealtimeStatusBoard: React.FC<AgentRealtimeStatusBoardProps> =
     setSelectedStateFilter((prev) => (prev === next ? 'all' : next))
   }, [])
 
+  const handleResetStateFilter = useCallback(() => {
+    setSelectedStateFilter('all')
+  }, [])
+
   const handleCardClick = useCallback((id: string) => {
     setSelectedCardId((prev) => (prev === id ? null : id))
     onAgentSelect?.(id)
@@ -408,194 +636,42 @@ export const AgentRealtimeStatusBoard: React.FC<AgentRealtimeStatusBoardProps> =
         className
       )}
     >
-      {/* Board Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <Activity className="w-5 h-5 text-primary-500" />
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-              Agent 실시간 상태 모니터링 현황판
-            </h2>
-          </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            에이전트 레지스트리에 등록된 에이전트의 상태와 실행 지표를 조회합니다.
-          </p>
-        </div>
+      <BoardHeader
+        lastUpdatedAt={lastUpdatedAt}
+        isRefreshing={isRefreshing}
+        onRefresh={refresh}
+      />
 
-        {/* Refresh control & last-updated stamp */}
-        <div className="flex items-center gap-2 bg-white dark:bg-zinc-800 px-3 py-1.5 rounded-lg border border-gray-200/80 dark:border-zinc-700/60 text-xs">
-          <span className="font-medium text-gray-500 dark:text-gray-400">
-            {lastUpdatedAt !== null ? `마지막 갱신 ${formatUpdatedAt(lastUpdatedAt)}` : '갱신 이력 없음'}
-          </span>
-          <button
-            type="button"
-            onClick={refresh}
-            disabled={isRefreshing}
-            className="ml-1 hover:bg-gray-100 dark:hover:bg-zinc-700 p-1 rounded transition-colors text-gray-400 hover:text-gray-700 dark:hover:text-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label="에이전트 목록 새로고침"
-          >
-            <RefreshCw className={cn('w-3.5 h-3.5', isRefreshing && 'animate-spin')} />
-          </button>
-        </div>
-      </div>
+      {state === 'loading' && <RegistryLoading />}
 
-      {/* ── Loading (first load only) ── */}
-      {state === 'loading' && (
-        <div
-          role="status"
-          className="flex flex-col items-center justify-center py-12 px-4 border border-dashed border-gray-200 dark:border-zinc-800 rounded-xl text-center bg-white dark:bg-zinc-800/20"
-        >
-          <Loader2 className="w-8 h-8 text-primary-500 animate-spin mb-3" />
-          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">
-            에이전트 목록을 불러오는 중...
-          </p>
-        </div>
-      )}
-
-      {/* ── Error (전면 패널은 보여 줄 데이터가 아예 없을 때만) ── */}
+      {/* 전면 에러 패널은 보여 줄 데이터가 아예 없을 때만. 데이터가 있으면
+          목록을 유지하고 배너로 알린다 — 목록을 비우면 "에이전트 없음" 과
+          구분되지 않는다. */}
       {state === 'error' && agents.length === 0 && (
-        <div
-          role="alert"
-          className="flex flex-col items-center justify-center py-12 px-4 border border-rose-200 dark:border-rose-800/50 rounded-xl text-center bg-rose-50 dark:bg-rose-950/20"
-        >
-          <AlertTriangle className="w-8 h-8 text-rose-500 dark:text-rose-400 mb-3" />
-          <p className="text-xs font-semibold text-rose-700 dark:text-rose-400">
-            에이전트 목록을 불러오지 못했습니다
-          </p>
-          {error && (
-            <p className="text-[10px] text-rose-600/80 dark:text-rose-400/70 mt-1">{error}</p>
-          )}
-          <button
-            type="button"
-            onClick={refresh}
-            disabled={isRefreshing}
-            className="mt-4 px-3 py-1.5 text-[10px] font-semibold rounded-lg bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label="에이전트 목록 다시 불러오기"
-          >
-            다시 시도
-          </button>
-        </div>
+        <RegistryErrorPanel error={error} isRefreshing={isRefreshing} onRetry={refresh} />
       )}
 
-      {/* ── Refresh failed while data is on screen (목록은 유지하고 배너로 알린다) ── */}
       {state === 'error' && agents.length > 0 && (
-        <div
-          role="alert"
-          className="flex items-center gap-2 px-3 py-2 mb-3 rounded-lg border border-rose-200 dark:border-rose-800/50 bg-rose-50 dark:bg-rose-950/20"
-        >
-          <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500 dark:text-rose-400" />
-          <p className="flex-1 text-[10px] text-rose-700 dark:text-rose-400">
-            갱신에 실패해 이전 목록을 보여 주고 있습니다{error ? ` — ${error}` : ''}
-          </p>
-          <button
-            type="button"
-            onClick={refresh}
-            disabled={isRefreshing}
-            className="px-2 py-1 text-[10px] font-semibold rounded-md bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label="에이전트 목록 다시 불러오기"
-          >
-            다시 시도
-          </button>
-        </div>
+        <StaleDataBanner error={error} isRefreshing={isRefreshing} onRetry={refresh} />
       )}
 
-      {/* ── Empty registry (successfully loaded, zero agents) ── */}
-      {isEmpty && (
-        <div className="flex flex-col items-center justify-center py-12 px-4 border border-dashed border-gray-200 dark:border-zinc-800 rounded-xl text-center bg-white dark:bg-zinc-800/20">
-          <Activity className="w-8 h-8 text-gray-300 dark:text-gray-700 mb-3" />
-          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">
-            등록된 에이전트가 없습니다
-          </p>
-          <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
-            레지스트리에 에이전트가 등록되면 이곳에 표시됩니다.
-          </p>
-          <button
-            type="button"
-            onClick={refresh}
-            disabled={isRefreshing}
-            className="mt-4 px-3 py-1.5 text-[10px] font-semibold rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-zinc-800 dark:text-gray-300 dark:hover:bg-zinc-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label="에이전트 목록 새로고침"
-          >
-            새로고침
-          </button>
-        </div>
-      )}
+      {isEmpty && <RegistryEmpty isRefreshing={isRefreshing} onRefresh={refresh} />}
 
-      {/* ── Loaded with data (갱신 실패 시에도 직전 목록을 유지한다) ── */}
       {state !== 'loading' && agents.length > 0 && (
-        <>
-          {/* SVG Circular Gauges Row */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {STATE_ORDER.map((gaugeState) => (
-              <CircularGauge
-                key={gaugeState}
-                state={gaugeState}
-                count={stateCounts[gaugeState]}
-                total={agents.length}
-                isSelected={selectedStateFilter === gaugeState}
-                onClick={() => handleStateGaugeClick(gaugeState)}
-              />
-            ))}
-          </div>
-
-          {/* Filter / Search Bar */}
-          <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between bg-white dark:bg-zinc-800/80 p-3 rounded-xl border border-gray-100 dark:border-zinc-800">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="에이전트 이름, 설명, 또는 카테고리 검색..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-1.5 text-xs bg-slate-50/50 dark:bg-zinc-900/60 border border-gray-200 dark:border-zinc-700/60 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-shadow"
-                aria-label="에이전트 이름, 설명, 카테고리 검색"
-              />
-            </div>
-
-            {/* Filter Quick Reset */}
-            <div className="flex items-center gap-2 self-end sm:self-auto">
-              {selectedStateFilter !== 'all' && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedStateFilter('all')}
-                  className="text-[10px] font-semibold text-primary-500 hover:text-primary-600 flex items-center gap-1 px-2 py-1 rounded hover:bg-primary-50 dark:hover:bg-primary-950/20 transition-colors"
-                  aria-label="상태 필터 초기화"
-                >
-                  <Filter className="w-3 h-3" />
-                  필터 초기화
-                </button>
-              )}
-              <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">
-                조회된 에이전트: {filteredAgents.length} / {agents.length} 개
-              </span>
-            </div>
-          </div>
-
-          {/* Agents List */}
-          <div className="flex flex-col gap-2.5 max-h-[380px] overflow-y-auto pr-1 select-none">
-            {filteredAgents.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 px-4 border border-dashed border-gray-200 dark:border-zinc-800 rounded-xl text-center bg-white dark:bg-zinc-800/20">
-                <Search className="w-8 h-8 text-gray-300 dark:text-gray-700 mb-2.5" />
-                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">
-                  일치하는 에이전트가 없습니다
-                </p>
-                <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
-                  검색어나 상단 상태 필터를 조정해 보세요.
-                </p>
-              </div>
-            ) : (
-              filteredAgents.map((agent) => (
-                <AgentActivityCard
-                  key={agent.id}
-                  agent={agent}
-                  isSelected={selectedCardId === agent.id}
-                  onClick={() => handleCardClick(agent.id)}
-                />
-              ))
-            )}
-          </div>
-        </>
+        <BoardContent
+          agents={agents}
+          filteredAgents={filteredAgents}
+          stateCounts={stateCounts}
+          selectedStateFilter={selectedStateFilter}
+          onStateGaugeClick={handleStateGaugeClick}
+          onResetStateFilter={handleResetStateFilter}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          selectedCardId={selectedCardId}
+          onCardClick={handleCardClick}
+        />
       )}
+
     </section>
   )
 })
