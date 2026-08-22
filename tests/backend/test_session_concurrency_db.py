@@ -14,7 +14,9 @@ import uuid
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from db.models.base import Base
 from db.repository import STATE_VERSION_KEY, SessionRepository, StateWriteResult
@@ -31,17 +33,35 @@ pytestmark = pytest.mark.skipif(
 
 @pytest_asyncio.fixture
 async def db_factory():
-    """테스트 전용 엔진 + 테이블. 끝나면 스키마를 지운다."""
-    engine = create_async_engine(TEST_DATABASE_URL, poolclass=None)
+    """랜덤 이름의 전용 스키마 안에서만 동작한다.
+
+    `Base.metadata.drop_all()` 로 정리하면 `AOS_TEST_DATABASE_URL` 이 실수로
+    개발·공용 DB 를 가리켰을 때 **애플리케이션 테이블을 전부 삭제한다** —
+    변수 이름은 관례이지 보증이 아니다. 대신 여기서 만든 스키마 하나만 만들고
+    그것만 제거한다. 잘못 가리켜도 남의 데이터에 닿지 않는다.
+    """
+    schema = f"aos_conc_test_{uuid.uuid4().hex[:12]}"
+    admin = create_async_engine(TEST_DATABASE_URL, poolclass=NullPool)
+    async with admin.begin() as conn:
+        await conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+
+    # 이 엔진의 모든 연결이 전용 스키마만 보게 한다 (asyncpg server_settings).
+    engine = create_async_engine(
+        TEST_DATABASE_URL,
+        poolclass=NullPool,
+        connect_args={"server_settings": {"search_path": schema}},
+    )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         yield factory
     finally:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.drop_all)
         await engine.dispose()
+        async with admin.begin() as conn:
+            # 이 픽스처가 만든 스키마 하나만 대상으로 한다.
+            await conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+        await admin.dispose()
 
 
 @pytest_asyncio.fixture

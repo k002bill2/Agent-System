@@ -148,7 +148,7 @@ class SessionRepository:
         session_id: str,
         state: dict[str, Any],
         expected_version: int | None = None,
-    ) -> "StateWriteResult":
+    ) -> tuple["StateWriteResult", int | None]:
         """세션 state 를 쓴다. `expected_version` 이 있으면 조건부 UPDATE.
 
         `expected_version` 이 None 이면 무조건 덮어쓴다 — 버전을 모르는 호출자

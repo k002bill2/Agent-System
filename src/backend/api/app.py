@@ -498,6 +498,20 @@ else:
                 "docs": "/docs",
             }
 
+        # 세션 쓰기 경합은 장애가 아니다 — 다른 쓰기가 먼저 반영됐을 뿐이고
+        # 클라이언트가 다시 시도하면 된다. 아래 전역 핸들러에 맡기면 500 이 나가
+        # 재시도 가능한 조건이 서버 오류처럼 보인다 (issue #292).
+        from services.session_service import SessionVersionConflictError
+
+        @app.exception_handler(SessionVersionConflictError)
+        async def session_conflict_handler(request: Request, exc: SessionVersionConflictError):
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(
+                status_code=409,
+                content={"detail": "Session was modified concurrently; retry the request"},
+            )
+
         # Global exception handler - always return JSON
         @app.exception_handler(Exception)
         async def global_exception_handler(request: Request, exc: Exception):
