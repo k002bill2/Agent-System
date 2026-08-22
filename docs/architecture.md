@@ -87,6 +87,40 @@ high-water mark** 다 — 활동은 누구의 관측이든 실제로 일어난 �
 남는 것은 두 인스턴스가 **동시에** 갱신·삭제를 시도하는 진짜 크로스 프로세스
 원자성이다. 그 답은 HITL 승인과 같다 — 저장소를 진실의 출처로 쓰는 조건부 `UPDATE`.
 
+## 세션 state 동시 쓰기
+
+`update_state` 는 `state_json` 을 **통째로** 덮어쓴다. 두 프로세스가 read-modify-write
+를 겹치면 늦게 쓴 쪽이 앞선 변경을 지운다(lost update). 승인 이중 소비와 세션 TTL
+경합은 이 부류의 사례였다.
+
+`sessions.version` 으로 낙관적 동시성을 건다 —
+`UPDATE ... SET ..., version = version + 1 WHERE id = ? AND version = ?`.
+
+| 계약 | 위치 | 없으면 |
+|------|------|--------|
+| 버전은 state 에 실려 다닌다 | `get_session` 이 `state["_version"]` 을 찍는다 | 서비스 수준 dict 로 두면 같은 프로세스의 동시 읽기 둘이 그것을 공유해 늦은 쓰기가 통과 |
+| 버전은 저장하지 않는다 | `update_state` 가 직렬화 결과에서 제거 | 컬럼과 JSON 두 벌이 되어 드리프트 |
+| 쓰기 성공 시 새 버전을 호출자에게 돌려준다 | `UPDATE ... RETURNING version` | 같은 state 로 다시 쓸 때 아무도 끼어들지 않았는데 충돌 |
+| 실패는 "행 없음" 과 "버전 불일치" 를 구분한다 | `StateWriteResult` | 재시도해도 소용없는 경우와 재시도해야 하는 경우가 뭉개짐 |
+| read-modify-write 는 `mutate_session` 을 쓴다 | 서비스/엔진 양쪽에 있음 | 직접 get + update 하면 그 사이의 다른 쓰기를 지움 |
+| 충돌 시 엔진 캐시를 버린다 | `engine.save_session` | 캐시 히트가 같은 낡은 버전을 계속 내줘 재시도가 영원히 충돌 |
+| HTTP 도달 경로에 미처리 충돌을 남기지 않는다 | 승인 API 는 재시도 후 409 | 재시도 가능한 조건이 500 으로 나감 |
+
+**`AgentState` 에 선언되지 않은 키는 그래프를 통과하며 사라진다.** LangGraph 가 노드
+출력에서 조용히 버리므로 `_metadata`(TTL)·`_version`(행 버전)은 반드시 선언돼 있어야
+한다. 선언이 지워지면 에러 없이 계약만 무너진다 —
+`tests/backend/test_agent_state_graph_keys.py` 가 그래프를 왕복시켜 지킨다.
+
+**예외: `engine.run`·`engine.stream` 의 최종 저장은 `check_version=False` 다.**
+완료된 그래프 실행의 산물이라 재시도가 도구 재실행을 뜻한다. 대신 실행 중 다른
+프로세스가 쓴 것은 유실된다 — 오래된 스냅샷을 통째로 쓰는 구조에서 오는 한계이고,
+제대로 풀려면 필드 단위 병합이 필요하다.
+
+**남는 것**: 두 인스턴스가 동시에 같은 승인을 소비하려는 진짜 경합은 이 버전 검사가
+"둘 중 하나는 실패" 로 만들지만, 실패한 쪽은 재시도가 아니라 task 실패로 처리된다
+(`executor._persist_approval_consumption`). 승인 소비를 `approvals` 테이블의 조건부
+UPDATE 로 옮기는 것이 그 답이며 별도 작업이다.
+
 ## HITL 승인 생명주기
 
 ```
