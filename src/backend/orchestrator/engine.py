@@ -301,7 +301,14 @@ class OrchestrationEngine:
 
         `session_service.mutate_session` 만 쓰면 엔진 캐시가 낡은 채로 남는다.
         """
-        mutated = await self.session_service.mutate_session(session_id, mutate)
+        try:
+            mutated = await self.session_service.mutate_session(session_id, mutate)
+        except SessionVersionConflictError:
+            # `save_session` 과 같은 이유다 — 캐시를 남기면 이후 `get_session` 이
+            # 캐시 히트로 낡은 스냅샷을 계속 내줘, 그 사이 다른 인스턴스가 쓴
+            # 최신 상태가 TTL 이 끝날 때까지 가려진다.
+            self._sessions.pop(session_id, None)
+            raise
         if mutated is not None:
             self._sessions[session_id] = mutated
         else:
