@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime
+from enum import Enum
 from typing import Any
 
 from sqlalchemy import delete, select, update
@@ -32,6 +33,19 @@ def serialize_value(value: Any) -> Any:
         return [serialize_value(item) for item in value]
     else:
         return value
+
+
+# 세션 state 에 실려 다니는 행 버전. 저장하지 않는다 — 진실은 `sessions.version`
+# 컬럼 하나이고, state_json 에도 넣으면 두 벌이 되어 드리프트한다 (issue #292).
+STATE_VERSION_KEY = "_version"
+
+
+class StateWriteResult(str, Enum):
+    """`update_state` 의 결과. 실패 두 가지는 호출자의 대응이 다르다."""
+
+    WRITTEN = "written"
+    MISSING = "missing"  # 행이 없다 — 재시도해도 소용없다
+    CONFLICT = "conflict"  # 버전이 어긋났다 — 다시 읽어 재시도해야 한다
 
 
 def serialize_state(state: dict[str, Any]) -> dict[str, Any]:
@@ -118,30 +132,59 @@ class SessionRepository:
         result = await self.db.execute(select(SessionModel).where(SessionModel.id == session_id))
         return result.scalar_one_or_none()
 
-    async def get_state(self, session_id: str) -> dict[str, Any] | None:
-        """Get session state as dict."""
+    async def get_state_with_version(self, session_id: str) -> tuple[dict[str, Any], int] | None:
+        """세션 state 와 그 행의 버전을 함께 읽는다.
+
+        버전을 state 와 **같은 읽기에서** 가져와야 조건부 UPDATE 의 기준이 맞는다.
+        따로 읽으면 그 사이의 쓰기를 놓친다.
+        """
         session = await self.get(session_id)
-        if session:
-            return session.state_json
-        return None
+        if session is None:
+            return None
+        return session.state_json, int(session.version)
 
     async def update_state(
         self,
         session_id: str,
         state: dict[str, Any],
-    ) -> bool:
-        """Update session state."""
+        expected_version: int | None = None,
+    ) -> tuple["StateWriteResult", int | None]:
+        """세션 state 를 쓴다. `expected_version` 이 있으면 조건부 UPDATE.
+
+        `expected_version` 이 None 이면 무조건 덮어쓴다 — 버전을 모르는 호출자
+        (컬럼 도입 이전에 읽은 state, 서비스를 거치지 않고 만든 state)의 기존
+        동작을 유지한다.
+
+        실패는 두 가지고 호출자의 대응이 다르다 — 행이 없으면 재시도해도 소용없고,
+        버전이 어긋났으면 다시 읽어 재시도해야 한다. rowcount 0 만으로는 구분되지
+        않으므로 실패 경로에서만 존재 확인 질의를 한 번 더 한다.
+        """
         # Serialize state to handle TaskNode and other Pydantic objects
         serialized = serialize_state(state)
+        serialized.pop(STATE_VERSION_KEY, None)  # 버전의 진실은 컬럼 하나뿐이다
+        stmt = update(SessionModel).where(SessionModel.id == session_id)
+        if expected_version is not None:
+            stmt = stmt.where(SessionModel.version == expected_version)
         result = await self.db.execute(
-            update(SessionModel)
-            .where(SessionModel.id == session_id)
-            .values(
+            stmt.values(
                 state_json=serialized,
                 updated_at=utcnow(),
-            )
+                version=SessionModel.version + 1,
+            ).returning(SessionModel.version)
         )
-        return result.rowcount > 0
+        new_version = result.scalar_one_or_none()
+        if new_version is not None:
+            return StateWriteResult.WRITTEN, int(new_version)
+        if expected_version is None:
+            return StateWriteResult.MISSING, None
+        # 조건부였으니 실패 이유가 둘이다 — 행이 사라졌나, 버전이 어긋났나.
+        exists = await self.db.execute(select(SessionModel.id).where(SessionModel.id == session_id))
+        outcome = (
+            StateWriteResult.CONFLICT
+            if exists.scalar_one_or_none() is not None
+            else StateWriteResult.MISSING
+        )
+        return outcome, None
 
     async def update_cost(
         self,

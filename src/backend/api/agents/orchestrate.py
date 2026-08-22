@@ -19,6 +19,7 @@ from agents.lead_orchestrator import (
 )
 from api.deps import get_current_user, get_db_session
 from db.models import UserModel
+from models.agent_state import AgentState
 from models.task_analysis import (
     TaskAnalysisQueryParams,
     TaskAnalysisSaveRequest,
@@ -461,15 +462,17 @@ async def execute_analysis(
     )
 
     # 3. 세션 state에 사전 분석 계획 주입
-    state = await engine.get_session(session_id)
-    if state:
+    # 읽고 고쳐 쓰는 경로다. 캐시와 영속 저장소를 함께 갱신하되(캐시만 갱신하면
+    # 재시작 후 계획이 사라져 PlannerNode 가 일반 LLM 계획으로 떨어진다), 그 사이
+    # 다른 쓰기가 끼어들면 다시 읽어 재시도한다 (issue #292).
+    async def _attach_plan(state: AgentState) -> AgentState:
         state["plan_metadata"] = {
             "pre_analyzed_execution_plan": entry.analysis.get("execution_plan", {}),
             "analysis_id": request.analysis_id,
         }
-        # 세션 업데이트 (캐시와 영속 저장소 함께 — 캐시만 갱신하면 재시작 후
-        # 계획이 사라져 PlannerNode 가 일반 LLM 계획으로 떨어진다)
-        await engine.save_session(session_id, state)
+        return state
+
+    await engine.mutate_session(session_id, _attach_plan)
 
     return ExecuteAnalysisResponse(
         success=True,

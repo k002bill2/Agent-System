@@ -13,9 +13,13 @@ from models.agent_state import AgentState, TaskStatus
 from models.hitl import APPROVAL_STATE_LOCK, ApprovalResponse, ApprovalStatus
 from orchestrator import OrchestrationEngine
 from services.audit_service import AuditAction, AuditService, ResourceType
+from services.session_service import SessionVersionConflictError
 from utils.time import utcnow
 
 router = APIRouter(tags=["orchestration"])
+
+# 버전 충돌 재시도 횟수 — 락은 프로세스 로컬이라 다른 인스턴스의 쓰기는 막지 못한다.
+_APPROVAL_WRITE_RETRIES = 3
 
 # 승인 전이(조회 → 검사 → 변경 → 영속화)는 `APPROVAL_STATE_LOCK` 으로 직렬화한다.
 #
@@ -50,74 +54,103 @@ async def resolve_approval(
         HTTPException: 404(세션·승인 없음) / 400(이미 해소된 승인)
     """
     async with APPROVAL_STATE_LOCK.lock():
-        state = await engine.get_session(session_id)
-        if not state:
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        pending_approvals = state.get("pending_approvals", {})
-        if approval_id not in pending_approvals:
-            raise HTTPException(status_code=404, detail="Approval request not found")
-
-        approval = pending_approvals[approval_id]
-        if approval["status"] != ApprovalStatus.PENDING.value:
-            raise HTTPException(
-                status_code=400, detail=f"Approval already resolved: {approval['status']}"
-            )
-
-        # 영속화가 실패하면 되돌리기 위해 이전 값을 잡아 둔다. 되돌리지 않으면
-        # 캐시는 `approved`, 저장소는 `pending` 으로 갈라져 재시도가 400 을 받고
-        # 그 승인은 영영 해소할 수 없게 된다.
-        before_approval = dict(approval)
-        before_waiting = state.get("waiting_for_approval")
-        before_task: tuple[TaskStatus, str | None, str | None] | None = None
-
-        approval["status"] = (
-            ApprovalStatus.APPROVED.value if approved else ApprovalStatus.DENIED.value
+        # 락은 프로세스 로컬이라 다른 인스턴스의 쓰기는 막지 못한다. 버전 충돌은
+        # 거기서 오고, 재시도 가능한 조건이다 — 그대로 올리면 승인 API 가 500 을
+        # 낸다(#283 이 닫은 "승인이 가끔 실패" 의 재발). 다시 읽어 검사부터 한다.
+        for _attempt in range(_APPROVAL_WRITE_RETRIES):
+            resolved = await _resolve_once(session_id, approval_id, approved, note, engine)
+            if resolved is not None:
+                return resolved
+        raise HTTPException(
+            status_code=409,
+            detail="Approval could not be resolved due to concurrent updates; retry",
         )
-        approval["resolver_note"] = note if approved else (note or "Denied by user")
-        approval["resolved_at"] = utcnow().isoformat()
-        state["pending_approvals"] = pending_approvals
-        state["waiting_for_approval"] = False
 
-        task_id = approval["task_id"]
-        if not approved:
-            tasks = state.get("tasks", {})
-            if task_id in tasks:
-                task = tasks[task_id]
-                before_task = (task.status, task.error, task.pending_approval_id)
-                task.status = TaskStatus.FAILED
-                task.error = f"Operation denied: {approval['resolver_note']}"
-                task.pending_approval_id = None
 
-        # 그래프 실행 **전에** 저장한다. `engine.run` 의 일괄 저장에만 기대면
-        # 실행이 실패했을 때 승인이 통째로 사라지고, 도구가 부수효과를 낸 뒤
-        # 저장 전에 죽으면 재시작 후 같은 승인이 다시 PENDING 으로 보인다.
-        # 거부는 그래프를 돌리지도 않으므로 여기서 저장하지 않으면 아무 데도 남지 않는다.
-        try:
-            await engine.save_session(session_id, state)
-        except Exception:
-            approval.clear()
-            approval.update(before_approval)
-            state["waiting_for_approval"] = before_waiting
-            if before_task is not None:
-                task = state["tasks"][task_id]
-                task.status, task.error, task.pending_approval_id = before_task
-            raise
+async def _resolve_once(
+    session_id: str,
+    approval_id: str,
+    approved: bool,
+    note: str | None,
+    engine: OrchestrationEngine,
+) -> tuple[AgentState, dict[str, Any]] | None:
+    """승인 전이 1 회 시도. 버전 충돌이면 `None` 을 돌려 호출자가 재시도한다."""
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
 
-        # 감사 로그는 **저장에 성공한 뒤**에 남긴다. 먼저 남기면 롤백된 전이가
-        # "승인됨"으로 기록돼 감사 기록만 홀로 어긋난다.
-        AuditService.log(
-            action=AuditAction.APPROVAL_GRANTED if approved else AuditAction.APPROVAL_DENIED,
-            resource_type=ResourceType.APPROVAL,
-            resource_id=approval_id,
-            session_id=session_id,
-            project_id=state.get("project", {}).get("id"),
-            metadata={
-                "task_id": task_id,
-                "tool_name": approval.get("tool_name"),
-                "note": approval["resolver_note"],
-            },
+    pending_approvals = state.get("pending_approvals", {})
+    if approval_id not in pending_approvals:
+        raise HTTPException(status_code=404, detail="Approval request not found")
+
+    approval = pending_approvals[approval_id]
+    if approval["status"] != ApprovalStatus.PENDING.value:
+        raise HTTPException(
+            status_code=400, detail=f"Approval already resolved: {approval['status']}"
         )
+
+    # 영속화가 실패하면 되돌리기 위해 이전 값을 잡아 둔다. 되돌리지 않으면
+    # 캐시는 `approved`, 저장소는 `pending` 으로 갈라져 재시도가 400 을 받고
+    # 그 승인은 영영 해소할 수 없게 된다.
+    before_approval = dict(approval)
+    before_waiting = state.get("waiting_for_approval")
+    before_task: tuple[TaskStatus, str | None, str | None] | None = None
+
+    approval["status"] = ApprovalStatus.APPROVED.value if approved else ApprovalStatus.DENIED.value
+    approval["resolver_note"] = note if approved else (note or "Denied by user")
+    approval["resolved_at"] = utcnow().isoformat()
+    state["pending_approvals"] = pending_approvals
+    state["waiting_for_approval"] = False
+
+    task_id = approval["task_id"]
+    if not approved:
+        tasks = state.get("tasks", {})
+        if task_id in tasks:
+            task = tasks[task_id]
+            before_task = (task.status, task.error, task.pending_approval_id)
+            task.status = TaskStatus.FAILED
+            task.error = f"Operation denied: {approval['resolver_note']}"
+            task.pending_approval_id = None
+
+    # 그래프 실행 **전에** 저장한다. `engine.run` 의 일괄 저장에만 기대면
+    # 실행이 실패했을 때 승인이 통째로 사라지고, 도구가 부수효과를 낸 뒤
+    # 저장 전에 죽으면 재시작 후 같은 승인이 다시 PENDING 으로 보인다.
+    # 거부는 그래프를 돌리지도 않으므로 여기서 저장하지 않으면 아무 데도 남지 않는다.
+    try:
+        await engine.save_session(session_id, state)
+    except SessionVersionConflictError:
+        # 다른 쓰기가 먼저 반영됐다. 로컬 변경은 버리고 (엔진 캐시는
+        # `save_session` 이 이미 무효화했다) 다시 읽어 검사부터 한다.
+        approval.clear()
+        approval.update(before_approval)
+        state["waiting_for_approval"] = before_waiting
+        if before_task is not None:
+            task = state["tasks"][task_id]
+            task.status, task.error, task.pending_approval_id = before_task
+        return None
+    except Exception:
+        approval.clear()
+        approval.update(before_approval)
+        state["waiting_for_approval"] = before_waiting
+        if before_task is not None:
+            task = state["tasks"][task_id]
+            task.status, task.error, task.pending_approval_id = before_task
+        raise
+
+    # 감사 로그는 **저장에 성공한 뒤**에 남긴다. 먼저 남기면 롤백된 전이가
+    # "승인됨"으로 기록돼 감사 기록만 홀로 어긋난다.
+    AuditService.log(
+        action=AuditAction.APPROVAL_GRANTED if approved else AuditAction.APPROVAL_DENIED,
+        resource_type=ResourceType.APPROVAL,
+        resource_id=approval_id,
+        session_id=session_id,
+        project_id=state.get("project", {}).get("id"),
+        metadata={
+            "task_id": task_id,
+            "tool_name": approval.get("tool_name"),
+            "note": approval["resolver_note"],
+        },
+    )
 
     return state, approval
 

@@ -1,6 +1,7 @@
 """WebSocket endpoint for real-time updates."""
 
 import asyncio
+import logging
 import os
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
@@ -16,10 +17,13 @@ from models.message import (
     MessageType,
     TaskCreatePayload,
 )
+from services.session_service import SessionVersionConflictError
 
 # Heartbeat configuration
 WS_HEARTBEAT_INTERVAL = int(os.getenv("WS_HEARTBEAT_INTERVAL", "20"))
 
+
+logger = logging.getLogger(__name__)
 
 websocket_router = APIRouter()
 
@@ -122,7 +126,17 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 from services.session_service import get_session_service
 
                 session_service = get_session_service()
-                await session_service.refresh_session(session_id)
+                try:
+                    await session_service.refresh_session(session_id)
+                except SessionVersionConflictError:
+                    # 하트비트다. FastAPI 예외 핸들러는 HTTP 스코프에만 걸리므로
+                    # 여기서 잡지 않으면 연결이 끊긴다. TTL 연장이 경합으로
+                    # 실패했다는 건 다른 쪽이 방금 갱신했다는 뜻이라 세션이 살아
+                    # 있다는 신호에 가깝다 — PONG 은 그대로 보낸다 (issue #292).
+                    logger.debug(
+                        "Session TTL refresh skipped due to write contention",
+                        extra={"session_id": session_id},
+                    )
 
                 await manager.send_message(
                     session_id,
@@ -151,7 +165,25 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     )
 
             elif message.type == MessageType.TASK_CANCEL:
-                await engine.cancel(session_id)
+                try:
+                    await engine.cancel(session_id)
+                except SessionVersionConflictError:
+                    # HTTP 예외 핸들러는 WebSocket 스코프에 걸리지 않는다 —
+                    # 여기서 잡지 않으면 경합 한 번에 연결이 끊긴다. 재시도
+                    # 가능한 조건이므로 프로토콜 오류로 알리고 연결은 유지한다.
+                    await manager.send_message(
+                        session_id,
+                        Message(
+                            type=MessageType.ERROR,
+                            payload={
+                                "code": "SESSION_CONFLICT",
+                                "message": "Session was modified concurrently; retry the cancel",
+                            },
+                            session_id=session_id,
+                        ),
+                    )
+                    continue
+
                 await manager.send_message(
                     session_id,
                     Message(
