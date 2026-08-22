@@ -29,6 +29,9 @@ class SessionModel(Base):
 
     # Session state stored as JSON
     state_json = Column(JSONB, nullable=False, default=dict)
+    # 낙관적 동시성 — `update_state` 가 state_json 을 통째로 덮으므로, 겹친
+    # read-modify-write 를 조건부 UPDATE 로 걸러낸다 (issue #292).
+    version = Column(Integer, nullable=False, default=1, server_default="1")
 
     # Metadata
     status = Column(String(50), default="active", index=True)
