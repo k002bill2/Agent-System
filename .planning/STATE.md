@@ -232,6 +232,27 @@ cd ~/Work/Agent-System && nohup node "$SCRIPT" review --scope branch --base main
   건드리지 않았다. 커밋 전 `git status` 재확인 필수.
 
 
+#### 이어받은 세션 (같은 날 21:20~) — Codex 3 라운드 완료, #293 머지, P2 는 #294 로
+
+위 항목의 "남은 일은 하나뿐: Codex 3 라운드" 를 실행했다. **다 끝났다.**
+
+| 결과 | |
+|---|---|
+| Codex 3 라운드 | 완료 — **P2 1 건**. `engine.mutate_session` 이 재시도 소진 충돌에서 엔진 캐시를 버리지 않아, 이후 `get_session` 이 낡은 스냅샷을 TTL 까지 계속 내준다(`save_session` 은 이미 버린다 — 대칭이 깨져 있었다) |
+| PR #293 | **머지됨** — squash `9154e13`. 리뷰가 도는 사이 머지돼, P2 는 main 에 남았다 |
+| PR #294 | 그 P2 수정. `origin/main` 위 `fix/session-conflict-cache-invalidation`. RED 확인 후 GREEN, 전체 pytest 베이스라인 일치 |
+| 이슈 #295 | 새로 등록 — 아래 참조 |
+
+**리뷰 3 라운드가 전부 실제 결함을 잡았다.** 1 라운드는 DB 를 통째로 지울 수 있는 테스트 teardown, 2 라운드는 HTTP 예외 핸들러가 WebSocket 스코프에 안 걸리는 것, 3 라운드는 이 캐시 무효화. 머지 전 Codex 게이트를 생략하지 말 것.
+
+**게이트 자체에 구멍이 있었다 (이슈 #295).**
+`pyproject.toml` 의 mypy 래칫이 `disable_error_code` 에 `return-value` 를 담고 있어, 이 PR 에서 같은 모양의 버그 두 건(`update_state`·`_resolve_once` 의 반환 타입 오선언)이 **mypy 를 통과했다**. 수정 전 파일로 실측 확인했다. 재활성화 비용은 **9 건**(전체 에러도 9 건). 설정의 TODO 도 재활성화 1 순위로 `return-value` 를 지목한다.
+→ **"Backend Type Check 초록" 은 반환 계약의 증거가 아니다.** 그 계열을 바꿀 때는 선언 arity 와 실제 `return` arity 를 AST 로 직접 대조하고, 탐지기는 알려진 양성으로 RED 검증한 뒤에 "0 건" 을 믿을 것.
+
+**환경 메모 (위 항목 이어서)**
+- `src/dashboard/src/components/monitor/{index.ts, AgentRealtimeStatusBoard.tsx}` 는 여전히 워킹트리에 있다. **어느 세션 것인지 확인되지 않았다** — 이관한 세션도 자기 것이 아니라고 적었다. 건드리지 않았다.
+- 메인 체크아웃이 삭제된 브랜치 `fix/session-state-optimistic-concurrency` 에 그대로 있다(upstream 없음). #294 작업은 별도 worktree 에서 해 공유 체크아웃을 흔들지 않았다.
+
 ### 2026-08-18 세션 — 감사 문서 청산 → 이슈 트래커 이관 → 결함 2건 수정
 
 **한 일 (완료)**
