@@ -12,7 +12,7 @@ import pytest
 from api.context import get_project_context
 from models.project import Project
 from orchestrator import OrchestrationEngine
-from services.session_service import SessionService
+from services.session_service import SessionService, SessionVersionConflictError
 from utils.time import utcnow
 
 
@@ -201,3 +201,33 @@ class TestProjectContextSessionLookup:
 
         assert response.session_info is not None
         assert response.session_info["session_id"] == session_id
+
+
+class TestConflictInvalidatesCache:
+    """재시도 소진 충돌은 캐시를 버려야 한다 (issue #292).
+
+    `save_session` 은 이미 그렇게 한다. `mutate_session` 이 예외 경로에서만
+    캐시를 남기면, 이후 `get_session` 이 캐시 히트로 낡은 스냅샷을 계속 내줘
+    다른 인스턴스가 쓴 최신 상태가 TTL 이 끝날 때까지 가려진다.
+    """
+
+    @pytest.mark.asyncio
+    async def test_exhausted_mutate_conflict_drops_cached_state(self, isolated_engine, monkeypatch):
+        engine = isolated_engine
+        session_id = await engine.create_session()
+        assert session_id in engine._sessions, "생성 직후 캐시에 올라와 있다(전제)"
+
+        async def _always_conflicts(sid, mutate, *args, **kwargs):
+            raise SessionVersionConflictError(sid)
+
+        monkeypatch.setattr(engine.session_service, "mutate_session", _always_conflicts)
+
+        async def _noop(state):
+            return state
+
+        with pytest.raises(SessionVersionConflictError):
+            await engine.mutate_session(session_id, _noop)
+
+        assert session_id not in engine._sessions, (
+            "충돌 후에도 캐시가 남아 낡은 스냅샷을 계속 내준다"
+        )
