@@ -40,3 +40,42 @@ async def test_version_conflict_returns_409_not_500():
         f"버전 충돌이 {response.status_code} 로 나갔다 — 재시도 가능한 조건은 500 이 아니다"
     )
     assert "retry" in response.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_ping_survives_ttl_refresh_contention(monkeypatch):
+    """하트비트는 TTL 연장이 경합해도 끊기지 않는다 (issue #292).
+
+    FastAPI 예외 핸들러는 HTTP 스코프에만 걸린다 — WebSocket 에서 잡지 않으면
+    경합 한 번에 연결이 끊긴다. 연장 실패는 "다른 쪽이 방금 갱신했다" 는 뜻이라
+    세션이 살아 있다는 신호에 가깝다.
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from api.deps import clear_engine, set_engine
+    from api.websocket import websocket_endpoint
+    from orchestrator import OrchestrationEngine
+
+    class _AlwaysConflicts:
+        """TTL 연장이 언제나 경합하는 서비스."""
+
+        async def refresh_session(self, session_id):
+            raise SessionVersionConflictError(session_id)
+
+    monkeypatch.setattr(
+        "services.session_service.get_session_service", lambda: _AlwaysConflicts()
+    )
+
+    set_engine(OrchestrationEngine())
+    app = FastAPI()
+    app.add_api_websocket_route("/ws/{session_id}", websocket_endpoint)
+
+    try:
+        with TestClient(app).websocket_connect("/ws/s-292") as ws:
+            ws.send_json({"type": "ping", "session_id": "s-292"})
+            reply = ws.receive_json()
+    finally:
+        clear_engine()
+
+    assert reply["type"] == "pong", f"경합으로 하트비트가 깨졌다: {reply}"

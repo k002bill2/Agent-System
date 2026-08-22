@@ -73,7 +73,7 @@ async def _resolve_once(
     approved: bool,
     note: str | None,
     engine: OrchestrationEngine,
-) -> ApprovalResponse | None:
+) -> tuple[AgentState, dict[str, Any]] | None:
     """승인 전이 1 회 시도. 버전 충돌이면 `None` 을 돌려 호출자가 재시도한다."""
     state = await engine.get_session(session_id)
     if not state:
