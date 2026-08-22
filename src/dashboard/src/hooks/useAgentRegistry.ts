@@ -59,8 +59,14 @@ export function useAgentRegistry(): UseAgentRegistryResult {
     try {
       const data = await agentService.getAgents()
       if (!mountedRef.current || generation !== generationRef.current) return
-      // Defensive: a proxy or misconfigured backend could return a non-array.
-      setAgents(Array.isArray(data) ? data : [])
+      // 형태가 어긋난 성공 응답(구버전 백엔드·프록시의 페이지네이션 봉투 등)을
+      // 빈 배열로 뭉개면 화면이 "등록된 에이전트가 없습니다" 라고 말한다 —
+      // 이 훅이 타입 수준에서 갈라 놓은 "빈 레지스트리 vs 실패" 구분이 바로
+      // 그 지점에서 무너진다. 계약 위반은 에러로 드러낸다.
+      if (!Array.isArray(data)) {
+        throw new TypeError('agent registry payload is not an array')
+      }
+      setAgents(data)
       setError(null)
       setState('ready')
       setLastUpdatedAt(Date.now())

@@ -120,13 +120,17 @@ describe('useAgentRegistry', () => {
       expect(result.current.error).toBeNull()
     })
 
-    it('coerces a non-array payload to an empty list instead of crashing', async () => {
+    it('surfaces a malformed payload as an error, not as an empty registry', async () => {
+      // 구버전 백엔드·프록시가 옛 페이지네이션 봉투를 돌려주는 경우. 이것을
+      // 빈 배열로 뭉개면 화면이 "등록된 에이전트가 없습니다" 라고 말해,
+      // 응답 불일치가 정상 상태로 위장된다.
       mockGetAgents.mockResolvedValue({ items: [AGENT_A] } as unknown as Agent[])
 
       const { result } = renderHook(() => useAgentRegistry())
-      await waitFor(() => expect(result.current.state).toBe('ready'))
+      await waitFor(() => expect(result.current.state).toBe('error'))
 
       expect(result.current.agents).toEqual([])
+      expect(result.current.error).not.toBeNull()
     })
   })
 
