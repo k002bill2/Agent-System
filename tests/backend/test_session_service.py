@@ -333,6 +333,31 @@ class TestSessionServiceExpiration:
         assert sid in self.service._memory_sessions
 
     @pytest.mark.asyncio
+    async def test_local_activity_is_not_rolled_back_by_older_stored_copy(self):
+        """`last_activity` 는 high-water mark 다 (issue #289).
+
+        `expires_at` 은 저장소가 내주는 리스라 저장소가 이기지만, 활동 기록은
+        누구의 관측이든 실제로 일어난 일이다. DB 모드에서는 `touch()` 가
+        영속화되지 않으므로 저장소 값으로 덮으면 방금 읽힌 세션이 비활성으로
+        분류된다. 그 불일치를 단일 인스턴스에서 위조해 재현한다.
+        """
+        sid = await self.service.create_session()
+
+        # 저장소에는 아직 flush 되지 않아 낡은 활동 기록이 남아 있다
+        stored = self.service._memory_sessions[sid]
+        older = SessionMetadata.from_dict(stored["_metadata"])
+        older.last_activity = utcnow() - timedelta(hours=5)
+        stored["_metadata"] = older.to_dict()
+
+        # 이 프로세스는 방금 읽어 활동을 갱신한 상태
+        recent = utcnow()
+        self.service._session_metadata[sid].last_activity = recent
+
+        await self.service.get_session(sid, update_activity=False)
+
+        assert self.service._session_metadata[sid].last_activity == recent
+
+    @pytest.mark.asyncio
     async def test_cleanup_expired_sessions_removes_expired(self):
         sid1 = await self.service.create_session()
         sid2 = await self.service.create_session()
@@ -424,6 +449,24 @@ class TestSessionServiceRefreshAndInfo:
             refreshed = await self.service.refresh_session(sid, extend_days=7)
 
         assert refreshed is False
+        assert self.service._session_metadata[sid].expires_at == original
+
+    @pytest.mark.asyncio
+    async def test_refresh_session_rolls_back_when_persist_raises(self):
+        """저장소 예외도 되돌린다 (issue #289).
+
+        예외를 False 로 바꾸지는 않는다 — DB 장애는 "갱신 거절" 이 아니고,
+        호출자는 불리언으로 분기하므로 장애가 정상 흐름처럼 보이면 안 된다.
+        """
+        sid = await self.service.create_session(ttl_days=1)
+        original = self.service._session_metadata[sid].expires_at
+
+        with patch.object(
+            self.service, "update_session", AsyncMock(side_effect=RuntimeError("db down"))
+        ):
+            with pytest.raises(RuntimeError):
+                await self.service.refresh_session(sid, extend_days=7)
+
         assert self.service._session_metadata[sid].expires_at == original
 
     @pytest.mark.asyncio

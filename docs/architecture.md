@@ -67,11 +67,18 @@ TTL·삭제·영속화는 전부 서비스가 소유하므로, 캐시가 서비�
 | 캐시 갱신은 영속화와 쌍을 이룬다 | `engine.save_session` | 재시작·다른 인스턴스의 캐시 미스 이후 변경이 사라짐 |
 | 외부 호출자는 캐시를 직접 순회하지 않는다 | `api/context.py` → `list_sessions()` + `engine.get_session()` | 만료 세션이 걸러지지 않고 응답에 실림 |
 | 목록 필터는 저장소 질의에 있다 | `SessionService.list_sessions(project_id=...)` | `limit` 이 필터보다 먼저 적용돼 대상 세션이 상위 N 개 밖으로 밀려남 |
-| 저장소 메타데이터가 로컬 사본을 이긴다 | `SessionService.get_session` 이 매 읽기마다 `state["_metadata"]` 로 재수화 | 다른 인스턴스가 연장한 TTL 을 못 보고 살아 있는 세션을 삭제 |
+| TTL(`expires_at`)은 저장소가 이긴다 | `SessionService.get_session` 이 매 읽기마다 `state["_metadata"]` 로 재수화 | 다른 인스턴스가 연장한 TTL 을 못 보고 살아 있는 세션을 삭제 |
+| 활동 기록(`last_activity`)은 늦은 쪽이 이긴다 | 같은 지점의 high-water mark | DB 모드에서 아직 flush 되지 않은 활동이 지워져 방금 읽힌 세션이 비활성으로 분류됨 |
+| 연장 실패는 되돌린다 | `SessionService.refresh_session` (False 반환·예외 양쪽) | 메모리만 연장된 상태로 저장소와 갈라져 재시작·타 인스턴스에서 연장이 사라짐 |
 
-`_session_metadata` 는 프로세스 로컬 캐시다. `refresh_session` 은 연장된 TTL 을
-저장소에 쓰므로 **진실은 저장소에 있고**, `get_session` 은 읽을 때마다 저장소의
+`_session_metadata` 는 프로세스 로컬 캐시이고, `get_session` 은 읽을 때마다 저장소의
 `_metadata` 로 재수화한다 — state 를 이미 로드한 뒤라 추가 I/O 가 없다.
+
+재수화는 필드마다 권위가 다르다. **`expires_at` 은 리스**다 — 저장소가 내주는 것이라
+저장소가 이긴다(`refresh_session` 이 연장값을 저장소에 쓴다). **`last_activity` 는
+high-water mark** 다 — 활동은 누구의 관측이든 실제로 일어난 일이라 더 늦은 쪽이
+이긴다. DB 모드에서는 `touch()` 가 영속화되지 않으므로 저장소 값으로 덮으면 방금
+읽힌 세션이 비활성으로 분류된다. `created_at` 은 불변이다.
 
 `is_session_expired` 의 빠른 경로는 여전히 낡을 수 있지만 그 결과는 "캐시를 버리고
 서비스 경로로 떨어짐" 뿐이고, 거기서 재수화가 올바른 답을 낸다. 비용은 저장소 읽기
