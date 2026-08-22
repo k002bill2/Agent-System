@@ -6,7 +6,7 @@ Provides an abstraction layer over storage (in-memory or database).
 import logging
 import os
 import uuid
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -25,6 +25,10 @@ from models.project import Project
 from utils.time import utcnow
 
 logger = logging.getLogger(__name__)
+
+# 버전 충돌 재시도 횟수. 충돌은 "다른 쓰기가 먼저 반영됐다" 는 뜻이라 재시도
+# 가능한 조건이다 — 소진되면 그때는 지속적 경합이므로 올려 보낸다.
+SESSION_WRITE_RETRIES = 3
 
 
 class SessionVersionConflictError(RuntimeError):
@@ -289,11 +293,15 @@ class SessionService:
             expected = state.get(STATE_VERSION_KEY) if check_version else None
             async with async_session_factory() as db:
                 repo = SessionRepository(db)
-                outcome = await repo.update_state(session_id, state, expected)
+                outcome, new_version = await repo.update_state(session_id, state, expected)
                 if outcome is StateWriteResult.CONFLICT:
                     await db.rollback()
                     raise SessionVersionConflictError(session_id)
                 await db.commit()
+                if new_version is not None:
+                    # 쓴 뒤의 버전을 호출자 state 에 되돌려준다. 안 그러면 같은
+                    # state 로 다시 쓸 때 아무도 끼어들지 않았는데 충돌한다.
+                    state[STATE_VERSION_KEY] = new_version
                 return outcome is StateWriteResult.WRITTEN
         else:
             if session_id in self._memory_sessions:
@@ -323,15 +331,16 @@ class SessionService:
     async def mutate_session(
         self,
         session_id: str,
-        mutate: Callable[[AgentState], AgentState | None],
-        retries: int = 3,
+        mutate: Callable[[AgentState], Awaitable[AgentState | None]],
+        retries: int = SESSION_WRITE_RETRIES,
     ) -> AgentState | None:
         """read → 수정 → 조건부 쓰기. 충돌하면 다시 읽어 재시도한다.
 
         `state_json` 을 통째로 쓰는 구조에서 read-modify-write 의 **정식 경로**다.
         직접 `get_session` + `update_session` 을 부르면 그 사이의 다른 쓰기를 지운다.
 
-        `mutate` 는 읽어온 state 를 받아 쓸 state 를 돌려준다. `None` 을 돌려주면
+        `mutate` 는 읽어온 state 를 받아 쓸 state 를 돌려주는 **async** 함수다
+        (저장소를 다시 읽어 판정하는 compare-and-set 을 안에 둘 수 있어야 한다). `None` 을 돌려주면
         쓰지 않고 중단한다(수정할 것이 없을 때). 재시도 시 **다시 호출되므로**
         부작용 없이 순수하게 state 만 다뤄야 한다.
 
@@ -345,7 +354,7 @@ class SessionService:
             if state is None:
                 return None
 
-            mutated = mutate(state)
+            mutated = await mutate(state)
             if mutated is None:
                 return None
 
@@ -389,25 +398,33 @@ class SessionService:
         Returns:
             True if session was refreshed
         """
-        state = await self.get_session(session_id, update_activity=False)
-        if not state:
-            return False
+        # 읽고 고쳐 쓰는 경로다. 버전 충돌은 재시도한다 — 다른 쓰기가 먼저
+        # 반영됐다는 뜻일 뿐이고, 호출자(`api/sessions.py`, `api/websocket.py`)는
+        # 불리언으로 분기하므로 그대로 올리면 재시도 가능한 조건이 500 이 된다.
+        for _ in range(SESSION_WRITE_RETRIES):
+            state = await self.get_session(session_id, update_activity=False)
+            if not state:
+                return False
 
-        metadata = self._session_metadata.get(session_id)
-        if metadata:
+            metadata = self._session_metadata.get(session_id)
+            if not metadata:
+                return False
+
             previous = metadata.to_dict()
             extend = extend_days or SESSION_TTL_DAYS
             metadata.expires_at = utcnow() + timedelta(days=extend)
             metadata.touch()
             state["_metadata"] = metadata.to_dict()
             # 영속화가 실패하면 메모리만 연장된 상태가 되어 저장소와 갈라진다.
-            # 실패 형태는 둘이다 — False 반환(행이 없음)과 저장소 예외.
+            # 실패 형태는 셋이다 — 버전 충돌(재시도), False 반환(행이 없음),
+            # 저장소 예외(장애).
             try:
                 persisted = await self.update_session(session_id, state)
+            except SessionVersionConflictError:
+                self._session_metadata[session_id] = SessionMetadata.from_dict(previous)
+                continue
             except Exception:
-                # 예외는 삼키지 않는다. DB 장애는 "갱신 거절" 이 아니고,
-                # 호출자(`api/sessions.py`, `api/websocket.py`)는 불리언으로
-                # 분기하므로 False 로 바꾸면 장애가 정상 흐름처럼 보인다.
+                # 예외는 삼키지 않는다. DB 장애는 "갱신 거절" 이 아니다.
                 self._session_metadata[session_id] = SessionMetadata.from_dict(previous)
                 raise
             if not persisted:
@@ -415,7 +432,7 @@ class SessionService:
                 return False
             return True
 
-        return False
+        raise SessionVersionConflictError(session_id)
 
     async def get_session_info(self, session_id: str) -> dict | None:
         """Get session metadata info without loading full state.

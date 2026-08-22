@@ -170,19 +170,21 @@ class SessionRepository:
                 state_json=serialized,
                 updated_at=utcnow(),
                 version=SessionModel.version + 1,
-            )
+            ).returning(SessionModel.version)
         )
-        if result.rowcount > 0:
-            return StateWriteResult.WRITTEN
+        new_version = result.scalar_one_or_none()
+        if new_version is not None:
+            return StateWriteResult.WRITTEN, int(new_version)
         if expected_version is None:
-            return StateWriteResult.MISSING
+            return StateWriteResult.MISSING, None
         # 조건부였으니 실패 이유가 둘이다 — 행이 사라졌나, 버전이 어긋났나.
         exists = await self.db.execute(select(SessionModel.id).where(SessionModel.id == session_id))
-        return (
+        outcome = (
             StateWriteResult.CONFLICT
             if exists.scalar_one_or_none() is not None
             else StateWriteResult.MISSING
         )
+        return outcome, None
 
     async def update_cost(
         self,

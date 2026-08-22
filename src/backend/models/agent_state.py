@@ -107,6 +107,16 @@ class AgentState(TypedDict):
     # Schema version for forward-compatible migrations
     _schema_version: int
 
+    # 그래프 밖에서 관리하는 키. LangGraph 는 `AgentState` 에 없는 키를 노드
+    # 출력에서 **조용히 버리므로**, 선언하지 않으면 `compiled_graph.ainvoke` 를
+    # 통과한 state 에서 사라진다 (실측 확인, issue #292).
+    #  - `_metadata`: 세션 TTL. 사라지면 그래프를 한 번 돈 세션이 영속 state 에서
+    #    만료 정보를 잃는다.
+    #  - `_version`: 낙관적 동시성의 기준 행 버전. 사라지면 조건부 UPDATE 가
+    #    무조건 쓰기로 떨어져 lost update 가 그대로 남는다. 저장되지는 않는다.
+    _metadata: dict[str, Any]
+    _version: int
+
     # Session information
     session_id: str
     user_id: str | None

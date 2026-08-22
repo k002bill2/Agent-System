@@ -2,7 +2,7 @@
 
 import os
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 from dotenv import load_dotenv
@@ -102,7 +102,11 @@ from services.audit_service import (
     ResourceType,
 )
 from services.context_compressor import ContextCompressor
-from services.session_service import SessionService, get_session_service
+from services.session_service import (
+    SessionService,
+    SessionVersionConflictError,
+    get_session_service,
+)
 from tools import ALL_TOOLS
 
 
@@ -230,11 +234,14 @@ class OrchestrationEngine:
         )
 
         # Also cache the state in memory for fast access
-        state = await self.session_service.get_session(session_id)
-        if state:
-            if self._apply_llm_access(state, llm_access):
-                await self.session_service.update_session(session_id, state)
-            self._sessions[session_id] = state
+        async def _apply(current: AgentState) -> AgentState | None:
+            return current if self._apply_llm_access(current, llm_access) else None
+
+        state = await self.mutate_session(session_id, _apply)
+        if state is None:
+            state = await self.session_service.get_session(session_id)
+            if state:
+                self._sessions[session_id] = state
 
         # Audit log: Session created
         AuditService.log(
@@ -277,7 +284,29 @@ class OrchestrationEngine:
         `run` 이 실패하면 그 저장은 아예 일어나지 않는다.
         """
         self._sessions[session_id] = state
-        await self.session_service.update_session(session_id, state)
+        try:
+            await self.session_service.update_session(session_id, state)
+        except SessionVersionConflictError:
+            # 캐시를 버려야 호출자의 재시도가 저장소를 다시 읽는다. 안 그러면
+            # 캐시 히트가 같은 낡은 `_version` 을 계속 내줘 영원히 충돌한다.
+            self._sessions.pop(session_id, None)
+            raise
+
+    async def mutate_session(
+        self,
+        session_id: str,
+        mutate: Callable[[AgentState], Awaitable[AgentState | None]],
+    ) -> AgentState | None:
+        """서비스의 read-modify-write 재시도 경로 + 엔진 캐시 갱신.
+
+        `session_service.mutate_session` 만 쓰면 엔진 캐시가 낡은 채로 남는다.
+        """
+        mutated = await self.session_service.mutate_session(session_id, mutate)
+        if mutated is not None:
+            self._sessions[session_id] = mutated
+        else:
+            self._sessions.pop(session_id, None)
+        return mutated
 
     async def delete_session(self, session_id: str) -> bool:
         """Delete a session."""
@@ -353,8 +382,14 @@ class OrchestrationEngine:
         final_state = await self.compiled_graph.ainvoke(state)
 
         # Update session (both cache and persistence)
+        #
+        # `check_version=False` — last-writer-wins 를 **의도적으로** 고른다.
+        # `final_state` 는 완료된 그래프 실행의 산물이라 버전 충돌 시 재시도가
+        # 그래프 재실행(= 도구 재실행)을 뜻한다. 대신 실행 중 다른 프로세스가
+        # 쓴 것은 유실된다 — 오래된 스냅샷을 통째로 쓰는 구조에서 오는 기존
+        # 동작이고, 제대로 풀려면 필드 단위 병합이 필요하다 (issue #292).
         self._sessions[session_id] = final_state
-        await self.session_service.update_session(session_id, final_state)
+        await self.session_service.update_session(session_id, final_state, check_version=False)
 
         return final_state
 
@@ -510,8 +545,10 @@ class OrchestrationEngine:
                             )
 
         # Update session with final state (both cache and persistence)
+        # `run` 과 같은 이유로 last-writer-wins — 그래프 실행의 산물이라
+        # 재시도가 도구 재실행을 뜻한다.
         self._sessions[session_id] = state
-        await self.session_service.update_session(session_id, state)
+        await self.session_service.update_session(session_id, state, check_version=False)
 
         # Update cost tracking in database
         total_tokens = sum(u.get("total_tokens", 0) for u in state.get("token_usage", {}).values())
@@ -537,16 +574,12 @@ class OrchestrationEngine:
 
     async def cancel(self, session_id: str) -> bool:
         """Cancel an active orchestration."""
-        state = await self.get_session(session_id)
-        if not state:
-            return False
 
-        # Set cancellation flag
-        state["next_action"] = None
-        state["errors"] = state.get("errors", []) + ["Cancelled by user"]
+        # 읽고 고쳐 쓰는 경로라 충돌 시 다시 읽어 재시도한다. 여기서 미리
+        # state 를 고치면 캐시 객체에 취소 표시가 두 번 쌓인다.
+        async def _mark_cancelled(current: AgentState) -> AgentState:
+            current["next_action"] = None
+            current["errors"] = current.get("errors", []) + ["Cancelled by user"]
+            return current
 
-        # Update session
-        self._sessions[session_id] = state
-        await self.session_service.update_session(session_id, state)
-
-        return True
+        return await self.mutate_session(session_id, _mark_cancelled) is not None

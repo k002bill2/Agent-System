@@ -687,10 +687,10 @@ def _full_agent() -> AgentInfo:
     )
 
 
-def _db_service_returning(raw_state: dict, monkeypatch) -> SessionService:
-    """`get_state` 가 raw JSON 을 돌려주는 DB 모드 SessionService 를 만든다."""
+def _db_service_returning(raw_state: dict, monkeypatch, version: int = 1) -> SessionService:
+    """`get_state_with_version` 이 (raw JSON, 버전) 을 돌려주는 DB 모드 서비스."""
     repo = MagicMock()
-    repo.get_state = AsyncMock(return_value=raw_state)
+    repo.get_state_with_version = AsyncMock(return_value=(raw_state, version))
     monkeypatch.setattr("services.session_service.SessionRepository", MagicMock(return_value=repo))
     monkeypatch.setattr("services.session_service.async_session_factory", _FakeSessionFactory())
     return SessionService(use_database=True)

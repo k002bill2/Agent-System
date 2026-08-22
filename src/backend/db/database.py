@@ -429,6 +429,17 @@ async def _run_migrations() -> None:
             except Exception:
                 pass  # FK may already exist or users table may not exist yet
 
+        # Migration 12: Add 'version' column to sessions for optimistic concurrency
+        #
+        # `update_state` 가 state_json 을 통째로 덮으므로, 겹친 read-modify-write 를
+        # 조건부 UPDATE 로 걸러낸다 (issue #292). Alembic 에도 같은 변경이 있지만
+        # 기동 경로는 create_all + 이 함수라 여기에도 있어야 한다 — create_all 은
+        # 기존 테이블에 컬럼을 추가하지 않으므로, 없으면 배포 직후 SELECT 가
+        # UndefinedColumn 으로 죽는다.
+        await conn.execute(
+            text("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1")
+        )
+
 
 async def close_db() -> None:
     """Close database connection pool."""
