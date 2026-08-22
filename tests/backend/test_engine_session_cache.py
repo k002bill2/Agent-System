@@ -37,9 +37,15 @@ def isolated_engine() -> OrchestrationEngine:
 
 
 def _expire(engine: OrchestrationEngine, session_id: str) -> None:
-    """세션 메타데이터를 만료 상태로 만든다."""
-    metadata = engine.session_service._session_metadata[session_id]
+    """세션 메타데이터를 만료 상태로 만든다.
+
+    저장소에 적힌 `_metadata` 도 함께 바꾼다 — `get_session` 이 저장소 값으로
+    재수화하므로(issue #289) 로컬 사본만 바꾸면 다음 읽기에서 되돌아간다.
+    """
+    service = engine.session_service
+    metadata = service._session_metadata[session_id]
     metadata.expires_at = utcnow() - timedelta(seconds=1)
+    service._memory_sessions[session_id]["_metadata"] = metadata.to_dict()
 
 
 class TestCacheExpiryBoundary:

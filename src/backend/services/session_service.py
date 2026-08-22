@@ -3,6 +3,7 @@
 Provides an abstraction layer over storage (in-memory or database).
 """
 
+import logging
 import os
 import uuid
 from datetime import datetime, timedelta
@@ -19,6 +20,8 @@ from db.repository import (
 from models.agent_state import AgentState, create_initial_state, migrate_state
 from models.project import Project
 from utils.time import utcnow
+
+logger = logging.getLogger(__name__)
 
 # Environment variable to control storage mode
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
@@ -197,11 +200,32 @@ class SessionService:
         # (이미 모델이면 그대로 통과 — deserialize_state 는 재적용에 안전).
         state = deserialize_state(state)
 
-        # Restore or create metadata
-        metadata = self._session_metadata.get(session_id)
-        if not metadata and state.get("_metadata"):
-            metadata = SessionMetadata.from_dict(state["_metadata"])
-            self._session_metadata[session_id] = metadata
+        # 저장소의 메타데이터로 **항상** 다시 읽는다 (issue #289). 필드마다
+        # 권위가 다르다:
+        #   - `expires_at` 은 **리스**다. 저장소가 내주는 것이므로 저장소가
+        #     이긴다. 로컬 사본이 이기면 이미 죽은 세션이 되살아나고, 반대로
+        #     낡은 사본을 우선하면 아래 만료 검사가 살아 있는 세션을 지운다.
+        #   - `last_activity` 는 **high-water mark** 다. 활동은 누구의 관측이든
+        #     실제로 일어난 일이라 더 늦은 쪽이 이긴다. DB 모드에서는 `touch()`
+        #     가 영속화되지 않으므로, 저장소 값으로 덮으면 방금 읽힌 세션이
+        #     비활성으로 분류된다.
+        cached = self._session_metadata.get(session_id)
+        metadata = cached
+        stored_metadata = state.get("_metadata")
+        if stored_metadata:
+            try:
+                metadata = SessionMetadata.from_dict(stored_metadata)
+            except (KeyError, TypeError, ValueError):
+                # 손상된 blob 은 건너뛰고 기존 사본을 유지한다 —
+                # 매 읽기마다 터지게 두면 그 세션이 영구 500 이 된다.
+                logger.warning(
+                    "Malformed session metadata, keeping cached copy",
+                    extra={"session_id": session_id},
+                )
+            else:
+                if cached and cached.last_activity > metadata.last_activity:
+                    metadata.last_activity = cached.last_activity
+                self._session_metadata[session_id] = metadata
 
         # Check expiration
         if metadata and metadata.is_expired():
@@ -282,11 +306,24 @@ class SessionService:
 
         metadata = self._session_metadata.get(session_id)
         if metadata:
+            previous = metadata.to_dict()
             extend = extend_days or SESSION_TTL_DAYS
             metadata.expires_at = utcnow() + timedelta(days=extend)
             metadata.touch()
             state["_metadata"] = metadata.to_dict()
-            await self.update_session(session_id, state)
+            # 영속화가 실패하면 메모리만 연장된 상태가 되어 저장소와 갈라진다.
+            # 실패 형태는 둘이다 — False 반환(행이 없음)과 저장소 예외.
+            try:
+                persisted = await self.update_session(session_id, state)
+            except Exception:
+                # 예외는 삼키지 않는다. DB 장애는 "갱신 거절" 이 아니고,
+                # 호출자(`api/sessions.py`, `api/websocket.py`)는 불리언으로
+                # 분기하므로 False 로 바꾸면 장애가 정상 흐름처럼 보인다.
+                self._session_metadata[session_id] = SessionMetadata.from_dict(previous)
+                raise
+            if not persisted:
+                self._session_metadata[session_id] = SessionMetadata.from_dict(previous)
+                return False
             return True
 
         return False
