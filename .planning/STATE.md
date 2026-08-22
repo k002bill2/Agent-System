@@ -183,6 +183,55 @@ Codex 1~10차 로그는 세션 scratchpad에만 있어 **휘발됐다** — 장�
 
 ## Session Continuity
 
+### 2026-08-22 세션 — #284 복구 → #289 → #292 낙관적 동시성 (진행 중, 다른 세션으로 이관)
+
+**끝난 것 (main 에 안착)**
+| PR | 내용 | 머지 |
+|---|---|---|
+| #288 (#284) | 엔진 세션 캐시를 서비스 계층 경계 안으로 + 프로젝트 필터를 질의로 | `93c30d8` |
+| #290 (#289) | 만료 판정이 저장소 메타데이터를 따르도록(리스 vs high-water mark) | `f6ad989` |
+
+**열린 PR — #293 (issue #292): 이 세션의 미완 작업**
+브랜치 `fix/session-state-optimistic-concurrency` · 커밋 5 개 · head `cf1988a` (푸시 완료)
+CI 8/8 pass · `MERGEABLE`/`CLEAN` · 로컬 게이트 ruff/mypy(319 files 0 errors)/pytest **1490 passed**
+(유일 실패 `test_embedding_model_consistency` 는 로컬 `.env` 오버라이드, CI 는 통과)
+
+**남은 일은 하나뿐: Codex 3 라운드 검증 후 머지.**
+3 라운드를 걸었으나 완료 전에 중단했다(로그 파기됨). 재실행:
+```
+SCRIPT=$(ls ~/.claude/plugins/cache/openai-codex/codex/*/scripts/codex-companion.mjs | sort -V | tail -1)
+cd ~/Work/Agent-System && nohup node "$SCRIPT" review --scope branch --base main > /tmp/codex-293.log 2>&1 & disown
+```
+**머지 전에 반드시 돌릴 것** — 이 PR 에서 Codex 는 1·2 라운드 모두 실제 결함을 잡았고,
+2 라운드 P1 은 *DB 를 통째로 지울 수 있는 테스트* 였다.
+
+**#292 의 방향을 착수 중 바꿨다 (이슈 본문과 다름)**
+이슈는 "`approvals` 테이블에 조건부 UPDATE" 를 제안했으나 실측 결과 그 테이블은
+**런타임 쓰기 0 건인 죽은 스키마**였다. 진실은 `state["pending_approvals"]`(세션 JSON) 에
+있고, `update_state` 가 `state_json` 을 통째로 덮으며 버전 컬럼이 없었다.
+→ 승인 이중 소비는 증상이고 원인은 통째 덮어쓰기다. `sessions.version` 으로 부류 전체를 닫았다.
+근거는 PR #293 본문 첫 절에 표로 있다.
+
+**이 작업 중 발견한 기존 결함 (함께 고침)**
+`AgentState` 미선언 키는 LangGraph 가 조용히 버린다 → `_metadata` 도 사라져서
+**그래프를 한 번 돈 세션은 영속 state 에서 TTL 정보를 잃고 있었다.** #289/#290 이 세운
+계약이 실행 후 무력화되던 상태다. 불변식 테스트 `test_agent_state_graph_keys.py` 로 고정.
+
+**후속 이슈 3 건 (미착수)**
+| 이슈 | 내용 |
+|---|---|
+| #291 | `cleanup_expired_sessions` 가 로컬 사본으로 삭제 판정. 프로덕션 호출부 0 건 |
+| #292 잔여 | 승인 소비의 진짜 경합 — 버전 검사로 중복 실행은 없으나 실패 측이 재시도 아닌 task 실패. `approvals` 테이블 이전이 답 |
+| (미등록) | `tests/backend/conftest.py:16` 의 `os.environ["USE_DATABASE"]="false"` 가 CI 의 `USE_DATABASE=true` 를 덮는다(최초 커밋 vs 2026-02-03). CI 가 Postgres 를 띄우고도 안 쓴다. `setdefault` 로 바꾸면 1478 개가 한꺼번에 DB 모드로 전환되므로 별도 PR 필요 |
+
+**환경 메모**
+- 개발용 DB `aos_test` 를 shared-postgres 에 만들었다(공용 `aos` 미접촉). 불필요하면 제거 가능.
+  DB 모드 테스트는 `AOS_TEST_DATABASE_URL` 이 있을 때만 돈다. CI 에는 배선해 두었다.
+- **다른 세션이 같은 저장소에서 작업 중이다.** 이관 시점 워킹트리에 내 것이 아닌
+  `src/dashboard/src/components/monitor/{index.ts, AgentRealtimeStatusBoard.tsx}` 가 있었다.
+  건드리지 않았다. 커밋 전 `git status` 재확인 필수.
+
+
 ### 2026-08-18 세션 — 감사 문서 청산 → 이슈 트래커 이관 → 결함 2건 수정
 
 **한 일 (완료)**
