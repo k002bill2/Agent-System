@@ -35,20 +35,16 @@ export interface AgentCapability {
   priority: number
 }
 
+/**
+ * Query params accepted by `GET /api/agents`.
+ *
+ * Mirrors the backend signature exactly (`api/agents/core.py::list_agents`):
+ * only `category` and `available_only` exist server-side. The endpoint is NOT
+ * paginated — it returns a bare `list[AgentResponse]`.
+ */
 export interface AgentQueryParams {
   category?: string
-  status?: string
-  page?: number
-  page_size?: number
-  search?: string
-}
-
-export interface PaginatedResponse<T> {
-  items: T[]
-  total: number
-  page: number
-  page_size: number
-  total_pages: number
+  available_only?: boolean
 }
 
 export interface CreateAgentInput {
@@ -86,10 +82,12 @@ export interface AgentRegistryStats {
 // Query-string builder
 // ---------------------------------------------------------------------------
 
-function toQueryString(params?: Record<string, string | number | undefined>): string {
+function toQueryString(
+  params?: Record<string, string | number | boolean | undefined>,
+): string {
   if (!params) return ''
   const entries = Object.entries(params).filter(
-    (pair): pair is [string, string | number] => pair[1] !== undefined,
+    (pair): pair is [string, string | number | boolean] => pair[1] !== undefined,
   )
   if (entries.length === 0) return ''
   const search = new URLSearchParams(
@@ -103,10 +101,15 @@ function toQueryString(params?: Record<string, string | number | undefined>): st
 // ---------------------------------------------------------------------------
 
 export const agentService = {
-  /** List agents with optional filters and pagination. */
-  getAgents(params?: AgentQueryParams): Promise<PaginatedResponse<Agent>> {
-    const qs = toQueryString(params as Record<string, string | number | undefined>)
-    return apiClient.get<PaginatedResponse<Agent>>(`/api/agents${qs}`)
+  /**
+   * List agents from the registry.
+   *
+   * Returns a bare array — `GET /api/agents` is declared
+   * `response_model=list[AgentResponse]` and has no pagination envelope.
+   */
+  getAgents(params?: AgentQueryParams): Promise<Agent[]> {
+    const qs = toQueryString(params as Record<string, string | number | boolean | undefined>)
+    return apiClient.get<Agent[]>(`/api/agents${qs}`)
   },
 
   /** Get a single agent by ID. */

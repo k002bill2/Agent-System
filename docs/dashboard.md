@@ -59,7 +59,7 @@ import { cn } from '@/lib/utils';
 | `ProjectsPage` | `/projects` | 프로젝트 목록 및 관리, RAG 검색 |
 | `ProjectConfigsPage` | `/project-configs` | 프로젝트 설정 관리 (Skills, Agents, MCP, Hooks) |
 | `TasksPage` | `/tasks` | 태스크 트리 뷰, 상세 정보 (라우트 미등록) |
-| `AgentsPage` | `/agents` | 에이전트 레지스트리 (글로벌+프로젝트 통합), MCP, RLHF |
+| `AgentsPage` | `/agents` | 에이전트 레지스트리 (글로벌+프로젝트 통합), MCP, RLHF, Agent Status 현황판 탭 |
 | `ActivityPage` | `/activity` | ~~실시간 활동 로그~~ (deprecated → SessionsPage로 대체) |
 | `MonitorPage` | `/monitor` | 프로젝트 헬스 체크 모니터링 |
 | `ClaudeSessionsPage` | `/claude-sessions` | Claude Code 세션 모니터링 |
@@ -253,7 +253,8 @@ import { cn } from '@/lib/utils';
 | `ContextPanel` | 컨텍스트 정보 패널 |
 | `OutputLog` | 실시간 출력 로그 |
 | `ResizablePanel` | 리사이즈 가능 패널 |
-| `AgentMonitorPanel` | 에이전트 모니터링 패널 |
+| `AgentMonitorPanel` | 에이전트 모니터링 패널 (SSE 스토어 기반, **어느 페이지에도 배선되지 않음**) |
+| `AgentRealtimeStatusBoard` | 에이전트 레지스트리 상태 현황판 — `GET /api/agents` 실데이터, 상태별 게이지·검색·필터. `AgentsPage` 의 `Agent Status` 탭에서 렌더 |
 | `MetricsChart` | 메트릭 차트 시각화 |
 | `WorkflowCheckCard` | 워크플로우 체크 카드 |
 
@@ -677,6 +678,7 @@ src/dashboard/
 | `useErrorHandler` | `useErrorHandler.ts` | 에러 핸들링 유틸리티 훅 |
 | `useRealtimeMonitor` | `useRealtimeMonitor.ts` | 실시간 모니터링 WebSocket 훅 |
 | `useBackendHealth` | `useBackendHealth.ts` | 백엔드 헬스 폴링 훅 (마운트 즉시 1회 + 30s 인터벌, unmount cleanup 가드) |
+| `useAgentRegistry` | `useAgentRegistry.ts` | 에이전트 레지스트리 조회 훅 (`GET /api/agents`, 마운트 1회 + 15s 폴링·탭 숨김 시 건너뜀 + 수동 새로고침). `loading`/`ready`/`error` 를 타입 수준에서 분리해 **빈 레지스트리와 실패가 절대 같은 화면이 되지 않는다** |
 
 ---
 

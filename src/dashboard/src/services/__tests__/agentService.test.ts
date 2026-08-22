@@ -1,9 +1,8 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { agentService } from '../agentService'
 import { ApiError, ApiErrorCode } from '../errors'
 import type {
   Agent,
-  PaginatedResponse,
   CreateAgentInput,
   UpdateAgentInput,
   AgentSearchResult,
@@ -68,13 +67,15 @@ const mockAgent: Agent = {
   updated_at: '2024-01-02T00:00:00Z',
 }
 
-const mockPaginatedResponse: PaginatedResponse<Agent> = {
-  items: [mockAgent],
-  total: 1,
-  page: 1,
-  page_size: 10,
-  total_pages: 1,
-}
+/**
+ * `GET /api/agents` is declared `response_model=list[AgentResponse]`
+ * (`src/backend/api/agents/core.py:99`) — a BARE ARRAY, never a pagination
+ * envelope. The previous fixture here mocked `{ items, total, page, ... }` and
+ * asserted the mock back, so it passed for ANY response shape. Assertions below
+ * check the array shape itself, so re-wrapping the service fails right here
+ * instead of surfacing as `undefined` at runtime.
+ */
+const mockAgentList: Agent[] = [mockAgent]
 
 const mockSearchResult: AgentSearchResult = {
   agent: mockAgent,
@@ -112,11 +113,14 @@ describe('agentService', () => {
 
   describe('getAgents', () => {
     it('fetches agents with no params and no query string', async () => {
-      const fetchSpy = mockFetchJson(mockPaginatedResponse)
+      const fetchSpy = mockFetchJson(mockAgentList)
 
       const result = await agentService.getAgents()
 
-      expect(result).toEqual(mockPaginatedResponse)
+      // Shape contract, asserted structurally (not by echoing the mock back).
+      expect(Array.isArray(result)).toBe(true)
+      expect(result).toHaveLength(1)
+      expect(result[0]).toEqual(mockAgent)
       expect(fetchSpy).toHaveBeenCalledTimes(1)
 
       const [url] = (fetchSpy.mock.calls[0] as [string, RequestInit])
@@ -124,47 +128,61 @@ describe('agentService', () => {
       expect(url).not.toContain('?')
     })
 
-    it('fetches agents with category and page params', async () => {
-      const fetchSpy = mockFetchJson(mockPaginatedResponse)
+    it('returns a bare array, never a pagination envelope', async () => {
+      mockFetchJson(mockAgentList)
 
-      await agentService.getAgents({ category: 'development', page: 2 })
+      const result = await agentService.getAgents()
+
+      // If `getAgents` is ever re-declared as `PaginatedResponse<Agent>`, or the
+      // backend starts wrapping the list, every one of these fails.
+      expect(Array.isArray(result)).toBe(true)
+      expect(result).not.toHaveProperty('items')
+      expect(result).not.toHaveProperty('total_pages')
+      expect(result.map((agent) => agent.id)).toEqual(['agent-123'])
+    })
+
+    it('fetches agents filtered by category', async () => {
+      const fetchSpy = mockFetchJson(mockAgentList)
+
+      await agentService.getAgents({ category: 'development' })
 
       expect(fetchSpy).toHaveBeenCalledTimes(1)
       const [url] = (fetchSpy.mock.calls[0] as [string, RequestInit])
       expect(url).toContain('/api/agents?')
       expect(url).toContain('category=development')
-      expect(url).toContain('page=2')
     })
 
-    it('fetches agents with all params', async () => {
-      const fetchSpy = mockFetchJson(mockPaginatedResponse)
+    it('serializes the boolean available_only as a lowercase string', async () => {
+      const fetchSpy = mockFetchJson(mockAgentList)
 
-      await agentService.getAgents({
-        category: 'analysis',
-        status: 'available',
-        page: 1,
-        page_size: 20,
-        search: 'test',
-      })
+      await agentService.getAgents({ available_only: true })
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1)
+      const [url] = (fetchSpy.mock.calls[0] as [string, RequestInit])
+      // FastAPI parses `true`/`false`. `String(v)` must not emit `True` or `1`.
+      expect(url).toContain('available_only=true')
+    })
+
+    it('sends both params the backend actually accepts', async () => {
+      const fetchSpy = mockFetchJson(mockAgentList)
+
+      await agentService.getAgents({ category: 'analysis', available_only: false })
 
       expect(fetchSpy).toHaveBeenCalledTimes(1)
       const [url] = (fetchSpy.mock.calls[0] as [string, RequestInit])
       expect(url).toContain('category=analysis')
-      expect(url).toContain('status=available')
-      expect(url).toContain('page=1')
-      expect(url).toContain('page_size=20')
-      expect(url).toContain('search=test')
+      expect(url).toContain('available_only=false')
     })
 
     it('skips undefined values in query string', async () => {
-      const fetchSpy = mockFetchJson(mockPaginatedResponse)
+      const fetchSpy = mockFetchJson(mockAgentList)
 
-      await agentService.getAgents({ category: 'development', status: undefined })
+      await agentService.getAgents({ category: 'development', available_only: undefined })
 
       expect(fetchSpy).toHaveBeenCalledTimes(1)
       const [url] = (fetchSpy.mock.calls[0] as [string, RequestInit])
       expect(url).toContain('category=development')
-      expect(url).not.toContain('status')
+      expect(url).not.toContain('available_only')
     })
   })
 
