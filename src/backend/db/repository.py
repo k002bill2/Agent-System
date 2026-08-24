@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -141,7 +141,7 @@ class SessionRepository:
         session = await self.get(session_id)
         if session is None:
             return None
-        return session.state_json, int(session.version)
+        return cast(dict[str, Any], session.state_json), int(session.version)
 
     async def update_state(
         self,

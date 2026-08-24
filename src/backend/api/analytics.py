@@ -14,6 +14,8 @@ so the service returns an empty result set instead of silently aggregating
 across projects.
 """
 
+from typing import cast
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -63,7 +65,7 @@ async def _resolve_project_path(project_id: str | None, db: AsyncSession) -> str
     if project is None or not project.path:
         return _NO_MATCH_PATH
 
-    return project.path
+    return cast(str, project.path)
 
 
 @router.get("/overview", response_model=OverviewMetrics)

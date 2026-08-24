@@ -622,7 +622,7 @@ After completing all necessary tool calls, provide a final summary."""
                     metadata={"task_id": current_task_id},
                 )
 
-            result = {
+            node_result: dict[str, Any] = {
                 "tasks": {current_task_id: task},
                 "agents": agents,
                 "messages": [self._create_message("assistant", f"Completed task: {task.title}")],
@@ -634,9 +634,9 @@ After completing all necessary tool calls, provide a final summary."""
 
             # Include token usage updates
             if accumulated_token_updates:
-                result.update(accumulated_token_updates)
+                node_result.update(accumulated_token_updates)
 
-            return result
+            return node_result
 
         except Exception as e:
             task.status = TaskStatus.FAILED
@@ -658,7 +658,7 @@ After completing all necessary tool calls, provide a final summary."""
                 agents[agent_id].status = TaskStatus.FAILED
                 agents[agent_id].current_task = None
 
-            result = {
+            error_result: dict[str, Any] = {
                 "tasks": {current_task_id: task},
                 "agents": agents,
                 "last_error": str(e),
@@ -669,6 +669,6 @@ After completing all necessary tool calls, provide a final summary."""
 
             # Include token usage even on failure
             if accumulated_token_updates:
-                result.update(accumulated_token_updates)
+                error_result.update(accumulated_token_updates)
 
-            return result
+            return error_result

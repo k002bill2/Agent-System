@@ -8,7 +8,7 @@ import os
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from db.database import async_session_factory
 from db.repository import (
@@ -267,7 +267,9 @@ class SessionService:
         if version is not None:
             state[STATE_VERSION_KEY] = version
 
-        return state
+        # `deserialize_state` 는 저장 포맷(dict) 을 다루는 헬퍼라 `dict` 를 돌려준다.
+        # `AgentState` 계약을 세우는 곳은 저장소를 감싸는 이 관문 하나뿐이다.
+        return cast(AgentState, state)
 
     async def update_session(
         self,
@@ -540,13 +542,13 @@ class SessionService:
                     for s in sessions
                 ]
         else:
-            sessions = []
+            memory_rows: list[dict[str, Any]] = []
             for sid, state in list(self._memory_sessions.items()):
-                if len(sessions) >= limit:
+                if len(memory_rows) >= limit:
                     break
                 if project_id and state.get("project", {}).get("id") != project_id:
                     continue
-                sessions.append(
+                memory_rows.append(
                     {
                         "id": sid,
                         "user_id": state.get("user_id"),
@@ -559,7 +561,7 @@ class SessionService:
                         "total_cost_usd": state.get("total_cost", 0),
                     }
                 )
-            return sessions
+            return memory_rows
 
     async def update_cost(
         self,
