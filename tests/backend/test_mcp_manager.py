@@ -1,19 +1,20 @@
 """Tests for MCP Manager."""
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from services.mcp_manager import (
+    DEFAULT_MCP_SERVERS,
+    MCPBatchToolCall,
+    MCPBatchToolResult,
     MCPManager,
     MCPServerConfig,
-    MCPServerType,
     MCPServerStatus,
+    MCPServerType,
     MCPToolCall,
     MCPToolResult,
     MCPToolSchema,
-    MCPBatchToolCall,
-    MCPBatchToolResult,
-    get_mcp_manager_sync,
 )
 
 
@@ -28,6 +29,13 @@ class TestMCPManager:
         """초기화 테스트."""
         assert self.manager._initialized is False
         assert len(self.manager._servers) == 0
+
+    def test_default_playwright_server_uses_official_package(self):
+        """기본 Playwright 서버가 공식 MCP 패키지와 실행 인자를 사용한다."""
+        config = next(server for server in DEFAULT_MCP_SERVERS if server.id == "playwright")
+
+        assert config.command == "npx"
+        assert config.args == ["-y", "@playwright/mcp@latest"]
 
     @pytest.mark.asyncio
     async def test_initialize_with_default_servers(self):
@@ -401,10 +409,7 @@ class TestMCPManagerBatchCall:
     async def test_call_tools_batch_respects_max_concurrent(self):
         """max_concurrent 설정 준수 테스트."""
         # 많은 호출 생성
-        calls = [
-            MCPToolCall(server_id=f"server{i}", tool_name="test")
-            for i in range(10)
-        ]
+        calls = [MCPToolCall(server_id=f"server{i}", tool_name="test") for i in range(10)]
         batch_call = MCPBatchToolCall(calls=calls, max_concurrent=2)
         result = await self.manager.call_tools_batch(batch_call)
 
@@ -415,7 +420,7 @@ class TestMCPManagerBatchCall:
     @pytest.mark.asyncio
     async def test_call_tools_batch_handles_exceptions(self):
         """예외 처리 테스트."""
-        with patch.object(self.manager, 'call_tool', side_effect=Exception("Test error")):
+        with patch.object(self.manager, "call_tool", side_effect=Exception("Test error")):
             # 서버 등록
             config = MCPServerConfig(
                 id="error-server",
