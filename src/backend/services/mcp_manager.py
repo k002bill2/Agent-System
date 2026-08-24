@@ -154,7 +154,7 @@ DEFAULT_MCP_SERVERS: list[MCPServerConfig] = [
         name="Playwright MCP",
         description="브라우저 자동화 및 스크린샷",
         command="npx",
-        args=["-y", "@anthropic/mcp-server-playwright"],
+        args=["-y", "@playwright/mcp@latest"],
         allowed_tools=[
             "browser_navigate",
             "browser_click",
