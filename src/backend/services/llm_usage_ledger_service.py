@@ -6,7 +6,7 @@ import logging
 import os
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -102,7 +102,7 @@ async def resolve_user_organization_id(db: AsyncSession, user_id: str | None) ->
         if getattr(row, "organization_id", None)
     }
     if len(org_ids) == 1:
-        return next(iter(org_ids))
+        return cast(str, next(iter(org_ids)))
     return None
 
 

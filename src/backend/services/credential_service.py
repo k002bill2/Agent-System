@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from typing import cast
 
 import httpx
 from sqlalchemy import and_, select
@@ -226,4 +227,4 @@ async def get_raw_key(db: AsyncSession, user_id: str, provider: ExternalProvider
         .limit(1)
     )
     row = result.scalar_one_or_none()
-    return row.api_key if row else None
+    return cast(str, row.api_key) if row else None

@@ -20,6 +20,7 @@ import logging
 import os
 import time
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 import httpx
 from sqlalchemy import select
@@ -88,7 +89,7 @@ async def resolve_admin_key(db: AsyncSession, provider: ExternalProvider) -> str
     """Resolve the usage admin key: active DB row > env var > None."""
     row = await _get_active_row(db, provider)
     if row is not None:
-        return row.api_key  # decrypted automatically by EncryptedString
+        return cast(str, row.api_key)  # decrypted automatically by EncryptedString
 
     env_name = ENV_MAP.get(provider)
     if env_name:
