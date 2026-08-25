@@ -16,6 +16,7 @@ import os
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 import pytest_asyncio
@@ -27,7 +28,7 @@ from db.models.base import Base
 from db.models.session import SessionModel
 from db.repository import SessionRepository
 from services.session_service import SessionMetadata
-from utils.time import utcnow
+from utils.time import to_utc_iso, utcnow
 
 TEST_DATABASE_URL = os.getenv("AOS_TEST_DATABASE_URL")
 
@@ -74,6 +75,42 @@ def test_session_metadata_reads_legacy_naive_strings():
     assert metadata.is_inactive() is True
     metadata.touch()
     assert metadata.is_inactive() is False
+
+
+def test_session_metadata_survives_a_write_read_roundtrip():
+    """`to_dict()` 가 쓴 문자열을 `from_dict()` 가 같은 순간으로 되읽어야 한다.
+
+    이 값들은 `state_json` 에 실려 `serialize_state`/`deserialize_state` 왕복을
+    탄다. 레거시(naive) 입력만 검증하면 정작 이번에 바뀐 **새로 쓰는** 형식의
+    왕복이 비어 있는 채로 남는다.
+    """
+    before = SessionMetadata(
+        session_id="rt-1",
+        created_at=utcnow(),
+        last_activity=utcnow(),
+        expires_at=utcnow() + timedelta(days=1),
+    )
+    after = SessionMetadata.from_dict(before.to_dict())
+
+    for field in ("created_at", "last_activity", "expires_at"):
+        original, restored = getattr(before, field), getattr(after, field)
+        assert restored == original, f"{field} 왕복에서 순간이 바뀌었다"
+        assert restored.tzinfo is not None, f"{field} 가 naive 로 돌아왔다"
+    assert after.is_expired() is False
+
+
+def test_to_utc_iso_always_emits_utc_offset():
+    """aware 입력이 UTC 가 아니어도 `+00:00` 형식으로 나가야 한다.
+
+    통과시키면 같은 순간이 표면마다 다른 문자열이 되어, 문자열로 값을 잇는
+    소비자가 조용히 어긋난다.
+    """
+    kst = datetime(2026, 8, 25, 16, 28, tzinfo=ZoneInfo("Asia/Seoul"))
+    emitted = to_utc_iso(kst)
+
+    assert emitted is not None and emitted.endswith("+00:00"), emitted
+    assert datetime.fromisoformat(emitted) == kst  # 같은 순간이어야 한다
+    assert to_utc_iso(None) is None
 
 
 # --------------------------------------------------------------------------

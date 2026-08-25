@@ -52,12 +52,16 @@ def to_utc_iso(dt: datetime | None) -> str | None:
     naive datetime은 백엔드 컨벤션상 UTC로 간주하고 offset을 부여한다.
     JS `new Date(iso)`가 timezone suffix 없는 입력을 로컬 시간으로 해석해
     9시간 어긋나는 문제를 응답 경계에서 차단하기 위함.
+
+    aware 입력은 UTC로 **변환**한다. 그냥 통과시키면 `+09:00` 을 단 문자열이 나가는데,
+    순간으로는 옳아도 이 함수가 약속한 `+00:00` 형식이 아니다. 같은 순간이 표면마다
+    다른 문자열로 직렬화되면 문자열 비교로 값을 잇는 소비자가 조용히 어긋난다.
     """
     if dt is None:
         return None
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
-    return dt.isoformat()
+        return dt.replace(tzinfo=UTC).isoformat()
+    return dt.astimezone(UTC).isoformat()
 
 
 def to_naive_utc(dt: datetime) -> datetime:
