@@ -688,10 +688,12 @@ class CostAllocationService:
             conditions.append(CostAllocationModel.project_id == project_id)
         if user_id:
             conditions.append(CostAllocationModel.user_id == user_id)
+        # DB 경로도 정규화한다. naive 를 timestamptz 조건에 바인딩하면 asyncpg 가
+        # 프로세스 로컬 TZ 로 해석해, 예외 없이 조회 구간만 오프셋만큼 밀린다.
         if start_date:
-            conditions.append(CostAllocationModel.created_at >= start_date)
+            conditions.append(CostAllocationModel.created_at >= to_aware_utc(start_date))
         if end_date:
-            conditions.append(CostAllocationModel.created_at <= end_date)
+            conditions.append(CostAllocationModel.created_at <= to_aware_utc(end_date))
 
         if conditions:
             query = query.where(and_(*conditions))

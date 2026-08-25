@@ -154,7 +154,10 @@ class FeedbackService:
     ) -> FeedbackStats:
         """피드백 통계 조회 (DB + in-memory fallback 병합)"""
         if self.use_database:
-            db_stats = await self._get_stats_from_db(start_date, end_date)
+            db_stats = await self._get_stats_from_db(
+                to_aware_utc(start_date) if start_date else None,
+                to_aware_utc(end_date) if end_date else None,
+            )
             # In-memory fallback 데이터 통계도 병합
             if self._feedbacks:
                 mem_stats = self._get_stats_memory(start_date, end_date)

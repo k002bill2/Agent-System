@@ -31,6 +31,7 @@ from db.models.session import SessionModel
 from db.repository import SessionRepository
 from models.config_version import ConfigVersion
 from models.organization import MemberUsageRecord, OrganizationInvitation
+from models.feedback import DatasetExportOptions, FeedbackQueryParams
 from models.playground import PlaygroundMessage, PlaygroundSession
 from models.rate_limit import RateLimitOverride
 from services.session_service import SessionMetadata
@@ -187,6 +188,10 @@ JSON_PERSISTED_MODELS = [
      {"id": "i", "organization_id": "o", "email": "a@b.co", "invited_by": "u",
       "expires_at": "2099-01-01T00:00:00"}, "created_at"),
     (RateLimitOverride, {"identifier": "u"}, "created_at"),
+    # 날짜 필터 모델. DB 경로에서는 예외 없이 **조용히** 조회 구간이 밀리므로
+    # 메모리 경로 테스트만으로는 회귀를 잡지 못한다.
+    (FeedbackQueryParams, {}, "start_date"),
+    (DatasetExportOptions, {}, "end_date"),
 ]
 
 
