@@ -1,4 +1,4 @@
-"""Session, Task, Message, Approval models."""
+"""Session, Task, Message models."""
 
 from db.models.base import (
     JSONB,
@@ -154,34 +154,3 @@ class MessageModel(Base):
     session = relationship("SessionModel", back_populates="messages")
 
     __table_args__ = (Index("ix_messages_session_timestamp", "session_id", "timestamp"),)
-
-
-class ApprovalModel(Base):
-    """Approval model for storing HITL approval history."""
-
-    __tablename__ = "approvals"
-
-    id = Column(String(36), primary_key=True)
-    session_id = Column(
-        String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    task_id = Column(String(36), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
-
-    # Approval details
-    tool_name = Column(String(100), nullable=False)
-    tool_args = Column(JSONB, nullable=False)
-    risk_level = Column(String(20), nullable=False)
-    risk_description = Column(Text, nullable=True)
-
-    # Status
-    status = Column(String(20), default="pending", index=True)
-    approved_by = Column(String(255), nullable=True)
-    denial_reason = Column(Text, nullable=True)
-
-    # Timestamps
-    created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
-    )
-    resolved_at = Column(DateTime(timezone=True), nullable=True)
-
-    __table_args__ = (Index("ix_approvals_session_status", "session_id", "status"),)

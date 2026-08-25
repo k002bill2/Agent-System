@@ -13,7 +13,6 @@ from typing import Any, cast
 from db.database import async_session_factory
 from db.repository import (
     STATE_VERSION_KEY,
-    ApprovalRepository,
     MessageRepository,
     SessionRepository,
     StateWriteResult,
@@ -733,59 +732,6 @@ class SessionService:
                 repo = TaskRepository(db)
                 await repo.update_status(task_id, status, result, error)
                 await db.commit()
-
-    async def save_approval(
-        self,
-        approval_id: str,
-        session_id: str,
-        task_id: str,
-        tool_name: str,
-        tool_args: dict,
-        risk_level: str,
-        risk_description: str,
-    ) -> None:
-        """Save an approval request to the database (if enabled)."""
-        if self.use_database:
-            async with async_session_factory() as db:
-                repo = ApprovalRepository(db)
-                await repo.create(
-                    approval_id=approval_id,
-                    session_id=session_id,
-                    task_id=task_id,
-                    tool_name=tool_name,
-                    tool_args=tool_args,
-                    risk_level=risk_level,
-                    risk_description=risk_description,
-                )
-                await db.commit()
-
-    async def approve_operation(
-        self,
-        approval_id: str,
-        approved_by: str | None = None,
-    ) -> bool:
-        """Approve an operation in the database (if enabled)."""
-        if self.use_database:
-            async with async_session_factory() as db:
-                repo = ApprovalRepository(db)
-                result = await repo.approve(approval_id, approved_by)
-                await db.commit()
-                return result
-        return True
-
-    async def deny_operation(
-        self,
-        approval_id: str,
-        reason: str | None = None,
-    ) -> bool:
-        """Deny an operation in the database (if enabled)."""
-        if self.use_database:
-            async with async_session_factory() as db:
-                repo = ApprovalRepository(db)
-                result = await repo.deny(approval_id, reason)
-                await db.commit()
-                return result
-        return True
 
 
 # Global service instance
