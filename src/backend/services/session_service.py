@@ -483,29 +483,51 @@ class SessionService:
         return self._sweep_memory()
 
     async def _sweep_storage(self, limit: int) -> int:
-        """저장소를 훑어 만료·비활성 세션을 조건부로 지운다 (DB 모드).
+        """저장소를 훑어 만료 세션을 조건부로 지운다 (DB 모드).
+
+        **전체를 페이지로 순회한다.** 한 페이지만 보고 끝내면, 앞을 차지한 살아 있는
+        세션들이 갱신되지 않는 한 순서가 그대로라 **영원히** 창 앞에 남고 그 뒤의
+        만료 세션은 어느 sweep 에서도 닿지 못한다. 그래서 `limit` 은 작업량 상한이
+        아니라 **페이지 크기**다 — 메모리는 한 페이지로 묶이고, 한 번의 sweep 비용은
+        세션 수에 비례한다(정리 작업의 성격상 불가피하다).
 
         판정은 Python 이 한다 — 손상된 `_metadata` 하나가 SQL 캐스팅에서 문장 전체를
         실패시키면 정리가 영영 멈추기 때문이다. 삭제는 판정 시점의 행 버전을 조건으로
         걸어, 그 사이 들어온 `refresh_session` 의 연장을 지우지 않는다.
         """
         cleaned = 0
+        cursor: tuple[datetime, str] | None = None
         async with async_session_factory() as db:
             repo = SessionRepository(db)
-            candidates = await repo.list_metadata_for_sweep(limit)
-            for session_id, raw_metadata, version in candidates:
-                if not self._is_sweepable(session_id, raw_metadata):
-                    continue
-                if await repo.delete_if_version(session_id, version):
-                    cleaned += 1
-                    # 이 인스턴스가 캐시에 들고 있었다면 함께 버린다. 없으면 no-op —
-                    # 저장소를 훑으므로 만진 적 없는 세션도 대상이 된다.
-                    self._session_metadata.pop(session_id, None)
+            while True:
+                page = await repo.list_metadata_for_sweep(limit, after=cursor)
+                if not page:
+                    break
+                for candidate in page:
+                    if not self._is_expired_in_storage(candidate.session_id, candidate.metadata):
+                        continue
+                    if await repo.delete_if_version(candidate.session_id, candidate.version):
+                        cleaned += 1
+                        # 이 인스턴스가 캐시에 들고 있었다면 함께 버린다. 없으면 no-op —
+                        # 저장소를 훑으므로 만진 적 없는 세션도 대상이 된다.
+                        self._session_metadata.pop(candidate.session_id, None)
+                # 삭제된 행은 커서를 흔들지 않는다 — `created_at` 은 불변이다.
+                cursor = (page[-1].created_at, page[-1].session_id)
             await db.commit()
         return cleaned
 
-    def _is_sweepable(self, session_id: str, raw_metadata: Any) -> bool:
-        """저장소의 `_metadata` 로 정리 대상인지 판정한다.
+    def _is_expired_in_storage(self, session_id: str, raw_metadata: Any) -> bool:
+        """저장소의 `_metadata` 로 **만료** 여부만 판정한다 (DB 모드).
+
+        `is_inactive()` 를 보지 않는 이유가 핵심이다. `last_activity` 를 갱신하는
+        `touch()` 는 **한 번도 영속화되지 않는다** — `get_session` 이 로컬 사본만
+        고친다. 그래서 저장소의 `last_activity` 는 "아무도 갱신하지 않는 값" 이고,
+        그것으로 비활성을 판정하면 활발히 **읽히지만 쓰이지는 않는** 세션이 24 시간
+        뒤 삭제된다. 로컬 사본을 high-water mark 로 얹는 것도 답이 아니다 — 다른
+        인스턴스만 관측한 활동은 여전히 보이지 않는다.
+
+        `expires_at` 은 다르다. **리스**이고 `refresh_session` 이 저장소에 실제로
+        쓰므로 저장소가 권위를 가진다 (#289 에서 정한 규칙).
 
         판정할 수 없으면 **지우지 않는다** — 메타데이터가 없거나 손상된 세션을
         지우는 것은 되돌릴 수 없고, 남겨 두는 쪽의 대가는 그 세션이 남는 것뿐이다.
@@ -520,6 +542,21 @@ class SessionService:
                 extra={"session_id": session_id},
             )
             return False
+        return metadata.is_expired()
+
+    def _is_sweepable_in_memory(self, raw_metadata: Any) -> bool:
+        """메모리 모드 판정 — 만료 **또는** 비활성.
+
+        DB 모드(`_is_expired_in_storage`)와 달리 `is_inactive()` 를 함께 본다.
+        단일 프로세스라 `touch()` 가 갱신하는 로컬 사본이 곧 저장소이고,
+        `last_activity` 가 실제 활동을 반영하기 때문이다.
+        """
+        if not isinstance(raw_metadata, dict):
+            return False
+        try:
+            metadata = SessionMetadata.from_dict(raw_metadata)
+        except (KeyError, TypeError, ValueError):
+            return False  # 손상된 메타데이터 — 판정할 수 없으면 지우지 않는다
         return metadata.is_expired() or metadata.is_inactive()
 
     def _sweep_memory(self) -> int:
@@ -537,7 +574,7 @@ class SessionService:
             if session_id in self._session_metadata:
                 continue
             state = self._memory_sessions.get(session_id)
-            if state and self._is_sweepable(session_id, state.get("_metadata")):
+            if state and self._is_sweepable_in_memory(state.get("_metadata")):
                 self._memory_sessions.pop(session_id, None)
                 cleaned += 1
 

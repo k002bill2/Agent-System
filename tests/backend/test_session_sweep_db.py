@@ -171,6 +171,62 @@ async def test_sweep_keeps_active_sessions(services):
 
 
 @pytest.mark.asyncio
+async def test_sweep_does_not_reap_on_stored_inactivity(services):
+    """DB 모드 sweep 은 `last_activity` 로 지우지 않는다 — 만료만 본다.
+
+    `touch()` 는 **한 번도 영속화되지 않는다**(`get_session` 이 로컬 사본만 고친다).
+    그래서 저장소의 `last_activity` 는 아무도 갱신하지 않는 값이고, 그것으로 비활성을
+    판정하면 활발히 **읽히지만 쓰이지는 않는** 세션이 24 시간 뒤 삭제된다. 로컬
+    사본을 high-water mark 로 얹는 것도 답이 아니다 — 다른 인스턴스만 관측한 활동은
+    여전히 보이지 않는다. `expires_at`(리스, 실제로 영속화됨)만 권위를 가진다.
+    """
+    a, _ = services
+    sid = await a.create_session()
+
+    # 저장소의 활동 기록만 한참 오래된 것으로 만든다. TTL 은 그대로(유효).
+    state = await a.get_session(sid, update_activity=False)
+    assert state is not None
+    stored_meta = SessionMetadata.from_dict(state["_metadata"])
+    stored_meta.last_activity = utcnow() - timedelta(hours=72)
+    state["_metadata"] = stored_meta.to_dict()
+    await a.update_session(sid, state)
+
+    cleaned = await a.cleanup_expired_sessions()
+
+    assert await _exists(a, sid), "영속화되지 않는 활동 기록으로 살아 있는 세션을 지웠다"
+    assert cleaned == 0
+
+
+@pytest.mark.asyncio
+async def test_sweep_reaches_beyond_the_first_page(db_factory, services):
+    """앞 페이지가 전부 살아 있어도 뒤쪽의 만료 세션에 도달한다.
+
+    `LIMIT` 한 장만 보고 끝내면, 앞을 차지한 살아 있는 세션들이 **영원히** 창 앞에
+    남고 그 뒤의 만료 세션은 어느 sweep 에서도 닿지 못한다. 커서는 `created_at` 이므로
+    나중에 만든 세션이 뒤쪽이다 — 그 전제를 아래에서 실제 순서로 확인한다(순서가
+    뒤집히면 이 테스트는 "우연히" 통과할 수 있고, 그러면 아무것도 검증하지 못한다).
+    """
+    a, _ = services
+    alive = [await a.create_session() for _ in range(3)]
+    doomed = await a.create_session()  # 가장 나중에 만들어 뒤쪽에 놓인다
+    await _expire_in_storage(a, doomed)
+
+    async with db_factory() as db:
+        order = await SessionRepository(db).list_metadata_for_sweep(limit=10)
+    assert [c.session_id for c in order][-1] == doomed, (
+        "만료 세션이 마지막 페이지에 있어야 이 테스트가 의미를 갖는다"
+    )
+
+    # 페이지 크기를 1 로 줄여 "앞 페이지가 전부 살아 있는" 상황을 만든다.
+    cleaned = await a.cleanup_expired_sessions(limit=1)
+
+    assert cleaned == 1, "앞 페이지가 살아 있으면 뒤쪽 만료 세션에 닿지 못한다"
+    assert not await _exists(a, doomed)
+    for sid in alive:
+        assert await _exists(a, sid)
+
+
+@pytest.mark.asyncio
 async def test_sweep_tolerates_malformed_metadata(services):
     """손상된 `_metadata` 는 건너뛴다 — sweep 전체가 터지면 안 된다.
 
