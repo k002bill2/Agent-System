@@ -32,7 +32,7 @@ from models.organization import MemberUsageRecord, OrganizationInvitation
 from models.playground import PlaygroundMessage, PlaygroundSession
 from models.rate_limit import RateLimitOverride
 from services.session_service import SessionMetadata
-from utils.time import to_utc_iso, utcnow
+from utils.time import to_aware_utc, to_utc_iso, utcnow
 
 TEST_DATABASE_URL = os.getenv("AOS_TEST_DATABASE_URL")
 
@@ -196,6 +196,25 @@ def test_json_persisted_models_absorb_naive_timestamps(model, kwargs, field):
 
     assert value.tzinfo is not None, f"{model.__name__}.{field} 가 naive 로 남았다"
     assert value < utcnow()  # 비교가 TypeError 없이 성립한다
+
+
+@pytest.mark.parametrize(
+    "stored_expiry",
+    [
+        pytest.param(datetime(2099, 1, 1, tzinfo=UTC), id="timestamptz-컬럼(aware)"),
+        pytest.param(datetime(2099, 1, 1), id="naive-컬럼(마이그레이션 경로)"),
+    ],
+)
+def test_invitation_expiry_compares_under_either_schema(stored_expiry):
+    """초대 만료 비교는 컬럼이 어느 쪽으로 만들어졌든 성립해야 한다.
+
+    `project_invitations.expires_at` 은 모델상 `timestamptz` 지만 마이그레이션
+    `f3a8b2c1d4e5` 는 `TIMESTAMP WITHOUT TIME ZONE` 으로 만든다. 스키마가 어떻게
+    만들어졌는지에 따라 asyncpg 가 aware 를 주기도 naive 를 주기도 한다.
+    (드리프트 자체는 #310 에서 따로 다룬다.)
+    """
+    assert to_aware_utc(stored_expiry) > utcnow()
+    assert to_aware_utc(stored_expiry).tzinfo is not None
 
 
 # --------------------------------------------------------------------------

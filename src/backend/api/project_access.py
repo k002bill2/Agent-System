@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.deps import get_current_user, get_db_session, require_project_role
 from db.models import UserModel
 from services.project_access_service import ProjectAccessService
+from utils.time import to_aware_utc, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -332,8 +333,6 @@ async def preview_invitation(
     db: AsyncSession = Depends(get_db_session),
 ):
     """토큰으로 초대 미리보기 (인증 불필요)."""
-    from datetime import datetime as dt
-
     from sqlalchemy import select
 
     from db.models import ProjectModel
@@ -343,7 +342,9 @@ async def preview_invitation(
     if not inv:
         raise HTTPException(status_code=404, detail="Invitation not found")
 
-    valid = inv.status == "pending" and inv.expires_at > dt.utcnow()
+    # `dt.utcnow()` 는 naive 를 돌려주는데 `expires_at` 은 timestamptz 라 aware 다.
+    # 그대로 비교하면 TypeError — 이 엔드포인트는 이 변경 이전부터 깨져 있었다.
+    valid = inv.status == "pending" and to_aware_utc(inv.expires_at) > utcnow()
 
     proj_result = await db.execute(select(ProjectModel).where(ProjectModel.id == inv.project_id))
     project = proj_result.scalar_one_or_none()
