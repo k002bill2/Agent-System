@@ -20,10 +20,10 @@ Each tier always uses LLM summarisation. Extractive fallback is the
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from typing import Any
 
 from models.context_usage import get_context_limit
+from utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ class CompressionResult:
             "tokens_before": self.tokens_before,
             "tokens_after": self.tokens_after,
             "tier": self.tier,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": utcnow().isoformat(),
         }
 
 
