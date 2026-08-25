@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, NamedTuple, cast
 
-from sqlalchemy import delete, select, tuple_, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import (
@@ -54,13 +54,12 @@ _TERMINAL_APPROVAL_STATUSES = frozenset(
 class SweepCandidate(NamedTuple):
     """만료 sweep 이 한 세션에 대해 판정·삭제에 쓰는 최소 정보.
 
-    `version` 은 삭제 조건, `created_at` 은 다음 페이지의 커서다.
+    `version` 은 삭제 조건이고, `session_id`(기본키)가 다음 페이지의 커서다.
     """
 
     session_id: str
     metadata: Any
     version: int
-    created_at: datetime
 
 
 class StateWriteResult(str, Enum):
@@ -283,7 +282,7 @@ class SessionRepository:
     async def list_metadata_for_sweep(
         self,
         limit: int,
-        after: tuple[datetime, str] | None = None,
+        after: str | None = None,
     ) -> list[SweepCandidate]:
         """만료 sweep 판정에 필요한 것만 한 페이지 읽는다.
 
@@ -297,11 +296,16 @@ class SessionRepository:
         `get_session` 이 이미 다루는 실제 경우다. 그래서 판정은 Python 이 하고
         저장소는 목록과 **조건부 삭제**만 맡는다.
 
-        **`created_at` 을 커서로 쓴다.** 불변이라 스캔 도중 행이 커서 밑으로
-        움직이지 않고, 인덱스(`ix_sessions_created_at`)가 이미 있으며, 무엇보다
-        컬럼 기본값으로만 쓰여 시계가 하나다 — `updated_at` 은 `update_state` 가
-        `utcnow()`(naive)로 덮으므로 컬럼 기본값(aware)과 섞여, UTC 가 아닌
-        타임존에서 도는 프로세스에서는 값이 오프셋만큼 어긋난다(별건).
+        **커서는 기본키(`id`)다.** 시간순으로 방문할 이유가 없다 — 전체를 순회하므로
+        어느 순서로 보든 모두 걸린다. 커서에 필요한 성질은 넷뿐이고 기본키가 그것을
+        전부 만족한다: 고유(중복·누락 없음) · 불변(스캔 도중 행이 커서 밑으로 움직이지
+        않음) · **NOT NULL** · 인덱스.
+
+        시각 컬럼은 커서로 쓰지 않는다. `created_at` 은 nullable 이라 NULL 이 커서에
+        들어가면 행 값 비교가 unknown 이 되어 이후 페이지가 통째로 비고 sweep 이
+        조용히 멈춘다. `updated_at` 은 거기에 더해 시계가 둘이다 — `update_state` 가
+        `utcnow()`(naive)로 덮으므로 컬럼 기본값(aware)과 섞여, UTC 가 아닌 타임존에서
+        도는 프로세스에서는 값이 오프셋만큼 어긋난다 (issue #309).
 
         `version` 을 함께 돌려주는 것이 계약의 핵심이다 — 판정과 삭제 사이에 다른
         인스턴스가 연장할 수 있으므로, 삭제는 이 버전을 조건으로 걸어야 한다.
@@ -313,15 +317,10 @@ class SessionRepository:
             SessionModel.id,
             SessionModel.state_json.op("->")("_metadata"),
             SessionModel.version,
-            SessionModel.created_at,
         )
         if after is not None:
-            # 행 값 비교 — `(created_at, id)` 가 커서보다 뒤인 것만. `created_at` 이
-            # 같은 행이 있어도 `id` 가 순서를 확정하므로 건너뛰거나 겹치지 않는다.
-            stmt = stmt.where(
-                tuple_(SessionModel.created_at, SessionModel.id) > tuple_(after[0], after[1])
-            )
-        stmt = stmt.order_by(SessionModel.created_at, SessionModel.id).limit(limit)
+            stmt = stmt.where(SessionModel.id > after)
+        stmt = stmt.order_by(SessionModel.id).limit(limit)
 
         result = await self.db.execute(stmt)
         return [
@@ -329,7 +328,6 @@ class SessionRepository:
                 session_id=str(row[0]),
                 metadata=row[1],
                 version=int(row[2]),
-                created_at=row[3],
             )
             for row in result.all()
         ]

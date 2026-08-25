@@ -496,7 +496,7 @@ class SessionService:
         걸어, 그 사이 들어온 `refresh_session` 의 연장을 지우지 않는다.
         """
         cleaned = 0
-        cursor: tuple[datetime, str] | None = None
+        cursor: str | None = None
         async with async_session_factory() as db:
             repo = SessionRepository(db)
             while True:
@@ -511,8 +511,8 @@ class SessionService:
                         # 이 인스턴스가 캐시에 들고 있었다면 함께 버린다. 없으면 no-op —
                         # 저장소를 훑으므로 만진 적 없는 세션도 대상이 된다.
                         self._session_metadata.pop(candidate.session_id, None)
-                # 삭제된 행은 커서를 흔들지 않는다 — `created_at` 은 불변이다.
-                cursor = (page[-1].created_at, page[-1].session_id)
+                # 삭제된 행은 커서를 흔들지 않는다 — 기본키는 불변이다.
+                cursor = page[-1].session_id
             await db.commit()
         return cleaned
 

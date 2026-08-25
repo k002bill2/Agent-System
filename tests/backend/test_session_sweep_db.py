@@ -202,20 +202,23 @@ async def test_sweep_reaches_beyond_the_first_page(db_factory, services):
     """앞 페이지가 전부 살아 있어도 뒤쪽의 만료 세션에 도달한다.
 
     `LIMIT` 한 장만 보고 끝내면, 앞을 차지한 살아 있는 세션들이 **영원히** 창 앞에
-    남고 그 뒤의 만료 세션은 어느 sweep 에서도 닿지 못한다. 커서는 `created_at` 이므로
-    나중에 만든 세션이 뒤쪽이다 — 그 전제를 아래에서 실제 순서로 확인한다(순서가
-    뒤집히면 이 테스트는 "우연히" 통과할 수 있고, 그러면 아무것도 검증하지 못한다).
+    남고 그 뒤의 만료 세션은 어느 sweep 에서도 닿지 못한다.
+
+    커서는 기본키(`id`)이고 세션 id 는 uuid4 라 정렬 순서가 생성 순과 무관하다.
+    만료 세션이 실제로 **뒤쪽 페이지**에 놓여야 이 테스트가 의미를 가지므로, 순서를
+    저장소에서 읽어 마지막 것을 만료시킨다 — 전제를 가정하면 "우연히" 통과해
+    아무것도 검증하지 못한다.
     """
     a, _ = services
-    alive = [await a.create_session() for _ in range(3)]
-    doomed = await a.create_session()  # 가장 나중에 만들어 뒤쪽에 놓인다
-    await _expire_in_storage(a, doomed)
+    sids = [await a.create_session() for _ in range(4)]
 
     async with db_factory() as db:
-        order = await SessionRepository(db).list_metadata_for_sweep(limit=10)
-    assert [c.session_id for c in order][-1] == doomed, (
-        "만료 세션이 마지막 페이지에 있어야 이 테스트가 의미를 갖는다"
-    )
+        page = await SessionRepository(db).list_metadata_for_sweep(limit=10)
+    order = [c.session_id for c in page]
+    assert sorted(order) == sorted(sids)
+    doomed = order[-1]
+    alive = [s for s in sids if s != doomed]
+    await _expire_in_storage(a, doomed)
 
     # 페이지 크기를 1 로 줄여 "앞 페이지가 전부 살아 있는" 상황을 만든다.
     cleaned = await a.cleanup_expired_sessions(limit=1)
@@ -224,6 +227,36 @@ async def test_sweep_reaches_beyond_the_first_page(db_factory, services):
     assert not await _exists(a, doomed)
     for sid in alive:
         assert await _exists(a, sid)
+
+
+@pytest.mark.asyncio
+async def test_sweep_survives_null_timestamps(db_factory, services):
+    """시각 컬럼이 NULL 인 행이 있어도 페이지 순회가 멈추지 않는다.
+
+    `sessions.created_at`·`updated_at` 은 **nullable** 이다(실제 스키마에서 확인).
+    시각 컬럼을 커서로 쓰면 NULL 이 커서에 들어가는 순간 이후 비교가 unknown 이 되어
+    다음 페이지가 통째로 비고, 그 뒤 세션은 **영영 정리되지 않는다**. 커서를 기본키로
+    두는 이유다 — `id` 는 NOT NULL 이라 이 경로 자체가 없다.
+    """
+    a, _ = services
+    sids = [await a.create_session() for _ in range(4)]
+
+    # 앞쪽 행들의 시각을 NULL 로 만든다 — 옛 데이터·수동 백필의 모습이다.
+    async with db_factory() as db:
+        await db.execute(
+            text("UPDATE sessions SET created_at = NULL, updated_at = NULL WHERE id = ANY(:ids)"),
+            {"ids": sids[:3]},
+        )
+        await db.commit()
+        page = await SessionRepository(db).list_metadata_for_sweep(limit=10)
+
+    doomed = [c.session_id for c in page][-1]
+    await _expire_in_storage(a, doomed)
+
+    cleaned = await a.cleanup_expired_sessions(limit=1)
+
+    assert cleaned == 1, "NULL 시각 행에서 페이지 순회가 멈췄다"
+    assert not await _exists(a, doomed)
 
 
 @pytest.mark.asyncio
