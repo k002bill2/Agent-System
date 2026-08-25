@@ -17,6 +17,7 @@ from db.models import (
     TaskModel,
 )
 from models.agent_state import AgentInfo, TaskNode
+from models.hitl import ApprovalStatus
 from utils.time import utcnow
 
 
@@ -38,6 +39,16 @@ def serialize_value(value: Any) -> Any:
 # 세션 state 에 실려 다니는 행 버전. 저장하지 않는다 — 진실은 `sessions.version`
 # 컬럼 하나이고, state_json 에도 넣으면 두 벌이 되어 드리프트한다 (issue #292).
 STATE_VERSION_KEY = "_version"
+
+# 되돌아가서는 안 되는 승인 상태. 소비·거부·만료는 종착점이고, 특히 `consumed` 는
+# **비가역 도구가 이미 실행됐다**는 뜻이라 `approved` 로 되돌리면 재실행이 열린다.
+_TERMINAL_APPROVAL_STATUSES = frozenset(
+    {
+        ApprovalStatus.CONSUMED.value,
+        ApprovalStatus.DENIED.value,
+        ApprovalStatus.EXPIRED.value,
+    }
+)
 
 
 class StateWriteResult(str, Enum):
@@ -162,6 +173,8 @@ class SessionRepository:
         # Serialize state to handle TaskNode and other Pydantic objects
         serialized = serialize_state(state)
         serialized.pop(STATE_VERSION_KEY, None)  # 버전의 진실은 컬럼 하나뿐이다
+        if expected_version is None:
+            serialized = await self._preserve_terminal_approvals(session_id, serialized)
         stmt = update(SessionModel).where(SessionModel.id == session_id)
         if expected_version is not None:
             stmt = stmt.where(SessionModel.version == expected_version)
@@ -185,6 +198,52 @@ class SessionRepository:
             else StateWriteResult.MISSING
         )
         return outcome, None
+
+    async def _preserve_terminal_approvals(
+        self,
+        session_id: str,
+        serialized: dict[str, Any],
+    ) -> dict[str, Any]:
+        """무조건 쓰기가 **터미널 승인을 되돌리거나 지우지 못하게** 병합한다.
+
+        조건부 쓰기는 버전이 어긋나면 실패하므로 낡은 스냅샷이 반영되지 않는다.
+        무조건 쓰기(`expected_version is None`)에는 그 방어가 없다 — 그래프 최종
+        저장(`engine.run`·`engine.stream`)이 대표적이고, 그쪽은 재시도가 도구
+        재실행을 뜻해 **의도적으로** 버전 검사를 끈다. 그래서 소비 이전에 읽은
+        스냅샷이 그래프를 마치고 도착하면 `state_json` 을 통째로 덮어
+        `consumed` 를 `approved` 로 되살린다. 그 승인으로 도구가 다시 실행될 수
+        있으므로 at-most-once 가 시간을 가로질러 깨진다 (issue #292).
+
+        승인 상태는 단조롭다 — `pending → approved → consumed/denied` 로만
+        전진한다. 그래서 병합 규칙은 "나중에 쓴 쪽" 이 아니라 **"더 앞선 쪽"** 이다:
+        저장소가 터미널이면 그 기록이 이긴다. 들어온 state 에 그 승인이 아예
+        없어도 되살려 넣는다 — 사라지는 것도 되돌아가는 것과 같은 결과다.
+
+        행을 `FOR UPDATE` 로 잠근 채 읽는다. 잠그지 않으면 읽기와 쓰기 사이가
+        다시 TOCTOU 창이 되어, 겹친 무조건 쓰기 둘이 각자 병합한 뒤 늦은 쪽이
+        앞선 병합을 덮는다 — 락을 저장소로 옮긴 의미가 사라진다.
+        """
+        result = await self.db.execute(
+            select(SessionModel.state_json).where(SessionModel.id == session_id).with_for_update()
+        )
+        stored = result.scalar_one_or_none()
+        if not stored:
+            return serialized
+
+        stored_approvals = stored.get("pending_approvals") or {}
+        terminal = {
+            approval_id: record
+            for approval_id, record in stored_approvals.items()
+            if isinstance(record, dict) and record.get("status") in _TERMINAL_APPROVAL_STATUSES
+        }
+        if not terminal:
+            return serialized
+
+        merged = dict(serialized)
+        approvals = dict(merged.get("pending_approvals") or {})
+        approvals.update(terminal)
+        merged["pending_approvals"] = approvals
+        return merged
 
     async def update_cost(
         self,

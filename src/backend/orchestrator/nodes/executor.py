@@ -16,6 +16,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 
+from db.repository import STATE_VERSION_KEY
 from models.agent_state import AgentInfo, AgentRole, AgentState, TaskStatus
 from models.hitl import APPROVAL_STATE_LOCK, ApprovalStatus, assess_operation_risk
 from models.llm_usage import LLMUsageSource
@@ -32,6 +33,24 @@ from utils.time import utcnow
 from .base import BaseNode
 
 logger = logging.getLogger(__name__)
+
+
+class ApprovalConsumptionUnsafeError(RuntimeError):
+    """소비를 안전하게 기록할 수 없어 도구 실행을 막았다 (issue #292).
+
+    `RuntimeError` 를 고른 이유: executor 의 바깥 try/except 가 그대로 잡아
+    task 실패로 처리한다 — 승인은 저장소에 `approved` 로 남아 있으므로 사람이
+    다시 시도할 수 있고, **도구는 실행되지 않는다**. 실행해 놓고 기록을 못 남기는
+    것보다 실행하지 않는 쪽이 항상 안전하다.
+    """
+
+    def __init__(self, session_id: str) -> None:
+        super().__init__(
+            f"Cannot safely record approval consumption for session {session_id}: "
+            "state carries no row version (cross-process at-most-once would be lost)"
+        )
+        self.session_id = session_id
+
 
 try:
     from orchestrator.tools import MCPToolExecutor
@@ -268,9 +287,19 @@ After completing all necessary tool calls, provide a final summary."""
 
         저장 실패(예외)는 삼키지 않는다 — 소비를 기록할 수 없으면 실행해서도
         안 된다. 호출자의 try/except 가 task 실패로 처리한다.
+
+        DB 모드에서 state 에 행 버전이 없으면 **소비하지 않는다**. 크로스 프로세스
+        at-most-once 는 전적으로 이 버전의 조건부 UPDATE 에 기대고 있고
+        (`update_session` 은 버전이 없으면 조용히 무조건 쓰기로 내려간다),
+        그 상태로 겹치면 두 인스턴스가 모두 소비에 성공해 비가역 도구가 두 번
+        실행된다 — issue #292 의 RED 실험에서 실제로 재현된 결과다. 버전 없는
+        state 는 `get_session` 을 거치지 않고 만들어진 것이므로, 막아도 정상
+        경로를 해치지 않는다.
         """
         session_id = state.get("session_id", "")
         service = self.session_service or get_session_service()
+        if service.use_database and state.get(STATE_VERSION_KEY) is None:
+            raise ApprovalConsumptionUnsafeError(session_id)
         persisted = await service.update_session(
             session_id,
             cast(AgentState, {**state, "pending_approvals": pending_approvals}),

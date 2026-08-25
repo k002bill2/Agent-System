@@ -259,6 +259,11 @@ def test_websocket_does_not_bypass_the_transition_gateway():
 class RecordingSessionService:
     """`update_session` 호출 시점의 승인 상태를 기록한다."""
 
+    # `SessionService` 대역이므로 그 계약을 따른다. 이 파일의 double 들은 전부
+    # **in-process** 저장소를 흉내내므로 DB 모드가 아니다 — executor 의 소비
+    # 경로는 DB 모드에서만 행 버전을 요구한다 (issue #292).
+    use_database = False
+
     def __init__(self, events: list[tuple[str, Any]]):
         self.events = events
 
@@ -353,7 +358,10 @@ async def test_consumption_persisted_before_tool_execution(monkeypatch, executor
 @pytest.mark.asyncio
 async def test_tool_not_executed_when_consumption_persist_fails(monkeypatch, executor_env):
     """소비를 기록하지 못하면 도구를 실행하지 않는다 (at-most-once)."""
+
     class FailingService:
+        use_database = False  # in-process double (issue #292)
+
         async def get_session(self, session_id: str, update_activity: bool = True):
             return None
 
@@ -419,6 +427,7 @@ class JitteryRecordingService:
     직렬화가 없으면 늦게 커밋된 낡은 스냅샷이 다른 소비를 되돌린다.
     """
 
+    use_database = False  # in-process double (issue #292)
     FIRST_WRITE_DELAY = 0.02
 
     def __init__(self) -> None:
@@ -509,6 +518,8 @@ class StoreBackedService:
     DB 모드의 `SessionService` 가 그렇다(`repo.get_state` 가 JSONB 를 매번 디코딩).
     따라서 캐시가 비어 있으면 동시에 시작한 두 실행이 서로 독립된 state 를 든다.
     """
+
+    use_database = False  # in-process double (issue #292)
 
     def __init__(self, state: dict[str, Any]):
         self.stored = state
