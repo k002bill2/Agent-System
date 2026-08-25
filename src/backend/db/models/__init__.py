@@ -84,7 +84,6 @@ from db.models.project import (
     ProjectModel,
 )
 from db.models.session import (
-    ApprovalModel,
     MessageModel,
     SessionModel,
     TaskModel,
@@ -107,7 +106,6 @@ __all__ = [
     "SessionModel",
     "TaskModel",
     "MessageModel",
-    "ApprovalModel",
     # Feedback
     "FeedbackModel",
     "DatasetEntryModel",

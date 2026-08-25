@@ -9,7 +9,6 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import (
-    ApprovalModel,
     BranchProtectionRuleModel,
     MergeRequestModel,
     MessageModel,
@@ -460,12 +459,6 @@ class SessionRepository:
         )
         counts["messages"] = result.scalar() or 0
 
-        # Count approvals
-        result = await self.db.execute(
-            select(func.count()).where(ApprovalModel.session_id.in_(session_ids))
-        )
-        counts["approvals"] = result.scalar() or 0
-
         # Count feedbacks
         try:
             from db.models import DatasetEntryModel, FeedbackModel
@@ -632,92 +625,6 @@ class MessageRepository:
             .where(MessageModel.session_id == session_id)
             .order_by(MessageModel.timestamp)
             .limit(limit)
-        )
-        return list(result.scalars().all())
-
-
-class ApprovalRepository:
-    """Repository for approval operations."""
-
-    def __init__(self, session: AsyncSession):
-        self.db = session
-
-    async def create(
-        self,
-        approval_id: str,
-        session_id: str,
-        task_id: str,
-        tool_name: str,
-        tool_args: dict,
-        risk_level: str,
-        risk_description: str,
-    ) -> ApprovalModel:
-        """Create a new approval request."""
-        approval = ApprovalModel(
-            id=approval_id,
-            session_id=session_id,
-            task_id=task_id,
-            tool_name=tool_name,
-            tool_args=tool_args,
-            risk_level=risk_level,
-            risk_description=risk_description,
-            status="pending",
-        )
-        self.db.add(approval)
-        await self.db.flush()
-        return approval
-
-    async def get(self, approval_id: str) -> ApprovalModel | None:
-        """Get approval by ID."""
-        result = await self.db.execute(select(ApprovalModel).where(ApprovalModel.id == approval_id))
-        return result.scalar_one_or_none()
-
-    async def approve(
-        self,
-        approval_id: str,
-        approved_by: str | None = None,
-    ) -> bool:
-        """Approve an approval request."""
-        result = await self.db.execute(
-            update(ApprovalModel)
-            .where(ApprovalModel.id == approval_id)
-            .values(
-                status="approved",
-                approved_by=approved_by,
-                resolved_at=utcnow(),
-            )
-        )
-        return result.rowcount > 0
-
-    async def deny(
-        self,
-        approval_id: str,
-        reason: str | None = None,
-    ) -> bool:
-        """Deny an approval request."""
-        result = await self.db.execute(
-            update(ApprovalModel)
-            .where(ApprovalModel.id == approval_id)
-            .values(
-                status="denied",
-                denial_reason=reason,
-                resolved_at=utcnow(),
-            )
-        )
-        return result.rowcount > 0
-
-    async def list_pending_by_session(
-        self,
-        session_id: str,
-    ) -> list[ApprovalModel]:
-        """List pending approvals for a session."""
-        result = await self.db.execute(
-            select(ApprovalModel)
-            .where(
-                ApprovalModel.session_id == session_id,
-                ApprovalModel.status == "pending",
-            )
-            .order_by(ApprovalModel.created_at)
         )
         return list(result.scalars().all())
 

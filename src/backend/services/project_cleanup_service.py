@@ -27,6 +27,8 @@ class DeletionPreview(BaseModel):
     sessions_count: int = 0
     tasks_count: int = 0
     messages_count: int = 0
+    # 항상 0 이다. `approvals` 테이블은 #306 에서 제거했다. 대시보드의 삭제
+    # 프리뷰가 이 필드를 합계에 더하므로 응답 형태 유지를 위해 남긴다.
     approvals_count: int = 0
     feedbacks_count: int = 0
     dataset_entries_count: int = 0
@@ -91,7 +93,6 @@ class ProjectCleanupService:
             preview.sessions_count = db_counts.get("sessions", 0)
             preview.tasks_count = db_counts.get("tasks", 0)
             preview.messages_count = db_counts.get("messages", 0)
-            preview.approvals_count = db_counts.get("approvals", 0)
             preview.feedbacks_count = db_counts.get("feedbacks", 0)
             preview.dataset_entries_count = db_counts.get("dataset_entries", 0)
         except Exception as e:

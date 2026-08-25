@@ -208,8 +208,14 @@ status 만 보고 통과시키면 이전 승인의 권한으로 그 호출이 �
 막는다 — 공유 이벤트 루프의 in-process 락, 그리고 읽기·소비를 함께 띄워
 경합이 아니라 순차 실행이 되는 것.
 
-`approvals` 테이블은 현재 **쓰이지 않는다**(`save_approval` 계열 호출부 0건).
-정확성에는 불필요하며, 감사·조회용으로 되살리는 것은 별도 작업이다.
+`approvals` 테이블과 그 코드(`ApprovalModel`·`ApprovalRepository`·`save_approval`
+계열 3 메서드)는 **제거했다** (#306). 한 번도 채워진 적이 없었고, 위에서 보듯
+정확성은 `sessions.state_json` + `sessions.version` 이 지킨다. 감사·조회 목적으로
+승인 이력이 필요해지면 이중 쓰기·백필을 갖춘 설계로 새로 만든다 — 비어 있는 테이블을
+남겨 두면 "쓰이는 줄 알았는데 비어 있다" 는 오독만 남는다.
+
+기존 배포에는 빈 `approvals` 테이블이 그대로 남는다. 지우는 DDL 은 넣지 않았다 —
+되돌릴 수 없는 작업이고, 남아 있어도 비용이 없다.
 
 ## Directory Structure (Backend)
 
@@ -579,7 +585,6 @@ USE_DATABASE=false
 | `sessions` | 세션 정보 |
 | `tasks` | 태스크 트리 |
 | `messages` | 대화 메시지 |
-| `approvals` | HITL 승인 요청 |
 | `users` | 사용자 (OAuth + Email) |
 | `organizations` | 멀티테넌트 조직 |
 | `organization_members` | 조직 멤버 |

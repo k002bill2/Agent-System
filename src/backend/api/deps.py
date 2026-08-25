@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import async_session_factory
 from db.models import OrganizationMemberModel, UserModel
-from db.repository import ApprovalRepository, MessageRepository, SessionRepository, TaskRepository
+from db.repository import MessageRepository, SessionRepository, TaskRepository
 from models.organization import MemberRole
 from orchestrator import OrchestrationEngine
 from services.auth_service import AuthService
@@ -69,11 +69,6 @@ def get_task_repository(db: AsyncSession) -> TaskRepository:
 def get_message_repository(db: AsyncSession) -> MessageRepository:
     """Get message repository."""
     return MessageRepository(db)
-
-
-def get_approval_repository(db: AsyncSession) -> ApprovalRepository:
-    """Get approval repository."""
-    return ApprovalRepository(db)
 
 
 # ─────────────────────────────────────────────────────────────
