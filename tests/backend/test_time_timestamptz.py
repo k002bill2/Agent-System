@@ -29,6 +29,7 @@ from db.models.session import SessionModel
 from db.repository import SessionRepository
 from models.config_version import ConfigVersion
 from models.organization import MemberUsageRecord, OrganizationInvitation
+from models.playground import PlaygroundMessage, PlaygroundSession
 from models.rate_limit import RateLimitOverride
 from services.session_service import SessionMetadata
 from utils.time import to_utc_iso, utcnow
@@ -152,6 +153,49 @@ def test_config_version_stays_naive():
     """
     version = ConfigVersion(id="v1", config_type="agent", config_id="a", version=1)
     assert version.created_at.tzinfo is None
+
+
+def test_playground_session_sorts_legacy_and_new_together():
+    """레거시 세션과 새 세션을 섞어 정렬해도 죽지 않아야 한다.
+
+    `playground_sessions.json` 은 `utcnow()` 가 naive 이던 시절에 쓰였다. 정규화가
+    없으면 파일에서 읽은 naive 와 새로 만든 aware 가 섞여 `list_sessions()` 의
+    정렬이 TypeError 로 죽고 목록이 통째로 안 나온다.
+    """
+    legacy = PlaygroundSession(
+        name="legacy", user_id="u",
+        created_at="2026-02-05T00:59:49.044250",   # offset 없음 = 구버전 형식
+        updated_at="2026-04-23T13:42:57.712906",
+    )
+    assert legacy.updated_at.tzinfo is not None
+
+    fresh = PlaygroundSession(name="fresh", user_id="u")
+    ordered = sorted([legacy, fresh], key=lambda x: x.updated_at, reverse=True)
+    assert ordered[0].name == "fresh"
+
+
+# JSON 파일로 영속화됐다 다시 읽히는 모델들. 그 파일에는 `utcnow()` 가 naive 이던
+# 시절의 offset 없는 문자열이 남아 있으므로, 읽는 쪽이 aware 로 흡수해야 한다.
+# 새로 JSON 에 영속화되는 모델을 추가하면 여기에도 넣는다.
+JSON_PERSISTED_MODELS = [
+    (PlaygroundSession, {"name": "n", "user_id": "u"}, "updated_at"),
+    (PlaygroundMessage, {"role": "user", "content": "c"}, "timestamp"),
+    (MemberUsageRecord, {"organization_id": "o", "user_id": "u"}, "timestamp"),
+    (OrganizationInvitation,
+     {"id": "i", "organization_id": "o", "email": "a@b.co", "invited_by": "u",
+      "expires_at": "2099-01-01T00:00:00"}, "created_at"),
+    (RateLimitOverride, {"identifier": "u"}, "created_at"),
+]
+
+
+@pytest.mark.parametrize("model, kwargs, field", JSON_PERSISTED_MODELS)
+def test_json_persisted_models_absorb_naive_timestamps(model, kwargs, field):
+    """offset 없는 문자열을 넣어도 aware 로 나와야 한다."""
+    instance = model(**{**kwargs, field: "2026-01-01T00:00:00"})
+    value = getattr(instance, field)
+
+    assert value.tzinfo is not None, f"{model.__name__}.{field} 가 naive 로 남았다"
+    assert value < utcnow()  # 비교가 TypeError 없이 성립한다
 
 
 # --------------------------------------------------------------------------
