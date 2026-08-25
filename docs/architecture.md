@@ -113,13 +113,18 @@ high-water mark** 다 — 활동은 누구의 관측이든 실제로 일어난 �
 
 **예외: `engine.run`·`engine.stream` 의 최종 저장은 `check_version=False` 다.**
 완료된 그래프 실행의 산물이라 재시도가 도구 재실행을 뜻한다. 대신 실행 중 다른
-프로세스가 쓴 것은 유실된다 — 오래된 스냅샷을 통째로 쓰는 구조에서 오는 한계이고,
-제대로 풀려면 필드 단위 병합이 필요하다.
+프로세스가 쓴 것은 유실된다 — 오래된 스냅샷을 통째로 쓰는 구조에서 오는 한계다.
 
-**남는 것**: 두 인스턴스가 동시에 같은 승인을 소비하려는 진짜 경합은 이 버전 검사가
-"둘 중 하나는 실패" 로 만들지만, 실패한 쪽은 재시도가 아니라 task 실패로 처리된다
-(`executor._persist_approval_consumption`). 승인 소비를 `approvals` 테이블의 조건부
-UPDATE 로 옮기는 것이 그 답이며 별도 작업이다.
+**단, 터미널 승인은 예외의 예외다 (issue #292).** 승인 상태는 단조롭다
+(`pending → approved → consumed/denied`). 무조건 쓰기가 `consumed` 를 `approved` 로
+되돌리면 그 승인으로 도구가 **다시** 실행될 수 있으므로, `update_state` 는
+`expected_version` 이 없을 때 행을 `FOR UPDATE` 로 잠그고 저장소의 터미널 승인을
+병합해 넣는다(`_preserve_terminal_approvals`). 병합 규칙은 "나중에 쓴 쪽" 이 아니라
+**"더 앞선 쪽"** 이다. 나머지 필드의 필드 단위 병합은 여전히 없다.
+
+**남는 것**: 진 쪽은 재시도가 아니라 task 실패로 처리된다
+(`executor._persist_approval_consumption`). 승인은 저장소에 `approved` 로 남아
+사람이 다시 시도할 수 있으므로 안전하지만, 자동 재개는 아니다.
 
 ## HITL 승인 생명주기
 
@@ -163,9 +168,24 @@ status 만 보고 통과시키면 이전 승인의 권한으로 그 호출이 �
 스케줄러가 그 task 를 집어 재개한다(`is_task_resumable_after_approval`). 승인 API 를 다시
 호출하는 방식의 재개는 없다 — 중복 승인 요청과 구분할 수 없기 때문이다.
 
-크로스 프로세스 원자성(다중 워커)은 아직 없다. 현재 배포는 단일 인스턴스이고
-(`render.yaml`, `--workers` 없음) `approvals` 테이블을 진실의 출처로 쓰는 조건부
-UPDATE 는 다중 워커 도입 시점의 과제다.
+**크로스 프로세스 at-most-once 는 확보돼 있다 (issue #292).** 진실의 출처는
+`approvals` 테이블이 아니라 `sessions.state_json` + `sessions.version` 이다 —
+소비는 `_persist_approval_consumption` 의 조건부 UPDATE 로 기록되므로, 두 인스턴스가
+같은 승인을 동시에 소비하려 하면 진 쪽이 `SessionVersionConflictError` 를 받고
+**도구를 실행하지 않는다**(소비 기록이 실행보다 앞선다).
+
+| 계약 | 위치 | 없으면 |
+|------|------|--------|
+| 소비 경로는 행 버전을 **요구**한다 | `_persist_approval_consumption` 의 `ApprovalConsumptionUnsafeError` | 버전 없는 state 는 무조건 쓰기로 내려가 두 인스턴스가 모두 소비에 성공 — 비가역 도구가 두 번 실행 |
+| 무조건 쓰기는 터미널 승인을 되돌리지 않는다 | `SessionRepository._preserve_terminal_approvals` (`FOR UPDATE` 병합) | 그래프 최종 저장이 소비 이전 스냅샷으로 `consumed` 를 `approved` 로 되살려 재실행이 열림 |
+
+`tests/backend/test_hitl_cross_process_atomicity.py` 가 서비스 인스턴스 둘로
+(= 프로세스 둘) 지킨다. 그 파일은 이 검증을 무력화하는 거짓 초록 둘도 함께
+막는다 — 공유 이벤트 루프의 in-process 락, 그리고 읽기·소비를 함께 띄워
+경합이 아니라 순차 실행이 되는 것.
+
+`approvals` 테이블은 현재 **쓰이지 않는다**(`save_approval` 계열 호출부 0건).
+정확성에는 불필요하며, 감사·조회용으로 되살리는 것은 별도 작업이다.
 
 ## Directory Structure (Backend)
 

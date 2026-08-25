@@ -960,6 +960,17 @@ class ProjectAccessService:
 - non-root 유저, HEALTHCHECK
 - Dashboard: nginx-alpine 기반 SPA 호스팅
 
+**다중 레플리카 정합성** (issue #292):
+매니페스트가 backend 를 2 개 이상으로 띄우므로 프로세스 로컬 락은 보장이 되지
+못한다. 정확성은 저장소에서 온다 — 세션 state 의 낙관적 동시성(`sessions.version`)
+이 겹친 쓰기를 걸러내고, HITL 승인의 at-most-once 는 그 위에 선다.
+계약과 검증은 `docs/architecture.md` 의 "세션 state 동시 쓰기" · "HITL 승인
+생명주기" 절 참조.
+
+**남은 단일 인스턴스 전제**: 세션 TTL 정리(`cleanup_expired_sessions`)는 아직
+로컬 사본으로 삭제를 판정한다 — 어느 인스턴스의 캐시에도 없는 세션은 아무도
+정리하지 않는다 (issue #291).
+
 ---
 
 ## 38. DB 기반 프로젝트 레지스트리

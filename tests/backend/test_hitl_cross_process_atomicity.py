@@ -26,9 +26,10 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from db.models.base import Base
+from db.repository import STATE_VERSION_KEY
 from models.agent_state import AgentState
 from models.hitl import APPROVAL_STATE_LOCK, ApprovalStatus
-from orchestrator.nodes.executor import ExecutorNode
+from orchestrator.nodes.executor import ApprovalConsumptionUnsafeError, ExecutorNode
 from services.session_service import SessionService, SessionVersionConflictError
 from utils.time import utcnow
 
@@ -205,6 +206,32 @@ async def test_sequential_second_consume_is_refused(services):
 
     assert await _try_consume(a, sid) is True
     assert await _try_consume(b, sid) is False
+
+
+@pytest.mark.asyncio
+async def test_versionless_state_refuses_to_consume(services):
+    """DB 모드에서 행 버전이 없으면 소비를 거부한다 — 도구를 실행하지 않는다.
+
+    버전이 없으면 `update_session` 은 조용히 무조건 쓰기로 내려가고, 그러면 겹친
+    두 인스턴스가 **둘 다** 소비에 성공한다(이 파일의 RED 실험에서 재현됨).
+    조용히 보장을 잃느니 실행을 막는다 — 승인은 `approved` 로 남아 재시도 가능하다.
+    """
+    a, _ = services
+    sid = await _seed_approved_session(a)
+
+    state = await _read(a, sid)
+    state.pop(STATE_VERSION_KEY, None)  # `get_session` 을 거치지 않은 state 를 모사
+
+    node = ExecutorNode(llm=None, tools=[], session_service=a)
+    pending = state["pending_approvals"]
+    with pytest.raises(ApprovalConsumptionUnsafeError):
+        await node._consume_approval(state, pending, pending[APPROVAL_ID])
+
+    # 거부는 저장소를 건드리지 않아야 한다 — 승인은 그대로 재시도 가능해야 한다.
+    fresh = SessionService(use_database=True)
+    stored = await fresh.get_session(sid)
+    assert stored is not None
+    assert stored["pending_approvals"][APPROVAL_ID]["status"] == ApprovalStatus.APPROVED.value
 
 
 @pytest.mark.asyncio
