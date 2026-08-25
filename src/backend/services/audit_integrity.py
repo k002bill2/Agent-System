@@ -15,7 +15,7 @@ from models.audit import (
     RetentionApplyResult,
     RetentionPolicy,
 )
-from utils.time import utcnow
+from utils.time import to_aware_utc, utcnow
 
 
 class AuditIntegrityService:
@@ -190,6 +190,9 @@ class AuditIntegrityService:
         entries = entries or self._entries
 
         # Filter by date range
+        # API 로 들어온 날짜 필터는 offset 이 없으면 naive 다. 비교 상대는 `utcnow()` 로
+        # 만들어진 aware 값이라 그대로 재면 TypeError 다 (#309).
+        start_date, end_date = to_aware_utc(start_date), to_aware_utc(end_date)
         filtered = [e for e in entries if start_date <= e.created_at <= end_date]
 
         # Compute statistics

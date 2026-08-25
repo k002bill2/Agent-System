@@ -13,6 +13,7 @@ CI 에서는 오프셋이 0 이라 **영원히 초록**이고, 회귀를 잡지 
 """
 
 import os
+import tempfile
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -24,6 +25,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from auth.token_service import TokenService
 from db.models.base import Base
 from db.models.session import SessionModel
 from db.repository import SessionRepository
@@ -215,6 +217,62 @@ def test_invitation_expiry_compares_under_either_schema(stored_expiry):
     """
     assert to_aware_utc(stored_expiry) > utcnow()
     assert to_aware_utc(stored_expiry).tzinfo is not None
+
+
+def test_file_mtime_is_read_as_utc():
+    """파일 mtime 은 `tz=UTC` 로 읽어야 한다.
+
+    `datetime.fromtimestamp(x)` 는 **로컬 시각** naive 를 준다. aware 인 `utcnow()` 와
+    비교하면 TypeError 고, 설령 비교가 됐더라도 UTC 가 아닌 값끼리 재는 셈이다
+    (`ProjectDiscovery.scan_project` 이 그 경로였다).
+    """
+    with tempfile.NamedTemporaryFile() as f:
+        mtime = os.stat(f.name).st_mtime
+
+    naive = datetime.fromtimestamp(mtime)
+    aware = datetime.fromtimestamp(mtime, UTC)
+
+    assert aware.tzinfo is not None
+    assert aware < utcnow() + timedelta(seconds=5)  # 비교가 성립한다
+    with pytest.raises(TypeError):
+        _ = naive > utcnow()  # tz 를 빠뜨리면 이렇게 죽는다
+
+
+def test_jwt_expiry_decodes_as_aware(monkeypatch):
+    """JWT 의 exp/iat 는 epoch UTC 다 — `tz=UTC` 로 읽어야 TTL 계산이 산다.
+
+    `TokenService.blacklist_token` 이 `expires_at - utcnow()` 를 하므로, naive 로
+    읽으면 Redis 블랙리스트 기록 전에 TypeError 로 죽는다.
+    """
+    from config import get_settings
+
+    monkeypatch.setenv("SESSION_SECRET_KEY", "x" * 48)
+    get_settings.cache_clear()
+    try:
+        service = TokenService()
+        decoded = service.verify_token(service.create_access_token("u"))
+
+        assert decoded is not None
+        assert decoded.exp.tzinfo is not None and decoded.iat.tzinfo is not None
+        # blacklist_token 의 TTL 계산과 같은 식
+        assert int((decoded.exp - utcnow()).total_seconds()) > 0
+    finally:
+        get_settings.cache_clear()
+
+
+def test_api_date_filters_compare_against_aware_records():
+    """offset 없는 날짜 필터가 들어와도 aware 레코드와 비교돼야 한다.
+
+    FastAPI 는 offset 없는 ISO 를 naive 로 파싱한다. 레코드의 `created_at` 은
+    `utcnow()` 가 만든 aware 라 그대로 재면 TypeError 다.
+    """
+    created_at = utcnow()
+    naive_bound = datetime(2020, 1, 1)  # 클라이언트가 offset 없이 보낸 값
+
+    with pytest.raises(TypeError):
+        _ = created_at < naive_bound  # 정규화 없이는 이렇게 죽는다
+
+    assert created_at > to_aware_utc(naive_bound)
 
 
 # --------------------------------------------------------------------------

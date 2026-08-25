@@ -30,7 +30,7 @@ from models.feedback import (
     TaskEvaluationStats,
     TaskEvaluationSubmit,
 )
-from utils.time import utcnow
+from utils.time import to_aware_utc, utcnow
 
 # Environment variable to control storage mode
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
@@ -590,9 +590,11 @@ class FeedbackService:
                 continue
             if params.agent_id and data["agent_id"] != params.agent_id:
                 continue
-            if params.start_date and data["created_at"] < params.start_date:
+            # API 로 들어온 날짜 필터는 offset 이 없으면 naive 다. 비교 상대는 `utcnow()` 로
+            # 만들어진 aware 값이라 그대로 재면 TypeError 다 (#309).
+            if params.start_date and data["created_at"] < to_aware_utc(params.start_date):
                 continue
-            if params.end_date and data["created_at"] > params.end_date:
+            if params.end_date and data["created_at"] > to_aware_utc(params.end_date):
                 continue
 
             results.append(self._to_feedback_entry(data))
@@ -619,9 +621,11 @@ class FeedbackService:
 
         for data in self._feedbacks.values():
             # 날짜 필터
-            if start_date and data["created_at"] < start_date:
+            # API 로 들어온 날짜 필터는 offset 이 없으면 naive 다. 비교 상대는 `utcnow()` 로
+            # 만들어진 aware 값이라 그대로 재면 TypeError 다 (#309).
+            if start_date and data["created_at"] < to_aware_utc(start_date):
                 continue
-            if end_date and data["created_at"] > end_date:
+            if end_date and data["created_at"] > to_aware_utc(end_date):
                 continue
 
             total += 1
@@ -786,9 +790,9 @@ class FeedbackService:
                 if options.agent_filter and metadata.get("agent_id") not in options.agent_filter:
                     continue
 
-                if options.start_date and data["created_at"] < options.start_date:
+                if options.start_date and data["created_at"] < to_aware_utc(options.start_date):
                     continue
-                if options.end_date and data["created_at"] > options.end_date:
+                if options.end_date and data["created_at"] > to_aware_utc(options.end_date):
                     continue
 
                 entries.append(

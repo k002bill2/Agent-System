@@ -16,7 +16,7 @@ from models.cost import (
     CostReport,
     SessionTokenUsage,
 )
-from utils.time import utcnow
+from utils.time import to_aware_utc, utcnow
 
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 
@@ -196,11 +196,13 @@ class CostAllocationService:
         if user_id:
             results = [a for a in results if a.user_id == user_id]
 
+        # API 로 들어온 날짜 필터는 offset 이 없으면 naive 다. 비교 상대는 `utcnow()` 로
+        # 만들어진 aware 값이라 그대로 재면 TypeError 다 (#309).
         if start_date:
-            results = [a for a in results if a.created_at >= start_date]
+            results = [a for a in results if a.created_at >= to_aware_utc(start_date)]
 
         if end_date:
-            results = [a for a in results if a.created_at <= end_date]
+            results = [a for a in results if a.created_at <= to_aware_utc(end_date)]
 
         return results
 
@@ -490,7 +492,7 @@ class CostAllocationService:
             results = [a for a in results if a.alert_type == alert_type]
 
         if since:
-            results = [a for a in results if a.created_at >= since]
+            results = [a for a in results if a.created_at >= to_aware_utc(since)]
 
         return sorted(results, key=lambda x: x.created_at, reverse=True)
 
