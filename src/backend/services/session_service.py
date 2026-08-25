@@ -50,6 +50,11 @@ SESSION_TTL_DAYS = int(os.getenv("SESSION_TTL_DAYS", "7"))
 # Inactive session cleanup threshold (in hours)
 SESSION_INACTIVE_HOURS = int(os.getenv("SESSION_INACTIVE_HOURS", "24"))
 
+# 한 번의 sweep 이 훑을 세션 수 상한. 전 행을 무제한으로 끌어오면 세션이 많은
+# 배포에서 sweep 하나가 메모리·왕복을 독차지한다. 남은 것은 다음 sweep 이 집는다
+# (`updated_at` 오름차순이라 오래된 것부터).
+SESSION_SWEEP_LIMIT = int(os.getenv("SESSION_SWEEP_LIMIT", "500"))
+
 
 class SessionMetadata:
     """Metadata for session management."""
@@ -460,37 +465,81 @@ class SessionService:
             "ttl_remaining_hours": max(0, (metadata.expires_at - now).total_seconds() / 3600),
         }
 
-    async def cleanup_expired_sessions(self) -> int:
-        """Clean up expired and inactive sessions.
+    async def cleanup_expired_sessions(self, limit: int = SESSION_SWEEP_LIMIT) -> int:
+        """만료·비활성 세션을 정리한다. 정리한 건수를 돌려준다.
 
-        Returns:
-            Number of sessions cleaned up
+        DB 모드는 **저장소를 훑는다** (issue #291). 로컬 `_session_metadata` 키만
+        돌던 예전 구조에는 결함이 두 겹 있었다:
+
+        - **낡은 판정** — 다른 인스턴스가 연장한 세션을 이 프로세스의 낡은 사본만
+          보고 지운다. `expires_at` 은 리스라 저장소가 이긴다 (#289 에서 정한 규칙).
+        - **누락** — 이 프로세스가 만진 적 없는 세션은 애초에 대상이 아니다.
+          다중 인스턴스에서는 **어느 인스턴스도 정리하지 않는 세션**이 생긴다.
+
+        메모리 모드는 단일 프로세스라 둘 다 성립하지 않으므로 기존 경로를 그대로 둔다.
+        """
+        if self.use_database:
+            return await self._sweep_storage(limit)
+        return self._sweep_memory()
+
+    async def _sweep_storage(self, limit: int) -> int:
+        """저장소를 훑어 만료·비활성 세션을 조건부로 지운다 (DB 모드).
+
+        판정은 Python 이 한다 — 손상된 `_metadata` 하나가 SQL 캐스팅에서 문장 전체를
+        실패시키면 정리가 영영 멈추기 때문이다. 삭제는 판정 시점의 행 버전을 조건으로
+        걸어, 그 사이 들어온 `refresh_session` 의 연장을 지우지 않는다.
         """
         cleaned = 0
+        async with async_session_factory() as db:
+            repo = SessionRepository(db)
+            candidates = await repo.list_metadata_for_sweep(limit)
+            for session_id, raw_metadata, version in candidates:
+                if not self._is_sweepable(session_id, raw_metadata):
+                    continue
+                if await repo.delete_if_version(session_id, version):
+                    cleaned += 1
+                    # 이 인스턴스가 캐시에 들고 있었다면 함께 버린다. 없으면 no-op —
+                    # 저장소를 훑으므로 만진 적 없는 세션도 대상이 된다.
+                    self._session_metadata.pop(session_id, None)
+            await db.commit()
+        return cleaned
 
-        # Get all session IDs to check
-        session_ids = list(self._session_metadata.keys())
+    def _is_sweepable(self, session_id: str, raw_metadata: Any) -> bool:
+        """저장소의 `_metadata` 로 정리 대상인지 판정한다.
 
-        for session_id in session_ids:
+        판정할 수 없으면 **지우지 않는다** — 메타데이터가 없거나 손상된 세션을
+        지우는 것은 되돌릴 수 없고, 남겨 두는 쪽의 대가는 그 세션이 남는 것뿐이다.
+        """
+        if not isinstance(raw_metadata, dict):
+            return False
+        try:
+            metadata = SessionMetadata.from_dict(raw_metadata)
+        except (KeyError, TypeError, ValueError):
+            logger.warning(
+                "Malformed session metadata, skipping sweep",
+                extra={"session_id": session_id},
+            )
+            return False
+        return metadata.is_expired() or metadata.is_inactive()
+
+    def _sweep_memory(self) -> int:
+        """메모리 모드 sweep — 단일 프로세스라 로컬 사본이 곧 저장소다."""
+        cleaned = 0
+        for session_id in list(self._session_metadata.keys()):
             metadata = self._session_metadata.get(session_id)
             if metadata and (metadata.is_expired() or metadata.is_inactive()):
-                await self.delete_session(session_id)
+                self._session_metadata.pop(session_id, None)
+                self._memory_sessions.pop(session_id, None)
                 cleaned += 1
 
-        # Also check memory sessions without metadata (legacy)
-        if not self.use_database:
-            for session_id in list(self._memory_sessions.keys()):
-                if session_id not in self._session_metadata:
-                    # Old session without metadata, check if it has embedded metadata
-                    state = self._memory_sessions.get(session_id)
-                    if state and state.get("_metadata"):
-                        try:
-                            metadata = SessionMetadata.from_dict(state["_metadata"])
-                            if metadata.is_expired() or metadata.is_inactive():
-                                await self.delete_session(session_id)
-                                cleaned += 1
-                        except Exception:
-                            pass  # Invalid metadata, skip
+        # metadata 항목 없이 state 에만 `_metadata` 가 있는 예전 세션도 본다.
+        for session_id in list(self._memory_sessions.keys()):
+            if session_id in self._session_metadata:
+                continue
+            state = self._memory_sessions.get(session_id)
+            if state and self._is_sweepable(session_id, state.get("_metadata")):
+                self._memory_sessions.pop(session_id, None)
+                cleaned += 1
 
         return cleaned
 

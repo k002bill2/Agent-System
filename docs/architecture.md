@@ -70,6 +70,9 @@ TTL·삭제·영속화는 전부 서비스가 소유하므로, 캐시가 서비�
 | TTL(`expires_at`)은 저장소가 이긴다 | `SessionService.get_session` 이 매 읽기마다 `state["_metadata"]` 로 재수화 | 다른 인스턴스가 연장한 TTL 을 못 보고 살아 있는 세션을 삭제 |
 | 활동 기록(`last_activity`)은 늦은 쪽이 이긴다 | 같은 지점의 high-water mark | DB 모드에서 아직 flush 되지 않은 활동이 지워져 방금 읽힌 세션이 비활성으로 분류됨 |
 | 연장 실패는 되돌린다 | `SessionService.refresh_session` (False 반환·예외 양쪽) | 메모리만 연장된 상태로 저장소와 갈라져 재시작·타 인스턴스에서 연장이 사라짐 |
+| 만료 sweep 은 **저장소를 훑는다** | `SessionService._sweep_storage` → `repo.list_metadata_for_sweep` | 로컬 캐시 키만 돌면 이 프로세스가 만진 적 없는 세션은 **어느 인스턴스도 정리하지 않음** |
+| sweep 의 삭제는 판정 시점의 행 버전을 조건으로 건다 | `repo.delete_if_version` | 판정과 삭제 사이에 들어온 `refresh_session` 의 연장이 지워짐 |
+| sweep 판정은 Python 이 한다 | `SessionService._is_sweepable` | 손상된 `_metadata` 하나가 SQL 캐스팅에서 문장 전체를 실패시켜 정리가 영영 멈춤 |
 
 `_session_metadata` 는 프로세스 로컬 캐시이고, `get_session` 은 읽을 때마다 저장소의
 `_metadata` 로 재수화한다 — state 를 이미 로드한 뒤라 추가 I/O 가 없다.
@@ -84,8 +87,13 @@ high-water mark** 다 — 활동은 누구의 관측이든 실제로 일어난 �
 서비스 경로로 떨어짐" 뿐이고, 거기서 재수화가 올바른 답을 낸다. 비용은 저장소 읽기
 한 번이지 데이터 손실이 아니다.
 
-남는 것은 두 인스턴스가 **동시에** 갱신·삭제를 시도하는 진짜 크로스 프로세스
-원자성이다. 그 답은 HITL 승인과 같다 — 저장소를 진실의 출처로 쓰는 조건부 `UPDATE`.
+두 인스턴스가 **동시에** 갱신·삭제를 시도하는 크로스 프로세스 경합은 조건부 문장으로
+닫았다 (issue #291) — 만료 sweep 은 저장소를 훑어 판정하고, 삭제는 판정 시점의 행
+버전을 조건으로 건다(`delete_if_version`). 연장이 먼저 반영됐으면 0 행이 지워지고
+그 세션은 살아남는다. 메모리 모드는 단일 프로세스라 기존 경로를 그대로 쓴다.
+
+**`cleanup_expired_sessions` 에는 아직 프로덕션 호출부가 없다.** 스케줄러에 연결할지는
+별도 결정이며, 그때까지 이 경로는 잠재적 정확성만 확보한 상태다.
 
 ## 세션 state 동시 쓰기
 

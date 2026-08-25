@@ -268,6 +268,48 @@ class SessionRepository:
         result = await self.db.execute(delete(SessionModel).where(SessionModel.id == session_id))
         return result.rowcount > 0
 
+    async def list_metadata_for_sweep(self, limit: int) -> list[tuple[str, Any, int]]:
+        """만료 sweep 판정에 필요한 것만 읽는다 — `(id, _metadata, version)`.
+
+        state 전체가 아니라 `_metadata` 서브객체만 꺼낸다. sweep 은 전체 세션을
+        도는 작업이라 세션마다 state 를 통째로 로드하면 비용 특성이 맞지 않는다
+        (issue #291 이 지적한 지점).
+
+        판정을 SQL 로 내리지 않는 이유: `expires_at` 은 `_metadata` 안의 ISO 문자열
+        이고, 손상된 값 하나가 `::timestamptz` 캐스팅에서 문장 전체를 실패시켜
+        **정리가 영영 멈춘다**. 이 코드베이스에서 손상된 메타데이터는 가정이 아니라
+        `get_session` 이 이미 다루는 실제 경우다. 그래서 판정은 Python 이 하고
+        저장소는 목록과 **조건부 삭제**만 맡는다.
+
+        `version` 을 함께 돌려주는 것이 계약의 핵심이다 — 판정과 삭제 사이에 다른
+        인스턴스가 연장할 수 있으므로, 삭제는 이 버전을 조건으로 걸어야 한다.
+        """
+        result = await self.db.execute(
+            select(
+                SessionModel.id,
+                SessionModel.state_json["_metadata"],
+                SessionModel.version,
+            )
+            .order_by(SessionModel.updated_at)
+            .limit(limit)
+        )
+        return [(str(row[0]), row[1], int(row[2])) for row in result.all()]
+
+    async def delete_if_version(self, session_id: str, expected_version: int) -> bool:
+        """행 버전이 그대로일 때만 삭제한다. 실제로 지웠을 때만 True.
+
+        무조건 `delete()` 를 쓰면 판정 이후에 들어온 `refresh_session` 의 연장을
+        지운다 — sweep 의 "훑어서 판정 → 삭제" 사이가 TOCTOU 창이기 때문이다.
+        조건을 문장 안에 넣어 DB 가 판정하게 한다 (issue #291, 처방은 #292 와 같다).
+        """
+        result = await self.db.execute(
+            delete(SessionModel).where(
+                SessionModel.id == session_id,
+                SessionModel.version == expected_version,
+            )
+        )
+        return result.rowcount > 0
+
     async def list_by_user(
         self,
         user_id: str,
