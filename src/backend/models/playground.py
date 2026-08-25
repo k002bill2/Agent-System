@@ -47,7 +47,6 @@ class PlaygroundMessage(BaseModel):
     _ensure_aware = field_validator("*")(normalize_aware_utc)
 
 
-
 class PlaygroundExecution(BaseModel):
     """A single execution in the playground."""
 
@@ -83,7 +82,6 @@ class PlaygroundExecution(BaseModel):
     # 문자열이 naive 로 파싱되면, aware 인 새 값과 섞여 `list_sessions()` 의
     # 정렬이 TypeError 로 죽는다 (#309).
     _ensure_aware = field_validator("*")(normalize_aware_utc)
-
 
 
 class PlaygroundSession(BaseModel):
@@ -153,7 +151,6 @@ class PlaygroundSession(BaseModel):
     # 문자열이 naive 로 파싱되면, aware 인 새 값과 섞여 `list_sessions()` 의
     # 정렬이 TypeError 로 죽는다 (#309).
     _ensure_aware = field_validator("*")(normalize_aware_utc)
-
 
 
 class PlaygroundSessionCreate(BaseModel):

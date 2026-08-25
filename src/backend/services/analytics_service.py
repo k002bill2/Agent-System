@@ -500,7 +500,6 @@ class AnalyticsService:
             now = utcnow()
             start = now - delta
 
-
             sessions = [s for s in sessions if to_aware_utc(s.created_at) >= start]
 
         total = len(sessions)
@@ -612,7 +611,6 @@ class AnalyticsService:
         delta = _get_time_delta(time_range)
         start = utcnow() - delta
 
-
         range_sessions = [s for s in sessions if to_aware_utc(s.created_at) >= start]
 
         # Group by model
@@ -666,7 +664,6 @@ class AnalyticsService:
         sessions = AnalyticsService._get_sessions(project_path)
         delta = _get_time_delta(time_range)
         start = utcnow() - delta
-
 
         range_sessions = [s for s in sessions if to_aware_utc(s.created_at) >= start]
 
@@ -750,7 +747,6 @@ class AnalyticsService:
         sessions = AnalyticsService._get_sessions(project_path)
         delta = _get_time_delta(time_range)
         start = utcnow() - delta
-
 
         # last_activity 기준 윈도우: 시작은 윈도우 밖이지만 여전히 활성인 세션도 포함.
         range_sessions = [s for s in sessions if to_aware_utc(s.last_activity) >= start]
