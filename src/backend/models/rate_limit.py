@@ -3,9 +3,9 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from utils.time import utcnow
+from utils.time import normalize_aware_utc, utcnow
 
 
 class RateLimitTier(str, Enum):
@@ -119,3 +119,7 @@ class RateLimitOverride(BaseModel):
     reason: str | None = None
     created_by: str | None = None
     created_at: datetime = Field(default_factory=utcnow)
+
+    # `expires_at` 은 API 쿼리 파라미터로 들어온다. 호출자가 offset 없는 ISO 를 주면
+    # FastAPI 가 naive 로 파싱하고, aware 인 `utcnow()` 와 비교돼 TypeError 가 난다.
+    _ensure_aware = field_validator("*")(normalize_aware_utc)

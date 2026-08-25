@@ -27,6 +27,9 @@ from sqlalchemy.pool import NullPool
 from db.models.base import Base
 from db.models.session import SessionModel
 from db.repository import SessionRepository
+from models.config_version import ConfigVersion
+from models.organization import MemberUsageRecord, OrganizationInvitation
+from models.rate_limit import RateLimitOverride
 from services.session_service import SessionMetadata
 from utils.time import to_utc_iso, utcnow
 
@@ -111,6 +114,44 @@ def test_to_utc_iso_always_emits_utc_offset():
     assert emitted is not None and emitted.endswith("+00:00"), emitted
     assert datetime.fromisoformat(emitted) == kst  # 같은 순간이어야 한다
     assert to_utc_iso(None) is None
+
+
+def test_legacy_json_records_normalize_to_aware():
+    """JSON 으로 영속화됐다 다시 읽히는 모델은 구버전 문자열을 흡수해야 한다.
+
+    `utcnow()` 가 naive 이던 시절에 쓰인 파일은 offset 없는 문자열을 담고 있다.
+    Pydantic 이 그것을 naive 로 파싱하면 aware 인 `utcnow()` 와 비교되는 순간
+    TypeError 가 나고, 기존 데이터가 있는 배포에서 통계·초대 수락이 죽는다.
+    """
+    legacy = "2026-01-01T00:00:00"  # offset suffix 없음
+
+    invitation = OrganizationInvitation(
+        id="i", organization_id="o", email="a@b.co", invited_by="u",
+        expires_at="2099-01-01T00:00:00", created_at=legacy,
+    )
+    assert invitation.expires_at.tzinfo is not None
+    assert invitation.expires_at > utcnow()  # 비교가 TypeError 없이 성립한다
+
+    usage = MemberUsageRecord(organization_id="o", user_id="u", timestamp=legacy)
+    assert usage.timestamp.tzinfo is not None
+    assert usage.timestamp < utcnow()
+
+
+def test_rate_limit_override_normalizes_naive_api_input():
+    """`expires_at` 은 API 쿼리 파라미터라 offset 없는 값이 들어올 수 있다."""
+    override = RateLimitOverride(identifier="u", expires_at="2099-01-01T00:00:00")
+
+    assert override.expires_at is not None and override.expires_at.tzinfo is not None
+    assert override.expires_at > utcnow()
+
+
+def test_config_version_stays_naive():
+    """`config_versions` 는 naive 컬럼이다 — 그 모델만 aware 규칙에서 빠진다.
+
+    aware 를 기본값으로 두면 DB 에서 읽어온 naive 행과 섞여 정렬이 죽는다.
+    """
+    version = ConfigVersion(id="v1", config_type="agent", config_id="a", version=1)
+    assert version.created_at.tzinfo is None
 
 
 # --------------------------------------------------------------------------

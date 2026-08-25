@@ -76,6 +76,17 @@ def to_naive_utc(dt: datetime) -> datetime:
     return dt
 
 
+def normalize_aware_utc(value: object) -> object:
+    """Pydantic 밸리데이터용 — datetime 이면 aware UTC 로, 나머지는 그대로.
+
+    JSON 으로 영속화된 뒤 다시 읽히는 모델을 위한 것이다. `utcnow()` 가 naive 이던
+    시절에 쓰인 파일은 offset 없는 문자열을 담고 있어 Pydantic 이 naive 로 파싱하는데,
+    그 값을 aware 인 `utcnow()` 와 비교하면 TypeError 가 난다. 기존 배포의 데이터가
+    그대로 남아 있으므로 읽는 쪽에서 흡수해야 한다.
+    """
+    return to_aware_utc(value) if isinstance(value, datetime) else value
+
+
 _DEFAULT_DISPLAY_TZ = "Asia/Seoul"
 
 
