@@ -5,9 +5,9 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from utils.time import utcnow
+from utils.time import normalize_aware_utc, utcnow
 
 
 class OrganizationPlan(str, Enum):
@@ -67,6 +67,10 @@ class Organization(BaseModel):
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
 
+    # JSON 으로 저장됐다 다시 읽히는 모델이다. 구버전이 남긴 offset 없는 문자열이
+    # naive 로 파싱돼 aware 인 `utcnow()` 와 비교되면 TypeError 가 난다 (#309).
+    _ensure_aware = field_validator("*")(normalize_aware_utc)
+
 
 class OrganizationCreate(BaseModel):
     """Request to create a new organization."""
@@ -111,6 +115,10 @@ class OrganizationMember(BaseModel):
     # Metadata
     created_at: datetime = Field(default_factory=utcnow)
 
+    # JSON 으로 저장됐다 다시 읽히는 모델이다. 구버전이 남긴 offset 없는 문자열이
+    # naive 로 파싱돼 aware 인 `utcnow()` 와 비교되면 TypeError 가 난다 (#309).
+    _ensure_aware = field_validator("*")(normalize_aware_utc)
+
 
 class InviteMemberRequest(BaseModel):
     """Request to invite a member to an organization."""
@@ -135,6 +143,10 @@ class OrganizationInvitation(BaseModel):
     accepted: bool = False
     accepted_at: datetime | None = None
     created_at: datetime = Field(default_factory=utcnow)
+
+    # JSON 으로 저장됐다 다시 읽히는 모델이다. 구버전이 남긴 offset 없는 문자열이
+    # naive 로 파싱돼 aware 인 `utcnow()` 와 비교되면 TypeError 가 난다 (#309).
+    _ensure_aware = field_validator("*")(normalize_aware_utc)
 
 
 class OrganizationStats(BaseModel):
@@ -174,6 +186,10 @@ class MemberUsageRecord(BaseModel):
     session_id: str | None = None
     model: str | None = None  # LLM model used
     timestamp: datetime = Field(default_factory=utcnow)
+
+    # JSON 으로 저장됐다 다시 읽히는 모델이다. 구버전이 남긴 offset 없는 문자열이
+    # naive 로 파싱돼 aware 인 `utcnow()` 와 비교되면 TypeError 가 난다 (#309).
+    _ensure_aware = field_validator("*")(normalize_aware_utc)
 
 
 class MemberUsageSummary(BaseModel):

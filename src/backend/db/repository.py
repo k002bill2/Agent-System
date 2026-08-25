@@ -302,9 +302,11 @@ class SessionRepository:
 
         시각 컬럼은 커서로 쓰지 않는다. `created_at` 은 nullable 이라 NULL 이 커서에
         들어가면 행 값 비교가 unknown 이 되어 이후 페이지가 통째로 비고 sweep 이
-        조용히 멈춘다. `updated_at` 은 거기에 더해 시계가 둘이다 — `update_state` 가
-        `utcnow()`(naive)로 덮으므로 컬럼 기본값(aware)과 섞여, UTC 가 아닌 타임존에서
-        도는 프로세스에서는 값이 오프셋만큼 어긋난다 (issue #309).
+        조용히 멈춘다. `updated_at` 은 nullable 은 아니지만 갱신마다 움직여
+        불변 조건을 깨므로 역시 커서가 될 수 없다.
+
+        (`updated_at` 이 컬럼 기본값과 다른 시계를 쓰던 문제는 #309 에서 `utcnow()`
+        를 aware 로 바꿔 해소했다. 커서를 기본키로 두는 이유는 그와 무관하게 유지된다.)
 
         `version` 을 함께 돌려주는 것이 계약의 핵심이다 — 판정과 삭제 사이에 다른
         인스턴스가 연장할 수 있으므로, 삭제는 이 버전을 조건으로 걸어야 한다.

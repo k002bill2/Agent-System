@@ -6,10 +6,10 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from models.llm_models import LLMModelRegistry
-from utils.time import utcnow
+from utils.time import normalize_aware_utc, utcnow
 
 
 # Get default model from central registry
@@ -40,6 +40,11 @@ class PlaygroundMessage(BaseModel):
     tokens: int = 0
     latency_ms: int = 0
     rag_sources: list[dict] | None = None
+
+    # 세션은 JSON 파일로 영속화됐다 다시 읽힌다. 구버전이 남긴 offset 없는
+    # 문자열이 naive 로 파싱되면, aware 인 새 값과 섞여 `list_sessions()` 의
+    # 정렬이 TypeError 로 죽는다 (#309).
+    _ensure_aware = field_validator("*")(normalize_aware_utc)
 
 
 class PlaygroundExecution(BaseModel):
@@ -72,6 +77,11 @@ class PlaygroundExecution(BaseModel):
     created_at: datetime = Field(default_factory=utcnow)
     started_at: datetime | None = None
     completed_at: datetime | None = None
+
+    # 세션은 JSON 파일로 영속화됐다 다시 읽힌다. 구버전이 남긴 offset 없는
+    # 문자열이 naive 로 파싱되면, aware 인 새 값과 섞여 `list_sessions()` 의
+    # 정렬이 TypeError 로 죽는다 (#309).
+    _ensure_aware = field_validator("*")(normalize_aware_utc)
 
 
 class PlaygroundSession(BaseModel):
@@ -136,6 +146,11 @@ class PlaygroundSession(BaseModel):
     # Timestamps
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
+
+    # 세션은 JSON 파일로 영속화됐다 다시 읽힌다. 구버전이 남긴 offset 없는
+    # 문자열이 naive 로 파싱되면, aware 인 새 값과 섞여 `list_sessions()` 의
+    # 정렬이 TypeError 로 죽는다 (#309).
+    _ensure_aware = field_validator("*")(normalize_aware_utc)
 
 
 class PlaygroundSessionCreate(BaseModel):

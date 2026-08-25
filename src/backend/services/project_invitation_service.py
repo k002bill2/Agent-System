@@ -8,7 +8,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import ProjectAccessModel, ProjectInvitationModel
-from utils.time import utcnow
+from utils.time import to_aware_utc, utcnow
 
 INVITATION_EXPIRE_DAYS = 7
 
@@ -81,7 +81,10 @@ class ProjectInvitationService:
             raise ValueError("유효하지 않은 초대 토큰입니다")
         if inv.status != "pending":
             raise ValueError(f"이미 처리된 초대입니다: {inv.status}")
-        if inv.expires_at < utcnow():
+        # `to_aware_utc` 를 거친다. 이 컬럼은 모델상 timestamptz 지만
+        # 마이그레이션(`f3a8b2c1d4e5`)은 naive 로 만든다 — 스키마가 어느 쪽으로
+        # 만들어졌든 비교가 성립해야 한다 (드리프트 자체는 #310).
+        if to_aware_utc(inv.expires_at) < utcnow():
             inv.status = "expired"
             await db.flush()
             raise ValueError("만료된 초대입니다")

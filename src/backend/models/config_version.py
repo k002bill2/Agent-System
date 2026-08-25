@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from utils.time import utcnow
+from utils.time import utcnow_naive
 
 
 class ConfigType(str, Enum):
@@ -48,7 +48,9 @@ class ConfigVersion(BaseModel):
     diff_from_previous: dict[str, Any] | None = None  # JSON diff
     # Metadata
     created_by: str | None = None
-    created_at: datetime = Field(default_factory=utcnow)
+    # `config_versions.created_at` 는 naive 컬럼이다. aware 를 기본값으로 두면
+    # DB 에서 읽어온 naive 행과 섞여 정렬이 TypeError 로 죽는다.
+    created_at: datetime = Field(default_factory=utcnow_naive)
     # Rollback tracking
     rolled_back_from: str | None = None  # Version ID this was rolled back from
     rolled_back_at: datetime | None = None
