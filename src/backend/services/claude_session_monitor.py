@@ -57,7 +57,7 @@ from models.claude_session import (
     TokenUsage,
     calculate_cost,
 )
-from utils.time import utcnow
+from utils.time import to_aware_utc, utcnow
 
 
 @dataclass
@@ -317,15 +317,9 @@ class ClaudeSessionMonitor:
                         print(f"Error parsing {jsonl_file}: {e}")
                         continue
 
-        # Sort by last activity (most recent first)
-        # Normalize datetimes for comparison (strip timezone info for sorting)
-        def get_sort_key(s):
-            ts = s.last_activity
-            if ts.tzinfo is not None:
-                return ts.replace(tzinfo=None)
-            return ts
-
-        sessions.sort(key=get_sort_key, reverse=True)
+        # Sort by last activity (most recent first).
+        # aware/naive 가 섞인 리스트는 정렬 자체가 TypeError 다. 전부 aware 로 맞춘다.
+        sessions.sort(key=lambda s: to_aware_utc(s.last_activity), reverse=True)
         return sessions
 
     def get_unique_source_users(self) -> list[str]:
@@ -458,12 +452,11 @@ class ClaudeSessionMonitor:
         if last_activity is None:
             last_activity = created_at
 
-        # Determine status based on last activity and message type
-        # Normalize to naive UTC for comparison (utcnow() returns naive UTC)
-        last_activity_naive = (
-            last_activity.replace(tzinfo=None) if last_activity.tzinfo else last_activity
-        )
-        time_since_activity = utcnow() - last_activity_naive
+        # Determine status based on last activity and message type.
+        # `utcnow()` 는 aware 이므로 상대도 aware 로 맞춘다. 이전 코드는 tzinfo 를
+        # 그냥 떼어냈는데, 그러면 UTC 가 아닌 값이 UTC 인 척하게 되어 오프셋만큼
+        # 어긋난 경과 시간이 나온다.
+        time_since_activity = utcnow() - to_aware_utc(last_activity)
         if time_since_activity < timedelta(minutes=5):
             status = SessionStatus.ACTIVE
         elif time_since_activity < timedelta(hours=1):
@@ -1210,9 +1203,7 @@ class ClaudeSessionMonitor:
 
                 # Filter by since timestamp
                 if since is not None:
-                    since_naive = since.replace(tzinfo=None) if since.tzinfo else since
-                    ts_naive = timestamp.replace(tzinfo=None) if timestamp.tzinfo else timestamp
-                    if ts_naive <= since_naive:
+                    if to_aware_utc(timestamp) <= to_aware_utc(since):
                         continue
 
                 msg_type = entry.get("type", "")

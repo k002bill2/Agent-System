@@ -4,7 +4,7 @@ import logging
 import os
 import random
 from collections import defaultdict
-from datetime import UTC, timedelta
+from datetime import timedelta
 
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,7 +29,7 @@ from models.analytics import (
     TrendDataPoint,
 )
 from models.project import get_project
-from utils.time import to_display_tz, utcnow
+from utils.time import to_aware_utc, to_display_tz, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -500,13 +500,8 @@ class AnalyticsService:
             now = utcnow()
             start = now - delta
 
-            def _normalize_dt(dt):
-                """Convert to naive UTC for consistent comparison."""
-                if dt.tzinfo is not None:
-                    return dt.astimezone(UTC).replace(tzinfo=None)
-                return dt
 
-            sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
+            sessions = [s for s in sessions if to_aware_utc(s.created_at) >= start]
 
         total = len(sessions)
         active = sum(1 for s in sessions if s.status.value == "active")
@@ -518,10 +513,8 @@ class AnalyticsService:
         # Avg session duration in ms
         durations = []
         for s in sessions:
-            created = s.created_at.replace(tzinfo=None) if s.created_at.tzinfo else s.created_at
-            last = (
-                s.last_activity.replace(tzinfo=None) if s.last_activity.tzinfo else s.last_activity
-            )
+            created = to_aware_utc(s.created_at)
+            last = to_aware_utc(s.last_activity)
             dur = (last - created).total_seconds() * 1000
             if dur > 0:
                 durations.append(dur)
@@ -558,13 +551,8 @@ class AnalyticsService:
         start = now - delta
 
         # Filter sessions in time range
-        def _normalize_dt(dt):
-            """Convert to naive UTC for consistent comparison."""
-            if dt.tzinfo is not None:
-                return dt.astimezone(UTC).replace(tzinfo=None)
-            return dt
 
-        range_sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
+        range_sessions = [s for s in sessions if to_aware_utc(s.created_at) >= start]
 
         tasks_data = []
         costs_data = []
@@ -576,7 +564,7 @@ class AnalyticsService:
             bucket_end = current + interval
 
             bucket = [
-                s for s in range_sessions if current <= _normalize_dt(s.created_at) < bucket_end
+                s for s in range_sessions if current <= to_aware_utc(s.created_at) < bucket_end
             ]
 
             bucket_completed = sum(1 for s in bucket if s.status.value == "completed")
@@ -624,13 +612,8 @@ class AnalyticsService:
         delta = _get_time_delta(time_range)
         start = utcnow() - delta
 
-        def _normalize_dt(dt):
-            """Convert to naive UTC for consistent comparison."""
-            if dt.tzinfo is not None:
-                return dt.astimezone(UTC).replace(tzinfo=None)
-            return dt
 
-        range_sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
+        range_sessions = [s for s in sessions if to_aware_utc(s.created_at) >= start]
 
         # Group by model
         by_model: dict[str, list] = defaultdict(list)
@@ -648,8 +631,8 @@ class AnalyticsService:
 
             durations = []
             for s in model_sessions:
-                created = _normalize_dt(s.created_at)
-                last = _normalize_dt(s.last_activity)
+                created = to_aware_utc(s.created_at)
+                last = to_aware_utc(s.last_activity)
                 dur = (last - created).total_seconds() * 1000
                 if dur > 0:
                     durations.append(dur)
@@ -684,13 +667,8 @@ class AnalyticsService:
         delta = _get_time_delta(time_range)
         start = utcnow() - delta
 
-        def _normalize_dt(dt):
-            """Convert to naive UTC for consistent comparison."""
-            if dt.tzinfo is not None:
-                return dt.astimezone(UTC).replace(tzinfo=None)
-            return dt
 
-        range_sessions = [s for s in sessions if _normalize_dt(s.created_at) >= start]
+        range_sessions = [s for s in sessions if to_aware_utc(s.created_at) >= start]
 
         total_cost = sum(s.estimated_cost for s in range_sessions)
         total_tokens = sum(s.total_input_tokens + s.total_output_tokens for s in range_sessions)
@@ -773,14 +751,9 @@ class AnalyticsService:
         delta = _get_time_delta(time_range)
         start = utcnow() - delta
 
-        def _normalize_dt(dt):
-            """Convert to naive UTC for consistent comparison."""
-            if dt.tzinfo is not None:
-                return dt.astimezone(UTC).replace(tzinfo=None)
-            return dt
 
         # last_activity 기준 윈도우: 시작은 윈도우 밖이지만 여전히 활성인 세션도 포함.
-        range_sessions = [s for s in sessions if _normalize_dt(s.last_activity) >= start]
+        range_sessions = [s for s in sessions if to_aware_utc(s.last_activity) >= start]
 
         heatmap: dict[tuple[int, int], int] = {}
         for day in range(7):

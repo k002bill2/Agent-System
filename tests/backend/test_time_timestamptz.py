@@ -1,0 +1,195 @@
+"""#309 회귀: naive datetime 을 timestamptz 컬럼에 쓰면 프로세스 TZ 만큼 어긋난다.
+
+`utcnow()` 는 naive UTC 를 돌려주면서 docstring 이 "All DB columns use TIMESTAMP
+WITHOUT TIME ZONE" 이라고 적고 있었다. 실측은 그 반대다 — `DateTime(timezone=True)`
+컬럼이 96 개, naive 컬럼은 `config_versions` 의 2 개뿐이다.
+
+asyncpg 는 naive datetime 을 timestamptz 에 넣을 때 **프로세스 로컬 타임존**으로
+해석한다. 변환은 클라이언트에서 일어나므로 서버의 `TimeZone` 설정으로는 못 고친다.
+
+여기 테스트가 TZ 를 강제로 고정하는 것이 핵심이다. 주변 TZ 에 맡기면 UTC 로 도는
+CI 에서는 오프셋이 0 이라 **영원히 초록**이고, 회귀를 잡지 못한다 (#291 이 겪은
+"틀린 이유로 통과" 와 같은 함정).
+"""
+
+import os
+import time
+import uuid
+from datetime import UTC, datetime, timedelta
+
+import pytest
+import pytest_asyncio
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
+
+from db.models.base import Base
+from db.models.session import SessionModel
+from db.repository import SessionRepository
+from services.session_service import SessionMetadata
+from utils.time import utcnow
+
+TEST_DATABASE_URL = os.getenv("AOS_TEST_DATABASE_URL")
+
+# UTC 가 아닌 고정 오프셋. DST 가 없어 계산이 흔들리지 않는다.
+NON_UTC_TZ = "Asia/Seoul"
+OFFSET_SECONDS = 9 * 3600
+
+
+def _as_aware(dt: datetime) -> datetime:
+    """naive 는 백엔드 컨벤션대로 UTC 로 간주한다."""
+    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt
+
+
+# --------------------------------------------------------------------------
+# DB 없이 도는 계약 — 모든 환경에서 실행된다
+# --------------------------------------------------------------------------
+
+
+def test_utcnow_is_timezone_aware():
+    """`utcnow()` 는 aware 여야 한다 — 쓰기 대상의 절대다수가 timestamptz 다."""
+    now = utcnow()
+    assert now.tzinfo is not None, "utcnow() 가 naive 면 timestamptz 에서 TZ 만큼 어긋난다"
+    assert now.utcoffset() == timedelta(0)
+
+
+def test_session_metadata_reads_legacy_naive_strings():
+    """이미 저장된 세션의 `_metadata` 는 offset 없는 naive 문자열이다.
+
+    `utcnow()` 를 aware 로 바꾸면 그 문자열을 그대로 파싱한 naive 값과 비교하게 되어
+    `is_expired()` 가 TypeError 로 죽는다. 읽는 쪽이 정규화해야 기존 세션이 산다.
+    (`session_service.py` 의 except 절은 KeyError/ValueError 만 잡는다 — TypeError 는
+    그대로 올라온다.)
+    """
+    legacy = {
+        "session_id": "legacy-1",
+        # offset suffix 없음 = 구버전이 남긴 형식
+        "created_at": "2026-01-01T00:00:00",
+        "last_activity": "2026-01-01T00:00:00",
+        "expires_at": "2099-01-01T00:00:00",
+    }
+    metadata = SessionMetadata.from_dict(legacy)
+
+    assert metadata.is_expired() is False
+    assert metadata.is_inactive() is True
+    metadata.touch()
+    assert metadata.is_inactive() is False
+
+
+# --------------------------------------------------------------------------
+# 실제 timestamptz 왕복 — Postgres 가 있을 때만
+# --------------------------------------------------------------------------
+
+pg = pytest.mark.skipif(
+    not TEST_DATABASE_URL,
+    reason="AOS_TEST_DATABASE_URL 미설정 — timestamptz 왕복 테스트를 건너뛴다",
+)
+
+
+@pytest.fixture
+def forced_non_utc_tz():
+    """프로세스 TZ 를 UTC 가 아닌 값으로 고정한다.
+
+    asyncpg 의 naive->timestamptz 변환은 인코딩 시점의 프로세스 TZ 를 쓴다.
+    주변 환경에 맡기면 UTC 로 도는 CI 에서 이 테스트가 무의미해진다.
+    """
+    original = os.environ.get("TZ")
+    os.environ["TZ"] = NON_UTC_TZ
+    time.tzset()
+    assert time.timezone != 0, "TZ 고정 실패 — 이 테스트는 UTC 가 아닌 TZ 를 전제한다"
+    try:
+        yield
+    finally:
+        if original is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = original
+        time.tzset()
+
+
+@pytest_asyncio.fixture
+async def db_factory(forced_non_utc_tz):
+    """전용 스키마 하나만 만들고 그것만 제거한다.
+
+    `Base.metadata.drop_all()` 로 정리하면 변수가 실수로 개발 DB 를 가리켰을 때
+    애플리케이션 테이블을 전부 지운다 — 변수 이름은 관례이지 보증이 아니다.
+    """
+    schema = f"aos_tz_test_{uuid.uuid4().hex[:12]}"
+    admin = create_async_engine(TEST_DATABASE_URL, poolclass=NullPool)
+    async with admin.begin() as conn:
+        await conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+
+    engine = create_async_engine(
+        TEST_DATABASE_URL,
+        poolclass=NullPool,
+        connect_args={"server_settings": {"search_path": schema}},
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        yield factory
+    finally:
+        await engine.dispose()
+        async with admin.begin() as conn:
+            await conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+        await admin.dispose()
+
+
+@pg
+@pytest.mark.asyncio
+async def test_utcnow_roundtrips_through_timestamptz(db_factory):
+    """`utcnow()` 로 쓴 값이 읽을 때 같은 순간이어야 한다."""
+    session_id = f"tz-{uuid.uuid4().hex[:8]}"
+    written = utcnow()
+
+    async with db_factory() as db:
+        db.add(SessionModel(id=session_id, status="active", state_json={}, updated_at=written))
+        await db.commit()
+
+    async with db_factory() as db:
+        stored = (
+            await db.execute(select(SessionModel.updated_at).where(SessionModel.id == session_id))
+        ).scalar_one()
+
+    # 저장된 값은 aware 로 돌아온다. 같은 순간이면 차이가 0 이다.
+    skew = abs((stored - _as_aware(written)).total_seconds())
+    assert skew < 1, (
+        f"timestamptz 왕복에서 {skew}초 어긋났다 "
+        f"(프로세스 TZ 오프셋 {OFFSET_SECONDS}초와 비교하라)"
+    )
+
+
+@pg
+@pytest.mark.asyncio
+async def test_update_state_cannot_write_a_timestamp_older_than_creation(db_factory):
+    """갱신이 생성보다 과거일 수는 없다.
+
+    `created_at` 은 컬럼 기본값(aware)이, `updated_at` 은 `update_state` 의
+    `utcnow()` 가 쓴다. 시계가 둘로 갈리면 UTC 가 아닌 TZ 에서 갱신 시각이
+    생성 시각보다 오프셋만큼 **과거**가 되어 `ORDER BY updated_at` 이 뒤집힌다.
+    """
+    session_id = f"tz-{uuid.uuid4().hex[:8]}"
+
+    async with db_factory() as db:
+        db.add(SessionModel(id=session_id, status="active", state_json={}))
+        await db.commit()
+
+    async with db_factory() as db:
+        repo = SessionRepository(db)
+        await repo.update_state(session_id, {"touched": True})
+        await db.commit()
+
+    async with db_factory() as db:
+        row = (
+            await db.execute(
+                select(SessionModel.created_at, SessionModel.updated_at).where(
+                    SessionModel.id == session_id
+                )
+            )
+        ).one()
+
+    created_at, updated_at = row
+    assert updated_at >= created_at, (
+        f"갱신 시각이 생성 시각보다 과거다 (차이 {(created_at - updated_at).total_seconds()}초)"
+    )

@@ -22,7 +22,7 @@ from db.repository import (
 )
 from models.agent_state import AgentState, create_initial_state, migrate_state
 from models.project import Project
-from utils.time import utcnow
+from utils.time import to_aware_utc, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -95,12 +95,19 @@ class SessionMetadata:
 
     @classmethod
     def from_dict(cls, data: dict) -> "SessionMetadata":
-        """Create from dictionary."""
+        """Create from dictionary.
+
+        **파싱 결과를 aware 로 정규화한다.** offset 유무가 문자열에 좌우되기
+        때문이다 — `utcnow()` 가 naive 이던 시절에 저장된 세션의 `_metadata` 는
+        suffix 가 없어 `fromisoformat` 이 naive 를 돌려준다. 그것을 aware 인
+        `utcnow()` 와 비교하면 TypeError 가 나고, sweep 의 `except` 절이 그것을
+        "손상된 메타데이터" 로 삼켜 **만료 세션이 영영 지워지지 않는다** (#309).
+        """
         return cls(
             session_id=data["session_id"],
-            created_at=datetime.fromisoformat(data["created_at"]),
-            last_activity=datetime.fromisoformat(data["last_activity"]),
-            expires_at=datetime.fromisoformat(data["expires_at"]),
+            created_at=to_aware_utc(datetime.fromisoformat(data["created_at"])),
+            last_activity=to_aware_utc(datetime.fromisoformat(data["last_activity"])),
+            expires_at=to_aware_utc(datetime.fromisoformat(data["expires_at"])),
         )
 
 
@@ -589,7 +596,7 @@ class SessionService:
                 metadata = state.get("_metadata")
                 if metadata:
                     try:
-                        created = datetime.fromisoformat(metadata["created_at"])
+                        created = to_aware_utc(datetime.fromisoformat(metadata["created_at"]))
                         if created >= today_start:
                             count += 1
                     except (KeyError, ValueError):

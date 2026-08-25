@@ -27,7 +27,7 @@ from models.organization import (
     OrganizationUpdate,
     TenantContext,
 )
-from utils.time import to_naive_utc, utcnow
+from utils.time import to_aware_utc, utcnow
 
 # ─────────────────────────────────────────────────────────────
 # Database Toggle
@@ -431,13 +431,9 @@ class OrganizationService:
         if not invitation:
             raise ValueError("Invalid or expired invitation")
 
-        # Strip tzinfo for naive UTC comparison (DB may return aware datetimes)
-        expires_at = (
-            invitation.expires_at.replace(tzinfo=None)
-            if invitation.expires_at.tzinfo
-            else invitation.expires_at
-        )
-        if expires_at < utcnow():
+        # `utcnow()` 가 aware 이므로 상대도 aware 로 맞춘다. tzinfo 를 그냥 떼면
+        # UTC 가 아닌 offset 이 조용히 UTC 로 둔갑한다.
+        if to_aware_utc(invitation.expires_at) < utcnow():
             raise ValueError("Invitation has expired")
 
         org = _organizations.get(invitation.organization_id)
@@ -1307,13 +1303,9 @@ class OrganizationService:
         if not invitation:
             raise ValueError("Invalid or expired invitation")
 
-        # Strip tzinfo for naive UTC comparison (DB may return aware datetimes)
-        expires_at = (
-            invitation.expires_at.replace(tzinfo=None)
-            if invitation.expires_at.tzinfo
-            else invitation.expires_at
-        )
-        if expires_at < utcnow():
+        # `utcnow()` 가 aware 이므로 상대도 aware 로 맞춘다. tzinfo 를 그냥 떼면
+        # UTC 가 아닌 offset 이 조용히 UTC 로 둔갑한다.
+        if to_aware_utc(invitation.expires_at) < utcnow():
             raise ValueError("Invitation has expired")
 
         # Get org
@@ -1491,7 +1483,8 @@ class OrganizationService:
 
     @staticmethod
     def _ledger_started_at(record) -> datetime:
-        return to_naive_utc(getattr(record, "started_at", None) or utcnow())
+        # aware 로 통일한다 — 이 값은 `utcnow()` 에서 파생된 기간 경계와 비교된다.
+        return to_aware_utc(getattr(record, "started_at", None) or utcnow())
 
     @staticmethod
     def _ledger_session_key(record) -> str:
@@ -1749,9 +1742,7 @@ class OrganizationService:
             snapshots = result.scalars().all()
 
             for snap in snapshots:
-                ts = snap.session_created_at or snap.created_at
-                if ts.tzinfo is not None:
-                    ts = ts.replace(tzinfo=None)
+                ts = to_aware_utc(snap.session_created_at or snap.created_at)
                 tok = (snap.total_input_tokens or 0) + (snap.total_output_tokens or 0)
                 sessions_all += 1
                 if ts >= month_start:
@@ -1907,9 +1898,7 @@ class OrganizationService:
                 uid = source_to_uid.get(snap.source_user)
                 if not uid:
                     continue
-                ts = snap.session_created_at or snap.created_at
-                if ts.tzinfo is not None:
-                    ts = ts.replace(tzinfo=None)
+                ts = to_aware_utc(snap.session_created_at or snap.created_at)
                 tok = (snap.total_input_tokens or 0) + (snap.total_output_tokens or 0)
 
                 if ts >= month_start:
@@ -2144,9 +2133,7 @@ class OrganizationService:
                 )
             )
             for snap in result.scalars().all():
-                ts = snap.session_created_at or snap.created_at
-                if ts.tzinfo is not None:
-                    ts = ts.replace(tzinfo=None)
+                ts = to_aware_utc(snap.session_created_at or snap.created_at)
                 tok = (snap.total_input_tokens or 0) + (snap.total_output_tokens or 0)
 
                 if ts >= month_start:

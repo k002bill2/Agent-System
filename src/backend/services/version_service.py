@@ -16,7 +16,7 @@ from models.config_version import (
     RollbackResult,
     VersionStatus,
 )
-from utils.time import utcnow
+from utils.time import utcnow_naive
 
 logger = logging.getLogger(__name__)
 
@@ -263,7 +263,9 @@ class VersionService:
 
         # Mark as rolled back
         new_version.rolled_back_from = current.id
-        new_version.rolled_back_at = utcnow()
+        # `config_versions` 는 이 코드베이스에 둘뿐인 naive(`TIMESTAMP WITHOUT TIME
+        # ZONE`) 컬럼이다. aware 를 넣으면 드라이버가 거부하거나 tzinfo 를 흘린다.
+        new_version.rolled_back_at = utcnow_naive()
 
         # Sync rollback metadata to DB
         VersionService._fire_and_forget_save(new_version)
@@ -458,7 +460,7 @@ class VersionService:
                     changes_summary=row.changes_summary,
                     diff_from_previous=row.diff_from_previous,
                     created_by=row.created_by,
-                    created_at=row.created_at or utcnow(),
+                    created_at=row.created_at or utcnow_naive(),
                     rolled_back_from=row.rolled_back_from,
                     rolled_back_at=row.rolled_back_at,
                 )
