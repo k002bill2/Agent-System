@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,6 +49,17 @@ _TERMINAL_APPROVAL_STATUSES = frozenset(
         ApprovalStatus.EXPIRED.value,
     }
 )
+
+
+class SweepCandidate(NamedTuple):
+    """만료 sweep 이 한 세션에 대해 판정·삭제에 쓰는 최소 정보.
+
+    `version` 은 삭제 조건이고, `session_id`(기본키)가 다음 페이지의 커서다.
+    """
+
+    session_id: str
+    metadata: Any
+    version: int
 
 
 class StateWriteResult(str, Enum):
@@ -266,6 +277,74 @@ class SessionRepository:
     async def delete(self, session_id: str) -> bool:
         """Delete session and all related data."""
         result = await self.db.execute(delete(SessionModel).where(SessionModel.id == session_id))
+        return result.rowcount > 0
+
+    async def list_metadata_for_sweep(
+        self,
+        limit: int,
+        after: str | None = None,
+    ) -> list[SweepCandidate]:
+        """만료 sweep 판정에 필요한 것만 한 페이지 읽는다.
+
+        state 전체가 아니라 `_metadata` 서브객체만 꺼낸다. sweep 은 전체 세션을
+        도는 작업이라 세션마다 state 를 통째로 로드하면 비용 특성이 맞지 않는다
+        (issue #291 이 지적한 지점).
+
+        **판정을 SQL 로 내리지 않는다.** `expires_at` 은 `_metadata` 안의 ISO
+        문자열이고, 손상된 값 하나가 `::timestamptz` 캐스팅에서 문장 전체를 실패시켜
+        **정리가 영영 멈춘다**. 이 코드베이스에서 손상된 메타데이터는 가정이 아니라
+        `get_session` 이 이미 다루는 실제 경우다. 그래서 판정은 Python 이 하고
+        저장소는 목록과 **조건부 삭제**만 맡는다.
+
+        **커서는 기본키(`id`)다.** 시간순으로 방문할 이유가 없다 — 전체를 순회하므로
+        어느 순서로 보든 모두 걸린다. 커서에 필요한 성질은 넷뿐이고 기본키가 그것을
+        전부 만족한다: 고유(중복·누락 없음) · 불변(스캔 도중 행이 커서 밑으로 움직이지
+        않음) · **NOT NULL** · 인덱스.
+
+        시각 컬럼은 커서로 쓰지 않는다. `created_at` 은 nullable 이라 NULL 이 커서에
+        들어가면 행 값 비교가 unknown 이 되어 이후 페이지가 통째로 비고 sweep 이
+        조용히 멈춘다. `updated_at` 은 거기에 더해 시계가 둘이다 — `update_state` 가
+        `utcnow()`(naive)로 덮으므로 컬럼 기본값(aware)과 섞여, UTC 가 아닌 타임존에서
+        도는 프로세스에서는 값이 오프셋만큼 어긋난다 (issue #309).
+
+        `version` 을 함께 돌려주는 것이 계약의 핵심이다 — 판정과 삭제 사이에 다른
+        인스턴스가 연장할 수 있으므로, 삭제는 이 버전을 조건으로 걸어야 한다.
+        """
+        # `->` 를 명시한다. `state_json["_metadata"]` 로 쓰면 SQLAlchemy 가 Postgres
+        # 14+ 에서만 되는 첨자 문법(`state_json['_metadata']`)을 낸다 — 동작하는
+        # 배포에서는 티가 안 나지만 코드가 조용히 버전 하한을 올린다.
+        stmt = select(
+            SessionModel.id,
+            SessionModel.state_json.op("->")("_metadata"),
+            SessionModel.version,
+        )
+        if after is not None:
+            stmt = stmt.where(SessionModel.id > after)
+        stmt = stmt.order_by(SessionModel.id).limit(limit)
+
+        result = await self.db.execute(stmt)
+        return [
+            SweepCandidate(
+                session_id=str(row[0]),
+                metadata=row[1],
+                version=int(row[2]),
+            )
+            for row in result.all()
+        ]
+
+    async def delete_if_version(self, session_id: str, expected_version: int) -> bool:
+        """행 버전이 그대로일 때만 삭제한다. 실제로 지웠을 때만 True.
+
+        무조건 `delete()` 를 쓰면 판정 이후에 들어온 `refresh_session` 의 연장을
+        지운다 — sweep 의 "훑어서 판정 → 삭제" 사이가 TOCTOU 창이기 때문이다.
+        조건을 문장 안에 넣어 DB 가 판정하게 한다 (issue #291, 처방은 #292 와 같다).
+        """
+        result = await self.db.execute(
+            delete(SessionModel).where(
+                SessionModel.id == session_id,
+                SessionModel.version == expected_version,
+            )
+        )
         return result.rowcount > 0
 
     async def list_by_user(

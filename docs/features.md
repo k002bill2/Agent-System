@@ -967,9 +967,12 @@ class ProjectAccessService:
 계약과 검증은 `docs/architecture.md` 의 "세션 state 동시 쓰기" · "HITL 승인
 생명주기" 절 참조.
 
-**남은 단일 인스턴스 전제**: 세션 TTL 정리(`cleanup_expired_sessions`)는 아직
-로컬 사본으로 삭제를 판정한다 — 어느 인스턴스의 캐시에도 없는 세션은 아무도
-정리하지 않는다 (issue #291).
+세션 TTL 정리(`cleanup_expired_sessions`)도 저장소를 전체 페이지로 훑어 판정하고 행
+버전을 조건으로 삭제한다 (issue #291) — 어느 인스턴스의 캐시에도 없는 세션까지
+대상이 된다. **DB 모드에서는 만료(`expires_at`)만 본다**: `touch()` 가 영속화되지
+않아 저장소의 `last_activity` 로는 비활성을 판정할 수 없기 때문이며, 그 결과 유휴
+세션은 24 시간이 아니라 TTL 까지 산다. 다만 **프로덕션 호출부가 아직 없다**;
+스케줄러 연결은 별도 결정이다.
 
 ---
 
