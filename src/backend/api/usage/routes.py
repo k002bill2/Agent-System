@@ -80,6 +80,61 @@ def _cached_codex_plan_response() -> CodexPlanUsageResponse | None:
     return response.model_copy(update={"isCached": True, "cacheAgeSeconds": max(age_seconds, 0)})
 
 
+LIMIT_MAPPING = {
+    "five_hour": ("fiveHour", "Current session"),
+    "seven_day": ("sevenDay", "All models"),
+    "seven_day_sonnet": ("sevenDaySonnet", "Sonnet only"),
+    "seven_day_opus": ("sevenDayOpus", "Opus only"),
+}
+
+# Buckets every account has. The Sonnet/Opus ones are plan-dependent, so their
+# absence is normal and must stay quiet — warning on those would fire on every
+# poll for every account that lacks them.
+CORE_LIMIT_KEYS = ("five_hour", "seven_day")
+
+
+def parse_usage_data(usage_data: dict[str, Any]) -> list[PlanLimitInfo]:
+    """Parse Anthropic API response into plan limits."""
+    limits = []
+    parsed_keys: set[str] = set()
+
+    for api_key, (name, display_name) in LIMIT_MAPPING.items():
+        if api_key in usage_data:
+            limit_data = usage_data[api_key]
+            if limit_data is None:
+                continue
+
+            resets_at = limit_data.get("resets_at")
+            hours, minutes = parse_reset_time(resets_at)
+
+            limits.append(
+                PlanLimitInfo(
+                    name=name,
+                    displayName=display_name,
+                    utilization=limit_data.get("utilization", 0),
+                    resetsAt=resets_at,
+                    resetsInHours=hours,
+                    resetsInMinutes=minutes,
+                )
+            )
+            parsed_keys.add(api_key)
+
+    # A missing core bucket deletes a dashboard card outright. Without this the
+    # outage is indistinguishable from a frontend bug: no error, no banner, the
+    # card just stops existing. Report what upstream *did* send so the next
+    # occurrence is diagnosable from one log line.
+    missing = [key for key in CORE_LIMIT_KEYS if key not in parsed_keys]
+    if missing:
+        logger.warning(
+            "Anthropic usage response is missing always-expected limit(s): %s. "
+            "The matching dashboard card(s) will be absent. Keys received: %s",
+            ", ".join(missing),
+            ", ".join(sorted(usage_data)) or "(none)",
+        )
+
+    return limits
+
+
 @router.get("", response_model=UsageResponse)
 async def get_usage(
     refresh: Annotated[
@@ -169,37 +224,6 @@ async def get_usage(
     oauth_error: str | None = None
     is_cached = False
     cache_age_minutes: int | None = None
-
-    def parse_usage_data(usage_data: dict[str, Any]) -> list[PlanLimitInfo]:
-        """Parse Anthropic API response into plan limits."""
-        limits = []
-        limit_mapping = {
-            "five_hour": ("fiveHour", "Current session"),
-            "seven_day": ("sevenDay", "All models"),
-            "seven_day_sonnet": ("sevenDaySonnet", "Sonnet only"),
-            "seven_day_opus": ("sevenDayOpus", "Opus only"),
-        }
-
-        for api_key, (name, display_name) in limit_mapping.items():
-            if api_key in usage_data:
-                limit_data = usage_data[api_key]
-                if limit_data is None:
-                    continue
-
-                resets_at = limit_data.get("resets_at")
-                hours, minutes = parse_reset_time(resets_at)
-
-                limits.append(
-                    PlanLimitInfo(
-                        name=name,
-                        displayName=display_name,
-                        utilization=limit_data.get("utilization", 0),
-                        resetsAt=resets_at,
-                        resetsInHours=hours,
-                        resetsInMinutes=minutes,
-                    )
-                )
-        return limits
 
     token = get_oauth_token()
     if token:

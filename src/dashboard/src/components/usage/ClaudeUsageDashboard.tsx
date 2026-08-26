@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from 'react'
+import { memo, useEffect, useCallback, useState } from 'react'
 import { BarChart3, RefreshCw, AlertCircle, CheckCircle2, XCircle, Clock } from 'lucide-react'
 import { useClaudeUsageStore } from '../../stores/claudeUsage'
 import type { PlanLimitInfo } from '../../types/claudeUsage'
@@ -214,6 +214,10 @@ export function ClaudeUsageDashboard() {
   const codexWindows = [codexLimit?.primary, codexLimit?.secondary].filter(
     (window): window is CodexPlanWindow => window != null,
   )
+  // Placeholders only make sense once Anthropic answered at all. When OAuth
+  // itself is down the yellow banner above the grid already says so, and
+  // placeholders would state the same failure a second time.
+  const claudeLimitsExpected = usage.oauthAvailable && usage.planLimits.length > 0
   const codexWeeklyTokens = codexUsage?.weeklyTokens ?? 0
   const combinedWeeklyTokens = usage.weeklyTotalTokens + codexWeeklyTokens
   const secondaryLimits = [sonnetLimit, opusLimit].filter(Boolean) as PlanLimitInfo[]
@@ -314,24 +318,16 @@ export function ClaudeUsageDashboard() {
             ChatGPT Codex & Claude Plan Limits
           </h4>
           <div className="grid grid-cols-2 sm:grid-cols-1 xl:grid-cols-2 gap-3">
-            {sessionLimit && (
-              <UsageRadialMetric
-                label="Claude Session"
-                value={`${Math.round(sessionLimit.utilization)}%`}
-                detail={`${formatResetTime(sessionLimit)} reset`}
-                percent={sessionLimit.utilization}
-                tone={getLimitTone(sessionLimit.utilization)}
-              />
-            )}
-            {allModelsLimit && (
-              <UsageRadialMetric
-                label="Claude Weekly"
-                value={`${Math.round(allModelsLimit.utilization)}%`}
-                detail={`${formatResetTime(allModelsLimit)} reset`}
-                percent={allModelsLimit.utilization}
-                tone={getLimitTone(allModelsLimit.utilization)}
-              />
-            )}
+            <ClaudeLimitMetric
+              label="Claude Session"
+              limit={sessionLimit}
+              showPlaceholder={claudeLimitsExpected}
+            />
+            <ClaudeLimitMetric
+              label="Claude Weekly"
+              limit={allModelsLimit}
+              showPlaceholder={claudeLimitsExpected}
+            />
             {codexWindows.length > 0 ? (
               codexWindows.map((window, idx) => (
                 <UsageRadialMetric
@@ -422,6 +418,48 @@ const RADIAL_TEXT_CLASS: Record<UsageTone, string> = {
   red: 'text-red-600 dark:text-red-400',
   purple: 'text-purple-600 dark:text-purple-400',
 }
+
+/**
+ * Claude 플랜 limit 카드. 상류 응답에 해당 limit 이 없으면 카드를 조용히
+ * 생략하지 않고 "Unavailable" 로 명시한다 — 무음 생략은 상류 장애를
+ * 프론트엔드 버그처럼 보이게 만든다(2026-08-26 sevenDay 누락 사례).
+ */
+const ClaudeLimitMetric = memo(({
+  label,
+  limit,
+  showPlaceholder,
+}: {
+  label: string
+  limit: PlanLimitInfo | undefined
+  showPlaceholder: boolean
+}) => {
+  if (limit) {
+    return (
+      <UsageRadialMetric
+        label={label}
+        value={`${Math.round(limit.utilization)}%`}
+        detail={`${formatResetTime(limit)} reset`}
+        percent={limit.utilization}
+        tone={getLimitTone(limit.utilization)}
+      />
+    )
+  }
+
+  if (!showPlaceholder) return null
+
+  return (
+    <UsageRadialMetric
+      label={label}
+      value="Unavailable"
+      detail="Not included in the latest Anthropic response"
+      percent={0}
+      tone="yellow"
+      centerText="N/A"
+    />
+  )
+})
+
+ClaudeLimitMetric.displayName = 'ClaudeLimitMetric'
 
 function UsageRadialMetric({
   label,
