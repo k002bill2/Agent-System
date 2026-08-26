@@ -1109,6 +1109,46 @@ async def test_websocket_auth_accepts_query_token(monkeypatch):
     assert user.id == "user-1"
 
 
+def test_websocket_route_binds_the_token_query_parameter(monkeypatch):
+    """The wiring, not the function body: does FastAPI bind `?token=` here?
+
+    The two tests above call get_current_user_websocket with `token` as a Python
+    keyword, which never exercises query extraction on a websocket route. That
+    is the same shape as the bug this commit fixes - both sides correct, the
+    seam between them assumed - so drive it through the real ASGI route.
+
+    Close *reason* separates the two outcomes: the auth dependency closes with
+    "Not authenticated", while a request that got past auth reaches the handler
+    and closes with "Session not found".
+    """
+    from starlette.testclient import TestClient
+    from starlette.websockets import WebSocketDisconnect
+
+    from api import deps as deps_module
+    from api.app import create_app
+    from api.deps import get_db_session, set_engine
+    from orchestrator import OrchestrationEngine
+
+    monkeypatch.setattr(deps_module, "AuthService", _StubAuthService)
+    set_engine(OrchestrationEngine())
+
+    test_app = create_app(title="WS Query Binding", debug=True)
+    test_app.dependency_overrides[get_db_session] = lambda: object()
+    client = TestClient(test_app)
+
+    with pytest.raises(WebSocketDisconnect) as without_token:
+        with client.websocket_connect("/ws/sess-binding"):
+            pass
+
+    with pytest.raises(WebSocketDisconnect) as with_token:
+        with client.websocket_connect("/ws/sess-binding?token=good-token"):
+            pass
+
+    assert without_token.value.reason == "Not authenticated"
+    # Past authentication - so the query parameter really did reach the guard.
+    assert with_token.value.reason == "Session not found"
+
+
 @pytest.mark.asyncio
 async def test_websocket_auth_rejects_missing_token(monkeypatch):
     """No credential at all closes with 1008 rather than serving the stream."""
