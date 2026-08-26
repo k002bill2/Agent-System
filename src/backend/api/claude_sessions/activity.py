@@ -18,7 +18,8 @@ from models.claude_session import (
     SessionStatus,
     TasksResponse,
 )
-from services.claude_session_monitor import get_monitor
+
+from .sessions import _resolve_session
 
 router = APIRouter()
 
@@ -42,7 +43,7 @@ async def get_session_activity(
     Returns:
         List of activity events with pagination info
     """
-    monitor = get_monitor()
+    monitor, details = _resolve_session(session_id)
     events, total_count = monitor.get_session_activity(
         session_id,
         offset=offset,
@@ -51,7 +52,6 @@ async def get_session_activity(
 
     if total_count == 0:
         # Check if session exists
-        details = monitor.get_session_details(session_id)
         if details is None:
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
@@ -80,12 +80,13 @@ async def stream_session_activity(session_id: str):
     """
     import json
 
-    monitor = get_monitor()
+    monitor, details = _resolve_session(session_id)
 
     # Verify session exists
-    details = monitor.get_session_details(session_id)
     if details is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+    if details.provider != "claude":
+        raise HTTPException(status_code=409, detail="Codex activity streaming is not supported")
 
     async def event_generator() -> AsyncGenerator[str, None]:
         """Generate SSE events for new activity."""
@@ -151,7 +152,14 @@ async def get_session_tasks(session_id: str) -> TasksResponse:
     Returns:
         Tasks dictionary and root task IDs
     """
-    monitor = get_monitor()
+    monitor, details = _resolve_session(session_id)
+    if details is not None and details.provider != "claude":
+        return TasksResponse(
+            session_id=session_id,
+            tasks={},
+            root_task_ids=[],
+            total_count=0,
+        )
     tasks, root_task_ids = monitor.get_session_tasks(session_id)
 
     if not tasks:

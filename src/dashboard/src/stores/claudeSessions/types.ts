@@ -12,6 +12,7 @@ import type {
 
 export type SortField = 'last_activity' | 'created_at' | 'message_count' | 'estimated_cost' | 'project_name'
 export type SortOrder = 'asc' | 'desc'
+export type ProviderFilter = 'all' | 'claude' | 'codex'
 
 export interface ClaudeSessionsState {
   // Session list
@@ -46,6 +47,7 @@ export interface ClaudeSessionsState {
   // Filtering
   projectFilter: string | null
   sourceUserFilter: string | null
+  providerFilter: ProviderFilter
   searchQuery: string
 
   // Source users
@@ -73,6 +75,7 @@ export interface ClaudeSessionsState {
   setSortOrder: (order: SortOrder) => void
   setProjectFilter: (project: string | null) => void
   setSourceUserFilter: (user: string | null) => void
+  setProviderFilter: (provider: ProviderFilter) => void
   setSearchQuery: (query: string) => void
   getFilteredSessions: () => ClaudeSessionInfo[]
   getUniqueProjects: () => string[]

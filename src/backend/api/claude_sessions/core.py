@@ -14,6 +14,7 @@ path 가 둘 다 비어 FastAPI 가 "Prefix and path cannot be both empty" 로
 import asyncio
 import logging
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter
 
@@ -26,18 +27,18 @@ from models.claude_session import (
 from services.claude_session_monitor import (
     get_monitor,
 )
+from services.codex_session_monitor import get_codex_monitor
 
 from .sync import _sync_sessions_to_db
 
 router = APIRouter(prefix="/claude-sessions", tags=["claude-sessions"])
 
 
-from typing import Literal
-
 SortField = Literal[
     "last_activity", "created_at", "message_count", "estimated_cost", "project_name"
 ]
 SortOrder = Literal["asc", "desc"]
+ProviderFilter = Literal["all", "claude", "codex"]
 
 
 @router.get("", response_model=ClaudeSessionResponse)
@@ -45,6 +46,7 @@ async def list_sessions(
     status: SessionStatus | None = None,
     project: str | None = None,
     source_user: str | None = None,
+    provider: ProviderFilter = "claude",
     sort_by: SortField = "last_activity",
     sort_order: SortOrder = "desc",
     offset: int = 0,
@@ -65,7 +67,18 @@ async def list_sessions(
         List of sessions with counts and pagination info
     """
     monitor = get_monitor()
-    all_sessions = monitor.discover_sessions(source_user=source_user)
+    all_sessions = monitor.discover_sessions(source_user=source_user) if provider != "codex" else []
+    if provider != "codex":
+        codex_sessions = []
+    else:
+        codex_sessions = get_codex_monitor().discover_sessions()
+    if provider == "all":
+        codex_sessions = get_codex_monitor().discover_sessions()
+    if source_user:
+        codex_sessions = [
+            session for session in codex_sessions if session.source_user == source_user
+        ]
+    all_sessions.extend(codex_sessions)
 
     # Count total before any filtering
     total_count = len(all_sessions)
@@ -110,12 +123,15 @@ async def list_sessions(
 
     # Add cached summaries to sessions
     for session in paginated_sessions:
-        cached_summary = monitor.get_cached_summary(session.session_id)
+        cached_summary = (
+            monitor.get_cached_summary(session.session_id) if session.provider == "claude" else None
+        )
         if cached_summary:
             session.summary = cached_summary
 
     # Background sync: save discovered sessions to DB (non-blocking)
-    asyncio.create_task(_sync_sessions_to_db(all_sessions))
+    claude_sessions = [session for session in all_sessions if session.provider == "claude"]
+    asyncio.create_task(_sync_sessions_to_db(claude_sessions))
 
     return ClaudeSessionResponse(
         sessions=paginated_sessions,

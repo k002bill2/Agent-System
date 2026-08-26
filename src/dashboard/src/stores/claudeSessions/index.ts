@@ -8,7 +8,7 @@ import {
 } from '../../types/claudeSession'
 import { apiClient } from '../../services/apiClient'
 import { getApiUrl } from '../../config/api'
-import type { ClaudeSessionsState, SortField, SortOrder } from './types'
+import type { ClaudeSessionsState, ProviderFilter, SortField, SortOrder } from './types'
 
 // 소비자 실측(2026-08-08): `SortField` 만 패키지 밖에서 쓰인다.
 // `SortOrder` 는 쓰이지 않지만 `SortField` 와 짝이라 함께 노출한다.
@@ -56,6 +56,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   // All projects initial state
   allProjects: [],
   projectsFetchError: false,
+  providerFilter: 'all',
 
   autoRefresh: true,
   refreshInterval: 5,
@@ -75,7 +76,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
   // Actions
   fetchSessions: async (status?: SessionStatus, reset: boolean = true) => {
-    const { sortBy, sortOrder, projectFilter, sourceUserFilter, pageSize, autoGenerateSummaries } = get()
+    const { sortBy, sortOrder, projectFilter, sourceUserFilter, providerFilter, pageSize, autoGenerateSummaries } = get()
 
     // If reset, start fresh
     if (reset) {
@@ -96,12 +97,15 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       if (sourceUserFilter) {
         params.set('source_user', sourceUserFilter)
       }
+      if (providerFilter !== 'all') {
+        params.set('provider', providerFilter)
+      }
       params.set('sort_by', sortBy)
       params.set('sort_order', sortOrder)
       params.set('offset', currentOffset.toString())
       params.set('limit', pageSize.toString())
 
-      const data = await apiClient.get<ClaudeSessionResponse>(`/api/claude-sessions?${params.toString()}`)
+      const data = await apiClient.get<ClaudeSessionResponse>(`/api/agent-sessions?${params.toString()}`)
       set({
         sessions: data.sessions,
         totalCount: data.total_count,
@@ -123,7 +127,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   },
 
   loadMoreSessions: async (status?: SessionStatus) => {
-    const { sortBy, sortOrder, projectFilter, sourceUserFilter, pageSize, sessions, hasMore, isLoadingMore } = get()
+    const { sortBy, sortOrder, projectFilter, sourceUserFilter, providerFilter, pageSize, sessions, hasMore, isLoadingMore } = get()
 
     // Don't load more if already loading or no more data
     if (isLoadingMore || !hasMore) return
@@ -142,12 +146,15 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       if (sourceUserFilter) {
         params.set('source_user', sourceUserFilter)
       }
+      if (providerFilter !== 'all') {
+        params.set('provider', providerFilter)
+      }
       params.set('sort_by', sortBy)
       params.set('sort_order', sortOrder)
       params.set('offset', nextOffset.toString())
       params.set('limit', pageSize.toString())
 
-      const data = await apiClient.get<ClaudeSessionResponse>(`/api/claude-sessions?${params.toString()}`)
+      const data = await apiClient.get<ClaudeSessionResponse>(`/api/agent-sessions?${params.toString()}`)
       set((state) => ({
         sessions: [...state.sessions, ...data.sessions],
         hasMore: data.has_more,
@@ -161,7 +168,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   },
 
   refreshSessions: async (status?: SessionStatus) => {
-    const { sortBy, sortOrder, projectFilter, sourceUserFilter, pageSize, sessions } = get()
+    const { sortBy, sortOrder, projectFilter, sourceUserFilter, providerFilter, pageSize, sessions } = get()
     set({ batchJustCompleted: false })
 
     // Soft refresh: fetch first page and merge with existing data
@@ -176,12 +183,15 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       if (sourceUserFilter) {
         params.set('source_user', sourceUserFilter)
       }
+      if (providerFilter !== 'all') {
+        params.set('provider', providerFilter)
+      }
       params.set('sort_by', sortBy)
       params.set('sort_order', sortOrder)
       params.set('offset', '0')
       params.set('limit', pageSize.toString())
 
-      const data = await apiClient.get<ClaudeSessionResponse>(`/api/claude-sessions?${params.toString()}`)
+      const data = await apiClient.get<ClaudeSessionResponse>(`/api/agent-sessions?${params.toString()}`)
 
       // Merge strategy:
       // 1. New sessions (not in current list) go to the top
@@ -226,6 +236,11 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
   setSourceUserFilter: (user: string | null) => {
     set({ sourceUserFilter: user })
+    get().fetchSessions()
+  },
+
+  setProviderFilter: (provider: ProviderFilter) => {
+    set({ providerFilter: provider })
     get().fetchSessions()
   },
 
@@ -400,7 +415,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
     }
 
     // Don't start streaming for completed sessions
-    if (selectedSession?.status === 'completed') {
+    if (selectedSession?.status === 'completed' || selectedSession?.provider === 'codex') {
       return
     }
 
@@ -530,8 +545,10 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       params.set('offset', '0')
       params.set('limit', '200')
 
-      const data = await apiClient.get<ClaudeSessionResponse>(`/api/claude-sessions?${params.toString()}`)
-      const sessionsWithoutSummary = data.sessions.filter(s => !s.summary)
+      const data = await apiClient.get<ClaudeSessionResponse>(`/api/agent-sessions?${params.toString()}`)
+      const sessionsWithoutSummary = data.sessions.filter(
+        s => (s.provider || 'claude') === 'claude' && !s.summary,
+      )
 
       // Generate summaries one by one to avoid overwhelming the LLM
       for (const session of sessionsWithoutSummary) {
@@ -592,20 +609,23 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   // Get count of empty sessions
   getEmptySessionsCount: () => {
     const { sessions } = get()
-    return sessions.filter((s) => s.message_count === 0).length
+    return sessions.filter((s) => (s.provider || 'claude') === 'claude' && s.message_count === 0).length
   },
 
   // Get count of ghost sessions (message_count > 0 but no real messages)
   getGhostSessionsCount: () => {
     const { sessions } = get()
     return sessions.filter(
-      (s) => s.message_count > 0 && s.user_message_count === 0 && s.assistant_message_count === 0
+      (s) =>
+        (s.provider || 'claude') === 'claude' &&
+        s.message_count > 0 && s.user_message_count === 0 && s.assistant_message_count === 0
     ).length
   },
 
   // Check if a session is a ghost session
   isGhostSession: (session: ClaudeSessionInfo) => {
     return (
+      (session.provider || 'claude') === 'claude' &&
       session.message_count > 0 &&
       session.user_message_count === 0 &&
       session.assistant_message_count === 0

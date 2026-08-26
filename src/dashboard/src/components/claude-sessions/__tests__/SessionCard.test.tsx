@@ -173,6 +173,21 @@ describe('SessionCard', () => {
     expect(screen.getByText(/johndoe/)).toBeInTheDocument()
   })
 
+  it('renders Codex provider and model without Claude-only actions', () => {
+    const codexSession = {
+      ...baseSession,
+      provider: 'codex' as const,
+      model: 'gpt-5.5',
+      message_count: 0,
+    }
+    render(<SessionCard session={codexSession} isSelected={false} onClick={onClick} />)
+
+    expect(screen.getByText('Codex')).toBeInTheDocument()
+    expect(screen.getByText('gpt-5.5')).toBeInTheDocument()
+    expect(screen.queryByTitle('AI 요약 생성')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('빈 세션 삭제')).not.toBeInTheDocument()
+  })
+
   it('renders different status colors for each status', () => {
     const completedSession = { ...baseSession, status: 'completed' as const }
     render(<SessionCard session={completedSession} isSelected={false} onClick={onClick} />)

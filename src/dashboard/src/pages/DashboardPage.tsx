@@ -75,13 +75,13 @@ export function DashboardPage() {
     }
   }, [sessions, allSessionProjects, projectsFetchError])
 
-  // Get recent Claude Code sessions (top 10 by last activity)
+  // Get recent external agent sessions (top 10 by last activity)
   const recentSessions = useMemo(() => sessions.slice(0, 10), [sessions])
 
   return (
     <div className="flex-1 p-6 overflow-y-auto">
 
-      {/* Stats Grid - Claude Sessions Overview */}
+      {/* Stats Grid - Agent Sessions Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {/* Total Sessions */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
@@ -137,7 +137,7 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* Agent Stats, Cost Monitor, Claude Usage & Recent Activity */}
+      {/* Agent Stats, Cost Monitor, provider-specific usage & Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6 items-start">
         {/* Column 1: Agent Status + Process Monitor + Cost Monitor (stacked) */}
         <div className="space-y-6">
@@ -170,7 +170,7 @@ export function DashboardPage() {
           <CostMonitor />
         </div>
 
-        {/* Column 2-3: Claude Code Usage + Config Stats (spans 2 columns) */}
+        {/* Column 2-3: Claude usage + Config Stats (spans 2 columns) */}
         <div className="xl:col-span-2 space-y-4">
           <ClaudeUsageDashboard />
           <ConfigStatsCard />
@@ -221,10 +221,18 @@ export function DashboardPage() {
                         {session.project_name}
                       </span>
                     )}
+                    <span className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-200 rounded">
+                      {session.provider === 'codex' ? 'Codex' : session.provider === 'claude' || !session.provider ? 'Claude' : session.provider}
+                    </span>
                   </div>
                   <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-1">
                     {session.summary || session.slug || 'No summary'}
                   </p>
+                  {session.model && session.model !== 'unknown' && (
+                    <p className="text-xs text-gray-400 dark:text-gray-500 truncate mt-0.5" title={session.model}>
+                      {session.model}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>

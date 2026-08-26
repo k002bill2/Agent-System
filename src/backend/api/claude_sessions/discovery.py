@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends
 
 from api.deps import get_current_user_optional
 from services.claude_session_monitor import get_monitor
+from services.codex_session_monitor import get_codex_monitor
 
 logger = logging.getLogger(__name__)
 
@@ -91,10 +92,15 @@ async def list_projects(
 
     # Fallback: filesystem-based discovery
     monitor = get_monitor()
-    projects = monitor.get_unique_projects()
+    projects = set(monitor.get_unique_projects())
+    projects.update(
+        session.project_name
+        for session in get_codex_monitor().discover_sessions()
+        if session.project_name
+    )
 
     return {
-        "projects": projects,
+        "projects": sorted(projects),
     }
 
 
