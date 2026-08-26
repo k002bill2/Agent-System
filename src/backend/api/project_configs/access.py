@@ -114,6 +114,16 @@ async def require_project_config_target_access(
 ) -> None:
     """Authorize the destination of a project-config copy operation."""
     if os.getenv("USE_DATABASE", "false").lower() != "true":
+        from services.project_config_monitor import get_project_config_monitor
+
+        if get_project_config_monitor().get_project_summary(target_project_id) is None:
+            raise HTTPException(status_code=404, detail="Target project not found")
+
+        # The route dependency authorizes the *source* project only, and a copy
+        # writes into the target - so the destination needs its own editor
+        # check. Returning here unconditionally let anyone with access to one
+        # project push .claude assets into any other project they could name.
+        await require_project_role(target_project_id, current_user, db, min_role="editor")
         return
 
     try:

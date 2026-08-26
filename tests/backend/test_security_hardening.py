@@ -1030,6 +1030,55 @@ async def test_filesystem_project_config_allows_project_without_acl(monkeypatch)
     assert result is user
 
 
+@pytest.mark.asyncio
+async def test_filesystem_project_config_copy_target_requires_editor(monkeypatch):
+    """A copy writes into the target, so the target needs its own write check.
+
+    The route dependency authorizes the *source* project only. This guard used
+    to return immediately in filesystem mode, so editor access to one project
+    was enough to push .claude assets into any other project by ID.
+    """
+    from api.project_configs import access as access_module
+
+    _patch_filesystem_project(monkeypatch)
+
+    seen: dict[str, object] = {}
+
+    async def fake_require(project_id, current_user, db, min_role="viewer"):
+        seen["project_id"] = project_id
+        seen["min_role"] = min_role
+        raise HTTPException(status_code=403, detail="No access to this project")
+
+    monkeypatch.setattr(access_module, "require_project_role", fake_require)
+
+    with pytest.raises(HTTPException) as exc:
+        await access_module.require_project_config_target_access(
+            "victim-project",
+            SimpleNamespace(id="regular", role="user", is_admin=False, is_active=True),
+            db=object(),
+        )
+
+    assert exc.value.status_code == 403
+    assert seen == {"project_id": "victim-project", "min_role": "editor"}
+
+
+@pytest.mark.asyncio
+async def test_filesystem_project_config_copy_target_must_exist(monkeypatch):
+    """An unknown target is a 404, not a silent pass-through."""
+    from api.project_configs import access as access_module
+
+    _patch_filesystem_project(monkeypatch, exists=False)
+
+    with pytest.raises(HTTPException) as exc:
+        await access_module.require_project_config_target_access(
+            "ghost-project",
+            SimpleNamespace(id="regular", role="user", is_admin=False, is_active=True),
+            db=object(),
+        )
+
+    assert exc.value.status_code == 404
+
+
 # ── WebSocket authentication ────────────────────────────────────
 
 
