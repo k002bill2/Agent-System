@@ -4,7 +4,7 @@ import os
 
 from fastapi import Depends, HTTPException, Request, status
 
-from api.deps import get_current_user, get_db_session
+from api.deps import get_current_user, get_db_session, require_project_role
 from db.models import ProjectAccessModel, ProjectModel, UserModel
 
 
@@ -44,6 +44,13 @@ async def require_project_config_access(
 
         if get_project_config_monitor().get_project_summary(project_id) is None:
             raise HTTPException(status_code=404, detail="Project not found")
+
+        # Existence was the only check here, which made this the one
+        # project-scoped path that never consulted the project ACL. Every other
+        # project route goes through require_project_role; this brings the
+        # filesystem branch in line. Reads need viewer, mutations need editor.
+        min_role = "viewer" if request.method in {"GET", "HEAD", "OPTIONS"} else "editor"
+        await require_project_role(project_id, current_user, db, min_role=min_role)
         return current_user
 
     try:

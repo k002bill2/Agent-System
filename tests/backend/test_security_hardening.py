@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 from httpx import ASGITransport, AsyncClient
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, WebSocketException
 
 from models.permissions import AgentPermission
 from services.audit_service import AuditAction
@@ -921,3 +921,156 @@ def test_api_docs_enablement_matrix(monkeypatch, debug, enabled, expected):
     monkeypatch.setenv("ENABLE_API_DOCS", enabled)
 
     assert _api_docs_enabled(debug) is expected
+
+
+# ── filesystem-mode project-config ACL ──────────────────────────
+
+
+def _request_stub(method: str, project_id: str | None, path: str) -> SimpleNamespace:
+    """Minimal stand-in for the Request fields the guard actually reads."""
+    return SimpleNamespace(
+        method=method,
+        path_params={"project_id": project_id} if project_id else {},
+        url=SimpleNamespace(path=path),
+    )
+
+
+def _patch_filesystem_project(monkeypatch, exists: bool = True) -> None:
+    monkeypatch.setenv("USE_DATABASE", "false")
+    summary = (lambda pid: {"id": pid}) if exists else (lambda pid: None)
+    monkeypatch.setattr(
+        "services.project_config_monitor.get_project_config_monitor",
+        lambda: SimpleNamespace(get_project_summary=summary),
+    )
+
+
+@pytest.mark.asyncio
+async def test_filesystem_project_config_consults_project_acl(monkeypatch):
+    """Existence alone must not authorize a project-scoped config route.
+
+    This branch used to `return current_user` right after the existence check,
+    making it the only project-scoped path that never called
+    require_project_role -- so any authenticated user who knew another project's
+    ID could reach that project's .claude assets.
+    """
+    from api.project_configs import access as access_module
+
+    _patch_filesystem_project(monkeypatch)
+
+    seen: dict[str, object] = {}
+
+    async def fake_require(project_id, current_user, db, min_role="viewer"):
+        seen["project_id"] = project_id
+        seen["min_role"] = min_role
+        raise HTTPException(status_code=403, detail="No access to this project")
+
+    monkeypatch.setattr(access_module, "require_project_role", fake_require)
+
+    with pytest.raises(HTTPException) as exc:
+        await access_module.require_project_config_access(
+            _request_stub("GET", "proj-a", "/api/project-configs/proj-a/skills"),
+            SimpleNamespace(id="regular", role="user", is_admin=False, is_active=True),
+            db=object(),
+        )
+
+    assert exc.value.status_code == 403
+    assert seen["project_id"] == "proj-a"
+
+
+@pytest.mark.asyncio
+async def test_filesystem_project_config_mutation_requires_editor(monkeypatch):
+    """Reads settle for viewer; writes to .claude assets need editor."""
+    from api.project_configs import access as access_module
+
+    _patch_filesystem_project(monkeypatch)
+
+    seen: dict[str, object] = {}
+
+    async def fake_require(project_id, current_user, db, min_role="viewer"):
+        seen[project_id] = min_role
+        return "owner"
+
+    monkeypatch.setattr(access_module, "require_project_role", fake_require)
+
+    user = SimpleNamespace(id="regular", role="user", is_admin=False, is_active=True)
+    for method, project_id in (("GET", "read-proj"), ("POST", "write-proj"), ("DELETE", "del-proj")):
+        await access_module.require_project_config_access(
+            _request_stub(method, project_id, f"/api/project-configs/{project_id}/skills"),
+            user,
+            db=object(),
+        )
+
+    assert seen == {"read-proj": "viewer", "write-proj": "editor", "del-proj": "editor"}
+
+
+@pytest.mark.asyncio
+async def test_filesystem_project_config_allows_project_without_acl(monkeypatch):
+    """A project with no ACL records stays open -- the documented fallback.
+
+    require_project_role returns "editor" when has_any_access_control is False,
+    so today's single-user deployments keep working; the guard only bites once
+    ACL rows exist.
+    """
+    from api.project_configs import access as access_module
+
+    _patch_filesystem_project(monkeypatch)
+
+    async def fake_require(project_id, current_user, db, min_role="viewer"):
+        return "editor"
+
+    monkeypatch.setattr(access_module, "require_project_role", fake_require)
+
+    user = SimpleNamespace(id="regular", role="user", is_admin=False, is_active=True)
+    result = await access_module.require_project_config_access(
+        _request_stub("GET", "open-proj", "/api/project-configs/open-proj/skills"),
+        user,
+        db=object(),
+    )
+
+    assert result is user
+
+
+# ── WebSocket authentication ────────────────────────────────────
+
+
+class _StubAuthService:
+    """Accepts exactly one token so the query/header paths stay distinguishable."""
+
+    def __init__(self, db):
+        self._db = db
+
+    def verify_token(self, token, token_type="access"):
+        return {"sub": "user-1"} if token == "good-token" else None
+
+    async def get_user_by_id(self, user_id):
+        return SimpleNamespace(id=user_id, is_active=True)
+
+
+@pytest.mark.asyncio
+async def test_websocket_auth_accepts_query_token(monkeypatch):
+    """Browsers cannot set headers on a WebSocket, so the query param is the path."""
+    from api import deps as deps_module
+
+    monkeypatch.setattr(deps_module, "AuthService", _StubAuthService)
+
+    user = await deps_module.get_current_user_websocket(
+        SimpleNamespace(headers={}), token="good-token", db=object()
+    )
+
+    assert user.id == "user-1"
+
+
+@pytest.mark.asyncio
+async def test_websocket_auth_rejects_missing_token(monkeypatch):
+    """No credential at all closes with 1008 rather than serving the stream."""
+    from api import deps as deps_module
+
+    monkeypatch.setattr(deps_module, "AuthService", _StubAuthService)
+
+    with pytest.raises(WebSocketException) as exc:
+        await deps_module.get_current_user_websocket(
+            SimpleNamespace(headers={}), token=None, db=object()
+        )
+
+    assert exc.value.code == 1008
+
