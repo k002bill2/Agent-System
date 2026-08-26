@@ -1,7 +1,7 @@
 """Token service with JWT management and blacklist support."""
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
@@ -174,8 +174,11 @@ class TokenService:
             return TokenPayload(
                 sub=payload["sub"],
                 type=payload["type"],
-                exp=datetime.fromtimestamp(payload["exp"]),
-                iat=datetime.fromtimestamp(payload["iat"]),
+                # JWT 의 exp/iat 는 epoch UTC 다. `tz=UTC` 없이 읽으면 로컬 시각
+                # naive 가 나와, aware 인 `utcnow()` 와 빼는 순간 TypeError 다
+                # (`blacklist_token` 의 TTL 계산).
+                exp=datetime.fromtimestamp(payload["exp"], UTC),
+                iat=datetime.fromtimestamp(payload["iat"], UTC),
                 jti=payload.get("jti"),
                 email=payload.get("email"),
                 name=payload.get("name"),
@@ -215,8 +218,11 @@ class TokenService:
             return TokenPayload(
                 sub=payload["sub"],
                 type=payload["type"],
-                exp=datetime.fromtimestamp(payload["exp"]),
-                iat=datetime.fromtimestamp(payload["iat"]),
+                # JWT 의 exp/iat 는 epoch UTC 다. `tz=UTC` 없이 읽으면 로컬 시각
+                # naive 가 나와, aware 인 `utcnow()` 와 빼는 순간 TypeError 다
+                # (`blacklist_token` 의 TTL 계산).
+                exp=datetime.fromtimestamp(payload["exp"], UTC),
+                iat=datetime.fromtimestamp(payload["iat"], UTC),
                 jti=payload.get("jti"),
                 email=payload.get("email"),
                 name=payload.get("name"),

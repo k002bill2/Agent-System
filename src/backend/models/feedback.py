@@ -9,7 +9,9 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from utils.time import normalize_aware_utc
 
 
 class FeedbackType(str, Enum):
@@ -119,6 +121,12 @@ class FeedbackQueryParams(BaseModel):
     limit: int = Field(50, ge=1, le=200)
     offset: int = Field(0, ge=0)
 
+    # 날짜 필터는 API 로 들어와 offset 이 없으면 naive 다. 메모리 경로는 비교에서
+    # TypeError 로 터지지만 **DB 경로는 조용히 틀린다** — asyncpg 가 naive 를
+    # 프로세스 로컬 TZ 로 해석해 timestamptz 조건에 바인딩하므로 조회 구간이
+    # 오프셋만큼 밀린다. 모델에서 흡수해 두 경로가 같은 값을 본다 (#309).
+    _ensure_aware = field_validator("*")(normalize_aware_utc)
+
 
 class FeedbackStats(BaseModel):
     """피드백 통계"""
@@ -159,6 +167,12 @@ class DatasetExportOptions(BaseModel):
     agent_filter: list[str] | None = Field(None, description="특정 에이전트만 필터")
     start_date: datetime | None = None
     end_date: datetime | None = None
+
+    # 날짜 필터는 API 로 들어와 offset 이 없으면 naive 다. 메모리 경로는 비교에서
+    # TypeError 로 터지지만 **DB 경로는 조용히 틀린다** — asyncpg 가 naive 를
+    # 프로세스 로컬 TZ 로 해석해 timestamptz 조건에 바인딩하므로 조회 구간이
+    # 오프셋만큼 밀린다. 모델에서 흡수해 두 경로가 같은 값을 본다 (#309).
+    _ensure_aware = field_validator("*")(normalize_aware_utc)
 
 
 class DatasetStats(BaseModel):

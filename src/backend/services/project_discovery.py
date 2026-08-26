@@ -7,7 +7,7 @@ and scans projects for configuration metadata.
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from models.project_config import ProjectInfo
@@ -376,7 +376,10 @@ class ProjectDiscovery:
         for check_path in [skills_dir, agents_dir, commands_dir, mcp_file, hooks_file]:
             if check_path.exists():
                 try:
-                    mtime = datetime.fromtimestamp(check_path.stat().st_mtime)
+                    # `tz=UTC` 를 명시한다. 없으면 **로컬 시각** naive 가 나와
+                    # aware 인 `last_modified` 와 비교되며 TypeError 가 나고,
+                    # 설령 비교가 됐더라도 UTC 가 아닌 값끼리 재던 셈이다.
+                    mtime = datetime.fromtimestamp(check_path.stat().st_mtime, UTC)
                     if mtime > last_modified:
                         last_modified = mtime
                 except OSError:
