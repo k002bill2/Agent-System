@@ -317,6 +317,85 @@ describe('ClaudeUsageDashboard', () => {
     ).toBeInTheDocument()
   })
 
+  it('marks a missing sevenDay limit as unavailable instead of dropping the card', () => {
+    // Observed 2026-08-26: during a session-window rollover the Anthropic usage
+    // endpoint returned five_hour only. The Claude Weekly card vanished with no
+    // error and no banner, so an upstream outage read as a frontend bug. The
+    // card must stay on screen and say it has no data.
+    mockUsage = makeUsageResponse({
+      planLimits: [
+        { name: 'fiveHour', displayName: 'Current Session', utilization: 30, resetsInHours: 2, resetsInMinutes: 15 },
+      ],
+    })
+
+    const { container } = render(<ClaudeUsageDashboard />)
+    const utils = within(container)
+
+    expect(utils.getByText('Claude Weekly')).toBeInTheDocument()
+    expect(utils.getByText('Unavailable')).toBeInTheDocument()
+  })
+
+  it('marks a missing fiveHour limit as unavailable instead of dropping the card', () => {
+    mockUsage = makeUsageResponse({
+      planLimits: [
+        { name: 'sevenDay', displayName: 'All Models (7d)', utilization: 45, resetsInHours: 120, resetsInMinutes: 0 },
+      ],
+    })
+
+    const { container } = render(<ClaudeUsageDashboard />)
+    const utils = within(container)
+
+    expect(utils.getByText('Claude Session')).toBeInTheDocument()
+    expect(utils.getByText('Unavailable')).toBeInTheDocument()
+  })
+
+  it('keeps both Claude cards when upstream answered but omitted every limit', () => {
+    // The worst case of the same outage: Anthropic replies 200 with every core
+    // bucket null, so planLimits is empty while oauth is fine. Gating the
+    // placeholders on planLimits.length would hide both cards here - exactly
+    // the disappearance this component is supposed to make visible.
+    mockUsage = makeUsageResponse({ planLimits: [] })
+
+    const { container } = render(<ClaudeUsageDashboard />)
+    const utils = within(container)
+
+    expect(utils.getByText('Claude Session')).toBeInTheDocument()
+    expect(utils.getByText('Claude Weekly')).toBeInTheDocument()
+    expect(utils.getAllByText('Unavailable')).toHaveLength(2)
+  })
+
+  it('does not state the same outage as both banner and placeholders', () => {
+    // With oauth healthy but every core bucket omitted, the placeholders already
+    // say "Unavailable" on each card. The fallback banner is for the OAuth-down
+    // path; showing both makes one upstream outage look like two failures.
+    mockUsage = makeUsageResponse({ planLimits: [] })
+
+    const { container } = render(<ClaudeUsageDashboard />)
+    const utils = within(container)
+
+    expect(utils.getAllByText('Unavailable')).toHaveLength(2)
+    expect(utils.queryByText('Plan limits unavailable')).not.toBeInTheDocument()
+    expect(
+      utils.queryByText(/Codex plan limits are checked separately/),
+    ).not.toBeInTheDocument()
+  })
+
+  it('does not show Claude placeholders when oauth itself is unavailable', () => {
+    // The offline path already explains itself with the yellow banner above the
+    // grid. Adding placeholders there would state the same failure twice.
+    mockUsage = makeUsageResponse({
+      oauthAvailable: false,
+      oauthError: 'Token expired',
+      planLimits: [],
+    })
+
+    const { container } = render(<ClaudeUsageDashboard />)
+    const utils = within(container)
+
+    expect(utils.queryByText('Claude Session')).not.toBeInTheDocument()
+    expect(utils.queryByText('Claude Weekly')).not.toBeInTheDocument()
+  })
+
   it('formats small token counts without suffix', () => {
     mockUsage = makeUsageResponse({ weeklyTotalTokens: 500, weeklySonnetTokens: 300, weeklyOpusTokens: 200 })
     render(<ClaudeUsageDashboard />)
