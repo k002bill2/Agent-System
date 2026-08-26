@@ -294,7 +294,11 @@ export function ClaudeUsageDashboard() {
 
       <div className="space-y-4 flex-1 flex flex-col">
         {/* OAuth Available - Show real plan limits */}
-        {usage.oauthAvailable && usage.planLimits.length > 0 ? (
+        {/* oauthAvailable 단독으로 가른다. planLimits 유무를 함께 보면 상류가
+            200 으로 답하고도 core limit 을 전부 빠뜨린 경우 이 분기가 fallback
+            으로 떨어져, 카드의 "Unavailable" 과 배너가 같은 장애를 두 번
+            말한다. 그 케이스는 placeholder 카드가 이미 설명한다. */}
+        {usage.oauthAvailable ? (
           <>
             {/* Cached data notice */}
             {usage.isCached && (

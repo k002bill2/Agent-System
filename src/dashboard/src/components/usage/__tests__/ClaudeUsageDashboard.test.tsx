@@ -364,6 +364,22 @@ describe('ClaudeUsageDashboard', () => {
     expect(utils.getAllByText('Unavailable')).toHaveLength(2)
   })
 
+  it('does not state the same outage as both banner and placeholders', () => {
+    // With oauth healthy but every core bucket omitted, the placeholders already
+    // say "Unavailable" on each card. The fallback banner is for the OAuth-down
+    // path; showing both makes one upstream outage look like two failures.
+    mockUsage = makeUsageResponse({ planLimits: [] })
+
+    const { container } = render(<ClaudeUsageDashboard />)
+    const utils = within(container)
+
+    expect(utils.getAllByText('Unavailable')).toHaveLength(2)
+    expect(utils.queryByText('Plan limits unavailable')).not.toBeInTheDocument()
+    expect(
+      utils.queryByText(/Codex plan limits are checked separately/),
+    ).not.toBeInTheDocument()
+  })
+
   it('does not show Claude placeholders when oauth itself is unavailable', () => {
     // The offline path already explains itself with the yellow banner above the
     // grid. Adding placeholders there would state the same failure twice.
