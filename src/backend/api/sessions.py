@@ -15,6 +15,7 @@ from api.deps import (
     get_current_user,
     get_db_session,
     get_engine,
+    require_project_role,
 )
 from db.models import UserModel
 from models.llm_access import LLMAccessResponse
@@ -120,6 +121,58 @@ async def require_session_access(
 # ─────────────────────────────────────────────────────────────
 
 
+async def _resolve_project_context(
+    project_id: str,
+    current_user: UserModel,
+    db: AsyncSession,
+):
+    """Resolve a project id against whichever registry is authoritative.
+
+    In database mode startup no longer populates PROJECTS_REGISTRY while
+    ``/api/projects`` serves ProjectModel ids - so the filesystem lookup misses
+    every id the dashboard is able to send, and session creation 404s on the
+    projects it just listed. Fall back to the DB registry there.
+
+    The DB branch authorizes the project the same way every other
+    project-scoped route does: a session must not be able to attach a project
+    the caller could not otherwise reach.
+    """
+    from models.project import Project, get_project
+
+    project = get_project(project_id)
+    if project is not None:
+        return project
+
+    if os.getenv("USE_DATABASE", "false").lower() != "true":
+        return None
+
+    from sqlalchemy import select
+
+    from db.models import ProjectModel
+
+    # Raises 404 (unknown), 403 (denied) or 503 (lookup failed) - fail closed.
+    await require_project_role(project_id, current_user, db, min_role="viewer")
+
+    row = (
+        await db.execute(
+            select(ProjectModel).where(
+                ProjectModel.id == project_id,
+                ProjectModel.is_active == True,  # noqa: E712
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+
+    return Project(
+        id=str(row.id),
+        name=row.name,
+        path=str(row.path or ""),
+        description=row.description or "",
+        organization_id=str(row.organization_id) if row.organization_id else None,
+    )
+
+
 @router.post(
     "/sessions",
     response_model=SessionResponse,
@@ -132,8 +185,6 @@ async def create_session(
     db: AsyncSession = Depends(get_db_session),
 ):
     """Create a new orchestration session with optional project context."""
-    from models.project import get_project
-
     project_id = request.project_id if request else None
     organization_id = request.organization_id if request else None
     user_id = str(current_user.id) if current_user else None
@@ -141,7 +192,7 @@ async def create_session(
     # Validate project if specified
     project = None
     if project_id:
-        project = get_project(project_id)
+        project = await _resolve_project_context(project_id, current_user, db)
         if not project:
             raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
 

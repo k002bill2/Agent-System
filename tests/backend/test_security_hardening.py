@@ -1163,3 +1163,167 @@ async def test_websocket_auth_rejects_missing_token(monkeypatch):
 
     assert exc.value.code == 1008
 
+
+# ── session project resolution (database mode) ──────────────────
+
+
+class _FakeResult:
+    def __init__(self, row):
+        self._row = row
+
+    def scalar_one_or_none(self):
+        return self._row
+
+
+class _FakeDb:
+    def __init__(self, row=None):
+        self._row = row
+        self.executed = 0
+
+    async def execute(self, _stmt):
+        self.executed += 1
+        return _FakeResult(self._row)
+
+
+def _db_project_row():
+    return SimpleNamespace(
+        id="05c4302d-9602-4b70-8267-65964f5bed4d",
+        name="DB Project",
+        path="/tmp/db-project",
+        description="from the DB registry",
+        organization_id=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_session_resolves_database_project(monkeypatch):
+    """/api/projects serves ProjectModel ids, so session creation must accept them.
+
+    In database mode startup no longer populates PROJECTS_REGISTRY, so the
+    filesystem lookup misses every id the dashboard can send and session
+    creation 404s on the projects it just listed.
+    """
+    from api import sessions as sessions_module
+
+    monkeypatch.setenv("USE_DATABASE", "true")
+    monkeypatch.setattr("models.project.get_project", lambda pid: None)
+
+    seen = {}
+
+    async def fake_require(project_id, current_user, db, min_role="viewer"):
+        seen["project_id"] = project_id
+        seen["min_role"] = min_role
+        return "viewer"
+
+    monkeypatch.setattr(sessions_module, "require_project_role", fake_require)
+
+    project = await sessions_module._resolve_project_context(
+        "05c4302d-9602-4b70-8267-65964f5bed4d",
+        SimpleNamespace(id="u1", role="user", is_admin=False, is_active=True),
+        _FakeDb(_db_project_row()),
+    )
+
+    assert project is not None
+    assert project.id == "05c4302d-9602-4b70-8267-65964f5bed4d"
+    assert project.name == "DB Project"
+    # Resolution must not become an authorization bypass.
+    assert seen == {"project_id": "05c4302d-9602-4b70-8267-65964f5bed4d", "min_role": "viewer"}
+
+
+@pytest.mark.asyncio
+async def test_session_database_project_denial_propagates(monkeypatch):
+    """A session must not attach a project the caller cannot otherwise reach."""
+    from api import sessions as sessions_module
+
+    monkeypatch.setenv("USE_DATABASE", "true")
+    monkeypatch.setattr("models.project.get_project", lambda pid: None)
+
+    async def deny(project_id, current_user, db, min_role="viewer"):
+        raise HTTPException(status_code=403, detail="No access to this project")
+
+    monkeypatch.setattr(sessions_module, "require_project_role", deny)
+
+    with pytest.raises(HTTPException) as exc:
+        await sessions_module._resolve_project_context(
+            "someone-elses-project",
+            SimpleNamespace(id="u1", role="user", is_admin=False, is_active=True),
+            _FakeDb(_db_project_row()),
+        )
+
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_session_filesystem_mode_does_not_query_the_database(monkeypatch):
+    """Memory mode keeps its registry-only behaviour - no new DB round trip."""
+    from api import sessions as sessions_module
+
+    monkeypatch.setenv("USE_DATABASE", "false")
+    monkeypatch.setattr("models.project.get_project", lambda pid: None)
+
+    db = _FakeDb(_db_project_row())
+    project = await sessions_module._resolve_project_context(
+        "ghost", SimpleNamespace(id="u1", role="user", is_admin=False, is_active=True), db
+    )
+
+    assert project is None
+    assert db.executed == 0
+
+
+@pytest.mark.asyncio
+async def test_session_prefers_the_filesystem_registry(monkeypatch):
+    """A registry hit short-circuits before any DB work."""
+    from api import sessions as sessions_module
+
+    monkeypatch.setenv("USE_DATABASE", "true")
+    registry_project = SimpleNamespace(id="obsidian", name="Obsidian")
+    monkeypatch.setattr("models.project.get_project", lambda pid: registry_project)
+
+    db = _FakeDb(_db_project_row())
+    project = await sessions_module._resolve_project_context(
+        "obsidian", SimpleNamespace(id="u1", role="user", is_admin=False, is_active=True), db
+    )
+
+    assert project is registry_project
+    assert db.executed == 0
+
+
+@pytest.mark.asyncio
+async def test_create_session_uses_the_project_resolver(monkeypatch):
+    """The wiring: does create_session actually go through the resolver?
+
+    The tests above call _resolve_project_context directly, so reverting the
+    call site inside create_session leaves them all green - the same seam this
+    branch already got wrong once with the WebSocket token.
+    """
+    from api import sessions as sessions_module
+
+    called = {}
+
+    async def fake_resolver(project_id, current_user, db):
+        called["project_id"] = project_id
+        return SimpleNamespace(id=project_id, name="Resolved", path="/tmp/x")
+
+    monkeypatch.setattr(sessions_module, "_resolve_project_context", fake_resolver)
+
+    class _Engine:
+        async def create_session(self, **kwargs):
+            called["project_passed"] = kwargs.get("project")
+            return "sess-1"
+
+    async def no_quota(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(sessions_module, "_get_llm_access_for_session", no_quota)
+
+    response = await sessions_module.create_session(
+        request=sessions_module.SessionCreate(project_id="db-uuid-1"),
+        engine=_Engine(),
+        current_user=SimpleNamespace(id="u1", role="user", is_admin=False, is_active=True),
+        db=_FakeDb(),
+    )
+
+    assert response.session_id == "sess-1"
+    assert called["project_id"] == "db-uuid-1"
+    assert called["project_passed"].id == "db-uuid-1"
+
