@@ -337,11 +337,10 @@ export function ClaudeUsageDashboard() {
                 <UsageRadialMetric
                   key={window.windowDurationMins ?? idx}
                   label={formatCodexWindowLabel(window)}
-                  value={`${Math.round(window.remainingPercent)}% left`}
+                  value={`${Math.round(window.usedPercent)}% used`}
                   detail={formatCodexPlanDetail(window, codexLimit?.planType)}
-                  percent={window.remainingPercent}
-                  tone={getRemainingTone(window.remainingPercent)}
-                  centerText={`${Math.round(window.remainingPercent)}%`}
+                  percent={window.usedPercent}
+                  tone={getCodexUsedTone(window.usedPercent)}
                 />
               ))
             ) : (
@@ -525,9 +524,13 @@ function getLimitTone(percentUsed: number): UsageTone {
   return 'blue'
 }
 
-function getRemainingTone(percentRemaining: number): UsageTone {
-  if (percentRemaining <= 10) return 'red'
-  if (percentRemaining <= 30) return 'yellow'
+/**
+ * Codex 창은 Claude 카드와 같은 "소요량" 임계치(70/90%)를 쓰되,
+ * 안전 구간 색만 purple 로 남겨 같은 그리드에서 프로바이더를 구분한다.
+ */
+function getCodexUsedTone(percentUsed: number): UsageTone {
+  if (percentUsed >= 90) return 'red'
+  if (percentUsed >= 70) return 'yellow'
   return 'purple'
 }
 
@@ -546,7 +549,7 @@ function formatCodexWindowLabel(window: CodexPlanWindow): string {
 
 function formatCodexPlanDetail(window: CodexPlanWindow, planType?: string | null): string {
   const pieces = [
-    `${Math.round(window.usedPercent)}% used`,
+    `${Math.round(window.remainingPercent)}% left`,
     `${formatCodexWindowReset(window)} reset`,
   ]
   if (planType) {
