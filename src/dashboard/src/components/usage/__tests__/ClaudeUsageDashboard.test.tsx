@@ -349,6 +349,21 @@ describe('ClaudeUsageDashboard', () => {
     expect(utils.getByText('Unavailable')).toBeInTheDocument()
   })
 
+  it('keeps both Claude cards when upstream answered but omitted every limit', () => {
+    // The worst case of the same outage: Anthropic replies 200 with every core
+    // bucket null, so planLimits is empty while oauth is fine. Gating the
+    // placeholders on planLimits.length would hide both cards here - exactly
+    // the disappearance this component is supposed to make visible.
+    mockUsage = makeUsageResponse({ planLimits: [] })
+
+    const { container } = render(<ClaudeUsageDashboard />)
+    const utils = within(container)
+
+    expect(utils.getByText('Claude Session')).toBeInTheDocument()
+    expect(utils.getByText('Claude Weekly')).toBeInTheDocument()
+    expect(utils.getAllByText('Unavailable')).toHaveLength(2)
+  })
+
   it('does not show Claude placeholders when oauth itself is unavailable', () => {
     // The offline path already explains itself with the yellow banner above the
     // grid. Adding placeholders there would state the same failure twice.

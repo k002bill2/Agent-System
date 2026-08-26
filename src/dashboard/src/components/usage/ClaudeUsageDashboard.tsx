@@ -217,7 +217,11 @@ export function ClaudeUsageDashboard() {
   // Placeholders only make sense once Anthropic answered at all. When OAuth
   // itself is down the yellow banner above the grid already says so, and
   // placeholders would state the same failure a second time.
-  const claudeLimitsExpected = usage.oauthAvailable && usage.planLimits.length > 0
+  // The backend sets oauthAvailable only on paths where upstream actually
+  // responded, so it alone is the signal - gating on planLimits.length would
+  // re-hide both cards in the very case this placeholder exists for (upstream
+  // answered but omitted every core limit).
+  const claudeLimitsExpected = usage.oauthAvailable
   const codexWeeklyTokens = codexUsage?.weeklyTokens ?? 0
   const combinedWeeklyTokens = usage.weeklyTotalTokens + codexWeeklyTokens
   const secondaryLimits = [sonnetLimit, opusLimit].filter(Boolean) as PlanLimitInfo[]
