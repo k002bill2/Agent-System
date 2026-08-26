@@ -94,10 +94,19 @@ def ownerless_session() -> PlaygroundSession:
 
 
 @pytest_asyncio.fixture
-async def app():
+async def app(monkeypatch):
     from api.app import create_app
     from api.deps import clear_engine, set_engine
     from orchestrator import OrchestrationEngine
+
+    # RateLimitService is a process-global singleton whose in-memory counters
+    # are keyed by client IP and survive across test modules. This suite sends
+    # a few hundred requests from the same TestClient IP, so leaving the
+    # middleware on would exhaust the shared budget and make every LATER test
+    # module fail with 429 — an ordering-dependent break that only shows up in
+    # a full run. Authorization is what is under test here; rate limiting is
+    # covered elsewhere.
+    monkeypatch.setenv("RATE_LIMIT_ENABLED", "false")
 
     set_engine(OrchestrationEngine())
     test_app = create_app(title="Playground AuthZ Test", debug=True)
