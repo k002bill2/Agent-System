@@ -203,8 +203,8 @@ describe('ClaudeUsageDashboard', () => {
     // primary(300분)→"Codex 5h", secondary(10080분)→"Codex Weekly"로 창 길이 기준 라벨링된다.
     expect(utils.getByText('Codex 5h')).toBeInTheDocument()
     expect(utils.getByText('Codex Weekly')).toBeInTheDocument()
-    expect(utils.getByText('44% left')).toBeInTheDocument()
-    expect(utils.getByText('60% left')).toBeInTheDocument()
+    expect(utils.getByText('56% used')).toBeInTheDocument()
+    expect(utils.getByText('40% used')).toBeInTheDocument()
   })
 
   it('labels a weekly-only codex window as "Codex Weekly" (5h window removed)', async () => {
@@ -244,7 +244,7 @@ describe('ClaudeUsageDashboard', () => {
     const utils = within(container)
 
     expect(await utils.findByText('Codex Weekly')).toBeInTheDocument()
-    expect(utils.getByText('25% left')).toBeInTheDocument()
+    expect(utils.getByText('75% used')).toBeInTheDocument()
     expect(utils.queryByText('Codex 5h')).not.toBeInTheDocument()
   })
 
