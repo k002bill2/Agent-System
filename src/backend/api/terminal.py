@@ -8,17 +8,20 @@ from __future__ import annotations
 
 import re
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
+from api.deps import get_current_admin_or_manager_user, get_current_user
+from db.models import UserModel
 from models.project import get_project
+from services.audit_service import AuditAction, AuditService, ResourceType
 from services.terminal_service import (
     TERMINAL_INFO,
     TerminalType,
     get_terminal_service,
 )
 
-router = APIRouter(tags=["terminal"])
+router = APIRouter(tags=["terminal"], dependencies=[Depends(get_current_user)])
 
 
 # ---------------------------------------------------------------------------
@@ -58,6 +61,44 @@ class TerminalExecuteResponse(BaseModel):
     error: str | None = None
 
 
+def _sanitize_terminal_error(error_message: str | None) -> str | None:
+    """Keep audit errors bounded to a type/category, never adapter text."""
+    if not error_message:
+        return None
+    if error_message in {
+        "adapter_unavailable",
+        "adapter_error",
+        "execution_error",
+    }:
+        return error_message
+    return "adapter_error"
+
+
+def _log_terminal_execution(
+    request: TerminalExecuteRequest,
+    operator: UserModel,
+    *,
+    status: str,
+    error_message: str | None = None,
+) -> None:
+    """Audit terminal execution without persisting the command contents."""
+    AuditService.log(
+        action=AuditAction.TOOL_EXECUTED,
+        resource_type=ResourceType.TOOL,
+        resource_id=request.terminal,
+        project_id=request.project_id,
+        user_id=operator.id,
+        status=status,
+        error_message=_sanitize_terminal_error(error_message),
+        metadata={
+            "terminal": request.terminal,
+            "command_length": len(request.command),
+            "use_claude_cli": request.use_claude_cli,
+            "branch_name_provided": request.branch_name is not None,
+        },
+    )
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -74,6 +115,7 @@ async def get_available_terminals() -> dict:
 @router.post("/terminal/execute", response_model=TerminalExecuteResponse)
 async def execute_in_terminal(
     request: TerminalExecuteRequest,
+    _operator: UserModel = Depends(get_current_admin_or_manager_user),
 ) -> TerminalExecuteResponse:
     """Execute a command/prompt in the selected terminal.
 
@@ -95,11 +137,27 @@ async def execute_in_terminal(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    service = get_terminal_service()
-    adapter = service.get_adapter(terminal_type)
+    try:
+        service = get_terminal_service()
+        adapter = service.get_adapter(terminal_type)
+        available = await adapter.is_available()
+    except Exception:
+        _log_terminal_execution(
+            request,
+            _operator,
+            status="failed",
+            error_message="adapter_error",
+        )
+        raise
 
     # Check availability before attempting execution
-    if not await adapter.is_available():
+    if not available:
+        _log_terminal_execution(
+            request,
+            _operator,
+            status="failed",
+            error_message="adapter_unavailable",
+        )
         info = TERMINAL_INFO[terminal_type]
         return TerminalExecuteResponse(
             success=False,
@@ -107,17 +165,36 @@ async def execute_in_terminal(
             error=f"{info['name']} is not installed",
         )
 
-    result = await adapter.execute(
-        project_path=project.path,
-        command=request.command,
-        title=request.title,
-        branch_name=request.branch_name,
-        image_paths=request.image_paths,
-    )
+    try:
+        result = await adapter.execute(
+            project_path=project.path,
+            command=request.command,
+            title=request.title,
+            branch_name=request.branch_name,
+            image_paths=request.image_paths,
+        )
+        if not isinstance(result, dict):
+            raise TypeError("terminal adapter returned an invalid result")
 
-    return TerminalExecuteResponse(
-        success=result.get("success", False),
-        terminal=result.get("terminal", request.terminal),
-        message=result.get("message"),
-        error=result.get("error"),
-    )
+        success = result.get("success", False)
+        _log_terminal_execution(
+            request,
+            _operator,
+            status="success" if success else "failed",
+            error_message=result.get("error"),
+        )
+
+        return TerminalExecuteResponse(
+            success=success,
+            terminal=result.get("terminal", request.terminal),
+            message=result.get("message"),
+            error=result.get("error"),
+        )
+    except Exception:
+        _log_terminal_execution(
+            request,
+            _operator,
+            status="failed",
+            error_message="execution_error",
+        )
+        raise

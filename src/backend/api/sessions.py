@@ -4,11 +4,19 @@ Handles session lifecycle (create, get, delete, sync, refresh) and
 task operations (submit, cancel, retry, pause, resume, delete, tree).
 """
 
+import os
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import get_current_user_optional, get_db_session, get_engine
+from api.deps import (
+    authorize_session_state,
+    get_current_user,
+    get_db_session,
+    get_engine,
+    require_project_role,
+)
 from db.models import UserModel
 from models.llm_access import LLMAccessResponse
 from models.task import TaskCreate, TaskTree
@@ -70,8 +78,12 @@ async def _get_llm_access_for_session(
     db: AsyncSession,
     organization_id: str | None,
 ) -> LLMAccessResponse | None:
-    """Resolve LLM access only for authenticated users."""
-    if not current_user:
+    """Resolve LLM access only when database-backed auth is enabled."""
+    if not current_user or os.getenv("USE_DATABASE", "false").lower() not in {
+        "1",
+        "true",
+        "yes",
+    }:
         return None
     return await get_access_for_user(
         db,
@@ -91,21 +103,88 @@ async def health_check():
     return {"status": "healthy", "service": "agent-orchestrator"}
 
 
+async def require_session_access(
+    session_id: str,
+    engine: OrchestrationEngine = Depends(get_engine),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Require ownership or privileged access to an orchestration session."""
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+    authorize_session_state(state, current_user)
+    return state
+
+
 # ─────────────────────────────────────────────────────────────
 # Session CRUD
 # ─────────────────────────────────────────────────────────────
 
 
-@router.post("/sessions", response_model=SessionResponse)
+async def _resolve_project_context(
+    project_id: str,
+    current_user: UserModel,
+    db: AsyncSession,
+):
+    """Resolve a project id against whichever registry is authoritative.
+
+    In database mode startup no longer populates PROJECTS_REGISTRY while
+    ``/api/projects`` serves ProjectModel ids - so the filesystem lookup misses
+    every id the dashboard is able to send, and session creation 404s on the
+    projects it just listed. Fall back to the DB registry there.
+
+    The DB branch authorizes the project the same way every other
+    project-scoped route does: a session must not be able to attach a project
+    the caller could not otherwise reach.
+    """
+    from models.project import Project, get_project
+
+    project = get_project(project_id)
+    if project is not None:
+        return project
+
+    if os.getenv("USE_DATABASE", "false").lower() != "true":
+        return None
+
+    from sqlalchemy import select
+
+    from db.models import ProjectModel
+
+    # Raises 404 (unknown), 403 (denied) or 503 (lookup failed) - fail closed.
+    await require_project_role(project_id, current_user, db, min_role="viewer")
+
+    row = (
+        await db.execute(
+            select(ProjectModel).where(
+                ProjectModel.id == project_id,
+                ProjectModel.is_active == True,  # noqa: E712
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+
+    return Project(
+        id=str(row.id),
+        name=row.name,
+        path=str(row.path or ""),
+        description=row.description or "",
+        organization_id=str(row.organization_id) if row.organization_id else None,
+    )
+
+
+@router.post(
+    "/sessions",
+    response_model=SessionResponse,
+    dependencies=[Depends(get_current_user)],
+)
 async def create_session(
     request: SessionCreate = None,
     engine: OrchestrationEngine = Depends(get_engine),
-    current_user: UserModel | None = Depends(get_current_user_optional),
+    current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Create a new orchestration session with optional project context."""
-    from models.project import get_project
-
     project_id = request.project_id if request else None
     organization_id = request.organization_id if request else None
     user_id = str(current_user.id) if current_user else None
@@ -113,7 +192,7 @@ async def create_session(
     # Validate project if specified
     project = None
     if project_id:
-        project = get_project(project_id)
+        project = await _resolve_project_context(project_id, current_user, db)
         if not project:
             raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
 
@@ -141,7 +220,11 @@ async def create_session(
     )
 
 
-@router.get("/sessions/{session_id}", response_model=StateResponse)
+@router.get(
+    "/sessions/{session_id}",
+    response_model=StateResponse,
+    dependencies=[Depends(require_session_access)],
+)
 async def get_session(
     session_id: str,
     engine: OrchestrationEngine = Depends(get_engine),
@@ -163,7 +246,7 @@ async def get_session(
     )
 
 
-@router.get("/sessions/{session_id}/info")
+@router.get("/sessions/{session_id}/info", dependencies=[Depends(require_session_access)])
 async def get_session_info(
     session_id: str,
     engine: OrchestrationEngine = Depends(get_engine),
@@ -182,7 +265,7 @@ async def get_session_info(
     return info
 
 
-@router.post("/sessions/{session_id}/refresh")
+@router.post("/sessions/{session_id}/refresh", dependencies=[Depends(require_session_access)])
 async def refresh_session(
     session_id: str,
     extend_days: int | None = None,
@@ -208,7 +291,7 @@ async def refresh_session(
     }
 
 
-@router.delete("/sessions/{session_id}")
+@router.delete("/sessions/{session_id}", dependencies=[Depends(require_session_access)])
 async def delete_session(
     session_id: str,
     engine: OrchestrationEngine = Depends(get_engine),
@@ -219,7 +302,7 @@ async def delete_session(
     return {"message": "Session deleted"}
 
 
-@router.get("/sessions/{session_id}/sync")
+@router.get("/sessions/{session_id}/sync", dependencies=[Depends(require_session_access)])
 async def sync_session(
     session_id: str,
     engine: OrchestrationEngine = Depends(get_engine),
@@ -272,12 +355,16 @@ async def sync_session(
 # ─────────────────────────────────────────────────────────────
 
 
-@router.post("/sessions/{session_id}/tasks", response_model=TaskResponse)
+@router.post(
+    "/sessions/{session_id}/tasks",
+    response_model=TaskResponse,
+    dependencies=[Depends(require_session_access)],
+)
 async def submit_task(
     session_id: str,
     task: TaskCreate,
     engine: OrchestrationEngine = Depends(get_engine),
-    current_user: UserModel | None = Depends(get_current_user_optional),
+    current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Submit a task for orchestration."""
@@ -305,7 +392,7 @@ async def submit_task(
     )
 
 
-@router.post("/sessions/{session_id}/cancel")
+@router.post("/sessions/{session_id}/cancel", dependencies=[Depends(require_session_access)])
 async def cancel_orchestration(
     session_id: str,
     engine: OrchestrationEngine = Depends(get_engine),
@@ -316,7 +403,9 @@ async def cancel_orchestration(
     return {"message": "Orchestration cancelled"}
 
 
-@router.get("/sessions/{session_id}/tasks/{task_id}")
+@router.get(
+    "/sessions/{session_id}/tasks/{task_id}", dependencies=[Depends(require_session_access)]
+)
 async def get_task(
     session_id: str,
     task_id: str,
@@ -335,7 +424,9 @@ async def get_task(
     return task.model_dump() if hasattr(task, "model_dump") else task
 
 
-@router.delete("/sessions/{session_id}/tasks/{task_id}")
+@router.delete(
+    "/sessions/{session_id}/tasks/{task_id}", dependencies=[Depends(require_session_access)]
+)
 async def delete_task(
     session_id: str,
     task_id: str,
@@ -380,7 +471,10 @@ async def delete_task(
     }
 
 
-@router.get("/sessions/{session_id}/tasks/{task_id}/deletion-info")
+@router.get(
+    "/sessions/{session_id}/tasks/{task_id}/deletion-info",
+    dependencies=[Depends(require_session_access)],
+)
 async def get_task_deletion_info(
     session_id: str,
     task_id: str,
@@ -409,7 +503,9 @@ async def get_task_deletion_info(
     return info
 
 
-@router.post("/sessions/{session_id}/tasks/{task_id}/cancel")
+@router.post(
+    "/sessions/{session_id}/tasks/{task_id}/cancel", dependencies=[Depends(require_session_access)]
+)
 async def cancel_single_task(
     session_id: str,
     task_id: str,
@@ -442,7 +538,9 @@ async def cancel_single_task(
     }
 
 
-@router.post("/sessions/{session_id}/tasks/{task_id}/retry")
+@router.post(
+    "/sessions/{session_id}/tasks/{task_id}/retry", dependencies=[Depends(require_session_access)]
+)
 async def retry_task(
     session_id: str,
     task_id: str,
@@ -477,7 +575,9 @@ async def retry_task(
     }
 
 
-@router.post("/sessions/{session_id}/tasks/{task_id}/pause")
+@router.post(
+    "/sessions/{session_id}/tasks/{task_id}/pause", dependencies=[Depends(require_session_access)]
+)
 async def pause_task(
     session_id: str,
     task_id: str,
@@ -512,7 +612,9 @@ async def pause_task(
     }
 
 
-@router.post("/sessions/{session_id}/tasks/{task_id}/resume")
+@router.post(
+    "/sessions/{session_id}/tasks/{task_id}/resume", dependencies=[Depends(require_session_access)]
+)
 async def resume_task(
     session_id: str,
     task_id: str,
@@ -549,7 +651,11 @@ async def resume_task(
 # ─────────────────────────────────────────────────────────────
 
 
-@router.get("/sessions/{session_id}/tree", response_model=TaskTree | None)
+@router.get(
+    "/sessions/{session_id}/tree",
+    response_model=TaskTree | None,
+    dependencies=[Depends(require_session_access)],
+)
 async def get_task_tree(
     session_id: str,
     engine: OrchestrationEngine = Depends(get_engine),

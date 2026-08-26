@@ -8,6 +8,8 @@
 던져 응답을 확인한다.
 """
 
+from types import SimpleNamespace
+
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
@@ -53,7 +55,7 @@ async def test_ping_survives_ttl_refresh_contention(monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    from api.deps import clear_engine, set_engine
+    from api.deps import clear_engine, get_current_user_websocket, set_engine
     from api.websocket import websocket_endpoint
     from orchestrator import OrchestrationEngine
 
@@ -67,8 +69,13 @@ async def test_ping_survives_ttl_refresh_contention(monkeypatch):
         "services.session_service.get_session_service", lambda: _AlwaysConflicts()
     )
 
-    set_engine(OrchestrationEngine())
+    engine = OrchestrationEngine()
+    await engine.create_session(session_id="s-292", user_id="test-admin")
+    set_engine(engine)
     app = FastAPI()
+    app.dependency_overrides[get_current_user_websocket] = lambda: SimpleNamespace(
+        id="test-admin", role="admin", is_admin=True, is_active=True
+    )
     app.add_api_websocket_route("/ws/{session_id}", websocket_endpoint)
 
     try:

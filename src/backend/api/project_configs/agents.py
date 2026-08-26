@@ -8,8 +8,10 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from api.deps import get_current_user, get_db_session
+from api.project_configs.access import require_project_config_target_access
 from models.project_config import (
     AgentConfig,
     AgentContentResponse,
@@ -163,7 +165,13 @@ async def delete_agent(project_id: str, agent_id: str) -> dict:
 
 
 @router.post("/{project_id}/agents/{agent_id}/copy")
-async def copy_agent(project_id: str, agent_id: str, request: CopyAgentRequest) -> dict:
+async def copy_agent(
+    project_id: str,
+    agent_id: str,
+    request: CopyAgentRequest,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db_session),
+) -> dict:
     """Copy an agent to another project.
 
     Args:
@@ -174,6 +182,7 @@ async def copy_agent(project_id: str, agent_id: str, request: CopyAgentRequest) 
     Returns:
         Success status
     """
+    await require_project_config_target_access(request.target_project_id, current_user, db)
     monitor = get_project_config_monitor()
 
     result = monitor.copy_agent(project_id, agent_id, request.target_project_id)

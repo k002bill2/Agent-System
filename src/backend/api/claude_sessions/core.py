@@ -15,7 +15,9 @@ import asyncio
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from api.deps import get_current_admin_or_manager_user
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,11 @@ from services.claude_session_monitor import (
 
 from .sync import _sync_sessions_to_db
 
-router = APIRouter(prefix="/claude-sessions", tags=["claude-sessions"])
+router = APIRouter(
+    prefix="/claude-sessions",
+    tags=["claude-sessions"],
+    dependencies=[Depends(get_current_admin_or_manager_user)],
+)
 
 
 from typing import Literal
@@ -129,7 +135,9 @@ async def list_sessions(
 
 
 @router.delete("")
-async def delete_empty_sessions() -> dict:
+async def delete_empty_sessions(
+    _admin=Depends(get_current_admin_or_manager_user),
+) -> dict:
     """Delete all sessions with 0 messages.
 
     Returns:

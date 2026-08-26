@@ -11,13 +11,14 @@
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from api.deps import get_current_admin_or_manager_user
 from services.claude_session_monitor import get_monitor
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_admin_or_manager_user)])
 
 
 @router.get("/summaries/pending-count")

@@ -18,6 +18,7 @@ import {
 } from '../orchestration'
 import { apiClient } from '../../services/apiClient'
 import { ApiError } from '../../services/errors'
+import { useAuthStore } from '../auth'
 
 const mockApiClient = vi.mocked(apiClient)
 
@@ -98,9 +99,28 @@ function resetStore() {
   })
 }
 
+/**
+ * Give the store a live access token.
+ *
+ * The dashboard authenticates `/ws/{id}` with a `token` query parameter, so a
+ * token-less store refuses to open the socket at all. Every WebSocket test here
+ * therefore needs one - which is itself the proof that the auth is enforced.
+ */
+function authenticate() {
+  useAuthStore.setState({
+    accessToken: 'test-access-token',
+    expiresAt: Date.now() + 60 * 60 * 1000,
+  })
+}
+
+function deauthenticate() {
+  useAuthStore.setState({ accessToken: null, expiresAt: null })
+}
+
 describe('orchestration store', () => {
   beforeEach(() => {
     resetStore()
+    authenticate()
     mockFetch.mockReset()
     vi.clearAllTimers()
     lastCreatedWs = null
@@ -923,6 +943,31 @@ describe('orchestration store', () => {
       expect(ws.url).toContain('/ws/sess-new')
     })
 
+    it('carries the access token on the connect WebSocket URL', async () => {
+      // The backend rejects a token-less /ws/{id} with close code 1008, and a
+      // browser WebSocket cannot send an Authorization header - the query
+      // parameter is the only channel available.
+      useOrchestrationStore.setState({ selectedProjectId: 'p1' })
+
+      const ws = await connectAndOpen('sess-auth')
+
+      expect(ws.url).toContain('/ws/sess-auth?token=test-access-token')
+    })
+
+    it('refuses to open the connect WebSocket without a token', async () => {
+      useOrchestrationStore.setState({ selectedProjectId: 'p1' })
+      deauthenticate()
+      mockApiClient.post.mockResolvedValueOnce({ session_id: 'sess-noauth' })
+
+      await useOrchestrationStore.getState().connect()
+
+      // No socket at all beats one that gets closed with 1008: the failure is
+      // reported as an auth failure instead of a generic disconnect.
+      expect(lastCreatedWs).toBeNull()
+      expect(useOrchestrationStore.getState().connectionStatus).toBe('failed')
+      expect(useOrchestrationStore.getState().isInitialLoading).toBe(false)
+    })
+
     it('handles session creation failure (non-ok response)', async () => {
       useOrchestrationStore.setState({ selectedProjectId: 'p1' })
 
@@ -1171,6 +1216,39 @@ describe('orchestration store', () => {
       expect(useOrchestrationStore.getState().connected).toBe(true)
       expect(useOrchestrationStore.getState().connectionStatus).toBe('connected')
       expect(useOrchestrationStore.getState().reconnectAttempt).toBe(0)
+    })
+
+    it('carries the access token on the reconnect WebSocket URL', async () => {
+      // The reconnect path is the one that gets missed: a fix applied only to
+      // connect() leaves every resumed session unauthenticated.
+      useOrchestrationStore.setState({ sessionId: 'sess-reauth' })
+
+      mockApiClient.get.mockResolvedValueOnce({
+        session_info: null,
+        tasks: {},
+        root_task_id: null,
+      })
+
+      await useOrchestrationStore.getState().reconnect()
+
+      expect(lastCreatedWs).not.toBeNull()
+      expect(lastCreatedWs!.url).toContain('/ws/sess-reauth?token=test-access-token')
+    })
+
+    it('refuses to reopen the reconnect WebSocket without a token', async () => {
+      useOrchestrationStore.setState({ sessionId: 'sess-renoauth' })
+      deauthenticate()
+
+      mockApiClient.get.mockResolvedValueOnce({
+        session_info: null,
+        tasks: {},
+        root_task_id: null,
+      })
+
+      await useOrchestrationStore.getState().reconnect()
+
+      expect(lastCreatedWs).toBeNull()
+      expect(useOrchestrationStore.getState().connectionStatus).toBe('failed')
     })
 
     it('handles WebSocket close during reconnect (auto-reconnect)', async () => {

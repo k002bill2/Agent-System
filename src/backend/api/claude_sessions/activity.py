@@ -10,9 +10,10 @@
 import asyncio
 from collections.abc import AsyncGenerator
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
+from api.deps import get_current_admin_or_manager_user
 from models.claude_session import (
     ActivityResponse,
     SessionStatus,
@@ -20,7 +21,7 @@ from models.claude_session import (
 )
 from services.claude_session_monitor import get_monitor
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_admin_or_manager_user)])
 
 
 @router.get("/{session_id}/activity", response_model=ActivityResponse)

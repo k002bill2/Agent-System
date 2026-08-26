@@ -116,14 +116,22 @@ def test_compute_stats_breakdown_sums_to_total():
 
 
 @pytest.mark.asyncio
-async def test_stats_endpoint_returns_zero_filled_seven_day_trend(client):
+async def test_stats_endpoint_returns_zero_filled_seven_day_trend(client, app):
+    from api.deps import get_current_user
+
+    app.dependency_overrides[get_current_user] = lambda: type(
+        "TestUser", (), {"id": "test-user", "role": "admin", "is_admin": True, "is_active": True}
+    )()
     AuditService.log(action=AuditAction.USER_LOGIN, resource_type=ResourceType.USER)
     old = AuditService.log(
         action=AuditAction.TOOL_EXECUTED, resource_type=ResourceType.TOOL, status="failed"
     )
     old.created_at = utcnow() - timedelta(days=3)  # leaves 5 days with no activity
 
-    resp = await client.get("/api/audit/stats")
+    try:
+        resp = await client.get("/api/audit/stats")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
 
     assert resp.status_code == 200
     data = resp.json()
@@ -140,8 +148,16 @@ async def test_stats_endpoint_returns_zero_filled_seven_day_trend(client):
 
 
 @pytest.mark.asyncio
-async def test_stats_endpoint_empty_store(client):
-    resp = await client.get("/api/audit/stats")
+async def test_stats_endpoint_empty_store(client, app):
+    from api.deps import get_current_user
+
+    app.dependency_overrides[get_current_user] = lambda: type(
+        "TestUser", (), {"id": "test-user", "role": "admin", "is_admin": True, "is_active": True}
+    )()
+    try:
+        resp = await client.get("/api/audit/stats")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
 
     assert resp.status_code == 200
     data = resp.json()

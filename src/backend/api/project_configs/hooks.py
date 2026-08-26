@@ -10,8 +10,10 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from api.deps import get_current_user, get_db_session
+from api.project_configs.access import require_project_config_target_access
 from models.project_config import (
     CopyHookRequest,
     HookEntryRequest,
@@ -132,7 +134,14 @@ async def delete_hook(project_id: str, event: str, index: int) -> dict:
 
 
 @router.post("/{project_id}/hooks/{event}/{index}/copy")
-async def copy_hook(project_id: str, event: str, index: int, request: CopyHookRequest) -> dict:
+async def copy_hook(
+    project_id: str,
+    event: str,
+    index: int,
+    request: CopyHookRequest,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db_session),
+) -> dict:
     """Copy a hook to another project.
 
     Args:
@@ -144,6 +153,7 @@ async def copy_hook(project_id: str, event: str, index: int, request: CopyHookRe
     Returns:
         Success status
     """
+    await require_project_config_target_access(request.target_project_id, current_user, db)
     monitor = get_project_config_monitor()
 
     result = monitor.copy_hook(project_id, event, index, request.target_project_id)

@@ -34,11 +34,44 @@ except ImportError:
 # Check deployment mode - Railway has limited dependencies
 RAILWAY_MODE = os.getenv("RAILWAY", "false").lower() == "true"
 
+
+def _api_docs_enabled(debug: bool = False) -> bool:
+    """Enable API docs only in debug mode or with explicit configuration."""
+    env_debug = os.getenv("DEBUG", "false").lower() == "true"
+    explicit_enable = os.getenv("ENABLE_API_DOCS", "false").lower() == "true"
+    return debug or env_debug or explicit_enable
+
+
 # ─────────────────────────────────────────────────────────────
 # Railway Mode: Minimal app (no LLM dependencies)
 # ─────────────────────────────────────────────────────────────
 if RAILWAY_MODE:
-    app = FastAPI(title="Agent Orchestration Service (Railway)")
+    railway_debug = os.getenv("DEBUG", "false").lower() == "true"
+    railway_docs_enabled = _api_docs_enabled(railway_debug)
+    app = FastAPI(
+        title="Agent Orchestration Service (Railway)",
+        docs_url="/docs" if railway_docs_enabled else None,
+        redoc_url="/redoc" if railway_docs_enabled else None,
+        openapi_url="/openapi.json" if railway_docs_enabled else None,
+    )
+
+    @app.exception_handler(Exception)
+    async def railway_exception_handler(request: Request, exc: Exception):
+        """Return a generic JSON error without exposing traceback details."""
+        import logging
+
+        from fastapi.responses import JSONResponse
+
+        request_id = uuid.uuid4().hex
+        logging.getLogger("aos.railway").error(
+            "Unhandled exception",
+            exc_info=exc,
+            extra={"request_id": request_id, "path": request.url.path},
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error", "request_id": request_id},
+        )
 
     app.add_middleware(
         CORSMiddleware,
@@ -58,8 +91,15 @@ if RAILWAY_MODE:
             "service": "Agent Orchestration Service",
             "status": "running",
             "railway_mode": True,
-            "docs": "/docs",
+            "docs": "/docs" if railway_docs_enabled else None,
         }
+
+    def create_app(
+        title: str = "Agent Orchestration Service",
+        debug: bool = False,
+    ) -> FastAPI:
+        """Return the minimal Railway app for package-level compatibility."""
+        return app
 
 # ─────────────────────────────────────────────────────────────
 # Full Mode: Complete app with all features
@@ -160,7 +200,7 @@ else:
                 "SESSION_SECRET_KEY is empty or the insecure default — set a strong "
                 "value (run ./setup.sh) before deploying to production."
             )
-            if app.debug:
+            if getattr(app.state, "debug_requested", False):
                 if logger:
                     logger.warning("insecure_session_secret_key", detail=_secret_msg)
                 else:
@@ -225,22 +265,12 @@ else:
             else:
                 print("📝 Running in memory mode (USE_DATABASE=false)")
 
-        # Initialize projects from projects/ directory
-        if PROJECTS_ENABLED:
+        # Filesystem discovery is only used in memory mode. In database mode
+        # the explicit ProjectModel registry is the sole project authority.
+        if PROJECTS_ENABLED and not USE_DATABASE:
             backend_dir = Path(__file__).parent.parent
             project_root = backend_dir.parent.parent
             init_projects(str(project_root))
-
-            if USE_DATABASE:
-                try:
-                    from services.project_sync_service import sync_all_projects_to_db
-
-                    synced = await sync_all_projects_to_db()
-                    if logger:
-                        logger.info("startup_project_sync_done", count=synced)
-                except Exception as e:
-                    if logger:
-                        logger.warning("startup_project_sync_failed", error=str(e))
 
             try:
                 from models.git import sync_git_repositories_from_projects
@@ -396,13 +426,24 @@ else:
         debug: bool = False,
     ) -> FastAPI:
         """Create and configure the FastAPI application."""
+        api_docs_enabled = _api_docs_enabled(debug)
+        docs_path = "/docs" if api_docs_enabled else None
+        redoc_path = "/redoc" if api_docs_enabled else None
+        openapi_path = "/openapi.json" if api_docs_enabled else None
         app = FastAPI(
             title=title,
             description="Multi-agent orchestration system powered by LangGraph",
             version="0.1.0",
-            debug=debug,
+            # Keep Starlette traceback responses disabled even when debug is
+            # requested for local diagnostics; docs exposure is configured
+            # independently above.
+            debug=False,
             lifespan=lifespan,
+            docs_url=docs_path,
+            redoc_url=redoc_path,
+            openapi_url=openapi_path,
         )
+        app.state.debug_requested = debug
 
         # Configure CORS - use Settings for robust parsing (JSON array, comma-separated)
         from config import get_settings
@@ -495,7 +536,7 @@ else:
                 "service": "Agent Orchestration Service",
                 "status": "running",
                 "railway_mode": False,
-                "docs": "/docs",
+                "docs": "/docs" if api_docs_enabled else None,
             }
 
         # 세션 쓰기 경합은 장애가 아니다 — 다른 쓰기가 먼저 반영됐을 뿐이고
@@ -516,16 +557,18 @@ else:
         @app.exception_handler(Exception)
         async def global_exception_handler(request: Request, exc: Exception):
             import logging
-            import traceback
 
             from fastapi.responses import JSONResponse
 
+            request_id = uuid.uuid4().hex
             logging.getLogger("aos.app").error(
-                f"Unhandled exception: {exc}\n{traceback.format_exc()}"
+                "Unhandled exception",
+                exc_info=exc,
+                extra={"request_id": request_id, "path": request.url.path},
             )
             return JSONResponse(
                 status_code=500,
-                content={"detail": f"Internal server error: {type(exc).__name__}: {str(exc)}"},
+                content={"detail": "Internal server error", "request_id": request_id},
             )
 
         # Include core router (if available)

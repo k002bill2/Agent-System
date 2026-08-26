@@ -9,12 +9,13 @@
 `__init__.py` 에서 **`sessions` 보다 먼저** include 해야 한다.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from api.deps import get_current_admin_or_manager_user
 from services.claude_session_monitor import get_monitor
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_admin_or_manager_user)])
 
 
 class ExternalPathRequest(BaseModel):

@@ -16,12 +16,14 @@ services:
       dockerfile: ../../infra/docker/Dockerfile.backend.dev
     container_name: aos-backend-dev
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "${BACKEND_BIND_HOST:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://aos:aos@postgres:5432/aos
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-aos}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aos}
       - USE_DATABASE=true
-      - REDIS_URL=redis://redis:6379/0
+      - ENABLE_API_DOCS=${ENABLE_API_DOCS:-true}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
       - QDRANT_URL=http://qdrant:6333
+      - QDRANT_API_KEY=${QDRANT_API_KEY:?set QDRANT_API_KEY}
       - LLM_PROVIDER=${LLM_PROVIDER:-codex_cli}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
@@ -53,7 +55,7 @@ services:
       dockerfile: Dockerfile.dev
     container_name: aos-dashboard-dev
     ports:
-      - "${DASHBOARD_PORT:-5173}:5173"
+      - "${DASHBOARD_BIND_HOST:-127.0.0.1}:${DASHBOARD_PORT:-5173}:5173"
     volumes:
       - ./src/dashboard:/app
       - /app/node_modules
@@ -67,15 +69,15 @@ services:
     image: postgres:16-alpine
     container_name: aos-postgres-dev
     environment:
-      POSTGRES_USER: aos
-      POSTGRES_PASSWORD: aos
-      POSTGRES_DB: aos
+      POSTGRES_USER: ${POSTGRES_USER:-aos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-aos}
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
     ports:
-      - "${PG_PORT:-5432}:5432"
+      - "${PG_BIND_HOST:-127.0.0.1}:${PG_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U aos -d aos"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aos} -d ${POSTGRES_DB:-aos}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -86,11 +88,13 @@ services:
   redis:
     image: redis:7-alpine
     container_name: aos-redis-dev
-    command: redis-server --appendonly yes
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD}"]
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
     volumes:
       - redis_dev_data:/data
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${REDIS_BIND_HOST:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -104,8 +108,10 @@ services:
     image: qdrant/qdrant:latest
     container_name: aos-qdrant-dev
     ports:
-      - "${QDRANT_PORT:-6333}:6333"
-      - "${QDRANT_GRPC_PORT:-6334}:6334"
+      - "${QDRANT_BIND_HOST:-127.0.0.1}:${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_BIND_HOST:-127.0.0.1}:${QDRANT_GRPC_PORT:-6334}:6334"
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:?set QDRANT_API_KEY}
     volumes:
       - qdrant_dev_data:/qdrant/storage
     healthcheck:

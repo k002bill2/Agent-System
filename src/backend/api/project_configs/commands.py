@@ -5,8 +5,10 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from api.deps import get_current_user, get_db_session
+from api.project_configs.access import require_project_config_target_access
 from models.project_config import (
     CommandConfig,
     CommandContentResponse,
@@ -149,7 +151,13 @@ async def delete_command(project_id: str, command_id: str) -> dict:
 
 
 @router.post("/{project_id}/commands/{command_id}/copy")
-async def copy_command(project_id: str, command_id: str, request: CopyCommandRequest) -> dict:
+async def copy_command(
+    project_id: str,
+    command_id: str,
+    request: CopyCommandRequest,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db_session),
+) -> dict:
     """Copy a command to another project.
 
     Args:
@@ -160,6 +168,7 @@ async def copy_command(project_id: str, command_id: str, request: CopyCommandReq
     Returns:
         Success status
     """
+    await require_project_config_target_access(request.target_project_id, current_user, db)
     monitor = get_project_config_monitor()
 
     result = monitor.copy_command(project_id, command_id, request.target_project_id)

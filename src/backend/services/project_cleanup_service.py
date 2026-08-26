@@ -242,10 +242,10 @@ class ProjectCleanupService:
         if not os.getenv("USE_DATABASE", "").lower() == "true":
             return {}
 
-        from db.database import get_db_session
+        from db.database import async_session_factory
         from db.repository import SessionRepository
 
-        async with get_db_session() as db:
+        async with async_session_factory() as db:
             repo = SessionRepository(db)
             counts = await repo.count_related_by_project(project_id)
             return counts
@@ -260,10 +260,10 @@ class ProjectCleanupService:
         if not os.getenv("USE_DATABASE", "").lower() == "true":
             return 0
 
-        from db.database import get_db_session
+        from db.database import async_session_factory
         from db.repository import SessionRepository
 
-        async with get_db_session() as db:
+        async with async_session_factory() as db:
             repo = SessionRepository(db)
             deleted = await repo.delete_by_project(project_id)
             await db.commit()

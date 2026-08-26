@@ -10,19 +10,19 @@
 
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
-from api.deps import get_current_user_optional
+from api.deps import get_current_admin_or_manager_user, get_current_user
 from services.claude_session_monitor import get_monitor
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_admin_or_manager_user)])
 
 
 @router.get("/projects")
 async def list_projects(
-    current_user=Depends(get_current_user_optional),
+    current_user=Depends(get_current_user),
 ) -> dict:
     """List project names for session filtering (접근 제어 적용).
 
@@ -35,7 +35,7 @@ async def list_projects(
 
     use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
 
-    if use_database and current_user:
+    if use_database:
         try:
             from sqlalchemy import or_, select
 
@@ -84,12 +84,21 @@ async def list_projects(
                             .order_by(ProjectModel.name)
                         )
 
-                project_names = [row[0] for row in result.fetchall()]
+                project_names = [row[0] for row in result.fetchall() if row[0]]
+                if not project_names:
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Project access control is temporarily unavailable",
+                    )
                 return {"projects": project_names}
-        except Exception as e:
-            logger.warning(f"DB project lookup failed, falling back to filesystem: {e}")
+        except Exception as exc:
+            logger.exception("DB project lookup failed")
+            raise HTTPException(
+                status_code=503,
+                detail="Project access control is temporarily unavailable",
+            ) from exc
 
-    # Fallback: filesystem-based discovery
+    # Filesystem discovery is only valid when the database registry is disabled.
     monitor = get_monitor()
     projects = monitor.get_unique_projects()
 
@@ -133,7 +142,9 @@ async def list_ghost_sessions() -> dict:
 
 
 @router.delete("/ghost")
-async def delete_ghost_sessions() -> dict:
+async def delete_ghost_sessions(
+    _admin=Depends(get_current_admin_or_manager_user),
+) -> dict:
     """Delete all ghost sessions.
 
     Returns:

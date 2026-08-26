@@ -12,12 +12,18 @@ DB 관리 프로젝트 레지스트리의 CRUD 와 생명주기(비활성화·�
 import logging
 import re
 import uuid
+from collections.abc import Awaitable, Callable
+from functools import wraps
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import get_current_admin_user, get_current_user, get_db_session
+from api.deps import (
+    get_current_admin_or_manager_user,
+    get_current_admin_user,
+    get_current_user,
+)
 from db.models import UserModel
 from models.project import (
     DBProjectCreate,
@@ -65,12 +71,32 @@ def _model_to_response(row) -> DBProjectResponse:
     )
 
 
+def _db_fail_closed(func: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
+    """Convert unexpected registry/database failures into a generic 503."""
+
+    @wraps(func)
+    async def wrapped(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return await func(*args, **kwargs)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("Project registry database operation failed")
+            raise HTTPException(
+                status_code=503,
+                detail="Project registry is temporarily unavailable",
+            ) from exc
+
+    return wrapped
+
+
 @router.post("", response_model=DBProjectResponse, status_code=201)
+@_db_fail_closed
 async def create_project(
     request: DBProjectCreate,
-    current_user: UserModel = Depends(get_current_user),
+    current_user: UserModel = Depends(get_current_admin_or_manager_user),
 ) -> DBProjectResponse:
-    """Create a new project. Only system admins or org admin/owners can create."""
+    """Create a new project. Only admins or managers can create."""
     import os
 
     use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
@@ -80,7 +106,7 @@ async def create_project(
     from db.database import async_session_factory
     from db.models import ProjectAccessModel, ProjectModel
 
-    is_system_admin = current_user.role == "admin" or current_user.is_admin
+    is_system_admin = current_user.role in {"admin", "manager"} or current_user.is_admin
 
     # 조직 admin 체크
     admin_org_ids = []
@@ -152,9 +178,9 @@ async def create_project(
 
 
 @router.get("", response_model=DBProjectListResponse)
+@_db_fail_closed
 async def list_active_projects(
     current_user: UserModel = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session),
 ) -> DBProjectListResponse:
     """List active projects filtered by org membership.
 
@@ -225,6 +251,7 @@ async def list_active_projects(
 
 
 @router.get("/all", response_model=DBProjectListResponse)
+@_db_fail_closed
 async def list_all_projects(
     current_user: UserModel = Depends(get_current_admin_user),
 ) -> DBProjectListResponse:
@@ -255,7 +282,11 @@ async def list_all_projects(
 
 
 @router.get("/{project_id}", response_model=DBProjectResponse)
-async def get_project(project_id: str) -> DBProjectResponse:
+@_db_fail_closed
+async def get_project(
+    project_id: str,
+    _current_user: UserModel = Depends(get_current_user),
+) -> DBProjectResponse:
     """Get a specific project by ID.
 
     Args:
@@ -284,7 +315,12 @@ async def get_project(project_id: str) -> DBProjectResponse:
 
 
 @router.put("/{project_id}", response_model=DBProjectResponse)
-async def update_project(project_id: str, request: DBProjectUpdate) -> DBProjectResponse:
+@_db_fail_closed
+async def update_project(
+    project_id: str,
+    request: DBProjectUpdate,
+    _operator: UserModel = Depends(get_current_admin_or_manager_user),
+) -> DBProjectResponse:
     """Update a project.
 
     Args:
@@ -342,7 +378,11 @@ async def update_project(project_id: str, request: DBProjectUpdate) -> DBProject
 
 
 @router.patch("/{project_id}/toggle-active", response_model=DBProjectResponse)
-async def toggle_project_active(project_id: str) -> DBProjectResponse:
+@_db_fail_closed
+async def toggle_project_active(
+    project_id: str,
+    _operator: UserModel = Depends(get_current_admin_or_manager_user),
+) -> DBProjectResponse:
     """Toggle a project's is_active status.
 
     Args:
@@ -377,7 +417,11 @@ async def toggle_project_active(project_id: str) -> DBProjectResponse:
 
 
 @router.delete("/{project_id}")
-async def delete_project(project_id: str) -> dict:
+@_db_fail_closed
+async def delete_project(
+    project_id: str,
+    _operator: UserModel = Depends(get_current_admin_or_manager_user),
+) -> dict:
     """Soft-delete a project (set is_active=False).
 
     Args:
@@ -415,7 +459,11 @@ async def delete_project(project_id: str) -> dict:
 
 
 @router.post("/{project_id}/restore")
-async def restore_project(project_id: str) -> DBProjectResponse:
+@_db_fail_closed
+async def restore_project(
+    project_id: str,
+    _operator: UserModel = Depends(get_current_admin_or_manager_user),
+) -> DBProjectResponse:
     """Restore a soft-deleted project.
 
     Args:
@@ -450,6 +498,7 @@ async def restore_project(project_id: str) -> DBProjectResponse:
 
 
 @router.delete("/{project_id}/permanent")
+@_db_fail_closed
 async def permanent_delete_project(
     project_id: str,
     current_user: UserModel = Depends(get_current_admin_user),

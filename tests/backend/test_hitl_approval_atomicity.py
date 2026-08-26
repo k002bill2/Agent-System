@@ -18,6 +18,7 @@
 import asyncio
 import copy
 import pathlib
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -33,6 +34,7 @@ from orchestrator.nodes.orchestrator import OrchestratorNode
 
 RISKY_ARGS = {"command": "rm -rf /tmp/scratch"}
 RISKY_CALL = {"name": "execute_bash", "args": RISKY_ARGS, "id": "call-1"}
+TEST_ADMIN = SimpleNamespace(id="test-admin", role="admin", is_admin=True)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -132,8 +134,8 @@ async def test_concurrent_approve_resolves_once():
     engine = StubEngine(_waiting_state())
 
     results = await asyncio.gather(
-        approve_operation("s-283", "a1", None, engine),
-        approve_operation("s-283", "a1", None, engine),
+        approve_operation("s-283", "a1", None, engine, TEST_ADMIN),
+        approve_operation("s-283", "a1", None, engine, TEST_ADMIN),
         return_exceptions=True,
     )
 
@@ -152,8 +154,8 @@ async def test_concurrent_approve_and_deny_resolves_once():
     engine = StubEngine(_waiting_state())
 
     results = await asyncio.gather(
-        approve_operation("s-283", "a1", None, engine),
-        deny_operation("s-283", "a1", None, engine),
+        approve_operation("s-283", "a1", None, engine, TEST_ADMIN),
+        deny_operation("s-283", "a1", None, engine, TEST_ADMIN),
         return_exceptions=True,
     )
 
@@ -185,7 +187,7 @@ async def test_approval_persisted_before_graph_run():
     """
     engine = StubEngine(_waiting_state())
 
-    await approve_operation("s-283", "a1", None, engine)
+    await approve_operation("s-283", "a1", None, engine, TEST_ADMIN)
 
     assert engine.events[:2] == ["persist", "run"], engine.events
     assert engine.stored_approval("a1")["status"] == ApprovalStatus.APPROVED.value
@@ -198,7 +200,7 @@ async def test_approval_survives_failed_graph_run():
     engine = StubEngine(_waiting_state())
     engine.run_error = RuntimeError("graph exploded")
 
-    result = await approve_operation("s-283", "a1", None, engine)
+    result = await approve_operation("s-283", "a1", None, engine, TEST_ADMIN)
 
     assert result["error"] == "graph exploded"
     assert engine.stored_approval("a1")["status"] == ApprovalStatus.APPROVED.value
@@ -213,7 +215,7 @@ async def test_denial_is_persisted():
     """
     engine = StubEngine(_waiting_state())
 
-    await deny_operation("s-283", "a1", None, engine)
+    await deny_operation("s-283", "a1", None, engine, TEST_ADMIN)
 
     assert engine.events == ["persist"]
     assert engine.stored_approval("a1")["status"] == ApprovalStatus.DENIED.value
@@ -232,7 +234,7 @@ async def test_consumed_approval_cannot_be_reopened():
     engine = StubEngine(state)
 
     with pytest.raises(HTTPException) as excinfo:
-        await approve_operation("s-283", "a1", None, engine)
+        await approve_operation("s-283", "a1", None, engine, TEST_ADMIN)
 
     assert excinfo.value.status_code == 400
     assert engine.run_calls == 0
@@ -249,6 +251,13 @@ def test_websocket_does_not_bypass_the_transition_gateway():
 
     assert "resolve_approval" in source, "WebSocket 이 전이 관문을 거치지 않는다"
     assert 'approval["status"]' not in source, "WebSocket 이 승인 상태를 직접 쓴다"
+    assert "get_current_user_websocket" in source, "WebSocket 인증 dependency가 없다"
+    assert "await websocket_endpoint(websocket, session_id, current_user)" in source, (
+        "등록된 WebSocket route가 인증된 사용자를 내부 handler에 전달하지 않는다"
+    )
+    assert "engine.create_session(session_id=session_id)" not in source, (
+        "WebSocket이 존재하지 않는 session을 임의 생성한다"
+    )
 
 
 # ─────────────────────────────────────────────────────────────
@@ -607,7 +616,7 @@ async def test_transition_rolled_back_when_persistence_fails():
     engine.save_error = RuntimeError("db down")
 
     with pytest.raises(RuntimeError):
-        await approve_operation("s-283", "a1", None, engine)
+        await approve_operation("s-283", "a1", None, engine, TEST_ADMIN)
 
     cached = engine.cached_approval("s-283", "a1")
     assert cached["status"] == ApprovalStatus.PENDING.value

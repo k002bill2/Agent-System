@@ -169,16 +169,30 @@ CLI 구독권 중심 사용량의 내부 원장 조회 API입니다. External Us
 
 ## Playground Extended
 
+모든 `/api/playground/*` 엔드포인트는 **인증 필수**(`Authorization: Bearer <access_token>`)입니다 —
+라우터 수준 `Depends(get_current_user)` 로 강제되며, 미인증 호출은 `401` 입니다.
+
+세션 범위 엔드포인트는 추가로 **소유자 또는 `admin`/`manager`** 만 접근할 수 있습니다
+(`authorize_owner_or_privileged`, 저장소 전 표면 공통 계약):
+
+- 비소유자 → `403 Resource access denied`
+- 존재하지 않는 세션 → `404 Session not found`
+- `user_id` 가 없는 레거시 세션은 일반 사용자에게 fail-closed(`403`)이며 `admin`/`manager` 만 접근합니다.
+  목록 조회에서도 제외되므로, 과거처럼 모든 사용자에게 남의 레거시 대화가 보이지 않습니다.
+
+세션 소유자는 요청 본문이 아니라 **인증 주체**로 바인딩됩니다 — `POST /api/playground/sessions` 에
+`user_id` 를 실어 보내도 무시되고 호출자 ID 로 덮어씁니다.
+
 | Method | Path | 설명 |
 |--------|------|------|
-| PATCH | `/api/playground/sessions/{id}/settings` | 세션 설정 변경 |
-| POST | `/api/playground/sessions/{id}/clear` | 대화 이력 초기화 |
-| POST | `/api/playground/sessions/{id}/execute` | 프롬프트 실행 |
-| POST | `/api/playground/sessions/{id}/execute/stream` | 스트리밍 실행 |
-| GET | `/api/playground/sessions/{id}/history` | 대화 이력 조회 |
-| DELETE | `/api/playground/sessions/{id}/messages/{message_id}` | 세션 내 특정 메시지 삭제 |
-| GET | `/api/playground/sessions/{id}/effective-system-prompt` | 최종 전송될 시스템 프롬프트 미리보기 |
-| GET | `/api/playground/tools` | 사용 가능 도구 목록 |
-| POST | `/api/playground/tools/test` | 도구 테스트 실행 |
-| POST | `/api/playground/compare` | 에이전트 비교 실행 |
-| GET | `/api/playground/models` | 사용 가능 모델 목록 |
+| PATCH | `/api/playground/sessions/{id}/settings` | 세션 설정 변경 (소유자/관리자) |
+| POST | `/api/playground/sessions/{id}/clear` | 대화 이력 초기화 (소유자/관리자) |
+| POST | `/api/playground/sessions/{id}/execute` | 프롬프트 실행 (소유자/관리자) |
+| POST | `/api/playground/sessions/{id}/execute/stream` | 스트리밍 실행 (소유자/관리자) |
+| GET | `/api/playground/sessions/{id}/history` | 대화 이력 조회 (소유자/관리자) |
+| DELETE | `/api/playground/sessions/{id}/messages/{message_id}` | 세션 내 특정 메시지 삭제 (소유자/관리자) |
+| GET | `/api/playground/sessions/{id}/effective-system-prompt` | 최종 전송될 시스템 프롬프트 미리보기 (소유자/관리자) |
+| GET | `/api/playground/tools` | 사용 가능 도구 목록 (인증 필요) |
+| POST | `/api/playground/tools/test` | 도구 테스트 실행 (인증 필요 — 호스트 코드 실행/파일 IO 도달) |
+| POST | `/api/playground/compare` | 에이전트 비교 실행 (인증 필요, 호출자 소유 임시 세션) |
+| GET | `/api/playground/models` | 사용 가능 모델 목록 (인증 필요) |

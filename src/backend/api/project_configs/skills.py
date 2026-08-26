@@ -9,8 +9,10 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from api.deps import get_current_user, get_db_session
+from api.project_configs.access import require_project_config_target_access
 from models.project_config import (
     CopySkillRequest,
     SkillConfig,
@@ -168,7 +170,13 @@ async def delete_skill(project_id: str, skill_id: str) -> dict:
 
 
 @router.post("/{project_id}/skills/{skill_id}/copy")
-async def copy_skill(project_id: str, skill_id: str, request: CopySkillRequest) -> dict:
+async def copy_skill(
+    project_id: str,
+    skill_id: str,
+    request: CopySkillRequest,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db_session),
+) -> dict:
     """Copy a skill to another project.
 
     Args:
@@ -179,6 +187,7 @@ async def copy_skill(project_id: str, skill_id: str, request: CopySkillRequest) 
     Returns:
         Success status
     """
+    await require_project_config_target_access(request.target_project_id, current_user, db)
     monitor = get_project_config_monitor()
 
     result = monitor.copy_skill(project_id, skill_id, request.target_project_id)

@@ -25,8 +25,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # Docker mode: skip host filesystem validations
 IS_DOCKER = bool(os.getenv("CLAUDE_HOME"))
 
-from api.deps import get_current_user_optional, get_db_session, require_project_role
+from api.deps import (
+    get_current_admin_or_manager_user,
+    get_current_user,
+    get_db_session,
+    reject_legacy_project_operation_in_database_mode,
+    require_project_role,
+)
 from models.project import (
+    Project,
     ProjectCreate,
     ProjectCreateFromTemplate,
     ProjectLinkRequest,
@@ -93,7 +100,8 @@ class ProjectReorderRequest(BaseModel):
 async def get_inactive_project_paths(db: AsyncSession) -> set[str]:
     """DB project-registry에서 is_active=False인 프로젝트의 path set 반환.
 
-    USE_DATABASE=false이거나 DB 오류 시 빈 set 반환 (필터링 스킵).
+    USE_DATABASE=false일 때만 빈 set을 반환한다. DB 오류는 접근제어
+    정보를 신뢰할 수 없는 상태이므로 503으로 fail-closed 한다.
     """
     import os
 
@@ -114,8 +122,11 @@ async def get_inactive_project_paths(db: AsyncSession) -> set[str]:
         )
         paths = {row[0] for row in result.all() if row[0]}
         return paths
-    except Exception:
-        return set()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Project access control is temporarily unavailable",
+        ) from exc
 
 
 async def _get_accessible_paths_for_user(
@@ -131,7 +142,7 @@ async def _get_accessible_paths_for_user(
         - 일반 member: 명시적 ProjectAccess만
 
     Returns:
-        - None: DB 미사용 또는 DB에 등록된 프로젝트 없음 -> 필터링 스킵
+        - None: DB 미사용 -> 필터링 스킵
         - set[str]: 접근 가능한 path 집합
     """
     import os
@@ -154,8 +165,12 @@ async def _get_accessible_paths_for_user(
         ]
 
         if not path_map:
-            # DB에 등록된 프로젝트 없음 -> 필터링 스킵
-            return None
+            # In database mode an empty registry is not permission to expose
+            # filesystem projects; startup synchronization is incomplete.
+            raise HTTPException(
+                status_code=503,
+                detail="Project access control is temporarily unavailable",
+            )
 
         # 2. 이 user가 접근 가능한 project_id (UUID) 집합
         access_result = await db.execute(
@@ -178,8 +193,11 @@ async def _get_accessible_paths_for_user(
 
         return accessible_paths
 
-    except Exception:
-        return None
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Project access control is temporarily unavailable",
+        ) from exc
 
 
 # ─────────────────────────────────────────────────────────────
@@ -189,7 +207,7 @@ async def _get_accessible_paths_for_user(
 
 @router.get("/projects", response_model=list[ProjectResponse])
 async def get_projects(
-    current_user=Depends(get_current_user_optional),
+    current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """List registered projects filtered by access control.
@@ -198,15 +216,75 @@ async def get_projects(
         - 시스템 admin: 모든 프로젝트
         - 조직 admin/owner: 자신의 조직 프로젝트 + 명시적 ProjectAccess
         - 일반 member: 명시적 ProjectAccess만
-        - DB에 등록되지 않은 레거시 프로젝트는 인증된 사용자 모두 표시
+        - DB 모드에서는 DB registry에 등록된 path만 표시
+        - 메모리 모드에서는 기존 filesystem discovery를 사용
     """
-    projects = list_projects()
+    use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
+    if use_database:
+        try:
+            from sqlalchemy import or_, select
+
+            from api.projects import _get_admin_org_ids
+            from db.models import ProjectAccessModel, ProjectModel
+
+            registry_result = await db.execute(select(ProjectModel).order_by(ProjectModel.name))
+            registry_projects = registry_result.scalars().all()
+            if not registry_projects or not any(p.is_active for p in registry_projects):
+                raise HTTPException(
+                    status_code=503,
+                    detail="Project access control is temporarily unavailable",
+                )
+
+            is_admin = current_user.role == "admin" or current_user.is_admin
+            if is_admin:
+                visible_projects = [p for p in registry_projects if p.is_active]
+            else:
+                admin_org_ids = await _get_admin_org_ids(current_user)
+                member_subq = select(ProjectAccessModel.project_id).where(
+                    ProjectAccessModel.user_id == current_user.id
+                )
+                visible_result = await db.execute(
+                    select(ProjectModel)
+                    .where(
+                        ProjectModel.is_active == True,  # noqa: E712
+                        or_(
+                            ProjectModel.organization_id.in_(admin_org_ids),
+                            ProjectModel.id.in_(member_subq),
+                        ),
+                    )
+                    .order_by(ProjectModel.name)
+                )
+                visible_projects = visible_result.scalars().all()
+
+            inactive_paths = {p.path for p in registry_projects if not p.is_active and p.path}
+            projects = [
+                Project(
+                    id=p.id,
+                    name=p.name,
+                    path=p.path or "",
+                    description=p.description or "",
+                    sort_order=(p.settings or {}).get("sort_order", 0),
+                    organization_id=p.organization_id,
+                )
+                for p in visible_projects
+            ]
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Project access control is temporarily unavailable",
+            ) from exc
+    else:
+        projects = list_projects()
+        inactive_paths = set()
 
     # Collect inactive paths from DB registry for is_active annotation
-    inactive_paths = await get_inactive_project_paths(db)
+    if not use_database:
+        inactive_paths = await get_inactive_project_paths(db)
 
     # Filter by accessible projects if user is authenticated
-    if current_user:
+    if current_user and not use_database:
         is_admin = current_user.role == "admin" or current_user.is_admin
         if not is_admin:
             # 조직 admin/owner 여부 확인
@@ -268,13 +346,18 @@ async def get_projects(
 
 
 @router.post("/projects/reorder", response_model=list[ProjectResponse])
-async def reorder_projects_endpoint(request: ProjectReorderRequest):
+async def reorder_projects_endpoint(
+    request: ProjectReorderRequest,
+    _admin=Depends(get_current_admin_or_manager_user),
+):
     """
     Reorder projects by providing a list of project IDs in the desired order.
 
     This updates the sort_order field for each project and persists it
     to the .aos-project.json metadata file.
     """
+    if os.getenv("USE_DATABASE", "false").lower() == "true":
+        raise HTTPException(status_code=503, detail="Use the database project registry")
     # Validate all project IDs exist
     for project_id in request.project_ids:
         if not get_project(project_id):
@@ -317,7 +400,7 @@ async def reorder_projects_endpoint(request: ProjectReorderRequest):
 
 
 @router.get("/projects/templates")
-async def list_templates():
+async def list_templates(_current_user=Depends(get_current_user)):
     """List available project templates."""
     from services.project_template_service import get_templates
 
@@ -325,12 +408,17 @@ async def list_templates():
 
 
 @router.post("/projects/link", response_model=ProjectResponse)
-async def link_project(request: ProjectLinkRequest):
+async def link_project(
+    request: ProjectLinkRequest,
+    _admin=Depends(get_current_admin_or_manager_user),
+):
     """
     Link an external project by creating a symlink.
 
     Creates a symbolic link in the projects/ directory pointing to the source.
     """
+    if os.getenv("USE_DATABASE", "false").lower() == "true":
+        raise HTTPException(status_code=503, detail="Use the database project registry")
     from pathlib import Path
 
     # Normalize path to remove shell escape characters (e.g., "Mobile\ Documents" -> "Mobile Documents")
@@ -381,7 +469,10 @@ async def link_project(request: ProjectLinkRequest):
 
 
 @router.post("/projects/create", response_model=ProjectResponse)
-async def create_project_from_template(request: ProjectCreateFromTemplate):
+async def create_project_from_template(
+    request: ProjectCreateFromTemplate,
+    _admin=Depends(get_current_admin_or_manager_user),
+):
     """
     Create a new project from a template.
 
@@ -391,6 +482,9 @@ async def create_project_from_template(request: ProjectCreateFromTemplate):
     - python: Python package with pyproject.toml
     - fastapi: FastAPI service
     """
+    if os.getenv("USE_DATABASE", "false").lower() == "true":
+        raise HTTPException(status_code=503, detail="Use the database project registry")
+
     from services.project_template_service import (
         create_project_from_template as create_from_template,
     )
@@ -444,17 +538,41 @@ async def create_project_from_template(request: ProjectCreateFromTemplate):
 @router.get("/projects/{project_id}", response_model=ProjectResponse)
 async def get_project_by_id(
     project_id: str,
-    current_user=Depends(get_current_user_optional),
+    current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Get a specific project. Requires viewer+ role if access control is active."""
+    # Apply RBAC before any legacy filesystem lookup. In database mode this
+    # also establishes that the project is an active DB-registered resource.
+    await require_project_role(project_id, current_user, db, min_role="viewer")
+
+    if os.getenv("USE_DATABASE", "false").lower() == "true":
+        from sqlalchemy import select
+
+        from db.models import ProjectModel
+
+        try:
+            result = await db.execute(select(ProjectModel).where(ProjectModel.id == project_id))
+            project = result.scalar_one_or_none()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Project access control is temporarily unavailable",
+            ) from exc
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        return ProjectResponse(
+            id=project.id,
+            name=project.name,
+            path=project.path or "",
+            description=project.description or "",
+            has_claude_md=False,
+            is_active=bool(project.is_active),
+        )
+
     project = get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-
-    # Apply RBAC if user is authenticated
-    if current_user:
-        await require_project_role(project_id, current_user, db, min_role="viewer")
 
     return ProjectResponse(
         id=project.id,
@@ -466,8 +584,15 @@ async def get_project_by_id(
 
 
 @router.post("/projects", response_model=ProjectResponse)
-async def create_project(request: ProjectCreate, background_tasks: BackgroundTasks):
+async def create_project(
+    request: ProjectCreate,
+    background_tasks: BackgroundTasks,
+    _admin=Depends(get_current_admin_or_manager_user),
+):
     """Register a new project and trigger background indexing."""
+    if os.getenv("USE_DATABASE", "false").lower() == "true":
+        raise HTTPException(status_code=503, detail="Use the database project registry")
+
     from pathlib import Path
 
     from api.rag import trigger_background_indexing
@@ -501,13 +626,57 @@ async def create_project(request: ProjectCreate, background_tasks: BackgroundTas
 async def update_project_endpoint(
     project_id: str,
     request: ProjectUpdate,
-    current_user=Depends(get_current_user_optional),
+    current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Update project name, description, or path. Requires editor+ role."""
-    # Apply RBAC if user is authenticated
     if current_user:
         await require_project_role(project_id, current_user, db, min_role="editor")
+
+    if os.getenv("USE_DATABASE", "false").lower() == "true":
+        from sqlalchemy import select
+
+        from db.models import ProjectModel
+        from utils.time import utcnow
+
+        try:
+            result = await db.execute(select(ProjectModel).where(ProjectModel.id == project_id))
+            project = result.scalar_one_or_none()
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
+            if request.name is not None:
+                duplicate = await db.execute(
+                    select(ProjectModel).where(
+                        ProjectModel.name == request.name,
+                        ProjectModel.id != project_id,
+                    )
+                )
+                if duplicate.scalar_one_or_none():
+                    raise HTTPException(status_code=409, detail="Project name already exists")
+                project.name = request.name
+                project.slug = request.name.lower().strip().replace(" ", "-")
+            if request.description is not None:
+                project.description = request.description
+            if request.path is not None:
+                project.path = request.path
+            project.updated_at = utcnow()
+            await db.commit()
+            await db.refresh(project)
+            return ProjectResponse(
+                id=project.id,
+                name=project.name,
+                path=project.path or "",
+                description=project.description or "",
+                has_claude_md=False,
+                is_active=bool(project.is_active),
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Project access control is temporarily unavailable",
+            ) from exc
 
     try:
         project = update_project(project_id, request.name, request.description, request.path)
@@ -528,7 +697,11 @@ async def update_project_endpoint(
 
 
 @router.get("/projects/{project_id}/deletion-preview")
-async def get_deletion_preview(project_id: str):
+async def get_deletion_preview(
+    project_id: str,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
     """
     Get preview of what will be deleted when removing a project.
 
@@ -541,6 +714,8 @@ async def get_deletion_preview(project_id: str):
     """
     from services.project_cleanup_service import get_cleanup_service
 
+    await require_project_role(project_id, current_user, db, min_role="viewer")
+    reject_legacy_project_operation_in_database_mode()
     service = get_cleanup_service()
     preview = await service.get_deletion_preview(project_id)
 
@@ -553,7 +728,7 @@ async def get_deletion_preview(project_id: str):
 @router.delete("/projects/{project_id}")
 async def delete_project(
     project_id: str,
-    current_user=Depends(get_current_user_optional),
+    current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """
@@ -571,15 +746,16 @@ async def delete_project(
     """
     from services.project_cleanup_service import get_cleanup_service
 
-    # Apply RBAC if user is authenticated
     if current_user:
         await require_project_role(project_id, current_user, db, min_role="owner")
-
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    reject_legacy_project_operation_in_database_mode()
 
     service = get_cleanup_service()
+    if os.getenv("USE_DATABASE", "false").lower() != "true":
+        project = get_project(project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+
     summary = await service.cascade_delete(project_id)
 
     if not summary.success:

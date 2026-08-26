@@ -3,6 +3,7 @@
 import { notificationService } from '../../services/notificationService'
 import { apiClient } from '../../services/apiClient'
 import { ApiError } from '../../services/errors'
+import { useAuthStore } from '../auth'
 import type { OrchestrationState, LLMProvider, ProviderUsage } from './types'
 import { RECONNECT_CONFIG, calculateBackoff } from './types'
 import { handleMessage, transformTask } from './wsHandler'
@@ -105,6 +106,28 @@ function setupWebSocketHandlers(
   }
 }
 
+/**
+ * Build the authenticated WebSocket URL, refreshing an expired token first.
+ *
+ * The backend authenticates `/ws/{session_id}` via a `token` query parameter or
+ * an Authorization header, and browsers cannot set headers on a WebSocket - so
+ * the query parameter is the only path available to the dashboard. Returns null
+ * when no usable token exists; opening a token-less socket only earns a 1008
+ * close, which surfaces as a generic disconnect instead of an auth failure.
+ */
+async function buildAuthenticatedWsUrl(sessionId: string): Promise<string | null> {
+  const { accessToken, isTokenExpired, refreshAccessToken } = useAuthStore.getState()
+  if (!accessToken) return null
+  if (isTokenExpired() && !(await refreshAccessToken())) return null
+
+  // Re-read after a refresh - the store holds the rotated token, not the local.
+  const token = useAuthStore.getState().accessToken
+  if (!token) return null
+
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${wsProtocol}//${window.location.host}/ws/${sessionId}?token=${encodeURIComponent(token)}`
+}
+
 // Connect to WebSocket with project context
 export async function connectWebSocket(set: SetFn, get: GetFn) {
   const { selectedProjectId } = get()
@@ -137,8 +160,13 @@ export async function connectWebSocket(set: SetFn, get: GetFn) {
     return
   }
 
-  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/${sessionId}`)
+  const wsUrl = await buildAuthenticatedWsUrl(sessionId)
+  if (!wsUrl) {
+    console.error('[Session] No usable access token; refusing to open WebSocket')
+    set({ isInitialLoading: false, connectionStatus: 'failed' })
+    return
+  }
+  const ws = new WebSocket(wsUrl)
 
   // Set sessionId before handlers so it's available in onopen
   set({ sessionId, sessionProjectId: selectedProjectId })
@@ -223,8 +251,13 @@ export async function reconnectWebSocket(set: SetFn, get: GetFn) {
     return
   }
 
-  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/${sessionId}`)
+  const wsUrl = await buildAuthenticatedWsUrl(sessionId)
+  if (!wsUrl) {
+    console.error('[Session] No usable access token; refusing to reconnect WebSocket')
+    set({ isInitialLoading: false, connectionStatus: 'failed' })
+    return
+  }
+  const ws = new WebSocket(wsUrl)
 
   setupWebSocketHandlers(ws, sessionId, set, get)
 }

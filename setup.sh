@@ -79,28 +79,72 @@ SESSION_VAL="$(env_value SESSION_SECRET_KEY)"
 if [ -z "$SESSION_VAL" ] || [ "$SESSION_VAL" = "aos-secret-key-change-in-production" ]; then
     NEW_SECRET="$(gen_secret)"
     set_env_value SESSION_SECRET_KEY "$NEW_SECRET"
-    echo -e "${GREEN}[OK]${NC} Generated SESSION_SECRET_KEY (****${NEW_SECRET: -4})"
+    echo -e "${GREEN}[OK]${NC} Generated SESSION_SECRET_KEY"
 else
     echo -e "${GREEN}[OK]${NC} SESSION_SECRET_KEY already set"
 fi
 
 # POSTGRES_PASSWORD — postgres only applies it on a FRESH data dir, so never
 # rotate against an existing DB (it would break auth). Keep the current value.
+#
+# Two storage backends, one credential source:
+#   prod (docker-compose.yml)     -> bind mount infra/docker/data/postgres
+#   dev  (docker-compose.dev.yml) -> named volume <project>_postgres_dev_data
+# Both must be probed, otherwise `--dev` on an existing volume regenerates a
+# password the running DB will never accept (auth failures on every request).
 PG_DATA_DIR="infra/docker/data/postgres"
 PG_PW_VAL="$(env_value POSTGRES_PASSWORD)"
-if [ -d "$PG_DATA_DIR" ] && [ -n "$(ls -A "$PG_DATA_DIR" 2>/dev/null)" ]; then
-    if [ -z "$PG_PW_VAL" ]; then
-        set_env_value POSTGRES_PASSWORD "aos"
-        echo -e "${YELLOW}[keep]${NC} Existing Postgres data dir — set POSTGRES_PASSWORD=aos to match it"
-    else
-        echo -e "${GREEN}[OK]${NC} POSTGRES_PASSWORD already set (existing DB)"
+
+pg_data_exists() {
+    if [ -d "$PG_DATA_DIR" ] && [ -n "$(ls -A "$PG_DATA_DIR" 2>/dev/null)" ]; then
+        return 0
     fi
+    if [ "$DEV_MODE" = true ]; then
+        # Compose derives the project name from the directory when `name:` is
+        # unset; honour COMPOSE_PROJECT_NAME when the caller overrides it.
+        local proj="${COMPOSE_PROJECT_NAME:-$(basename "$SCRIPT_DIR" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]_-')}"
+        if docker volume inspect "${proj}_postgres_dev_data" &>/dev/null; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+if pg_data_exists; then
+    if [ -z "$PG_PW_VAL" ]; then
+        # Existing data + no recorded password: we cannot know the real one,
+        # and writing a guess ("aos") only produces a confusing auth failure
+        # later while re-introducing a hardcoded credential.
+        echo -e "${RED}Error: existing Postgres data found but POSTGRES_PASSWORD is empty in .env.${NC}"
+        echo -e "  Set POSTGRES_PASSWORD to the password that DB was provisioned with,"
+        echo -e "  or remove the existing Postgres data to provision a fresh one."
+        exit 1
+    fi
+    echo -e "${GREEN}[OK]${NC} POSTGRES_PASSWORD already set (existing DB)"
 elif [ -z "$PG_PW_VAL" ]; then
     NEW_PG_PW="$(gen_secret)"
     set_env_value POSTGRES_PASSWORD "$NEW_PG_PW"
-    echo -e "${GREEN}[OK]${NC} Generated POSTGRES_PASSWORD (****${NEW_PG_PW: -4})"
+    echo -e "${GREEN}[OK]${NC} Generated POSTGRES_PASSWORD"
 else
     echo -e "${GREEN}[OK]${NC} POSTGRES_PASSWORD already set"
+fi
+
+# Redis/Qdrant credentials — generate when absent so fresh setup satisfies
+# Compose's required secret interpolation.
+REDIS_PW_VAL="$(env_value REDIS_PASSWORD)"
+if [ -z "$REDIS_PW_VAL" ]; then
+    set_env_value REDIS_PASSWORD "$(gen_secret)"
+    echo -e "${GREEN}[OK]${NC} Generated REDIS_PASSWORD"
+else
+    echo -e "${GREEN}[OK]${NC} REDIS_PASSWORD already set"
+fi
+
+QDRANT_KEY_VAL="$(env_value QDRANT_API_KEY)"
+if [ -z "$QDRANT_KEY_VAL" ]; then
+    set_env_value QDRANT_API_KEY "$(gen_secret)"
+    echo -e "${GREEN}[OK]${NC} Generated QDRANT_API_KEY"
+else
+    echo -e "${GREEN}[OK]${NC} QDRANT_API_KEY already set"
 fi
 
 # --- 3. Port conflict detection ---
@@ -175,12 +219,15 @@ DASH_PORT="${DASHBOARD_PORT:-5173}"
 PG_P="${PG_PORT:-5432}"
 REDIS_P="${REDIS_PORT:-6379}"
 QDRANT_P="${QDRANT_PORT:-6333}"
+# Reflect the actual configured identity — never echo the password itself.
+PG_U="$(env_value POSTGRES_USER)"; PG_U="${PG_U:-aos}"
+PG_DB="$(env_value POSTGRES_DB)"; PG_DB="${PG_DB:-aos}"
 
 echo ""
 echo -e "${CYAN}=== AOS is running ===${NC}"
 echo -e "  Dashboard:  ${GREEN}http://localhost:${DASH_PORT}${NC}"
 echo -e "  Backend:    ${GREEN}http://localhost:${BACKEND_PORT}${NC}"
-echo -e "  PostgreSQL: postgresql://aos:****@localhost:${PG_P}/aos  (credentials in .env)"
+echo -e "  PostgreSQL: postgresql://${PG_U}:***@localhost:${PG_P}/${PG_DB}  (credentials in .env)"
 echo -e "  Redis:      redis://localhost:${REDIS_P}"
 echo -e "  Qdrant:     http://localhost:${QDRANT_P}"
 echo ""

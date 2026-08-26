@@ -8,9 +8,10 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
+from api.deps import get_current_admin_or_manager_user
 from models.llm_usage import (
     LLMRuntimeMode,
     LLMUsageMeasurementMethod,
@@ -29,7 +30,10 @@ from services.warp_service import get_warp_service
 # Docker mode: skip host filesystem validations
 IS_DOCKER = bool(os.getenv("CLAUDE_HOME"))
 
-router = APIRouter(tags=["orchestration"])
+router = APIRouter(
+    tags=["orchestration"],
+    dependencies=[Depends(get_current_admin_or_manager_user)],
+)
 
 
 class WarpOpenRequest(BaseModel):

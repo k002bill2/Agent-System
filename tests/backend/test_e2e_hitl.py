@@ -2,9 +2,9 @@
 
 import pytest
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from types import SimpleNamespace
 
-from models.agent_state import TaskStatus, TaskNode, create_initial_state
+from models.agent_state import TaskNode
 from models.hitl import ApprovalStatus, RiskLevel, TOOL_RISK_CONFIG
 
 
@@ -26,6 +26,7 @@ class TestHITLConfiguration:
         ]
 
         # At least execute_bash should be high risk
+        assert high_risk_tools
         assert "execute_bash" in TOOL_RISK_CONFIG
         assert TOOL_RISK_CONFIG["execute_bash"].risk_level == RiskLevel.HIGH
         assert TOOL_RISK_CONFIG["execute_bash"].requires_approval is True
@@ -139,37 +140,62 @@ class TestHITLState:
 class TestHITLAPIIntegration:
     """HITL API integration tests."""
 
-    async def test_get_approvals_endpoint(self, client):
-        """Test getting pending approvals via API."""
+    async def test_get_approvals_endpoint(self, client, app):
+        """Test getting pending approvals via API for an authenticated admin."""
+        from api.deps import get_current_user
+
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+            id="test-admin", role="admin", is_admin=True, is_active=True
+        )
         # Create session
         create_resp = await client.post("/api/sessions", json={})
         session_id = create_resp.json()["session_id"]
 
-        # Get approvals
-        response = await client.get(f"/api/sessions/{session_id}/approvals")
+        try:
+            response = await client.get(f"/api/sessions/{session_id}/approvals")
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
 
         assert response.status_code == 200
         assert isinstance(response.json(), list)
 
-    async def test_approve_endpoint_requires_valid_approval(self, client):
+    async def test_approve_endpoint_requires_valid_approval(self, client, app):
         """Test approve endpoint requires valid approval ID."""
+        from api.deps import get_current_user
+
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+            id="test-admin", role="admin", is_admin=True, is_active=True
+        )
         # Create session
         create_resp = await client.post("/api/sessions", json={})
         session_id = create_resp.json()["session_id"]
 
-        # Try to approve nonexistent
-        response = await client.post(f"/api/sessions/{session_id}/approve/nonexistent")
+        try:
+            response = await client.post(
+                f"/api/sessions/{session_id}/approve/nonexistent"
+            )
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
 
         assert response.status_code == 404
 
-    async def test_deny_endpoint_requires_valid_approval(self, client):
+    async def test_deny_endpoint_requires_valid_approval(self, client, app):
         """Test deny endpoint requires valid approval ID."""
+        from api.deps import get_current_user
+
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+            id="test-admin", role="admin", is_admin=True, is_active=True
+        )
         # Create session
         create_resp = await client.post("/api/sessions", json={})
         session_id = create_resp.json()["session_id"]
 
-        # Try to deny nonexistent
-        response = await client.post(f"/api/sessions/{session_id}/deny/nonexistent")
+        try:
+            response = await client.post(
+                f"/api/sessions/{session_id}/deny/nonexistent"
+            )
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
 
         assert response.status_code == 404
 
