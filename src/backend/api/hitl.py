@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from api.deps import get_engine
+from api.deps import authorize_session_state, get_current_user, get_engine
 from models.agent_state import AgentState, TaskStatus
 from models.hitl import APPROVAL_STATE_LOCK, ApprovalResponse, ApprovalStatus
 from orchestrator import OrchestrationEngine
@@ -16,7 +16,10 @@ from services.audit_service import AuditAction, AuditService, ResourceType
 from services.session_service import SessionVersionConflictError
 from utils.time import utcnow
 
-router = APIRouter(tags=["orchestration"])
+router = APIRouter(
+    tags=["orchestration"],
+    dependencies=[Depends(get_current_user)],
+)
 
 # 버전 충돌 재시도 횟수 — 락은 프로세스 로컬이라 다른 인스턴스의 쓰기는 막지 못한다.
 _APPROVAL_WRITE_RETRIES = 3
@@ -155,6 +158,19 @@ async def _resolve_once(
     return state, approval
 
 
+async def _authorize_approval_access(
+    engine: OrchestrationEngine,
+    session_id: str,
+    current_user,
+) -> AgentState:
+    """Require session ownership or a privileged role before HITL access."""
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+    authorize_session_state(state, current_user)
+    return state
+
+
 class ApprovalRequestResponse(BaseModel):
     """Response for pending approval requests."""
 
@@ -172,11 +188,13 @@ class ApprovalRequestResponse(BaseModel):
 async def get_pending_approvals(
     session_id: str,
     engine: OrchestrationEngine = Depends(get_engine),
+    current_user=Depends(get_current_user),
 ) -> list[ApprovalRequestResponse]:
     """Get all pending approval requests for a session."""
     state = await engine.get_session(session_id)
     if not state:
         raise HTTPException(status_code=404, detail="Session not found")
+    authorize_session_state(state, current_user)
 
     pending_approvals = state.get("pending_approvals", {})
     return [
@@ -201,12 +219,14 @@ async def approve_operation(
     approval_id: str,
     response: ApprovalResponse | None = None,
     engine: OrchestrationEngine = Depends(get_engine),
+    current_user=Depends(get_current_user),
 ):
     """
     Approve a pending operation.
 
     This will update the approval status and resume execution.
     """
+    await _authorize_approval_access(engine, session_id, current_user)
     _, approval = await resolve_approval(
         engine,
         session_id,
@@ -238,12 +258,14 @@ async def deny_operation(
     approval_id: str,
     response: ApprovalResponse | None = None,
     engine: OrchestrationEngine = Depends(get_engine),
+    current_user=Depends(get_current_user),
 ):
     """
     Deny a pending operation.
 
     This will mark the task as failed and stop execution.
     """
+    await _authorize_approval_access(engine, session_id, current_user)
     _, approval = await resolve_approval(
         engine,
         session_id,

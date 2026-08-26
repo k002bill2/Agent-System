@@ -57,6 +57,8 @@ class ProjectConfigMonitor:
         self,
         project_paths: list[str] | None = None,
         include_current: bool = True,
+        include_env_paths: bool = True,
+        allow_auto_discovery: bool = True,
     ):
         """Initialize the monitor.
 
@@ -67,6 +69,8 @@ class ProjectConfigMonitor:
         self._discovery = ProjectDiscovery(
             project_paths=project_paths,
             include_current=include_current,
+            include_env_paths=include_env_paths,
+            allow_auto_discovery=allow_auto_discovery,
         )
         self._skill_manager = SkillManager(self._discovery)
         self._agent_manager = AgentManager(self._discovery)

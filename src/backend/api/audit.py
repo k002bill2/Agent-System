@@ -6,7 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.deps import get_current_admin_or_manager_user, get_current_admin_user
 from db.database import get_db
+from db.models import UserModel
 from models.audit import (
     ComplianceReport,
     DataClassification,
@@ -25,7 +27,11 @@ from services.audit_service import (
 )
 from utils.time import utcnow
 
-router = APIRouter(prefix="/audit", tags=["audit"])
+router = APIRouter(
+    prefix="/audit",
+    tags=["audit"],
+    dependencies=[Depends(get_current_admin_or_manager_user)],
+)
 
 
 class AuditLogQueryParams(BaseModel):
@@ -237,7 +243,11 @@ async def get_session_audit_trail(session_id: str, db: AsyncSession = Depends(ge
 
 
 @router.post("/cleanup")
-async def cleanup_old_logs(days: int = Query(30, ge=1, le=365), db: AsyncSession = Depends(get_db)):
+async def cleanup_old_logs(
+    days: int = Query(30, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+    _admin: UserModel = Depends(get_current_admin_user),
+):
     """
     Clean up audit logs older than specified days.
 
@@ -324,6 +334,7 @@ async def apply_retention_policy(
         ..., description="Retention policy: standard, extended, permanent, minimal"
     ),
     classification: str | None = Query(None, description="Filter by data classification"),
+    _admin: UserModel = Depends(get_current_admin_user),
 ):
     """
     Apply retention policy to audit entries.
@@ -379,7 +390,10 @@ async def get_data_classifications():
 
 
 @router.post("/seed")
-async def seed_sample_data(db: AsyncSession = Depends(get_db)):
+async def seed_sample_data(
+    db: AsyncSession = Depends(get_db),
+    _admin: UserModel = Depends(get_current_admin_user),
+):
     """
     Seed sample audit data for testing.
     Creates various audit log entries to demonstrate the UI.

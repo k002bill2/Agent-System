@@ -1,8 +1,9 @@
 """Dependency injection for API routes."""
 
-from collections.abc import AsyncGenerator
+import os
+from collections.abc import AsyncGenerator, Mapping
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, WebSocket, WebSocketException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,6 +41,15 @@ def clear_engine() -> None:
     _engine = None
 
 
+def reject_legacy_project_operation_in_database_mode() -> None:
+    """Fail closed for project operations that still use filesystem models."""
+    if os.getenv("USE_DATABASE", "false").lower() == "true":
+        raise HTTPException(
+            status_code=503,
+            detail="Project operation is unavailable until a database-backed handler is enabled",
+        )
+
+
 # ─────────────────────────────────────────────────────────────
 # Database Dependencies
 # ─────────────────────────────────────────────────────────────
@@ -47,13 +57,23 @@ def clear_engine() -> None:
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """Get database session for dependency injection."""
-    async with async_session_factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
+    try:
+        session_context = async_session_factory()
+        session = await session_context.__aenter__()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Database service is temporarily unavailable",
+        ) from exc
+
+    try:
+        yield session
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+    finally:
+        await session_context.__aexit__(None, None, None)
 
 
 def get_session_repository(db: AsyncSession) -> SessionRepository:
@@ -154,6 +174,43 @@ async def get_current_user(
         )
 
     return user
+
+
+async def get_current_user_websocket(
+    websocket: WebSocket,
+    token: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db_session),
+) -> UserModel:
+    """Authenticate a WebSocket via query token or Authorization header."""
+    authorization = websocket.headers.get("authorization", "")
+    bearer_token = token
+    if not bearer_token and authorization.lower().startswith("bearer "):
+        bearer_token = authorization[7:].strip()
+    if not bearer_token:
+        raise WebSocketException(code=1008, reason="Not authenticated")
+
+    auth_service = AuthService(db)
+    payload = auth_service.verify_token(bearer_token, token_type="access")
+    user_id = payload.get("sub") if payload else None
+    user = await auth_service.get_user_by_id(user_id) if user_id else None
+    if not user:
+        raise WebSocketException(code=1008, reason="Invalid or expired token")
+    if not user.is_active:
+        raise WebSocketException(code=1008, reason="User is inactive")
+    return user
+
+
+def authorize_owner_or_privileged(owner_id: object, current_user: UserModel) -> None:
+    """Require resource ownership or an admin/manager role."""
+    if current_user.role in {"admin", "manager"} or current_user.is_admin:
+        return
+    if owner_id is None or str(owner_id) != str(current_user.id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Resource access denied")
+
+
+def authorize_session_state(state: Mapping[str, object], current_user: UserModel) -> None:
+    """Authorize a session state using its persisted owner metadata."""
+    authorize_owner_or_privileged(state.get("user_id"), current_user)
 
 
 async def get_current_admin_user(
@@ -312,18 +369,51 @@ async def require_project_role(
     """
     from services.project_access_service import ProjectAccessService
 
+    # Database mode is authoritative. Do this check before ACL handling so a
+    # known filesystem-only project ID cannot reach legacy project handlers.
+    if os.getenv("USE_DATABASE", "false").lower() == "true":
+        from sqlalchemy import select
+
+        from db.models import ProjectModel
+
+        try:
+            registered = await db.execute(
+                select(ProjectModel).where(
+                    ProjectModel.id == project_id,
+                    ProjectModel.is_active == True,  # noqa: E712
+                )
+            )
+            if registered.scalar_one_or_none() is None:
+                raise HTTPException(status_code=404, detail="Project not found")
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Project access control is temporarily unavailable",
+            ) from exc
+
     # System admin bypass
     if current_user.role == "admin" or current_user.is_admin:
         return "owner"
 
-    # Check if the project has any access control
-    has_acl = await ProjectAccessService.has_any_access_control(db, project_id)
-    if not has_acl:
-        # No access control → open to all authenticated users
-        return "editor"
+    try:
+        # Check if the project has any access control
+        has_acl = await ProjectAccessService.has_any_access_control(db, project_id)
+        if not has_acl:
+            # No access control → open to all authenticated users
+            return "editor"
 
-    # Check user's role
-    user_role = await ProjectAccessService.check_access(db, project_id, current_user.id)
+        # Check user's role
+        user_role = await ProjectAccessService.check_access(db, project_id, current_user.id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Project access control is temporarily unavailable",
+        ) from exc
+
     if user_role is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

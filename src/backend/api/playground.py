@@ -8,7 +8,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import get_current_user_optional, get_db_session
+from api.deps import (
+    authorize_owner_or_privileged,
+    get_current_user,
+    get_current_user_optional,
+    get_db_session,
+)
 from api.rag import trigger_background_indexing
 from db.models import UserModel
 from models.llm_access import LLMAccessResponse
@@ -29,7 +34,11 @@ from services.playground_service import PlaygroundService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/playground", tags=["playground"])
+router = APIRouter(
+    prefix="/playground",
+    tags=["playground"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 async def _get_llm_access_for_playground(
@@ -41,6 +50,18 @@ async def _get_llm_access_for_playground(
     return await get_access_for_user(db, str(current_user.id))
 
 
+async def require_playground_session_access(
+    session_id: str,
+    current_user: UserModel = Depends(get_current_user),
+) -> PlaygroundSession:
+    """Require an owner or privileged user for a playground session object."""
+    session = PlaygroundService.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    authorize_owner_or_privileged(session.user_id, current_user)
+    return session
+
+
 # ─────────────────────────────────────────────────────────────
 # Session Management
 # ─────────────────────────────────────────────────────────────
@@ -48,11 +69,10 @@ async def _get_llm_access_for_playground(
 
 @router.get("/sessions", response_model=list[PlaygroundSession])
 async def list_sessions(
-    current_user: UserModel | None = Depends(get_current_user_optional),
+    current_user: UserModel = Depends(get_current_user),
 ):
     """List playground sessions for the current user."""
-    user_id = current_user.id if current_user else None
-    return PlaygroundService.list_sessions(user_id=user_id)
+    return PlaygroundService.list_sessions(user_id=current_user.id)
 
 
 @router.post("/sessions", response_model=PlaygroundSession)
@@ -66,7 +86,11 @@ async def create_session(
     return PlaygroundService.create_session(data)
 
 
-@router.get("/sessions/{session_id}", response_model=PlaygroundSession)
+@router.get(
+    "/sessions/{session_id}",
+    response_model=PlaygroundSession,
+    dependencies=[Depends(require_playground_session_access)],
+)
 async def get_session(session_id: str):
     """Get a playground session."""
     session = PlaygroundService.get_session(session_id)
@@ -89,10 +113,10 @@ class EffectiveSystemPromptResponse(BaseModel):
 @router.get(
     "/sessions/{session_id}/effective-system-prompt",
     response_model=EffectiveSystemPromptResponse,
+    dependencies=[Depends(require_playground_session_access)],
 )
 async def get_effective_system_prompt(
     session_id: str,
-    current_user: UserModel | None = Depends(get_current_user_optional),
 ):
     """Preview the final system prompt that will be sent to the LLM.
 
@@ -103,9 +127,6 @@ async def get_effective_system_prompt(
     session = PlaygroundService.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    # Authorization: if a user is attached to the session, require match.
-    if current_user and session.user_id and session.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
 
     effective = build_effective_system_prompt(session)
     return EffectiveSystemPromptResponse(
@@ -118,7 +139,10 @@ async def get_effective_system_prompt(
     )
 
 
-@router.delete("/sessions/{session_id}")
+@router.delete(
+    "/sessions/{session_id}",
+    dependencies=[Depends(require_playground_session_access)],
+)
 async def delete_session(session_id: str):
     """Delete a playground session."""
     if not PlaygroundService.delete_session(session_id):
@@ -151,7 +175,11 @@ class SessionSettingsUpdate(BaseModel):
     context_budget_tokens: int | None = Field(default=None, ge=500, le=64000)
 
 
-@router.patch("/sessions/{session_id}/settings", response_model=PlaygroundSession)
+@router.patch(
+    "/sessions/{session_id}/settings",
+    response_model=PlaygroundSession,
+    dependencies=[Depends(require_playground_session_access)],
+)
 async def update_session_settings(
     session_id: str,
     data: SessionSettingsUpdate,
@@ -203,7 +231,10 @@ async def update_session_settings(
     return session
 
 
-@router.delete("/sessions/{session_id}/messages/{message_id}")
+@router.delete(
+    "/sessions/{session_id}/messages/{message_id}",
+    dependencies=[Depends(require_playground_session_access)],
+)
 async def delete_message(session_id: str, message_id: str):
     """Delete a specific message from a session."""
     if not PlaygroundService.delete_message(session_id, message_id):
@@ -211,7 +242,10 @@ async def delete_message(session_id: str, message_id: str):
     return {"success": True, "message": "Message deleted"}
 
 
-@router.post("/sessions/{session_id}/clear")
+@router.post(
+    "/sessions/{session_id}/clear",
+    dependencies=[Depends(require_playground_session_access)],
+)
 async def clear_session_history(session_id: str):
     """Clear conversation history."""
     if not PlaygroundService.clear_session_history(session_id):
@@ -224,7 +258,11 @@ async def clear_session_history(session_id: str):
 # ─────────────────────────────────────────────────────────────
 
 
-@router.post("/sessions/{session_id}/execute", response_model=PlaygroundExecution)
+@router.post(
+    "/sessions/{session_id}/execute",
+    response_model=PlaygroundExecution,
+    dependencies=[Depends(require_playground_session_access)],
+)
 async def execute_prompt(
     session_id: str,
     request: PlaygroundExecuteRequest,
@@ -239,7 +277,10 @@ async def execute_prompt(
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.post("/sessions/{session_id}/execute/stream")
+@router.post(
+    "/sessions/{session_id}/execute/stream",
+    dependencies=[Depends(require_playground_session_access)],
+)
 async def execute_prompt_stream(
     session_id: str,
     request: PlaygroundExecuteRequest,
@@ -267,7 +308,11 @@ async def execute_prompt_stream(
     )
 
 
-@router.get("/sessions/{session_id}/history", response_model=list[PlaygroundExecution])
+@router.get(
+    "/sessions/{session_id}/history",
+    response_model=list[PlaygroundExecution],
+    dependencies=[Depends(require_playground_session_access)],
+)
 async def get_execution_history(
     session_id: str,
     limit: int = Query(default=50, ge=1, le=200),

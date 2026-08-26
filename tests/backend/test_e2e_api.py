@@ -1,5 +1,7 @@
 """E2E API integration tests."""
 
+from types import SimpleNamespace
+
 import pytest
 from httpx import AsyncClient
 
@@ -22,7 +24,7 @@ class TestHealthEndpoint:
 class TestSessionAPI:
     """Session management API tests."""
 
-    async def test_create_session(self, client: AsyncClient):
+    async def test_create_session(self, client: AsyncClient, authenticated_app):
         """Test session creation."""
         response = await client.post("/api/sessions", json={})
 
@@ -31,7 +33,7 @@ class TestSessionAPI:
         assert "session_id" in data
         assert data["message"] == "Session created successfully"
 
-    async def test_get_session(self, client: AsyncClient):
+    async def test_get_session(self, client: AsyncClient, authenticated_app):
         """Test getting session state."""
         # Create session first
         create_resp = await client.post("/api/sessions", json={})
@@ -47,14 +49,14 @@ class TestSessionAPI:
         assert "agents" in data
         assert data["iteration_count"] == 0
 
-    async def test_get_nonexistent_session(self, client: AsyncClient):
+    async def test_get_nonexistent_session(self, client: AsyncClient, authenticated_app):
         """Test getting nonexistent session returns 404."""
         response = await client.get("/api/sessions/nonexistent-id")
 
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
 
-    async def test_delete_session(self, client: AsyncClient):
+    async def test_delete_session(self, client: AsyncClient, authenticated_app):
         """Test session deletion."""
         # Create session
         create_resp = await client.post("/api/sessions", json={})
@@ -74,17 +76,33 @@ class TestSessionAPI:
 class TestProjectAPI:
     """Project management API tests."""
 
-    async def test_list_projects(self, client: AsyncClient):
-        """Test listing projects."""
-        response = await client.get("/api/projects")
+    async def test_list_projects(self, client: AsyncClient, app):
+        """Test listing projects for an authenticated user."""
+        from api.deps import get_current_user
+
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+            id="test-user", role="admin", is_admin=True, is_active=True
+        )
+        try:
+            response = await client.get("/api/projects")
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
 
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
 
-    async def test_get_nonexistent_project(self, client: AsyncClient):
-        """Test getting nonexistent project."""
-        response = await client.get("/api/projects/nonexistent")
+    async def test_get_nonexistent_project(self, client: AsyncClient, app):
+        """Test getting nonexistent project for an authenticated admin."""
+        from api.deps import get_current_user
+
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+            id="test-user", role="admin", is_admin=True, is_active=True
+        )
+        try:
+            response = await client.get("/api/projects/nonexistent")
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
 
         assert response.status_code == 404
 
@@ -93,28 +111,43 @@ class TestProjectAPI:
 class TestApprovalAPI:
     """HITL approval API tests."""
 
-    async def test_get_pending_approvals_empty(self, client: AsyncClient):
-        """Test getting pending approvals when none exist."""
+    async def test_get_pending_approvals_empty(self, client: AsyncClient, app):
+        """Test getting pending approvals when none exist for an admin."""
+        from api.deps import get_current_user
+
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+            id="test-user", role="admin", is_admin=True, is_active=True
+        )
         # Create session
         create_resp = await client.post("/api/sessions", json={})
         session_id = create_resp.json()["session_id"]
 
-        # Get approvals
-        response = await client.get(f"/api/sessions/{session_id}/approvals")
+        try:
+            response = await client.get(f"/api/sessions/{session_id}/approvals")
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
 
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
         assert len(data) == 0
 
-    async def test_approve_nonexistent(self, client: AsyncClient):
-        """Test approving nonexistent approval."""
+    async def test_approve_nonexistent(self, client: AsyncClient, app):
+        """Test approving nonexistent approval for an admin."""
+        from api.deps import get_current_user
+
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+            id="test-user", role="admin", is_admin=True, is_active=True
+        )
         # Create session
         create_resp = await client.post("/api/sessions", json={})
         session_id = create_resp.json()["session_id"]
 
-        response = await client.post(
-            f"/api/sessions/{session_id}/approve/nonexistent-approval"
-        )
+        try:
+            response = await client.post(
+                f"/api/sessions/{session_id}/approve/nonexistent-approval"
+            )
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
 
         assert response.status_code == 404

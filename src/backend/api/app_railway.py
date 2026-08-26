@@ -1,8 +1,10 @@
 """Railway FastAPI app with OAuth support (no LLM/DB dependencies)."""
 
 import hashlib
+import json
 import os
 import secrets
+import uuid
 from datetime import timedelta
 from urllib.parse import urlencode
 
@@ -41,14 +43,41 @@ users_store: dict[str, dict] = {}
 # FastAPI App
 # ─────────────────────────────────────────────────────────────
 
+DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+ENABLE_API_DOCS = os.getenv("ENABLE_API_DOCS", "false").lower() == "true"
+API_DOCS_ENABLED = DEBUG or ENABLE_API_DOCS
+
 app = FastAPI(
     title="Agent Orchestration Service",
     description="Railway deployment with OAuth",
     version="0.1.0",
+    # Never let debug mode produce Starlette plaintext tracebacks. API docs
+    # exposure is controlled independently by DEBUG/ENABLE_API_DOCS above.
+    debug=False,
+    docs_url="/docs" if API_DOCS_ENABLED else None,
+    redoc_url="/redoc" if API_DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if API_DOCS_ENABLED else None,
 )
 
-# CORS - parse CORS_ORIGINS env var (JSON array or comma-separated)
-import json
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Return a generic JSON error without exposing traceback details."""
+    import logging
+
+    from fastapi.responses import JSONResponse
+
+    request_id = uuid.uuid4().hex
+    logging.getLogger("aos.railway").error(
+        "Unhandled exception",
+        exc_info=exc,
+        extra={"request_id": request_id, "path": request.url.path},
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "request_id": request_id},
+    )
+
 
 _cors_origins = [
     "http://localhost:3000",
@@ -158,7 +187,7 @@ async def root():
         "status": "running",
         "mode": "railway",
         "oauth_enabled": bool(GOOGLE_CLIENT_ID or GITHUB_CLIENT_ID),
-        "docs": "/docs",
+        "docs": "/docs" if API_DOCS_ENABLED else None,
     }
 
 

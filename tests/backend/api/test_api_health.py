@@ -1,5 +1,7 @@
 """HTTP-level API tests for health and basic endpoints."""
 
+from types import SimpleNamespace
+
 import pytest
 
 
@@ -35,7 +37,7 @@ async def test_api_sessions_list(client):
 
 
 @pytest.mark.anyio
-async def test_api_sessions_create(client):
+async def test_api_sessions_create(client, authenticated_app):
     """POST /api/sessions should create a new session."""
     response = await client.post(
         "/api/sessions",
@@ -47,16 +49,25 @@ async def test_api_sessions_create(client):
 
 
 @pytest.mark.anyio
-async def test_api_sessions_get_nonexistent(client):
+async def test_api_sessions_get_nonexistent(client, authenticated_app):
     """GET /api/sessions/{id} with invalid ID should return 404."""
     response = await client.get("/api/sessions/nonexistent-session-id")
     assert response.status_code == 404
 
 
 @pytest.mark.anyio
-async def test_api_projects_list(client):
-    """GET /api/projects should return a list of projects."""
-    response = await client.get("/api/projects")
+async def test_api_projects_list(client, app):
+    """GET /api/projects should return a list for an authenticated user."""
+    from api.deps import get_current_user
+
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id="test-user", role="admin", is_admin=True, is_active=True
+    )
+    try:
+        response = await client.get("/api/projects")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)

@@ -14,9 +14,10 @@ DB 기반 접근 제어 필터(`_get_db_filtered_projects`)는 `list_projects` �
 import logging
 import os
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
-from api.deps import get_current_user_optional
+from api.deps import get_current_user
+from api.project_configs.access import require_project_config_access
 from models.project_config import (
     ProjectConfigResponse,
 )
@@ -24,7 +25,11 @@ from services.project_config_monitor import get_project_config_monitor
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/project-configs", tags=["project-configs"])
+router = APIRouter(
+    prefix="/project-configs",
+    tags=["project-configs"],
+    dependencies=[Depends(require_project_config_access)],
+)
 
 
 # ========================================
@@ -34,7 +39,7 @@ router = APIRouter(prefix="/project-configs", tags=["project-configs"])
 
 @router.get("", response_model=ProjectConfigResponse)
 async def list_projects(
-    current_user=Depends(get_current_user_optional),
+    current_user=Depends(get_current_user),
 ) -> ProjectConfigResponse:
     """List projects with Claude Code configuration (접근 제어 적용).
 
@@ -43,17 +48,19 @@ async def list_projects(
         - 조직 admin/owner: 자신의 조직 프로젝트 + 명시적 ProjectAccess
         - 일반 member: 명시적 ProjectAccess만
     """
-    monitor = get_project_config_monitor()
-
     use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
 
     if use_database:
         try:
-            projects = await _get_db_filtered_projects(monitor, current_user)
-        except Exception as e:
-            logger.warning(f"DB project filter failed, falling back to discovery: {e}")
-            projects = monitor.discover_projects()
+            projects = await _get_db_filtered_projects(None, current_user)
+        except Exception as exc:
+            logger.exception("DB project filter failed")
+            raise HTTPException(
+                status_code=503,
+                detail="Project access control is temporarily unavailable",
+            ) from exc
     else:
+        monitor = get_project_config_monitor()
         projects = monitor.discover_projects()
 
     total_skills = sum(p.skill_count for p in projects)
@@ -83,7 +90,16 @@ async def _get_db_filtered_projects(monitor, current_user=None) -> list:
     from db.database import async_session_factory
     from db.models import ProjectAccessModel, ProjectModel
     from models.project_config import ProjectInfo
+    from services.project_config_monitor import ProjectConfigMonitor
     from utils.time import utcnow
+
+    if monitor is None:
+        monitor = ProjectConfigMonitor(
+            project_paths=[],
+            include_current=False,
+            include_env_paths=False,
+            allow_auto_discovery=False,
+        )
 
     async with async_session_factory() as session:
         is_admin = False
@@ -133,39 +149,19 @@ async def _get_db_filtered_projects(monitor, current_user=None) -> list:
         db_projects = result.scalars().all()
 
     if not db_projects:
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Project access control is temporarily unavailable",
+        )
 
-    # Build set of DB project names for matching
-    db_project_names = {p.name for p in db_projects}
-    db_project_paths = {p.path for p in db_projects if p.path}
-
-    # Get all discovered projects from filesystem
-    all_discovered = monitor.discover_projects()
-
-    # Filter: only keep projects whose name or path matches a DB project
-    # Use seen_paths to prevent duplicates when DB name != filesystem name
+    # Scan only explicitly registered DB project paths. Never enumerate the
+    # monitor's machine-wide filesystem roots in database mode.
     filtered = []
     seen_paths = set()
-    for discovered in all_discovered:
-        if (
-            discovered.project_name in db_project_names
-            or discovered.project_path in db_project_paths
-        ):
-            if discovered.project_path not in seen_paths:
-                filtered.append(discovered)
-                seen_paths.add(discovered.project_path)
-
-    # Also ensure DB projects with paths not yet in monitor get added
-    discovered_names = {p.project_name for p in filtered}
     for db_proj in db_projects:
-        if db_proj.name in discovered_names:
-            continue
-
         if db_proj.path:
-            # Skip if this path was already added (matched by path in first loop)
             if db_proj.path in seen_paths:
                 continue
-            # Try to add the path and scan
             path = PathLib(db_proj.path)
             if path.exists() and path.is_dir():
                 monitor.add_external_project(str(path))

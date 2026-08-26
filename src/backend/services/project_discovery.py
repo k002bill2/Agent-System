@@ -23,6 +23,8 @@ class ProjectDiscovery:
         self,
         project_paths: list[str] | None = None,
         include_current: bool = True,
+        include_env_paths: bool = True,
+        allow_auto_discovery: bool = True,
     ):
         """Initialize the discovery service.
 
@@ -34,7 +36,7 @@ class ProjectDiscovery:
         self._external_paths: list[str] = []
         self._auto_discovered: set[Path] = set()
         self._is_docker = bool(os.getenv("CLAUDE_HOME"))
-
+        self._allow_auto_discovery = allow_auto_discovery
         # Add current directory (even without .claude/)
         # Skip if cwd is src/backend (the backend runtime directory)
         if include_current:
@@ -50,8 +52,9 @@ class ProjectDiscovery:
                     if path not in self._project_paths:
                         self._project_paths.append(path)
 
-        # Add paths from environment variable
-        env_paths = os.getenv("CLAUDE_PROJECT_PATHS", "")
+        # Environment paths are only initial discovery inputs; refresh keeps its
+        # historical behavior for the regular long-lived filesystem monitor.
+        env_paths = os.getenv("CLAUDE_PROJECT_PATHS", "") if include_env_paths else ""
         if env_paths:
             for p in env_paths.split(","):
                 p = p.strip()
@@ -190,6 +193,9 @@ class ProjectDiscovery:
         new symlinks are added, stale entries (symlink removed) are evicted.
         Paths added manually (cwd / external API / env) are never evicted here.
         """
+        if not self._allow_auto_discovery:
+            return
+
         # Re-scan projects/ directory (symlinked projects only)
         current_symlink_targets: set[Path] = set()
         try:

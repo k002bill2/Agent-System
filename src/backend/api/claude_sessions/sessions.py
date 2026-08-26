@@ -18,9 +18,10 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
+from api.deps import get_current_admin_or_manager_user
 from models.claude_session import (
     ClaudeSessionDetail,
     ClaudeSessionSaveRequest,
@@ -32,7 +33,7 @@ from utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_admin_or_manager_user)])
 
 
 @dataclass

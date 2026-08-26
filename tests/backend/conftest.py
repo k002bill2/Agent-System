@@ -50,6 +50,20 @@ async def app():
 
 
 @pytest_asyncio.fixture
+async def authenticated_app(app):
+    """App with a deterministic privileged test identity for protected API tests."""
+    from types import SimpleNamespace
+
+    from api.deps import get_current_user
+
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id="test-admin", role="admin", is_admin=True, is_active=True
+    )
+    yield app
+    app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest_asyncio.fixture
 async def client(app):
     """Create async HTTP client for testing."""
     transport = ASGITransport(app=app)

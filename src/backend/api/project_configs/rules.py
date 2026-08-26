@@ -9,8 +9,10 @@ PUT·DELETE `/global/rules/{rule_id}`, GET `/global/rules/{rule_id}/content`).""
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from api.deps import get_current_user, get_db_session
+from api.project_configs.access import require_project_config_target_access
 from models.project_config import (
     CopyRuleRequest,
     RuleConfig,
@@ -152,7 +154,13 @@ async def delete_rule(project_id: str, rule_id: str) -> dict:
 
 
 @router.post("/{project_id}/rules/{rule_id}/copy")
-async def copy_rule(project_id: str, rule_id: str, request: CopyRuleRequest) -> dict:
+async def copy_rule(
+    project_id: str,
+    rule_id: str,
+    request: CopyRuleRequest,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db_session),
+) -> dict:
     """Copy a rule to another project.
 
     Args:
@@ -163,6 +171,7 @@ async def copy_rule(project_id: str, rule_id: str, request: CopyRuleRequest) -> 
     Returns:
         Success status
     """
+    await require_project_config_target_access(request.target_project_id, current_user, db)
     monitor = get_project_config_monitor()
 
     result = monitor.copy_rule(project_id, rule_id, request.target_project_id)

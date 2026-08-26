@@ -4,10 +4,10 @@ import asyncio
 import logging
 import os
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
-from api.deps import get_engine
+from api.deps import authorize_session_state, get_current_user_websocket, get_engine
 from api.hitl import resolve_approval
 from models.message import (
     ApprovalDeniedPayload,
@@ -81,7 +81,11 @@ async def heartbeat_task(
         pass  # Connection closed or other error
 
 
-async def websocket_endpoint(websocket: WebSocket, session_id: str):
+async def websocket_endpoint(
+    websocket: WebSocket,
+    session_id: str,
+    current_user=Depends(get_current_user_websocket),
+):
     """
     WebSocket endpoint for orchestration streaming.
 
@@ -89,20 +93,23 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     - Client sends: { "type": "task_create", "payload": { "title": "...", "description": "..." } }
     - Server sends: { "type": "task_started|task_progress|agent_thinking|...", "payload": {...} }
     """
+    engine = get_engine()
+    existing_session = await engine.get_session(session_id)
+    if not existing_session:
+        await websocket.close(code=1008, reason="Session not found")
+        return
+    try:
+        authorize_session_state(existing_session, current_user)
+    except HTTPException:
+        await websocket.close(code=1008, reason="Session access denied")
+        return
+
     await manager.connect(session_id, websocket)
 
     # Start server-side heartbeat task
     heartbeat = asyncio.create_task(heartbeat_task(session_id, websocket))
 
     try:
-        engine = get_engine()
-
-        # Verify session exists or create one
-        existing_session = await engine.get_session(session_id)
-        if not existing_session:
-            # Create session through the engine (handles both memory and DB)
-            await engine.create_session(session_id=session_id)
-
         while True:
             # Receive message from client
             data = await websocket.receive_json()
@@ -302,6 +309,10 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
 
 @websocket_router.websocket("/ws/{session_id}")
-async def ws_endpoint(websocket: WebSocket, session_id: str):
-    """WebSocket route handler."""
-    await websocket_endpoint(websocket, session_id)
+async def ws_endpoint(
+    websocket: WebSocket,
+    session_id: str,
+    current_user=Depends(get_current_user_websocket),
+):
+    """Authenticated WebSocket route handler."""
+    await websocket_endpoint(websocket, session_id, current_user)

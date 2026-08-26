@@ -5,10 +5,16 @@ Obsidian vault health checks: links, frontmatter, orphans, images via SSE stream
 
 import json
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from api.deps import (
+    get_current_user,
+    get_db_session,
+    reject_legacy_project_operation_in_database_mode,
+    require_project_role,
+)
 from models.monitoring import (
     CheckCompletedPayload,
     CheckProgressPayload,
@@ -64,8 +70,12 @@ class CheckConfigResponse(BaseModel):
 
 
 @router.get("/projects/{project_id}/health-config", response_model=CheckConfigResponse)
-async def get_health_config(project_id: str):
+async def get_health_config(
+    project_id: str, current_user=Depends(get_current_user), db=Depends(get_db_session)
+):
     """Get the health check configuration (labels & commands) for a project."""
+    await require_project_role(project_id, current_user, db, min_role="viewer")
+    reject_legacy_project_operation_in_database_mode()
     project = get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -79,8 +89,12 @@ async def get_health_config(project_id: str):
 
 
 @router.get("/projects/{project_id}/health", response_model=ProjectHealthResponse)
-async def get_project_health(project_id: str):
+async def get_project_health(
+    project_id: str, current_user=Depends(get_current_user), db=Depends(get_db_session)
+):
     """Get the health status of a project."""
+    await require_project_role(project_id, current_user, db, min_role="viewer")
+    reject_legacy_project_operation_in_database_mode()
     project = get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -119,12 +133,16 @@ async def get_project_health(project_id: str):
 
 
 @router.get("/projects/{project_id}/checks/run-all")
-async def run_all_checks(project_id: str):
+async def run_all_checks(
+    project_id: str, current_user=Depends(get_current_user), db=Depends(get_db_session)
+):
     """
     Run all checks on a project sequentially.
 
     Returns a streaming response with SSE events for all checks.
     """
+    await require_project_role(project_id, current_user, db, min_role="editor")
+    reject_legacy_project_operation_in_database_mode()
     project = get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -190,7 +208,12 @@ async def run_all_checks(project_id: str):
 
 
 @router.get("/projects/{project_id}/checks/{check_type}")
-async def run_check(project_id: str, check_type: str):
+async def run_check(
+    project_id: str,
+    check_type: str,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db_session),
+):
     """
     Run a specific check on a project.
 
@@ -199,6 +222,8 @@ async def run_check(project_id: str, check_type: str):
     - check_progress: Output line from the check
     - check_completed: Check has finished
     """
+    await require_project_role(project_id, current_user, db, min_role="editor")
+    reject_legacy_project_operation_in_database_mode()
     project = get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")

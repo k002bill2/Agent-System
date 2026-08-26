@@ -79,7 +79,7 @@ SESSION_VAL="$(env_value SESSION_SECRET_KEY)"
 if [ -z "$SESSION_VAL" ] || [ "$SESSION_VAL" = "aos-secret-key-change-in-production" ]; then
     NEW_SECRET="$(gen_secret)"
     set_env_value SESSION_SECRET_KEY "$NEW_SECRET"
-    echo -e "${GREEN}[OK]${NC} Generated SESSION_SECRET_KEY (****${NEW_SECRET: -4})"
+    echo -e "${GREEN}[OK]${NC} Generated SESSION_SECRET_KEY"
 else
     echo -e "${GREEN}[OK]${NC} SESSION_SECRET_KEY already set"
 fi
@@ -98,9 +98,27 @@ if [ -d "$PG_DATA_DIR" ] && [ -n "$(ls -A "$PG_DATA_DIR" 2>/dev/null)" ]; then
 elif [ -z "$PG_PW_VAL" ]; then
     NEW_PG_PW="$(gen_secret)"
     set_env_value POSTGRES_PASSWORD "$NEW_PG_PW"
-    echo -e "${GREEN}[OK]${NC} Generated POSTGRES_PASSWORD (****${NEW_PG_PW: -4})"
+    echo -e "${GREEN}[OK]${NC} Generated POSTGRES_PASSWORD"
 else
     echo -e "${GREEN}[OK]${NC} POSTGRES_PASSWORD already set"
+fi
+
+# Redis/Qdrant credentials — generate when absent so fresh setup satisfies
+# Compose's required secret interpolation.
+REDIS_PW_VAL="$(env_value REDIS_PASSWORD)"
+if [ -z "$REDIS_PW_VAL" ]; then
+    set_env_value REDIS_PASSWORD "$(gen_secret)"
+    echo -e "${GREEN}[OK]${NC} Generated REDIS_PASSWORD"
+else
+    echo -e "${GREEN}[OK]${NC} REDIS_PASSWORD already set"
+fi
+
+QDRANT_KEY_VAL="$(env_value QDRANT_API_KEY)"
+if [ -z "$QDRANT_KEY_VAL" ]; then
+    set_env_value QDRANT_API_KEY "$(gen_secret)"
+    echo -e "${GREEN}[OK]${NC} Generated QDRANT_API_KEY"
+else
+    echo -e "${GREEN}[OK]${NC} QDRANT_API_KEY already set"
 fi
 
 # --- 3. Port conflict detection ---

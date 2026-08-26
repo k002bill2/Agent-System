@@ -4,11 +4,18 @@ Handles session lifecycle (create, get, delete, sync, refresh) and
 task operations (submit, cancel, retry, pause, resume, delete, tree).
 """
 
+import os
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import get_current_user_optional, get_db_session, get_engine
+from api.deps import (
+    authorize_session_state,
+    get_current_user,
+    get_db_session,
+    get_engine,
+)
 from db.models import UserModel
 from models.llm_access import LLMAccessResponse
 from models.task import TaskCreate, TaskTree
@@ -70,8 +77,12 @@ async def _get_llm_access_for_session(
     db: AsyncSession,
     organization_id: str | None,
 ) -> LLMAccessResponse | None:
-    """Resolve LLM access only for authenticated users."""
-    if not current_user:
+    """Resolve LLM access only when database-backed auth is enabled."""
+    if not current_user or os.getenv("USE_DATABASE", "false").lower() not in {
+        "1",
+        "true",
+        "yes",
+    }:
         return None
     return await get_access_for_user(
         db,
@@ -91,16 +102,33 @@ async def health_check():
     return {"status": "healthy", "service": "agent-orchestrator"}
 
 
+async def require_session_access(
+    session_id: str,
+    engine: OrchestrationEngine = Depends(get_engine),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Require ownership or privileged access to an orchestration session."""
+    state = await engine.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+    authorize_session_state(state, current_user)
+    return state
+
+
 # ─────────────────────────────────────────────────────────────
 # Session CRUD
 # ─────────────────────────────────────────────────────────────
 
 
-@router.post("/sessions", response_model=SessionResponse)
+@router.post(
+    "/sessions",
+    response_model=SessionResponse,
+    dependencies=[Depends(get_current_user)],
+)
 async def create_session(
     request: SessionCreate = None,
     engine: OrchestrationEngine = Depends(get_engine),
-    current_user: UserModel | None = Depends(get_current_user_optional),
+    current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Create a new orchestration session with optional project context."""
@@ -141,7 +169,11 @@ async def create_session(
     )
 
 
-@router.get("/sessions/{session_id}", response_model=StateResponse)
+@router.get(
+    "/sessions/{session_id}",
+    response_model=StateResponse,
+    dependencies=[Depends(require_session_access)],
+)
 async def get_session(
     session_id: str,
     engine: OrchestrationEngine = Depends(get_engine),
@@ -163,7 +195,7 @@ async def get_session(
     )
 
 
-@router.get("/sessions/{session_id}/info")
+@router.get("/sessions/{session_id}/info", dependencies=[Depends(require_session_access)])
 async def get_session_info(
     session_id: str,
     engine: OrchestrationEngine = Depends(get_engine),
@@ -182,7 +214,7 @@ async def get_session_info(
     return info
 
 
-@router.post("/sessions/{session_id}/refresh")
+@router.post("/sessions/{session_id}/refresh", dependencies=[Depends(require_session_access)])
 async def refresh_session(
     session_id: str,
     extend_days: int | None = None,
@@ -208,7 +240,7 @@ async def refresh_session(
     }
 
 
-@router.delete("/sessions/{session_id}")
+@router.delete("/sessions/{session_id}", dependencies=[Depends(require_session_access)])
 async def delete_session(
     session_id: str,
     engine: OrchestrationEngine = Depends(get_engine),
@@ -219,7 +251,7 @@ async def delete_session(
     return {"message": "Session deleted"}
 
 
-@router.get("/sessions/{session_id}/sync")
+@router.get("/sessions/{session_id}/sync", dependencies=[Depends(require_session_access)])
 async def sync_session(
     session_id: str,
     engine: OrchestrationEngine = Depends(get_engine),
@@ -272,12 +304,16 @@ async def sync_session(
 # ─────────────────────────────────────────────────────────────
 
 
-@router.post("/sessions/{session_id}/tasks", response_model=TaskResponse)
+@router.post(
+    "/sessions/{session_id}/tasks",
+    response_model=TaskResponse,
+    dependencies=[Depends(require_session_access)],
+)
 async def submit_task(
     session_id: str,
     task: TaskCreate,
     engine: OrchestrationEngine = Depends(get_engine),
-    current_user: UserModel | None = Depends(get_current_user_optional),
+    current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Submit a task for orchestration."""
@@ -305,7 +341,7 @@ async def submit_task(
     )
 
 
-@router.post("/sessions/{session_id}/cancel")
+@router.post("/sessions/{session_id}/cancel", dependencies=[Depends(require_session_access)])
 async def cancel_orchestration(
     session_id: str,
     engine: OrchestrationEngine = Depends(get_engine),
@@ -316,7 +352,9 @@ async def cancel_orchestration(
     return {"message": "Orchestration cancelled"}
 
 
-@router.get("/sessions/{session_id}/tasks/{task_id}")
+@router.get(
+    "/sessions/{session_id}/tasks/{task_id}", dependencies=[Depends(require_session_access)]
+)
 async def get_task(
     session_id: str,
     task_id: str,
@@ -335,7 +373,9 @@ async def get_task(
     return task.model_dump() if hasattr(task, "model_dump") else task
 
 
-@router.delete("/sessions/{session_id}/tasks/{task_id}")
+@router.delete(
+    "/sessions/{session_id}/tasks/{task_id}", dependencies=[Depends(require_session_access)]
+)
 async def delete_task(
     session_id: str,
     task_id: str,
@@ -380,7 +420,10 @@ async def delete_task(
     }
 
 
-@router.get("/sessions/{session_id}/tasks/{task_id}/deletion-info")
+@router.get(
+    "/sessions/{session_id}/tasks/{task_id}/deletion-info",
+    dependencies=[Depends(require_session_access)],
+)
 async def get_task_deletion_info(
     session_id: str,
     task_id: str,
@@ -409,7 +452,9 @@ async def get_task_deletion_info(
     return info
 
 
-@router.post("/sessions/{session_id}/tasks/{task_id}/cancel")
+@router.post(
+    "/sessions/{session_id}/tasks/{task_id}/cancel", dependencies=[Depends(require_session_access)]
+)
 async def cancel_single_task(
     session_id: str,
     task_id: str,
@@ -442,7 +487,9 @@ async def cancel_single_task(
     }
 
 
-@router.post("/sessions/{session_id}/tasks/{task_id}/retry")
+@router.post(
+    "/sessions/{session_id}/tasks/{task_id}/retry", dependencies=[Depends(require_session_access)]
+)
 async def retry_task(
     session_id: str,
     task_id: str,
@@ -477,7 +524,9 @@ async def retry_task(
     }
 
 
-@router.post("/sessions/{session_id}/tasks/{task_id}/pause")
+@router.post(
+    "/sessions/{session_id}/tasks/{task_id}/pause", dependencies=[Depends(require_session_access)]
+)
 async def pause_task(
     session_id: str,
     task_id: str,
@@ -512,7 +561,9 @@ async def pause_task(
     }
 
 
-@router.post("/sessions/{session_id}/tasks/{task_id}/resume")
+@router.post(
+    "/sessions/{session_id}/tasks/{task_id}/resume", dependencies=[Depends(require_session_access)]
+)
 async def resume_task(
     session_id: str,
     task_id: str,
@@ -549,7 +600,11 @@ async def resume_task(
 # ─────────────────────────────────────────────────────────────
 
 
-@router.get("/sessions/{session_id}/tree", response_model=TaskTree | None)
+@router.get(
+    "/sessions/{session_id}/tree",
+    response_model=TaskTree | None,
+    dependencies=[Depends(require_session_access)],
+)
 async def get_task_tree(
     session_id: str,
     engine: OrchestrationEngine = Depends(get_engine),

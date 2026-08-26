@@ -1,0 +1,155 @@
+"""Central authorization guard for project configuration assets."""
+
+import os
+
+from fastapi import Depends, HTTPException, Request, status
+
+from api.deps import get_current_user, get_db_session
+from db.models import ProjectAccessModel, ProjectModel, UserModel
+
+
+async def require_project_config_access(
+    request: Request,
+    current_user: UserModel = Depends(get_current_user),
+    db=Depends(get_db_session),
+) -> UserModel:
+    """Authorize every project-config asset route from one DB-aware guard.
+
+    The aggregate project list is handled by its own DB access filter. Routes
+    that enumerate global/machine-wide assets require a privileged operator.
+    Project-scoped routes require an active DB-registered project in database
+    mode and an explicit project/org grant for non-privileged users.
+    """
+    project_id = request.path_params.get("project_id")
+    if request.url.path.rstrip("/") == "/api/project-configs":
+        return current_user
+
+    is_privileged = current_user.role in {"admin", "manager"} or current_user.is_admin
+    if project_id is None:
+        if os.getenv("USE_DATABASE", "false").lower() == "true":
+            raise HTTPException(
+                status_code=503,
+                detail="Project configuration discovery is unavailable in database mode",
+            )
+        if not is_privileged:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin or manager privileges required",
+            )
+        return current_user
+
+    use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
+    if not use_database:
+        from services.project_config_monitor import get_project_config_monitor
+
+        if get_project_config_monitor().get_project_summary(project_id) is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        return current_user
+
+    try:
+        from sqlalchemy import select
+
+        result = await db.execute(select(ProjectModel).where(ProjectModel.is_active == True))  # noqa: E712
+        projects = result.scalars().all()
+        if not projects:
+            raise HTTPException(
+                status_code=503,
+                detail="Project access control is temporarily unavailable",
+            )
+
+        def route_ids(project: ProjectModel) -> set[str]:
+            ids = {str(project.id), f"db-{project.id}"}
+            if project.path:
+                ids.add(str(project.path).replace("/", "-").replace("\\", "-"))
+            return ids
+
+        project = next((item for item in projects if project_id in route_ids(item)), None)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        if is_privileged:
+            raise HTTPException(
+                status_code=503,
+                detail="Project configuration operations are unavailable in database mode",
+            )
+
+        from api.projects import _get_admin_org_ids
+
+        admin_org_ids = await _get_admin_org_ids(current_user)
+        access_result = await db.execute(
+            select(ProjectAccessModel.project_id).where(
+                ProjectAccessModel.project_id == project.id,
+                ProjectAccessModel.user_id == current_user.id,
+            )
+        )
+        has_direct_access = access_result.scalar_one_or_none() is not None
+        if project.organization_id in admin_org_ids or has_direct_access:
+            raise HTTPException(
+                status_code=503,
+                detail="Project configuration operations are unavailable in database mode",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Project access denied",
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Project access control is temporarily unavailable",
+        ) from exc
+
+
+async def require_project_config_target_access(
+    target_project_id: str,
+    current_user: UserModel,
+    db,
+) -> None:
+    """Authorize the destination of a project-config copy operation."""
+    if os.getenv("USE_DATABASE", "false").lower() != "true":
+        return
+
+    try:
+        from sqlalchemy import select
+
+        result = await db.execute(select(ProjectModel).where(ProjectModel.is_active == True))  # noqa: E712
+        projects = result.scalars().all()
+
+        def route_ids(project: ProjectModel) -> set[str]:
+            ids = {str(project.id), f"db-{project.id}"}
+            if project.path:
+                ids.add(str(project.path).replace("/", "-").replace("\\", "-"))
+            return ids
+
+        project = next((item for item in projects if target_project_id in route_ids(item)), None)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Target project not found")
+
+        is_privileged = current_user.role in {"admin", "manager"} or current_user.is_admin
+        if is_privileged:
+            return
+
+        from api.projects import _get_admin_org_ids
+
+        admin_org_ids = await _get_admin_org_ids(current_user)
+        access_result = await db.execute(
+            select(ProjectAccessModel.project_id).where(
+                ProjectAccessModel.project_id == project.id,
+                ProjectAccessModel.user_id == current_user.id,
+            )
+        )
+        if (
+            project.organization_id in admin_org_ids
+            or access_result.scalar_one_or_none() is not None
+        ):
+            return
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Target project access denied"
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Project access control is temporarily unavailable",
+        ) from exc

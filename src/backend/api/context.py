@@ -8,7 +8,13 @@ import os
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from api.deps import get_engine
+from api.deps import (
+    get_current_user,
+    get_db_session,
+    get_engine,
+    reject_legacy_project_operation_in_database_mode,
+    require_project_role,
+)
 from models.context_usage import ContextUsage, get_context_limit
 from models.project import get_project
 from orchestrator import OrchestrationEngine
@@ -50,6 +56,8 @@ class ProjectContextResponse(BaseModel):
 async def get_project_context(
     project_id: str,
     engine: OrchestrationEngine = Depends(get_engine),
+    current_user=Depends(get_current_user),
+    db=Depends(get_db_session),
 ):
     """
     Get full project context including:
@@ -60,6 +68,9 @@ async def get_project_context(
     from datetime import datetime
     from pathlib import Path
 
+    if hasattr(current_user, "role") and hasattr(db, "execute"):
+        await require_project_role(project_id, current_user, db, min_role="viewer")
+        reject_legacy_project_operation_in_database_mode()
     project = get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -126,8 +137,15 @@ async def get_project_context(
 
 
 @router.get("/projects/{project_id}/claude-md")
-async def get_project_claude_md(project_id: str):
+async def get_project_claude_md(
+    project_id: str,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db_session),
+):
     """Get raw CLAUDE.md content for a project."""
+    if hasattr(current_user, "role") and hasattr(db, "execute"):
+        await require_project_role(project_id, current_user, db, min_role="viewer")
+        reject_legacy_project_operation_in_database_mode()
     project = get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
