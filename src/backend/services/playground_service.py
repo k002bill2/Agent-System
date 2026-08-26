@@ -421,13 +421,33 @@ class PlaygroundService:
         return _sessions.get(session_id)
 
     @staticmethod
-    def list_sessions(user_id: str | None = None) -> list[PlaygroundSession]:
-        """List playground sessions. If user_id given, return only that user's sessions."""
+    def list_sessions(
+        user_id: str | None = None,
+        *,
+        include_all: bool = False,
+    ) -> list[PlaygroundSession]:
+        """List playground sessions, scoped to the caller by default.
+
+        Fail-closed contract:
+
+        - ``include_all=True`` returns every session. Callers **must** have
+          verified an admin/manager role before asking for this.
+        - Otherwise only sessions owned by ``user_id`` are returned.
+        - ``user_id is None`` (no authenticated identity) returns nothing
+          rather than everything, so a caller that forgets to pass an identity
+          leaks no data.
+
+        Ownerless legacy sessions (``user_id is None`` on the session) are
+        deliberately **excluded** from per-user listings — previously they were
+        shown to every user, which disclosed other people's legacy transcripts.
+        They remain reachable via ``include_all`` for admin recovery.
+        """
         _load_sessions()  # Ensure sessions are loaded
         sessions = _sessions.values()
-        if user_id:
-            # 자신의 세션 + user_id 없는 레거시 세션 포함
-            sessions = (s for s in sessions if s.user_id == user_id or s.user_id is None)
+        if not include_all:
+            if not user_id:
+                return []
+            sessions = (s for s in sessions if s.user_id == user_id)
         return sorted(
             sessions,
             key=lambda s: s.updated_at,
@@ -928,14 +948,27 @@ class PlaygroundService:
     # ─────────────────────────────────────────────────────────────
 
     @staticmethod
-    async def compare(request: PlaygroundCompareRequest) -> PlaygroundCompareResult:
-        """Compare multiple agents on the same prompt."""
+    async def compare(
+        request: PlaygroundCompareRequest,
+        *,
+        user_id: str | None = None,
+        llm_access: LLMAccessResponse | None = None,
+    ) -> PlaygroundCompareResult:
+        """Compare multiple agents on the same prompt.
+
+        The temporary sessions are owned by ``user_id`` so that, for the brief
+        window they live in the registry, they are not ownerless (which would
+        otherwise be admin-visible scratch data). ``llm_access`` is forwarded so
+        the LLM spend is attributed and entitlement-gated like any other
+        execution instead of running as an anonymous call.
+        """
         results = []
 
         for agent_id in request.agents:
             # Create temporary session for each agent
             temp_session = PlaygroundSession(
                 agent_id=agent_id,
+                user_id=user_id,
             )
             _sessions[temp_session.id] = temp_session
 
@@ -944,11 +977,15 @@ class PlaygroundService:
                     prompt=request.prompt,
                     context=request.context,
                 )
-                execution = await PlaygroundService.execute(temp_session.id, exec_request)
+                execution = await PlaygroundService.execute(
+                    temp_session.id,
+                    exec_request,
+                    llm_access=llm_access,
+                )
                 results.append(execution)
             finally:
                 # Clean up temporary session
-                del _sessions[temp_session.id]
+                _sessions.pop(temp_session.id, None)
 
         # Calculate comparison metrics
         metrics = {

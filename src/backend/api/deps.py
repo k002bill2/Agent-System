@@ -200,9 +200,18 @@ async def get_current_user_websocket(
     return user
 
 
+def is_privileged_user(current_user: UserModel) -> bool:
+    """True when the user may reach resources they do not own.
+
+    ``is_admin`` is a legacy fallback kept for accounts provisioned before the
+    ``role`` column existed.
+    """
+    return current_user.role in {"admin", "manager"} or bool(current_user.is_admin)
+
+
 def authorize_owner_or_privileged(owner_id: object, current_user: UserModel) -> None:
     """Require resource ownership or an admin/manager role."""
-    if current_user.role in {"admin", "manager"} or current_user.is_admin:
+    if is_privileged_user(current_user):
         return
     if owner_id is None or str(owner_id) != str(current_user.id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Resource access denied")

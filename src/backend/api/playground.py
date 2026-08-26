@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.deps import (
     authorize_owner_or_privileged,
     get_current_user,
-    get_current_user_optional,
     get_db_session,
+    is_privileged_user,
 )
 from api.rag import trigger_background_indexing
 from db.models import UserModel
@@ -42,11 +42,15 @@ router = APIRouter(
 
 
 async def _get_llm_access_for_playground(
-    current_user: UserModel | None,
+    current_user: UserModel,
     db: AsyncSession,
 ) -> LLMAccessResponse | None:
-    if current_user is None:
-        return None
+    """Resolve the caller's LLM entitlement.
+
+    ``current_user`` is non-optional: every playground surface runs behind the
+    router-level ``Depends(get_current_user)``, so usage is always attributable
+    to a real account rather than silently falling back to anonymous access.
+    """
     return await get_access_for_user(db, str(current_user.id))
 
 
@@ -72,17 +76,22 @@ async def list_sessions(
     current_user: UserModel = Depends(get_current_user),
 ):
     """List playground sessions for the current user."""
-    return PlaygroundService.list_sessions(user_id=current_user.id)
+    if is_privileged_user(current_user):
+        return PlaygroundService.list_sessions(include_all=True)
+    return PlaygroundService.list_sessions(user_id=str(current_user.id))
 
 
 @router.post("/sessions", response_model=PlaygroundSession)
 async def create_session(
     data: PlaygroundSessionCreate,
-    current_user: UserModel | None = Depends(get_current_user_optional),
+    current_user: UserModel = Depends(get_current_user),
 ):
-    """Create a new playground session."""
-    if current_user:
-        data.user_id = current_user.id
+    """Create a new playground session owned by the caller.
+
+    ``data.user_id`` from the request body is always overwritten: the owner is
+    the authenticated caller, never a client-supplied value.
+    """
+    data.user_id = str(current_user.id)
     return PlaygroundService.create_session(data)
 
 
@@ -266,7 +275,7 @@ async def clear_session_history(session_id: str):
 async def execute_prompt(
     session_id: str,
     request: PlaygroundExecuteRequest,
-    current_user: UserModel | None = Depends(get_current_user_optional),
+    current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Execute a prompt in the playground."""
@@ -284,7 +293,7 @@ async def execute_prompt(
 async def execute_prompt_stream(
     session_id: str,
     request: PlaygroundExecuteRequest,
-    current_user: UserModel | None = Depends(get_current_user_optional),
+    current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Execute a prompt with streaming response."""
@@ -344,8 +353,17 @@ async def test_tool(request: PlaygroundToolTest):
 
 
 @router.post("/compare", response_model=PlaygroundCompareResult)
-async def compare_agents(request: PlaygroundCompareRequest):
-    """Compare multiple agents on the same prompt."""
+async def compare_agents(
+    request: PlaygroundCompareRequest,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Compare multiple agents on the same prompt.
+
+    Each comparison spends LLM budget, so it must be attributable to a caller.
+    The scratch sessions it creates are owned by the caller and torn down
+    afterwards.
+    """
     if len(request.agents) < 2:
         raise HTTPException(
             status_code=400,
@@ -356,7 +374,12 @@ async def compare_agents(request: PlaygroundCompareRequest):
             status_code=400,
             detail="Maximum 5 agents allowed for comparison",
         )
-    return await PlaygroundService.compare(request)
+    llm_access = await _get_llm_access_for_playground(current_user, db)
+    return await PlaygroundService.compare(
+        request,
+        user_id=str(current_user.id),
+        llm_access=llm_access,
+    )
 
 
 # ─────────────────────────────────────────────────────────────
