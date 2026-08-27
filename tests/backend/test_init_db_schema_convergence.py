@@ -219,3 +219,31 @@ async def test_init_db_restores_indexes_dropped_with_their_column(probe):
     restored = await _actual_indexes(engine, schema)
     missing = {"ix_audit_logs_project_id", "ix_audit_project_action"} - restored
     assert not missing, f"복구되지 않은 인덱스: {sorted(missing)}"
+
+
+async def test_init_db_survives_a_column_it_cannot_backfill(probe):
+    """자동 추가할 수 없는 컬럼이 있어도 기동이 죽지 않아야 한다.
+
+    `llm_model_update_logs.provider` 는 NOT NULL 인데 server_default 가 없다.
+    기존 행을 채울 값이 없어 리콘실러는 **의도적으로 건너뛰고 경고만** 남긴다.
+    그런데 그 컬럼에 인덱스(`ix_llm_model_update_logs_provider`)가 걸려 있어,
+    인덱스 패스가 테이블 존재만 보고 만들려 들면 UndefinedColumn 으로
+    `init_db()` 전체가 죽는다 — 경고만 남기고 기동하려던 설계가 무너진다.
+    """
+    schema, engine = probe
+
+    await db_mod.init_db()
+
+    async with engine.begin() as conn:
+        await conn.execute(text('ALTER TABLE "llm_model_update_logs" DROP COLUMN "provider"'))
+
+    stale = await _actual_schema(engine, schema)
+    assert "provider" not in stale["llm_model_update_logs"], "프로브가 컬럼을 지우지 못했다"
+
+    await db_mod.init_db()  # 죽지 않아야 한다
+
+    after = await _actual_schema(engine, schema)
+    assert "provider" not in after["llm_model_update_logs"], (
+        "NOT NULL + 기본값 없음 컬럼을 자동 추가했다 — 기존 행을 채울 값이 없다"
+    )
+    assert "ix_llm_model_update_logs_provider" not in await _actual_indexes(engine, schema)

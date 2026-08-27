@@ -488,6 +488,7 @@ async def _run_migrations() -> None:
                     continue
                 ddl = CreateColumn(column).compile(dialect=pg_dialect)
                 await conn.execute(text(f"ALTER TABLE {table.name} ADD COLUMN IF NOT EXISTS {ddl}"))
+                existing_columns.add(column.name)
                 print(f"✅ {table.name}.{column.name} 컬럼 추가")
 
         # 인덱스: 존재하는 테이블에 대해 메타데이터가 선언한 것 중 없는 것만 만든다.
@@ -502,6 +503,16 @@ async def _run_migrations() -> None:
                 continue
             for index in table.indexes:
                 if index.name in existing_indexes:
+                    continue
+                # 위에서 건너뛴 컬럼(NOT NULL + 기본값 없음)을 참조하는 인덱스는
+                # 만들 수 없다. 시도하면 UndefinedColumn 으로 init_db() 자체가 죽어,
+                # 경고만 남기고 기동하려던 설계가 무너진다.
+                index_columns = {c.name for c in index.columns}
+                if not index_columns <= present[table.name]:
+                    print(
+                        f"⚠️  {index.name} 인덱스 건너뜀 — 참조 컬럼 "
+                        f"{sorted(index_columns - present[table.name])} 이 아직 없다"
+                    )
                     continue
                 await conn.execute(
                     text(str(CreateIndex(index, if_not_exists=True).compile(dialect=pg_dialect)))
