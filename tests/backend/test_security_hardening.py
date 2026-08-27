@@ -1497,3 +1497,145 @@ async def test_project_configs_empty_registry_still_returns_503_for_admin(monkey
             SimpleNamespace(id="admin-1", role="admin", is_admin=True),
         )
     assert exc_info.value.status_code == 503
+
+
+# ─────────────────────────────────────────────────────────────
+# Database-mode project-config authorization
+#
+# PR #318 put a blanket 503 ("unavailable in database mode") on top of these
+# branches, so the authorization below never actually ran and nothing locked
+# it. The 2026-08-27 posture decision removed the block; these tests are the
+# evidence that lifting it did not open the routes to unauthorized users.
+# ─────────────────────────────────────────────────────────────
+
+
+def _db_project(project_id: str = "proj-uuid", organization_id: str = "org-1"):
+    """Stand-in for the ProjectModel columns the guard reads."""
+    return SimpleNamespace(id=project_id, path="/tmp/proj", organization_id=organization_id)
+
+
+class _ProjectConfigDbStub:
+    """Serves the guard's two queries in order: active projects, then the grant.
+
+    The guard runs `select(ProjectModel)` first and `select(ProjectAccessModel)`
+    only for non-privileged users, so call order is the discriminator.
+    """
+
+    def __init__(self, projects, direct_grant=None):
+        self._projects = projects
+        self._direct_grant = direct_grant
+        self.calls = 0
+
+    async def execute(self, *_args, **_kwargs):
+        self.calls += 1
+        if self.calls == 1:
+            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: self._projects))
+        return SimpleNamespace(scalar_one_or_none=lambda: self._direct_grant)
+
+
+@pytest.mark.asyncio
+async def test_db_project_config_allows_privileged_operator(monkeypatch):
+    """An operator reaches a registered project's .claude assets in DB mode."""
+    from api.project_configs import access as access_module
+
+    monkeypatch.setenv("USE_DATABASE", "true")
+    admin = SimpleNamespace(id="admin-1", role="admin", is_admin=True, is_active=True)
+
+    result = await access_module.require_project_config_access(
+        _request_stub("GET", "proj-uuid", "/api/project-configs/proj-uuid/skills"),
+        admin,
+        db=_ProjectConfigDbStub([_db_project()]),
+    )
+
+    assert result is admin
+
+
+@pytest.mark.asyncio
+async def test_db_project_config_allows_explicit_grant(monkeypatch):
+    """A non-privileged user with a ProjectAccess row is authorized."""
+    from api.project_configs import access as access_module
+
+    monkeypatch.setenv("USE_DATABASE", "true")
+
+    async def no_admin_orgs(_user):
+        return []
+
+    monkeypatch.setattr("api.projects._get_admin_org_ids", no_admin_orgs)
+    member = SimpleNamespace(id="member-1", role="user", is_admin=False, is_active=True)
+
+    result = await access_module.require_project_config_access(
+        _request_stub("GET", "proj-uuid", "/api/project-configs/proj-uuid/skills"),
+        member,
+        db=_ProjectConfigDbStub([_db_project()], direct_grant="proj-uuid"),
+    )
+
+    assert result is member
+
+
+@pytest.mark.asyncio
+async def test_db_project_config_denies_user_without_grant(monkeypatch):
+    """No org-admin scope and no ProjectAccess row still means 403, not access."""
+    from api.project_configs import access as access_module
+
+    monkeypatch.setenv("USE_DATABASE", "true")
+
+    async def no_admin_orgs(_user):
+        return []
+
+    monkeypatch.setattr("api.projects._get_admin_org_ids", no_admin_orgs)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await access_module.require_project_config_access(
+            _request_stub("GET", "proj-uuid", "/api/project-configs/proj-uuid/skills"),
+            SimpleNamespace(id="outsider", role="user", is_admin=False, is_active=True),
+            db=_ProjectConfigDbStub([_db_project()], direct_grant=None),
+        )
+
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_db_project_config_unregistered_project_is_404(monkeypatch):
+    """An ID that matches no active DB project is still not found."""
+    from api.project_configs import access as access_module
+
+    monkeypatch.setenv("USE_DATABASE", "true")
+
+    with pytest.raises(HTTPException) as exc_info:
+        await access_module.require_project_config_access(
+            _request_stub("GET", "other-uuid", "/api/project-configs/other-uuid/skills"),
+            SimpleNamespace(id="admin-1", role="admin", is_admin=True, is_active=True),
+            db=_ProjectConfigDbStub([_db_project()]),
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_db_global_config_route_requires_privileged_role(monkeypatch):
+    """Global asset routes stay operator-only in DB mode -- same as memory mode.
+
+    These have no project_id, so they used to hit the discovery 503 before any
+    role check. Removing it must not turn them into open routes.
+    """
+    from api.project_configs import access as access_module
+
+    monkeypatch.setenv("USE_DATABASE", "true")
+
+    with pytest.raises(HTTPException) as exc_info:
+        await access_module.require_project_config_access(
+            _request_stub("GET", None, "/api/project-configs/global"),
+            SimpleNamespace(id="member-1", role="user", is_admin=False, is_active=True),
+            db=object(),
+        )
+
+    assert exc_info.value.status_code == 403
+
+    operator = SimpleNamespace(id="manager-1", role="manager", is_admin=False, is_active=True)
+    result = await access_module.require_project_config_access(
+        _request_stub("GET", None, "/api/project-configs/global"),
+        operator,
+        db=object(),
+    )
+
+    assert result is operator

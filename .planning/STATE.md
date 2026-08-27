@@ -362,8 +362,22 @@ Codex 2 라운드 + 실행 스모크로 지적 4 P1 / 3 P2 중 확인된 것을 
   `project_configs/core.py` 만 쿼리 하나가 이미 접근 필터링된 상태라 두 원인이 합쳐져 있었다.
   판별자는 함수 안에 이미 있었다(admin/미인증 분기 = registry-wide). 추가 쿼리 없이 그 불리언만
   끌어올려 raise 를 게이트했다.
-- **DB 모드 posture 결정은 여전히 미해결이다** (503 유지 vs DB-backed 구현 선행).
-  다만 위 오분류와는 무관한 별개 사안임이 확인됐다.
+- ~~**DB 모드 posture 결정은 여전히 미해결이다**~~ → **2026-08-27 사용자 결정: 차단 해제.**
+  대시보드 Project Configs 가 DB 모드에서 통째로 503 을 내는 것을 사용자가 보고 결정을 내렸다.
+  실측으로 좁혀진 사실 2 가지가 결정을 쉽게 만들었다:
+  - 차단 지점은 "26 곳"이 아니라 `project_configs/access.py` **3 곳**이다. 계열 전체가
+    `require_project_config_access` 의존성 하나를 지나므로 가드 한 곳이 전부를 막고 있었다.
+  - 그 3 곳은 인가 판정(privileged / org-admin / direct ProjectAccess)을 **전부 수행한 뒤**
+    통과 자리에 놓인 플레이스홀더였다. 즉 DB-backed 구현이 없어서 막은 것이 아니라,
+    인가 결과를 쓰지 않고 덮어둔 상태였다. 503 을 걷어내면 그 판정이 그대로 발효된다.
+  자산은 양쪽 모드 모두 파일시스템에 있고 스캔 범위는 기존 monitor 그대로라 새 노출면은 없다.
+  회귀 테스트 5 건 추가(`test_security_hardening.py`) — Red-Green 판별: 503 을 복원하면
+  **통과 케이스 3 건만** 실패하고 403/404 거부 케이스 2 건은 그대로 통과한다(= 차단만 풀렸고
+  거부 로직은 불변).
+- **후속(미결)**: DB 분기는 ProjectAccess 행의 **존재만** 보고 role 을 보지 않는다. filesystem
+  분기는 04574fa 이후 GET=viewer / 그 외=editor 를 요구하므로, ACL 행이 실제로 쌓이면 두 모드의
+  쓰기 권한 기준이 갈린다. `require_project_role` 은 DB 모드에서 `ProjectModel.id`(UUID)로 조회하는데
+  라우트의 `project_id` 는 path 기반 문자열이라 그대로는 못 쓴다 — ID 해석을 통일해야 붙일 수 있다.
 
 
 ### 2026-08-22 세션 — #284 복구 → #289 → #292 낙관적 동시성 (진행 중, 다른 세션으로 이관)
