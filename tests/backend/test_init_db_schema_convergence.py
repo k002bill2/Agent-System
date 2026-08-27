@@ -65,6 +65,16 @@ async def _actual_schema(engine, schema: str) -> dict[str, set[str]]:
         return await conn.run_sync(read)
 
 
+async def _actual_indexes(engine, schema: str) -> set[str]:
+    """DB 에 실제로 있는 인덱스 이름."""
+    async with engine.connect() as conn:
+        rows = await conn.execute(
+            text("SELECT indexname FROM pg_indexes WHERE schemaname = :schema"),
+            {"schema": schema},
+        )
+        return {row[0] for row in rows}
+
+
 @pytest_asyncio.fixture
 async def probe(monkeypatch):
     """빈 전용 스키마 + 그것을 보도록 갈아끼운 `db.database.engine`.
@@ -183,3 +193,29 @@ async def test_init_db_backfills_columns_an_older_deployment_lacks(probe):
         if set(columns) - after[table]
     }
     assert not not_restored, f"오래된 배포에서 복구되지 않은 컬럼: {not_restored}"
+
+
+async def test_init_db_restores_indexes_dropped_with_their_column(probe):
+    """컬럼만 채우고 인덱스를 빠뜨리면 수렴이 반쪽이다.
+
+    `audit_logs.project_id` 는 컬럼과 인덱스 2 개(`ix_audit_logs_project_id`,
+    `ix_audit_project_action`)가 한 변경이었다. Postgres 는 컬럼을 지울 때 그것에
+    의존하는 인덱스를 함께 지우므로, 오래된 배포 흉내가 그대로 인덱스 프로브가 된다.
+    """
+    schema, engine = probe
+
+    await db_mod.init_db()
+
+    async with engine.begin() as conn:
+        await conn.execute(text('ALTER TABLE "audit_logs" DROP COLUMN "project_id"'))
+
+    stale = await _actual_indexes(engine, schema)
+    assert not {"ix_audit_logs_project_id", "ix_audit_project_action"} & stale, (
+        "컬럼과 함께 인덱스가 지워지지 않았다 — 프로브가 성립하지 않는다"
+    )
+
+    await db_mod.init_db()  # 재기동
+
+    restored = await _actual_indexes(engine, schema)
+    missing = {"ix_audit_logs_project_id", "ix_audit_project_action"} - restored
+    assert not missing, f"복구되지 않은 인덱스: {sorted(missing)}"

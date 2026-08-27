@@ -452,10 +452,13 @@ async def _run_migrations() -> None:
         # 대조해 없는 컬럼만 추가한다. DDL 은 `CreateColumn` 으로 렌더하므로 `create_all()`
         # 이 새 DB 에 쓰는 것과 같은 문장이 된다.
         #
-        # 하지 않는 것: DROP·타입 변경·인덱스 생성. 파괴적이거나 되돌리기 어려운 연산은
-        # 사람이 판단할 일이고, 여기는 기동마다 무인으로 도는 자리다.
+        # 인덱스도 같이 맞춘다 — 컬럼만 채우면 수렴을 주장하면서 질의 성능이 빠진다
+        # (`audit_logs.project_id` 는 컬럼과 인덱스 2 개가 한 변경이었다).
+        #
+        # 하지 않는 것: DROP·타입 변경. 파괴적이거나 되돌리기 어려운 연산은 사람이
+        # 판단할 일이고, 여기는 기동마다 무인으로 도는 자리다.
         from sqlalchemy.dialects import postgresql
-        from sqlalchemy.schema import CreateColumn
+        from sqlalchemy.schema import CreateColumn, CreateIndex
 
         rows = await conn.execute(
             text(
@@ -486,6 +489,24 @@ async def _run_migrations() -> None:
                 ddl = CreateColumn(column).compile(dialect=pg_dialect)
                 await conn.execute(text(f"ALTER TABLE {table.name} ADD COLUMN IF NOT EXISTS {ddl}"))
                 print(f"✅ {table.name}.{column.name} 컬럼 추가")
+
+        # 인덱스: 존재하는 테이블에 대해 메타데이터가 선언한 것 중 없는 것만 만든다.
+        # `IF NOT EXISTS` 라 멱등하다. 큰 테이블에서는 이 생성이 기동을 잠시 붙잡을 수
+        # 있으나, 인덱스가 없는 채로 도는 것보다 낫다 (한 번만 일어난다).
+        index_rows = await conn.execute(
+            text("SELECT indexname FROM pg_indexes WHERE schemaname = current_schema()")
+        )
+        existing_indexes = {row[0] for row in index_rows}
+        for table in Base.metadata.sorted_tables:
+            if table.name not in present:
+                continue
+            for index in table.indexes:
+                if index.name in existing_indexes:
+                    continue
+                await conn.execute(
+                    text(str(CreateIndex(index, if_not_exists=True).compile(dialect=pg_dialect)))
+                )
+                print(f"✅ {index.name} 인덱스 생성")
 
 
 async def close_db() -> None:
