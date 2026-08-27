@@ -88,6 +88,8 @@
 | GET | `/api/claude-sessions/{id}/activity/stream` | 활동 스트림 |
 | GET | `/api/claude-sessions/{id}/tasks` | 세션 태스크 목록 |
 
+> **인증**: 위 라우트는 전부 admin/manager 권한을 요구합니다 (`get_current_admin_or_manager_user`).
+
 **쿼리 파라미터** (`GET /api/claude-sessions`):
 - `status`: `active` | `idle` | `completed`
 - `sort_by`: `last_activity` | `created_at` | `message_count` | `estimated_cost` | `project_name`
@@ -101,3 +103,25 @@
 - `{id}` / `{id}/stream`의 `recent_messages`는 **요약 윈도**입니다 — 파일 tail 일부만 파싱하고 최근 N개 메시지만, 각 본문은 길이 캡(기본 2000자)으로 제한됩니다.
 - 절단은 더 이상 무표시가 아닙니다. 각 `SessionMessage`/`ActivityEvent`는 `content_truncated`(bool)와 `full_length`(원본 길이)를 포함하고, `ClaudeSessionDetail`은 `messages_truncated`(bool)로 부분 윈도 여부를 알립니다. 전체 대화는 `{id}/transcript`(절단 없음, 페이지네이션만)로 조회합니다.
 - `{id}/activity`의 `result` 이벤트 `tool_result`는 `json.dumps`로 직렬화 후 캡되어 잘린 결과도 유효한 JSON 접두사를 유지합니다.
+
+---
+
+## Agent Sessions (provider-neutral alias)
+
+`/api/claude-sessions` 의 provider 중립 별칭입니다 (#320). 리소스 이름에 provider 를
+넣지 않은 동일 계약을 노출하며, **원본과 동일하게 admin/manager 권한을 요구합니다**.
+provider 별 mutation 을 지원하지 않을 때는 409 를 반환합니다.
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/agent-sessions` | 세션 목록 조회 |
+| GET | `/api/agent-sessions/{id}` | 세션 상세 정보 |
+| GET | `/api/agent-sessions/{id}/transcript` | Raw 트랜스크립트 |
+| GET | `/api/agent-sessions/{id}/activity` | 정규화된 활동 내역 |
+| GET | `/api/agent-sessions/{id}/stream` | 실시간 SSE 스트리밍 |
+| POST | `/api/agent-sessions/{id}/save` | 세션 DB 저장 |
+| POST | `/api/agent-sessions/{id}/summary` | 세션 요약 생성 |
+| GET | `/api/agent-sessions/{id}/summary` | 세션 요약 조회 |
+| DELETE | `/api/agent-sessions/{id}` | 세션 삭제 |
+
+쿼리 파라미터는 `GET /api/claude-sessions` 와 동일하며, `provider` (`all` | provider 명) 가 추가됩니다.
