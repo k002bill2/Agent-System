@@ -1,6 +1,7 @@
 """Codex rollout JSONL discovery tests."""
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -147,13 +148,102 @@ def test_ignores_rollout_symlink_outside_sessions_root(tmp_path: Path) -> None:
     assert {session.slug for session in sessions} == {"valid"}
 
 
-def test_skips_rollout_above_file_size_limit(
+def test_large_rollout_is_truncated_not_dropped(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    path = _write_rollout(tmp_path)
-    monkeypatch.setattr(codex_monitor, "MAX_ROLLOUT_BYTES", path.stat().st_size - 1)
+    """Exhausting the retain budget must degrade the session, not hide it.
 
-    assert CodexSessionMonitor(tmp_path).discover_sessions() == []
+    File size is a poor proxy for memory cost — a rollout is usually large
+    because a few tool outputs are huge, not because it holds many records.
+    """
+    _write_rollout(tmp_path)
+    monkeypatch.setattr(codex_monitor, "MAX_ROLLOUT_RECORDS", 2)
+
+    sessions = CodexSessionMonitor(tmp_path).discover_sessions()
+
+    assert [session.session_id for session in sessions] == ["thread-01abc"]
+    assert sessions[0].records_truncated is True
+    # Counts reflect only what was read, so they are a lower bound.
+    assert sessions[0].user_message_count == 1
+    assert sessions[0].tool_call_count == 0
+
+
+def test_list_view_streams_without_retaining_records(tmp_path: Path) -> None:
+    """The polled list must not hold the conversation in memory.
+
+    Aggregates still have to be exact — this is the contract that lets the
+    file-size gate go away without trading a silent drop for memory growth.
+    """
+    path = _write_rollout(tmp_path)
+
+    streamed = CodexSessionMonitor(tmp_path)._read_file(path, retain=False)
+    retained = CodexSessionMonitor(tmp_path)._read_file(path, retain=True)
+
+    assert streamed.records == []
+    assert streamed.messages == []
+    assert retained.records and retained.messages
+    for field in (
+        "message_count",
+        "user_count",
+        "assistant_count",
+        "tool_count",
+        "model",
+        "tokens",
+    ):
+        assert getattr(streamed, field) == getattr(retained, field), field
+    assert streamed.first_timestamp == retained.first_timestamp
+    assert streamed.last_timestamp == retained.last_timestamp
+
+
+def test_detail_retain_budget_degrades_instead_of_failing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Neither discovery nor detail depends on the retain budget any more.
+
+    Both stream, so a tiny budget — which only bounds the transcript path —
+    leaves the list and the detail window fully intact.
+    """
+    _write_rollout(tmp_path)
+    monkeypatch.setattr(codex_monitor, "MAX_RETAINED_BYTES", 1)
+    monitor = CodexSessionMonitor(tmp_path)
+
+    sessions = monitor.discover_sessions()
+    detail = monitor.get_session_details("thread-01abc")
+
+    assert [session.session_id for session in sessions] == ["thread-01abc"]
+    assert detail is not None
+    assert [message.type.value for message in detail.recent_messages] == [
+        "user",
+        "assistant",
+        "tool_use",
+    ]
+
+
+def test_oversized_line_is_skipped_without_dropping_the_session(tmp_path: Path) -> None:
+    """One huge line must not cost the whole session."""
+    path = _write_rollout(tmp_path)
+    with path.open("a", encoding="utf-8") as stream:
+        stream.write(
+            json.dumps(
+                {
+                    "timestamp": "2026-08-27T01:00:05Z",
+                    "type": "response_item",
+                    "payload": {
+                        "type": "function_call",
+                        "name": "read_file",
+                        "arguments": "x" * (codex_monitor.MAX_ROLLOUT_LINE_BYTES + 1),
+                    },
+                }
+            )
+            + "\n"
+        )
+
+    sessions = CodexSessionMonitor(tmp_path).discover_sessions()
+
+    assert [session.session_id for session in sessions] == ["thread-01abc"]
+    # The giant record is dropped, so the earlier apply_patch call is the only tool.
+    assert sessions[0].tool_call_count == 1
+    assert sessions[0].records_truncated is True
 
 
 def test_malformed_usage_values_do_not_break_message_parsing() -> None:
@@ -325,3 +415,88 @@ def test_non_string_payload_types_are_skipped_not_fatal(tmp_path: Path) -> None:
 
     assert [session.session_id for session in sessions] == ["thread-corrupt"]
     assert sessions[0].user_message_count == 1
+
+
+def test_oversized_line_is_never_materialized_whole(tmp_path: Path, monkeypatch) -> None:
+    """The reader must not allocate a line bigger than the per-line cap.
+
+    Iterating the file object would build the whole line before its size could
+    be checked, so a single huge tool output could exhaust memory.
+    """
+    path = _write_rollout(tmp_path)
+    # A line far larger than the cap, spanning many read chunks.
+    with path.open("ab") as stream:
+        stream.write(b'{"padding": "' + b"x" * (12 * 1024 * 1024) + b'"}\n')
+        stream.write(
+            json.dumps(
+                {
+                    "timestamp": "2026-08-27T01:00:06Z",
+                    "type": "response_item",
+                    "payload": {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "after the giant"}],
+                    },
+                }
+            ).encode()
+            + b"\n"
+        )
+
+    biggest = 0
+    original = CodexSessionMonitor._iter_lines
+
+    def spy(stream, agg):
+        nonlocal biggest
+        for line in original(stream, agg):
+            biggest = max(biggest, len(line))
+            yield line
+
+    monkeypatch.setattr(CodexSessionMonitor, "_iter_lines", staticmethod(spy))
+    sessions = CodexSessionMonitor(tmp_path).discover_sessions()
+
+    assert biggest <= codex_monitor.MAX_ROLLOUT_LINE_BYTES
+    assert sessions[0].records_truncated is True
+    # Records on both sides of the giant line survive.
+    assert sessions[0].user_message_count == 2
+    assert sessions[0].tool_call_count == 1
+
+
+def test_scan_stops_at_the_total_scan_budget(tmp_path: Path, monkeypatch) -> None:
+    """A pathological rollout must not scan forever on every list refresh."""
+    _write_rollout(tmp_path)
+    monkeypatch.setattr(codex_monitor, "MAX_SCAN_BYTES", 1)
+
+    sessions = CodexSessionMonitor(tmp_path).discover_sessions()
+
+    assert len(sessions) == 1
+    assert sessions[0].records_truncated is True
+
+
+def test_detail_shows_the_real_tail_when_the_scan_stops_early(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A truncated scan must not present the oldest messages as the newest."""
+    _write_rollout(tmp_path)
+    monkeypatch.setattr(codex_monitor, "DETAIL_WINDOW", 1)
+    monitor = CodexSessionMonitor(tmp_path)
+
+    detail = monitor.get_session_details("thread-01abc")
+
+    assert detail is not None
+    # apply_patch is the last message in the fixture, not the first.
+    assert [message.tool_name for message in detail.recent_messages] == ["apply_patch"]
+    assert detail.messages_truncated is True
+
+
+def test_truncated_scan_uses_file_mtime_for_last_activity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Activity status must not be derived from a prefix of the file."""
+    path = _write_rollout(tmp_path)
+    monkeypatch.setattr(codex_monitor, "MAX_SCAN_BYTES", 1)
+
+    session = CodexSessionMonitor(tmp_path).discover_sessions()[0]
+
+    assert session.records_truncated is True
+    mtime = datetime.fromtimestamp(path.stat().st_mtime, UTC)
+    assert abs((session.last_activity - mtime).total_seconds()) < 1

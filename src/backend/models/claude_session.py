@@ -96,6 +96,10 @@ class ClaudeSessionInfo(BaseModel):
     # File metadata
     file_path: str = Field(default="", description="Path to the .jsonl file")
     file_size: int = Field(default=0, description="File size in bytes")
+    records_truncated: bool = Field(
+        default=False,
+        description="Some records were skipped, so counts and totals are a lower bound",
+    )
 
     # AI-generated summary
     summary: str | None = Field(default=None, description="AI-generated conversation summary")
