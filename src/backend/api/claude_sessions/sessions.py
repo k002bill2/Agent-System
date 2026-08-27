@@ -28,26 +28,15 @@ from models.claude_session import (
     ClaudeSessionSaveResponse,
     SessionStatus,
 )
-from services.claude_session_monitor import ClaudeSessionMonitor, get_monitor
-from services.codex_session_monitor import CodexSessionMonitor, get_codex_monitor
+from services.claude_session_monitor import get_monitor
+from services.codex_session_monitor import get_codex_monitor
 from utils.time import utcnow
+
+from .resolver import resolve_session
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[Depends(get_current_admin_or_manager_user)])
-
-
-def _resolve_session(
-    session_id: str,
-) -> tuple[ClaudeSessionMonitor | CodexSessionMonitor, ClaudeSessionDetail | None]:
-    """Resolve a session against the supported provider adapters."""
-    claude_monitor = get_monitor()
-    details = claude_monitor.get_session_details(session_id)
-    if details is not None:
-        return claude_monitor, details
-
-    codex_monitor = get_codex_monitor()
-    return codex_monitor, codex_monitor.get_session_details(session_id)
 
 
 @dataclass
@@ -105,7 +94,7 @@ _line_count_cache = TranscriptLineCountCache()
 @router.get("/{session_id}", response_model=ClaudeSessionDetail)
 async def get_session(session_id: str) -> ClaudeSessionDetail:
     """Get detailed information for a session from any supported provider."""
-    monitor, details = _resolve_session(session_id)
+    monitor, details = resolve_session(session_id)
 
     if details is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
@@ -129,7 +118,7 @@ async def stream_session(session_id: str):
     Returns:
         Server-Sent Events stream with session updates
     """
-    monitor, initial = _resolve_session(session_id)
+    monitor, initial = resolve_session(session_id)
 
     # Verify session exists
     if initial is None:
@@ -204,7 +193,7 @@ async def save_session(
     Returns:
         Save confirmation with timestamp
     """
-    monitor, details = _resolve_session(session_id)
+    monitor, details = resolve_session(session_id)
 
     if details is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
@@ -416,7 +405,7 @@ async def generate_session_summary(session_id: str) -> dict:
     Returns:
         Generated or cached summary
     """
-    monitor, details = _resolve_session(session_id)
+    monitor, details = resolve_session(session_id)
 
     # Verify session exists
     if details is None:
@@ -443,7 +432,7 @@ async def get_session_summary(session_id: str) -> dict:
     Returns:
         Cached summary or null
     """
-    monitor, details = _resolve_session(session_id)
+    monitor, details = resolve_session(session_id)
     if details is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     if details.provider != "claude":

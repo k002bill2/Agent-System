@@ -77,6 +77,32 @@
 | POST | `/api/claude-sessions/external-paths` | 외부 경로 추가 (body: `{path}`) |
 | DELETE | `/api/claude-sessions/external-paths/{path_encoded}` | 외부 경로 삭제 (URL-encoded path) |
 
+### 외부 에이전트 세션 (Claude · Codex)
+
+세션 모니터링은 provider 인지형이다. 같은 정규화 형태(`ClaudeSessionInfo`, `provider` 필드로 구분)를
+Claude JSONL(`~/.claude/projects/`)과 Codex rollout JSONL(`~/.codex/sessions/`, `CODEX_SESSIONS_DIR` 로 재지정)
+양쪽에서 만든다. Codex 는 **읽기 전용**이다.
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/agent-sessions` | provider 중립 목록. `provider=all` 기본 |
+| GET | `/api/agent-sessions/{session_id}` | 상세 (양 provider 해석) |
+| GET | `/api/agent-sessions/{session_id}/transcript` | 원본 전사 (offset/limit) |
+| GET | `/api/agent-sessions/{session_id}/activity` | 정규화 활동 이벤트 |
+| GET | `/api/claude-sessions` | 레거시 별칭. `provider=claude` 기본으로 기존 계약 유지 |
+
+- `provider` 쿼리는 `all` · `claude` · `codex` 만 허용하며 그 외는 **422**.
+- Codex 가 안전하게 지원하지 못하는 mutation(스트리밍·요약 생성·삭제)은 **409** 로 명시 거부한다.
+  Claude 전용 OS 프로세스 정리 API 는 Codex 를 관리한다고 주장하지 않는다.
+- 두 라우터 모두 `get_current_admin_or_manager_user` 로 보호된다. `/agent-sessions` 는 핸들러를
+  import 해 자기 라우터에 재등록하는 alias 라 **라우터 레벨 의존성이 따라오지 않으므로**
+  같은 정책을 직접 선언한다.
+
+**Codex 파싱 주의** — 실제 rollout 은 합성 fixture 와 필드 위치가 다르다:
+model 은 `turn_context.payload.model`, 토큰은 `event_msg` 의 `payload.type=token_count` →
+`info.total_token_usage`(세션 **누적값**이라 합산 금지), 툴은 `function_call` 과 `custom_tool_call` 둘 다.
+일부 레코드를 건너뛴 세션은 `records_truncated=true` 로 표시되며 집계는 하한이다.
+
 **멀티 프로젝트 비교** (`GET /api/analytics/trends/compare`):
 - `project_ids`: 비교할 프로젝트 ID 목록 (최대 5개, 필수)
 - `metric`: `tasks` | `tokens` | `cost` | `success_rate` (기본: `tasks`)

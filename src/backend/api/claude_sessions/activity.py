@@ -20,7 +20,7 @@ from models.claude_session import (
     TasksResponse,
 )
 
-from .sessions import _resolve_session
+from .resolver import resolve_session
 
 router = APIRouter(dependencies=[Depends(get_current_admin_or_manager_user)])
 
@@ -44,7 +44,7 @@ async def get_session_activity(
     Returns:
         List of activity events with pagination info
     """
-    monitor, details = _resolve_session(session_id)
+    monitor, details = resolve_session(session_id)
     events, total_count = monitor.get_session_activity(
         session_id,
         offset=offset,
@@ -81,7 +81,7 @@ async def stream_session_activity(session_id: str):
     """
     import json
 
-    monitor, details = _resolve_session(session_id)
+    monitor, details = resolve_session(session_id)
 
     # Verify session exists
     if details is None:
@@ -153,7 +153,7 @@ async def get_session_tasks(session_id: str) -> TasksResponse:
     Returns:
         Tasks dictionary and root task IDs
     """
-    monitor, details = _resolve_session(session_id)
+    monitor, details = resolve_session(session_id)
     if details is not None and details.provider != "claude":
         return TasksResponse(
             session_id=session_id,

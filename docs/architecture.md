@@ -253,6 +253,7 @@ src/backend/
 │   ├── auth_service.py            # OAuth/JWT/Email 인증
 │   ├── claude_config_service.py   # Claude OAuth 토큰 관리 (Keychain/env/파일)
 │   ├── claude_session_monitor.py  # Claude 세션 파일 스캔/파싱
+│   ├── codex_session_monitor.py   # Codex rollout JSONL 스캔/파싱 (읽기 전용)
 │   ├── code_entity_extractor.py   # RAG 메타데이터용 코드 엔티티 추출 (AST/Regex)
 │   ├── cost_allocation_service.py # 비용 추적/할당 서비스
 │   ├── credential_service.py      # 자격증명 암호화/저장
@@ -298,6 +299,7 @@ src/backend/
 │   ├── sandbox_manager.py         # Docker 격리 실행
 │   ├── scheduler_service.py       # APScheduler 기반 Cron 스케줄링
 │   ├── secret_service.py          # Fernet 암호화 시크릿 관리
+│   ├── session_file_cache.py      # 세션 파일 파싱 결과 캐시 (mtime+size 무효화, Claude·Codex 공용)
 │   ├── session_service.py         # 세션 생명주기 관리
 │   ├── skill_manager.py           # SKILL.md 파일 CRUD 관리
 │   ├── task_analysis_service.py   # 태스크 복잡도 분석
