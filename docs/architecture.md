@@ -622,37 +622,39 @@ USE_DATABASE=false
 | `config_versions` | 설정 버전 스냅샷 (타입별, diff 추적, 롤백) |
 | `playground_sessions` | 에이전트 플레이그라운드 세션 (메시지, 실행, 비용) |
 
-### Database Migration (Alembic)
+### Database Migration
 
-스키마 변경 관리를 위한 Alembic 설정:
+**마이그레이션 도구는 쓰지 않는다.** 스키마는 기동 시 `init_db()` 가 만든다
+(`src/backend/db/database.py:74`):
 
 ```
-src/backend/
-├── alembic.ini              # 마이그레이션 설정
-└── alembic/
-    ├── env.py               # 환경 설정 (SQLAlchemy 연동)
-    ├── script.py.mako       # 마이그레이션 템플릿
-    └── versions/            # 마이그레이션 스크립트
+init_db()
+  ├─ Base.metadata.create_all()   # 모델 → 없는 테이블·인덱스 생성
+  └─ _run_migrations()            # 기존 배포 따라잡기 (information_schema 조회 후 raw DDL)
 ```
 
-**주요 명령어**:
+두 단계의 역할이 다르다:
 
-```bash
-# 새 마이그레이션 생성 (모델 변경 감지)
-alembic revision --autogenerate -m "Add new table"
+| | 대상 | 하는 일 |
+|---|---|---|
+| `create_all()` | **빈 DB** | 모델에 선언된 테이블을 전부 만든다. 스키마의 진실의 출처다 |
+| `_run_migrations()` | **이미 떠 있던 DB** | `create_all()` 이 하지 못하는 것 — 기존 테이블에 컬럼 추가, 타입 확장, 백필 |
 
-# 최신 버전으로 업그레이드
-alembic upgrade head
+`create_all()` 은 **기존 테이블에 컬럼을 추가하지 않는다.** 그래서 이미 배포된 DB 를
+따라잡히려면 `_run_migrations()` 에 블록을 추가해야 한다. 규칙:
 
-# 한 단계 롤백
-alembic downgrade -1
+- 반드시 **가드 먼저** — `information_schema` 로 존재 여부를 확인한 뒤에만 DDL 을 실행한다
+  (기동마다 실행되므로 멱등해야 한다)
+- 새 **테이블**은 모델에 선언하는 것으로 충분하다. `create_all()` 이 만든다
+- 새 **컬럼**은 모델 선언 + `_run_migrations()` 블록 **둘 다** 필요하다.
+  모델만 고치면 새 배포에서만 생기고 기존 배포에는 안 생긴다
 
-# 현재 버전 확인
-alembic current
+`init_db()` 가 빈 DB 에서 모델과 일치하는 스키마를 만들고 두 번 돌려도 같은지는
+`tests/backend/test_init_db_schema_convergence.py` 가 검증한다 (CI 의 Postgres 서비스에서 실행).
 
-# 마이그레이션 히스토리
-alembic history
-```
+> Alembic 은 2026-08-27 에 제거했다 (issue #310). 마이그레이션 11 개 전체의 `upgrade()` 에
+> `op.create_table` 이 0 건이라 **빈 DB 에 스키마를 만들 수 없었고**, `alembic upgrade` 를
+> 부르는 실행 경로도 리포에 없었다. 실행되지 않는데 문서만 안내하는 발판이었다.
 
 ## Analytics Data Flow
 

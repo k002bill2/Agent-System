@@ -200,7 +200,7 @@ npm test -- --run  # 테스트 실패
 |------|----------|----------|
 | prepared statement 에러 | 캐시 충돌 (우선 확인!) | connection pool 설정 확인 |
 | connection refused | DB 미실행 | `docker compose ps` 확인 |
-| migration 에러 | 스키마 불일치 | alembic history 확인 |
+| 스키마 불일치 | 모델만 고치고 `_run_migrations()` 블록 누락 | `information_schema.columns` 로 실제 컬럼 확인 |
 
 **React/Dashboard 관련**:
 | 증상 | 가능 원인 | 확인 방법 |

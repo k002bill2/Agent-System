@@ -42,7 +42,7 @@ non-zero 종료는 차단 신호가 아니라 발견 신호다 — 리포트는 
 
 - **테스트 파일** (`test_*.py`) — 타입 힌트 누락, print 허용
 - **CLI 스크립트** (`cli/`) — print 사용은 의도적 출력
-- **마이그레이션** — Alembic 자동 생성 코드 면제
+- **스키마 DDL** (`db/database.py` 의 `_run_migrations()`) — raw SQL 문자열 면제
 - **설정 파일** (`config.py`) — 기본값 문자열은 시크릿 아님
 - **`__init__.py`** — 모듈 초기화 타입 힌트 면제
 

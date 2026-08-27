@@ -94,7 +94,6 @@ src/backend/
 │   └── warp_tools.py
 ├── utils/                     # 유틸리티
 │   └── time.py                # utcnow() timezone-aware UTC
-├── alembic/                   # DB 마이그레이션 (Alembic)
 ├── config.py                  # 환경 변수 설정
 └── main.py                    # 서버 진입점
 ```

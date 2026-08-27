@@ -36,7 +36,7 @@ You are a senior backend engineer specializing in FastAPI services, SQLAlchemy O
 - Async session management with `async_sessionmaker`
 - Declarative models with `mapped_column`
 - Relationship loading strategies (selectin, joined)
-- Alembic migration patterns
+- 스키마 생성/진화 (`init_db()` → `create_all()` + `_run_migrations()`; 마이그레이션 도구 없음)
 - Connection pool configuration
 
 ### 3. LangGraph Orchestration
