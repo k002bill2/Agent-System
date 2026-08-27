@@ -7,12 +7,15 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from config import get_model_for_provider, get_settings
+from config import PROJECT_ROOT_ENV, get_model_for_provider, get_settings
 
 settings = get_settings()
 
-# Load environment variables
-load_dotenv()
+# Load environment variables from the repo-root .env. Passing the path
+# explicitly matters: a bare ``load_dotenv()`` walks up from this file and
+# stops at whichever ``.env`` it meets first, which is how the backend ended
+# up reading two different files.
+load_dotenv(PROJECT_ROOT_ENV)
 
 # LLM Provider selection
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", settings.llm_provider)

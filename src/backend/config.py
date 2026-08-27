@@ -11,8 +11,10 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 if TYPE_CHECKING:
     pass
 
-# Project root .env (two levels up from src/backend/)
-_PROJECT_ROOT_ENV = Path(__file__).resolve().parent.parent.parent / ".env"
+# Project root .env (two levels up from src/backend/). Public because
+# ``api/app.py`` loads the same file for the module-level ``os.getenv``
+# readers — recomputing it there is what let the two paths drift apart.
+PROJECT_ROOT_ENV = Path(__file__).resolve().parent.parent.parent / ".env"
 
 
 class Settings(BaseSettings):
@@ -141,7 +143,7 @@ class Settings(BaseSettings):
     rag_candidate_multiplier: int = 3
 
     model_config = SettingsConfigDict(
-        env_file=str(_PROJECT_ROOT_ENV),
+        env_file=str(PROJECT_ROOT_ENV),
         env_file_encoding="utf-8",
         extra="ignore",
     )
