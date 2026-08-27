@@ -303,27 +303,126 @@ async def test_init_db_survives_a_column_it_cannot_backfill(probe):
     assert "ix_llm_model_update_logs_provider" not in await _actual_indexes(engine, schema)
 
 
-async def test_init_db_reports_a_foreign_key_it_did_not_restore(probe, capsys):
-    """채운 컬럼의 FK 제약은 복구되지 않는다 — 그 사실을 숨기지 않아야 한다.
+# `project_invitations` 의 FK 는 `invited_by → users.id` 하나다 (issue #330 의 대표 사례).
+INVITATION_FK = ("project_invitations", ("invited_by",), "users")
 
-    `CreateColumn` 은 컬럼 정의만 렌더하므로 테이블 수준 FK 제약은 빠진 채 남는다.
-    자동으로 붙이지 않는 것은 의도다 — 고아 행이 있으면 `ADD CONSTRAINT` 가 검증에
-    실패해 기동이 죽는다. 대신 **빠졌다는 사실이 로그에 남아야** 한다. 조용히
-    "복구됨" 으로 보이는 것이 이 지적(Codex R4)의 본체다.
+# 고아/NULL 행을 심기 위한 최소 INSERT. NOT NULL 인 컬럼만 채운다.
+_INSERT_INVITATION = """
+INSERT INTO "project_invitations"
+       (id, project_id, invited_by, email, role, token, status, expires_at)
+VALUES (:id, 'p-1', :invited_by, :email, 'viewer', :token, 'pending', now())
+"""
+
+
+async def _drop_invitation_fk(engine, schema: str) -> None:
+    """`project_invitations` 의 FK 제약만 떼어낸다 (컬럼은 남긴다).
+
+    제약 이름을 하드코딩하지 않는다 — 모델이 `name=None` 이라 PG 가 자동 명명하므로
+    이름은 구현 세부사항이다. `pg_constraint` 에서 그때그때 읽는다.
+    """
+    async with engine.begin() as conn:
+        name = (
+            await conn.execute(
+                text(
+                    "SELECT con.conname FROM pg_constraint con "
+                    "JOIN pg_class rel ON rel.oid = con.conrelid "
+                    "JOIN pg_namespace ns ON ns.oid = rel.relnamespace "
+                    "WHERE con.contype = 'f' AND ns.nspname = :schema "
+                    "  AND rel.relname = 'project_invitations'"
+                ),
+                {"schema": schema},
+            )
+        ).scalar_one()
+        await conn.execute(text(f'ALTER TABLE "project_invitations" DROP CONSTRAINT "{name}"'))
+
+
+async def test_init_db_attaches_the_foreign_key_of_a_column_it_backfilled(probe):
+    """채운 컬럼의 FK 제약도 함께 복구돼야 한다 — 이 이슈의 본체 (#330).
+
+    `CreateColumn` 은 컬럼 정의만 렌더하므로 테이블 수준 FK 는 빠진 채 남는다.
+    그런데 **리콘실러가 방금 채운 컬럼은 전부 NULL 이라 고아가 정의상 0** 이다.
+    즉 이 케이스는 조건부 추가 규칙이 전량 수렴시켜야 하는 자리다.
     """
     schema, engine = probe
 
     await db_mod.init_db()
 
     async with engine.begin() as conn:
+        # 컬럼을 지우면 그것에 의존하는 FK 도 함께 사라진다 — 오래된 배포 흉내가
+        # 그대로 FK 프로브가 된다.
         await conn.execute(text('ALTER TABLE "project_invitations" DROP COLUMN "invited_by"'))
 
-    capsys.readouterr()  # 앞선 기동의 출력은 버린다
-    await db_mod.init_db()  # 재기동 — 컬럼은 채우고 FK 는 보고만
-    output = capsys.readouterr().out
+    assert INVITATION_FK not in await _actual_foreign_keys(engine, schema), (
+        "프로브가 FK 를 떼어내지 못했다 — 단언이 공허해진다"
+    )
+
+    await db_mod.init_db()  # 재기동
 
     after = await _actual_schema(engine, schema)
     assert "invited_by" in after["project_invitations"], "컬럼이 복구되지 않았다"
-    assert "project_invitations.invited_by" in output and "외래키" in output, (
-        f"FK 가 복구되지 않았는데 그 사실을 알리지 않았다:\n{output}"
+    assert (await _actual_foreign_keys(engine, schema))[INVITATION_FK] == 1, (
+        "컬럼은 채웠는데 FK 제약이 복구되지 않았다"
+    )
+
+
+async def test_init_db_attaches_a_foreign_key_when_only_null_rows_exist(probe):
+    """FK 컬럼이 NULL 인 행은 고아가 아니다 — 그것 때문에 제약을 포기하면 안 된다.
+
+    고아 질의에서 `IS NOT NULL` 을 빠뜨리면 NULL 행이 전부 고아로 세어져 제약이
+    영원히 안 붙는 **조용한 무동작**이 된다. 실패해도 로그가 "고아 N 건" 이라
+    그럴듯해 보이므로, 빈 테이블 프로브로는 절대 잡히지 않는다. 그래서 NULL 행을
+    **실제로 심어 둔 상태**를 판별 조건으로 쓴다 (issue #330 함정 2).
+    """
+    schema, engine = probe
+
+    await db_mod.init_db()
+    await _drop_invitation_fk(engine, schema)
+
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(_INSERT_INVITATION),
+            {"id": "inv-null", "invited_by": None, "email": "null@example.com", "token": "t-null"},
+        )
+
+    await db_mod.init_db()  # 재기동
+
+    assert (await _actual_foreign_keys(engine, schema))[INVITATION_FK] == 1, (
+        "NULL 행만 있는데 제약을 붙이지 않았다 — 고아 질의가 NULL 을 고아로 세고 있다"
+    )
+
+
+async def test_init_db_leaves_a_foreign_key_whose_table_has_orphan_rows(probe, capsys):
+    """참조가 깨진 행이 있으면 붙이지 않고, 몇 건인지 보고해야 한다.
+
+    무조건 `ADD CONSTRAINT` 는 검증에 실패해 `init_db()` 를 죽이고 **애플리케이션이
+    아예 기동하지 못한다.** 정리 방침(NULL 로 끊기 / 행 삭제)은 컬럼마다 다르므로
+    사람이 정할 일이다. 여기서 고정하는 것은 둘 — 붙이지 않는다, 그리고 조용히
+    넘어가지 않는다.
+    """
+    schema, engine = probe
+
+    await db_mod.init_db()
+    await _drop_invitation_fk(engine, schema)
+
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(_INSERT_INVITATION),
+            {
+                "id": "inv-orphan",
+                "invited_by": "user-that-does-not-exist",
+                "email": "orphan@example.com",
+                "token": "t-orphan",
+            },
+        )
+
+    capsys.readouterr()  # 앞선 기동의 출력은 버린다
+    await db_mod.init_db()  # 죽지 않아야 한다
+    output = capsys.readouterr().out
+
+    assert INVITATION_FK not in await _actual_foreign_keys(engine, schema), (
+        "고아 행이 있는데 제약을 붙였다 — 더러운 배포에서는 기동이 죽는다"
+    )
+    reported = [line for line in output.splitlines() if "project_invitations" in line]
+    assert any("외래키" in line and "1 건" in line for line in reported), (
+        "붙이지 않은 사실과 고아 건수를 보고하지 않았다:\n" + "\n".join(reported)
     )
