@@ -37,6 +37,12 @@ const revokeSessionAccess = (
     filteredCount: 0,
     activeCount: 0,
     hasMore: false,
+    // 세션에서 파생된 값들도 함께 비운다. 남겨두면 `SessionList` 가 프로젝트·유저
+    // 필터를 계속 그리고, `pendingSummaryCount` 가 0 이 아니면 일괄 요약 버튼이
+    // 살아 있어 이미 거부된 POST 를 낼 수 있다 (Codex [P2]).
+    pendingSummaryCount: 0,
+    allProjects: [],
+    sourceUsers: [],
   })
 }
 

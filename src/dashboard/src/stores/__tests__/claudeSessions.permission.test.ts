@@ -97,6 +97,9 @@ describe('claudeSessions store — permission classification', () => {
       selectedSessionId: 's1',
       selectedSession: { session_id: 's1' } as never,
       transcriptEntries: [{ type: 'user' }] as never,
+      pendingSummaryCount: 3,
+      allProjects: ['ProjectA'],
+      sourceUsers: ['user1'],
       totalCount: 1,
       activeCount: 1,
       eventSource: { close } as never,
@@ -113,6 +116,10 @@ describe('claudeSessions store — permission classification', () => {
     expect(state.transcriptEntries).toEqual([])
     expect(state.eventSource).toBeNull()
     expect(close).toHaveBeenCalled()
+    // 파생 값이 남으면 필터와 일괄 요약 버튼이 살아 있다.
+    expect(state.pendingSummaryCount).toBe(0)
+    expect(state.allProjects).toEqual([])
+    expect(state.sourceUsers).toEqual([])
   })
 
   /**
