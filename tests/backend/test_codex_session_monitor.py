@@ -181,3 +181,147 @@ def test_malformed_usage_values_do_not_break_message_parsing() -> None:
     assert message.usage.output_tokens == 0
     assert message.usage.cache_read_tokens == 0
     assert message.usage.cache_creation_tokens == 3
+
+
+def _write_real_shape_rollout(root: Path) -> Path:
+    """Rollout using the field layout real Codex CLI writes.
+
+    Real rollouts carry the model in ``turn_context``, cumulative usage in an
+    ``event_msg``/``token_count`` record, and tools such as ``apply_patch`` as
+    ``custom_tool_call`` — none of which appear on ``response_item`` messages.
+    """
+    path = root / "2026" / "08" / "27" / "rollout-2026-08-27T11-00-00-02real.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    records = [
+        {
+            "timestamp": "2026-08-27T02:00:00Z",
+            "type": "session_meta",
+            "payload": {"id": "thread-real", "cwd": "/Users/tester/Work/AOS"},
+        },
+        {
+            "timestamp": "2026-08-27T02:00:01Z",
+            "type": "turn_context",
+            "payload": {"cwd": "/Users/tester/Work/AOS", "model": "gpt-5.2-codex"},
+        },
+        {
+            "timestamp": "2026-08-27T02:00:02Z",
+            "type": "response_item",
+            "payload": {
+                "type": "custom_tool_call",
+                "status": "completed",
+                "call_id": "call_real_1",
+                "name": "apply_patch",
+                "input": "*** Begin Patch",
+            },
+        },
+        {
+            "timestamp": "2026-08-27T02:00:03Z",
+            "type": "event_msg",
+            "payload": {
+                "type": "token_count",
+                "info": {
+                    "total_token_usage": {
+                        "input_tokens": 100,
+                        "cached_input_tokens": 40,
+                        "output_tokens": 7,
+                        "reasoning_output_tokens": 3,
+                        "total_tokens": 107,
+                    }
+                },
+            },
+        },
+        {
+            "timestamp": "2026-08-27T02:00:04Z",
+            "type": "event_msg",
+            "payload": {
+                "type": "token_count",
+                "info": {
+                    "total_token_usage": {
+                        "input_tokens": 250,
+                        "cached_input_tokens": 90,
+                        "output_tokens": 11,
+                        "reasoning_output_tokens": 4,
+                        "total_tokens": 261,
+                    }
+                },
+            },
+        },
+        {
+            "timestamp": "2026-08-27T02:00:05Z",
+            "type": "event_msg",
+            "payload": {"type": "token_count", "info": None},
+        },
+    ]
+    with path.open("w", encoding="utf-8") as stream:
+        for record in records:
+            stream.write(json.dumps(record) + "\n")
+    return path
+
+
+def test_model_comes_from_turn_context_when_messages_omit_it(tmp_path: Path) -> None:
+    _write_real_shape_rollout(tmp_path)
+
+    session = CodexSessionMonitor(tmp_path).discover_sessions()[0]
+
+    assert session.model == "gpt-5.2-codex"
+
+
+def test_token_totals_use_latest_cumulative_token_count(tmp_path: Path) -> None:
+    _write_real_shape_rollout(tmp_path)
+
+    session = CodexSessionMonitor(tmp_path).discover_sessions()[0]
+
+    # total_token_usage is cumulative, so the last record wins instead of summing.
+    assert session.total_input_tokens == 250
+    assert session.total_output_tokens == 11
+
+
+def test_custom_tool_calls_are_counted_as_tool_use(tmp_path: Path) -> None:
+    _write_real_shape_rollout(tmp_path)
+    monitor = CodexSessionMonitor(tmp_path)
+
+    session = monitor.discover_sessions()[0]
+    detail = monitor.get_session_details("thread-real")
+
+    assert session.tool_call_count == 1
+    assert detail is not None
+    assert [message.tool_name for message in detail.recent_messages] == ["apply_patch"]
+    assert detail.recent_messages[0].tool_id == "call_real_1"
+
+
+def test_non_string_payload_types_are_skipped_not_fatal(tmp_path: Path) -> None:
+    """A corrupt record must not abort discovery for the whole rollout."""
+    path = tmp_path / "2026" / "08" / "27" / "rollout-corrupt.jsonl"
+    path.parent.mkdir(parents=True)
+    records = [
+        {
+            "timestamp": "2026-08-27T03:00:00Z",
+            "type": "session_meta",
+            "payload": {"id": "thread-corrupt", "cwd": "/Users/tester/Work/AOS"},
+        },
+        # Unhashable payload type / role: membership tests must not raise.
+        {"timestamp": "2026-08-27T03:00:01Z", "type": "response_item", "payload": {"type": ["x"]}},
+        {
+            "timestamp": "2026-08-27T03:00:02Z",
+            "type": "response_item",
+            "payload": {"type": "message", "role": {"a": 1}},
+        },
+        {
+            "timestamp": "2026-08-27T03:00:03Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "survived"}],
+            },
+        },
+    ]
+    with path.open("w", encoding="utf-8") as stream:
+        for record in records:
+            stream.write(json.dumps(record) + "\n")
+
+    monitor = CodexSessionMonitor(tmp_path)
+    sessions = monitor.discover_sessions()
+
+    assert [session.session_id for session in sessions] == ["thread-corrupt"]
+    assert sessions[0].user_message_count == 1

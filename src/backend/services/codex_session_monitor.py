@@ -104,20 +104,32 @@ class CodexSessionMonitor:
             return None
 
         payload_type = payload.get("type")
-        if payload_type == "function_call":
+        if not isinstance(payload_type, str):
+            return None
+        if payload_type in {"function_call", "custom_tool_call"}:
+            # Freeform tools such as apply_patch arrive as custom_tool_call and
+            # carry their payload in ``input`` rather than ``arguments``.
+            arguments = payload.get("arguments")
+            tool_input = (
+                {"arguments": arguments}
+                if arguments is not None
+                else {"input": payload.get("input")}
+                if payload.get("input") is not None
+                else None
+            )
             return SessionMessage(
                 type=MessageType.TOOL_USE,
                 timestamp=timestamp,
-                tool_name=str(payload.get("name") or "function_call"),
+                tool_name=str(payload.get("name") or payload_type),
                 tool_id=str(payload.get("call_id")) if payload.get("call_id") else None,
-                tool_input={"arguments": payload.get("arguments")}
-                if payload.get("arguments") is not None
-                else None,
+                tool_input=tool_input,
             )
         if payload_type != "message":
             return None
 
         role = payload.get("role")
+        if not isinstance(role, str):
+            return None
         content = cls._text_content(payload.get("content"))
         if role == "user":
             return SessionMessage(
@@ -179,6 +191,50 @@ class CodexSessionMonitor:
         return metadata, messages, records
 
     @staticmethod
+    def _turn_context_model(records: list[dict[str, Any]]) -> str | None:
+        """Return the most recent model recorded in ``turn_context``.
+
+        Real rollouts never put a model on ``response_item`` messages; it only
+        appears here, once per turn.
+        """
+        model: str | None = None
+        for record in records:
+            if record.get("type") != "turn_context":
+                continue
+            payload = record.get("payload")
+            if isinstance(payload, dict) and payload.get("model"):
+                model = str(payload["model"])
+        return model
+
+    @classmethod
+    def _cumulative_usage(cls, records: list[dict[str, Any]]) -> TokenUsage | None:
+        """Return the last ``token_count`` total, or None when absent.
+
+        ``total_token_usage`` is cumulative per session, so the final record
+        supersedes earlier ones instead of adding to them. ``cached_input_tokens``
+        is a subset of ``input_tokens`` and is reported separately, not added.
+        """
+        usage: TokenUsage | None = None
+        for record in records:
+            if record.get("type") != "event_msg":
+                continue
+            payload = record.get("payload")
+            if not isinstance(payload, dict) or payload.get("type") != "token_count":
+                continue
+            info = payload.get("info")
+            if not isinstance(info, dict):
+                continue
+            totals = info.get("total_token_usage")
+            if not isinstance(totals, dict):
+                continue
+            usage = TokenUsage(
+                input_tokens=cls._token_count(totals.get("input_tokens")),
+                output_tokens=cls._token_count(totals.get("output_tokens")),
+                cache_read_tokens=cls._token_count(totals.get("cached_input_tokens")),
+            )
+        return usage
+
+    @staticmethod
     def _session_id(metadata: dict[str, Any], path: Path) -> str:
         value = metadata.get("id") or metadata.get("session_id")
         return str(value)[:255] if value else path.stem.removeprefix("rollout-")[:255]
@@ -202,13 +258,26 @@ class CodexSessionMonitor:
         last_activity = (
             max(timestamps) if timestamps else datetime.fromtimestamp(stat.st_mtime, UTC)
         )
-        model = next((message.model for message in messages if message.model), None) or "unknown"
+        model = (
+            self._turn_context_model(records)
+            or next((message.model for message in messages if message.model), None)
+            or "unknown"
+        )
         cwd = str(metadata.get("cwd") or "")
         user_count = sum(message.type == MessageType.USER for message in messages)
         assistant_count = sum(message.type == MessageType.ASSISTANT for message in messages)
         tool_count = sum(message.type == MessageType.TOOL_USE for message in messages)
-        input_tokens = sum(message.usage.input_tokens for message in messages if message.usage)
-        output_tokens = sum(message.usage.output_tokens for message in messages if message.usage)
+        # A cumulative token_count supersedes per-message usage; only sum the
+        # per-message values when the rollout carries no token_count record.
+        cumulative = self._cumulative_usage(records)
+        if cumulative is not None:
+            input_tokens = cumulative.input_tokens
+            output_tokens = cumulative.output_tokens
+        else:
+            input_tokens = sum(message.usage.input_tokens for message in messages if message.usage)
+            output_tokens = sum(
+                message.usage.output_tokens for message in messages if message.usage
+            )
         age = utcnow() - to_aware_utc(last_activity)
         status = (
             SessionStatus.ACTIVE
