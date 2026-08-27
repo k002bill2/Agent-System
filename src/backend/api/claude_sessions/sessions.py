@@ -18,7 +18,7 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from api.deps import get_current_admin_or_manager_user
@@ -29,7 +29,7 @@ from models.claude_session import (
     SessionStatus,
 )
 from services.claude_session_monitor import get_monitor
-from services.codex_session_monitor import get_codex_monitor
+from services.codex_session_monitor import MAX_TRANSCRIPT_LIMIT, get_codex_monitor
 from utils.time import utcnow
 
 from .resolver import resolve_session
@@ -284,8 +284,8 @@ async def save_session(
 @router.get("/{session_id}/transcript")
 async def get_session_transcript(
     session_id: str,
-    offset: int = 0,
-    limit: int = 100,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(MAX_TRANSCRIPT_LIMIT, ge=1, le=MAX_TRANSCRIPT_LIMIT),
 ) -> dict:
     """Get raw transcript entries for a session.
 

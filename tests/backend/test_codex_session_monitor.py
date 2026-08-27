@@ -201,8 +201,9 @@ def test_detail_retain_budget_degrades_instead_of_failing(
 ) -> None:
     """Neither discovery nor detail depends on the retain budget any more.
 
-    Both stream, so a tiny budget — which only bounds the transcript path —
-    leaves the list and the detail window fully intact.
+    Both stream, so a tiny budget leaves the list and the detail window fully
+    intact. The transcript no longer consults the budget either — it reads a
+    bounded window — so this now pins that nothing user-visible does.
     """
     _write_rollout(tmp_path)
     monkeypatch.setattr(codex_monitor, "MAX_RETAINED_BYTES", 1)
@@ -595,3 +596,147 @@ def test_cached_session_status_still_ages(tmp_path: Path, monkeypatch: pytest.Mo
     monkeypatch.setattr(codex_monitor, "utcnow", lambda: now + timedelta(hours=2))
 
     assert monitor.discover_sessions()[0].status.value == "completed"
+
+
+def _write_numbered_rollout(root: Path, count: int) -> Path:
+    """A rollout whose records carry their own index, so a page states its range."""
+    path = root / "2026" / "08" / "28" / "rollout-2026-08-28T10-00-00-0numb.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    records: list[dict] = [
+        {
+            "timestamp": "2026-08-28T01:00:00Z",
+            "type": "session_meta",
+            "payload": {"id": "thread-numbered", "cwd": "/Users/tester/Work/AOS"},
+        }
+    ]
+    records += [
+        {
+            "timestamp": "2026-08-28T01:00:00Z",
+            "type": "response_item",
+            "index": index,
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": f"record {index}"}],
+            },
+        }
+        for index in range(1, count)
+    ]
+    path.write_text("\n".join(json.dumps(record) for record in records), encoding="utf-8")
+    return path
+
+
+def test_transcript_reaches_records_past_the_retain_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pagination is not bounded by how much of the file fits in memory.
+
+    The transcript used to retain a prefix of the file — everything up to
+    ``MAX_RETAINED_BYTES`` — then slice that prefix and report its length as the
+    total. Records past the budget were unreachable at every offset, and the
+    total under-reported them, so nothing in the response said they existed.
+
+    Real data cannot produce this (the largest rollout on hand is 29.7MB against
+    a 48MB budget), so the budget is forced small here. That is the only lever
+    that reaches the regime.
+    """
+    _write_numbered_rollout(tmp_path, 40)
+    # Fits one 10-record page (~1.8KB) but stops a whole-file read around
+    # record 11 — so the old prefix never reached offset 30.
+    monkeypatch.setattr(codex_monitor, "MAX_RETAINED_BYTES", 2048)
+    monitor = CodexSessionMonitor(tmp_path)
+
+    head, total = monitor.get_session_transcript("thread-numbered", offset=0, limit=10)
+    tail, tail_total = monitor.get_session_transcript("thread-numbered", offset=30, limit=10)
+
+    assert total == 40, "total must count the whole file, not the retained prefix"
+    assert tail_total == total
+    assert [record["index"] for record in tail] == list(range(30, 40))
+    assert [record["index"] for record in head[1:]] == list(range(1, 10))
+
+
+def test_transcript_window_holds_only_the_requested_page(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A page costs ``limit`` records, not the whole file.
+
+    Asserted through the byte budget rather than by measuring memory: with a
+    budget far smaller than the file, a windowed read still returns a full page
+    because only the page is retained. A whole-file read cannot.
+    """
+    _write_numbered_rollout(tmp_path, 200)
+    # Fits one 25-record page (~4.6KB); a whole-file read stops near
+    # record 33 of 200.
+    monkeypatch.setattr(codex_monitor, "MAX_RETAINED_BYTES", 6144)
+    monitor = CodexSessionMonitor(tmp_path)
+
+    page, total = monitor.get_session_transcript("thread-numbered", offset=150, limit=25)
+
+    assert total == 200
+    assert [record["index"] for record in page] == list(range(150, 175))
+
+
+def test_transcript_offset_past_the_end_is_empty_with_a_true_total(
+    tmp_path: Path,
+) -> None:
+    """Paging off the end reports the total rather than zero."""
+    _write_numbered_rollout(tmp_path, 12)
+    monitor = CodexSessionMonitor(tmp_path)
+
+    page, total = monitor.get_session_transcript("thread-numbered", offset=99, limit=10)
+
+    assert page == []
+    assert total == 12
+
+
+def test_transcript_page_is_whole_regardless_of_the_retain_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The byte budget does not reach the transcript path at all.
+
+    Cutting a page short would relocate the bug rather than fix it: the
+    dashboard pages by ``(page - 1) * size``, so it would step over whatever did
+    not fit and those records would be hidden again. A page therefore returns
+    its whole requested range, and the page size is bounded instead.
+    """
+    _write_numbered_rollout(tmp_path, 40)
+    monkeypatch.setattr(codex_monitor, "MAX_RETAINED_BYTES", 256)
+    monitor = CodexSessionMonitor(tmp_path)
+
+    page, total = monitor.get_session_transcript("thread-numbered", offset=30, limit=10)
+
+    assert total == 40
+    assert [record["index"] for record in page] == list(range(30, 40))
+
+
+def test_transcript_limit_is_clamped_in_the_monitor(tmp_path: Path) -> None:
+    """The monitor does not trust either router to have clamped the page size."""
+    _write_numbered_rollout(tmp_path, 400)
+    monitor = CodexSessionMonitor(tmp_path)
+
+    page, total = monitor.get_session_transcript("thread-numbered", offset=0, limit=10_000)
+
+    assert total == 400
+    assert len(page) == codex_monitor.MAX_TRANSCRIPT_LIMIT
+
+
+def test_windowed_scan_does_not_collect_the_detail_tail(tmp_path: Path) -> None:
+    """A page holds its own records and nothing else.
+
+    ``absorb`` runs for every record, before the window filter, so the 20-entry
+    detail tail would otherwise fill with messages decoded from records outside
+    the page — content the transcript never returns. With the 2MiB line cap that
+    is up to 40MiB riding on top of the bound the window exists to provide.
+    Aggregates must survive the change, so the counts are asserted too.
+    """
+    monitor = CodexSessionMonitor(tmp_path)
+    path = _write_numbered_rollout(tmp_path, 60)
+
+    windowed = monitor._read_file(path, record_window=(50, 5))
+    whole = monitor._read_file(path, retain=False)
+
+    assert windowed.tail_messages == ()
+    assert whole.tail_messages, "the detail path still needs its tail"
+    assert windowed.record_count == whole.record_count == 60
+    assert windowed.user_count == whole.user_count
+    assert len(windowed.records) == 5

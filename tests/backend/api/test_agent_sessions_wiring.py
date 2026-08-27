@@ -117,3 +117,23 @@ def test_neutral_routes_require_authorization(path: str) -> None:
     data is served with the auth stripped off.
     """
     assert TestClient(app).get(path).status_code in (401, 403)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/agent-sessions/any-session/transcript",
+        "/api/claude-sessions/any-session/transcript",
+    ],
+)
+def test_transcript_limit_above_the_cap_is_rejected(client: TestClient, path: str) -> None:
+    """A transcript page is held whole, so its size is a memory lever.
+
+    ``limit`` used to be harmless because the read was capped by bytes no matter
+    what the caller asked for; a windowed read makes ``limit`` the bound itself.
+    Both routers extract the query separately, so the cap has to hold on each —
+    a handler-level unit call never runs ``Query`` validation at all.
+    """
+    assert client.get(path, params={"limit": 10_000}).status_code == 422
+    assert client.get(path, params={"limit": 0}).status_code == 422
+    assert client.get(path, params={"offset": -1}).status_code == 422

@@ -40,6 +40,11 @@ logger = logging.getLogger(__name__)
 MAX_RETAINED_BYTES = 48 * 1024 * 1024
 MAX_ROLLOUT_LINE_BYTES = 2 * 1024 * 1024
 MAX_ROLLOUT_RECORDS = 100_000
+# A transcript page is held whole, so its size is the memory lever the byte
+# budget used to be. The number comes from the only real client — the
+# dashboard's ITEMS_PER_PAGE — rather than being picked round, so the worst
+# case is as close to the old MAX_RETAINED_BYTES ceiling as the UI allows.
+MAX_TRANSCRIPT_LIMIT = 50
 # Even the streaming pass must terminate on a pathological file, since the list
 # view scans every rollout on each refresh.
 MAX_SCAN_BYTES = 256 * 1024 * 1024
@@ -112,6 +117,11 @@ class _Aggregate:
     tail_messages: deque[SessionMessage] = field(
         default_factory=lambda: deque(maxlen=DETAIL_WINDOW)
     )
+    # A paginated read wants its page and nothing else. The tail is decoded
+    # from records outside the window, so collecting it would add up to
+    # DETAIL_WINDOW messages of unrelated content on top of the page and
+    # break the bound the window exists to provide.
+    collect_tail: bool = True
 
     def absorb(
         self,
@@ -147,7 +157,8 @@ class _Aggregate:
         if message.usage is not None:
             self.message_input_tokens += message.usage.input_tokens
             self.message_output_tokens += message.usage.output_tokens
-        self.tail_messages.append(message)
+        if self.collect_tail:
+            self.tail_messages.append(message)
 
     def _absorb_token_count(self, monitor: CodexSessionMonitor, payload: dict[str, Any]) -> None:
         """Take the latest cumulative total, which supersedes earlier ones."""
@@ -356,18 +367,43 @@ class CodexSessionMonitor:
             else:
                 yield bytes(buffer)
 
-    def _read_file(self, path: Path, *, retain: bool = True) -> RolloutScan:
+    def _read_file(
+        self,
+        path: Path,
+        *,
+        retain: bool = True,
+        record_window: tuple[int, int] | None = None,
+    ) -> RolloutScan:
         """Scan a rollout once.
 
         ``retain=False`` keeps memory flat for the polled list view; the record
         and message lists come back empty while the aggregates stay accurate.
+
+        ``record_window=(offset, limit)`` keeps only that slice of records while
+        still counting every one of them. Without it a paginated read had to
+        retain the file from its start, so the byte budget cut the list short and
+        ``record_count`` became the length of that prefix — records past it were
+        unreachable at every offset and nothing in the result said so.
+
+        A window returns its whole requested range; the byte budget does not
+        apply to it. Cutting a page short would relocate the same bug rather
+        than fix it, because the dashboard pages by ``(page - 1) * size`` and
+        would step over whatever did not fit. What a window holds is a subset of
+        the file, so the ceiling is the smaller of the file and
+        ``limit * MAX_ROLLOUT_LINE_BYTES`` — and ``limit`` is clamped by the
+        callers, which is where that bound belongs.
         """
-        agg = _Aggregate()
+        agg = _Aggregate(collect_tail=record_window is None)
         metadata: dict[str, Any] = {}
         messages: list[SessionMessage] = []
         records: list[dict[str, Any]] = []
         if not self._is_safe_rollout(path):
             return RolloutScan(metadata, messages, records)
+        window_start, window_stop = (
+            (record_window[0], record_window[0] + record_window[1])
+            if record_window is not None
+            else (0, 0)
+        )
         retained = 0
         try:
             # Read bytes: an oversized line is skipped without ever being decoded
@@ -375,7 +411,7 @@ class CodexSessionMonitor:
             # never become Python objects.
             with path.open("rb") as stream:
                 for line in self._iter_lines(stream, agg):
-                    if retain:
+                    if retain and record_window is None:
                         retained += len(line)
                         if retained > MAX_RETAINED_BYTES:
                             agg.truncated = True
@@ -397,10 +433,21 @@ class CodexSessionMonitor:
                             metadata = payload
                     message = self._message_from_record(record)
                     agg.absorb(self, record, message)
-                    if retain:
+                    if not retain:
+                        continue
+                    if record_window is None:
                         records.append(record)
                         if message is not None:
                             messages.append(message)
+                        continue
+                    index = agg.count - 1
+                    if index >= window_stop:
+                        # The window is filled; keep counting so the caller
+                        # learns the true total, but stop holding records.
+                        continue
+                    if index < window_start:
+                        continue
+                    records.append(record)
         except OSError as exc:
             logger.warning("Unable to read Codex rollout: %s", type(exc).__name__)
         if agg.truncated:
@@ -530,13 +577,14 @@ class CodexSessionMonitor:
         )
 
     def get_session_transcript(
-        self, session_id: str, offset: int = 0, limit: int = 100
+        self, session_id: str, offset: int = 0, limit: int = MAX_TRANSCRIPT_LIMIT
     ) -> tuple[list[dict[str, Any]], int]:
         path = self._find_file(session_id)
         if path is None:
             return [], 0
-        records = self._read_file(path).records
-        return records[offset : offset + limit], len(records)
+        window = (max(offset, 0), min(max(limit, 0), MAX_TRANSCRIPT_LIMIT))
+        scan = self._read_file(path, record_window=window)
+        return scan.records, scan.record_count
 
     def get_session_activity(
         self, session_id: str, offset: int = 0, limit: int = 100

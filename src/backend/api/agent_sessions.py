@@ -5,7 +5,7 @@ This router exposes the same normalized contract without encoding a provider in
 its resource name; provider-specific mutations still return a controlled 409.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from api.claude_sessions.activity import get_session_activity
 from api.claude_sessions.core import ProviderFilter, SortField, SortOrder, list_sessions
@@ -27,6 +27,7 @@ from models.claude_session import (
     ClaudeSessionSaveResponse,
     SessionStatus,
 )
+from services.codex_session_monitor import MAX_TRANSCRIPT_LIMIT
 
 # 라우터 레벨 ``dependencies`` 는 핸들러 *함수* 가 아니라 *라우터* 에 붙는다.
 # 이 alias 는 ``api.claude_sessions`` 의 핸들러를 import 해 자기 라우터에 다시
@@ -70,7 +71,11 @@ async def get_agent_session(session_id: str) -> ClaudeSessionDetail:
 
 
 @router.get("/{session_id}/transcript")
-async def get_agent_session_transcript(session_id: str, offset: int = 0, limit: int = 100) -> dict:
+async def get_agent_session_transcript(
+    session_id: str,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(MAX_TRANSCRIPT_LIMIT, ge=1, le=MAX_TRANSCRIPT_LIMIT),
+) -> dict:
     """Get a raw provider transcript with pagination."""
     return await get_session_transcript(session_id=session_id, offset=offset, limit=limit)
 
