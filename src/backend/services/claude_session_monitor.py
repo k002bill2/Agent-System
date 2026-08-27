@@ -57,78 +57,30 @@ from models.claude_session import (
     TokenUsage,
     calculate_cost,
 )
+from services.session_file_cache import SessionFileCache
 from utils.time import to_aware_utc, utcnow
-
-
-@dataclass
-class CacheEntry:
-    """Cache entry for session file."""
-
-    mtime: float
-    file_size: int
-    session_info: ClaudeSessionInfo
-
-
-class SessionFileCache:
-    """File-based cache for session parsing results.
-
-    Uses mtime + file_size for cache invalidation.
-    """
-
-    def __init__(self):
-        self._cache: dict[str, CacheEntry] = {}
-
-    def get(self, file_path: Path) -> ClaudeSessionInfo | None:
-        """Get cached session info if still valid.
-
-        Args:
-            file_path: Path to .jsonl file
-
-        Returns:
-            Cached ClaudeSessionInfo if valid, None if needs refresh
-        """
-        key = str(file_path)
-        if key not in self._cache:
-            return None
-
-        entry = self._cache[key]
-        try:
-            stat = file_path.stat()
-            # Check if file changed (mtime or size)
-            if stat.st_mtime == entry.mtime and stat.st_size == entry.file_size:
-                return entry.session_info
-        except OSError:
-            # File might have been deleted
-            self._cache.pop(key, None)
-
-        return None
-
-    def set(self, file_path: Path, session_info: ClaudeSessionInfo, stat: os.stat_result) -> None:
-        """Store session info in cache.
-
-        Args:
-            file_path: Path to .jsonl file
-            session_info: Parsed session info
-            stat: File stat result (for mtime/size)
-        """
-        key = str(file_path)
-        self._cache[key] = CacheEntry(
-            mtime=stat.st_mtime,
-            file_size=stat.st_size,
-            session_info=session_info,
-        )
-
-    def invalidate(self, file_path: Path) -> None:
-        """Remove entry from cache."""
-        self._cache.pop(str(file_path), None)
-
-    def clear(self) -> None:
-        """Clear all cache entries."""
-        self._cache.clear()
-
 
 # Global cache instance
 _session_cache = SessionFileCache()
+
+
+def status_for(last_activity: datetime) -> SessionStatus:
+    """Derive status from the clock.
+
+    Depends on ``utcnow()`` rather than on file contents, so it must be
+    recomputed whenever a cached record is reused — a session file that stops
+    changing is exactly one that goes idle and then completes.
+
+    `utcnow()` 는 aware 이므로 상대도 aware 로 맞춘다. 이전 코드는 tzinfo 를
+    그냥 떼어냈는데, 그러면 UTC 가 아닌 값이 UTC 인 척하게 되어 오프셋만큼
+    어긋난 경과 시간이 나온다.
+    """
+    time_since_activity = utcnow() - to_aware_utc(last_activity)
+    if time_since_activity < timedelta(minutes=5):
+        return SessionStatus.ACTIVE
+    if time_since_activity < timedelta(hours=1):
+        return SessionStatus.IDLE
+    return SessionStatus.COMPLETED
 
 
 class ClaudeSessionMonitor:
@@ -301,6 +253,8 @@ class ClaudeSessionMonitor:
                             # Update source info from cache (may have changed)
                             cached.source_user = user
                             cached.source_path = source_path
+                            # Status is clock-derived, so it cannot be cached.
+                            cached.status = status_for(cached.last_activity)
                             sessions.append(cached)
                             continue
 
@@ -456,13 +410,7 @@ class ClaudeSessionMonitor:
         # `utcnow()` 는 aware 이므로 상대도 aware 로 맞춘다. 이전 코드는 tzinfo 를
         # 그냥 떼어냈는데, 그러면 UTC 가 아닌 값이 UTC 인 척하게 되어 오프셋만큼
         # 어긋난 경과 시간이 나온다.
-        time_since_activity = utcnow() - to_aware_utc(last_activity)
-        if time_since_activity < timedelta(minutes=5):
-            status = SessionStatus.ACTIVE
-        elif time_since_activity < timedelta(hours=1):
-            status = SessionStatus.IDLE
-        else:
-            status = SessionStatus.COMPLETED
+        status = status_for(last_activity)
 
         # Calculate cost
         estimated_cost = calculate_cost(model, total_input_tokens, total_output_tokens)

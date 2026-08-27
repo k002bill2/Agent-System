@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections import deque
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -27,6 +28,7 @@ from models.claude_session import (
     SessionStatus,
     TokenUsage,
 )
+from services.session_file_cache import SessionFileCache
 from utils.time import to_aware_utc, utcnow
 
 logger = logging.getLogger(__name__)
@@ -197,6 +199,7 @@ class CodexSessionMonitor:
             Path(sessions_dir) if sessions_dir else Path.home() / ".codex" / "sessions"
         )
         self._files_by_id: dict[str, Path] = {}
+        self._cache = SessionFileCache()
 
     def _iter_files(self) -> Iterator[Path]:
         if not self.sessions_dir.is_dir():
@@ -409,6 +412,21 @@ class CodexSessionMonitor:
         value = metadata.get("id") or metadata.get("session_id")
         return str(value)[:255] if value else path.stem.removeprefix("rollout-")[:255]
 
+    @staticmethod
+    def _status_for(last_activity: datetime) -> SessionStatus:
+        """Derive status from the clock.
+
+        This depends on ``utcnow()``, not on file contents, so it must be
+        recomputed whenever a cached record is reused — a rollout that stops
+        changing is exactly a session that goes idle and then completes.
+        """
+        age = utcnow() - to_aware_utc(last_activity)
+        if age < timedelta(minutes=5):
+            return SessionStatus.ACTIVE
+        if age < timedelta(hours=1):
+            return SessionStatus.IDLE
+        return SessionStatus.COMPLETED
+
     def _parse(self, path: Path) -> ClaudeSessionInfo | None:
         if not self._is_safe_rollout(path):
             return None
@@ -416,6 +434,12 @@ class CodexSessionMonitor:
             stat = path.stat()
         except OSError:
             return None
+        cached = self._cache.get(path)
+        if cached is not None:
+            # Still register the file so detail lookups resolve without a rescan.
+            self._files_by_id[cached.session_id] = path
+            # Status is clock-derived, so it cannot be served from the cache.
+            return cached.model_copy(update={"status": self._status_for(cached.last_activity)})
         # The list view is polled continuously, so it streams: no record or
         # message list is retained regardless of how long the session is.
         scan = self._read_file(path, retain=False)
@@ -434,14 +458,7 @@ class CodexSessionMonitor:
         model = scan.model
         cwd = str(metadata.get("cwd") or "")
         input_tokens, output_tokens = scan.tokens
-        age = utcnow() - to_aware_utc(last_activity)
-        status = (
-            SessionStatus.ACTIVE
-            if age < timedelta(minutes=5)
-            else SessionStatus.IDLE
-            if age < timedelta(hours=1)
-            else SessionStatus.COMPLETED
-        )
+        status = self._status_for(last_activity)
         info = ClaudeSessionInfo(
             provider="codex",
             parent_thread_id=str(metadata.get("parent_thread_id"))
@@ -472,6 +489,7 @@ class CodexSessionMonitor:
             source_path=str(self.sessions_dir),
         )
         self._files_by_id[session_id] = path
+        self._cache.set(path, info, stat)
         return info
 
     def discover_sessions(self) -> list[ClaudeSessionInfo]:
@@ -565,8 +583,17 @@ class CodexSessionMonitor:
         return {}, []
 
 
-def get_codex_monitor() -> CodexSessionMonitor:
-    """Create a Codex monitor using the configured local sessions root."""
-    import os
+_monitor: CodexSessionMonitor | None = None
 
-    return CodexSessionMonitor(os.getenv("CODEX_SESSIONS_DIR") or None)
+
+def get_codex_monitor() -> CodexSessionMonitor:
+    """Get or create the global monitor instance.
+
+    One list request reaches this from several routes, and the dashboard polls
+    it continuously — a fresh instance each time would throw away the parse
+    cache and rescan every rollout.
+    """
+    global _monitor
+    if _monitor is None:
+        _monitor = CodexSessionMonitor(os.getenv("CODEX_SESSIONS_DIR") or None)
+    return _monitor
