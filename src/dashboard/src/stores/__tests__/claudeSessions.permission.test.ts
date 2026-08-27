@@ -85,6 +85,36 @@ describe('claudeSessions store — permission classification', () => {
     expect(state.error).not.toBeNull()
   })
 
+  /**
+   * A denial that only hides the list leaves `SessionDetails`,
+   * `ClaudeCodeTasks` and the SSE stream showing data the account may no
+   * longer read — the mid-session demotion case (Codex [P1]).
+   */
+  it('drops cached session data and stops streaming on a 403', async () => {
+    const close = vi.fn()
+    useClaudeSessionsStore.setState({
+      sessions: [{ session_id: 's1' }] as never,
+      selectedSessionId: 's1',
+      selectedSession: { session_id: 's1' } as never,
+      transcriptEntries: [{ type: 'user' }] as never,
+      totalCount: 1,
+      activeCount: 1,
+      eventSource: { close } as never,
+    })
+    mockApiClient.get.mockRejectedValueOnce(forbidden())
+
+    await useClaudeSessionsStore.getState().fetchSessions()
+
+    const state = useClaudeSessionsStore.getState()
+    expect(state.permissionDenied).toBe(true)
+    expect(state.sessions).toEqual([])
+    expect(state.selectedSession).toBeNull()
+    expect(state.selectedSessionId).toBeNull()
+    expect(state.transcriptEntries).toEqual([])
+    expect(state.eventSource).toBeNull()
+    expect(close).toHaveBeenCalled()
+  })
+
   it('marks a 403 from loadMoreSessions as denied permission', async () => {
     useClaudeSessionsStore.setState({ hasMore: true, sessions: [] })
     mockApiClient.get.mockRejectedValueOnce(forbidden())

@@ -18,6 +18,28 @@ export type { SortField, SortOrder } from './types'
 /** 403 은 "데이터 없음" 이 아니라 권한 부족이다 — 그 구분을 여기서 한 번만 한다. */
 const isForbidden = (e: unknown): boolean => isApiError(e) && e.status === 403
 
+/**
+ * 403 은 "이 계정은 이 데이터를 볼 수 없다" 는 뜻이다. 목록만 가리고 캐시를
+ * 남겨두면 `SessionDetails`·`ClaudeCodeTasks` 같은 다른 소비자가 계속 그리고
+ * SSE 도 계속 흐른다 — 세션 도중 권한이 회수된 경우가 그 형태다 (Codex [P1]).
+ */
+const revokeSessionAccess = (
+  set: (partial: Partial<ClaudeSessionsState>) => void,
+  get: () => ClaudeSessionsState,
+): void => {
+  get().stopStreaming()
+  get().clearTranscript()
+  set({
+    sessions: [],
+    selectedSessionId: null,
+    selectedSession: null,
+    totalCount: 0,
+    filteredCount: 0,
+    activeCount: 0,
+    hasMore: false,
+  })
+}
+
 /** Claude 세션 목록/상세/스트리밍 상태 관리 스토어. */
 export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => ({
   // Initial state
@@ -130,7 +152,9 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
       // Assignment, not a conditional set: a non-403 failure must also lower
       // the flag, or a stale denial outlives the request that caused it.
-      set({ error: errorMessage, isLoading: false, permissionDenied: isForbidden(e) })
+      const denied = isForbidden(e)
+      if (denied) revokeSessionAccess(set, get)
+      set({ error: errorMessage, isLoading: false, permissionDenied: denied })
     }
   },
 
@@ -171,7 +195,9 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       }))
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
-      set({ error: errorMessage, isLoadingMore: false, permissionDenied: isForbidden(e) })
+      const denied = isForbidden(e)
+      if (denied) revokeSessionAccess(set, get)
+      set({ error: errorMessage, isLoadingMore: false, permissionDenied: denied })
     }
   },
 
@@ -237,6 +263,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
         // 배너를 다시 세울 이유가 없다.
         if (!get().permissionDenied) {
           const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+          revokeSessionAccess(set, get)
           set({ permissionDenied: true, error: errorMessage })
         }
         return
