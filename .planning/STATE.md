@@ -240,7 +240,14 @@ Codex 2 라운드 + 실행 스모크로 지적 4 P1 / 3 P2 중 확인된 것을 
   (인증된 호출자는 존재/부재 구분 가능)는 `test_forbidden_and_missing_are_distinct_statuses`
   에 근거와 함께 고정.
 - **`wip/security-followup-20260827` 종료**: 커밋 A·B 는 #318 에 403 계약으로 적응돼 반영됐고,
-  고유 자산이던 이 STATE.md 기록은 main 으로 옮겼다(이 커밋). 브랜치는 삭제했다.
+  고유 자산이던 이 STATE.md 기록은 main 으로 옮겼다(이 커밋).
+  로컬만 삭제돼 있었고 **원격은 2026-08-27 까지 생존**해 있었다 — 고유 추가 파일 0 인데
+  main 파일 7 개(`tests/backend/test_security_hardening.py` 포함)를 지우는 상태라
+  그대로 PR 을 열면 #321 이 #318 을 되돌리던 실패가 재현된다. 같은 날 원격도 삭제했다.
+  복원이 필요하면 tip `4219ce7551754c62b4986e1a1ccc6c05c95d2ed5` 로:
+  `git push origin 4219ce7:refs/heads/wip/security-followup-20260827`
+  (고유 테스트 `test_missing_and_forbidden_are_indistinguishable` 는 유실이 아니라
+   위 403 결정으로 `test_forbidden_and_missing_are_distinct_statuses` 에 의도적으로 대체된 것)
 - **CI 에서만 드러난 결함 1 건** (`fe25821`): 새 authz 스위트가 `RateLimitService` 전역 싱글턴의
   카운터를 소진해, 뒤따르는 모든 테스트 모듈이 429 로 실패했다(로컬 44 failed 재현).
   로컬이 통과한 이유는 `src/backend/.env`(루트 `.env` 심링크)의 `RATE_LIMIT_ENABLED=false` 다 —
