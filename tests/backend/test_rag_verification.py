@@ -461,16 +461,32 @@ class TestTroubleshooting:
         """
         import services.rag_service as rag_mod
 
-        # 기본 임베딩 제공자가 일관되는지
+        # provider 유효성은 오버라이드와 무관하게 항상 검증한다 — 아래 skip 이 이
+        # 검사까지 가리면 provider 설정 오류를 놓친다.
         assert rag_mod.EMBEDDING_PROVIDER in ("huggingface", "openai", "google")
 
-        # HuggingFace 기본값 확인 (BAAI/bge-m3 — 다국어, 1024-dim)
-        if rag_mod.EMBEDDING_PROVIDER == "huggingface":
-            assert rag_mod.DEFAULT_EMBEDDING_MODEL == "BAAI/bge-m3"
-        elif rag_mod.EMBEDDING_PROVIDER == "openai":
-            assert rag_mod.DEFAULT_EMBEDDING_MODEL == "text-embedding-3-small"
-        elif rag_mod.EMBEDDING_PROVIDER == "google":
-            assert rag_mod.DEFAULT_EMBEDDING_MODEL == "models/text-embedding-004"
+        expected_default = {
+            "huggingface": "BAAI/bge-m3",  # 다국어, 1024-dim
+            "openai": "text-embedding-3-small",
+            "google": "models/text-embedding-004",
+        }[rag_mod.EMBEDDING_PROVIDER]
+
+        # RAG_EMBEDDING_MODEL 이 설정되면 rag_service 는 provider 별 기본값 대신 그 값을
+        # 쓴다(rag_service.py 의 _RAG_EMBEDDING_MODEL_OVERRIDE 분기). 이 테스트는 기본값을
+        # 검증하므로, 오버라이드가 기본값과 "다를" 때만 대상이 아니다 — 값이 같으면
+        # (.env.example 구성) 그대로 검증한다.
+        # os.getenv 가 아니라 모듈이 실제로 사용한 값으로 판단한다: .env 가 언제
+        # os.environ 에 로드되는지는 테스트 실행 순서에 따라 달라진다. 오버라이드가 없는데
+        # 값이 다르다면 그것은 skip 대상이 아니라 실패해야 할 회귀이므로, 두 조건을 함께 본다.
+        if (
+            rag_mod._RAG_EMBEDDING_MODEL_OVERRIDE
+            and rag_mod.DEFAULT_EMBEDDING_MODEL != expected_default
+        ):
+            pytest.skip(
+                "RAG_EMBEDDING_MODEL 오버라이드가 provider 기본값과 다름 — 기본값 검증 대상 아님"
+            )
+
+        assert rag_mod.DEFAULT_EMBEDDING_MODEL == expected_default
 
     def test_distance_metric_is_cosine(self):
         """거리 계산 방식이 Cosine으로 올바르게 설정되어 있는지."""
