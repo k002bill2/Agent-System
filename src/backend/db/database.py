@@ -441,6 +441,52 @@ async def _run_migrations() -> None:
             text("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1")
         )
 
+        # Migration 13: 모델에 선언됐는데 기존 테이블에 없는 컬럼을 채운다 (추가 전용)
+        #
+        # `create_all()` 은 **기존 테이블을 건드리지 않는다.** 그래서 새 컬럼은 위와 같은
+        # 수작업 블록으로만 따라잡혀 왔고, 빠뜨리면 이미 떠 있던 배포에서 ORM 질의가
+        # UndefinedColumn 으로 죽는다. 실제로 11 개가 그 상태였다 — 삭제한 alembic
+        # 마이그레이션이 유일한 경로였고 그것을 부르는 자동화는 없었다 (issue #310).
+        #
+        # 케이스를 하나씩 늘리는 대신 **부류를 닫는다**: 메타데이터와 information_schema 를
+        # 대조해 없는 컬럼만 추가한다. DDL 은 `CreateColumn` 으로 렌더하므로 `create_all()`
+        # 이 새 DB 에 쓰는 것과 같은 문장이 된다.
+        #
+        # 하지 않는 것: DROP·타입 변경·인덱스 생성. 파괴적이거나 되돌리기 어려운 연산은
+        # 사람이 판단할 일이고, 여기는 기동마다 무인으로 도는 자리다.
+        from sqlalchemy.dialects import postgresql
+        from sqlalchemy.schema import CreateColumn
+
+        rows = await conn.execute(
+            text(
+                "SELECT table_name, column_name FROM information_schema.columns "
+                "WHERE table_schema = current_schema()"
+            )
+        )
+        present: dict[str, set[str]] = {}
+        for table_name, column_name in rows:
+            present.setdefault(table_name, set()).add(column_name)
+
+        pg_dialect = postgresql.dialect()
+        for table in Base.metadata.sorted_tables:
+            existing_columns = present.get(table.name)
+            if existing_columns is None:
+                continue  # 테이블 자체가 없으면 create_all 이 만든다
+            for column in table.columns:
+                if column.name in existing_columns:
+                    continue
+                if not column.nullable and column.server_default is None:
+                    # 기존 행을 채울 값이 없다. 조용히 NULL 허용으로 바꾸면 모델과
+                    # 어긋나므로 손대지 않고 알린다.
+                    print(
+                        f"⚠️  {table.name}.{column.name} 누락 — NOT NULL 인데 기본값이 없어 "
+                        "자동 추가하지 않는다 (수동 백필 필요)"
+                    )
+                    continue
+                ddl = CreateColumn(column).compile(dialect=pg_dialect)
+                await conn.execute(text(f"ALTER TABLE {table.name} ADD COLUMN IF NOT EXISTS {ddl}"))
+                print(f"✅ {table.name}.{column.name} 컬럼 추가")
+
 
 async def close_db() -> None:
     """Close database connection pool."""

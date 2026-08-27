@@ -128,3 +128,58 @@ async def test_init_db_is_idempotent(probe):
     second = await _actual_schema(engine, schema)
 
     assert first == second, "두 번째 init_db() 가 스키마를 바꿨다 — 가드가 멱등하지 않다"
+
+
+# 삭제한 alembic 마이그레이션이 **유일한 추가 경로**였던 컬럼들 (issue #310).
+# `sessions.version` 은 제외한다 — 그것만 `_run_migrations()` 에 이미 블록이 있었다.
+ONLY_ALEMBIC_ADDED_COLUMNS: dict[str, list[str]] = {
+    "audit_logs": ["project_id"],
+    "feedbacks": ["project_name", "effort_level"],
+    "playground_sessions": [
+        "rag_k",
+        "rag_hybrid_override",
+        "rag_rerank_override",
+        "rag_include_shared",
+        "rules_mode",
+        "memory_mode",
+        "selected_rule_ids",
+        "selected_memory_ids",
+        "context_budget_tokens",
+    ],
+}
+
+
+async def test_init_db_backfills_columns_an_older_deployment_lacks(probe):
+    """이미 떠 있던 배포에 모델의 새 컬럼이 없으면 기동이 채워야 한다.
+
+    `create_all()` 은 **기존 테이블을 건드리지 않는다.** 그래서 새 컬럼은 지금까지
+    `_run_migrations()` 의 수작업 블록으로만 따라잡혔고, 빠뜨린 11 개는 삭제한 alembic
+    마이그레이션이 유일한 경로였다. 그 경로를 지우면서 같은 일을 하는 리콘실러를
+    넣었으므로, 여기서 "오래된 배포" 를 흉내 내 실제로 복구되는지 본다.
+    """
+    schema, engine = probe
+
+    await db_mod.init_db()
+
+    async with engine.begin() as conn:
+        for table, columns in ONLY_ALEMBIC_ADDED_COLUMNS.items():
+            for column in columns:
+                await conn.execute(text(f'ALTER TABLE "{table}" DROP COLUMN "{column}"'))
+
+    stale = await _actual_schema(engine, schema)
+    still_there = {
+        table: sorted(set(columns) & stale[table])
+        for table, columns in ONLY_ALEMBIC_ADDED_COLUMNS.items()
+        if set(columns) & stale[table]
+    }
+    assert not still_there, f"프로브가 컬럼을 지우지 못했다 — 단언이 공허해진다: {still_there}"
+
+    await db_mod.init_db()  # 재기동
+
+    after = await _actual_schema(engine, schema)
+    not_restored = {
+        table: sorted(set(columns) - after[table])
+        for table, columns in ONLY_ALEMBIC_ADDED_COLUMNS.items()
+        if set(columns) - after[table]
+    }
+    assert not not_restored, f"오래된 배포에서 복구되지 않은 컬럼: {not_restored}"
