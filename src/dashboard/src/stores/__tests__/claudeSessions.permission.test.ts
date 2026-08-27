@@ -293,6 +293,24 @@ describe('claudeSessions store — protected detail paths revoke too', () => {
   })
 })
 
+describe('claudeSessions store — mutating actions revoke too', () => {
+  /**
+   * A manager demoted after the list loaded can still press delete or the
+   * batch-summary button. Those catches only wrote an error string, leaving the
+   * cached list and its controls in place (Codex [P1]).
+   */
+  it('revokes access when a delete comes back 403', async () => {
+    useClaudeSessionsStore.setState({ sessions: [{ session_id: 's1' }] as never })
+    mockApiClient.delete.mockRejectedValueOnce(forbidden())
+
+    await useClaudeSessionsStore.getState().deleteSession('s1')
+
+    const state = useClaudeSessionsStore.getState()
+    expect(state.permissionDenied).toBe(true)
+    expect(state.sessions).toEqual([])
+  })
+})
+
 describe('claudeSessions store — auto-generation backs off when denied', () => {
   /**
    * The entry guard only runs once. Permission can be revoked while the loop is

@@ -682,6 +682,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
       return true
     } catch (e) {
+      denyIfForbidden(e, set, get)
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
       set({ error: errorMessage })
       return false
@@ -702,6 +703,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
       return { deletedCount: data.deleted_count, deletedIds }
     } catch (e) {
+      denyIfForbidden(e, set, get)
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
       set({ error: errorMessage })
       return { deletedCount: 0, deletedIds: [] }
@@ -748,6 +750,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
       return { deletedCount: data.deleted_count, deletedIds }
     } catch (e) {
+      denyIfForbidden(e, set, get)
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
       set({ error: errorMessage })
       return { deletedCount: 0, deletedIds: [] }
@@ -820,6 +823,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
         }))
       }
     } catch (e) {
+      denyIfForbidden(e, set, get)
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
       set({ error: errorMessage, isBatchGenerating: false })
       // Also re-fetch on error to sync state
