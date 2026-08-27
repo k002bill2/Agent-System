@@ -80,7 +80,7 @@ async def test_legacy_list_default_is_claude_only(monkeypatch: pytest.MonkeyPatc
 
 @pytest.mark.asyncio
 async def test_unknown_summary_returns_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(session_routes, "_resolve_session", lambda _: (object(), None))
+    monkeypatch.setattr(session_routes, "resolve_session", lambda _: (object(), None))
 
     with pytest.raises(HTTPException) as error:
         await session_routes.get_session_summary("missing")
@@ -99,7 +99,7 @@ async def test_codex_session_mutations_are_rejected(
         def get_cached_summary(self, session_id: str) -> str | None:
             return None
 
-    monkeypatch.setattr(session_routes, "_resolve_session", lambda _: (_Monitor(), detail))
+    monkeypatch.setattr(session_routes, "resolve_session", lambda _: (_Monitor(), detail))
 
     with pytest.raises(HTTPException) as stream_error:
         await session_routes.stream_session("codex-1")
