@@ -24,6 +24,7 @@ Alembic 을 제거하면서(이슈 #310) 스키마의 진실의 출처가 `init_
 
 import os
 import uuid
+from collections import Counter
 
 import pytest
 import pytest_asyncio
@@ -73,6 +74,43 @@ async def _actual_indexes(engine, schema: str) -> set[str]:
             {"schema": schema},
         )
         return {row[0] for row in rows}
+
+
+# 제약 조회는 `pg_constraint` 로 한다. `conkey` 순서를 그대로 읽을 수 있어 복합 제약을
+# 한 단위로 다룰 수 있기 때문이다. **이름으로 키를 잡으면 안 된다** — 모델의 FK 24 건은
+# 전부 `name=None` 이라 PG 가 자동 명명하고, 중복으로 붙은 두 번째 제약은 `..._fkey1`
+# 이라는 *다른* 이름을 받는다. 이름 기준 집합 비교는 그것을 "새 제약" 이 아니라
+# 그냥 다른 원소로 보게 되어, 무엇이 중복인지 말해주지 못한다.
+_FK_QUERY = """
+SELECT rel.relname AS table_name,
+       frel.relname AS referenced_table,
+       ARRAY(
+           SELECT att.attname
+           FROM unnest(con.conkey) WITH ORDINALITY AS k(attnum, ord)
+           JOIN pg_attribute att
+             ON att.attrelid = con.conrelid AND att.attnum = k.attnum
+           ORDER BY k.ord
+       ) AS columns
+FROM pg_constraint con
+JOIN pg_class rel ON rel.oid = con.conrelid
+JOIN pg_class frel ON frel.oid = con.confrelid
+JOIN pg_namespace ns ON ns.oid = rel.relnamespace
+WHERE con.contype = 'f' AND ns.nspname = :schema
+"""
+
+
+async def _actual_foreign_keys(engine, schema: str) -> Counter:
+    """DB 에 실제로 있는 FK 를 `(테이블, 컬럼 튜플, 참조 테이블)` 의 **다중집합**으로.
+
+    집합이 아니라 다중집합인 것이 핵심이다. 막으려는 사고는 "기동마다 같은 제약이
+    하나씩 쌓이는 것" 인데, `set()` 은 동일한 두 제약을 하나로 접어버려 그 사고를
+    **초록인 채로 통과시킨다.**
+    """
+    async with engine.connect() as conn:
+        rows = await conn.execute(text(_FK_QUERY), {"schema": schema})
+        return Counter(
+            (table, tuple(sorted(columns)), referenced) for table, referenced, columns in rows
+        )
 
 
 @pytest_asyncio.fixture
@@ -128,16 +166,32 @@ async def test_init_db_builds_the_declared_schema(probe):
 
 
 async def test_init_db_is_idempotent(probe):
-    """기동마다 실행되므로 두 번째 실행이 실패하거나 스키마를 바꾸면 안 된다."""
+    """기동마다 실행되므로 두 번째 실행이 실패하거나 스키마를 바꾸면 안 된다.
+
+    컬럼뿐 아니라 **제약까지** 비교한다. `ALTER TABLE ... ADD FOREIGN KEY` 에는
+    `IF NOT EXISTS` 가 없고 렌더 결과가 익명이므로, 리콘실러의 탐지 가드가 유일한
+    중복 방지책이다. 그 가드가 깨지면 제약이 기동마다 하나씩 쌓이는데, 컬럼만
+    비교하는 단언은 그 사고를 **초록인 채로 통과시킨다** (issue #330).
+    """
     schema, engine = probe
 
     await db_mod.init_db()
     first = await _actual_schema(engine, schema)
+    first_fks = await _actual_foreign_keys(engine, schema)
 
     await db_mod.init_db()  # 재기동
     second = await _actual_schema(engine, schema)
+    second_fks = await _actual_foreign_keys(engine, schema)
 
     assert first == second, "두 번째 init_db() 가 스키마를 바꿨다 — 가드가 멱등하지 않다"
+
+    assert first_fks, "FK 를 하나도 읽지 못했다 — 단언이 공허해진다"
+    added = second_fks - first_fks
+    removed = first_fks - second_fks
+    assert not added and not removed, (
+        f"두 번째 init_db() 가 제약을 바꿨다 — 추가된 것: {sorted(added.elements())}, "
+        f"사라진 것: {sorted(removed.elements())}"
+    )
 
 
 # 삭제한 alembic 마이그레이션이 **유일한 추가 경로**였던 컬럼들 (issue #310).
