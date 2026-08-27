@@ -101,12 +101,18 @@ async def _get_db_filtered_projects(monitor, current_user=None) -> list:
             allow_auto_discovery=False,
         )
 
+    # Whether the query below spans the whole registry or only what this user
+    # may reach. An empty result means different things for the two, and the
+    # 503 guard after the block depends on telling them apart.
+    registry_wide = False
+
     async with async_session_factory() as session:
         is_admin = False
         if current_user:
             is_admin = current_user.role == "admin" or current_user.is_admin
 
-        if is_admin or not current_user:
+        registry_wide = is_admin or not current_user
+        if registry_wide:
             # 시스템 admin 또는 미인증: 전체 활성 프로젝트
             result = await session.execute(
                 select(ProjectModel)
@@ -148,11 +154,21 @@ async def _get_db_filtered_projects(monitor, current_user=None) -> list:
 
         db_projects = result.scalars().all()
 
-    if not db_projects:
+    if not db_projects and registry_wide:
+        # Registry-wide query came back empty: in database mode that is an
+        # unprovisioned registry (startup sync incomplete), not a normal state.
+        # Same reading as `api/routes.py`'s registry check.
         raise HTTPException(
             status_code=503,
             detail="Project access control is temporarily unavailable",
         )
+
+    # An access-filtered query coming back empty is NOT an outage — it means
+    # this user may reach no project. Returning [] is the correct answer and is
+    # already fail-closed: the loop below never runs, and the monitor is built
+    # with auto-discovery and env paths off, so nothing on the filesystem is
+    # enumerated. Raising 503 here told legitimate users the service was broken
+    # and made a permission outcome indistinguishable from a real outage.
 
     # Scan only explicitly registered DB project paths. Never enumerate the
     # monitor's machine-wide filesystem roots in database mode.
