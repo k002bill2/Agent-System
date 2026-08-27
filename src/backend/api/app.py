@@ -9,8 +9,11 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-# Load .env file from backend directory
-load_dotenv(Path(__file__).parent.parent / ".env")
+from config import PROJECT_ROOT_ENV
+
+# Load the repo-root .env so the module-level ``os.getenv`` readers
+# (db.database, agents.base, api.llm) see the same file as ``Settings``.
+load_dotenv(PROJECT_ROOT_ENV)
 
 # Initialize structured logging (optional - graceful fallback)
 try:
