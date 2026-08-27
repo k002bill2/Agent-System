@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useClaudeSessionsStore, SortField } from '../../stores/claudeSessions'
+import type { ProviderFilter } from '../../stores/claudeSessions/types'
 import { SessionCard } from './SessionCard'
 import { RefreshCw, Circle, CircleDot, ArrowUpDown, ArrowUp, ArrowDown, Trash2, Search, FolderOpen, X, Check, Users, Loader2, Sparkles } from 'lucide-react'
 import { cn } from '../../lib/utils'
@@ -32,6 +33,7 @@ export function SessionList({ statusFilter }: SessionListProps) {
     sortOrder,
     projectFilter,
     sourceUserFilter,
+    providerFilter = 'all',
     sourceUsers,
     searchQuery,
     fetchSessions,
@@ -45,6 +47,7 @@ export function SessionList({ statusFilter }: SessionListProps) {
     setSortOrder,
     setProjectFilter,
     setSourceUserFilter,
+    setProviderFilter = () => undefined,
     setSearchQuery,
     getFilteredSessions,
     getUniqueProjects,
@@ -509,6 +512,22 @@ export function SessionList({ statusFilter }: SessionListProps) {
         </div>
       </div>
 
+      {/* Provider filter */}
+      <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700">
+        <label className="flex items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
+          <span>Provider</span>
+          <select
+            value={providerFilter}
+            onChange={(event) => setProviderFilter(event.target.value as ProviderFilter)}
+            className="flex-1 max-w-[220px] px-2 py-1.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-0 outline-none"
+          >
+            <option value="all">All providers</option>
+            <option value="claude">Claude</option>
+            <option value="codex">Codex</option>
+          </select>
+        </label>
+      </div>
+
       {/* Session List */}
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-3 space-y-2">
         {isLoading && sessions.length === 0 ? (
@@ -528,7 +547,7 @@ export function SessionList({ statusFilter }: SessionListProps) {
               <>
                 <p className="text-sm">No sessions found</p>
                 <p className="text-xs mt-1">
-                  Start a Claude Code session in another terminal
+                  Start an agent session in another terminal
                 </p>
               </>
             ) : (

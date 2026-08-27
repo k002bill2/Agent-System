@@ -54,7 +54,7 @@ export const MENU_LABELS: Record<string, string> = {
   sessions: 'Sessions',
   agents: 'Task Analyzer',
   monitor: 'Monitor',
-  'claude-sessions': 'Claude Sessions',
+  'claude-sessions': 'Agent Sessions',
   'project-configs': 'Project Configs',
   'project-management': 'Project Registry',
   git: 'Git',

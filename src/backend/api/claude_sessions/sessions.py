@@ -28,12 +28,26 @@ from models.claude_session import (
     ClaudeSessionSaveResponse,
     SessionStatus,
 )
-from services.claude_session_monitor import get_monitor
+from services.claude_session_monitor import ClaudeSessionMonitor, get_monitor
+from services.codex_session_monitor import CodexSessionMonitor, get_codex_monitor
 from utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[Depends(get_current_admin_or_manager_user)])
+
+
+def _resolve_session(
+    session_id: str,
+) -> tuple[ClaudeSessionMonitor | CodexSessionMonitor, ClaudeSessionDetail | None]:
+    """Resolve a session against the supported provider adapters."""
+    claude_monitor = get_monitor()
+    details = claude_monitor.get_session_details(session_id)
+    if details is not None:
+        return claude_monitor, details
+
+    codex_monitor = get_codex_monitor()
+    return codex_monitor, codex_monitor.get_session_details(session_id)
 
 
 @dataclass
@@ -90,24 +104,17 @@ _line_count_cache = TranscriptLineCountCache()
 
 @router.get("/{session_id}", response_model=ClaudeSessionDetail)
 async def get_session(session_id: str) -> ClaudeSessionDetail:
-    """Get detailed information for a specific session.
-
-    Args:
-        session_id: Session UUID
-
-    Returns:
-        Detailed session information with recent messages
-    """
-    monitor = get_monitor()
-    details = monitor.get_session_details(session_id)
+    """Get detailed information for a session from any supported provider."""
+    monitor, details = _resolve_session(session_id)
 
     if details is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
-    # Add cached summary if exists
-    cached_summary = monitor.get_cached_summary(session_id)
-    if cached_summary:
-        details.summary = cached_summary
+    # Summaries are currently a Claude-only mutation/caching capability.
+    if details.provider == "claude":
+        cached_summary = monitor.get_cached_summary(session_id)  # type: ignore[attr-defined]
+        if cached_summary:
+            details.summary = cached_summary
 
     return details
 
@@ -122,12 +129,13 @@ async def stream_session(session_id: str):
     Returns:
         Server-Sent Events stream with session updates
     """
-    monitor = get_monitor()
+    monitor, initial = _resolve_session(session_id)
 
     # Verify session exists
-    initial = monitor.get_session_details(session_id)
     if initial is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+    if initial.provider != "claude":
+        raise HTTPException(status_code=409, detail="Codex session streaming is not supported")
 
     async def event_generator() -> AsyncGenerator[str, None]:
         """Generate SSE events for session updates."""
@@ -196,11 +204,12 @@ async def save_session(
     Returns:
         Save confirmation with timestamp
     """
-    monitor = get_monitor()
-    details = monitor.get_session_details(session_id)
+    monitor, details = _resolve_session(session_id)
 
     if details is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+    if details.provider != "claude":
+        raise HTTPException(status_code=409, detail="Codex sessions are read-only")
 
     # Check if database mode is enabled
     import os
@@ -301,6 +310,18 @@ async def get_session_transcript(
     """
     import json
 
+    codex_monitor = get_codex_monitor()
+    if codex_monitor.get_session_details(session_id) is not None:
+        entries, total_count = codex_monitor.get_session_transcript(session_id, offset, limit)
+        return {
+            "session_id": session_id,
+            "entries": entries,
+            "offset": offset,
+            "limit": limit,
+            "total_count": total_count,
+            "has_more": offset + len(entries) < total_count,
+        }
+
     monitor = get_monitor()
 
     # Find session file across all projects directories (including subagent dirs)
@@ -395,15 +416,16 @@ async def generate_session_summary(session_id: str) -> dict:
     Returns:
         Generated or cached summary
     """
-    monitor = get_monitor()
+    monitor, details = _resolve_session(session_id)
 
     # Verify session exists
-    details = monitor.get_session_details(session_id)
     if details is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+    if details.provider != "claude":
+        raise HTTPException(status_code=409, detail="Codex session summaries are not supported")
 
     # Generate or retrieve cached summary
-    summary = await monitor.generate_summary(session_id)
+    summary = await monitor.generate_summary(session_id)  # type: ignore[attr-defined]
 
     return {
         "session_id": session_id,
@@ -421,10 +443,14 @@ async def get_session_summary(session_id: str) -> dict:
     Returns:
         Cached summary or null
     """
-    monitor = get_monitor()
+    monitor, details = _resolve_session(session_id)
+    if details is None:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+    if details.provider != "claude":
+        raise HTTPException(status_code=409, detail="Codex session summaries are not supported")
 
     # Check cached summary
-    summary = monitor.get_cached_summary(session_id)
+    summary = monitor.get_cached_summary(session_id)  # type: ignore[attr-defined]
 
     return {
         "session_id": session_id,
@@ -442,6 +468,10 @@ async def delete_session(session_id: str) -> dict:
     Returns:
         Success status and message
     """
+    codex_monitor = get_codex_monitor()
+    if codex_monitor.get_session_details(session_id) is not None:
+        raise HTTPException(status_code=409, detail="Codex sessions are read-only")
+
     monitor = get_monitor()
 
     if monitor.delete_session(session_id):

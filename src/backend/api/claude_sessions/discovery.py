@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from api.deps import get_current_admin_or_manager_user, get_current_user
 from services.claude_session_monitor import get_monitor
+from services.codex_session_monitor import get_codex_monitor
 
 logger = logging.getLogger(__name__)
 
@@ -100,10 +101,15 @@ async def list_projects(
 
     # Filesystem discovery is only valid when the database registry is disabled.
     monitor = get_monitor()
-    projects = monitor.get_unique_projects()
+    projects = set(monitor.get_unique_projects())
+    projects.update(
+        session.project_name
+        for session in get_codex_monitor().discover_sessions()
+        if session.project_name
+    )
 
     return {
-        "projects": projects,
+        "projects": sorted(projects),
     }
 
 

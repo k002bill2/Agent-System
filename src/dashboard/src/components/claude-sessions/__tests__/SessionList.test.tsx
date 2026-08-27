@@ -219,7 +219,7 @@ describe('SessionList', () => {
     it('shows empty state when no sessions at all', () => {
       render(<SessionList />)
       expect(screen.getByText('No sessions found')).toBeInTheDocument()
-      expect(screen.getByText('Start a Claude Code session in another terminal')).toBeInTheDocument()
+      expect(screen.getByText('Start an agent session in another terminal')).toBeInTheDocument()
     })
 
     it('shows search empty state when sessions exist but filter matches none', () => {

@@ -2,6 +2,7 @@
  * Claude Code external session types
  */
 
+export type AgentProvider = 'claude' | 'codex' | (string & {})
 export type SessionStatus = 'active' | 'idle' | 'completed' | 'unknown'
 
 export type MessageType = 'user' | 'assistant' | 'progress' | 'tool_use' | 'tool_result'
@@ -27,6 +28,9 @@ export interface SessionMessage {
 }
 
 export interface ClaudeSessionInfo {
+  /** Provider is optional for legacy API fixtures; live responses always include it. */
+  provider?: AgentProvider
+  parent_thread_id?: string
   session_id: string
   slug: string
   status: SessionStatus

@@ -49,7 +49,10 @@ export function SessionCard({ session, isSelected, onClick }: SessionCardProps) 
   const isGenerating = generatingSummaryFor === session.session_id
   const isEmpty = session.message_count === 0
   const isGhost = isGhostSession(session)
-  const isDeletable = isEmpty || isGhost
+  const provider = session.provider || 'claude'
+  const providerLabel = provider === 'codex' ? 'Codex' : provider === 'claude' ? 'Claude' : provider
+  const isClaudeSession = provider === 'claude'
+  const isDeletable = isClaudeSession && (isEmpty || isGhost)
   const isExternal = isExternalSession(session)
 
   const handleGenerateSummary = (e: React.MouseEvent) => {
@@ -85,7 +88,10 @@ export function SessionCard({ session, isSelected, onClick }: SessionCardProps) 
           <h3 className="font-medium text-gray-900 dark:text-white truncate">
             {session.summary || session.slug || session.session_id.slice(0, 8)}
           </h3>
-          {!session.summary && (
+          <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+            {providerLabel}
+          </span>
+          {!session.summary && isClaudeSession && (
             <button
               onClick={handleGenerateSummary}
               disabled={isGenerating}
@@ -157,6 +163,13 @@ export function SessionCard({ session, isSelected, onClick }: SessionCardProps) 
 
       {/* Stats Row */}
       <div className="flex flex-wrap gap-3 text-xs text-gray-500 dark:text-gray-400">
+        {/* Provider model */}
+        {session.model && session.model !== 'unknown' && (
+          <div className="max-w-[150px] truncate" title={session.model}>
+            {session.model}
+          </div>
+        )}
+
         {/* Messages */}
         <div className="flex items-center gap-1" title="Messages">
           <MessageSquare className="w-3.5 h-3.5" />

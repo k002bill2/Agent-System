@@ -32,7 +32,7 @@ const viewTitles: Record<string, string> = {
   sessions: 'Sessions',
   agents: 'Agents',
   monitor: 'Monitor',
-  'claude-sessions': 'Claude Sessions',
+  'claude-sessions': 'Agent Sessions',
   'project-configs': 'Project Configs',
   'project-management': 'Project Registry',
   git: 'Git Management',

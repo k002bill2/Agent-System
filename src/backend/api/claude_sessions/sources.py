@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from api.deps import get_current_admin_or_manager_user
 from services.claude_session_monitor import get_monitor
+from services.codex_session_monitor import get_codex_monitor
 
 router = APIRouter(dependencies=[Depends(get_current_admin_or_manager_user)])
 
@@ -112,10 +113,11 @@ async def list_source_users() -> dict:
         List of unique usernames and current user
     """
     monitor = get_monitor()
-    users = monitor.get_unique_source_users()
+    users = set(monitor.get_unique_source_users())
+    users.update(session.source_user for session in get_codex_monitor().discover_sessions())
     current_user = monitor._get_current_user()
 
     return {
-        "users": users,
+        "users": sorted(users),
         "current_user": current_user,
     }

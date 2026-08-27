@@ -221,6 +221,14 @@ function OverviewContent({
             </span>
           </div>
 
+          {/* Provider */}
+          <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+            <Bot className="w-4 h-4" />
+            <span className="truncate capitalize">
+              {session.provider || 'claude'}
+            </span>
+          </div>
+
           {/* Git Branch */}
           {session.git_branch && (
             <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">

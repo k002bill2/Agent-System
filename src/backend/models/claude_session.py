@@ -56,9 +56,17 @@ class SessionMessage(BaseModel):
 
 
 class ClaudeSessionInfo(BaseModel):
-    """Claude Code session information."""
+    """External agent session information.
 
-    session_id: str = Field(..., description="Unique session ID (UUID)")
+    The class name is kept for API compatibility with the original Claude-only
+    surface. ``provider`` identifies the source format at runtime.
+    """
+
+    provider: str = Field(default="claude", description="Session provider, such as claude or codex")
+    parent_thread_id: str | None = Field(
+        default=None, description="Parent thread for child sessions"
+    )
+    session_id: str = Field(..., description="Unique session ID")
     slug: str = Field(..., description="Human-readable slug like 'federated-booping-frog'")
     status: SessionStatus = Field(default=SessionStatus.UNKNOWN, description="Session status")
     model: str = Field(default="unknown", description="Model name like 'claude-opus-4-8'")

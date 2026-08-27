@@ -69,7 +69,7 @@ describe('Sidebar', () => {
     expect(screen.getByText('Sessions')).toBeInTheDocument()
     expect(screen.getByText('Task Analyzer')).toBeInTheDocument()
     expect(screen.getByText('Monitor')).toBeInTheDocument()
-    expect(screen.getByText('Claude Sessions')).toBeInTheDocument()
+    expect(screen.getByText('Agent Sessions')).toBeInTheDocument()
     expect(screen.getByText('Settings')).toBeInTheDocument()
   })
 

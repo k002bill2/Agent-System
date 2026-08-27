@@ -128,6 +128,7 @@ else:
     mcp_router = safe_import("api.mcp", "router")
     usage_router = safe_import("api.usage", "router")
     claude_sessions_router = safe_import("api.claude_sessions", "router")
+    agent_sessions_router = safe_import("api.agent_sessions", "router")
     agents_router = safe_import("api.agents", "router")
     feedback_router = safe_import("api.feedback", "router")
     auth_router = safe_import("api.auth", "router")
@@ -584,6 +585,8 @@ else:
             app.include_router(usage_router, prefix="/api")
         if claude_sessions_router:
             app.include_router(claude_sessions_router, prefix="/api")
+        if agent_sessions_router:
+            app.include_router(agent_sessions_router, prefix="/api")
         if agents_router:
             app.include_router(agents_router, prefix="/api")
         if feedback_router:
