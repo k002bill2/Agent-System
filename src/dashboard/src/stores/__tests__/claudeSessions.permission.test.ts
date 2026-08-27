@@ -115,6 +115,21 @@ describe('claudeSessions store — permission classification', () => {
     expect(close).toHaveBeenCalled()
   })
 
+  /**
+   * A failure never proves access. Once the cached sessions are gone, letting a
+   * transient 500 lower the flag drops a forbidden account straight back into
+   * "No sessions found" — the exact state this change removes (Codex [P2]).
+   */
+  it('keeps the denial through a later transient failure', async () => {
+    mockApiClient.get.mockRejectedValueOnce(forbidden())
+    await useClaudeSessionsStore.getState().fetchSessions()
+
+    mockApiClient.get.mockRejectedValueOnce(serverError())
+    await useClaudeSessionsStore.getState().fetchSessions()
+
+    expect(useClaudeSessionsStore.getState().permissionDenied).toBe(true)
+  })
+
   it('marks a 403 from loadMoreSessions as denied permission', async () => {
     useClaudeSessionsStore.setState({ hasMore: true, sessions: [] })
     mockApiClient.get.mockRejectedValueOnce(forbidden())
@@ -239,6 +254,33 @@ describe('claudeSessions store — refreshSessions stays quiet except for 403', 
 })
 
 describe('claudeSessions store — auto-generation backs off when denied', () => {
+  /**
+   * The entry guard only runs once. Permission can be revoked while the loop is
+   * mid-flight, and the loop would keep issuing up to 200 privileged POSTs that
+   * `generateSummaryQuiet` swallows one by one (Codex [P2]).
+   */
+  it('stops mid-loop when permission is revoked', async () => {
+    useClaudeSessionsStore.setState({
+      autoGenerateSummaries: true,
+      permissionDenied: false,
+    })
+    mockApiClient.get.mockResolvedValueOnce({
+      ...emptyResponse,
+      sessions: [
+        { session_id: 'a', provider: 'claude', summary: null },
+        { session_id: 'b', provider: 'claude', summary: null },
+      ],
+    })
+    mockApiClient.post.mockImplementationOnce(async () => {
+      useClaudeSessionsStore.setState({ permissionDenied: true })
+      return { summary: 'first' }
+    })
+
+    await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
+
+    expect(mockApiClient.post).toHaveBeenCalledTimes(1)
+  })
+
   it('does not call the API while permission is denied', async () => {
     useClaudeSessionsStore.setState({
       permissionDenied: true,

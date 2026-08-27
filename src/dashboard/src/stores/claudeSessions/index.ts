@@ -150,11 +150,15 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       }
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
-      // Assignment, not a conditional set: a non-403 failure must also lower
-      // the flag, or a stale denial outlives the request that caused it.
-      const denied = isForbidden(e)
-      if (denied) revokeSessionAccess(set, get)
-      set({ error: errorMessage, isLoading: false, permissionDenied: denied })
+      // 실패는 접근 권한을 증명하지 않는다. 거부를 내릴 자격이 있는 사건은 성공
+      // 응답 하나뿐이므로, 비 403 실패에서는 플래그를 건드리지 않는다 — 건드리면
+      // 일시적 500 하나로 권한 없는 계정이 다시 빈 상태를 보게 된다 (Codex [P2]).
+      if (isForbidden(e)) {
+        revokeSessionAccess(set, get)
+        set({ error: errorMessage, isLoading: false, permissionDenied: true })
+      } else {
+        set({ error: errorMessage, isLoading: false })
+      }
     }
   },
 
@@ -195,9 +199,12 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       }))
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
-      const denied = isForbidden(e)
-      if (denied) revokeSessionAccess(set, get)
-      set({ error: errorMessage, isLoadingMore: false, permissionDenied: denied })
+      if (isForbidden(e)) {
+        revokeSessionAccess(set, get)
+        set({ error: errorMessage, isLoadingMore: false, permissionDenied: true })
+      } else {
+        set({ error: errorMessage, isLoadingMore: false })
+      }
     }
   },
 
@@ -612,7 +619,9 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
       // Generate summaries one by one to avoid overwhelming the LLM
       for (const session of sessionsWithoutSummary) {
-        if (!get().autoGenerateSummaries) break
+        // 루프가 도는 동안 권한이 회수될 수 있다. 시작 시점 가드만으로는 최대
+        // 200 건의 403 POST 가 조용히 나간다 (Codex [P2]).
+        if (!get().autoGenerateSummaries || get().permissionDenied) break
         await get().generateSummaryQuiet(session.session_id)
       }
 
