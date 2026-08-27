@@ -180,6 +180,24 @@ describe('claudeSessions store — refreshSessions stays quiet except for 403', 
     expect(denialWrites).toBe(0)
   })
 
+  /**
+   * `ClaudeSessionsPage` renders `error` as a dismissible banner. If the 5s
+   * refresh rewrites the error after a dismissal, closing the banner does
+   * nothing — it returns on the next tick. The denial itself is carried by the
+   * flag, so the banner only has to be raised once.
+   */
+  it('does not resurrect a banner the user dismissed', async () => {
+    mockApiClient.get.mockRejectedValue(forbidden())
+    await useClaudeSessionsStore.getState().refreshSessions()
+    useClaudeSessionsStore.getState().clearError()
+
+    await useClaudeSessionsStore.getState().refreshSessions()
+
+    const state = useClaudeSessionsStore.getState()
+    expect(state.error).toBeNull()
+    expect(state.permissionDenied).toBe(true)
+  })
+
   it('clears the denial when a refresh succeeds', async () => {
     useClaudeSessionsStore.setState({ permissionDenied: true, error: 'Forbidden' })
     mockApiClient.get.mockResolvedValueOnce(emptyResponse)

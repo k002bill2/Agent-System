@@ -231,11 +231,12 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       // A refresh stays quiet about transient failures, but a 403 is not
       // transient — it is the answer, and the surfaces have to show it.
       if (isForbidden(e)) {
-        const errorMessage = e instanceof Error ? e.message : 'Unknown error'
-        const { permissionDenied, error } = get()
-        // This runs on a 5s interval; writing the same denial again would wake
-        // every subscriber on each tick.
-        if (!permissionDenied || error !== errorMessage) {
+        // 거부가 **새로 생겼을 때만** 쓴다. 5 초 주기라 이미 거부 상태인데 다시
+        // 쓰면 두 가지가 깨진다: 구독자가 매 틱 깨어나고, 사용자가 닫은 배너가
+        // 다음 폴링에 되살아난다 (Codex [P2]). 거부 사실은 플래그가 들고 있으므로
+        // 배너를 다시 세울 이유가 없다.
+        if (!get().permissionDenied) {
+          const errorMessage = e instanceof Error ? e.message : 'Unknown error'
           set({ permissionDenied: true, error: errorMessage })
         }
         return
