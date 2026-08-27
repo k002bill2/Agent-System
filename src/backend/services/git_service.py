@@ -2,7 +2,7 @@
 
 import logging
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Pick a git binary that does not depend on Xcode CLT license acceptance.
@@ -281,7 +281,7 @@ class GitService:
                         commit_sha=commit.hexsha,
                         commit_message=commit.message.strip().split("\n")[0][:100],
                         commit_author=commit.author.name,
-                        commit_date=datetime.fromtimestamp(commit.committed_date),
+                        commit_date=datetime.fromtimestamp(commit.committed_date, UTC),
                         ahead=ahead,
                         behind=behind,
                         tracking_branch=tracking,
@@ -317,7 +317,7 @@ class GitService:
                             commit_sha=commit.hexsha,
                             commit_message=commit.message.strip().split("\n")[0][:100],
                             commit_author=commit.author.name,
-                            commit_date=datetime.fromtimestamp(commit.committed_date),
+                            commit_date=datetime.fromtimestamp(commit.committed_date, UTC),
                             ahead=ahead,
                             behind=behind,
                         )
@@ -353,7 +353,7 @@ class GitService:
                 commit_sha=commit.hexsha,
                 commit_message=commit.message.strip().split("\n")[0][:100],
                 commit_author=commit.author.name,
-                commit_date=datetime.fromtimestamp(commit.committed_date),
+                commit_date=datetime.fromtimestamp(commit.committed_date, UTC),
             )
         except GitCommandError as e:
             raise GitServiceError(f"Failed to create branch: {e}")
@@ -1732,10 +1732,10 @@ class GitService:
             message=commit.message.strip(),
             author_name=commit.author.name,
             author_email=commit.author.email,
-            authored_date=datetime.fromtimestamp(commit.authored_date),
+            authored_date=datetime.fromtimestamp(commit.authored_date, UTC),
             committer_name=commit.committer.name,
             committer_email=commit.committer.email,
-            committed_date=datetime.fromtimestamp(commit.committed_date),
+            committed_date=datetime.fromtimestamp(commit.committed_date, UTC),
             parent_shas=[p.hexsha for p in commit.parents],
         )
 

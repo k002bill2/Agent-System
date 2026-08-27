@@ -12,11 +12,13 @@ CI 에서는 오프셋이 0 이라 **영원히 초록**이고, 회귀를 잡지 
 "틀린 이유로 통과" 와 같은 함정).
 """
 
+import ast
 import os
 import tempfile
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -241,6 +243,60 @@ def test_file_mtime_is_read_as_utc():
     assert aware < utcnow() + timedelta(seconds=5)  # 비교가 성립한다
     with pytest.raises(TypeError):
         _ = naive > utcnow()  # tz 를 빠뜨리면 이렇게 죽는다
+
+
+def _naive_fromtimestamp_sites() -> list[str]:
+    """`fromtimestamp(...)` 호출 중 tz 인자가 없는 지점을 AST 로 모은다.
+
+    grep 이 아니라 AST 인 이유는 두 가지다. 인자가 여러 줄로 쪼개진 호출을 한 줄
+    정규식이 놓치고, `fromtimestamp(p.stat().st_mtime, UTC)` 처럼 인자 안에 괄호가
+    있으면 `[^)]*` 류 패턴이 tz 를 못 본다 (실측으로 둘 다 오탐/누락을 냈다).
+    """
+    backend = Path(__file__).resolve().parents[2] / "src" / "backend"
+    sites: list[str] = []
+    for path in sorted(backend.rglob("*.py")):
+        if any(part in {".venv", "__pycache__"} for part in path.parts):
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if not (isinstance(func, ast.Attribute) and func.attr == "fromtimestamp"):
+                continue
+            has_tz = len(node.args) >= 2 or any(kw.arg == "tz" for kw in node.keywords)
+            if not has_tz:
+                sites.append(f"{path.relative_to(backend)}:{node.lineno}")
+    return sites
+
+
+def test_no_naive_fromtimestamp_in_backend():
+    """#314 회귀: `datetime.fromtimestamp(x)` 는 **로컬 시각** naive 를 돌려준다.
+
+    그 값이 응답 경계의 `to_utc_iso()` 를 지나면 naive 를 UTC 로 간주해 `+00:00` 이
+    붙는다. 로컬 TZ 가 UTC 가 아닌 서버에서는 표시되는 시각이 오프셋만큼 틀린다
+    (KST 면 9 시간). 비교에 참여하지 않아 TypeError 로 드러나지도 않는 부류라,
+    깨지는 대신 **조용히 틀린 값**을 낸다 — 그래서 불변식으로 고정한다.
+
+    이 스캐너는 검증 대상이 실제로 있을 때만 의미가 있다. 백엔드에 `fromtimestamp`
+    호출이 하나도 남지 않으면 단언은 공허하게 통과하므로 그것도 함께 막는다.
+    """
+    backend = Path(__file__).resolve().parents[2] / "src" / "backend"
+    total = sum(
+        1
+        for path in backend.rglob("*.py")
+        if not any(part in {".venv", "__pycache__"} for part in path.parts)
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "fromtimestamp"
+    )
+    assert total > 0, "스캐너가 아무것도 보지 못했다 — 경로가 틀렸을 가능성이 크다"
+
+    assert _naive_fromtimestamp_sites() == [], (
+        "tz 없는 fromtimestamp 는 로컬 시각을 UTC 로 표기한다. "
+        "`datetime.fromtimestamp(x, UTC)` 로 바꿀 것"
+    )
 
 
 def test_jwt_expiry_decodes_as_aware(monkeypatch):

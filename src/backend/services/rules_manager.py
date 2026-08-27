@@ -6,7 +6,7 @@ in both project-level (.claude/rules/) and global (~/.claude/rules/) directories
 
 import logging
 import shutil
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from models.project_config import RuleConfig
@@ -104,7 +104,7 @@ class RulesManager:
             description=description,
             file_path=str(rule_file),
             is_global=is_global,
-            modified_at=datetime.fromtimestamp(stat.st_mtime),
+            modified_at=datetime.fromtimestamp(stat.st_mtime, UTC),
         )
 
     def get_rule_content(
