@@ -250,13 +250,46 @@ describe('claudeSessions store — refreshSessions stays quiet except for 403', 
     expect(state.permissionDenied).toBe(true)
   })
 
-  it('clears the denial when a refresh succeeds', async () => {
+  /**
+   * Recovery cannot be a merge. `revokeSessionAccess` emptied the filters,
+   * counts and pagination, and the merge path restores none of them — so a
+   * refresh that lifts the denial hands off to a full fetch (Codex [P2]).
+   *
+   * The second `mockResolvedValueOnce` is that hand-off: without it the call
+   * falls through to a persistent rejection left by an earlier test.
+   */
+  it('clears the denial and reloads in full when a refresh succeeds', async () => {
     useClaudeSessionsStore.setState({ permissionDenied: true, error: 'Forbidden' })
-    mockApiClient.get.mockResolvedValueOnce(emptyResponse)
+    mockApiClient.get.mockResolvedValueOnce(emptyResponse).mockResolvedValueOnce(emptyResponse)
 
     await useClaudeSessionsStore.getState().refreshSessions()
 
     expect(useClaudeSessionsStore.getState().permissionDenied).toBe(false)
+    // 병합 1 회가 아니라 회복용 전체 조회까지 2 회다.
+    expect(mockApiClient.get).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('claudeSessions store — protected detail paths revoke too', () => {
+  /**
+   * A demotion can land on a detail request while the list still holds a cached
+   * answer. If only the list paths revoke, `SessionDetails` keeps rendering
+   * data the server just refused (Codex [P1]).
+   */
+  it('revokes access when session details come back 403', async () => {
+    useClaudeSessionsStore.setState({
+      sessions: [{ session_id: 's1' }] as never,
+      selectedSession: { session_id: 's1' } as never,
+      selectedSessionId: 's1',
+    })
+    mockApiClient.get.mockRejectedValueOnce(forbidden())
+
+    await useClaudeSessionsStore.getState().fetchSessionDetails('s1')
+
+    const state = useClaudeSessionsStore.getState()
+    expect(state.permissionDenied).toBe(true)
+    expect(state.selectedSession).toBeNull()
+    expect(state.sessions).toEqual([])
   })
 })
 

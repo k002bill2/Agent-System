@@ -46,6 +46,21 @@ const revokeSessionAccess = (
   })
 }
 
+/**
+ * 보호된 세션 요청이 403 이면 어느 경로에서 왔든 같은 회수를 수행한다.
+ * 목록만 다루면 상세·전사·요약 경로가 거부를 받고도 캐시를 들고 있는다 (Codex [P1]).
+ */
+const denyIfForbidden = (
+  e: unknown,
+  set: (partial: Partial<ClaudeSessionsState>) => void,
+  get: () => ClaudeSessionsState,
+): boolean => {
+  if (!isForbidden(e)) return false
+  revokeSessionAccess(set, get)
+  set({ permissionDenied: true })
+  return true
+}
+
 /** Claude 세션 목록/상세/스트리밍 상태 관리 스토어. */
 export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => ({
   // Initial state
@@ -254,17 +269,19 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       // Put new sessions at the start (they're the most recent)
       const mergedSessions = [...newSessions, ...updatedExisting]
 
-      // A successful refresh lifts a previous denial; unrelated errors stay put.
-      const denialLifted = get().permissionDenied
-        ? { permissionDenied: false, error: null }
-        : {}
+      // 거부에서 복귀하면 병합으로는 되살릴 수 없다 — 회수가 비운 필터·카운트·
+      // 페이지네이션을 이 경로가 복원하지 못한다. 전체 조회로 넘긴다 (Codex [P2]).
+      if (get().permissionDenied) {
+        set({ permissionDenied: false, error: null })
+        await get().fetchSessions(status)
+        return
+      }
 
       set({
         sessions: mergedSessions,
         totalCount: data.total_count,
         filteredCount: data.filtered_count,
         activeCount: data.active_count,
-        ...denialLifted,
       })
     } catch (e) {
       // A refresh stays quiet about transient failures, but a 403 is not
@@ -398,6 +415,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       })
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      denyIfForbidden(e, set, get)
       set({ error: errorMessage, isLoadingDetails: false })
     }
   },
@@ -462,6 +480,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       }))
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      denyIfForbidden(e, set, get)
       set({ error: errorMessage, isLoadingTranscript: false })
     }
   },
@@ -572,6 +591,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       }))
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      denyIfForbidden(e, set, get)
       set({ error: errorMessage, generatingSummaryFor: null })
     }
   },
