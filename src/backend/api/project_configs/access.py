@@ -26,11 +26,11 @@ async def require_project_config_access(
 
     is_privileged = current_user.role in {"admin", "manager"} or current_user.is_admin
     if project_id is None:
-        if os.getenv("USE_DATABASE", "false").lower() == "true":
-            raise HTTPException(
-                status_code=503,
-                detail="Project configuration discovery is unavailable in database mode",
-            )
+        # Global / machine-wide asset routes (/global, /stream, /external-paths).
+        # Operator-only, and that rule does not depend on the storage mode — the
+        # assets live on the filesystem either way. A database-mode 503 used to
+        # sit ahead of this check and blocked the routes outright, including for
+        # operators who were authorized to reach them.
         if not is_privileged:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -74,10 +74,7 @@ async def require_project_config_access(
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         if is_privileged:
-            raise HTTPException(
-                status_code=503,
-                detail="Project configuration operations are unavailable in database mode",
-            )
+            return current_user
 
         from api.projects import _get_admin_org_ids
 
@@ -90,10 +87,7 @@ async def require_project_config_access(
         )
         has_direct_access = access_result.scalar_one_or_none() is not None
         if project.organization_id in admin_org_ids or has_direct_access:
-            raise HTTPException(
-                status_code=503,
-                detail="Project configuration operations are unavailable in database mode",
-            )
+            return current_user
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Project access denied",

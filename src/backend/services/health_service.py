@@ -354,6 +354,27 @@ class HealthService:
                     details=details,
                 )
 
+        elif provider == "codex_cli":
+            # Local Codex CLI provider — no HTTP endpoint to probe. It is the
+            # default provider (config.llm_provider), so the catch-all below
+            # marked the whole system DEGRADED in local dev. Healthy when the
+            # `codex` binary is resolvable on PATH.
+            import shutil
+
+            if shutil.which("codex"):
+                return ComponentHealth(
+                    name="llm",
+                    status=HealthStatus.HEALTHY,
+                    message="Codex CLI available",
+                    details=details,
+                )
+            return ComponentHealth(
+                name="llm",
+                status=HealthStatus.DEGRADED,
+                message="Codex CLI not found on PATH",
+                details=details,
+            )
+
         return ComponentHealth(
             name="llm",
             status=HealthStatus.DEGRADED,

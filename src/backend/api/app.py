@@ -266,9 +266,13 @@ else:
             else:
                 print("📝 Running in memory mode (USE_DATABASE=false)")
 
-        # Filesystem discovery is only used in memory mode. In database mode
-        # the explicit ProjectModel registry is the sole project authority.
-        if PROJECTS_ENABLED and not USE_DATABASE:
+        # Filesystem discovery (projects/ symlinks) populates the in-memory
+        # PROJECTS_REGISTRY, which the Git API router (models.project.get_project)
+        # reads unconditionally — it has no DB-backed project resolver. So this
+        # must run in database mode too, otherwise every /git/projects/* endpoint
+        # 404s. GIT_REPOSITORIES is an in-memory dict, so the sync below is
+        # idempotent per reload (no DB rows, no duplicates).
+        if PROJECTS_ENABLED:
             backend_dir = Path(__file__).parent.parent
             project_root = backend_dir.parent.parent
             init_projects(str(project_root))

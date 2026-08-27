@@ -11,13 +11,23 @@ class TestHealthEndpoint:
     """Health endpoint tests."""
 
     async def test_health_check(self, client: AsyncClient):
-        """Test health check endpoint returns healthy status."""
+        """Health check returns the rich handler's status/version/uptime body.
+
+        This used to assert `service == "agent-orchestrator"`, which pinned
+        `/api/health` to a bare stub in sessions.py that shadowed the health
+        router's prefixed mount. The dashboard badge needs version and uptime,
+        so the stub shape is the wrong contract to lock.
+        """
         response = await client.get("/api/health")
 
         assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "healthy"
-        assert data["service"] == "agent-orchestrator"
+        # Not `== "healthy"`: the handler reports the real dependency state and
+        # CI has no `codex` binary, so llm is degraded there. 200 already means
+        # HEALTHY or DEGRADED -- UNHEALTHY would have been 503.
+        assert data["status"] in {"healthy", "degraded"}
+        assert isinstance(data["version"], str)
+        assert isinstance(data["uptime_seconds"], int | float)
 
 
 @pytest.mark.asyncio

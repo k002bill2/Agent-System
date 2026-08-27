@@ -92,17 +92,6 @@ async def _get_llm_access_for_session(
     )
 
 
-# ─────────────────────────────────────────────────────────────
-# Health
-# ─────────────────────────────────────────────────────────────
-
-
-@router.get("/health")
-async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy", "service": "agent-orchestrator"}
-
-
 async def require_session_access(
     session_id: str,
     engine: OrchestrationEngine = Depends(get_engine),

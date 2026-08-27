@@ -3,13 +3,21 @@
  *
  * Raw `fetch` against the auth-exempt `GET /api/health` endpoint (no
  * Authorization header). The request URL is built with the canonical
- * `getApiUrl()` so it hits the real router in both environments — dev
- * `/api/health` (via Vite proxy) and prod `${VITE_API_URL}/api/health` —
- * rather than the app-level `/health` stub (which omits version/uptime and
- * would force a permanent "offline"). `getApiUrl` is a pure URL builder, so
- * `apiClient`'s retry/backoff is not reintroduced and the "offline" signal
- * stays fast. Owns a 5s AbortController timeout and never throws — every
- * failure resolves to an `offline` state.
+ * `getApiUrl()` so it resolves the same way in both environments — dev
+ * `/api/health` (via Vite proxy) and prod `${VITE_API_URL}/api/health`.
+ *
+ * The badge needs `version` and `uptime_seconds`, which only the health
+ * router's rich handler returns; any `status`-only body here renders a
+ * permanent "offline" pill. That is a live failure mode, not a hypothetical:
+ * a bare `/health` route in `api/sessions.py` was mounted under `/api`
+ * ahead of the health router and shadowed this endpoint (FastAPI resolves
+ * first-match), so the badge sat at Offline while the backend was healthy.
+ * `tests/backend/api/test_api_health.py` now locks the full body shape.
+ *
+ * `getApiUrl` is a pure URL builder, so `apiClient`'s retry/backoff is not
+ * reintroduced and the "offline" signal stays fast. Owns a 5s
+ * AbortController timeout and never throws — every failure resolves to an
+ * `offline` state.
  */
 
 import { getApiUrl } from '@/config/api'
