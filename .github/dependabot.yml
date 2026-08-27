@@ -64,7 +64,6 @@ updates:
       sqlalchemy:
         patterns:
           - "sqlalchemy*"
-          - "alembic"
           - "asyncpg"
           - "psycopg*"
       minor-and-patch:

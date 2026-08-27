@@ -125,7 +125,10 @@ decisions:
       - Dependency Injection: Depends(get_db) (from db.database import get_db)
         예외(인증 라우트) — get_current_user 계열은 get_db_session 세션을 이미 소유.
         handler 독립 DB 작업이 필요할 때만 get_db 병용, 같은 트랜잭션 필요 시 dependency 통합은 별도 리팩터링
-      - Alembic으로 DB 마이그레이션 관리
+      - DB 스키마는 기동 시 init_db()(create_all + _run_migrations)가 만든다
+        (2026-08-27 개정 — 원 결정은 "Alembic으로 마이그레이션 관리"였으나,
+         마이그레이션 11개 전체의 upgrade()에 create_table이 0건이라 빈 DB를 만들 수 없었고
+         alembic upgrade를 부르는 실행 경로도 없어 제거했다. issue #310)
     consequences:
       positive:
         - "async/await로 LangGraph와 자연스러운 통합"

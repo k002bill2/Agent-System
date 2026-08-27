@@ -44,12 +44,9 @@ Alembic migration `f4c9d8e7a6b5_add_llm_usage_ledger.py`가 다음 테이블을 
 | `user_llm_entitlements` | 사용자 또는 조직이 어떤 provider/mode/source를 사용할 수 있는지 |
 | `llm_usage_ledger` | AOS가 실행한 LLM 호출의 내부 사용량 원장 |
 
-마이그레이션 실행:
-
-```bash
-cd src/backend
-alembic upgrade head
-```
+스키마 반영: **별도 명령이 필요 없다.** 두 테이블 모두 모델에 선언돼 있어
+백엔드 기동 시 `init_db()` → `Base.metadata.create_all()` 이 만든다
+(`docs/architecture.md` 의 "Database Migration" 절 참조).
 
 ### Backend API
 
@@ -159,12 +156,7 @@ services:
       - ./runtime/llm-profiles/codex/default:/home/aos/.codex:ro
 ```
 
-4. DB migration을 적용한다.
-
-```bash
-cd src/backend
-alembic upgrade head
-```
+4. 백엔드를 기동한다 — 스키마는 `init_db()` 가 만든다. 별도 migration 명령은 없다.
 
 5. Dashboard Settings -> LLM Access에서 CLI profile을 생성한다.
 
@@ -350,7 +342,7 @@ npm run build
 | 영역 | 파일 |
 |---|---|
 | DB 모델 | `src/backend/db/models/llm.py` |
-| DB migration | `src/backend/alembic/versions/f4c9d8e7a6b5_add_llm_usage_ledger.py` |
+| 스키마 생성 | `src/backend/db/database.py` (`init_db()` → `create_all()`) |
 | Access API | `src/backend/api/llm_access.py` |
 | Usage API | `src/backend/api/llm_usage.py` |
 | Runtime resolver | `src/backend/services/llm_runtime_resolver.py` |
