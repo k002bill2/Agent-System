@@ -412,6 +412,21 @@ class CodexSessionMonitor:
         value = metadata.get("id") or metadata.get("session_id")
         return str(value)[:255] if value else path.stem.removeprefix("rollout-")[:255]
 
+    @staticmethod
+    def _status_for(last_activity: datetime) -> SessionStatus:
+        """Derive status from the clock.
+
+        This depends on ``utcnow()``, not on file contents, so it must be
+        recomputed whenever a cached record is reused — a rollout that stops
+        changing is exactly a session that goes idle and then completes.
+        """
+        age = utcnow() - to_aware_utc(last_activity)
+        if age < timedelta(minutes=5):
+            return SessionStatus.ACTIVE
+        if age < timedelta(hours=1):
+            return SessionStatus.IDLE
+        return SessionStatus.COMPLETED
+
     def _parse(self, path: Path) -> ClaudeSessionInfo | None:
         if not self._is_safe_rollout(path):
             return None
@@ -423,7 +438,8 @@ class CodexSessionMonitor:
         if cached is not None:
             # Still register the file so detail lookups resolve without a rescan.
             self._files_by_id[cached.session_id] = path
-            return cached
+            # Status is clock-derived, so it cannot be served from the cache.
+            return cached.model_copy(update={"status": self._status_for(cached.last_activity)})
         # The list view is polled continuously, so it streams: no record or
         # message list is retained regardless of how long the session is.
         scan = self._read_file(path, retain=False)
@@ -442,14 +458,7 @@ class CodexSessionMonitor:
         model = scan.model
         cwd = str(metadata.get("cwd") or "")
         input_tokens, output_tokens = scan.tokens
-        age = utcnow() - to_aware_utc(last_activity)
-        status = (
-            SessionStatus.ACTIVE
-            if age < timedelta(minutes=5)
-            else SessionStatus.IDLE
-            if age < timedelta(hours=1)
-            else SessionStatus.COMPLETED
-        )
+        status = self._status_for(last_activity)
         info = ClaudeSessionInfo(
             provider="codex",
             parent_thread_id=str(metadata.get("parent_thread_id"))

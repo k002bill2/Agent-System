@@ -64,6 +64,25 @@ from utils.time import to_aware_utc, utcnow
 _session_cache = SessionFileCache()
 
 
+def status_for(last_activity: datetime) -> SessionStatus:
+    """Derive status from the clock.
+
+    Depends on ``utcnow()`` rather than on file contents, so it must be
+    recomputed whenever a cached record is reused — a session file that stops
+    changing is exactly one that goes idle and then completes.
+
+    `utcnow()` 는 aware 이므로 상대도 aware 로 맞춘다. 이전 코드는 tzinfo 를
+    그냥 떼어냈는데, 그러면 UTC 가 아닌 값이 UTC 인 척하게 되어 오프셋만큼
+    어긋난 경과 시간이 나온다.
+    """
+    time_since_activity = utcnow() - to_aware_utc(last_activity)
+    if time_since_activity < timedelta(minutes=5):
+        return SessionStatus.ACTIVE
+    if time_since_activity < timedelta(hours=1):
+        return SessionStatus.IDLE
+    return SessionStatus.COMPLETED
+
+
 class ClaudeSessionMonitor:
     """Monitor for external Claude Code sessions."""
 
@@ -234,6 +253,8 @@ class ClaudeSessionMonitor:
                             # Update source info from cache (may have changed)
                             cached.source_user = user
                             cached.source_path = source_path
+                            # Status is clock-derived, so it cannot be cached.
+                            cached.status = status_for(cached.last_activity)
                             sessions.append(cached)
                             continue
 
@@ -389,13 +410,7 @@ class ClaudeSessionMonitor:
         # `utcnow()` 는 aware 이므로 상대도 aware 로 맞춘다. 이전 코드는 tzinfo 를
         # 그냥 떼어냈는데, 그러면 UTC 가 아닌 값이 UTC 인 척하게 되어 오프셋만큼
         # 어긋난 경과 시간이 나온다.
-        time_since_activity = utcnow() - to_aware_utc(last_activity)
-        if time_since_activity < timedelta(minutes=5):
-            status = SessionStatus.ACTIVE
-        elif time_since_activity < timedelta(hours=1):
-            status = SessionStatus.IDLE
-        else:
-            status = SessionStatus.COMPLETED
+        status = status_for(last_activity)
 
         # Calculate cost
         estimated_cost = calculate_cost(model, total_input_tokens, total_output_tokens)

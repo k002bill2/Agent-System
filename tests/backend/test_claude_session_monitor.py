@@ -8,7 +8,7 @@ instead of silently hiding conversation content.
 
 import json
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -51,9 +51,7 @@ def _assistant_line(text: str, ts: str = "2026-06-06T10:00:01Z") -> dict:
 def monitor(tmp_path: Path) -> ClaudeSessionMonitor:
     projects_dir = tmp_path / "projects"
     projects_dir.mkdir()
-    mon = ClaudeSessionMonitor(
-        claude_projects_dirs=[str(projects_dir)], include_external=False
-    )
+    mon = ClaudeSessionMonitor(claude_projects_dirs=[str(projects_dir)], include_external=False)
     # Expose the temp projects dir for helpers
     mon._test_projects_dir = projects_dir  # type: ignore[attr-defined]
     return mon
@@ -116,3 +114,30 @@ def test_few_messages_not_messages_truncated(monitor):
 
     assert detail is not None
     assert detail.messages_truncated is False
+
+
+def test_cached_session_status_still_ages(
+    monitor: ClaudeSessionMonitor, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Status is clock-derived, so a cache hit must recompute it.
+
+    A session file that stops changing is exactly one that goes idle and then
+    completes; serving the cached status would pin it to active forever.
+    """
+    import services.claude_session_monitor as claude_monitor
+    from services.claude_session_monitor import _session_cache
+
+    _session_cache.clear()
+    now = datetime.now(UTC)
+    stamp = now.isoformat().replace("+00:00", "Z")
+    _write_session(
+        monitor._test_projects_dir,  # type: ignore[attr-defined]
+        [_user_line("hi", ts=stamp), _assistant_line("hello", ts=stamp)],
+    )
+
+    assert monitor.discover_sessions()[0].status.value == "active"
+
+    # The file never changes, but two hours pass.
+    monkeypatch.setattr(claude_monitor, "utcnow", lambda: now + timedelta(hours=2))
+
+    assert monitor.discover_sessions()[0].status.value == "completed"

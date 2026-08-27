@@ -2,7 +2,7 @@
 
 import json
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -565,3 +565,33 @@ def test_cached_discovery_still_resolves_session_details(tmp_path: Path) -> None
 def test_get_codex_monitor_returns_one_shared_instance() -> None:
     """Eight call sites per request must share one cache, not build eight."""
     assert codex_monitor.get_codex_monitor() is codex_monitor.get_codex_monitor()
+
+
+def test_cached_session_status_still_ages(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Status is derived from the clock, so a cache hit must recompute it.
+
+    A rollout that stops changing is exactly a session that goes idle and then
+    completes — freezing its status would pin it to active forever.
+    """
+    path = tmp_path / "2026" / "08" / "27" / "rollout-live.jsonl"
+    path.parent.mkdir(parents=True)
+    now = datetime.now(UTC)
+    path.write_text(
+        json.dumps(
+            {
+                "timestamp": now.isoformat().replace("+00:00", "Z"),
+                "type": "session_meta",
+                "payload": {"id": "thread-live", "cwd": "/Users/tester/Work/AOS"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monitor = CodexSessionMonitor(tmp_path)
+
+    assert monitor.discover_sessions()[0].status.value == "active"
+
+    # The file never changes, but two hours pass.
+    monkeypatch.setattr(codex_monitor, "utcnow", lambda: now + timedelta(hours=2))
+
+    assert monitor.discover_sessions()[0].status.value == "completed"
