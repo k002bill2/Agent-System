@@ -22,6 +22,7 @@ PROTECTED_ROUTE_PREFIXES = (
 SENSITIVE_DISCOVERY_ROUTES = (
     "/api/projects",
     "/api/claude-sessions/projects",
+    "/api/agent-sessions",
     "/api/playground/sessions",
 )
 
@@ -42,6 +43,9 @@ HIGH_RISK_ROUTE_PATHS = (
     "/api/claude-sessions",
     "/api/claude-sessions/processes",
     "/api/claude-sessions/processes/kill",
+    "/api/agent-sessions",
+    "/api/agent-sessions/{session_id}",
+    "/api/agent-sessions/{session_id}/transcript",
     "/api/playground/sessions/{session_id}",
     "/api/playground/sessions/{session_id}/execute",
     "/api/audit",
@@ -91,6 +95,109 @@ def test_expanded_high_risk_routes_advertise_bearer_security(app):
             for method, operation in operations.items()
             if method in {"get", "post", "put", "patch", "delete"}
         ), f"missing auth on {path}"
+
+
+# ``/api/agent-sessions`` 는 ``/api/claude-sessions`` 의 provider-neutral alias 다
+# (#320). 라우터 레벨 ``dependencies`` 는 핸들러 함수가 아니라 라우터에 붙으므로,
+# 원본 핸들러를 import 해 다시 등록하는 alias 는 인증을 스스로 선언하지 않으면
+# 정책만 벗겨진 채 노출된다. 위 경로 목록은 allowlist 라 새 엔드포인트를 구조적으로
+# 놓치므로, alias 전체를 prefix 로 전수 검사한다.
+ALIAS_ROUTE_PREFIX = "/api/agent-sessions"
+
+
+def test_agent_sessions_alias_routes_all_require_auth(app):
+    """alias 라우터의 *모든* operation 이 인증을 요구해야 한다."""
+    paths = app.openapi()["paths"]
+    checked = []
+    for path, operations in paths.items():
+        if not path.startswith(ALIAS_ROUTE_PREFIX):
+            continue
+        for method, operation in operations.items():
+            if method not in {"get", "post", "put", "patch", "delete"}:
+                continue
+            checked.append(f"{method.upper()} {path}")
+            assert operation.get("security"), f"missing auth on {method.upper()} {path}"
+
+    assert checked, f"expected at least one route under {ALIAS_ROUTE_PREFIX}"
+
+
+def test_agent_sessions_alias_matches_origin_auth_policy(app):
+    """alias 는 원본 ``/api/claude-sessions`` 와 동일한 보안 스킴을 광고해야 한다."""
+
+    def _schemes(prefix: str) -> set[str]:
+        found: set[str] = set()
+        for path, operations in app.openapi()["paths"].items():
+            if not path.startswith(prefix):
+                continue
+            for method, operation in operations.items():
+                if method not in {"get", "post", "put", "patch", "delete"}:
+                    continue
+                for requirement in operation.get("security") or []:
+                    found.update(requirement)
+        return found
+
+    origin = _schemes("/api/claude-sessions")
+    alias = _schemes(ALIAS_ROUTE_PREFIX)
+
+    assert origin, "origin routes must advertise a security scheme"
+    assert alias == origin, f"alias auth {alias} diverged from origin {origin}"
+
+
+def _dependency_calls(dependant) -> set:
+    """dependant 트리를 재귀로 훑어 의존성 *함수 객체* 를 모은다.
+
+    라우터 레벨 의존성은 최상위에 오지만 핸들러 레벨 의존성은 중첩될 수 있으므로
+    재귀로 수집한다.
+    """
+    found = set()
+    for sub in dependant.dependencies:
+        if sub.call is not None:
+            found.add(sub.call)
+        found |= _dependency_calls(sub)
+    return found
+
+
+def test_agent_sessions_alias_enforces_admin_or_manager_role():
+    """alias 는 *스킴* 이 아니라 실제 admin/manager 의존성을 걸어야 한다.
+
+    OpenAPI ``security`` 검사만으로는 부족하다 — 의존성을 ``get_current_user`` 로
+    바꿔도 동일한 HTTPBearer 스킴을 광고하므로, 위 두 테스트는 통과하면서 일반
+    user 에게 열린다. 라우터의 의존성 트리에서 함수 객체를 직접 확인해 그 교체를
+    잡는다. OpenAPI 문서가 아니라 라우트를 보므로 ``openapi_extra`` 로 security 를
+    수동 주입하는 경우와 WebSocket 라우트도 함께 커버된다.
+
+    한계: 검사 대상은 이 alias 라우터다. 또 다른 모듈이 같은 핸들러를 제3의
+    prefix 로 재노출하면 여기서는 잡히지 않는다.
+    """
+    from api.agent_sessions import router as alias_router
+    from api.deps import get_current_admin_or_manager_user
+
+    routes = [route for route in alias_router.routes if hasattr(route, "dependant")]
+    assert routes, "alias router exposes no routes"
+
+    for route in routes:
+        methods = ",".join(sorted(getattr(route, "methods", None) or {"WS"}))
+        assert get_current_admin_or_manager_user in _dependency_calls(route.dependant), (
+            f"{methods} {route.path} lacks the admin/manager dependency"
+        )
+
+
+@pytest.mark.asyncio
+async def test_agent_sessions_alias_rejects_regular_user(app):
+    """인증됐지만 권한 없는 일반 user 는 alias 로도 세션에 닿지 못한다."""
+    from api.deps import get_current_user
+
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id="regular-user", role="user", is_admin=False, is_active=True
+    )
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            response = await ac.get(ALIAS_ROUTE_PREFIX)
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio
