@@ -3,15 +3,25 @@
 ## Project Reference
 See: `.planning/PROJECT.md`
 **Core value:** Claude Code 에이전트 체계적 협업
-**Current focus:** **800줄 초과 파일 분할 프로그램 — B4 머지 완료, B5 계획 완료·구현 미착수**
+**Current focus:** **결함 청산 — 열린 PR·이슈를 게이트(CI + Codex)로 하나씩 닫는다**
 
 ## Current Position
-Phase: **B5** (백엔드 분할) — **5/5 완료. PR #247 · CI 9/9 통과 · 머지 대기**
-https://github.com/k002bill2/Agent-System/pull/247 · 브랜치 `refactor/split-backend-b5`
-CI 실측: Backend Lint 30s · Backend Tests **2m36s** · Backend Type Check 1m28s ·
-Frontend Build/Knip/Lint/Tests(**2m47s**)/Type Check · CI Success — 전부 pass.
-Linux CI 에서 백엔드 테스트가 통과했다는 것은 로컬의 유일한 실패(RAG 플레이크)가
-환경 문제였음을 재확인한다.
+**2026-08-27 기준 — main `0dc4a8e`. 열린 PR 0 건.**
+
+| 항목 | 상태 |
+|---|---|
+| 열린 PR | **0 건** (#322 `bd08396` · #317 `e968dd7` · #325 `0dc4a8e` 전부 squash 머지) |
+| 열린 이슈 | **#310** alembic 이 빈 DB 에서 스키마를 못 만듦 (설계 판단 필요) |
+| 사용자 결정 대기 | **DB 모드 posture** — #318 이 넣은 503 26 곳 유지 vs DB-backed 구현 선행 |
+| 백로그(이슈 미등록) | #322 의 `records_truncated` 가 대시보드 소비자 0 건. 현재 데이터로는 절단 자체가 도달 불가(보유 최대 29.7MB < 예산 48MB)라 방치 가능 |
+
+다음에 손댈 것을 고를 때 **이 표를 먼저 실측으로 갱신할 것** — 아래 파일 분할 트랙 기록이
+"PR #247 머지 대기" 로 3 주 가까이 남아 있었으나 실제로는 2026-08-09 에 머지돼 있었다.
+문서에 적힌 부채 기술도 실측 대상이다.
+
+### (이전 트랙) 파일 분할 프로그램 — B5 는 2026-08-09 에 머지됐다
+PR #247 `MERGED` (2026-08-09). 800 줄 초과 백엔드 파일은 **15 개**(2026-08-27 재실측, 변동 없음)
+이며 전부 B5.5·B6 대상이거나 제외 결정된 `api/v1` 이다. 아래는 그 시점의 상세 기록이다.
 
 | Task | 대상 | 결과 | 커밋 |
 |---|---|---|---|
@@ -182,6 +192,54 @@ RUN_STATE 기록"은 이동 후 경로가 없어 빈 워크스페이스를 재�
 Codex 1~10차 로그는 세션 scratchpad에만 있어 **휘발됐다** — 장기 보존이 필요하면 레포로 옮길 것.
 
 ## Session Continuity
+
+### 2026-08-27 세션 (오후) — 열린 PR 3 건 청산, #314 tz 정규화까지
+
+**머지 완료 3 건 — 이 시점 열린 PR 0 건**
+
+| PR | 내용 | 머지 |
+|---|---|---|
+| #322 | Codex rollout 실 스키마 파싱 + 파일크기 상한 → 실메모리 상한 | `bd08396` |
+| #317 | `RAG_EMBEDDING_MODEL` 오버라이드일 때만 기본값 테스트 skip | `e968dd7` |
+| #325 | 이슈 #314 — tz 없는 `fromtimestamp` 15 곳을 UTC 로 | `0dc4a8e` |
+
+**#317 에는 Codex 게이트가 비어 있었다.** 테스트 전용 변경이라 생략됐던 것으로 보이는데,
+`tests/backend` 는 훅·CI 양쪽 ruff 범위 밖이라 오히려 자동 검사가 가장 적은 표면이다.
+격리 worktree 에서 `--scope branch --base main` 으로 돌려 지적 0 건 확인 후 머지했다.
+
+**#325 (이슈 #314) — 15 곳, 21 곳이 아니었다.**
+이슈 본문의 "21 곳" 은 #313·#322 가 일부를 이미 고친 뒤라 낡았고, grep 은 **17 건** 을 냈다.
+정규식이 인자 안의 괄호(`fromtimestamp(p.stat().st_mtime, UTC)`)에서 `[^)]*` 로 끊겨
+tz 를 못 본 오탐 2 건이다. AST 스캐너 실측이 **15 건**이며 그것을 회귀 테스트로 고정했다
+(`test_no_naive_fromtimestamp_in_backend`, `tests/backend/test_time_timestamptz.py`).
+
+틀리는 메커니즘도 이슈 본문과 달랐다 — `to_utc_iso()` 의 실사용처는 `models/analytics.py`
+3 곳뿐이고 이 15 곳은 그 경로를 지나지 않는다. 실제 원인은 **offset 부재**다:
+
+    참값(UTC)    2025-08-24T01:46:40+00:00
+    수정 전 응답  {"modified_at":"2025-08-24T10:46:40"}   ← offset 없음 → 브라우저가 로컬로 해석
+    수정 후 응답  {"modified_at":"2025-08-24T01:46:40Z"}
+
+**이 세션에서 배운 것 (메모리에 저장됨)**
+- **설정 민감 검사의 대조군은 같은 경로에서 만든다.** `git show origin/main:<파일> > /tmp/x.py`
+  후 ruff 를 돌리면 프로젝트 `pyproject.toml` 의 isort 설정이 빠져 **기존 결함이 통과로 보인다**.
+  하마터면 기존 `I001` 을 "내 변경 탓" 으로 오판해 surgical 범위를 벗어날 뻔했다. 같은 경로에
+  stash 로 되돌려 재측정해야 대조가 성립한다 → `tool_config_sensitive_check_needs_inplace_control`
+- `tests/backend/test_time_timestamptz.py` 의 import 블록은 **기존부터** ruff `I001` 을 낸다.
+  두 게이트 범위 밖이라 수 개월 살아남았다. surgical 원칙대로 이 PR 에서는 고치지 않았다
+  → 기존 메모리 `project_backend_tests_unlinted_by_both_gates` 에 실물 사례로 추가
+
+**남은 것**
+- 이슈 **#310** (alembic 이 빈 DB 에서 스키마 생성 불가) — 설계 판단 필요
+- **DB 모드 posture** 결정 — 사용자 몫
+- `records_truncated` 대시보드 소비자 0 건 — 현재 데이터로 도달 불가라 이슈 미등록
+
+**정리한 것:** `fix/codex-rollout-real-schema` · `fix/rag-test-override-skip-guard` ·
+`fix/fromtimestamp-utc` 원격 전부 삭제 확인. 다만 `fix/codex-rollout-real-schema` 는
+Orca worktree(`~/orca/workspaces/Agent-System/provider-agnostic-sessions`)에 **로컬 브랜치로
+남아 있다** — 그 디렉터리를 `codex`·`node` 프로세스가 쓰고 있어 건드리지 않았다.
+원격이 없으므로 PR 재생성 위험은 없다.
+
 
 ### 2026-08-26~27 세션 — usage 대시보드 상류 부분 응답 → 보안 하드닝 PR #318 분리·수리
 
