@@ -278,14 +278,15 @@ describe('claudeSessions store — auto-generation backs off when denied', () =>
         { session_id: 'b', provider: 'claude', summary: null },
       ],
     })
-    mockApiClient.post.mockImplementationOnce(async () => {
-      useClaudeSessionsStore.setState({ permissionDenied: true })
-      return { summary: 'first' }
-    })
+    // 실제 신호로 재현한다. 플래그를 손으로 세우면 "가드가 동작한다" 만 확인하고,
+    // 정작 그 플래그를 세울 신호가 도달하는지는 보지 못한다 — 첫 작성에서 실제로
+    // 그렇게 썼고, 그래서 403 을 삼키던 generateSummaryQuiet 을 놓쳤다.
+    mockApiClient.post.mockRejectedValue(forbidden())
 
     await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
 
     expect(mockApiClient.post).toHaveBeenCalledTimes(1)
+    expect(useClaudeSessionsStore.getState().permissionDenied).toBe(true)
   })
 
   it('does not call the API while permission is denied', async () => {

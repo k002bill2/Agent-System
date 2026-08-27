@@ -590,7 +590,14 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
         ),
         generatingSummaryFor: null,
       }))
-    } catch {
+    } catch (e) {
+      // 조용히 삼키되 403 만은 예외다. 이걸 흘려보내면 루프의 권한 가드가 세워질
+      // 신호를 못 받아 남은 세션 수만큼 POST 를 계속 낸다 (Codex [P2]).
+      if (isForbidden(e)) {
+        revokeSessionAccess(set, get)
+        set({ permissionDenied: true, generatingSummaryFor: null })
+        return
+      }
       // Silently ignore errors for auto-generation
       set({ generatingSummaryFor: null })
     }
