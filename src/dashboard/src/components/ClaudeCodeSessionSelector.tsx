@@ -7,6 +7,7 @@
 import { useEffect } from 'react'
 import { Terminal, Clock, Activity, MessageSquare, Wrench, RefreshCw } from 'lucide-react'
 import { useClaudeSessionsStore } from '../stores/claudeSessions'
+import { SessionPermissionNotice } from './claude-sessions/SessionPermissionNotice'
 import { cn } from '../lib/utils'
 
 interface ClaudeCodeSessionSelectorProps {
@@ -20,7 +21,8 @@ export function ClaudeCodeSessionSelector({
   onSelect,
   className,
 }: ClaudeCodeSessionSelectorProps) {
-  const { sessions, isLoading, fetchSessions, refreshSessions } = useClaudeSessionsStore()
+  const { sessions, permissionDenied, isLoading, fetchSessions, refreshSessions } =
+    useClaudeSessionsStore()
 
   // Fetch sessions on mount
   useEffect(() => {
@@ -62,7 +64,8 @@ export function ClaudeCodeSessionSelector({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
           <Activity className="w-4 h-4 text-green-500" />
-          <span>Active Sessions ({activeSessions.length})</span>
+          {/* 거부 상태의 (0) 은 "없음" 으로 읽힌다 — 세지 않은 것이지 0 이 아니다. */}
+          <span>Active Sessions {permissionDenied ? '' : `(${activeSessions.length})`}</span>
         </div>
         <button
           onClick={handleRefresh}
@@ -84,6 +87,9 @@ export function ClaudeCodeSessionSelector({
           <RefreshCw className="w-5 h-5 animate-spin mr-2" />
           Loading sessions...
         </div>
+      ) : permissionDenied ? (
+        // 403 은 "활성 세션 없음" 이 아니다.
+        <SessionPermissionNotice compact />
       ) : activeSessions.length === 0 ? (
         <div className="text-center py-8 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
           <Terminal className="w-10 h-10 mx-auto mb-2 opacity-40" />

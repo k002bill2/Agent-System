@@ -130,6 +130,7 @@ import { cn } from '@/lib/utils';
 | `SessionDetails` | 상세 정보 + Recent Activity (요약 윈도 시 "전체 Transcript 보기" 배너, 메시지별 잘림 표시). 툴 인풋·메타데이터는 `title` 툴팁으로 전체값 hover 노출. "전체 보기" 클릭 시 해당 메시지 timestamp를 `TranscriptViewer`로 전달(딥링크) |
 | `TranscriptViewer` | Raw 트랜스크립트 (JSON Tree, 긴 문자열은 "더 보기" 토글로 전체 표시). `targetTimestamp` prop 수신 시 마지막(최신) 페이지로 점프, 그 페이지에 일치 entry가 있으면 instant 비교로 자동 펼침·스크롤·하이라이트 |
 | `ProcessCleanupPanel` | 프로세스 정리 패널 |
+| `SessionPermissionNotice` | 세션 API 403 안내. 세션 조회는 admin·manager 전용이라 일반 계정은 403 을 받는데, 빈 목록으로 그리면 "세션이 없다" 와 구분되지 않는다. `SessionList`·`DashboardPage`·`ClaudeCodeSessionSelector` 가 공유하며 `compact` 로 좁은 카드용 축약형 |
 
 ### Project Config Components
 
@@ -384,7 +385,7 @@ import { cn } from '@/lib/utils';
 | `useAgentMonitorStore` | `agentMonitor.ts` | 에이전트 모니터링 메트릭 |
 | `useTaskStore` | `taskStore.ts` | 태스크 CRUD 관리 |
 | `useFeedbackStore` | `feedback.ts` | RLHF 피드백 |
-| `useClaudeSessionsStore` | `claudeSessions.ts` | Claude 세션 모니터링 |
+| `useClaudeSessionsStore` | `claudeSessions.ts` | Claude 세션 모니터링. 403 은 `permissionDenied` 로 일반 에러와 분리 보관해 소비자가 상태 코드를 각자 비교하지 않게 한다 (성공·비 403 실패 시 함께 내려간다) |
 | `useClaudeCodeActivityStore` | `claudeCodeActivity.ts` | Claude Code 실시간 활동 |
 | `useClaudeUsageStore` | `claudeUsage.ts` | Context Window 사용량 |
 | `useMCPStore` | `mcp.ts` | MCP 서버 관리 |

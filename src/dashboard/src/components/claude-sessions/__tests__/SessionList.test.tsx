@@ -17,6 +17,7 @@ vi.mock('lucide-react', () => ({
   Users: (props: Record<string, unknown>) => <span data-testid="icon-users" {...props} />,
   Loader2: (props: Record<string, unknown>) => <span data-testid="icon-loader" {...props} />,
   Sparkles: (props: Record<string, unknown>) => <span data-testid="icon-sparkles" {...props} />,
+  ShieldAlert: (props: Record<string, unknown>) => <span data-testid="icon-shield" {...props} />,
 }))
 
 // Mock SessionCard subcomponent to isolate tests
@@ -55,6 +56,7 @@ const mockDeleteGhostSessions = vi.fn().mockResolvedValue({ deletedCount: 0, del
 
 const defaultStoreState = {
   sessions: [],
+  permissionDenied: false,
   filteredCount: 0,
   activeCount: 0,
   isLoading: false,
@@ -1072,6 +1074,39 @@ describe('SessionList', () => {
       // Open project menu (sort menu should close via outside click)
       fireEvent.mouseDown(screen.getByTitle('프로젝트 필터'))
       fireEvent.click(screen.getByTitle('프로젝트 필터'))
+    })
+  })
+  // =============================================
+  // Permission denial (issue #329)
+  // =============================================
+  describe('permission denial', () => {
+    it('renders the permission notice instead of the empty state', () => {
+      storeState.permissionDenied = true
+      render(<SessionList />)
+
+      expect(screen.getByText('세션 조회 권한이 없습니다')).toBeInTheDocument()
+      expect(screen.queryByText('No sessions found')).not.toBeInTheDocument()
+    })
+
+    it('does not print counts it was never allowed to read', () => {
+      storeState.permissionDenied = true
+      storeState.activeCount = 0
+      storeState.filteredCount = 0
+
+      render(<SessionList />)
+
+      // "0 active / 0 loaded / 0 total" next to a permission notice reads as
+      // "there are none" — the counts are unknown, not zero.
+      expect(screen.queryByText('0 active / 0 loaded / 0 total')).not.toBeInTheDocument()
+      expect(screen.getByText('세션 수를 확인할 수 없음')).toBeInTheDocument()
+    })
+
+    it('still shows the empty state when nothing is denied', () => {
+      storeState.permissionDenied = false
+      render(<SessionList />)
+
+      expect(screen.getByText('No sessions found')).toBeInTheDocument()
+      expect(screen.queryByText('세션 조회 권한이 없습니다')).not.toBeInTheDocument()
     })
   })
 })

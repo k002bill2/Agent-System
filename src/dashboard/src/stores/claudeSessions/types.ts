@@ -64,6 +64,12 @@ export interface ClaudeSessionsState {
 
   // Error state
   error: string | null
+  /**
+   * The session API is admin/manager only. Classifying 403 here — once, in the
+   * store — keeps every surface from comparing status codes on its own and
+   * drifting apart on what counts as "you may not see this".
+   */
+  permissionDenied: boolean
 
   // Actions
   fetchSessions: (status?: SessionStatus, reset?: boolean) => Promise<void>

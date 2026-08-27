@@ -7,12 +7,59 @@ import {
   TranscriptResponse,
 } from '../../types/claudeSession'
 import { apiClient } from '../../services/apiClient'
+import { isApiError } from '../../services/errors'
 import { getApiUrl } from '../../config/api'
 import type { ClaudeSessionsState, ProviderFilter, SortField, SortOrder } from './types'
 
 // 소비자 실측(2026-08-08): `SortField` 만 패키지 밖에서 쓰인다.
 // `SortOrder` 는 쓰이지 않지만 `SortField` 와 짝이라 함께 노출한다.
 export type { SortField, SortOrder } from './types'
+
+/** 403 은 "데이터 없음" 이 아니라 권한 부족이다 — 그 구분을 여기서 한 번만 한다. */
+const isForbidden = (e: unknown): boolean => isApiError(e) && e.status === 403
+
+/**
+ * 403 은 "이 계정은 이 데이터를 볼 수 없다" 는 뜻이다. 목록만 가리고 캐시를
+ * 남겨두면 `SessionDetails`·`ClaudeCodeTasks` 같은 다른 소비자가 계속 그리고
+ * SSE 도 계속 흐른다 — 세션 도중 권한이 회수된 경우가 그 형태다 (Codex [P1]).
+ */
+const revokeSessionAccess = (
+  set: (partial: Partial<ClaudeSessionsState>) => void,
+  get: () => ClaudeSessionsState,
+): void => {
+  get().stopStreaming()
+  get().clearTranscript()
+  set({
+    sessions: [],
+    selectedSessionId: null,
+    selectedSession: null,
+    totalCount: 0,
+    filteredCount: 0,
+    activeCount: 0,
+    hasMore: false,
+    // 세션에서 파생된 값들도 함께 비운다. 남겨두면 `SessionList` 가 프로젝트·유저
+    // 필터를 계속 그리고, `pendingSummaryCount` 가 0 이 아니면 일괄 요약 버튼이
+    // 살아 있어 이미 거부된 POST 를 낼 수 있다 (Codex [P2]).
+    pendingSummaryCount: 0,
+    allProjects: [],
+    sourceUsers: [],
+  })
+}
+
+/**
+ * 보호된 세션 요청이 403 이면 어느 경로에서 왔든 같은 회수를 수행한다.
+ * 목록만 다루면 상세·전사·요약 경로가 거부를 받고도 캐시를 들고 있는다 (Codex [P1]).
+ */
+const denyIfForbidden = (
+  e: unknown,
+  set: (partial: Partial<ClaudeSessionsState>) => void,
+  get: () => ClaudeSessionsState,
+): boolean => {
+  if (!isForbidden(e)) return false
+  revokeSessionAccess(set, get)
+  set({ permissionDenied: true })
+  return true
+}
 
 /** Claude 세션 목록/상세/스트리밍 상태 관리 스토어. */
 export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => ({
@@ -62,6 +109,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   refreshInterval: 5,
 
   error: null,
+  permissionDenied: false,
 
   generatingSummaryFor: null,
   autoGenerateSummaries: true,  // Auto-generate summaries by default
@@ -114,6 +162,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
         hasMore: data.has_more,
         offset: data.offset,
         isLoading: false,
+        permissionDenied: false,
       })
 
       // Trigger auto-generate for missing summaries (non-blocking)
@@ -122,7 +171,15 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       }
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
-      set({ error: errorMessage, isLoading: false })
+      // 실패는 접근 권한을 증명하지 않는다. 거부를 내릴 자격이 있는 사건은 성공
+      // 응답 하나뿐이므로, 비 403 실패에서는 플래그를 건드리지 않는다 — 건드리면
+      // 일시적 500 하나로 권한 없는 계정이 다시 빈 상태를 보게 된다 (Codex [P2]).
+      if (isForbidden(e)) {
+        revokeSessionAccess(set, get)
+        set({ error: errorMessage, isLoading: false, permissionDenied: true })
+      } else {
+        set({ error: errorMessage, isLoading: false })
+      }
     }
   },
 
@@ -163,7 +220,12 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       }))
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
-      set({ error: errorMessage, isLoadingMore: false })
+      if (isForbidden(e)) {
+        revokeSessionAccess(set, get)
+        set({ error: errorMessage, isLoadingMore: false, permissionDenied: true })
+      } else {
+        set({ error: errorMessage, isLoadingMore: false })
+      }
     }
   },
 
@@ -207,6 +269,14 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       // Put new sessions at the start (they're the most recent)
       const mergedSessions = [...newSessions, ...updatedExisting]
 
+      // 거부에서 복귀하면 병합으로는 되살릴 수 없다 — 회수가 비운 필터·카운트·
+      // 페이지네이션을 이 경로가 복원하지 못한다. 전체 조회로 넘긴다 (Codex [P2]).
+      if (get().permissionDenied) {
+        set({ permissionDenied: false, error: null })
+        await get().fetchSessions(status)
+        return
+      }
+
       set({
         sessions: mergedSessions,
         totalCount: data.total_count,
@@ -214,6 +284,20 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
         activeCount: data.active_count,
       })
     } catch (e) {
+      // A refresh stays quiet about transient failures, but a 403 is not
+      // transient — it is the answer, and the surfaces have to show it.
+      if (isForbidden(e)) {
+        // 거부가 **새로 생겼을 때만** 쓴다. 5 초 주기라 이미 거부 상태인데 다시
+        // 쓰면 두 가지가 깨진다: 구독자가 매 틱 깨어나고, 사용자가 닫은 배너가
+        // 다음 폴링에 되살아난다 (Codex [P2]). 거부 사실은 플래그가 들고 있으므로
+        // 배너를 다시 세울 이유가 없다.
+        if (!get().permissionDenied) {
+          const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+          revokeSessionAccess(set, get)
+          set({ permissionDenied: true, error: errorMessage })
+        }
+        return
+      }
       // Silently fail on refresh - don't show error to user
       console.error('Failed to refresh sessions:', e)
     }
@@ -331,6 +415,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       })
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      denyIfForbidden(e, set, get)
       set({ error: errorMessage, isLoadingDetails: false })
     }
   },
@@ -370,6 +455,8 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   },
 
   clearError: () => {
+    // 배너를 닫는 것과 권한이 생기는 것은 다른 사건이다. 거부 사실은 다음
+    // 성공 요청에서 내려간다 (Codex [P2]).
     set({ error: null })
   },
 
@@ -393,6 +480,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       }))
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      denyIfForbidden(e, set, get)
       set({ error: errorMessage, isLoadingTranscript: false })
     }
   },
@@ -503,6 +591,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       }))
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      denyIfForbidden(e, set, get)
       set({ error: errorMessage, generatingSummaryFor: null })
     }
   },
@@ -521,7 +610,14 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
         ),
         generatingSummaryFor: null,
       }))
-    } catch {
+    } catch (e) {
+      // 조용히 삼키되 403 만은 예외다. 이걸 흘려보내면 루프의 권한 가드가 세워질
+      // 신호를 못 받아 남은 세션 수만큼 POST 를 계속 낸다 (Codex [P2]).
+      if (isForbidden(e)) {
+        revokeSessionAccess(set, get)
+        set({ permissionDenied: true, generatingSummaryFor: null })
+        return
+      }
       // Silently ignore errors for auto-generation
       set({ generatingSummaryFor: null })
     }
@@ -535,6 +631,10 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   autoGenerateMissingSummaries: async () => {
     const { autoGenerateSummaries, projectFilter, sourceUserFilter, sortBy, sortOrder, generatingSummaryFor } = get()
     if (!autoGenerateSummaries || generatingSummaryFor) return
+
+    // Auto-generation is optimistic background work, not something the user
+    // asked for. Without this guard a denied account fires one 403 per session.
+    if (get().permissionDenied) return
 
     try {
       const params = new URLSearchParams()
@@ -552,7 +652,9 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
       // Generate summaries one by one to avoid overwhelming the LLM
       for (const session of sessionsWithoutSummary) {
-        if (!get().autoGenerateSummaries) break
+        // 루프가 도는 동안 권한이 회수될 수 있다. 시작 시점 가드만으로는 최대
+        // 200 건의 403 POST 가 조용히 나간다 (Codex [P2]).
+        if (!get().autoGenerateSummaries || get().permissionDenied) break
         await get().generateSummaryQuiet(session.session_id)
       }
 
@@ -580,6 +682,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
       return true
     } catch (e) {
+      denyIfForbidden(e, set, get)
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
       set({ error: errorMessage })
       return false
@@ -600,6 +703,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
       return { deletedCount: data.deleted_count, deletedIds }
     } catch (e) {
+      denyIfForbidden(e, set, get)
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
       set({ error: errorMessage })
       return { deletedCount: 0, deletedIds: [] }
@@ -646,6 +750,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
       return { deletedCount: data.deleted_count, deletedIds }
     } catch (e) {
+      denyIfForbidden(e, set, get)
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
       set({ error: errorMessage })
       return { deletedCount: 0, deletedIds: [] }
@@ -718,6 +823,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
         }))
       }
     } catch (e) {
+      denyIfForbidden(e, set, get)
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
       set({ error: errorMessage, isBatchGenerating: false })
       // Also re-fetch on error to sync state

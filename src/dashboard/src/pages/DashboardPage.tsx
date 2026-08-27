@@ -6,6 +6,7 @@ import { CostMonitor } from '../components/CostMonitor'
 import { ClaudeUsageDashboard } from '../components/usage/ClaudeUsageDashboard'
 import { ConfigStatsCard, ConfigChartCard } from '../components/ProjectConfigStats'
 import { ProcessMonitorWidget } from '../components/ProcessMonitorWidget'
+import { SessionPermissionNotice } from '../components/claude-sessions/SessionPermissionNotice'
 import { useNavigationStore } from '../stores/navigation'
 
 function formatTimeAgo(date: Date): string {
@@ -28,6 +29,7 @@ export function DashboardPage() {
   const allSessionProjects = useClaudeSessionsStore(s => s.allProjects)
   const projectsFetchError = useClaudeSessionsStore(s => s.projectsFetchError)
   const isLoadingSessions = useClaudeSessionsStore(s => s.isLoading)
+  const permissionDenied = useClaudeSessionsStore(s => s.permissionDenied)
   const selectSession = useClaudeSessionsStore(s => s.selectSession)
   const setView = useNavigationStore(s => s.setView)
 
@@ -75,6 +77,11 @@ export function DashboardPage() {
     }
   }, [sessions, allSessionProjects, projectsFetchError])
 
+  // 권한이 거부된 상태의 0 은 "세션이 없다" 와 구분되지 않는다 — 집계 대신
+  // 알 수 없음을 표시한다.
+  const statValue = (value: string | number): string =>
+    permissionDenied ? '—' : String(value)
+
   // Get recent external agent sessions (top 10 by last activity)
   const recentSessions = useMemo(() => sessions.slice(0, 10), [sessions])
 
@@ -88,7 +95,7 @@ export function DashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400">Total Sessions</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{sessions.length}</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{statValue(sessions.length)}</p>
             </div>
             <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/30 rounded-lg flex items-center justify-center">
               <Terminal className="w-5 h-5 text-primary-600 dark:text-primary-400" />
@@ -101,7 +108,7 @@ export function DashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400">Active Sessions</p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{activeSessions}</p>
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{statValue(activeSessions)}</p>
             </div>
             <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
               <Zap className="w-5 h-5 text-green-600 dark:text-green-400" />
@@ -114,7 +121,7 @@ export function DashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400">Session Projects</p>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{sessionProjectCount}</p>
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{statValue(sessionProjectCount)}</p>
             </div>
             <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
               <FolderOpen className="w-5 h-5 text-blue-600 dark:text-blue-400" />
@@ -127,8 +134,8 @@ export function DashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400">Session Messages</p>
-              <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{totalMessages.toLocaleString()}</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{lastActivityText}</p>
+              <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{statValue(totalMessages.toLocaleString())}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{statValue(lastActivityText)}</p>
             </div>
             <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
               <MessageSquare className="w-5 h-5 text-purple-600 dark:text-purple-400" />
@@ -189,6 +196,8 @@ export function DashboardPage() {
                 <div key={i} className="h-12 bg-gray-100 dark:bg-gray-700 rounded" />
               ))}
             </div>
+          ) : permissionDenied ? (
+            <SessionPermissionNotice compact />
           ) : recentSessions.length === 0 ? (
             <p className="text-sm text-gray-500 dark:text-gray-400">No recent sessions</p>
           ) : (

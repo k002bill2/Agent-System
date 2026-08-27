@@ -1,0 +1,353 @@
+/**
+ * The session API is admin/manager only, so a `role="user"` account gets 403
+ * from every one of these calls. The store used to keep only `e.message`,
+ * which left the surfaces unable to tell "you may not see this" apart from
+ * "there is nothing here" — they all rendered an empty state.
+ *
+ * These tests pin the classification to the store, not the surfaces: one
+ * `permissionDenied` flag that consumers read, instead of three components
+ * each comparing a status code and drifting apart.
+ */
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+
+vi.mock('../../services/apiClient', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}))
+
+import { useClaudeSessionsStore } from '../claudeSessions'
+import { apiClient } from '../../services/apiClient'
+import { ApiError, ApiErrorCode } from '../../services/errors'
+
+const mockApiClient = vi.mocked(apiClient)
+
+const emptyResponse = {
+  sessions: [],
+  total_count: 0,
+  filtered_count: 0,
+  active_count: 0,
+  has_more: false,
+  offset: 0,
+}
+
+const forbidden = () =>
+  new ApiError({ message: 'Forbidden', status: 403, code: ApiErrorCode.FORBIDDEN })
+
+const serverError = () =>
+  new ApiError({
+    message: 'Boom',
+    status: 500,
+    code: ApiErrorCode.INTERNAL_SERVER_ERROR,
+  })
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  useClaudeSessionsStore.setState({
+    sessions: [],
+    totalCount: 0,
+    filteredCount: 0,
+    activeCount: 0,
+    isLoading: false,
+    isLoadingMore: false,
+    offset: 0,
+    hasMore: false,
+    error: null,
+    permissionDenied: false,
+    // Auto-generation issues its own request; keep it out of these assertions.
+    autoGenerateSummaries: false,
+  })
+})
+
+describe('claudeSessions store — permission classification', () => {
+  it('marks a 403 from fetchSessions as denied permission', async () => {
+    mockApiClient.get.mockRejectedValueOnce(forbidden())
+
+    await useClaudeSessionsStore.getState().fetchSessions()
+
+    const state = useClaudeSessionsStore.getState()
+    expect(state.permissionDenied).toBe(true)
+    expect(state.error).not.toBeNull()
+    expect(state.isLoading).toBe(false)
+  })
+
+  it('does not mark other failures as denied permission', async () => {
+    mockApiClient.get.mockRejectedValueOnce(serverError())
+
+    await useClaudeSessionsStore.getState().fetchSessions()
+
+    const state = useClaudeSessionsStore.getState()
+    expect(state.permissionDenied).toBe(false)
+    expect(state.error).not.toBeNull()
+  })
+
+  /**
+   * A denial that only hides the list leaves `SessionDetails`,
+   * `ClaudeCodeTasks` and the SSE stream showing data the account may no
+   * longer read — the mid-session demotion case (Codex [P1]).
+   */
+  it('drops cached session data and stops streaming on a 403', async () => {
+    const close = vi.fn()
+    useClaudeSessionsStore.setState({
+      sessions: [{ session_id: 's1' }] as never,
+      selectedSessionId: 's1',
+      selectedSession: { session_id: 's1' } as never,
+      transcriptEntries: [{ type: 'user' }] as never,
+      pendingSummaryCount: 3,
+      allProjects: ['ProjectA'],
+      sourceUsers: ['user1'],
+      totalCount: 1,
+      activeCount: 1,
+      eventSource: { close } as never,
+    })
+    mockApiClient.get.mockRejectedValueOnce(forbidden())
+
+    await useClaudeSessionsStore.getState().fetchSessions()
+
+    const state = useClaudeSessionsStore.getState()
+    expect(state.permissionDenied).toBe(true)
+    expect(state.sessions).toEqual([])
+    expect(state.selectedSession).toBeNull()
+    expect(state.selectedSessionId).toBeNull()
+    expect(state.transcriptEntries).toEqual([])
+    expect(state.eventSource).toBeNull()
+    expect(close).toHaveBeenCalled()
+    // 파생 값이 남으면 필터와 일괄 요약 버튼이 살아 있다.
+    expect(state.pendingSummaryCount).toBe(0)
+    expect(state.allProjects).toEqual([])
+    expect(state.sourceUsers).toEqual([])
+  })
+
+  /**
+   * A failure never proves access. Once the cached sessions are gone, letting a
+   * transient 500 lower the flag drops a forbidden account straight back into
+   * "No sessions found" — the exact state this change removes (Codex [P2]).
+   */
+  it('keeps the denial through a later transient failure', async () => {
+    mockApiClient.get.mockRejectedValueOnce(forbidden())
+    await useClaudeSessionsStore.getState().fetchSessions()
+
+    mockApiClient.get.mockRejectedValueOnce(serverError())
+    await useClaudeSessionsStore.getState().fetchSessions()
+
+    expect(useClaudeSessionsStore.getState().permissionDenied).toBe(true)
+  })
+
+  it('marks a 403 from loadMoreSessions as denied permission', async () => {
+    useClaudeSessionsStore.setState({ hasMore: true, sessions: [] })
+    mockApiClient.get.mockRejectedValueOnce(forbidden())
+
+    await useClaudeSessionsStore.getState().loadMoreSessions()
+
+    expect(useClaudeSessionsStore.getState().permissionDenied).toBe(true)
+  })
+
+  /**
+   * The flag that never comes back down is worse than the bug it replaces: an
+   * admin who catches a single 403 would see a permanent "no permission"
+   * screen. This is the transition a one-call assertion cannot see.
+   */
+  it('clears the flag once a call succeeds again', async () => {
+    mockApiClient.get.mockRejectedValueOnce(forbidden())
+    await useClaudeSessionsStore.getState().fetchSessions()
+    expect(useClaudeSessionsStore.getState().permissionDenied).toBe(true)
+
+    mockApiClient.get.mockResolvedValueOnce(emptyResponse)
+    await useClaudeSessionsStore.getState().fetchSessions()
+
+    const state = useClaudeSessionsStore.getState()
+    expect(state.permissionDenied).toBe(false)
+    expect(state.error).toBeNull()
+  })
+
+  /**
+   * `clearError` is what the error banner's dismiss button calls. Dismissing a
+   * message is not the same event as being granted access — clearing the flag
+   * there drops the surfaces straight back to "No sessions found", which is
+   * the bug this change exists to remove. The denial lifts on the next
+   * successful request, not on a dismissal.
+   */
+  it('keeps the denial when the error banner is dismissed', () => {
+    useClaudeSessionsStore.setState({ error: 'Forbidden', permissionDenied: true })
+
+    useClaudeSessionsStore.getState().clearError()
+
+    const state = useClaudeSessionsStore.getState()
+    expect(state.error).toBeNull()
+    expect(state.permissionDenied).toBe(true)
+  })
+})
+
+describe('claudeSessions store — refreshSessions stays quiet except for 403', () => {
+  it('keeps swallowing transient refresh failures', async () => {
+    mockApiClient.get.mockRejectedValueOnce(serverError())
+
+    await useClaudeSessionsStore.getState().refreshSessions()
+
+    const state = useClaudeSessionsStore.getState()
+    expect(state.error).toBeNull()
+    expect(state.permissionDenied).toBe(false)
+  })
+
+  it('surfaces a 403 even on a background refresh', async () => {
+    mockApiClient.get.mockRejectedValueOnce(forbidden())
+
+    await useClaudeSessionsStore.getState().refreshSessions()
+
+    const state = useClaudeSessionsStore.getState()
+    expect(state.permissionDenied).toBe(true)
+    expect(state.error).not.toBeNull()
+  })
+
+  /**
+   * ClaudeCodeSessionSelector refreshes every 5 seconds, so a repeated denial
+   * must not keep rewriting the same values — components that select `error`
+   * or `permissionDenied` would re-render on every tick.
+   *
+   * The assertion counts writes to the denial slice specifically, not
+   * notifications: `refreshSessions` opens with an unconditional
+   * `set({ batchJustCompleted: false })`, so subscribers wake either way. That
+   * is pre-existing behaviour and out of scope here.
+   */
+  it('does not rewrite the denial when it is unchanged', async () => {
+    mockApiClient.get.mockRejectedValue(forbidden())
+    await useClaudeSessionsStore.getState().refreshSessions()
+
+    let denialWrites = 0
+    const unsubscribe = useClaudeSessionsStore.subscribe((state, previous) => {
+      if (
+        state.permissionDenied !== previous.permissionDenied ||
+        state.error !== previous.error
+      ) {
+        denialWrites += 1
+      }
+    })
+    await useClaudeSessionsStore.getState().refreshSessions()
+    unsubscribe()
+
+    expect(denialWrites).toBe(0)
+  })
+
+  /**
+   * `ClaudeSessionsPage` renders `error` as a dismissible banner. If the 5s
+   * refresh rewrites the error after a dismissal, closing the banner does
+   * nothing — it returns on the next tick. The denial itself is carried by the
+   * flag, so the banner only has to be raised once.
+   */
+  it('does not resurrect a banner the user dismissed', async () => {
+    mockApiClient.get.mockRejectedValue(forbidden())
+    await useClaudeSessionsStore.getState().refreshSessions()
+    useClaudeSessionsStore.getState().clearError()
+
+    await useClaudeSessionsStore.getState().refreshSessions()
+
+    const state = useClaudeSessionsStore.getState()
+    expect(state.error).toBeNull()
+    expect(state.permissionDenied).toBe(true)
+  })
+
+  /**
+   * Recovery cannot be a merge. `revokeSessionAccess` emptied the filters,
+   * counts and pagination, and the merge path restores none of them — so a
+   * refresh that lifts the denial hands off to a full fetch (Codex [P2]).
+   *
+   * The second `mockResolvedValueOnce` is that hand-off: without it the call
+   * falls through to a persistent rejection left by an earlier test.
+   */
+  it('clears the denial and reloads in full when a refresh succeeds', async () => {
+    useClaudeSessionsStore.setState({ permissionDenied: true, error: 'Forbidden' })
+    mockApiClient.get.mockResolvedValueOnce(emptyResponse).mockResolvedValueOnce(emptyResponse)
+
+    await useClaudeSessionsStore.getState().refreshSessions()
+
+    expect(useClaudeSessionsStore.getState().permissionDenied).toBe(false)
+    // 병합 1 회가 아니라 회복용 전체 조회까지 2 회다.
+    expect(mockApiClient.get).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('claudeSessions store — protected detail paths revoke too', () => {
+  /**
+   * A demotion can land on a detail request while the list still holds a cached
+   * answer. If only the list paths revoke, `SessionDetails` keeps rendering
+   * data the server just refused (Codex [P1]).
+   */
+  it('revokes access when session details come back 403', async () => {
+    useClaudeSessionsStore.setState({
+      sessions: [{ session_id: 's1' }] as never,
+      selectedSession: { session_id: 's1' } as never,
+      selectedSessionId: 's1',
+    })
+    mockApiClient.get.mockRejectedValueOnce(forbidden())
+
+    await useClaudeSessionsStore.getState().fetchSessionDetails('s1')
+
+    const state = useClaudeSessionsStore.getState()
+    expect(state.permissionDenied).toBe(true)
+    expect(state.selectedSession).toBeNull()
+    expect(state.sessions).toEqual([])
+  })
+})
+
+describe('claudeSessions store — mutating actions revoke too', () => {
+  /**
+   * A manager demoted after the list loaded can still press delete or the
+   * batch-summary button. Those catches only wrote an error string, leaving the
+   * cached list and its controls in place (Codex [P1]).
+   */
+  it('revokes access when a delete comes back 403', async () => {
+    useClaudeSessionsStore.setState({ sessions: [{ session_id: 's1' }] as never })
+    mockApiClient.delete.mockRejectedValueOnce(forbidden())
+
+    await useClaudeSessionsStore.getState().deleteSession('s1')
+
+    const state = useClaudeSessionsStore.getState()
+    expect(state.permissionDenied).toBe(true)
+    expect(state.sessions).toEqual([])
+  })
+})
+
+describe('claudeSessions store — auto-generation backs off when denied', () => {
+  /**
+   * The entry guard only runs once. Permission can be revoked while the loop is
+   * mid-flight, and the loop would keep issuing up to 200 privileged POSTs that
+   * `generateSummaryQuiet` swallows one by one (Codex [P2]).
+   */
+  it('stops mid-loop when permission is revoked', async () => {
+    useClaudeSessionsStore.setState({
+      autoGenerateSummaries: true,
+      permissionDenied: false,
+    })
+    mockApiClient.get.mockResolvedValueOnce({
+      ...emptyResponse,
+      sessions: [
+        { session_id: 'a', provider: 'claude', summary: null },
+        { session_id: 'b', provider: 'claude', summary: null },
+      ],
+    })
+    // 실제 신호로 재현한다. 플래그를 손으로 세우면 "가드가 동작한다" 만 확인하고,
+    // 정작 그 플래그를 세울 신호가 도달하는지는 보지 못한다 — 첫 작성에서 실제로
+    // 그렇게 썼고, 그래서 403 을 삼키던 generateSummaryQuiet 을 놓쳤다.
+    mockApiClient.post.mockRejectedValue(forbidden())
+
+    await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
+
+    expect(mockApiClient.post).toHaveBeenCalledTimes(1)
+    expect(useClaudeSessionsStore.getState().permissionDenied).toBe(true)
+  })
+
+  it('does not call the API while permission is denied', async () => {
+    useClaudeSessionsStore.setState({
+      permissionDenied: true,
+      autoGenerateSummaries: true,
+    })
+
+    await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
+
+    expect(mockApiClient.get).not.toHaveBeenCalled()
+  })
+})
