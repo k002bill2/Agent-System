@@ -1,6 +1,7 @@
 """Codex rollout JSONL discovery tests."""
 
 import json
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -500,3 +501,67 @@ def test_truncated_scan_uses_file_mtime_for_last_activity(
     assert session.records_truncated is True
     mtime = datetime.fromtimestamp(path.stat().st_mtime, UTC)
     assert abs((session.last_activity - mtime).total_seconds()) < 1
+
+
+def test_repeat_discovery_reuses_the_parse_cache(tmp_path: Path) -> None:
+    """A finished rollout must not be re-read on every poll."""
+    _write_rollout(tmp_path)
+    monitor = CodexSessionMonitor(tmp_path)
+    reads = 0
+    original = monitor._read_file
+
+    def counting(path: Path, *, retain: bool = True):
+        nonlocal reads
+        reads += 1
+        return original(path, retain=retain)
+
+    monitor._read_file = counting  # type: ignore[method-assign]
+
+    monitor.discover_sessions()
+    after_first = reads
+    monitor.discover_sessions()
+
+    assert after_first == 1
+    assert reads == after_first, "두 번째 조회가 파일을 다시 읽었다"
+
+
+def test_appending_to_a_rollout_invalidates_its_cache(tmp_path: Path) -> None:
+    """A live session keeps updating, so its entry must not go stale."""
+    path = _write_rollout(tmp_path)
+    monitor = CodexSessionMonitor(tmp_path)
+    assert monitor.discover_sessions()[0].user_message_count == 1
+
+    with path.open("a", encoding="utf-8") as stream:
+        stream.write(
+            json.dumps(
+                {
+                    "timestamp": "2026-08-27T01:00:09Z",
+                    "type": "response_item",
+                    "payload": {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "one more"}],
+                    },
+                }
+            )
+            + "\n"
+        )
+        os.utime(path, (path.stat().st_atime, path.stat().st_mtime + 10))
+
+    assert monitor.discover_sessions()[0].user_message_count == 2
+
+
+def test_cached_discovery_still_resolves_session_details(tmp_path: Path) -> None:
+    """A cache hit must not lose the id-to-file mapping detail lookup needs."""
+    _write_rollout(tmp_path)
+    monitor = CodexSessionMonitor(tmp_path)
+
+    monitor.discover_sessions()
+    monitor.discover_sessions()
+
+    assert monitor.get_session_details("thread-01abc") is not None
+
+
+def test_get_codex_monitor_returns_one_shared_instance() -> None:
+    """Eight call sites per request must share one cache, not build eight."""
+    assert codex_monitor.get_codex_monitor() is codex_monitor.get_codex_monitor()
