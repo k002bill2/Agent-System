@@ -248,6 +248,13 @@ Codex 2 라운드 + 실행 스모크로 지적 4 P1 / 3 P2 중 확인된 것을 
   `git push origin 4219ce7:refs/heads/wip/security-followup-20260827`
   (고유 테스트 `test_missing_and_forbidden_are_indistinguishable` 는 유실이 아니라
    위 403 결정으로 `test_forbidden_and_missing_are_distinct_statuses` 에 의도적으로 대체된 것)
+- **`provider-agnostic-sessions` 종료**: PR #320 이 squash 머지되어 내용은 main 에 전부 있었다.
+  그 상태로 다시 열린 PR #321 은 보탤 것 0 인데 #318 을 되돌리는 diff 였고, 사용자 판단으로 닫혔다.
+  2026-08-27 main 을 되머지(`394ca48`)해 삭제 위험을 없앤 뒤 브랜치를 로컬·원격 모두 삭제했다.
+  삭제 시점 트리는 main 과 바이트 동일이고 `--diff-filter=A`·`--diff-filter=D` 모두 0 건이었다.
+  복원이 필요하면 tip `394ca481d98f29e88b571e8d298b2ee05faa70ab` 로:
+  `git push origin 394ca48:refs/heads/provider-agnostic-sessions`
+  원 작업 커밋 `8930f29` 는 `refs/pull/320/head` 로도 남아 있어 PR #320 에서 계속 열람된다.
 - **CI 에서만 드러난 결함 1 건** (`fe25821`): 새 authz 스위트가 `RateLimitService` 전역 싱글턴의
   카운터를 소진해, 뒤따르는 모든 테스트 모듈이 429 로 실패했다(로컬 44 failed 재현).
   로컬이 통과한 이유는 `src/backend/.env`(루트 `.env` 심링크)의 `RATE_LIMIT_ENABLED=false` 다 —
