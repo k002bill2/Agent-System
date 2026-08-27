@@ -1327,3 +1327,66 @@ async def test_create_session_uses_the_project_resolver(monkeypatch):
     assert called["project_id"] == "db-uuid-1"
     assert called["project_passed"].id == "db-uuid-1"
 
+
+
+# ─────────────────────────────────────────────────────────────
+# project-configs: 빈 접근 집합은 장애가 아니다
+# ─────────────────────────────────────────────────────────────
+
+
+class _FakeSession:
+    """async_session_factory() 대역 — 지정한 프로젝트 목록을 그대로 돌려준다."""
+
+    def __init__(self, projects):
+        self._projects = projects
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_args):
+        return None
+
+    async def execute(self, *_args, **_kwargs):
+        projects = self._projects
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: projects))
+
+
+@pytest.mark.asyncio
+async def test_project_configs_empty_access_returns_empty_list_not_503(monkeypatch):
+    """접근 가능한 프로젝트가 0개인 일반 사용자는 빈 목록을 받는다.
+
+    쿼리가 이미 접근 제어로 필터링돼 있으므로, 결과가 비었다는 것은 "이 사용자가
+    볼 수 있는 프로젝트가 없다"는 정상적인 인가 결과다. 503 으로 답하면 권한
+    결과를 실제 장애와 구분할 수 없게 되고, 정상 사용자에게 서비스가 고장났다고
+    알리게 된다.
+    """
+    from api.project_configs.core import _get_db_filtered_projects
+
+    monkeypatch.setattr("db.database.async_session_factory", lambda: _FakeSession([]))
+    monkeypatch.setattr("api.projects._get_admin_org_ids", AsyncMock(return_value=[]))
+
+    result = await _get_db_filtered_projects(
+        None,
+        SimpleNamespace(id="member-1", role="member", is_admin=False),
+    )
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_project_configs_empty_registry_still_returns_503_for_admin(monkeypatch):
+    """admin 의 빈 결과는 레지스트리 미구성이므로 503 을 유지한다.
+
+    admin 쿼리는 접근 필터가 없어 전체 활성 프로젝트를 조회한다. 그것이 비었다면
+    기동 동기화가 끝나지 않은 상태이지 인가 결과가 아니다 (api/routes.py 의
+    레지스트리 검사와 같은 해석).
+    """
+    from api.project_configs.core import _get_db_filtered_projects
+
+    monkeypatch.setattr("db.database.async_session_factory", lambda: _FakeSession([]))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _get_db_filtered_projects(
+            None,
+            SimpleNamespace(id="admin-1", role="admin", is_admin=True),
+        )
+    assert exc_info.value.status_code == 503
