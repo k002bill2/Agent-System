@@ -64,7 +64,8 @@ export function ClaudeCodeSessionSelector({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
           <Activity className="w-4 h-4 text-green-500" />
-          <span>Active Sessions ({activeSessions.length})</span>
+          {/* 거부 상태의 (0) 은 "없음" 으로 읽힌다 — 세지 않은 것이지 0 이 아니다. */}
+          <span>Active Sessions {permissionDenied ? '' : `(${activeSessions.length})`}</span>
         </div>
         <button
           onClick={handleRefresh}

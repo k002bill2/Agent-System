@@ -112,14 +112,21 @@ describe('claudeSessions store — permission classification', () => {
     expect(state.error).toBeNull()
   })
 
-  it('clears the flag through clearError', () => {
+  /**
+   * `clearError` is what the error banner's dismiss button calls. Dismissing a
+   * message is not the same event as being granted access — clearing the flag
+   * there drops the surfaces straight back to "No sessions found", which is
+   * the bug this change exists to remove. The denial lifts on the next
+   * successful request, not on a dismissal.
+   */
+  it('keeps the denial when the error banner is dismissed', () => {
     useClaudeSessionsStore.setState({ error: 'Forbidden', permissionDenied: true })
 
     useClaudeSessionsStore.getState().clearError()
 
     const state = useClaudeSessionsStore.getState()
-    expect(state.permissionDenied).toBe(false)
     expect(state.error).toBeNull()
+    expect(state.permissionDenied).toBe(true)
   })
 })
 

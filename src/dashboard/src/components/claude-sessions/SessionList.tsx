@@ -238,7 +238,9 @@ export function SessionList({ statusFilter }: SessionListProps) {
             {projectFilter || 'All Projects'}
           </h2>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            {activeCount} active / {sessions.length} loaded / {filteredCount} total
+            {permissionDenied
+              ? '세션 수를 확인할 수 없음'
+              : `${activeCount} active / ${sessions.length} loaded / ${filteredCount} total`}
           </p>
         </div>
 

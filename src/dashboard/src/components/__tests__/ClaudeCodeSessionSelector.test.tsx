@@ -48,6 +48,14 @@ describe('ClaudeCodeSessionSelector — permission denial', () => {
     expect(screen.queryByText('No active Claude Code sessions')).not.toBeInTheDocument()
   })
 
+  it('drops the active-session count while denied', () => {
+    storeState.permissionDenied = true
+
+    render(<ClaudeCodeSessionSelector selectedSessionId={null} onSelect={vi.fn()} />)
+
+    expect(screen.queryByText('Active Sessions (0)')).not.toBeInTheDocument()
+  })
+
   it('keeps the empty state when nothing is denied', () => {
     render(<ClaudeCodeSessionSelector selectedSessionId={null} onSelect={vi.fn()} />)
 

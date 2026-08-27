@@ -1088,6 +1088,19 @@ describe('SessionList', () => {
       expect(screen.queryByText('No sessions found')).not.toBeInTheDocument()
     })
 
+    it('does not print counts it was never allowed to read', () => {
+      storeState.permissionDenied = true
+      storeState.activeCount = 0
+      storeState.filteredCount = 0
+
+      render(<SessionList />)
+
+      // "0 active / 0 loaded / 0 total" next to a permission notice reads as
+      // "there are none" — the counts are unknown, not zero.
+      expect(screen.queryByText('0 active / 0 loaded / 0 total')).not.toBeInTheDocument()
+      expect(screen.getByText('세션 수를 확인할 수 없음')).toBeInTheDocument()
+    })
+
     it('still shows the empty state when nothing is denied', () => {
       storeState.permissionDenied = false
       render(<SessionList />)

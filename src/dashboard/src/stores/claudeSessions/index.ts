@@ -396,7 +396,9 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   },
 
   clearError: () => {
-    set({ error: null, permissionDenied: false })
+    // 배너를 닫는 것과 권한이 생기는 것은 다른 사건이다. 거부 사실은 다음
+    // 성공 요청에서 내려간다 (Codex [P2]).
+    set({ error: null })
   },
 
   fetchTranscript: async (sessionId: string, offset = 0, limit = 50, append = false) => {
