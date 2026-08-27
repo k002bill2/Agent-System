@@ -6,7 +6,7 @@ within .claude/skills/ directories.
 
 import logging
 import shutil
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from models.project_config import SkillConfig
@@ -116,8 +116,8 @@ class SkillManager:
             has_references=has_references,
             has_scripts=has_scripts,
             has_assets=has_assets,
-            created_at=datetime.fromtimestamp(stat.st_ctime),
-            modified_at=datetime.fromtimestamp(stat.st_mtime),
+            created_at=datetime.fromtimestamp(stat.st_ctime, UTC),
+            modified_at=datetime.fromtimestamp(stat.st_mtime, UTC),
         )
 
     def get_skill_content(

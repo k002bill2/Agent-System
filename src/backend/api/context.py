@@ -65,7 +65,7 @@ async def get_project_context(
     - Dev docs from dev/active folder
     - Current session info (if active)
     """
-    from datetime import datetime
+    from datetime import UTC, datetime
     from pathlib import Path
 
     if hasattr(current_user, "role") and hasattr(db, "execute"):
@@ -90,7 +90,7 @@ async def get_project_context(
                         name=file_path.name,
                         path=str(file_path),
                         content=content,
-                        modified_at=datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                        modified_at=datetime.fromtimestamp(stat.st_mtime, UTC).isoformat(),
                     )
                 )
             except Exception:

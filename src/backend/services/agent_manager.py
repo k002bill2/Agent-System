@@ -6,7 +6,7 @@ within .claude/agents/ directories.
 
 import logging
 import shutil
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from models.project_config import AgentConfig
@@ -118,7 +118,7 @@ class AgentManager:
             model=frontmatter.get("model"),
             role=frontmatter.get("role"),
             is_shared=is_shared,
-            modified_at=datetime.fromtimestamp(stat.st_mtime),
+            modified_at=datetime.fromtimestamp(stat.st_mtime, UTC),
         )
 
     def get_agent_content(self, project_id: str, agent_id: str) -> tuple[AgentConfig | None, str]:

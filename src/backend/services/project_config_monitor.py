@@ -17,7 +17,7 @@ import json
 import logging
 import shutil
 from collections.abc import AsyncIterator
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from models.project_config import (
@@ -627,7 +627,7 @@ class ProjectConfigMonitor:
             file_path=str(command_file),
             allowed_tools=frontmatter.get("allowed-tools"),
             argument_hint=frontmatter.get("argument-hint"),
-            modified_at=datetime.fromtimestamp(stat.st_mtime),
+            modified_at=datetime.fromtimestamp(stat.st_mtime, UTC),
         )
 
     def get_command_content(
@@ -852,7 +852,7 @@ class ProjectConfigMonitor:
                             model=frontmatter.get("model"),
                             role=frontmatter.get("role"),
                             is_shared=False,
-                            modified_at=datetime.fromtimestamp(stat.st_mtime),
+                            modified_at=datetime.fromtimestamp(stat.st_mtime, UTC),
                         )
                     )
                 except Exception as e:
@@ -895,8 +895,8 @@ class ProjectConfigMonitor:
                             has_references=has_references,
                             has_scripts=has_scripts,
                             has_assets=has_assets,
-                            created_at=datetime.fromtimestamp(stat.st_ctime),
-                            modified_at=datetime.fromtimestamp(stat.st_mtime),
+                            created_at=datetime.fromtimestamp(stat.st_ctime, UTC),
+                            modified_at=datetime.fromtimestamp(stat.st_mtime, UTC),
                         )
                     )
                 except Exception as e:

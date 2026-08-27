@@ -5,7 +5,7 @@ stored in ~/.claude/projects/{encoded_path}/memory/.
 """
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from models.project_config import MemoryConfig
@@ -98,7 +98,7 @@ class MemoryManager:
             description=description,
             file_path=str(memory_file),
             memory_type=memory_type,
-            modified_at=datetime.fromtimestamp(stat.st_mtime),
+            modified_at=datetime.fromtimestamp(stat.st_mtime, UTC),
         )
 
     def get_memory_content(
