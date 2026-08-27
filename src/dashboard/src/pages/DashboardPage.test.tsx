@@ -21,6 +21,7 @@ vi.mock('../components/ProcessMonitorWidget', () => ({
 let mockAgents: Record<string, { status: string }> = {}
 let mockSessions: Array<{ session_id: string; status: string; last_activity: string; project_name?: string; summary?: string; slug?: string; message_count?: number }> = []
 let mockIsLoadingSessions = false
+let mockPermissionDenied = false
 const mockFetchSessions = vi.fn()
 const mockSelectSession = vi.fn()
 const mockSetView = vi.fn()
@@ -39,6 +40,7 @@ vi.mock('../stores/claudeSessions', () => ({
       allProjects: [],
       projectsFetchError: false,
       isLoading: mockIsLoadingSessions,
+      permissionDenied: mockPermissionDenied,
       selectSession: mockSelectSession,
     }),
 }))
@@ -54,6 +56,7 @@ describe('DashboardPage', () => {
     mockAgents = {}
     mockSessions = []
     mockIsLoadingSessions = false
+    mockPermissionDenied = false
   })
 
   it('renders stats cards', () => {
@@ -128,5 +131,32 @@ describe('DashboardPage', () => {
     render(<DashboardPage />)
     expect(screen.getByText('TestProject')).toBeInTheDocument()
     expect(screen.getByText('Working on feature')).toBeInTheDocument()
+  })
+  /**
+   * Issue #329: a `role="user"` account is denied the session API. Rendering
+   * zeros and "No recent sessions" tells them the machine is idle, which is a
+   * different (and wrong) statement.
+   */
+  describe('permission denial', () => {
+    it('replaces the session-derived stats with an unknown marker', () => {
+      mockPermissionDenied = true
+      mockSessions = []
+
+      render(<DashboardPage />)
+
+      // Total / Active / Projects / Messages — none of them are knowable.
+      expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(4)
+      expect(screen.queryByText('No sessions')).not.toBeInTheDocument()
+    })
+
+    it('renders the permission notice in place of the recent session list', () => {
+      mockPermissionDenied = true
+      mockSessions = []
+
+      render(<DashboardPage />)
+
+      expect(screen.getByText('세션 조회 권한이 없습니다')).toBeInTheDocument()
+      expect(screen.queryByText('No recent sessions')).not.toBeInTheDocument()
+    })
   })
 })

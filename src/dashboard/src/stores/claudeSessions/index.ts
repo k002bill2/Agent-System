@@ -7,12 +7,16 @@ import {
   TranscriptResponse,
 } from '../../types/claudeSession'
 import { apiClient } from '../../services/apiClient'
+import { isApiError } from '../../services/errors'
 import { getApiUrl } from '../../config/api'
 import type { ClaudeSessionsState, ProviderFilter, SortField, SortOrder } from './types'
 
 // 소비자 실측(2026-08-08): `SortField` 만 패키지 밖에서 쓰인다.
 // `SortOrder` 는 쓰이지 않지만 `SortField` 와 짝이라 함께 노출한다.
 export type { SortField, SortOrder } from './types'
+
+/** 403 은 "데이터 없음" 이 아니라 권한 부족이다 — 그 구분을 여기서 한 번만 한다. */
+const isForbidden = (e: unknown): boolean => isApiError(e) && e.status === 403
 
 /** Claude 세션 목록/상세/스트리밍 상태 관리 스토어. */
 export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => ({
@@ -62,6 +66,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   refreshInterval: 5,
 
   error: null,
+  permissionDenied: false,
 
   generatingSummaryFor: null,
   autoGenerateSummaries: true,  // Auto-generate summaries by default
@@ -114,6 +119,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
         hasMore: data.has_more,
         offset: data.offset,
         isLoading: false,
+        permissionDenied: false,
       })
 
       // Trigger auto-generate for missing summaries (non-blocking)
@@ -122,7 +128,9 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       }
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
-      set({ error: errorMessage, isLoading: false })
+      // Assignment, not a conditional set: a non-403 failure must also lower
+      // the flag, or a stale denial outlives the request that caused it.
+      set({ error: errorMessage, isLoading: false, permissionDenied: isForbidden(e) })
     }
   },
 
@@ -163,7 +171,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       }))
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
-      set({ error: errorMessage, isLoadingMore: false })
+      set({ error: errorMessage, isLoadingMore: false, permissionDenied: isForbidden(e) })
     }
   },
 
@@ -207,13 +215,31 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       // Put new sessions at the start (they're the most recent)
       const mergedSessions = [...newSessions, ...updatedExisting]
 
+      // A successful refresh lifts a previous denial; unrelated errors stay put.
+      const denialLifted = get().permissionDenied
+        ? { permissionDenied: false, error: null }
+        : {}
+
       set({
         sessions: mergedSessions,
         totalCount: data.total_count,
         filteredCount: data.filtered_count,
         activeCount: data.active_count,
+        ...denialLifted,
       })
     } catch (e) {
+      // A refresh stays quiet about transient failures, but a 403 is not
+      // transient — it is the answer, and the surfaces have to show it.
+      if (isForbidden(e)) {
+        const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+        const { permissionDenied, error } = get()
+        // This runs on a 5s interval; writing the same denial again would wake
+        // every subscriber on each tick.
+        if (!permissionDenied || error !== errorMessage) {
+          set({ permissionDenied: true, error: errorMessage })
+        }
+        return
+      }
       // Silently fail on refresh - don't show error to user
       console.error('Failed to refresh sessions:', e)
     }
@@ -370,7 +396,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   },
 
   clearError: () => {
-    set({ error: null })
+    set({ error: null, permissionDenied: false })
   },
 
   fetchTranscript: async (sessionId: string, offset = 0, limit = 50, append = false) => {
@@ -535,6 +561,10 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
   autoGenerateMissingSummaries: async () => {
     const { autoGenerateSummaries, projectFilter, sourceUserFilter, sortBy, sortOrder, generatingSummaryFor } = get()
     if (!autoGenerateSummaries || generatingSummaryFor) return
+
+    // Auto-generation is optimistic background work, not something the user
+    // asked for. Without this guard a denied account fires one 403 per session.
+    if (get().permissionDenied) return
 
     try {
       const params = new URLSearchParams()

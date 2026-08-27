@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useClaudeSessionsStore, SortField } from '../../stores/claudeSessions'
 import type { ProviderFilter } from '../../stores/claudeSessions/types'
 import { SessionCard } from './SessionCard'
+import { SessionPermissionNotice } from './SessionPermissionNotice'
 import { RefreshCw, Circle, CircleDot, ArrowUpDown, ArrowUp, ArrowDown, Trash2, Search, FolderOpen, X, Check, Users, Loader2, Sparkles } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { SessionStatus } from '../../types/claudeSession'
@@ -21,6 +22,7 @@ interface SessionListProps {
 export function SessionList({ statusFilter }: SessionListProps) {
   const {
     sessions,
+    permissionDenied,
     filteredCount,
     activeCount,
     isLoading,
@@ -540,6 +542,9 @@ export function SessionList({ statusFilter }: SessionListProps) {
               />
             ))}
           </div>
+        ) : permissionDenied ? (
+          // 403 은 빈 목록이 아니다 — 아래 빈 상태 분기보다 먼저 걸러야 한다.
+          <SessionPermissionNotice className="h-48" />
         ) : filteredSessions.length === 0 ? (
           // Empty state
           <div className="flex flex-col items-center justify-center h-48 text-gray-500 dark:text-gray-400">
