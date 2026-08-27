@@ -247,3 +247,29 @@ async def test_init_db_survives_a_column_it_cannot_backfill(probe):
         "NOT NULL + 기본값 없음 컬럼을 자동 추가했다 — 기존 행을 채울 값이 없다"
     )
     assert "ix_llm_model_update_logs_provider" not in await _actual_indexes(engine, schema)
+
+
+async def test_init_db_reports_a_foreign_key_it_did_not_restore(probe, capsys):
+    """채운 컬럼의 FK 제약은 복구되지 않는다 — 그 사실을 숨기지 않아야 한다.
+
+    `CreateColumn` 은 컬럼 정의만 렌더하므로 테이블 수준 FK 제약은 빠진 채 남는다.
+    자동으로 붙이지 않는 것은 의도다 — 고아 행이 있으면 `ADD CONSTRAINT` 가 검증에
+    실패해 기동이 죽는다. 대신 **빠졌다는 사실이 로그에 남아야** 한다. 조용히
+    "복구됨" 으로 보이는 것이 이 지적(Codex R4)의 본체다.
+    """
+    schema, engine = probe
+
+    await db_mod.init_db()
+
+    async with engine.begin() as conn:
+        await conn.execute(text('ALTER TABLE "project_invitations" DROP COLUMN "invited_by"'))
+
+    capsys.readouterr()  # 앞선 기동의 출력은 버린다
+    await db_mod.init_db()  # 재기동 — 컬럼은 채우고 FK 는 보고만
+    output = capsys.readouterr().out
+
+    after = await _actual_schema(engine, schema)
+    assert "invited_by" in after["project_invitations"], "컬럼이 복구되지 않았다"
+    assert "project_invitations.invited_by" in output and "외래키" in output, (
+        f"FK 가 복구되지 않았는데 그 사실을 알리지 않았다:\n{output}"
+    )

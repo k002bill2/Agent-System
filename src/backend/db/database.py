@@ -519,6 +519,39 @@ async def _run_migrations() -> None:
                 )
                 print(f"✅ {index.name} 인덱스 생성")
 
+        # 참조 무결성은 **보고만 한다.**
+        #
+        # `CreateColumn` 은 컬럼 정의만 렌더하므로, 위에서 채운 컬럼에 FK 가 선언돼
+        # 있었다면 제약은 빠진 채로 남는다 (대상 10 개). 그렇다고 여기서
+        # `ADD CONSTRAINT` 를 하면 안 된다 — 기존 데이터에 고아 행이 하나라도 있으면
+        # 검증에 실패해 기동이 통째로 죽는다. 바로 위 인덱스 가드와 같은 함정이다.
+        # 고아를 정리한 뒤 붙이는 것은 사람이 판단할 일이라, 빠진 것만 알린다.
+        fk_rows = await conn.execute(
+            text(
+                "SELECT tc.table_name, kcu.column_name "
+                "FROM information_schema.table_constraints tc "
+                "JOIN information_schema.key_column_usage kcu "
+                "  ON tc.constraint_name = kcu.constraint_name "
+                " AND tc.table_schema = kcu.table_schema "
+                "WHERE tc.constraint_type = 'FOREIGN KEY' "
+                "  AND tc.table_schema = current_schema()"
+            )
+        )
+        existing_fks = {(row[0], row[1]) for row in fk_rows}
+        for table in Base.metadata.sorted_tables:
+            if table.name not in present:
+                continue
+            for column in table.columns:
+                if not column.foreign_keys or column.name not in present[table.name]:
+                    continue
+                if (table.name, column.name) in existing_fks:
+                    continue
+                targets = ", ".join(sorted(fk.target_fullname for fk in column.foreign_keys))
+                print(
+                    f"⚠️  {table.name}.{column.name} 의 외래키 제약({targets})이 없다 — "
+                    "고아 행 정리 후 수동으로 붙일 것 (자동 생성은 검증 실패 시 기동을 막는다)"
+                )
+
 
 async def close_db() -> None:
     """Close database connection pool."""
