@@ -1378,21 +1378,39 @@ async def test_session_filesystem_mode_does_not_query_the_database(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_session_prefers_the_filesystem_registry(monkeypatch):
-    """A registry hit short-circuits before any DB work."""
+async def test_session_ignores_the_filesystem_registry_in_database_mode(monkeypatch):
+    """DB 모드에서 레지스트리 히트가 인가를 건너뛰던 우회로를 막는다.
+
+    이전 계약은 "레지스트리 히트 시 DB 작업 생략"(성능)이었다. 그러나 `app.py` 는
+    DB 모드에서도 `projects/` 심링크를 스캔하므로(`7ed7c46`) 그 레지스트리는 비어
+    있지 않고, 심링크 이름만 알면 DB 미등록 프로젝트를 세션에 붙일 수 있었다.
+    DB 모드에서는 `ProjectModel` 이 유일한 권위다 —
+    `api/git/_shared.resolve_project` 와 같은 규칙.
+    """
     from api import sessions as sessions_module
 
     monkeypatch.setenv("USE_DATABASE", "true")
     registry_project = SimpleNamespace(id="obsidian", name="Obsidian")
     monkeypatch.setattr("models.project.get_project", lambda pid: registry_project)
 
+    authorized = {}
+
+    async def fake_require(project_id, _user, _db, min_role="viewer"):
+        authorized["project_id"] = project_id
+        return "viewer"
+
+    monkeypatch.setattr(sessions_module, "require_project_role", fake_require)
+
     db = _FakeDb(_db_project_row())
     project = await sessions_module._resolve_project_context(
         "obsidian", SimpleNamespace(id="u1", role="user", is_admin=False, is_active=True), db
     )
 
-    assert project is registry_project
-    assert db.executed == 0
+    # 레지스트리를 지나치고 인가를 실제로 거쳤다.
+    assert authorized["project_id"] == "obsidian"
+    assert project is not registry_project
+    assert project.id == "05c4302d-9602-4b70-8267-65964f5bed4d"
+    assert db.executed == 1
 
 
 @pytest.mark.asyncio
