@@ -6,14 +6,14 @@ See: `.planning/PROJECT.md`
 **Current focus:** **결함 청산 — 열린 PR·이슈를 게이트(CI + Codex)로 하나씩 닫는다**
 
 ## Current Position
-**2026-08-28 기준 — main `3e07203`. provider 중립 세션 트랙 종료, 파일 분할 B5.5 착수.**
+**2026-08-28 기준 — main `16fca73`. provider 중립 세션 트랙 종료, 파일 분할 B5.5 진행 중(2/5).**
 
 | 항목 | 상태 |
 |---|---|
-| 열린 PR | **#352** (다른 세션, `.planning/STATE.md` 597 행 부근만 건드린다). 이 세션이 낸 #339 `df238fd` · #342 `e82485d` · #344 `87ba018` · #346 `7cf54e5` · #349 `3e07203` 은 전부 squash 머지 + 파일 단위 내용 대조로 안착 확인 |
+| 열린 PR | **없음** (이 세션 기준). 다른 세션이 `fix/git-db-project-resolution` 을 진행 중 — 이 세션이 워크트리에 남아 있던 미커밋 변경을 `144c73b` 로 보관했고 그 세션이 그 위에 `c76c9e8` 을 쌓았다. 이 세션이 낸 #339 · #342 · #344 · #346 · #349 · **#353 `91af5b2`** · **#354 `16fca73`** 는 전부 squash 머지 + 파일 단위 내용 대조로 안착 확인 |
 | 열린 이슈 | **#345** 세션 권한 회수 — 활동 스토어 회수와 요청 세대 경쟁 (#343 에서 범위 밖으로 분리한 2 건) |
 | 사용자 결정 대기 | **없음.** 이전 표의 "DB 모드 posture" 는 #336 `5b03970` 이 project-config 503 을 해제하며 결정됐다(바로 아래 ③ 행과 모순이던 것을 정정). `core.py` 의 "권한 없음 → 503" 오분류도 실측상 남아 있지 않다. `api/` 전체 503 78 건 중 `project_configs/` 8 건은 잔존하나 그것은 결정이 아니라 구현 잔여다 |
-| 잔여 작업 (착수 가능) | **B5.5 나머지 4 개** — 순서와 근거는 아래 "2026-08-28 (이어서)" 의 표. 그 다음이 B6 |
+| 잔여 작업 (착수 가능) | **B5.5 나머지 3 개** — 다음은 `merge_service`. 순서와 근거는 아래 "2026-08-28 (이어서)" 의 표. 그 다음이 B6 |
 | 백로그(이슈 미등록) | `get_session_activity` 가 전사와 같은 결함(offset 이 필터된 이벤트를 센다) · 절단 사실(`scan.truncated`)이 전사 응답에 안 실린다 |
 
 **닫힌 잔여 항목 2 건 (이전 표의 ①·②)**
@@ -199,6 +199,59 @@ Codex 1~10차 로그는 세션 scratchpad에만 있어 **휘발됐다** — 장�
 
 ## Session Continuity
 
+### 2026-08-28 (이어서 2) — B5.5 Task 2(tmux_service) 완료. 다음은 merge_service
+
+**#354 `16fca73`** — `services/tmux_service.py` 920 줄 → 패키지 3 모듈, 최대 618 줄
+(`models` 30 · `usage` 294 · `service` 618 · 배럴 39).
+
+**"비관대" 패치 타깃을 어떻게 처리했나 — 남은 3 개에 그대로 적용된다.**
+문자열 패치 4 건이 전부 `services.tmux_service` 네임스페이스로 *가져온* 원장 심볼
+둘(`record_usage_best_effort` 3 건 · `enforce_usage_quota_preflight_best_effort` 1 건)을
+겨냥했다. 선택지는 둘이었고 **후자를 골랐다**:
+
+- (a) 읽는 함수를 `__init__.py` 에 남겨 패치 경로를 그대로 유지 → 배럴이 뚱뚱해지고,
+  `TmuxService` 가 그것을 부르므로 **순환 import** 또는 지연 import 우회가 필요해진다
+- (b) 읽는 함수를 `usage.py` 로 옮기고 **테스트 패치 타깃 4 줄을 재지정** →
+  DAG 가 비순환이고 배럴이 얇다
+
+**핵심은 배럴에서 그 두 이름을 빼는 것이다.** 재노출하면 낡은 패치 경로가 *성공하되*
+서브모듈 전역은 원본을 계속 봐서 조용히 무효가 된다. 빼두면 `monkeypatch.setattr` 이
+그 줄에서 `AttributeError` 로 죽어 **실패가 자기 위치를 가리킨다** — 재지정 전 실측으로
+3 건이 정확히 그렇게 실패했다(RED). `tests/backend/test_tmux_service_package.py` 의
+`_DELIBERATELY_ABSENT` 가 이 계약을 고정한다(배럴에 넣어 RED 확인).
+
+**싱글턴은 `_audit_logs` 와 같은 형태였고 같은 규칙으로 처리했다.**
+`_tmux_service` 는 `get_tmux_service` 안 `global` 재바인딩 + 외부 writer 0 건.
+**접근자와 같은 모듈에 두고 배럴은 함수만 내보낸다** — 값을 재노출하면 `None` 스냅샷이
+영구히 남는다. Task 1 의 회귀와 정확히 같은 뿌리다.
+
+**`scripts/split_audit.py` 를 고쳤다 — 남은 3 개가 전부 여기서 막힌다.**
+`logger` 를 per-module 이름으로 tolerate 하도록 `_PER_MODULE` 을 추가했다.
+`split_module.py` 는 이미 `tolerate=` 로 제외하는데 audit 쪽만 빠져 있어
+`두 모듈에 같은 정의: logger` 로 중단됐다. Task 1 의 `audit_service` 는 모듈 레벨
+`logger` 가 아예 없어 드러나지 않았을 뿐이다. 유실 자체는 여전히 잡히고(프로브 FAIL),
+`logger` 결손은 ruff F821 이 백스톱한다(실측: 줄 삭제 → 3 errors).
+
+**엔진의 알려진 과대추정 1 종.** `split_module.py` 의 `_referenced` 는 정규식이라
+**메서드 지역 import 를 구분 못 한다** — 원본 `TmuxService` 안에 `import re` 가 따로
+있는데도 `service.py` 에 모듈 레벨 `import re` 를 얹어 F401 이 났다. `split_audit` 가
+import 를 의도적으로 대조하지 않고 ruff 에 맡기는 분업이 그 층을 잡는다.
+**분할 직후 `ruff check --fix` + `ruff format` 은 절차의 일부다**(둘 다 — `check` 만
+돌리면 CI Backend Lint 의 format 단계가 깨진다).
+
+**검증 — 체크리스트 7 단계 전부 돌렸고, 특히 7 번을 생략하지 않았다.**
+분할 전후를 각각 실행해(원본을 `services/_tmux_before.py` 로 잠시 되살려) 싱글턴 멱등 ·
+모듈 전역 일치 · 파서 3 입력 · 원장 도달 경로를 JSON 으로 뽑아 `diff` 로 대조 — 완전 동일.
+Task 1 은 이 단계를 건너뛰어 회귀를 만들었다. 게이트: ruff · ruff format · mypy(320) ·
+pytest **1,698 passed / 0 failed**. Codex(`--scope branch --base <main SHA>`, detached
+워크트리) **지적 0 건**이고 결론이 변경 경로를 지목한다(무효 런 아님).
+
+**다음 — `merge_service` (1,329 줄, 잔여 693, 문자열 패치 6 건).**
+체크리스트는 아래 "남은 파일 분할 전 체크리스트" 를 그대로 쓴다. 배정표는
+`tests/backend/api/split_tmux.py` 를 본떠 `ASSIGNMENT`·`DOCSTRINGS`·`BARREL` 만 바꾼다
+(이번 것이 "패치 타깃이 있는" 경우의 본보기다 — `split_usage.py` 보다 가깝다).
+`playground_service` 는 **유일한 2 단계**라 마지막이다.
+
 ### 2026-08-28 (이어서) — B5.5 Task 1(audit_service) 완료. 다음은 tmux_service
 
 **#349 `3e07203`** — `services/audit_service.py` 986 줄 → 패키지 5 모듈, 최대 633 줄.
@@ -212,8 +265,8 @@ Codex 1~10차 로그는 세션 scratchpad에만 있어 **휘발됐다** — 장�
 | 대상 | 줄수 | 집중도 | 잔여 | 문자열패치 | 모듈객체패치 | 성질 |
 |---|---:|---:|---:|---:|---:|---|
 | ~~audit_service~~ | ~~986~~ | 56% | 634 | 0 | 0 | **완료 (#349)** |
-| **tmux_service** | 921 | 63% | 660 | **4** | 0 | 1 단계. 모듈 지역 타깃 2 종 — 계획서가 `orchestrator.nodes` 에서 "비관대" 로 부른 형태 |
-| merge_service | 1,329 | 48% | 693 | 6 | 0 | 1 단계. 클래스 2 개가 641/612 로 거의 같아 집중도가 특히 오도한다 |
+| ~~tmux_service~~ | ~~921~~ | 63% | 660 | 4 | 0 | **완료 (#354 `16fca73`)** |
+| **merge_service** | 1,329 | 48% | 693 | **6** | 0 | **다음 차례.** 1 단계. 클래스 2 개가 641/612 로 거의 같아 집중도가 특히 오도한다 |
 | notification_service | 1,018 | 65% | 743 | 13 | 0 | 1 단계. 13 건은 `NotificationService.*` 클래스 속성(관대) + 무관한 `httpx.AsyncClient` |
 | playground_service | 1,287 | 63% | **963** | 0 | **12** | **유일한 2 단계.** 최대 클래스가 808 줄이라 정의 이동만으로는 못 들어간다. 모듈 객체 패치 12 건 + 직접 참조까지 있어 마지막 |
 
