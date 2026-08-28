@@ -15,11 +15,23 @@ from httpx import ASGITransport, AsyncClient
 
 @pytest.fixture
 def app() -> FastAPI:
-    """Create test FastAPI app with git router."""
+    """Create test FastAPI app with git router.
+
+    The git router requires authentication (2026-08-28), so an identity is
+    injected here. What this file tests is the prune endpoint's contract, not
+    the gate -- the gate itself is covered by the git authentication tests in
+    `test_security_hardening.py`.
+    """
+    from types import SimpleNamespace
+
+    from api.deps import get_current_user
     from api.git import router
 
     test_app = FastAPI()
     test_app.include_router(router)
+    test_app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id="test-user", role="admin", is_admin=True, is_active=True
+    )
     return test_app
 
 
