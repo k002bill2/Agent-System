@@ -6,14 +6,14 @@ See: `.planning/PROJECT.md`
 **Current focus:** **결함 청산 — 열린 PR·이슈를 게이트(CI + Codex)로 하나씩 닫는다**
 
 ## Current Position
-**2026-08-28 기준 — main `16fca73`. provider 중립 세션 트랙 종료, 파일 분할 B5.5 진행 중(2/5).**
+**2026-08-28 기준 — main `a43219f`. provider 중립 세션 트랙 종료, 파일 분할 B5.5 진행 중(4/5).**
 
 | 항목 | 상태 |
 |---|---|
 | 열린 PR | **없음** (이 세션 기준). 다른 세션이 `fix/git-db-project-resolution` 을 진행 중 — 이 세션이 워크트리에 남아 있던 미커밋 변경을 `144c73b` 로 보관했고 그 세션이 그 위에 `c76c9e8` 을 쌓았다. 이 세션이 낸 #339 · #342 · #344 · #346 · #349 · **#353 `91af5b2`** · **#354 `16fca73`** 는 전부 squash 머지 + 파일 단위 내용 대조로 안착 확인 |
 | 열린 이슈 | **#345** 세션 권한 회수 — 활동 스토어 회수와 요청 세대 경쟁 (#343 에서 범위 밖으로 분리한 2 건) |
 | 사용자 결정 대기 | **없음.** 이전 표의 "DB 모드 posture" 는 #336 `5b03970` 이 project-config 503 을 해제하며 결정됐다(바로 아래 ③ 행과 모순이던 것을 정정). `core.py` 의 "권한 없음 → 503" 오분류도 실측상 남아 있지 않다. `api/` 전체 503 78 건 중 `project_configs/` 8 건은 잔존하나 그것은 결정이 아니라 구현 잔여다 |
-| 잔여 작업 (착수 가능) | **B5.5 나머지 3 개** — 다음은 `merge_service`. 순서와 근거는 아래 "2026-08-28 (이어서)" 의 표. 그 다음이 B6 |
+| 잔여 작업 (착수 가능) | **B5.5 마지막 1 개 — `playground_service`.** 앞의 4 개와 성질이 다르다(2 단계 + 모듈 객체 패치 12 건). 정찰 결과는 아래 **"2026-08-28 (이어서 3)"** 에 있다. 그 다음이 B6 |
 | 백로그(이슈 미등록) | `get_session_activity` 가 전사와 같은 결함(offset 이 필터된 이벤트를 센다) · 절단 사실(`scan.truncated`)이 전사 응답에 안 실린다 |
 
 **닫힌 잔여 항목 2 건 (이전 표의 ①·②)**
@@ -199,6 +199,94 @@ Codex 1~10차 로그는 세션 scratchpad에만 있어 **휘발됐다** — 장�
 
 ## Session Continuity
 
+### 2026-08-28 (이어서 3) — B5.5 Task 3·4 완료. 마지막 playground_service 는 성질이 다르다
+
+**#356 `1746335`** — `merge_service.py` 1,328 줄 → 3 모듈, 최대 707 줄
+(`errors` 7 · `service` 707 · `requests` 633).
+**#358 `a43219f`** — `notification_service.py` 1,017 줄 → 3 모듈, 최대 753 줄
+(`config` 77 · `adapters` 229 · `service` 753).
+
+**Task 4 에서 새로 나온 함정 — 깊이 결합 경로. 마지막 대상에도 있다.**
+
+    DATA_DIR = Path(__file__).parent.parent / "data"
+
+원본 `services/notification_service.py` 에서 `.parent.parent` 는 `src/backend/` 였다.
+패키지 안에서는 한 단계 깊어져 `services/` 를 가리킨다 — 데이터 디렉토리가 조용히
+이동하고 기존 설정 파일이 사라진 것처럼 읽힌다. **패키지 안 어느 위치에 두어도**
+`.parent.parent` 로는 못 맞춘다(배럴 `__init__.py` 도 마찬가지). 본문을 고쳐야 한다.
+
+**핵심: 본문을 그대로 두면 `split_audit.py` 가 OK 를 낸다.** 같은 바이트, 다른
+디렉토리. 정의 보존 도구가 구조적으로 못 보는 층이고, 고친 뒤에는 그 한 건만
+FAIL 로 보고한다 — 그 FAIL 은 억누를 결함이 아니라 **의도한 변경의 영수증**이다.
+전용 단언(`test_data_dir_survived_the_extra_package_level`)의 앵커는
+`Path(services.__file__).parent.parent` 처럼 **독립적으로 유도**한다. config 모듈
+자신의 깊이로 계산하면 구현을 되풀이하는 동어반복이라 아무것도 못 잡는다.
+
+- 확산 실측: `playground_service.STORAGE_DIR`(L60)에 **같은 형태가 있다**.
+  이미 머지된 `audit_service` · `tmux_service` · `merge_service` · `api/usage` ·
+  `api/git` · `models/git` 에는 `__file__` 이 없어 무영향이다.
+
+**Task 3 에서 확인한 것 — `try/except ImportError` 는 fail-open 이다.**
+`merge_service` 머리의 `try: from git import ...` 가 순환 import 를 "의존성 부재" 로
+삼키면 `MergeService.__init__` 이 모든 호출자에게 실패하는데 **ruff · mypy · 본문
+대조 · 전체 스위트가 전부 통과한 채로** 그렇게 된다. 실물로 확인했다 — 폴백을 강제
+발동시키니 새 단언 하나만 실패하고 나머지 12 건은 초록이었다. 판정은 초록 여부가
+아니라 **플래그 값**이고, `import git` 로 의존성 존재를 먼저 증명해야 의미가 있다.
+
+**계획서 숫자는 역시 틀렸다.** `notification_service` 의 문자열 패치는 13 이 아니라
+**7 건**이고 전부 `httpx.AsyncClient` 한 형태였다("`NotificationService.*` 클래스
+속성" 은 실재하지 않는다). 매번 재측정할 것.
+
+**배럴 재노출 기준이 확정됐다 — "정의했는가" 가 아니라 "재바인딩되는가" 다.**
+
+| 이름 | 판정 | 근거 |
+|---|---|---|
+| `merge_service.MergeRequestStatus` | **넣음** | `models.git` 소유지만 테스트 3 곳이 여기서 가져가고, 패치 타깃이 아니라 무효를 만들 여지가 없다 |
+| `merge_service.GIT_AVAILABLE` | 뺌 | `@patch` 6 건이 재바인딩한다 |
+| `notification._rules` · `_notification_history` | **넣음** | 재바인딩 없음(테스트도 `.clear()` 만) → 배럴이 같은 객체를 가리킨다 |
+| `notification._channel_configs` | 뺌 | `global` 재바인딩(L549) |
+| `notification.httpx` | 뺌 | 7 건이 `httpx.AsyncClient` 를 패치한다 |
+
+`__all__` 에 private 이름을 넣는 것은 `audit_service` 배럴 선례가 있다(ruff F401 회피).
+
+**Codex base 는 `origin/main` 이 아니라 `git merge-base HEAD origin/main` 이다.**
+Task 4 도중 다른 세션이 #357 을 머지해 `origin/main` 이 움직였고, 그것을 base 로
+주면 Codex 가 **중간에 머지된 남의 변경을 "이 PR 이 되돌린 것" 으로 읽는다.**
+죽이고 분기점으로 다시 걸었다. 이 레포는 세션이 여럿 도니 매번 실측할 것.
+
+---
+
+**다음 — `playground_service` (1,286 줄). 정찰 완료. 앞의 4 개와 성질이 다르다.**
+
+기계적 분할이 **불가능하다.** 세 제약이 겹친다:
+
+1. **`PlaygroundService` 가 혼자 808 줄**(L383-1190)이라 정의 이동만으로는 한도에
+   못 들어간다 → **메서드 추출이 강제된다**(설계 작업, 순수 이동 아님)
+2. **`global _sessions, _initialized` 가 두 곳**에 있다 — 모듈 함수
+   `_load_sessions`(L244)와 `PlaygroundService` 메서드(L1181). 재바인딩하는 쪽이
+   갈리면 두 전역이 분열하므로 **둘이 같은 모듈에 묶인다**(48 + 808 = 856 > 800)
+3. **모듈 객체 패치 12 건** — `from services import playground_service` 별칭에
+   `monkeypatch.setattr(playground_service, "_load_sessions"|"_save_sessions"|
+   "_fire_and_forget", ...)`. 배럴 속성을 갈아끼우는데 **읽는 쪽은
+   `PlaygroundService` 메서드**라, 그 클래스를 서브모듈로 옮기면 패치가
+   조용히 무효가 된다. 형태 ③(모듈 객체)이라 앞 4 개의 문자열 패치보다 나쁘다
+
+**따라서 (2) 를 먼저 푸는 것이 순서다.** Task 1 이 `_audit_logs` 에서 쓴 수법이
+그대로 적용된다 — **재바인딩 자체를 없앤다.** `_sessions` 는 dict 이므로
+`_sessions.clear(); _sessions.update(...)` 로 바꿀 수 있다. `_initialized` 는 bool
+이라 in-place 가 불가능하니 별도 판단이 필요하다(가장 단순한 것은 `_sessions` 초기화
+여부로 대체하거나 가변 홀더로 바꾸는 것). 재바인딩이 사라지면 (2) 의 856 줄 묶음이
+풀리고 배럴 재노출도 안전해진다.
+
+(3) 은 `_load_sessions`·`_save_sessions`·`_fire_and_forget` 세 이름을 **배럴이 아니라
+읽는 쪽과 같은 모듈**에 두고 테스트 12 줄을 그 모듈로 재지정하면 앞 4 개와 같은
+형태가 된다. 다만 `monkeypatch.setattr(module_obj, ...)` 는 문자열이 아니라 **모듈
+객체**를 받으므로, 낡은 경로가 `AttributeError` 로 죽는 안전망이 문자열 패치만큼
+자동으로 걸리지 않는다 — 재지정 후 RED 를 **반드시 직접** 확인할 것.
+
+**#357 `5e2d14c`** (다른 세션) — 이 세션이 워크트리에 남아 있던 미커밋 변경을
+`144c73b` 로 보관했고 그 위에 쌓여 머지됐다.
+
 ### 2026-08-28 (이어서 2) — B5.5 Task 2(tmux_service) 완료. 다음은 merge_service
 
 **#354 `16fca73`** — `services/tmux_service.py` 920 줄 → 패키지 3 모듈, 최대 618 줄
@@ -266,9 +354,9 @@ pytest **1,698 passed / 0 failed**. Codex(`--scope branch --base <main SHA>`, de
 |---|---:|---:|---:|---:|---:|---|
 | ~~audit_service~~ | ~~986~~ | 56% | 634 | 0 | 0 | **완료 (#349)** |
 | ~~tmux_service~~ | ~~921~~ | 63% | 660 | 4 | 0 | **완료 (#354 `16fca73`)** |
-| **merge_service** | 1,329 | 48% | 693 | **6** | 0 | **다음 차례.** 1 단계. 클래스 2 개가 641/612 로 거의 같아 집중도가 특히 오도한다 |
-| notification_service | 1,018 | 65% | 743 | 13 | 0 | 1 단계. 13 건은 `NotificationService.*` 클래스 속성(관대) + 무관한 `httpx.AsyncClient` |
-| playground_service | 1,287 | 63% | **963** | 0 | **12** | **유일한 2 단계.** 최대 클래스가 808 줄이라 정의 이동만으로는 못 들어간다. 모듈 객체 패치 12 건 + 직접 참조까지 있어 마지막 |
+| ~~merge_service~~ | ~~1,329~~ | 48% | 693 | 6 | 0 | **완료 (#356 `1746335`)** |
+| ~~notification_service~~ | ~~1,018~~ | 65% | 743 | **7**(13 아님) | 0 | **완료 (#358 `a43219f`)** |
+| **playground_service** | 1,286 | 63% | **963** | 0 | **12** | **마지막 — 유일한 2 단계.** 최대 클래스가 808 줄이라 정의 이동만으로는 못 들어간다. 정찰 완료, 아래 "2026-08-28 (이어서 3)" 참조 |
 
 **순서의 근거는 잔여가 아니라 패치 스캔이다.** 잔여 634 인데 문자열 패치 6 건인 파일이
 잔여 743 에 관대 패치만 있는 파일보다 어렵다.
