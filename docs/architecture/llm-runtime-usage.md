@@ -37,7 +37,7 @@ User action
 - Settings의 LLM 사용 권한과 External Usage는 같은 내부 사용량 원장(`LLMUsageLedger`)을 본다.
 - provider가 token metadata를 주지 않으면 request/response 길이 기반 추정치를 기록한다.
 - 비용은 실제 billing cost가 아니라 `estimated_cost_usd`로 취급하며 nullable이어야 한다.
-- organization monthly token quota는 기본적으로 호출을 막지 않고 ledger write 이후 counter를 갱신한다. 운영자가 `LLM_USAGE_PREFLIGHT_QUOTA_ENABLED=true`를 설정한 경우에만 `LLMService` 호출과 `tmux_service.py` Claude CLI 실행 전에 strict quota gate를 적용한다.
+- organization monthly token quota는 기본적으로 호출을 막지 않고 ledger write 이후 counter를 갱신한다. 운영자가 `LLM_USAGE_PREFLIGHT_QUOTA_ENABLED=true`를 설정한 경우에만 `LLMService` 호출과 `tmux_service/usage.py` Claude CLI 실행 전에 strict quota gate를 적용한다.
 
 ---
 
@@ -49,7 +49,7 @@ User action
 | Playground 모델 목록 | `api/playground.py` | `LLMService.get_available_models()` -> `LLMModelRegistry` | none | 실행이 아니라 capability 조회 |
 | Task Analyzer 분석 | `api/agents.py` | `LeadOrchestrator.execute()` -> `BaseAgent._invoke_llm()` | `task_analyzer` | 분석 결과는 `TaskAnalysisService`에 저장 |
 | Task Analyzer 이미지 OCR | `api/agents.py` | vision model 후보 -> runtime resolver -> `LLMService._get_llm()` -> `ainvoke()` | `task_analyzer_ocr` | API vision 모델은 explicit fallback entitlement가 있을 때만 실행 |
-| Task Analyzer 터미널 실행 | `api/agents.py` | `services/tmux_service.py` -> `claude -p` | `task_analyzer_execution` | LangChain을 거치지 않는 CLI 실행 경로 |
+| Task Analyzer 터미널 실행 | `api/agents.py` | `services/tmux_service/` -> `claude -p` | `task_analyzer_execution` | LangChain을 거치지 않는 CLI 실행 경로 |
 | Warp Claude launch | `api/warp.py` | `services/warp_service.py` -> Warp launch config -> host `claude` | `warp_launch` | AOS는 launch prompt 입력 추정치만 기록, 후속 Warp 세션 token은 미계상 |
 | Warp AI agent tool | `tools/warp_tools.py` | Warp CLI `agent run` subprocess | `warp_agent` | Warp 자체 AI agent 실행. ExecutorNode 경로는 user/org/project context를 전달 |
 | Git draft commits | `api/git/commits.py` | `LLMService.invoke()` | `git_draft_commit` | 응답의 `total_tokens`를 API response에도 반환 |
@@ -74,7 +74,7 @@ User action
 | `services/llm_service.py` | model config의 provider로 LangChain model 생성 | `RuntimeResolver`가 user/org entitlement와 mode를 먼저 결정 |
 | `orchestrator/engine.py` | 별도 `get_llm()` 구현 | `LLMService` 또는 runtime resolver로 통합 |
 | `api/agents.py` OCR | 사용 가능한 vision model 자동 선택 | CLI vision 가능 여부와 API fallback 정책 반영 |
-| `services/tmux_service.py` | `claude -p` 직접 실행 | CLI runtime execution event로 원장 기록 |
+| `services/tmux_service/usage.py` | `claude -p` 직접 실행 | CLI runtime execution event로 원장 기록 |
 
 ---
 
@@ -130,12 +130,12 @@ Playground는 가장 먼저 원장 계측을 붙일 수 있는 경로다. `LLMSe
 Task Analyzer는 세 종류의 LLM 사용이 있다.
 
 1. 분석: `LeadOrchestrator`가 LLM으로 JSON 실행 계획을 만든다.
-2. 실행: `tmux_service.py`가 `claude -p`를 터미널에서 실행한다.
+2. 실행: `tmux_service/service.py`가 `claude -p`를 터미널에서 실행한다.
 3. OCR: 이미지 텍스트 추출은 vision-capable 후보 모델을 `source=task_analyzer_ocr`로 resolver에 통과시킨 뒤 실행한다.
 
 각 경로는 같은 UI 기능에 속하지만 runtime 경로가 다르므로 source를 분리한다.
 
-`tmux_service.py`는 Claude CLI stdout/stderr를 transcript 파일로 남긴다. 완료 이벤트 기록 시 transcript 안의 JSON usage block 또는 `Input tokens`, `Output tokens`, `Total cost` 형식의 labeled line을 파싱할 수 있으면 `measurement_method=cli_metadata`로 token/cost를 기록한다. 파싱 가능한 metadata가 없으면 기존처럼 token 값을 비워 둔다.
+`tmux_service/service.py`는 Claude CLI stdout/stderr를 transcript 파일로 남긴다. 완료 이벤트 기록 시 transcript 안의 JSON usage block 또는 `Input tokens`, `Output tokens`, `Total cost` 형식의 labeled line을 파싱할 수 있으면 `measurement_method=cli_metadata`로 token/cost를 기록한다. 파싱 가능한 metadata가 없으면 기존처럼 token 값을 비워 둔다.
 
 ### Warp launch
 

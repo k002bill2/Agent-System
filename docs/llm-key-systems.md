@@ -68,7 +68,7 @@ provider billing API에서 org 전체 사용량/비용을 읽는 **admin 키**. 
 
 - Settings의 LLM Access([0])가 현재 기본 실행 권한이다.
 - External Usage의 기본 수치는 provider billing API가 아니라 내부 `llm_usage_ledger`다.
-- 단, **Claude CLI** 카드만은 예외다. `llm_usage_ledger`가 아니라 `claude_session_snapshots`(호스트 전체 `~/.claude/projects/` 스캔, launcher 무관 — cmux/tmux/iterm 포함)에서 온다. ledger의 `claude_cli` 행은 이중집계 방지를 위해 CLAUDE_CLI 집계에서 제외된다(`external_usage_service._collect_internal_ledger_records`). `tmux_service.py`·`api/warp.py`의 claude_cli writer는 유지되나 그 값은 CLAUDE_CLI 카드에 반영되지 않는다.
+- 단, **Claude CLI** 카드만은 예외다. `llm_usage_ledger`가 아니라 `claude_session_snapshots`(호스트 전체 `~/.claude/projects/` 스캔, launcher 무관 — cmux/tmux/iterm 포함)에서 온다. ledger의 `claude_cli` 행은 이중집계 방지를 위해 CLAUDE_CLI 집계에서 제외된다(`external_usage_service._collect_internal_ledger_records`). `tmux_service/usage.py`·`api/warp.py`의 claude_cli writer는 유지되나 그 값은 CLAUDE_CLI 카드에 반영되지 않는다.
 - Settings에 등록하는 fallback/compatibility 키([2])는 **채팅용**이고 `/v1/models`로 검증된다.
 - provider billing API([3])는 **Admin 키**(`sk-admin-`, org 스코프)를 요구한다.
 - 채팅 키로 usage API를 치면 401/403이 발생하므로 [3]은 별도 테이블 + admin 전용 UI + **실제 usage 엔드포인트 verify**로 분리한다.

@@ -197,7 +197,7 @@ External Usage는 내부 원장 집계를 보여준다.
 
 - CLI profile secret과 API key는 서로 다른 credential type으로 관리한다.
 - API fallback은 권한이 있는 admin/manager만 활성화할 수 있다.
-- Organization token quota pre-flight는 기본적으로 비활성화한다. CLI subscription 사용량은 내부 ledger에 기록하고 post-hoc counter를 갱신하되, 운영자가 `LLM_USAGE_PREFLIGHT_QUOTA_ENABLED=true`를 설정한 경우에만 `LLMService` 호출과 `tmux_service.py` Claude CLI 실행 시작 전에 차단한다.
+- Organization token quota pre-flight는 기본적으로 비활성화한다. CLI subscription 사용량은 내부 ledger에 기록하고 post-hoc counter를 갱신하되, 운영자가 `LLM_USAGE_PREFLIGHT_QUOTA_ENABLED=true`를 설정한 경우에만 `LLMService` 호출과 `tmux_service/usage.py` Claude CLI 실행 시작 전에 차단한다.
 - 사용자에게 API key 원문은 절대 반환하지 않는다.
 - CLI command execution은 allowlist, timeout, working directory, sandbox 정책을 가져야 한다.
 - ledger는 감사 목적이 있으므로 request prompt 원문 저장을 피하고 correlation id와 token/cost metadata 중심으로 저장한다.

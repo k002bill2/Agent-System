@@ -614,7 +614,7 @@ async def test_tmux_execute_analysis_records_cli_usage(monkeypatch, tmp_path) ->
         "send_command",
         lambda _name, command: sent_commands.append(command) or True,
     )
-    monkeypatch.setattr("services.tmux_service.record_usage_best_effort", recorder)
+    monkeypatch.setattr("services.tmux_service.usage.record_usage_best_effort", recorder)
 
     info = await service.execute_analysis(
         analysis_id="analysis-1",
@@ -672,9 +672,9 @@ async def test_tmux_execute_analysis_preflight_quota_blocks_session_creation(
     monkeypatch.setattr(service, "is_claude_available", lambda: True)
     monkeypatch.setattr(service, "create_session", create_session)
     monkeypatch.setattr(service, "send_command", send_command)
-    monkeypatch.setattr("services.tmux_service.record_usage_best_effort", recorder)
+    monkeypatch.setattr("services.tmux_service.usage.record_usage_best_effort", recorder)
     monkeypatch.setattr(
-        "services.tmux_service.enforce_usage_quota_preflight_best_effort",
+        "services.tmux_service.usage.enforce_usage_quota_preflight_best_effort",
         preflight,
     )
 
@@ -1190,7 +1190,7 @@ async def test_tmux_get_session_records_completion_when_process_exits(
     )
 
     monkeypatch.setattr(service, "is_session_alive", lambda _name: False)
-    monkeypatch.setattr("services.tmux_service.record_usage_best_effort", recorder)
+    monkeypatch.setattr("services.tmux_service.usage.record_usage_best_effort", recorder)
 
     info = service.get_session("aos-test")
     await asyncio.sleep(0)

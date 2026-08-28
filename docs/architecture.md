@@ -249,7 +249,7 @@ src/backend/
 │   ├── analytics_service.py       # 분석 서비스 (세션 파일 + DB 이중 지원)
 │   ├── artifact_service.py        # 워크플로우 아티팩트 관리
 │   ├── audit_integrity.py         # 감사 로그 무결성 검증
-│   ├── audit_service.py           # 감사 로그 서비스
+│   ├── audit_service/             # 감사 로그 서비스 (패키지: models·helpers·stats·service)
 │   ├── auth_service.py            # OAuth/JWT/Email 인증
 │   ├── claude_config_service.py   # Claude OAuth 토큰 관리 (Keychain/env/파일)
 │   ├── claude_session_monitor.py  # Claude 세션 파일 스캔/파싱
@@ -305,7 +305,7 @@ src/backend/
 │   ├── task_analysis_service.py   # 태스크 복잡도 분석
 │   ├── task_service.py            # 태스크 CRUD/상태 관리
 │   ├── template_service.py        # 워크플로우 템플릿 관리
-│   ├── tmux_service.py            # Tmux 세션 관리
+│   ├── tmux_service/              # Tmux 세션 관리 (패키지: models·usage·service)
 │   ├── variable_expander.py       # ${{ }} 변수 치환 (steps/env/matrix/secrets)
 │   ├── version_service.py         # 설정 버전 관리/롤백
 │   ├── memory_manager.py          # Claude Code 메모리 파일 CRUD 관리
@@ -458,7 +458,7 @@ class LeadOrchestratorAgent(BaseAgent):
 | 산출물 | 경로 | 도달 지점 |
 |--------|------|-----------|
 | `execution_plan` | `POST /api/agents/orchestrate/execute-analysis` 가 `plan_metadata.pre_analyzed_execution_plan` 으로 주입(`api/agents/orchestrate.py:467`) | `PlannerNode` 가 읽어 LLM 계획 수립을 건너뛴다(`orchestrator/nodes/planner.py:229`) |
-| `safety_flags` | Claude Code CLI 프롬프트의 `## Safety Warnings` 섹션 생성 | `services/tmux_service.py:639 build_claude_prompt` 와 그 프론트엔드 포팅 `src/dashboard/src/stores/agents.ts:205 buildClaudePrompt` |
+| `safety_flags` | Claude Code CLI 프롬프트의 `## Safety Warnings` 섹션 생성 | `services/tmux_service/service.py:338 build_claude_prompt` 와 그 프론트엔드 포팅 `src/dashboard/src/stores/agents.ts:205 buildClaudePrompt` |
 
 즉 노드 그래프와 LeadOrchestrator 는 **직접 import 가 없을 뿐**(`grep -rn "LeadOrchestrator" src/backend/orchestrator` → 0건)
 `plan_metadata` 를 경유해 이미 결합돼 있다. 심볼 grep 은 이 데이터 경유 결합을 잡지 못하므로
