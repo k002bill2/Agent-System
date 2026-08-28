@@ -35,6 +35,10 @@ class ProjectDiscovery:
         self._project_paths: list[Path] = []
         self._external_paths: list[str] = []
         self._auto_discovered: set[Path] = set()
+        # DB-backed project IDs are public identities; managers still need the
+        # path-derived key used by the filesystem monitor.  Aliases are
+        # registered only by the DB-aware API guard for active registered paths.
+        self._project_id_aliases: dict[str, str] = {}
         self._is_docker = bool(os.getenv("CLAUDE_HOME"))
         self._allow_auto_discovery = allow_auto_discovery
         # Add current directory (even without .claude/)
@@ -75,6 +79,21 @@ class ProjectDiscovery:
         """Whether running in Docker environment."""
         return self._is_docker
 
+    def normalize_path(self, path: str) -> Path:
+        """Normalize a filesystem path the way monitored paths are stored.
+
+        Symlinks are resolved outside Docker (host paths are unreachable inside
+        it), which is what makes `encode_path` agree with `find_project_path`.
+        Callers that need a monitor key for a path must go through this instead
+        of encoding the raw string — `projects/` entries are symlinks, so the
+        two spellings disagree for exactly the projects this repo registers.
+        """
+        return Path(path) if self._is_docker else Path(path).resolve()
+
+    def encode_project_path(self, path: str) -> str:
+        """Monitor key for a filesystem path (normalize + encode)."""
+        return self.encode_path(self.normalize_path(path))
+
     def add_external_project(self, path: str) -> bool:
         """Add an external project path at runtime.
 
@@ -84,7 +103,7 @@ class ProjectDiscovery:
         Returns:
             True if added, False if invalid or already exists
         """
-        p = Path(path) if self._is_docker else Path(path).resolve()
+        p = self.normalize_path(path)
 
         # In Docker, host paths aren't accessible - skip validation
         if not self._is_docker:
@@ -170,6 +189,14 @@ class ProjectDiscovery:
     def get_monitored_paths(self) -> list[str]:
         """Get all monitored project paths."""
         return [str(p) for p in self._project_paths]
+
+    def register_project_id_alias(self, public_project_id: str, project_path: str) -> None:
+        """Bind a DB public ID to an already registered monitor path key."""
+        self._project_id_aliases[public_project_id] = self.encode_project_path(project_path)
+
+    def resolve_project_id(self, project_id: str) -> str:
+        """Resolve a public ID to the monitor's path-derived key."""
+        return self._project_id_aliases.get(project_id, project_id)
 
     def encode_path(self, path: Path) -> str:
         """Encode path to project ID.
@@ -414,15 +441,9 @@ class ProjectDiscovery:
         )
 
     def find_project_path(self, project_id: str) -> Path | None:
-        """Find project path by ID.
-
-        Args:
-            project_id: Project identifier
-
-        Returns:
-            Path to project or None
-        """
+        """Find project path by public or path-derived ID."""
+        monitor_id = self.resolve_project_id(project_id)
         for project_path in self._project_paths:
-            if self.encode_path(project_path) == project_id:
+            if self.encode_path(project_path) == monitor_id:
                 return project_path
         return None

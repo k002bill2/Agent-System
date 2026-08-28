@@ -361,6 +361,21 @@ _PROJECT_ROLE_HIERARCHY: dict[str, int] = {
 }
 
 
+def normalize_project_id(project_id: object) -> str:
+    """Return a usable project identifier or fail closed.
+
+    An empty or whitespace-only identifier is not "no project" — downstream
+    filters treat it as falsy and silently widen to every project, so it is
+    rejected here instead of being normalized away.
+    """
+    if not isinstance(project_id, str):
+        raise HTTPException(status_code=400, detail="Invalid project identifier")
+    normalized = project_id.strip()
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Invalid project identifier")
+    return normalized
+
+
 async def require_project_role(
     project_id: str,
     current_user: UserModel,
@@ -372,11 +387,22 @@ async def require_project_role(
     Returns the user's role string.
 
     Rules:
-    - System admins (role=="admin" or is_admin==True) bypass all checks.
+    - Malformed project identifiers and unknown roles are rejected (fail closed).
+    - System admins (role=="admin" or is_admin==True) bypass the ACL checks.
     - Projects with no access control records are open to all authenticated users.
     - Otherwise, the user must have at least `min_role` level.
     """
     from services.project_access_service import ProjectAccessService
+
+    # Shape checks run before the admin bypass: an admin must not be able to
+    # smuggle a blank identifier through, and an unknown ``min_role`` must fail
+    # the same way for every caller instead of only for non-admins.
+    project_id = normalize_project_id(project_id)
+    if min_role not in _PROJECT_ROLE_HIERARCHY:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Unknown project role requirement",
+        )
 
     # Database mode is authoritative. Do this check before ACL handling so a
     # known filesystem-only project ID cannot reach legacy project handlers.
@@ -429,8 +455,14 @@ async def require_project_role(
             detail="No access to this project",
         )
 
-    user_level = _PROJECT_ROLE_HIERARCHY.get(user_role, 0)
-    required_level = _PROJECT_ROLE_HIERARCHY.get(min_role, 0)
+    if not isinstance(user_role, str) or user_role not in _PROJECT_ROLE_HIERARCHY:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Unrecognized project role",
+        )
+
+    user_level = _PROJECT_ROLE_HIERARCHY[user_role]
+    required_level = _PROJECT_ROLE_HIERARCHY[min_role]
 
     if user_level < required_level:
         raise HTTPException(

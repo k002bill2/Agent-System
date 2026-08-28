@@ -5,7 +5,32 @@ import os
 from fastapi import Depends, HTTPException, Request, status
 
 from api.deps import get_current_user, get_db_session, require_project_role
+from api.project_configs.identity import (
+    CANONICAL_ID_SLOT,
+)
 from db.models import ProjectModel, UserModel
+from services import project_config_monitor
+
+
+def _bind_canonical_identity(request: Request, project: ProjectModel) -> None:
+    """정규 DB id 를 요청 스코프에 남기고 `{project_id}` 를 모니터 키로 바꾼다.
+
+    DB 모드에서 이 라우터로 들어오는 id 는 정규 UUID 인데, `.claude/` 자산을
+    실제로 읽는 `ProjectConfigMonitor` 는 경로 파생 키밖에 모른다. 번역을 여기
+    한 곳에서만 하고 핸들러는 평소대로 `{project_id}` 를 쓴다 — FastAPI 는
+    라우터 의존성을 전부 푼 **뒤에** 핸들러의 path 파라미터를 뽑으므로 이
+    제자리 변경이 핸들러까지 전달된다.
+
+    호출은 **인가를 통과한 뒤에만** 한다. `monitor_id_for_registered_path` 가
+    경로를 모니터에 등록하므로, 권한 없는 요청이 감시 대상을 늘리지 않게 한다.
+
+    경로 없는 DB 프로젝트는 번역할 대상이 없다. 정규 id 만 남기고
+    `{project_id}` 는 그대로 둬서 핸들러가 평소대로 404 를 내게 한다.
+    """
+    request.path_params[CANONICAL_ID_SLOT] = str(project.id)
+    # Keep the handler's project_id canonical. ProjectConfigMonitor resolves
+    # this public ID through the alias registered by the access guard; mutating
+    # Starlette path_params here would make responses leak the internal path key.
 
 
 async def require_project_config_access(
@@ -40,9 +65,7 @@ async def require_project_config_access(
 
     use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
     if not use_database:
-        from services.project_config_monitor import get_project_config_monitor
-
-        if get_project_config_monitor().get_project_summary(project_id) is None:
+        if project_config_monitor.get_project_config_monitor().get_project_summary(project_id) is None:
             raise HTTPException(status_code=404, detail="Project not found")
 
         # Existence was the only check here, which made this the one
@@ -67,23 +90,31 @@ async def require_project_config_access(
         def route_ids(project: ProjectModel) -> set[str]:
             ids = {str(project.id), f"db-{project.id}"}
             if project.path:
-                ids.add(str(project.path).replace("/", "-").replace("\\", "-"))
+                monitor = project_config_monitor.get_project_config_monitor()
+                ids.add(monitor.encode_project_path(str(project.path)))
             return ids
 
         project = next((item for item in projects if project_id in route_ids(item)), None)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
+        if project.path:
+            monitor = project_config_monitor.get_project_config_monitor()
+            monitor.add_external_project(str(project.path))
+            monitor.register_project_id_alias(str(project.id), str(project.path))
         if is_privileged:
+            _bind_canonical_identity(request, project)
             return current_user
 
         from api.projects import _get_admin_org_ids
 
         admin_org_ids = await _get_admin_org_ids(current_user)
         if project.organization_id in admin_org_ids:
+            _bind_canonical_identity(request, project)
             return current_user
 
         min_role = "viewer" if request.method in {"GET", "HEAD", "OPTIONS"} else "editor"
         await require_project_role(str(project.id), current_user, db, min_role=min_role)
+        _bind_canonical_identity(request, project)
         return current_user
     except HTTPException:
         raise
@@ -101,9 +132,7 @@ async def require_project_config_target_access(
 ) -> None:
     """Authorize the destination of a project-config copy operation."""
     if os.getenv("USE_DATABASE", "false").lower() != "true":
-        from services.project_config_monitor import get_project_config_monitor
-
-        if get_project_config_monitor().get_project_summary(target_project_id) is None:
+        if project_config_monitor.get_project_config_monitor().get_project_summary(target_project_id) is None:
             raise HTTPException(status_code=404, detail="Target project not found")
 
         # The route dependency authorizes the *source* project only, and a copy
@@ -122,12 +151,16 @@ async def require_project_config_target_access(
         def route_ids(project: ProjectModel) -> set[str]:
             ids = {str(project.id), f"db-{project.id}"}
             if project.path:
-                ids.add(str(project.path).replace("/", "-").replace("\\", "-"))
+                ids.add(project_config_monitor.get_project_config_monitor().encode_project_path(str(project.path)))
             return ids
 
         project = next((item for item in projects if target_project_id in route_ids(item)), None)
         if project is None:
             raise HTTPException(status_code=404, detail="Target project not found")
+        if project.path:
+            monitor = project_config_monitor.get_project_config_monitor()
+            monitor.add_external_project(str(project.path))
+            monitor.register_project_id_alias(str(project.id), str(project.path))
 
         is_privileged = current_user.role in {"admin", "manager"} or current_user.is_admin
         if is_privileged:

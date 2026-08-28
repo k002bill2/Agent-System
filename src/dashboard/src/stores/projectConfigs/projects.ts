@@ -36,16 +36,23 @@ export function selectProject(set: SetFn, get: GetFn, projectId: string | null) 
   }
 }
 
-export async function fetchProjectSummary(set: SetFn, _get: GetFn, projectId: string) {
+export async function fetchProjectSummary(set: SetFn, get: GetFn, projectId: string) {
+  const initialSelection = get().selectedProjectId
+  if (initialSelection && initialSelection !== projectId) return
   set({ isLoadingProject: true, error: null })
 
   try {
     const data = await apiClient.get<ProjectConfigSummary>(`/api/project-configs/${projectId}`)
+    const currentSelection = get().selectedProjectId
+    if (currentSelection && currentSelection !== projectId) return
+    if (data.project?.project_id && data.project.project_id !== projectId) return
     set({
       selectedProject: data,
       isLoadingProject: false,
     })
   } catch (e) {
+    const currentSelection = get().selectedProjectId
+    if (currentSelection && currentSelection !== projectId) return
     const errorMessage = e instanceof Error ? e.message : 'Unknown error'
     set({ error: errorMessage, isLoadingProject: false })
   }

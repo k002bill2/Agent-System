@@ -5,7 +5,8 @@ Obsidian vault health checks: links, frontmatter, orphans, images via SSE stream
 
 import json
 import os
-from typing import Literal
+from pathlib import Path
+from typing import Literal, NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -32,6 +33,87 @@ router = APIRouter(tags=["orchestration"])
 
 # In-memory storage for project health (could be replaced with DB)
 _project_health: dict[str, ProjectHealth] = {}
+
+# Returned when an authorized database-mode project carries no inspectable
+# directory. Kept distinct from the generic dependency-failure detail so the
+# two 503 causes stay separable by callers and by tests.
+NO_MONITORED_PATH_DETAIL = "Project has no registered filesystem path for health monitoring"
+
+
+class MonitoredProject(NamedTuple):
+    """The one project this request may inspect, and the identity to report.
+
+    ``project_id`` is the public identity echoed back to the client;
+    ``path`` is the only filesystem location the request is allowed to touch.
+    Both come from the same authoritative record, so a path-derived or
+    client-supplied identifier can never widen the inspected location.
+    """
+
+    project_id: str
+    name: str
+    path: str
+
+
+def _use_database() -> bool:
+    return os.getenv("USE_DATABASE", "false").lower() == "true"
+
+
+async def _resolve_database_project(project_id: str, db) -> MonitoredProject | None:
+    """Resolve the canonical DB project row into an inspectable target.
+
+    Only ``ProjectModel.id`` is matched — the path-derived identifiers used by
+    the legacy filesystem registry and by ProjectConfigMonitor are deliberately
+    not accepted here, so they cannot reach the filesystem through monitoring.
+
+    Returns ``None`` when the registration has no usable directory. The caller
+    keeps that fail-closed instead of guessing a path.
+    """
+    from sqlalchemy import select
+
+    from db.models import ProjectModel
+
+    try:
+        result = await db.execute(
+            select(ProjectModel).where(
+                ProjectModel.id == project_id,
+                ProjectModel.is_active == True,  # noqa: E712
+            )
+        )
+        row = result.scalar_one_or_none()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Project monitoring is temporarily unavailable",
+        ) from exc
+
+    if row is None:
+        return None
+    path = str(row.path or "").strip()
+    if not path or not Path(path).is_dir():
+        return None
+    return MonitoredProject(project_id=str(row.id), name=str(row.name or ""), path=path)
+
+
+async def _monitored_project(project_id: str, db) -> MonitoredProject:
+    """Resolve the inspection target *after* the caller has authorized access.
+
+    Database mode reads the DB registry, which is authoritative for both
+    identity and path. Filesystem mode keeps the legacy registry lookup behind
+    ``reject_legacy_project_operation_in_database_mode`` — that guard is
+    unreachable from here in database mode by construction, and is kept as a
+    standing assertion that the legacy branch never runs in that mode.
+    """
+    if _use_database():
+        project = await _resolve_database_project(project_id, db)
+        if project is None:
+            raise HTTPException(status_code=503, detail=NO_MONITORED_PATH_DETAIL)
+        return project
+
+    reject_legacy_project_operation_in_database_mode()
+    legacy = get_project(project_id)
+    if not legacy:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return MonitoredProject(project_id=project_id, name=legacy.name, path=legacy.path)
 
 
 class CheckResponse(BaseModel):
@@ -89,27 +171,37 @@ class MonitoringCapabilitiesResponse(BaseModel):
 async def get_monitoring_capabilities(
     project_id: str, current_user=Depends(get_current_user), db=Depends(get_db_session)
 ):
-    """Report whether legacy filesystem monitoring is available for a project.
+    """Report which monitoring operations this project supports.
 
-    Database mode deliberately advertises the legacy health/check operations as
-    disabled. It does not fall back to filesystem handlers, so this endpoint
-    cannot weaken the database-mode authorization boundary.
+    Database mode is served by the DB-backed handlers below, which inspect only
+    the path registered on the project row. A project whose registration has no
+    usable directory stays disabled — the endpoint never falls back to the
+    legacy filesystem registry, so it cannot weaken the authorization boundary.
     """
     await require_project_role(project_id, current_user, db, min_role="viewer")
-    use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
-    if use_database:
+    if not _use_database():
+        return MonitoringCapabilitiesResponse(
+            project_id=project_id,
+            mode="filesystem",
+            health_config="available",
+            health="available",
+            checks="available",
+        )
+
+    project = await _resolve_database_project(project_id, db)
+    if project is None:
         return MonitoringCapabilitiesResponse(
             project_id=project_id,
             mode="database",
             health_config="disabled",
             health="disabled",
             checks="disabled",
-            reason="Database-backed project monitoring is not available",
+            reason=NO_MONITORED_PATH_DETAIL,
         )
 
     return MonitoringCapabilitiesResponse(
-        project_id=project_id,
-        mode="filesystem",
+        project_id=project.project_id,
+        mode="database",
         health_config="available",
         health="available",
         checks="available",
@@ -122,14 +214,11 @@ async def get_health_config(
 ):
     """Get the health check configuration (labels & commands) for a project."""
     await require_project_role(project_id, current_user, db, min_role="viewer")
-    reject_legacy_project_operation_in_database_mode()
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await _monitored_project(project_id, db)
 
     config = get_check_config(project.path)
     return CheckConfigResponse(
-        project_id=project_id,
+        project_id=project.project_id,
         checks={k: CheckConfigEntry(**v) for k, v in config.items()},
         check_types=list(config.keys()),
     )
@@ -141,10 +230,8 @@ async def get_project_health(
 ):
     """Get the health status of a project."""
     await require_project_role(project_id, current_user, db, min_role="viewer")
-    reject_legacy_project_operation_in_database_mode()
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await _monitored_project(project_id, db)
+    project_id = project.project_id
 
     # Initialize health if not exists
     if project_id not in _project_health:
@@ -189,10 +276,8 @@ async def run_all_checks(
     Returns a streaming response with SSE events for all checks.
     """
     await require_project_role(project_id, current_user, db, min_role="editor")
-    reject_legacy_project_operation_in_database_mode()
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await _monitored_project(project_id, db)
+    project_id = project.project_id
 
     # Initialize health if not exists
     if project_id not in _project_health:
@@ -270,10 +355,8 @@ async def run_check(
     - check_completed: Check has finished
     """
     await require_project_role(project_id, current_user, db, min_role="editor")
-    reject_legacy_project_operation_in_database_mode()
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await _monitored_project(project_id, db)
+    project_id = project.project_id
 
     config = get_check_config(project.path)
     if check_type not in config:

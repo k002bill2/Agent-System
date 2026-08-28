@@ -56,10 +56,14 @@ function resetStore() {
     activeLogView: 'all',
     activeContextTab: 'claude-md',
     workflowChecks: [],
+    workflowProjectId: null,
     isLoadingWorkflows: false,
     runningWorkflowIds: new Set(),
     workflowLogs: {},
     error: null,
+    contextUnavailableReason: null,
+    contextUnavailableProjectId: null,
+    monitoringCapabilitiesErrorMap: {},
     monitoringCapabilitiesMap: {
       p1: {
         project_id: 'p1',
@@ -120,6 +124,41 @@ describe('monitoring store', () => {
       expect(useMonitoringStore.getState().monitoringCapabilitiesMap.p1).toEqual(capabilities)
     })
 
+    it('shares an in-flight capability request for the same project', async () => {
+      let resolveCapabilities!: (value: unknown) => void
+      const pendingCapabilities = new Promise((resolve) => {
+        resolveCapabilities = resolve
+      })
+      useMonitoringStore.setState({ monitoringCapabilitiesMap: {} })
+      mockApiClient.get.mockReturnValueOnce(pendingCapabilities as any)
+
+      const firstRequest = useMonitoringStore.getState().fetchMonitoringCapabilities('p1')
+      const secondRequest = useMonitoringStore.getState().fetchMonitoringCapabilities('p1')
+      expect(mockApiClient.get).toHaveBeenCalledTimes(1)
+
+      resolveCapabilities({
+        project_id: 'p1',
+        mode: 'database',
+        health_config: 'disabled',
+        health: 'disabled',
+        checks: 'disabled',
+        reason: 'Database-backed project monitoring is not available',
+      })
+
+      await expect(firstRequest).resolves.toMatchObject({ project_id: 'p1' })
+      await expect(secondRequest).resolves.toMatchObject({ project_id: 'p1' })
+    })
+
+    it('propagates capability failures for direct consumers', async () => {
+      useMonitoringStore.setState({ monitoringCapabilitiesMap: {} })
+      mockApiClient.get.mockRejectedValueOnce(new Error('capability authentication failed'))
+
+      await useMonitoringStore.getState().fetchMonitoringCapabilities('p1')
+
+      expect(useMonitoringStore.getState().error).toContain('capability authentication failed')
+      expect(useMonitoringStore.getState().monitoringCapabilitiesErrorMap.p1).toContain('capability authentication failed')
+    })
+
     it('blocks legacy health and check operations when the backend disables them', async () => {
       const capabilities = {
         project_id: 'p1' as string,
@@ -140,6 +179,177 @@ describe('monitoring store', () => {
       expect(mockApiClient.get).not.toHaveBeenCalledWith(expect.stringContaining('/health'))
       expect(eventSourceInstances).toHaveLength(0)
       expect(useMonitoringStore.getState().error).toContain('Database-backed')
+    })
+    it('does not call the legacy context endpoint in database mode', async () => {
+      const capabilities = {
+        project_id: 'p1' as string,
+        mode: 'database' as const,
+        health_config: 'disabled' as const,
+        health: 'disabled' as const,
+        checks: 'disabled' as const,
+        reason: 'Database-backed project monitoring is not available',
+      }
+      useMonitoringStore.setState({ monitoringCapabilitiesMap: {} })
+      mockApiClient.get.mockResolvedValueOnce(capabilities)
+
+      await useMonitoringStore.getState().fetchProjectContext('p1')
+
+      expect(mockApiClient.get).toHaveBeenCalledWith('/api/projects/p1/monitoring-capabilities')
+      expect(mockApiClient.get).not.toHaveBeenCalledWith('/api/projects/p1/context')
+      expect(useMonitoringStore.getState().contextUnavailableReason).toContain('Database-backed')
+      expect(useMonitoringStore.getState().error).toBeNull()
+    })
+    it('clears stale context when capability loading fails', async () => {
+      useMonitoringStore.setState({
+        projectContext: {
+          project_id: 'p1',
+          project_name: 'Previous project',
+          project_path: '/previous',
+          claude_md: '# stale',
+          dev_docs: [],
+          session_info: null,
+        },
+      })
+      useMonitoringStore.setState({ monitoringCapabilitiesMap: {} })
+      mockApiClient.get.mockRejectedValueOnce(new Error('capability request failed'))
+
+      await useMonitoringStore.getState().fetchProjectContext('p2')
+
+      expect(useMonitoringStore.getState().projectContext).toBeNull()
+      expect(useMonitoringStore.getState().isLoadingContext).toBe(false)
+    })
+
+    it('ignores a late response from a previously selected project', async () => {
+      let resolveP1!: (value: unknown) => void
+      const p1Context = new Promise((resolve) => {
+        resolveP1 = resolve
+      })
+      mockApiClient.get.mockReturnValueOnce(p1Context as any)
+
+      const p1Request = useMonitoringStore.getState().fetchProjectContext('p1')
+      useMonitoringStore.setState({
+        monitoringCapabilitiesMap: {
+          p1: useMonitoringStore.getState().monitoringCapabilitiesMap.p1,
+          p2: {
+            project_id: 'p2',
+            mode: 'database',
+            health_config: 'disabled',
+            health: 'disabled',
+            checks: 'disabled',
+            reason: 'Database-backed project monitoring is not available',
+          },
+        },
+      })
+      const p2Request = useMonitoringStore.getState().fetchProjectContext('p2')
+      await p2Request
+
+      resolveP1({
+        project_id: 'p1',
+        project_name: 'Previous project',
+        project_path: '/previous',
+        claude_md: '# stale',
+        dev_docs: [],
+        session_info: null,
+      })
+      await p1Request
+
+      expect(useMonitoringStore.getState().projectContext).toBeNull()
+      expect(useMonitoringStore.getState().contextUnavailableReason).toContain('Database-backed')
+    })
+
+    it('re-fetches capabilities when the cached project identity is inconsistent', async () => {
+      useMonitoringStore.setState({
+        monitoringCapabilitiesMap: {
+          p1: {
+            project_id: 'different-project',
+            mode: 'filesystem',
+            health_config: 'available',
+            health: 'available',
+            checks: 'available',
+            reason: null,
+          },
+        },
+      })
+      mockApiClient.get
+        .mockResolvedValueOnce({
+          project_id: 'p1',
+          mode: 'filesystem',
+          health_config: 'available',
+          health: 'available',
+          checks: 'available',
+          reason: null,
+        })
+        .mockResolvedValueOnce({ project_id: 'p1', claude_md: '# Current', dev_docs: [], session_info: null })
+
+      await useMonitoringStore.getState().fetchProjectContext('p1')
+
+      expect(mockApiClient.get).toHaveBeenNthCalledWith(1, '/api/projects/p1/monitoring-capabilities')
+      expect(mockApiClient.get).toHaveBeenNthCalledWith(2, '/api/projects/p1/context')
+      expect(useMonitoringStore.getState().projectContext?.project_id).toBe('p1')
+    })
+
+    it('ignores a late capability failure from a previously selected project', async () => {
+      let rejectP1!: (reason?: unknown) => void
+      const p1Capabilities = new Promise((_resolve, reject) => {
+        rejectP1 = reject
+      })
+      mockApiClient.get.mockReturnValueOnce(p1Capabilities as any)
+
+      const p1Request = useMonitoringStore.getState().fetchProjectContext('p1')
+      useMonitoringStore.setState({
+        monitoringCapabilitiesMap: {
+          p2: {
+            project_id: 'p2',
+            mode: 'database',
+            health_config: 'disabled',
+            health: 'disabled',
+            checks: 'disabled',
+            reason: 'Database-backed project monitoring is not available',
+          },
+        },
+      })
+      await useMonitoringStore.getState().fetchProjectContext('p2')
+
+      rejectP1(new Error('previous project capability request failed'))
+      await p1Request
+
+      expect(useMonitoringStore.getState().error).toBeNull()
+      expect(useMonitoringStore.getState().contextUnavailableReason).toContain('Database-backed')
+    })
+
+    it('rejects capability responses for a different project', async () => {
+      useMonitoringStore.setState({ monitoringCapabilitiesMap: {} })
+      mockApiClient.get.mockResolvedValueOnce({
+        project_id: 'p2',
+        mode: 'database',
+        health_config: 'disabled',
+        health: 'disabled',
+        checks: 'disabled',
+        reason: 'Database-backed project monitoring is not available',
+      })
+
+      await useMonitoringStore.getState().fetchProjectContext('p1')
+
+      expect(useMonitoringStore.getState().projectContext).toBeNull()
+      expect(useMonitoringStore.getState().contextUnavailableReason).toBeNull()
+      expect(useMonitoringStore.getState().error).toContain('did not match')
+      expect(mockApiClient.get).not.toHaveBeenCalledWith('/api/projects/p1/context')
+    })
+
+    it('ignores context responses for a different project', async () => {
+      mockApiClient.get.mockResolvedValueOnce({
+        project_id: 'p2',
+        project_name: 'Wrong project',
+        project_path: '/wrong',
+        claude_md: '# wrong',
+        dev_docs: [],
+        session_info: null,
+      })
+
+      await useMonitoringStore.getState().fetchProjectContext('p1')
+
+      expect(useMonitoringStore.getState().projectContext).toBeNull()
+      expect(useMonitoringStore.getState().isLoadingContext).toBe(false)
     })
   })
 
@@ -336,7 +546,7 @@ describe('monitoring store', () => {
 
   describe('fetchProjectContext', () => {
     it('fetches and stores context', async () => {
-      const contextData = { claude_md: '# Test', dev_docs: null }
+      const contextData = { project_id: 'p1', claude_md: '# Test', dev_docs: null }
       mockApiClient.get.mockResolvedValueOnce(contextData)
 
       await useMonitoringStore.getState().fetchProjectContext('p1')
@@ -357,12 +567,42 @@ describe('monitoring store', () => {
   // ── fetchWorkflowChecks ────────────────────────────────
 
   describe('fetchWorkflowChecks', () => {
+    it('rejects workflows from a different project', async () => {
+      mockApiClient.get.mockResolvedValueOnce({
+        workflows: [{ id: 'wf-other', project_id: 'p2', name: 'Other', description: '' }],
+      })
+
+      await useMonitoringStore.getState().fetchWorkflowChecks('p1')
+
+      expect(useMonitoringStore.getState().workflowChecks).toEqual([])
+      expect(useMonitoringStore.getState().error).toContain('different project')
+    })
+
+    it('rejects a global (null project) workflow in a project-scoped response', async () => {
+      mockApiClient.get.mockResolvedValueOnce({
+        workflows: [{ id: 'wf-global', project_id: null, name: 'Global', description: '' }],
+      })
+
+      await useMonitoringStore.getState().fetchWorkflowChecks('p1')
+
+      expect(useMonitoringStore.getState().workflowChecks).toEqual([])
+      expect(useMonitoringStore.getState().error).toContain('different project')
+    })
+
+    it('encodes the project id in the request URL', async () => {
+      mockApiClient.get.mockResolvedValueOnce({ workflows: [] })
+
+      await useMonitoringStore.getState().fetchWorkflowChecks('p 1&x=2')
+
+      expect(mockApiClient.get).toHaveBeenCalledWith('/api/workflows?project_id=p%201%26x%3D2')
+    })
+
     it('fetches workflows and maps to checks', async () => {
       mockApiClient.get.mockResolvedValueOnce({
         workflows: [
-          { id: 'wf-1', name: 'CI', description: 'CI Pipeline', last_run_status: 'completed', last_run_at: '2025-01-01' },
-          { id: 'wf-2', name: 'Deploy', description: '', last_run_status: 'failed', last_run_at: null },
-          { id: 'wf-3', name: 'Test', description: '', last_run_status: null, last_run_at: null },
+          { id: 'wf-1', project_id: 'p1', name: 'CI', description: 'CI Pipeline', last_run_status: 'completed', last_run_at: '2025-01-01' },
+          { id: 'wf-2', project_id: 'p1', name: 'Deploy', description: '', last_run_status: 'failed', last_run_at: null },
+          { id: 'wf-3', project_id: 'p1', name: 'Test', description: '', last_run_status: null, last_run_at: null },
         ],
       })
 
@@ -615,7 +855,7 @@ describe('monitoring store', () => {
     }
 
     beforeEach(() => {
-      useMonitoringStore.setState({ workflowChecks: [mockWorkflow] })
+      useMonitoringStore.setState({ workflowChecks: [mockWorkflow], workflowProjectId: 'p1' })
     })
 
     it('marks workflow as running and adds start log', async () => {

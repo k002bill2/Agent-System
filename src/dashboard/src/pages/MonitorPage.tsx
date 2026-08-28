@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { RefreshCw, Play, AlertCircle, PanelLeftClose, PanelLeft, FolderKanban, Network, ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { HealthOverview, OutputLog, ContextPanel, ResizablePanel, ProjectsPanel, DiagnosticsPanel, TopologyMap, VaultHealthDetail } from '../components/monitor'
@@ -18,6 +18,7 @@ export function MonitorPage() {
     fetchMonitoringCapabilities,
     getMonitoringCapabilities,
     fetchWorkflowChecks,
+    resetMonitoringSelection,
     runAllChecks,
     clearError,
   } = useMonitoringStore()
@@ -26,6 +27,8 @@ export function MonitorPage() {
   const [showProjects, setShowProjects] = useState(true)
   const [showTopology, setShowTopology] = useState(false)
   const selectedProject = projects.find((p) => p.id === selectedProjectId)
+  const selectedProjectRef = useRef(selectedProjectId)
+  selectedProjectRef.current = selectedProjectId
 
   // 현재 선택된 프로젝트의 health와 runningChecks
   const projectHealth = selectedProjectId ? getProjectHealth(selectedProjectId) : null
@@ -50,19 +53,30 @@ export function MonitorPage() {
   // Resolve capabilities first. Legacy filesystem monitoring is fail-closed
   // until the backend explicitly says each operation is available.
   useEffect(() => {
+    resetMonitoringSelection()
+    let active = true
     if (selectedProjectId) {
       void (async () => {
-        const capabilities = await fetchMonitoringCapabilities(selectedProjectId)
+        const capabilities = await fetchMonitoringCapabilities(
+          selectedProjectId,
+          () => active,
+        )
+        if (!active) return
         if (capabilities?.health_config === 'available') {
-          await fetchCheckConfig(selectedProjectId)
+          await fetchCheckConfig(selectedProjectId, () => active)
         }
+        if (!active) return
         if (capabilities?.health === 'available') {
-          await fetchProjectHealth(selectedProjectId)
+          await fetchProjectHealth(selectedProjectId, () => active)
         }
-        await fetchWorkflowChecks(selectedProjectId)
+        if (!active) return
+        await fetchWorkflowChecks(selectedProjectId, () => active)
       })()
     }
-  }, [selectedProjectId, fetchMonitoringCapabilities, fetchCheckConfig, fetchProjectHealth, fetchWorkflowChecks])
+    return () => {
+      active = false
+    }
+  }, [selectedProjectId, fetchMonitoringCapabilities, fetchCheckConfig, fetchProjectHealth, fetchWorkflowChecks, resetMonitoringSelection])
 
   // No project selected - show projects panel for selection
   if (!selectedProjectId || !selectedProject) {
@@ -145,7 +159,7 @@ export function MonitorPage() {
 
             {/* Refresh button */}
             <button
-              onClick={() => fetchProjectHealth(selectedProjectId)}
+              onClick={() => fetchProjectHealth(selectedProjectId, () => selectedProjectRef.current === selectedProjectId)}
               disabled={isLoadingHealth || !healthAvailable}
               className={cn(
                 'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
@@ -208,7 +222,7 @@ export function MonitorPage() {
         )}
 
         {/* Health overview and logs */}
-        {!monitoringDisabled && projectHealth && (
+        {healthAvailable && projectHealth && (
           <>
             <HealthOverview health={projectHealth} projectId={selectedProjectId} />
             <DiagnosticsPanel projectId={selectedProjectId} />

@@ -50,6 +50,7 @@ interface MonitoringState {
 
   // Workflow checks
   workflowChecks: WorkflowCheck[]
+  workflowProjectId: string | null
   isLoadingWorkflows: boolean
   runningWorkflowIds: Set<string>
   workflowLogs: Record<string, LogLine[]>
@@ -59,9 +60,12 @@ interface MonitoringState {
 
   // Capabilities of the active monitoring backend (filesystem or database)
   monitoringCapabilitiesMap: Record<string, MonitoringCapabilities>
+  monitoringCapabilitiesErrorMap: Record<string, string>
 
   // Error state
   error: string | null
+  contextUnavailableReason: string | null
+  contextUnavailableProjectId: string | null
 
   // Actions
   getProjectHealth: (projectId: string) => ProjectHealth | null
@@ -69,8 +73,8 @@ interface MonitoringState {
   getCheckLabel: (projectId: string, checkType: CheckType) => string
   getCheckConfig: (projectId: string) => Record<string, CheckConfigEntry> | null
   getCheckTypes: (projectId: string) => string[]
-  fetchCheckConfig: (projectId: string) => Promise<void>
-  fetchProjectHealth: (projectId: string) => Promise<void>
+  fetchCheckConfig: (projectId: string, isRequestCurrent?: () => boolean) => Promise<void>
+  fetchProjectHealth: (projectId: string, isRequestCurrent?: () => boolean) => Promise<void>
   fetchProjectContext: (projectId: string) => Promise<void>
   runCheck: (projectId: string, checkType: CheckType) => void
   runAllChecks: (projectId: string) => void
@@ -78,18 +82,52 @@ interface MonitoringState {
   setActiveContextTab: (tab: 'claude-md' | 'dev-docs' | 'session') => void
   clearLogs: (checkType?: CheckType) => void
   clearError: () => void
+  resetMonitoringSelection: () => void
   getMonitoringCapabilities: (projectId: string) => MonitoringCapabilities | null
-  fetchMonitoringCapabilities: (projectId: string) => Promise<MonitoringCapabilities | null>
+  fetchMonitoringCapabilities: (projectId: string, isRequestCurrent?: () => boolean, propagateError?: boolean) => Promise<MonitoringCapabilities | null>
 
   // Vault health actions
   getVaultHealth: (projectId: string) => VaultHealthResult | null
   parseVaultHealth: (projectId: string, stdout: string) => void
 
   // Workflow actions
-  fetchWorkflowChecks: (projectId: string) => Promise<void>
+  fetchWorkflowChecks: (projectId: string, isRequestCurrent?: () => boolean) => Promise<void>
   runWorkflowCheck: (workflowId: string) => Promise<void>
   clearWorkflowLogs: (workflowId?: string) => void
 }
+
+const invalidateProjectMonitoringState = (
+  state: MonitoringState,
+  projectId: string,
+  error: string,
+): Partial<MonitoringState> => {
+  const { [projectId]: _capabilities, ...monitoringCapabilitiesMap } = state.monitoringCapabilitiesMap
+  const { [projectId]: _health, ...projectHealthMap } = state.projectHealthMap
+  const { [projectId]: _config, ...checkConfigMap } = state.checkConfigMap
+  const { [projectId]: _running, ...runningChecksMap } = state.runningChecksMap
+  const checkLogs = Object.fromEntries(
+    Object.entries(state.checkLogs).map(([checkType, logs]) => [
+      checkType,
+      logs.filter((log) => log.projectId !== projectId),
+    ]),
+  )
+  return {
+    monitoringCapabilitiesMap,
+    projectHealthMap,
+    checkConfigMap,
+    runningChecksMap,
+    checkLogs,
+    monitoringCapabilitiesErrorMap: {
+      ...state.monitoringCapabilitiesErrorMap,
+      [projectId]: error,
+    },
+  }
+}
+
+let projectContextRequestId = 0
+const monitoringCapabilityRequests: Record<string, Promise<MonitoringCapabilities | null> | undefined> = {}
+const workflowEventSources: Record<string, ReturnType<typeof createAuthenticatedSseClient> | undefined> = {}
+let workflowRequestId = 0
 
 export const useMonitoringStore = create<MonitoringState>((set, get) => ({
   projectHealthMap: {},
@@ -102,12 +140,16 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
   activeLogView: 'all',
   activeContextTab: 'claude-md',
   workflowChecks: [],
+  workflowProjectId: null,
   isLoadingWorkflows: false,
   runningWorkflowIds: new Set(),
   workflowLogs: {},
   vaultHealthMap: {},
   monitoringCapabilitiesMap: {},
+  monitoringCapabilitiesErrorMap: {},
   error: null,
+  contextUnavailableReason: null,
+  contextUnavailableProjectId: null,
 
   getProjectHealth: (projectId: string) => {
     return get().projectHealthMap[projectId] || null
@@ -130,41 +172,120 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
     return get().checkConfigMap[projectId]?.check_types ?? []
   },
 
+  resetMonitoringSelection: () => {
+    Object.values(workflowEventSources).forEach((eventSource) => eventSource?.close())
+    for (const workflowId of Object.keys(workflowEventSources)) {
+      delete workflowEventSources[workflowId]
+    }
+    workflowRequestId += 1
+    set({
+      error: null,
+      isLoadingHealth: false,
+      workflowChecks: [],
+      workflowProjectId: null,
+      isLoadingWorkflows: false,
+      runningWorkflowIds: new Set<string>(),
+      workflowLogs: {},
+    })
+  },
+
   getMonitoringCapabilities: (projectId: string) => {
-    return get().monitoringCapabilitiesMap[projectId] ?? null
+    const capabilities = get().monitoringCapabilitiesMap[projectId]
+    return capabilities?.project_id === projectId ? capabilities : null
   },
 
-  fetchMonitoringCapabilities: async (projectId: string) => {
-    try {
-      const data = await apiClient.get<MonitoringCapabilities>(
-        `/api/projects/${projectId}/monitoring-capabilities`,
-      )
-      set((state) => ({
-        monitoringCapabilitiesMap: {
-          ...state.monitoringCapabilitiesMap,
-          [projectId]: data,
-        },
-      }))
+  fetchMonitoringCapabilities: async (projectId: string, isRequestCurrent?: () => boolean, propagateError = true) => {
+    const publishConsumerError = (data: MonitoringCapabilities | null) => {
+      if (propagateError && !data) {
+        const capabilityError = get().monitoringCapabilitiesErrorMap[projectId]
+        if (capabilityError) set({ error: capabilityError })
+      }
       return data
-    } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
-      set({ error: errorMessage })
-      return null
+    }
+
+    const existingRequest = monitoringCapabilityRequests[projectId]
+    if (existingRequest) {
+      const data = await existingRequest
+      if (isRequestCurrent && !isRequestCurrent()) return null
+      return publishConsumerError(data)
+    }
+
+    const request = (async () => {
+      try {
+        const data = await apiClient.get<MonitoringCapabilities>(
+          `/api/projects/${projectId}/monitoring-capabilities`,
+        )
+        const rawData = data as Partial<MonitoringCapabilities>
+        const validCapability = rawData.project_id === projectId &&
+          (rawData.mode === 'filesystem' || rawData.mode === 'database') &&
+          (rawData.health_config === 'available' || rawData.health_config === 'disabled') &&
+          (rawData.health === 'available' || rawData.health === 'disabled') &&
+          (rawData.checks === 'available' || rawData.checks === 'disabled')
+        if (!validCapability) {
+          const errorMessage = rawData.project_id !== projectId
+            ? 'Monitoring capabilities response did not match the requested project'
+            : 'Monitoring capabilities response was invalid'
+          set((state) => invalidateProjectMonitoringState(state, projectId, errorMessage))
+          return null
+        }
+        set((state) => {
+          const { [projectId]: _ignored, ...remainingErrors } = state.monitoringCapabilitiesErrorMap
+          return {
+            monitoringCapabilitiesMap: {
+              ...state.monitoringCapabilitiesMap,
+              [projectId]: data,
+            },
+            monitoringCapabilitiesErrorMap: remainingErrors,
+          }
+        })
+        return data
+      } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+        set((state) => invalidateProjectMonitoringState(state, projectId, errorMessage))
+        return null
+      }
+    })()
+    monitoringCapabilityRequests[projectId] = request
+
+    try {
+      const data = await request
+      if (isRequestCurrent && !isRequestCurrent()) return null
+      return publishConsumerError(data)
+    } finally {
+      if (monitoringCapabilityRequests[projectId] === request) {
+        delete monitoringCapabilityRequests[projectId]
+      }
     }
   },
 
-  fetchCheckConfig: async (projectId: string) => {
-    let capabilities: MonitoringCapabilities | undefined = get().monitoringCapabilitiesMap[projectId]
+  fetchCheckConfig: async (projectId: string, isRequestCurrent?: () => boolean) => {
+    let capabilities: MonitoringCapabilities | undefined = get().getMonitoringCapabilities(projectId) ?? undefined
     if (!capabilities) {
-      capabilities = (await get().fetchMonitoringCapabilities(projectId)) ?? undefined
+      capabilities = (await get().fetchMonitoringCapabilities(projectId, isRequestCurrent)) ?? undefined
     }
+    if (isRequestCurrent && !isRequestCurrent()) return
     if (!capabilities || capabilities.health_config === 'disabled') {
-      set({ error: capabilities?.reason ?? 'Project monitoring configuration is unavailable' })
+      const errorMessage = get().monitoringCapabilitiesErrorMap[projectId] ?? capabilities?.reason ?? 'Project monitoring configuration is unavailable'
+      set((state) => {
+        const { [projectId]: _staleConfig, ...checkConfigMap } = state.checkConfigMap
+        return { checkConfigMap, error: errorMessage }
+      })
       return
     }
 
     try {
       const data = await apiClient.get<CheckConfig>(`/api/projects/${projectId}/health-config`)
+      if (isRequestCurrent && !isRequestCurrent()) return
+      if (data.project_id !== projectId) {
+        set((state) => {
+          const { [projectId]: _staleConfig, ...checkConfigMap } = state.checkConfigMap
+          return {
+            checkConfigMap,
+            error: 'Project monitoring configuration response did not match the requested project',
+          }
+        })
+        return
+      }
       set((state) => {
         // Initialize checkLogs for new check types
         const newLogs = { ...state.checkLogs }
@@ -179,24 +300,46 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
         }
       })
     } catch (e) {
-      console.warn('Failed to fetch check config:', e)
+      if (isRequestCurrent && !isRequestCurrent()) return
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set((state) => {
+        const { [projectId]: _staleConfig, ...checkConfigMap } = state.checkConfigMap
+        return { checkConfigMap, error: errorMessage }
+      })
     }
   },
 
-  fetchProjectHealth: async (projectId: string) => {
-    let capabilities: MonitoringCapabilities | undefined = get().monitoringCapabilitiesMap[projectId]
+  fetchProjectHealth: async (projectId: string, isRequestCurrent?: () => boolean) => {
+    let capabilities: MonitoringCapabilities | undefined = get().getMonitoringCapabilities(projectId) ?? undefined
     if (!capabilities) {
-      capabilities = (await get().fetchMonitoringCapabilities(projectId)) ?? undefined
+      capabilities = (await get().fetchMonitoringCapabilities(projectId, isRequestCurrent)) ?? undefined
     }
+    if (isRequestCurrent && !isRequestCurrent()) return
     if (!capabilities || capabilities.health === 'disabled') {
-      set({ isLoadingHealth: false, error: capabilities?.reason ?? 'Project health monitoring is unavailable' })
+      const errorMessage = get().monitoringCapabilitiesErrorMap[projectId] ?? capabilities?.reason ?? 'Project health monitoring is unavailable'
+      set((state) => {
+        const { [projectId]: _staleHealth, ...projectHealthMap } = state.projectHealthMap
+        return { projectHealthMap, isLoadingHealth: false, error: errorMessage }
+      })
       return
     }
 
-    set({ isLoadingHealth: true, error: null })
+    set({ isLoadingHealth: true })
 
     try {
       const data = await apiClient.get<ProjectHealth>(`/api/projects/${projectId}/health`)
+      if (isRequestCurrent && !isRequestCurrent()) return
+      if (data.project_id !== projectId) {
+        set((state) => {
+          const { [projectId]: _staleHealth, ...projectHealthMap } = state.projectHealthMap
+          return {
+            projectHealthMap,
+            error: 'Project health response did not match the requested project',
+            isLoadingHealth: false,
+          }
+        })
+        return
+      }
       set((state) => ({
         projectHealthMap: {
           ...state.projectHealthMap,
@@ -205,25 +348,73 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
         isLoadingHealth: false,
       }))
     } catch (e) {
+      if (isRequestCurrent && !isRequestCurrent()) return
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
-      set({ error: errorMessage, isLoadingHealth: false })
+      set((state) => {
+        const { [projectId]: _staleHealth, ...projectHealthMap } = state.projectHealthMap
+        return { projectHealthMap, error: errorMessage, isLoadingHealth: false }
+      })
     }
   },
 
   fetchProjectContext: async (projectId: string) => {
-    set({ isLoadingContext: true, error: null })
+    const requestId = ++projectContextRequestId
+    set({
+      projectContext: null,
+      isLoadingContext: true,
+      error: null,
+      contextUnavailableReason: null,
+      contextUnavailableProjectId: null,
+    })
+
+    let capabilities: MonitoringCapabilities | undefined = get().getMonitoringCapabilities(projectId) ?? undefined
+    if (capabilities?.project_id !== projectId) {
+      capabilities = undefined
+    }
+    if (!capabilities) {
+      capabilities = (await get().fetchMonitoringCapabilities(
+        projectId,
+        () => requestId === projectContextRequestId,
+        false,
+      )) ?? undefined
+    }
+    if (requestId !== projectContextRequestId) return
+    if (!capabilities) {
+      const capabilityError = get().monitoringCapabilitiesErrorMap[projectId]
+      set({ isLoadingContext: false, error: capabilityError ?? null })
+      return
+    }
+    if (capabilities.mode === 'database') {
+      set({
+        projectContext: null,
+        isLoadingContext: false,
+        contextUnavailableReason: capabilities.reason ?? 'Project context is unavailable in database mode',
+        contextUnavailableProjectId: projectId,
+      })
+      return
+    }
 
     try {
       const data = await apiClient.get<ProjectContext>(`/api/projects/${projectId}/context`)
-      set({ projectContext: data, isLoadingContext: false })
+      if (requestId !== projectContextRequestId) return
+      if (data.project_id !== projectId) {
+        set({
+          projectContext: null,
+          isLoadingContext: false,
+          error: 'Project context response did not match the requested project',
+        })
+        return
+      }
+      set({ projectContext: data, isLoadingContext: false, contextUnavailableReason: null, contextUnavailableProjectId: null })
     } catch (e) {
+      if (requestId !== projectContextRequestId) return
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
       set({ error: errorMessage, isLoadingContext: false })
     }
   },
 
   runCheck: (projectId: string, checkType: CheckType) => {
-    const capabilities = get().monitoringCapabilitiesMap[projectId]
+    const capabilities = get().getMonitoringCapabilities(projectId)
     if (!capabilities) {
       void get().fetchMonitoringCapabilities(projectId).then((loaded) => {
         if (loaded?.checks === 'available') get().runCheck(projectId, checkType)
@@ -435,7 +626,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
   },
 
   runAllChecks: (projectId: string) => {
-    const capabilities = get().monitoringCapabilitiesMap[projectId]
+    const capabilities = get().getMonitoringCapabilities(projectId)
     if (!capabilities) {
       void get().fetchMonitoringCapabilities(projectId).then((loaded) => {
         if (loaded?.checks === 'available') get().runAllChecks(projectId)
@@ -696,12 +887,39 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
 
   // ── Workflow Actions ──────────────────────────────────────
 
-  fetchWorkflowChecks: async (projectId: string) => {
-    set({ isLoadingWorkflows: true })
+  fetchWorkflowChecks: async (projectId: string, isRequestCurrent?: () => boolean) => {
+    const previousProjectId = get().workflowProjectId
+    if (previousProjectId !== null && previousProjectId !== projectId) {
+      Object.values(workflowEventSources).forEach((eventSource) => eventSource?.close())
+      for (const workflowId of Object.keys(workflowEventSources)) {
+        delete workflowEventSources[workflowId]
+      }
+    }
+    const requestId = ++workflowRequestId
+    set({
+      workflowChecks: [],
+      workflowProjectId: projectId,
+      workflowLogs: {},
+      ...(previousProjectId !== null && previousProjectId !== projectId
+        ? { runningWorkflowIds: new Set<string>() }
+        : {}),
+      isLoadingWorkflows: true,
+    })
 
     try {
-      const data = await apiClient.get<{ workflows: Record<string, unknown>[] }>(`/api/workflows?project_id=${projectId}`)
+      const data = await apiClient.get<{ workflows: Record<string, unknown>[] }>(`/api/workflows?project_id=${encodeURIComponent(projectId)}`)
+      if (requestId !== workflowRequestId || (isRequestCurrent && !isRequestCurrent())) return
       const workflows = data.workflows || []
+      // The request is project-scoped, so every workflow must carry exactly the
+      // requested id. A null project_id is a global workflow, not a match.
+      if (workflows.some((workflow) => workflow.project_id !== projectId)) {
+        set({
+          workflowChecks: [],
+          error: 'Workflow response contained a workflow from a different project',
+          isLoadingWorkflows: false,
+        })
+        return
+      }
 
       const checks: WorkflowCheck[] = workflows.map((w: Record<string, unknown>) => {
         let status: WorkflowCheckStatus = 'idle'
@@ -719,16 +937,25 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
         }
       })
 
-      set({ workflowChecks: checks, isLoadingWorkflows: false })
+      set({ workflowChecks: checks, workflowProjectId: projectId, isLoadingWorkflows: false })
     } catch (e) {
+      if (requestId !== workflowRequestId || (isRequestCurrent && !isRequestCurrent())) return
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
       set({ error: errorMessage, isLoadingWorkflows: false })
     }
   },
 
   runWorkflowCheck: async (workflowId: string) => {
-    const { runningWorkflowIds } = get()
+    const { runningWorkflowIds, workflowProjectId, workflowChecks } = get()
+    const projectId = workflowProjectId
+    const workflowGeneration = workflowRequestId
+    if (!projectId || !workflowChecks.some((workflow) => workflow.id === workflowId)) return
     if (runningWorkflowIds.has(workflowId)) return
+
+    const isCurrentWorkflow = () => {
+      const state = get()
+      return state.workflowProjectId === projectId && workflowRequestId === workflowGeneration && state.workflowChecks.some((workflow) => workflow.id === workflowId)
+    }
 
     // Mark as running
     const newRunning = new Set(runningWorkflowIds)
@@ -752,7 +979,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
               timestamp: new Date().toISOString(),
               text: `>>> Starting workflow: ${wc?.name || workflowId}...`,
               isStderr: false,
-              projectId: '',
+              projectId: projectId,
             },
           ],
         },
@@ -762,12 +989,42 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
     try {
       // Trigger the run
       const runData = await apiClient.post<{ id: string }>(`/api/workflows/${workflowId}/runs`, {})
+      if (!isCurrentWorkflow()) return
       const runId = runData.id
 
       // Stream logs via SSE
-      const eventSource = new EventSource(getApiUrl(`/api/workflows/runs/${runId}/stream`))
+      const finishWorkflowStream = (message: string) => {
+        if (!isCurrentWorkflow()) return
+        delete workflowEventSources[workflowId]
+        const { runningWorkflowIds: currentRunning } = get()
+        const updated = new Set(currentRunning)
+        updated.delete(workflowId)
+        set((state) => ({
+          runningWorkflowIds: updated,
+          workflowChecks: state.workflowChecks.map((wc) =>
+            wc.id === workflowId ? { ...wc, status: 'failure' as WorkflowCheckStatus } : wc
+          ),
+          error: message,
+        }))
+      }
+      const eventSource = createAuthenticatedSseClient(
+        getApiUrl(`/api/workflows/runs/${runId}/stream`),
+        {
+          onStatus: (status) => {
+            if (status === 'authentication-failed') finishWorkflowStream('Workflow stream authentication failed')
+            else if (status === 'permission-denied') finishWorkflowStream('Workflow stream permission denied')
+            else if (status === 'error') finishWorkflowStream('Workflow stream error')
+            else if (status === 'closed') finishWorkflowStream('Workflow stream ended before completion')
+          },
+        },
+      )
+      workflowEventSources[workflowId] = eventSource
 
       eventSource.addEventListener('log', (event) => {
+        if (!isCurrentWorkflow()) {
+          eventSource.close()
+          return
+        }
         const logData = JSON.parse(event.data)
         set((state) => ({
           workflowLogs: {
@@ -778,7 +1035,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
                 timestamp: logData.timestamp || new Date().toISOString(),
                 text: logData.message || logData.output || JSON.stringify(logData),
                 isStderr: logData.level === 'error' || logData.is_stderr === true,
-                projectId: '',
+                projectId: projectId,
               },
             ],
           },
@@ -786,6 +1043,10 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
       })
 
       eventSource.addEventListener('status', (event) => {
+        if (!isCurrentWorkflow()) {
+          eventSource.close()
+          return
+        }
         const statusData = JSON.parse(event.data)
         const statusValue = statusData.status
 
@@ -801,6 +1062,10 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
       })
 
       eventSource.addEventListener('done', (event) => {
+        if (!isCurrentWorkflow()) {
+          eventSource.close()
+          return
+        }
         const doneData = JSON.parse(event.data)
         const finalStatus: WorkflowCheckStatus =
           doneData.status === 'completed' ? 'success' : doneData.status === 'failed' ? 'failure' : 'idle'
@@ -830,16 +1095,21 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
                 timestamp: new Date().toISOString(),
                 text: `>>> Workflow ${finalStatus === 'success' ? 'completed' : 'failed'}${doneData.duration_seconds ? ` (${doneData.duration_seconds.toFixed(1)}s)` : ''}`,
                 isStderr: finalStatus === 'failure',
-                projectId: '',
+                projectId: projectId,
               },
             ],
           },
         }))
 
+        delete workflowEventSources[workflowId]
         eventSource.close()
       })
 
       eventSource.addEventListener('error', () => {
+        if (!isCurrentWorkflow()) {
+          eventSource.close()
+          return
+        }
         const { runningWorkflowIds: currentRunning } = get()
         const updated = new Set(currentRunning)
         updated.delete(workflowId)
@@ -851,9 +1121,11 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
           ),
           error: `Workflow stream error`,
         }))
+        delete workflowEventSources[workflowId]
         eventSource.close()
       })
     } catch (e) {
+      if (!isCurrentWorkflow()) return
       const { runningWorkflowIds: currentRunning } = get()
       const updated = new Set(currentRunning)
       updated.delete(workflowId)
@@ -873,7 +1145,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
               timestamp: new Date().toISOString(),
               text: `>>> Error: ${errorMessage}`,
               isStderr: true,
-              projectId: '',
+              projectId: projectId,
             },
           ],
         },

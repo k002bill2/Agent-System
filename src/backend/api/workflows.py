@@ -7,7 +7,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.deps import get_current_user, normalize_project_id
+from api.workflow_authz import (
+    authorize_run,
+    authorize_workflow,
+    authorize_workflow_project,
+    workflow_project_id,
+)
 from db.database import get_db
+from db.models import UserModel
 from models.workflow import (
     WorkflowCreate,
     WorkflowListResponse,
@@ -18,7 +26,11 @@ from services.workflow_engine import get_workflow_engine
 from services.workflow_service import USE_DATABASE, WorkflowService, get_workflow_service
 from services.workflow_yaml_parser import workflow_to_yaml
 
-router = APIRouter(prefix="/workflows", tags=["workflows"])
+router = APIRouter(
+    prefix="/workflows",
+    tags=["workflows"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 def _to_workflow_response(w: dict) -> dict:
@@ -65,13 +77,24 @@ def _to_run_response(r: dict) -> dict:
 async def list_workflows(
     project_id: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
 ):
-    """List all workflow definitions."""
+    """List workflows visible to the authenticated project member."""
+    if project_id is not None:
+        # A blank identifier is rejected rather than normalized: both listing
+        # backends treat a falsy project_id as "no filter" and would return
+        # every workflow in the deployment.
+        project_id = normalize_project_id(project_id)
+    await authorize_workflow_project(project_id, current_user, db)
     service = get_workflow_service()
     if USE_DATABASE:
         workflows = await WorkflowService.list_workflows_async(db, project_id=project_id)
     else:
         workflows = service.list_workflows(project_id=project_id)
+    if project_id is not None:
+        # Defensive: the authorized scope is exactly one project, so the
+        # response must never carry a global or foreign workflow.
+        workflows = [w for w in workflows if w.get("project_id") == project_id]
     return {
         "workflows": [_to_workflow_response(w) for w in workflows],
         "total": len(workflows),
@@ -79,21 +102,26 @@ async def list_workflows(
 
 
 @router.get("/{workflow_id}")
-async def get_workflow(workflow_id: str, db: AsyncSession = Depends(get_db)):
+async def get_workflow(
+    workflow_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
     """Get a workflow definition by ID."""
-    service = get_workflow_service()
-    if USE_DATABASE:
-        workflow = await WorkflowService.get_workflow_async(db, workflow_id)
-    else:
-        workflow = service.get_workflow(workflow_id)
-    if not workflow:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    workflow = await authorize_workflow(workflow_id, current_user, db)
     return _to_workflow_response(workflow)
 
 
 @router.post("", status_code=201)
-async def create_workflow(data: WorkflowCreate, db: AsyncSession = Depends(get_db)):
+async def create_workflow(
+    data: WorkflowCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
     """Create a new workflow definition."""
+    if data.project_id is not None:
+        data = data.model_copy(update={"project_id": normalize_project_id(data.project_id)})
+    await authorize_workflow_project(data.project_id, current_user, db, min_role="editor")
     try:
         service = get_workflow_service()
         if USE_DATABASE:
@@ -110,10 +138,25 @@ async def update_workflow(
     workflow_id: str,
     data: WorkflowUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
 ):
     """Update a workflow definition."""
+    service = get_workflow_service()
+    # Authorize the source project before anything else, then — when the update
+    # relocates the workflow — the destination project independently. Checking
+    # only one side lets an editor of project A move a workflow into project B
+    # (or into the privileged global scope) that they cannot write to.
+    existing = await authorize_workflow(workflow_id, current_user, db, min_role="editor")
+    if "project_id" in data.model_fields_set:
+        target_project_id = data.project_id
+        if target_project_id is not None:
+            target_project_id = normalize_project_id(target_project_id)
+            data = data.model_copy(update={"project_id": target_project_id})
+        if target_project_id != workflow_project_id(existing):
+            # ``require_project_role`` also validates that the target project is
+            # registered and active (database mode is authoritative).
+            await authorize_workflow_project(target_project_id, current_user, db, min_role="editor")
     try:
-        service = get_workflow_service()
         if USE_DATABASE:
             workflow = await WorkflowService.update_workflow_async(db, workflow_id, data)
         else:
@@ -126,9 +169,14 @@ async def update_workflow(
 
 
 @router.delete("/{workflow_id}", status_code=204)
-async def delete_workflow(workflow_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_workflow(
+    workflow_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
     """Delete a workflow definition."""
     service = get_workflow_service()
+    await authorize_workflow(workflow_id, current_user, db, min_role="editor")
     if USE_DATABASE:
         success = await WorkflowService.delete_workflow_async(db, workflow_id)
     else:
@@ -145,9 +193,11 @@ async def list_runs(
     workflow_id: str,
     limit: int = Query(50, le=200),
     db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
 ):
-    """List runs for a workflow."""
+    """List runs for an authorized workflow."""
     service = get_workflow_service()
+    await authorize_workflow(workflow_id, current_user, db)
     if USE_DATABASE:
         runs = await WorkflowService.list_runs_async(db, workflow_id=workflow_id, limit=limit)
     else:
@@ -163,10 +213,12 @@ async def trigger_run(
     workflow_id: str,
     data: WorkflowRunTrigger | None = None,
     db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
 ):
-    """Trigger a new workflow run."""
+    """Trigger a new workflow run for an authorized workflow."""
+    service = get_workflow_service()
+    await authorize_workflow(workflow_id, current_user, db, min_role="editor")
     try:
-        service = get_workflow_service()
         trigger = data or WorkflowRunTrigger()
         if USE_DATABASE:
             run = await service.trigger_run_async(db, workflow_id, trigger)
@@ -178,25 +230,25 @@ async def trigger_run(
 
 
 @router.get("/runs/{run_id}")
-async def get_run(run_id: str, db: AsyncSession = Depends(get_db)):
+async def get_run(
+    run_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
     """Get a workflow run by ID."""
-    service = get_workflow_service()
-    if USE_DATABASE:
-        # Check in-memory first (active runs for SSE)
-        run = service.get_run(run_id)
-        if not run:
-            run = await WorkflowService.get_run_async(db, run_id)
-    else:
-        run = service.get_run(run_id)
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
+    run = await authorize_run(run_id, current_user, db)
     return _to_run_response(run)
 
 
 @router.post("/runs/{run_id}/cancel")
-async def cancel_run(run_id: str, db: AsyncSession = Depends(get_db)):
+async def cancel_run(
+    run_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
     """Cancel a running workflow."""
     service = get_workflow_service()
+    await authorize_run(run_id, current_user, db, min_role="editor")
     if USE_DATABASE:
         run = await service.cancel_run_async(db, run_id)
     else:
@@ -207,9 +259,14 @@ async def cancel_run(run_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/runs/{run_id}/retry", status_code=201)
-async def retry_run(run_id: str, db: AsyncSession = Depends(get_db)):
+async def retry_run(
+    run_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
     """Retry a failed workflow run."""
     service = get_workflow_service()
+    await authorize_run(run_id, current_user, db, min_role="editor")
     if USE_DATABASE:
         workflow_id = await WorkflowService.retry_run_async(db, run_id)
     else:
@@ -229,16 +286,14 @@ async def retry_run(run_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/runs/{run_id}/stream")
-async def stream_run_logs(run_id: str, db: AsyncSession = Depends(get_db)):
-    """Stream real-time logs for a workflow run via SSE."""
+async def stream_run_logs(
+    run_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Stream real-time logs for an authorized workflow run via SSE."""
     service = get_workflow_service()
-    # Check in-memory first (active runs); fallback to DB for completed
-    run = service.get_run(run_id)
-    if not run and USE_DATABASE:
-        run = await WorkflowService.get_run_async(db, run_id)
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
-
+    await authorize_run(run_id, current_user, db)
     engine = get_workflow_engine()
 
     async def event_stream():
@@ -250,8 +305,13 @@ async def stream_run_logs(run_id: str, db: AsyncSession = Depends(get_db)):
                 yield f"event: log\ndata: {json.dumps(log)}\n\n"
                 log_index += 1
 
-            # Check run status (in-memory is authoritative for active runs)
+            # Check the active in-memory run first. In database mode a run may
+            # outlive the process-local cache, so fall back to the authoritative
+            # DB snapshot; otherwise a terminal run would leave this stream open
+            # forever without a final snapshot/EOF.
             current_run = service.get_run(run_id)
+            if current_run is None and USE_DATABASE:
+                current_run = await WorkflowService.get_run_async(db, run_id)
             if current_run:
                 status = current_run["status"]
                 if isinstance(status, str):
@@ -283,15 +343,13 @@ async def stream_run_logs(run_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{workflow_id}/yaml")
-async def export_yaml(workflow_id: str, db: AsyncSession = Depends(get_db)):
+async def export_yaml(
+    workflow_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
     """Export workflow definition as YAML."""
-    service = get_workflow_service()
-    if USE_DATABASE:
-        workflow = await WorkflowService.get_workflow_async(db, workflow_id)
-    else:
-        workflow = service.get_workflow(workflow_id)
-    if not workflow:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    workflow = await authorize_workflow(workflow_id, current_user, db)
 
     if workflow.get("yaml_content"):
         return {"yaml": workflow["yaml_content"]}

@@ -87,6 +87,7 @@ async def _get_db_filtered_projects(monitor, current_user=None) -> list:
 
     from sqlalchemy import or_, select
 
+    from api.project_configs.identity import stamp_project_info
     from db.database import async_session_factory
     from db.models import ProjectAccessModel, ProjectModel
     from models.project_config import ProjectInfo
@@ -181,17 +182,26 @@ async def _get_db_filtered_projects(monitor, current_user=None) -> list:
             path = PathLib(db_proj.path)
             if path.exists() and path.is_dir():
                 monitor.add_external_project(str(path))
-                # Re-scan this specific project
-                project_id = str(path).replace("/", "-").replace("\\", "-")
+                # Re-scan this specific project. The monitor key must come from
+                # the monitor's own normalization -- encoding the raw string
+                # misses this project whenever the registered path is a symlink
+                # (every `projects/` entry in this repo is one).
+                project_id = monitor.encode_project_path(str(path))
                 summary = monitor.get_project_summary(project_id)
                 if summary and summary.project:
-                    filtered.append(summary.project)
+                    # The public identity is the DB id, not the monitor's
+                    # path-derived key. The dashboard reuses whatever id this
+                    # list hands out for every child request, so leaking the
+                    # monitor key here is what split the two vocabularies.
+                    filtered.append(stamp_project_info(summary.project, str(db_proj.id)))
                     seen_paths.add(summary.project.project_path)
                     continue
 
         # Fallback: DB project has no path or path scan failed
-        # Include it as a basic ProjectInfo so it appears in the list
-        project_id = f"db-{db_proj.id}"
+        # Include it as a basic ProjectInfo so it appears in the list.
+        # Same canonical identity as the scanned branch above -- the guard
+        # still accepts the legacy `db-` spelling on the way in.
+        project_id = str(db_proj.id)
         filtered.append(
             ProjectInfo(
                 project_id=project_id,

@@ -1,16 +1,43 @@
 """Workflow artifacts API router."""
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.deps import get_current_user, get_db_session
+from api.workflow_authz import authorize_run
+from db.models import UserModel
 from services.artifact_service import get_artifact_service
 
-router = APIRouter(tags=["artifacts"])
+router = APIRouter(tags=["artifacts"], dependencies=[Depends(get_current_user)])
+
+
+async def _authorize_artifact(
+    artifact_id: str,
+    current_user: UserModel,
+    db: AsyncSession,
+    min_role: str = "viewer",
+) -> dict:
+    """Load an artifact and authorize it through its run's owning project."""
+    service = get_artifact_service()
+    artifact = service.get_artifact(artifact_id)
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    run_id = artifact.get("run_id")
+    if not isinstance(run_id, str):
+        raise HTTPException(status_code=404, detail="Run not found")
+    await authorize_run(run_id, current_user, db, min_role=min_role)
+    return artifact
 
 
 @router.get("/workflows/runs/{run_id}/artifacts")
-async def list_artifacts(run_id: str):
+async def list_artifacts(
+    run_id: str,
+    db: AsyncSession = Depends(get_db_session),
+    current_user: UserModel = Depends(get_current_user),
+):
     """List artifacts for a workflow run."""
+    await authorize_run(run_id, current_user, db)
     service = get_artifact_service()
     artifacts = service.list_artifacts(run_id)
     return {
@@ -42,8 +69,11 @@ async def upload_artifact(
     job_id: str = Form(None),
     step_id: str = Form(None),
     retention_days: int = Form(30),
+    db: AsyncSession = Depends(get_db_session),
+    current_user: UserModel = Depends(get_current_user),
 ):
     """Upload an artifact for a workflow run."""
+    await authorize_run(run_id, current_user, db, min_role="editor")
     service = get_artifact_service()
     data = await file.read()
     artifact_name = name or file.filename or "artifact"
@@ -67,12 +97,13 @@ async def upload_artifact(
 
 
 @router.get("/workflows/artifacts/{artifact_id}")
-async def get_artifact(artifact_id: str):
+async def get_artifact(
+    artifact_id: str,
+    db: AsyncSession = Depends(get_db_session),
+    current_user: UserModel = Depends(get_current_user),
+):
     """Get artifact metadata."""
-    service = get_artifact_service()
-    artifact = service.get_artifact(artifact_id)
-    if not artifact:
-        raise HTTPException(status_code=404, detail="Artifact not found")
+    artifact = await _authorize_artifact(artifact_id, current_user, db)
     return {
         "id": artifact["id"],
         "run_id": artifact["run_id"],
@@ -89,13 +120,15 @@ async def get_artifact(artifact_id: str):
 
 
 @router.get("/workflows/artifacts/{artifact_id}/download")
-async def download_artifact(artifact_id: str):
+async def download_artifact(
+    artifact_id: str,
+    db: AsyncSession = Depends(get_db_session),
+    current_user: UserModel = Depends(get_current_user),
+):
     """Download artifact file."""
-    service = get_artifact_service()
-    artifact = service.get_artifact(artifact_id)
-    if not artifact:
-        raise HTTPException(status_code=404, detail="Artifact not found")
+    artifact = await _authorize_artifact(artifact_id, current_user, db)
 
+    service = get_artifact_service()
     data = service.get_artifact_data(artifact_id)
     if data is None:
         raise HTTPException(status_code=404, detail="Artifact file not found")
@@ -108,8 +141,13 @@ async def download_artifact(artifact_id: str):
 
 
 @router.delete("/workflows/artifacts/{artifact_id}", status_code=204)
-async def delete_artifact(artifact_id: str):
+async def delete_artifact(
+    artifact_id: str,
+    db: AsyncSession = Depends(get_db_session),
+    current_user: UserModel = Depends(get_current_user),
+):
     """Delete an artifact."""
+    await _authorize_artifact(artifact_id, current_user, db, min_role="editor")
     service = get_artifact_service()
     if not service.delete_artifact(artifact_id):
         raise HTTPException(status_code=404, detail="Artifact not found")
