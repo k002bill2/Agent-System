@@ -284,7 +284,7 @@ src/backend/
 │   ├── merge_service/             # Git 머지/충돌 해결 (패키지: errors·service·requests)
 │   ├── notification_service/      # 알림 서비스 (패키지: config·adapters·service)
 │   ├── organization_service.py    # 조직/멀티테넌트 서비스
-│   ├── playground_service.py      # 에이전트 플레이그라운드
+│   ├── playground_service/        # 에이전트 플레이그라운드 (패키지: config·storage·llm·mock·service)
 │   ├── playground_tools.py        # 플레이그라운드 도구 정의
 │   ├── project_access_service.py  # RBAC 접근제어 서비스
 │   ├── project_cleanup_service.py # 프로젝트 삭제/정리

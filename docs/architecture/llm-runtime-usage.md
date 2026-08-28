@@ -45,7 +45,7 @@ User action
 
 | 사용처 | Backend 시작점 | 실제 호출 경로 | 제안 source | 비고 |
 |---|---|---|---|---|
-| Playground 일반 실행 | `api/playground.py` | `services/playground_service.py` -> `LLMService.invoke()` / `invoke_with_tools()` / `stream_with_tokens()` | `playground` | session model이 stale하면 configured default로 fallback |
+| Playground 일반 실행 | `api/playground.py` | `services/playground_service/service.py` -> `LLMService.invoke()` / `invoke_with_tools()` / `stream_with_tokens()` | `playground` | session model이 stale하면 configured default로 fallback |
 | Playground 모델 목록 | `api/playground.py` | `LLMService.get_available_models()` -> `LLMModelRegistry` | none | 실행이 아니라 capability 조회 |
 | Task Analyzer 분석 | `api/agents.py` | `LeadOrchestrator.execute()` -> `BaseAgent._invoke_llm()` | `task_analyzer` | 분석 결과는 `TaskAnalysisService`에 저장 |
 | Task Analyzer 이미지 OCR | `api/agents.py` | vision model 후보 -> runtime resolver -> `LLMService._get_llm()` -> `ainvoke()` | `task_analyzer_ocr` | API vision 모델은 explicit fallback entitlement가 있을 때만 실행 |

@@ -112,13 +112,13 @@ async def test_execute_retries_with_safe_default_when_saved_model_is_inaccessibl
 ) -> None:
     """Persisted sessions with stale OpenAI models should not stay broken."""
     playground_service._sessions.clear()
-    monkeypatch.setattr(playground_service, "_load_sessions", lambda: None)
-    monkeypatch.setattr(playground_service, "_save_sessions", lambda: None)
+    monkeypatch.setattr(playground_service.service, "_load_sessions", lambda: None)
+    monkeypatch.setattr(playground_service.service, "_save_sessions", lambda: None)
 
     def close_background_coro(coro):
         coro.close()
 
-    monkeypatch.setattr(playground_service, "_fire_and_forget", close_background_coro)
+    monkeypatch.setattr(playground_service.service, "_fire_and_forget", close_background_coro)
     monkeypatch.setenv("LLM_PROVIDER", "codex_cli")
 
     session = PlaygroundService.create_session(
@@ -164,13 +164,13 @@ async def test_execute_passes_llm_access_to_usage_context(monkeypatch) -> None:
     from services.llm_access_service import default_access_response
 
     playground_service._sessions.clear()
-    monkeypatch.setattr(playground_service, "_load_sessions", lambda: None)
-    monkeypatch.setattr(playground_service, "_save_sessions", lambda: None)
+    monkeypatch.setattr(playground_service.service, "_load_sessions", lambda: None)
+    monkeypatch.setattr(playground_service.service, "_save_sessions", lambda: None)
 
     def close_background_coro(coro):
         coro.close()
 
-    monkeypatch.setattr(playground_service, "_fire_and_forget", close_background_coro)
+    monkeypatch.setattr(playground_service.service, "_fire_and_forget", close_background_coro)
 
     session = PlaygroundService.create_session(
         PlaygroundSessionCreate(name="access", model="codex-cli", user_id="user-1")
@@ -234,13 +234,13 @@ async def test_execute_retries_on_resolver_entitlement_error_for_authenticated_u
     )
 
     playground_service._sessions.clear()
-    monkeypatch.setattr(playground_service, "_load_sessions", lambda: None)
-    monkeypatch.setattr(playground_service, "_save_sessions", lambda: None)
+    monkeypatch.setattr(playground_service.service, "_load_sessions", lambda: None)
+    monkeypatch.setattr(playground_service.service, "_save_sessions", lambda: None)
 
     def close_background_coro(coro):
         coro.close()
 
-    monkeypatch.setattr(playground_service, "_fire_and_forget", close_background_coro)
+    monkeypatch.setattr(playground_service.service, "_fire_and_forget", close_background_coro)
 
     access = default_access_response("user-1")
     entitled = resolve_llm_runtime(

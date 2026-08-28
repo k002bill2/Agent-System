@@ -60,9 +60,9 @@ MANAGER = _make_user(MANAGER_ID, role="manager")
 @pytest.fixture(autouse=True)
 def _isolated_sessions(monkeypatch):
     """Keep the module-level session registry isolated from disk."""
-    monkeypatch.setattr(playground_service, "_load_sessions", lambda: None)
-    monkeypatch.setattr(playground_service, "_save_sessions", lambda: None)
-    monkeypatch.setattr(playground_service, "_fire_and_forget", lambda coro: coro.close())
+    monkeypatch.setattr(playground_service.service, "_load_sessions", lambda: None)
+    monkeypatch.setattr(playground_service.service, "_save_sessions", lambda: None)
+    monkeypatch.setattr(playground_service.service, "_fire_and_forget", lambda coro: coro.close())
     playground_service._sessions.clear()
     yield
     playground_service._sessions.clear()
