@@ -1,19 +1,14 @@
-"""Notification service for sending alerts across multiple channels."""
+"""알림 규칙·발송·이력과 그 인메모리 상태.
 
-import json
-import os
-import re
-import ssl
+`_channel_configs` 는 `get_channel_config` 안에서 `global` 로 재바인딩된다.
+그것을 읽는 곳 전부가 이 모듈에 있어야 하고, 배럴은 이 이름을 재노출하면
+안 된다 — 재바인딩 이후 낡은 dict 를 영구히 노출한다.
+"""
+
 import uuid
-from abc import ABC, abstractmethod
 from datetime import timedelta
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from pathlib import Path
 from typing import Any
 
-import aiosmtplib
-import httpx
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,276 +26,15 @@ from models.notification import (
 )
 from utils.time import utcnow
 
-USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
+from .adapters import (
+    DiscordAdapter,
+    EmailAdapter,
+    NotificationAdapter,
+    SlackAdapter,
+    WebhookAdapter,
+)
+from .config import USE_DATABASE, _load_channel_configs, _save_channel_configs
 
-# Data directory for persistent storage
-DATA_DIR = Path(__file__).parent.parent / "data"
-CHANNEL_CONFIGS_FILE = DATA_DIR / "notification_channel_configs.json"
-
-
-def _load_channel_configs() -> dict[NotificationChannel, ChannelConfig]:
-    """Load channel configs from JSON file."""
-    if not CHANNEL_CONFIGS_FILE.exists():
-        return {}
-    try:
-        with open(CHANNEL_CONFIGS_FILE) as f:
-            data = json.load(f)
-        configs = {}
-        for channel_str, config_data in data.items():
-            channel = NotificationChannel(channel_str)
-            configs[channel] = ChannelConfig(
-                channel=channel,
-                enabled=config_data.get("enabled", True),
-                webhook_url=config_data.get("webhook_url"),
-                api_key=config_data.get("api_key"),
-                bot_token=config_data.get("bot_token"),
-                email_address=config_data.get("email_address"),
-                smtp_host=config_data.get("smtp_host"),
-                smtp_port=config_data.get("smtp_port", 587),
-                smtp_username=config_data.get("smtp_username"),
-                smtp_password=config_data.get("smtp_password"),
-                smtp_use_tls=config_data.get("smtp_use_tls", True),
-                rate_limit_per_hour=config_data.get("rate_limit_per_hour", 60),
-            )
-        return configs
-    except Exception:
-        return {}
-
-
-def _save_channel_configs(configs: dict[NotificationChannel, ChannelConfig]) -> None:
-    """Save channel configs to JSON file."""
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    data = {}
-    for channel, config in configs.items():
-        data[channel.value] = {
-            "enabled": config.enabled,
-            "webhook_url": config.webhook_url,
-            "api_key": config.api_key,
-            "bot_token": config.bot_token,
-            "email_address": config.email_address,
-            "smtp_host": config.smtp_host,
-            "smtp_port": config.smtp_port,
-            "smtp_username": config.smtp_username,
-            "smtp_password": config.smtp_password,
-            "smtp_use_tls": config.smtp_use_tls,
-            "rate_limit_per_hour": config.rate_limit_per_hour,
-        }
-    with open(CHANNEL_CONFIGS_FILE, "w") as f:
-        json.dump(data, f, indent=2)
-
-
-class NotificationAdapter(ABC):
-    """Base class for notification channel adapters."""
-
-    @abstractmethod
-    async def send(
-        self, message: NotificationMessage, config: ChannelConfig
-    ) -> tuple[bool, str | None]:
-        """Send a notification. Returns (success, error_message)."""
-        pass
-
-
-class SlackAdapter(NotificationAdapter):
-    """Slack webhook notification adapter."""
-
-    async def send(
-        self, message: NotificationMessage, config: ChannelConfig
-    ) -> tuple[bool, str | None]:
-        if not config.webhook_url:
-            return False, "Slack webhook URL not configured"
-
-        # Format message for Slack
-        priority_emoji = {
-            NotificationPriority.LOW: ":information_source:",
-            NotificationPriority.MEDIUM: ":bell:",
-            NotificationPriority.HIGH: ":warning:",
-            NotificationPriority.URGENT: ":rotating_light:",
-        }
-
-        payload = {
-            "text": f"{priority_emoji.get(message.priority, '')} {message.title}",
-            "blocks": [
-                {
-                    "type": "header",
-                    "text": {"type": "plain_text", "text": message.title},
-                },
-                {
-                    "type": "section",
-                    "text": {"type": "mrkdwn", "text": message.body},
-                },
-            ],
-        }
-
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    config.webhook_url,
-                    json=payload,
-                    timeout=10.0,
-                )
-                if response.status_code == 200:
-                    return True, None
-                return False, f"Slack API error: {response.status_code}"
-        except Exception as e:
-            return False, str(e)
-
-
-class DiscordAdapter(NotificationAdapter):
-    """Discord webhook notification adapter."""
-
-    async def send(
-        self, message: NotificationMessage, config: ChannelConfig
-    ) -> tuple[bool, str | None]:
-        if not config.webhook_url:
-            return False, "Discord webhook URL not configured"
-
-        # Format message for Discord
-        color_map = {
-            NotificationPriority.LOW: 0x3498DB,  # Blue
-            NotificationPriority.MEDIUM: 0xF39C12,  # Orange
-            NotificationPriority.HIGH: 0xE74C3C,  # Red
-            NotificationPriority.URGENT: 0x9B59B6,  # Purple
-        }
-
-        payload = {
-            "embeds": [
-                {
-                    "title": message.title,
-                    "description": message.body,
-                    "color": color_map.get(message.priority, 0x95A5A6),
-                    "timestamp": utcnow().isoformat(),
-                }
-            ]
-        }
-
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    config.webhook_url,
-                    json=payload,
-                    timeout=10.0,
-                )
-                if response.status_code in (200, 204):
-                    return True, None
-                return False, f"Discord API error: {response.status_code}"
-        except Exception as e:
-            return False, str(e)
-
-
-class EmailAdapter(NotificationAdapter):
-    """Email notification adapter using SMTP."""
-
-    async def send(
-        self, message: NotificationMessage, config: ChannelConfig
-    ) -> tuple[bool, str | None]:
-        if not config.email_address:
-            return False, "Email address not configured"
-
-        if not config.smtp_host or not config.smtp_username or not config.smtp_password:
-            return False, "SMTP settings not configured"
-
-        # Build email message
-        email_msg = MIMEMultipart("alternative")
-        email_msg["Subject"] = f"[AOS] {message.title}"
-        email_msg["From"] = config.smtp_username
-        email_msg["To"] = config.email_address
-
-        # Priority header
-        priority_map = {
-            NotificationPriority.LOW: "5",
-            NotificationPriority.MEDIUM: "3",
-            NotificationPriority.HIGH: "2",
-            NotificationPriority.URGENT: "1",
-        }
-        email_msg["X-Priority"] = priority_map.get(message.priority, "3")
-
-        # Plain text and HTML versions
-        text_content = f"{message.title}\n\n{message.body}"
-
-        # Convert URLs in body to clickable <a> tags for HTML version
-        html_body = re.sub(
-            r'(https?://[^\s<>"]+)',
-            r'<a href="\1" style="color: #2563eb;">\1</a>',
-            message.body,
-        )
-        # Preserve line breaks in HTML
-        html_body = html_body.replace("\n", "<br>")
-
-        html_content = f"""
-        <html>
-        <body style="font-family: Arial, sans-serif; padding: 20px;">
-            <h2 style="color: #333;">{message.title}</h2>
-            <p style="color: #666; line-height: 1.6;">{html_body}</p>
-            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-            <p style="color: #999; font-size: 12px;">
-                Sent by Agent Orchestration Service
-            </p>
-        </body>
-        </html>
-        """
-
-        email_msg.attach(MIMEText(text_content, "plain"))
-        email_msg.attach(MIMEText(html_content, "html"))
-
-        try:
-            # Create SSL context for TLS
-            if config.smtp_use_tls:
-                tls_context = ssl.create_default_context()
-            else:
-                tls_context = None
-
-            # Send email via SMTP
-            await aiosmtplib.send(
-                email_msg,
-                hostname=config.smtp_host,
-                port=config.smtp_port,
-                username=config.smtp_username,
-                password=config.smtp_password,
-                start_tls=config.smtp_use_tls,
-                tls_context=tls_context,
-            )
-            return True, None
-        except aiosmtplib.SMTPAuthenticationError:
-            return False, "SMTP authentication failed. Check username/app password"
-        except aiosmtplib.SMTPConnectError:
-            return False, f"Cannot connect to SMTP server {config.smtp_host}:{config.smtp_port}"
-        except Exception as e:
-            return False, f"Email send failed: {str(e)}"
-
-
-class WebhookAdapter(NotificationAdapter):
-    """Generic webhook notification adapter."""
-
-    async def send(
-        self, message: NotificationMessage, config: ChannelConfig
-    ) -> tuple[bool, str | None]:
-        if not config.webhook_url:
-            return False, "Webhook URL not configured"
-
-        payload = {
-            "event": message.event_type.value,
-            "priority": message.priority.value,
-            "title": message.title,
-            "body": message.body,
-            "data": message.data,
-            "timestamp": utcnow().isoformat(),
-        }
-
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    config.webhook_url,
-                    json=payload,
-                    timeout=10.0,
-                )
-                if response.status_code in (200, 201, 202, 204):
-                    return True, None
-                return False, f"Webhook error: {response.status_code}"
-        except Exception as e:
-            return False, str(e)
-
-
-# Adapter registry
 ADAPTERS: dict[NotificationChannel, NotificationAdapter] = {
     NotificationChannel.SLACK: SlackAdapter(),
     NotificationChannel.DISCORD: DiscordAdapter(),
@@ -309,9 +43,12 @@ ADAPTERS: dict[NotificationChannel, NotificationAdapter] = {
 }
 
 
-# In-memory storage (fallback when USE_DATABASE=false)
 _rules: dict[str, NotificationRule] = {}
+
+
 _channel_configs: dict[NotificationChannel, ChannelConfig] = _load_channel_configs()
+
+
 _notification_history: list[NotificationMessage] = []
 
 
@@ -983,7 +720,6 @@ class NotificationService:
         return result.rowcount
 
 
-# Convenience functions
 async def notify_task_completed(session_id: str, task_id: str, task_title: str) -> None:
     """Send task completed notification."""
     await NotificationService.send_notification(
