@@ -852,9 +852,27 @@ Codex 2 라운드 + 실행 스모크로 지적 4 P1 / 3 P2 중 확인된 것을 
     에서 읽는다 — 선언하면 `{project_id}` 없는 라우트가 422 로 깨진다.
   - **후속 2 의 원래 우려도 함께 닫혔다**: DB 미등록 슬러그는 이제 404 다. 수정 전에는
     200 과 실제 저장소 데이터를 반환했다(RED 실측).
-  - **남은 것**: `sessions._resolve_project_context` 의 파일시스템 우선 분기는 그대로다 —
-    같은 우회를 세션 표면에 갖고 있다. `api/git/merge*` 의 `user_role` 은 여전히 클라이언트가
-    쿼리 파라미터로 보낸다(인가 입력이 클라이언트 제어). 둘 다 이 diff 범위 밖.
+  - ~~**남은 것**: `sessions._resolve_project_context` 의 파일시스템 우선 분기,
+    `api/git/merge*` 의 클라이언트 제어 `user_role`~~ → **2026-08-28 둘 다 종료**
+    (PR `#363`, 브랜치 `fix/project-authz-followups`).
+    - 세션: DB 모드에서 파일시스템 폴백을 없앴다. 실측으로 확인된 우회였다 — 일반
+      사용자가 DB 미등록 슬러그로 `POST /api/sessions` 에 **200** 을 받았다.
+      `test_session_prefers_the_filesystem_registry`(#318 이 만든 **성능** 계약)를
+      교체했다. 그 계약의 순서가 곧 우회로였다.
+    - 머지: `user_role`·`user_id` 쿼리 파라미터를 서버 판정값으로 대체했다.
+      `user_id` 는 attribution 위조가 아니라 **승인 우회**다 —
+      `merge_service/requests.py:_try_auto_merge` 가 승인 수를 실제로 게이트한다.
+    - **다음 세션이 다시 만들 판단 2 가지**:
+      1) 어휘가 셋이라(`require_project_role`=owner/editor/viewer,
+         `GIT_ROLE_PERMISSIONS`=owner/admin/manager/member/viewer, org 멤버십)
+         `editor` 를 그대로 넘기면 키 부재로 **에러 없이 전면 거부**가 된다.
+         `_PROJECT_ROLE_TO_GIT_ROLE` 매핑 표가 그래서 명시적이다.
+      2) org 역할은 대안이 못 된다 — 등록 프로젝트의 `organization_id` 가
+         **전부 NULL**(실측 9/9)이다. 채워진 권위는 `project_access`(8 행).
+    - **아직 남은 것**: 대시보드 `GitPage.tsx:501` 의 `canMerge` 는 여전히 org 역할로
+      판정해 서버(프로젝트 ACL 역할)와 기준이 다르다 — 보안 문제는 아니나 버튼 노출이
+      어긋날 수 있다. `create_merge_request` 의 `author_*` 도 클라이언트 입력이다
+      (인가 미사용, attribution 전용).
 
 - **브랜치 정리 (복원 지점)**: `fix/health-badge-and-project-config-db-mode` 를 2026-08-28 에
   로컬·원격 모두 삭제했다. tip 은 **`95dd5b5`**(5 커밋: `f955e7e` · `754edc0` · `7ed7c46` ·
