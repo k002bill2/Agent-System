@@ -23,11 +23,13 @@ os.environ["OLLAMA_MODEL"] = "qwen2.5:7b"
 # next fails with 429 — an ordering-dependent break invisible in a single-file
 # run. test_playground_authorization.py already disables the middleware for
 # exactly this reason; doing it once here covers every suite.
-# Nothing loses coverage: the service itself is tested directly in
+# Nothing loses coverage today: the service itself is tested directly in
 # test_rate_limit_service.py, and the 429 asserted in
 # tests/backend/api/test_agent_registry.py comes from the independent
-# api/v1/rate_limiter.py, which does not read this flag.
-os.environ["RATE_LIMIT_ENABLED"] = "false"
+# api/v1/rate_limiter.py, which does not read this flag. setdefault (not a
+# plain assignment) keeps the opt-in escape hatch open for a future suite that
+# does want the middleware dispatching: RATE_LIMIT_ENABLED=1 pytest ...
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
 # Force HuggingFace offline so tests never download models (HF 429 flake
 # guard for every pytest invocation, local and CI). An unmocked model load
