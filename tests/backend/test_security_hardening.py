@@ -1665,7 +1665,9 @@ def _register_git_project(tmp_path) -> str:
 
     repo = tmp_path / "repo"
     repo.mkdir()
-    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    # `-b` 로 이름을 고정한다 — init.defaultBranch 는 환경마다 다르다
+    # (로컬 main / CI 기본 master).
+    subprocess.run(["git", "init", "-q", "-b", "work"], cwd=repo, check=True)
     (repo / "f.txt").write_text("x\n")
     subprocess.run(["git", "add", "."], cwd=repo, check=True)
     subprocess.run(
@@ -1723,4 +1725,6 @@ async def test_git_route_reachable_when_authenticated(client, authenticated_app,
     response = await client.get(f"/api/git/projects/{project_id}/branches")
 
     assert response.status_code == 200
-    assert any(b["name"] == "main" for b in response.json()["branches"])
+    branches = response.json()["branches"]
+    assert [b["name"] for b in branches] == ["work"]
+    assert branches[0]["is_current"] is True
