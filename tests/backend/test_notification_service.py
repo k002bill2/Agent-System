@@ -404,7 +404,7 @@ class TestSlackAdapter:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("services.notification_service.httpx.AsyncClient", return_value=mock_client):
+        with patch("services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client):
             success, error = await adapter.send(message, config)
 
         assert success is True
@@ -430,7 +430,7 @@ class TestSlackAdapter:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("services.notification_service.httpx.AsyncClient", return_value=mock_client):
+        with patch("services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client):
             success, error = await adapter.send(message, config)
 
         assert success is False
@@ -453,7 +453,7 @@ class TestSlackAdapter:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("services.notification_service.httpx.AsyncClient", return_value=mock_client):
+        with patch("services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client):
             success, error = await adapter.send(message, config)
 
         assert success is False
@@ -503,7 +503,7 @@ class TestDiscordAdapter:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("services.notification_service.httpx.AsyncClient", return_value=mock_client):
+        with patch("services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client):
             success, error = await adapter.send(message, config)
 
         assert success is True
@@ -532,7 +532,7 @@ class TestDiscordAdapter:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("services.notification_service.httpx.AsyncClient", return_value=mock_client):
+        with patch("services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client):
             success, error = await adapter.send(message, config)
 
         assert success is False
@@ -582,7 +582,7 @@ class TestWebhookAdapter:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("services.notification_service.httpx.AsyncClient", return_value=mock_client):
+        with patch("services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client):
             success, error = await adapter.send(message, config)
 
         assert success is True
@@ -630,7 +630,7 @@ class TestSendNotification:
         with patch(
             "services.notification_service.NotificationService.get_channel_config",
             return_value=slack_config,
-        ), patch("services.notification_service.httpx.AsyncClient", return_value=mock_client):
+        ), patch("services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client):
             msg = await NotificationService.send_notification(
                 NotificationEventType.TASK_COMPLETED,
                 {"task_title": "My Task"},
