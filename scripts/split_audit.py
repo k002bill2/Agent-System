@@ -16,8 +16,17 @@ deleting an import from one of the new modules makes ``ruff check`` fail.
 Usage:
     split_audit.py <before-ref>:<path> <after-path> [<after-path> ...]
 
-Example:
+Example, before committing the promotion (the original file still exists):
     scripts/split_audit.py HEAD:src/backend/services/audit_service.py \\
+        src/backend/services/audit_service/*.py
+
+After committing, that path is gone from ``HEAD`` and ``git show`` exits 128.
+``HEAD~1`` only works in the one commit right after the split, so find the
+revision that still had the file instead — the parent of the commit that
+deleted it:
+
+    P=src/backend/services/audit_service.py
+    scripts/split_audit.py "$(git log --diff-filter=D -1 --format=%H -- "$P")^:$P" \\
         src/backend/services/audit_service/*.py
 """
 
