@@ -1,226 +1,43 @@
-"""Audit trail service for logging all system actions."""
+"""The audit service and the in-memory store it owns.
+
+``_audit_logs``, ``_filter_logs`` and ``AuditService`` stay together so the store
+has one owner. ``cleanup_old_logs`` used to rebind the list through ``global``,
+which replaces only the defining module's name — after the split that left the
+package barrel exporting the pre-purge list. It now mutates in place, so every
+holder of the list sees the same contents and no layout here depends on that.
+"""
 
 import asyncio
 import os
 import uuid
-from datetime import datetime, timedelta
-from enum import Enum
+from datetime import timedelta
 from typing import Any
 
-from pydantic import BaseModel, Field
-from sqlalchemy import and_, desc, func, or_, select
+from sqlalchemy import and_, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models.audit import (
-    ComplianceAuditEntry,
-    DataClassification,
-    RetentionPolicy,
+from models.audit import ComplianceAuditEntry, DataClassification
+from services.audit_service.models import (
+    AuditAction,
+    AuditLogEntry,
+    AuditLogFilter,
+    AuditLogResponse,
+    ResourceType,
+)
+from services.audit_service.stats import (
+    _APPROVAL_ACTIONS,
+    _TOOL_ACTIONS,
+    TREND_DAYS,
+    _build_conditions,
+    build_recent_trend,
+    compute_stats_from_logs,
 )
 from utils.time import utcnow
 
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 
 
-class AuditAction(str, Enum):
-    """Audit action types."""
-
-    # Session actions
-    SESSION_CREATED = "session_created"
-    SESSION_DELETED = "session_deleted"
-    SESSION_EXPIRED = "session_expired"
-
-    # Task actions
-    TASK_CREATED = "task_created"
-    TASK_UPDATED = "task_updated"
-    TASK_COMPLETED = "task_completed"
-    TASK_FAILED = "task_failed"
-    TASK_CANCELLED = "task_cancelled"
-    TASK_PAUSED = "task_paused"
-    TASK_RESUMED = "task_resumed"
-    TASK_RETRIED = "task_retried"
-    TASK_DELETED = "task_deleted"
-
-    # Approval actions
-    APPROVAL_REQUESTED = "approval_requested"
-    APPROVAL_GRANTED = "approval_granted"
-    APPROVAL_DENIED = "approval_denied"
-
-    # Tool actions
-    TOOL_EXECUTED = "tool_executed"
-    TOOL_FAILED = "tool_failed"
-
-    # Agent actions
-    AGENT_ASSIGNED = "agent_assigned"
-    AGENT_COMPLETED = "agent_completed"
-
-    # Permission actions
-    PERMISSION_CHANGED = "permission_changed"
-    AGENT_DISABLED = "agent_disabled"
-    AGENT_ENABLED = "agent_enabled"
-
-    # Authentication actions
-    USER_LOGIN = "user_login"
-    USER_LOGOUT = "user_logout"
-    TOKEN_REFRESHED = "token_refreshed"
-    USER_REGISTERED = "user_registered"
-    LOGIN_FAILED = "login_failed"
-
-    # Project actions
-    PROJECT_CREATED = "project_created"
-    PROJECT_UPDATED = "project_updated"
-    PROJECT_DELETED = "project_deleted"
-
-    # Config actions (skills, agents, MCP, hooks, commands)
-    CONFIG_CREATED = "config_created"
-    CONFIG_UPDATED = "config_updated"
-    CONFIG_DELETED = "config_deleted"
-
-    # Notification actions
-    NOTIFICATION_RULE_CREATED = "notification_rule_created"
-    NOTIFICATION_RULE_UPDATED = "notification_rule_updated"
-    NOTIFICATION_RULE_DELETED = "notification_rule_deleted"
-
-    # LLM Router actions
-    LLM_PROVIDER_CHANGED = "llm_provider_changed"
-
-
-class ResourceType(str, Enum):
-    """Resource types for audit logging."""
-
-    SESSION = "session"
-    TASK = "task"
-    APPROVAL = "approval"
-    AGENT = "agent"
-    USER = "user"
-    PERMISSION = "permission"
-    TOOL = "tool"
-    PROJECT = "project"
-    CONFIG = "config"
-    NOTIFICATION = "notification"
-    LLM_PROVIDER = "llm_provider"
-
-
-class AuditLogEntry(BaseModel):
-    """Audit log entry model."""
-
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    session_id: str | None = None
-    user_id: str | None = None
-    project_id: str | None = None
-
-    action: AuditAction
-    resource_type: ResourceType
-    resource_id: str | None = None
-
-    old_value: dict[str, Any] | None = None
-    new_value: dict[str, Any] | None = None
-    changes: dict[str, Any] | None = None
-
-    agent_id: str | None = None
-    ip_address: str | None = None
-    user_agent: str | None = None
-
-    metadata: dict[str, Any] = Field(default_factory=dict)
-    status: str = "success"
-    error_message: str | None = None
-
-    created_at: datetime = Field(default_factory=utcnow)
-
-    # Compliance fields (optional for backward compatibility)
-    data_classification: DataClassification | None = None
-    change_reason: str | None = None
-    compliance_flags: list[str] = Field(default_factory=list)
-    previous_hash: str | None = None
-    hash: str | None = None
-    retention_policy: RetentionPolicy | None = None
-
-
-class AuditLogFilter(BaseModel):
-    """Filter for querying audit logs."""
-
-    session_id: str | None = None
-    user_id: str | None = None
-    project_id: str | None = None
-    include_global: bool = True  # Include project_id IS NULL events when filtering by project
-    action: AuditAction | None = None
-    resource_type: ResourceType | None = None
-    resource_id: str | None = None
-    status: str | None = None
-    start_date: datetime | None = None
-    end_date: datetime | None = None
-    limit: int = 100
-    offset: int = 0
-
-
-class AuditLogResponse(BaseModel):
-    """Response model for audit log queries."""
-
-    logs: list[AuditLogEntry]
-    total: int
-    limit: int
-    offset: int
-
-
-# In-memory storage for development fallback
 _audit_logs: list[AuditLogEntry] = []
-
-
-# ─────────────────────────────────────────────────────────────
-# Stats aggregation helpers
-# ─────────────────────────────────────────────────────────────
-
-# Action categories — explicit membership instead of fragile substring matching
-_TOOL_ACTIONS: frozenset[AuditAction] = frozenset(
-    {AuditAction.TOOL_EXECUTED, AuditAction.TOOL_FAILED}
-)
-_APPROVAL_ACTIONS: frozenset[AuditAction] = frozenset(
-    {
-        AuditAction.APPROVAL_REQUESTED,
-        AuditAction.APPROVAL_GRANTED,
-        AuditAction.APPROVAL_DENIED,
-    }
-)
-
-# Number of calendar days shown in the activity trend
-TREND_DAYS = 7
-
-
-def build_recent_trend(day_counts: dict[str, int], days: int = TREND_DAYS) -> list[dict[str, Any]]:
-    """Build a contiguous day-by-day activity trend ending today (UTC).
-
-    Unlike a bare ``GROUP BY date``, this zero-fills days with no activity, so
-    the chart always shows exactly ``days`` consecutive calendar days and the
-    "Last N days" label is literally accurate.
-    """
-    today = utcnow().date()
-    trend: list[dict[str, Any]] = []
-    for offset in range(days - 1, -1, -1):
-        date_str = (today - timedelta(days=offset)).strftime("%Y-%m-%d")
-        trend.append({"date": date_str, "count": day_counts.get(date_str, 0)})
-    return trend
-
-
-def compute_stats_from_logs(logs: list[AuditLogEntry], total: int) -> dict[str, Any]:
-    """Compute the audit statistics payload from a list of log entries."""
-    actions_by_type: dict[str, int] = {}
-    actions_by_status: dict[str, int] = {}
-    day_counts: dict[str, int] = {}
-
-    for log in logs:
-        actions_by_type[log.action.value] = actions_by_type.get(log.action.value, 0) + 1
-        actions_by_status[log.status] = actions_by_status.get(log.status, 0) + 1
-        date_str = log.created_at.strftime("%Y-%m-%d")
-        day_counts[date_str] = day_counts.get(date_str, 0) + 1
-
-    return {
-        "total_actions": total,
-        "tool_executions": sum(actions_by_type.get(a.value, 0) for a in _TOOL_ACTIONS),
-        "approvals": sum(actions_by_type.get(a.value, 0) for a in _APPROVAL_ACTIONS),
-        "errors": actions_by_status.get("failed", 0),
-        "actions_by_type": actions_by_type,
-        "actions_by_status": actions_by_status,
-        "recent_trend": build_recent_trend(day_counts),
-    }
 
 
 def _filter_logs(filter: AuditLogFilter) -> list[AuditLogEntry]:
@@ -252,40 +69,6 @@ def _filter_logs(filter: AuditLogFilter) -> list[AuditLogEntry]:
         results = [r for r in results if r.created_at <= filter.end_date]
 
     return results
-
-
-def _build_conditions(filter: AuditLogFilter) -> list:
-    """Build SQLAlchemy WHERE conditions shared by log queries and stats aggregation."""
-    from db.models import AuditLogModel
-
-    conditions: list = []
-    if filter.session_id:
-        conditions.append(AuditLogModel.session_id == filter.session_id)
-    if filter.user_id:
-        conditions.append(AuditLogModel.user_id == filter.user_id)
-    if filter.project_id:
-        if filter.include_global:
-            conditions.append(
-                or_(
-                    AuditLogModel.project_id == filter.project_id,
-                    AuditLogModel.project_id.is_(None),
-                )
-            )
-        else:
-            conditions.append(AuditLogModel.project_id == filter.project_id)
-    if filter.action:
-        conditions.append(AuditLogModel.action == filter.action.value)
-    if filter.resource_type:
-        conditions.append(AuditLogModel.resource_type == filter.resource_type.value)
-    if filter.resource_id:
-        conditions.append(AuditLogModel.resource_id == filter.resource_id)
-    if filter.status:
-        conditions.append(AuditLogModel.status == filter.status)
-    if filter.start_date:
-        conditions.append(AuditLogModel.created_at >= filter.start_date)
-    if filter.end_date:
-        conditions.append(AuditLogModel.created_at <= filter.end_date)
-    return conditions
 
 
 class AuditService:
@@ -761,11 +544,18 @@ class AuditService:
 
     @staticmethod
     def cleanup_old_logs(days: int = 30) -> int:
-        """Remove audit logs older than specified days (in-memory)."""
-        global _audit_logs
+        """Remove audit logs older than specified days (in-memory).
+
+        Mutates the list in place rather than rebinding it. Rebinding through
+        ``global`` replaces only this module's name, so the package barrel — and
+        anything else holding the list — would keep the pre-purge contents and
+        report audit data that no longer exists. Splitting the module made that
+        reachable through ``services.audit_service._audit_logs``; mutating in
+        place removes the hazard for every holder at once.
+        """
         cutoff = utcnow() - timedelta(days=days)
         original_count = len(_audit_logs)
-        _audit_logs = [log for log in _audit_logs if log.created_at >= cutoff]
+        _audit_logs[:] = [log for log in _audit_logs if log.created_at >= cutoff]
         return original_count - len(_audit_logs)
 
     @staticmethod
@@ -841,145 +631,3 @@ class AuditService:
 
         else:
             raise ValueError(f"Unsupported format: {format}")
-
-
-# Convenience functions for common audit events
-def audit_task_created(
-    session_id: str,
-    task_id: str,
-    task_data: dict,
-    user_id: str | None = None,
-    project_id: str | None = None,
-) -> AuditLogEntry:
-    """Log task creation."""
-    return AuditService.log(
-        action=AuditAction.TASK_CREATED,
-        resource_type=ResourceType.TASK,
-        resource_id=task_id,
-        session_id=session_id,
-        user_id=user_id,
-        project_id=project_id,
-        new_value=task_data,
-    )
-
-
-def audit_task_status_change(
-    session_id: str,
-    task_id: str,
-    old_status: str,
-    new_status: str,
-    agent_id: str | None = None,
-    project_id: str | None = None,
-) -> AuditLogEntry:
-    """Log task status change."""
-    action_map = {
-        "completed": AuditAction.TASK_COMPLETED,
-        "failed": AuditAction.TASK_FAILED,
-        "cancelled": AuditAction.TASK_CANCELLED,
-        "paused": AuditAction.TASK_PAUSED,
-        "pending": AuditAction.TASK_RESUMED if old_status == "paused" else AuditAction.TASK_UPDATED,
-    }
-    action = action_map.get(new_status, AuditAction.TASK_UPDATED)
-
-    return AuditService.log(
-        action=action,
-        resource_type=ResourceType.TASK,
-        resource_id=task_id,
-        session_id=session_id,
-        agent_id=agent_id,
-        project_id=project_id,
-        old_value={"status": old_status},
-        new_value={"status": new_status},
-    )
-
-
-def audit_tool_executed(
-    session_id: str,
-    tool_name: str,
-    tool_args: dict,
-    result: Any,
-    agent_id: str | None = None,
-    task_id: str | None = None,
-    project_id: str | None = None,
-) -> AuditLogEntry:
-    """Log tool execution."""
-    return AuditService.log(
-        action=AuditAction.TOOL_EXECUTED,
-        resource_type=ResourceType.TOOL,
-        resource_id=tool_name,
-        session_id=session_id,
-        agent_id=agent_id,
-        project_id=project_id,
-        new_value={"args": tool_args, "result": str(result)[:1000]},
-        metadata={"task_id": task_id} if task_id else None,
-    )
-
-
-def audit_approval(
-    session_id: str,
-    approval_id: str,
-    action: AuditAction,
-    user_id: str | None = None,
-    note: str | None = None,
-) -> AuditLogEntry:
-    """Log approval action."""
-    return AuditService.log(
-        action=action,
-        resource_type=ResourceType.APPROVAL,
-        resource_id=approval_id,
-        session_id=session_id,
-        user_id=user_id,
-        metadata={"note": note} if note else None,
-    )
-
-
-def audit_user_auth(
-    action: AuditAction,
-    user_id: str | None = None,
-    metadata: dict | None = None,
-    status: str = "success",
-    error_message: str | None = None,
-) -> AuditLogEntry:
-    """Log authentication event (login, logout, register, token refresh)."""
-    return AuditService.log(
-        action=action,
-        resource_type=ResourceType.USER,
-        resource_id=user_id,
-        user_id=user_id,
-        metadata=metadata or {},
-        status=status,
-        error_message=error_message,
-    )
-
-
-def audit_config_change(
-    action: AuditAction,
-    config_type: str,
-    config_id: str,
-    project_id: str | None = None,
-    user_id: str | None = None,
-) -> AuditLogEntry:
-    """Log configuration change (skill, agent, MCP, hook, command)."""
-    return AuditService.log(
-        action=action,
-        resource_type=ResourceType.CONFIG,
-        resource_id=config_id,
-        user_id=user_id,
-        project_id=project_id,
-        metadata={"config_type": config_type},
-    )
-
-
-def audit_project_change(
-    action: AuditAction,
-    project_id: str,
-    user_id: str | None = None,
-) -> AuditLogEntry:
-    """Log project change."""
-    return AuditService.log(
-        action=action,
-        resource_type=ResourceType.PROJECT,
-        resource_id=project_id,
-        user_id=user_id,
-        project_id=project_id,
-    )
