@@ -203,7 +203,7 @@ class TestMergeService:
         service.project_path = "/test/path"
         return service
 
-    @patch("services.merge_service.GIT_AVAILABLE", True)
+    @patch("services.merge_service.service.GIT_AVAILABLE", True)
     def test_init(self, mock_git_service):
         """Test MergeService initialization."""
         from services.merge_service import MergeService
@@ -211,7 +211,7 @@ class TestMergeService:
         merge_service = MergeService(mock_git_service)
         assert merge_service.git_service == mock_git_service
 
-    @patch("services.merge_service.GIT_AVAILABLE", True)
+    @patch("services.merge_service.service.GIT_AVAILABLE", True)
     @patch("subprocess.run")
     def test_check_merge_conflicts_no_conflicts(self, mock_run, mock_git_service):
         """Test checking for merge conflicts with no conflicts."""
@@ -252,7 +252,7 @@ class TestMergeService:
 class TestMergeRequestService:
     """Tests for MergeRequestService class."""
 
-    @patch("services.merge_service.GIT_AVAILABLE", True)
+    @patch("services.merge_service.service.GIT_AVAILABLE", True)
     def test_create_merge_request(self):
         """Test creating a merge request."""
         from services.merge_service import MergeRequestService, MergeRequestStatus
@@ -275,7 +275,7 @@ class TestMergeRequestService:
         assert mr.status == MergeRequestStatus.OPEN
         assert mr.author_id == "user1"
 
-    @patch("services.merge_service.GIT_AVAILABLE", True)
+    @patch("services.merge_service.service.GIT_AVAILABLE", True)
     def test_list_merge_requests(self):
         """Test listing merge requests."""
         from services.merge_service import MergeRequestService, MergeRequestStatus
@@ -306,7 +306,7 @@ class TestMergeRequestService:
         open_mrs = mr_service.list_merge_requests(status=MergeRequestStatus.OPEN)
         assert len(open_mrs) == 2
 
-    @patch("services.merge_service.GIT_AVAILABLE", True)
+    @patch("services.merge_service.service.GIT_AVAILABLE", True)
     def test_approve_merge_request(self):
         """Test approving a merge request."""
         from services.merge_service import MergeRequestService
@@ -325,7 +325,7 @@ class TestMergeRequestService:
         updated_mr = mr_service.approve_merge_request(mr.id, "user2")
         assert "user2" in updated_mr.approved_by
 
-    @patch("services.merge_service.GIT_AVAILABLE", True)
+    @patch("services.merge_service.service.GIT_AVAILABLE", True)
     def test_close_merge_request(self):
         """Test closing a merge request."""
         from services.merge_service import MergeRequestService, MergeRequestStatus

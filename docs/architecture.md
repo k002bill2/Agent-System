@@ -281,7 +281,7 @@ src/backend/
 │   ├── mcp_config_manager.py      # MCP 설정 파일 관리
 │   ├── mcp_manager.py             # MCP 서버 생명주기 관리
 │   ├── mcp_service.py             # MCP 서버 관리
-│   ├── merge_service.py           # Git 머지/충돌 해결
+│   ├── merge_service/             # Git 머지/충돌 해결 (패키지: errors·service·requests)
 │   ├── notification_service.py    # 알림 서비스 (Slack, Discord, Email, Webhook)
 │   ├── organization_service.py    # 조직/멀티테넌트 서비스
 │   ├── playground_service.py      # 에이전트 플레이그라운드
