@@ -348,7 +348,7 @@ npm run build
 | Runtime resolver | `src/backend/services/llm_runtime_resolver.py` |
 | Usage ledger service | `src/backend/services/llm_usage_ledger_service.py` |
 | Common LLM service | `src/backend/services/llm_service.py` |
-| Task Analyzer tmux | `src/backend/services/tmux_service.py` |
+| Task Analyzer tmux | `src/backend/services/tmux_service/` |
 | External Usage adapter | `src/backend/services/external_usage_service.py` |
 | Settings LLM Access UI | `src/dashboard/src/components/usage/LLMAccessSettings.tsx` |
 | LLM Access UI modules | `src/dashboard/src/components/usage/llm-access/` |

@@ -43,6 +43,15 @@ from pathlib import Path
 # then stops covering the barrel at all.
 _BARREL_ONLY = frozenset({"__all__"})
 
+# Names that are *correct* in every module of a package rather than owned by one.
+# `logger = logging.getLogger(__name__)` is the case: the text is identical but
+# `__name__` resolves per module, so a split that gives each module its own is
+# right, and comparing them would abort with "두 모듈에 같은 정의". `split_module.py`
+# already excludes the same name from its assignment table (`tolerate=`); this
+# keeps the two tools' contracts aligned. Losing it everywhere is still caught —
+# by ruff F821, the same backstop that covers dropped imports.
+_PER_MODULE = frozenset({"logger"})
+
 
 def _bound_names(target: ast.expr) -> list[str]:
     """Names an assignment target binds, unpacking tuples and lists."""
@@ -66,7 +75,7 @@ def _definitions(source: str, origin: str) -> dict[str, tuple[str, str]]:
     found: dict[str, tuple[str, str]] = {}
 
     def record(name: str, node: ast.AST, kind: str) -> None:
-        if name in _BARREL_ONLY:
+        if name in _BARREL_ONLY or name in _PER_MODULE:
             return
         # Decorators sit above ``node.lineno``. Comparing from ``def``/``class``
         # would call a definition unchanged after its decorator was removed —
