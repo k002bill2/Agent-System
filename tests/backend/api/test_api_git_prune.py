@@ -17,19 +17,22 @@ from httpx import ASGITransport, AsyncClient
 def app() -> FastAPI:
     """Create test FastAPI app with git router.
 
-    The git router requires authentication (2026-08-28), so an identity is
-    injected here. What this file tests is the prune endpoint's contract, not
-    the gate -- the gate itself is covered by the git authentication tests in
+    The git router gates every route with `require_git_project_access`
+    (authentication + project-level authorization), so it is overridden here
+    with a fixed identity. What this file tests is the prune endpoint's
+    contract, not the gate -- overriding it also keeps `PROJECT_ID` free to be
+    a stand-in rather than a real registry entry. The gate itself is covered by
+    the git authentication and authorization tests in
     `test_security_hardening.py`.
     """
     from types import SimpleNamespace
 
-    from api.deps import get_current_user
     from api.git import router
+    from api.git._shared import require_git_project_access
 
     test_app = FastAPI()
     test_app.include_router(router)
-    test_app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+    test_app.dependency_overrides[require_git_project_access] = lambda: SimpleNamespace(
         id="test-user", role="admin", is_admin=True, is_active=True
     )
     return test_app

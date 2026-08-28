@@ -11,8 +11,6 @@
 
 from fastapi import APIRouter, Depends
 
-from api.deps import get_current_user
-
 from . import (
     branches,
     commits,
@@ -23,6 +21,7 @@ from . import (
     repositories,
     working_tree,
 )
+from ._shared import require_git_project_access
 from .commits import generate_draft_commits, generate_draft_commits_for_project
 
 # 인증은 **라우터 소유 모듈**에서 건다. 하위 8 모듈의 라우트가 전부 이 하나를
@@ -37,14 +36,14 @@ from .commits import generate_draft_commits, generate_draft_commits_for_project
 # 대시보드는 이미 `apiClient` 의 auth interceptor 로 Authorization 헤더를 보내고
 # 있어(그리고 git store 는 전부 apiClient 를 쓴다) 이 변경으로 깨지지 않는다.
 #
-# 이것은 **인증**(누구인지)만 건다. 프로젝트 단위 **인가**(그 프로젝트에 접근할
-# 권한이 있는지)는 아직 없다 — 라우트의 `project_id` 가 path 기반 문자열인 반면
-# `require_project_role` 은 UUID 를 기대해서, ID 해석 통일이 선행 조건이다.
-# `.planning/STATE.md` 의 후속 1·2 에 그 작업으로 묶어 두었다.
+# 게이트는 인증(누구인지)과 프로젝트 단위 인가(그 프로젝트에 접근할 권한이
+# 있는지)를 함께 건다 — `_shared.require_git_project_access` 참조. 두 ID 공간
+# (레지스트리의 path 기반 문자열 vs `ProjectModel.id` UUID)은 양쪽이 공유하는
+# 필드인 **파일시스템 경로**로 잇는다.
 router = APIRouter(
     prefix="/git",
     tags=["git"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(require_git_project_access)],
 )
 
 # 등록 순서는 원본 선언 순서를 재현하지 않는다 — 원본은 도메인 그룹이 불연속이라

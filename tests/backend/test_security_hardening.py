@@ -1858,3 +1858,126 @@ async def test_git_route_reachable_when_authenticated(client, authenticated_app,
     branches = response.json()["branches"]
     assert [b["name"] for b in branches] == ["work"]
     assert branches[0]["is_current"] is True
+
+
+# ─────────────────────────────────────────────────────────────
+# Git API project-level authorization
+#
+# The router gate added on 2026-08-28 only authenticated. Any logged-in user
+# could still reach any project in the registry. `require_git_project_access`
+# closes that by joining the two ID spaces on the filesystem path: the registry
+# key is path-derived, `require_project_role` wants a ProjectModel UUID, and
+# the path is the field both sides carry.
+# ─────────────────────────────────────────────────────────────
+
+
+@pytest.mark.anyio
+async def test_git_project_access_uses_path_to_resolve_db_project(monkeypatch, tmp_path):
+    """The registry key is translated to a ProjectModel id before the role check."""
+    from api.git import _shared
+
+    monkeypatch.setenv("USE_DATABASE", "true")
+
+    project_id = _register_git_project(tmp_path)
+    repo_path = str(tmp_path / "repo")
+    registered = SimpleNamespace(id="proj-uuid", path=repo_path, is_active=True)
+
+    class _Db:
+        async def execute(self, *_args, **_kwargs):
+            return SimpleNamespace(
+                scalars=lambda: SimpleNamespace(first=lambda: registered)
+            )
+
+    seen: dict[str, object] = {}
+
+    async def fake_require(pid, user, db, min_role="viewer"):
+        seen["project_id"] = pid
+        seen["min_role"] = min_role
+        return "editor"
+
+    monkeypatch.setattr(_shared, "require_project_role", fake_require)
+
+    user = SimpleNamespace(id="member", role="user", is_admin=False, is_active=True)
+    await _shared.require_git_project_access(
+        _request_stub("GET", project_id, f"/api/git/projects/{project_id}/branches"),
+        user,
+        db=_Db(),
+    )
+
+    # The UUID, not the path-derived registry key -- that translation is the point.
+    assert seen == {"project_id": "proj-uuid", "min_role": "viewer"}
+
+
+@pytest.mark.anyio
+async def test_git_writes_require_editor_role(monkeypatch, tmp_path):
+    """Reads settle for viewer; anything that mutates a repo needs editor."""
+    from api.git import _shared
+
+    monkeypatch.setenv("USE_DATABASE", "false")
+    project_id = _register_git_project(tmp_path)
+
+    seen: dict[str, str] = {}
+
+    async def fake_require(pid, user, db, min_role="viewer"):
+        seen[str(pid)] = min_role
+        return "editor"
+
+    monkeypatch.setattr(_shared, "require_project_role", fake_require)
+    user = SimpleNamespace(id="member", role="user", is_admin=False, is_active=True)
+
+    for method in ("GET", "POST", "DELETE"):
+        seen.clear()
+        await _shared.require_git_project_access(
+            _request_stub(method, project_id, f"/api/git/projects/{project_id}/branches"),
+            user,
+            db=object(),
+        )
+        expected = "viewer" if method == "GET" else "editor"
+        assert seen[project_id] == expected, f"{method} -> {seen[project_id]}"
+
+
+@pytest.mark.anyio
+async def test_git_project_absent_from_db_registry_is_404(monkeypatch, tmp_path):
+    """A path that exists on disk but is not DB-registered is not a project.
+
+    This is exactly the gap `7ed7c46` opened: filesystem discovery populates
+    the in-memory registry in database mode, so registry membership alone must
+    not grant access.
+    """
+    from api.git import _shared
+
+    monkeypatch.setenv("USE_DATABASE", "true")
+    project_id = _register_git_project(tmp_path)
+
+    class _EmptyDb:
+        async def execute(self, *_args, **_kwargs):
+            return SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: None))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _shared.require_git_project_access(
+            _request_stub("GET", project_id, f"/api/git/projects/{project_id}/branches"),
+            SimpleNamespace(id="admin", role="admin", is_admin=True, is_active=True),
+            db=_EmptyDb(),
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_git_github_routes_need_no_project_authorization(monkeypatch):
+    """`/github/...` has no project_id -- authentication only, no role lookup."""
+    from api.git import _shared
+
+    async def explode(*_args, **_kwargs):
+        raise AssertionError("require_project_role must not run without a project_id")
+
+    monkeypatch.setattr(_shared, "require_project_role", explode)
+    user = SimpleNamespace(id="member", role="user", is_admin=False, is_active=True)
+
+    result = await _shared.require_git_project_access(
+        _request_stub("GET", None, "/api/git/github/owner/repo/pulls"),
+        user,
+        db=object(),
+    )
+
+    assert result is user
