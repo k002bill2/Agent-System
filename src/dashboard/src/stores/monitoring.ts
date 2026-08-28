@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { apiClient } from '../services/apiClient'
+import { createAuthenticatedSseClient } from '../services/authenticatedSse'
 import { getApiUrl } from '../config/api'
 import {
   CheckType,
@@ -13,6 +14,7 @@ import {
   WorkflowCheck,
   WorkflowCheckStatus,
   VaultHealthResult,
+  MonitoringCapabilities,
 } from '../types/monitoring'
 
 export interface LogLine {
@@ -55,6 +57,9 @@ interface MonitoringState {
   // Vault health (parsed from vault-health check stdout)
   vaultHealthMap: Record<string, VaultHealthResult>
 
+  // Capabilities of the active monitoring backend (filesystem or database)
+  monitoringCapabilitiesMap: Record<string, MonitoringCapabilities>
+
   // Error state
   error: string | null
 
@@ -73,6 +78,8 @@ interface MonitoringState {
   setActiveContextTab: (tab: 'claude-md' | 'dev-docs' | 'session') => void
   clearLogs: (checkType?: CheckType) => void
   clearError: () => void
+  getMonitoringCapabilities: (projectId: string) => MonitoringCapabilities | null
+  fetchMonitoringCapabilities: (projectId: string) => Promise<MonitoringCapabilities | null>
 
   // Vault health actions
   getVaultHealth: (projectId: string) => VaultHealthResult | null
@@ -99,6 +106,7 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
   runningWorkflowIds: new Set(),
   workflowLogs: {},
   vaultHealthMap: {},
+  monitoringCapabilitiesMap: {},
   error: null,
 
   getProjectHealth: (projectId: string) => {
@@ -122,7 +130,39 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
     return get().checkConfigMap[projectId]?.check_types ?? []
   },
 
+  getMonitoringCapabilities: (projectId: string) => {
+    return get().monitoringCapabilitiesMap[projectId] ?? null
+  },
+
+  fetchMonitoringCapabilities: async (projectId: string) => {
+    try {
+      const data = await apiClient.get<MonitoringCapabilities>(
+        `/api/projects/${projectId}/monitoring-capabilities`,
+      )
+      set((state) => ({
+        monitoringCapabilitiesMap: {
+          ...state.monitoringCapabilitiesMap,
+          [projectId]: data,
+        },
+      }))
+      return data
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error'
+      set({ error: errorMessage })
+      return null
+    }
+  },
+
   fetchCheckConfig: async (projectId: string) => {
+    let capabilities: MonitoringCapabilities | undefined = get().monitoringCapabilitiesMap[projectId]
+    if (!capabilities) {
+      capabilities = (await get().fetchMonitoringCapabilities(projectId)) ?? undefined
+    }
+    if (!capabilities || capabilities.health_config === 'disabled') {
+      set({ error: capabilities?.reason ?? 'Project monitoring configuration is unavailable' })
+      return
+    }
+
     try {
       const data = await apiClient.get<CheckConfig>(`/api/projects/${projectId}/health-config`)
       set((state) => {
@@ -144,6 +184,15 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
   },
 
   fetchProjectHealth: async (projectId: string) => {
+    let capabilities: MonitoringCapabilities | undefined = get().monitoringCapabilitiesMap[projectId]
+    if (!capabilities) {
+      capabilities = (await get().fetchMonitoringCapabilities(projectId)) ?? undefined
+    }
+    if (!capabilities || capabilities.health === 'disabled') {
+      set({ isLoadingHealth: false, error: capabilities?.reason ?? 'Project health monitoring is unavailable' })
+      return
+    }
+
     set({ isLoadingHealth: true, error: null })
 
     try {
@@ -174,6 +223,18 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
   },
 
   runCheck: (projectId: string, checkType: CheckType) => {
+    const capabilities = get().monitoringCapabilitiesMap[projectId]
+    if (!capabilities) {
+      void get().fetchMonitoringCapabilities(projectId).then((loaded) => {
+        if (loaded?.checks === 'available') get().runCheck(projectId, checkType)
+      })
+      return
+    }
+    if (capabilities.checks === 'disabled') {
+      set({ error: capabilities.reason ?? 'Project checks are unavailable' })
+      return
+    }
+
     const { runningChecksMap } = get()
     const runningChecks = runningChecksMap[projectId] || new Set()
 
@@ -193,8 +254,27 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
     }))
 
     // Start SSE connection
-    const eventSource = new EventSource(
+    const eventSource = createAuthenticatedSseClient(
       `${getApiUrl('/api')}/projects/${projectId}/checks/${checkType}`,
+      {
+        onStatus: (status) => {
+          if (status === 'authentication-failed') {
+            set({ error: 'Authentication required for project checks' })
+          } else if (status === 'permission-denied') {
+            set({ error: 'You do not have permission to run project checks' })
+          } else if (status === 'error') {
+            set({ error: `Check ${checkType} failed` })
+          }
+          if (status !== 'closed') {
+            const currentRunning = get().runningChecksMap[projectId] || new Set()
+            const newRunning = new Set(currentRunning)
+            newRunning.delete(checkType)
+            set((state) => ({
+              runningChecksMap: { ...state.runningChecksMap, [projectId]: newRunning },
+            }))
+          }
+        },
+      },
     )
 
     eventSource.addEventListener('check_started', (event) => {
@@ -355,6 +435,18 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
   },
 
   runAllChecks: (projectId: string) => {
+    const capabilities = get().monitoringCapabilitiesMap[projectId]
+    if (!capabilities) {
+      void get().fetchMonitoringCapabilities(projectId).then((loaded) => {
+        if (loaded?.checks === 'available') get().runAllChecks(projectId)
+      })
+      return
+    }
+    if (capabilities.checks === 'disabled') {
+      set({ error: capabilities.reason ?? 'Project checks are unavailable' })
+      return
+    }
+
     const { runningChecksMap } = get()
     const runningChecks = runningChecksMap[projectId] || new Set()
 
@@ -364,8 +456,27 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
     }
 
     // Start SSE connection for all checks
-    const eventSource = new EventSource(
+    const eventSource = createAuthenticatedSseClient(
       `${getApiUrl('/api')}/projects/${projectId}/checks/run-all`,
+      {
+        onStatus: (status) => {
+          if (status === 'authentication-failed') {
+            set({ error: 'Authentication required for project checks' })
+          } else if (status === 'permission-denied') {
+            set({ error: 'You do not have permission to run project checks' })
+          } else if (status === 'error') {
+            set({ error: 'Failed to run checks' })
+          }
+          if (status !== 'closed') {
+            set((state) => ({
+              runningChecksMap: {
+                ...state.runningChecksMap,
+                [projectId]: new Set(),
+              },
+            }))
+          }
+        },
+      },
     )
 
     eventSource.addEventListener('check_started', (event) => {

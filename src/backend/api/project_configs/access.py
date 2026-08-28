@@ -5,7 +5,7 @@ import os
 from fastapi import Depends, HTTPException, Request, status
 
 from api.deps import get_current_user, get_db_session, require_project_role
-from db.models import ProjectAccessModel, ProjectModel, UserModel
+from db.models import ProjectModel, UserModel
 
 
 async def require_project_config_access(
@@ -79,19 +79,12 @@ async def require_project_config_access(
         from api.projects import _get_admin_org_ids
 
         admin_org_ids = await _get_admin_org_ids(current_user)
-        access_result = await db.execute(
-            select(ProjectAccessModel.project_id).where(
-                ProjectAccessModel.project_id == project.id,
-                ProjectAccessModel.user_id == current_user.id,
-            )
-        )
-        has_direct_access = access_result.scalar_one_or_none() is not None
-        if project.organization_id in admin_org_ids or has_direct_access:
+        if project.organization_id in admin_org_ids:
             return current_user
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Project access denied",
-        )
+
+        min_role = "viewer" if request.method in {"GET", "HEAD", "OPTIONS"} else "editor"
+        await require_project_role(str(project.id), current_user, db, min_role=min_role)
+        return current_user
     except HTTPException:
         raise
     except Exception as exc:
@@ -143,20 +136,11 @@ async def require_project_config_target_access(
         from api.projects import _get_admin_org_ids
 
         admin_org_ids = await _get_admin_org_ids(current_user)
-        access_result = await db.execute(
-            select(ProjectAccessModel.project_id).where(
-                ProjectAccessModel.project_id == project.id,
-                ProjectAccessModel.user_id == current_user.id,
-            )
-        )
-        if (
-            project.organization_id in admin_org_ids
-            or access_result.scalar_one_or_none() is not None
-        ):
+        if project.organization_id in admin_org_ids:
             return
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Target project access denied"
-        )
+
+        await require_project_role(str(project.id), current_user, db, min_role="editor")
+        return
     except HTTPException:
         raise
     except Exception as exc:

@@ -40,6 +40,10 @@ class MockEventSource {
 // @ts-expect-error - Mock
 global.EventSource = MockEventSource
 
+vi.mock('../../services/authenticatedSse', () => ({
+  createAuthenticatedSseClient: (url: string) => new MockEventSource(url),
+}))
+
 function resetStore() {
   useMonitoringStore.setState({
     projectHealthMap: {},
@@ -56,6 +60,16 @@ function resetStore() {
     runningWorkflowIds: new Set(),
     workflowLogs: {},
     error: null,
+    monitoringCapabilitiesMap: {
+      p1: {
+        project_id: 'p1',
+        mode: 'filesystem',
+        health_config: 'available',
+        health: 'available',
+        checks: 'available',
+        reason: null,
+      },
+    },
   })
   eventSourceInstances.length = 0
 }
@@ -87,8 +101,49 @@ describe('monitoring store', () => {
     })
   })
 
-  // ── UI Actions ─────────────────────────────────────────
+  describe('monitoring capabilities', () => {
+    it('fetches and stores the backend capability before legacy operations', async () => {
+      useMonitoringStore.setState({ monitoringCapabilitiesMap: {} })
+      const capabilities = {
+        project_id: 'p1',
+        mode: 'database',
+        health_config: 'disabled',
+        health: 'disabled',
+        checks: 'disabled',
+        reason: 'Database-backed project monitoring is not available',
+      }
+      mockApiClient.get.mockResolvedValueOnce(capabilities)
 
+      await useMonitoringStore.getState().fetchMonitoringCapabilities('p1')
+
+      expect(mockApiClient.get).toHaveBeenCalledWith('/api/projects/p1/monitoring-capabilities')
+      expect(useMonitoringStore.getState().monitoringCapabilitiesMap.p1).toEqual(capabilities)
+    })
+
+    it('blocks legacy health and check operations when the backend disables them', async () => {
+      const capabilities = {
+        project_id: 'p1' as string,
+        mode: 'database' as const,
+        health_config: 'disabled' as const,
+        health: 'disabled' as const,
+        checks: 'disabled' as const,
+        reason: 'Database-backed project monitoring is not available',
+      }
+      useMonitoringStore.setState({ monitoringCapabilitiesMap: { p1: capabilities } })
+
+      await useMonitoringStore.getState().fetchCheckConfig('p1')
+      await useMonitoringStore.getState().fetchProjectHealth('p1')
+      useMonitoringStore.getState().runCheck('p1', 'test')
+      useMonitoringStore.getState().runAllChecks('p1')
+
+      expect(mockApiClient.get).not.toHaveBeenCalledWith(expect.stringContaining('/health-config'))
+      expect(mockApiClient.get).not.toHaveBeenCalledWith(expect.stringContaining('/health'))
+      expect(eventSourceInstances).toHaveLength(0)
+      expect(useMonitoringStore.getState().error).toContain('Database-backed')
+    })
+  })
+
+  // ── UI Actions ──────────────────────────────────────────
   describe('UI actions', () => {
     it('setActiveLogView updates view', () => {
       useMonitoringStore.getState().setActiveLogView('test')

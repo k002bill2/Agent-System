@@ -8,7 +8,10 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { apiClient } from '../services/apiClient'
+import { useAuthStore } from './auth'
 import { getApiUrl } from '../config/api'
+import { createAuthenticatedSseClient } from '../services/authenticatedSse'
+import type { AuthenticatedSseClient } from '../services/authenticatedSse'
 import {
   ActivityEvent,
   ActivityResponse,
@@ -37,7 +40,7 @@ interface ClaudeCodeActivityState {
   isLoadingTasks: boolean
 
   // SSE connection
-  eventSource: EventSource | null
+  eventSource: AuthenticatedSseClient | null
 
   // Error state
   error: string | null
@@ -170,8 +173,33 @@ export const useClaudeCodeActivityStore = create<ClaudeCodeActivityState>()(
       stopStreaming()
     }
 
-    const eventSource = new EventSource(
-      getApiUrl(`/api/claude-sessions/${sessionId}/activity/stream`)
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+    const scheduleReconnect = () => {
+      if (reconnectTimer !== null) return
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null
+        const { activeSessionId, dataSource, eventSource: current } = get()
+        if (current === eventSource && activeSessionId && dataSource === 'claude-code') {
+          get().startStreaming(activeSessionId)
+        }
+      }, 5000)
+    }
+
+    const eventSource: AuthenticatedSseClient = createAuthenticatedSseClient(
+      getApiUrl(`/api/claude-sessions/${sessionId}/activity/stream`),
+      {
+        onStatus: (status) => {
+          if (status === 'authentication-failed') {
+            set({ eventSource: null, error: 'Authentication required for activity stream' })
+          } else if (status === 'permission-denied') {
+            set({ eventSource: null, error: 'You do not have permission to view activity' })
+          } else if (status === 'error') {
+            // Only a transport error is reconnectable. Authentication and
+            // permission failures above are terminal for this stream.
+            scheduleReconnect()
+          }
+        },
+      },
     )
 
     // Handle initial batch of activity
@@ -207,17 +235,6 @@ export const useClaudeCodeActivityStore = create<ClaudeCodeActivityState>()(
     eventSource.addEventListener('session_completed', () => {
       // Session completed, but keep the data
       // Claude Code session completed
-    })
-
-    eventSource.addEventListener('error', (event) => {
-      console.warn('SSE connection error:', event)
-      // Attempt to reconnect after a short delay
-      setTimeout(() => {
-        const { activeSessionId, dataSource } = get()
-        if (activeSessionId && dataSource === 'claude-code') {
-          get().startStreaming(activeSessionId)
-        }
-      }, 5000)
     })
 
     set({ eventSource })
@@ -265,7 +282,10 @@ export const useClaudeCodeActivityStore = create<ClaudeCodeActivityState>()(
         rootTaskIds: state.rootTaskIds,
       }),
       onRehydrateStorage: () => (state) => {
-        if (state?.activeSessionId) {
+        const auth = useAuthStore.getState()
+        const canOpenProtectedStream =
+          auth._hasHydrated && auth.isAuthenticated() && !auth.isTokenExpired()
+        if (state?.activeSessionId && canOpenProtectedStream) {
           // Defer SSE reconnection to next tick to ensure store is fully initialized
           setTimeout(() => {
             state.startStreaming(state.activeSessionId!)
@@ -275,3 +295,25 @@ export const useClaudeCodeActivityStore = create<ClaudeCodeActivityState>()(
     },
   ),
 )
+
+// Auth and activity stores hydrate independently. If the activity store wins
+// the race, retry exactly when auth hydration completes instead of opening a
+// protected stream without validated credentials or leaving it permanently
+// disconnected.
+useAuthStore.subscribe((auth, previousAuth) => {
+  if (!previousAuth._hasHydrated && auth._hasHydrated) {
+    setTimeout(() => {
+      const activity = useClaudeCodeActivityStore.getState()
+      const currentAuth = useAuthStore.getState()
+      if (
+        activity.activeSessionId &&
+        !activity.eventSource &&
+        currentAuth._hasHydrated &&
+        currentAuth.isAuthenticated() &&
+        !currentAuth.isTokenExpired()
+      ) {
+        activity.startStreaming(activity.activeSessionId)
+      }
+    }, 0)
+  }
+})

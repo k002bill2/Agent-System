@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MonitorPage } from './MonitorPage'
 
@@ -32,6 +32,7 @@ vi.mock('../components/monitor', () => ({
 const mockFetchProjects = vi.fn()
 const mockFetchCheckConfig = vi.fn()
 const mockFetchProjectHealth = vi.fn()
+const mockFetchMonitoringCapabilities = vi.fn()
 const mockFetchWorkflowChecks = vi.fn()
 const mockRunAllChecks = vi.fn()
 const mockClearError = vi.fn()
@@ -41,6 +42,7 @@ let mockProjects: Array<{ id: string; name: string; path: string }> = []
 let mockError: string | null = null
 let mockIsLoadingHealth = false
 let mockProjectHealthMap: Record<string, unknown> = {}
+let mockCapabilities: Record<string, unknown> = {}
 
 vi.mock('../stores/orchestration', () => ({
   useOrchestrationStore: (selector: (s: Record<string, unknown>) => unknown) => {
@@ -60,8 +62,10 @@ vi.mock('../stores/monitoring', () => ({
       getRunningChecks: () => new Set(),
       isLoadingHealth: mockIsLoadingHealth,
       error: mockError,
+      getMonitoringCapabilities: (id: string) => mockCapabilities[id] || null,
       fetchCheckConfig: mockFetchCheckConfig,
       fetchProjectHealth: mockFetchProjectHealth,
+      fetchMonitoringCapabilities: mockFetchMonitoringCapabilities,
       fetchWorkflowChecks: mockFetchWorkflowChecks,
       runAllChecks: mockRunAllChecks,
       clearError: mockClearError,
@@ -82,6 +86,16 @@ describe('MonitorPage', () => {
     mockError = null
     mockIsLoadingHealth = false
     mockProjectHealthMap = {}
+    mockCapabilities = {
+      'proj-1': {
+        project_id: 'proj-1', mode: 'filesystem', health_config: 'available',
+        health: 'available', checks: 'available', reason: null,
+      },
+    }
+    mockFetchMonitoringCapabilities.mockResolvedValue({
+      project_id: 'proj-1', mode: 'filesystem', health_config: 'available',
+      health: 'available', checks: 'available', reason: null,
+    })
   })
 
   it('shows select project prompt when no project selected', () => {
@@ -134,14 +148,14 @@ describe('MonitorPage', () => {
     expect(mockClearError).toHaveBeenCalledTimes(1)
   })
 
-  it('calls refresh when Refresh button clicked', () => {
+  it('calls refresh when Refresh button clicked', async () => {
     mockSelectedProjectId = 'proj-1'
     mockProjects = [{ id: 'proj-1', name: 'Test', path: '/test' }]
     mockProjectHealthMap = { 'proj-1': { status: 'healthy' } }
 
     render(<MonitorPage />)
     fireEvent.click(screen.getByText('Refresh'))
-    expect(mockFetchProjectHealth).toHaveBeenCalledWith('proj-1')
+    await waitFor(() => expect(mockFetchProjectHealth).toHaveBeenCalledWith('proj-1'))
   })
 
   it('calls runAllChecks when Run All button clicked', () => {
@@ -154,12 +168,15 @@ describe('MonitorPage', () => {
     expect(mockRunAllChecks).toHaveBeenCalledWith('proj-1')
   })
 
-  it('fetches health and checks when project changes', () => {
+  it('fetches capabilities before health and checks when project changes', async () => {
     mockSelectedProjectId = 'proj-1'
     mockProjects = [{ id: 'proj-1', name: 'Test', path: '/test' }]
 
     render(<MonitorPage />)
-    expect(mockFetchProjectHealth).toHaveBeenCalledWith('proj-1')
-    expect(mockFetchWorkflowChecks).toHaveBeenCalledWith('proj-1')
+    await waitFor(() => {
+      expect(mockFetchMonitoringCapabilities).toHaveBeenCalledWith('proj-1')
+      expect(mockFetchProjectHealth).toHaveBeenCalledWith('proj-1')
+      expect(mockFetchWorkflowChecks).toHaveBeenCalledWith('proj-1')
+    })
   })
 })

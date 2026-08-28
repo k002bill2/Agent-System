@@ -7,6 +7,7 @@ import {
   TranscriptResponse,
 } from '../../types/claudeSession'
 import { apiClient } from '../../services/apiClient'
+import { createAuthenticatedSseClient } from '../../services/authenticatedSse'
 import { isApiError } from '../../services/errors'
 import { getApiUrl } from '../../config/api'
 import type { ClaudeSessionsState, ProviderFilter, SortField, SortOrder } from './types'
@@ -507,8 +508,17 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       return
     }
 
-    const eventSource = new EventSource(
+    const eventSource = createAuthenticatedSseClient(
       getApiUrl(`/api/claude-sessions/${sessionId}/stream`),
+      {
+        onStatus: (status) => {
+          if (status === 'authentication-failed') {
+            set({ eventSource: null, error: 'Authentication required for session stream' })
+          } else if (status === 'permission-denied') {
+            set({ eventSource: null, permissionDenied: true, error: 'Session access denied' })
+          }
+        },
+      },
     )
 
     eventSource.addEventListener('session_update', (event) => {

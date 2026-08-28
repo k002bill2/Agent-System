@@ -11,29 +11,45 @@ vi.mock('../../services/apiClient', () => ({
   },
 }))
 
+const { authenticatedSseInstances, mockCreateAuthenticatedSseClient } = vi.hoisted(() => {
+  type Client = {
+    url: string
+    listeners: Record<string, ((e: MessageEvent) => void)[]>
+    close: ReturnType<typeof vi.fn>
+    addEventListener: (event: string, handler: (e: MessageEvent) => void) => void
+    emit: (event: string, data?: unknown) => void
+    emitStatus: (status: string) => void
+  }
+  const instances: Client[] = []
+  const create = vi.fn((url: string, options?: { onStatus?: (status: string) => void }) => {
+    const client = {
+      url,
+      listeners: {} as Record<string, ((e: MessageEvent) => void)[]>,
+      close: vi.fn(),
+      addEventListener(event: string, handler: (e: MessageEvent) => void) {
+        ;(this.listeners[event] ??= []).push(handler)
+      },
+      emit(event: string, data?: unknown) {
+        for (const handler of this.listeners[event] ?? []) handler(data as MessageEvent)
+      },
+      emitStatus(status: string) {
+        options?.onStatus?.(status)
+      },
+    } satisfies Client
+    instances.push(client)
+    return client
+  })
+  return { authenticatedSseInstances: instances, mockCreateAuthenticatedSseClient: create }
+})
+
+vi.mock('../../services/authenticatedSse', () => ({
+  createAuthenticatedSseClient: mockCreateAuthenticatedSseClient,
+}))
+
 import { useClaudeSessionsStore } from '../claudeSessions'
 import { apiClient } from '../../services/apiClient'
 
 const mockApiClient = vi.mocked(apiClient)
-
-// Mock EventSource
-class MockEventSource {
-  url: string
-  listeners: Record<string, ((e: MessageEvent) => void)[]> = {}
-  close = vi.fn()
-  constructor(url: string) { this.url = url }
-  addEventListener(event: string, handler: (e: MessageEvent) => void) {
-    if (!this.listeners[event]) this.listeners[event] = []
-    this.listeners[event].push(handler)
-  }
-  // Helper: fire a registered event
-  emit(event: string, data?: any) {
-    const handlers = this.listeners[event] || []
-    handlers.forEach((h) => h(data as MessageEvent))
-  }
-}
-// @ts-expect-error - Mock
-global.EventSource = MockEventSource
 
 const emptyResponse = {
   sessions: [],
@@ -82,6 +98,7 @@ function resetStore() {
     batchProgress: { total: 0, processed: 0, success: 0, failed: 0 },
     pendingSummaryCount: 0,
   })
+  authenticatedSseInstances.length = 0
 }
 
 describe('claudeSessions store', () => {
@@ -1434,7 +1451,7 @@ describe('claudeSessions store', () => {
     it('startStreaming creates EventSource', () => {
       useClaudeSessionsStore.getState().startStreaming('s-1')
 
-      const es = useClaudeSessionsStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeSessionsStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
       expect(es).not.toBeNull()
       expect(es.url).toContain('/api/claude-sessions/s-1/stream')
     })
@@ -1456,7 +1473,7 @@ describe('claudeSessions store', () => {
       useClaudeSessionsStore.getState().startStreaming('s-2')
 
       expect(oldES.close).toHaveBeenCalled()
-      const newES = useClaudeSessionsStore.getState().eventSource as unknown as MockEventSource
+      const newES = useClaudeSessionsStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
       expect(newES).not.toBeNull()
       expect(newES.url).toContain('s-2')
     })
@@ -1468,7 +1485,7 @@ describe('claudeSessions store', () => {
       })
 
       useClaudeSessionsStore.getState().startStreaming('s-1')
-      const es = useClaudeSessionsStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeSessionsStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
 
       const updateData = {
         session_id: 's-1',
@@ -1496,7 +1513,7 @@ describe('claudeSessions store', () => {
       })
 
       useClaudeSessionsStore.getState().startStreaming('s-1')
-      const es = useClaudeSessionsStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeSessionsStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
 
       es.emit('session_update', {
         data: JSON.stringify({
@@ -1517,7 +1534,7 @@ describe('claudeSessions store', () => {
     it('session_update handles invalid JSON gracefully', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       useClaudeSessionsStore.getState().startStreaming('s-1')
-      const es = useClaudeSessionsStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeSessionsStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
 
       // Should not throw
       es.emit('session_update', { data: 'invalid json' })
@@ -1532,7 +1549,7 @@ describe('claudeSessions store', () => {
       })
 
       useClaudeSessionsStore.getState().startStreaming('s-1')
-      const es = useClaudeSessionsStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeSessionsStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
 
       es.emit('session_completed', {
         data: JSON.stringify({
@@ -1552,7 +1569,7 @@ describe('claudeSessions store', () => {
       })
 
       useClaudeSessionsStore.getState().startStreaming('s-1')
-      const es = useClaudeSessionsStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeSessionsStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
 
       es.emit('session_completed', {
         data: JSON.stringify({
@@ -1568,7 +1585,7 @@ describe('claudeSessions store', () => {
     it('session_completed handles invalid JSON gracefully', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       useClaudeSessionsStore.getState().startStreaming('s-1')
-      const es = useClaudeSessionsStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeSessionsStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
 
       es.emit('session_completed', { data: 'bad json' })
 
@@ -1578,7 +1595,7 @@ describe('claudeSessions store', () => {
 
     it('session_ended event stops streaming', () => {
       useClaudeSessionsStore.getState().startStreaming('s-1')
-      const es = useClaudeSessionsStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeSessionsStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
 
       es.emit('session_ended', {})
 
@@ -1592,7 +1609,7 @@ describe('claudeSessions store', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
       useClaudeSessionsStore.getState().startStreaming('s-1')
-      const es = useClaudeSessionsStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeSessionsStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
 
       es.emit('error', {})
 
@@ -1614,7 +1631,7 @@ describe('claudeSessions store', () => {
       useClaudeSessionsStore.setState({
         selectedSession: { status: 'completed' } as any,
       })
-      const es = useClaudeSessionsStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeSessionsStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
 
       es.emit('error', {})
 
@@ -1627,7 +1644,7 @@ describe('claudeSessions store', () => {
       useClaudeSessionsStore.setState({ selectedSession: null })
 
       useClaudeSessionsStore.getState().startStreaming('s-1')
-      const es = useClaudeSessionsStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeSessionsStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
 
       es.emit('error', {})
 
@@ -1645,7 +1662,7 @@ describe('claudeSessions store', () => {
       })
 
       useClaudeSessionsStore.getState().startStreaming('s-1')
-      const es = useClaudeSessionsStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeSessionsStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
 
       es.emit('session_update', {
         data: JSON.stringify({

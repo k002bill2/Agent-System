@@ -1,6 +1,7 @@
 /** 프로젝트 목록·선택·전역 설정·SSE 스트리밍·탭/에러 등 스토어 전반의 액션. */
 import { apiClient } from '../../services/apiClient'
 import { getApiUrl } from '../../config/api'
+import { createAuthenticatedSseClient } from '../../services/authenticatedSse'
 import type { ConfigChangeEvent, GlobalConfigSummary, ProjectConfigSummary, ProjectConfigsState, ProjectInfo, TabType } from './types'
 
 /** `git/` 도메인 모듈과 같은 형태. set/get 을 명시 인자로 받는다. */
@@ -112,7 +113,30 @@ export function startStreaming(set: SetFn, get: GetFn) {
     stopStreaming()
   }
 
-  const eventSource = new EventSource(getApiUrl('/api/project-configs/stream'))
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  const scheduleReconnect = () => {
+    if (reconnectTimer !== null) return
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null
+      if (get().eventSource === eventSource) {
+        get().startStreaming()
+      }
+    }, 5000)
+  }
+
+  const eventSource = createAuthenticatedSseClient(getApiUrl('/api/project-configs/stream'), {
+    onStatus: (status) => {
+      if (status === 'authentication-failed') {
+        set({ eventSource: null, error: 'Authentication required for config stream' })
+      } else if (status === 'permission-denied') {
+        set({ eventSource: null, error: 'You do not have permission to view config changes' })
+      } else if (status === 'error') {
+        // The authenticated client owns transport status. Do not also use a
+        // legacy EventSource error listener, which would schedule duplicates.
+        scheduleReconnect()
+      }
+    },
+  })
 
   eventSource.addEventListener('config_change', (event) => {
     try {
@@ -135,15 +159,6 @@ export function startStreaming(set: SetFn, get: GetFn) {
 
   eventSource.addEventListener('connected', () => {
     // Connected to config stream
-  })
-
-  eventSource.addEventListener('error', () => {
-    console.warn('Config stream error, will reconnect...')
-    stopStreaming()
-    // Auto-reconnect after 5 seconds
-    setTimeout(() => {
-      get().startStreaming()
-    }, 5000)
   })
 
   set({ eventSource })

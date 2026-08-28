@@ -15,6 +15,8 @@ export function MonitorPage() {
     activeLogView,
     fetchCheckConfig,
     fetchProjectHealth,
+    fetchMonitoringCapabilities,
+    getMonitoringCapabilities,
     fetchWorkflowChecks,
     runAllChecks,
     clearError,
@@ -28,20 +30,39 @@ export function MonitorPage() {
   // 현재 선택된 프로젝트의 health와 runningChecks
   const projectHealth = selectedProjectId ? getProjectHealth(selectedProjectId) : null
   const runningChecks = selectedProjectId ? getRunningChecks(selectedProjectId) : new Set()
+  const monitoringCapabilities = selectedProjectId
+    ? getMonitoringCapabilities(selectedProjectId)
+    : null
+  const capabilitiesLoaded = monitoringCapabilities !== null
+  const healthAvailable = monitoringCapabilities?.health === 'available'
+  const checksAvailable = monitoringCapabilities?.checks === 'available'
+  const monitoringDisabled = capabilitiesLoaded &&
+    monitoringCapabilities?.mode === 'database' &&
+    monitoringCapabilities.health_config === 'disabled' &&
+    monitoringCapabilities.health === 'disabled' &&
+    monitoringCapabilities.checks === 'disabled'
 
   // Fetch projects on mount
   useEffect(() => {
     fetchProjects()
   }, [fetchProjects])
 
-  // Fetch health config, health, and workflow checks when project changes
+  // Resolve capabilities first. Legacy filesystem monitoring is fail-closed
+  // until the backend explicitly says each operation is available.
   useEffect(() => {
     if (selectedProjectId) {
-      fetchCheckConfig(selectedProjectId)
-      fetchProjectHealth(selectedProjectId)
-      fetchWorkflowChecks(selectedProjectId)
+      void (async () => {
+        const capabilities = await fetchMonitoringCapabilities(selectedProjectId)
+        if (capabilities?.health_config === 'available') {
+          await fetchCheckConfig(selectedProjectId)
+        }
+        if (capabilities?.health === 'available') {
+          await fetchProjectHealth(selectedProjectId)
+        }
+        await fetchWorkflowChecks(selectedProjectId)
+      })()
     }
-  }, [selectedProjectId, fetchCheckConfig, fetchProjectHealth, fetchWorkflowChecks])
+  }, [selectedProjectId, fetchMonitoringCapabilities, fetchCheckConfig, fetchProjectHealth, fetchWorkflowChecks])
 
   // No project selected - show projects panel for selection
   if (!selectedProjectId || !selectedProject) {
@@ -125,7 +146,7 @@ export function MonitorPage() {
             {/* Refresh button */}
             <button
               onClick={() => fetchProjectHealth(selectedProjectId)}
-              disabled={isLoadingHealth}
+              disabled={isLoadingHealth || !healthAvailable}
               className={cn(
                 'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
                 'border border-gray-300 dark:border-gray-600',
@@ -143,7 +164,7 @@ export function MonitorPage() {
             {/* Run All button */}
             <button
               onClick={() => runAllChecks(selectedProjectId)}
-              disabled={isAnyRunning}
+              disabled={isAnyRunning || !checksAvailable}
               className={cn(
                 'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap',
                 'bg-primary-600 hover:bg-primary-700 text-white',
@@ -155,6 +176,13 @@ export function MonitorPage() {
             </button>
           </div>
         </div>
+
+        {monitoringDisabled && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+            Project health checks are unavailable in database mode.
+            {monitoringCapabilities.reason ? ` ${monitoringCapabilities.reason}` : ''}
+          </div>
+        )}
 
         {/* Error banner */}
         {error && (
@@ -180,7 +208,7 @@ export function MonitorPage() {
         )}
 
         {/* Health overview and logs */}
-        {projectHealth && (
+        {!monitoringDisabled && projectHealth && (
           <>
             <HealthOverview health={projectHealth} projectId={selectedProjectId} />
             <DiagnosticsPanel projectId={selectedProjectId} />

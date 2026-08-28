@@ -4,6 +4,8 @@ Obsidian vault health checks: links, frontmatter, orphans, images via SSE stream
 """
 
 import json
+import os
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -67,6 +69,51 @@ class CheckConfigResponse(BaseModel):
     project_id: str
     checks: dict[str, CheckConfigEntry]
     check_types: list[str] = []
+
+
+class MonitoringCapabilitiesResponse(BaseModel):
+    """Capabilities exposed by the active project-monitoring backend."""
+
+    project_id: str
+    mode: Literal["filesystem", "database"]
+    health_config: Literal["available", "disabled"]
+    health: Literal["available", "disabled"]
+    checks: Literal["available", "disabled"]
+    reason: str | None = None
+
+
+@router.get(
+    "/projects/{project_id}/monitoring-capabilities",
+    response_model=MonitoringCapabilitiesResponse,
+)
+async def get_monitoring_capabilities(
+    project_id: str, current_user=Depends(get_current_user), db=Depends(get_db_session)
+):
+    """Report whether legacy filesystem monitoring is available for a project.
+
+    Database mode deliberately advertises the legacy health/check operations as
+    disabled. It does not fall back to filesystem handlers, so this endpoint
+    cannot weaken the database-mode authorization boundary.
+    """
+    await require_project_role(project_id, current_user, db, min_role="viewer")
+    use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
+    if use_database:
+        return MonitoringCapabilitiesResponse(
+            project_id=project_id,
+            mode="database",
+            health_config="disabled",
+            health="disabled",
+            checks="disabled",
+            reason="Database-backed project monitoring is not available",
+        )
+
+    return MonitoringCapabilitiesResponse(
+        project_id=project_id,
+        mode="filesystem",
+        health_config="available",
+        health="available",
+        checks="available",
+    )
 
 
 @router.get("/projects/{project_id}/health-config", response_model=CheckConfigResponse)

@@ -61,6 +61,18 @@ export interface CheckConfig {
   checks: Record<string, CheckConfigEntry>
 }
 
+export type MonitoringBackendMode = 'filesystem' | 'database'
+export type MonitoringCapability = 'available' | 'disabled'
+
+export interface MonitoringCapabilities {
+  project_id: string
+  mode: MonitoringBackendMode
+  health_config: MonitoringCapability
+  health: MonitoringCapability
+  checks: MonitoringCapability
+  reason: string | null
+}
+
 // Workflow check types for monitor integration
 export type WorkflowCheckStatus = 'idle' | 'running' | 'success' | 'failure'
 

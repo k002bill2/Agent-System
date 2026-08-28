@@ -11,24 +11,47 @@ vi.mock('../../services/apiClient', () => ({
   },
 }))
 
+const { authenticatedSseInstances, mockCreateAuthenticatedSseClient } = vi.hoisted(() => {
+  type StatusHandler = (status: string) => void
+  type Client = {
+    url: string
+    listeners: Record<string, ((e: MessageEvent) => void)[]>
+    close: ReturnType<typeof vi.fn>
+    addEventListener: (event: string, handler: (e: MessageEvent) => void) => void
+    emit: (event: string, data?: unknown) => void
+    emitStatus: (status: string) => void
+  }
+  const instances: Client[] = []
+  const create = vi.fn((url: string, options?: { onStatus?: StatusHandler }) => {
+    const client = {
+      url,
+      listeners: {} as Record<string, ((e: MessageEvent) => void)[]>,
+      close: vi.fn(),
+      addEventListener(event: string, handler: (e: MessageEvent) => void) {
+        ;(this.listeners[event] ??= []).push(handler)
+      },
+      emit(event: string, data?: unknown) {
+        for (const handler of this.listeners[event] ?? []) handler(data as MessageEvent)
+      },
+      emitStatus(status: string) {
+        options?.onStatus?.(status)
+      },
+    } satisfies Client
+    instances.push(client)
+    return client
+  })
+  return { authenticatedSseInstances: instances, mockCreateAuthenticatedSseClient: create }
+})
+
+vi.mock('../../services/authenticatedSse', () => ({
+  createAuthenticatedSseClient: mockCreateAuthenticatedSseClient,
+}))
+
 import { useClaudeCodeActivityStore } from '../claudeCodeActivity'
 import { apiClient } from '../../services/apiClient'
+import { useAuthStore } from '../auth'
 
 const mockApiClient = vi.mocked(apiClient)
-
-// Mock EventSource
-class MockEventSource {
-  url: string
-  listeners: Record<string, ((e: MessageEvent) => void)[]> = {}
-  close = vi.fn()
-  constructor(url: string) { this.url = url }
-  addEventListener(event: string, handler: (e: MessageEvent) => void) {
-    if (!this.listeners[event]) this.listeners[event] = []
-    this.listeners[event].push(handler)
-  }
-}
-// @ts-expect-error - Mock
-global.EventSource = MockEventSource
 
 function resetStore() {
   useClaudeCodeActivityStore.setState({
@@ -45,11 +68,18 @@ function resetStore() {
     eventSource: null,
     error: null,
   })
+  authenticatedSseInstances.length = 0
 }
 
 describe('claudeCodeActivity store', () => {
   beforeEach(() => {
     resetStore()
+    useAuthStore.setState({
+      _hasHydrated: false,
+      accessToken: null,
+      refreshToken: null,
+      expiresAt: null,
+    })
     vi.clearAllMocks()
   })
 
@@ -238,7 +268,7 @@ describe('claudeCodeActivity store', () => {
     it('creates EventSource with correct URL', () => {
       useClaudeCodeActivityStore.getState().startStreaming('s-1')
 
-      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
       expect(es).not.toBeNull()
       expect(es.url).toContain('/api/claude-sessions/s-1/activity/stream')
     })
@@ -250,6 +280,22 @@ describe('claudeCodeActivity store', () => {
       useClaudeCodeActivityStore.getState().startStreaming('s-2')
 
       expect(oldES.close).toHaveBeenCalled()
+    })
+
+    it('resumes a persisted session when auth hydrates after the activity store', async () => {
+      useClaudeCodeActivityStore.setState({ activeSessionId: 's-hydrated' })
+      useAuthStore.setState({
+        _hasHydrated: true,
+        accessToken: 'hydrated-token',
+        refreshToken: null,
+        expiresAt: Date.now() + 60_000,
+      })
+
+      await vi.waitFor(() => expect(authenticatedSseInstances).toHaveLength(1))
+
+      expect(authenticatedSseInstances[0].url).toContain(
+        '/api/claude-sessions/s-hydrated/activity/stream',
+      )
     })
   })
 
@@ -331,7 +377,7 @@ describe('claudeCodeActivity store', () => {
       expect(state.rootTaskIds).toEqual(['t1'])
       expect(state.eventSource).not.toBeNull()
 
-      const es = state.eventSource as unknown as MockEventSource
+      const es = state.eventSource as unknown as (typeof authenticatedSseInstances)[number]
       expect(es.url).toContain('/api/claude-sessions/s-1/activity/stream')
     })
 
@@ -368,7 +414,7 @@ describe('claudeCodeActivity store', () => {
   describe('SSE activity_batch event handler', () => {
     it('sets activities from parsed JSON batch', () => {
       useClaudeCodeActivityStore.getState().startStreaming('s-1')
-      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
 
       const batch = [
         { id: 'ev-1', type: 'user', session_id: 's-1', timestamp: '2024-01-01T00:00:00Z' },
@@ -384,7 +430,7 @@ describe('claudeCodeActivity store', () => {
     it('logs error and does not update state when JSON is invalid', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       useClaudeCodeActivityStore.getState().startStreaming('s-1')
-      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
 
       useClaudeCodeActivityStore.setState({ activities: [{ id: 'existing' } as any] })
 
@@ -410,7 +456,7 @@ describe('claudeCodeActivity store', () => {
       })
 
       useClaudeCodeActivityStore.getState().startStreaming('s-1')
-      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
 
       const newActivity = {
         id: 'ev-2',
@@ -435,7 +481,7 @@ describe('claudeCodeActivity store', () => {
       })
 
       useClaudeCodeActivityStore.getState().startStreaming('s-1')
-      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
 
       const taskCreateActivity = {
         id: 'ev-3',
@@ -467,7 +513,7 @@ describe('claudeCodeActivity store', () => {
       })
 
       useClaudeCodeActivityStore.getState().startStreaming('s-1')
-      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
 
       const taskUpdateActivity = {
         id: 'ev-4',
@@ -491,7 +537,7 @@ describe('claudeCodeActivity store', () => {
 
     it('does not refetch tasks for other tool_use types', () => {
       useClaudeCodeActivityStore.getState().startStreaming('s-1')
-      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
 
       const otherActivity = {
         id: 'ev-5',
@@ -509,7 +555,7 @@ describe('claudeCodeActivity store', () => {
 
     it('does not refetch tasks for non-tool_use activity types', () => {
       useClaudeCodeActivityStore.getState().startStreaming('s-1')
-      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
 
       const assistantActivity = {
         id: 'ev-6',
@@ -529,7 +575,7 @@ describe('claudeCodeActivity store', () => {
       useClaudeCodeActivityStore.setState({ activities: [], activityTotalCount: 0 })
 
       useClaudeCodeActivityStore.getState().startStreaming('s-1')
-      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
 
       const handler = es.listeners['activity'][0]
       handler(new MessageEvent('activity', { data: 'bad-json}}' }))
@@ -553,7 +599,7 @@ describe('claudeCodeActivity store', () => {
       })
 
       useClaudeCodeActivityStore.getState().startStreaming('s-1')
-      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
 
       // Verify the handler exists
       expect(es.listeners['session_completed']).toBeDefined()
@@ -569,114 +615,58 @@ describe('claudeCodeActivity store', () => {
     })
   })
 
-  describe('SSE error event handler', () => {
-    it('logs a warning on error', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  describe('SSE transport status handling', () => {
+    it('reconnects after a transport error, but only while the session is active', () => {
       vi.useFakeTimers()
-
-      useClaudeCodeActivityStore.getState().startStreaming('s-1')
-      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as MockEventSource
-
-      const handler = es.listeners['error'][0]
-      handler(new MessageEvent('error', { data: 'connection refused' }))
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('SSE connection error:'),
-        expect.anything()
-      )
-
-      vi.useRealTimers()
-      warnSpy.mockRestore()
-    })
-
-    it('reconnects after 5s when activeSessionId is set and dataSource is claude-code', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-      vi.useFakeTimers()
-
       useClaudeCodeActivityStore.setState({
         activeSessionId: 's-1',
         dataSource: 'claude-code',
       })
 
       useClaudeCodeActivityStore.getState().startStreaming('s-1')
-      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as MockEventSource
+      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
+      es.emitStatus('error')
 
-      const handler = es.listeners['error'][0]
-      handler(new MessageEvent('error', { data: '' }))
-
-      // Before timeout, eventSource is still the old one
-      const esBeforeTimeout = useClaudeCodeActivityStore.getState().eventSource
-      expect(esBeforeTimeout).toBe(es)
-
-      // Advance timers by 5000ms to trigger reconnect
+      expect(useClaudeCodeActivityStore.getState().eventSource).toBe(es)
       vi.advanceTimersByTime(5000)
 
-      // After timeout, a new EventSource should have been created
-      const newEs = useClaudeCodeActivityStore.getState().eventSource as unknown as MockEventSource
-      expect(newEs).not.toBeNull()
+      const newEs = useClaudeCodeActivityStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
+      expect(newEs).not.toBe(es)
       expect(newEs.url).toContain('/api/claude-sessions/s-1/activity/stream')
-
       vi.useRealTimers()
-      warnSpy.mockRestore()
     })
 
-    it('does not reconnect after 5s when activeSessionId is null', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    it('does not reconnect after a terminal authentication failure', () => {
       vi.useFakeTimers()
-
       useClaudeCodeActivityStore.setState({
-        activeSessionId: null,
+        activeSessionId: 's-1',
         dataSource: 'claude-code',
       })
 
-      useClaudeCodeActivityStore.getState().startStreaming('s-temp')
-      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as MockEventSource
-
-      // Manually set activeSessionId to null to simulate session cleared during error
-      useClaudeCodeActivityStore.setState({ activeSessionId: null })
-
-      const handler = es.listeners['error'][0]
-      handler(new MessageEvent('error', { data: '' }))
-
+      useClaudeCodeActivityStore.getState().startStreaming('s-1')
+      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
+      es.emitStatus('authentication-failed')
       vi.advanceTimersByTime(5000)
 
-      // eventSource should not have been replaced with a new one
-      // (the old mock es was replaced during startStreaming setup, but no new one created after timeout)
-      const currentEs = useClaudeCodeActivityStore.getState().eventSource
-      // It won't be the new MockEventSource created by reconnect since condition failed
-      if (currentEs !== null) {
-        const currentMockEs = currentEs as unknown as MockEventSource
-        // If there is an eventSource, it must be the same one (no reconnect occurred)
-        expect(currentMockEs).toBe(es)
-      }
-
+      expect(useClaudeCodeActivityStore.getState().eventSource).toBeNull()
+      expect(useClaudeCodeActivityStore.getState().error).toContain('Authentication required')
+      expect(authenticatedSseInstances).toHaveLength(1)
       vi.useRealTimers()
-      warnSpy.mockRestore()
     })
 
-    it('does not reconnect when dataSource is not claude-code', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    it('does not reconnect when the active session or data source changes', () => {
       vi.useFakeTimers()
-
       useClaudeCodeActivityStore.setState({
         activeSessionId: 's-1',
-        dataSource: 'aos',
+        dataSource: 'claude-code',
       })
-
       useClaudeCodeActivityStore.getState().startStreaming('s-1')
-      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as MockEventSource
-
-      const handler = es.listeners['error'][0]
-      handler(new MessageEvent('error', { data: '' }))
-
+      const es = useClaudeCodeActivityStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
+      es.emitStatus('error')
+      useClaudeCodeActivityStore.setState({ activeSessionId: null })
       vi.advanceTimersByTime(5000)
-
-      // eventSource should still be the same one from before (no reconnect)
-      const currentEs = useClaudeCodeActivityStore.getState().eventSource as unknown as MockEventSource
-      expect(currentEs).toBe(es)
-
+      expect(authenticatedSseInstances).toHaveLength(1)
       vi.useRealTimers()
-      warnSpy.mockRestore()
     })
   })
 

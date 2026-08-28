@@ -1,16 +1,15 @@
 """Regression tests for high-risk API authentication and permission auditing."""
 
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from httpx import ASGITransport, AsyncClient
 import pytest
 from fastapi import HTTPException, WebSocketException
+from httpx import ASGITransport, AsyncClient
 
 from models.permissions import AgentPermission
 from services.audit_service import AuditAction
-
 
 PROTECTED_ROUTE_PREFIXES = (
     "/api/audit",
@@ -581,7 +580,7 @@ async def test_db_project_context_does_not_execute_legacy_filesystem_handler(mon
 @pytest.mark.asyncio
 async def test_project_config_copy_target_requires_access(monkeypatch):
     """Copy destinations must be registered and independently authorized."""
-    from api.project_configs.access import require_project_config_target_access
+    from api.project_configs import access as access_module
 
     target = SimpleNamespace(id="target", path="/target", organization_id="org-other")
 
@@ -592,24 +591,21 @@ async def test_project_config_copy_target_requires_access(monkeypatch):
         def scalars(self):
             return SimpleNamespace(all=lambda: self.value)
 
-        def scalar_one_or_none(self):
-            return self.value
-
     class Database:
-        def __init__(self):
-            self.calls = 0
-
         async def execute(self, *_args, **_kwargs):
-            self.calls += 1
-            return Result([target] if self.calls == 1 else None)
+            return Result([target])
 
     async def no_admin_orgs(_user):
         return []
 
+    async def deny_target_role(*_args, **_kwargs):
+        raise HTTPException(status_code=403, detail="Target project access denied")
+
     monkeypatch.setenv("USE_DATABASE", "true")
     monkeypatch.setattr("api.projects._get_admin_org_ids", no_admin_orgs)
+    monkeypatch.setattr(access_module, "require_project_role", deny_target_role)
     with pytest.raises(HTTPException) as exc_info:
-        await require_project_config_target_access(
+        await access_module.require_project_config_target_access(
             "target",
             SimpleNamespace(id="user", role="user", is_admin=False),
             Database(),
@@ -1569,8 +1565,8 @@ async def test_db_project_config_allows_privileged_operator(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_db_project_config_allows_explicit_grant(monkeypatch):
-    """A non-privileged user with a ProjectAccess row is authorized."""
+async def test_db_project_config_applies_viewer_role(monkeypatch):
+    """A non-privileged project reader is authorized through the central guard."""
     from api.project_configs import access as access_module
 
     monkeypatch.setenv("USE_DATABASE", "true")
@@ -1578,21 +1574,29 @@ async def test_db_project_config_allows_explicit_grant(monkeypatch):
     async def no_admin_orgs(_user):
         return []
 
+    seen: list[tuple[str, str]] = []
+
+    async def require_viewer(project_id, _user, _db, min_role="viewer"):
+        seen.append((project_id, min_role))
+        return "viewer"
+
     monkeypatch.setattr("api.projects._get_admin_org_ids", no_admin_orgs)
+    monkeypatch.setattr(access_module, "require_project_role", require_viewer)
     member = SimpleNamespace(id="member-1", role="user", is_admin=False, is_active=True)
 
     result = await access_module.require_project_config_access(
         _request_stub("GET", "proj-uuid", "/api/project-configs/proj-uuid/skills"),
         member,
-        db=_ProjectConfigDbStub([_db_project()], direct_grant="proj-uuid"),
+        db=_ProjectConfigDbStub([_db_project()]),
     )
 
     assert result is member
+    assert seen == [("proj-uuid", "viewer")]
 
 
 @pytest.mark.asyncio
 async def test_db_project_config_denies_user_without_grant(monkeypatch):
-    """No org-admin scope and no ProjectAccess row still means 403, not access."""
+    """A central role denial still blocks the DB-mode config route."""
     from api.project_configs import access as access_module
 
     monkeypatch.setenv("USE_DATABASE", "true")
@@ -1602,14 +1606,74 @@ async def test_db_project_config_denies_user_without_grant(monkeypatch):
 
     monkeypatch.setattr("api.projects._get_admin_org_ids", no_admin_orgs)
 
+    async def deny_project_role(*_args, **_kwargs):
+        raise HTTPException(status_code=403, detail="No access to this project")
+
+    monkeypatch.setattr(access_module, "require_project_role", deny_project_role)
+
     with pytest.raises(HTTPException) as exc_info:
         await access_module.require_project_config_access(
             _request_stub("GET", "proj-uuid", "/api/project-configs/proj-uuid/skills"),
             SimpleNamespace(id="outsider", role="user", is_admin=False, is_active=True),
-            db=_ProjectConfigDbStub([_db_project()], direct_grant=None),
+            db=_ProjectConfigDbStub([_db_project()]),
         )
 
     assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_db_project_config_mutation_requires_editor(monkeypatch):
+    """A viewer cannot reach a DB-mode project-config mutation route."""
+    from api.project_configs import access as access_module
+
+    monkeypatch.setenv("USE_DATABASE", "true")
+    monkeypatch.setattr("api.projects._get_admin_org_ids", AsyncMock(return_value=[]))
+
+    seen: list[str] = []
+
+    async def require_editor(_project_id, _user, _db, min_role="viewer"):
+        seen.append(min_role)
+        if min_role == "editor":
+            raise HTTPException(status_code=403, detail="editor role required")
+        return "viewer"
+
+    monkeypatch.setattr(access_module, "require_project_role", require_editor)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await access_module.require_project_config_access(
+            _request_stub("POST", "proj-uuid", "/api/project-configs/proj-uuid/skills"),
+            SimpleNamespace(id="viewer", role="user", is_admin=False, is_active=True),
+            db=_ProjectConfigDbStub([_db_project()]),
+        )
+
+    assert exc_info.value.status_code == 403
+    assert seen == ["editor"]
+
+
+@pytest.mark.asyncio
+async def test_db_project_config_copy_target_requires_editor(monkeypatch):
+    """A viewer cannot use a DB-mode project-config copy target."""
+    from api.project_configs import access as access_module
+
+    monkeypatch.setenv("USE_DATABASE", "true")
+    monkeypatch.setattr("api.projects._get_admin_org_ids", AsyncMock(return_value=[]))
+    seen: list[tuple[str, str]] = []
+
+    async def require_editor(project_id, _user, _db, min_role="viewer"):
+        seen.append((project_id, min_role))
+        raise HTTPException(status_code=403, detail="editor role required")
+
+    monkeypatch.setattr(access_module, "require_project_role", require_editor)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await access_module.require_project_config_target_access(
+            "proj-uuid",
+            SimpleNamespace(id="viewer", role="user", is_admin=False),
+            _ProjectConfigDbStub([_db_project()]),
+        )
+
+    assert exc_info.value.status_code == 403
+    assert seen == [("proj-uuid", "editor")]
 
 
 @pytest.mark.asyncio
