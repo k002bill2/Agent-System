@@ -10,8 +10,12 @@ Handles cleanup of all project-related data:
 """
 
 import logging
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    from models.project import Project
 
 logger = logging.getLogger(__name__)
 
@@ -66,20 +70,22 @@ class ProjectCleanupService:
     def __init__(self):
         self._is_docker = False
 
-    async def get_deletion_preview(self, project_id: str) -> DeletionPreview | None:
+    async def get_deletion_preview(self, project: "Project") -> DeletionPreview:
         """Get preview of what will be deleted.
 
+        Takes an already-resolved project rather than an id: the caller owns
+        both authorization and registry resolution, and the filesystem registry
+        this service used to read is empty of DB-mode ids.
+
         Args:
-            project_id: Project identifier
+            project: Resolved project (``api.deps.get_project_or_404``)
 
         Returns:
-            DeletionPreview or None if project not found
+            DeletionPreview
         """
-        from models.project import get_project, get_projects_dir
+        from models.project import get_projects_dir
 
-        project = get_project(project_id)
-        if not project:
-            return None
+        project_id = project.id
 
         preview = DeletionPreview(
             project_id=project_id,
@@ -119,7 +125,7 @@ class ProjectCleanupService:
 
         return preview
 
-    async def cascade_delete(self, project_id: str) -> CleanupSummary:
+    async def cascade_delete(self, project: "Project") -> CleanupSummary:
         """Perform cascade delete of all project data.
 
         Cleanup order:
@@ -128,24 +134,19 @@ class ProjectCleanupService:
         3. Health cache
         4. Config monitor cache
         5. Symlink removal
-        6. Registry unregistration
+        6. Registry unregistration (in-memory registry + DB registry rows)
+
+        Takes an already-resolved project: see ``get_deletion_preview``.
 
         Args:
-            project_id: Project identifier
+            project: Resolved project (``api.deps.get_project_or_404``)
 
         Returns:
             CleanupSummary with results
         """
-        from models.project import get_project, get_projects_dir, unregister_project
+        from models.project import get_projects_dir, unregister_project
 
-        project = get_project(project_id)
-        if not project:
-            return CleanupSummary(
-                project_id=project_id,
-                success=False,
-                errors=["Project not found"],
-            )
-
+        project_id = project.id
         summary = CleanupSummary(project_id=project_id, success=True)
 
         # 1. Delete DB records
@@ -217,8 +218,14 @@ class ProjectCleanupService:
             summary.errors.append(error_msg)
 
         # 6. Unregister from registry
+        #
+        # Both registries have to go. The in-memory one is keyed by the
+        # projects/<name> symlink, the DB one by ProjectModel.id -- dropping
+        # only the former leaves the project listed by GET /api/projects with
+        # its sessions, index and symlink already gone.
         try:
             unregister_project(project_id)
+            await self._delete_db_project_registry(project_id)
             summary.registry_unregistered = True
             logger.info(f"Unregistered project: {project_id}")
         except Exception as e:
@@ -231,6 +238,45 @@ class ProjectCleanupService:
             summary.success = False
 
         return summary
+
+    async def _delete_db_project_registry(self, project_id: str) -> bool:
+        """Remove the project's DB registry rows (project + access + invites).
+
+        Mirrors ``DELETE /api/project-registry/{id}/permanent``: sessions,
+        activities and audit rows keep their project_id for historical record.
+        No-op outside database mode, where there is no registry row.
+        """
+        import os
+
+        if os.getenv("USE_DATABASE", "").lower() != "true":
+            return False
+
+        from sqlalchemy import delete as sa_delete
+        from sqlalchemy import select
+
+        from db.database import async_session_factory
+        from db.models import ProjectAccessModel, ProjectInvitationModel, ProjectModel
+
+        async with async_session_factory() as db:
+            row = (
+                await db.execute(select(ProjectModel).where(ProjectModel.id == project_id))
+            ).scalar_one_or_none()
+            if row is None:
+                return False
+
+            await db.execute(
+                sa_delete(ProjectAccessModel).where(ProjectAccessModel.project_id == project_id)
+            )
+            await db.execute(
+                sa_delete(ProjectInvitationModel).where(
+                    ProjectInvitationModel.project_id == project_id
+                )
+            )
+            await db.delete(row)
+            await db.commit()
+
+        logger.info(f"Removed DB registry rows for project: {project_id}")
+        return True
 
     async def _count_db_records(self, project_id: str) -> dict[str, int]:
         """Count DB records related to a project.

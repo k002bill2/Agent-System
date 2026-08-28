@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from api.deps import (
     get_current_user,
     get_db_session,
-    reject_legacy_project_operation_in_database_mode,
+    get_project_or_404,
     require_project_role,
 )
 from models.monitoring import (
@@ -23,7 +23,6 @@ from models.monitoring import (
     CheckStatus,
     ProjectHealth,
 )
-from models.project import get_project
 from services.project_runner import get_check_config, get_runner
 
 router = APIRouter(tags=["orchestration"])
@@ -75,10 +74,7 @@ async def get_health_config(
 ):
     """Get the health check configuration (labels & commands) for a project."""
     await require_project_role(project_id, current_user, db, min_role="viewer")
-    reject_legacy_project_operation_in_database_mode()
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await get_project_or_404(project_id, db)
 
     config = get_check_config(project.path)
     return CheckConfigResponse(
@@ -94,10 +90,7 @@ async def get_project_health(
 ):
     """Get the health status of a project."""
     await require_project_role(project_id, current_user, db, min_role="viewer")
-    reject_legacy_project_operation_in_database_mode()
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await get_project_or_404(project_id, db)
 
     # Initialize health if not exists
     if project_id not in _project_health:
@@ -142,10 +135,7 @@ async def run_all_checks(
     Returns a streaming response with SSE events for all checks.
     """
     await require_project_role(project_id, current_user, db, min_role="editor")
-    reject_legacy_project_operation_in_database_mode()
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await get_project_or_404(project_id, db)
 
     # Initialize health if not exists
     if project_id not in _project_health:
@@ -223,10 +213,7 @@ async def run_check(
     - check_completed: Check has finished
     """
     await require_project_role(project_id, current_user, db, min_role="editor")
-    reject_legacy_project_operation_in_database_mode()
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await get_project_or_404(project_id, db)
 
     config = get_check_config(project.path)
     if check_type not in config:

@@ -1,16 +1,16 @@
 """Regression tests for high-risk API authentication and permission auditing."""
 
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from httpx import ASGITransport, AsyncClient
 import pytest
 from fastapi import HTTPException, WebSocketException
+from httpx import ASGITransport, AsyncClient
 
 from models.permissions import AgentPermission
+from models.project import Project
 from services.audit_service import AuditAction
-
 
 PROTECTED_ROUTE_PREFIXES = (
     "/api/audit",
@@ -555,27 +555,76 @@ async def test_db_project_config_listing_does_not_initialize_global_monitor(monk
 
 
 @pytest.mark.asyncio
-async def test_db_project_context_does_not_execute_legacy_filesystem_handler(monkeypatch):
-    """DB-mode context must fail closed until a DB-backed handler exists."""
+async def test_db_project_context_authorizes_before_resolving(monkeypatch):
+    """DB-mode context resolves via the DB registry - after the ACL check.
+
+    PR #318 put a blanket 503 here because the handler read only the in-memory
+    registry, which is keyed by the projects/ symlink name and so misses every
+    ProjectModel UUID the dashboard sends. The resolver replaced the 503; this
+    asserts that lifting it did not also lift the authorization.
+    """
     from api.context import get_project_context
 
     monkeypatch.setenv("USE_DATABASE", "true")
-    async def allow_project_role(*_args, **_kwargs):
-        return "admin"
 
-    monkeypatch.setattr("api.context.require_project_role", allow_project_role)
+    async def deny_project_role(*_args, **_kwargs):
+        raise HTTPException(status_code=403, detail="No access to this project")
+
+    monkeypatch.setattr("api.context.require_project_role", deny_project_role)
     monkeypatch.setattr(
-        "api.context.get_project",
-        lambda _project_id: (_ for _ in ()).throw(AssertionError("legacy project lookup")),
+        "api.context.get_project_or_404",
+        _unreachable_resolver("resolution ran before authorization"),
     )
     with pytest.raises(HTTPException) as exc_info:
         await get_project_context(
             "registered",
             SimpleNamespace(),
-            SimpleNamespace(id="admin", role="admin", is_admin=True),
+            SimpleNamespace(id="member", role="user", is_admin=False),
             SimpleNamespace(execute=lambda *_args, **_kwargs: None),
         )
-    assert exc_info.value.status_code == 503
+    assert exc_info.value.status_code == 403
+
+
+def _unreachable_resolver(message: str):
+    """An async ``get_project_or_404`` stand-in that must never be awaited."""
+
+    async def _resolver(*_args, **_kwargs):
+        raise AssertionError(message)
+
+    return _resolver
+
+
+@pytest.mark.asyncio
+async def test_db_project_context_serves_a_registered_project(monkeypatch):
+    """A project the caller may reach comes back instead of a 503."""
+    from api.context import get_project_context
+
+    monkeypatch.setenv("USE_DATABASE", "true")
+
+    async def allow_project_role(*_args, **_kwargs):
+        return "viewer"
+
+    resolved = Project(id="db-uuid", name="DB Project", path="/tmp/db-project")
+
+    async def resolve(project_id, db):
+        assert project_id == "db-uuid"
+        return resolved
+
+    monkeypatch.setattr("api.context.require_project_role", allow_project_role)
+    monkeypatch.setattr("api.context.get_project_or_404", resolve)
+
+    engine = SimpleNamespace(
+        session_service=SimpleNamespace(list_sessions=AsyncMock(return_value=[]))
+    )
+    response = await get_project_context(
+        "db-uuid",
+        engine,
+        SimpleNamespace(id="admin", role="admin", is_admin=True),
+        SimpleNamespace(execute=lambda *_args, **_kwargs: None),
+    )
+
+    assert response.project_id == "db-uuid"
+    assert response.project_name == "DB Project"
 
 
 @pytest.mark.asyncio
@@ -675,23 +724,91 @@ async def test_database_session_http_exception_is_generic_503(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_db_project_deletion_routes_fail_closed_before_cleanup(monkeypatch):
-    """DB mode must not invoke filesystem cleanup for preview or deletion."""
+async def test_db_project_deletion_routes_reject_unresolvable_ids(monkeypatch):
+    """An id the authoritative registry cannot resolve never reaches cleanup.
+
+    Deletion is the one route where a wrong resolution is destructive, so the
+    404 has to land before the cleanup service is constructed, not inside it.
+    """
     from api.routes import delete_project, get_deletion_preview
 
     monkeypatch.setenv("USE_DATABASE", "true")
     monkeypatch.setattr("api.routes.require_project_role", AsyncMock())
+
+    async def unresolvable(_project_id, _db):
+        return None
+
+    monkeypatch.setattr("api.deps.resolve_project", unresolvable)
     cleanup_service = AsyncMock()
-    monkeypatch.setattr("services.project_cleanup_service.get_cleanup_service", lambda: cleanup_service)
+    monkeypatch.setattr(
+        "services.project_cleanup_service.get_cleanup_service", lambda: cleanup_service
+    )
     user = SimpleNamespace(id="owner", role="admin", is_admin=True, is_active=True)
 
     for handler in (get_deletion_preview, delete_project):
         with pytest.raises(HTTPException) as exc_info:
             await handler("db-project", current_user=user, db=object())
-        assert exc_info.value.status_code == 503
+        assert exc_info.value.status_code == 404
 
     cleanup_service.get_deletion_preview.assert_not_awaited()
     cleanup_service.cascade_delete.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_db_project_deletion_requires_owner_before_resolving(monkeypatch):
+    """Deletion keeps its owner gate - the resolver must not soften it."""
+    from api.routes import delete_project
+
+    monkeypatch.setenv("USE_DATABASE", "true")
+    seen = {}
+
+    async def record_role(project_id, current_user, db, min_role="viewer"):
+        seen["min_role"] = min_role
+        raise HTTPException(status_code=403, detail="Requires at least 'owner' role")
+
+    monkeypatch.setattr("api.routes.require_project_role", record_role)
+    monkeypatch.setattr(
+        "api.deps.resolve_project", _unreachable_resolver("resolved before authorization")
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await delete_project(
+            "db-project",
+            current_user=SimpleNamespace(id="viewer", role="user", is_admin=False, is_active=True),
+            db=object(),
+        )
+
+    assert exc_info.value.status_code == 403
+    assert seen["min_role"] == "owner"
+
+
+@pytest.mark.asyncio
+async def test_db_project_deletion_removes_the_db_registry_row(monkeypatch):
+    """Cascade delete must drop the DB registry rows, not just the in-memory one.
+
+    Clearing only PROJECTS_REGISTRY leaves the project listed by
+    GET /api/projects with its sessions, index and symlink already gone.
+    """
+    from services.project_cleanup_service import ProjectCleanupService
+
+    monkeypatch.setenv("USE_DATABASE", "true")
+    service = ProjectCleanupService()
+
+    removed: list[str] = []
+
+    async def record(project_id):
+        removed.append(project_id)
+        return True
+
+    monkeypatch.setattr(service, "_delete_db_project_registry", record)
+    monkeypatch.setattr(service, "_delete_db_records", AsyncMock(return_value=0))
+
+    summary = await service.cascade_delete(
+        Project(id="db-uuid", name="DB Project", path="/tmp/db-project")
+    )
+
+    assert summary.registry_unregistered is True
+    assert removed == ["db-uuid"]
 
 
 @pytest.mark.asyncio
@@ -1299,6 +1416,7 @@ def _db_project_row():
         path="/tmp/db-project",
         description="from the DB registry",
         organization_id=None,
+        settings={},
     )
 
 
@@ -1378,21 +1496,33 @@ async def test_session_filesystem_mode_does_not_query_the_database(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_session_prefers_the_filesystem_registry(monkeypatch):
-    """A registry hit short-circuits before any DB work."""
+async def test_session_filesystem_registry_does_not_bypass_db_authorization(monkeypatch):
+    """A projects/ symlink id must not short-circuit the DB ACL check.
+
+    Startup scans projects/ in database mode too (7ed7c46), so the in-memory
+    registry is populated there. Returning a registry hit before
+    ``require_project_role`` would let any authenticated caller attach a
+    project by its symlink name, skipping the ACL the DB id is subject to.
+    """
     from api import sessions as sessions_module
 
     monkeypatch.setenv("USE_DATABASE", "true")
     registry_project = SimpleNamespace(id="obsidian", name="Obsidian")
     monkeypatch.setattr("models.project.get_project", lambda pid: registry_project)
 
-    db = _FakeDb(_db_project_row())
-    project = await sessions_module._resolve_project_context(
-        "obsidian", SimpleNamespace(id="u1", role="user", is_admin=False, is_active=True), db
-    )
+    async def deny(project_id, current_user, db, min_role="viewer"):
+        raise HTTPException(status_code=404, detail="Project not found")
 
-    assert project is registry_project
-    assert db.executed == 0
+    monkeypatch.setattr(sessions_module, "require_project_role", deny)
+
+    with pytest.raises(HTTPException) as exc:
+        await sessions_module._resolve_project_context(
+            "obsidian",
+            SimpleNamespace(id="u1", role="user", is_admin=False, is_active=True),
+            _FakeDb(_db_project_row()),
+        )
+
+    assert exc.value.status_code == 404
 
 
 @pytest.mark.asyncio

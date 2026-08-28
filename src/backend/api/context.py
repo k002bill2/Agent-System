@@ -12,11 +12,10 @@ from api.deps import (
     get_current_user,
     get_db_session,
     get_engine,
-    reject_legacy_project_operation_in_database_mode,
+    get_project_or_404,
     require_project_role,
 )
 from models.context_usage import ContextUsage, get_context_limit
-from models.project import get_project
 from orchestrator import OrchestrationEngine
 
 router = APIRouter(tags=["orchestration"])
@@ -70,10 +69,7 @@ async def get_project_context(
 
     if hasattr(current_user, "role") and hasattr(db, "execute"):
         await require_project_role(project_id, current_user, db, min_role="viewer")
-        reject_legacy_project_operation_in_database_mode()
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await get_project_or_404(project_id, db)
 
     # Get dev docs from dev/active folder
     dev_docs: list[DevDocFile] = []
@@ -145,10 +141,7 @@ async def get_project_claude_md(
     """Get raw CLAUDE.md content for a project."""
     if hasattr(current_user, "role") and hasattr(db, "execute"):
         await require_project_role(project_id, current_user, db, min_role="viewer")
-        reject_legacy_project_operation_in_database_mode()
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await get_project_or_404(project_id, db)
 
     if not project.claude_md:
         raise HTTPException(status_code=404, detail="No CLAUDE.md found for this project")

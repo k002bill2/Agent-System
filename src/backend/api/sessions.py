@@ -16,6 +16,7 @@ from api.deps import (
     get_db_session,
     get_engine,
     require_project_role,
+    resolve_project,
 )
 from db.models import UserModel
 from models.llm_access import LLMAccessResponse
@@ -115,51 +116,22 @@ async def _resolve_project_context(
     current_user: UserModel,
     db: AsyncSession,
 ):
-    """Resolve a project id against whichever registry is authoritative.
+    """Resolve a project id, authorizing it first in database mode.
 
-    In database mode startup no longer populates PROJECTS_REGISTRY while
-    ``/api/projects`` serves ProjectModel ids - so the filesystem lookup misses
-    every id the dashboard is able to send, and session creation 404s on the
-    projects it just listed. Fall back to the DB registry there.
-
-    The DB branch authorizes the project the same way every other
-    project-scoped route does: a session must not be able to attach a project
-    the caller could not otherwise reach.
+    ``/api/projects`` serves ProjectModel ids in database mode while the
+    in-memory registry is keyed by the projects/ symlink name, so the
+    filesystem lookup misses every id the dashboard is able to send and session
+    creation 404s on the projects it just listed. ``resolve_project`` picks the
+    authoritative registry; this wrapper adds the authorization, because a
+    session must not attach a project the caller could not otherwise reach.
     """
-    from models.project import Project, get_project
+    if os.getenv("USE_DATABASE", "false").lower() == "true":
+        # Raises 404 (unknown), 403 (denied) or 503 (lookup failed) - fail
+        # closed, and before resolution so a filesystem-registry id cannot
+        # attach a project the caller could not otherwise reach.
+        await require_project_role(project_id, current_user, db, min_role="viewer")
 
-    project = get_project(project_id)
-    if project is not None:
-        return project
-
-    if os.getenv("USE_DATABASE", "false").lower() != "true":
-        return None
-
-    from sqlalchemy import select
-
-    from db.models import ProjectModel
-
-    # Raises 404 (unknown), 403 (denied) or 503 (lookup failed) - fail closed.
-    await require_project_role(project_id, current_user, db, min_role="viewer")
-
-    row = (
-        await db.execute(
-            select(ProjectModel).where(
-                ProjectModel.id == project_id,
-                ProjectModel.is_active == True,  # noqa: E712
-            )
-        )
-    ).scalar_one_or_none()
-    if row is None:
-        return None
-
-    return Project(
-        id=str(row.id),
-        name=row.name,
-        path=str(row.path or ""),
-        description=row.description or "",
-        organization_id=str(row.organization_id) if row.organization_id else None,
-    )
+    return await resolve_project(project_id, db)
 
 
 @router.post(

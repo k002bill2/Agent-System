@@ -29,7 +29,7 @@ from api.deps import (
     get_current_admin_or_manager_user,
     get_current_user,
     get_db_session,
-    reject_legacy_project_operation_in_database_mode,
+    get_project_or_404,
     require_project_role,
 )
 from models.project import (
@@ -715,12 +715,9 @@ async def get_deletion_preview(
     from services.project_cleanup_service import get_cleanup_service
 
     await require_project_role(project_id, current_user, db, min_role="viewer")
-    reject_legacy_project_operation_in_database_mode()
+    project = await get_project_or_404(project_id, db)
     service = get_cleanup_service()
-    preview = await service.get_deletion_preview(project_id)
-
-    if not preview:
-        raise HTTPException(status_code=404, detail="Project not found")
+    preview = await service.get_deletion_preview(project)
 
     return preview.model_dump()
 
@@ -740,7 +737,7 @@ async def delete_project(
     - Health cache
     - Config monitor cache
     - The symlink in projects/ directory
-    - The project from registry
+    - The project from both registries (in-memory and DB)
 
     IMPORTANT: Source files are NEVER deleted, only the symlink.
     """
@@ -748,15 +745,11 @@ async def delete_project(
 
     if current_user:
         await require_project_role(project_id, current_user, db, min_role="owner")
-    reject_legacy_project_operation_in_database_mode()
 
     service = get_cleanup_service()
-    if os.getenv("USE_DATABASE", "false").lower() != "true":
-        project = get_project(project_id)
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
+    project = await get_project_or_404(project_id, db)
 
-    summary = await service.cascade_delete(project_id)
+    summary = await service.cascade_delete(project)
 
     if not summary.success:
         raise HTTPException(

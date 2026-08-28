@@ -135,7 +135,10 @@ class TestProjectContextSessionLookup:
         """활성 세션이 응답에 실린다 — state 의 project id 키를 올바르게 읽는지."""
         project = _project()
         project.path = str(tmp_path)
-        monkeypatch.setattr("api.context.get_project", lambda pid: project)
+        async def _resolved(pid, db):
+            return project
+
+        monkeypatch.setattr("api.context.get_project_or_404", _resolved)
 
         engine = isolated_engine
         session_id = await engine.create_session(project=project)
@@ -150,7 +153,10 @@ class TestProjectContextSessionLookup:
         """만료된 세션은 응답에 나타나지 않는다 — 캐시 직접 순회로는 걸러지지 않는다."""
         project = _project()
         project.path = str(tmp_path)
-        monkeypatch.setattr("api.context.get_project", lambda pid: project)
+        async def _resolved(pid, db):
+            return project
+
+        monkeypatch.setattr("api.context.get_project_or_404", _resolved)
 
         engine = isolated_engine
         session_id = await engine.create_session(project=project)
@@ -167,7 +173,10 @@ class TestProjectContextSessionLookup:
         """같은 프로젝트에 세션이 여럿이고 앞선 것이 만료면 살아 있는 쪽을 찾는다."""
         project = _project()
         project.path = str(tmp_path)
-        monkeypatch.setattr("api.context.get_project", lambda pid: project)
+        async def _resolved(pid, db):
+            return project
+
+        monkeypatch.setattr("api.context.get_project_or_404", _resolved)
 
         engine = isolated_engine
         stale_id = await engine.create_session(project=project)
@@ -190,7 +199,10 @@ class TestProjectContextSessionLookup:
         """
         project = _project()
         project.path = str(tmp_path)
-        monkeypatch.setattr("api.context.get_project", lambda pid: project)
+        async def _resolved(pid, db):
+            return project
+
+        monkeypatch.setattr("api.context.get_project_or_404", _resolved)
 
         engine = isolated_engine
         for index in range(50):

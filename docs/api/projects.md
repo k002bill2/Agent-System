@@ -67,6 +67,44 @@
 | GET | `/api/projects/{id}/context` | 프로젝트 컨텍스트 (CLAUDE.md, dev docs) |
 | GET | `/api/projects/{id}/claude-md` | CLAUDE.md 내용 조회 |
 
+### `DELETE /api/projects/{id}` — cascade 삭제 범위
+
+세션·태스크·메시지 DB 레코드, RAG 인덱스, 헬스/설정 캐시, `projects/` 심링크,
+그리고 **양쪽 레지스트리**(인메모리 `PROJECTS_REGISTRY` + DB 모드의 `projects`·`project_access`·
+`project_invitations` 행)를 제거한다. DB 행 삭제 의미는
+`DELETE /api/project-registry/{id}/permanent` 와 같다 — 세션·감사 로그의 `project_id` 는
+이력 보존을 위해 남긴다. **원본 소스 파일은 삭제하지 않는다** (심링크만 제거).
+
+인메모리 레지스트리만 지우면 프로젝트가 세션·인덱스·심링크를 모두 잃은 채
+`GET /api/projects` 목록에 계속 남는다.
+
+### 프로젝트 id 해석 (registry resolution)
+
+위 경로들과 Project Monitoring·Project Diagnostics 절의 `{project_id}` 는 **모드에 따라 다른
+레지스트리**로 해석된다. 해석은 `api/deps.py` 의 `resolve_project()` / `get_project_or_404()` 한
+곳에 모여 있다.
+
+| `USE_DATABASE` | 권위 있는 레지스트리 | 키 |
+|---|---|---|
+| `false` | 인메모리 `PROJECTS_REGISTRY` (`projects/` 심링크 스캔) | 심링크 디렉터리명 |
+| `true` | DB `projects` 테이블 (`ProjectModel`) | `ProjectModel.id` |
+
+DB 행에는 레지스트리 메타데이터만 있으므로, 파일시스템에서 파생되는 필드
+(`claude_md`, `git_path`, `git_enabled`, `.aos-project.json`)는 저장된 `path` 로 다시 만든다.
+이후 DB 컬럼이 `.aos-project.json` 을 덮어쓴다 — 이름·설명·소유 조직의 SSOT 는 DB 레지스트리다.
+
+응답 규약:
+- 해석 불가 id → **404** (`path` 가 NULL 인 행 포함 — 파일시스템 기반 라우트를 서빙할 수 없다)
+- 레지스트리 조회 실패 → **503** `Project registry is temporarily unavailable`
+- 인가는 각 라우트가 `require_project_role()` 로 직접 수행한다 (조회 전용 resolver).
+  요구 role 이 경로마다 다르기 때문이다 — 진단 조회는 `viewer`, `diagnostics/fix` 와 체크 실행은
+  `editor`, `DELETE /api/projects/{id}` 는 `owner`.
+
+> **이력**: PR #318 은 이 라우트들에 `USE_DATABASE=true` 면 무조건 503
+> (`Project operation is unavailable until a database-backed handler is enabled`)을 반환하는
+> fail-closed 가드를 두었다. 당시 핸들러가 인메모리 레지스트리만 읽었기 때문이다.
+> 그 가드는 위 resolver 로 대체되어 제거됐다.
+
 ### 프로젝트 id 제약 (요청 본문)
 
 `POST /api/projects`, `POST /api/projects/create`, `POST /api/projects/link` 세 엔드포인트의

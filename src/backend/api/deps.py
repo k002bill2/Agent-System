@@ -2,6 +2,7 @@
 
 import os
 from collections.abc import AsyncGenerator, Mapping
+from typing import TYPE_CHECKING
 
 from fastapi import Depends, HTTPException, Query, WebSocket, WebSocketException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -13,6 +14,9 @@ from db.repository import MessageRepository, SessionRepository, TaskRepository
 from models.organization import MemberRole
 from orchestrator import OrchestrationEngine
 from services.auth_service import AuthService
+
+if TYPE_CHECKING:
+    from models.project import Project
 
 # Global engine instance
 _engine: OrchestrationEngine | None = None
@@ -41,13 +45,84 @@ def clear_engine() -> None:
     _engine = None
 
 
-def reject_legacy_project_operation_in_database_mode() -> None:
-    """Fail closed for project operations that still use filesystem models."""
-    if os.getenv("USE_DATABASE", "false").lower() == "true":
+async def resolve_project(project_id: str, db: AsyncSession | None) -> "Project | None":
+    """Resolve a project id against whichever registry is authoritative.
+
+    Database mode keys projects by ``ProjectModel.id`` (a UUID minted at seed
+    time) while the in-memory ``PROJECTS_REGISTRY`` is keyed by the
+    ``projects/<name>`` symlink directory. The two id spaces never overlap, so
+    a filesystem-only lookup misses every id ``GET /api/projects`` is able to
+    hand the dashboard. Resolve against the DB registry there.
+
+    The DB row carries only registry metadata, so the filesystem-derived fields
+    are rebuilt from the stored path: ``claude_md`` (context routes),
+    ``git_path``/``git_enabled`` (diagnostics' git category) and the on-disk
+    ``.aos-project.json``. DB columns then win over that file - the DB registry
+    is the source of truth for name, description and ownership.
+
+    Resolution only. Callers authorize with ``require_project_role`` themselves
+    because the required role differs per route (viewer to read diagnostics,
+    owner to delete); re-authorizing here at a fixed role would invite a later
+    caller to drop its own stricter check.
+    """
+    from models.project import Project, get_project
+
+    if os.getenv("USE_DATABASE", "false").lower() != "true":
+        return get_project(project_id)
+
+    # Handlers whose auth branch is skipped for non-DB callers pass a stub db.
+    if db is None or not hasattr(db, "execute"):
+        return get_project(project_id)
+
+    from sqlalchemy import select
+
+    from db.models import ProjectModel
+
+    try:
+        row = (
+            await db.execute(
+                select(ProjectModel).where(
+                    ProjectModel.id == project_id,
+                    ProjectModel.is_active == True,  # noqa: E712
+                )
+            )
+        ).scalar_one_or_none()
+    except Exception as exc:
         raise HTTPException(
             status_code=503,
-            detail="Project operation is unavailable until a database-backed handler is enabled",
-        )
+            detail="Project registry is temporarily unavailable",
+        ) from exc
+
+    if row is None:
+        return None
+
+    path = str(row.path or "").strip()
+    if not path:
+        # ProjectModel.path is nullable. A pathless row cannot serve any
+        # filesystem-backed route, and an empty path would send the diagnostics
+        # and monitoring services walking the process CWD instead.
+        return None
+
+    try:
+        project = Project.from_path(project_id, path)
+    except OSError:
+        # Unreadable workspace: still resolve so diagnostics can report *why*.
+        project = Project(id=project_id, name=row.name, path=path)
+
+    project.name = row.name
+    project.description = row.description or project.description
+    if row.organization_id:
+        project.organization_id = str(row.organization_id)
+    project.sort_order = (row.settings or {}).get("sort_order", project.sort_order)
+    return project
+
+
+async def get_project_or_404(project_id: str, db: AsyncSession | None) -> "Project":
+    """``resolve_project`` with the 404 every caller would otherwise repeat."""
+    project = await resolve_project(project_id, db)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
 
 
 # ─────────────────────────────────────────────────────────────
