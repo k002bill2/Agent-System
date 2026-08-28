@@ -16,20 +16,20 @@ from models.git import (
     # Permission helpers
     can_merge_to_branch,
 )
-from models.project import get_project
 
-from ._shared import get_effective_git_path
+from ._shared import get_effective_git_path, resolve_project
 
 router = APIRouter()
 
 
-def get_merge_service_for_project(project_id: str):
-    """Get MergeService for a project."""
+async def get_merge_service_for_project(project_id: str):
+    """Get MergeService for a project.
+
+    인가는 라우터의 `enforce_git_project_access` 가 이미 걸었다 — 여기서는 해석만 한다.
+    """
     from services.merge_service import get_merge_service
 
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
+    project = await resolve_project(project_id)
 
     git_path = get_effective_git_path(project)
     service = get_merge_service(git_path)
@@ -55,7 +55,7 @@ async def preview_merge(
     """Preview merge and check for conflicts (dry-run)."""
     from services.merge_service import MergeServiceError
 
-    merge_service = get_merge_service_for_project(project_id)
+    merge_service = await get_merge_service_for_project(project_id)
 
     try:
         preview = merge_service.check_merge_conflicts(
@@ -74,7 +74,7 @@ async def get_conflicts(
     target_branch: str = Query("main", description="Target branch"),
 ):
     """Get detailed conflict information."""
-    merge_service = get_merge_service_for_project(project_id)
+    merge_service = await get_merge_service_for_project(project_id)
 
     conflicts = merge_service.get_conflict_details(
         source_branch=source_branch,
@@ -91,7 +91,7 @@ async def get_three_way_diff(
     target_branch: str = Query("main", description="Target branch"),
 ):
     """Get three-way diff for a file."""
-    merge_service = get_merge_service_for_project(project_id)
+    merge_service = await get_merge_service_for_project(project_id)
 
     diff = merge_service.get_three_way_diff(
         file_path=file_path,
@@ -120,7 +120,7 @@ async def execute_merge(
             detail=f"Insufficient permissions to merge to '{request.target_branch}'",
         )
 
-    merge_service = get_merge_service_for_project(project_id)
+    merge_service = await get_merge_service_for_project(project_id)
 
     try:
         result = merge_service.merge_branch(
@@ -146,7 +146,7 @@ async def resolve_conflict(
     - theirs: Keep source branch version
     - custom: Provide resolved content manually
     """
-    merge_service = get_merge_service_for_project(project_id)
+    merge_service = await get_merge_service_for_project(project_id)
 
     result = merge_service.resolve_conflict(request)
 
@@ -163,7 +163,7 @@ async def abort_merge(project_id: str):
     Use this endpoint to cancel a merge that has conflicts.
     All changes will be reverted to the pre-merge state.
     """
-    merge_service = get_merge_service_for_project(project_id)
+    merge_service = await get_merge_service_for_project(project_id)
 
     result = merge_service.abort_merge()
 
@@ -181,7 +181,7 @@ async def get_merge_status(project_id: str):
     which files still have unresolved conflicts, and whether
     the merge can be completed.
     """
-    merge_service = get_merge_service_for_project(project_id)
+    merge_service = await get_merge_service_for_project(project_id)
     return merge_service.get_merge_status()
 
 
@@ -194,7 +194,7 @@ async def complete_merge(
 
     Use this endpoint after resolving all conflicts to create the merge commit.
     """
-    merge_service = get_merge_service_for_project(project_id)
+    merge_service = await get_merge_service_for_project(project_id)
 
     result = merge_service.complete_merge(message)
 

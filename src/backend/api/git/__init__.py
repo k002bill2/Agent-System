@@ -23,6 +23,7 @@ from . import (
     repositories,
     working_tree,
 )
+from ._shared import enforce_git_project_access
 from .commits import generate_draft_commits, generate_draft_commits_for_project
 
 # 인증은 **라우터 소유 모듈**에서 건다. 하위 8 모듈의 라우트가 전부 이 하나를
@@ -37,14 +38,19 @@ from .commits import generate_draft_commits, generate_draft_commits_for_project
 # 대시보드는 이미 `apiClient` 의 auth interceptor 로 Authorization 헤더를 보내고
 # 있어(그리고 git store 는 전부 apiClient 를 쓴다) 이 변경으로 깨지지 않는다.
 #
-# 이것은 **인증**(누구인지)만 건다. 프로젝트 단위 **인가**(그 프로젝트에 접근할
-# 권한이 있는지)는 아직 없다 — 라우트의 `project_id` 가 path 기반 문자열인 반면
-# `require_project_role` 은 UUID 를 기대해서, ID 해석 통일이 선행 조건이다.
-# `.planning/STATE.md` 의 후속 1·2 에 그 작업으로 묶어 두었다.
+# `get_current_user` 는 **인증**(누구인지)만 건다. 프로젝트 단위 **인가**(그 프로젝트에
+# 접근할 권한이 있는지)는 `enforce_git_project_access` 가 건다. 선행 조건이던 ID 해석
+# 통일(`_shared.resolve_project` — DB 모드에서 `ProjectModel` 이 유일한 권위)을 함께
+# 넣어 `.planning/STATE.md` 의 후속 1·2 를 닫는다.
+#
+# 그 의존성은 `project_id` 를 파라미터로 **선언하지 않고** `request.path_params` 에서
+# 읽는다 — 선언하면 `{project_id}` 없는 라우트(`/repositories`·`/github/...`)에서
+# FastAPI 가 그것을 필수 쿼리 파라미터로 해석해 그 라우트들이 422 로 깨진다.
+# `test_routes_without_project_id_still_work` 가 그 배선 실수를 잡는다.
 router = APIRouter(
     prefix="/git",
     tags=["git"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_user), Depends(enforce_git_project_access)],
 )
 
 # 등록 순서는 원본 선언 순서를 재현하지 않는다 — 원본은 도메인 그룹이 불연속이라

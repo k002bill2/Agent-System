@@ -746,6 +746,28 @@ Codex 2 라운드 + 실행 스모크로 지적 4 P1 / 3 P2 중 확인된 것을 
 
   ※ 이 저장소는 public 이므로 재현 절차는 남기지 않는다. 위 사실만으로 수정과 검증에 충분하다.
 
+- **후속 1·2 종료 — 2026-08-28. ID 해석 통일 + 프로젝트 단위 인가를 한 작업으로 반영.**
+  브랜치 `fix/git-db-project-resolution`(`60f5f7a` 기준). 착수 계기는 대시보드 Git 페이지
+  스크린샷이었다: `Project '2bb68d8f-…' not found`.
+
+  - **진짜 결함은 인가 부재가 아니라 그 선행 조건이었다.** DB 모드에서 `/api/projects` 는
+    `ProjectModel.id`(UUID)를 내보내는데 `api/git` 은 `PROJECTS_REGISTRY`(슬러그 키)만
+    조회한다. DB 9 행 중 id 가 우연히 슬러그와 같은 `apfs` 1 건만 동작했다. 회귀 지점은
+    `#318` 이 추가한 `/api/projects` 의 DB 분기다.
+  - **처음 고른 방향은 정반대였고 Codex 가 잡았다.** `/api/projects` 가 슬러그를 내보내게
+    되돌리는 안은 P1 2 건이었다 — `require_project_role`·프로젝트 CRUD 가 UUID 로 조회하므로
+    404 가 되고, `sessions._resolve_project_context` 가 파일시스템을 먼저 보는 탓에 세션
+    생성이 **ACL 검사를 건너뛴다**. DB 가 권위라는 `#318` 의 방향이 옳다.
+  - **채택**: `api/git/_shared.resolve_project` — DB 모드에서 `ProjectModel` 만 본다
+    (파일시스템 폴백 없음). `enforce_git_project_access` 를 라우터에 걸어 GET=viewer /
+    그 외=editor 로 인가한다. `project_id` 를 파라미터로 선언하지 않고 `request.path_params`
+    에서 읽는다 — 선언하면 `{project_id}` 없는 라우트가 422 로 깨진다.
+  - **후속 2 의 원래 우려도 함께 닫혔다**: DB 미등록 슬러그는 이제 404 다. 수정 전에는
+    200 과 실제 저장소 데이터를 반환했다(RED 실측).
+  - **남은 것**: `sessions._resolve_project_context` 의 파일시스템 우선 분기는 그대로다 —
+    같은 우회를 세션 표면에 갖고 있다. `api/git/merge*` 의 `user_role` 은 여전히 클라이언트가
+    쿼리 파라미터로 보낸다(인가 입력이 클라이언트 제어). 둘 다 이 diff 범위 밖.
+
 - **브랜치 정리 (복원 지점)**: `fix/health-badge-and-project-config-db-mode` 를 2026-08-28 에
   로컬·원격 모두 삭제했다. tip 은 **`95dd5b5`**(5 커밋: `f955e7e` · `754edc0` · `7ed7c46` ·
   `22ca9dd` · `95dd5b5`). squash 로 들어갔으므로 개별 커밋 해시는 main 에 없다 — 되살릴 일이

@@ -441,6 +441,28 @@ def update_project(
     return project
 
 
+def set_project_git_path(project: Project, git_path: str | None) -> Project:
+    """Set a project's Git repository path and persist it to `.aos-project.json`.
+
+    `update_project` 는 `PROJECTS_REGISTRY` 엔트리에만 동작한다 — DB 모드의 프로젝트는
+    레지스트리에 없으므로 id 가 아니라 `Project` 객체를 직접 받는다. 저장 대상은
+    `update_project` 와 같은 메타데이터 파일이고 읽기도 `Project.from_path` 가 같은
+    파일을 보므로, 두 모드가 같은 위치를 쓴다.
+
+    Raises:
+        ValueError: `git_path` 가 존재하지 않는 경로일 때.
+    """
+    if git_path:
+        git_path = normalize_path(git_path)
+        if not Path(git_path).exists():
+            raise ValueError(f"Git path does not exist: {git_path}")
+
+    project.git_path = git_path or None
+    project.git_enabled = _check_git_repository(project.git_path or project.path)
+    _save_project_metadata(Path(project.path), project.name, project.description, project.git_path)
+    return project
+
+
 def update_project_sort_order(project_id: str, sort_order: int) -> Project | None:
     """Update a project's sort order."""
     project = PROJECTS_REGISTRY.get(project_id)

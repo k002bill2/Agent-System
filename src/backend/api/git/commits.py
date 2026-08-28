@@ -96,7 +96,7 @@ async def generate_draft_commits_for_project(
 
     from services.llm_service import LLMService
 
-    git_service = get_git_service_for_project(project_id, worktree_path=worktree_path)
+    git_service = await get_git_service_for_project(project_id, worktree_path=worktree_path)
 
     # Get diff content
     try:
@@ -308,7 +308,7 @@ async def list_commits(
     skip: int = Query(0, ge=0, description="Number of commits to skip"),
 ):
     """List commits in a branch."""
-    git_service = get_git_service_for_project(project_id)
+    git_service = await get_git_service_for_project(project_id)
 
     commits = git_service.get_commits(branch=branch, limit=limit, skip=skip)
     actual_branch = branch or git_service.current_branch
@@ -328,7 +328,7 @@ async def get_commit(
     """Get a specific commit."""
     from services.git_service import GitServiceError
 
-    git_service = get_git_service_for_project(project_id)
+    git_service = await get_git_service_for_project(project_id)
 
     try:
         commit = git_service.get_commit(sha)
@@ -345,7 +345,7 @@ async def get_commit_files(
     """Get files changed in a commit."""
     from services.git_service import GitServiceError
 
-    git_service = get_git_service_for_project(project_id)
+    git_service = await get_git_service_for_project(project_id)
 
     try:
         files = git_service.get_commit_files(sha)
@@ -363,7 +363,7 @@ async def get_commit_diff(
     """Get diff for a commit."""
     from services.git_service import GitServiceError
 
-    git_service = get_git_service_for_project(project_id)
+    git_service = await get_git_service_for_project(project_id)
 
     try:
         diff = git_service.get_commit_diff(sha, file_path=file_path)
