@@ -117,23 +117,19 @@ async def _resolve_project_context(
 ):
     """Resolve a project id against whichever registry is authoritative.
 
-    In database mode startup no longer populates PROJECTS_REGISTRY while
-    ``/api/projects`` serves ProjectModel ids - so the filesystem lookup misses
-    every id the dashboard is able to send, and session creation 404s on the
-    projects it just listed. Fall back to the DB registry there.
+    DB 모드에서는 `ProjectModel` 이 유일한 권위다 — 파일시스템 레지스트리를 먼저
+    보지 않는다. 이전에는 `get_project()` 가 히트하면 아래 `require_project_role`
+    **전에** return 했는데, `app.py` 가 DB 모드에서도 `projects/` 심링크 스캔을
+    돌리므로(`7ed7c46`) 그 레지스트리는 비어 있지 않다. 즉 심링크 이름만 알면 DB
+    미등록 프로젝트를 세션에 붙일 수 있었다(실측: 일반 사용자가 200 을 받았다).
 
-    The DB branch authorizes the project the same way every other
-    project-scoped route does: a session must not be able to attach a project
-    the caller could not otherwise reach.
+    `api/git/_shared.resolve_project` 와 같은 규칙이다 — 두 표면이 갈리면 한쪽만
+    닫히고 다른 쪽이 우회로로 남는다.
     """
     from models.project import Project, get_project
 
-    project = get_project(project_id)
-    if project is not None:
-        return project
-
     if os.getenv("USE_DATABASE", "false").lower() != "true":
-        return None
+        return get_project(project_id)
 
     from sqlalchemy import select
 

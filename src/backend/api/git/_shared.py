@@ -18,6 +18,20 @@ def _use_database() -> bool:
     return os.getenv("USE_DATABASE", "false").lower() == "true"
 
 
+# 프로젝트 ACL 역할(owner/editor/viewer) → git 권한 역할.
+# 어휘가 셋이라 그냥 넘기면 조용히 틀린다: `require_project_role` 이 돌려주는
+# `editor` 는 `models/git/permissions.py` 의 `GIT_ROLE_PERMISSIONS` 에 없어서
+# `has_git_permission` 이 빈 리스트를 받고 **전면 거부**가 된다(에러 없음).
+# 대시보드가 보내던 org 역할은 대안이 못 된다 — 등록된 프로젝트의
+# `organization_id` 가 전부 NULL 이라 조회할 조직이 없다(실측 9/9).
+# `editor` → `member`: 쓰기는 되지만 보호 브랜치 머지(MERGE_MAIN)는 안 된다.
+_PROJECT_ROLE_TO_GIT_ROLE: dict[str, str] = {
+    "owner": "owner",
+    "editor": "member",
+    "viewer": "viewer",
+}
+
+
 # =============================================================================
 # Project Resolution & Authorization
 # =============================================================================
@@ -91,6 +105,9 @@ async def enforce_git_project_access(
     모드에서만 강제한다. 이는 기존 동작 유지이며, 이 변경으로 새로 열리는 표면은 없다.
     """
     if not _use_database():
+        # 메모리 모드에는 프로젝트 ACL 이 없어 인증된 사용자가 이미 모든 git 쓰기를
+        # 할 수 있다. 머지만 따로 막으면 기능 제거가 되므로 기존 동작을 유지한다.
+        request.state.git_role = "admin"
         return
 
     project_id = request.path_params.get("project_id")
@@ -107,7 +124,21 @@ async def enforce_git_project_access(
     min_role = "viewer" if request.method in {"GET", "HEAD", "OPTIONS"} else "editor"
 
     # 404(미등록) / 403(거부) / 503(조회 실패) — 전부 fail-closed.
-    await require_project_role(project_id, current_user, db, min_role=min_role)
+    project_role = await require_project_role(project_id, current_user, db, min_role=min_role)
+
+    # 머지 권한(`can_merge_to_branch`)이 쓸 역할을 여기서 확정해 둔다. 이전에는
+    # 핸들러가 `user_role` 을 **쿼리 파라미터로** 받아 `?user_role=owner` 한 줄이면
+    # 보호 브랜치 제한이 사라졌다.
+    request.state.git_role = _PROJECT_ROLE_TO_GIT_ROLE.get(project_role, "viewer")
+
+
+async def get_git_role(request: Request) -> str:
+    """`enforce_git_project_access` 가 확정한 git 권한 역할.
+
+    그 의존성은 라우터 소유라 엔드포인트 파라미터보다 먼저 해석되므로 값이 항상 있다.
+    없으면(배선이 끊긴 경우) 가장 낮은 역할로 떨어진다 — fail-closed.
+    """
+    return getattr(request.state, "git_role", "viewer")
 
 
 # =============================================================================

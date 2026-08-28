@@ -2,8 +2,9 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from api.deps import get_current_user
 from models.git import (
     MergeRequest,
     MergeRequestCreate,
@@ -13,7 +14,7 @@ from models.git import (
     can_merge_to_branch,
 )
 
-from ._shared import _get_db_session, get_mr_service_for_project
+from ._shared import _get_db_session, get_git_role, get_mr_service_for_project
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +165,7 @@ async def update_merge_request(
 async def approve_merge_request(
     project_id: str,
     mr_id: str,
-    user_id: str = Query(..., description="Approving user ID"),
+    current_user=Depends(get_current_user),
 ):
     """Approve a merge request. Triggers auto-merge if conditions met."""
     db_session = await _get_db_session()
@@ -172,10 +173,12 @@ async def approve_merge_request(
         mr_service = await get_mr_service_for_project(project_id, db_session=db_session)
         if db_session:
             async with db_session:
-                mr = await mr_service.approve_merge_request_async(mr_id=mr_id, user_id=user_id)
+                mr = await mr_service.approve_merge_request_async(
+                    mr_id=mr_id, user_id=str(current_user.id)
+                )
                 await db_session.commit()
         else:
-            mr = mr_service.approve_merge_request(mr_id=mr_id, user_id=user_id)
+            mr = mr_service.approve_merge_request(mr_id=mr_id, user_id=str(current_user.id))
 
         if not mr:
             raise HTTPException(status_code=404, detail="Merge request not found")
@@ -191,8 +194,8 @@ async def approve_merge_request(
 async def merge_merge_request(
     project_id: str,
     mr_id: str,
-    user_id: str = Query(..., description="User ID performing the merge"),
-    user_role: str = Query("member", description="User role for permission check"),
+    current_user=Depends(get_current_user),
+    user_role: str = Depends(get_git_role),
 ):
     """Merge a merge request."""
     db_session = await _get_db_session()
@@ -212,7 +215,7 @@ async def merge_merge_request(
                     )
 
                 mr, result = await mr_service.merge_merge_request_async(
-                    mr_id=mr_id, merged_by=user_id
+                    mr_id=mr_id, merged_by=str(current_user.id)
                 )
                 await db_session.commit()
 
@@ -230,7 +233,7 @@ async def merge_merge_request(
                     detail=f"Insufficient permissions to merge to '{mr.target_branch}'",
                 )
 
-            mr, result = mr_service.merge_merge_request(mr_id=mr_id, merged_by=user_id)
+            mr, result = mr_service.merge_merge_request(mr_id=mr_id, merged_by=str(current_user.id))
 
         if not mr:
             raise HTTPException(status_code=404, detail="Merge request not found")
@@ -250,7 +253,7 @@ async def merge_merge_request(
 async def close_merge_request(
     project_id: str,
     mr_id: str,
-    user_id: str = Query(..., description="User ID closing the MR"),
+    current_user=Depends(get_current_user),
 ):
     """Close a merge request without merging."""
     db_session = await _get_db_session()
@@ -258,10 +261,12 @@ async def close_merge_request(
         mr_service = await get_mr_service_for_project(project_id, db_session=db_session)
         if db_session:
             async with db_session:
-                mr = await mr_service.close_merge_request_async(mr_id=mr_id, closed_by=user_id)
+                mr = await mr_service.close_merge_request_async(
+                    mr_id=mr_id, closed_by=str(current_user.id)
+                )
                 await db_session.commit()
         else:
-            mr = mr_service.close_merge_request(mr_id=mr_id, closed_by=user_id)
+            mr = mr_service.close_merge_request(mr_id=mr_id, closed_by=str(current_user.id))
 
         if not mr:
             raise HTTPException(status_code=404, detail="Merge request not found")
