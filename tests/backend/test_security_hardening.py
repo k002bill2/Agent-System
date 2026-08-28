@@ -1639,3 +1639,92 @@ async def test_db_global_config_route_requires_privileged_role(monkeypatch):
     )
 
     assert result is operator
+
+
+# ─────────────────────────────────────────────────────────────
+# Git API authentication
+#
+# The git package had no authentication gate at all until 2026-08-28: the
+# router carried no `dependencies`, `include_router` added none, and the one
+# `get_current_user` in the package (commits.py) is the *optional* variant.
+# Unauthenticated GETs returned 200 with real repository data once a project
+# was in PROJECTS_REGISTRY; writes reached body validation (422, not 401).
+# An empty registry made it look closed -- `7ed7c46` filled the registry in
+# database mode and the surface became reachable.
+#
+# No test called a git route over HTTP, which is why nothing caught it. These
+# do.
+# ─────────────────────────────────────────────────────────────
+
+
+def _register_git_project(tmp_path) -> str:
+    """Create a real repo and register it, returning the route's project_id."""
+    import subprocess
+
+    from models.project import register_project
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    # `-b` 로 이름을 고정한다 — init.defaultBranch 는 환경마다 다르다
+    # (로컬 main / CI 기본 master).
+    subprocess.run(["git", "init", "-q", "-b", "work"], cwd=repo, check=True)
+    (repo / "f.txt").write_text("x\n")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=a@b.c", "-c", "user.name=t", "commit", "-qm", "init"],
+        cwd=repo,
+        check=True,
+    )
+    project_id = str(repo).replace("/", "-")
+    register_project(project_id, str(repo))
+    return project_id
+
+
+@pytest.mark.anyio
+async def test_git_reads_require_authentication(client, tmp_path):
+    """A registered project must not expose its history to anonymous callers.
+
+    These returned 200 with branch names, commit SHAs, messages and author
+    identities before the router gate existed.
+    """
+    project_id = _register_git_project(tmp_path)
+
+    for path in (
+        f"/api/git/projects/{project_id}/branches",
+        f"/api/git/projects/{project_id}/commits",
+        f"/api/git/projects/{project_id}/remotes",
+    ):
+        response = await client.get(path)
+        assert response.status_code == 401, f"{path} -> {response.status_code}"
+
+
+@pytest.mark.anyio
+async def test_git_writes_require_authentication(client, tmp_path):
+    """Writes must be rejected before body validation, not after.
+
+    A 422 here would mean the request reached the handler's schema check with
+    no identity attached -- that was the pre-fix behaviour.
+    """
+    project_id = _register_git_project(tmp_path)
+
+    response = await client.post(
+        f"/api/git/projects/{project_id}/branches", json={"name": "injected"}
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_git_route_reachable_when_authenticated(client, authenticated_app, tmp_path):
+    """The gate must not break the dashboard: an authenticated read still works.
+
+    Guards against "fixed by making it always fail" -- the frontend sends a
+    bearer token via apiClient's auth interceptor, so this is the real path.
+    """
+    project_id = _register_git_project(tmp_path)
+
+    response = await client.get(f"/api/git/projects/{project_id}/branches")
+
+    assert response.status_code == 200
+    branches = response.json()["branches"]
+    assert [b["name"] for b in branches] == ["work"]
+    assert branches[0]["is_current"] is True
