@@ -1,5 +1,6 @@
 """Dependency injection for API routes."""
 
+import asyncio
 import os
 from collections.abc import AsyncGenerator, Mapping
 from typing import TYPE_CHECKING
@@ -104,7 +105,10 @@ async def resolve_project(project_id: str, db: AsyncSession | None) -> "Project 
         return None
 
     try:
-        project = Project.from_path(project_id, path)
+        # from_path reads CLAUDE.md, package.json and .aos-project.json and
+        # stats .git. On a network or cold filesystem that is long enough to
+        # stall the loop, and this runs on every project-scoped request.
+        project = await asyncio.to_thread(Project.from_path, project_id, path)
     except OSError:
         # Unreadable workspace: still resolve so diagnostics can report *why*.
         project = Project(id=project_id, name=row.name, path=path)

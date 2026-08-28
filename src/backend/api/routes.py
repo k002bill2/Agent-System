@@ -622,6 +622,63 @@ async def create_project(
     )
 
 
+async def _validate_project_path_change(
+    project_id: str,
+    requested_path: str,
+    current_user,
+    db: AsyncSession,
+) -> str:
+    """Authorize and validate a project workspace repoint.
+
+    The stored path decides which directory the context, diagnostics and
+    monitoring routes read, and ``checks/run-all`` executes the commands it
+    finds in that directory's ``.aos-project.json`` with ``cwd`` set to it
+    (``services/project_runner.py``). So a path change is a privilege transfer,
+    not a metadata edit: an editor who could repoint a project would gain read
+    and execute access to any directory the backend can reach.
+
+    Gate it at owner, require the directory to exist, and refuse to point one
+    project at another registered project's workspace - project-scoped ACLs
+    mean nothing if two ids can share one directory.
+    """
+    from pathlib import Path
+
+    await require_project_role(project_id, current_user, db, min_role="owner")
+
+    normalized = normalize_path(requested_path)
+    if not IS_DOCKER and not Path(normalized).exists():
+        raise HTTPException(status_code=400, detail=f"Path does not exist: {normalized}")
+
+    target = Path(normalized).resolve()
+    if os.getenv("USE_DATABASE", "false").lower() == "true":
+        from sqlalchemy import select
+
+        from db.models import ProjectModel
+
+        rows = (
+            await db.execute(
+                select(ProjectModel.id, ProjectModel.path).where(
+                    ProjectModel.is_active == True,  # noqa: E712
+                    ProjectModel.path.isnot(None),
+                )
+            )
+        ).all()
+        taken = [(str(pid), str(ppath)) for pid, ppath in rows]
+    else:
+        taken = [(p.id, p.path) for p in list_projects() if p.path]
+
+    for other_id, other_path in taken:
+        if other_id == project_id:
+            continue
+        if Path(other_path).resolve() == target:
+            raise HTTPException(
+                status_code=409,
+                detail="Path already belongs to another project",
+            )
+
+    return normalized
+
+
 @router.put("/projects/{project_id}", response_model=ProjectResponse)
 async def update_project_endpoint(
     project_id: str,
@@ -629,9 +686,13 @@ async def update_project_endpoint(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Update project name, description, or path. Requires editor+ role."""
+    """Update project metadata. Requires editor+; a path change requires owner."""
     if current_user:
         await require_project_role(project_id, current_user, db, min_role="editor")
+        if request.path is not None:
+            request.path = await _validate_project_path_change(
+                project_id, request.path, current_user, db
+            )
 
     if os.getenv("USE_DATABASE", "false").lower() == "true":
         from sqlalchemy import select

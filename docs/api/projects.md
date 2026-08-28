@@ -67,6 +67,20 @@
 | GET | `/api/projects/{id}/context` | 프로젝트 컨텍스트 (CLAUDE.md, dev docs) |
 | GET | `/api/projects/{id}/claude-md` | CLAUDE.md 내용 조회 |
 
+### `PUT /api/projects/{id}` — path 변경은 owner 권한
+
+이름·설명 수정은 `editor` 지만, **`path` 변경은 `owner`** 를 요구한다. 저장된 path 는
+메타데이터가 아니라 권한 이전이기 때문이다 — context·diagnostics·monitoring 이 읽는
+디렉터리를 정하고, `checks/run-all` 은 그 디렉터리의 `.aos-project.json` 에 적힌
+`health_checks[*].command` 를 `cwd` 를 그 경로로 두고 실행한다
+(`services/project_runner.py`).
+
+path 변경 시 추가 검증:
+- 존재하지 않는 디렉터리 → **400** (Docker 환경 제외 — 호스트 경로 접근 불가)
+- 다른 활성 프로젝트가 이미 쓰는 경로 → **409** `Path already belongs to another project`.
+  두 id 가 한 디렉터리를 공유하면 프로젝트 단위 ACL 이 무의미해진다
+- 터미널에서 붙여넣은 shell escape (`Mobile\ Documents`) 는 `normalize_path()` 로 정규화
+
 ### `DELETE /api/projects/{id}` — cascade 삭제 범위
 
 세션·태스크·메시지 DB 레코드, RAG 인덱스, 헬스/설정 캐시, `projects/` 심링크,
@@ -77,6 +91,12 @@
 
 인메모리 레지스트리만 지우면 프로젝트가 세션·인덱스·심링크를 모두 잃은 채
 `GET /api/projects` 목록에 계속 남는다.
+
+**부분 실패 규약**: 레지스트리 해제는 프로젝트를 도달 불가로 만드는 단계이므로 **맨 마지막**에,
+그리고 **앞선 단계가 전부 성공했을 때만** 수행한다. 1~5 단계는 각각 멱등이라 실패 시 프로젝트를
+등록된 채로 남겨두면 운영자가 재시도할 수 있다. 오류가 하나라도 남으면 `success=false` 이고
+핸들러는 **500** 과 함께 오류 목록을 반환한다 — 일부만 지워진 프로젝트를 성공으로 보고하면
+재시도할 경로조차 사라진다.
 
 ### 프로젝트 id 해석 (registry resolution)
 

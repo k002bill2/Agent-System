@@ -223,19 +223,32 @@ class ProjectCleanupService:
         # projects/<name> symlink, the DB one by ProjectModel.id -- dropping
         # only the former leaves the project listed by GET /api/projects with
         # its sessions, index and symlink already gone.
-        try:
-            unregister_project(project_id)
-            await self._delete_db_project_registry(project_id)
-            summary.registry_unregistered = True
-            logger.info(f"Unregistered project: {project_id}")
-        except Exception as e:
-            error_msg = f"Registry unregistration failed: {e}"
-            logger.error(error_msg)
-            summary.errors.append(error_msg)
+        #
+        # Unregistering is what makes the project unreachable, so it goes last
+        # and only if every destructive step before it succeeded. Steps 1-5 are
+        # each idempotent, so leaving the project registered after a failure
+        # lets the operator retry; dropping the registry entry anyway would
+        # strand whatever survived with no route left to reach it.
+        if summary.errors:
+            logger.error(
+                f"Skipping registry unregistration for {project_id}: "
+                f"{len(summary.errors)} cleanup step(s) failed"
+            )
+        else:
+            try:
+                unregister_project(project_id)
+                await self._delete_db_project_registry(project_id)
+                summary.registry_unregistered = True
+                logger.info(f"Unregistered project: {project_id}")
+            except Exception as e:
+                error_msg = f"Registry unregistration failed: {e}"
+                logger.error(error_msg)
+                summary.errors.append(error_msg)
 
-        # Mark as failed if critical errors occurred
-        if summary.errors and not summary.registry_unregistered:
-            summary.success = False
+        # Any surviving error means the caller must not be told the project is
+        # gone -- a partially deleted project reported as success is worse than
+        # a failure the operator can retry.
+        summary.success = not summary.errors
 
         return summary
 
