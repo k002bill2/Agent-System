@@ -1,6 +1,6 @@
 """merge 관련 Git API 라우트."""
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from models.git import (
     ConflictFile,
@@ -17,7 +17,7 @@ from models.git import (
     can_merge_to_branch,
 )
 
-from ._shared import get_effective_git_path, resolve_project
+from ._shared import get_effective_git_path, get_git_role, resolve_project
 
 router = APIRouter()
 
@@ -105,7 +105,7 @@ async def get_three_way_diff(
 async def execute_merge(
     project_id: str,
     request: MergeExecuteRequest,
-    user_role: str = Query("member", description="User role for permission check"),
+    user_role: str = Depends(get_git_role),
 ):
     """Execute merge operation.
 
