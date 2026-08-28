@@ -33,7 +33,7 @@ async def list_merge_requests(
     """List merge requests for a project."""
     db_session = await _get_db_session()
     try:
-        mr_service = get_mr_service_for_project(project_id, db_session=db_session)
+        mr_service = await get_mr_service_for_project(project_id, db_session=db_session)
         if db_session:
             async with db_session:
                 mrs = await mr_service.list_merge_requests_async(status=status)
@@ -56,7 +56,7 @@ async def get_merge_request(
     """Get a merge request by ID."""
     db_session = await _get_db_session()
     try:
-        mr_service = get_mr_service_for_project(project_id, db_session=db_session)
+        mr_service = await get_mr_service_for_project(project_id, db_session=db_session)
         if db_session:
             async with db_session:
                 mr = await mr_service.get_merge_request_async(mr_id)
@@ -85,7 +85,7 @@ async def create_merge_request(
     """Create a new merge request."""
     db_session = await _get_db_session()
     try:
-        mr_service = get_mr_service_for_project(project_id, db_session=db_session)
+        mr_service = await get_mr_service_for_project(project_id, db_session=db_session)
         if db_session:
             async with db_session:
                 mr = await mr_service.create_merge_request_async(
@@ -129,7 +129,7 @@ async def update_merge_request(
     """Update a merge request."""
     db_session = await _get_db_session()
     try:
-        mr_service = get_mr_service_for_project(project_id, db_session=db_session)
+        mr_service = await get_mr_service_for_project(project_id, db_session=db_session)
         if db_session:
             async with db_session:
                 mr = await mr_service.update_merge_request_async(
@@ -169,7 +169,7 @@ async def approve_merge_request(
     """Approve a merge request. Triggers auto-merge if conditions met."""
     db_session = await _get_db_session()
     try:
-        mr_service = get_mr_service_for_project(project_id, db_session=db_session)
+        mr_service = await get_mr_service_for_project(project_id, db_session=db_session)
         if db_session:
             async with db_session:
                 mr = await mr_service.approve_merge_request_async(mr_id=mr_id, user_id=user_id)
@@ -197,7 +197,7 @@ async def merge_merge_request(
     """Merge a merge request."""
     db_session = await _get_db_session()
     try:
-        mr_service = get_mr_service_for_project(project_id, db_session=db_session)
+        mr_service = await get_mr_service_for_project(project_id, db_session=db_session)
 
         if db_session:
             async with db_session:
@@ -255,7 +255,7 @@ async def close_merge_request(
     """Close a merge request without merging."""
     db_session = await _get_db_session()
     try:
-        mr_service = get_mr_service_for_project(project_id, db_session=db_session)
+        mr_service = await get_mr_service_for_project(project_id, db_session=db_session)
         if db_session:
             async with db_session:
                 mr = await mr_service.close_merge_request_async(mr_id=mr_id, closed_by=user_id)
@@ -281,7 +281,7 @@ async def delete_merge_request(
     """Permanently delete a merge request record (metadata only — git refs are untouched)."""
     db_session = await _get_db_session()
     try:
-        mr_service = get_mr_service_for_project(project_id, db_session=db_session)
+        mr_service = await get_mr_service_for_project(project_id, db_session=db_session)
         if db_session:
             async with db_session:
                 deleted = await mr_service.delete_merge_request_async(mr_id)
@@ -308,7 +308,7 @@ async def refresh_mr_conflicts(
     """Refresh conflict status for a merge request."""
     db_session = await _get_db_session()
     try:
-        mr_service = get_mr_service_for_project(project_id, db_session=db_session)
+        mr_service = await get_mr_service_for_project(project_id, db_session=db_session)
         if db_session:
             async with db_session:
                 mr = await mr_service.refresh_conflict_status_async(mr_id)

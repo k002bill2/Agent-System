@@ -42,7 +42,7 @@ async def list_branches(
     base_branch: str = Query("main", description="Base branch for ahead/behind calculation"),
 ):
     """List all branches in a project."""
-    git_service = get_git_service_for_project(project_id)
+    git_service = await get_git_service_for_project(project_id)
 
     branches = git_service.list_branches(
         include_remote=include_remote,
@@ -64,7 +64,7 @@ async def create_branch(
     """Create a new branch."""
     from services.git_service import GitServiceError
 
-    git_service = get_git_service_for_project(project_id)
+    git_service = await get_git_service_for_project(project_id)
 
     try:
         branch = git_service.create_branch(
@@ -84,7 +84,7 @@ async def checkout_branch(
     """Checkout (switch to) a branch."""
     from services.git_service import GitServiceError
 
-    git_service = get_git_service_for_project(project_id)
+    git_service = await get_git_service_for_project(project_id)
 
     try:
         branch = git_service.checkout_branch(name=branch_name)
@@ -104,7 +104,7 @@ async def delete_branch(
     """Delete a branch (local and/or remote)."""
     from services.git_service import GitServiceError
 
-    git_service = get_git_service_for_project(project_id)
+    git_service = await get_git_service_for_project(project_id)
 
     try:
         success = git_service.delete_branch(
@@ -118,7 +118,7 @@ async def delete_branch(
         closed_mrs = 0
         try:
             db_session = await _get_db_session()
-            mr_service = get_mr_service_for_project(project_id, db_session=db_session)
+            mr_service = await get_mr_service_for_project(project_id, db_session=db_session)
             closed_mrs = await mr_service.close_mrs_by_source_branch_async(
                 branch_name, closed_by="system"
             )
@@ -149,7 +149,7 @@ async def prune_merged_branches(project_id: str, request: PruneRequest):
     """
     from services.git_service import GitServiceError
 
-    git_service = get_git_service_for_project(project_id)
+    git_service = await get_git_service_for_project(project_id)
     github_service = get_github_service()  # raises 503 without token
 
     # Pre-fetch active protection patterns (async DB) → pass to sync service
@@ -203,7 +203,7 @@ async def get_branch_diff(
     """Get diff summary between a branch and base."""
     from services.git_service import GitServiceError
 
-    git_service = get_git_service_for_project(project_id)
+    git_service = await get_git_service_for_project(project_id)
 
     try:
         diff = git_service.get_branch_diff(branch=branch_name, base=base)
