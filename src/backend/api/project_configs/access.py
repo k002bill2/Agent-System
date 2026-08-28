@@ -65,7 +65,10 @@ async def require_project_config_access(
 
     use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
     if not use_database:
-        if project_config_monitor.get_project_config_monitor().get_project_summary(project_id) is None:
+        if (
+            project_config_monitor.get_project_config_monitor().get_project_summary(project_id)
+            is None
+        ):
             raise HTTPException(status_code=404, detail="Project not found")
 
         # Existence was the only check here, which made this the one
@@ -132,7 +135,12 @@ async def require_project_config_target_access(
 ) -> None:
     """Authorize the destination of a project-config copy operation."""
     if os.getenv("USE_DATABASE", "false").lower() != "true":
-        if project_config_monitor.get_project_config_monitor().get_project_summary(target_project_id) is None:
+        if (
+            project_config_monitor.get_project_config_monitor().get_project_summary(
+                target_project_id
+            )
+            is None
+        ):
             raise HTTPException(status_code=404, detail="Target project not found")
 
         # The route dependency authorizes the *source* project only, and a copy
@@ -151,7 +159,11 @@ async def require_project_config_target_access(
         def route_ids(project: ProjectModel) -> set[str]:
             ids = {str(project.id), f"db-{project.id}"}
             if project.path:
-                ids.add(project_config_monitor.get_project_config_monitor().encode_project_path(str(project.path)))
+                ids.add(
+                    project_config_monitor.get_project_config_monitor().encode_project_path(
+                        str(project.path)
+                    )
+                )
             return ids
 
         project = next((item for item in projects if target_project_id in route_ids(item)), None)
