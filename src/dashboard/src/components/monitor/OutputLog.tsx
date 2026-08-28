@@ -26,12 +26,25 @@ export function OutputLog({ projectId }: OutputLogProps) {
     setActiveLogView,
     clearLogs,
     workflowChecks,
+    workflowProjectId,
     workflowLogs,
     clearWorkflowLogs,
     getCheckTypes,
   } = useMonitoringStore()
   const checkLabels = useCheckLabels(projectId)
   const checkTypes = getCheckTypes(projectId)
+  const visibleWorkflowChecks = workflowProjectId === projectId ? workflowChecks : []
+  const visibleWorkflowIds = new Set(visibleWorkflowChecks.map((workflow) => workflow.id))
+  const visibleWorkflowLogs = workflowProjectId === projectId
+    ? Object.fromEntries(
+        Object.entries(workflowLogs)
+          .filter(([workflowId]) => visibleWorkflowIds.has(workflowId))
+          .map(([workflowId, logs]) => [
+            workflowId,
+            logs.filter((log) => log.projectId === projectId),
+          ]),
+      )
+    : {}
   const logContainerRef = useRef<HTMLDivElement>(null)
 
   // Check if current view is a known check type
@@ -49,8 +62,8 @@ export function OutputLog({ projectId }: OutputLogProps) {
           .filter((log) => log.projectId === projectId)
           .map((log) => ({ ...log, label: checkLabels[ct] || ct }))
       )
-      const allWfLogs = Object.entries(workflowLogs).flatMap(([wfId, logs]) => {
-        const wf = workflowChecks.find((w) => w.id === wfId)
+      const allWfLogs = Object.entries(visibleWorkflowLogs).flatMap(([wfId, logs]) => {
+        const wf = visibleWorkflowChecks.find((w) => w.id === wfId)
         return logs.map((log) => ({ ...log, label: wf?.name || wfId }))
       })
       return [...allCheckLogs, ...allWfLogs].sort(
@@ -60,8 +73,8 @@ export function OutputLog({ projectId }: OutputLogProps) {
 
     if (isWorkflowView) {
       // Workflow logs
-      return (workflowLogs[activeLogView] || []).map((log) => {
-        const wf = workflowChecks.find((w) => w.id === activeLogView)
+      return (visibleWorkflowLogs[activeLogView] || []).map((log) => {
+        const wf = visibleWorkflowChecks.find((w) => w.id === activeLogView)
         return { ...log, label: wf?.name || activeLogView }
       })
     }
@@ -145,10 +158,10 @@ export function OutputLog({ projectId }: OutputLogProps) {
             ))}
 
             {/* Workflow tabs (with divider) */}
-            {workflowChecks.length > 0 && (
+            {visibleWorkflowChecks.length > 0 && (
               <>
                 <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1 shrink-0" />
-                {workflowChecks.map((wc) => (
+                {visibleWorkflowChecks.map((wc) => (
                   <button
                     key={wc.id}
                     onClick={() => setActiveLogView(wc.id)}

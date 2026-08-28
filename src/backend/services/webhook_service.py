@@ -50,6 +50,8 @@ class WebhookService:
         webhook = self._webhooks.get(webhook_id)
         if not webhook:
             return False
+        if not isinstance(signature, str) or not signature:
+            return False
 
         expected = (
             "sha256="
@@ -60,7 +62,12 @@ class WebhookService:
             ).hexdigest()
         )
 
-        return hmac.compare_digest(expected, signature)
+        try:
+            return hmac.compare_digest(expected, signature)
+        except TypeError:
+            # ``compare_digest`` rejects non-ASCII str operands; a hostile
+            # header must fail verification, not raise a 500.
+            return False
 
     async def handle_webhook(
         self,

@@ -35,6 +35,7 @@ vi.mock('../../../stores/monitoring', () => ({
     activeLogView: mockActiveLogView,
     setActiveLogView: mockSetActiveLogView,
     workflowChecks: mockWorkflowChecks,
+    workflowProjectId: 'proj-1',
     runningWorkflowIds: mockRunningWorkflowIds,
     runWorkflowCheck: mockRunWorkflowCheck,
   }),

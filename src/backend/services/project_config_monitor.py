@@ -88,6 +88,14 @@ class ProjectConfigMonitor:
     def add_external_project(self, path: str) -> bool:
         return self._discovery.add_external_project(path)
 
+    def encode_project_path(self, path: str) -> str:
+        """Monitor key for a filesystem path, normalized as monitored paths are."""
+        return self._discovery.encode_project_path(path)
+
+    def register_project_id_alias(self, public_project_id: str, project_path: str) -> None:
+        """Register a DB public ID for the already-registered filesystem path."""
+        self._discovery.register_project_id_alias(public_project_id, project_path)
+
     def remove_external_project(self, path: str) -> bool:
         result = self._discovery.remove_external_project(path)
         if result:
@@ -970,7 +978,7 @@ class ProjectConfigMonitor:
             return None
 
         return ProjectConfigSummary(
-            project=project_info,
+            project=project_info.model_copy(update={"project_id": project_id}),
             skills=self.get_project_skills(project_id),
             agents=self.get_project_agents(project_id),
             mcp_servers=self.get_project_mcp_config(project_id),

@@ -1,16 +1,15 @@
 """Regression tests for high-risk API authentication and permission auditing."""
 
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from httpx import ASGITransport, AsyncClient
 import pytest
 from fastapi import HTTPException, WebSocketException
+from httpx import ASGITransport, AsyncClient
 
 from models.permissions import AgentPermission
 from services.audit_service import AuditAction
-
 
 PROTECTED_ROUTE_PREFIXES = (
     "/api/audit",
@@ -310,7 +309,9 @@ async def test_terminal_execution_writes_audit_event(client, app, monkeypatch):
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
         id="operator-user", role="admin", is_admin=True, is_active=True
     )
-    monkeypatch.setattr("api.terminal.get_project", lambda _project_id: SimpleNamespace(path="/tmp"))
+    monkeypatch.setattr(
+        "api.terminal.get_project", lambda _project_id: SimpleNamespace(path="/tmp")
+    )
     monkeypatch.setattr("api.terminal.get_terminal_service", lambda: Service())
     try:
         response = await client.post(
@@ -338,6 +339,7 @@ async def test_project_config_lookup_fails_closed_on_database_error(monkeypatch)
     from api.project_configs.core import list_projects
 
     monkeypatch.setenv("USE_DATABASE", "true")
+
     async def broken_lookup(*_args, **_kwargs):
         raise RuntimeError("database unavailable")
 
@@ -391,9 +393,7 @@ async def test_terminal_audit_redacts_adapter_error(monkeypatch):
     from api.terminal import TerminalExecuteRequest, _log_terminal_execution
     from services.audit_service import _audit_logs
 
-    request = TerminalExecuteRequest(
-        terminal="orca", project_id="project", command="echo secret"
-    )
+    request = TerminalExecuteRequest(terminal="orca", project_id="project", command="echo secret")
     before = len(_audit_logs)
     _log_terminal_execution(
         request,
@@ -416,7 +416,9 @@ async def test_terminal_resolution_failure_is_audited(client, app, monkeypatch):
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
         id="operator", role="admin", is_admin=True, is_active=True
     )
-    monkeypatch.setattr("api.terminal.get_project", lambda _project_id: SimpleNamespace(path="/tmp"))
+    monkeypatch.setattr(
+        "api.terminal.get_project", lambda _project_id: SimpleNamespace(path="/tmp")
+    )
     monkeypatch.setattr(
         "api.terminal.get_terminal_service",
         lambda: (_ for _ in ()).throw(RuntimeError("secret adapter details")),
@@ -458,7 +460,9 @@ async def test_terminal_malformed_result_is_audited(client, app, monkeypatch):
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
         id="operator", role="admin", is_admin=True, is_active=True
     )
-    monkeypatch.setattr("api.terminal.get_project", lambda _project_id: SimpleNamespace(path="/tmp"))
+    monkeypatch.setattr(
+        "api.terminal.get_project", lambda _project_id: SimpleNamespace(path="/tmp")
+    )
     monkeypatch.setattr("api.terminal.get_terminal_service", lambda: Service())
     before = len(_audit_logs)
     try:
@@ -519,9 +523,7 @@ async def test_project_config_query_project_id_cannot_bypass_global_guard(client
         id="regular", role="user", is_admin=False, is_active=True
     )
     try:
-        response = await client.get(
-            "/api/project-configs/paths?project_id=authorized-project"
-        )
+        response = await client.get("/api/project-configs/paths?project_id=authorized-project")
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
@@ -560,6 +562,7 @@ async def test_db_project_context_does_not_execute_legacy_filesystem_handler(mon
     from api.context import get_project_context
 
     monkeypatch.setenv("USE_DATABASE", "true")
+
     async def allow_project_role(*_args, **_kwargs):
         return "admin"
 
@@ -581,7 +584,7 @@ async def test_db_project_context_does_not_execute_legacy_filesystem_handler(mon
 @pytest.mark.asyncio
 async def test_project_config_copy_target_requires_access(monkeypatch):
     """Copy destinations must be registered and independently authorized."""
-    from api.project_configs.access import require_project_config_target_access
+    from api.project_configs import access as access_module
 
     target = SimpleNamespace(id="target", path="/target", organization_id="org-other")
 
@@ -592,24 +595,21 @@ async def test_project_config_copy_target_requires_access(monkeypatch):
         def scalars(self):
             return SimpleNamespace(all=lambda: self.value)
 
-        def scalar_one_or_none(self):
-            return self.value
-
     class Database:
-        def __init__(self):
-            self.calls = 0
-
         async def execute(self, *_args, **_kwargs):
-            self.calls += 1
-            return Result([target] if self.calls == 1 else None)
+            return Result([target])
 
     async def no_admin_orgs(_user):
         return []
 
+    async def deny_target_role(*_args, **_kwargs):
+        raise HTTPException(status_code=403, detail="Target project access denied")
+
     monkeypatch.setenv("USE_DATABASE", "true")
     monkeypatch.setattr("api.projects._get_admin_org_ids", no_admin_orgs)
+    monkeypatch.setattr(access_module, "require_project_role", deny_target_role)
     with pytest.raises(HTTPException) as exc_info:
-        await require_project_config_target_access(
+        await access_module.require_project_config_target_access(
             "target",
             SimpleNamespace(id="user", role="user", is_admin=False),
             Database(),
@@ -682,7 +682,9 @@ async def test_db_project_deletion_routes_fail_closed_before_cleanup(monkeypatch
     monkeypatch.setenv("USE_DATABASE", "true")
     monkeypatch.setattr("api.routes.require_project_role", AsyncMock())
     cleanup_service = AsyncMock()
-    monkeypatch.setattr("services.project_cleanup_service.get_cleanup_service", lambda: cleanup_service)
+    monkeypatch.setattr(
+        "services.project_cleanup_service.get_cleanup_service", lambda: cleanup_service
+    )
     user = SimpleNamespace(id="owner", role="admin", is_admin=True, is_active=True)
 
     for handler in (get_deletion_preview, delete_project):
@@ -744,7 +746,9 @@ async def test_debug_environment_enables_standard_docs(monkeypatch):
     monkeypatch.setenv("DEBUG", "true")
     monkeypatch.setenv("ENABLE_API_DOCS", "false")
     debug_app = create_app(debug=False)
-    async with AsyncClient(transport=ASGITransport(app=debug_app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=debug_app), base_url="http://test"
+    ) as client:
         assert (await client.get("/docs")).status_code == 200
 
 
@@ -799,7 +803,10 @@ def test_setup_and_compose_do_not_print_secret_fragments():
     compose_text = compose.read_text()
     assert "NEW_SECRET: -4" not in setup_text
     assert "NEW_PG_PW: -4" not in setup_text
-    assert "postgresql+asyncpg://${POSTGRES_USER:-aos}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aos}" in compose_text
+    assert (
+        "postgresql+asyncpg://${POSTGRES_USER:-aos}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aos}"
+        in compose_text
+    )
 
 
 @pytest.mark.asyncio
@@ -902,9 +909,10 @@ async def test_projects_db_failure_returns_503_without_filesystem_listing(monkey
             raise RuntimeError("database unavailable")
 
     monkeypatch.setenv("USE_DATABASE", "true")
-    monkeypatch.setattr("api.routes.list_projects", lambda: (_ for _ in ()).throw(
-        AssertionError("filesystem listing must not run in DB mode")
-    ))
+    monkeypatch.setattr(
+        "api.routes.list_projects",
+        lambda: (_ for _ in ()).throw(AssertionError("filesystem listing must not run in DB mode")),
+    )
     with pytest.raises(HTTPException) as exc_info:
         await get_projects(
             current_user=SimpleNamespace(id="admin", role="admin", is_admin=True),
@@ -976,9 +984,12 @@ async def test_db_project_route_rejects_unregistered_id_before_filesystem_lookup
             return Result()
 
     monkeypatch.setenv("USE_DATABASE", "true")
-    monkeypatch.setattr("api.routes.get_project", lambda _project_id: (_ for _ in ()).throw(
-        AssertionError("legacy filesystem lookup must not run")
-    ))
+    monkeypatch.setattr(
+        "api.routes.get_project",
+        lambda _project_id: (_ for _ in ()).throw(
+            AssertionError("legacy filesystem lookup must not run")
+        ),
+    )
     with pytest.raises(HTTPException) as exc_info:
         await get_project_by_id(
             "filesystem-only",
@@ -1100,7 +1111,11 @@ async def test_filesystem_project_config_mutation_requires_editor(monkeypatch):
     monkeypatch.setattr(access_module, "require_project_role", fake_require)
 
     user = SimpleNamespace(id="regular", role="user", is_admin=False, is_active=True)
-    for method, project_id in (("GET", "read-proj"), ("POST", "write-proj"), ("DELETE", "del-proj")):
+    for method, project_id in (
+        ("GET", "read-proj"),
+        ("POST", "write-proj"),
+        ("DELETE", "del-proj"),
+    ):
         await access_module.require_project_config_access(
             _request_stub(method, project_id, f"/api/project-configs/{project_id}/skills"),
             user,
@@ -1453,7 +1468,6 @@ async def test_create_session_uses_the_project_resolver(monkeypatch):
     assert called["project_passed"].id == "db-uuid-1"
 
 
-
 # ─────────────────────────────────────────────────────────────
 # project-configs: 빈 접근 집합은 장애가 아니다
 # ─────────────────────────────────────────────────────────────
@@ -1569,8 +1583,8 @@ async def test_db_project_config_allows_privileged_operator(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_db_project_config_allows_explicit_grant(monkeypatch):
-    """A non-privileged user with a ProjectAccess row is authorized."""
+async def test_db_project_config_applies_viewer_role(monkeypatch):
+    """A non-privileged project reader is authorized through the central guard."""
     from api.project_configs import access as access_module
 
     monkeypatch.setenv("USE_DATABASE", "true")
@@ -1578,21 +1592,29 @@ async def test_db_project_config_allows_explicit_grant(monkeypatch):
     async def no_admin_orgs(_user):
         return []
 
+    seen: list[tuple[str, str]] = []
+
+    async def require_viewer(project_id, _user, _db, min_role="viewer"):
+        seen.append((project_id, min_role))
+        return "viewer"
+
     monkeypatch.setattr("api.projects._get_admin_org_ids", no_admin_orgs)
+    monkeypatch.setattr(access_module, "require_project_role", require_viewer)
     member = SimpleNamespace(id="member-1", role="user", is_admin=False, is_active=True)
 
     result = await access_module.require_project_config_access(
         _request_stub("GET", "proj-uuid", "/api/project-configs/proj-uuid/skills"),
         member,
-        db=_ProjectConfigDbStub([_db_project()], direct_grant="proj-uuid"),
+        db=_ProjectConfigDbStub([_db_project()]),
     )
 
     assert result is member
+    assert seen == [("proj-uuid", "viewer")]
 
 
 @pytest.mark.asyncio
 async def test_db_project_config_denies_user_without_grant(monkeypatch):
-    """No org-admin scope and no ProjectAccess row still means 403, not access."""
+    """A central role denial still blocks the DB-mode config route."""
     from api.project_configs import access as access_module
 
     monkeypatch.setenv("USE_DATABASE", "true")
@@ -1602,14 +1624,74 @@ async def test_db_project_config_denies_user_without_grant(monkeypatch):
 
     monkeypatch.setattr("api.projects._get_admin_org_ids", no_admin_orgs)
 
+    async def deny_project_role(*_args, **_kwargs):
+        raise HTTPException(status_code=403, detail="No access to this project")
+
+    monkeypatch.setattr(access_module, "require_project_role", deny_project_role)
+
     with pytest.raises(HTTPException) as exc_info:
         await access_module.require_project_config_access(
             _request_stub("GET", "proj-uuid", "/api/project-configs/proj-uuid/skills"),
             SimpleNamespace(id="outsider", role="user", is_admin=False, is_active=True),
-            db=_ProjectConfigDbStub([_db_project()], direct_grant=None),
+            db=_ProjectConfigDbStub([_db_project()]),
         )
 
     assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_db_project_config_mutation_requires_editor(monkeypatch):
+    """A viewer cannot reach a DB-mode project-config mutation route."""
+    from api.project_configs import access as access_module
+
+    monkeypatch.setenv("USE_DATABASE", "true")
+    monkeypatch.setattr("api.projects._get_admin_org_ids", AsyncMock(return_value=[]))
+
+    seen: list[str] = []
+
+    async def require_editor(_project_id, _user, _db, min_role="viewer"):
+        seen.append(min_role)
+        if min_role == "editor":
+            raise HTTPException(status_code=403, detail="editor role required")
+        return "viewer"
+
+    monkeypatch.setattr(access_module, "require_project_role", require_editor)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await access_module.require_project_config_access(
+            _request_stub("POST", "proj-uuid", "/api/project-configs/proj-uuid/skills"),
+            SimpleNamespace(id="viewer", role="user", is_admin=False, is_active=True),
+            db=_ProjectConfigDbStub([_db_project()]),
+        )
+
+    assert exc_info.value.status_code == 403
+    assert seen == ["editor"]
+
+
+@pytest.mark.asyncio
+async def test_db_project_config_copy_target_requires_editor(monkeypatch):
+    """A viewer cannot use a DB-mode project-config copy target."""
+    from api.project_configs import access as access_module
+
+    monkeypatch.setenv("USE_DATABASE", "true")
+    monkeypatch.setattr("api.projects._get_admin_org_ids", AsyncMock(return_value=[]))
+    seen: list[tuple[str, str]] = []
+
+    async def require_editor(project_id, _user, _db, min_role="viewer"):
+        seen.append((project_id, min_role))
+        raise HTTPException(status_code=403, detail="editor role required")
+
+    monkeypatch.setattr(access_module, "require_project_role", require_editor)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await access_module.require_project_config_target_access(
+            "proj-uuid",
+            SimpleNamespace(id="viewer", role="user", is_admin=False),
+            _ProjectConfigDbStub([_db_project()]),
+        )
+
+    assert exc_info.value.status_code == 403
+    assert seen == [("proj-uuid", "editor")]
 
 
 @pytest.mark.asyncio
@@ -1746,3 +1828,100 @@ async def test_git_route_reachable_when_authenticated(client, authenticated_app,
     branches = response.json()["branches"]
     assert [b["name"] for b in branches] == ["work"]
     assert branches[0]["is_current"] is True
+
+
+# ── Project role authorization: fail-closed shape checks ───────────────
+
+
+def _stub_db():
+    """A session that must never be queried by these tests."""
+    return SimpleNamespace(execute=AsyncMock(side_effect=AssertionError("unexpected query")))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("project_id", ["", "   ", None, 123])
+async def test_blank_project_identifier_is_rejected_for_every_role(monkeypatch, project_id):
+    """A blank id must not authorize anyone -- including system admins.
+
+    Downstream listing code treats a falsy project_id as "no filter", so a
+    blank id that survived authorization would widen to every project.
+    """
+    from api.deps import require_project_role
+
+    monkeypatch.setenv("USE_DATABASE", "false")
+
+    for user in (
+        SimpleNamespace(id="admin", role="admin", is_admin=True, is_active=True),
+        SimpleNamespace(id="user", role="user", is_admin=False, is_active=True),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await require_project_role(project_id, user, _stub_db())
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == "Invalid project identifier"
+
+
+@pytest.mark.asyncio
+async def test_unknown_min_role_is_rejected_before_admin_bypass(monkeypatch):
+    """An unknown ``min_role`` must fail the same way for admins and users.
+
+    Consumed at the comparison site it would silently 403 normal users while
+    letting admins through -- a role-dependent failure that hides typos.
+    """
+    from api.deps import require_project_role
+
+    monkeypatch.setenv("USE_DATABASE", "false")
+
+    for user in (
+        SimpleNamespace(id="admin", role="admin", is_admin=True, is_active=True),
+        SimpleNamespace(id="user", role="user", is_admin=False, is_active=True),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await require_project_role("p1", user, _stub_db(), min_role="superuser")
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.detail == "Unknown project role requirement"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stored_role", ["", "administrator", "VIEWER", 5])
+async def test_malformed_acl_role_fails_closed(monkeypatch, stored_role):
+    """An ACL role outside the hierarchy must deny, not fall back to viewer."""
+    from api.deps import require_project_role
+    from services.project_access_service import ProjectAccessService
+
+    monkeypatch.setenv("USE_DATABASE", "false")
+
+    async def has_acl(*_args, **_kwargs):
+        return True
+
+    async def malformed_role(*_args, **_kwargs):
+        return stored_role
+
+    monkeypatch.setattr(ProjectAccessService, "has_any_access_control", has_acl)
+    monkeypatch.setattr(ProjectAccessService, "check_access", malformed_role)
+    user = SimpleNamespace(id="user", role="user", is_admin=False, is_active=True)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await require_project_role("p1", user, _stub_db(), min_role="viewer")
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Unrecognized project role"
+
+
+@pytest.mark.asyncio
+async def test_known_acl_role_still_authorizes(monkeypatch):
+    """Guard against "fixed by denying everyone": a real role still passes."""
+    from api.deps import require_project_role
+    from services.project_access_service import ProjectAccessService
+
+    monkeypatch.setenv("USE_DATABASE", "false")
+
+    async def has_acl(*_args, **_kwargs):
+        return True
+
+    async def editor_role(*_args, **_kwargs):
+        return "editor"
+
+    monkeypatch.setattr(ProjectAccessService, "has_any_access_control", has_acl)
+    monkeypatch.setattr(ProjectAccessService, "check_access", editor_role)
+    user = SimpleNamespace(id="user", role="user", is_admin=False, is_active=True)
+
+    assert await require_project_role("p1", user, _stub_db(), min_role="editor") == "editor"

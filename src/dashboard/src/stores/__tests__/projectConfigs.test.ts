@@ -11,24 +11,45 @@ vi.mock('../../services/apiClient', () => ({
   },
 }))
 
+const { authenticatedSseInstances, mockCreateAuthenticatedSseClient } = vi.hoisted(() => {
+  type Client = {
+    url: string
+    listeners: Record<string, ((e: MessageEvent) => void)[]>
+    close: ReturnType<typeof vi.fn>
+    addEventListener: (event: string, handler: (e: MessageEvent) => void) => void
+    emit: (event: string, data?: unknown) => void
+    emitStatus: (status: string) => void
+  }
+  const instances: Client[] = []
+  const create = vi.fn((url: string, options?: { onStatus?: (status: string) => void }) => {
+    const client = {
+      url,
+      listeners: {} as Record<string, ((e: MessageEvent) => void)[]>,
+      close: vi.fn(),
+      addEventListener(event: string, handler: (e: MessageEvent) => void) {
+        ;(this.listeners[event] ??= []).push(handler)
+      },
+      emit(event: string, data?: unknown) {
+        for (const handler of this.listeners[event] ?? []) handler(data as MessageEvent)
+      },
+      emitStatus(status: string) {
+        options?.onStatus?.(status)
+      },
+    } satisfies Client
+    instances.push(client)
+    return client
+  })
+  return { authenticatedSseInstances: instances, mockCreateAuthenticatedSseClient: create }
+})
+
+vi.mock('../../services/authenticatedSse', () => ({
+  createAuthenticatedSseClient: mockCreateAuthenticatedSseClient,
+}))
+
 import { useProjectConfigsStore } from '../projectConfigs'
 import { apiClient } from '../../services/apiClient'
 
 const mockApiClient = vi.mocked(apiClient)
-
-// Mock EventSource
-class MockEventSource {
-  url: string
-  listeners: Record<string, ((e: MessageEvent) => void)[]> = {}
-  close = vi.fn()
-  constructor(url: string) { this.url = url }
-  addEventListener(event: string, handler: (e: MessageEvent) => void) {
-    if (!this.listeners[event]) this.listeners[event] = []
-    this.listeners[event].push(handler)
-  }
-}
-// @ts-expect-error - Mock
-global.EventSource = MockEventSource
 
 function resetStore() {
   useProjectConfigsStore.setState({
@@ -63,6 +84,7 @@ function resetStore() {
     savingAgent: false,
     deletingAgents: new Set(),
   })
+  authenticatedSseInstances.length = 0
 }
 
 describe('projectConfigs store', () => {
@@ -276,12 +298,44 @@ describe('projectConfigs store', () => {
       expect(useProjectConfigsStore.getState().eventSource).toBeNull()
     })
 
-    it('startStreaming creates EventSource', () => {
+    it('startStreaming creates an authenticated SSE client with the stream URL', () => {
       useProjectConfigsStore.getState().startStreaming()
 
-      const es = useProjectConfigsStore.getState().eventSource as unknown as MockEventSource
+      const es = useProjectConfigsStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
       expect(es).not.toBeNull()
       expect(es.url).toContain('/api/project-configs/stream')
+      expect(mockCreateAuthenticatedSseClient).toHaveBeenCalledWith(
+        expect.stringContaining('/api/project-configs/stream'),
+        expect.objectContaining({ onStatus: expect.any(Function) }),
+      )
+    })
+
+    it('reconnects once for a transport error through status, not an error event listener', () => {
+      vi.useFakeTimers()
+      useProjectConfigsStore.getState().startStreaming()
+      const es = useProjectConfigsStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
+
+      expect(es.listeners.error).toBeUndefined()
+      es.emitStatus('error')
+      es.emitStatus('error')
+      vi.advanceTimersByTime(5000)
+
+      expect(authenticatedSseInstances).toHaveLength(2)
+      expect(authenticatedSseInstances[0].close).toHaveBeenCalled()
+      vi.useRealTimers()
+    })
+
+    it('does not reconnect after authentication or permission failure', () => {
+      vi.useFakeTimers()
+      useProjectConfigsStore.getState().startStreaming()
+      const es = useProjectConfigsStore.getState().eventSource as unknown as (typeof authenticatedSseInstances)[number]
+      es.emitStatus('permission-denied')
+      vi.advanceTimersByTime(5000)
+
+      expect(authenticatedSseInstances).toHaveLength(1)
+      expect(useProjectConfigsStore.getState().eventSource).toBeNull()
+      expect(useProjectConfigsStore.getState().error).toContain('permission')
+      vi.useRealTimers()
     })
   })
 

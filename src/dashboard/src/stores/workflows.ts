@@ -13,6 +13,8 @@ import type {
 
 import { apiClient } from '../services/apiClient'
 import { getApiUrl } from '../config/api'
+import { createAuthenticatedSseClient } from '../services/authenticatedSse'
+import type { AuthenticatedSseClient } from '../services/authenticatedSse'
 
 interface WorkflowState {
   // Data
@@ -75,7 +77,12 @@ interface WorkflowState {
   setShowTemplateGallery: (show: boolean) => void
 }
 
-let currentEventSource: EventSource | null = null
+let currentSseClient: AuthenticatedSseClient | null = null
+/**
+ * Monotonic id for the active log stream. Every handler checks it before
+ * touching the store so a superseded stream can never revive stale state.
+ */
+let streamGeneration = 0
 
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   workflows: [],
@@ -99,7 +106,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   fetchWorkflows: async (projectId?: string) => {
     set({ isLoading: true, error: null })
     try {
-      const params = projectId ? `?project_id=${projectId}` : ''
+      const params = projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''
       const data = await apiClient.get<{ workflows: Workflow[] }>(`/api/workflows${params}`)
       set({ workflows: data.workflows, isLoading: false })
     } catch (e) {
@@ -207,52 +214,104 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   },
 
   streamRunLogs: (runId: string) => {
-    // Close existing stream
-    if (currentEventSource) {
-      currentEventSource.close()
-      currentEventSource = null
+    // Close any existing stream and invalidate its in-flight handlers.
+    if (currentSseClient) {
+      currentSseClient.close()
+      currentSseClient = null
     }
 
-    const eventSource = new EventSource(getApiUrl(`/api/workflows/runs/${runId}/stream`))
-    currentEventSource = eventSource
+    const generation = ++streamGeneration
+    const isCurrent = () => streamGeneration === generation
 
-    eventSource.addEventListener('log', (event) => {
-      const log = JSON.parse(event.data)
+    // Drop logs from a previous attempt at this run so a re-stream cannot
+    // append onto stale output.
+    set(state => ({ runLogs: { ...state.runLogs, [runId]: [] }, error: null }))
+
+    const detach = () => {
+      if (!isCurrent()) return
+      currentSseClient = null
+    }
+
+    /** Terminal, non-success end of the stream. */
+    const failStream = (message: string) => {
+      if (!isCurrent()) return
+      detach()
+      set({ error: message, isRunning: false })
+    }
+
+    const parse = (event: MessageEvent<string>): Record<string, unknown> | null => {
+      try {
+        return JSON.parse(event.data)
+      } catch {
+        return null
+      }
+    }
+
+    const client = createAuthenticatedSseClient(
+      getApiUrl(`/api/workflows/runs/${encodeURIComponent(runId)}/stream`),
+      {
+        onStatus: (status) => {
+          if (status === 'authentication-failed') failStream('Workflow log stream authentication failed')
+          else if (status === 'permission-denied') failStream('Workflow log stream permission denied')
+          else if (status === 'error') failStream('Workflow log stream error')
+          // A clean EOF after `done` is suppressed by close() below, so a
+          // surviving 'closed' means the stream ended before completing.
+          else if (status === 'closed') failStream('Workflow log stream ended before completion')
+        },
+      },
+    )
+    currentSseClient = client
+
+    client.addEventListener('log', (event) => {
+      if (!isCurrent()) {
+        client.close()
+        return
+      }
+      const log = parse(event)
+      if (!log) return
       set(state => ({
         runLogs: {
           ...state.runLogs,
-          [runId]: [...(state.runLogs[runId] || []), log],
+          [runId]: [...(state.runLogs[runId] || []), log as unknown as WorkflowLog],
         },
       }))
     })
 
-    eventSource.addEventListener('status', (event) => {
-      const { status } = JSON.parse(event.data)
+    client.addEventListener('status', (event) => {
+      if (!isCurrent()) {
+        client.close()
+        return
+      }
+      const data = parse(event)
+      if (!data) return
+      const status = data.status
       set(state => {
         if (state.activeRun && state.activeRun.id === runId) {
-          return { activeRun: { ...state.activeRun, status } }
+          return { activeRun: { ...state.activeRun, status: status as WorkflowRun['status'] } }
         }
         return {}
       })
     })
 
-    eventSource.addEventListener('done', (event) => {
-      const run = JSON.parse(event.data)
-      set({ activeRun: run })
-      eventSource.close()
-      currentEventSource = null
+    client.addEventListener('done', (event) => {
+      if (!isCurrent()) {
+        client.close()
+        return
+      }
+      const run = parse(event)
+      // close() before the transport reaches EOF, so the terminal 'closed'
+      // status is suppressed and a completed run reports no error.
+      client.close()
+      detach()
+      if (run) set({ activeRun: run as unknown as WorkflowRun, isRunning: false })
     })
-
-    eventSource.onerror = () => {
-      eventSource.close()
-      currentEventSource = null
-    }
   },
 
   stopLogStream: () => {
-    if (currentEventSource) {
-      currentEventSource.close()
-      currentEventSource = null
+    streamGeneration += 1
+    if (currentSseClient) {
+      currentSseClient.close()
+      currentSseClient = null
     }
   },
 

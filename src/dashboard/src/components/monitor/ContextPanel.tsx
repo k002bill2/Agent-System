@@ -20,6 +20,8 @@ export function ContextPanel({ projectId }: ContextPanelProps) {
   const {
     projectContext,
     isLoadingContext,
+    contextUnavailableReason,
+    contextUnavailableProjectId,
     activeContextTab,
     fetchProjectContext,
     setActiveContextTab,
@@ -30,6 +32,11 @@ export function ContextPanel({ projectId }: ContextPanelProps) {
       fetchProjectContext(projectId)
     }
   }, [projectId, fetchProjectContext])
+
+  const visibleProjectContext = projectContext?.project_id === projectId ? projectContext : null
+  const contextUnavailable = contextUnavailableProjectId === projectId
+    ? contextUnavailableReason
+    : null
 
   const tabs = [
     { id: 'claude-md' as const, label: 'CLAUDE.md', icon: FileText },
@@ -46,7 +53,16 @@ export function ContextPanel({ projectId }: ContextPanelProps) {
       )
     }
 
-    if (!projectContext) {
+    if (contextUnavailable) {
+      return (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+          <p className="font-medium">Project context is unavailable in database mode.</p>
+          <p className="mt-1">{contextUnavailable}</p>
+        </div>
+      )
+    }
+
+    if (!visibleProjectContext) {
       return (
         <div className="text-center text-gray-500 py-8">
           No context available
@@ -56,11 +72,11 @@ export function ContextPanel({ projectId }: ContextPanelProps) {
 
     switch (activeContextTab) {
       case 'claude-md':
-        return <ClaudeMdView content={projectContext.claude_md} />
+        return <ClaudeMdView content={visibleProjectContext.claude_md} />
       case 'dev-docs':
-        return <DevDocsView docs={projectContext.dev_docs} />
+        return <DevDocsView docs={visibleProjectContext.dev_docs} />
       case 'session':
-        return <SessionView sessionInfo={projectContext.session_info} />
+        return <SessionView sessionInfo={visibleProjectContext.session_info} />
       default:
         return null
     }
@@ -95,7 +111,11 @@ export function ContextPanel({ projectId }: ContextPanelProps) {
 
           <button
             onClick={() => fetchProjectContext(projectId)}
-            className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            disabled={Boolean(contextUnavailable) || isLoadingContext}
+            className={cn(
+              'p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors',
+              (contextUnavailable || isLoadingContext) && 'opacity-50 cursor-not-allowed'
+            )}
             title="Refresh context"
           >
             <RefreshCw

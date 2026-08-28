@@ -17,6 +17,18 @@ os.environ["USE_DATABASE"] = "false"
 os.environ["LLM_PROVIDER"] = "ollama"
 os.environ["OLLAMA_MODEL"] = "qwen2.5:7b"
 
+# RateLimitService is a process-global singleton keyed by client IP, and every
+# suite here shares the one TestClient IP. A request-heavy module therefore
+# drains the shared free-tier budget (60 req/min) and whichever module runs
+# next fails with 429 — an ordering-dependent break invisible in a single-file
+# run. test_playground_authorization.py already disables the middleware for
+# exactly this reason; doing it once here covers every suite.
+# Nothing loses coverage: the service itself is tested directly in
+# test_rate_limit_service.py, and the 429 asserted in
+# tests/backend/api/test_agent_registry.py comes from the independent
+# api/v1/rate_limiter.py, which does not read this flag.
+os.environ["RATE_LIMIT_ENABLED"] = "false"
+
 # Force HuggingFace offline so tests never download models (HF 429 flake
 # guard for every pytest invocation, local and CI). An unmocked model load
 # fails loudly instead of hitting the network — mark such tests

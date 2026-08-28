@@ -21,12 +21,16 @@ const mockSetActiveContextTab = vi.fn()
 
 let mockProjectContext: ProjectContext | null = null
 let mockIsLoadingContext = false
+let mockContextUnavailableReason: string | null = null
+let mockContextUnavailableProjectId: string | null = null
 let mockActiveContextTab: 'claude-md' | 'dev-docs' | 'session' = 'claude-md'
 
 vi.mock('../../../stores/monitoring', () => ({
   useMonitoringStore: () => ({
     projectContext: mockProjectContext,
     isLoadingContext: mockIsLoadingContext,
+    contextUnavailableReason: mockContextUnavailableReason,
+    contextUnavailableProjectId: mockContextUnavailableProjectId,
     activeContextTab: mockActiveContextTab,
     fetchProjectContext: mockFetchProjectContext,
     setActiveContextTab: mockSetActiveContextTab,
@@ -48,6 +52,8 @@ describe('ContextPanel', () => {
     vi.clearAllMocks()
     mockProjectContext = null
     mockIsLoadingContext = false
+    mockContextUnavailableReason = null
+    mockContextUnavailableProjectId = null
     mockActiveContextTab = 'claude-md'
   })
 
@@ -73,6 +79,21 @@ describe('ContextPanel', () => {
     mockIsLoadingContext = false
     render(<ContextPanel projectId="proj-1" />)
     expect(screen.getByText('No context available')).toBeInTheDocument()
+  })
+
+  it('does not render context from another project', () => {
+    mockProjectContext = makeContext({ project_id: 'other-project', claude_md: '# Other' })
+    render(<ContextPanel projectId="proj-1" />)
+    expect(screen.getByText('No context available')).toBeInTheDocument()
+    expect(screen.queryByText('# Other')).not.toBeInTheDocument()
+  })
+
+  it('shows a non-error unavailable state when project context is disabled', () => {
+    mockContextUnavailableReason = 'Database-backed project monitoring is not available'
+    mockContextUnavailableProjectId = 'proj-1'
+    render(<ContextPanel projectId="proj-1" />)
+    expect(screen.getByText('Project context is unavailable in database mode.')).toBeInTheDocument()
+    expect(screen.getByText('Database-backed project monitoring is not available')).toBeInTheDocument()
   })
 
   it('shows CLAUDE.md content when on claude-md tab', () => {

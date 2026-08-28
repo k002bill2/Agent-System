@@ -11,6 +11,14 @@ vi.mock('../../services/apiClient', () => ({
   },
 }))
 
+const { mockCreateAuthenticatedSseClient } = vi.hoisted(() => ({
+  mockCreateAuthenticatedSseClient: vi.fn(),
+}))
+
+vi.mock('../../services/authenticatedSse', () => ({
+  createAuthenticatedSseClient: mockCreateAuthenticatedSseClient,
+}))
+
 import { useWorkflowStore } from '../workflows'
 import { apiClient } from '../../services/apiClient'
 
@@ -62,6 +70,7 @@ describe('workflow store', () => {
   beforeEach(() => {
     resetStore()
     vi.clearAllMocks()
+    mockCreateAuthenticatedSseClient.mockImplementation((url: string) => new MockEventSource(url) as any)
   })
 
   // ── Initial State ──────────────────────────────────────
@@ -532,6 +541,17 @@ describe('workflow store', () => {
   })
 
   // ── stopLogStream ──────────────────────────────────────
+
+  describe('authenticated log stream', () => {
+    it('uses the authenticated SSE client for the protected stream', () => {
+      useWorkflowStore.getState().streamRunLogs('run 1')
+
+      expect(mockCreateAuthenticatedSseClient).toHaveBeenCalledWith(
+        expect.stringContaining('/api/workflows/runs/run%201/stream'),
+        expect.objectContaining({ onStatus: expect.any(Function) }),
+      )
+    })
+  })
 
   describe('stopLogStream', () => {
     it('stops existing log stream', () => {

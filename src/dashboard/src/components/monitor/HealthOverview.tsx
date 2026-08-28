@@ -18,11 +18,13 @@ export function HealthOverview({ health, projectId }: HealthOverviewProps) {
     activeLogView,
     setActiveLogView,
     workflowChecks,
+    workflowProjectId,
     runningWorkflowIds,
     runWorkflowCheck,
   } = useMonitoringStore()
   const runningChecks = getRunningChecks(projectId)
   const checkTypes = getCheckTypes(projectId)
+  const visibleWorkflowChecks = workflowProjectId === projectId ? workflowChecks : []
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3">
@@ -53,18 +55,18 @@ export function HealthOverview({ health, projectId }: HealthOverviewProps) {
       </div>
 
       {/* Workflow Checks Section */}
-      {workflowChecks.length > 0 ? (
+      {visibleWorkflowChecks.length > 0 ? (
         <div className="mt-3">
           <div className="flex items-center gap-1.5 mb-2">
             <Workflow className="w-3.5 h-3.5 text-gray-500" />
             <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300">
               Workflow Checks
             </h3>
-            <span className="text-xs text-gray-400">({workflowChecks.length})</span>
+            <span className="text-xs text-gray-400">({visibleWorkflowChecks.length})</span>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {workflowChecks.map((wc) => (
+            {visibleWorkflowChecks.map((wc) => (
               <WorkflowCheckCard
                 key={wc.id}
                 workflow={wc}

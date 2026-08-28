@@ -3,6 +3,8 @@
  * `ProjectConfigsState` 는 패키지 내부 전용이지만, 액션을 모듈로 승격할 때(Task 8)
  * 각 도메인 모듈이 `SetFn`/`GetFn` 대신 이것을 직접 참조하므로 export 한다.
  */
+import type { AuthenticatedSseClient } from '../../services/authenticatedSse'
+
 export interface ProjectInfo {
   project_id: string
   project_name: string
@@ -191,7 +193,7 @@ export interface ProjectConfigsState {
   externalPaths: string[]
 
   // Real-time updates
-  eventSource: EventSource | null
+  eventSource: AuthenticatedSseClient | null
   recentChanges: ConfigChangeEvent[]
 
   // Skill content

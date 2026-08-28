@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MonitorPage } from './MonitorPage'
 
@@ -32,6 +32,7 @@ vi.mock('../components/monitor', () => ({
 const mockFetchProjects = vi.fn()
 const mockFetchCheckConfig = vi.fn()
 const mockFetchProjectHealth = vi.fn()
+const mockFetchMonitoringCapabilities = vi.fn()
 const mockFetchWorkflowChecks = vi.fn()
 const mockRunAllChecks = vi.fn()
 const mockClearError = vi.fn()
@@ -41,6 +42,7 @@ let mockProjects: Array<{ id: string; name: string; path: string }> = []
 let mockError: string | null = null
 let mockIsLoadingHealth = false
 let mockProjectHealthMap: Record<string, unknown> = {}
+let mockCapabilities: Record<string, unknown> = {}
 
 vi.mock('../stores/orchestration', () => ({
   useOrchestrationStore: (selector: (s: Record<string, unknown>) => unknown) => {
@@ -60,9 +62,12 @@ vi.mock('../stores/monitoring', () => ({
       getRunningChecks: () => new Set(),
       isLoadingHealth: mockIsLoadingHealth,
       error: mockError,
+      getMonitoringCapabilities: (id: string) => mockCapabilities[id] || null,
       fetchCheckConfig: mockFetchCheckConfig,
       fetchProjectHealth: mockFetchProjectHealth,
+      fetchMonitoringCapabilities: mockFetchMonitoringCapabilities,
       fetchWorkflowChecks: mockFetchWorkflowChecks,
+      resetMonitoringSelection: vi.fn(),
       runAllChecks: mockRunAllChecks,
       clearError: mockClearError,
     }
@@ -82,6 +87,16 @@ describe('MonitorPage', () => {
     mockError = null
     mockIsLoadingHealth = false
     mockProjectHealthMap = {}
+    mockCapabilities = {
+      'proj-1': {
+        project_id: 'proj-1', mode: 'filesystem', health_config: 'available',
+        health: 'available', checks: 'available', reason: null,
+      },
+    }
+    mockFetchMonitoringCapabilities.mockResolvedValue({
+      project_id: 'proj-1', mode: 'filesystem', health_config: 'available',
+      health: 'available', checks: 'available', reason: null,
+    })
   })
 
   it('shows select project prompt when no project selected', () => {
@@ -134,14 +149,14 @@ describe('MonitorPage', () => {
     expect(mockClearError).toHaveBeenCalledTimes(1)
   })
 
-  it('calls refresh when Refresh button clicked', () => {
+  it('calls refresh when Refresh button clicked', async () => {
     mockSelectedProjectId = 'proj-1'
     mockProjects = [{ id: 'proj-1', name: 'Test', path: '/test' }]
     mockProjectHealthMap = { 'proj-1': { status: 'healthy' } }
 
     render(<MonitorPage />)
     fireEvent.click(screen.getByText('Refresh'))
-    expect(mockFetchProjectHealth).toHaveBeenCalledWith('proj-1')
+    await waitFor(() => expect(mockFetchProjectHealth).toHaveBeenCalledWith('proj-1', expect.any(Function)))
   })
 
   it('calls runAllChecks when Run All button clicked', () => {
@@ -154,12 +169,67 @@ describe('MonitorPage', () => {
     expect(mockRunAllChecks).toHaveBeenCalledWith('proj-1')
   })
 
-  it('fetches health and checks when project changes', () => {
+  it('fetches capabilities before health and checks when project changes', async () => {
     mockSelectedProjectId = 'proj-1'
     mockProjects = [{ id: 'proj-1', name: 'Test', path: '/test' }]
 
     render(<MonitorPage />)
-    expect(mockFetchProjectHealth).toHaveBeenCalledWith('proj-1')
-    expect(mockFetchWorkflowChecks).toHaveBeenCalledWith('proj-1')
+    await waitFor(() => {
+      expect(mockFetchMonitoringCapabilities).toHaveBeenCalledWith('proj-1', expect.any(Function))
+      expect(mockFetchProjectHealth).toHaveBeenCalledWith('proj-1', expect.any(Function))
+      expect(mockFetchWorkflowChecks).toHaveBeenCalledWith('proj-1', expect.any(Function))
+    })
+  })
+  // Database mode is no longer a blanket "monitoring off" state: the backend
+  // now serves health from the DB-registered project path, so the page must
+  // key off the capability flags rather than the mode string. A project whose
+  // DB row has no inspectable path stays fail-closed and keeps the banner.
+  describe('database-backed monitoring', () => {
+    const dbProjectId = '3f9c1b74-6d20-4a8e-9c31-5b7e0d2a8f61'
+
+    it('renders health without the unavailable banner when database mode reports available', async () => {
+      const capabilities = {
+        project_id: dbProjectId, mode: 'database', health_config: 'available',
+        health: 'available', checks: 'available', reason: null,
+      }
+      mockSelectedProjectId = dbProjectId
+      mockProjects = [{ id: dbProjectId, name: 'Test', path: '/test' }]
+      mockProjectHealthMap = { [dbProjectId]: { status: 'healthy' } }
+      mockCapabilities = { [dbProjectId]: capabilities }
+      mockFetchMonitoringCapabilities.mockResolvedValue(capabilities)
+
+      render(<MonitorPage />)
+
+      await waitFor(() => {
+        expect(mockFetchCheckConfig).toHaveBeenCalledWith(dbProjectId, expect.any(Function))
+        expect(mockFetchProjectHealth).toHaveBeenCalledWith(dbProjectId, expect.any(Function))
+      })
+      expect(screen.queryByText(/unavailable in database mode/)).not.toBeInTheDocument()
+      expect(screen.getByTestId('health-overview')).toBeInTheDocument()
+      expect(screen.getByText('Run All')).not.toBeDisabled()
+    })
+
+    it('keeps the fail-closed banner when database mode reports every operation disabled', async () => {
+      const capabilities = {
+        project_id: dbProjectId, mode: 'database', health_config: 'disabled',
+        health: 'disabled', checks: 'disabled',
+        reason: 'Project has no registered filesystem path for health monitoring',
+      }
+      mockSelectedProjectId = dbProjectId
+      mockProjects = [{ id: dbProjectId, name: 'Test', path: '/test' }]
+      mockCapabilities = { [dbProjectId]: capabilities }
+      mockFetchMonitoringCapabilities.mockResolvedValue(capabilities)
+
+      render(<MonitorPage />)
+
+      expect(screen.getByText(/unavailable in database mode/)).toBeInTheDocument()
+      expect(
+        screen.getByText(/no registered filesystem path for health monitoring/),
+      ).toBeInTheDocument()
+      expect(screen.getByText('Run All')).toBeDisabled()
+      await waitFor(() => expect(mockFetchMonitoringCapabilities).toHaveBeenCalled())
+      expect(mockFetchCheckConfig).not.toHaveBeenCalled()
+      expect(mockFetchProjectHealth).not.toHaveBeenCalled()
+    })
   })
 })

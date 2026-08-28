@@ -464,13 +464,40 @@ class TestWorkflowAPI:
 
     @pytest.fixture
     def client(self):
-        """Create async httpx test client."""
-        from httpx import ASGITransport, AsyncClient
+        """Create async httpx test client with an explicit privileged test user."""
+        from types import SimpleNamespace
 
         from api.app import app
+        from api.deps import get_current_user
+        from httpx import ASGITransport, AsyncClient
 
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+            id="test-admin",
+            role="admin",
+            is_admin=True,
+            is_active=True,
+        )
         transport = ASGITransport(app=app)
-        return AsyncClient(transport=transport, base_url="http://test")
+        client = AsyncClient(transport=transport, base_url="http://test")
+        yield client
+        app.dependency_overrides.pop(get_current_user, None)
+
+    @pytest.mark.asyncio
+    async def test_unauthenticated_requests_are_rejected(self, client):
+        from api.app import app
+        from api.deps import get_current_user
+
+        app.dependency_overrides.pop(get_current_user, None)
+        try:
+            async with client as c:
+                response = await c.get("/api/workflows")
+            assert response.status_code == 401
+        finally:
+            app.dependency_overrides[get_current_user] = lambda: type(
+                "TestAdmin",
+                (),
+                {"id": "test-admin", "role": "admin", "is_admin": True, "is_active": True},
+            )()
 
     @pytest.mark.asyncio
     async def test_list_empty(self, client):

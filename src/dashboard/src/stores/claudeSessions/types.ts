@@ -3,6 +3,7 @@
  * `ClaudeSessionsState` 는 패키지 내부 전용이지만, 액션을 모듈로 승격할 때
  * `SetFn`/`GetFn` 타입이 이것을 참조하므로 export 한다.
  */
+import type { AuthenticatedSseClient } from '../../services/authenticatedSse'
 import type {
   ClaudeSessionDetail,
   ClaudeSessionInfo,
@@ -122,7 +123,7 @@ export interface ClaudeSessionsState {
   generateBatchSummaries: (limit?: number) => Promise<void>
 
   // SSE connection
-  eventSource: EventSource | null
+  eventSource: AuthenticatedSseClient | null
   startStreaming: (sessionId: string) => void
   stopStreaming: () => void
 }
