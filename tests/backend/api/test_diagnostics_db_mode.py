@@ -578,3 +578,94 @@ async def test_filesystem_mode_still_uses_the_legacy_registry(
         assert missing.status_code == 404, missing.text
     finally:
         authenticated_app.dependency_overrides.pop(get_db_session, None)
+
+
+# ─────────────────────────────────────────────────────────────
+# 6. DB 조직이 연결된 프로젝트의 quota 진단
+# ─────────────────────────────────────────────────────────────
+
+
+@pytest_asyncio.fixture
+async def org_linked_db_mode_app(authenticated_app, tmp_path, monkeypatch):
+    """조직이 연결된 DB 프로젝트 1건만 등록된 DB 모드 앱.
+
+    조직은 DB 에만 존재한다 — 레거시 인메모리 `OrganizationService` 는 이 id 를
+    모른다. 그것이 DB 모드의 정상 상태이지 프로젝트의 결함이 아니다.
+    """
+    project_path = _make_project_tree(tmp_path / "Agent-System")
+    row = _row(str(project_path), organization_id="org-only-in-database")
+    _install_db(authenticated_app, monkeypatch, row)
+    _forbid_legacy_registry(monkeypatch)
+
+    from api.deps import get_db_session
+
+    yield authenticated_app
+    authenticated_app.dependency_overrides.pop(get_db_session, None)
+
+
+@pytest.mark.asyncio
+async def test_db_organization_does_not_make_diagnostics_unhealthy(org_linked_db_mode_app):
+    """DB 전용 조직은 quota 를 UNHEALTHY 로 만들지 않는다.
+
+    quota 진단은 인메모리 `OrganizationService` 만 읽을 수 있다. DB 모드에서
+    조직을 못 찾는 것은 "조직 없음"이 아니라 "여기서 확인 불가"이므로,
+    `Organization not found` 라는 거짓 red 대신 DEGRADED 로 표현되어야 한다.
+    """
+    app = org_linked_db_mode_app
+
+    response = await _get(app, f"/api/projects/{DB_UUID}/diagnostics")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    quota = body["categories"]["quota"]
+    assert quota["status"] == "degraded", quota
+    messages = " ".join(c["message"] for c in quota["checks"])
+    assert "not found" not in messages.lower(), messages
+    assert body["overall_status"] != "unhealthy", body["overall_status"]
+
+
+@pytest.mark.asyncio
+async def test_single_quota_category_is_degraded_in_database_mode(org_linked_db_mode_app):
+    """카테고리 단건 조회도 같은 계약을 따른다."""
+    app = org_linked_db_mode_app
+
+    response = await _get(app, f"/api/projects/{DB_UUID}/diagnostics/quota")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert list(body["categories"]) == ["quota"]
+    assert body["categories"]["quota"]["status"] == "degraded", body
+
+
+@pytest.mark.asyncio
+async def test_filesystem_mode_quota_still_runs_the_real_check(
+    authenticated_app, tmp_path, monkeypatch
+):
+    """파일시스템 모드에서는 quota 진단이 그대로 실행된다 (DEGRADED 로 덮이지 않는다).
+
+    DB 모드 전용 처리가 다른 배포 모드로 새면 실제 quota 위반이 조용히 숨는다.
+    """
+    from api.deps import get_db_session
+    from models.project import Project
+
+    project_path = _make_project_tree(tmp_path / "fs-quota")
+    legacy = Project.from_path("fs-quota", str(project_path))
+
+    monkeypatch.setenv("USE_DATABASE", "false")
+    monkeypatch.setattr(
+        "api.diagnostics.get_project",
+        lambda pid: legacy if pid == "fs-quota" else None,
+    )
+
+    async def _override():
+        yield SimpleNamespace()
+
+    authenticated_app.dependency_overrides[get_db_session] = _override
+    try:
+        response = await _get(authenticated_app, "/api/projects/fs-quota/diagnostics/quota")
+        assert response.status_code == 200, response.text
+        quota = response.json()["categories"]["quota"]
+        assert quota["status"] == "healthy", quota
+        assert quota["checks"][0]["name"] == "organization"
+    finally:
+        authenticated_app.dependency_overrides.pop(get_db_session, None)

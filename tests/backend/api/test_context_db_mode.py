@@ -445,3 +445,19 @@ async def test_filesystem_mode_still_uses_the_legacy_registry(
         assert missing.status_code == 404, missing.text
     finally:
         authenticated_app.dependency_overrides.pop(get_db_session, None)
+
+
+def test_no_context_path_detail_is_pinned_to_the_dashboard_literal():
+    """영구 불가 503 의 detail 은 대시보드와 글자 단위로 같아야 한다.
+
+    `apiClient.buildApiError()` 는 FastAPI 의 `detail` 을 그대로 `ApiError.message`
+    에 넣고, 대시보드 스토어는 그 문자열로 **영구(경로 없음)** 와 **일시(의존성
+    장애)** 503 을 구분한다. 한쪽만 바뀌면 일시 장애가 영구 불가로 표시되어
+    Refresh 버튼이 잠긴다 — 그 회귀를 여기서 빨간불로 만든다.
+
+    대응 상수: `src/dashboard/src/stores/monitoring.ts`
+    의 `CONTEXT_PATH_UNAVAILABLE_DETAIL`.
+    """
+    from api.context import NO_CONTEXT_PATH_DETAIL
+
+    assert NO_CONTEXT_PATH_DETAIL == "Project has no registered filesystem path for context"

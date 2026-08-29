@@ -11,7 +11,7 @@ vi.mock('../../services/apiClient', () => ({
   },
 }))
 
-import { useMonitoringStore } from '../monitoring'
+import { useMonitoringStore, CONTEXT_PATH_UNAVAILABLE_DETAIL } from '../monitoring'
 import { apiClient } from '../../services/apiClient'
 import { ApiError } from '../../services/errors'
 
@@ -226,6 +226,32 @@ describe('monitoring store', () => {
       expect(useMonitoringStore.getState().contextUnavailableReason).toBe(
         'Project has no registered filesystem path for context',
       )
+    })
+    it('pins the permanent-unavailability detail to the backend constant', () => {
+      // 백엔드 `api.context.NO_CONTEXT_PATH_DETAIL` 과 글자 단위로 같아야 한다.
+      // 한쪽만 바뀌면 영구/일시 503 구분이 조용히 무너진다 — 같은 리터럴을
+      // 양쪽 테스트에 고정해 그 변경이 반드시 빨간불을 내게 한다.
+      expect(CONTEXT_PATH_UNAVAILABLE_DETAIL).toBe(
+        'Project has no registered filesystem path for context',
+      )
+    })
+    it('keeps a transient 503 in the retryable error path', async () => {
+      // 일시적 DB 장애의 503 을 영구 불가로 분류하면 ContextPanel 이
+      // Refresh 버튼을 비활성화해(ContextPanel.tsx: disabled={Boolean(contextUnavailable)})
+      // 복구 가능한 장애에서 사용자가 재시도할 방법을 잃는다.
+      mockApiClient.get.mockRejectedValueOnce(
+        new ApiError({
+          message: 'Project context is temporarily unavailable',
+          status: 503,
+          code: 'SERVICE_UNAVAILABLE',
+        }),
+      )
+
+      await useMonitoringStore.getState().fetchProjectContext('p1')
+
+      expect(useMonitoringStore.getState().error).toBe('Project context is temporarily unavailable')
+      expect(useMonitoringStore.getState().contextUnavailableReason).toBeNull()
+      expect(useMonitoringStore.getState().contextUnavailableProjectId).toBeNull()
     })
     it('clears stale context when capability loading fails', async () => {
       useMonitoringStore.setState({

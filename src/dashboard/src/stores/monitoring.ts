@@ -3,6 +3,15 @@ import { apiClient } from '../services/apiClient'
 import { ApiError } from '../services/errors'
 import { createAuthenticatedSseClient } from '../services/authenticatedSse'
 import { getApiUrl } from '../config/api'
+
+/**
+ * 백엔드 `api.context.NO_CONTEXT_PATH_DETAIL` 의 사본.
+ *
+ * 이 문자열은 두 503 원인 중 **영구** 쪽(등록된 경로 없음)만 지목한다.
+ * 백엔드와 글자 단위로 같아야 하며, 양쪽 테스트가 같은 리터럴을 고정한다.
+ */
+export const CONTEXT_PATH_UNAVAILABLE_DETAIL =
+  'Project has no registered filesystem path for context'
 import {
   CheckType,
   CheckConfig,
@@ -400,7 +409,11 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
     } catch (e) {
       if (requestId !== projectContextRequestId) return
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
-      const contextUnavailable = e instanceof ApiError && e.status === 503
+      // 503 에는 두 가지 원인이 있다. 등록된 경로가 없는 것은 재시도해도 달라지지
+      // 않는 영구 상태이지만, 의존성 장애는 재시도로 회복된다. 후자를 영구 상태로
+      // 분류하면 ContextPanel 이 Refresh 를 비활성화해 회복 경로를 막는다.
+      const contextUnavailable =
+        e instanceof ApiError && e.status === 503 && e.message === CONTEXT_PATH_UNAVAILABLE_DETAIL
       set({
         error: contextUnavailable ? null : errorMessage,
         isLoadingContext: false,

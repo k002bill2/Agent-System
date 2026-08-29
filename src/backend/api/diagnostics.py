@@ -31,6 +31,17 @@ def _use_database() -> bool:
     return os.getenv("USE_DATABASE", "false").lower() == "true"
 
 
+def _unverifiable_categories() -> set[DiagnosticCategory]:
+    """Categories this deployment mode cannot resolve.
+
+    Quota reads ``OrganizationService``, which is backed by the legacy
+    in-memory registry. A database-mode project carries a DB organization id
+    that registry never holds, so running the check would report a healthy
+    project as ``Organization not found``.
+    """
+    return {DiagnosticCategory.QUOTA} if _use_database() else set()
+
+
 async def _resolve_database_project(project_id: str, db) -> Project | None:
     """Resolve the canonical DB project row into a safe diagnosable target."""
     try:
@@ -80,7 +91,7 @@ async def get_project_diagnostics(
     await require_project_role(project_id, current_user, db, min_role="viewer")
     project = await _diagnostic_target(project_id, db)
 
-    return run_diagnostics(project)
+    return run_diagnostics(project, unverifiable_categories=_unverifiable_categories())
 
 
 @router.get(
@@ -100,7 +111,11 @@ async def get_project_diagnostics_by_category(
     await require_project_role(project_id, current_user, db, min_role="viewer")
     project = await _diagnostic_target(project_id, db)
 
-    return run_diagnostics(project, categories=[category])
+    return run_diagnostics(
+        project,
+        categories=[category],
+        unverifiable_categories=_unverifiable_categories(),
+    )
 
 
 @router.post(

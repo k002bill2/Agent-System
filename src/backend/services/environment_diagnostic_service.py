@@ -465,23 +465,52 @@ CATEGORY_RUNNERS = {
 }
 
 
+def _unverifiable_result(category: DiagnosticCategory) -> CategoryResult:
+    """A category the caller declared unverifiable in this deployment.
+
+    Reported as DEGRADED rather than HEALTHY or UNHEALTHY: the check did not
+    pass, but nothing about the project failed either.
+    """
+    return CategoryResult(
+        category=category,
+        status=DiagnosticStatus.DEGRADED,
+        checks=[
+            DiagnosticCheck(
+                name="unverifiable",
+                status=DiagnosticStatus.DEGRADED,
+                message=f"{category.value} cannot be verified in this deployment mode",
+            )
+        ],
+    )
+
+
 def run_diagnostics(
     project: Project,
     categories: list[DiagnosticCategory] | None = None,
+    unverifiable_categories: set[DiagnosticCategory] | None = None,
 ) -> ProjectDiagnostics:
     """Run environment diagnostics for a project.
 
     Args:
         project: The project to diagnose.
         categories: Specific categories to check. None means all.
+        unverifiable_categories: Categories whose backing data this deployment
+            cannot reach. Reported as DEGRADED instead of being run, so a check
+            that is merely out of reach is never rendered as a project failure.
+            The caller owns this decision — the diagnosers stay unaware of the
+            deployment mode.
 
     Returns:
         ProjectDiagnostics with results per category.
     """
     target_categories = categories or list(DiagnosticCategory)
+    unverifiable = unverifiable_categories or set()
     results: dict[str, CategoryResult] = {}
 
     for cat in target_categories:
+        if cat in unverifiable:
+            results[cat.value] = _unverifiable_result(cat)
+            continue
         runner = CATEGORY_RUNNERS.get(cat)
         if runner:
             try:
