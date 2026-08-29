@@ -142,8 +142,6 @@ sequenceDiagram
 | **운영** | `/start-all` | 전체 서비스 시작 (인프라 + Backend + Dashboard) |
 | **운영** | `/stop-all` | 전체 서비스 중지 |
 | **운영** | `/start-dashboard` | React 대시보드 개발 서버 실행 |
-| **운영** | `/backup` | 전체 서비스 백업 (Postgres + Redis + Qdrant) |
-| **운영** | `/restore` | 백업 디렉토리에서 전체 서비스 복원 |
 | **운영** | `/session-wrap` | 세션 종료 시 4개 병렬 에이전트로 문서·패턴·후속작업 정리 |
 | **운영** | `/wip-save` | 작업 상태 저장/복원 (WIP 커밋, 구 `/checkpoint`) |
 | **운영** | `/update-llm-models` | LLM 모델 레지스트리 갱신 (`update-llm-models` 스킬 실행) |

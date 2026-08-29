@@ -12,7 +12,8 @@ class TestTemplateService:
 
     def test_builtin_templates_seeded(self):
         templates = self.svc.list_templates()
-        assert len(templates) >= 4  # 4 built-in templates
+        assert len(templates) == 13  # 13 built-in templates
+        assert not any(t["name"] == "Database Backup" for t in templates)
 
     def test_list_by_category(self):
         ci_templates = self.svc.list_templates(category=TemplateCategory.CI)

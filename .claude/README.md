@@ -36,8 +36,6 @@ Claude Code configuration for AOS (Agent Orchestration Service) Dashboard.
 | `/start-all` | 전체 서비스 시작 (인프라 + Backend + Dashboard) |
 | `/start-dashboard` | Dashboard 단독 시작 |
 | `/stop-all` | 전체 서비스 중지 |
-| `/backup` | AOS 전체 서비스 백업 (Postgres + Redis + Qdrant) |
-| `/restore` | AOS 전체 서비스 복원 (Postgres + Redis + Qdrant) |
 
 ### 계획 및 개발
 

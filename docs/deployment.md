@@ -26,7 +26,6 @@
 ### 선택 사항
 - **Slack/Discord** - 알림 웹훅
 - **Sentry** - 에러 추적
-- **AWS S3 또는 GCS** - 백업 저장소
 
 ---
 
@@ -46,7 +45,7 @@
 
 > **Qdrant healthcheck 관련**: Qdrant 공식 이미지에는 `curl`/`wget`이 포함되어 있지 않아 Docker healthcheck을 설정할 수 없습니다. `docker-compose.yml`에서는 `condition: service_started`로 Qdrant 시작만 확인합니다. Qdrant의 `/healthz` 엔드포인트는 호스트에서 `curl http://localhost:6333/healthz`로 외부 확인 가능합니다.
 
-> **사내/팀 self-host라면** 원격 접속·첫 관리자 부트스트랩·백업·**보안 주의사항**을 정리한
+> **사내/팀 self-host라면** 원격 접속·첫 관리자 부트스트랩·**보안 주의사항**을 정리한
 > [self-host 퀵스타트](./self-host-quickstart.md)를 먼저 참고하세요.
 
 ### 배포 절차
@@ -369,16 +368,6 @@ PRODUCTION_DASHBOARD_URL=https://aos-dashboard.railway.app
 
 # 알림 (선택)
 SLACK_WEBHOOK_URL=<webhook-url>
-
-# 백업 (선택)
-DATABASE_HOST=<db-host>
-DATABASE_PORT=5432
-DATABASE_USER=<db-user>
-DATABASE_PASSWORD=<db-password>
-DATABASE_NAME=aos
-AWS_ACCESS_KEY_ID=<aws-key>
-AWS_SECRET_ACCESS_KEY=<aws-secret>
-BACKUP_S3_BUCKET=<bucket-name>
 ```
 
 ### 워크플로우
@@ -389,27 +378,17 @@ BACKUP_S3_BUCKET=<bucket-name>
 | `build.yml` | push to main, tag | Docker 이미지 빌드 & GHCR 푸시 | **active** |
 | `deploy-staging.yml` | build 성공 후 | 스테이징 자동 배포 | **비활성 (disabled_manually)** |
 | `deploy-production.yml` | 릴리스 또는 수동 | 프로덕션 수동 배포 | **비활성 (disabled_manually)** |
-| `backup.yml` | 매일 2AM UTC | DB 백업 | **비활성 (disabled_manually)** |
 
-> ⚠️ **배포·백업 워크플로우는 현재 실행되지 않습니다.** `deploy-staging.yml`, `deploy-production.yml`,
-> `backup.yml` 3종은 GitHub Actions 시크릿이 등록되지 않은 상태여서 의도적으로
-> 비활성화(`disabled_manually`)되어 있습니다. 따라서 위 표의 "스테이징 자동 배포",
-> "매일 2AM UTC DB 백업"은 **시크릿 등록 + 워크플로우 재활성화 이후**에만 동작합니다.
+> ⚠️ **배포 워크플로우는 현재 실행되지 않습니다.** `deploy-staging.yml`, `deploy-production.yml`
+> 2종은 GitHub Actions 시크릿이 등록되지 않은 상태여서 의도적으로
+> 비활성화(`disabled_manually`)되어 있습니다. 따라서 위 표의 "스테이징 자동 배포"는
+> **시크릿 등록 + 워크플로우 재활성화 이후**에만 동작합니다.
 >
 > **필수 시크릿**: 배포는 `RAILWAY_TOKEN`(+`RAILWAY_PROJECT_ID`)에 더해 **환경 URL 시크릿**이
 > 필요합니다 — 스테이징은 `STAGING_BACKEND_URL`, `STAGING_DASHBOARD_URL`, 프로덕션은
 > `PRODUCTION_BACKEND_URL`, `PRODUCTION_DASHBOARD_URL`입니다. 두 배포 워크플로우 모두 배포 직후
 > `curl "$BACKEND_URL/health/ready"`로 헬스체크를 수행하므로, `*_BACKEND_URL`이 비어 있으면
 > **헬스체크 단계에서 실패**합니다(`*_DASHBOARD_URL`은 environment URL·배포 요약에 쓰입니다).
-> 백업은 DB 접속 계열
-> (`DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USER`, `DATABASE_NAME`, `DATABASE_PASSWORD`)입니다.
->
-> **선택 시크릿(백업 스토리지)**: `backup.yml`은 업로드 대상을 시크릿 존재 여부로 분기하는데,
-> S3와 GCS 조건은 **서로 독립적**입니다 — `AWS_ACCESS_KEY_ID`가 있으면 S3(`BACKUP_S3_BUCKET`),
-> `GCS_SERVICE_ACCOUNT_KEY`가 있으면 GCS(`BACKUP_GCS_BUCKET`)에 업로드하며, **둘 다 설정하면
-> 양쪽에 모두 업로드되어 두 벌이 보관**됩니다(중복 보관·스토리지 비용 발생에 유의).
-> **둘 다 없으면 GitHub 아티팩트로 폴백**해 보관합니다.
-> 따라서 AWS·GCS 자격증명은 **필수가 아니며**, 없어도 백업 자체는 정상 동작합니다.
 >
 > **재활성화 방법**:
 > ```bash
@@ -420,14 +399,10 @@ BACKUP_S3_BUCKET=<bucket-name>
 > gh secret set STAGING_DASHBOARD_URL
 > gh secret set PRODUCTION_BACKEND_URL
 > gh secret set PRODUCTION_DASHBOARD_URL
-> gh secret set DATABASE_PASSWORD    # 백업용 (DATABASE_HOST/PORT/USER/NAME 도 함께)
-> # 스토리지는 선택 — S3에 보관하려는 경우에만
-> # gh secret set AWS_ACCESS_KEY_ID && gh secret set AWS_SECRET_ACCESS_KEY
 >
 > # 2) 워크플로우 활성화
 > gh workflow enable "Deploy Staging"
 > gh workflow enable "Deploy Production"
-> gh workflow enable "Database Backup"
 >
 > # 3) 상태 확인 (active/disabled_manually)
 > gh workflow list --all

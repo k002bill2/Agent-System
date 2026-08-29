@@ -32,7 +32,6 @@ COMPOSE_DIR=~/Work/shared-infra; TOPOLOGY=local
 
 PG=shared-postgres; RD=shared-redis; QD=shared-qdrant
 PGUSER=postgres; PGDB=aos; VOLPREFIX=shared-infra
-export CONTAINER_NAME="$PG" REDIS_CONTAINER="$RD" DB_USER="$PGUSER" DB_NAME="$PGDB"
 export QDRANT_URL="http://localhost:${QDRANT_REST_PORT:-6333}"   # shared-infra 는 QDRANT_REST_PORT
 echo "선택된 환경: $TOPOLOGY / $PG / $QDRANT_URL"
 ```
@@ -48,16 +47,11 @@ PG=aos-postgres; RD=aos-redis; QD=aos-qdrant
 PGUSER="${POSTGRES_USER:-aos}"; PGDB="${POSTGRES_DB:-aos}"
 VOLPREFIX=aos                            # 루트 compose 의 `name: aos` 가 볼륨 접두사
 COMPOSE_DIR="$PWD"; TOPOLOGY=selfhost    # 절대경로로 고정 — 이후 cd 해도 유효
-export CONTAINER_NAME="$PG" REDIS_CONTAINER="$RD" DB_USER="$PGUSER" DB_NAME="$PGDB"
 export QDRANT_URL="http://localhost:${QDRANT_PORT:-6333}"   # self-host 는 QDRANT_PORT
 echo "선택된 환경: $TOPOLOGY / $PG / $PGUSER@$PGDB / $QDRANT_URL / $COMPOSE_DIR"
 ```
 
-> **`export` 가 필요한 이유:** `backup-all.sh`·`restore-all.sh`는 `PG`/`PGUSER`가 아니라 `CONTAINER_NAME`·`REDIS_CONTAINER`·`DB_USER`·`DB_NAME`을 읽습니다. 이 줄이 없으면 self-host 환경에서 두 스크립트가 shared-infra 기본값으로 되돌아가, 엉뚱한 인스턴스를 백업하거나 복원합니다.
-
 **이 문서의 인라인 명령**은 설정을 건너뛰면 `PG: parameter null or not set`으로 즉시 실패합니다. 존재하지 않는 컨테이너를 조용히 겨냥하는 것보다 낫기 때문에 의도한 동작입니다.
-
-> **단, 통합 스크립트는 fail-closed가 아닙니다.** `backup-all.sh`·`restore-all.sh`는 변수가 없으면 **shared-infra 기본값**(`shared-postgres`/`shared-redis`)으로 조용히 진행합니다 — launchd 자동 백업이 그 기본값으로 돌아야 하므로 의도된 설계입니다. 따라서 **self-host에서 이 두 스크립트를 쓸 때는 위 B 블록을 반드시 먼저 실행하세요.** 건너뛰면 self-host를 복구하려다 로컬 공유 인스턴스를 백업하거나 덮어씁니다. 두 스택을 한 호스트에서 함께 돌릴 때 특히 위험합니다. 실행 전 `echo "$CONTAINER_NAME"`으로 대상을 눈으로 확인하세요.
 
 **백엔드/대시보드 프로세스는 토폴로지마다 다릅니다.** self-host에서는 `backend`·`dashboard`가 compose 서비스지만, 로컬 개발의 shared-infra compose에는 `postgres`·`redis`·`qdrant` 세 서비스뿐입니다. 로컬에서 백엔드를 재시작하려면 compose가 아니라 `uvicorn` 프로세스를 직접 다시 띄웁니다:
 
@@ -80,7 +74,7 @@ fi
 ## 목차
 
 1. [장애 대응 프로세스](#장애-대응-프로세스)
-2. [자동 백업 설정](#자동-백업-설정)
+2. [백업 정책](#백업-정책)
 3. [PostgreSQL 백업/복원](#postgresql-백업복원)
 4. [Redis 백업/복원](#redis-백업복원)
 5. [Qdrant 백업/복원](#qdrant-백업복원)
@@ -130,110 +124,25 @@ fi
 
 ---
 
-## 자동 백업 설정
+## 백업 정책
 
-macOS `launchd` 기반으로 매일 자동 DB 백업을 실행합니다.
+**AOS는 백업·복원 자동화를 제공하지 않습니다.** 레포에 백업 스케줄러·백업 스크립트·복원 스크립트가 없고, 백엔드도 백업 아티팩트를 생성하지 않습니다. 설치할 launchd 에이전트나 실행할 AOS 백업 명령은 존재하지 않습니다.
 
-### 구성 요소
+데이터 보호는 **운영자가 별도로 관리하는 프로바이더 또는 인프라 백업 정책**의 책임입니다:
 
-| 파일 | 역할 |
-|------|------|
-| `infra/scripts/backup-all.sh` | 통합 백업 (Postgres + Redis + Qdrant) |
-| `infra/scripts/restore-all.sh` | 통합 복원 (한번에 전체 복원) |
-| `infra/scripts/backup-db.sh` | PostgreSQL 단독 백업 (레거시) |
-| `infra/scripts/com.aos.db-backup.plist` | launchd 스케줄 템플릿 |
-| `infra/scripts/setup-auto-backup.sh` | 설치/제거/상태 관리 CLI |
+- **관리형 DB** — 프로바이더의 자동 백업·PITR (Railway, Render, RDS, Cloud SQL 등)
+- **자체 호스팅** — 인프라 계층의 스냅샷·오프사이트 보관 (볼륨 스냅샷, 호스트 백업 에이전트, 운영자 크론 등)
 
-### 설치
+스케줄·보존 기간·오프사이트 복제·복원 리허설은 모두 그 정책에서 정의하고 검증해야 합니다. AOS는 이를 대신 수행하지도, 성공 여부를 감시하지도 않습니다.
+
+기존에 AOS macOS 자동 백업을 설치한 호스트는 다음 일회성 정리를 수행하세요:
 
 ```bash
-cd infra/scripts
-./setup-auto-backup.sh install
+launchctl bootout "gui/$(id -u)/com.aos.db-backup" 2>/dev/null || true
+rm -f "$HOME/Library/LaunchAgents/com.aos.db-backup.plist"
 ```
 
-설치 시 `com.aos.db-backup.plist` 템플릿의 `__PROJECT_ROOT__`, `__LOG_DIR__` 플레이스홀더가 실제 경로로 치환되어 `~/Library/LaunchAgents/`에 복사됩니다.
-
-> **템플릿을 고쳤으면 반드시 다시 설치하세요.** launchd가 실행하는 것은 레포의 템플릿이 아니라 `~/Library/LaunchAgents/`의 **복사본**입니다. 템플릿만 수정하면 이미 설치된 에이전트는 옛 설정으로 계속 돕니다. `./setup-auto-backup.sh install`을 다시 실행하면 재생성 후 재적재됩니다. `./setup-auto-backup.sh status`가 설치본과 템플릿을 대조해 `Template: stale`로 알려줍니다.
-
-### 관리 명령어
-
-```bash
-./setup-auto-backup.sh status     # 상태 확인 (설치 여부, 최신 백업, 총 백업 수)
-./setup-auto-backup.sh run        # 즉시 백업 실행
-./setup-auto-backup.sh uninstall  # 자동 백업 제거
-```
-
-### 수동 백업/복원
-
-```bash
-# 전체 백업 (Postgres + Redis + Qdrant)
-./infra/scripts/backup-all.sh --verify
-
-# 전체 복원 (최신 백업)
-./infra/scripts/restore-all.sh latest
-
-# 특정 시점 복원
-./infra/scripts/restore-all.sh 20260416_030205
-
-# 복원 미리보기 (실행 안 함)
-./infra/scripts/restore-all.sh latest --dry-run
-```
-
-### 동작 방식
-
-| 항목 | 값 |
-|------|-----|
-| 스케줄 | 매일 03:00 (launchd `StartCalendarInterval`) |
-| 대상 | PostgreSQL + Redis + Qdrant (통합) |
-| 검증 | `pg_restore --list`로 무결성 확인 (`--verify`) |
-| 보관 기간 | 30일 (이후 자동 삭제) |
-| 로그 | `infra/backups/logs/backup-stdout.log`, `backup-stderr.log` |
-
-### 백업 디렉토리 구조
-
-```
-infra/backups/
-├── 20260416_030205/          # 타임스탬프 디렉토리
-│   ├── postgres.dump         # PostgreSQL (pg_dump custom format)
-│   ├── redis.rdb             # Redis RDB snapshot
-│   ├── qdrant.snapshot       # Qdrant full snapshot
-│   └── manifest.json         # 메타데이터 (서비스별 상태)
-├── latest -> 20260416_030205 # 최신 백업 심링크
-└── logs/
-    ├── backup-stdout.log
-    └── backup-stderr.log
-```
-
-### 놓친 백업 실행
-
-macOS `StartCalendarInterval`은 컴퓨터가 꺼져 있거나 잠자기 상태였던 스케줄을 깨어난 후 자동 실행합니다. 별도 설정 없이 놓친 백업이 복구됩니다.
-
-### 환경 변수 (선택)
-
-기본값의 정본(SSOT)은 `infra/scripts/backup-all.sh` 상단이며, 로컬 개발(shared-infra) 기준입니다:
-
-| 변수 | 기본값 | 설명 |
-|------|--------|------|
-| `CONTAINER_NAME` | `shared-postgres` | PostgreSQL 컨테이너 |
-| `REDIS_CONTAINER` | `shared-redis` | Redis 컨테이너 |
-| `DB_USER` | `postgres` | 데이터베이스 사용자 |
-| `DB_NAME` | `aos` | 데이터베이스 이름 |
-| `QDRANT_URL` | `http://localhost:6333` | Qdrant 엔드포인트 |
-
-> **plist에서 이 값들을 재정의하지 마세요.** launchd plist에 `CONTAINER_NAME` 등을 넣으면 스크립트 기본값을 가리고, 인프라 이관 후 그 값이 낡으면 백업이 조용히 실패합니다. 실제로 plist에 남아 있던 `aos-postgres` 오버라이드 때문에 PostgreSQL 백업이 보관 기간 30일 내내 건너뛰어졌습니다(Redis·Qdrant는 정상이라 작업은 "성공"으로 보였습니다). self-host 등 다른 토폴로지에서 백업하려면 plist를 고치지 말고 셸에서 변수를 지정해 `backup-all.sh`를 직접 실행하세요.
-
-### 백업이 실제로 남았는지 확인 (매번)
-
-작업 성공 여부가 아니라 **서비스별 상태**를 봐야 합니다. `backup-all.sh`는 건너뛴 서비스를 실패로 세지 않으므로(`SERVICES_FAIL`만 종료 코드에 반영), 서비스가 통째로 빠져도 작업은 **exit 0으로 끝납니다**:
-
-```bash
-jq '.services' infra/backups/latest/manifest.json
-# 세 서비스 모두 "ok" 여야 합니다.
-# postgres 는 누락 시 "missing", redis/qdrant 는 "skipped" 로 기록됩니다
-# (backup-all.sh 의 manifest 생성부 참조). "ok" 가 아니면 그 서비스는 백업되지 않았습니다.
-
-ls -la infra/backups/latest/   # postgres.dump 실존 확인
-```
+이어지는 절들은 자동화가 아니라 **장애 대응 중 손으로 실행하는 일회성 절차**(`pg_dump`/`pg_restore`, Redis RDB, Qdrant 스냅샷 API)입니다.
 
 ---
 
@@ -329,7 +238,7 @@ docker cp "${RD:?}":/data/dump.rdb ./redis_backup_$(date +%Y%m%d_%H%M%S).rdb
 
 ### RDB 복원
 
-> **🚨 로컬(shared-infra)에서는 조율 없이 실행하지 마세요.** RDB 파일은 **Redis 서버 전체**를 담습니다. `shared-redis`는 elitedeck·image_maker와 논리 DB를 공유하므로, 복원하면 **다른 프로젝트의 캐시·큐가 통째로 과거 시점으로 되돌아가거나 사라집니다**. `restore-all.sh latest`도 같은 경로를 탑니다. 공유 환경에서는 (1) 관련 프로젝트와 시점을 합의한 뒤 전체 인스턴스를 함께 복원하거나, (2) AOS 키만 선별 내보내기/복원하세요. 아래 절차는 그 조율이 끝났거나 self-host 전용 인스턴스일 때만 사용합니다.
+> **🚨 로컬(shared-infra)에서는 조율 없이 실행하지 마세요.** RDB 파일은 **Redis 서버 전체**를 담습니다. `shared-redis`는 elitedeck·image_maker와 논리 DB를 공유하므로, 복원하면 **다른 프로젝트의 캐시·큐가 통째로 과거 시점으로 되돌아가거나 사라집니다**. 공유 환경에서는 (1) 관련 프로젝트와 시점을 합의한 뒤 전체 인스턴스를 함께 복원하거나, (2) AOS 키만 선별 내보내기/복원하세요. 아래 절차는 그 조율이 끝났거나 self-host 전용 인스턴스일 때만 사용합니다.
 
 ```bash
 # 1. Redis 컨테이너 중지 (compose 는 반드시 해당 환경 디렉토리에서)

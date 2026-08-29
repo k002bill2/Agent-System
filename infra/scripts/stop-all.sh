@@ -69,20 +69,6 @@ if pgrep -f "uvicorn.*api\.app:app" > /dev/null 2>&1; then
     pkill -9 -f "uvicorn.*api\.app:app" 2>/dev/null || true
 fi
 
-# Auto-backup before shutdown (if shared-postgres is running)
-# shared-infra uses postgres:postgres credentials; DB name is 'aos'.
-if docker ps --filter "name=shared-postgres" --filter "status=running" -q | grep -q .; then
-    echo -e "${YELLOW}Creating pre-shutdown backup (aos DB)...${NC}"
-    BACKUP_DIR="$PROJECT_ROOT/infra/docker/data/backups"
-    mkdir -p "$BACKUP_DIR"
-    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-    docker exec shared-postgres pg_dump -U postgres aos | gzip > "$BACKUP_DIR/pre_shutdown_${TIMESTAMP}.sql.gz" 2>/dev/null && \
-        echo -e "${GREEN}Backup saved: $BACKUP_DIR/pre_shutdown_${TIMESTAMP}.sql.gz${NC}" || \
-        echo -e "${YELLOW}Backup skipped (non-critical)${NC}"
-    # Keep only last 5 pre-shutdown backups
-    ls -t "$BACKUP_DIR"/pre_shutdown_*.sql.gz 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null || true
-fi
-
 # Stop Infrastructure (shared-infra: Postgres, Redis, Qdrant — shared across projects)
 echo -e "${GREEN}Stopping Infrastructure (shared-infra)...${NC}"
 docker compose -f "$COMPOSE_FILE" down ${COMPOSE_DOWN_FLAGS} 2>/dev/null || true

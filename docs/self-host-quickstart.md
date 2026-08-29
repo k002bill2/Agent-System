@@ -128,11 +128,11 @@ docker compose down               # 중지(데이터 보존)
 docker compose down -v            # ⚠️ named 볼륨까지 삭제 — 신중히
 ```
 
-**업그레이드 전 백업 필수**:
+AOS는 백업·복원 자동화를 제공하지 않습니다. 데이터 보호가 필요하면
+운영자가 선택한 프로바이더 또는 인프라 백업 정책을 별도로 구성하고, 그 정책의
+복원 절차를 검증한 뒤 업그레이드하세요. AOS 저장소에는 이를 실행할 백업 명령이 없습니다.
 
 ```bash
-CONTAINER_NAME=aos-postgres DB_USER=aos ./infra/scripts/backup-db.sh
-# 새 코드 받기
 git pull && ./setup.sh            # setup.sh는 강한 시크릿을 덮어쓰지 않음(멱등)
 ```
 

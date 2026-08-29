@@ -1606,16 +1606,15 @@ Claude 구독(CLI 로그인) 세션으로 LLM 호출을 실행하는 opt-in 런�
 
 ---
 
-## 59. CI/CD 및 백업 자동화
+## 59. CI/CD 자동화
 
-GitHub Actions 기반 검증·빌드·배포·백업 파이프라인. 검증(CI)과 빌드(Build)는 상시 동작하지만, **배포·백업 3종은 현재 비활성 상태**다.
+GitHub Actions 기반 검증·빌드·배포 파이프라인. 검증(CI)과 빌드(Build)는 상시 동작하지만, **배포 2종은 현재 비활성 상태**다.
 
 **기능**:
 - `ci.yml` (**active**): PR·main push 시 백엔드(ruff + mypy + pytest)와 대시보드(tsc + lint + vitest + build) 게이트 실행. `concurrency` 그룹으로 동일 ref 중복 실행 취소
 - `build.yml` (**active**): main push 및 `v*.*.*` 태그 시 백엔드/대시보드 Docker 이미지 빌드 후 GHCR 푸시. `workflow_dispatch`의 `push` 입력으로 푸시 없이 빌드만 검증 가능
 - `deploy-staging.yml` (**비활성**): Build 워크플로우 성공 후 Railway 스테이징 자동 배포. `secrets.RAILWAY_TOKEN` 필요
 - `deploy-production.yml` (**비활성**): 릴리스 published 또는 수동 실행(버전 태그 입력)으로 프로덕션 배포
-- `backup.yml` (**비활성**): 매일 2AM UTC(11AM KST) cron으로 `pg_dump` + gzip 덤프 생성. 보존 기간 기본 30일. 필수 시크릿은 DB 접속 계열(`DATABASE_HOST`/`PORT`/`USER`/`NAME`/`PASSWORD`)뿐이며, 업로드 대상은 시크릿 존재 여부로 분기하되 **S3·GCS 조건은 서로 독립적**이다 — AWS 자격증명이 있으면 S3(`aws s3 cp` + 만료분 정리), GCS 서비스 계정 키가 있으면 GCS(`gcloud storage cp`)에 업로드하며, **둘 다 설정하면 양쪽 모두 실행되어 두 벌이 저장**된다(중복 보관·스토리지 비용 발생에 유의). **둘 다 없으면 `actions/upload-artifact` 폴백**으로 GitHub 아티팩트에 보관. 즉 클라우드 스토리지 자격증명은 선택 사항
 - 이 외에 GitHub 관리형 워크플로우로 Dependabot Updates(의존성 자동 PR), Dependency Graph가 active 상태로 동작
 
-**현재 상태**: 배포·백업 3종은 Actions 시크릿이 등록되지 않아 의도적으로 `disabled_manually` 처리되어 있다. 실배포·자동 백업은 **동작하지 않으며**, 재활성화하려면 시크릿 등록 후 `gh workflow enable "<워크플로우 이름>"`을 실행해야 한다 (상세: `docs/deployment.md` → CI/CD 파이프라인).
+**현재 상태**: 배포 2종은 Actions 시크릿이 등록되지 않아 의도적으로 `disabled_manually` 처리되어 있다. 실배포는 **동작하지 않으며**, 재활성화하려면 시크릿 등록 후 `gh workflow enable "<워크플로우 이름>"`을 실행해야 한다 (상세: `docs/deployment.md` → CI/CD 파이프라인).

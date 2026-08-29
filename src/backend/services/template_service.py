@@ -229,48 +229,6 @@ jobs:
 """,
     },
     {
-        "name": "Database Backup",
-        "description": "PostgreSQL 데이터베이스 백업 및 정리 워크플로우 (일일/주간 백업)",
-        "category": TemplateCategory.UTILITY,
-        "tags": ["database", "backup", "postgresql"],
-        "icon": "database",
-        "yaml_content": """name: Database Backup
-on:
-  manual: {}
-  schedule:
-    - cron: "0 2 * * *"
-env:
-  DB_HOST: localhost
-  DB_PORT: "5432"
-  DB_NAME: aos
-  DB_USER: aos
-  BACKUP_DIR: backups/db
-  RETENTION_DAYS: "7"
-jobs:
-  backup:
-    name: Create backup
-    runs_on: local
-    steps:
-      - name: Create backup directory
-        run: mkdir -p ${{ env.BACKUP_DIR }}
-      - name: Dump database
-        run: pg_dump -h ${{ env.DB_HOST }} -p ${{ env.DB_PORT }} -U ${{ env.DB_USER }} -Fc ${{ env.DB_NAME }} > ${{ env.BACKUP_DIR }}/backup_$(date +%Y%m%d_%H%M%S).dump 2>&1 || echo "pg_dump failed - is PostgreSQL running?"
-        continue_on_error: true
-      - name: Verify backup file
-        run: ls -lh ${{ env.BACKUP_DIR }}/backup_*.dump 2>/dev/null || echo "No backup files found"
-        continue_on_error: true
-  cleanup:
-    name: Remove old backups
-    runs_on: local
-    needs: [backup]
-    steps:
-      - name: Delete backups older than retention period
-        run: find ${{ env.BACKUP_DIR }} -name "*.dump" -mtime +${{ env.RETENTION_DAYS }} -delete -print 2>/dev/null || echo "No old backups to remove"
-      - name: List remaining backups
-        run: ls -lh ${{ env.BACKUP_DIR }}/ 2>/dev/null || echo "Backup directory empty"
-""",
-    },
-    {
         "name": "PR Validation",
         "description": "Pull Request 코드 품질 검증 파이프라인 (lint, type-check, test, build)",
         "category": TemplateCategory.CI,
