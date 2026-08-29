@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -165,6 +165,7 @@ else:
     llm_proxy_router = safe_import("api.llm_proxy", "router")
     llm_usage_router = safe_import("api.llm_usage", "router")
     llm_access_router = safe_import("api.llm_access", "router")
+    agent_monitor_router = safe_import("api.v1.agent_monitor", "router")
 
     # Optional orchestrator
     try:
@@ -665,6 +666,15 @@ else:
             app.include_router(llm_usage_router, prefix="/api")
         if llm_access_router:
             app.include_router(llm_access_router, prefix="/api")
+        if agent_monitor_router:
+            # Router already declares its full "/api/v1/agents" prefix internally —
+            # no extra prefix here. The router itself already requires
+            # get_current_user (api/v1/agent_monitor.py); this adds the same
+            # dependency again at include-time as defense-in-depth so the route
+            # stays gated even if the router-level dependency is ever dropped.
+            from api.deps import get_current_user
+
+            app.include_router(agent_monitor_router, dependencies=[Depends(get_current_user)])
 
         # Add Rate Limiting Middleware
         rate_limit_enabled = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"

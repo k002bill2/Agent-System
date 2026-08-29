@@ -161,8 +161,12 @@ async def stream_session(session_id: str):
                     yield f"event: session_completed\ndata: {details.model_dump_json()}\n\n"
                     break
 
-            except Exception as e:
-                yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+            except Exception:
+                logger.exception("Error streaming session %s", session_id)
+                error_data = json.dumps(
+                    {"error": "Internal error while streaming session", "session_id": session_id}
+                )
+                yield f"event: error\ndata: {error_data}\n\n"
                 break
 
     return StreamingResponse(
