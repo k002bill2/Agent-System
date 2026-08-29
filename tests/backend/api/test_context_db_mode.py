@@ -461,3 +461,51 @@ def test_no_context_path_detail_is_pinned_to_the_dashboard_literal():
     from api.context import NO_CONTEXT_PATH_DETAIL
 
     assert NO_CONTEXT_PATH_DETAIL == "Project has no registered filesystem path for context"
+
+
+def test_symlink_loop_is_treated_as_an_unusable_path(tmp_path):
+    """심링크 루프는 fail-closed 여야 한다 — 예외로 새어 나가면 안 된다.
+
+    `Path.resolve()` 는 심링크 루프에서 `OSError` 가 아니라 `RuntimeError` 를
+    던진다(실측: CPython 3.11). `OSError` 만 잡으면 이 헬퍼가 예외를 그대로
+    올려보내 라우트가 500 을 내고, "사용 불가한 경로는 None" 이라는 계약이
+    깨진다.
+    """
+    from api.db_project import resolve_registered_root, safe_project_child
+
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "a").symlink_to(root / "b")
+    (root / "b").symlink_to(root / "a")
+
+    assert safe_project_child(root, "a", strict=True) is None
+    assert safe_project_child(root, "a", strict=False) is None
+    assert resolve_registered_root(str(root / "a")) is None
+
+
+@pytest.mark.asyncio
+async def test_context_route_fails_closed_on_a_symlink_loop(
+    authenticated_app, tmp_path, monkeypatch
+):
+    """루프가 `dev/active` 에 있어도 라우트는 500 이 아니라 정상 응답을 낸다.
+
+    읽을 수 없는 문서 디렉터리는 "문서 없음"이지 서버 오류가 아니다.
+    """
+    from api.deps import get_db_session
+
+    project_path = _make_project_tree(tmp_path / "Agent-System")
+    dev_active = project_path / "dev" / "active"
+    for child in dev_active.iterdir():
+        child.unlink()
+    dev_active.rmdir()
+    dev_active.symlink_to(project_path / "dev" / "loop")
+    (project_path / "dev" / "loop").symlink_to(dev_active)
+
+    _install_db(authenticated_app, monkeypatch, _row(str(project_path)))
+    try:
+        response = await _get(authenticated_app, f"/api/projects/{DB_UUID}/context")
+
+        assert response.status_code == 200, response.text
+        assert response.json()["dev_docs"] == []
+    finally:
+        authenticated_app.dependency_overrides.pop(get_db_session, None)
