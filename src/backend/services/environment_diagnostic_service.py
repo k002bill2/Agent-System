@@ -9,6 +9,7 @@ import os
 import shutil
 from pathlib import Path
 
+from api.db_project import safe_project_child
 from models.diagnostics import (
     CategoryResult,
     DiagnosticCategory,
@@ -63,8 +64,8 @@ def _diagnose_workspace(project: Project) -> CategoryResult:
         )
 
     # 2. .aos-project.json validity
-    config_file = project_path / ".aos-project.json"
-    if config_file.exists():
+    config_file = safe_project_child(project.path, ".aos-project.json", strict=True)
+    if config_file is not None and config_file.is_file():
         try:
             data = json.loads(config_file.read_text(encoding="utf-8"))
             checks.append(
@@ -95,8 +96,8 @@ def _diagnose_workspace(project: Project) -> CategoryResult:
         )
 
     # 3. CLAUDE.md exists
-    claude_md = project_path / "CLAUDE.md"
-    if claude_md.exists():
+    claude_md = safe_project_child(project.path, "CLAUDE.md", strict=True)
+    if claude_md is not None and claude_md.is_file():
         size_kb = claude_md.stat().st_size / 1024
         checks.append(
             DiagnosticCheck(
@@ -167,11 +168,10 @@ def _diagnose_workspace(project: Project) -> CategoryResult:
 def _diagnose_mcp(project: Project) -> CategoryResult:
     """Check MCP server configuration health."""
     checks: list[DiagnosticCheck] = []
-    project_path = Path(project.path)
 
     # 1. Project-level MCP config (.claude/mcp.json)
-    mcp_json = project_path / ".claude" / "mcp.json"
-    if mcp_json.exists():
+    mcp_json = safe_project_child(project.path, ".claude", "mcp.json", strict=True)
+    if mcp_json is not None and mcp_json.is_file():
         try:
             data = json.loads(mcp_json.read_text(encoding="utf-8"))
             servers = data.get("mcpServers", {})
@@ -465,23 +465,52 @@ CATEGORY_RUNNERS = {
 }
 
 
+def _unverifiable_result(category: DiagnosticCategory) -> CategoryResult:
+    """A category the caller declared unverifiable in this deployment.
+
+    Reported as DEGRADED rather than HEALTHY or UNHEALTHY: the check did not
+    pass, but nothing about the project failed either.
+    """
+    return CategoryResult(
+        category=category,
+        status=DiagnosticStatus.DEGRADED,
+        checks=[
+            DiagnosticCheck(
+                name="unverifiable",
+                status=DiagnosticStatus.DEGRADED,
+                message=f"{category.value} cannot be verified in this deployment mode",
+            )
+        ],
+    )
+
+
 def run_diagnostics(
     project: Project,
     categories: list[DiagnosticCategory] | None = None,
+    unverifiable_categories: set[DiagnosticCategory] | None = None,
 ) -> ProjectDiagnostics:
     """Run environment diagnostics for a project.
 
     Args:
         project: The project to diagnose.
         categories: Specific categories to check. None means all.
+        unverifiable_categories: Categories whose backing data this deployment
+            cannot reach. Reported as DEGRADED instead of being run, so a check
+            that is merely out of reach is never rendered as a project failure.
+            The caller owns this decision — the diagnosers stay unaware of the
+            deployment mode.
 
     Returns:
         ProjectDiagnostics with results per category.
     """
     target_categories = categories or list(DiagnosticCategory)
+    unverifiable = unverifiable_categories or set()
     results: dict[str, CategoryResult] = {}
 
     for cat in target_categories:
+        if cat in unverifiable:
+            results[cat.value] = _unverifiable_result(cat)
+            continue
         runner = CATEGORY_RUNNERS.get(cat)
         if runner:
             try:
@@ -524,7 +553,9 @@ def run_diagnostics(
 
 def _fix_create_aos_config(project: Project, params: dict) -> str:
     """Create a default .aos-project.json."""
-    config_file = Path(project.path) / ".aos-project.json"
+    config_file = safe_project_child(project.path, ".aos-project.json")
+    if config_file is None:
+        raise ValueError("Refused to access a path outside the registered project root")
     if config_file.exists():
         return ".aos-project.json already exists"
 
@@ -541,7 +572,9 @@ def _fix_create_aos_config(project: Project, params: dict) -> str:
 
 def _fix_create_claude_md(project: Project, params: dict) -> str:
     """Create a minimal CLAUDE.md."""
-    claude_md = Path(project.path) / "CLAUDE.md"
+    claude_md = safe_project_child(project.path, "CLAUDE.md")
+    if claude_md is None:
+        raise ValueError("Refused to access a path outside the registered project root")
     if claude_md.exists():
         return "CLAUDE.md already exists"
 
@@ -552,7 +585,9 @@ def _fix_create_claude_md(project: Project, params: dict) -> str:
 
 def _fix_enable_mcp_servers(project: Project, params: dict) -> str:
     """Enable all disabled MCP servers in project config."""
-    mcp_json = Path(project.path) / ".claude" / "mcp.json"
+    mcp_json = safe_project_child(project.path, ".claude", "mcp.json")
+    if mcp_json is None:
+        raise ValueError("Refused to access a path outside the registered project root")
     if not mcp_json.exists():
         return "No .claude/mcp.json found"
 
@@ -588,6 +623,7 @@ def execute_fix(
     project: Project,
     fix_action: str,
     params: dict | None = None,
+    unverifiable_categories: set[DiagnosticCategory] | None = None,
 ) -> FixResult:
     """Execute a self-healing fix and re-diagnose.
 
@@ -609,7 +645,7 @@ def execute_fix(
 
     try:
         message = handler(project, params or {})
-        diagnostics = run_diagnostics(project)
+        diagnostics = run_diagnostics(project, unverifiable_categories=unverifiable_categories)
         return FixResult(
             fix_action=fix_action,
             success=True,

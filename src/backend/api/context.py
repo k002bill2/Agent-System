@@ -8,6 +8,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from api.db_project import load_registered_project, safe_project_child
 from api.deps import (
     get_current_user,
     get_db_session,
@@ -16,10 +17,53 @@ from api.deps import (
     require_project_role,
 )
 from models.context_usage import ContextUsage, get_context_limit
-from models.project import get_project
+from models.project import Project, get_project
 from orchestrator import OrchestrationEngine
 
 router = APIRouter(tags=["orchestration"])
+
+# Returned when an authorized database-mode project carries no readable
+# directory. Kept distinct from the generic dependency-failure detail so the
+# two 503 causes stay separable by callers and by tests. Mirrors
+# ``api/diagnostics.NO_DIAGNOSTIC_PATH_DETAIL``.
+NO_CONTEXT_PATH_DETAIL = "Project has no registered filesystem path for context"
+
+
+def _use_database() -> bool:
+    return os.getenv("USE_DATABASE", "false").lower() == "true"
+
+
+async def _resolve_database_project(project_id: str, db) -> Project | None:
+    """Resolve the canonical DB project row into a safe context target."""
+    try:
+        return await load_registered_project(db, project_id)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Project context is temporarily unavailable",
+        ) from exc
+
+
+async def _context_target(project_id: str, db) -> Project:
+    """Resolve the read project *after* the caller has authorized access.
+
+    Database mode reads the DB registry, which is authoritative for both
+    identity and path. Filesystem mode keeps the legacy registry lookup behind
+    ``reject_legacy_project_operation_in_database_mode`` — that guard is
+    unreachable from here in database mode by construction, and is kept as a
+    standing assertion that the legacy branch never runs in that mode.
+    """
+    if _use_database():
+        resolved = await _resolve_database_project(project_id, db)
+        if resolved is None:
+            raise HTTPException(status_code=503, detail=NO_CONTEXT_PATH_DETAIL)
+        return resolved
+
+    reject_legacy_project_operation_in_database_mode()
+    legacy = get_project(project_id)
+    if not legacy:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return legacy
 
 
 # ─────────────────────────────────────────────────────────────
@@ -66,34 +110,36 @@ async def get_project_context(
     - Current session info (if active)
     """
     from datetime import UTC, datetime
-    from pathlib import Path
 
+    # Preserve direct service-level callers used by the orchestration engine
+    # tests; FastAPI supplies real user/session objects on the HTTP route.
     if hasattr(current_user, "role") and hasattr(db, "execute"):
         await require_project_role(project_id, current_user, db, min_role="viewer")
-        reject_legacy_project_operation_in_database_mode()
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await _context_target(project_id, db)
 
     # Get dev docs from dev/active folder
     dev_docs: list[DevDocFile] = []
-    project_path = Path(project.path)
-    dev_active_path = project_path / "dev" / "active"
+    dev_active_path = safe_project_child(project.path, "dev", "active", strict=True)
 
-    if dev_active_path.exists():
+    if dev_active_path is not None and dev_active_path.is_dir():
         for file_path in dev_active_path.glob("*.md"):
+            safe_file_path = safe_project_child(
+                project.path, "dev", "active", file_path.name, strict=True
+            )
+            if safe_file_path is None or not safe_file_path.is_file():
+                continue
             try:
-                stat = file_path.stat()
-                content = file_path.read_text(encoding="utf-8")
+                stat = safe_file_path.stat()
+                content = safe_file_path.read_text(encoding="utf-8")
                 dev_docs.append(
                     DevDocFile(
-                        name=file_path.name,
-                        path=str(file_path),
+                        name=safe_file_path.name,
+                        path=str(safe_file_path),
                         content=content,
                         modified_at=datetime.fromtimestamp(stat.st_mtime, UTC).isoformat(),
                     )
                 )
-            except Exception:
+            except (OSError, UnicodeError):
                 pass  # Skip files that can't be read
 
     # Sort by modified time, most recent first
@@ -143,12 +189,8 @@ async def get_project_claude_md(
     db=Depends(get_db_session),
 ):
     """Get raw CLAUDE.md content for a project."""
-    if hasattr(current_user, "role") and hasattr(db, "execute"):
-        await require_project_role(project_id, current_user, db, min_role="viewer")
-        reject_legacy_project_operation_in_database_mode()
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    await require_project_role(project_id, current_user, db, min_role="viewer")
+    project = await _context_target(project_id, db)
 
     if not project.claude_md:
         raise HTTPException(status_code=404, detail="No CLAUDE.md found for this project")
