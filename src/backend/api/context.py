@@ -4,6 +4,7 @@ Project context (CLAUDE.md, dev docs) and context window usage meter.
 """
 
 import os
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -16,10 +17,86 @@ from api.deps import (
     require_project_role,
 )
 from models.context_usage import ContextUsage, get_context_limit
-from models.project import get_project
+from models.project import Project, get_project
 from orchestrator import OrchestrationEngine
 
 router = APIRouter(tags=["orchestration"])
+
+# Returned when an authorized database-mode project carries no readable
+# directory. Kept distinct from the generic dependency-failure detail so the
+# two 503 causes stay separable by callers and by tests. Mirrors
+# ``api/diagnostics.NO_DIAGNOSTIC_PATH_DETAIL``.
+NO_CONTEXT_PATH_DETAIL = "Project has no registered filesystem path for context"
+
+
+def _use_database() -> bool:
+    return os.getenv("USE_DATABASE", "false").lower() == "true"
+
+
+async def _resolve_database_project(project_id: str, db) -> Project | None:
+    """Resolve the canonical DB project row into a readable context target.
+
+    Only ``ProjectModel.id`` is matched — the path-derived identifiers used by
+    the legacy filesystem registry are deliberately not accepted, so they
+    cannot reach the filesystem through the context surface.
+
+    Returns ``None`` when the registration has no usable directory. The caller
+    keeps that fail-closed instead of guessing a path.
+    """
+    from sqlalchemy import select
+
+    from db.models import ProjectModel
+
+    try:
+        result = await db.execute(
+            select(ProjectModel).where(
+                ProjectModel.id == project_id,
+                ProjectModel.is_active == True,  # noqa: E712
+            )
+        )
+        row = result.scalar_one_or_none()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Project context is temporarily unavailable",
+        ) from exc
+
+    if row is None:
+        return None
+
+    path = str(row.path or "").strip()
+    if not path or not Path(path).is_dir():
+        return None
+
+    # `Project.from_path` 로 구성한다 — CLAUDE.md 본문과 `.aos-project.json`
+    # 메타데이터를 읽는 유일한 생성자다. 필드를 손으로 옮기면 `claude_md` 가
+    # 항상 None 이 되어 패널이 조용히 빈 화면이 된다.
+    project = Project.from_path(str(row.id), path)
+
+    # 이름·설명의 권위는 DB 행이다.
+    return project.model_copy(update={"name": row.name, "description": row.description or ""})
+
+
+async def _context_target(project_id: str, db) -> Project:
+    """Resolve the read project *after* the caller has authorized access.
+
+    Database mode reads the DB registry, which is authoritative for both
+    identity and path. Filesystem mode keeps the legacy registry lookup behind
+    ``reject_legacy_project_operation_in_database_mode`` — that guard is
+    unreachable from here in database mode by construction, and is kept as a
+    standing assertion that the legacy branch never runs in that mode.
+    """
+    if _use_database():
+        resolved = await _resolve_database_project(project_id, db)
+        if resolved is None:
+            raise HTTPException(status_code=503, detail=NO_CONTEXT_PATH_DETAIL)
+        return resolved
+
+    reject_legacy_project_operation_in_database_mode()
+    legacy = get_project(project_id)
+    if not legacy:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return legacy
 
 
 # ─────────────────────────────────────────────────────────────
@@ -66,14 +143,9 @@ async def get_project_context(
     - Current session info (if active)
     """
     from datetime import UTC, datetime
-    from pathlib import Path
 
-    if hasattr(current_user, "role") and hasattr(db, "execute"):
-        await require_project_role(project_id, current_user, db, min_role="viewer")
-        reject_legacy_project_operation_in_database_mode()
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    await require_project_role(project_id, current_user, db, min_role="viewer")
+    project = await _context_target(project_id, db)
 
     # Get dev docs from dev/active folder
     dev_docs: list[DevDocFile] = []
@@ -143,12 +215,8 @@ async def get_project_claude_md(
     db=Depends(get_db_session),
 ):
     """Get raw CLAUDE.md content for a project."""
-    if hasattr(current_user, "role") and hasattr(db, "execute"):
-        await require_project_role(project_id, current_user, db, min_role="viewer")
-        reject_legacy_project_operation_in_database_mode()
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    await require_project_role(project_id, current_user, db, min_role="viewer")
+    project = await _context_target(project_id, db)
 
     if not project.claude_md:
         raise HTTPException(status_code=404, detail="No CLAUDE.md found for this project")

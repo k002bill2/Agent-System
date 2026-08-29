@@ -384,16 +384,6 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
       set({ isLoadingContext: false, error: capabilityError ?? null })
       return
     }
-    if (capabilities.mode === 'database') {
-      set({
-        projectContext: null,
-        isLoadingContext: false,
-        contextUnavailableReason: capabilities.reason ?? 'Project context is unavailable in database mode',
-        contextUnavailableProjectId: projectId,
-      })
-      return
-    }
-
     try {
       const data = await apiClient.get<ProjectContext>(`/api/projects/${projectId}/context`)
       if (requestId !== projectContextRequestId) return

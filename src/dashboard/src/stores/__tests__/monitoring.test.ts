@@ -180,7 +180,7 @@ describe('monitoring store', () => {
       expect(eventSourceInstances).toHaveLength(0)
       expect(useMonitoringStore.getState().error).toContain('Database-backed')
     })
-    it('does not call the legacy context endpoint in database mode', async () => {
+    it('fetches project context in database mode', async () => {
       const capabilities = {
         project_id: 'p1' as string,
         mode: 'database' as const,
@@ -190,13 +190,23 @@ describe('monitoring store', () => {
         reason: 'Database-backed project monitoring is not available',
       }
       useMonitoringStore.setState({ monitoringCapabilitiesMap: {} })
-      mockApiClient.get.mockResolvedValueOnce(capabilities)
+      mockApiClient.get
+        .mockResolvedValueOnce(capabilities)
+        .mockResolvedValueOnce({
+          project_id: 'p1',
+          project_name: 'Database project',
+          project_path: '/registered/project',
+          claude_md: '# DB context',
+          dev_docs: [],
+          session_info: null,
+        })
 
       await useMonitoringStore.getState().fetchProjectContext('p1')
 
       expect(mockApiClient.get).toHaveBeenCalledWith('/api/projects/p1/monitoring-capabilities')
-      expect(mockApiClient.get).not.toHaveBeenCalledWith('/api/projects/p1/context')
-      expect(useMonitoringStore.getState().contextUnavailableReason).toContain('Database-backed')
+      expect(mockApiClient.get).toHaveBeenCalledWith('/api/projects/p1/context')
+      expect(useMonitoringStore.getState().projectContext?.claude_md).toBe('# DB context')
+      expect(useMonitoringStore.getState().contextUnavailableReason).toBeNull()
       expect(useMonitoringStore.getState().error).toBeNull()
     })
     it('clears stale context when capability loading fails', async () => {
@@ -226,10 +236,17 @@ describe('monitoring store', () => {
       })
       mockApiClient.get.mockReturnValueOnce(p1Context as any)
 
-      const p1Request = useMonitoringStore.getState().fetchProjectContext('p1')
+      const p1Capabilities = {
+        project_id: 'p1' as string,
+        mode: 'filesystem' as const,
+        health_config: 'available' as const,
+        health: 'available' as const,
+        checks: 'available' as const,
+        reason: null,
+      }
       useMonitoringStore.setState({
         monitoringCapabilitiesMap: {
-          p1: useMonitoringStore.getState().monitoringCapabilitiesMap.p1,
+          p1: p1Capabilities,
           p2: {
             project_id: 'p2',
             mode: 'database',
@@ -239,6 +256,15 @@ describe('monitoring store', () => {
             reason: 'Database-backed project monitoring is not available',
           },
         },
+      })
+      const p1Request = useMonitoringStore.getState().fetchProjectContext('p1')
+      mockApiClient.get.mockResolvedValueOnce({
+        project_id: 'p2',
+        project_name: 'Current project',
+        project_path: '/current',
+        claude_md: '# current',
+        dev_docs: [],
+        session_info: null,
       })
       const p2Request = useMonitoringStore.getState().fetchProjectContext('p2')
       await p2Request
@@ -253,8 +279,9 @@ describe('monitoring store', () => {
       })
       await p1Request
 
-      expect(useMonitoringStore.getState().projectContext).toBeNull()
-      expect(useMonitoringStore.getState().contextUnavailableReason).toContain('Database-backed')
+      expect(useMonitoringStore.getState().projectContext?.project_id).toBe('p2')
+      expect(useMonitoringStore.getState().projectContext?.claude_md).toBe('# current')
+      expect(useMonitoringStore.getState().contextUnavailableReason).toBeNull()
     })
 
     it('re-fetches capabilities when the cached project identity is inconsistent', async () => {
@@ -308,13 +335,21 @@ describe('monitoring store', () => {
           },
         },
       })
+      mockApiClient.get.mockResolvedValueOnce({
+        project_id: 'p2',
+        project_name: 'Current project',
+        project_path: '/current',
+        claude_md: '# current',
+        dev_docs: [],
+        session_info: null,
+      })
       await useMonitoringStore.getState().fetchProjectContext('p2')
 
       rejectP1(new Error('previous project capability request failed'))
       await p1Request
 
       expect(useMonitoringStore.getState().error).toBeNull()
-      expect(useMonitoringStore.getState().contextUnavailableReason).toContain('Database-backed')
+      expect(useMonitoringStore.getState().contextUnavailableReason).toBeNull()
     })
 
     it('rejects capability responses for a different project', async () => {
