@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import pytest
 from fastapi import HTTPException
 
+from api.claude_sessions import activity as activity_routes
 from api.claude_sessions import core
 from api.claude_sessions import sessions as session_routes
 from models.claude_session import ClaudeSessionInfo
@@ -108,3 +109,60 @@ async def test_codex_session_mutations_are_rejected(
 
     assert stream_error.value.status_code == 409
     assert summary_error.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_stream_session_error_event_hides_exception_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SSE `error` events must not leak internal exception text to the client."""
+    claude = _session("claude", "claude-1")
+    secret = "leaked-token-xyz db password 12345"
+
+    class _Monitor:
+        def get_session_details(self, session_id: str):
+            raise RuntimeError(secret)
+
+    monkeypatch.setattr(session_routes, "resolve_session", lambda _: (_Monitor(), claude))
+
+    async def fast_sleep(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr(session_routes.asyncio, "sleep", fast_sleep)
+
+    response = await session_routes.stream_session("claude-1")
+    body = "".join([chunk async for chunk in response.body_iterator])
+
+    assert "event: error" in body
+    assert secret not in body
+    assert "RuntimeError" not in body
+
+
+@pytest.mark.asyncio
+async def test_stream_session_activity_error_event_hides_exception_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SSE `error` events on the activity stream must not leak exception text."""
+    claude = _session("claude", "claude-1")
+    secret = "leaked-token-xyz db password 12345"
+
+    class _Monitor:
+        def get_session_activity(self, session_id: str, offset: int = 0, limit: int = 100):
+            return [], 0
+
+        def get_new_activity_since_size(self, session_id: str, last_size: int):
+            raise RuntimeError(secret)
+
+    monkeypatch.setattr(activity_routes, "resolve_session", lambda _: (_Monitor(), claude))
+
+    async def fast_sleep(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr(activity_routes.asyncio, "sleep", fast_sleep)
+
+    response = await activity_routes.stream_session_activity("claude-1")
+    body = "".join([chunk async for chunk in response.body_iterator])
+
+    assert "event: error" in body
+    assert secret not in body
+    assert "RuntimeError" not in body

@@ -7,6 +7,7 @@
 
 import { create } from 'zustand'
 import { apiClient } from '../services/apiClient'
+import { createAuthenticatedSseClient, type AuthenticatedSseClient } from '../services/authenticatedSse'
 import { getApiUrl } from '../config/api'
 
 // ─────────────────────────────────────────────────────────────
@@ -87,7 +88,7 @@ const BACKOFF_MULTIPLIER = 2
 interface AgentMonitorState {
   // Connection
   connectionStatus: ConnectionStatus
-  eventSource: EventSource | null
+  eventSource: AuthenticatedSseClient | null
   reconnectAttempts: number
   reconnectTimer: ReturnType<typeof setTimeout> | null
 
@@ -157,7 +158,50 @@ export const useAgentMonitorStore = create<AgentMonitorState>((set, get) => ({
     set({ connectionStatus: 'connecting', error: null })
 
     const url = getApiUrl('/api/v1/agents/monitor/stream?interval=5')
-    const source = new EventSource(url)
+
+    const scheduleReconnect = () => {
+      const { reconnectAttempts, reconnectTimer } = get()
+
+      // Clear existing timer
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer)
+      }
+
+      // Calculate exponential backoff delay
+      const delay = Math.min(
+        INITIAL_RECONNECT_DELAY_MS * Math.pow(BACKOFF_MULTIPLIER, reconnectAttempts),
+        MAX_RECONNECT_DELAY_MS,
+      )
+
+      set({
+        connectionStatus: 'reconnecting',
+        eventSource: null,
+        reconnectAttempts: reconnectAttempts + 1,
+      })
+
+      // Schedule reconnection
+      const timer = setTimeout(() => {
+        set({ reconnectTimer: null })
+        get().connect()
+      }, delay)
+
+      set({ reconnectTimer: timer })
+    }
+
+    const source = createAuthenticatedSseClient(url, {
+      onStatus: (status) => {
+        if (status === 'authentication-failed') {
+          set({ connectionStatus: 'disconnected', eventSource: null, error: 'Authentication required for agent monitor stream' })
+          return
+        }
+        if (status === 'permission-denied') {
+          set({ connectionStatus: 'disconnected', eventSource: null, error: 'You do not have permission to view the agent monitor stream' })
+          return
+        }
+        // 'error' | 'closed' — transport dropped, auto-reconnect with backoff
+        scheduleReconnect()
+      },
+    })
 
     source.addEventListener('agent_status', (event: MessageEvent) => {
       const data: AgentStatusEvent = JSON.parse(event.data)
@@ -194,50 +238,11 @@ export const useAgentMonitorStore = create<AgentMonitorState>((set, get) => ({
 
       // Heartbeat confirms connection is alive
       if (get().connectionStatus !== 'connected') {
-        set({ connectionStatus: 'connected' })
+        set({ connectionStatus: 'connected', reconnectAttempts: 0 })
       }
 
       get().addEvent({ type: 'heartbeat', data })
     })
-
-    source.onopen = () => {
-      set({
-        connectionStatus: 'connected',
-        reconnectAttempts: 0,
-      })
-    }
-
-    source.onerror = () => {
-      const { reconnectAttempts, reconnectTimer } = get()
-
-      // Clean up current source
-      source.close()
-
-      // Clear existing timer
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer)
-      }
-
-      // Calculate exponential backoff delay
-      const delay = Math.min(
-        INITIAL_RECONNECT_DELAY_MS * Math.pow(BACKOFF_MULTIPLIER, reconnectAttempts),
-        MAX_RECONNECT_DELAY_MS,
-      )
-
-      set({
-        connectionStatus: 'reconnecting',
-        eventSource: null,
-        reconnectAttempts: reconnectAttempts + 1,
-      })
-
-      // Schedule reconnection
-      const timer = setTimeout(() => {
-        set({ reconnectTimer: null })
-        get().connect()
-      }, delay)
-
-      set({ reconnectTimer: timer })
-    }
 
     set({ eventSource: source })
   },

@@ -3,27 +3,39 @@
 Tests cover SSE streaming, metrics, summary, and error handling.
 """
 
-import asyncio
+from unittest.mock import MagicMock
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
 from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
+from api import deps as api_deps
 from api.v1.agent_monitor import (
-    router,
-    _agents,
-    _sse_subscribers,
     AgentRecord,
     AgentStatus,
+    _agents,
+    _sse_subscribers,
+    router,
 )
+
+
+def _fake_authenticated_user() -> MagicMock:
+    """Stand-in for api.deps.get_current_user's return value."""
+    return MagicMock(id="test-user", role="admin", is_admin=True, is_active=True)
 
 
 @pytest.fixture
 def app() -> FastAPI:
-    """Create test FastAPI app with agent monitor router."""
+    """Create test FastAPI app with agent monitor router.
+
+    The router itself declares Depends(get_current_user), so requests are
+    rejected with 401 unless this override explicitly bypasses auth for
+    these endpoint-behavior tests.
+    """
     test_app = FastAPI()
     test_app.include_router(router)
+    test_app.dependency_overrides[api_deps.get_current_user] = _fake_authenticated_user
     return test_app
 
 
@@ -226,6 +238,7 @@ async def test_get_summary_empty_agents() -> None:
     """
     test_app = FastAPI()
     test_app.include_router(router)
+    test_app.dependency_overrides[api_deps.get_current_user] = _fake_authenticated_user
 
     # Make sure _agents is empty and won't auto-seed
     _agents.clear()

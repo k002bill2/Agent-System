@@ -9,11 +9,17 @@ from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 from enum import Enum
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-router = APIRouter(prefix="/api/v1/agents", tags=["agent-monitor"])
+from api.deps import get_current_user
+
+router = APIRouter(
+    prefix="/api/v1/agents",
+    tags=["agent-monitor"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 # ─────────────────────────────────────────────────────────────

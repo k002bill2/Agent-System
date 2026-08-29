@@ -351,7 +351,9 @@ async def test_db_project_without_path_stays_fail_closed(authenticated_app, monk
 
 
 @pytest.mark.asyncio
-async def test_database_failure_is_reported_as_unavailable(authenticated_app, tmp_path, monkeypatch):
+async def test_database_failure_is_reported_as_unavailable(
+    authenticated_app, tmp_path, monkeypatch
+):
     """DB 조회 자체가 실패하면 503 — 위의 '경로 없음' 503 과 detail 이 다르다."""
     from api.deps import get_db_session
 
@@ -395,9 +397,11 @@ async def test_filesystem_mode_still_uses_the_legacy_registry(
     monkeypatch.setenv("USE_DATABASE", "false")
     monkeypatch.setattr(
         "api.monitoring.get_project",
-        lambda pid: SimpleNamespace(name="fs-project", path=str(project_path))
-        if pid == "fs-project"
-        else None,
+        lambda pid: (
+            SimpleNamespace(name="fs-project", path=str(project_path))
+            if pid == "fs-project"
+            else None
+        ),
     )
 
     async def _override():
@@ -420,3 +424,79 @@ async def test_filesystem_mode_still_uses_the_legacy_registry(
         assert missing.status_code == 404, missing.text
     finally:
         authenticated_app.dependency_overrides.pop(get_db_session, None)
+
+
+# ─────────────────────────────────────────────────────────────
+# 6. SSE 오류 이벤트는 내부 예외 내용을 클라이언트에 노출하지 않는다
+# ─────────────────────────────────────────────────────────────
+
+
+class _ExplodingRunner:
+    """모든 체크에서 즉시 실패하는 러너 — 내부 예외 텍스트가 새는지 검증한다."""
+
+    def __init__(self, secret: str):
+        self._secret = secret
+
+    async def stream_check(self, project_id, check_type):
+        raise RuntimeError(self._secret)
+        yield  # pragma: no cover - unreachable, keeps this an async generator
+
+
+@pytest.mark.asyncio
+async def test_run_check_error_event_hides_exception_details(monkeypatch):
+    """단일 체크 SSE 스트림의 `error` 이벤트는 원본 예외 문자열을 담지 않는다."""
+    from api.monitoring import MonitoredProject, run_check
+
+    secret = "leaked-token-xyz db password 12345"
+    monkeypatch.setattr("api.monitoring.require_project_role", lambda *a, **kw: _async_ok("editor"))
+    monkeypatch.setattr(
+        "api.monitoring._monitored_project",
+        lambda *a, **kw: _async_value(
+            MonitoredProject(project_id="proj-1", name="Proj", path="/tmp/proj-1")
+        ),
+    )
+    monkeypatch.setattr(
+        "api.monitoring.get_check_config", lambda path: {"probe": {"label": "Probe", "command": ""}}
+    )
+    monkeypatch.setattr("api.monitoring.get_runner", lambda path: _ExplodingRunner(secret))
+
+    response = await run_check("proj-1", "probe", current_user=object(), db=object())
+    body = "".join([chunk async for chunk in response.body_iterator])
+
+    assert "event: error" in body
+    assert secret not in body
+    assert "RuntimeError" not in body
+
+
+@pytest.mark.asyncio
+async def test_run_all_checks_error_event_hides_exception_details(monkeypatch):
+    """전체 체크 SSE 스트림의 `error` 이벤트도 원본 예외 문자열을 담지 않는다."""
+    from api.monitoring import MonitoredProject, run_all_checks
+
+    secret = "leaked-token-xyz db password 12345"
+    monkeypatch.setattr("api.monitoring.require_project_role", lambda *a, **kw: _async_ok("editor"))
+    monkeypatch.setattr(
+        "api.monitoring._monitored_project",
+        lambda *a, **kw: _async_value(
+            MonitoredProject(project_id="proj-1", name="Proj", path="/tmp/proj-1")
+        ),
+    )
+    monkeypatch.setattr(
+        "api.monitoring.get_check_config", lambda path: {"probe": {"label": "Probe", "command": ""}}
+    )
+    monkeypatch.setattr("api.monitoring.get_runner", lambda path: _ExplodingRunner(secret))
+
+    response = await run_all_checks("proj-1", current_user=object(), db=object())
+    body = "".join([chunk async for chunk in response.body_iterator])
+
+    assert "event: error" in body
+    assert secret not in body
+    assert "RuntimeError" not in body
+
+
+async def _async_ok(value):
+    return value
+
+
+async def _async_value(value):
+    return value

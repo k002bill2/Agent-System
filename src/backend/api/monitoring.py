@@ -4,6 +4,7 @@ Obsidian vault health checks: links, frontmatter, orphans, images via SSE stream
 """
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Literal, NamedTuple
@@ -29,6 +30,8 @@ from models.monitoring import (
 from models.project import get_project
 from services.project_runner import get_check_config, get_runner
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["orchestration"])
 
 # In-memory storage for project health (could be replaced with DB)
@@ -38,6 +41,11 @@ _project_health: dict[str, ProjectHealth] = {}
 # directory. Kept distinct from the generic dependency-failure detail so the
 # two 503 causes stay separable by callers and by tests.
 NO_MONITORED_PATH_DETAIL = "Project has no registered filesystem path for health monitoring"
+
+# Generic message surfaced to SSE clients on check failure. Exception details
+# (which may contain secrets, tokens, or filesystem paths from tool output)
+# are logged server-side only via logger.exception.
+CHECK_ERROR_DETAIL = "Health check failed unexpectedly"
 
 
 class MonitoredProject(NamedTuple):
@@ -322,8 +330,9 @@ async def run_all_checks(
                         )
                         yield f"event: check_completed\ndata: {event.model_dump_json()}\n\n"
 
-            except Exception as e:
-                error_data = json.dumps({"error": str(e), "check_type": check_id})
+            except Exception:
+                logger.exception("Health check %s failed for project %s", check_id, project_id)
+                error_data = json.dumps({"error": CHECK_ERROR_DETAIL, "check_type": check_id})
                 yield f"event: error\ndata: {error_data}\n\n"
 
         yield "event: all_checks_done\ndata: {}\n\n"
@@ -408,8 +417,9 @@ async def run_check(
                     )
                     yield f"event: check_completed\ndata: {event.model_dump_json()}\n\n"
 
-        except Exception as e:
-            error_data = json.dumps({"error": str(e)})
+        except Exception:
+            logger.exception("Health check %s failed for project %s", check_type, project_id)
+            error_data = json.dumps({"error": CHECK_ERROR_DETAIL, "check_type": check_type})
             yield f"event: error\ndata: {error_data}\n\n"
 
     return StreamingResponse(

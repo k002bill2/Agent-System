@@ -8,6 +8,7 @@
 """
 
 import asyncio
+import logging
 from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -21,6 +22,8 @@ from models.claude_session import (
 )
 
 from .resolver import resolve_session
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[Depends(get_current_admin_or_manager_user)])
 
@@ -125,8 +128,12 @@ async def stream_session_activity(session_id: str):
                     yield f"event: session_completed\ndata: {json.dumps({'session_id': session_id})}\n\n"
                     break
 
-            except Exception as e:
-                yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+            except Exception:
+                logger.exception("Error streaming activity for session %s", session_id)
+                error_data = json.dumps(
+                    {"error": "Internal error while streaming activity", "session_id": session_id}
+                )
+                yield f"event: error\ndata: {error_data}\n\n"
                 break
 
     return StreamingResponse(

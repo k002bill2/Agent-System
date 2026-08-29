@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
-import { useAgentMonitorStore } from '../agentMonitor'
 
 // ─────────────────────────────────────────────────────────────
 // Mocks
@@ -8,26 +7,27 @@ import { useAgentMonitorStore } from '../agentMonitor'
 const mockFetch = vi.fn()
 global.fetch = mockFetch
 
-interface MockEventSourceInstance {
+type MockStatus = 'authentication-failed' | 'permission-denied' | 'error' | 'closed'
+
+interface MockSseClientInstance {
   url: string
+  onStatus?: (status: MockStatus) => void
   listeners: Record<string, ((e: MessageEvent) => void)[]>
   close: ReturnType<typeof vi.fn>
-  onopen: (() => void) | null
-  onerror: (() => void) | null
   addEventListener: (event: string, handler: (e: MessageEvent) => void) => void
 }
 
-let lastEventSource: MockEventSourceInstance | null = null
+let lastEventSource: MockSseClientInstance | null = null
 
-class MockEventSource implements MockEventSourceInstance {
+class MockSseClient implements MockSseClientInstance {
   url: string
+  onStatus?: (status: MockStatus) => void
   listeners: Record<string, ((e: MessageEvent) => void)[]> = {}
   close = vi.fn()
-  onopen: (() => void) | null = null
-  onerror: (() => void) | null = null
 
-  constructor(url: string) {
+  constructor(url: string, options?: { onStatus?: (status: MockStatus) => void }) {
     this.url = url
+    this.onStatus = options?.onStatus
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     lastEventSource = this
   }
@@ -43,10 +43,18 @@ class MockEventSource implements MockEventSourceInstance {
       handler({ data: JSON.stringify(data) } as MessageEvent)
     }
   }
+
+  _status(status: MockStatus) {
+    this.onStatus?.(status)
+  }
 }
 
-// @ts-expect-error - Mock EventSource for testing
-global.EventSource = MockEventSource
+vi.mock('../../services/authenticatedSse', () => ({
+  createAuthenticatedSseClient: (url: string, options?: { onStatus?: (status: MockStatus) => void }) =>
+    new MockSseClient(url, options),
+}))
+
+const { useAgentMonitorStore } = await import('../agentMonitor')
 
 function resetStore() {
   useAgentMonitorStore.setState({
@@ -95,14 +103,51 @@ describe('agentMonitor store', () => {
       expect(lastEventSource?.url).toContain('/api/v1/agents/monitor/stream')
     })
 
-    it('sets connected status on open', () => {
+    it('sets connected status on first heartbeat', () => {
       useAgentMonitorStore.getState().connect()
 
-      // Simulate onopen
-      lastEventSource?.onopen?.()
+      lastEventSource?._emit('heartbeat', { timestamp: '2025-01-01T00:00:00Z' })
 
       expect(useAgentMonitorStore.getState().connectionStatus).toBe('connected')
       expect(useAgentMonitorStore.getState().reconnectAttempts).toBe(0)
+    })
+
+    it('uses the authenticated SSE client (not native EventSource) for the stream', () => {
+      useAgentMonitorStore.getState().connect()
+
+      expect(lastEventSource).not.toBeNull()
+      expect(typeof lastEventSource?.onStatus).toBe('function')
+    })
+
+    it('schedules a reconnect with backoff on transport error status', () => {
+      useAgentMonitorStore.getState().connect()
+      const firstSource = lastEventSource
+
+      firstSource?._status('error')
+
+      const state = useAgentMonitorStore.getState()
+      expect(state.connectionStatus).toBe('reconnecting')
+      expect(state.eventSource).toBeNull()
+      expect(state.reconnectAttempts).toBe(1)
+
+      vi.advanceTimersByTime(1000)
+
+      expect(lastEventSource).not.toBe(firstSource)
+      expect(useAgentMonitorStore.getState().connectionStatus).toBe('connecting')
+    })
+
+    it('stops without reconnecting on authentication-failed status', () => {
+      useAgentMonitorStore.getState().connect()
+
+      lastEventSource?._status('authentication-failed')
+
+      const state = useAgentMonitorStore.getState()
+      expect(state.connectionStatus).toBe('disconnected')
+      expect(state.eventSource).toBeNull()
+      expect(state.error).toBeTruthy()
+
+      vi.advanceTimersByTime(60000)
+      expect(useAgentMonitorStore.getState().connectionStatus).toBe('disconnected')
     })
 
     it('disconnect closes EventSource and resets state', () => {
