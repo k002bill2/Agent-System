@@ -669,3 +669,44 @@ async def test_filesystem_mode_quota_still_runs_the_real_check(
         assert quota["checks"][0]["name"] == "organization"
     finally:
         authenticated_app.dependency_overrides.pop(get_db_session, None)
+
+
+@pytest.mark.asyncio
+async def test_personal_db_project_keeps_the_real_quota_check(db_mode_app):
+    """조직이 없는 DB 프로젝트의 quota 는 그대로 확인 가능하다.
+
+    `organization_id` 가 없으면 `_diagnose_quota` 는 조직 조회 없이 "개인
+    프로젝트"로 HEALTHY 를 낸다 — 레거시 레지스트리가 필요 없으므로 DB 모드에서도
+    확인 불가가 아니다. 모드만 보고 덮으면 멀쩡한 초록이 거짓 노랑이 된다.
+    """
+    app, _ = db_mode_app
+
+    response = await _get(app, f"/api/projects/{DB_UUID}/diagnostics/quota")
+
+    assert response.status_code == 200, response.text
+    quota = response.json()["categories"]["quota"]
+    assert quota["status"] == "healthy", quota
+    assert quota["checks"][0]["name"] == "organization"
+
+
+@pytest.mark.asyncio
+async def test_fix_result_diagnostics_follow_the_same_quota_policy(org_linked_db_mode_app):
+    """fix 응답에 실린 재진단도 같은 정책을 따른다.
+
+    같은 프로젝트가 진단 엔드포인트에서는 DEGRADED, fix 응답에서는 UNHEALTHY 로
+    갈리면 대시보드가 어느 쪽을 읽었는지에 따라 건강 상태가 뒤바뀐다.
+    """
+    app = org_linked_db_mode_app
+
+    response = await _post(
+        app,
+        f"/api/projects/{DB_UUID}/diagnostics/fix",
+        {"fix_action": "create_claude_md", "params": {}},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["success"] is True, body
+    quota = body["diagnostics"]["categories"]["quota"]
+    assert quota["status"] == "degraded", quota
+    assert body["diagnostics"]["overall_status"] != "unhealthy", body["diagnostics"]

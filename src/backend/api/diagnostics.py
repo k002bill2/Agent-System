@@ -31,15 +31,22 @@ def _use_database() -> bool:
     return os.getenv("USE_DATABASE", "false").lower() == "true"
 
 
-def _unverifiable_categories() -> set[DiagnosticCategory]:
-    """Categories this deployment mode cannot resolve.
+def _unverifiable_categories(project: Project) -> set[DiagnosticCategory]:
+    """Categories whose backing data is out of reach for this project.
 
-    Quota reads ``OrganizationService``, which is backed by the legacy
-    in-memory registry. A database-mode project carries a DB organization id
-    that registry never holds, so running the check would report a healthy
-    project as ``Organization not found``.
+    Quota resolves organizations through ``OrganizationService``, which is
+    backed by the legacy in-memory registry and is never populated from the
+    database. So a database-mode project that carries a DB organization id
+    would be reported as ``Organization not found`` — a healthy project shown
+    as failed.
+
+    The gate is the organization, not the mode: a project with no organization
+    is diagnosed without any registry lookup, so its quota result stays
+    verifiable and must not be overridden.
     """
-    return {DiagnosticCategory.QUOTA} if _use_database() else set()
+    if _use_database() and project.organization_id:
+        return {DiagnosticCategory.QUOTA}
+    return set()
 
 
 async def _resolve_database_project(project_id: str, db) -> Project | None:
@@ -91,7 +98,7 @@ async def get_project_diagnostics(
     await require_project_role(project_id, current_user, db, min_role="viewer")
     project = await _diagnostic_target(project_id, db)
 
-    return run_diagnostics(project, unverifiable_categories=_unverifiable_categories())
+    return run_diagnostics(project, unverifiable_categories=_unverifiable_categories(project))
 
 
 @router.get(
@@ -114,7 +121,7 @@ async def get_project_diagnostics_by_category(
     return run_diagnostics(
         project,
         categories=[category],
-        unverifiable_categories=_unverifiable_categories(),
+        unverifiable_categories=_unverifiable_categories(project),
     )
 
 
@@ -141,7 +148,12 @@ async def fix_diagnostic_issue(
     await require_project_role(project_id, current_user, db, min_role="editor")
     project = await _diagnostic_target(project_id, db)
 
-    result = execute_fix(project, request.fix_action, request.params)
+    result = execute_fix(
+        project,
+        request.fix_action,
+        request.params,
+        unverifiable_categories=_unverifiable_categories(project),
+    )
     if not result.success:
         raise HTTPException(status_code=400, detail=result.message)
 

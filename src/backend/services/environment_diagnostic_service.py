@@ -623,6 +623,7 @@ def execute_fix(
     project: Project,
     fix_action: str,
     params: dict | None = None,
+    unverifiable_categories: set[DiagnosticCategory] | None = None,
 ) -> FixResult:
     """Execute a self-healing fix and re-diagnose.
 
@@ -644,7 +645,7 @@ def execute_fix(
 
     try:
         message = handler(project, params or {})
-        diagnostics = run_diagnostics(project)
+        diagnostics = run_diagnostics(project, unverifiable_categories=unverifiable_categories)
         return FixResult(
             fix_action=fix_action,
             success=True,
