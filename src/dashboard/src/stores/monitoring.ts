@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { apiClient } from '../services/apiClient'
+import { ApiError } from '../services/errors'
 import { createAuthenticatedSseClient } from '../services/authenticatedSse'
 import { getApiUrl } from '../config/api'
 import {
@@ -399,7 +400,13 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
     } catch (e) {
       if (requestId !== projectContextRequestId) return
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
-      set({ error: errorMessage, isLoadingContext: false })
+      const contextUnavailable = e instanceof ApiError && e.status === 503
+      set({
+        error: contextUnavailable ? null : errorMessage,
+        isLoadingContext: false,
+        contextUnavailableReason: contextUnavailable ? errorMessage : null,
+        contextUnavailableProjectId: contextUnavailable ? projectId : null,
+      })
     }
   },
 

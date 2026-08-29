@@ -16,6 +16,9 @@
      호출되지 않는다.
   3. **인가가 파일시스템 접근보다 먼저** — 401/403/404 는 그대로, 503 은 진짜
      사용 불가한 DB 의존성과 '등록된 디렉터리 없음' 에만.
+  4. **DB `Project` 는 파일시스템 metadata를 identity로 사용하지 않음** — DB의
+     name·description·organization_id가 권위이고, 별도 DB git_path가 없으므로
+     context는 등록된 프로젝트 루트의 CLAUDE.md와 dev/active만 읽는다.
 
 라우트 전체(프레임워크 배선 포함)를 지나가게 한다 — 핸들러 직접 호출은
 `Depends(get_current_user)` 와 경로 파라미터 추출을 건너뛰어 이 계약을 검증하지
@@ -167,6 +170,28 @@ async def test_context_reads_the_registered_db_path(db_mode_app):
     assert body["claude_md"] == CLAUDE_MD_BODY
     assert [doc["name"] for doc in body["dev_docs"]] == ["task.md"]
     assert body["dev_docs"][0]["content"] == DEV_DOC_BODY
+
+
+@pytest.mark.asyncio
+async def test_context_rejects_dev_active_symlink_escape(authenticated_app, tmp_path, monkeypatch):
+    """dev/active 심링크가 DB 등록 루트 밖으로 나가면 읽지 않는다."""
+    from api.deps import get_db_session
+
+    project_path = tmp_path / "Agent-System"
+    project_path.mkdir()
+    (project_path / "CLAUDE.md").write_text(CLAUDE_MD_BODY, encoding="utf-8")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.md").write_text("not for this project", encoding="utf-8")
+    (project_path / "dev").mkdir()
+    (project_path / "dev" / "active").symlink_to(outside, target_is_directory=True)
+    _install_db(authenticated_app, monkeypatch, _row(str(project_path)))
+
+    response = await _get(authenticated_app, f"/api/projects/{DB_UUID}/context")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["dev_docs"] == []
+    authenticated_app.dependency_overrides.pop(get_db_session, None)
 
 
 @pytest.mark.asyncio

@@ -13,8 +13,9 @@
      권위가 되지 않는다. 레거시 레지스트리는 DB 모드에서 절대 호출되지 않는다.
   3. **인가가 파일시스템 접근보다 먼저** — 401/403/404 는 그대로, 503 은 진짜
      사용 불가한 의존성(또는 경로 없는 등록)에만.
-  4. **`Project` 는 `Project.from_path` 로 구성** — 필드를 손으로 옮기면
-     `.aos-project.json` 의 `git_path` 가 조용히 무시된다.
+  4. **DB `Project` 는 파일시스템 metadata를 identity로 사용하지 않음** — DB의
+     name·description·organization_id가 권위이고, 별도 DB git_path가 없으므로
+     진단 Git 대상은 등록된 프로젝트 루트로 제한한다.
 
 라우트 전체(프레임워크 배선 포함)를 지나가게 한다 — 핸들러 직접 호출은
 `Depends(get_current_user)` 와 경로 파라미터 추출을 건너뛰어 이 계약을 검증하지
@@ -94,7 +95,7 @@ class _IdAwareDatabase:
         return None
 
 
-def _row(path):
+def _row(path, organization_id=None):
     return SimpleNamespace(
         id=DB_UUID,
         name="Agent-System",
@@ -103,7 +104,7 @@ def _row(path):
         path=path,
         is_active=True,
         settings={},
-        organization_id=None,
+        organization_id=organization_id,
         created_by=None,
         created_at=None,
         updated_at=None,
@@ -197,21 +198,85 @@ async def test_single_category_diagnostics_succeeds(db_mode_app):
 
 
 @pytest.mark.asyncio
-async def test_git_metadata_comes_from_the_registered_path(db_mode_app):
-    """git 카테고리는 `.aos-project.json` 의 `git_path` 를 본다.
-
-    이 단언이 없으면 DB 행 필드를 손으로 옮겨 `Project` 를 만드는 구현이 초록으로
-    통과한다 — 그 구현에서는 `git_path` 가 None 이고 `git_enabled` 가 영구히
-    False 라, 모든 DB 프로젝트가 자기 경로로 "Not a Git repository" 를 보고한다.
-    """
+async def test_git_metadata_cannot_escape_the_registered_path(db_mode_app):
+    """DB 프로젝트는 metadata의 외부 git_path를 진단 대상로 사용하지 않는다."""
     app, project_path = db_mode_app
 
     response = await _get(app, f"/api/projects/{DB_UUID}/diagnostics/git")
 
     assert response.status_code == 200, response.text
     checks = {c["name"]: c for c in response.json()["categories"]["git"]["checks"]}
-    assert checks["git_repository"]["details"]["path"] == METADATA_GIT_PATH
-    assert checks["git_repository"]["details"]["path"] != project_path
+    assert checks["git_repository"]["details"]["path"] == project_path
+
+
+@pytest.mark.asyncio
+async def test_db_identity_overrides_filesystem_metadata(authenticated_app, tmp_path, monkeypatch):
+    """DB 조직 ID가 metadata의 조직 ID보다 우선하고 외부 git_path는 제거된다."""
+    from api.db_project import load_registered_project
+    from api.deps import get_db_session
+
+    project_path = _make_project_tree(tmp_path / "Agent-System")
+    (project_path / ".aos-project.json").write_text(
+        json.dumps(
+            {
+                "organization_id": "filesystem-org",
+                "git_path": "/outside/repository",
+            }
+        ),
+        encoding="utf-8",
+    )
+    database = _install_db(
+        authenticated_app, monkeypatch, _row(str(project_path), organization_id="db-org")
+    )
+
+    try:
+        project = await load_registered_project(database, DB_UUID)
+        assert project is not None
+        assert project.organization_id == "db-org"
+        assert project.git_path is None
+        assert project.path == str(project_path.resolve())
+    finally:
+        authenticated_app.dependency_overrides.pop(get_db_session, None)
+
+
+@pytest.mark.asyncio
+async def test_diagnostics_rejects_project_config_symlink_escape(
+    authenticated_app, tmp_path, monkeypatch
+):
+    """진단 읽기·self-healing 쓰기는 등록 루트 밖의 symlink를 따라가지 않는다."""
+    from api.deps import get_db_session
+
+    project_path = tmp_path / "Agent-System"
+    project_path.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    outside_config = outside / "mcp.json"
+    outside_config.write_text(
+        json.dumps({"mcpServers": {"outside": {"disabled": True}}}), encoding="utf-8"
+    )
+    (project_path / ".claude").symlink_to(outside, target_is_directory=True)
+    _install_db(authenticated_app, monkeypatch, _row(str(project_path)))
+    _forbid_legacy_registry(monkeypatch)
+
+    try:
+        response = await _get(authenticated_app, f"/api/projects/{DB_UUID}/diagnostics/mcp")
+        assert response.status_code == 200, response.text
+        checks = {c["name"]: c for c in response.json()["categories"]["mcp"]["checks"]}
+        assert checks["mcp_project_config"]["message"] == (
+            "No project-level MCP config (using global)"
+        )
+
+        fix_response = await _post(
+            authenticated_app,
+            f"/api/projects/{DB_UUID}/diagnostics/fix",
+            {"fix_action": "enable_mcp_servers", "params": {}},
+        )
+        assert fix_response.status_code == 400, fix_response.text
+        assert json.loads(outside_config.read_text(encoding="utf-8"))["mcpServers"]["outside"][
+            "disabled"
+        ] is True
+    finally:
+        authenticated_app.dependency_overrides.pop(get_db_session, None)
 
 
 @pytest.mark.asyncio

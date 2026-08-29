@@ -13,6 +13,7 @@ vi.mock('../../services/apiClient', () => ({
 
 import { useMonitoringStore } from '../monitoring'
 import { apiClient } from '../../services/apiClient'
+import { ApiError } from '../../services/errors'
 
 const mockApiClient = vi.mocked(apiClient)
 
@@ -208,6 +209,23 @@ describe('monitoring store', () => {
       expect(useMonitoringStore.getState().projectContext?.claude_md).toBe('# DB context')
       expect(useMonitoringStore.getState().contextUnavailableReason).toBeNull()
       expect(useMonitoringStore.getState().error).toBeNull()
+    })
+    it('stores a 503 context failure as a project-scoped unavailable state', async () => {
+      mockApiClient.get.mockRejectedValueOnce(
+        new ApiError({
+          message: 'Project has no registered filesystem path for context',
+          status: 503,
+          code: 'SERVICE_UNAVAILABLE',
+        }),
+      )
+
+      await useMonitoringStore.getState().fetchProjectContext('p1')
+
+      expect(useMonitoringStore.getState().error).toBeNull()
+      expect(useMonitoringStore.getState().contextUnavailableProjectId).toBe('p1')
+      expect(useMonitoringStore.getState().contextUnavailableReason).toBe(
+        'Project has no registered filesystem path for context',
+      )
     })
     it('clears stale context when capability loading fails', async () => {
       useMonitoringStore.setState({
