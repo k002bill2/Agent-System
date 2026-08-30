@@ -45,8 +45,29 @@ if [ -f "$PID_DIR/dashboard.pid" ]; then
 else
     echo -e "${YELLOW}Dashboard PID file not found${NC}"
 fi
-# Always kill remaining vite processes (child processes may survive)
-pkill -f "vite.*5173" 2>/dev/null || true
+# Always kill whatever still holds the dashboard port. A pattern kill cannot
+# work here: vite's argv is just `node .../node_modules/.bin/vite` with no port
+# in it, so the old `pkill -f "vite.*5173"` never matched anything.
+# -sTCP:LISTEN: never kill a client merely connected to the port.
+for pid in $(lsof -ti :5173 -sTCP:LISTEN 2>/dev/null); do
+    # 5173 is vite's default port, so a sibling project may legitimately hold it.
+    # vite's argv carries the project's absolute path (that is why a port-pattern
+    # kill cannot work, and why a path check can) - only kill what is ours.
+    CMD=$(ps -ww -o command= -p "$pid" 2>/dev/null | tr -d '\n')
+    case "$CMD" in
+        *"$PROJECT_ROOT/src/dashboard/"*) ;;
+        *)
+            echo -e "${YELLOW}Port 5173 held by another project (PID $pid): $CMD${NC}"
+            echo -e "${YELLOW}Leaving it alone - not an AOS dashboard.${NC}"
+            continue
+            ;;
+    esac
+    PARENT_PID=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    if [ -n "$PARENT_PID" ] && ps -ww -o command= -p "$PARENT_PID" 2>/dev/null | grep -q "npm"; then
+        kill -9 "$PARENT_PID" 2>/dev/null || true
+    fi
+    kill -9 "$pid" 2>/dev/null || true
+done
 
 # Stop Backend
 if [ -f "$PID_DIR/backend.pid" ]; then

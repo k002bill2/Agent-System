@@ -116,7 +116,7 @@ fi
 # Kill any orphaned uvicorn processes and workers on port 8000
 # Match AOS backend (regex; \. escaped to avoid any-char false-positives)
 pkill -9 -f "uvicorn.*api\.app:app" 2>/dev/null || true
-lsof -ti :8000 | xargs kill -9 2>/dev/null || true
+lsof -ti :8000 -sTCP:LISTEN 2>/dev/null | xargs kill -9 2>/dev/null || true
 sleep 0.5
 
 # Create logs directory
@@ -147,7 +147,7 @@ if [ ! -d "node_modules" ]; then
     npm install --silent
 fi
 
-# Kill existing dashboard if running
+# Kill existing dashboard if running (PID file + port holder + npm wrapper)
 if [ -f "$PID_DIR/dashboard.pid" ]; then
     OLD_PID=$(cat "$PID_DIR/dashboard.pid")
     if kill -0 "$OLD_PID" 2>/dev/null; then
@@ -156,6 +156,39 @@ if [ -f "$PID_DIR/dashboard.pid" ]; then
         sleep 1
     fi
 fi
+# A stale PID file leaves the real vite alive, so also kill whoever actually
+# holds the port, and the npm wrapper with it or the wrapper lingers.
+# -sTCP:LISTEN: never kill a client merely connected to the port.
+# The `| tr -d ' '` below is load-bearing under `set -e`: it makes the pipeline
+# exit 0 when the process dies between lsof and ps.
+for pid in $(lsof -ti :5173 -sTCP:LISTEN 2>/dev/null); do
+    # 5173 is vite's default port, so a sibling project may legitimately hold it.
+    # vite's argv carries the project's absolute path (that is why a port-pattern
+    # kill cannot work, and why a path check can) - only kill what is ours.
+    CMD=$(ps -ww -o command= -p "$pid" 2>/dev/null | tr -d '\n')
+    case "$CMD" in
+        *"$PROJECT_ROOT/src/dashboard/"*) ;;
+        *)
+            echo -e "${YELLOW}      Port 5173 held by another project (PID $pid): $CMD${NC}"
+            echo -e "${YELLOW}      Leaving it alone - dashboard will start on another port.${NC}"
+            echo -e "${YELLOW}      stop-all.sh only cleans 5173; stop that one manually.${NC}"
+            continue
+            ;;
+    esac
+    PARENT_PID=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    if [ -n "$PARENT_PID" ] && ps -ww -o command= -p "$PARENT_PID" 2>/dev/null | grep -q "npm"; then
+        kill -9 "$PARENT_PID" 2>/dev/null || true
+    fi
+    kill -9 "$pid" 2>/dev/null || true
+done
+# Wait for the port to clear; vite has no strictPort, so a lingering holder
+# would silently push the new dashboard to 5174.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if [ -z "$(lsof -ti :5173 -sTCP:LISTEN 2>/dev/null)" ]; then
+        break
+    fi
+    sleep 0.3
+done
 
 # Start dashboard in background
 nohup npm run dev > "$PROJECT_ROOT/logs/dashboard.log" 2>&1 &
