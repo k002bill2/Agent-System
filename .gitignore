@@ -117,5 +117,10 @@ paseo.json
 _workspace/
 _workspace_*/
 
+# Hermes 에이전트 작업 디렉토리 — 진행 중 계획서 등 산출물. `.claude/plans/` ·
+# `dev/active/` 와 같은 성격이라 추적하지 않는다. 남길 가치가 있는 계획은
+# `docs/plans/` 로 옮긴다.
+.hermes/
+
 # AOS 런타임이 직접 쓰는 프로젝트별 로컬 메타데이터 (머신 종속)
 .aos-project.json
