@@ -4,6 +4,12 @@ from pathlib import Path
 
 from models.project import Project
 
+# ``Path.resolve()`` reports a symlink loop as ``RuntimeError``, not ``OSError``
+# (measured on CPython 3.11, for both ``strict`` values). Catching only
+# ``OSError`` would let that escape and turn an unusable path into a 500
+# instead of a closed door.
+_UNRESOLVABLE = (OSError, RuntimeError)
+
 
 def resolve_registered_root(path: str | None) -> Path | None:
     """Return the canonical registered directory, or ``None`` if unusable."""
@@ -12,7 +18,7 @@ def resolve_registered_root(path: str | None) -> Path | None:
         return None
     try:
         root = Path(raw_path).resolve(strict=True)
-    except OSError:
+    except _UNRESOLVABLE:
         return None
     return root if root.is_dir() else None
 
@@ -33,7 +39,7 @@ def safe_project_child(
         return None
     try:
         resolved = root.joinpath(*parts).resolve(strict=strict)
-    except OSError:
+    except _UNRESOLVABLE:
         return None
     if resolved != root and root not in resolved.parents:
         return None
