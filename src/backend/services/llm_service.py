@@ -14,7 +14,7 @@ from langchain_core.messages import (
 )
 
 from models.llm_access import LLMAccessResponse
-from models.llm_models import LLMModelRegistry, get_model_configs
+from models.llm_models import LLMModelRegistry
 from models.llm_usage import (
     LLMRuntimeMode,
     LLMUsageMeasurementMethod,
@@ -32,9 +32,6 @@ from services.llm_usage_ledger_service import (
     enforce_usage_quota_preflight_best_effort,
     record_usage_best_effort,
 )
-
-# Use central registry for model configurations
-MODEL_CONFIGS = get_model_configs()
 
 
 def _runtime_mode_for_provider(provider: str) -> LLMRuntimeMode:
@@ -95,8 +92,8 @@ def _resolve_runtime_from_context(
     source = _usage_context_value(usage_context, "source")
     if not access or not source:
         resolved_model = model_id or LLMModelRegistry.get_default()
-        config = MODEL_CONFIGS.get(resolved_model, {})
-        return resolved_model, config.get("provider", "unknown"), usage_context
+        provider = LLMModelRegistry.get_provider(resolved_model)
+        return resolved_model, provider.value if provider else "unknown", usage_context
 
     resolution = resolve_llm_runtime(
         access,
@@ -270,14 +267,22 @@ class LLMService:
         temperature: float = 0.7,
         max_tokens: int = 4096,
     ) -> Any:
-        """Get or create LLM instance for the specified model."""
+        """Get or create LLM instance for the specified model.
+
+        Gates on the live registry (DB-aware), not a static snapshot: a model
+        must be registered AND enabled to build. DB-discovered models carry
+        enough metadata (provider + id) to build without a code entry.
+        """
         if not model_id:
             model_id = LLMModelRegistry.get_default()
-        config = MODEL_CONFIGS.get(model_id)
-        if not config:
+        model = LLMModelRegistry.get_by_id(model_id)
+        if model is None:
             raise ValueError(f"Unknown model: {model_id}")
+        if not model.is_enabled:
+            raise ValueError(f"Model disabled: {model_id}")
 
-        provider = config["provider"]
+        provider = model.provider.value
+        model_name = model.id
         cache_key = f"{model_id}:{temperature}:{max_tokens}"
 
         if cache_key in cls._instances:
@@ -292,7 +297,7 @@ class LLMService:
             if not api_key:
                 raise ValueError("GOOGLE_API_KEY not set")
             llm = ChatGoogleGenerativeAI(
-                model=config["model"],
+                model=model_name,
                 temperature=temperature,
                 max_output_tokens=max_tokens,
                 google_api_key=api_key,
@@ -305,7 +310,7 @@ class LLMService:
             if not api_key:
                 raise ValueError("ANTHROPIC_API_KEY not set")
             llm = ChatAnthropic(
-                model=config["model"],
+                model=model_name,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 api_key=api_key,
@@ -318,7 +323,7 @@ class LLMService:
             if not api_key:
                 raise ValueError("OPENAI_API_KEY not set")
             llm = ChatOpenAI(
-                model=config["model"],
+                model=model_name,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 api_key=api_key,
@@ -327,18 +332,18 @@ class LLMService:
         elif provider == "codex_cli":
             from services.codex_cli_chat_model import CodexCliChatModel
 
-            llm = CodexCliChatModel(model_name=config["model"])
+            llm = CodexCliChatModel(model_name=model_name)
 
         elif provider == "claude_cli":
             from services.claude_cli_chat_model import ClaudeCliChatModel
 
-            llm = ClaudeCliChatModel(model_name=config["model"])
+            llm = ClaudeCliChatModel(model_name=model_name)
 
         elif provider == "ollama":
             from langchain_ollama import ChatOllama
 
             llm = ChatOllama(
-                model=config["model"],
+                model=model_name,
                 temperature=temperature,
                 num_predict=max_tokens,
                 base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),

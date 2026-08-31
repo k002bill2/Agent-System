@@ -37,8 +37,9 @@ class TestSonnet5RegistryEntry:
         assert model.supports_vision is True
         assert model.is_enabled is True
 
-    def test_sonnet5_is_anthropic_code_default(self):
-        assert LLMModelRegistry.get_default("anthropic") == "claude-sonnet-5"
+    def test_sonnet46_is_anthropic_code_default(self):
+        # Policy 2026-08-31: sonnet-4-6 is the current GA balanced model.
+        assert LLMModelRegistry.get_default("anthropic") == "claude-sonnet-4-6"
 
     def test_anthropic_has_exactly_one_code_default(self):
         defaults = [
@@ -46,7 +47,106 @@ class TestSonnet5RegistryEntry:
             for m in _MODELS
             if m.provider == LLMProvider.ANTHROPIC and m.is_default
         ]
-        assert defaults == ["claude-sonnet-5"]
+        assert defaults == ["claude-sonnet-4-6"]
+
+
+# ─────────────────────────────────────────────────────────────
+# (a3) 2026-08-31 provider default policy — registry entries
+# ─────────────────────────────────────────────────────────────
+
+
+class TestSonnet46RegistryEntry:
+    def test_sonnet46_spec_preserved(self):
+        """default 이관은 스펙을 건드리지 않는다 (ID/가격/context 보존)."""
+        model = LLMModelRegistry.get_by_id("claude-sonnet-4-6")
+        assert model is not None
+        assert model.provider == LLMProvider.ANTHROPIC
+        assert model.context_window == 1_000_000
+        assert model.input_price == 0.003
+        assert model.output_price == 0.015
+        assert model.supports_tools is True
+        assert model.supports_vision is True
+        assert model.is_enabled is True
+
+
+class TestOpus47RegistryEntry:
+    def test_opus47_exists_enabled_nondefault(self):
+        model = LLMModelRegistry.get_by_id("claude-opus-4-7")
+        assert model is not None
+        assert model.provider == LLMProvider.ANTHROPIC
+        assert model.context_window == 1_000_000
+        assert model.input_price == 0.005  # $5/1M tokens (per-1k)
+        assert model.output_price == 0.025  # $25/1M tokens (per-1k)
+        assert model.supports_tools is True
+        assert model.supports_vision is True
+        assert model.is_enabled is True
+        assert model.is_default is False
+
+
+class TestGpt56RegistryEntry:
+    def test_gpt56_alias_enabled_with_official_spec(self):
+        model = LLMModelRegistry.get_by_id("gpt-5.6")
+        assert model is not None
+        assert model.provider == LLMProvider.OPENAI
+        assert model.context_window == 1_050_000
+        assert model.input_price == 0.004  # $4/1M tokens (per-1k)
+        assert model.output_price == 0.02  # $20/1M tokens (per-1k)
+        assert model.supports_tools is True
+        assert model.supports_vision is True
+        assert model.is_enabled is True
+
+    def test_gpt56_is_openai_code_default(self):
+        assert LLMModelRegistry.get_default("openai") == "gpt-5.6"
+
+    def test_openai_has_exactly_one_code_default(self):
+        defaults = [
+            m.id
+            for m in _MODELS
+            if m.provider == LLMProvider.OPENAI and m.is_default
+        ]
+        assert defaults == ["gpt-5.6"]
+
+    @pytest.mark.parametrize(
+        ("model_id", "input_price", "output_price"),
+        [
+            ("gpt-5.6-sol", 0.004, 0.02),
+            ("gpt-5.6-terra", 0.002, 0.012),
+            ("gpt-5.6-luna", 0.0002, 0.0012),
+        ],
+    )
+    def test_gpt56_tiers_are_enabled(self, model_id, input_price, output_price):
+        model = LLMModelRegistry.get_by_id(model_id)
+        assert model is not None
+        assert model.provider == LLMProvider.OPENAI
+        assert model.context_window == 1_050_000
+        assert model.input_price == input_price
+        assert model.output_price == output_price
+        assert model.is_enabled is True
+        assert model.is_default is False
+
+
+class TestGemini37FlashRegistryEntry:
+    def test_gemini37_flash_exists_with_official_spec(self):
+        model = LLMModelRegistry.get_by_id("gemini-3.7-flash")
+        assert model is not None
+        assert model.provider == LLMProvider.GOOGLE
+        assert model.context_window == 1_048_576
+        assert model.input_price == 0.00075  # $0.75/1M tokens (per-1k)
+        assert model.output_price == 0.00375  # $3.75/1M tokens (per-1k)
+        assert model.supports_tools is True
+        assert model.supports_vision is True
+        assert model.is_enabled is True
+
+    def test_gemini37_flash_is_google_code_default(self):
+        assert LLMModelRegistry.get_default("google") == "gemini-3.7-flash"
+
+    def test_google_has_exactly_one_code_default(self):
+        defaults = [
+            m.id
+            for m in _MODELS
+            if m.provider == LLMProvider.GOOGLE and m.is_default
+        ]
+        assert defaults == ["gemini-3.7-flash"]
 
 
 # ─────────────────────────────────────────────────────────────
@@ -143,16 +243,50 @@ def _find_insert(session: _FakeSession, model_id: str):
     raise AssertionError(f"no insert captured for {model_id}")
 
 
+class _RowAwareFakeSession(_FakeSession):
+    """SQL-aware fake: answers each SELECT by applying its rendered WHERE
+    filters to a simulated llm_model_configs table, so the provider-guard
+    query's *semantics* (not the call order) determine the outcome.
+
+    rows: [{"id", "provider", "is_default", "is_enabled"}, ...]
+    """
+
+    def __init__(self, rows: list[dict]):
+        super().__init__(select_results=[])
+        self._rows = rows
+
+    async def execute(self, stmt):
+        if isinstance(stmt, (Insert, Update, Delete)):
+            return await super().execute(stmt)
+        self.selects.append(stmt)
+        sql = str(stmt.compile(dialect=postgresql.dialect()))
+        if "llm_model_suppressions" in sql:
+            return _FakeResult([])  # no suppressions in these scenarios
+        columns = sql.split("FROM", 1)[0]
+        if "display_name" in columns:
+            return _FakeResult([])  # final load_from_db entity select
+        rows = self._rows
+        if "is_default IS true" in sql:
+            rows = [r for r in rows if r["is_default"]]
+        if "is_enabled IS true" in sql:
+            rows = [r for r in rows if r["is_enabled"]]
+        if "llm_model_configs.provider" in columns:
+            return _FakeResult(sorted({(r["provider"],) for r in rows}))
+        if "llm_model_configs.id" in columns:
+            return _FakeResult([(r["id"],) for r in rows])
+        raise AssertionError(f"unrecognized select in fake session: {sql}")
+
+
 @pytest.mark.asyncio
 async def test_sync_to_db_new_default_demoted_when_db_default_exists():
     """New is_default=True model must INSERT as is_default=False when the
-    provider already has a default row in DB (existing DB default respected)."""
+    provider already has rows in DB (existing admin state respected)."""
     session = _FakeSession(
         select_results=[
             _FakeResult([]),  # suppressed ids (none)
             # existing IDs: sonnet-5 is NEW, sonnet-4-6 already exists
             _FakeResult([("claude-sonnet-4-6",), ("claude-opus-4-8",)]),
-            # providers that already have a DB default row
+            # providers that already have DB rows
             _FakeResult([("anthropic",)]),
             # final load_from_db select
             _FakeResult([]),
@@ -167,95 +301,90 @@ async def test_sync_to_db_new_default_demoted_when_db_default_exists():
 
 
 @pytest.mark.asyncio
-async def test_sync_to_db_new_default_kept_when_no_db_default():
-    """New is_default=True model keeps is_default=True when the provider has
-    no default row in DB."""
+async def test_sync_to_db_new_default_kept_when_provider_has_zero_rows():
+    """New is_default=True model keeps is_default=True only when the provider
+    has ZERO rows in DB (bootstrap of a fresh provider)."""
     session = _FakeSession(
         select_results=[
             _FakeResult([]),  # suppressed ids (none)
-            _FakeResult([("claude-sonnet-4-6",)]),  # sonnet-5 is NEW
-            _FakeResult([]),  # no provider has a DB default
+            _FakeResult([("gpt-4o",)]),  # only an openai row: anthropic is empty
+            _FakeResult([("openai",)]),  # providers with DB rows
             _FakeResult([]),  # final load_from_db select
         ]
     )
 
     await LLMModelRegistry.sync_to_db(session)
 
-    params = _insert_params(_find_insert(session, "claude-sonnet-5"))
+    params = _insert_params(_find_insert(session, "claude-sonnet-4-6"))
     assert params["is_default"] is True
 
 
 @pytest.mark.asyncio
-async def test_sync_to_db_default_guard_ignores_disabled_db_defaults():
-    """The dual-default guard must only count ENABLED default rows: a provider
-    whose only DB default is disabled still accepts the new code default."""
-    session = _FakeSession(
-        select_results=[
-            _FakeResult([]),  # suppressed ids (none)
-            _FakeResult([("claude-sonnet-4-6",)]),  # sonnet-5 is NEW
-            # Guard select returns no providers: the anthropic default row in
-            # DB is disabled, so the is_enabled filter excludes it.
-            _FakeResult([]),
-            _FakeResult([]),  # final load_from_db select
+async def test_sync_to_db_new_default_demoted_when_prior_default_is_disabled():
+    """승격 차단 회귀 (plan §5): provider의 유일한 default 행이 DISABLED여도
+    admin 결정이다 — 신규 code default는 non-default로 INSERT되고, 기존 행의
+    admin 플래그(is_default/is_enabled)를 건드리는 UPDATE가 발행되면 안 된다."""
+    session = _RowAwareFakeSession(
+        rows=[
+            {
+                "id": "claude-sonnet-4-6",
+                "provider": "anthropic",
+                "is_default": True,
+                "is_enabled": False,  # admin이 disable해 둔 구 default
+            }
         ]
     )
 
     await LLMModelRegistry.sync_to_db(session)
 
-    # The guard query itself must filter on BOTH is_default and is_enabled.
-    # selects[0]=suppressed ids, [1]=existing ids, [2]=providers_with_db_default.
-    guard_select = session.selects[2]
-    sql = str(guard_select.compile(dialect=postgresql.dialect()))
-    assert "is_default" in sql
-    assert "is_enabled" in sql
-
-    # And the new model keeps its code-level default flag
     params = _insert_params(_find_insert(session, "claude-sonnet-5"))
-    assert params["is_default"] is True
+    assert params["is_default"] is False
+    assert session.updates == [], (
+        "sync must not clear/override admin flags on existing rows"
+    )
 
 
 @pytest.mark.asyncio
-async def test_sync_to_db_clears_stale_disabled_default_before_new_default_insert():
-    """disable→sync→re-enable 시나리오: 구 default(예: sonnet-4-6)가 disabled인
-    상태에서 sync가 신규 default(sonnet-5)를 INSERT하면, 구 행의 is_default를
-    False로 클리어하는 UPDATE가 함께 발행되어야 한다 — 이후 admin이 구 행을
-    re-enable해도 provider default가 2개가 되지 않도록."""
-    session = _FakeSession(
-        select_results=[
-            _FakeResult([]),  # suppressed ids (none)
-            _FakeResult([("claude-sonnet-4-6",)]),  # sonnet-5 is NEW
-            # anthropic의 유일한 default 행이 disabled → enabled 필터에 걸러져
-            # 가드 통과 (신규 모델이 default로 INSERT되는 경로)
-            _FakeResult([]),
-            _FakeResult([]),  # final load_from_db select
+async def test_sync_to_db_new_default_demoted_when_provider_has_only_nondefault_rows():
+    """승격 차단 회귀 (plan §5): default 행이 하나도 없어도 provider에 DB 행이
+    존재하면 신규 code default는 non-default로 INSERT된다 — zero-row provider의
+    bootstrap만 예외."""
+    session = _RowAwareFakeSession(
+        rows=[
+            {
+                "id": "claude-opus-4-8",
+                "provider": "anthropic",
+                "is_default": False,
+                "is_enabled": True,
+            }
         ]
     )
 
     await LLMModelRegistry.sync_to_db(session)
 
-    # 신규 모델은 default로 INSERT됨
     params = _insert_params(_find_insert(session, "claude-sonnet-5"))
-    assert params["is_default"] is True
+    assert params["is_default"] is False
 
-    # anthropic provider의 잔존 default 행을 클리어하는 UPDATE 발행 확인
-    anthropic_clears = []
-    for stmt in session.updates:
-        compiled = stmt.compile(dialect=postgresql.dialect())
-        if (
-            "anthropic" in compiled.params.values()
-            and compiled.params.get("is_default") is False
-        ):
-            anthropic_clears.append(str(compiled))
-    assert anthropic_clears, "expected is_default-clearing UPDATE for anthropic"
-    sql = anthropic_clears[0]
-    assert "SET is_default" in sql
-    # 클리어 UPDATE는 is_default만 만지고 enable 상태는 건드리지 않는다
-    assert "is_enabled" not in sql.split("SET", 1)[1].split("WHERE", 1)[0]
-    # WHERE절이 is_enabled=False 조건을 포함해야 한다: 가드 SELECT와 이
-    # UPDATE 사이에 admin이 구 default를 re-enable하는 경쟁(READ COMMITTED)
-    # 에서도 "disabled default만 정리" 불변식이 SQL 자체로 보장되도록.
-    where_clause = sql.split("WHERE", 1)[1]
-    assert "is_enabled IS false" in where_clause
+
+@pytest.mark.asyncio
+async def test_sync_to_db_bootstraps_default_for_provider_with_zero_rows():
+    """다른 provider에 행이 있어도, 행이 0개인 provider의 code default는
+    그대로 bootstrap된다 (SQL-aware 시뮬레이션으로 의미론 검증)."""
+    session = _RowAwareFakeSession(
+        rows=[
+            {
+                "id": "gpt-4o",
+                "provider": "openai",
+                "is_default": True,
+                "is_enabled": True,
+            }
+        ]
+    )
+
+    await LLMModelRegistry.sync_to_db(session)
+
+    params = _insert_params(_find_insert(session, "claude-sonnet-4-6"))
+    assert params["is_default"] is True
 
 
 @pytest.mark.asyncio

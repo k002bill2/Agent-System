@@ -183,7 +183,7 @@ class TestAgentMetadata:
             description="Test",
             category=AgentCategory.DEVELOPMENT,
         )
-        assert agent.model == "claude-sonnet-5"
+        assert agent.model == "claude-sonnet-4-6"
 
         # 인스턴스 생성 시점 평가 확인 (import 시점 고정이 아님)
         monkeypatch.setenv("LLM_PROVIDER", "codex_cli")

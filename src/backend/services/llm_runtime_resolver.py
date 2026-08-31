@@ -78,6 +78,9 @@ def _enabled_entitlements(
         entitlement
         for entitlement in access.entitlements
         if entitlement.enabled
+        # Reject malformed pairs: mode must be derivable from provider, or the
+        # mode gate and the provider-based executor disagree (policy bypass).
+        and entitlement.mode == _runtime_mode_for_provider(entitlement.provider)
         and _source_matches(entitlement.source_scope, source)
         and (
             request.organization_id is None
@@ -89,10 +92,12 @@ def _enabled_entitlements(
 def _provider_for_requested_model(requested_model_id: str | None) -> str | None:
     if not requested_model_id:
         return None
-    provider = LLMModelRegistry.get_provider(requested_model_id)
-    if provider is None:
+    model = LLMModelRegistry.get_by_id(requested_model_id)
+    if model is None:
         raise LLMRuntimeResolutionError(f"Unknown model: {requested_model_id}")
-    return provider.value
+    if not model.is_enabled:
+        raise LLMRuntimeResolutionError(f"Model disabled: {requested_model_id}")
+    return model.provider.value
 
 
 def _select_entitlement(

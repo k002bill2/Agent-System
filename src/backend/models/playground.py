@@ -66,6 +66,12 @@ class PlaygroundExecution(BaseModel):
     result: str | None = None
     error: str | None = None
 
+    # Model attribution — 실행 단위 귀속. session.model은 사용자의 저장된
+    # 선택으로 남고, fallback retry가 다른 모델로 성공한 사실은 여기에만
+    # 남는다. 구버전 JSON 레코드에는 없는 필드라 None 기본값이 필수.
+    requested_model: str | None = None
+    resolved_model: str | None = None
+
     # Metrics
     total_tokens: int = 0
     input_tokens: int = 0

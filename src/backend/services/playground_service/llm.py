@@ -162,7 +162,13 @@ async def _invoke_with_model_fallback(
     invoke,
     **kwargs: Any,
 ) -> LLMResponse:
-    """Invoke once, then retry with the configured safe default for stale models."""
+    """Invoke once, then retry with the configured safe default for stale models.
+
+    The retry is execution-scoped: ``session.model`` is the user's saved
+    choice and is never rewritten here — a successful fallback is recorded on
+    the execution (requested/resolved), and a failed fallback target must not
+    be persisted into the session either.
+    """
     try:
         return await invoke(model_id=session.model, **kwargs)
     except Exception as exc:
@@ -170,10 +176,8 @@ async def _invoke_with_model_fallback(
         if not fallback_model or not _is_inaccessible_model_error(exc):
             raise
 
-        stale_model = session.model
         logger.warning(
             "playground_model_inaccessible_retry",
-            extra={"stale_model": stale_model, "fallback_model": fallback_model},
+            extra={"stale_model": session.model, "fallback_model": fallback_model},
         )
-        session.model = fallback_model
         return await invoke(model_id=fallback_model, **kwargs)

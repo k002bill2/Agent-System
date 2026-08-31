@@ -27,6 +27,7 @@ from models.playground import (
     PlaygroundSessionCreate,
     PlaygroundToolTest,
 )
+from services.llm_runtime_resolver import LLMRuntimeResolutionError
 from services.llm_service import LLMService
 from services.playground_context import build_effective_system_prompt
 from utils.time import utcnow
@@ -35,7 +36,9 @@ from .config import DEFAULT_SYSTEM_PROMPT, PLAYGROUND_TOOLS
 from .llm import (
     _coerce_llm_content,
     _invoke_with_model_fallback,
+    _is_inaccessible_model_error,
     _playground_usage_context,
+    _safe_playground_fallback_model,
     _to_lc_messages,
 )
 from .mock import _generate_mock_tool_result
@@ -236,6 +239,7 @@ class PlaygroundService:
             temperature=request.temperature or session.temperature,
             max_tokens=request.max_tokens or session.max_tokens,
             tools_enabled=request.tools or session.enabled_tools,
+            requested_model=session.model,
         )
 
         execution.status = PlaygroundExecutionStatus.RUNNING
@@ -366,6 +370,8 @@ class PlaygroundService:
             # Update execution metrics
             execution.result = content
             execution.status = PlaygroundExecutionStatus.COMPLETED
+            # 실제 성공한 모델(무변이 fallback retry면 fallback model)을 귀속.
+            execution.resolved_model = llm_response.model or session.model
             execution.input_tokens = llm_response.input_tokens
             execution.output_tokens = llm_response.output_tokens
             execution.total_tokens = llm_response.total_tokens
@@ -418,12 +424,37 @@ class PlaygroundService:
         if not session:
             raise ValueError(f"Session {session_id} not found")
 
+        # Execution record — 스트리밍도 execute() 와 같은 실행 단위 귀속을 남긴다.
+        execution = PlaygroundExecution(
+            agent_id=session.agent_id or "default",
+            prompt=request.prompt,
+            context=request.context,
+            temperature=request.temperature or session.temperature,
+            max_tokens=request.max_tokens or session.max_tokens,
+            tools_enabled=request.tools or session.enabled_tools,
+            requested_model=session.model,
+        )
+        execution.status = PlaygroundExecutionStatus.RUNNING
+        execution.started_at = utcnow()
+
         # Add user message to session
         user_msg = PlaygroundMessage(
             role="user",
             content=request.prompt,
         )
+        execution.messages.append(user_msg)
         session.messages.append(user_msg)
+        session.executions.append(execution)
+
+        def _record_stream_failure(message: str) -> None:
+            # 실패 execution 도 영속화하되, 성공 집계(total_*)는 올리지 않는다
+            # (기존 계약 — 실패 스트림은 세션 집계에 반영되지 않는다).
+            execution.status = PlaygroundExecutionStatus.FAILED
+            execution.error = message
+            execution.completed_at = utcnow()
+            session.updated_at = utcnow()
+            _save_sessions()
+            _fire_and_forget(PlaygroundService.save_session_to_db(session))
 
         # Multi-turn history as LangChain messages (excl. the just-appended user)
         history = _to_lc_messages(session.messages[-11:-1])
@@ -482,6 +513,10 @@ class PlaygroundService:
             llm_access=llm_access,
         )
 
+        # 실제 성공한 모델. fallback retry가 다른 모델로 성공하면 갱신되며,
+        # 비용/토큰 추정은 session.model이 아니라 이 값으로 계산한다.
+        resolved_model = session.model
+
         try:
             if enabled_tools:
                 # Tool-enabled: single-shot invoke_with_tools, yield final answer.
@@ -499,6 +534,7 @@ class PlaygroundService:
                     working_directory=session.working_directory,
                     usage_context=usage_context,
                 )
+                resolved_model = resp.model or session.model
                 full_response = _coerce_llm_content(resp.content)
                 yield full_response
                 token_info = {
@@ -509,37 +545,76 @@ class PlaygroundService:
                 for tc, tr in zip(resp.tool_calls, resp.tool_results, strict=False):
                     yield f"\n\n__TOOL_CALL__{json.dumps({'call': tc, 'result': tr}, ensure_ascii=False)}"
             else:
-                async for chunk, info in LLMService.stream_with_tokens(
-                    prompt=request.prompt,
-                    model_id=session.model,
-                    system_prompt=effective_system_prompt,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    context=request.context or None,
-                    history=history,
-                    rag_context=rag_context_str,
-                    usage_context=usage_context,
-                ):
-                    if info:
-                        if info.get("error"):
-                            # Structured error — surface plain text to user
-                            yield chunk
-                            return
-                        token_info = info
-                    elif chunk:
-                        full_response += chunk
-                        yield chunk
+                # Non-tools: same stale-model fallback as the non-streaming
+                # path, but only while nothing has been emitted yet — once a
+                # chunk reached the client a retry would duplicate content, so
+                # a later error is surfaced as-is. session.model is never
+                # rewritten (the retry is execution-scoped).
+                attempt_model = session.model
+                retried = False
+                while True:
+                    error: Exception | None = None
+                    error_chunk = ""
+                    try:
+                        async for chunk, info in LLMService.stream_with_tokens(
+                            prompt=request.prompt,
+                            model_id=attempt_model,
+                            system_prompt=effective_system_prompt,
+                            temperature=temperature,
+                            max_tokens=max_tokens,
+                            context=request.context or None,
+                            history=history,
+                            rag_context=rag_context_str,
+                            usage_context=usage_context,
+                        ):
+                            if info:
+                                if info.get("error"):
+                                    # Structured error sentinel from the stream
+                                    error = Exception(str(info.get("message") or chunk))
+                                    error_chunk = chunk
+                                    break
+                                token_info = info
+                            elif chunk:
+                                full_response += chunk
+                                yield chunk
+                    except LLMRuntimeResolutionError as exc:
+                        # Resolver rejects on first iteration — raised raw, not
+                        # wrapped in the error sentinel.
+                        error = exc
+                        error_chunk = f"\n\n[Error: {exc}]"
+
+                    if error is None:
+                        resolved_model = attempt_model
+                        break
+
+                    fallback_model = (
+                        None
+                        if (retried or full_response)
+                        else _safe_playground_fallback_model(attempt_model, usage_context)
+                    )
+                    if not fallback_model or not _is_inaccessible_model_error(error):
+                        # Surface plain text to user (no retry available)
+                        _record_stream_failure(str(error))
+                        yield error_chunk
+                        return
+
+                    logger.warning(
+                        "playground_stream_model_inaccessible_retry",
+                        extra={"stale_model": attempt_model, "fallback_model": fallback_model},
+                    )
+                    attempt_model = fallback_model
+                    retried = True
 
             # Calculate token usage
             if token_info:
                 input_tokens = token_info.get("input_tokens", 0)
                 output_tokens = token_info.get("output_tokens", 0)
             else:
-                input_tokens = estimate_tokens(request.prompt, session.model)
-                output_tokens = estimate_tokens(full_response, session.model)
+                input_tokens = estimate_tokens(request.prompt, resolved_model)
+                output_tokens = estimate_tokens(full_response, resolved_model)
 
             total_tokens = input_tokens + output_tokens
-            cost = calculate_cost(input_tokens, output_tokens, session.model)
+            cost = calculate_cost(input_tokens, output_tokens, resolved_model)
 
             # Persist assistant message
             assistant_msg = PlaygroundMessage(
@@ -549,6 +624,17 @@ class PlaygroundService:
                 rag_sources=rag_sources,
             )
             session.messages.append(assistant_msg)
+
+            # Finalize the execution record with the resolved-model attribution.
+            execution.result = full_response
+            execution.status = PlaygroundExecutionStatus.COMPLETED
+            execution.resolved_model = resolved_model
+            execution.input_tokens = input_tokens
+            execution.output_tokens = output_tokens
+            execution.total_tokens = total_tokens
+            execution.cost = cost
+            execution.completed_at = utcnow()
+
             session.total_executions += 1
             session.total_tokens += total_tokens
             session.total_cost += cost
@@ -560,6 +646,10 @@ class PlaygroundService:
                 yield f"\n\n__RAG_SOURCES__{json.dumps(rag_sources, ensure_ascii=False)}"
 
         except Exception as e:
+            # 비-tools 루프에서 이미 finalize 된 실패는 여기로 오지 않지만,
+            # tools 분기 등에서 RUNNING 인 채 떨어진 예외는 여기서 한 번만 마감한다.
+            if execution.status == PlaygroundExecutionStatus.RUNNING:
+                _record_stream_failure(str(e))
             yield f"\n\n[Error: {str(e)}]"
 
     # ─────────────────────────────────────────────────────────────

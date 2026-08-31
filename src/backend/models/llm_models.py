@@ -44,12 +44,24 @@ class LLMModelConfig(BaseModel):
 # All supported models with their configurations
 _MODELS: list[LLMModelConfig] = [
     # ─────────────────────────────────────────────────────────
-    # Anthropic Claude Models (updated 2026-05-30)
-    # Pricing: USD per 1K tokens. Docs: https://docs.anthropic.com/en/docs/about-claude/models
+    # Anthropic Claude Models (updated 2026-08-31)
+    # Pricing: USD per 1K tokens. Docs: https://platform.claude.com/docs/en/about-claude/models/overview
     # ─────────────────────────────────────────────────────────
     LLMModelConfig(
         id="claude-opus-4-8",
         display_name="Claude Opus 4.8",
+        provider=LLMProvider.ANTHROPIC,
+        context_window=1000000,  # 1M tokens
+        input_price=0.005,  # $5.00/1M tokens
+        output_price=0.025,  # $25.00/1M tokens
+        is_default=False,
+        supports_tools=True,
+        supports_vision=True,
+    ),
+    # claude-opus-4-7: official model docs, verified 2026-08-31
+    LLMModelConfig(
+        id="claude-opus-4-7",
+        display_name="Claude Opus 4.7",
         provider=LLMProvider.ANTHROPIC,
         context_window=1000000,  # 1M tokens
         input_price=0.005,  # $5.00/1M tokens
@@ -65,7 +77,7 @@ _MODELS: list[LLMModelConfig] = [
         context_window=1000000,  # 1M tokens
         input_price=0.003,  # $3.00/1M tokens
         output_price=0.015,  # $15.00/1M tokens
-        is_default=True,  # Default Anthropic model
+        is_default=False,
         supports_tools=True,
         supports_vision=True,
     ),
@@ -76,7 +88,7 @@ _MODELS: list[LLMModelConfig] = [
         context_window=1000000,  # 1M tokens
         input_price=0.003,  # $3.00/1M tokens
         output_price=0.015,  # $15.00/1M tokens
-        is_default=False,
+        is_default=True,  # Default Anthropic model (current GA balanced, policy 2026-08-31)
         supports_tools=True,
         supports_vision=True,
     ),
@@ -92,9 +104,21 @@ _MODELS: list[LLMModelConfig] = [
         supports_vision=True,
     ),
     # ─────────────────────────────────────────────────────────
-    # Google Gemini Models (updated 2026-05-30)
+    # Google Gemini Models (updated 2026-08-31)
     # Pricing: USD per 1K tokens. Docs: https://ai.google.dev/gemini-api/docs/models
     # ─────────────────────────────────────────────────────────
+    # gemini-3.7-flash: official model docs (current stable Flash), verified 2026-08-31
+    LLMModelConfig(
+        id="gemini-3.7-flash",
+        display_name="Gemini 3.7 Flash",
+        provider=LLMProvider.GOOGLE,
+        context_window=1048576,
+        input_price=0.00075,  # $0.75/1M tokens
+        output_price=0.00375,  # $3.75/1M tokens
+        is_default=True,  # Default Google model (policy 2026-08-31)
+        supports_tools=True,
+        supports_vision=True,
+    ),
     LLMModelConfig(
         id="gemini-3-flash-preview",
         display_name="Gemini 3 Flash",
@@ -102,7 +126,7 @@ _MODELS: list[LLMModelConfig] = [
         context_window=1000000,
         input_price=0.0005,  # $0.50/1M tokens
         output_price=0.003,  # $3.00/1M tokens
-        is_default=True,  # Default Google model
+        is_default=False,
         supports_tools=True,
         supports_vision=True,
     ),
@@ -161,7 +185,7 @@ _MODELS: list[LLMModelConfig] = [
         context_window=128000,
         input_price=0.00015,  # $0.15/1M tokens
         output_price=0.0006,  # $0.60/1M tokens
-        is_default=True,  # Conservative default for broad API project access
+        is_default=False,
         supports_tools=True,
         supports_vision=True,
     ),
@@ -176,15 +200,62 @@ _MODELS: list[LLMModelConfig] = [
         supports_tools=True,
         supports_vision=True,
     ),
+    # GPT-5.6 family: official model/pricing docs, verified 2026-08-31.
+    # The gpt-5.6 alias routes to GPT-5.6 Sol.
+    LLMModelConfig(
+        id="gpt-5.6",
+        display_name="GPT-5.6 (Sol alias)",
+        provider=LLMProvider.OPENAI,
+        context_window=1050000,
+        input_price=0.004,  # $4.00/1M tokens
+        output_price=0.02,  # $20.00/1M tokens
+        is_default=True,  # Default OpenAI model (policy 2026-08-31)
+        supports_tools=True,
+        supports_vision=True,
+    ),
+    LLMModelConfig(
+        id="gpt-5.6-sol",
+        display_name="GPT-5.6 Sol",
+        provider=LLMProvider.OPENAI,
+        context_window=1050000,
+        input_price=0.004,  # $4.00/1M tokens
+        output_price=0.02,  # $20.00/1M tokens
+        is_default=False,
+        supports_tools=True,
+        supports_vision=True,
+    ),
+    LLMModelConfig(
+        id="gpt-5.6-terra",
+        display_name="GPT-5.6 Terra",
+        provider=LLMProvider.OPENAI,
+        context_window=1050000,
+        input_price=0.002,  # $2.00/1M tokens
+        output_price=0.012,  # $12.00/1M tokens
+        is_default=False,
+        supports_tools=True,
+        supports_vision=True,
+    ),
+    LLMModelConfig(
+        id="gpt-5.6-luna",
+        display_name="GPT-5.6 Luna",
+        provider=LLMProvider.OPENAI,
+        context_window=1050000,
+        input_price=0.0002,  # $0.20/1M tokens
+        output_price=0.0012,  # $1.20/1M tokens
+        is_default=False,
+        supports_tools=True,
+        supports_vision=True,
+    ),
+    # gpt-5.5: retained for compatibility; no longer the default.
     LLMModelConfig(
         id="gpt-5.5",
         display_name="GPT-5.5",
         provider=LLMProvider.OPENAI,
-        context_window=1000000,
-        input_price=0.005,
-        output_price=0.03,
+        context_window=1050000,
+        input_price=0.005,  # $5.00/1M tokens
+        output_price=0.03,  # $30.00/1M tokens
         is_default=False,
-        is_enabled=False,
+        is_enabled=True,
         supports_tools=True,
         supports_vision=True,
     ),
@@ -431,7 +502,7 @@ class LLMModelRegistry:
         Returns:
             Dict with 'inserted' and 'updated' counts.
         """
-        from sqlalchemy import delete, select, update
+        from sqlalchemy import delete, select
         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
         from db.models import LLMModelConfigModel, LLMModelSuppressionModel
@@ -458,18 +529,16 @@ class LLMModelRegistry:
         result = await session.execute(select(LLMModelConfigModel.id))
         existing_ids = {row[0] for row in result.fetchall()}
 
-        # Providers that already have an ENABLED default row in DB.
-        # Guard: a NEW model with is_default=True must not create a second
-        # default for a provider whose DB default is admin-controlled.
-        # A disabled default row does not count — the new model should
-        # still become the provider default in that case.
+        # Providers that already have ANY row in DB (after the self-heal
+        # delete above). Guard: a NEW code model with is_default=True may
+        # only bootstrap the provider default when the provider has ZERO
+        # DB rows. Any existing row — including a disabled prior default —
+        # is admin-controlled state, so the new model is inserted
+        # non-default and no admin flag is cleared or overridden.
         result = await session.execute(
-            select(LLMModelConfigModel.provider).where(
-                LLMModelConfigModel.is_default.is_(True),
-                LLMModelConfigModel.is_enabled.is_(True),
-            )
+            select(LLMModelConfigModel.provider).distinct()
         )
-        providers_with_db_default = {row[0] for row in result.fetchall()}
+        providers_with_db_rows = {row[0] for row in result.fetchall()}
 
         inserted = 0
         updated = 0
@@ -484,33 +553,16 @@ class LLMModelRegistry:
             if (
                 is_default
                 and model.id not in existing_ids
-                and model.provider.value in providers_with_db_default
+                and model.provider.value in providers_with_db_rows
             ):
-                # Respect the existing DB default for this provider:
-                # insert the new model as non-default to avoid dual defaults.
+                # The provider already has admin-controlled rows in DB
+                # (possibly a disabled prior default): insert the new model
+                # as non-default. Promotion is an explicit admin action, not
+                # a side effect of the periodic sync. No UPDATE touches the
+                # existing rows' is_default/is_enabled flags here — the only
+                # bootstrap path is a provider with zero rows, where there
+                # is nothing to clear.
                 is_default = False
-
-            if is_default and model.id not in existing_ids:
-                # This new model is about to be INSERTed as the provider
-                # default (the guard above passed, so any remaining default
-                # rows for this provider are disabled). Clear their
-                # is_default flag so a later admin re-enable of an old row
-                # cannot resurrect a second default for the provider.
-                # is_enabled=False is part of the WHERE on purpose: under
-                # READ COMMITTED an admin could re-enable the old default
-                # between the guard SELECT and this UPDATE, so the "only
-                # clear DISABLED defaults" invariant must live in the SQL
-                # itself, not just in the pre-check.
-                await session.execute(
-                    update(LLMModelConfigModel)
-                    .where(
-                        LLMModelConfigModel.provider == model.provider.value,
-                        LLMModelConfigModel.is_default.is_(True),
-                        LLMModelConfigModel.is_enabled.is_(False),
-                        LLMModelConfigModel.id != model.id,
-                    )
-                    .values(is_default=False)
-                )
 
             values = {
                 "id": model.id,
