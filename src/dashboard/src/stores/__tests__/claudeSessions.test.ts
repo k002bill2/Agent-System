@@ -1212,6 +1212,64 @@ describe('claudeSessions store', () => {
       expect((options as { timeout?: number } | undefined)?.timeout).toBeGreaterThanOrEqual(120_000)
     })
 
+    it('decrements the pending count and resyncs it from the server', async () => {
+      // 카드/상세 제목은 바뀌는데 상단 "미요약 N개" 만 새로고침해도 그대로 남던 버그.
+      // 일괄 생성은 성공 수만큼 차감하지만 단건에는 그 대응이 없었다.
+      useClaudeSessionsStore.setState({
+        sessions: [{ session_id: 's-1', summary: null } as any],
+        pendingSummaryCount: 7,
+      })
+      mockApiClient.post.mockResolvedValueOnce({ summary: 'generated' })
+      mockApiClient.get.mockResolvedValueOnce({ pending_count: 5 })
+
+      await useClaudeSessionsStore.getState().generateSummary('s-1')
+
+      expect(mockApiClient.get).toHaveBeenCalledWith(
+        expect.stringContaining('/summaries/pending-count'),
+      )
+      expect(useClaudeSessionsStore.getState().pendingSummaryCount).toBe(5)
+    })
+
+    it('keeps the optimistic decrement when the resync fails', async () => {
+      useClaudeSessionsStore.setState({
+        sessions: [{ session_id: 's-1', summary: null } as any],
+        pendingSummaryCount: 3,
+      })
+      mockApiClient.post.mockResolvedValueOnce({ summary: 'generated' })
+      mockApiClient.get.mockRejectedValueOnce(new Error('offline'))
+
+      await useClaudeSessionsStore.getState().generateSummary('s-1')
+
+      expect(useClaudeSessionsStore.getState().pendingSummaryCount).toBe(2)
+      expect(useClaudeSessionsStore.getState().error).toBeNull()
+    })
+
+    it('does not decrement when the session already had a summary', async () => {
+      // 이미 요약된 세션을 다시 생성하는 것은 미요약 수를 줄이지 않는다.
+      useClaudeSessionsStore.setState({
+        sessions: [{ session_id: 's-1', summary: 'old' } as any],
+        pendingSummaryCount: 4,
+      })
+      mockApiClient.post.mockResolvedValueOnce({ summary: 'new' })
+      mockApiClient.get.mockRejectedValueOnce(new Error('offline'))
+
+      await useClaudeSessionsStore.getState().generateSummary('s-1')
+
+      expect(useClaudeSessionsStore.getState().pendingSummaryCount).toBe(4)
+    })
+
+    it('leaves the pending count untouched when generation fails', async () => {
+      useClaudeSessionsStore.setState({
+        sessions: [{ session_id: 's-1', summary: null } as any],
+        pendingSummaryCount: 6,
+      })
+      mockApiClient.post.mockRejectedValueOnce(new Error('boom'))
+
+      await useClaudeSessionsStore.getState().generateSummary('s-1')
+
+      expect(useClaudeSessionsStore.getState().pendingSummaryCount).toBe(6)
+    })
+
     it('sets generatingSummaryFor during generation', async () => {
       let generating: string | null = null
       mockApiClient.post.mockImplementationOnce(() => {
