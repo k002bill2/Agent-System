@@ -898,7 +898,9 @@ class ClaudeSessionMonitor:
     async def generate_summary(self, session_id: str) -> str:
         """Generate AI summary for a session.
 
-        Uses Haiku model for cost efficiency. Caches result to file.
+        Uses the configured Ollama model for cost efficiency. Disables reasoning
+        for thinking models so the response field contains the summary. Caches
+        result to file.
 
         Args:
             session_id: Session UUID
@@ -919,7 +921,7 @@ class ClaudeSessionMonitor:
         if not messages:
             return "대화 내용 없음"
 
-        # 3. Call Haiku for summary
+        # 3. Call Ollama for summary
         prompt = f"""다음 대화의 주제를 한 문장(30자 이내)으로 요약해주세요.
 마침표 없이 간결하게 작성하세요.
 
@@ -941,6 +943,7 @@ class ClaudeSessionMonitor:
                         "model": ollama_model,
                         "prompt": prompt,
                         "stream": False,
+                        "think": False,
                         "options": {
                             "num_predict": 50,
                             "temperature": 0.3,
