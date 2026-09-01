@@ -595,6 +595,9 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
 
   generateSummary: async (sessionId: string) => {
     set({ generatingSummaryFor: sessionId })
+    // 이미 요약이 있는 세션을 다시 생성해도 미요약 수는 줄지 않는다. 차감 여부는
+    // 요청 전 상태로 정하고, 재조회가 서버 값으로 덮어쓴다.
+    const wasPending = !get().sessions.find((s) => s.session_id === sessionId)?.summary
 
     try {
       const data = await apiClient.post<{ summary: string }>(
@@ -609,7 +612,16 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
           s.session_id === sessionId ? { ...s, summary: data.summary } : s
         ),
         generatingSummaryFor: null,
+        // 일괄 생성은 성공 수만큼 즉시 차감하는데 단건에는 그 대응이 없어, 카드
+        // 제목만 바뀌고 상단 "미요약 N개" 는 그대로 남아 있었다.
+        pendingSummaryCount: wasPending
+          ? Math.max(0, state.pendingSummaryCount - 1)
+          : state.pendingSummaryCount,
       }))
+
+      // 즉시 차감은 화면용이고, 권위는 서버에 있다 — 다른 세션이 동시에 요약을
+      // 만들었을 수 있으므로 성공 뒤에는 실제 값으로 맞춘다.
+      await get().fetchPendingSummaryCount()
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Unknown error'
       denyIfForbidden(e, set, get)
