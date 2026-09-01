@@ -24,8 +24,16 @@ def _default_agent_model() -> str:
     import), so LLM_PROVIDER changes and DB-loaded registry defaults present
     at that moment are honored. See _build_default_agents() for the
     once-per-process singleton limitation.
+
+    get_default 는 미지 provider·enabled 모델 0개에 fail-closed(LookupError)
+    한다. 이 함수는 default_factory 로 불리므로 예외를 등록 경로로 흘리지
+    않고 legacy "codex-cli" 폴백을 유지한다 (models/playground.py 관례 —
+    실행 시 LLMService._get_llm 게이트가 unknown/disabled 를 거부한다).
     """
-    return LLMModelRegistry.get_default(os.getenv("LLM_PROVIDER", "codex_cli"))
+    try:
+        return LLMModelRegistry.get_default(os.getenv("LLM_PROVIDER", "codex_cli"))
+    except LookupError:
+        return "codex-cli"
 
 
 class AgentCategory(str, Enum):

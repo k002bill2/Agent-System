@@ -152,7 +152,12 @@ def _safe_playground_fallback_model(
         entitled = resolution.model_id
         return entitled if entitled and entitled != current_model else None
 
-    configured_default = LLMModelRegistry.get_default(os.getenv("LLM_PROVIDER") or "codex_cli")
+    try:
+        configured_default = LLMModelRegistry.get_default(os.getenv("LLM_PROVIDER") or "codex_cli")
+    except LookupError:
+        # 구성된 provider 에 enabled 모델이 0개(fail-closed) — 재시도할 안전한
+        # 대상이 없다. None 을 돌려 원래 오류가 그대로 표면화되게 한다.
+        return None
     fallback = configured_default or "codex-cli"
     return fallback if fallback and fallback != current_model else None
 
@@ -162,7 +167,13 @@ async def _invoke_with_model_fallback(
     invoke,
     **kwargs: Any,
 ) -> LLMResponse:
-    """Invoke once, then retry with the configured safe default for stale models."""
+    """Invoke once, then retry with the configured safe default for stale models.
+
+    The retry is execution-scoped: ``session.model`` is the user's saved
+    choice and is never rewritten here — a successful fallback is recorded on
+    the execution (requested/resolved), and a failed fallback target must not
+    be persisted into the session either.
+    """
     try:
         return await invoke(model_id=session.model, **kwargs)
     except Exception as exc:
@@ -170,10 +181,8 @@ async def _invoke_with_model_fallback(
         if not fallback_model or not _is_inaccessible_model_error(exc):
             raise
 
-        stale_model = session.model
         logger.warning(
             "playground_model_inaccessible_retry",
-            extra={"stale_model": stale_model, "fallback_model": fallback_model},
+            extra={"stale_model": session.model, "fallback_model": fallback_model},
         )
-        session.model = fallback_model
         return await invoke(model_id=fallback_model, **kwargs)

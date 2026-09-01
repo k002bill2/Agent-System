@@ -158,6 +158,12 @@ def get_settings() -> Settings:
 def get_model_for_provider(provider: str) -> str:
     """Get the default model for a provider from the LLM Model Registry (DB-backed).
 
+    get_default 는 미지 provider·enabled 모델 0개 provider 에
+    fail-closed(LookupError) 한다. 이 헬퍼는 orchestrator/router 초기화
+    경로에서 불리므로 예외를 흘리지 않고 구성된 기본 모델로 폴백한다 —
+    entitlement 게이트가 아니라 내부 기본값 선택이며, 반환값은 실행 시
+    LLMService._get_llm 의 unknown/disabled 게이트를 다시 통과해야 한다.
+
     Args:
         provider: Provider name ('google', 'anthropic', 'openai', 'ollama')
 
@@ -168,12 +174,23 @@ def get_model_for_provider(provider: str) -> str:
 
     try:
         return LLMModelRegistry.get_default(LLMProvider(provider))
-    except ValueError:
-        return LLMModelRegistry.get_default()
+    except (ValueError, LookupError):
+        # Unknown provider name, or a provider with zero enabled models —
+        # fall through to the configured default.
+        return get_default_model()
 
 
 def get_default_model() -> str:
-    """Get the default model from the LLM Model Registry (DB-backed)."""
+    """Get the default model from the LLM Model Registry (DB-backed).
+
+    LLM_PROVIDER 가 미지 문자열이거나 구성 provider 에 enabled 모델이 0개면
+    legacy "codex-cli" 폴백을 유지한다 (models/playground.py 관례 — 그 값이
+    실제로 못 쓰는 모델이면 LLMService._get_llm 게이트가 명확한 ValueError
+    로 거부한다).
+    """
     from models.llm_models import LLMModelRegistry
 
-    return LLMModelRegistry.get_default()
+    try:
+        return LLMModelRegistry.get_default()
+    except LookupError:
+        return "codex-cli"

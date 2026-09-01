@@ -183,6 +183,7 @@ class TestAgentMetadata:
             description="Test",
             category=AgentCategory.DEVELOPMENT,
         )
+        # Policy 2026-09-01: restore the verified Anthropic code default.
         assert agent.model == "claude-sonnet-5"
 
         # 인스턴스 생성 시점 평가 확인 (import 시점 고정이 아님)

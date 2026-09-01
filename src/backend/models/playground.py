@@ -14,8 +14,17 @@ from utils.time import normalize_aware_utc, utcnow
 
 # Get default model from central registry
 def _get_default_model() -> str:
-    """Get default model for playground, resolved from the configured provider."""
-    return LLMModelRegistry.get_default(os.getenv("LLM_PROVIDER", "codex_cli"))
+    """Get default model for playground, resolved from the configured provider.
+
+    get_default 는 provider 에 enabled 모델이 0개면 fail-closed(LookupError)
+    한다. 이 함수는 요청 body 파싱 중(default_factory) 불리므로 예외를 500 으로
+    흘리지 않고 legacy "codex-cli" 폴백을 유지한다 — 그 값이 실제로 못 쓰는
+    모델이면 create 경로의 등록 게이트가 명확한 검증 오류(400)로 거부한다.
+    """
+    try:
+        return LLMModelRegistry.get_default(os.getenv("LLM_PROVIDER", "codex_cli"))
+    except LookupError:
+        return "codex-cli"
 
 
 class PlaygroundExecutionStatus(str, Enum):
@@ -65,6 +74,17 @@ class PlaygroundExecution(BaseModel):
     messages: list[PlaygroundMessage] = Field(default_factory=list)
     result: str | None = None
     error: str | None = None
+
+    # Model attribution — 실행 단위 귀속. session.model은 사용자의 저장된
+    # 선택으로 남고, fallback retry가 다른 모델로 성공한 사실은 여기에만
+    # 남는다. 구버전 JSON 레코드에는 없는 필드라 None 기본값이 필수.
+    requested_model: str | None = None
+    resolved_model: str | None = None
+    # 실행 시점의 registry snapshot 표식 (LLMModelRegistry.get_revision()).
+    # optional 계측 metadata — 구버전 레코드 호환을 위해 None 기본값 필수.
+    # provider 가 실제 서빙한 concrete 모델 id 는 provider 응답 없이는 알 수
+    # 없으므로 여기 기록하지 않는다 (resolved_model 은 '우리가 호출한' id).
+    registry_revision: str | None = None
 
     # Metrics
     total_tokens: int = 0

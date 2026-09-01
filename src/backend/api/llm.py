@@ -156,7 +156,12 @@ async def get_default_model(
     provider: str | None = Query(None, description="Get default for specific provider"),
 ) -> DefaultModelResponse:
     """Get the default model."""
-    model_id = LLMModelRegistry.get_default(provider)
+    try:
+        model_id = LLMModelRegistry.get_default(provider)
+    except LookupError as e:
+        # fail-closed: enabled 모델이 0개인 provider — 타 provider 모델을
+        # 대답하지 않고 404 로 알린다.
+        raise HTTPException(status_code=404, detail=str(e))
     model = LLMModelRegistry.get_by_id(model_id)
 
     if model:
@@ -370,9 +375,15 @@ async def get_providers() -> dict:
     result = {}
     for provider in LLMProvider:
         models = LLMModelRegistry.get_by_provider(provider)
+        try:
+            default = LLMModelRegistry.get_default(provider)
+        except LookupError:
+            # enabled 모델이 0개인 provider: 타 provider 모델 이름을 대입하던
+            # 과거 오답 대신 None 으로 보고한다 (목록 전체가 500 나면 안 됨).
+            default = None
         result[provider.value] = {
             "models": [m.id for m in models],
-            "default": LLMModelRegistry.get_default(provider),
+            "default": default,
             "count": len(models),
         }
     return result
