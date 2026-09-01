@@ -91,7 +91,7 @@ export function SessionCard({ session, isSelected, onClick }: SessionCardProps) 
           <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
             {providerLabel}
           </span>
-          {!session.summary && isClaudeSession && (
+          {!session.summary && (
             <button
               onClick={handleGenerateSummary}
               disabled={isGenerating}

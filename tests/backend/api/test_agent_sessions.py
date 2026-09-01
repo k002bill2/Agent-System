@@ -93,6 +93,7 @@ async def test_unknown_summary_returns_not_found(monkeypatch: pytest.MonkeyPatch
 async def test_codex_session_mutations_are_rejected(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Writing to a Codex rollout stays refused — summaries are not a write."""
     codex = _session("codex", "codex-1")
     detail = codex.model_copy(update={"recent_messages": [], "messages_truncated": False})
 
@@ -104,11 +105,37 @@ async def test_codex_session_mutations_are_rejected(
 
     with pytest.raises(HTTPException) as stream_error:
         await session_routes.stream_session("codex-1")
-    with pytest.raises(HTTPException) as summary_error:
-        await session_routes.get_session_summary("codex-1")
 
     assert stream_error.value.status_code == 409
-    assert summary_error.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_codex_session_summaries_are_served_and_generated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The summary routes must reach the Codex monitor instead of returning 409."""
+    codex = _session("codex", "codex-1")
+    detail = codex.model_copy(update={"recent_messages": [], "messages_truncated": False})
+    generated: list[str] = []
+
+    class _Monitor:
+        def get_cached_summary(self, session_id: str) -> str | None:
+            return "좀비 소켓 진단"
+
+        async def generate_summary(self, session_id: str) -> str:
+            generated.append(session_id)
+            return "좀비 소켓 진단"
+
+    monkeypatch.setattr(session_routes, "resolve_session", lambda _: (_Monitor(), detail))
+
+    cached = await session_routes.get_session_summary("codex-1")
+    created = await session_routes.generate_session_summary("codex-1")
+    details = await session_routes.get_session("codex-1")
+
+    assert cached == {"session_id": "codex-1", "summary": "좀비 소켓 진단"}
+    assert created == {"session_id": "codex-1", "summary": "좀비 소켓 진단"}
+    assert generated == ["codex-1"]
+    assert details.summary == "좀비 소켓 진단"
 
 
 @pytest.mark.asyncio

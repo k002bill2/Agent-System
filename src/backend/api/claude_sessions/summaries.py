@@ -14,9 +14,42 @@ import logging
 from fastapi import APIRouter, Depends
 
 from api.deps import get_current_admin_or_manager_user
-from services.claude_session_monitor import get_monitor
+from models.claude_session import ClaudeSessionInfo
+from services.claude_session_monitor import ClaudeSessionMonitor, get_monitor
+from services.codex_session_monitor import CodexSessionMonitor, get_codex_monitor
+from utils.time import to_aware_utc
 
 logger = logging.getLogger(__name__)
+
+SessionMonitor = ClaudeSessionMonitor | CodexSessionMonitor
+
+
+def _discover_with_monitors() -> list[tuple[SessionMonitor, ClaudeSessionInfo]]:
+    """Pair every discovered session with the monitor that owns it.
+
+    Both providers cache summaries, so the batch must carry the owning monitor
+    rather than assuming a single one. The two lists are merged by recency
+    rather than concatenated: ``generate_batch_summaries`` applies its ``limit``
+    while walking this list, so a plain concatenation would let older Claude
+    sessions fill the budget before any Codex session is reached.
+    """
+    claude_monitor = get_monitor()
+    codex_monitor = get_codex_monitor()
+    paired: list[tuple[SessionMonitor, ClaudeSessionInfo]] = [
+        (claude_monitor, session) for session in claude_monitor.discover_sessions()
+    ]
+    paired.extend((codex_monitor, session) for session in codex_monitor.discover_sessions())
+    paired.sort(key=lambda pair: _recency(pair[1]), reverse=True)
+    return paired
+
+
+def _recency(session: ClaudeSessionInfo) -> float:
+    """Sort key for last activity; naive timestamps are read as UTC."""
+    last_activity = session.last_activity
+    if last_activity is None:
+        return 0.0
+    return to_aware_utc(last_activity).timestamp()
+
 
 router = APIRouter(dependencies=[Depends(get_current_admin_or_manager_user)])
 
@@ -31,12 +64,11 @@ async def get_pending_summary_count(project: str | None = None) -> dict:
     Returns:
         Count of sessions that need summary generation
     """
-    monitor = get_monitor()
-    all_sessions = monitor.discover_sessions()
+    all_sessions = _discover_with_monitors()
 
     pending_count = 0
     total_filtered = 0
-    for session in all_sessions:
+    for monitor, session in all_sessions:
         # Filter by project if specified
         if project and getattr(session, "project_name", None) != project:
             continue
@@ -76,12 +108,11 @@ async def generate_batch_summaries(
     """
     import asyncio
 
-    monitor = get_monitor()
-    all_sessions = monitor.discover_sessions()
+    all_sessions = _discover_with_monitors()
 
     # Filter sessions without summaries
-    sessions_to_process = []
-    for session in all_sessions:
+    sessions_to_process: list[tuple[SessionMonitor, ClaudeSessionInfo]] = []
+    for monitor, session in all_sessions:
         if skip_existing:
             cached = monitor.get_cached_summary(session.session_id)
             if cached:
@@ -91,7 +122,7 @@ async def generate_batch_summaries(
             continue
         if session.user_message_count == 0 and session.assistant_message_count == 0:
             continue
-        sessions_to_process.append(session)
+        sessions_to_process.append((monitor, session))
         if len(sessions_to_process) >= limit:
             break
 
@@ -109,7 +140,7 @@ async def generate_batch_summaries(
     retry_delay = 5.0  # seconds
     between_requests_delay = 2.0  # seconds
 
-    for idx, session in enumerate(sessions_to_process):
+    for idx, (monitor, session) in enumerate(sessions_to_process):
         # Log progress every 10 sessions
         if idx > 0 and idx % 10 == 0:
             logger.info(f"Batch summary progress: {idx}/{len(sessions_to_process)} processed")

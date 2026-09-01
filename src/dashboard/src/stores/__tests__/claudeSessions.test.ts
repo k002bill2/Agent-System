@@ -1198,6 +1198,20 @@ describe('claudeSessions store', () => {
       expect(useClaudeSessionsStore.getState().generatingSummaryFor).toBeNull()
     })
 
+    it('waits past the default client timeout for the Ollama round trip', async () => {
+      // 기본 30s 로 두면 브라우저가 먼저 끊고 "Request timed out" 을 띄우지만
+      // 백엔드는 계속 돌아 요약을 캐시에 쓴다 (실측 56.4s). 실패로 보이는데 결과는 남는다.
+      useClaudeSessionsStore.setState({
+        sessions: [{ session_id: 's-1', summary: null } as any],
+      })
+      mockApiClient.post.mockResolvedValueOnce({ summary: 'slow but done' })
+
+      await useClaudeSessionsStore.getState().generateSummary('s-1')
+
+      const [, , options] = mockApiClient.post.mock.calls[0]
+      expect((options as { timeout?: number } | undefined)?.timeout).toBeGreaterThanOrEqual(120_000)
+    })
+
     it('sets generatingSummaryFor during generation', async () => {
       let generating: string | null = null
       mockApiClient.post.mockImplementationOnce(() => {

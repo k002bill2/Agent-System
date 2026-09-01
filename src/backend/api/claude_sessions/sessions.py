@@ -99,11 +99,9 @@ async def get_session(session_id: str) -> ClaudeSessionDetail:
     if details is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
-    # Summaries are currently a Claude-only mutation/caching capability.
-    if details.provider == "claude":
-        cached_summary = monitor.get_cached_summary(session_id)  # type: ignore[attr-defined]
-        if cached_summary:
-            details.summary = cached_summary
+    cached_summary = monitor.get_cached_summary(session_id)
+    if cached_summary:
+        details.summary = cached_summary
 
     return details
 
@@ -414,11 +412,9 @@ async def generate_session_summary(session_id: str) -> dict:
     # Verify session exists
     if details is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
-    if details.provider != "claude":
-        raise HTTPException(status_code=409, detail="Codex session summaries are not supported")
 
     # Generate or retrieve cached summary
-    summary = await monitor.generate_summary(session_id)  # type: ignore[attr-defined]
+    summary = await monitor.generate_summary(session_id)
 
     return {
         "session_id": session_id,
@@ -439,11 +435,9 @@ async def get_session_summary(session_id: str) -> dict:
     monitor, details = resolve_session(session_id)
     if details is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
-    if details.provider != "claude":
-        raise HTTPException(status_code=409, detail="Codex session summaries are not supported")
 
     # Check cached summary
-    summary = monitor.get_cached_summary(session_id)  # type: ignore[attr-defined]
+    summary = monitor.get_cached_summary(session_id)
 
     return {
         "session_id": session_id,

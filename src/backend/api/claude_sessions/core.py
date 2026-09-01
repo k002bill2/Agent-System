@@ -127,11 +127,12 @@ async def list_sessions(
     # Check if more sessions are available
     has_more = offset + len(paginated_sessions) < filtered_count
 
-    # Add cached summaries to sessions
+    # Add cached summaries to sessions. The card falls back to the slug, which
+    # for Codex is the rollout timestamp — so a generated summary that is not
+    # attached here stays invisible in the list.
     for session in paginated_sessions:
-        cached_summary = (
-            monitor.get_cached_summary(session.session_id) if session.provider == "claude" else None
-        )
+        summary_source = get_codex_monitor() if session.provider == "codex" else monitor
+        cached_summary = summary_source.get_cached_summary(session.session_id)
         if cached_summary:
             session.summary = cached_summary
 

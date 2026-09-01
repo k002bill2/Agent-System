@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from collections import deque
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -29,6 +30,7 @@ from models.claude_session import (
     TokenUsage,
 )
 from services.session_file_cache import SessionFileCache
+from services.session_summary import generate_summary_from_messages, read_cached_summary
 from utils.time import to_aware_utc, utcnow
 
 logger = logging.getLogger(__name__)
@@ -200,6 +202,47 @@ class _Aggregate:
             message_output_tokens=self.message_output_tokens,
             tail_messages=tuple(self.tail_messages),
         )
+
+
+# Every rollout opens with context the harness injected, not with a real turn:
+# a survey of 150 local rollouts found `<recommended_plugins>` leading 63 of
+# them, `# AGENTS.md instructions for ...` leading 61 more, and per-turn
+# `[Base]` / `[Context]` blocks repeated verbatim across sessions. Summarizing
+# that prefix gives every Codex session the same worthless summary, so it is
+# dropped and the first genuine turn is used instead. Measured over 120 local
+# rollouts, dropping it changes the summary input for 40 of them.
+# Matching *any* lone `<tag>` line would drop a genuine request that happens to
+# open with an XML wrapper (`<task>`, say), so only the envelopes actually
+# observed in the survey are listed. An unknown envelope survives as content —
+# a worse summary, not a lost turn.
+_INJECTED_TAGS = frozenset(
+    {
+        "recommended_plugins",
+        "user_action",
+        "user_instructions",
+        "environment_context",
+        "realtime_delegation",
+    }
+)
+_TAG_ONLY_LINE = re.compile(r"<([a-z_][a-z0-9_]*)>")
+_PREAMBLE_PREFIXES = (
+    "# AGENTS.md instructions for",
+    "[Base]",
+    "[Context]",
+    "[New message",
+)
+
+
+def _is_injected_preamble(content: str) -> bool:
+    """Report whether a user message is harness-injected context."""
+    stripped = content.strip()
+    if not stripped:
+        return True
+    first_line = stripped.split("\n", 1)[0].strip()
+    tag = _TAG_ONLY_LINE.fullmatch(first_line)
+    if tag is not None and tag.group(1) in _INJECTED_TAGS:
+        return True
+    return stripped.startswith(_PREAMBLE_PREFIXES)
 
 
 class CodexSessionMonitor:
@@ -625,6 +668,88 @@ class CodexSessionMonitor:
             return [], details.file_size if details else last_size
         events, _ = self.get_session_activity(session_id, offset=0, limit=100)
         return events, details.file_size
+
+    def _get_first_messages(self, session_id: str, limit: int = 5) -> list[dict]:
+        """Get the first N conversational messages of a rollout.
+
+        Every rollout opens with harness-injected context rather than a real
+        turn, so the leading preamble is dropped — see ``_is_injected_preamble``.
+
+        Args:
+            session_id: Codex session id
+            limit: Maximum number of messages to return
+
+        Returns:
+            List of message dicts with role and content
+        """
+        path = self._find_file(session_id)
+        if path is None:
+            return []
+        kept, raw = self._scan_first_messages(path, limit)
+        # 4 of 120 local rollouts hold nothing but injected context. A
+        # boilerplate summary still beats reporting an empty conversation.
+        return kept or raw
+
+    def _scan_first_messages(self, path: Path, limit: int) -> tuple[list[dict], list[dict]]:
+        """Scan a rollout only until ``limit`` conversational messages are found.
+
+        A summary needs the opening turns, so the scan stops there instead of
+        materializing the whole rollout the way the detail path does — the
+        retention cap is 48MiB, and this runs once per session in a loop over
+        every session. ``raw`` keeps the preamble for the fallback above.
+        """
+        kept: list[dict] = []
+        raw: list[dict] = []
+        agg = _Aggregate()
+        try:
+            with path.open("rb") as stream:
+                for line in self._iter_lines(stream, agg):
+                    if len(kept) >= limit:
+                        break
+                    try:
+                        record = json.loads(line)
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        continue
+                    if not isinstance(record, dict):
+                        continue
+                    message = self._message_from_record(record)
+                    if message is None:
+                        continue
+                    content = (message.content or "").strip()
+                    if not content:
+                        continue
+                    if message.type == MessageType.USER:
+                        entry = {"role": "user", "content": content[:500]}
+                        if len(raw) < limit:
+                            raw.append(entry)
+                        if not _is_injected_preamble(content):
+                            kept.append(entry)
+                    elif message.type == MessageType.ASSISTANT:
+                        entry = {"role": "assistant", "content": content[:500]}
+                        if len(raw) < limit:
+                            raw.append(entry)
+                        kept.append(entry)
+        except OSError as exc:
+            logger.warning("Unable to read Codex rollout: %s", type(exc).__name__)
+        return kept, raw
+
+    async def generate_summary(self, session_id: str) -> str:
+        """Generate an AI summary for a Codex session.
+
+        The rollout file itself is never written to; only the summary cache is.
+        """
+        # The cache is checked before the rollout is opened: a cached summary
+        # must not cost a file read, and must still be served when the rollout
+        # has moved or is briefly unreadable.
+        cached = read_cached_summary(session_id)
+        if cached:
+            return cached
+        messages = self._get_first_messages(session_id, limit=5)
+        return await generate_summary_from_messages(session_id, messages)
+
+    def get_cached_summary(self, session_id: str) -> str | None:
+        """Get the cached summary for a Codex session, if one exists."""
+        return read_cached_summary(session_id)
 
     def get_session_tasks(self, session_id: str) -> tuple[dict[str, ClaudeCodeTask], list[str]]:
         """Codex task extraction is not exposed until its event semantics stabilize."""

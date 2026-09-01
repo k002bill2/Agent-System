@@ -110,7 +110,18 @@
 
 `/api/claude-sessions` 의 provider 중립 별칭입니다 (#320). 리소스 이름에 provider 를
 넣지 않은 동일 계약을 노출하며, **원본과 동일하게 admin/manager 권한을 요구합니다**.
-provider 별 mutation 을 지원하지 않을 때는 409 를 반환합니다.
+provider 별 mutation 을 지원하지 않을 때는 409 를 반환합니다 — Codex 는 `stream` /
+`save` / `DELETE` 가 409 입니다 (롤아웃 파일은 read-only).
+
+**요약은 두 provider 모두 지원합니다.** 요약은 롤아웃/JSONL 이 아니라 별도 캐시
+(`SUMMARY_CACHE_DIR`)에 쓰므로 read-only 계약을 깨지 않습니다. Codex 롤아웃은 첫
+user 메시지가 항상 하네스 주입 프리앰블(`<recommended_plugins>`,
+`# AGENTS.md instructions for ...`, 턴마다 반복되는 `[Base]` / `[Context]`)이라,
+요약 입력에서는 이를 건너뛰고 첫 실제 대화 턴부터 사용합니다
+(`services/codex_session_monitor._is_injected_preamble`). 주입 컨텍스트밖에 없는
+세션은 프리앰블을 그대로 쓰는 폴백으로 처리해 "대화 내용 없음"을 피합니다.
+요약 일괄 생성(`summaries/generate-batch`)은 두 provider 세션을 **last_activity
+기준으로 병합 정렬한 뒤** limit 을 적용합니다.
 
 | Method | Path | 설명 |
 |--------|------|------|

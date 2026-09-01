@@ -63,6 +63,13 @@ const denyIfForbidden = (
 }
 
 /** Claude 세션 목록/상세/스트리밍 상태 관리 스토어. */
+// 요약 생성은 Ollama 왕복이라 apiClient 기본 타임아웃(30s)보다 오래 걸린다.
+// 브라우저가 먼저 abort 해도 백엔드는 계속 돌아 요약을 캐시에 쓰므로, 사용자에게는
+// "실패"로 보이지만 결과는 남는 어긋남이 생긴다. 백엔드 httpx 타임아웃(120s)에 맞춘다.
+const SUMMARY_TIMEOUT_MS = 120_000
+// 일괄 생성은 세션 수만큼 순차 호출한다 (실측 395s). 백엔드가 스스로 끝낼 때까지 기다린다.
+const BATCH_SUMMARY_TIMEOUT_MS = 600_000
+
 export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => ({
   // Initial state
   sessions: [],
@@ -590,7 +597,11 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
     set({ generatingSummaryFor: sessionId })
 
     try {
-      const data = await apiClient.post<{ summary: string }>(`/api/claude-sessions/${sessionId}/summary`)
+      const data = await apiClient.post<{ summary: string }>(
+        `/api/claude-sessions/${sessionId}/summary`,
+        undefined,
+        { timeout: SUMMARY_TIMEOUT_MS },
+      )
 
       // Update session in list
       set((state) => ({
@@ -611,7 +622,11 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
     set({ generatingSummaryFor: sessionId })
 
     try {
-      const data = await apiClient.post<{ summary: string }>(`/api/claude-sessions/${sessionId}/summary`)
+      const data = await apiClient.post<{ summary: string }>(
+        `/api/claude-sessions/${sessionId}/summary`,
+        undefined,
+        { timeout: SUMMARY_TIMEOUT_MS },
+      )
 
       // Update session in list
       set((state) => ({
@@ -656,9 +671,7 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
       params.set('limit', '200')
 
       const data = await apiClient.get<ClaudeSessionResponse>(`/api/agent-sessions?${params.toString()}`)
-      const sessionsWithoutSummary = data.sessions.filter(
-        s => (s.provider || 'claude') === 'claude' && !s.summary,
-      )
+      const sessionsWithoutSummary = data.sessions.filter(s => !s.summary)
 
       // Generate summaries one by one to avoid overwhelming the LLM
       for (const session of sessionsWithoutSummary) {
@@ -801,7 +814,9 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
         success_count: number
         failed_count: number
         generated_summaries?: { session_id: string; summary: string }[]
-      }>(`/api/claude-sessions/summaries/generate-batch?${params.toString()}`)
+      }>(`/api/claude-sessions/summaries/generate-batch?${params.toString()}`, undefined, {
+        timeout: BATCH_SUMMARY_TIMEOUT_MS,
+      })
 
       // Update progress and immediately reduce pendingSummaryCount
       const currentPendingCount = get().pendingSummaryCount

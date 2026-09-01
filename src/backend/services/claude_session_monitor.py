@@ -42,8 +42,6 @@ def _truncate_content(text: str | None, limit: int) -> tuple[str | None, bool, i
     return text, False, None
 
 
-import httpx
-
 from models.claude_session import (
     ActivityEvent,
     ActivityEventType,
@@ -58,6 +56,12 @@ from models.claude_session import (
     calculate_cost,
 )
 from services.session_file_cache import SessionFileCache
+from services.session_summary import (
+    format_messages_for_prompt,
+    generate_summary_from_messages,
+    read_cached_summary,
+    summary_cache_path,
+)
 from utils.time import to_aware_utc, utcnow
 
 # Global cache instance
@@ -786,26 +790,13 @@ class ClaudeSessionMonitor:
     def _get_summary_cache_path(self, session_id: str) -> Path:
         """Get cache file path for session summary.
 
-        Uses SUMMARY_CACHE_DIR env var if set, otherwise falls back to
-        ~/.claude/session_summaries/. In Docker, ~/.claude is read-only,
-        so we use /app/data/summaries instead.
-
         Args:
             session_id: Session UUID
 
         Returns:
             Path to the summary cache file
         """
-        cache_dir = os.getenv("SUMMARY_CACHE_DIR", "")
-        if cache_dir:
-            return Path(cache_dir) / f"{session_id}.txt"
-
-        # In Docker (CLAUDE_HOME is set), use /app/data/summaries to avoid read-only mount
-        claude_home = os.getenv("CLAUDE_HOME", "")
-        if claude_home:
-            return Path("/app/data/summaries") / f"{session_id}.txt"
-
-        return Path.home() / ".claude" / "session_summaries" / f"{session_id}.txt"
+        return summary_cache_path(session_id)
 
     def _get_first_messages(self, session_id: str, limit: int = 5) -> list[dict]:
         """Get first N user/assistant messages from a session.
@@ -888,19 +879,10 @@ class ClaudeSessionMonitor:
         Returns:
             Formatted string for prompt
         """
-        formatted = []
-        for msg in messages:
-            role = "사용자" if msg["role"] == "user" else "어시스턴트"
-            content = msg["content"][:200]  # Truncate for prompt
-            formatted.append(f"{role}: {content}")
-        return "\n".join(formatted)
+        return format_messages_for_prompt(messages)
 
     async def generate_summary(self, session_id: str) -> str:
         """Generate AI summary for a session.
-
-        Uses the configured Ollama model for cost efficiency. Disables reasoning
-        for thinking models so the response field contains the summary. Caches
-        result to file.
 
         Args:
             session_id: Session UUID
@@ -908,66 +890,14 @@ class ClaudeSessionMonitor:
         Returns:
             Generated summary string
         """
-        logger = logging.getLogger(__name__)
-
-        # 1. Check cache
-        cache_path = self._get_summary_cache_path(session_id)
-        if cache_path.exists():
-            logger.info(f"Using cached summary for session {session_id}")
-            return cache_path.read_text().strip()
-
-        # 2. Get first messages
+        # The cache is checked before the transcript is opened: a cached summary
+        # must not cost a file read, and must still be served when the session
+        # file has moved or is briefly unreadable.
+        cached = read_cached_summary(session_id)
+        if cached:
+            return cached
         messages = self._get_first_messages(session_id, limit=5)
-        if not messages:
-            return "대화 내용 없음"
-
-        # 3. Call Ollama for summary
-        prompt = f"""다음 대화의 주제를 한 문장(30자 이내)으로 요약해주세요.
-마침표 없이 간결하게 작성하세요.
-
-대화:
-{self._format_messages_for_prompt(messages)}
-
-요약:"""
-
-        try:
-            ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-            from config import get_model_for_provider
-
-            ollama_model = get_model_for_provider("ollama")
-
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(
-                    f"{ollama_base_url}/api/generate",
-                    json={
-                        "model": ollama_model,
-                        "prompt": prompt,
-                        "stream": False,
-                        "think": False,
-                        "options": {
-                            "num_predict": 50,
-                            "temperature": 0.3,
-                        },
-                    },
-                )
-                response.raise_for_status()
-                data = response.json()
-                summary = data.get("response", "").strip()
-
-                # Clean up: take first line only
-                if "\n" in summary:
-                    summary = summary.split("\n")[0].strip()
-
-            # 4. Save to cache
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-            cache_path.write_text(summary)
-
-            logger.info(f"Generated summary for session {session_id}: {summary}")
-            return summary
-
-        except Exception as e:
-            logger.error(f"Failed to generate summary for {session_id}: {e}")
-            return "요약 생성 실패"
+        return await generate_summary_from_messages(session_id, messages)
 
     def get_cached_summary(self, session_id: str) -> str | None:
         """Get cached summary if exists.
@@ -978,10 +908,7 @@ class ClaudeSessionMonitor:
         Returns:
             Cached summary or None
         """
-        cache_path = self._get_summary_cache_path(session_id)
-        if cache_path.exists():
-            return cache_path.read_text().strip()
-        return None
+        return read_cached_summary(session_id)
 
     def delete_session(self, session_id: str) -> bool:
         """Delete a session file.
