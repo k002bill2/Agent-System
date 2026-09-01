@@ -173,7 +173,7 @@ describe('SessionCard', () => {
     expect(screen.getByText(/johndoe/)).toBeInTheDocument()
   })
 
-  it('renders Codex provider and model without Claude-only actions', () => {
+  it('offers summary generation for Codex while keeping deletion Claude-only', () => {
     const codexSession = {
       ...baseSession,
       provider: 'codex' as const,
@@ -184,8 +184,18 @@ describe('SessionCard', () => {
 
     expect(screen.getByText('Codex')).toBeInTheDocument()
     expect(screen.getByText('gpt-5.5')).toBeInTheDocument()
-    expect(screen.queryByTitle('AI 요약 생성')).not.toBeInTheDocument()
+    // 요약은 롤아웃 파일이 아니라 캐시에 쓰므로 read-only 계약을 깨지 않는다.
+    expect(screen.getByTitle('AI 요약 생성')).toBeInTheDocument()
     expect(screen.queryByTitle('빈 세션 삭제')).not.toBeInTheDocument()
+  })
+
+  it('generates a Codex summary when the sparkle button is clicked', () => {
+    const codexSession = { ...baseSession, provider: 'codex' as const, summary: undefined }
+    render(<SessionCard session={codexSession} isSelected={false} onClick={onClick} />)
+
+    fireEvent.click(screen.getByTitle('AI 요약 생성'))
+
+    expect(mockGenerateSummary).toHaveBeenCalledWith(codexSession.session_id)
   })
 
   it('renders different status colors for each status', () => {

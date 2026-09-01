@@ -740,3 +740,228 @@ def test_windowed_scan_does_not_collect_the_detail_tail(tmp_path: Path) -> None:
     assert windowed.record_count == whole.record_count == 60
     assert windowed.user_count == whole.user_count
     assert len(windowed.records) == 5
+
+
+def _write_preamble_rollout(root: Path) -> Path:
+    """Write a rollout that opens the way real ones do.
+
+    The record shapes come from a survey of 150 local rollouts: a
+    ``<recommended_plugins>`` blob and an ``# AGENTS.md instructions for`` blob
+    always precede the first genuine turn.
+    """
+    path = root / "2026" / "09" / "01" / "rollout-2026-09-01T10-00-00-01pre.jsonl"
+    path.parent.mkdir(parents=True)
+    records = [
+        {
+            "timestamp": "2026-09-01T01:00:00Z",
+            "type": "session_meta",
+            "payload": {"id": "thread-preamble", "cwd": "/Users/tester/Work/AOS"},
+        },
+        {
+            "timestamp": "2026-09-01T01:00:01Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": "<recommended_plugins>\nHere is a list of plugins.\n"
+                        "</recommended_plugins>",
+                    }
+                ],
+            },
+        },
+        {
+            "timestamp": "2026-09-01T01:00:02Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": "# AGENTS.md instructions for /Users/tester/Work/AOS\n\n"
+                        "<INSTRUCTIONS>\n",
+                    }
+                ],
+            },
+        },
+        {
+            "timestamp": "2026-09-01T01:00:03Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "포트 8000 좀비 소켓 진단해줘"}],
+            },
+        },
+        {
+            "timestamp": "2026-09-01T01:00:04Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "model": "gpt-5.5",
+                "content": [{"type": "output_text", "text": "netstat 으로 확인하겠습니다."}],
+            },
+        },
+    ]
+    with path.open("wb") as stream:
+        for record in records:
+            stream.write(json.dumps(record).encode("utf-8") + b"\n")
+    return path
+
+
+def test_first_messages_skip_the_injected_preamble(tmp_path: Path) -> None:
+    """Summaries must come from the conversation, not the harness prologue.
+
+    Without the filter every Codex session summarizes the same two blobs.
+    """
+    _write_preamble_rollout(tmp_path)
+    monitor = CodexSessionMonitor(tmp_path)
+
+    messages = monitor._get_first_messages("thread-preamble")
+
+    assert [message["role"] for message in messages] == ["user", "assistant"]
+    assert messages[0]["content"] == "포트 8000 좀비 소켓 진단해줘"
+    assert not any("recommended_plugins" in message["content"] for message in messages)
+    assert not any("AGENTS.md" in message["content"] for message in messages)
+
+
+@pytest.mark.asyncio
+async def test_generate_summary_serves_the_cache_without_calling_ollama(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A cached summary is returned as-is, so a Codex session needs no network."""
+    cache_dir = tmp_path / "summaries"
+    cache_dir.mkdir()
+    (cache_dir / "thread-preamble.txt").write_text("좀비 소켓 진단\n")
+    monkeypatch.setenv("SUMMARY_CACHE_DIR", str(cache_dir))
+    _write_preamble_rollout(tmp_path)
+    monitor = CodexSessionMonitor(tmp_path)
+
+    assert monitor.get_cached_summary("thread-preamble") == "좀비 소켓 진단"
+    assert await monitor.generate_summary("thread-preamble") == "좀비 소켓 진단"
+
+
+def _write_preamble_only_rollout(root: Path) -> Path:
+    """A rollout whose every message is injected context and nothing else."""
+    path = root / "2026" / "09" / "01" / "rollout-2026-09-01T11-00-00-01only.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    records = [
+        {
+            "timestamp": "2026-09-01T02:00:00Z",
+            "type": "session_meta",
+            "payload": {"id": "thread-preamble-only", "cwd": "/Users/tester/Work/AOS"},
+        },
+        {
+            "timestamp": "2026-09-01T02:00:01Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "<recommended_plugins>\nplugins\n"}],
+            },
+        },
+        {
+            "timestamp": "2026-09-01T02:00:02Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "[Base]\nYou are operating inside X."}],
+            },
+        },
+    ]
+    with path.open("wb") as stream:
+        for record in records:
+            stream.write(json.dumps(record).encode("utf-8") + b"\n")
+    return path
+
+
+def test_first_messages_skip_repeated_harness_blocks(tmp_path: Path) -> None:
+    """`[Base]`/`[Context]` repeat verbatim across sessions, so they are dropped.
+
+    Measured over 120 local rollouts, dropping them changes the summary input
+    for 40 — otherwise every session of the same harness summarizes alike.
+    """
+    _write_preamble_rollout(tmp_path)
+    monitor = CodexSessionMonitor(tmp_path)
+    path = tmp_path / "2026" / "09" / "01" / "rollout-2026-09-01T10-00-00-01pre.jsonl"
+    scanned = monitor._read_file(path).messages
+    harness = [
+        message
+        for message in scanned
+        if message.content and message.content.startswith(("[Base]", "[Context]"))
+    ]
+
+    assert not harness, "fixture guard: this rollout carries no harness blocks"
+    assert codex_monitor._is_injected_preamble("[Base]\nYou are operating inside Buzz.")
+    assert codex_monitor._is_injected_preamble("[Context]\nScope: thread")
+    assert codex_monitor._is_injected_preamble("[New message — arrived while you were working]")
+    assert not codex_monitor._is_injected_preamble("포트 8000 좀비 소켓 진단해줘")
+
+
+def test_first_messages_fall_back_when_only_preamble_exists(tmp_path: Path) -> None:
+    """A session of nothing but injected context still summarizes something.
+
+    4 of 120 local rollouts look like this; dropping everything would report
+    '대화 내용 없음' for a session that genuinely has content on screen.
+    """
+    _write_preamble_only_rollout(tmp_path)
+    monitor = CodexSessionMonitor(tmp_path)
+
+    messages = monitor._get_first_messages("thread-preamble-only")
+
+    assert messages, "the fallback must not return an empty conversation"
+    assert messages[0]["content"].startswith("<recommended_plugins>")
+
+
+def test_xml_wrapped_user_request_is_not_treated_as_preamble() -> None:
+    """Only the observed envelopes are injected; a `<task>` turn is a real request.
+
+    Matching any lone `<tag>` line would drop the request and summarize the
+    replies to a question nobody can see.
+    """
+    assert codex_monitor._is_injected_preamble("<recommended_plugins>\nplugins")
+    assert codex_monitor._is_injected_preamble("<user_action>\nopened a file")
+    assert not codex_monitor._is_injected_preamble("<task>\n포트 8000 좀비 소켓 진단해줘")
+    assert not codex_monitor._is_injected_preamble("<spec>\nbuild the thing")
+
+
+def test_first_message_scan_stops_at_the_limit(tmp_path: Path) -> None:
+    """A summary reads the opening turns, not the whole rollout.
+
+    The detail path retains up to 48MiB; doing that once per session while
+    walking every session is the cost this bound exists to avoid.
+    """
+    _write_preamble_rollout(tmp_path)
+    monitor = CodexSessionMonitor(tmp_path)
+    path = tmp_path / "2026" / "09" / "01" / "rollout-2026-09-01T10-00-00-01pre.jsonl"
+
+    kept, raw = monitor._scan_first_messages(path, limit=1)
+
+    assert len(kept) == 1
+    assert kept[0]["content"] == "포트 8000 좀비 소켓 진단해줘"
+    assert len(raw) <= 1
+
+
+@pytest.mark.asyncio
+async def test_cached_summary_is_served_without_opening_the_rollout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A cached summary must not cost a file read, nor need the file to exist."""
+    cache_dir = tmp_path / "summaries"
+    cache_dir.mkdir()
+    (cache_dir / "thread-preamble.txt").write_text("좀비 소켓 진단")
+    monkeypatch.setenv("SUMMARY_CACHE_DIR", str(cache_dir))
+    _write_preamble_rollout(tmp_path)
+    monitor = CodexSessionMonitor(tmp_path)
+
+    def _fail(*args: object, **kwargs: object) -> None:
+        raise AssertionError("the rollout must not be read when a summary is cached")
+
+    monkeypatch.setattr(monitor, "_get_first_messages", _fail)
+
+    assert await monitor.generate_summary("thread-preamble") == "좀비 소켓 진단"
