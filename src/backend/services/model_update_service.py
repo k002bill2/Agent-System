@@ -24,6 +24,18 @@ UPDATE_CHECK_TIMEOUT = int(os.getenv("LLM_UPDATE_CHECK_TIMEOUT", "30"))
 USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 
 
+def _provider_probe_available(provider: LLMProvider | str) -> bool:
+    """update check 대상 provider 프로브 (API 키 존재 여부 대용).
+
+    get_default 는 enabled 모델이 0개인 provider 에 fail-closed(LookupError)
+    한다 — 스케줄러가 죽지 않도록 그 경우를 '사용 불가'(skip)로 취급한다.
+    """
+    try:
+        return LLMModelRegistry.is_available(LLMModelRegistry.get_default(provider))
+    except LookupError:
+        return False
+
+
 # ─────────────────────────────────────────────────────────────
 # Data Structures
 # ─────────────────────────────────────────────────────────────
@@ -336,8 +348,8 @@ class ModelUpdateService:
         results: list[UpdateCheckResult] = []
 
         for provider in _FETCHERS:
-            # Skip providers without API keys
-            if not LLMModelRegistry.is_available(LLMModelRegistry.get_default(provider)):
+            # Skip providers without API keys (or without any enabled model)
+            if not _provider_probe_available(provider):
                 continue
 
             result = await ModelUpdateService.check_provider(provider, apply_updates=apply_updates)
@@ -558,9 +570,5 @@ class ModelUpdateService:
             "enabled": USE_DATABASE,
             "check_interval_hours": UPDATE_CHECK_INTERVAL_HOURS,
             "last_check": last_check,
-            "configured_providers": [
-                p.value
-                for p in _FETCHERS
-                if LLMModelRegistry.is_available(LLMModelRegistry.get_default(p))
-            ],
+            "configured_providers": [p.value for p in _FETCHERS if _provider_probe_available(p)],
         }

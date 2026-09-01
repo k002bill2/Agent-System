@@ -9,6 +9,7 @@ DB 영속화 5 함수는 `storage.py` 로 들어올린 뒤 클래스에 같은 �
 `monkeypatch.setattr(playground_service.service, "_load_sessions", ...)`.
 """
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -16,6 +17,7 @@ from typing import Any
 
 from models.cost import calculate_cost, estimate_tokens
 from models.llm_access import LLMAccessResponse
+from models.llm_models import LLMModelRegistry
 from models.playground import (
     PlaygroundCompareRequest,
     PlaygroundCompareResult,
@@ -57,6 +59,21 @@ from .storage import (
 logger = logging.getLogger(__name__)
 
 
+def _require_registered_enabled_model(model_id: str) -> None:
+    """세션 저장 경로의 모델 등록 게이트.
+
+    Registry 에 존재하고 enabled 인 모델만 세션에 저장될 수 있다. 검증은
+    쓰기 경로(create/update)에만 있다 — 기존 세션 로딩(legacy JSON/DB)은
+    stale 모델이어도 그대로 파싱되고, 실행 시 resolver/fallback 이 처리한다.
+    오류 메시지는 llm_runtime_resolver 와 동일한 관례를 따른다.
+    """
+    model = LLMModelRegistry.get_by_id(model_id)
+    if model is None:
+        raise ValueError(f"Unknown model: {model_id}")
+    if not model.is_enabled:
+        raise ValueError(f"Model disabled: {model_id}")
+
+
 class PlaygroundService:
     """Service for managing playground sessions and executions."""
 
@@ -66,8 +83,13 @@ class PlaygroundService:
 
     @staticmethod
     def create_session(data: PlaygroundSessionCreate) -> PlaygroundSession:
-        """Create a new playground session."""
+        """Create a new playground session.
+
+        Raises:
+            ValueError: ``data.model`` is not a registered, enabled model.
+        """
         _load_sessions()  # Ensure sessions are loaded
+        _require_registered_enabled_model(data.model)
 
         session = PlaygroundSession(
             name=data.name,
@@ -165,11 +187,19 @@ class PlaygroundService:
         selected_memory_ids: list[str] | None = None,
         context_budget_tokens: int | None = None,
     ) -> PlaygroundSession | None:
-        """Update session settings."""
+        """Update session settings.
+
+        Raises:
+            ValueError: ``model`` is not a registered, enabled model. 검증은
+                어떤 필드도 반영되기 전에 수행된다 — 거부는 원자적이다.
+        """
         _load_sessions()  # Ensure sessions are loaded
         session = _sessions.get(session_id)
         if not session:
             return None
+
+        if model is not None:
+            _require_registered_enabled_model(model)
 
         if name is not None:
             session.name = name
@@ -240,6 +270,7 @@ class PlaygroundService:
             max_tokens=request.max_tokens or session.max_tokens,
             tools_enabled=request.tools or session.enabled_tools,
             requested_model=session.model,
+            registry_revision=LLMModelRegistry.get_revision(),
         )
 
         execution.status = PlaygroundExecutionStatus.RUNNING
@@ -433,6 +464,7 @@ class PlaygroundService:
             max_tokens=request.max_tokens or session.max_tokens,
             tools_enabled=request.tools or session.enabled_tools,
             requested_model=session.model,
+            registry_revision=LLMModelRegistry.get_revision(),
         )
         execution.status = PlaygroundExecutionStatus.RUNNING
         execution.started_at = utcnow()
@@ -446,78 +478,84 @@ class PlaygroundService:
         session.messages.append(user_msg)
         session.executions.append(execution)
 
-        def _record_stream_failure(message: str) -> None:
-            # 실패 execution 도 영속화하되, 성공 집계(total_*)는 올리지 않는다
-            # (기존 계약 — 실패 스트림은 세션 집계에 반영되지 않는다).
-            execution.status = PlaygroundExecutionStatus.FAILED
+        def _record_stream_failure(
+            message: str,
+            status: PlaygroundExecutionStatus = PlaygroundExecutionStatus.FAILED,
+        ) -> None:
+            # 실패/취소 execution 도 영속화하되, 성공 집계(total_*)는 올리지
+            # 않는다 (기존 계약 — 실패 스트림은 세션 집계에 반영되지 않는다).
+            execution.status = status
             execution.error = message
             execution.completed_at = utcnow()
             session.updated_at = utcnow()
             _save_sessions()
             _fire_and_forget(PlaygroundService.save_session_to_db(session))
 
-        # Multi-turn history as LangChain messages (excl. the just-appended user)
-        history = _to_lc_messages(session.messages[-11:-1])
-
-        # Inject RAG context if enabled
-        rag_sources: list[dict] | None = None
-        rag_context_str: str | None = None
-        if session.rag_enabled and session.project_id:
-            try:
-                from services.rag_service import get_project_context_with_sources
-
-                k = (
-                    request.rag_k
-                    if getattr(request, "rag_k", None)
-                    else getattr(session, "rag_k", None) or 5
-                )
-                force_hybrid = (
-                    request.rag_hybrid_override
-                    if getattr(request, "rag_hybrid_override", None) is not None
-                    else getattr(session, "rag_hybrid_override", None)
-                )
-                force_rerank = (
-                    request.rag_rerank_override
-                    if getattr(request, "rag_rerank_override", None) is not None
-                    else getattr(session, "rag_rerank_override", None)
-                )
-                include_shared = (
-                    request.rag_include_shared
-                    if getattr(request, "rag_include_shared", None) is not None
-                    else bool(getattr(session, "rag_include_shared", False))
-                )
-                rag_context_str, rag_sources = await get_project_context_with_sources(
-                    project_id=session.project_id,
-                    query=request.prompt,
-                    k=k,
-                    include_shared=include_shared,
-                    force_hybrid=force_hybrid,
-                    force_rerank=force_rerank,
-                )
-            except Exception as e:
-                logger.warning("RAG context retrieval failed: %s", e)
-
-        # Choose streaming path vs tool-enabled path
-        enabled_tools = request.tools or session.enabled_tools or []
-        temperature = request.temperature or session.temperature
-        max_tokens = request.max_tokens or session.max_tokens
-
-        full_response = ""
-        token_info: dict | None = None
-
-        # Compose once — shared by streaming and tool-enabled branches.
-        effective_system_prompt = build_effective_system_prompt(session)
-        usage_context = _playground_usage_context(
-            session,
-            metadata={"tools_enabled": bool(enabled_tools), "streaming": True},
-            llm_access=llm_access,
-        )
-
-        # 실제 성공한 모델. fallback retry가 다른 모델로 성공하면 갱신되며,
-        # 비용/토큰 추정은 session.model이 아니라 이 값으로 계산한다.
-        resolved_model = session.model
-
+        # history/RAG 준비부터 성공 마감까지 전 구간을 하나의 try 로 감싼다 —
+        # 초기화 단계 예외·태스크 취소·클라이언트 disconnect 어느 경로에서도
+        # RUNNING execution 이 영속화 대상으로 남지 않게 하기 위함이다.
         try:
+            # Multi-turn history as LangChain messages (excl. the just-appended user)
+            history = _to_lc_messages(session.messages[-11:-1])
+
+            # Inject RAG context if enabled
+            rag_sources: list[dict] | None = None
+            rag_context_str: str | None = None
+            if session.rag_enabled and session.project_id:
+                try:
+                    from services.rag_service import get_project_context_with_sources
+
+                    k = (
+                        request.rag_k
+                        if getattr(request, "rag_k", None)
+                        else getattr(session, "rag_k", None) or 5
+                    )
+                    force_hybrid = (
+                        request.rag_hybrid_override
+                        if getattr(request, "rag_hybrid_override", None) is not None
+                        else getattr(session, "rag_hybrid_override", None)
+                    )
+                    force_rerank = (
+                        request.rag_rerank_override
+                        if getattr(request, "rag_rerank_override", None) is not None
+                        else getattr(session, "rag_rerank_override", None)
+                    )
+                    include_shared = (
+                        request.rag_include_shared
+                        if getattr(request, "rag_include_shared", None) is not None
+                        else bool(getattr(session, "rag_include_shared", False))
+                    )
+                    rag_context_str, rag_sources = await get_project_context_with_sources(
+                        project_id=session.project_id,
+                        query=request.prompt,
+                        k=k,
+                        include_shared=include_shared,
+                        force_hybrid=force_hybrid,
+                        force_rerank=force_rerank,
+                    )
+                except Exception as e:
+                    logger.warning("RAG context retrieval failed: %s", e)
+
+            # Choose streaming path vs tool-enabled path
+            enabled_tools = request.tools or session.enabled_tools or []
+            temperature = request.temperature or session.temperature
+            max_tokens = request.max_tokens or session.max_tokens
+
+            full_response = ""
+            token_info: dict | None = None
+
+            # Compose once — shared by streaming and tool-enabled branches.
+            effective_system_prompt = build_effective_system_prompt(session)
+            usage_context = _playground_usage_context(
+                session,
+                metadata={"tools_enabled": bool(enabled_tools), "streaming": True},
+                llm_access=llm_access,
+            )
+
+            # 실제 성공한 모델. fallback retry가 다른 모델로 성공하면 갱신되며,
+            # 비용/토큰 추정은 session.model이 아니라 이 값으로 계산한다.
+            resolved_model = session.model
+
             if enabled_tools:
                 # Tool-enabled: single-shot invoke_with_tools, yield final answer.
                 resp = await _invoke_with_model_fallback(
@@ -645,9 +683,21 @@ class PlaygroundService:
             if rag_sources:
                 yield f"\n\n__RAG_SOURCES__{json.dumps(rag_sources, ensure_ascii=False)}"
 
+        except (asyncio.CancelledError, GeneratorExit):
+            # 클라이언트 disconnect(aclose→GeneratorExit)와 태스크 취소는
+            # BaseException 이라 아래 except Exception 이 못 잡는다 — CANCELLED
+            # 로 마감만 하고 반드시 재전파한다 (GeneratorExit 를 삼키면
+            # RuntimeError, CancelledError 를 삼키면 취소 유실).
+            if execution.status == PlaygroundExecutionStatus.RUNNING:
+                _record_stream_failure(
+                    "stream cancelled before completion",
+                    status=PlaygroundExecutionStatus.CANCELLED,
+                )
+            raise
         except Exception as e:
             # 비-tools 루프에서 이미 finalize 된 실패는 여기로 오지 않지만,
-            # tools 분기 등에서 RUNNING 인 채 떨어진 예외는 여기서 한 번만 마감한다.
+            # 초기화 단계·tools 분기 등에서 RUNNING 인 채 떨어진 예외는 여기서
+            # 한 번만 마감한다.
             if execution.status == PlaygroundExecutionStatus.RUNNING:
                 _record_stream_failure(str(e))
             yield f"\n\n[Error: {str(e)}]"

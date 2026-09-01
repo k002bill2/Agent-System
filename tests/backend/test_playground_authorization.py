@@ -381,6 +381,56 @@ async def test_create_session_requires_authentication(app, client):
 
 
 # ─────────────────────────────────────────────────────────────
+# 6b. Session model registration gate (create / settings PATCH → 400)
+# ─────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_create_session_with_unknown_model_returns_400(app, client):
+    """Registry 에 없는 모델은 세션 생성 전에 명확한 검증 오류(400)로 거부되고,
+    아무것도 영속화되지 않는다 (500 이나 조용한 저장 금지)."""
+    _authenticate_as(app, OWNER)
+    res = await client.post(
+        "/api/playground/sessions",
+        json={"name": "bad-model", "model": "no-such-model"},
+    )
+    assert res.status_code == 400
+    assert "no-such-model" in res.json()["detail"]
+    assert playground_service._sessions == {}
+
+
+@pytest.mark.asyncio
+async def test_create_session_with_disabled_model_returns_400(app, client):
+    """gpt-5.4 는 registry 에 있으나 disabled — 저장 전에 400 으로 거부."""
+    _authenticate_as(app, OWNER)
+    res = await client.post(
+        "/api/playground/sessions",
+        json={"name": "bad-model", "model": "gpt-5.4"},
+    )
+    assert res.status_code == 400
+    assert "gpt-5.4" in res.json()["detail"]
+    assert playground_service._sessions == {}
+
+
+@pytest.mark.asyncio
+async def test_settings_update_with_invalid_model_returns_400_atomically(
+    app, client, owned_session
+):
+    """settings PATCH 의 model 검증 실패는 400 이고, 같은 요청의 다른 필드
+    (name)도 반영되지 않아야 한다 — 원자적 거부."""
+    _authenticate_as(app, OWNER)
+    model_before = owned_session.model  # 같은 객체가 dict 에 있으므로 사전 캡처
+    res = await client.patch(
+        f"/api/playground/sessions/{owned_session.id}/settings",
+        json={"name": "should-not-apply", "model": "no-such-model"},
+    )
+    assert res.status_code == 400
+    unchanged = playground_service._sessions[owned_session.id]
+    assert unchanged.name == "owner private session"
+    assert unchanged.model == model_before
+
+
+# ─────────────────────────────────────────────────────────────
 # 7. Service layer: fail-closed listing without an identity
 # ─────────────────────────────────────────────────────────────
 

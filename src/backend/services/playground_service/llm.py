@@ -152,7 +152,12 @@ def _safe_playground_fallback_model(
         entitled = resolution.model_id
         return entitled if entitled and entitled != current_model else None
 
-    configured_default = LLMModelRegistry.get_default(os.getenv("LLM_PROVIDER") or "codex_cli")
+    try:
+        configured_default = LLMModelRegistry.get_default(os.getenv("LLM_PROVIDER") or "codex_cli")
+    except LookupError:
+        # 구성된 provider 에 enabled 모델이 0개(fail-closed) — 재시도할 안전한
+        # 대상이 없다. None 을 돌려 원래 오류가 그대로 표면화되게 한다.
+        return None
     fallback = configured_default or "codex-cli"
     return fallback if fallback and fallback != current_model else None
 

@@ -1,5 +1,7 @@
 """Tests for claude-sonnet-5 registry entry, sync_to_db dual-default guard, and pricing."""
 
+import logging
+
 import pytest
 from sqlalchemy import Delete, Update
 from sqlalchemy.dialects import postgresql
@@ -37,9 +39,10 @@ class TestSonnet5RegistryEntry:
         assert model.supports_vision is True
         assert model.is_enabled is True
 
-    def test_sonnet46_is_anthropic_code_default(self):
-        # Policy 2026-08-31: sonnet-4-6 is the current GA balanced model.
-        assert LLMModelRegistry.get_default("anthropic") == "claude-sonnet-4-6"
+    def test_sonnet5_is_anthropic_code_default(self):
+        # 후속 정책 2026-09-01 (plan §5): 검증된 claude-sonnet-5 를
+        # anthropic code default 로 복원한다.
+        assert LLMModelRegistry.get_default("anthropic") == "claude-sonnet-5"
 
     def test_anthropic_has_exactly_one_code_default(self):
         defaults = [
@@ -47,7 +50,7 @@ class TestSonnet5RegistryEntry:
             for m in _MODELS
             if m.provider == LLMProvider.ANTHROPIC and m.is_default
         ]
-        assert defaults == ["claude-sonnet-4-6"]
+        assert defaults == ["claude-sonnet-5"]
 
 
 # ─────────────────────────────────────────────────────────────
@@ -147,6 +150,208 @@ class TestGemini37FlashRegistryEntry:
             if m.provider == LLMProvider.GOOGLE and m.is_default
         ]
         assert defaults == ["gemini-3.7-flash"]
+
+
+# ─────────────────────────────────────────────────────────────
+# (a4) 2026-09-01 follow-up policy — gpt-5.5 seed, alias/revision metadata
+# ─────────────────────────────────────────────────────────────
+
+
+class TestGpt55SeedPolicy:
+    def test_gpt55_seed_is_disabled(self):
+        """후속 정책 2026-09-01 (plan §5): gpt-5.5 는 live smoke 전까지 code
+        seed 에서 즉시 enabled 로 두지 않는다. 행 자체는 호환성 위해 유지."""
+        model = LLMModelRegistry.get_by_id("gpt-5.5")
+        assert model is not None
+        assert model.is_enabled is False
+        assert model.is_default is False
+
+
+class TestAliasAndRevisionMetadata:
+    def test_gpt56_alias_maps_to_documented_concrete_model(self):
+        """gpt-5.6 은 문서상 Sol 로 라우팅되는 alias — code-seed 의 optional
+        구조화 metadata 로만 기록한다. provider 응답으로 확인한 값이 아니므로
+        실행 귀속(resolved_model)에는 쓰지 않는다."""
+        model = LLMModelRegistry.get_by_id("gpt-5.6")
+        assert model is not None
+        assert model.alias_for == "gpt-5.6-sol"
+
+    def test_alias_for_defaults_none_for_regular_models(self):
+        """구버전 직렬화/DB-loaded config 호환: alias_for 는 optional 기본 None."""
+        model = LLMModelRegistry.get_by_id("claude-sonnet-5")
+        assert model is not None
+        assert model.alias_for is None
+
+    @pytest.mark.asyncio
+    async def test_sync_to_db_values_do_not_include_alias_for(self):
+        """alias_for 는 code-seed 전용 metadata: DB 스키마에 컬럼이 없으므로
+        INSERT values 에 포함되면 실제 DB 에서 sync 가 죽는다 (no migration)."""
+        session = _FakeSession(
+            select_results=[
+                _FakeResult([]),  # suppressed ids
+                _FakeResult([]),  # existing ids
+                _FakeResult([]),  # providers with DB rows
+                _FakeResult([]),  # final load_from_db select
+            ]
+        )
+        await LLMModelRegistry.sync_to_db(session)
+        for stmt in session.inserts:
+            assert "alias_for" not in _insert_params(stmt)
+
+    def test_registry_revision_reflects_serving_mode(self):
+        """실행 계측용 registry revision: code seed 서빙과 DB 캐시 서빙을
+        구분해 표시한다 (JSON-safe 문자열, 스키마 변경 없음)."""
+        from models.llm_models import REGISTRY_REVISION
+
+        assert LLMModelRegistry.get_revision() == f"code:{REGISTRY_REVISION}"
+        LLMModelRegistry._db_cache = []
+        LLMModelRegistry._db_index = {}
+        assert LLMModelRegistry.get_revision() == f"db:{REGISTRY_REVISION}"
+
+
+# ─────────────────────────────────────────────────────────────
+# (a5) get_default — deterministic + fail-closed selection policy
+# ─────────────────────────────────────────────────────────────
+
+
+def _policy_cfg(
+    model_id: str,
+    *,
+    is_default: bool = False,
+    is_enabled: bool = True,
+    input_price: float = 0.001,
+    output_price: float = 0.002,
+):
+    from models.llm_models import LLMModelConfig
+
+    return LLMModelConfig(
+        id=model_id,
+        display_name=model_id,
+        provider=LLMProvider.GOOGLE,
+        context_window=100_000,
+        input_price=input_price,
+        output_price=output_price,
+        is_default=is_default,
+        is_enabled=is_enabled,
+    )
+
+
+def _serve_from_cache(models: list) -> None:
+    LLMModelRegistry._db_cache = models
+    LLMModelRegistry._db_index = {m.id: m for m in models}
+
+
+class TestGetDefaultSelectionPolicy:
+    def test_every_seed_provider_has_exactly_one_enabled_default(self):
+        """provider 별 code default 는 정확히 하나, 그리고 enabled 여야 한다 —
+        disabled default 는 조용한 순서 의존 선택을 유발한다."""
+        providers = {m.provider for m in _MODELS}
+        for provider in providers:
+            defaults = [m for m in _MODELS if m.provider == provider and m.is_default]
+            assert len(defaults) == 1, (
+                f"{provider.value}: defaults={[m.id for m in defaults]}"
+            )
+            assert defaults[0].is_enabled, (
+                f"{provider.value}: default {defaults[0].id} is disabled"
+            )
+
+    def test_no_enabled_default_falls_back_to_cheapest_deterministically(self, caplog):
+        """default 가 disabled 된 provider: 목록 순서(첫 요소)가 아니라
+        결정론적(최저가 합산, id tie-break) 폴백을 고르고 경고를 남긴다."""
+        _serve_from_cache(
+            [
+                _policy_cfg("z-expensive", input_price=0.01, output_price=0.05),
+                _policy_cfg("a-cheap", input_price=0.0001, output_price=0.0004),
+                _policy_cfg("m-disabled-default", is_default=True, is_enabled=False),
+            ]
+        )
+        with caplog.at_level(logging.WARNING, logger="models.llm_models"):
+            assert LLMModelRegistry.get_default("google") == "a-cheap"
+        assert "no enabled default" in caplog.text
+
+    def test_fallback_is_order_independent(self):
+        models = [
+            _policy_cfg("z-expensive", input_price=0.01, output_price=0.05),
+            _policy_cfg("a-cheap", input_price=0.0001, output_price=0.0004),
+        ]
+        _serve_from_cache(models)
+        first = LLMModelRegistry.get_default("google")
+        _serve_from_cache(list(reversed(models)))
+        assert LLMModelRegistry.get_default("google") == first == "a-cheap"
+
+    def test_multiple_enabled_defaults_resolve_deterministically(self, caplog):
+        """DB drift 로 enabled default 가 2개면 목록 순서가 아니라 id 순으로
+        결정하고 경고를 남긴다 — 충돌을 조용히 숨기지 않는다."""
+        _serve_from_cache(
+            [
+                _policy_cfg("z-default", is_default=True),
+                _policy_cfg("a-default", is_default=True),
+            ]
+        )
+        with caplog.at_level(logging.WARNING, logger="models.llm_models"):
+            assert LLMModelRegistry.get_default("google") == "a-default"
+        assert "multiple enabled defaults" in caplog.text
+
+    def test_provider_without_enabled_models_fails_closed(self):
+        """enabled 모델이 0개인 provider 는 타 provider 모델("codex-cli")을
+        조용히 반환하지 않고 LookupError 로 fail-closed 한다."""
+        _serve_from_cache([_policy_cfg("g-disabled", is_enabled=False)])
+        with pytest.raises(LookupError, match="google"):
+            LLMModelRegistry.get_default("google")
+
+    def test_unknown_provider_string_fails_closed(self, caplog):
+        """미지 provider 문자열은 "codex-cli" 로 조용히 라우팅하지 않고
+        LookupError 로 fail-closed 한다 — 임의 문자열이 Codex 실행 경로로
+        흘러가면 provider 정책·entitlement 게이트가 우회된다."""
+        with caplog.at_level(logging.ERROR, logger="models.llm_models"):
+            with pytest.raises(LookupError, match="not-a-provider"):
+                LLMModelRegistry.get_default("not-a-provider")
+        assert "unknown provider" in caplog.text.lower()
+
+    def test_unknown_env_provider_fails_closed_without_provider_arg(self, monkeypatch):
+        """provider 인자 없는 호출은 LLM_PROVIDER env 로 해석되는데, env 가
+        미지 문자열이면 codex-cli 대체 없이 LookupError 로 fail-closed 한다."""
+        monkeypatch.setenv("LLM_PROVIDER", "rogue-provider")
+        with pytest.raises(LookupError, match="rogue-provider"):
+            LLMModelRegistry.get_default()
+
+
+class TestGetDefaultFailClosedCallerGuards:
+    """get_default 의 LookupError(fail-closed)가 조회성 표면을 500 으로
+    깨뜨리지 않도록, 명시적 폴백을 가진 호출부를 고정한다."""
+
+    @pytest.mark.asyncio
+    async def test_providers_endpoint_reports_none_default_for_empty_provider(self):
+        """/api/llm/providers 는 enabled 모델 0개인 provider 를 500 없이
+        default=None 으로 보고해야 한다 (타 provider 모델 이름을 대입하던
+        기존 오답도 함께 제거)."""
+        from api.llm import get_providers
+
+        _serve_from_cache([_policy_cfg("g-disabled", is_enabled=False)])
+        result = await get_providers()
+        assert result["google"]["default"] is None
+        assert result["google"]["models"] == []
+
+    @pytest.mark.asyncio
+    async def test_default_model_endpoint_returns_404_for_empty_provider(self):
+        """/api/llm/models/default?provider=google 은 enabled 모델이 0개면
+        500 이 아니라 404 로 fail-closed 한다."""
+        from fastapi import HTTPException
+
+        from api.llm import get_default_model
+
+        _serve_from_cache([_policy_cfg("g-disabled", is_enabled=False)])
+        with pytest.raises(HTTPException) as exc_info:
+            await get_default_model(provider="google")
+        assert exc_info.value.status_code == 404
+
+    def test_update_probe_treats_empty_provider_as_unavailable(self):
+        """12시간 update check 의 provider 프로브는 enabled 모델 0개를
+        '사용 불가'(skip)로 취급해야 한다 — 스케줄러가 죽으면 안 된다."""
+        from services.model_update_service import _provider_probe_available
+
+        _serve_from_cache([_policy_cfg("g-disabled", is_enabled=False)])
+        assert _provider_probe_available("google") is False
 
 
 # ─────────────────────────────────────────────────────────────
@@ -315,7 +520,8 @@ async def test_sync_to_db_new_default_kept_when_provider_has_zero_rows():
 
     await LLMModelRegistry.sync_to_db(session)
 
-    params = _insert_params(_find_insert(session, "claude-sonnet-4-6"))
+    # 2026-09-01 정책: anthropic code default 는 claude-sonnet-5 로 복원됨.
+    params = _insert_params(_find_insert(session, "claude-sonnet-5"))
     assert params["is_default"] is True
 
 
@@ -383,7 +589,8 @@ async def test_sync_to_db_bootstraps_default_for_provider_with_zero_rows():
 
     await LLMModelRegistry.sync_to_db(session)
 
-    params = _insert_params(_find_insert(session, "claude-sonnet-4-6"))
+    # 2026-09-01 정책: anthropic code default 는 claude-sonnet-5 로 복원됨.
+    params = _insert_params(_find_insert(session, "claude-sonnet-5"))
     assert params["is_default"] is True
 
 

@@ -92,7 +92,11 @@ async def create_session(
     the authenticated caller, never a client-supplied value.
     """
     data.user_id = str(current_user.id)
-    return PlaygroundService.create_session(data)
+    try:
+        return PlaygroundService.create_session(data)
+    except ValueError as e:
+        # 모델 등록 게이트(unknown/disabled model) — 잘못된 입력이므로 400.
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get(
@@ -195,28 +199,32 @@ async def update_session_settings(
     background_tasks: BackgroundTasks,
 ):
     """Update session settings. Auto-triggers indexing when RAG is enabled."""
-    session = PlaygroundService.update_session_settings(
-        session_id,
-        name=data.name,
-        agent_id=data.agent_id,
-        model=data.model,
-        temperature=data.temperature,
-        max_tokens=data.max_tokens,
-        system_prompt=data.system_prompt,
-        enabled_tools=data.enabled_tools,
-        project_id=data.project_id,
-        working_directory=data.working_directory,
-        rag_enabled=data.rag_enabled,
-        rag_k=data.rag_k,
-        rag_hybrid_override=data.rag_hybrid_override,
-        rag_rerank_override=data.rag_rerank_override,
-        rag_include_shared=data.rag_include_shared,
-        rules_mode=data.rules_mode,
-        memory_mode=data.memory_mode,
-        selected_rule_ids=data.selected_rule_ids,
-        selected_memory_ids=data.selected_memory_ids,
-        context_budget_tokens=data.context_budget_tokens,
-    )
+    try:
+        session = PlaygroundService.update_session_settings(
+            session_id,
+            name=data.name,
+            agent_id=data.agent_id,
+            model=data.model,
+            temperature=data.temperature,
+            max_tokens=data.max_tokens,
+            system_prompt=data.system_prompt,
+            enabled_tools=data.enabled_tools,
+            project_id=data.project_id,
+            working_directory=data.working_directory,
+            rag_enabled=data.rag_enabled,
+            rag_k=data.rag_k,
+            rag_hybrid_override=data.rag_hybrid_override,
+            rag_rerank_override=data.rag_rerank_override,
+            rag_include_shared=data.rag_include_shared,
+            rules_mode=data.rules_mode,
+            memory_mode=data.memory_mode,
+            selected_rule_ids=data.selected_rule_ids,
+            selected_memory_ids=data.selected_memory_ids,
+            context_budget_tokens=data.context_budget_tokens,
+        )
+    except ValueError as e:
+        # 모델 등록 게이트(unknown/disabled model) — 검증 실패는 원자적 거부.
+        raise HTTPException(status_code=400, detail=str(e))
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 

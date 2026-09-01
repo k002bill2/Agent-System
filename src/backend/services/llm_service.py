@@ -91,7 +91,12 @@ def _resolve_runtime_from_context(
     access = _usage_context_access(usage_context)
     source = _usage_context_value(usage_context, "source")
     if not access or not source:
-        resolved_model = model_id or LLMModelRegistry.get_default()
+        try:
+            resolved_model = model_id or LLMModelRegistry.get_default()
+        except LookupError as e:
+            # 구성 provider 가 미지이거나 enabled 모델 0개 — 이 모듈의 실패
+            # 계약 타입(ValueError, cf. Unknown model/Model disabled)으로 번역.
+            raise ValueError(str(e)) from e
         provider = LLMModelRegistry.get_provider(resolved_model)
         return resolved_model, provider.value if provider else "unknown", usage_context
 
@@ -274,7 +279,11 @@ class LLMService:
         enough metadata (provider + id) to build without a code entry.
         """
         if not model_id:
-            model_id = LLMModelRegistry.get_default()
+            try:
+                model_id = LLMModelRegistry.get_default()
+            except LookupError as e:
+                # 이 메서드의 기존 실패 계약(ValueError)으로 번역한다.
+                raise ValueError(str(e)) from e
         model = LLMModelRegistry.get_by_id(model_id)
         if model is None:
             raise ValueError(f"Unknown model: {model_id}")
@@ -640,8 +649,15 @@ class LLMService:
         """Get the default model based on available API keys.
 
         Uses the central LLMModelRegistry.
+
+        Raises:
+            ValueError: 구성 provider 가 미지이거나 enabled 모델이 0개
+                (registry fail-closed 를 서비스 계약 타입으로 번역).
         """
-        return LLMModelRegistry.get_default()
+        try:
+            return LLMModelRegistry.get_default()
+        except LookupError as e:
+            raise ValueError(str(e)) from e
 
     @classmethod
     async def invoke_with_tools(

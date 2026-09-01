@@ -4,11 +4,14 @@
 모델 추가/수정 시 이 파일만 변경하면 전체 시스템에 반영됩니다.
 """
 
+import logging
 import os
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 
 class LLMProvider(str, Enum):
@@ -35,6 +38,11 @@ class LLMModelConfig(BaseModel):
     is_enabled: bool = True  # Whether model is enabled
     supports_tools: bool = True  # Tool/function calling support
     supports_vision: bool = False  # Vision/image support
+    # Optional code-seed metadata: 문서상 이 alias 가 라우팅하는 concrete 모델 id.
+    # DB 스키마에 컬럼이 없으므로 sync_to_db 값에 포함하지 않고(no migration),
+    # DB-loaded config 에서는 항상 None 이다. provider 응답으로 확인된 값이
+    # 아니므로 실행 귀속(resolved_model)에는 쓰지 않는다.
+    alias_for: str | None = None
 
 
 # ─────────────────────────────────────────────────────────────
@@ -77,7 +85,7 @@ _MODELS: list[LLMModelConfig] = [
         context_window=1000000,  # 1M tokens
         input_price=0.003,  # $3.00/1M tokens
         output_price=0.015,  # $15.00/1M tokens
-        is_default=False,
+        is_default=True,  # Default Anthropic model (restored, follow-up policy 2026-09-01)
         supports_tools=True,
         supports_vision=True,
     ),
@@ -88,7 +96,7 @@ _MODELS: list[LLMModelConfig] = [
         context_window=1000000,  # 1M tokens
         input_price=0.003,  # $3.00/1M tokens
         output_price=0.015,  # $15.00/1M tokens
-        is_default=True,  # Default Anthropic model (current GA balanced, policy 2026-08-31)
+        is_default=False,
         supports_tools=True,
         supports_vision=True,
     ),
@@ -212,6 +220,7 @@ _MODELS: list[LLMModelConfig] = [
         is_default=True,  # Default OpenAI model (policy 2026-08-31)
         supports_tools=True,
         supports_vision=True,
+        alias_for="gpt-5.6-sol",  # documented routing target (docs, not a provider response)
     ),
     LLMModelConfig(
         id="gpt-5.6-sol",
@@ -246,7 +255,9 @@ _MODELS: list[LLMModelConfig] = [
         supports_tools=True,
         supports_vision=True,
     ),
-    # gpt-5.5: retained for compatibility; no longer the default.
+    # gpt-5.5: retained for compatibility; disabled until a live smoke run
+    # validates it (follow-up policy 2026-09-01). Enabling is an explicit
+    # admin action, not a code-seed default.
     LLMModelConfig(
         id="gpt-5.5",
         display_name="GPT-5.5",
@@ -255,7 +266,7 @@ _MODELS: list[LLMModelConfig] = [
         input_price=0.005,  # $5.00/1M tokens
         output_price=0.03,  # $30.00/1M tokens
         is_default=False,
-        is_enabled=True,
+        is_enabled=False,
         supports_tools=True,
         supports_vision=True,
     ),
@@ -397,6 +408,11 @@ _MODELS: list[LLMModelConfig] = [
 # Index by model ID for fast lookup
 _MODEL_INDEX: dict[str, LLMModelConfig] = {m.id: m for m in _MODELS}
 
+# Code-seed revision stamp — bump when policy-relevant seed contents change
+# (defaults, enabled flags, model set). Recorded on Playground executions as
+# optional audit metadata; see LLMModelRegistry.get_revision().
+REGISTRY_REVISION = "2026-09-01"
+
 
 class LLMModelRegistry:
     """Central registry for LLM model configurations.
@@ -535,9 +551,7 @@ class LLMModelRegistry:
         # DB rows. Any existing row — including a disabled prior default —
         # is admin-controlled state, so the new model is inserted
         # non-default and no admin flag is cleared or overridden.
-        result = await session.execute(
-            select(LLMModelConfigModel.provider).distinct()
-        )
+        result = await session.execute(select(LLMModelConfigModel.provider).distinct())
         providers_with_db_rows = {row[0] for row in result.fetchall()}
 
         inserted = 0
@@ -634,27 +648,66 @@ class LLMModelRegistry:
         return [m for m in cls._models() if m.provider == provider and m.is_enabled]
 
     @classmethod
+    def get_revision(cls) -> str:
+        """Registry snapshot marker for execution metadata (JSON-safe string).
+
+        ``code:`` = in-memory seed serving, ``db:`` = DB cache serving. The
+        date part is the code-seed revision this process was built with.
+        """
+        mode = "db" if cls._db_cache is not None else "code"
+        return f"{mode}:{REGISTRY_REVISION}"
+
+    @classmethod
     def get_default(cls, provider: LLMProvider | str | None = None) -> str:
-        """Get the default model ID for a provider.
+        """Get the default model ID for a provider (deterministic, fail-closed).
 
-        Args:
-            provider: Specific provider, or None to use the first available.
+        - 명시적 enabled default 가 있으면 그것을 쓴다. 둘 이상이면(DB drift)
+          id 순으로 결정하고 경고를 남긴다 — 충돌을 조용히 숨기지 않는다.
+        - enabled default 가 없으면 목록 순서가 아니라 최저가(합산 per-1k,
+          id tie-break) 모델로 결정론적 폴백하고 경고를 남긴다.
+        - enabled 모델이 하나도 없으면 LookupError 로 fail-closed 한다 —
+          타 provider 모델("codex-cli")을 조용히 반환하지 않는다.
+        - 미지 provider 문자열도 LookupError 로 fail-closed 한다 — 임의
+          문자열이 Codex 실행 경로로 조용히 라우팅되면 provider 정책·
+          entitlement 게이트가 우회된다. 기동 경로의 폴백은 이 함수가 아니라
+          각 호출부의 명시적 LookupError 처리로 옮겼다.
 
-        Returns:
-            Default model ID string.
+        Raises:
+            LookupError: unknown provider, or the provider has zero enabled
+                models.
         """
         if provider:
             if isinstance(provider, str):
                 try:
                     provider = LLMProvider(provider)
                 except ValueError:
-                    return "codex-cli"  # Fallback
+                    logger.error(
+                        "get_default: unknown provider %r — failing closed",
+                        provider,
+                    )
+                    raise LookupError(f"Unknown provider: {provider}") from None
 
             models = cls.get_by_provider(provider)
-            for m in models:
-                if m.is_default:
-                    return m.id
-            return models[0].id if models else "codex-cli"
+            defaults = [m for m in models if m.is_default]
+            if len(defaults) > 1:
+                logger.warning(
+                    "get_default: multiple enabled defaults for provider %s (%s), "
+                    "resolving deterministically by id",
+                    provider.value,
+                    [m.id for m in defaults],
+                )
+            if defaults:
+                return min(defaults, key=lambda m: m.id).id
+            if models:
+                fallback = min(models, key=lambda m: (m.input_price + m.output_price, m.id))
+                logger.warning(
+                    "get_default: no enabled default for provider %s, "
+                    "using deterministic cheapest fallback %s",
+                    provider.value,
+                    fallback.id,
+                )
+                return fallback.id
+            raise LookupError(f"No enabled models for provider {provider.value}")
 
         # No provider specified - resolve from the configured provider so the
         # registry default stays consistent with LLM_PROVIDER (headless deploys

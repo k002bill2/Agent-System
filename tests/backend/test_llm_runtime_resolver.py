@@ -263,3 +263,45 @@ def test_resolve_rejects_disabled_requested_model(_static_registry) -> None:
                 requested_model_id="gpt-5.4",
             ),
         )
+
+
+def test_resolve_fails_closed_when_entitled_provider_has_no_enabled_models(
+    monkeypatch,
+) -> None:
+    """entitlement 의 provider 에 enabled 모델이 0개면, get_default 가 타
+    provider 모델("codex-cli")을 조용히 대입하던 기존 동작 대신 fail-closed
+    LookupError 가 나고, resolver 는 이를 계약 타입인
+    LLMRuntimeResolutionError 로 번역해야 한다 — provider/model 불일치
+    resolution 이 실행 경로로 흘러가면 entitlement 게이트가 무의미해진다."""
+    from models.llm_models import LLMModelConfig, LLMModelRegistry
+    from models.llm_models import LLMProvider as ModelProvider
+
+    stub = LLMModelConfig(
+        id="gpt-4o-stub",
+        display_name="stub",
+        provider=ModelProvider.OPENAI,
+        context_window=1_000,
+        input_price=0.0,
+        output_price=0.0,
+    )
+    monkeypatch.setattr(LLMModelRegistry, "_db_cache", [stub])
+    monkeypatch.setattr(LLMModelRegistry, "_db_index", {stub.id: stub})
+
+    access = LLMAccessResponse(
+        user_id="user-1",
+        api_fallback_enabled=False,
+        profiles=[],
+        entitlements=[
+            _entitlement(provider="ollama", mode="local", cli_profile_id=None)
+        ],
+    )
+
+    with pytest.raises(LLMRuntimeResolutionError, match="ollama"):
+        resolve_llm_runtime(
+            access,
+            LLMRuntimeRequest(
+                user_id="user-1",
+                source=LLMUsageSource.PLAYGROUND,
+                requested_model_id=None,
+            ),
+        )

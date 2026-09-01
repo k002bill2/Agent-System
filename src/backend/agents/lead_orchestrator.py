@@ -5,7 +5,6 @@
 """
 
 import json
-import os
 import time
 import uuid
 from datetime import datetime
@@ -15,7 +14,6 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from agents.base import AgentConfig, AgentResult, BaseAgent
-from models.llm_models import LLMModelRegistry
 from models.llm_usage import LLMUsageSource
 from services.agent_registry import (
     EffortLevel,
@@ -260,7 +258,9 @@ class LeadOrchestratorAgent(BaseAgent):
             name="LeadOrchestrator",
             description="Multi-agent workflow coordinator that decomposes complex tasks and delegates to specialized agents",
             system_prompt=LEAD_ORCHESTRATOR_SYSTEM_PROMPT,
-            model_name=LLMModelRegistry.get_default(os.getenv("LLM_PROVIDER", "codex_cli")),
+            # model_name 은 AgentConfig default_factory 가 provider 기반으로
+            # 해석한다 — rogue/enabled-0 provider 는 ValueError 로 fail-closed
+            # (uncaught LookupError·codex-cli 조용한 대입 금지).
             temperature=0.0,  # 일관된 분석 결과를 위해 temperature 0
             max_tokens=4096,
         )

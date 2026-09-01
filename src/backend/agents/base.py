@@ -27,15 +27,40 @@ from services.llm_runtime_resolver import (
 from services.llm_service import LLMService
 from services.llm_usage_ledger_service import record_usage_best_effort
 
-# Default model resolved from the configured provider (LLM_PROVIDER).
-# Headless deploys set LLM_PROVIDER=google/openai; local dev defaults to codex_cli.
-_DEFAULT_AGENT_MODEL = LLMModelRegistry.get_default(os.getenv("LLM_PROVIDER", "codex_cli"))
 
-# Specialist agent model (configurable via env, defaults to registry default)
-SPECIALIST_AGENT_MODEL = os.getenv(
-    "SPECIALIST_AGENT_MODEL",
-    _DEFAULT_AGENT_MODEL,
-)
+def _resolve_default_agent_model() -> str:
+    """Resolve the default agent model from the configured provider (LLM_PROVIDER).
+
+    Headless deploys set LLM_PROVIDER=google/openai; local dev defaults to
+    codex_cli. 임포트 시점이 아니라 AgentConfig 생성 시점에 평가된다 — 임포트
+    시점 해석은 rogue/enabled-0 provider 에서 모듈 임포트를 죽이고, api/app.py
+    safe_import 가 agents 라우터 트리를 조용히 제거한다.
+
+    Raises:
+        ValueError: LLM_PROVIDER 가 미지이거나 enabled 모델이 0개
+            (registry fail-closed LookupError 를 이 모듈의 실패 계약 타입으로
+            번역 — 타 provider 모델을 조용히 대입하지 않는다).
+    """
+    try:
+        return LLMModelRegistry.get_default(os.getenv("LLM_PROVIDER", "codex_cli"))
+    except LookupError as e:
+        raise ValueError(str(e)) from e
+
+
+def _specialist_agent_model() -> str:
+    """Specialist agent model (env override first, else registry default)."""
+    override = os.getenv("SPECIALIST_AGENT_MODEL")
+    if override:
+        return override
+    return _resolve_default_agent_model()
+
+
+def __getattr__(name: str) -> str:
+    # PEP 562: `from agents.base import SPECIALIST_AGENT_MODEL` 를 유지하면서
+    # registry 해석을 임포트 이후(specialist 인스턴스화 시점)로 미룬다.
+    if name == "SPECIALIST_AGENT_MODEL":
+        return _specialist_agent_model()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _enum_value(value: Any) -> Any:
@@ -177,7 +202,7 @@ class AgentConfig(BaseModel):
     name: str
     description: str
     system_prompt: str
-    model_name: str = _DEFAULT_AGENT_MODEL
+    model_name: str = Field(default_factory=_resolve_default_agent_model)
     temperature: float = 0.7
     max_tokens: int = 4096
     tools: list[str] = Field(default_factory=list)

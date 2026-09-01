@@ -10,7 +10,7 @@ from models.llm_access import (
     LLMCLIProfileResponse,
     LLMEntitlementResponse,
 )
-from models.llm_models import LLMModelRegistry
+from models.llm_models import LLMModelRegistry, LLMProvider
 
 
 class LLMRuntimeResolutionError(PermissionError):
@@ -57,6 +57,14 @@ def _enum_value(value: Any) -> Any:
     return value.value if hasattr(value, "value") else value
 
 
+def _is_known_provider(provider: str) -> bool:
+    try:
+        LLMProvider(provider)
+    except ValueError:
+        return False
+    return True
+
+
 def _runtime_mode_for_provider(provider: str) -> str:
     if provider.endswith("_cli"):
         return "cli"
@@ -78,6 +86,10 @@ def _enabled_entitlements(
         entitlement
         for entitlement in access.entitlements
         if entitlement.enabled
+        # Reject providers outside the LLMProvider enum: "somefake_cli" would
+        # otherwise derive mode "cli", win the CLI-first preference, and pull
+        # a default model it has no right to (policy bypass).
+        and _is_known_provider(entitlement.provider)
         # Reject malformed pairs: mode must be derivable from provider, or the
         # mode gate and the provider-based executor disagree (policy bypass).
         and entitlement.mode == _runtime_mode_for_provider(entitlement.provider)
@@ -144,7 +156,13 @@ def _model_for_resolution(
 ) -> str:
     if requested_model_id:
         return requested_model_id
-    return LLMModelRegistry.get_default(entitlement.provider)
+    try:
+        return LLMModelRegistry.get_default(entitlement.provider)
+    except LookupError as exc:
+        # entitlement 의 provider 에 enabled 모델이 0개 — 타 provider 모델이
+        # 조용히 대입되면 entitlement 게이트가 우회되므로, resolver 계약
+        # 타입으로 번역해 fail-closed 한다.
+        raise LLMRuntimeResolutionError(str(exc)) from exc
 
 
 def resolve_llm_runtime(
