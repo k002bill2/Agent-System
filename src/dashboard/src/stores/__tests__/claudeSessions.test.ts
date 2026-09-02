@@ -48,6 +48,7 @@ vi.mock('../../services/authenticatedSse', () => ({
 
 import { useClaudeSessionsStore } from '../claudeSessions'
 import { apiClient } from '../../services/apiClient'
+import { ApiError, ApiErrorCode } from '../../services/errors'
 
 const mockApiClient = vi.mocked(apiClient)
 
@@ -90,6 +91,10 @@ function resetStore() {
     autoRefresh: true,
     refreshInterval: 5,
     error: null,
+    // 403 을 다루는 테스트가 이 플래그를 세운 채 끝난다. 리셋하지 않으면 뒤따르는
+    // 테스트가 권한 가드에 걸려 조기 return 하고, 호출이 안 나간 이유가 코드가
+    // 아니라 앞 테스트라는 사실이 드러나지 않는다.
+    permissionDenied: false,
     generatingSummaryFor: null,
     autoGenerateSummaries: false, // Disable for tests
     eventSource: null,
@@ -289,21 +294,25 @@ describe('claudeSessions store', () => {
         ...emptyResponse,
         sessions: [{ session_id: 's-1', summary: null }],
       })
-      // Second call: autoGenerateMissingSummaries internal fetch
-      mockApiClient.get.mockResolvedValueOnce({
-        ...emptyResponse,
-        sessions: [{ session_id: 's-1', summary: null }],
+      // Second call: the batch that autoGenerateMissingSummaries delegates to
+      mockApiClient.post.mockResolvedValueOnce({
+        total_processed: 1,
+        success_count: 1,
+        failed_count: 0,
+        generated_summaries: [{ session_id: 's-1', summary: 'Auto' }],
       })
-      // Third call: generateSummaryQuiet
-      mockApiClient.post.mockResolvedValueOnce({ summary: 'Auto' })
-      // Fourth call: fetchPendingSummaryCount
+      // Third call: fetchPendingSummaryCount
       mockApiClient.get.mockResolvedValueOnce({ pending_count: 0 })
 
       await useClaudeSessionsStore.getState().fetchSessions()
 
       // Wait for non-blocking auto-generate
       await vi.waitFor(() => {
-        expect(mockApiClient.get.mock.calls.length).toBeGreaterThanOrEqual(2)
+        expect(mockApiClient.post).toHaveBeenCalledWith(
+          expect.stringContaining('summaries/generate-batch'),
+          undefined,
+          expect.anything(),
+        )
       })
     })
 
@@ -1371,130 +1380,194 @@ describe('claudeSessions store', () => {
   // ── autoGenerateMissingSummaries ────────────────────────
 
   describe('autoGenerateMissingSummaries', () => {
+    const batchResult = (
+      summaries: { session_id: string; summary: string }[] = [],
+    ) => ({
+      total_processed: summaries.length,
+      success_count: summaries.length,
+      failed_count: 0,
+      generated_summaries: summaries,
+    })
+
     it('skips when autoGenerateSummaries is disabled', async () => {
       useClaudeSessionsStore.setState({ autoGenerateSummaries: false })
 
       await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
 
-      expect(mockApiClient.get).not.toHaveBeenCalled()
+      expect(mockApiClient.post).not.toHaveBeenCalled()
     })
 
-    it('skips when already generating a summary', async () => {
+    it('skips while a user-triggered batch is running', async () => {
       useClaudeSessionsStore.setState({
         autoGenerateSummaries: true,
-        generatingSummaryFor: 's-existing',
+        isBatchGenerating: true,
       })
 
       await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
 
-      expect(mockApiClient.get).not.toHaveBeenCalled()
+      expect(mockApiClient.post).not.toHaveBeenCalled()
     })
 
-    it('generates summaries for sessions without one', async () => {
+    // 카드에서 단건 생성을 누르면 `generatingSummaryFor` 가 선다. 배치가 그 세션을
+    // 다시 집으면 아직 캐시가 없어 같은 세션에 Ollama 요청이 두 번 나간다 (Codex [P2]).
+    it('skips while the user is generating a single summary', async () => {
       useClaudeSessionsStore.setState({
         autoGenerateSummaries: true,
-        sessions: [{ session_id: 's-1', summary: null } as any],
+        generatingSummaryFor: 's-1',
       })
-      // First call: fetch sessions to find those without summary
-      mockApiClient.get.mockResolvedValueOnce({
-        sessions: [
-          { session_id: 's-1', summary: null },
-          { session_id: 's-2', summary: 'has one' },
-        ],
-        total_count: 2,
-        filtered_count: 2,
-        active_count: 0,
-        has_more: false,
-        offset: 0,
+
+      await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
+
+      expect(mockApiClient.post).not.toHaveBeenCalled()
+    })
+
+    it('skips when permission was denied', async () => {
+      useClaudeSessionsStore.setState({
+        autoGenerateSummaries: true,
+        permissionDenied: true,
       })
-      // Second call: generateSummaryQuiet for s-1
-      mockApiClient.post.mockResolvedValueOnce({ summary: 'Auto generated' })
-      // Third call: fetchPendingSummaryCount
+
+      await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
+
+      expect(mockApiClient.post).not.toHaveBeenCalled()
+    })
+
+    // 이 스토어가 최근 N 건만 훑던 시절의 회귀 가드다. 목록 창을 넓히는 대신
+    // 창이 없는 서버 배치에 위임하므로, 백로그가 목록 밖에 있어도 닿는다.
+    it('delegates to the server batch instead of walking a session window', async () => {
+      useClaudeSessionsStore.setState({ autoGenerateSummaries: true })
+      mockApiClient.post.mockResolvedValueOnce(batchResult())
       mockApiClient.get.mockResolvedValueOnce({ pending_count: 0 })
 
       await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
 
-      // generateSummaryQuiet was called
-      expect(mockApiClient.get).toHaveBeenCalledTimes(2) // sessions fetch + pending count
-      expect(mockApiClient.post).toHaveBeenCalledTimes(1) // summary generation
+      expect(mockApiClient.post).toHaveBeenCalledTimes(1)
+      const url = mockApiClient.post.mock.calls[0][0] as string
+      expect(url).toContain('/api/claude-sessions/summaries/generate-batch')
+      expect(url).toContain('skip_existing=true')
+
+      const fetched = mockApiClient.get.mock.calls.map((c) => c[0] as string)
+      expect(fetched.some((u) => u.includes('/api/agent-sessions'))).toBe(false)
     })
 
-    it('silently handles fetch error', async () => {
+    // 막히는 세션 하나가 372s(재시도 3회 × 120s)다. 20 건이면 1 건까지는 499s 로
+    // 클라이언트 타임아웃(600s) 안이다 — 2 건부터는 어떤 limit 으로도 못 막는다.
+    // 값이 조용히 커지면 그 1 건 여유마저 사라지므로 여기서 고정한다.
+    it('caps the batch so one stuck session cannot exceed the client timeout', async () => {
       useClaudeSessionsStore.setState({ autoGenerateSummaries: true })
-      mockApiClient.get.mockRejectedValueOnce(new Error('fail'))
+      mockApiClient.post.mockResolvedValueOnce(batchResult())
+      mockApiClient.get.mockResolvedValueOnce({ pending_count: 0 })
+
+      await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
+
+      expect(mockApiClient.post.mock.calls[0][0] as string).toContain('limit=20')
+    })
+
+    it('applies returned summaries to the session list', async () => {
+      useClaudeSessionsStore.setState({
+        autoGenerateSummaries: true,
+        sessions: [
+          { session_id: 's-1', summary: null } as any,
+          { session_id: 's-2', summary: 'kept' } as any,
+        ],
+      })
+      mockApiClient.post.mockResolvedValueOnce(
+        batchResult([{ session_id: 's-1', summary: 'fresh' }]),
+      )
+      mockApiClient.get.mockResolvedValueOnce({ pending_count: 0 })
+
+      await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
+
+      const sessions = useClaudeSessionsStore.getState().sessions
+      expect(sessions[0].summary).toBe('fresh')
+      expect(sessions[1].summary).toBe('kept')
+    })
+
+    it('refreshes the pending count after generating', async () => {
+      useClaudeSessionsStore.setState({
+        autoGenerateSummaries: true,
+        pendingSummaryCount: 9,
+      })
+      mockApiClient.post.mockResolvedValueOnce(
+        batchResult([{ session_id: 's-1', summary: 'fresh' }]),
+      )
+      mockApiClient.get.mockResolvedValueOnce({ pending_count: 4 })
+
+      await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
+
+      expect(useClaudeSessionsStore.getState().pendingSummaryCount).toBe(4)
+    })
+
+    // 실행 중임을 표시하지 않으면 새로고침·필터 변경·수동 버튼이 같은 후보를
+    // 다시 집어 Ollama 작업이 중복된다 (Codex [P1]).
+    it('marks itself in flight so a second batch cannot start', async () => {
+      useClaudeSessionsStore.setState({ autoGenerateSummaries: true })
+      let inFlight: boolean | null = null
+      mockApiClient.post.mockImplementationOnce(async () => {
+        inFlight = useClaudeSessionsStore.getState().isBatchGenerating
+        return batchResult()
+      })
+      mockApiClient.get.mockResolvedValueOnce({ pending_count: 0 })
+
+      await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
+
+      expect(inFlight).toBe(true)
+      expect(useClaudeSessionsStore.getState().isBatchGenerating).toBe(false)
+    })
+
+    it('clears the in-flight flag even when the batch fails', async () => {
+      useClaudeSessionsStore.setState({ autoGenerateSummaries: true })
+      mockApiClient.post.mockRejectedValueOnce(new Error('boom'))
+
+      await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
+
+      expect(useClaudeSessionsStore.getState().isBatchGenerating).toBe(false)
+    })
+
+    // 자동 생성은 사용자가 요청한 일이 아니다. `batchJustCompleted` 를 세우면
+    // 일괄 생성 버튼이 숨겨져 사용자가 백로그를 직접 소진할 수단을 잃는다.
+    it('leaves the manual batch UI state untouched', async () => {
+      useClaudeSessionsStore.setState({ autoGenerateSummaries: true })
+      mockApiClient.post.mockResolvedValueOnce(
+        batchResult([{ session_id: 's-1', summary: 'fresh' }]),
+      )
+      mockApiClient.get.mockResolvedValueOnce({ pending_count: 0 })
+
+      await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
+
+      const state = useClaudeSessionsStore.getState()
+      expect(state.isBatchGenerating).toBe(false)
+      expect(state.batchJustCompleted).toBe(false)
+      expect(state.batchProgress).toEqual({
+        total: 0,
+        processed: 0,
+        success: 0,
+        failed: 0,
+      })
+    })
+
+    it('marks permission denied on 403', async () => {
+      useClaudeSessionsStore.setState({ autoGenerateSummaries: true })
+      mockApiClient.post.mockRejectedValueOnce(
+        new ApiError({
+          message: 'Forbidden',
+          status: 403,
+          code: ApiErrorCode.FORBIDDEN,
+        }),
+      )
+
+      await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
+
+      expect(useClaudeSessionsStore.getState().permissionDenied).toBe(true)
+    })
+
+    it('silently handles errors', async () => {
+      useClaudeSessionsStore.setState({ autoGenerateSummaries: true })
+      mockApiClient.post.mockRejectedValueOnce(new Error('fail'))
 
       await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
 
       expect(useClaudeSessionsStore.getState().error).toBeNull()
-    })
-
-    it('stops generating if autoGenerateSummaries is disabled mid-loop', async () => {
-      useClaudeSessionsStore.setState({ autoGenerateSummaries: true })
-      // Return 2 sessions without summaries
-      mockApiClient.get.mockResolvedValueOnce({
-        sessions: [
-          { session_id: 's-1', summary: null },
-          { session_id: 's-2', summary: null },
-        ],
-        total_count: 2,
-        filtered_count: 2,
-        active_count: 0,
-        has_more: false,
-        offset: 0,
-      })
-      // For the first generateSummaryQuiet call, disable auto-generate
-      mockApiClient.post.mockImplementationOnce(() => {
-        useClaudeSessionsStore.setState({ autoGenerateSummaries: false })
-        return Promise.resolve({ summary: 'first' })
-      })
-      // fetchPendingSummaryCount is still called because sessionsWithoutSummary.length > 0
-      mockApiClient.get.mockResolvedValueOnce({ pending_count: 1 })
-
-      await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
-
-      // s-2 was skipped because autoGenerateSummaries was disabled mid-loop
-      // Only 1 POST call (for s-1), not 2
-      expect(mockApiClient.post).toHaveBeenCalledTimes(1)
-    })
-
-    it('does not call fetchPendingSummaryCount when no sessions without summaries', async () => {
-      useClaudeSessionsStore.setState({ autoGenerateSummaries: true })
-      mockApiClient.get.mockResolvedValueOnce({
-        sessions: [{ session_id: 's-1', summary: 'already has one' }],
-        total_count: 1,
-        filtered_count: 1,
-        active_count: 0,
-        has_more: false,
-        offset: 0,
-      })
-
-      await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
-
-      // Only the sessions fetch, no pending count fetch
-      expect(mockApiClient.get).toHaveBeenCalledTimes(1)
-    })
-
-    it('includes filter params', async () => {
-      useClaudeSessionsStore.setState({
-        autoGenerateSummaries: true,
-        projectFilter: 'MyProject',
-        sourceUserFilter: 'admin',
-      })
-      mockApiClient.get.mockResolvedValueOnce({
-        sessions: [],
-        total_count: 0,
-        filtered_count: 0,
-        active_count: 0,
-        has_more: false,
-        offset: 0,
-      })
-
-      await useClaudeSessionsStore.getState().autoGenerateMissingSummaries()
-
-      const url = mockApiClient.get.mock.calls[0][0] as string
-      expect(url).toContain('project=MyProject')
-      expect(url).toContain('source_user=admin')
-      expect(url).toContain('limit=200')
     })
   })
 

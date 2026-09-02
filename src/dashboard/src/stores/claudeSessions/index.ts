@@ -69,6 +69,17 @@ const denyIfForbidden = (
 const SUMMARY_TIMEOUT_MS = 120_000
 // 일괄 생성은 세션 수만큼 순차 호출한다 (실측 395s). 백엔드가 스스로 끝낼 때까지 기다린다.
 const BATCH_SUMMARY_TIMEOUT_MS = 600_000
+// 자동 생성 1 회가 처리할 상한. 백엔드 실측은 건당 6.7s(요약 4.7s + 지연 2s)라
+// 20 건이면 약 133s 다. 막히는 세션은 재시도 3 회 × httpx 타임아웃 120s 로 그 건만
+// 372s 가 되는데, 20 건 기준 1 건까지는 499s 로 위 600s 안이고 2 건이면 864s 로
+// 넘어선다. limit 을 낮춰도 이 성질은 남는다(10 건이어도 2 건 막히면 797s) —
+// 막힌 건 하나의 비용이 배치 전체보다 크기 때문이라, 상한으로는 못 막는다.
+//
+// 넘어서면 클라이언트만 포기하고 서버는 계속 돌아 캐시를 쓴다. 작업이 유실되지는
+// 않고 다음 실행이 skip_existing 으로 이어받지만, 그 사이 서버에서 배치가 겹칠 수
+// 있다. 겹침을 없애려면 서버측 단일 실행 락이 필요하다 (이 변경의 범위 밖).
+// 남은 백로그는 다음 페이지 로드가 이어서 소진한다.
+const AUTO_SUMMARY_BATCH_LIMIT = 20
 
 export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => ({
   // Initial state
@@ -664,41 +675,76 @@ export const useClaudeSessionsStore = create<ClaudeSessionsState>((set, get) => 
     set({ autoGenerateSummaries: enabled })
   },
 
-  // Auto-generate summaries for sessions without one (up to 200 sessions)
+  // Auto-generate summaries for sessions without one.
+  //
+  // 목록을 직접 훑지 않고 서버 배치에 위임한다. 이전 구현은 최근 200 건만 조회해
+  // 그 창 밖의 미요약 세션에는 영원히 닿지 못했고(백로그는 수동 버튼으로만 소진),
+  // 세션마다 POST 를 순차 발사해 Ollama 페이싱도 없었다. 서버 배치는 창이 없고
+  // (`_discover_with_monitors` 가 전체를 훑는다) 요청 간 지연·재시도를 갖고 있다.
   autoGenerateMissingSummaries: async () => {
-    const { autoGenerateSummaries, projectFilter, sourceUserFilter, sortBy, sortOrder, generatingSummaryFor } = get()
-    if (!autoGenerateSummaries || generatingSummaryFor) return
+    const { autoGenerateSummaries, isBatchGenerating, generatingSummaryFor } = get()
+    // 사용자가 누른 일괄 생성이 도는 중이면 비켜선다. 같은 후보를 두 번 처리하는
+    // 낭비를 막고, 수동 배치의 진행률 표시를 흔들지 않는다.
+    //
+    // `generatingSummaryFor` 는 카드에서 단건 생성을 누른 동안 선다. 그 세션은 아직
+    // 캐시가 없어 배치의 후보에 그대로 들어오므로, 비켜서지 않으면 한 세션에
+    // Ollama 요청이 두 번 나간다 (Codex [P2]).
+    if (!autoGenerateSummaries || isBatchGenerating || generatingSummaryFor) return
 
     // Auto-generation is optimistic background work, not something the user
-    // asked for. Without this guard a denied account fires one 403 per session.
+    // asked for. Without this guard a denied account keeps firing 403s.
     if (get().permissionDenied) return
 
+    // 읽기만 하고 자기를 표시하지 않으면 가드가 자기 자신에게는 무력하다 — 배치가
+    // 도는 동안의 새로고침·필터 변경이 같은 후보를 다시 집어 Ollama 작업을
+    // 중복시킨다 (Codex [P1]). 버튼도 이 플래그로 비활성화되므로 표시가 정직해진다.
+    set({ isBatchGenerating: true })
+
     try {
+      // 화면의 project·source_user 필터는 싣지 않는다. 배치 엔드포인트가 받지 않기도
+      // 하지만, 받게 만들어도 필터를 건 사용자는 다른 프로젝트의 백로그에 영원히
+      // 닿지 못한다 — 이 변경이 없앤 "최근 200 건" 창과 축만 다른 같은 문제다.
+      // 필터 밖 세션의 요약은 버려지는 일이 아니라 선반영이고(캐시 값은 어디서
+      // 만들어도 같다), 미요약 배지도 필터가 없으면 전체를 센다 (Codex [P2], 미반영).
       const params = new URLSearchParams()
-      if (projectFilter) params.set('project', projectFilter)
-      if (sourceUserFilter) params.set('source_user', sourceUserFilter)
-      params.set('sort_by', sortBy)
-      params.set('sort_order', sortOrder)
-      params.set('offset', '0')
-      params.set('limit', '200')
+      params.set('limit', AUTO_SUMMARY_BATCH_LIMIT.toString())
+      params.set('skip_existing', 'true')
 
-      const data = await apiClient.get<ClaudeSessionResponse>(`/api/agent-sessions?${params.toString()}`)
-      const sessionsWithoutSummary = data.sessions.filter(s => !s.summary)
+      const data = await apiClient.post<{
+        success_count: number
+        generated_summaries?: { session_id: string; summary: string }[]
+      }>(`/api/claude-sessions/summaries/generate-batch?${params.toString()}`, undefined, {
+        timeout: BATCH_SUMMARY_TIMEOUT_MS,
+      })
 
-      // Generate summaries one by one to avoid overwhelming the LLM
-      for (const session of sessionsWithoutSummary) {
-        // 루프가 도는 동안 권한이 회수될 수 있다. 시작 시점 가드만으로는 최대
-        // 200 건의 403 POST 가 조용히 나간다 (Codex [P2]).
-        if (!get().autoGenerateSummaries || get().permissionDenied) break
-        await get().generateSummaryQuiet(session.session_id)
+      // 이전 구현은 루프 중간에 `autoGenerateSummaries` 를 다시 읽어 끄면 멈췄다.
+      // 서버 배치는 요청 1 회라 그 중단점이 없다 — 여기서 abort 해도 서버는 끝까지
+      // 돌기 때문에 취소는 표시상의 것일 뿐이다. 대신 한 번에 도는 시간이 최대 200
+      // 건에서 20 건으로 줄어 붙잡히는 구간 자체가 짧아졌다 (Codex [P2], 미반영).
+      //
+      // 수동 배치와 달리 batchProgress·batchJustCompleted 는 건드리지 않는다.
+      // 후자는 일괄 생성 버튼을 숨기는 플래그라, 자동 실행이 세우면 사용자가
+      // 남은 백로그를 직접 소진할 수단을 잃는다 (SessionList).
+      const generated = data.generated_summaries ?? []
+      if (generated.length > 0) {
+        const summaryMap = new Map(generated.map((item) => [item.session_id, item.summary]))
+        set((state) => ({
+          sessions: state.sessions.map((s) => {
+            const newSummary = summaryMap.get(s.session_id)
+            return newSummary ? { ...s, summary: newSummary } : s
+          }),
+        }))
       }
 
-      // Refresh pending count after generation
-      if (sessionsWithoutSummary.length > 0) {
-        await get().fetchPendingSummaryCount()
-      }
-    } catch {
-      // Silently fail for auto-generation
+      await get().fetchPendingSummaryCount()
+    } catch (e) {
+      // 403 만은 삼키지 않는다. 흘려보내면 페이지를 열 때마다 다시 발사된다.
+      denyIfForbidden(e, set, get)
+      // 그 외는 조용히 실패 — 사용자가 요청한 작업이 아니다.
+    } finally {
+      // 실패해도 반드시 내린다. 세워둔 채 끝나면 일괄 생성 버튼이 영구히
+      // 비활성화되고 이후 자동 실행도 자기 가드에 막힌다.
+      set({ isBatchGenerating: false })
     }
   },
 
