@@ -18,7 +18,19 @@
 from types import SimpleNamespace
 
 import pytest
+import pytest_asyncio
 from sqlalchemy.exc import SQLAlchemyError
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _isolate_database_pool():
+    """Do not carry asyncpg pooled connections across pytest event loops."""
+    from db import database
+
+    await database.engine.dispose()
+    yield
+    await database.engine.dispose()
+
 
 ADMIN_IDENTITY = SimpleNamespace(
     id="test-admin",
