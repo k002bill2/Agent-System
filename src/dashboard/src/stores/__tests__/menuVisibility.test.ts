@@ -19,6 +19,7 @@ vi.mock('../auth', () => ({
   useAuthStore: {
     getState: () => authState,
   },
+  getAuthSessionKey: () => '',
 }))
 
 import { useMenuVisibilityStore } from '../menuVisibility'
@@ -31,6 +32,7 @@ function resetStore() {
     visibility: {},
     menuOrder: [],
     isLoaded: false,
+    isFallback: false,
   })
 }
 

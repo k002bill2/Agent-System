@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { analytics } from '../services/analytics'
 import { apiClient } from '../services/apiClient'
+import { getAuthSessionKey } from './auth'
 
 export interface Project {
   id: string
@@ -45,6 +46,7 @@ interface ProjectsState {
   projects: Project[]
   templates: ProjectTemplate[]
   isLoading: boolean
+  isHydrated: boolean
   error: string | null
 
   // Modal state
@@ -60,6 +62,9 @@ interface ProjectsState {
 
   // Actions - Data
   fetchProjects: () => Promise<void>
+  ensureProjects: () => Promise<void>
+  hydrateProjects: (projects: Project[]) => void
+  reset: () => void
   fetchTemplates: () => Promise<void>
   createProject: (id: string, name: string, description: string, template: string) => Promise<boolean>
   linkProject: (id: string, sourcePath: string) => Promise<boolean>
@@ -92,6 +97,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   projects: [],
   templates: [],
   isLoading: false,
+  isHydrated: false,
   error: null,
   modalMode: null,
   editingProject: null,
@@ -101,10 +107,12 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
 
   // Fetch all projects
   fetchProjects: async () => {
+    const requestSessionKey = getAuthSessionKey()
     set({ isLoading: true, error: null })
     try {
       const projects = await apiClient.get<Project[]>('/api/projects')
-      set({ projects, isLoading: false })
+      if (getAuthSessionKey() !== requestSessionKey) return
+      set({ projects, isLoading: false, isHydrated: true })
 
       // Auto-select first project if none selected
       const { selectedProjectId } = get()
@@ -112,8 +120,27 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
         set({ selectedProjectId: projects[0].id })
       }
     } catch (error) {
+      if (getAuthSessionKey() !== requestSessionKey) return
       set({ error: (error as Error).message, isLoading: false })
     }
+  },
+
+  ensureProjects: async () => {
+    const { isHydrated, isLoading } = get()
+    if (isHydrated || isLoading) return
+    await get().fetchProjects()
+  },
+
+  hydrateProjects: (projects) => {
+    set({ projects, isLoading: false, isHydrated: true, error: null })
+    const { selectedProjectId } = get()
+    if (!selectedProjectId && projects.length > 0) {
+      set({ selectedProjectId: projects[0].id })
+    }
+  },
+
+  reset: () => {
+    set({ projects: [], isLoading: false, isHydrated: false, error: null, selectedProjectId: null })
   },
 
   // Fetch available templates

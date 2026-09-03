@@ -68,6 +68,7 @@ vi.mock('../stores/settings', () => ({
     setNotificationSetting: mockSetNotificationSetting,
     setPreferredTerminal: mockSetPreferredTerminal,
     fetchModels: vi.fn(),
+    ensureModels: vi.fn(),
     ...getSettingsOverrides(),
   }),
   Theme: {},

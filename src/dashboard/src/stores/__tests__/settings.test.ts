@@ -708,3 +708,50 @@ describe('theme initialization and applyThemeToDocument', () => {
     expect(useSettingsStore.getState().theme).toBe('light')
   })
 })
+
+// ── Startup hydration guard ──────────────────────────────
+// Bootstrap seeds availableModels; SettingsPage must not refetch them on mount.
+
+describe('settings store ensureModels', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useSettingsStore.setState({ availableModels: [], modelsLoading: false, modelsHydrated: false, modelsError: null })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('skips the request when models are already hydrated', async () => {
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    useSettingsStore.getState().hydrateModels([makeModel({ id: 'm-1', provider: 'anthropic' })])
+
+    await useSettingsStore.getState().ensureModels()
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('fetches when no models are loaded yet', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ models: [makeModel({ id: 'm-1', provider: 'anthropic' })] }),
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    await useSettingsStore.getState().ensureModels()
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    expect(useSettingsStore.getState().availableModels).toHaveLength(1)
+  })
+
+  it('skips while a fetch is already in flight', async () => {
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    useSettingsStore.setState({ modelsLoading: true })
+
+    await useSettingsStore.getState().ensureModels()
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+})

@@ -9,7 +9,7 @@
 import { ApiError, ApiErrorCode, errorCodeFromStatus } from './errors'
 import { getApiUrl } from '../config/api'
 import { analytics } from './analytics'
-import { useAuthStore } from '../stores/auth'
+import { useAuthStore, getAuthSessionKey } from '../stores/auth'
 
 // ---------------------------------------------------------------------------
 // Config & interceptor types
@@ -85,7 +85,7 @@ class ApiClient {
 
   private requestInterceptors: RequestInterceptor[] = []
   private responseInterceptors: ResponseInterceptor[] = []
-  private refreshPromise: Promise<void> | null = null
+  private refreshPromise: { key: string; marker: object; promise: Promise<void> } | null = null
 
   constructor(config: ApiClientConfig) {
     this.config = {
@@ -285,12 +285,15 @@ class ApiClient {
   // ── Token refresh ────────────────────────────────────────
 
   private async refreshToken(): Promise<void> {
-    // Coalesce concurrent refresh attempts
-    if (this.refreshPromise) {
-      return this.refreshPromise
+    const sessionKey = getAuthSessionKey()
+    const existing = this.refreshPromise
+    // Coalesce only requests from the same auth session.
+    if (existing?.key === sessionKey) {
+      return existing.promise
     }
 
-    this.refreshPromise = (async () => {
+    const marker = {}
+    const refreshRequest = (async () => {
       try {
         const success = await useAuthStore.getState().refreshAccessToken()
         if (!success) {
@@ -301,11 +304,14 @@ class ApiClient {
           })
         }
       } finally {
-        this.refreshPromise = null
+        if (this.refreshPromise?.marker === marker) {
+          this.refreshPromise = null
+        }
       }
     })()
 
-    return this.refreshPromise
+    this.refreshPromise = { key: sessionKey, marker, promise: refreshRequest }
+    return refreshRequest
   }
 
   // ── Error builder ────────────────────────────────────────

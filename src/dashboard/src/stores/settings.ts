@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { apiClient } from '../services/apiClient'
+import { getAuthSessionKey } from './auth'
 
 export type Theme = 'light' | 'dark' | 'system'
 export type LLMProvider = 'anthropic' | 'openai' | 'google' | 'codex_cli' | 'claude_cli' | 'local'
@@ -80,6 +81,7 @@ interface SettingsState {
   // LLM Models from API
   availableModels: LLMModel[]
   modelsLoading: boolean
+  modelsHydrated: boolean
   modelsError: string | null
 
   // Actions
@@ -91,6 +93,9 @@ interface SettingsState {
   ) => void
   setPreferredTerminal: (terminal: TerminalType) => void
   fetchModels: () => Promise<void>
+  ensureModels: () => Promise<void>
+  hydrateModels: (models: LLMModel[]) => void
+  resetModels: () => void
   setDefaultModel: (modelId: string) => Promise<boolean>
   getModelsForProvider: (provider: LLMProvider) => LLMModel[]
 }
@@ -176,6 +181,7 @@ export const useSettingsStore = create<SettingsState>()(
       // LLM Models state
       availableModels: [],
       modelsLoading: false,
+      modelsHydrated: false,
       modelsError: null,
 
       // Actions
@@ -198,6 +204,7 @@ export const useSettingsStore = create<SettingsState>()(
 
       fetchModels: async () => {
         const state = get()
+        const requestSessionKey = getAuthSessionKey()
         // In-flight dedup: skip if a fetch is already running
         // (e.g. App mount and SettingsPage mount firing concurrently)
         if (state.modelsLoading) return
@@ -211,11 +218,14 @@ export const useSettingsStore = create<SettingsState>()(
           }
 
           const data = await response.json()
+          if (getAuthSessionKey() !== requestSessionKey) return
           set({
             availableModels: data.models || [],
             modelsLoading: false,
+            modelsHydrated: true,
           })
         } catch (error) {
+          if (getAuthSessionKey() !== requestSessionKey) return
           console.warn('Failed to fetch LLM models from API, using fallback:', error)
           set((current) => ({
             // Keep previously loaded models; only inject fallbacks when empty
@@ -226,6 +236,20 @@ export const useSettingsStore = create<SettingsState>()(
             modelsError: error instanceof Error ? error.message : 'Failed to fetch models',
           }))
         }
+      },
+
+      ensureModels: async () => {
+        const { modelsHydrated, modelsLoading } = get()
+        if (modelsHydrated || modelsLoading) return
+        await get().fetchModels()
+      },
+
+      hydrateModels: (models) => {
+        set({ availableModels: models, modelsLoading: false, modelsHydrated: true, modelsError: null })
+      },
+
+      resetModels: () => {
+        set({ availableModels: [], modelsLoading: false, modelsHydrated: false, modelsError: null })
       },
 
       setDefaultModel: async (modelId) => {

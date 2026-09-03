@@ -19,6 +19,9 @@ PROTECTED_ROUTE_PREFIXES = (
 )
 
 SENSITIVE_DISCOVERY_ROUTES = (
+    # `/api/bootstrap` 는 프로젝트 목록을 그대로 실어 나른다 — `/api/projects` 와
+    # 같은 등급의 열거 표면이므로 같은 익명 접근 금지 계약을 적용한다.
+    "/api/bootstrap",
     "/api/projects",
     "/api/claude-sessions/projects",
     "/api/agent-sessions",
@@ -1925,3 +1928,64 @@ async def test_known_acl_role_still_authorizes(monkeypatch):
     user = SimpleNamespace(id="user", role="user", is_admin=False, is_active=True)
 
     assert await require_project_role("p1", user, _stub_db(), min_role="editor") == "editor"
+
+
+@pytest.mark.asyncio
+async def test_projects_filesystem_org_acl_failure_is_503(monkeypatch):
+    """Filesystem-mode org ACL lookup failures must be controlled 503s, not 500s."""
+    from api.routes import get_projects
+
+    monkeypatch.setenv("USE_DATABASE", "false")
+    monkeypatch.setattr("api.routes.list_projects", lambda: [])
+
+    async def broken_org_lookup(*_args, **_kwargs):
+        raise RuntimeError("org acl sentinel")
+
+    monkeypatch.setattr("api.projects._get_admin_org_ids", broken_org_lookup)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_projects(
+            current_user=SimpleNamespace(id="user", role="user", is_admin=False),
+            db=object(),
+        )
+
+    assert exc_info.value.status_code == 503
+    assert "org acl sentinel" not in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_projects_filesystem_acl_preserves_intended_http_status(monkeypatch):
+    """A deliberate HTTPException from the ACL path must not be rewritten to 503."""
+    from api.routes import get_projects
+
+    monkeypatch.setenv("USE_DATABASE", "false")
+    monkeypatch.setattr("api.routes.list_projects", lambda: [])
+
+    async def forbidden_org_lookup(*_args, **_kwargs):
+        raise HTTPException(status_code=403, detail="Organization membership required")
+
+    monkeypatch.setattr("api.projects._get_admin_org_ids", forbidden_org_lookup)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_projects(
+            current_user=SimpleNamespace(id="user", role="user", is_admin=False),
+            db=object(),
+        )
+
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_accessible_paths_preserves_intended_http_status(monkeypatch):
+    """_get_accessible_paths_for_user must not rewrap deliberate HTTPExceptions."""
+    from api.routes import _get_accessible_paths_for_user
+
+    class ForbiddenDatabase:
+        async def execute(self, *_args, **_kwargs):
+            raise HTTPException(status_code=403, detail="Project registry forbidden")
+
+    monkeypatch.setenv("USE_DATABASE", "true")
+    with pytest.raises(HTTPException) as exc_info:
+        await _get_accessible_paths_for_user(ForbiddenDatabase(), "user-id", admin_org_ids=[])
+
+    assert exc_info.value.status_code == 403

@@ -62,19 +62,12 @@ export function Sidebar() {
   const visibility = useMenuVisibilityStore(s => s.visibility)
   const menuOrder = useMenuVisibilityStore(s => s.menuOrder)
   const isLoaded = useMenuVisibilityStore(s => s.isLoaded)
-  const fetchVisibility = useMenuVisibilityStore(s => s.fetchVisibility)
-
+  const isFallback = useMenuVisibilityStore(s => s.isFallback)
   useEffect(() => {
     fetchProjects()
   }, [fetchProjects])
 
-  // 사용자 변경 시 메뉴 가시성 재로딩 (다른 계정으로 전환 시 stale data 방지)
-  useEffect(() => {
-    if (user?.id) {
-      useMenuVisibilityStore.setState({ isLoaded: false, menuOrder: [], visibility: {} })
-      fetchVisibility()
-    }
-  }, [user?.id, fetchVisibility])
+  // Menu visibility is hydrated by App's authenticated bootstrap flow.
 
   const userRole = user?.role || (user?.is_admin ? 'admin' : 'user')
 
@@ -88,6 +81,7 @@ export function Sidebar() {
       .map((view) => navByView.get(view as ViewType))
       .filter((n): n is (typeof navigation)[number] => n !== undefined)
 
+    if (isFallback && userRole !== 'admin') return sorted.filter((item) => item.view === 'dashboard')
     if (userRole === 'admin') return sorted // admin은 모든 메뉴 접근 가능
 
     return sorted.filter((item) => {
@@ -95,13 +89,13 @@ export function Sidebar() {
       if (!menuVisibility) return true // 설정 없으면 기본 표시
       return menuVisibility[userRole] !== false
     })
-  }, [visibility, menuOrder, userRole])
+  }, [visibility, menuOrder, userRole, isFallback])
 
   // Admin 메뉴 표시 여부
-  const showAdmin = userRole === 'admin' || (visibility['admin']?.[userRole] ?? false)
+  const showAdmin = userRole === 'admin' || (!isFallback && (visibility['admin']?.[userRole] ?? false))
 
   // Settings 메뉴 표시 여부
-  const showSettings = userRole === 'admin' || (visibility['settings']?.[userRole] ?? true)
+  const showSettings = userRole === 'admin' || (!isFallback && (visibility['settings']?.[userRole] ?? true))
 
   // 첫 fetch 종료 전에는 Skeleton — DEFAULT_MENU_ORDER가 잠깐 노출 후 재정렬되는 깜빡임 차단.
   if (!isLoaded) return <SidebarSkeleton />

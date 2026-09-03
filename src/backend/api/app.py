@@ -149,6 +149,7 @@ else:
     health_router = safe_import("api.health", "router")
     git_router = safe_import("api.git", "router")
     llm_models_router = safe_import("api.llm", "router")
+    bootstrap_router = safe_import("api.bootstrap", "router")
     admin_router = safe_import("api.admin", "router")
     project_access_router = safe_import("api.project_access", "router")
     invitation_router = safe_import("api.project_access", "invitation_router")
@@ -634,6 +635,8 @@ else:
             app.include_router(git_router, prefix="/api")
         if llm_models_router:
             app.include_router(llm_models_router, prefix="/api")
+        if bootstrap_router:
+            app.include_router(bootstrap_router, prefix="/api")
         if admin_router:
             app.include_router(admin_router, prefix="/api")
         if project_access_router:
