@@ -78,6 +78,7 @@ const defaultStoreState = {
   showInactive: false,
   selectedProjectId: null,
   fetchProjects: mockFetchProjects,
+  ensureProjects: mockFetchProjects,
   fetchTemplates: mockFetchTemplates,
   setSearchQuery: mockSetSearchQuery,
   setShowInactive: mockSetShowInactive,

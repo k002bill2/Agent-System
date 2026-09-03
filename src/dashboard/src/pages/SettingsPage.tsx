@@ -31,7 +31,7 @@ export function SettingsPage() {
     setNotificationSetting,
     preferredTerminal,
     setPreferredTerminal,
-    fetchModels,
+    ensureModels,
   } = useSettingsStore()
 
   const { connected, connect, disconnect } = useOrchestrationStore()
@@ -187,8 +187,8 @@ export function SettingsPage() {
 
   // Fetch models from API on mount (populates availableModels for MemberDetailPanel)
   useEffect(() => {
-    fetchModels()
-  }, [fetchModels])
+    ensureModels()
+  }, [ensureModels])
 
   const handleReconnect = () => {
     disconnect()

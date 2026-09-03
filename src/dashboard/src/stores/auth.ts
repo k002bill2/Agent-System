@@ -47,6 +47,7 @@ interface AuthState {
   // Actions
   setTokens: (accessToken: string, refreshToken: string, expiresIn: number) => void
   setUser: (user: User) => void
+  hydrateUser: (user: User) => void
   logout: () => void
   refreshAccessToken: () => Promise<boolean>
   fetchCurrentUser: () => Promise<void>
@@ -97,6 +98,8 @@ export const useAuthStore = create<AuthState>()(
         analytics.track('user_logged_in', { provider: user.oauth_provider })
       },
 
+      hydrateUser: (user) => set({ user, error: null }),
+
       // Logout
       logout: () => {
         analytics.track('user_logged_out')
@@ -115,11 +118,13 @@ export const useAuthStore = create<AuthState>()(
 
       // Refresh access token
       refreshAccessToken: async () => {
-        const { refreshToken } = get()
-        if (!refreshToken) {
+        const requestRefreshToken = get().refreshToken
+        if (!requestRefreshToken) {
           get().logout()
           return false
         }
+
+        const isCurrentRefresh = () => get().refreshToken === requestRefreshToken
 
         try {
           const response = await fetch(getApiUrl('/api/auth/refresh'), {
@@ -127,16 +132,18 @@ export const useAuthStore = create<AuthState>()(
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ refresh_token: refreshToken }),
+            body: JSON.stringify({ refresh_token: requestRefreshToken }),
           })
 
           if (!response.ok) {
-            // Refresh token is invalid or expired
-            get().logout()
+            // Refresh token is invalid or expired. Do not log out a newer session.
+            if (isCurrentRefresh()) get().logout()
             return false
           }
 
           const data = await response.json()
+          // A logout/account switch may have happened while the request was in flight.
+          if (!isCurrentRefresh()) return false
           set({
             accessToken: data.access_token,
             refreshToken: data.refresh_token,
@@ -146,7 +153,7 @@ export const useAuthStore = create<AuthState>()(
           return true
         } catch (error) {
           console.error('Failed to refresh token:', error)
-          get().logout()
+          if (isCurrentRefresh()) get().logout()
           return false
         }
       },
@@ -167,12 +174,16 @@ export const useAuthStore = create<AuthState>()(
           }
         }
 
+        const requestSessionKey = `${get().accessToken ?? ''}:${get().refreshToken ?? ''}`
+        const requestAccessToken = get().accessToken
+        if (!requestAccessToken) return
+        let refreshFailed = false
         set({ isLoading: true, error: null })
 
         try {
           const response = await fetch(getApiUrl('/api/auth/me'), {
             headers: {
-              Authorization: `Bearer ${get().accessToken}`,
+              Authorization: `Bearer ${requestAccessToken}`,
             },
           })
 
@@ -184,14 +195,17 @@ export const useAuthStore = create<AuthState>()(
                 // Retry with new token
                 return get().fetchCurrentUser()
               }
+              refreshFailed = true
             }
             throw new Error('Failed to fetch user info')
           }
 
           const user = await response.json()
+          if (getAuthSessionKey() !== requestSessionKey) return
           set({ user, isLoading: false })
         } catch (error) {
           console.error('Failed to fetch user:', error)
+          if (getAuthSessionKey() !== requestSessionKey && !refreshFailed) return
           set({
             error: error instanceof Error ? error.message : 'Failed to fetch user',
             isLoading: false,
@@ -243,6 +257,11 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 )
+
+export function getAuthSessionKey(): string {
+  const { accessToken, refreshToken } = useAuthStore.getState()
+  return `${accessToken ?? ''}:${refreshToken ?? ''}`
+}
 
 // ─────────────────────────────────────────────────────────────
 // Auth Fetch Wrapper

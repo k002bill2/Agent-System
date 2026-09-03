@@ -275,6 +275,7 @@ export function ProjectsPage() {
     showInactive,
     selectedProjectId,
     fetchProjects,
+    ensureProjects,
     fetchTemplates,
     setSearchQuery,
     setShowInactive,
@@ -336,9 +337,9 @@ export function ProjectsPage() {
   }
 
   useEffect(() => {
-    fetchProjects()
+    ensureProjects()
     fetchTemplates()
-  }, [fetchProjects, fetchTemplates])
+  }, [ensureProjects, fetchTemplates])
 
   // Handle navigation to Project Configs page
   useEffect(() => {

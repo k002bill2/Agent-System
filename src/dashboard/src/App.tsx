@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ComponentType } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { ChatInput } from './components/ChatInput'
 import { ApprovalBanner } from './components/ApprovalModal'
@@ -7,11 +8,13 @@ import { HealthBadge } from './components/HealthBadge'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useOrchestrationStore } from './stores/orchestration'
 import { useNavigationStore, isPublicView } from './stores/navigation'
-import { useAuthStore } from './stores/auth'
+import { useAuthStore, getAuthSessionKey } from './stores/auth'
+import { useProjectsStore } from './stores/projects'
 import { useMenuVisibilityStore } from './stores/menuVisibility'
 import { useSettingsStore } from './stores/settings'
 import { routes } from './routes'
 import { analytics } from './services/analytics'
+import { fetchBootstrap } from './services/bootstrap'
 import { apiClient } from '@/services/apiClient'
 import {
   SidebarSkeleton,
@@ -20,11 +23,18 @@ import {
 import { Skeleton } from './components/ui/Skeleton'
 import { RotateCcw, Trash2 } from 'lucide-react'
 
-// Eager-load login/register (needed before auth check)
-import { LoginPage } from './pages/LoginPage'
-import { RegisterPage } from './pages/RegisterPage'
+// AuthCallbackPage is eager-loaded because its provider prop is required.
 import { AuthCallbackPage } from './pages/AuthCallbackPage'
-import { InvitationAcceptPage } from './pages/InvitationAcceptPage'
+
+const getPublicPage = (view: string): ComponentType => {
+  const route = routes.find((candidate) => candidate.view === view && candidate.isPublic)
+  if (!route) throw new Error(`Missing public route: ${view}`)
+  return route.element as ComponentType
+}
+
+const LoginPage = getPublicPage('login')
+const RegisterPage = getPublicPage('register')
+const InvitationAcceptPage = getPublicPage('invitation-accept')
 
 const viewTitles: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -59,10 +69,14 @@ export default function App() {
     connectionStatus,
     _hasHydrated: orchestrationHydrated,
   } = useOrchestrationStore()
+  const {
+    visibility,
+    isLoaded: menuLoaded,
+    isFallback,
+  } = useMenuVisibilityStore()
   const { currentView, setView } = useNavigationStore()
   const {
     _hasHydrated: authHydrated,
-    fetchCurrentUser,
     user,
   } = useAuthStore()
 
@@ -76,6 +90,8 @@ export default function App() {
     github_enabled: boolean
     email_enabled: boolean
   } | null>(null)
+  const [bootstrapLoading, setBootstrapLoading] = useState(false)
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null)
 
   // Derived values
   const oauthEnabled = authStatus?.oauth_enabled ?? null
@@ -87,13 +103,15 @@ export default function App() {
     analytics.init()
   }, [])
 
-  // LLM 모델 목록 로드 (앱 마운트 시 1회, 이미 로드/로딩 중이면 스킵)
+  // Keep the legacy public model lookup for installations with auth disabled.
   useEffect(() => {
+    if (authStatus === null || anyAuthAvailable) return
     const { availableModels, modelsLoading, fetchModels } = useSettingsStore.getState()
-    if (availableModels.length === 0 && !modelsLoading) {
-      fetchModels()
+    if (availableModels.length === 0 && !modelsLoading) void fetchModels()
+    if (!useMenuVisibilityStore.getState().isLoaded) {
+      void useMenuVisibilityStore.getState().fetchVisibility()
     }
-  }, [])
+  }, [authStatus, anyAuthAvailable])
 
   // 페이지뷰 추적
   useEffect(() => {
@@ -128,12 +146,61 @@ export default function App() {
     }
   }, [authHydrated, accessToken, refreshToken, currentView, setView, anyAuthAvailable])
 
-  // Fetch current user on mount if authenticated but no user data
+  const bootstrapGeneration = useRef(0)
+  const sessionKeyRef = useRef<string | null>(null)
+  const sessionKey = getAuthSessionKey()
+
+  // Reset user-scoped startup state whenever the authenticated session changes.
+  // This runs before the bootstrap effect below, so no response can cross users.
   useEffect(() => {
-    if (authHydrated && (accessToken || refreshToken) && !user) {
-      fetchCurrentUser()
-    }
-  }, [authHydrated, accessToken, refreshToken, user, fetchCurrentUser])
+    if (sessionKeyRef.current === sessionKey) return
+    sessionKeyRef.current = sessionKey
+    bootstrapGeneration.current += 1
+    useAuthStore.setState({ user: null, error: null })
+    useProjectsStore.getState().reset()
+    useSettingsStore.getState().resetModels()
+    useMenuVisibilityStore.getState().reset()
+  }, [sessionKey])
+
+  // Load authenticated startup data in one request, then seed existing stores.
+  useEffect(() => {
+    if (!authHydrated || !sessionKey) return
+
+    const generation = ++bootstrapGeneration.current
+    setBootstrapLoading(true)
+    fetchBootstrap(sessionKey)
+      .then((payload) => {
+        if (generation !== bootstrapGeneration.current || getAuthSessionKey() !== sessionKey) return
+
+        useAuthStore.getState().hydrateUser(payload.user)
+        useProjectsStore.getState().hydrateProjects(payload.projects)
+        useSettingsStore.getState().hydrateModels(payload.models)
+        if (payload.menu) {
+          useMenuVisibilityStore.getState().hydrateVisibility(payload.menu)
+        } else {
+          void useMenuVisibilityStore.getState().fetchVisibility()
+        }
+        setBootstrapError(null)
+      })
+      .catch((error: unknown) => {
+        if (generation !== bootstrapGeneration.current || getAuthSessionKey() !== sessionKey) return
+
+        const message = error instanceof Error ? error.message : 'Failed to load startup data'
+        setBootstrapError(message)
+        // Preserve the previous startup behavior if the aggregate request fails.
+        void Promise.all([
+          useAuthStore.getState().fetchCurrentUser(),
+          useProjectsStore.getState().fetchProjects(),
+          useSettingsStore.getState().fetchModels(),
+          useMenuVisibilityStore.getState().fetchVisibility(),
+        ]).catch(() => undefined)
+      })
+      .finally(() => {
+        if (generation === bootstrapGeneration.current && getAuthSessionKey() === sessionKey) {
+          setBootstrapLoading(false)
+        }
+      })
+  }, [authHydrated, sessionKey])
 
   // Check if authenticated (or if no auth method available, skip auth check)
   const isLoggedIn = !anyAuthAvailable || !!(accessToken || refreshToken)
@@ -174,8 +241,8 @@ export default function App() {
     }
   }, [orchestrationHydrated, authHydrated, isLoggedIn, sessionId, connected, connectionStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Show loading while hydrating or checking auth status
-  if (!authHydrated || authStatus === null) {
+  // Show loading while hydrating, checking auth, or loading the first user payload.
+  if (!authHydrated || authStatus === null || (isLoggedIn && bootstrapLoading && !user)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="text-center">
@@ -219,12 +286,14 @@ export default function App() {
     }
 
     // 역할 기반 접근 제어
-    const { visibility } = useMenuVisibilityStore.getState()
     const userRole = user?.role || (user?.is_admin ? 'admin' : 'user')
+    if (anyAuthAvailable && userRole !== 'admin' && currentView !== 'dashboard' && (!menuLoaded || isFallback)) {
+      setView('dashboard')
+      return null
+    }
     if (
       userRole !== 'admin' &&
       currentView !== 'dashboard' &&
-      currentView !== 'settings' &&
       visibility[currentView]
     ) {
       const allowed = visibility[currentView][userRole]
@@ -314,6 +383,11 @@ export default function App() {
 
           {/* HITL Approval Banner */}
           {!isInitialLoading && <ApprovalBanner />}
+          {bootstrapError && (
+            <div role="alert" className="border-b border-amber-200 bg-amber-50 px-6 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+              Startup data could not be loaded in one request. Using individual requests instead.
+            </div>
+          )}
 
           {/* Content Area */}
           <div className="flex-1 flex overflow-hidden">

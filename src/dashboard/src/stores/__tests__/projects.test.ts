@@ -449,3 +449,82 @@ describe('projects store', () => {
     })
   })
 })
+
+// ── Startup hydration guard ──────────────────────────────
+// Bootstrap seeds the store once; page mounts must not refetch the same list.
+
+describe('projects store hydration guard', () => {
+  beforeEach(() => {
+    useProjectsStore.setState({
+      projects: [],
+      isLoading: false,
+      error: null,
+      selectedProjectId: null,
+      isHydrated: false,
+    })
+    vi.clearAllMocks()
+  })
+
+  it('marks the store hydrated after bootstrap seeding', () => {
+    useProjectsStore.getState().hydrateProjects([mockProject('p-1', 'One')] as any)
+
+    expect(useProjectsStore.getState().isHydrated).toBe(true)
+  })
+
+  it('marks the store hydrated after a successful fetch', async () => {
+    mockApiClient.get.mockResolvedValueOnce([mockProject('p-1', 'One')])
+
+    await useProjectsStore.getState().fetchProjects()
+
+    expect(useProjectsStore.getState().isHydrated).toBe(true)
+  })
+
+  it('does not mark the store hydrated when the fetch fails', async () => {
+    mockApiClient.get.mockRejectedValueOnce(new Error('boom'))
+
+    await useProjectsStore.getState().fetchProjects()
+
+    expect(useProjectsStore.getState().isHydrated).toBe(false)
+  })
+
+  it('clears hydration on reset so a new session refetches', () => {
+    useProjectsStore.getState().hydrateProjects([mockProject('p-1', 'One')] as any)
+    useProjectsStore.getState().reset()
+
+    expect(useProjectsStore.getState().isHydrated).toBe(false)
+  })
+
+  it('ensureProjects skips the request when already hydrated', async () => {
+    useProjectsStore.getState().hydrateProjects([mockProject('p-1', 'One')] as any)
+
+    await useProjectsStore.getState().ensureProjects()
+
+    expect(mockApiClient.get).not.toHaveBeenCalled()
+  })
+
+  it('ensureProjects skips an empty-but-hydrated store', async () => {
+    useProjectsStore.getState().hydrateProjects([])
+
+    await useProjectsStore.getState().ensureProjects()
+
+    expect(mockApiClient.get).not.toHaveBeenCalled()
+  })
+
+  it('ensureProjects fetches when the store was never hydrated', async () => {
+    mockApiClient.get.mockResolvedValueOnce([mockProject('p-1', 'One')])
+
+    await useProjectsStore.getState().ensureProjects()
+
+    expect(mockApiClient.get).toHaveBeenCalledWith('/api/projects')
+  })
+
+  it('explicit fetchProjects still refetches a hydrated store (retry/mutation refresh)', async () => {
+    useProjectsStore.getState().hydrateProjects([mockProject('p-1', 'One')] as any)
+    mockApiClient.get.mockResolvedValueOnce([mockProject('p-2', 'Two')])
+
+    await useProjectsStore.getState().fetchProjects()
+
+    expect(mockApiClient.get).toHaveBeenCalledWith('/api/projects')
+    expect(useProjectsStore.getState().projects[0].id).toBe('p-2')
+  })
+})

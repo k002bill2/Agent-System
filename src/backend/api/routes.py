@@ -131,7 +131,7 @@ async def get_inactive_project_paths(db: AsyncSession) -> set[str]:
 
 async def _get_accessible_paths_for_user(
     db: AsyncSession, user_id: str, admin_org_ids: list[str] | None = None
-) -> set[str] | None:
+) -> set[str]:
     """파일시스템 프로젝트의 접근 가능한 path set을 반환.
 
     ProjectModel.path <-> project_access(project_id) 를 크로스레퍼런스하여
@@ -142,15 +142,9 @@ async def _get_accessible_paths_for_user(
         - 일반 member: 명시적 ProjectAccess만
 
     Returns:
-        - None: DB 미사용 -> 필터링 스킵
-        - set[str]: 접근 가능한 path 집합
+        - set[str]: 접근 가능한 path 집합. DB registry/ACL 조회 실패 시 503으로
+          fail-closed 처리한다.
     """
-    import os
-
-    use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
-    if not use_database:
-        return None
-
     try:
         from sqlalchemy import select
 
@@ -193,6 +187,8 @@ async def _get_accessible_paths_for_user(
 
         return accessible_paths
 
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(
             status_code=503,
@@ -283,33 +279,27 @@ async def get_projects(
     if not use_database:
         inactive_paths = await get_inactive_project_paths(db)
 
-    # Filter by accessible projects if user is authenticated
+    # Filter by accessible projects if user is authenticated.
+    # In filesystem mode, non-admin users are still restricted by the DB
+    # registry/ACL mapping; unregistered legacy paths fail closed.
     if current_user and not use_database:
         is_admin = current_user.role == "admin" or current_user.is_admin
         if not is_admin:
-            # 조직 admin/owner 여부 확인
             from api.projects import _get_admin_org_ids
 
-            admin_org_ids = await _get_admin_org_ids(current_user)
-            accessible_paths = await _get_accessible_paths_for_user(
-                db, current_user.id, admin_org_ids
-            )
-            if accessible_paths is not None:
-                from sqlalchemy import select
-
-                from db.models import ProjectModel
-
-                path_result = await db.execute(select(ProjectModel.path))
-                db_registered_paths: set[str] = {row[0] for row in path_result.all() if row[0]}
-
-                filtered = []
-                for p in projects:
-                    if p.path not in db_registered_paths:
-                        # DB에 등록되지 않은 레거시 프로젝트 -> 인증 사용자 모두 표시
-                        filtered.append(p)
-                    elif p.path in accessible_paths:
-                        filtered.append(p)
-                projects = filtered
+            try:
+                admin_org_ids = await _get_admin_org_ids(current_user)
+                accessible_paths = await _get_accessible_paths_for_user(
+                    db, current_user.id, admin_org_ids
+                )
+            except HTTPException:
+                raise
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Project access control is temporarily unavailable",
+                ) from exc
+            projects = [p for p in projects if p.path in accessible_paths]
 
     # Try to get RAG stats if available
     try:

@@ -213,7 +213,46 @@ describe('auth store', () => {
 
       expect(result).toBe(false)
     })
+
+    it('ignores a refresh response after logout', async () => {
+      let resolveResponse!: (response: Response) => void
+      mockFetch.mockReturnValueOnce(new Promise<Response>((resolve) => {
+        resolveResponse = resolve
+      }))
+      useAuthStore.setState({ accessToken: 'old-access', refreshToken: 'old-refresh' })
+
+      const refreshPromise = useAuthStore.getState().refreshAccessToken()
+      useAuthStore.getState().logout()
+      resolveResponse(jsonResponse({ access_token: 'stale-access', refresh_token: 'stale-refresh', expires_in: 3600 }))
+
+      expect(await refreshPromise).toBe(false)
+      expect(useAuthStore.getState().accessToken).toBeNull()
+      expect(useAuthStore.getState().refreshToken).toBeNull()
+    })
+
+    it('does not overwrite a replacement session with a stale refresh response', async () => {
+      let resolveResponse!: (response: Response) => void
+      mockFetch.mockReturnValueOnce(new Promise<Response>((resolve) => {
+        resolveResponse = resolve
+      }))
+      useAuthStore.setState({ accessToken: 'old-access', refreshToken: 'old-refresh' })
+
+      const refreshPromise = useAuthStore.getState().refreshAccessToken()
+      useAuthStore.setState({ accessToken: 'new-access', refreshToken: 'new-refresh' })
+      resolveResponse(jsonResponse({ access_token: 'stale-access', refresh_token: 'stale-refresh', expires_in: 3600 }))
+
+      expect(await refreshPromise).toBe(false)
+      expect(useAuthStore.getState().accessToken).toBe('new-access')
+      expect(useAuthStore.getState().refreshToken).toBe('new-refresh')
+    })
   })
+
+function jsonResponse(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
 
   // ── fetchCurrentUser ───────────────────────────────────
 
