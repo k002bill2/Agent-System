@@ -275,6 +275,34 @@ describe('WorkingDirectory', () => {
     expect(defaultProps.onClearDrafts).toHaveBeenCalledTimes(1)
   })
 
+  it('shows a compact "Generate with AI" action in list view when not clean', () => {
+    render(<WorkingDirectory {...defaultProps} />)
+    expect(screen.getByRole('button', { name: /Generate with AI/ })).toBeInTheDocument()
+  })
+
+  it('calls onGenerateDrafts when the list view AI action is clicked', () => {
+    render(<WorkingDirectory {...defaultProps} />)
+    fireEvent.click(screen.getByRole('button', { name: /Generate with AI/ }))
+    expect(defaultProps.onGenerateDrafts).toHaveBeenCalledTimes(1)
+  })
+
+  it('disables the list view AI action and shows "Analyzing..." while generating', () => {
+    render(<WorkingDirectory {...defaultProps} isGeneratingDrafts={true} />)
+    const button = screen.getByRole('button', { name: /Analyzing/ })
+    expect(screen.getByText('Analyzing...')).toBeInTheDocument()
+    expect(button).toBeDisabled()
+  })
+
+  it('does not show the list view AI action when working directory is clean', () => {
+    const cleanStatus = makeWorkingStatus({
+      is_clean: true,
+      unstaged_files: [],
+      total_changes: 0,
+    })
+    render(<WorkingDirectory {...defaultProps} workingStatus={cleanStatus} />)
+    expect(screen.queryByText('Generate with AI')).not.toBeInTheDocument()
+  })
+
   it('shows "No unstaged changes" when no unstaged files exist', () => {
     const status = makeWorkingStatus({
       unstaged_files: [],
