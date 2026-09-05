@@ -255,6 +255,26 @@ export function WorkingDirectory({
               </button>
             </div>
           )}
+          {!is_clean && viewMode === 'list' && (
+            <button
+              onClick={onGenerateDrafts}
+              disabled={isGeneratingDrafts || allFiles.length === 0}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+              title="Generate commit suggestions with AI"
+            >
+              {isGeneratingDrafts ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  {draftCommits.length > 0 ? 'Regenerate' : 'Generate with AI'}
+                </>
+              )}
+            </button>
+          )}
           <button
             onClick={onRefresh}
             disabled={isLoading}
