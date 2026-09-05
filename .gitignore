@@ -62,6 +62,7 @@ src/backend/data/
 
 # Cache
 .cache/
+.impeccable/
 *.swp
 
 # Projects (symlinks - managed separately)
