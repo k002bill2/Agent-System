@@ -79,12 +79,34 @@ _MODELS: list[LLMModelConfig] = [
         supports_vision=True,
     ),
     LLMModelConfig(
+        id="claude-opus-5",
+        display_name="Claude Opus 5",
+        provider=LLMProvider.ANTHROPIC,
+        context_window=1000000,  # 1M tokens
+        input_price=0.005,  # $5.00/1M tokens
+        output_price=0.025,  # $25.00/1M tokens
+        is_default=False,
+        supports_tools=True,
+        supports_vision=True,
+    ),
+    LLMModelConfig(
+        id="claude-fable-5-1",
+        display_name="Claude Fable 5.1",
+        provider=LLMProvider.ANTHROPIC,
+        context_window=1000000,  # 1M tokens
+        input_price=0.010,  # $10.00/1M tokens
+        output_price=0.050,  # $50.00/1M tokens
+        is_default=False,
+        supports_tools=True,
+        supports_vision=True,
+    ),
+    LLMModelConfig(
         id="claude-sonnet-5",
         display_name="Claude Sonnet 5",
         provider=LLMProvider.ANTHROPIC,
         context_window=1000000,  # 1M tokens
-        input_price=0.003,  # $3.00/1M tokens
-        output_price=0.015,  # $15.00/1M tokens
+        input_price=0.002,  # $2.00/1M tokens
+        output_price=0.010,  # $10.00/1M tokens
         is_default=True,  # Default Anthropic model (restored, follow-up policy 2026-09-01)
         supports_tools=True,
         supports_vision=True,
@@ -115,6 +137,18 @@ _MODELS: list[LLMModelConfig] = [
     # Google Gemini Models (updated 2026-08-31)
     # Pricing: USD per 1K tokens. Docs: https://ai.google.dev/gemini-api/docs/models
     # ─────────────────────────────────────────────────────────
+    # gemini-3.8-flash: official model docs, verified 2026-09-05
+    LLMModelConfig(
+        id="gemini-3.8-flash",
+        display_name="Gemini 3.8 Flash",
+        provider=LLMProvider.GOOGLE,
+        context_window=1048576,
+        input_price=0.00075,  # $0.75/1M tokens
+        output_price=0.00375,  # $3.75/1M tokens
+        is_default=False,  # Do not promote without provider smoke/canary
+        supports_tools=True,
+        supports_vision=True,
+    ),
     # gemini-3.7-flash: official model docs (current stable Flash), verified 2026-08-31
     LLMModelConfig(
         id="gemini-3.7-flash",
@@ -205,6 +239,17 @@ _MODELS: list[LLMModelConfig] = [
         input_price=0.005,  # $5.00/1M tokens
         output_price=0.015,  # $15.00/1M tokens
         is_default=False,
+        supports_tools=True,
+        supports_vision=True,
+    ),
+    LLMModelConfig(
+        id="gpt-6-astra",
+        display_name="GPT-6 Astra",
+        provider=LLMProvider.OPENAI,
+        context_window=1050000,
+        input_price=0.010,  # $10.00/1M tokens
+        output_price=0.050,  # $50.00/1M tokens
+        is_default=False,  # Do not promote without provider smoke/canary
         supports_tools=True,
         supports_vision=True,
     ),

@@ -105,9 +105,9 @@ interface SettingsState {
 // Disabled backend models (gpt-5.5, gpt-5.4 family) are intentionally excluded.
 // Keep this list AND fallbackDefaultModelIds below in sync when the backend changes.
 const fallbackModels: Record<LLMProvider, string[]> = {
-  anthropic: ['claude-opus-4-8', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
-  google: ['gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite-preview', 'gemini-2.5-pro', 'gemini-2.5-flash'],
-  openai: ['gpt-4o-mini', 'gpt-4o', 'o3', 'o4-mini'],
+  anthropic: ['claude-opus-5', 'claude-fable-5-1', 'claude-opus-4-8', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
+  google: ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite-preview', 'gemini-2.5-pro', 'gemini-2.5-flash'],
+  openai: ['gpt-6-astra', 'gpt-4o-mini', 'gpt-4o', 'o3', 'o4-mini'],
   codex_cli: ['codex-cli'],
   claude_cli: ['claude-cli'],
   local: ['exaone3.5:7.8b', 'llama3:8b', 'mistral:7b', 'codellama:7b'],
