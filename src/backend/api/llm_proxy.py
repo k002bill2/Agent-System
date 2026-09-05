@@ -40,11 +40,14 @@ PROVIDER_BASE_URLS: dict[str, str] = {
 }
 
 COST_TABLE: list[tuple[str, float, float]] = [
+    ("gpt-6-astra", 0.010, 0.050),
     ("gpt-4o-mini", 0.00015, 0.0006),
     ("gpt-4o", 0.005, 0.015),
     ("o1-mini", 0.003, 0.012),
     ("o1", 0.015, 0.060),
-    ("claude-sonnet-5", 0.003, 0.015),
+    ("claude-fable-5-1", 0.010, 0.050),
+    ("claude-opus-5", 0.005, 0.025),
+    ("claude-sonnet-5", 0.002, 0.010),
     ("claude-opus-4-8", 0.005, 0.025),
     # Opus price cut ($5/$25) applies from Opus 4.5 onward; these specific
     # prefixes must precede the generic "claude-opus-4" (4-0/4-1 era $15/$75).
