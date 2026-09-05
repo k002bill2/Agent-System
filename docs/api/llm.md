@@ -33,7 +33,7 @@ LLM 모델 레지스트리, 라우터, 자격증명, 프록시, Playground API�
       "display_name": "Claude Sonnet 5",
       "provider": "anthropic",
       "context_window": 1000000,
-      "pricing": {"input": 0.003, "output": 0.015},
+      "pricing": {"input": 0.002, "output": 0.010},
       "available": true,
       "is_default": true,
       "supports_tools": true,
