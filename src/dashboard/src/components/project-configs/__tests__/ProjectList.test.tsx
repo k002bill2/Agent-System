@@ -73,6 +73,23 @@ describe('ProjectList', () => {
     expect(screen.getByText('5 commands')).toBeInTheDocument()
   })
 
+  it('does not nest the remove control inside the project selection button', () => {
+    mockStoreState.dbProjects = [{ id: 'db-1', name: 'Project Alpha' }]
+    const { container } = render(<ProjectList />)
+
+    expect(container.querySelector('button button')).not.toBeInTheDocument()
+  })
+
+  it('exposes the remove control as a sibling of the selection button', () => {
+    mockStoreState.dbProjects = [{ id: 'db-1', name: 'Project Alpha' }]
+    render(<ProjectList />)
+
+    const select = screen.getByRole('button', { name: /select project alpha/i })
+    const remove = screen.getByRole('button', { name: /remove project alpha/i })
+
+    expect(select).not.toContainElement(remove)
+  })
+
   it('calls selectProject on project click', () => {
     render(<ProjectList />)
     fireEvent.click(screen.getByText('Project Alpha'))

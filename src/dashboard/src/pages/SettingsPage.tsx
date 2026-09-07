@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSettingsStore, Theme, TerminalType, TERMINAL_DISPLAY_NAMES } from '../stores/settings'
 import { useOrchestrationStore } from '../stores/orchestration'
+import { authFetch } from '../stores/auth'
 import { notificationService } from '../services/notificationService'
 import { cn } from '../lib/utils'
 import {
@@ -89,7 +90,7 @@ export function SettingsPage() {
     const fetchTerminals = async () => {
       setTerminalsLoading(true)
       try {
-        const response = await fetch(`${backendUrl}/api/terminal/available`)
+        const response = await authFetch(`${backendUrl}/api/terminal/available`)
         if (response.ok) {
           const data = await response.json()
           setAvailableTerminals(data.terminals || [])

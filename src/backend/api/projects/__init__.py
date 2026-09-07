@@ -14,7 +14,7 @@
 """
 
 from . import members
-from ._shared import _get_admin_org_ids
+from ._shared import _get_admin_org_ids, authorize_db_project, authorize_db_projects
 from .registry import router
 
 # 집계 라우터는 `registry` 모듈이 소유한다(그쪽 주석 참조 — 빈 경로 라우트가
@@ -27,5 +27,7 @@ router.include_router(members.router)
 
 __all__ = [
     "_get_admin_org_ids",
+    "authorize_db_project",
+    "authorize_db_projects",
     "router",
 ]

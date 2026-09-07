@@ -136,7 +136,11 @@ else:
     feedback_router = safe_import("api.feedback", "router")
     auth_router = safe_import("api.auth", "router")
     project_configs_router = safe_import("api.project_configs", "router")
-    rag_router = safe_import("api.rag", "router")
+    # RAG is a dashboard feature, not an optional integration.  Import it
+    # directly so a broken dependency fails startup visibly instead of serving
+    # the dashboard with every /api/rag request returning a misleading 404.
+    from api.rag import router as rag_router
+
     audit_router = safe_import("api.audit", "router")
     notifications_router = safe_import("api.notifications", "router")
     analytics_router = safe_import("api.analytics", "router")
@@ -604,8 +608,7 @@ else:
             app.include_router(auth_router, prefix="/api")
         if project_configs_router:
             app.include_router(project_configs_router, prefix="/api")
-        if rag_router:
-            app.include_router(rag_router, prefix="/api")
+        app.include_router(rag_router, prefix="/api")
         if audit_router:
             app.include_router(audit_router, prefix="/api")
         if notifications_router:
