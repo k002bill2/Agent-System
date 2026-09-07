@@ -153,7 +153,15 @@ async def _authorized_project_ids(
     if requested_ids is not None:
         legacy_ids &= set(requested_ids)
 
-    db_rows = await authorize_db_projects(requested_ids, user, session)
+    try:
+        db_rows = await authorize_db_projects(requested_ids, user, session)
+    except Exception as exc:
+        logger.exception("Failed to resolve authorized RAG projects from the database")
+        raise HTTPException(
+            status_code=503,
+            detail="Project registry is temporarily unavailable",
+        ) from exc
+
     return sorted(legacy_ids | {row.id for row in db_rows})
 
 
@@ -504,6 +512,12 @@ async def cross_project_query(
     ACL 을 건 의미가 사라진다.
     """
     allowed_ids = await _authorized_project_ids(request.project_ids, current_user, db)
+    # `query_cross_project` 는 source 목록이 None 일 때만 exclude 를 적용한다.
+    # 인가 필터가 항상 명시 목록을 넘기게 됐으므로 제외를 여기서 미리 뺀다 —
+    # 안 그러면 제외한 프로젝트가 그대로 검색돼 결과에 섞인다.
+    if request.exclude_project_ids:
+        excluded = set(request.exclude_project_ids)
+        allowed_ids = [pid for pid in allowed_ids if pid not in excluded]
     if not allowed_ids:
         return QueryResult(query=request.query, documents=[], total_found=0)
 

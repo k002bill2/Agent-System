@@ -313,3 +313,51 @@ async def test_shared_query_propagates_registry_outage_as_503(monkeypatch, tmp_p
         )
 
     assert excinfo.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_cross_project_query_still_honours_exclusions(monkeypatch) -> None:
+    """인가 집합을 명시 목록으로 넘기면서 exclude 가 무시되면 안 된다.
+
+    `query_cross_project` 는 `source_project_ids is None` 일 때만 exclude 를
+    적용한다. 인가 필터가 항상 명시 목록을 넘기게 되었으므로, 제외는 여기서
+    미리 빼야 한다.
+    """
+
+    async def _authorized(requested_ids, user, session):
+        return ["alpha", "beta"]
+
+    monkeypatch.setattr(rag, "_authorized_project_ids", _authorized)
+
+    captured: dict[str, object] = {}
+
+    class _Store:
+        async def query_cross_project(self, **kwargs):
+            captured.update(kwargs)
+            return QueryResult(query=kwargs["query"], documents=[], total_found=0)
+
+    monkeypatch.setattr(rag, "get_vector_store", lambda: _Store())
+
+    await rag.cross_project_query(
+        rag.CrossProjectQueryRequest(query="q", exclude_project_ids=["beta"]),
+        MEMBER,
+        MagicMock(),
+    )
+
+    assert captured["source_project_ids"] == ["alpha"]
+
+
+@pytest.mark.asyncio
+async def test_authorized_project_ids_maps_registry_failure_to_503(monkeypatch) -> None:
+    """ACL 조회가 터지면 500 이 아니라 `_get_db_project` 과 같은 503 이어야 한다."""
+    monkeypatch.setattr(rag, "PROJECTS_REGISTRY", {})
+
+    async def _boom(project_ids, user, session, min_role="viewer"):
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr(rag, "authorize_db_projects", _boom)
+
+    with pytest.raises(HTTPException) as excinfo:
+        await rag._authorized_project_ids(None, MEMBER, MagicMock())
+
+    assert excinfo.value.status_code == 503
