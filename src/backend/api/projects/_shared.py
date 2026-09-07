@@ -41,3 +41,48 @@ async def _get_admin_org_ids(user) -> list[str]:
         db_org_ids = [row[0] for row in result.all()]
 
     return db_org_ids
+
+
+async def authorize_db_project(project_id: str, user, session):
+    """유저가 접근 가능한 **활성** DB 레지스트리 프로젝트만 돌려준다.
+
+    `api/routes.py` 의 `GET /projects` 와 같은 규칙이다:
+        - 시스템 admin: 전체
+        - 조직 admin/owner: 자기 조직 프로젝트
+        - 일반 member: 명시적 `ProjectAccess` 만
+
+    규칙을 두 벌로 두면 인가 검사가 조용히 갈라지므로, 단건 조회가 필요한
+    소비자(`api/rag.py`)는 이 헬퍼를 재사용한다.
+
+    접근 불가·미존재를 구분하지 않고 둘 다 `None` 으로 낸다 — 호출자가 404 를
+    내면 존재 자체가 새어나가지 않는다.
+    """
+    import os
+
+    if os.getenv("USE_DATABASE", "false").lower() != "true":
+        return None
+
+    from sqlalchemy import or_, select
+
+    from db.models import ProjectAccessModel, ProjectModel
+
+    query = select(ProjectModel).where(
+        ProjectModel.id == project_id,
+        ProjectModel.is_active == True,  # noqa: E712
+    )
+
+    is_admin = getattr(user, "role", None) == "admin" or bool(getattr(user, "is_admin", False))
+    if not is_admin:
+        admin_org_ids = await _get_admin_org_ids(user)
+        member_subquery = select(ProjectAccessModel.project_id).where(
+            ProjectAccessModel.user_id == user.id
+        )
+        query = query.where(
+            or_(
+                ProjectModel.organization_id.in_(admin_org_ids),
+                ProjectModel.id.in_(member_subquery),
+            )
+        )
+
+    result = await session.execute(query)
+    return result.scalar_one_or_none()

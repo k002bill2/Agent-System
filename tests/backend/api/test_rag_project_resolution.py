@@ -1,6 +1,6 @@
 """RAG must resolve projects stored in the database registry."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -19,4 +19,9 @@ async def test_resolve_project_falls_back_to_the_database_registry(monkeypatch) 
     monkeypatch.setattr(rag, "get_project", lambda _project_id: None)
     monkeypatch.setattr(rag, "_get_db_project", AsyncMock(return_value=database_project))
 
-    assert await rag._resolve_project(database_project.id) == database_project
+    user = MagicMock()
+    session = MagicMock()
+
+    resolved = await rag._resolve_project(database_project.id, user, session)
+
+    assert resolved == database_project

@@ -2,10 +2,14 @@
 
 import logging
 from datetime import UTC, datetime
+from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.deps import get_current_user, get_db_session
+from api.projects import authorize_db_project
 from models.project import PROJECTS_REGISTRY, Project, get_project
 from services.code_entity_extractor import extract_dependencies, extract_entities
 from services.rag_service import (
@@ -87,27 +91,15 @@ class StatsResponse(BaseModel):
 _indexing_state: dict[str, dict] = {}
 
 
-async def _get_db_project(project_id: str) -> Project | None:
-    """Resolve an active DB-registry project as the legacy RAG project shape."""
-    import os
+async def _get_db_project(project_id: str, user: object, session: AsyncSession) -> Project | None:
+    """Resolve an access-authorized DB-registry project as the legacy RAG shape.
 
-    if os.getenv("USE_DATABASE", "false").lower() != "true":
-        return None
-
+    인가는 `api/projects` 의 `authorize_db_project` 가 소유한다 — `GET /projects`
+    와 같은 규칙을 재사용하기 위해서다. 규칙을 여기 복제하면 두 벌이 조용히
+    갈라지고, 갈라진 쪽이 인가 검사라 티가 나지 않는다.
+    """
     try:
-        from sqlalchemy import select
-
-        from db.database import async_session_factory
-        from db.models import ProjectModel
-
-        async with async_session_factory() as session:
-            result = await session.execute(
-                select(ProjectModel).where(
-                    ProjectModel.id == project_id,
-                    ProjectModel.is_active == True,  # noqa: E712
-                )
-            )
-            row = result.scalar_one_or_none()
+        row = await authorize_db_project(project_id, user, session)
     except Exception as exc:
         logger.exception("Failed to resolve RAG project '%s' from the database", project_id)
         raise HTTPException(
@@ -127,9 +119,21 @@ async def _get_db_project(project_id: str) -> Project | None:
     )
 
 
-async def _resolve_project(project_id: str) -> Project | None:
-    """Resolve legacy filesystem projects first, then DB-registry projects."""
-    return get_project(project_id) or await _get_db_project(project_id)
+async def _resolve_project(project_id: str, user: object, session: AsyncSession) -> Project | None:
+    """Resolve legacy filesystem projects first, then DB-registry projects.
+
+    DB 레지스트리는 `path` 가 nullable 이다. 빈 경로를 그대로 흘리면
+    `Path("").resolve()` 가 **서버의 작업 디렉터리**로 해석돼 저장소 전체가 그
+    프로젝트 컬렉션에 인덱싱된다. 그래서 여기서 미등록과 동일하게 취급한다.
+    """
+    legacy = get_project(project_id)
+    if legacy:
+        return legacy
+
+    db_project = await _get_db_project(project_id, user, session)
+    if db_project is None or not db_project.path.strip():
+        return None
+    return db_project
 
 
 def _get_state(project_id: str) -> dict:
@@ -249,6 +253,8 @@ def get_indexing_status_value(project_id: str) -> str:
 async def index_project(
     project_id: str,
     background_tasks: BackgroundTasks,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
     request: IndexRequest | None = None,
 ) -> IndexResponse:
     """
@@ -256,10 +262,18 @@ async def index_project(
 
     Indexing runs in the background. Poll GET /status/{project_id} for progress.
     """
-    project = await _resolve_project(project_id)
+    project = await _resolve_project(project_id, current_user, db)
     if not project:
         raise HTTPException(
             status_code=404, detail=f"Project '{project_id}' not found. Register it first."
+        )
+
+    # 등록된 경로가 실제 디렉터리가 아니면 인덱싱은 조용히 0건을 넣고
+    # `completed` 를 보고한다 — 성공처럼 보이는 실패라, 예약 전에 막는다.
+    if not Path(project.path).is_dir():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Project '{project_id}' has no readable directory at its registered path",
         )
 
     force_reindex = request.force_reindex if request else False
@@ -284,6 +298,8 @@ async def index_project(
 async def query_project(
     project_id: str,
     request: QueryRequest,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
 ) -> QueryResult:
     """
     Query project context using semantic search.
@@ -291,7 +307,7 @@ async def query_project(
     Returns the most relevant document chunks from the project's indexed files.
     """
     # Check if project exists
-    project = await _resolve_project(project_id)
+    project = await _resolve_project(project_id, current_user, db)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
 
@@ -312,14 +328,18 @@ async def query_project(
 
 
 @router.get("/projects/{project_id}/stats", response_model=StatsResponse)
-async def get_project_stats(project_id: str) -> StatsResponse:
+async def get_project_stats(
+    project_id: str,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> StatsResponse:
     """
     Get vector store statistics for a project.
 
     Returns information about the indexed documents and collection status.
     """
     # Check if project exists
-    project = await _resolve_project(project_id)
+    project = await _resolve_project(project_id, current_user, db)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
 
@@ -360,14 +380,18 @@ async def get_project_stats(project_id: str) -> StatsResponse:
 
 
 @router.delete("/projects/{project_id}/index")
-async def delete_project_index(project_id: str) -> dict:
+async def delete_project_index(
+    project_id: str,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
     """
     Delete all indexed data for a project.
 
     This removes the vector store collection and all associated embeddings.
     """
     # Check if project exists
-    project = await _resolve_project(project_id)
+    project = await _resolve_project(project_id, current_user, db)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
 
@@ -390,13 +414,25 @@ async def delete_project_index(project_id: str) -> dict:
 
 
 @router.get("/status/{project_id}")
-async def get_indexing_status(project_id: str) -> dict:
+async def get_indexing_status(
+    project_id: str,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
     """Get the current indexing status for a project."""
+    project = await _resolve_project(project_id, current_user, db)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
+
     state = _get_state(project_id)
 
-    indexed = False
     if project_id in PROJECTS_REGISTRY:
         indexed = PROJECTS_REGISTRY[project_id].vector_store_initialized or False
+    else:
+        # DB 레지스트리 프로젝트는 in-memory 플래그가 없다. 그 경우 컬렉션이
+        # 유일한 사실이다 — 안 그러면 인덱싱이 끝나도 영원히 `indexed: false` 라
+        # 대시보드가 "미인덱싱" 으로 계속 표시한다.
+        indexed = _safe_count(project_id) > 0
 
     # Mirror /stats: while indexing, return the last known stable count so
     # the UI never sees the partial mid-reindex value.
@@ -486,6 +522,8 @@ async def list_collections() -> dict:
 @router.get("/projects/{project_id}/entities")
 async def get_project_entities(
     project_id: str,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
     entity_type: str | None = None,
 ) -> dict:
     """
@@ -494,7 +532,7 @@ async def get_project_entities(
     Scans project files and extracts functions, classes, interfaces, etc.
     Optionally filter by entity_type (function, class, method, interface, etc.).
     """
-    project = await _resolve_project(project_id)
+    project = await _resolve_project(project_id, current_user, db)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
 
@@ -553,6 +591,8 @@ async def get_project_entities(
 @router.get("/projects/{project_id}/dependencies")
 async def get_project_dependencies(
     project_id: str,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
     entity_name: str | None = None,
 ) -> dict:
     """
@@ -561,7 +601,7 @@ async def get_project_dependencies(
     Extracts import and inheritance relationships between code entities.
     Optionally filter by entity_name to see deps for a specific entity.
     """
-    project = await _resolve_project(project_id)
+    project = await _resolve_project(project_id, current_user, db)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
 
