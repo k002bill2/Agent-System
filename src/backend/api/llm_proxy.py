@@ -58,6 +58,10 @@ COST_TABLE: list[tuple[str, float, float]] = [
     ("claude-sonnet-4", 0.003, 0.015),
     ("claude-haiku-4-5", 0.001, 0.005),
     ("claude-haiku-4", 0.00025, 0.00125),
+    # Gemini 3.x Flash: $0.75/$3.75 per 1M (공식 가격표, 2026-09-05 확인).
+    # 행이 없으면 _calc_cost 가 조용히 0.0 을 돌려줘 전액 미집계된다.
+    ("gemini-3.8-flash", 0.00075, 0.00375),
+    ("gemini-3.7-flash", 0.00075, 0.00375),
     ("gemini-2.0-flash", 0.00025, 0.001),
     ("gemini-1.5-pro", 0.00125, 0.005),
 ]

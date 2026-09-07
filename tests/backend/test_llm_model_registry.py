@@ -820,6 +820,20 @@ class TestLLMProxyCostTable:
         assert _calc_cost("gpt-6-astra", 1000, 1000) == pytest.approx(0.010 + 0.050)
         assert _calc_cost("claude-fable-5-1", 1000, 1000) == pytest.approx(0.010 + 0.050)
 
+    def test_opus_5_does_not_fall_through_to_legacy_opus_4(self):
+        """`claude-opus-5` 는 generic `claude-opus-4` 행($15/$75)에 걸리면 안 된다."""
+        from api.llm_proxy import _calc_cost
+
+        assert _calc_cost("claude-opus-5", 1000, 1000) == pytest.approx(0.005 + 0.025)
+
+    def test_gemini_3_flash_models_are_priced(self):
+        """미매칭 모델은 조용히 $0 로 정산된다 — Flash 3.7/3.8 은 행이 있어야 한다."""
+        from api.llm_proxy import _calc_cost
+
+        for model in ("gemini-3.8-flash", "gemini-3.7-flash"):
+            assert _calc_cost(model, 1000, 1000) == pytest.approx(0.00075 + 0.00375), model
+
+    def test_opus_4_8_matches_before_legacy_opus_4(self):
         from api.llm_proxy import _calc_cost
 
         # Must hit the claude-opus-4-8 row ($5/$25), not claude-opus-4 ($15/$75)
