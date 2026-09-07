@@ -21,6 +21,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import pytest_asyncio
+from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 
 from api import deps as api_deps
@@ -285,3 +286,30 @@ async def test_shared_query_is_limited_to_authorized_collections(monkeypatch, tm
         DB_PROJECT_ID,
         "another-project-i-can-see",
     ]
+
+
+@pytest.mark.asyncio
+async def test_shared_query_propagates_registry_outage_as_503(monkeypatch, tmp_path) -> None:
+    """ACL 조회 실패가 catch-all 에 먹혀 내부 에러 문자열이 담긴 500 이 되면 안 된다."""
+    project = Project(id=DB_PROJECT_ID, name="Agent System", path=str(tmp_path))
+
+    async def _resolve(project_id, user, session, min_role="viewer"):
+        return project
+
+    monkeypatch.setattr(rag, "_resolve_project", _resolve)
+
+    async def _outage(requested_ids, user, session):
+        raise HTTPException(status_code=503, detail="Project registry is temporarily unavailable")
+
+    monkeypatch.setattr(rag, "_authorized_project_ids", _outage)
+    monkeypatch.setattr(rag, "get_vector_store", lambda: pytest.fail("must not query on outage"))
+
+    with pytest.raises(HTTPException) as excinfo:
+        await rag.query_project(
+            DB_PROJECT_ID,
+            rag.QueryRequest(query="secret", include_shared=True),
+            MEMBER,
+            MagicMock(),
+        )
+
+    assert excinfo.value.status_code == 503

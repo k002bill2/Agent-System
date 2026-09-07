@@ -332,16 +332,16 @@ async def query_project(
     if not project:
         raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
 
+    # `include_shared` 는 서비스 계층에서 다른 컬렉션을 **전부** 훑는다. 대상을
+    # 호출자의 ACL 로 좁혀 넘기지 않으면 단건 라우트의 인가가 이 플래그 하나로
+    # 우회된다. 이 조회는 try 밖에 둔다 — 레지스트리 장애의 503 이 아래 catch-all
+    # 에 먹히면 내부 예외 문자열이 담긴 500 으로 바뀐다.
+    allowed_shared_ids = (
+        await _authorized_project_ids(None, current_user, db) if request.include_shared else None
+    )
+
     try:
         store = get_vector_store()
-        # `include_shared` 는 서비스 계층에서 다른 컬렉션을 **전부** 훑는다.
-        # 대상을 호출자의 ACL 로 좁혀 넘기지 않으면 단건 라우트의 인가가
-        # 이 플래그 하나로 우회된다.
-        allowed_shared_ids = (
-            await _authorized_project_ids(None, current_user, db)
-            if request.include_shared
-            else None
-        )
         result = await store.query(
             project_id=project_id,
             query=request.query,
@@ -353,6 +353,8 @@ async def query_project(
 
         return result
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
 
