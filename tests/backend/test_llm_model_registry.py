@@ -1116,3 +1116,35 @@ class TestOpenAIStandardTierPricing:
         # $0.55/$2.20 은 Batch/Flex 단가다. 표준은 $1.10/$4.40.
         assert model.input_price == pytest.approx(0.0011)
         assert model.output_price == pytest.approx(0.0044)
+
+
+class TestProxyUsageExtraction:
+    """비용표에 행이 있어도 응답에서 모델 id 를 못 읽으면 _calc_cost 는 "unknown" 을
+    받아 0.0 을 돌려준다. Gemini 응답은 top-level "model" 이 없고 modelVersion 만 준다
+    — 이 한 칸이 비면 COST_TABLE 의 gemini 행 전체가 죽은 코드가 된다."""
+
+    def test_gemini_model_id_comes_from_model_version(self):
+        from api.llm_proxy import _calc_cost, _extract_usage
+
+        response = {
+            "modelVersion": "gemini-3.7-flash",
+            "usageMetadata": {"promptTokenCount": 1000, "candidatesTokenCount": 3000},
+        }
+        in_tok, out_tok, model = _extract_usage("google_gemini", response)
+
+        assert (in_tok, out_tok) == (1000, 3000)
+        assert model == "gemini-3.7-flash"
+        # 비용표까지 실제로 이어지는지 — 0.0 이면 gemini 행이 도달 불가라는 뜻이다.
+        assert _calc_cost(model, in_tok, out_tok) == pytest.approx(0.00075 + 3 * 0.00375)
+
+    def test_openai_and_anthropic_keep_reading_top_level_model(self):
+        from api.llm_proxy import _extract_usage
+
+        openai_resp = {"model": "gpt-5.6", "usage": {"prompt_tokens": 1, "completion_tokens": 2}}
+        anthropic_resp = {
+            "model": "claude-sonnet-5",
+            "usage": {"input_tokens": 1, "output_tokens": 2},
+        }
+
+        assert _extract_usage("openai", openai_resp)[2] == "gpt-5.6"
+        assert _extract_usage("anthropic", anthropic_resp)[2] == "claude-sonnet-5"

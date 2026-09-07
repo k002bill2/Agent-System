@@ -148,10 +148,13 @@ def _extract_usage(provider: str, response_json: dict) -> tuple[int, int, str]:
         )
     # google_gemini or unknown
     usage_meta = response_json.get("usageMetadata", {})
+    # Gemini generateContent 응답에는 top-level "model" 이 없고 "modelVersion" 만 있다
+    # (공식 GenerateContentResponse 스키마). 이걸 읽지 않으면 model="unknown" 이라
+    # COST_TABLE 의 gemini 행이 전부 도달 불가가 되어 _calc_cost 가 0.0 을 돌려준다.
     return (
         usage_meta.get("promptTokenCount", 0),
         usage_meta.get("candidatesTokenCount", 0),
-        model,
+        response_json.get("modelVersion") or model,
     )
 
 
