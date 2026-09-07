@@ -60,7 +60,10 @@ class OpenAIUsageCollector(BaseUsageCollector):
         ("gpt-5.4-mini", 0.00075, 0.0045),
         ("gpt-5.4-nano", 0.0002, 0.00125),
         ("gpt-5.4", 0.0025, 0.015),
-        ("o4-mini", 0.00055, 0.0022),
+        ("o4-mini", 0.0011, 0.0044),
+        # generic "o3" 가 o3-mini/o3-pro 를 삼키지 않도록 변종을 앞에 둔다.
+        ("o3-pro", 0.020, 0.080),
+        ("o3-mini", 0.0011, 0.0044),
         ("o3", 0.002, 0.008),
     )
 

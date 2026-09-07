@@ -1013,6 +1013,17 @@ class TestCostTablePrefixOrdering:
         assert _calc_cost("gpt-5.4-nano", 1000, 3000) == pytest.approx(0.0002 + 3 * 0.00125)
         assert _calc_cost("gpt-5.4", 1000, 3000) == pytest.approx(0.0025 + 3 * 0.015)
 
+    def test_o3_variants_are_not_repriced_by_generic_row(self):
+        """o3-mini/o3-pro 는 SSOT 미등재라 드리프트 불변식이 보지 못한다 —
+        generic "o3" 행이 이들을 삼키지 않는지 직접 고정한다."""
+        from api.llm_proxy import _calc_cost
+        from services.external_usage_service.collectors import OpenAIUsageCollector
+
+        for calc in (_calc_cost, OpenAIUsageCollector._calc_cost):
+            assert calc("o3-pro", 1000, 3000) == pytest.approx(0.020 + 3 * 0.080)
+            assert calc("o3-mini", 1000, 3000) == pytest.approx(0.0011 + 3 * 0.0044)
+            assert calc("o3", 1000, 3000) == pytest.approx(0.002 + 3 * 0.008)
+
     def test_usage_collector_keeps_the_same_variant_ordering(self):
         from services.external_usage_service.collectors import OpenAIUsageCollector
 
@@ -1093,3 +1104,15 @@ class TestDashboardFallbackMirror:
             f"default 미러 드리프트: 프론트에 없음={sorted(backend - frontend)}, "
             f"백엔드 default 아님={sorted(frontend - backend)}"
         )
+
+
+class TestOpenAIStandardTierPricing:
+    """공식 가격표는 Standard / Batch / Flex 를 나란히 싣는다. 싼 쪽(Batch·Flex)을
+    옮겨 적으면 표준 사용분이 조용히 과소 집계된다 — o4-mini 가 실제로 그랬다."""
+
+    def test_o4_mini_uses_standard_tier_not_batch(self):
+        model = next(m for m in _MODELS if m.id == "o4-mini")
+
+        # $0.55/$2.20 은 Batch/Flex 단가다. 표준은 $1.10/$4.40.
+        assert model.input_price == pytest.approx(0.0011)
+        assert model.output_price == pytest.approx(0.0044)
