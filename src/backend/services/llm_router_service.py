@@ -6,6 +6,7 @@ import time
 from datetime import timedelta
 
 from config import get_model_for_provider
+from models.llm_models import LLMModelRegistry
 from models.llm_router import (
     LLMHealthCheck,
     LLMProvider,
@@ -434,18 +435,28 @@ class LLMRouterService:
     def initialize_default_providers() -> None:
         """Initialize default providers from environment variables.
         Skips providers that already exist to prevent duplicates.
+
+        단가는 레지스트리에서 파생한다 — `_registry_costs` 주석 참조.
         """
+        _default_model = {
+            name: get_model_for_provider(name)
+            for name in ("anthropic", "google", "openai", "ollama")
+        }
+        _default_cost = {
+            name: _registry_costs(model_id) for name, model_id in _default_model.items()
+        }
+
         # Anthropic
         anthropic_key = os.getenv("ANTHROPIC_API_KEY")
         if anthropic_key and not LLMRouterService._has_provider(LLMProvider.ANTHROPIC):
             LLMRouterService.create_provider(
                 LLMProviderConfigCreate(
                     provider=LLMProvider.ANTHROPIC,
-                    model=get_model_for_provider("anthropic"),
+                    model=_default_model["anthropic"],
                     api_key=anthropic_key,
                     priority=100,
-                    cost_per_1k_input=0.003,
-                    cost_per_1k_output=0.015,
+                    cost_per_1k_input=_default_cost["anthropic"][0],
+                    cost_per_1k_output=_default_cost["anthropic"][1],
                 )
             )
 
@@ -455,11 +466,11 @@ class LLMRouterService:
             LLMRouterService.create_provider(
                 LLMProviderConfigCreate(
                     provider=LLMProvider.GOOGLE,
-                    model=get_model_for_provider("google"),
+                    model=_default_model["google"],
                     api_key=google_key,
                     priority=90,
-                    cost_per_1k_input=0.00025,
-                    cost_per_1k_output=0.001,
+                    cost_per_1k_input=_default_cost["google"][0],
+                    cost_per_1k_output=_default_cost["google"][1],
                 )
             )
 
@@ -469,11 +480,11 @@ class LLMRouterService:
             LLMRouterService.create_provider(
                 LLMProviderConfigCreate(
                     provider=LLMProvider.OPENAI,
-                    model=get_model_for_provider("openai"),
+                    model=_default_model["openai"],
                     api_key=openai_key,
                     priority=80,
-                    cost_per_1k_input=0.005,
-                    cost_per_1k_output=0.015,
+                    cost_per_1k_input=_default_cost["openai"][0],
+                    cost_per_1k_output=_default_cost["openai"][1],
                 )
             )
 
@@ -483,11 +494,11 @@ class LLMRouterService:
             LLMRouterService.create_provider(
                 LLMProviderConfigCreate(
                     provider=LLMProvider.OLLAMA,
-                    model=get_model_for_provider("ollama"),
+                    model=_default_model["ollama"],
                     base_url=ollama_url,
                     priority=50,
-                    cost_per_1k_input=0.0,
-                    cost_per_1k_output=0.0,
+                    cost_per_1k_input=_default_cost["ollama"][0],
+                    cost_per_1k_output=_default_cost["ollama"][1],
                 )
             )
 
@@ -495,6 +506,22 @@ class LLMRouterService:
 # ─────────────────────────────────────────────────────────────
 # Helper Functions
 # ─────────────────────────────────────────────────────────────
+
+
+def _registry_costs(model_id: str) -> tuple[float, float]:
+    """레지스트리(SSOT)에서 모델 단가(per-1k)를 읽는다.
+
+    여기에 숫자를 하드코딩하면 가격표가 한 벌 더 생긴다. 모델은
+    `get_model_for_provider` 로 레지스트리에서 가져오면서 단가만 상수로 두면
+    가격 갱신 때 조용히 어긋나고, `least_cost` 선택과 비용 리포트가 함께
+    틀어지는데 어느 쪽도 에러를 내지 않는다.
+
+    레지스트리에 없는 모델(로컬 ollama 등)은 0.0 — 과금 대상이 아니다.
+    """
+    model = LLMModelRegistry.get_by_id(model_id)
+    if model is None:
+        return (0.0, 0.0)
+    return (model.input_price, model.output_price)
 
 
 def _simulate_provider_health(provider: LLMProviderConfig) -> bool:

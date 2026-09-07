@@ -33,8 +33,8 @@ class TestSonnet5RegistryEntry:
         assert model is not None
         assert model.provider == LLMProvider.ANTHROPIC
         assert model.context_window == 1_000_000
-        assert model.input_price == 0.003  # $3/1M tokens (per-1k)
-        assert model.output_price == 0.015  # $15/1M tokens (per-1k)
+        assert model.input_price == 0.002  # $2/1M tokens (per-1k)
+        assert model.output_price == 0.010  # $10/1M tokens (per-1k)
         assert model.supports_tools is True
         assert model.supports_vision is True
         assert model.is_enabled is True
@@ -84,6 +84,36 @@ class TestOpus47RegistryEntry:
         assert model.supports_vision is True
         assert model.is_enabled is True
         assert model.is_default is False
+
+
+class TestCurrentModelRefreshEntries:
+    @pytest.mark.parametrize(
+        ("model_id", "provider", "context_window", "input_price", "output_price"),
+        [
+            ("claude-opus-5", LLMProvider.ANTHROPIC, 1_000_000, 0.005, 0.025),
+            ("claude-fable-5-1", LLMProvider.ANTHROPIC, 1_000_000, 0.010, 0.050),
+            ("gemini-3.8-flash", LLMProvider.GOOGLE, 1_048_576, 0.00075, 0.00375),
+            ("gpt-6-astra", LLMProvider.OPENAI, 1_050_000, 0.010, 0.050),
+        ],
+    )
+    def test_new_models_have_verified_specs_and_are_non_default(
+        self, model_id, provider, context_window, input_price, output_price
+    ):
+        model = LLMModelRegistry.get_by_id(model_id)
+        assert model is not None
+        assert model.provider == provider
+        assert model.context_window == context_window
+        assert model.input_price == input_price
+        assert model.output_price == output_price
+        assert model.is_enabled is True
+        assert model.is_default is False
+        assert model.supports_tools is True
+        assert model.supports_vision is True
+
+    def test_existing_provider_defaults_are_not_promoted_without_smoke(self):
+        assert LLMModelRegistry.get_default("anthropic") == "claude-sonnet-5"
+        assert LLMModelRegistry.get_default("google") == "gemini-3.7-flash"
+        assert LLMModelRegistry.get_default("openai") == "gpt-5.6"
 
 
 class TestGpt56RegistryEntry:
@@ -781,8 +811,27 @@ class TestLLMProxyCostTable:
         from api.llm_proxy import _calc_cost
 
         cost = _calc_cost("claude-sonnet-5", 1000, 1000)
-        assert cost == pytest.approx(0.003 + 0.015)
+        assert cost == pytest.approx(0.002 + 0.010)
         assert cost > 0.0
+
+    def test_gpt6_astra_and_fable5_costs_are_priced(self):
+        from api.llm_proxy import _calc_cost
+
+        assert _calc_cost("gpt-6-astra", 1000, 1000) == pytest.approx(0.010 + 0.050)
+        assert _calc_cost("claude-fable-5-1", 1000, 1000) == pytest.approx(0.010 + 0.050)
+
+    def test_opus_5_does_not_fall_through_to_legacy_opus_4(self):
+        """`claude-opus-5` 는 generic `claude-opus-4` 행($15/$75)에 걸리면 안 된다."""
+        from api.llm_proxy import _calc_cost
+
+        assert _calc_cost("claude-opus-5", 1000, 1000) == pytest.approx(0.005 + 0.025)
+
+    def test_gemini_3_flash_models_are_priced(self):
+        """미매칭 모델은 조용히 $0 로 정산된다 — Flash 3.7/3.8 은 행이 있어야 한다."""
+        from api.llm_proxy import _calc_cost
+
+        for model in ("gemini-3.8-flash", "gemini-3.7-flash"):
+            assert _calc_cost(model, 1000, 1000) == pytest.approx(0.00075 + 0.00375), model
 
     def test_opus_4_8_matches_before_legacy_opus_4(self):
         from api.llm_proxy import _calc_cost

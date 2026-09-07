@@ -249,14 +249,26 @@ describe('settings store', () => {
 
       const state = useSettingsStore.getState()
       const ids = state.availableModels.map((m) => m.id)
+      expect(ids).toContain('claude-opus-5')
+      expect(ids).toContain('claude-fable-5-1')
       expect(ids).toContain('claude-opus-4-8')
       expect(ids).toContain('claude-sonnet-5')
       expect(ids).toContain('claude-sonnet-4-6')
       expect(ids).toContain('claude-haiku-4-5-20251001')
+      expect(ids).toContain('gpt-6-astra')
       expect(ids).toContain('gpt-4o-mini')
+      expect(ids).toContain('gemini-3.8-flash')
+      expect(ids).toContain('gemini-3.7-flash')
       expect(ids).toContain('codex-cli')
       expect(ids).toContain('claude-cli')
       expect(ids).toContain('gemini-3-flash-preview')
+      expect(ids).toContain('gpt-5.6')
+
+      // default 로 표시된 id 는 반드시 폴백 목록 안에 실재해야 한다.
+      // 목록에 없는 id 를 default 로 적으면 API 장애 시 어떤 모델도
+      // 기본으로 표시되지 않는다 — 값 대조만으로는 안 잡히는 축이다.
+      const defaultIds = state.availableModels.filter((m) => m.is_default).map((m) => m.id)
+      expect(defaultIds.every((id) => ids.includes(id))).toBe(true)
 
       // Each injected model is a fully-formed LLMModel; claude-sonnet-5 is the
       // backend default for anthropic (mirrored from _MODELS is_default=True)
@@ -292,8 +304,8 @@ describe('settings store', () => {
           'claude-sonnet-5',
           'codex-cli',
           'exaone3.5:7.8b',
-          'gemini-3-flash-preview',
-          'gpt-4o-mini',
+          'gemini-3.7-flash',
+          'gpt-5.6',
         ].sort()
       )
     })
