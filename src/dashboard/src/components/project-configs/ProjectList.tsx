@@ -157,8 +157,16 @@ interface ProjectCardProps {
 
 function ProjectCard({ project, isSelected, onClick, onDelete, canDelete }: ProjectCardProps) {
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onClick()
+        }
+      }}
       className={cn(
         'w-full text-left p-3 rounded-lg transition-colors group',
         isSelected
@@ -220,6 +228,6 @@ function ProjectCard({ project, isSelected, onClick, onDelete, canDelete }: Proj
           </button>
         )}
       </div>
-    </button>
+    </div>
   )
 }
