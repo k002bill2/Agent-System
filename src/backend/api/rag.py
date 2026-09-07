@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
-from models.project import PROJECTS_REGISTRY, get_project
+from models.project import PROJECTS_REGISTRY, Project, get_project
 from services.code_entity_extractor import extract_dependencies, extract_entities
 from services.rag_service import (
     QDRANT_AVAILABLE,
@@ -85,6 +85,51 @@ class StatsResponse(BaseModel):
 # stable number to the UI while a background reindex is mid-flight (the live
 # Qdrant points_count fluctuates as the collection is dropped and refilled).
 _indexing_state: dict[str, dict] = {}
+
+
+async def _get_db_project(project_id: str) -> Project | None:
+    """Resolve an active DB-registry project as the legacy RAG project shape."""
+    import os
+
+    if os.getenv("USE_DATABASE", "false").lower() != "true":
+        return None
+
+    try:
+        from sqlalchemy import select
+
+        from db.database import async_session_factory
+        from db.models import ProjectModel
+
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(ProjectModel).where(
+                    ProjectModel.id == project_id,
+                    ProjectModel.is_active == True,  # noqa: E712
+                )
+            )
+            row = result.scalar_one_or_none()
+    except Exception as exc:
+        logger.exception("Failed to resolve RAG project '%s' from the database", project_id)
+        raise HTTPException(
+            status_code=503,
+            detail="Project registry is temporarily unavailable",
+        ) from exc
+
+    if not row:
+        return None
+
+    return Project(
+        id=row.id,
+        name=row.name,
+        path=row.path or "",
+        description=row.description or "",
+        organization_id=row.organization_id,
+    )
+
+
+async def _resolve_project(project_id: str) -> Project | None:
+    """Resolve legacy filesystem projects first, then DB-registry projects."""
+    return get_project(project_id) or await _get_db_project(project_id)
 
 
 def _get_state(project_id: str) -> dict:
@@ -211,7 +256,7 @@ async def index_project(
 
     Indexing runs in the background. Poll GET /status/{project_id} for progress.
     """
-    project = get_project(project_id)
+    project = await _resolve_project(project_id)
     if not project:
         raise HTTPException(
             status_code=404, detail=f"Project '{project_id}' not found. Register it first."
@@ -246,7 +291,7 @@ async def query_project(
     Returns the most relevant document chunks from the project's indexed files.
     """
     # Check if project exists
-    project = get_project(project_id)
+    project = await _resolve_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
 
@@ -274,7 +319,7 @@ async def get_project_stats(project_id: str) -> StatsResponse:
     Returns information about the indexed documents and collection status.
     """
     # Check if project exists
-    project = get_project(project_id)
+    project = await _resolve_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
 
@@ -322,7 +367,7 @@ async def delete_project_index(project_id: str) -> dict:
     This removes the vector store collection and all associated embeddings.
     """
     # Check if project exists
-    project = get_project(project_id)
+    project = await _resolve_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
 
@@ -449,7 +494,7 @@ async def get_project_entities(
     Scans project files and extracts functions, classes, interfaces, etc.
     Optionally filter by entity_type (function, class, method, interface, etc.).
     """
-    project = get_project(project_id)
+    project = await _resolve_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
 
@@ -516,7 +561,7 @@ async def get_project_dependencies(
     Extracts import and inheritance relationships between code entities.
     Optionally filter by entity_name to see deps for a specific entity.
     """
-    project = get_project(project_id)
+    project = await _resolve_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
 
