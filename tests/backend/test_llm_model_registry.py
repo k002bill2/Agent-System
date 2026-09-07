@@ -1,6 +1,8 @@
 """Tests for claude-sonnet-5 registry entry, sync_to_db dual-default guard, and pricing."""
 
 import logging
+import re
+from pathlib import Path
 
 import pytest
 from sqlalchemy import Delete, Update
@@ -915,3 +917,179 @@ class TestClaudeSessionModelCosts:
             "claude-opus-4-5-20251101",
         ):
             assert calculate_cost(model, 1000, 1000) == pytest.approx(0.030), model
+
+
+# ─────────────────────────────────────────────────────────────
+# (f) 비용표 ↔ 레지스트리 드리프트 방지 불변식
+# ─────────────────────────────────────────────────────────────
+
+# CLI/로컬 런타임은 구독·무료 실행이라 per-token 비용표의 대상이 아니다.
+_UNPRICED_PROVIDERS = frozenset({LLMProvider.CODEX_CLI, LLMProvider.CLAUDE_CLI, LLMProvider.OLLAMA})
+
+_PRICED_MODELS = [m for m in _MODELS if m.provider not in _UNPRICED_PROVIDERS]
+
+# 입력·출력 토큰 수를 다르게 준다. 같은 수(예: 1000/1000)면 비용이 (in+out) 대칭 합이 되어
+# 행의 두 값을 뒤바꿔 적은 전치 오류가 그대로 통과한다 — 15행을 손으로 옮기는 작업에서
+# 가장 현실적인 오류가 전치이므로 비대칭으로 고정한다.
+_IN_TOKENS, _OUT_TOKENS = 1000, 3000
+
+
+def _expected_cost(model) -> float:
+    return model.input_price * (_IN_TOKENS / 1000) + model.output_price * (_OUT_TOKENS / 1000)
+
+
+class TestCostTableRegistryDrift:
+    """_MODELS(SSOT) 에 있는데 비용표에 행이 없으면 _calc_cost 가 조용히 0.0 을
+    돌려줘 전액 미집계된다. is_enabled 와 무관하게 전수 검사한다 — disabled
+    모델도 admin 의 PATCH 한 번으로 즉시 라이브가 되기 때문이다."""
+
+    def test_every_priced_registry_model_is_covered_by_llm_proxy(self):
+        from api.llm_proxy import _calc_cost
+
+        mismatched = []
+        for model in _PRICED_MODELS:
+            expected = _expected_cost(model)
+            actual = _calc_cost(model.id, _IN_TOKENS, _OUT_TOKENS)
+            if actual != pytest.approx(expected):
+                mismatched.append((model.id, expected, actual))
+
+        assert not mismatched, f"llm_proxy COST_TABLE 미커버/오단가: {mismatched}"
+
+    def test_every_openai_registry_model_is_covered_by_usage_collector(self):
+        from services.external_usage_service.collectors import OpenAIUsageCollector
+
+        mismatched = []
+        for model in _PRICED_MODELS:
+            if model.provider != LLMProvider.OPENAI:
+                continue
+            expected = _expected_cost(model)
+            actual = OpenAIUsageCollector._calc_cost(model.id, _IN_TOKENS, _OUT_TOKENS)
+            if actual != pytest.approx(expected):
+                mismatched.append((model.id, expected, actual))
+
+        assert not mismatched, f"OpenAIUsageCollector._COST_TABLE 미커버/오단가: {mismatched}"
+
+
+class TestCostTablePrefixOrdering:
+    """비용표는 startswith 선착 매칭이라 삽입 순서가 계약이다: 구체 변종이
+    bare alias 행보다 뒤에 오면 조용히 alias 단가로 재가격된다."""
+
+    @staticmethod
+    def _shadowed(prefixes: list[str]) -> list[tuple[str, str]]:
+        """뒤쪽 행이 앞쪽 행의 확장(prefix 관계)이면 영원히 도달 불가."""
+        return [
+            (specific, generic)
+            for i, generic in enumerate(prefixes)
+            for specific in prefixes[i + 1 :]
+            if specific.startswith(generic)
+        ]
+
+    def test_llm_proxy_table_has_no_shadowed_row(self):
+        """오늘의 id 를 고정하는 대신 구조를 단언한다 — 새 행이 추가돼도 살아남는다."""
+        from api.llm_proxy import COST_TABLE
+
+        shadowed = self._shadowed([row[0] for row in COST_TABLE])
+        assert not shadowed, f"COST_TABLE: 구체 prefix 가 generic 뒤에 있어 도달 불가: {shadowed}"
+
+    def test_usage_collector_table_has_no_shadowed_row(self):
+        from services.external_usage_service.collectors import OpenAIUsageCollector
+
+        shadowed = self._shadowed([row[0] for row in OpenAIUsageCollector._COST_TABLE])
+        assert not shadowed, f"_COST_TABLE: 구체 prefix 가 generic 뒤에 있어 도달 불가: {shadowed}"
+
+    def test_gpt56_variants_are_not_repriced_by_alias_row(self):
+        from api.llm_proxy import _calc_cost
+
+        # gpt-5.6 alias 는 $4/$20 — terra/luna 행이 그 뒤에 오면 과대 집계된다.
+        assert _calc_cost("gpt-5.6-terra", 1000, 3000) == pytest.approx(0.002 + 3 * 0.012)
+        assert _calc_cost("gpt-5.6-luna", 1000, 3000) == pytest.approx(0.0002 + 3 * 0.0012)
+        assert _calc_cost("gpt-5.6", 1000, 3000) == pytest.approx(0.004 + 3 * 0.02)
+
+    def test_gpt54_variants_are_not_repriced_by_base_row(self):
+        from api.llm_proxy import _calc_cost
+
+        # gpt-5.4 는 $2.5/$15 — mini/nano 행이 그 뒤에 오면 과대 집계된다.
+        assert _calc_cost("gpt-5.4-mini", 1000, 3000) == pytest.approx(0.00075 + 3 * 0.0045)
+        assert _calc_cost("gpt-5.4-nano", 1000, 3000) == pytest.approx(0.0002 + 3 * 0.00125)
+        assert _calc_cost("gpt-5.4", 1000, 3000) == pytest.approx(0.0025 + 3 * 0.015)
+
+    def test_usage_collector_keeps_the_same_variant_ordering(self):
+        from services.external_usage_service.collectors import OpenAIUsageCollector
+
+        calc = OpenAIUsageCollector._calc_cost
+        assert calc("gpt-5.6-terra", 1000, 3000) == pytest.approx(0.002 + 3 * 0.012)
+        assert calc("gpt-5.6-luna", 1000, 3000) == pytest.approx(0.0002 + 3 * 0.0012)
+        assert calc("gpt-5.4-nano", 1000, 3000) == pytest.approx(0.0002 + 3 * 0.00125)
+
+
+class TestDashboardFallbackMirror:
+    """settings.ts 의 오프라인 폴백 목록은 자동 동기화가 없는 수동 미러라 조용히
+    드리프트한다(2026-09-07 에 enabled 4종 누락으로 실재). 프론트 테스트는 id 를
+    손으로 열거하므로 누락을 잡지 못한다 — 백엔드에서 집합 비교로 닫는다."""
+
+    _PROVIDER_KEYS = {
+        "anthropic": "anthropic",
+        "google": "google",
+        "openai": "openai",
+        "codex_cli": "codex_cli",
+        "claude_cli": "claude_cli",
+        "local": "ollama",
+    }
+
+    @staticmethod
+    def _settings_ts() -> str:
+        path = Path(__file__).resolve().parents[2] / "src/dashboard/src/stores/settings.ts"
+        assert path.exists(), f"settings.ts 경로가 바뀌었다(이 테스트의 앵커 갱신 필요): {path}"
+        return path.read_text(encoding="utf-8")
+
+    def _parse_fallback_models(self, source: str) -> dict[str, list[str]]:
+        block = re.search(r"const fallbackModels[^{]*\{(.*?)\n\}", source, re.S)
+        assert block, "settings.ts 의 fallbackModels 선언을 찾지 못했다"
+        parsed = {}
+        for line in block.group(1).strip().splitlines():
+            entry = re.match(r"\s*(\w+):\s*\[(.*)\],", line)
+            if entry:
+                parsed[entry.group(1)] = [
+                    x.strip().strip("'") for x in entry.group(2).split(",") if x.strip()
+                ]
+        # 파싱 가드: 정규식이 빗나가면 빈 dict 로 조용히 통과할 수 있다.
+        assert set(parsed) == set(self._PROVIDER_KEYS), f"파싱된 키가 어긋남: {sorted(parsed)}"
+        return parsed
+
+    def test_fallback_models_mirror_enabled_registry_models(self):
+        parsed = self._parse_fallback_models(self._settings_ts())
+
+        drift = {}
+        for key, provider in self._PROVIDER_KEYS.items():
+            backend = {m.id for m in _MODELS if m.provider.value == provider and m.is_enabled}
+            frontend = set(parsed[key])
+            if backend != frontend:
+                drift[key] = {
+                    "프론트에 없음": sorted(backend - frontend),
+                    "백엔드 enabled 아님": sorted(frontend - backend),
+                }
+
+        assert not drift, f"settings.ts fallbackModels 미러 드리프트: {drift}"
+
+    def test_fallback_default_ids_mirror_registry_defaults(self):
+        source = self._settings_ts()
+        # 선언에 앵커를 건다. `fallbackDefaultModelIds` 만으로 찾으면 위쪽 주석의
+        # 언급이 먼저 걸려 fallbackModels 배열을 삼킨다(실측).
+        block = re.search(
+            r"const fallbackDefaultModelIds[^=]*=\s*new Set\(\[(.*?)\]\)", source, re.S
+        )
+        assert block, "settings.ts 의 fallbackDefaultModelIds 선언을 찾지 못했다"
+        frontend = {
+            x.strip().strip("'")
+            for x in re.sub(r"//[^\n]*", "", block.group(1)).split(",")
+            if x.strip()
+        }
+        # 파싱 가드: 정규식이 빗나가면 선언 밖 텍스트가 섞여 조용히 통과할 수 있다.
+        malformed = [x for x in frontend if not re.fullmatch(r"[A-Za-z0-9._:\-]+", x)]
+        assert not malformed, f"파싱 결과에 id 가 아닌 항목이 섞였다: {malformed}"
+        backend = {m.id for m in _MODELS if m.is_default and m.is_enabled}
+
+        assert frontend == backend, (
+            f"default 미러 드리프트: 프론트에 없음={sorted(backend - frontend)}, "
+            f"백엔드 default 아님={sorted(frontend - backend)}"
+        )
