@@ -26,6 +26,7 @@ from httpx import ASGITransport, AsyncClient
 from api import deps as api_deps
 from api import rag
 from models.project import Project
+from services.rag_service import QueryResult
 
 from .route_table import snapshot
 
@@ -101,7 +102,7 @@ async def test_member_without_access_cannot_resolve_a_db_project(monkeypatch) ->
     """권한 없는 member 에게는 DB 프로젝트가 존재하지 않는 것으로 보인다."""
     monkeypatch.setattr(rag, "get_project", lambda _project_id: None)
 
-    async def _deny(project_id, user, session):
+    async def _deny(project_id, user, session, min_role="viewer"):
         return None
 
     monkeypatch.setattr(rag, "authorize_db_project", _deny)
@@ -119,7 +120,7 @@ async def test_db_project_without_a_path_is_rejected_before_scheduling(monkeypat
     pathless = Project(id=DB_PROJECT_ID, name="Pathless", path="")
     monkeypatch.setattr(rag, "get_project", lambda _project_id: None)
 
-    async def _allow(project_id, user, session):
+    async def _allow(project_id, user, session, min_role="viewer"):
         return pathless
 
     monkeypatch.setattr(rag, "authorize_db_project", _allow)
@@ -141,7 +142,7 @@ async def test_status_reports_indexed_for_a_db_registry_project(monkeypatch) -> 
     db_project = Project(id=DB_PROJECT_ID, name="Agent System", path="/workspace/agent-system")
     monkeypatch.setattr(rag, "get_project", lambda _project_id: None)
 
-    async def _allow(project_id, user, session):
+    async def _allow(project_id, user, session, min_role="viewer"):
         return db_project
 
     monkeypatch.setattr(rag, "authorize_db_project", _allow)
@@ -190,7 +191,7 @@ async def test_code_scanning_routes_do_not_subscript_the_project(
     """
     project = Project(id=DB_PROJECT_ID, name="Agent System", path=str(tmp_path))
 
-    async def _resolve(project_id, user, session):
+    async def _resolve(project_id, user, session, min_role="viewer"):
         return project
 
     monkeypatch.setattr(rag, "_resolve_project", _resolve)
@@ -202,3 +203,85 @@ async def test_code_scanning_routes_do_not_subscript_the_project(
 
     assert isinstance(result, dict)
     assert result["project_id"] == DB_PROJECT_ID
+
+
+@pytest.mark.parametrize(
+    "handler_name, expected_min_role",
+    [
+        ("index_project", "editor"),
+        ("delete_project_index", "editor"),
+        ("get_project_stats", "viewer"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_mutating_rag_routes_demand_editor_access(
+    monkeypatch, tmp_path, handler_name, expected_min_role
+) -> None:
+    """viewer 는 재인덱싱·컬렉션 삭제를 못 한다.
+
+    `ProjectAccess` 를 user_id 로만 거르면 viewer 도 통과해, 비싼 재인덱싱과
+    벡터 컬렉션 전체 삭제가 열린다.
+    """
+    project = Project(id=DB_PROJECT_ID, name="Agent System", path=str(tmp_path))
+    seen: list[str] = []
+
+    async def _record(project_id, user, session, min_role="viewer"):
+        seen.append(min_role)
+        return project
+
+    monkeypatch.setattr(rag, "get_project", lambda _project_id: None)
+    monkeypatch.setattr(rag, "_get_db_project", _record)
+    monkeypatch.setattr(rag, "trigger_background_indexing", lambda **kwargs: True)
+    monkeypatch.setattr(rag, "_safe_count", lambda _project_id: 0)
+
+    handler = getattr(rag, handler_name)
+    args: list[object] = [DB_PROJECT_ID]
+    if handler_name == "index_project":
+        args.append(MagicMock())  # BackgroundTasks
+    args += [MEMBER, MagicMock()]
+
+    try:
+        await handler(*args)
+    except Exception:
+        # 이 테스트가 고정하는 것은 요구 권한 수준뿐이다 — Qdrant 부재 등
+        # 하위 실패는 관심 밖이다.
+        pass
+
+    assert seen == [expected_min_role]
+
+
+@pytest.mark.asyncio
+async def test_shared_query_is_limited_to_authorized_collections(monkeypatch, tmp_path) -> None:
+    """`include_shared` 는 ACL 없이 다른 컬렉션을 전부 훑는다 — 대상을 좁혀 넘긴다."""
+    project = Project(id=DB_PROJECT_ID, name="Agent System", path=str(tmp_path))
+
+    async def _resolve(project_id, user, session, min_role="viewer"):
+        return project
+
+    monkeypatch.setattr(rag, "_resolve_project", _resolve)
+
+    async def _authorized(requested_ids, user, session):
+        return [DB_PROJECT_ID, "another-project-i-can-see"]
+
+    monkeypatch.setattr(rag, "_authorized_project_ids", _authorized)
+
+    captured: dict[str, object] = {}
+
+    class _Store:
+        async def query(self, **kwargs):
+            captured.update(kwargs)
+            return QueryResult(query=kwargs["query"], documents=[], total_found=0)
+
+    monkeypatch.setattr(rag, "get_vector_store", lambda: _Store())
+
+    await rag.query_project(
+        DB_PROJECT_ID,
+        rag.QueryRequest(query="secret", include_shared=True),
+        MEMBER,
+        MagicMock(),
+    )
+
+    assert captured["allowed_shared_project_ids"] == [
+        DB_PROJECT_ID,
+        "another-project-i-can-see",
+    ]

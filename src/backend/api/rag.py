@@ -91,7 +91,9 @@ class StatsResponse(BaseModel):
 _indexing_state: dict[str, dict] = {}
 
 
-async def _get_db_project(project_id: str, user: object, session: AsyncSession) -> Project | None:
+async def _get_db_project(
+    project_id: str, user: object, session: AsyncSession, min_role: str = "viewer"
+) -> Project | None:
     """Resolve an access-authorized DB-registry project as the legacy RAG shape.
 
     인가는 `api/projects` 의 `authorize_db_project` 가 소유한다 — `GET /projects`
@@ -99,7 +101,7 @@ async def _get_db_project(project_id: str, user: object, session: AsyncSession) 
     갈라지고, 갈라진 쪽이 인가 검사라 티가 나지 않는다.
     """
     try:
-        row = await authorize_db_project(project_id, user, session)
+        row = await authorize_db_project(project_id, user, session, min_role=min_role)
     except Exception as exc:
         logger.exception("Failed to resolve RAG project '%s' from the database", project_id)
         raise HTTPException(
@@ -119,7 +121,9 @@ async def _get_db_project(project_id: str, user: object, session: AsyncSession) 
     )
 
 
-async def _resolve_project(project_id: str, user: object, session: AsyncSession) -> Project | None:
+async def _resolve_project(
+    project_id: str, user: object, session: AsyncSession, min_role: str = "viewer"
+) -> Project | None:
     """Resolve legacy filesystem projects first, then DB-registry projects.
 
     DB 레지스트리는 `path` 가 nullable 이다. 빈 경로를 그대로 흘리면
@@ -130,7 +134,7 @@ async def _resolve_project(project_id: str, user: object, session: AsyncSession)
     if legacy:
         return legacy
 
-    db_project = await _get_db_project(project_id, user, session)
+    db_project = await _get_db_project(project_id, user, session, min_role=min_role)
     if db_project is None or not db_project.path.strip():
         return None
     return db_project
@@ -279,7 +283,7 @@ async def index_project(
 
     Indexing runs in the background. Poll GET /status/{project_id} for progress.
     """
-    project = await _resolve_project(project_id, current_user, db)
+    project = await _resolve_project(project_id, current_user, db, min_role="editor")
     if not project:
         raise HTTPException(
             status_code=404, detail=f"Project '{project_id}' not found. Register it first."
@@ -330,12 +334,21 @@ async def query_project(
 
     try:
         store = get_vector_store()
+        # `include_shared` 는 서비스 계층에서 다른 컬렉션을 **전부** 훑는다.
+        # 대상을 호출자의 ACL 로 좁혀 넘기지 않으면 단건 라우트의 인가가
+        # 이 플래그 하나로 우회된다.
+        allowed_shared_ids = (
+            await _authorized_project_ids(None, current_user, db)
+            if request.include_shared
+            else None
+        )
         result = await store.query(
             project_id=project_id,
             query=request.query,
             k=request.k,
             filter_priority=request.filter_priority,
             include_shared=request.include_shared,
+            allowed_shared_project_ids=allowed_shared_ids,
         )
 
         return result
@@ -408,7 +421,7 @@ async def delete_project_index(
     This removes the vector store collection and all associated embeddings.
     """
     # Check if project exists
-    project = await _resolve_project(project_id, current_user, db)
+    project = await _resolve_project(project_id, current_user, db, min_role="editor")
     if not project:
         raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found")
 

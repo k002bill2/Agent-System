@@ -1098,6 +1098,7 @@ class ProjectVectorStore:
         k: int = 5,
         filter_priority: str | None = None,
         include_shared: bool = False,
+        allowed_shared_project_ids: list[str] | None = None,
         force_hybrid: bool | None = None,
         force_rerank: bool | None = None,
     ) -> QueryResult:
@@ -1116,6 +1117,10 @@ class ProjectVectorStore:
 
         Args:
             include_shared: If True, also search other project collections
+            allowed_shared_project_ids: When given, the shared search is limited to
+                these project IDs. Callers that serve end users must pass the
+                caller's authorized set — otherwise ``include_shared`` reads every
+                collection in Qdrant and bypasses per-project access control.
                 and merge results (current project gets a boost).
             force_hybrid: Per-call override for ``RAG_ENABLE_HYBRID`` env
                 (``None`` = use env, ``True``/``False`` = force).
@@ -1199,6 +1204,13 @@ class ProjectVectorStore:
         # the prior "insert local twice" boost, which mathematically locked
         # every slot to the current project when k <= len(local_result).
         other_collections = self._get_all_project_collections(exclude_ids=[project_id])
+        if allowed_shared_project_ids is not None:
+            allowed = set(allowed_shared_project_ids)
+            other_collections = [
+                coll
+                for coll in other_collections
+                if self._extract_project_id_from_collection(coll) in allowed
+            ]
 
         all_ranked_lists: list[list[tuple[str, dict[str, Any]]]] = []
 
