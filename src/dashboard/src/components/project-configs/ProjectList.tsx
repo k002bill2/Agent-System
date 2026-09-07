@@ -157,77 +157,80 @@ interface ProjectCardProps {
 
 function ProjectCard({ project, isSelected, onClick, onDelete, canDelete }: ProjectCardProps) {
   return (
+    // 삭제 버튼은 선택 버튼의 **형제**여야 한다. ARIA button 의 자손은 보조기술이
+    // presentational 로 취급해 중첩된 삭제 컨트롤이 읽히지도 도달하지도 않는다.
     <div
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          onClick()
-        }
-      }}
       className={cn(
-        'w-full text-left p-3 rounded-lg transition-colors group',
+        'relative w-full rounded-lg transition-colors group',
         isSelected
           ? 'bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800'
           : 'hover:bg-gray-100 dark:hover:bg-gray-800 border border-transparent'
       )}
     >
-      <div className="flex items-start gap-3">
-        <div
-          className={cn(
-            'p-2 rounded-lg',
-            isSelected
-              ? 'bg-primary-100 dark:bg-primary-800'
-              : 'bg-gray-100 dark:bg-gray-700'
-          )}
-        >
-          <FolderCode
+      <button
+        type="button"
+        onClick={onClick}
+        aria-current={isSelected}
+        aria-label={`Select ${project.project_name}`}
+        className={cn('w-full text-left p-3', canDelete && 'pr-10')}
+      >
+        <div className="flex items-start gap-3">
+          <div
             className={cn(
-              'w-4 h-4',
+              'p-2 rounded-lg',
               isSelected
-                ? 'text-primary-600 dark:text-primary-400'
-                : 'text-gray-500 dark:text-gray-400'
-            )}
-          />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p
-            className={cn(
-              'text-sm font-medium truncate',
-              isSelected
-                ? 'text-primary-700 dark:text-primary-300'
-                : 'text-gray-900 dark:text-white'
+                ? 'bg-primary-100 dark:bg-primary-800'
+                : 'bg-gray-100 dark:bg-gray-700'
             )}
           >
-            {project.project_name}
-          </p>
-          <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
-            {project.skill_count > 0 && (
-              <span>{project.skill_count} skills</span>
-            )}
-            {project.agent_count > 0 && (
-              <span>{project.agent_count} agents</span>
-            )}
-            {project.mcp_server_count > 0 && (
-              <span>{project.mcp_server_count} MCP</span>
-            )}
-            {project.command_count > 0 && (
-              <span>{project.command_count} commands</span>
-            )}
+            <FolderCode
+              className={cn(
+                'w-4 h-4',
+                isSelected
+                  ? 'text-primary-600 dark:text-primary-400'
+                  : 'text-gray-500 dark:text-gray-400'
+              )}
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p
+              className={cn(
+                'text-sm font-medium truncate',
+                isSelected
+                  ? 'text-primary-700 dark:text-primary-300'
+                  : 'text-gray-900 dark:text-white'
+              )}
+            >
+              {project.project_name}
+            </p>
+            <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {project.skill_count > 0 && (
+                <span>{project.skill_count} skills</span>
+              )}
+              {project.agent_count > 0 && (
+                <span>{project.agent_count} agents</span>
+              )}
+              {project.mcp_server_count > 0 && (
+                <span>{project.mcp_server_count} MCP</span>
+              )}
+              {project.command_count > 0 && (
+                <span>{project.command_count} commands</span>
+              )}
+            </div>
           </div>
         </div>
-        {canDelete && (
-          <button
-            onClick={onDelete}
-            className="p-1 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
-            title="Remove project"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
+      </button>
+      {canDelete && (
+        <button
+          type="button"
+          onClick={onDelete}
+          aria-label={`Remove ${project.project_name}`}
+          className="absolute right-3 top-3 p-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
+          title="Remove project"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      )}
     </div>
   )
 }

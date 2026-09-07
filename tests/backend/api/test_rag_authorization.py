@@ -11,8 +11,8 @@ DB 레지스트리 프로젝트를 RAG 가 해석하게 되면서 생긴 노출�
    (`Path("").resolve()` 는 서버 작업 디렉터리라, 통과하면 그 전체를 인덱싱한다.)
 4. `/rag/status` 는 DB 프로젝트에도 `indexed` 를 사실대로 보고한다.
 
-`POST /api/rag/query`(cross_project_query)는 프로젝트를 해석하지 않아 이 변경의
-범위 밖이므로 여기서 다루지 않는다.
+`GET /api/rag/collections` 는 프로젝트 스코프가 아니라 여기서 제외한다 —
+이 변경이 건드리지 않은 기존 표면이다.
 """
 
 from __future__ import annotations
@@ -69,11 +69,16 @@ async def client(app):
 
 
 def _project_scoped_rag_routes(app) -> list[tuple[str, str]]:
-    """`{project_id}` 를 받는 RAG 라우트만 (method, 구체 경로) 로 낸다."""
+    """프로젝트 데이터를 읽거나 바꾸는 RAG 라우트를 (method, 구체 경로) 로 낸다.
+
+    `{project_id}` 라우트에 더해 교차 프로젝트 검색(`POST /api/rag/query`)도
+    포함한다 — 인덱싱된 청크를 그대로 내주므로 같은 경계에 있다.
+    """
     rows = [
         (method, path)
         for method, path, _ in snapshot(app.router)
-        if path.startswith("/api/rag/") and "{project_id}" in path
+        if path.startswith("/api/rag/")
+        and ("{project_id}" in path or path == "/api/rag/query")
     ]
     assert rows, "RAG 라우트가 하나도 안 잡혔다 — 라우터가 안 붙었거나 경로가 바뀌었다"
     return [(method, path.replace("{project_id}", DB_PROJECT_ID)) for method, path in rows]
@@ -147,3 +152,53 @@ async def test_status_reports_indexed_for_a_db_registry_project(monkeypatch) -> 
 
     assert result["indexed"] is True
     assert result["document_count"] == 7
+
+
+@pytest.mark.asyncio
+async def test_cross_project_search_is_narrowed_to_authorized_projects(monkeypatch) -> None:
+    """member 가 남의 project_id 를 지목해도 그 컬렉션은 검색되지 않는다.
+
+    인증만 걸고 대상 집합을 좁히지 않으면 단건 라우트의 ACL 이 무의미해진다.
+    """
+    monkeypatch.setattr(rag, "PROJECTS_REGISTRY", {})
+
+    async def _only_mine(project_ids, user, session):
+        mine = MagicMock()
+        mine.id = DB_PROJECT_ID
+        return [mine] if project_ids is None or DB_PROJECT_ID in project_ids else []
+
+    monkeypatch.setattr(rag, "authorize_db_projects", _only_mine)
+
+    allowed = await rag._authorized_project_ids(
+        [DB_PROJECT_ID, "someone-elses-project"], MEMBER, MagicMock()
+    )
+
+    assert allowed == [DB_PROJECT_ID]
+
+
+@pytest.mark.parametrize(
+    "handler_name, kwargs",
+    [("get_project_entities", {}), ("get_project_dependencies", {})],
+)
+@pytest.mark.asyncio
+async def test_code_scanning_routes_do_not_subscript_the_project(
+    monkeypatch, tmp_path, handler_name, kwargs
+) -> None:
+    """`Project` 는 Pydantic 모델이라 `project["path"]` 는 TypeError → 500 이었다.
+
+    소스 문자열이 아니라 **핸들러를 실제로 호출해서** 고정한다.
+    """
+    project = Project(id=DB_PROJECT_ID, name="Agent System", path=str(tmp_path))
+
+    async def _resolve(project_id, user, session):
+        return project
+
+    monkeypatch.setattr(rag, "_resolve_project", _resolve)
+    monkeypatch.setattr(rag, "extract_entities", lambda *a, **kw: [])
+    monkeypatch.setattr(rag, "extract_dependencies", lambda *a, **kw: [])
+
+    handler = getattr(rag, handler_name)
+    result = await handler(DB_PROJECT_ID, MEMBER, MagicMock(), **kwargs)
+
+    assert isinstance(result, dict)
+    assert result["project_id"] == DB_PROJECT_ID

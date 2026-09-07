@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_current_user, get_db_session
-from api.projects import authorize_db_project
+from api.projects import authorize_db_project, authorize_db_projects
 from models.project import PROJECTS_REGISTRY, Project, get_project
 from services.code_entity_extractor import extract_dependencies, extract_entities
 from services.rag_service import (
@@ -134,6 +134,23 @@ async def _resolve_project(project_id: str, user: object, session: AsyncSession)
     if db_project is None or not db_project.path.strip():
         return None
     return db_project
+
+
+async def _authorized_project_ids(
+    requested_ids: list[str] | None, user: object, session: AsyncSession
+) -> list[str]:
+    """교차 프로젝트 검색이 실제로 훑어도 되는 컬렉션 ID 만 낸다.
+
+    레거시 filesystem 레지스트리에는 per-user ACL 이 아예 없다. 그쪽은 이 변경
+    전과 같은 가시성을 유지하고(인증만 새로 요구한다), DB 레지스트리 프로젝트는
+    단건 라우트와 같은 인가 규칙으로 좁힌다.
+    """
+    legacy_ids = set(PROJECTS_REGISTRY)
+    if requested_ids is not None:
+        legacy_ids &= set(requested_ids)
+
+    db_rows = await authorize_db_projects(requested_ids, user, session)
+    return sorted(legacy_ids | {row.id for row in db_rows})
 
 
 def _get_state(project_id: str) -> dict:
@@ -456,19 +473,31 @@ async def get_indexing_status(
 
 
 @router.post("/query", response_model=QueryResult)
-async def cross_project_query(request: CrossProjectQueryRequest) -> QueryResult:
+async def cross_project_query(
+    request: CrossProjectQueryRequest,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> QueryResult:
     """
     Query across multiple project collections.
 
     Search all indexed projects (or a subset) and return merged results
     ranked by Reciprocal Rank Fusion.
+
+    검색 대상은 **호출자가 접근 가능한 프로젝트로 좁힌다**. 인증만 걸면 member 가
+    남의 project_id 를 지목해 그 청크를 그대로 읽을 수 있다 — 단건 라우트에
+    ACL 을 건 의미가 사라진다.
     """
+    allowed_ids = await _authorized_project_ids(request.project_ids, current_user, db)
+    if not allowed_ids:
+        return QueryResult(query=request.query, documents=[], total_found=0)
+
     try:
         store = get_vector_store()
         result = await store.query_cross_project(
             query=request.query,
             k=request.k,
-            source_project_ids=request.project_ids,
+            source_project_ids=allowed_ids,
             exclude_project_ids=request.exclude_project_ids,
             filter_priority=request.filter_priority,
         )
@@ -538,7 +567,7 @@ async def get_project_entities(
 
     from pathlib import Path
 
-    project_root = Path(project["path"]).resolve()
+    project_root = Path(project.path).resolve()
     if not project_root.is_dir():
         raise HTTPException(status_code=404, detail=f"Project path not found: {project_root}")
 
@@ -607,7 +636,7 @@ async def get_project_dependencies(
 
     from pathlib import Path
 
-    project_root = Path(project["path"]).resolve()
+    project_root = Path(project.path).resolve()
     if not project_root.is_dir():
         raise HTTPException(status_code=404, detail=f"Project path not found: {project_root}")
 
