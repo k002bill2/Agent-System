@@ -12,6 +12,7 @@ const {
   mockDisconnect,
   mockRequestPermission,
   mockPlaySound,
+  mockAuthFetch,
   getSettingsOverrides,
   setSettingsOverrides,
   getOrchestrationOverrides,
@@ -28,6 +29,7 @@ const {
     mockDisconnect: vi.fn(),
     mockRequestPermission: vi.fn(),
     mockPlaySound: vi.fn(),
+    mockAuthFetch: vi.fn(),
     getSettingsOverrides: () => _settingsOverrides,
     setSettingsOverrides: (v: Record<string, unknown>) => { _settingsOverrides = v },
     getOrchestrationOverrides: () => _orchestrationOverrides,
@@ -94,6 +96,10 @@ vi.mock('../stores/orchestration', () => ({
   }),
 }))
 
+vi.mock('../stores/auth', () => ({
+  authFetch: (...args: unknown[]) => mockAuthFetch(...args),
+}))
+
 vi.mock('../lib/utils', () => ({
   cn: (...args: unknown[]) => args.filter(Boolean).join(' '),
 }))
@@ -132,6 +138,7 @@ describe('SettingsPage', () => {
     setSettingsOverrides({})
     setOrchestrationOverrides({})
     mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) })
+    mockAuthFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({ terminals: [] }) })
   })
 
   afterEach(() => {
@@ -188,6 +195,14 @@ describe('SettingsPage', () => {
   it('shows connected status for backend', async () => {
     await renderSettingsPage()
     expect(screen.getByText('Connected')).toBeInTheDocument()
+  })
+
+  it('uses the authenticated request helper when loading available terminals', async () => {
+    await renderSettingsPage()
+
+    expect(mockAuthFetch).toHaveBeenCalledWith(
+      'http://localhost:8000/api/terminal/available'
+    )
   })
 
   // ---- NEW: Connection Status ----
