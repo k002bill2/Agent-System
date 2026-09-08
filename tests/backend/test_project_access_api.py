@@ -5,10 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from api.project_access import router
-
 
 # ─────────────────────────────────────────────────────────────
 # Test Setup
@@ -77,11 +75,14 @@ class TestGetMyAccess:
         with patch("api.project_access.get_current_user", return_value=admin_user):
             with patch("api.project_access.get_db_session") as mock_db:
                 mock_db.return_value = AsyncMock()
-                client = TestClient(app)
                 # Override dependencies
                 app.dependency_overrides = {
-                    __import__("api.deps", fromlist=["get_current_user"]).get_current_user: lambda: admin_user,
-                    __import__("api.deps", fromlist=["get_db_session"]).get_db_session: lambda: AsyncMock(),
+                    __import__(
+                        "api.deps", fromlist=["get_current_user"]
+                    ).get_current_user: lambda: admin_user,
+                    __import__("api.deps", fromlist=["get_db_session"]).get_db_session: lambda: (
+                        AsyncMock()
+                    ),
                 }
 
                 # Admin bypass is handled in the endpoint itself

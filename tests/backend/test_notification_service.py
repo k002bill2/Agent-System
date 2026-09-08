@@ -1,10 +1,9 @@
 """Unit tests for notification_service.py."""
 
-import pytest
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from utils.time import utcnow
+import pytest
 
 from models.notification import (
     ChannelConfig,
@@ -22,16 +21,17 @@ from services.notification_service import (
     NotificationService,
     SlackAdapter,
     WebhookAdapter,
-    _rules,
     _notification_history,
+    _rules,
     notify_task_completed,
     notify_task_failed,
 )
-
+from utils.time import utcnow
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_rule_create(
     name: str = "Test Rule",
@@ -72,6 +72,7 @@ def _make_channel_config(
 # ---------------------------------------------------------------------------
 # CRUD – In-memory
 # ---------------------------------------------------------------------------
+
 
 class TestNotificationServiceCRUD:
     """Tests for in-memory CRUD operations."""
@@ -189,6 +190,7 @@ class TestNotificationServiceCRUD:
 # Condition / Project filter checks
 # ---------------------------------------------------------------------------
 
+
 class TestCheckConditions:
     """Tests for _check_conditions."""
 
@@ -212,81 +214,81 @@ class TestCheckConditions:
 
     def test_equals_operator_match(self):
         """equals condition passes when field value is equal."""
-        rule = self._rule_with_conditions([
-            NotificationCondition(field="status", operator="equals", value="done")
-        ])
+        rule = self._rule_with_conditions(
+            [NotificationCondition(field="status", operator="equals", value="done")]
+        )
         assert NotificationService._check_conditions(rule, {"status": "done"}) is True
 
     def test_equals_operator_no_match(self):
         """equals condition fails when field value differs."""
-        rule = self._rule_with_conditions([
-            NotificationCondition(field="status", operator="equals", value="done")
-        ])
+        rule = self._rule_with_conditions(
+            [NotificationCondition(field="status", operator="equals", value="done")]
+        )
         assert NotificationService._check_conditions(rule, {"status": "pending"}) is False
 
     def test_contains_operator_match(self):
         """contains condition passes when substring is found."""
-        rule = self._rule_with_conditions([
-            NotificationCondition(field="message", operator="contains", value="error")
-        ])
-        assert NotificationService._check_conditions(rule, {"message": "fatal error occurred"}) is True
+        rule = self._rule_with_conditions(
+            [NotificationCondition(field="message", operator="contains", value="error")]
+        )
+        assert (
+            NotificationService._check_conditions(rule, {"message": "fatal error occurred"}) is True
+        )
 
     def test_contains_operator_no_match(self):
         """contains condition fails when substring is absent."""
-        rule = self._rule_with_conditions([
-            NotificationCondition(field="message", operator="contains", value="error")
-        ])
+        rule = self._rule_with_conditions(
+            [NotificationCondition(field="message", operator="contains", value="error")]
+        )
         assert NotificationService._check_conditions(rule, {"message": "all good"}) is False
 
     def test_greater_than_operator_match(self):
         """greater_than condition passes when value is larger."""
-        rule = self._rule_with_conditions([
-            NotificationCondition(field="cost", operator="greater_than", value=10.0)
-        ])
+        rule = self._rule_with_conditions(
+            [NotificationCondition(field="cost", operator="greater_than", value=10.0)]
+        )
         assert NotificationService._check_conditions(rule, {"cost": 15.0}) is True
 
     def test_greater_than_operator_no_match(self):
         """greater_than condition fails when value is smaller or equal."""
-        rule = self._rule_with_conditions([
-            NotificationCondition(field="cost", operator="greater_than", value=10.0)
-        ])
+        rule = self._rule_with_conditions(
+            [NotificationCondition(field="cost", operator="greater_than", value=10.0)]
+        )
         assert NotificationService._check_conditions(rule, {"cost": 5.0}) is False
         assert NotificationService._check_conditions(rule, {"cost": 10.0}) is False
 
     def test_less_than_operator_match(self):
         """less_than condition passes when value is smaller."""
-        rule = self._rule_with_conditions([
-            NotificationCondition(field="score", operator="less_than", value=50)
-        ])
+        rule = self._rule_with_conditions(
+            [NotificationCondition(field="score", operator="less_than", value=50)]
+        )
         assert NotificationService._check_conditions(rule, {"score": 30}) is True
 
     def test_less_than_operator_no_match(self):
         """less_than condition fails when value is equal or larger."""
-        rule = self._rule_with_conditions([
-            NotificationCondition(field="score", operator="less_than", value=50)
-        ])
+        rule = self._rule_with_conditions(
+            [NotificationCondition(field="score", operator="less_than", value=50)]
+        )
         assert NotificationService._check_conditions(rule, {"score": 50}) is False
         assert NotificationService._check_conditions(rule, {"score": 70}) is False
 
     def test_missing_field_fails(self):
         """A condition whose field is absent in data returns False."""
-        rule = self._rule_with_conditions([
-            NotificationCondition(field="missing_key", operator="equals", value="x")
-        ])
+        rule = self._rule_with_conditions(
+            [NotificationCondition(field="missing_key", operator="equals", value="x")]
+        )
         assert NotificationService._check_conditions(rule, {}) is False
 
     def test_multiple_conditions_all_must_pass(self):
         """All conditions must be satisfied for the overall check to pass."""
-        rule = self._rule_with_conditions([
-            NotificationCondition(field="status", operator="equals", value="done"),
-            NotificationCondition(field="cost", operator="greater_than", value=5.0),
-        ])
-        assert NotificationService._check_conditions(
-            rule, {"status": "done", "cost": 10.0}
-        ) is True
-        assert NotificationService._check_conditions(
-            rule, {"status": "done", "cost": 1.0}
-        ) is False
+        rule = self._rule_with_conditions(
+            [
+                NotificationCondition(field="status", operator="equals", value="done"),
+                NotificationCondition(field="cost", operator="greater_than", value=5.0),
+            ]
+        )
+        assert NotificationService._check_conditions(rule, {"status": "done", "cost": 10.0}) is True
+        assert NotificationService._check_conditions(rule, {"status": "done", "cost": 1.0}) is False
 
 
 class TestCheckRateLimit:
@@ -363,6 +365,7 @@ class TestCheckProjectFilter:
 # Adapters
 # ---------------------------------------------------------------------------
 
+
 class TestSlackAdapter:
     """Tests for SlackAdapter.send."""
 
@@ -404,7 +407,9 @@ class TestSlackAdapter:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client
+        ):
             success, error = await adapter.send(message, config)
 
         assert success is True
@@ -430,7 +435,9 @@ class TestSlackAdapter:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client
+        ):
             success, error = await adapter.send(message, config)
 
         assert success is False
@@ -453,7 +460,9 @@ class TestSlackAdapter:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client
+        ):
             success, error = await adapter.send(message, config)
 
         assert success is False
@@ -503,7 +512,9 @@ class TestDiscordAdapter:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client
+        ):
             success, error = await adapter.send(message, config)
 
         assert success is True
@@ -532,7 +543,9 @@ class TestDiscordAdapter:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client
+        ):
             success, error = await adapter.send(message, config)
 
         assert success is False
@@ -582,7 +595,9 @@ class TestWebhookAdapter:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client
+        ):
             success, error = await adapter.send(message, config)
 
         assert success is True
@@ -592,6 +607,7 @@ class TestWebhookAdapter:
 # ---------------------------------------------------------------------------
 # send_notification (in-memory rules path)
 # ---------------------------------------------------------------------------
+
 
 class TestSendNotification:
     """Tests for NotificationService.send_notification (in-memory)."""
@@ -627,10 +643,15 @@ class TestSendNotification:
             webhook_url="https://hooks.slack.com/test",
         )
 
-        with patch(
-            "services.notification_service.NotificationService.get_channel_config",
-            return_value=slack_config,
-        ), patch("services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client):
+        with (
+            patch(
+                "services.notification_service.NotificationService.get_channel_config",
+                return_value=slack_config,
+            ),
+            patch(
+                "services.notification_service.adapters.httpx.AsyncClient", return_value=mock_client
+            ),
+        ):
             msg = await NotificationService.send_notification(
                 NotificationEventType.TASK_COMPLETED,
                 {"task_title": "My Task"},
@@ -750,6 +771,7 @@ class TestSendNotification:
 # Convenience functions
 # ---------------------------------------------------------------------------
 
+
 class TestConvenienceFunctions:
     """Tests for notify_task_completed and notify_task_failed."""
 
@@ -807,6 +829,7 @@ class TestConvenienceFunctions:
 # ---------------------------------------------------------------------------
 # Notification history helpers
 # ---------------------------------------------------------------------------
+
 
 class TestNotificationHistory:
     """Tests for get_history and clear_history."""

@@ -272,9 +272,12 @@ async def test_diagnostics_rejects_project_config_symlink_escape(
             {"fix_action": "enable_mcp_servers", "params": {}},
         )
         assert fix_response.status_code == 400, fix_response.text
-        assert json.loads(outside_config.read_text(encoding="utf-8"))["mcpServers"]["outside"][
-            "disabled"
-        ] is True
+        assert (
+            json.loads(outside_config.read_text(encoding="utf-8"))["mcpServers"]["outside"][
+                "disabled"
+            ]
+            is True
+        )
     finally:
         authenticated_app.dependency_overrides.pop(get_db_session, None)
 

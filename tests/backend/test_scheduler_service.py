@@ -1,7 +1,6 @@
 """Tests for scheduler service."""
 
 import pytest
-from unittest.mock import patch, AsyncMock
 
 from services.scheduler_service import SchedulerService
 

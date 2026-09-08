@@ -83,8 +83,15 @@ def _list_payload_pr():
     pr.closed_at = now
     # These are NOT in the PR list payload — accessing them triggers a per-PR
     # API round-trip. The lite path must never touch them.
-    for attr in ("mergeable", "mergeable_state", "commits", "additions",
-                 "deletions", "changed_files", "review_comments"):
+    for attr in (
+        "mergeable",
+        "mergeable_state",
+        "commits",
+        "additions",
+        "deletions",
+        "changed_files",
+        "review_comments",
+    ):
         setattr(type(pr), attr, PropertyMock(side_effect=AssertionError(f"{attr} fetched!")))
     return pr
 

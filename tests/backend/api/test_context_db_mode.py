@@ -206,7 +206,9 @@ async def test_claude_md_reads_the_registered_db_path(db_mode_app):
 
 
 @pytest.mark.asyncio
-async def test_missing_claude_md_is_not_found_not_unavailable(authenticated_app, tmp_path, monkeypatch):
+async def test_missing_claude_md_is_not_found_not_unavailable(
+    authenticated_app, tmp_path, monkeypatch
+):
     """등록 경로는 있는데 CLAUDE.md 만 없으면 404 — 503 이 아니다.
 
     503 은 '검사 가능한 디렉터리가 없음' 하나에만 남겨 둔다. 두 원인을 같은

@@ -518,8 +518,12 @@ async def test_task_analyzer_ocr_records_allowed_api_fallback_usage(monkeypatch)
     preflight = AsyncMock()
 
     monkeypatch.setattr("api.agents.ocr.get_access_for_user", AsyncMock(return_value=access))
-    monkeypatch.setattr("api.agents.ocr.LLMModelRegistry.get_enabled", MagicMock(return_value=[model]))
-    monkeypatch.setattr("api.agents.ocr.LLMModelRegistry.is_available", MagicMock(return_value=True))
+    monkeypatch.setattr(
+        "api.agents.ocr.LLMModelRegistry.get_enabled", MagicMock(return_value=[model])
+    )
+    monkeypatch.setattr(
+        "api.agents.ocr.LLMModelRegistry.is_available", MagicMock(return_value=True)
+    )
     monkeypatch.setattr("api.agents.ocr.LLMService._get_llm", MagicMock(return_value=fake_llm))
     monkeypatch.setattr("api.agents.ocr.record_usage_best_effort", recorder)
     monkeypatch.setattr(

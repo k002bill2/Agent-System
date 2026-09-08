@@ -65,9 +65,7 @@ async def test_ping_survives_ttl_refresh_contention(monkeypatch):
         async def refresh_session(self, session_id):
             raise SessionVersionConflictError(session_id)
 
-    monkeypatch.setattr(
-        "services.session_service.get_session_service", lambda: _AlwaysConflicts()
-    )
+    monkeypatch.setattr("services.session_service.get_session_service", lambda: _AlwaysConflicts())
 
     engine = OrchestrationEngine()
     await engine.create_session(session_id="s-292", user_id="test-admin")

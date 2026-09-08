@@ -37,9 +37,7 @@ def _isolated_sessions(monkeypatch):
     playground_service._sessions.clear()
     monkeypatch.setattr(playground_service.service, "_load_sessions", lambda: None)
     monkeypatch.setattr(playground_service.service, "_save_sessions", lambda: None)
-    monkeypatch.setattr(
-        playground_service.service, "_fire_and_forget", lambda coro: coro.close()
-    )
+    monkeypatch.setattr(playground_service.service, "_fire_and_forget", lambda coro: coro.close())
     yield
     playground_service._sessions.clear()
 
@@ -87,15 +85,11 @@ async def test_create_route_still_creates_with_enabled_model() -> None:
 
 @pytest.mark.asyncio
 async def test_update_route_maps_invalid_model_to_400() -> None:
-    session = PlaygroundService.create_session(
-        PlaygroundSessionCreate(name="s", model="codex-cli")
-    )
+    session = PlaygroundService.create_session(PlaygroundSessionCreate(name="s", model="codex-cli"))
     data = playground_api.SessionSettingsUpdate(model="gpt-5.4", name="renamed")
 
     with pytest.raises(HTTPException) as exc_info:
-        await playground_api.update_session_settings(
-            session.id, data, BackgroundTasks()
-        )
+        await playground_api.update_session_settings(session.id, data, BackgroundTasks())
 
     assert exc_info.value.status_code == 400
     # 원자성: 같은 요청의 다른 필드도 반영되지 않는다.
@@ -105,13 +99,9 @@ async def test_update_route_maps_invalid_model_to_400() -> None:
 
 @pytest.mark.asyncio
 async def test_update_route_still_updates_with_enabled_model() -> None:
-    session = PlaygroundService.create_session(
-        PlaygroundSessionCreate(name="s", model="codex-cli")
-    )
+    session = PlaygroundService.create_session(PlaygroundSessionCreate(name="s", model="codex-cli"))
     data = playground_api.SessionSettingsUpdate(model="claude-sonnet-5")
 
-    updated = await playground_api.update_session_settings(
-        session.id, data, BackgroundTasks()
-    )
+    updated = await playground_api.update_session_settings(session.id, data, BackgroundTasks())
 
     assert updated.model == "claude-sonnet-5"

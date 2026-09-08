@@ -177,9 +177,7 @@ class TestApprovalResumeEndToEnd:
     """compiled graph 를 실제로 통과하는 승인 왕복."""
 
     @pytest.mark.asyncio
-    async def test_approved_tool_runs_exactly_once_and_task_completes(
-        self, monkeypatch, graph_env
-    ):
+    async def test_approved_tool_runs_exactly_once_and_task_completes(self, monkeypatch, graph_env):
         """승인 생성 → 승인 → 도구가 정확히 한 번 실행 → task COMPLETED."""
         compiled, execute_tool = _build_graph(
             monkeypatch,

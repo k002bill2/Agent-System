@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -61,7 +61,9 @@ class TestSecretService:
         self.db.flush = AsyncMock()
 
         result = await self.svc.create_secret(
-            SecretCreate(name="API_KEY", value="secret123", scope=SecretScope.WORKFLOW, scope_id="wf1"),
+            SecretCreate(
+                name="API_KEY", value="secret123", scope=SecretScope.WORKFLOW, scope_id="wf1"
+            ),
             user_id="user-1",
         )
         assert result["name"] == "API_KEY"

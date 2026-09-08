@@ -1,7 +1,5 @@
 """Tests for advanced matrix features (exclude/include)."""
 
-import pytest
-
 from models.workflow import WorkflowJobDef, WorkflowStepDef
 from services.workflow_engine import WorkflowEngine
 

@@ -79,8 +79,7 @@ def _project_scoped_rag_routes(app) -> list[tuple[str, str]]:
     rows = [
         (method, path)
         for method, path, _ in snapshot(app.router)
-        if path.startswith("/api/rag/")
-        and ("{project_id}" in path or path == "/api/rag/query")
+        if path.startswith("/api/rag/") and ("{project_id}" in path or path == "/api/rag/query")
     ]
     assert rows, "RAG 라우트가 하나도 안 잡혔다 — 라우터가 안 붙었거나 경로가 바뀌었다"
     return [(method, path.replace("{project_id}", DB_PROJECT_ID)) for method, path in rows]

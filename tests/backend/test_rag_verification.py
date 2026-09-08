@@ -10,13 +10,9 @@
   - 거리 계산 방식(Metric) 설정 오류
 """
 
-import hashlib
-import os
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-
 
 # ── Test Helpers ─────────────────────────────────────────────────────────────
 
@@ -139,7 +135,6 @@ class TestStage1Ingestion:
         priority_files = ["CLAUDE.md", "README.md", "package.json", "pyproject.toml"]
 
         # 실제 인덱싱에서 priority_files 목록이 코드와 일치하는지 확인
-        import services.rag_service as rag_mod
 
         # index_project 메서드 내의 priority_files 목록 참조
         # 코드에서 하드코딩된 목록과 일치하는지 검증
@@ -204,9 +199,7 @@ class TestStage2Retrieval:
             (irrelevant_doc, 0.31),
         ]
 
-        monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
-        )
+        monkeypatch.setattr(vector_store, "_get_or_create_collection", lambda pid: mock_collection)
 
         result = await vector_store.query("proj1", "재택근무 규정은?", k=5)
 
@@ -228,9 +221,7 @@ class TestStage2Retrieval:
         mock_doc.metadata = {"source": "test.py", "chunk_index": 0, "priority": "normal"}
         mock_collection.similarity_search_with_score.return_value = [(mock_doc, 0.75)]
 
-        monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
-        )
+        monkeypatch.setattr(vector_store, "_get_or_create_collection", lambda pid: mock_collection)
 
         result = await vector_store.query("proj1", "test", k=5)
 
@@ -254,12 +245,10 @@ class TestStage2Retrieval:
 
         mock_collection.similarity_search_with_score.return_value = [
             (doc1, -0.1),  # 음수
-            (doc2, 1.5),   # 1 초과
+            (doc2, 1.5),  # 1 초과
         ]
 
-        monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
-        )
+        monkeypatch.setattr(vector_store, "_get_or_create_collection", lambda pid: mock_collection)
 
         result = await vector_store.query("proj1", "test", k=5)
 
@@ -329,11 +318,9 @@ class TestStage2Retrieval:
         mock_doc.metadata = {"source": "CLAUDE.md", "chunk_index": 0, "priority": "high"}
         mock_collection.similarity_search_with_score.return_value = [(mock_doc, 0.9)]
 
-        monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
-        )
+        monkeypatch.setattr(vector_store, "_get_or_create_collection", lambda pid: mock_collection)
 
-        result = await vector_store.query("proj1", "query", k=5, filter_priority="high")
+        await vector_store.query("proj1", "query", k=5, filter_priority="high")
 
         # Qdrant 필터가 첫 호출에 적용되었는지 확인.
         # (sparse-result fallback 발동 시 후속 호출은 filter=None로 재시도하므로
@@ -367,9 +354,7 @@ class TestStage3Generation:
         }
         mock_collection.similarity_search_with_score.return_value = [(mock_doc, 0.88)]
 
-        monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
-        )
+        monkeypatch.setattr(vector_store, "_get_or_create_collection", lambda pid: mock_collection)
 
         # 전역 인스턴스 모킹
         monkeypatch.setattr(rag_mod, "_vector_store", vector_store)
@@ -409,9 +394,7 @@ class TestStage3Generation:
             (doc2, 0.7),
         ]
 
-        monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
-        )
+        monkeypatch.setattr(vector_store, "_get_or_create_collection", lambda pid: mock_collection)
         monkeypatch.setattr(rag_mod, "_vector_store", vector_store)
 
         context = await rag_mod.get_project_context("proj1", "query", k=2)
@@ -431,9 +414,7 @@ class TestStage3Generation:
         mock_collection = MagicMock()
         mock_collection.similarity_search_with_score.return_value = []
 
-        monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
-        )
+        monkeypatch.setattr(vector_store, "_get_or_create_collection", lambda pid: mock_collection)
         monkeypatch.setattr(rag_mod, "_vector_store", vector_store)
 
         context = await rag_mod.get_project_context("proj1", "존재하지 않는 내용")
@@ -490,11 +471,11 @@ class TestTroubleshooting:
 
     def test_distance_metric_is_cosine(self):
         """거리 계산 방식이 Cosine으로 올바르게 설정되어 있는지."""
-        import services.rag_service as rag_mod
-
         # 코드에서 Distance.COSINE을 사용하는지 확인
         # _ensure_collection_exists 메서드에서 Distance.COSINE 설정
         import inspect
+
+        import services.rag_service as rag_mod
 
         source = inspect.getsource(rag_mod.ProjectVectorStore._ensure_collection_exists)
         assert "Distance.COSINE" in source
@@ -589,7 +570,8 @@ class TestEdgeCases:
         """오버랩이 청크 크기 이상일 때 무한 루프 방지."""
         # overlap >= chunk_size인 경우
         chunks = vector_store._chunk_document_manual(
-            "A" * 300, "test.txt",
+            "A" * 300,
+            "test.txt",
             chunk_size=100,
             chunk_overlap=100,  # overlap == size
         )

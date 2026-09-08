@@ -56,6 +56,14 @@ jobs:
       - name: Ruff format check
         run: uv run ruff format --check .
 
+      # tests/backend 는 src/backend 밖이라 위 두 스텝의 범위에 들지 않는다.
+      # 자체 ruff.toml 을 두었으므로 cwd 와 무관하게 같은 규칙이 적용된다.
+      - name: Ruff lint (tests)
+        run: uv run ruff check ../../tests/backend --output-format=github
+
+      - name: Ruff format check (tests)
+        run: uv run ruff format --check ../../tests/backend
+
   backend-typecheck:
     name: Backend Type Check
     runs-on: ubuntu-latest

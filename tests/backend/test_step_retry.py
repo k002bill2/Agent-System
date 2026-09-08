@@ -76,11 +76,7 @@ class TestStepRetry:
         """Test normal step execution without retry."""
         definition = WorkflowDefinitionSchema(
             name="normal",
-            jobs={
-                "test": WorkflowJobDef(
-                    steps=[WorkflowStepDef(name="ok", run="echo hi")]
-                )
-            },
+            jobs={"test": WorkflowJobDef(steps=[WorkflowStepDef(name="ok", run="echo hi")])},
         )
         result = await self.engine.execute_run(
             run_id="retry-3",

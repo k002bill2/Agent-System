@@ -1,10 +1,8 @@
 """Tests for rate limit service."""
 
 import pytest
-import asyncio
-from datetime import datetime
 
-from models.rate_limit import RateLimitTier, RATE_LIMIT_TIERS
+from models.rate_limit import RATE_LIMIT_TIERS, RateLimitTier
 from services.rate_limit_service import RateLimitService
 
 
@@ -55,7 +53,7 @@ class TestRateLimitService:
                 identifier=identifier,
                 tier=RateLimitTier.FREE.value,
             )
-            assert result.allowed is True, f"Request {i+1} should be allowed"
+            assert result.allowed is True, f"Request {i + 1} should be allowed"
 
         # Next request should be blocked
         result = await rate_limit_service.check_rate_limit(
@@ -80,7 +78,10 @@ class TestRateLimitService:
 
         assert status.identifier == identifier
         assert status.minute_count == 5
-        assert status.minute_remaining == RATE_LIMIT_TIERS[RateLimitTier.FREE.value].requests_per_minute - 5
+        assert (
+            status.minute_remaining
+            == RATE_LIMIT_TIERS[RateLimitTier.FREE.value].requests_per_minute - 5
+        )
 
     @pytest.mark.asyncio
     async def test_reset_limits(self, rate_limit_service):
@@ -155,7 +156,7 @@ class TestRateLimitTierConfig:
 
     def test_all_tiers_have_required_fields(self):
         """Test that all tiers have required configuration."""
-        for tier_name, config in RATE_LIMIT_TIERS.items():
+        for _tier_name, config in RATE_LIMIT_TIERS.items():
             assert config.name is not None
             assert config.requests_per_minute is not None
             assert config.requests_per_hour is not None

@@ -1,14 +1,12 @@
 """Tests for Agent Registry."""
 
-import pytest
 from services.agent_registry import (
-    AgentRegistry,
-    AgentMetadata,
-    AgentCategory,
-    AgentStatus,
     AgentCapability,
+    AgentCategory,
+    AgentMetadata,
+    AgentRegistry,
+    AgentStatus,
     EffortLevel,
-    get_agent_registry,
 )
 
 
@@ -30,6 +28,7 @@ class TestAgentRegistry:
 
         # 기본 에이전트를 복사해서 등록 (상태 격리)
         from services.agent_registry import _build_default_agents
+
         for agent in _build_default_agents():
             # 깊은 복사를 통해 새 인스턴스 생성
             agent_copy = AgentMetadata(
@@ -222,9 +221,7 @@ class TestAgentMetadata:
                 for model_id in ("claude-sonnet-5", "claude-opus-4-8")
             ]
             monkeypatch.setattr(LLMModelRegistry, "_db_cache", db_models)
-            monkeypatch.setattr(
-                LLMModelRegistry, "_db_index", {m.id: m for m in db_models}
-            )
+            monkeypatch.setattr(LLMModelRegistry, "_db_index", {m.id: m for m in db_models})
 
         # DB-loaded admin default = opus → 빌드 결과에 반영
         _set_db_default("claude-opus-4-8")

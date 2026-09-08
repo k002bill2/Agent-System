@@ -1,11 +1,13 @@
 """Tests for ProjectInvitationService."""
+
+import sys
+from datetime import timedelta
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from utils.time import utcnow
-import sys
-from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src" / "backend"))
 

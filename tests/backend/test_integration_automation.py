@@ -20,7 +20,6 @@ from services.automation_loop_service import (
 from services.pipeline.models import PipelineConfig, StageConfig
 from services.pipeline.pipeline_service import PipelineService
 
-
 # ── Fixtures ────────────────────────────────────────────────
 
 
@@ -326,9 +325,7 @@ class TestScenario3AutomationTriggersPipeline:
     """
 
     @pytest.mark.asyncio
-    async def test_automation_loop_triggers_pipeline(
-        self, automation_service, pipeline_service
-    ):
+    async def test_automation_loop_triggers_pipeline(self, automation_service, pipeline_service):
         """자동화 루프가 조건 충족 시 파이프라인을 트리거해야 한다."""
         # 1. Create pipeline first
         pipeline_config = PipelineConfig(
@@ -404,9 +401,7 @@ class TestScenario3AutomationTriggersPipeline:
         assert triggered[0].run_count == 1
 
     @pytest.mark.asyncio
-    async def test_pipeline_action_failure_handled(
-        self, automation_service, pipeline_service
-    ):
+    async def test_pipeline_action_failure_handled(self, automation_service, pipeline_service):
         """존재하지 않는 파이프라인 트리거 시 에러가 적절히 처리되어야 한다."""
         loop_config = AutomationLoopConfig(
             name="bad-pipeline-loop",

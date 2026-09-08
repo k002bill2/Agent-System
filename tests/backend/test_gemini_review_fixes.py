@@ -10,7 +10,7 @@ Covers:
 import os
 import time
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -20,7 +20,6 @@ from agents.lead_orchestrator import (
     _safe_execution_strategy,
 )
 from services.agent_registry import EffortLevel
-
 
 # ─────────────────────────────────────────────────────────────
 # 1. project_path "." should be validated too
@@ -46,7 +45,7 @@ class TestProjectPathValidation:
 
     def test_validate_project_path_accepts_allowed_root(self):
         """허용된 workspace 내 경로를 수락해야 한다."""
-        from api.agents import ALLOWED_WORKSPACE_ROOTS, _validate_project_path
+        from api.agents import _validate_project_path
 
         # Create a temp dir under the first allowed root for testing
         # Just test that the function exists and has the right signature
@@ -58,8 +57,12 @@ class TestProjectPathValidation:
 
         # "." resolves to CWD - if CWD is not in allowed roots, should raise
         cwd = Path.cwd().resolve()
-        allowed_roots = [Path.home() / "Work", Path.home() / "Projects",
-                         Path.home() / "Developer", Path("/tmp/aos-workspaces")]
+        allowed_roots = [
+            Path.home() / "Work",
+            Path.home() / "Projects",
+            Path.home() / "Developer",
+            Path("/tmp/aos-workspaces"),
+        ]
 
         cwd_is_allowed = any(
             cwd == root.resolve() or str(cwd).startswith(str(root.resolve()) + "/")

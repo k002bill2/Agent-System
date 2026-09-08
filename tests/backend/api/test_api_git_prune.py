@@ -116,12 +116,8 @@ class TestPruneMergedEndpoint:
         """dry_run=False must call prune_merged_branches and surface deleted list."""
         git_service = MagicMock()
         candidate = _make_candidate("feat/a", pr=1)
-        git_service.find_prune_candidates.return_value = _make_scan_result(
-            candidates=[candidate]
-        )
-        git_service.prune_merged_branches.return_value = _make_execute_result(
-            deleted=["feat/a"]
-        )
+        git_service.find_prune_candidates.return_value = _make_scan_result(candidates=[candidate])
+        git_service.prune_merged_branches.return_value = _make_execute_result(deleted=["feat/a"])
 
         with (
             patch("api.git.branches.get_git_service_for_project", return_value=git_service),
@@ -146,9 +142,7 @@ class TestPruneMergedEndpoint:
             candidates=[_make_candidate("feat/a", pr=1)],
             skipped=skipped,
         )
-        git_service.prune_merged_branches.return_value = _make_execute_result(
-            deleted=["feat/a"]
-        )
+        git_service.prune_merged_branches.return_value = _make_execute_result(deleted=["feat/a"])
 
         with (
             patch("api.git.branches.get_git_service_for_project", return_value=git_service),

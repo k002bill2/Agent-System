@@ -1,0 +1,30 @@
+# tests/backend 전용 ruff 설정.
+#
+# 왜 별도 파일인가: 이 디렉토리는 src/backend 의 pyproject.toml 바깥이라
+# 어떤 설정도 소유하지 않았고, ruff 는 그럴 때 "실행 시점 cwd 의 설정"을
+# 폴백으로 쓴다. 그래서 같은 파일이 cwd 에 따라 line-length 88/100 으로
+# 다르게 판정되는 상태였다 — 게이트를 걸기 전에 이 비결정성부터 없앤다.
+#
+# 규칙은 src/backend/pyproject.toml 을 미러한다. 갱신 시 양쪽을 함께 고친다.
+line-length = 100
+target-version = "py311"
+# 백엔드 소스 루트를 명시한다. 없으면 isort 가 이 디렉토리를 1st-party 루트로
+# 보고 `models`/`api`/`services` 를 서드파티로 분류해, src/backend 와 정렬
+# 순서가 어긋난다(실측: I001 40 → 113).
+src = ["../../src/backend"]
+
+[lint]
+select = ["E", "F", "I", "N", "W", "B", "UP"]
+ignore = [
+    "E501",   # line-too-long (handled by formatter)
+    "B008",   # function-call-in-default-argument (FastAPI/Pydantic Field patterns)
+    "B904",   # raise-without-from-inside-except
+    "UP042",  # replace-str-enum (StrEnum migration deferred)
+    "N815",   # mixed-case-variable-in-class-scope (API compatibility)
+    "E402",   # module-import-not-at-top (conftest 는 import 전에 env 를 고정해야 한다)
+    "E741",   # ambiguous-variable-name
+    # ── 아래는 tests 고유 ──
+    "B017",   # assert-raises-exception: pytest.raises(Exception) 13곳.
+              # 구체 예외 타입을 고르는 것은 테스트 의미를 바꾸는 판단이라
+              # 게이트 도입 PR 에서 함께 처리하지 않는다 (별도 후속).
+]

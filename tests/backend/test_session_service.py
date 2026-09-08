@@ -1,10 +1,10 @@
 """Tests for session service."""
 
-import pytest
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from utils.time import utcnow
+import pytest
+
 from db.repository import serialize_state
 from models.agent_state import (
     AgentInfo,
@@ -22,7 +22,7 @@ from services.session_service import (
     get_session_service,
     set_session_service,
 )
-
+from utils.time import utcnow
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
@@ -363,9 +363,7 @@ class TestSessionServiceExpiration:
         sid2 = await self.service.create_session()
 
         # Expire sid1
-        self.service._session_metadata[sid1].expires_at = (
-            utcnow() - timedelta(seconds=1)
-        )
+        self.service._session_metadata[sid1].expires_at = utcnow() - timedelta(seconds=1)
 
         cleaned = await self.service.cleanup_expired_sessions()
         assert cleaned >= 1
@@ -376,9 +374,7 @@ class TestSessionServiceExpiration:
     async def test_cleanup_inactive_sessions(self):
         sid = await self.service.create_session()
         # Age the last_activity well beyond any reasonable threshold
-        self.service._session_metadata[sid].last_activity = (
-            utcnow() - timedelta(hours=72)
-        )
+        self.service._session_metadata[sid].last_activity = utcnow() - timedelta(hours=72)
 
         cleaned = await self.service.cleanup_expired_sessions()
         assert cleaned >= 1
@@ -570,14 +566,12 @@ class TestSessionServiceQuota:
         mock_check.message = "Daily session quota exceeded"
         mock_quota_module.QuotaService.check_session_quota.return_value = mock_check
 
-        with (
-            patch.dict(
-                sys.modules,
-                {
-                    "services.organization_service": mock_org_module,
-                    "services.quota_service": mock_quota_module,
-                },
-            )
+        with patch.dict(
+            sys.modules,
+            {
+                "services.organization_service": mock_org_module,
+                "services.quota_service": mock_quota_module,
+            },
         ):
             with pytest.raises(ValueError, match="quota"):
                 await self.service.create_session(organization_id="org-1")
@@ -597,14 +591,12 @@ class TestSessionServiceQuota:
         mock_check.allowed = True
         mock_quota_module.QuotaService.check_session_quota.return_value = mock_check
 
-        with (
-            patch.dict(
-                sys.modules,
-                {
-                    "services.organization_service": mock_org_module,
-                    "services.quota_service": mock_quota_module,
-                },
-            )
+        with patch.dict(
+            sys.modules,
+            {
+                "services.organization_service": mock_org_module,
+                "services.quota_service": mock_quota_module,
+            },
         ):
             sid = await self.service.create_session(organization_id="org-2")
             assert isinstance(sid, str)

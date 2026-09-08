@@ -1,9 +1,8 @@
 """Tests for audit integrity service."""
 
-import pytest
-from datetime import datetime, timedelta
+from datetime import timedelta
 
-from utils.time import utcnow
+import pytest
 
 from models.audit import (
     ComplianceAuditEntry,
@@ -11,6 +10,7 @@ from models.audit import (
     RetentionPolicy,
 )
 from services.audit_integrity import AuditIntegrityService
+from utils.time import utcnow
 
 
 @pytest.fixture
@@ -113,7 +113,13 @@ class TestAuditIntegrityService:
     def test_generate_compliance_report(self, integrity_service):
         """Test compliance report generation."""
         # Add entries with various classifications
-        for i, cls in enumerate([DataClassification.PUBLIC, DataClassification.INTERNAL, DataClassification.CONFIDENTIAL]):
+        for i, cls in enumerate(
+            [
+                DataClassification.PUBLIC,
+                DataClassification.INTERNAL,
+                DataClassification.CONFIDENTIAL,
+            ]
+        ):
             entry = ComplianceAuditEntry(
                 id=f"entry-{i}",
                 action="task_created",

@@ -128,12 +128,8 @@ def _isolate_sessions(monkeypatch) -> list[bool]:
     playground_service._sessions.clear()
     saves: list[bool] = []
     monkeypatch.setattr(playground_service.service, "_load_sessions", lambda: None)
-    monkeypatch.setattr(
-        playground_service.service, "_save_sessions", lambda: saves.append(True)
-    )
-    monkeypatch.setattr(
-        playground_service.service, "_fire_and_forget", lambda coro: coro.close()
-    )
+    monkeypatch.setattr(playground_service.service, "_save_sessions", lambda: saves.append(True))
+    monkeypatch.setattr(playground_service.service, "_fire_and_forget", lambda coro: coro.close())
     return saves
 
 
@@ -146,9 +142,7 @@ def test_create_session_rejects_unknown_model(monkeypatch) -> None:
     """Registry 에 없는 모델은 세션 생성(영속화) 전에 거부된다."""
     saves = _isolate_sessions(monkeypatch)
     with pytest.raises(ValueError, match="Unknown model"):
-        PlaygroundService.create_session(
-            PlaygroundSessionCreate(name="bad", model="no-such-model")
-        )
+        PlaygroundService.create_session(PlaygroundSessionCreate(name="bad", model="no-such-model"))
     assert playground_service._sessions == {}
     assert saves == []
 
@@ -157,9 +151,7 @@ def test_create_session_rejects_disabled_model(monkeypatch) -> None:
     """gpt-5.4 는 registry 에 있으나 disabled — 저장 전에 거부되어야 한다."""
     saves = _isolate_sessions(monkeypatch)
     with pytest.raises(ValueError, match="Model disabled"):
-        PlaygroundService.create_session(
-            PlaygroundSessionCreate(name="bad", model="gpt-5.4")
-        )
+        PlaygroundService.create_session(PlaygroundSessionCreate(name="bad", model="gpt-5.4"))
     assert playground_service._sessions == {}
     assert saves == []
 
@@ -197,9 +189,7 @@ def test_update_settings_rejects_invalid_model_atomically(monkeypatch) -> None:
 
 def test_update_settings_rejects_disabled_model(monkeypatch) -> None:
     _isolate_sessions(monkeypatch)
-    session = PlaygroundService.create_session(
-        PlaygroundSessionCreate(name="s", model="codex-cli")
-    )
+    session = PlaygroundService.create_session(PlaygroundSessionCreate(name="s", model="codex-cli"))
     with pytest.raises(ValueError, match="Model disabled"):
         PlaygroundService.update_session_settings(session.id, model="gpt-5.4")
     assert session.model == "codex-cli"
@@ -207,12 +197,8 @@ def test_update_settings_rejects_disabled_model(monkeypatch) -> None:
 
 def test_update_settings_accepts_enabled_model(monkeypatch) -> None:
     _isolate_sessions(monkeypatch)
-    session = PlaygroundService.create_session(
-        PlaygroundSessionCreate(name="s", model="codex-cli")
-    )
-    updated = PlaygroundService.update_session_settings(
-        session.id, model="claude-sonnet-5"
-    )
+    session = PlaygroundService.create_session(PlaygroundSessionCreate(name="s", model="codex-cli"))
+    updated = PlaygroundService.update_session_settings(session.id, model="claude-sonnet-5")
     assert updated is not None
     assert updated.model == "claude-sonnet-5"
 
@@ -825,9 +811,7 @@ async def test_stream_client_disconnect_finalizes_execution_as_cancelled(
     monkeypatch.setattr(
         playground_service.service, "_save_sessions", lambda: save_calls.append(True)
     )
-    session = PlaygroundService.create_session(
-        PlaygroundSessionCreate(name="s", model="codex-cli")
-    )
+    session = PlaygroundService.create_session(PlaygroundSessionCreate(name="s", model="codex-cli"))
     save_calls.clear()
 
     def fake_stream(**kwargs):
@@ -840,9 +824,7 @@ async def test_stream_client_disconnect_finalizes_execution_as_cancelled(
 
     monkeypatch.setattr(LLMService, "stream_with_tokens", fake_stream)
 
-    stream = PlaygroundService.execute_stream(
-        session.id, PlaygroundExecuteRequest(prompt="hi")
-    )
+    stream = PlaygroundService.execute_stream(session.id, PlaygroundExecuteRequest(prompt="hi"))
     assert await stream.__anext__() == "chunk-1 "
     await stream.aclose()
 
@@ -864,9 +846,7 @@ async def test_stream_task_cancellation_finalizes_execution_as_cancelled(
     import asyncio
 
     _patch_stream_env(monkeypatch)
-    session = PlaygroundService.create_session(
-        PlaygroundSessionCreate(name="s", model="codex-cli")
-    )
+    session = PlaygroundService.create_session(PlaygroundSessionCreate(name="s", model="codex-cli"))
 
     def fake_stream(**kwargs):
         async def gen():
@@ -877,9 +857,7 @@ async def test_stream_task_cancellation_finalizes_execution_as_cancelled(
 
     monkeypatch.setattr(LLMService, "stream_with_tokens", fake_stream)
 
-    stream = PlaygroundService.execute_stream(
-        session.id, PlaygroundExecuteRequest(prompt="hi")
-    )
+    stream = PlaygroundService.execute_stream(session.id, PlaygroundExecuteRequest(prompt="hi"))
     assert await stream.__anext__() == "chunk-1 "
     with pytest.raises(asyncio.CancelledError):
         await stream.athrow(asyncio.CancelledError)
@@ -897,9 +875,7 @@ async def test_stream_init_exception_does_not_leave_running_execution(
     """LLM 루프 진입 전(history/RAG 준비 단계) 예외도 RUNNING execution 을
     남기지 않고 FAILED 로 마감한 뒤 in-band [Error] 청크로 표면화한다."""
     _patch_stream_env(monkeypatch)
-    session = PlaygroundService.create_session(
-        PlaygroundSessionCreate(name="s", model="codex-cli")
-    )
+    session = PlaygroundService.create_session(PlaygroundSessionCreate(name="s", model="codex-cli"))
 
     def boom(_msgs):
         raise RuntimeError("history exploded")
@@ -940,18 +916,14 @@ async def test_execute_stamps_registry_revision(monkeypatch) -> None:
     from models.llm_models import LLMModelRegistry
 
     _isolate_sessions(monkeypatch)
-    session = PlaygroundService.create_session(
-        PlaygroundSessionCreate(name="s", model="codex-cli")
-    )
+    session = PlaygroundService.create_session(PlaygroundSessionCreate(name="s", model="codex-cli"))
 
     async def fake_invoke(**kwargs):
         return LLMResponse(content="ok", model=kwargs["model_id"], provider="codex_cli")
 
     monkeypatch.setattr(LLMService, "invoke", fake_invoke)
 
-    execution = await PlaygroundService.execute(
-        session.id, PlaygroundExecuteRequest(prompt="hi")
-    )
+    execution = await PlaygroundService.execute(session.id, PlaygroundExecuteRequest(prompt="hi"))
 
     assert execution.registry_revision == LLMModelRegistry.get_revision()
     # 기존 DB JSON 직렬화 경로에도 자동 포함된다 (model_dump 전량 직렬화).
@@ -964,9 +936,7 @@ async def test_stream_stamps_registry_revision(monkeypatch) -> None:
     from models.llm_models import LLMModelRegistry
 
     _patch_stream_env(monkeypatch)
-    session = PlaygroundService.create_session(
-        PlaygroundSessionCreate(name="s", model="codex-cli")
-    )
+    session = PlaygroundService.create_session(PlaygroundSessionCreate(name="s", model="codex-cli"))
 
     def fake_stream(**kwargs):
         async def gen():

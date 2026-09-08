@@ -47,9 +47,7 @@ class TestTemplateService:
 
     def test_create_template_invalid_yaml(self):
         with pytest.raises(ValueError):
-            self.svc.create_template(
-                TemplateCreate(name="Bad", yaml_content="invalid yaml: [")
-            )
+            self.svc.create_template(TemplateCreate(name="Bad", yaml_content="invalid yaml: ["))
 
     def test_update_template(self):
         templates = self.svc.list_templates()

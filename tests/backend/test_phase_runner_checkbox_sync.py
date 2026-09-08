@@ -28,9 +28,7 @@ class TestStatusToCheckbox:
 class TestIdFormats:
     def test_bold_id_with_colon(self):
         body = "- [ ] **migrate_button**: do stuff\n"
-        out = sync_checkboxes(
-            body, _spec(Task(id="migrate_button", status="done"))
-        )
+        out = sync_checkboxes(body, _spec(Task(id="migrate_button", status="done")))
         assert "[x]" in out
 
     def test_plain_id_with_colon(self):
@@ -56,10 +54,7 @@ class TestSelectivity:
         assert out == body
 
     def test_does_not_touch_other_checkboxes(self):
-        body = (
-            "- [ ] **W0-1**: managed\n"
-            "- [ ] **UNKNOWN**: manual item user added\n"
-        )
+        body = "- [ ] **W0-1**: managed\n- [ ] **UNKNOWN**: manual item user added\n"
         out = sync_checkboxes(body, _spec(Task(id="W0-1", status="done")))
         assert "- [x] **W0-1**" in out
         assert "- [ ] **UNKNOWN**" in out

@@ -3,8 +3,6 @@
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from utils.time import utcnow
-
 import pytest
 
 from models.analytics import (
@@ -24,7 +22,7 @@ from services.analytics_service import (
     _get_time_delta,
     _normalize_model_name,
 )
-
+from utils.time import utcnow
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -449,10 +447,21 @@ class TestGetOverviewAsync:
     def setup_method(self):
         self.service = AnalyticsService()
 
-    def _make_db(self, session_count=5, active_count=2, total_tasks=10,
-                 completed=8, failed=1, pending=1, tokens=50000, cost=1.5,
-                 avg_duration=4500, approvals_pending=1, approvals_granted=10,
-                 approvals_denied=2):
+    def _make_db(
+        self,
+        session_count=5,
+        active_count=2,
+        total_tasks=10,
+        completed=8,
+        failed=1,
+        pending=1,
+        tokens=50000,
+        cost=1.5,
+        avg_duration=4500,
+        approvals_pending=1,
+        approvals_granted=10,
+        approvals_denied=2,
+    ):
         """Build an AsyncSession mock whose execute() returns canned scalars."""
         db = AsyncMock()
 
@@ -475,17 +484,17 @@ class TestGetOverviewAsync:
             return result
 
         db.execute.side_effect = [
-            _scalar_result(session_count),    # total_sessions
-            _scalar_result(active_count),     # active_sessions
-            _scalar_result(total_tasks),      # total_tasks
-            _scalar_result(completed),        # completed_tasks
-            _scalar_result(failed),           # failed_tasks
-            _scalar_result(pending),          # pending_tasks
-            _row_result(tokens, cost),        # tokens + cost (one row)
-            _scalar_result(avg_duration),     # avg_duration
-            _scalar_result(approvals_pending),   # approvals_pending
-            _scalar_result(approvals_granted),   # approvals_granted
-            _scalar_result(approvals_denied),    # approvals_denied
+            _scalar_result(session_count),  # total_sessions
+            _scalar_result(active_count),  # active_sessions
+            _scalar_result(total_tasks),  # total_tasks
+            _scalar_result(completed),  # completed_tasks
+            _scalar_result(failed),  # failed_tasks
+            _scalar_result(pending),  # pending_tasks
+            _row_result(tokens, cost),  # tokens + cost (one row)
+            _scalar_result(avg_duration),  # avg_duration
+            _scalar_result(approvals_pending),  # approvals_pending
+            _scalar_result(approvals_granted),  # approvals_granted
+            _scalar_result(approvals_denied),  # approvals_denied
         ]
         return db
 

@@ -1,6 +1,6 @@
 """Tests for RAG service: chunking, hybrid search, BM25, reranking."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -128,7 +128,8 @@ class TestChunkDocument:
 
         monkeypatch.setattr(rag_mod, "RAG_FULL_CONTEXT_THRESHOLD", 100)
 
-        python_content = '''
+        python_content = (
+            '''
 class MyClass:
     """A class."""
 
@@ -144,7 +145,9 @@ class AnotherClass:
 
     def another_method(self):
         return 3
-''' * 5  # Repeat to ensure it's large enough
+'''
+            * 5
+        )  # Repeat to ensure it's large enough
 
         chunks = vector_store._chunk_document(python_content, "module.py", chunk_size=200)
         assert len(chunks) > 1
@@ -383,9 +386,7 @@ class TestQueryPaths:
         mock_doc.metadata = {"source": "test.py", "chunk_index": 0, "priority": "normal"}
         mock_collection.similarity_search_with_score.return_value = [(mock_doc, 0.8)]
 
-        monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
-        )
+        monkeypatch.setattr(vector_store, "_get_or_create_collection", lambda pid: mock_collection)
 
         result = await vector_store.query("proj1", "test query", k=5)
 
@@ -410,9 +411,7 @@ class TestQueryPaths:
         mock_doc.metadata = {"source": "sem.py", "chunk_index": 0, "priority": "normal"}
         mock_collection.similarity_search_with_score.return_value = [(mock_doc, 0.9)]
 
-        monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
-        )
+        monkeypatch.setattr(vector_store, "_get_or_create_collection", lambda pid: mock_collection)
 
         # Build BM25 index
         vector_store._build_bm25_index(
@@ -493,11 +492,21 @@ class TestCrossProjectQuery:
         # Mock vector stores for each project
         doc_a = MagicMock()
         doc_a.page_content = "alpha content about auth"
-        doc_a.metadata = {"source": "auth.py", "chunk_index": 0, "priority": "high", "project_id": "alpha"}
+        doc_a.metadata = {
+            "source": "auth.py",
+            "chunk_index": 0,
+            "priority": "high",
+            "project_id": "alpha",
+        }
 
         doc_b = MagicMock()
         doc_b.page_content = "beta content about auth"
-        doc_b.metadata = {"source": "login.py", "chunk_index": 0, "priority": "normal", "project_id": "beta"}
+        doc_b.metadata = {
+            "source": "login.py",
+            "chunk_index": 0,
+            "priority": "normal",
+            "project_id": "beta",
+        }
 
         mock_vs_alpha = MagicMock()
         mock_vs_alpha.similarity_search_with_score.return_value = [(doc_a, 0.9)]
@@ -505,7 +514,6 @@ class TestCrossProjectQuery:
         mock_vs_beta.similarity_search_with_score.return_value = [(doc_b, 0.85)]
 
         call_count = {"n": 0}
-        original_get_or_create = vector_store._get_or_create_collection
 
         def fake_get_or_create(pid):
             call_count["n"] += 1
@@ -530,16 +538,19 @@ class TestCrossProjectQuery:
 
         doc = MagicMock()
         doc.page_content = "only alpha content"
-        doc.metadata = {"source": "a.py", "chunk_index": 0, "priority": "normal", "project_id": "alpha"}
+        doc.metadata = {
+            "source": "a.py",
+            "chunk_index": 0,
+            "priority": "normal",
+            "project_id": "alpha",
+        }
 
         mock_vs = MagicMock()
         mock_vs.similarity_search_with_score.return_value = [(doc, 0.8)]
 
         monkeypatch.setattr(vector_store, "_get_or_create_collection", lambda pid: mock_vs)
 
-        result = await vector_store.query_cross_project(
-            "query", k=5, source_project_ids=["alpha"]
-        )
+        result = await vector_store.query_cross_project("query", k=5, source_project_ids=["alpha"])
 
         assert result.total_found == 1
         assert result.documents[0]["project_id"] == "alpha"
@@ -562,11 +573,21 @@ class TestCrossProjectQuery:
 
         local_doc = MagicMock()
         local_doc.page_content = "local result"
-        local_doc.metadata = {"source": "main.py", "chunk_index": 0, "priority": "normal", "project_id": "main"}
+        local_doc.metadata = {
+            "source": "main.py",
+            "chunk_index": 0,
+            "priority": "normal",
+            "project_id": "main",
+        }
 
         other_doc = MagicMock()
         other_doc.page_content = "other project result"
-        other_doc.metadata = {"source": "lib.py", "chunk_index": 0, "priority": "normal", "project_id": "other"}
+        other_doc.metadata = {
+            "source": "lib.py",
+            "chunk_index": 0,
+            "priority": "normal",
+            "project_id": "other",
+        }
 
         mock_local_vs = MagicMock()
         mock_local_vs.similarity_search_with_score.return_value = [(local_doc, 0.9)]
@@ -600,9 +621,7 @@ class TestCrossProjectQuery:
         mock_doc.metadata = {"source": "test.py", "chunk_index": 0, "priority": "normal"}
         mock_collection.similarity_search_with_score.return_value = [(mock_doc, 0.8)]
 
-        monkeypatch.setattr(
-            vector_store, "_get_or_create_collection", lambda pid: mock_collection
-        )
+        monkeypatch.setattr(vector_store, "_get_or_create_collection", lambda pid: mock_collection)
 
         result = await vector_store.query("proj1", "test query", k=5, include_shared=False)
 
@@ -626,7 +645,12 @@ class TestCrossProjectQuery:
 
         doc = MagicMock()
         doc.page_content = "alpha content"
-        doc.metadata = {"source": "a.py", "chunk_index": 0, "priority": "normal", "project_id": "alpha"}
+        doc.metadata = {
+            "source": "a.py",
+            "chunk_index": 0,
+            "priority": "normal",
+            "project_id": "alpha",
+        }
 
         mock_vs = MagicMock()
         mock_vs.similarity_search_with_score.return_value = [(doc, 0.85)]

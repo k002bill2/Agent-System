@@ -11,15 +11,14 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src" / "backend"))
 
 from services.automation_loop_service import (
+    _OPERATORS,
     ActionDef,
     AutomationLoopConfig,
     AutomationLoopService,
     ConditionDef,
     ConditionResult,
     LoopState,
-    _OPERATORS,
 )
-
 
 # ── Fixtures ────────────────────────────────────────────────
 
@@ -62,9 +61,7 @@ def simple_config():
         interval_seconds=0,
         max_iterations=1,
         conditions=[
-            ConditionDef(
-                metric="health.database.latency_ms", operator="gt", threshold=50.0
-            )
+            ConditionDef(metric="health.database.latency_ms", operator="gt", threshold=50.0)
         ],
         actions=[ActionDef(type="log", target="triggered")],
         cooldown_seconds=0,
@@ -78,9 +75,7 @@ class TestModels:
     """Test Pydantic model immutability and validation."""
 
     def test_condition_def_frozen(self):
-        cond = ConditionDef(
-            metric="health.db.latency_ms", operator="gt", threshold=100.0
-        )
+        cond = ConditionDef(metric="health.db.latency_ms", operator="gt", threshold=100.0)
         with pytest.raises(Exception):  # ValidationError for frozen
             cond.metric = "changed"
 
@@ -99,9 +94,7 @@ class TestModels:
             config.name = "changed"
 
     def test_condition_result_frozen(self):
-        result = ConditionResult(
-            metric="test", threshold=1.0, operator="gt", triggered=True
-        )
+        result = ConditionResult(metric="test", threshold=1.0, operator="gt", triggered=True)
         with pytest.raises(Exception):
             result.triggered = False
 
@@ -216,9 +209,7 @@ class TestLifecycle:
     async def test_start_loop(self, service, simple_config):
         loop_id = await service.create_loop(simple_config)
 
-        with patch.object(
-            service, "_get_metric_value", new_callable=AsyncMock, return_value=10.0
-        ):
+        with patch.object(service, "_get_metric_value", new_callable=AsyncMock, return_value=10.0):
             await service.start_loop(loop_id)
             # Wait for loop to complete (max_iterations=1)
             await asyncio.sleep(0.1)
@@ -231,9 +222,7 @@ class TestLifecycle:
     async def test_start_already_running(self, service, sample_config):
         loop_id = await service.create_loop(sample_config)
 
-        with patch.object(
-            service, "_get_metric_value", new_callable=AsyncMock, return_value=10.0
-        ):
+        with patch.object(service, "_get_metric_value", new_callable=AsyncMock, return_value=10.0):
             await service.start_loop(loop_id)
             with pytest.raises(ValueError, match="already running"):
                 await service.start_loop(loop_id)
@@ -251,18 +240,14 @@ class TestLifecycle:
             interval_seconds=10,  # Long interval
             max_iterations=None,  # Infinite
             conditions=[
-                ConditionDef(
-                    metric="health.database.latency_ms", operator="gt", threshold=100.0
-                )
+                ConditionDef(metric="health.database.latency_ms", operator="gt", threshold=100.0)
             ],
             actions=[ActionDef(type="log", target="triggered")],
             cooldown_seconds=0,
         )
         loop_id = await service.create_loop(config)
 
-        with patch.object(
-            service, "_get_metric_value", new_callable=AsyncMock, return_value=10.0
-        ):
+        with patch.object(service, "_get_metric_value", new_callable=AsyncMock, return_value=10.0):
             await service.start_loop(loop_id)
             await asyncio.sleep(0.05)  # Let it run briefly
 
@@ -286,18 +271,14 @@ class TestLifecycle:
             interval_seconds=0,
             max_iterations=3,
             conditions=[
-                ConditionDef(
-                    metric="health.database.latency_ms", operator="gt", threshold=100.0
-                )
+                ConditionDef(metric="health.database.latency_ms", operator="gt", threshold=100.0)
             ],
             actions=[ActionDef(type="log", target="triggered")],
             cooldown_seconds=0,
         )
         loop_id = await service.create_loop(config)
 
-        with patch.object(
-            service, "_get_metric_value", new_callable=AsyncMock, return_value=10.0
-        ):
+        with patch.object(service, "_get_metric_value", new_callable=AsyncMock, return_value=10.0):
             await service.start_loop(loop_id)
             await asyncio.sleep(0.2)
 
@@ -314,18 +295,14 @@ class TestLifecycle:
             interval_seconds=10,
             max_iterations=None,
             conditions=[
-                ConditionDef(
-                    metric="health.database.latency_ms", operator="gt", threshold=100.0
-                )
+                ConditionDef(metric="health.database.latency_ms", operator="gt", threshold=100.0)
             ],
             actions=[ActionDef(type="log", target="triggered")],
             cooldown_seconds=0,
         )
         loop_id = await service.create_loop(config)
 
-        with patch.object(
-            service, "_get_metric_value", new_callable=AsyncMock, return_value=10.0
-        ):
+        with patch.object(service, "_get_metric_value", new_callable=AsyncMock, return_value=10.0):
             await service.start_loop(loop_id)
             await asyncio.sleep(0.05)
 
@@ -345,14 +322,10 @@ class TestConditionEvaluation:
     @pytest.mark.asyncio
     async def test_condition_triggered(self, service):
         conditions = [
-            ConditionDef(
-                metric="health.database.latency_ms", operator="gt", threshold=100.0
-            )
+            ConditionDef(metric="health.database.latency_ms", operator="gt", threshold=100.0)
         ]
 
-        with patch.object(
-            service, "_get_metric_value", new_callable=AsyncMock, return_value=150.0
-        ):
+        with patch.object(service, "_get_metric_value", new_callable=AsyncMock, return_value=150.0):
             results = await service._evaluate_conditions(conditions)
 
         assert len(results) == 1
@@ -362,14 +335,10 @@ class TestConditionEvaluation:
     @pytest.mark.asyncio
     async def test_condition_not_triggered(self, service):
         conditions = [
-            ConditionDef(
-                metric="health.database.latency_ms", operator="gt", threshold=100.0
-            )
+            ConditionDef(metric="health.database.latency_ms", operator="gt", threshold=100.0)
         ]
 
-        with patch.object(
-            service, "_get_metric_value", new_callable=AsyncMock, return_value=50.0
-        ):
+        with patch.object(service, "_get_metric_value", new_callable=AsyncMock, return_value=50.0):
             results = await service._evaluate_conditions(conditions)
 
         assert len(results) == 1
@@ -377,13 +346,9 @@ class TestConditionEvaluation:
 
     @pytest.mark.asyncio
     async def test_condition_metric_unavailable(self, service):
-        conditions = [
-            ConditionDef(metric="health.unknown.value", operator="gt", threshold=100.0)
-        ]
+        conditions = [ConditionDef(metric="health.unknown.value", operator="gt", threshold=100.0)]
 
-        with patch.object(
-            service, "_get_metric_value", new_callable=AsyncMock, return_value=None
-        ):
+        with patch.object(service, "_get_metric_value", new_callable=AsyncMock, return_value=None):
             results = await service._evaluate_conditions(conditions)
 
         assert len(results) == 1
@@ -393,12 +358,8 @@ class TestConditionEvaluation:
     @pytest.mark.asyncio
     async def test_multiple_conditions(self, service):
         conditions = [
-            ConditionDef(
-                metric="health.database.latency_ms", operator="gt", threshold=100.0
-            ),
-            ConditionDef(
-                metric="health.redis.latency_ms", operator="lt", threshold=10.0
-            ),
+            ConditionDef(metric="health.database.latency_ms", operator="gt", threshold=100.0),
+            ConditionDef(metric="health.redis.latency_ms", operator="lt", threshold=10.0),
         ]
 
         async def mock_metric(metric: str):
@@ -533,9 +494,7 @@ class TestLoopIntegration:
         loop_id = await service.create_loop(config)
 
         # Mock metric to return high latency
-        with patch.object(
-            service, "_get_metric_value", new_callable=AsyncMock, return_value=150.0
-        ):
+        with patch.object(service, "_get_metric_value", new_callable=AsyncMock, return_value=150.0):
             await service.start_loop(loop_id)
             await asyncio.sleep(0.2)
 
@@ -566,9 +525,7 @@ class TestLoopIntegration:
         loop_id = await service.create_loop(config)
 
         # Mock metric to return low latency
-        with patch.object(
-            service, "_get_metric_value", new_callable=AsyncMock, return_value=50.0
-        ):
+        with patch.object(service, "_get_metric_value", new_callable=AsyncMock, return_value=50.0):
             await service.start_loop(loop_id)
             await asyncio.sleep(0.2)
 
@@ -597,9 +554,7 @@ class TestLoopIntegration:
 
         loop_id = await service.create_loop(config)
 
-        with patch.object(
-            service, "_get_metric_value", new_callable=AsyncMock, return_value=150.0
-        ):
+        with patch.object(service, "_get_metric_value", new_callable=AsyncMock, return_value=150.0):
             await service.start_loop(loop_id)
             await asyncio.sleep(0.3)
 
@@ -614,9 +569,7 @@ class TestLoopIntegration:
         """Task reference should be cleaned up after loop completes."""
         loop_id = await service.create_loop(simple_config)
 
-        with patch.object(
-            service, "_get_metric_value", new_callable=AsyncMock, return_value=10.0
-        ):
+        with patch.object(service, "_get_metric_value", new_callable=AsyncMock, return_value=10.0):
             await service.start_loop(loop_id)
             await asyncio.sleep(0.2)
 

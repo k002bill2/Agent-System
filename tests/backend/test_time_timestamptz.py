@@ -32,8 +32,8 @@ from db.models.base import Base
 from db.models.session import SessionModel
 from db.repository import SessionRepository
 from models.config_version import ConfigVersion
-from models.organization import MemberUsageRecord, OrganizationInvitation
 from models.feedback import DatasetExportOptions, FeedbackQueryParams
+from models.organization import MemberUsageRecord, OrganizationInvitation
 from models.playground import PlaygroundMessage, PlaygroundSession
 from models.rate_limit import RateLimitOverride
 from services.session_service import SessionMetadata
@@ -132,8 +132,12 @@ def test_legacy_json_records_normalize_to_aware():
     legacy = "2026-01-01T00:00:00"  # offset suffix 없음
 
     invitation = OrganizationInvitation(
-        id="i", organization_id="o", email="a@b.co", invited_by="u",
-        expires_at="2099-01-01T00:00:00", created_at=legacy,
+        id="i",
+        organization_id="o",
+        email="a@b.co",
+        invited_by="u",
+        expires_at="2099-01-01T00:00:00",
+        created_at=legacy,
     )
     assert invitation.expires_at.tzinfo is not None
     assert invitation.expires_at > utcnow()  # 비교가 TypeError 없이 성립한다
@@ -168,8 +172,9 @@ def test_playground_session_sorts_legacy_and_new_together():
     정렬이 TypeError 로 죽고 목록이 통째로 안 나온다.
     """
     legacy = PlaygroundSession(
-        name="legacy", user_id="u",
-        created_at="2026-02-05T00:59:49.044250",   # offset 없음 = 구버전 형식
+        name="legacy",
+        user_id="u",
+        created_at="2026-02-05T00:59:49.044250",  # offset 없음 = 구버전 형식
         updated_at="2026-04-23T13:42:57.712906",
     )
     assert legacy.updated_at.tzinfo is not None
@@ -186,9 +191,17 @@ JSON_PERSISTED_MODELS = [
     (PlaygroundSession, {"name": "n", "user_id": "u"}, "updated_at"),
     (PlaygroundMessage, {"role": "user", "content": "c"}, "timestamp"),
     (MemberUsageRecord, {"organization_id": "o", "user_id": "u"}, "timestamp"),
-    (OrganizationInvitation,
-     {"id": "i", "organization_id": "o", "email": "a@b.co", "invited_by": "u",
-      "expires_at": "2099-01-01T00:00:00"}, "created_at"),
+    (
+        OrganizationInvitation,
+        {
+            "id": "i",
+            "organization_id": "o",
+            "email": "a@b.co",
+            "invited_by": "u",
+            "expires_at": "2099-01-01T00:00:00",
+        },
+        "created_at",
+    ),
     (RateLimitOverride, {"identifier": "u"}, "created_at"),
     # 날짜 필터 모델. DB 경로에서는 예외 없이 **조용히** 조회 구간이 밀리므로
     # 메모리 경로 테스트만으로는 회귀를 잡지 못한다.
@@ -415,8 +428,7 @@ async def test_utcnow_roundtrips_through_timestamptz(db_factory):
     # 저장된 값은 aware 로 돌아온다. 같은 순간이면 차이가 0 이다.
     skew = abs((stored - _as_aware(written)).total_seconds())
     assert skew < 1, (
-        f"timestamptz 왕복에서 {skew}초 어긋났다 "
-        f"(프로세스 TZ 오프셋 {OFFSET_SECONDS}초와 비교하라)"
+        f"timestamptz 왕복에서 {skew}초 어긋났다 (프로세스 TZ 오프셋 {OFFSET_SECONDS}초와 비교하라)"
     )
 
 
