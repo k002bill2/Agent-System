@@ -83,7 +83,7 @@ prefix 불일치·ID 누락 시 $0 정산 또는 오정산이 조용히 발생�
 
 - `tests/backend/test_llm_model_registry.py`: 신모델 존재·스펙·default 해석, 가격 prefix 매칭(구체 vs generic 순서), `calculate_cost` 정확값.
   - **일부 표는 불변식이 먼저 RED 로 잡아준다** (2026-09-08 추가): `TestCostTableRegistryDrift`(`_MODELS` 전수 ↔ ① llm_proxy `COST_TABLE`, ④ `OpenAIUsageCollector._COST_TABLE`, ③ `claude_session.MODEL_COSTS`. `is_enabled` 무관), `TestCostTablePrefixOrdering`(구체 prefix 가 generic 뒤에 오면 실패), `TestDashboardFallbackMirror`(`settings.ts` 미러 집합 비교), `TestOpenAIStandardTierPricing`(Batch 단가 복귀 감지).
-  - **가드가 없는 표가 하나 남아 있다 — ② `AnthropicUsageCollector` 의 `costs`.** `collect()` **내부 지역 변수**라 import 할 수 없어 자동 검사 대상이 아니다. 즉 Anthropic 신모델을 넣고 이 표만 빠뜨리면 **전 게이트가 초록인데 외부 usage 만 $0** 이 된다 — 2단계에서 손으로 확인하라. (후속: `OpenAIUsageCollector._COST_TABLE` 처럼 클래스 속성으로 승격하면 같은 불변식으로 덮인다.)
+  - **네 표 모두 덮인다** (2026-09-08 기준): ② `AnthropicUsageCollector` 의 표는 `collect()` 내부 지역 변수라 검사할 수 없었는데 `_COST_TABLE` 클래스 속성으로 승격해 같은 불변식에 넣었다. 새 비용표를 만들 때도 **모듈/클래스 레벨 상수로 두어라** — 함수 안에 두면 테스트가 볼 수 없어 조용히 드리프트한다.
   - 새로 단가를 단언할 때 **입력·출력 토큰 수를 다르게 준다**(예: 1000/3000). 같은 수면 비용이 `in+out` 대칭 합이라 두 단가를 뒤바꿔 적은 전치 오류가 그대로 통과한다(실측).
   - **신규 async 테스트는 `@pytest.mark.asyncio` 명시를 관례로 유지하라.** `src/backend/pyproject.toml`에 `asyncio_mode=auto`가 있으나, pytest rootdir이 repo 루트로 해석되는 실행 경로에서는 이 설정이 적용되지 않아 CI "async not supported"로 실패한 실사례가 있다. auto가 적용되는 환경에서도 marker는 무해하므로 항상 붙인다.
 - `src/dashboard/src/stores/__tests__/settings.test.ts`: fallback 목록/default 검증을 갱신.

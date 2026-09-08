@@ -969,6 +969,22 @@ class TestCostTableRegistryDrift:
 
         assert not mismatched, f"OpenAIUsageCollector._COST_TABLE 미커버/오단가: {mismatched}"
 
+    def test_every_anthropic_registry_model_is_covered_by_usage_collector(self):
+        """AnthropicUsageCollector 의 표는 collect() 지역 변수였다가 클래스 속성으로
+        승격됐다(2026-09-08). 그 전에는 이 불변식을 걸 수 없어 조용히 드리프트했다."""
+        from services.external_usage_service.collectors import AnthropicUsageCollector
+
+        mismatched = []
+        for model in _PRICED_MODELS:
+            if model.provider != LLMProvider.ANTHROPIC:
+                continue
+            expected = _expected_cost(model)
+            actual = AnthropicUsageCollector._calc_cost(model.id, _IN_TOKENS, _OUT_TOKENS)
+            if actual != pytest.approx(expected):
+                mismatched.append((model.id, expected, actual))
+
+        assert not mismatched, f"AnthropicUsageCollector._COST_TABLE 미커버/오단가: {mismatched}"
+
     def test_every_anthropic_registry_model_is_in_claude_session_costs(self):
         """MODEL_COSTS 는 정확-ID 조회라 신규 Anthropic 모델이 빠지면 sonnet 단가로
         폴백해 오집계된다(비싼 모델이면 과소, 싼 모델이면 과대)."""
@@ -1011,10 +1027,17 @@ class TestCostTablePrefixOrdering:
         assert not shadowed, f"COST_TABLE: 구체 prefix 가 generic 뒤에 있어 도달 불가: {shadowed}"
 
     def test_usage_collector_table_has_no_shadowed_row(self):
-        from services.external_usage_service.collectors import OpenAIUsageCollector
+        from services.external_usage_service.collectors import (
+            AnthropicUsageCollector,
+            OpenAIUsageCollector,
+        )
 
-        shadowed = self._shadowed([row[0] for row in OpenAIUsageCollector._COST_TABLE])
-        assert not shadowed, f"_COST_TABLE: 구체 prefix 가 generic 뒤에 있어 도달 불가: {shadowed}"
+        for collector in (OpenAIUsageCollector, AnthropicUsageCollector):
+            shadowed = self._shadowed([row[0] for row in collector._COST_TABLE])
+            assert not shadowed, (
+                f"{collector.__name__}._COST_TABLE: 구체 prefix 가 generic 뒤에 있어 "
+                f"도달 불가: {shadowed}"
+            )
 
     def test_gpt56_variants_are_not_repriced_by_alias_row(self):
         from api.llm_proxy import _calc_cost

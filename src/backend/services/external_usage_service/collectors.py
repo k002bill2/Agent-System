@@ -257,8 +257,39 @@ class AnthropicUsageCollector(BaseUsageCollector):
 
     BASE_URL = "https://api.anthropic.com/v1"
 
+    # Per-1K-token USD pricing (input, output), prefix-matched most-specific first.
+    # Mirrors api/llm_proxy.py COST_TABLE; unlisted models fall back to $0 rather
+    # than fabricating a price. Kept as a class attribute (not a local inside
+    # collect()) so tests/backend/test_llm_model_registry.py can assert it against
+    # the _MODELS registry — a local dict here silently drifted in the past.
+    _COST_TABLE: tuple[tuple[str, float, float], ...] = (
+        ("claude-fable-5-1", 0.010, 0.050),
+        ("claude-opus-5", 0.005, 0.025),
+        ("claude-sonnet-5", 0.002, 0.010),
+        ("claude-opus-4-8", 0.005, 0.025),
+        # Opus price cut ($5/$25) applies from Opus 4.5 onward; these specific
+        # prefixes must precede the generic "claude-opus-4" (4-0/4-1 era $15/$75).
+        ("claude-opus-4-7", 0.005, 0.025),
+        ("claude-opus-4-6", 0.005, 0.025),
+        ("claude-opus-4-5", 0.005, 0.025),
+        ("claude-opus-4", 0.015, 0.075),
+        ("claude-sonnet-4", 0.003, 0.015),
+        ("claude-haiku-4-5", 0.001, 0.005),
+        ("claude-haiku-4", 0.00025, 0.00125),
+    )
+
     def __init__(self, admin_key: str) -> None:
         self._admin_key = admin_key
+
+    @classmethod
+    def _calc_cost(cls, model: str | None, input_tokens: int, output_tokens: int) -> float:
+        """Estimate USD cost from the local price table; 0.0 for unlisted models."""
+        if not model:
+            return 0.0
+        for prefix, cost_in, cost_out in cls._COST_TABLE:
+            if model.startswith(prefix):
+                return (input_tokens / 1000) * cost_in + (output_tokens / 1000) * cost_out
+        return 0.0
 
     def get_provider(self) -> ExternalProvider:
         return ExternalProvider.ANTHROPIC
@@ -299,23 +330,6 @@ class AnthropicUsageCollector(BaseUsageCollector):
         """Collect from Anthropic Usage Report API."""
         records: list[UnifiedUsageRecord] = []
 
-        costs: dict[str, tuple[float, float]] = {
-            "claude-fable-5-1": (0.010, 0.050),
-            "claude-opus-5": (0.005, 0.025),
-            "claude-sonnet-5": (0.002, 0.010),
-            "claude-opus-4-8": (0.005, 0.025),
-            # Opus price cut ($5/$25) applies from Opus 4.5 onward; these
-            # specific prefixes must precede the generic "claude-opus-4"
-            # (4-0/4-1 era $15/$75). Dict order == match order (startswith).
-            "claude-opus-4-7": (0.005, 0.025),
-            "claude-opus-4-6": (0.005, 0.025),
-            "claude-opus-4-5": (0.005, 0.025),
-            "claude-opus-4": (0.015, 0.075),
-            "claude-sonnet-4": (0.003, 0.015),
-            "claude-haiku-4-5": (0.001, 0.005),
-            "claude-haiku-4": (0.00025, 0.00125),
-        }
-
         async with httpx.AsyncClient(timeout=30) as client:
             params: dict = {
                 "starting_at": start_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -347,11 +361,7 @@ class AnthropicUsageCollector(BaseUsageCollector):
                     model = item.get("model", "unknown")
                     input_tok = item.get("input_tokens", 0)
                     output_tok = item.get("output_tokens", 0)
-                    cost = 0.0
-                    for prefix, (ci, co) in costs.items():
-                        if model.startswith(prefix):
-                            cost = (input_tok / 1000) * ci + (output_tok / 1000) * co
-                            break
+                    cost = self._calc_cost(model, input_tok, output_tok)
                     records.append(
                         UnifiedUsageRecord(
                             provider=ExternalProvider.ANTHROPIC,
