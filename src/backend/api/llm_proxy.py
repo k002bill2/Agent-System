@@ -42,7 +42,12 @@ PROVIDER_BASE_URLS: dict[str, str] = {
 COST_TABLE: list[tuple[str, float, float]] = [
     ("gpt-6-astra", 0.010, 0.050),
     ("gpt-4o-mini", 0.00015, 0.0006),
-    ("gpt-4o", 0.005, 0.015),
+    # gpt-4o 현행 표준가는 $2.50/$10. $5/$15 는 2024-05-13 스냅샷 전용이라
+    # 그 dated id 를 generic 앞에 두어 과거 정산 근거를 보존한다.
+    ("gpt-4o-2024-05-13", 0.005, 0.015),
+    ("gpt-4o", 0.0025, 0.010),
+    # o1-pro 는 $150/$600 — generic "o1"($15/$60) 뒤에 두면 10배 과소 집계된다.
+    ("o1-pro", 0.150, 0.600),
     ("o1-mini", 0.003, 0.012),
     ("o1", 0.015, 0.060),
     # GPT-5.6/5.5/5.4 · o-series: 값은 models/llm_models.py `_MODELS`(SSOT) 그대로.
@@ -88,6 +93,8 @@ COST_TABLE: list[tuple[str, float, float]] = [
     ("gemini-3.1-flash-lite-preview", 0.00025, 0.0015),
     ("gemini-3-flash-preview", 0.0005, 0.003),
     ("gemini-2.5-pro", 0.00125, 0.01),
+    # Flash-Lite($0.10/$0.40)는 generic "gemini-2.5-flash" 뒤에 두면 3~6배 과대 집계된다.
+    ("gemini-2.5-flash-lite", 0.0001, 0.0004),
     ("gemini-2.5-flash", 0.0003, 0.0025),
     ("gemini-2.0-flash", 0.00025, 0.001),
     ("gemini-1.5-pro", 0.00125, 0.005),
