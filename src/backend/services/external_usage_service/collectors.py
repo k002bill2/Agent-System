@@ -45,7 +45,11 @@ class OpenAIUsageCollector(BaseUsageCollector):
     _COST_TABLE: tuple[tuple[str, float, float], ...] = (
         ("gpt-6-astra", 0.010, 0.050),
         ("gpt-4o-mini", 0.00015, 0.0006),
-        ("gpt-4o", 0.005, 0.015),
+        # dated 스냅샷은 구 단가($5/$15), 현행 gpt-4o 는 $2.50/$10.
+        ("gpt-4o-2024-05-13", 0.005, 0.015),
+        ("gpt-4o", 0.0025, 0.010),
+        # o1-pro($150/$600)가 generic "o1" 에 삼켜지면 10배 과소 집계.
+        ("o1-pro", 0.150, 0.600),
         ("o1-mini", 0.003, 0.012),
         ("o1", 0.015, 0.060),
         # GPT-5.6/5.5/5.4 · o-series: 값은 models/llm_models.py `_MODELS`(SSOT) 그대로.

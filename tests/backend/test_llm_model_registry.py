@@ -1066,6 +1066,27 @@ class TestCostTablePrefixOrdering:
             assert calc("o3-mini", 1000, 3000) == pytest.approx(0.0011 + 3 * 0.0044)
             assert calc("o3", 1000, 3000) == pytest.approx(0.002 + 3 * 0.008)
 
+    def test_swallowed_variants_keep_their_own_price(self):
+        """generic 행이 SSOT 미등재 변종을 삼키던 사례들(2026-09-08 수정).
+        전부 레지스트리 밖 id 라 드리프트 불변식이 보지 못한다."""
+        from api.llm_proxy import _calc_cost
+        from services.external_usage_service.collectors import OpenAIUsageCollector
+
+        for calc in (_calc_cost, OpenAIUsageCollector._calc_cost):
+            # o1-pro $150/$600 vs generic o1 $15/$60 — 삼켜지면 10배 과소 집계
+            assert calc("o1-pro", 1000, 3000) == pytest.approx(0.150 + 3 * 0.600)
+            assert calc("o1", 1000, 3000) == pytest.approx(0.015 + 3 * 0.060)
+            # dated 스냅샷은 구 단가를 유지하고, 현행 gpt-4o 는 표준가를 쓴다
+            assert calc("gpt-4o-2024-05-13", 1000, 3000) == pytest.approx(0.005 + 3 * 0.015)
+            assert calc("gpt-4o", 1000, 3000) == pytest.approx(0.0025 + 3 * 0.010)
+            assert calc("gpt-4o-mini", 1000, 3000) == pytest.approx(0.00015 + 3 * 0.0006)
+
+        # Gemini 는 수집기가 없어 llm_proxy 만 해당
+        assert _calc_cost("gemini-2.5-flash-lite", 1000, 3000) == pytest.approx(
+            0.0001 + 3 * 0.0004
+        )
+        assert _calc_cost("gemini-2.5-flash", 1000, 3000) == pytest.approx(0.0003 + 3 * 0.0025)
+
     def test_usage_collector_keeps_the_same_variant_ordering(self):
         from services.external_usage_service.collectors import OpenAIUsageCollector
 

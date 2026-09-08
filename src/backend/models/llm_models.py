@@ -138,6 +138,9 @@ _MODELS: list[LLMModelConfig] = [
     # Pricing: USD per 1K tokens. Docs: https://ai.google.dev/gemini-api/docs/models
     # ─────────────────────────────────────────────────────────
     # gemini-3.8-flash: official model docs, verified 2026-09-05
+    # 발효일 주의: 공식 가격표가 "$0.75/$3.75 through December 31, 2026,
+    # $1.50/$7.50 starting January 1, 2027" 로 고지한다 (3.7-flash 도 동일).
+    # 2027-01-01 에 이 두 행과 llm_proxy COST_TABLE 을 함께 올려야 한다.
     LLMModelConfig(
         id="gemini-3.8-flash",
         display_name="Gemini 3.8 Flash",
@@ -236,8 +239,10 @@ _MODELS: list[LLMModelConfig] = [
         display_name="GPT-4o",
         provider=LLMProvider.OPENAI,
         context_window=128000,
-        input_price=0.005,  # $5.00/1M tokens
-        output_price=0.015,  # $15.00/1M tokens
+        # 표준 티어 단가. $5.00/$15.00 은 gpt-4o-2024-05-13 스냅샷 가격이라
+        # 현행 gpt-4o 에 쓰면 과대 집계된다 (공식 가격표 대조, 2026-09-08 교정).
+        input_price=0.0025,  # $2.50/1M tokens
+        output_price=0.010,  # $10.00/1M tokens
         is_default=False,
         supports_tools=True,
         supports_vision=True,

@@ -67,8 +67,9 @@ async def test_openai_collect_computes_cost_for_known_model() -> None:
 
     assert len(records) == 1
     rec = records[0]
-    # gpt-4o: $0.005/1K input + $0.015/1K output → 0.02 for 1K+1K tokens
-    assert rec.cost_usd == pytest.approx(0.02)
+    # gpt-4o: $0.0025/1K input + $0.010/1K output → 0.0125 for 1K+1K tokens
+    # ($5/$15 는 gpt-4o-2024-05-13 스냅샷 전용 단가다)
+    assert rec.cost_usd == pytest.approx(0.0125)
     assert rec.model == "gpt-4o-2024-08-06"
     assert rec.input_tokens == 1000
 
