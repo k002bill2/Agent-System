@@ -80,9 +80,9 @@ class TestGetMyAccess:
                     __import__(
                         "api.deps", fromlist=["get_current_user"]
                     ).get_current_user: lambda: admin_user,
-                    __import__(
-                        "api.deps", fromlist=["get_db_session"]
-                    ).get_db_session: lambda: AsyncMock(),
+                    __import__("api.deps", fromlist=["get_db_session"]).get_db_session: lambda: (
+                        AsyncMock()
+                    ),
                 }
 
                 # Admin bypass is handled in the endpoint itself
