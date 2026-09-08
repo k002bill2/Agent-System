@@ -45,6 +45,25 @@ COST_TABLE: list[tuple[str, float, float]] = [
     ("gpt-4o", 0.005, 0.015),
     ("o1-mini", 0.003, 0.012),
     ("o1", 0.015, 0.060),
+    # GPT-5.6/5.5/5.4 · o-series: 값은 models/llm_models.py `_MODELS`(SSOT) 그대로.
+    # startswith 선착 매칭이므로 구체 변종(-sol/-terra/-luna, -mini/-nano)이
+    # bare alias("gpt-5.6"/"gpt-5.4")보다 **먼저** 와야 한다 — 뒤에 두면 terra/luna/
+    # nano 가 조용히 alias 단가로 재가격된다. disabled seed(5.5/5.4 계열)도
+    # admin 의 PATCH 한 번으로 즉시 라이브가 되므로 행을 함께 둔다.
+    ("gpt-5.6-sol", 0.004, 0.02),
+    ("gpt-5.6-terra", 0.002, 0.012),
+    ("gpt-5.6-luna", 0.0002, 0.0012),
+    ("gpt-5.6", 0.004, 0.02),
+    ("gpt-5.5", 0.005, 0.03),
+    ("gpt-5.4-mini", 0.00075, 0.0045),
+    ("gpt-5.4-nano", 0.0002, 0.00125),
+    ("gpt-5.4", 0.0025, 0.015),
+    ("o4-mini", 0.0011, 0.0044),
+    # o3 변종: generic "o3" 는 o3-mini/o3-pro 도 매칭하므로 반드시 앞에 온다.
+    # 단가는 공식 가격표 표준 티어 (2026-09-08 확인).
+    ("o3-pro", 0.020, 0.080),
+    ("o3-mini", 0.0011, 0.0044),
+    ("o3", 0.002, 0.008),
     ("claude-fable-5-1", 0.010, 0.050),
     ("claude-opus-5", 0.005, 0.025),
     ("claude-sonnet-5", 0.002, 0.010),
@@ -62,6 +81,14 @@ COST_TABLE: list[tuple[str, float, float]] = [
     # 행이 없으면 _calc_cost 가 조용히 0.0 을 돌려줘 전액 미집계된다.
     ("gemini-3.8-flash", 0.00075, 0.00375),
     ("gemini-3.7-flash", 0.00075, 0.00375),
+    # Gemini 3.x preview · 2.5 계열: 값은 `_MODELS`(SSOT) 그대로. 3.8/3.7-flash 와는
+    # prefix 가 겹치지 않으나("gemini-3." vs "gemini-3-"), 세대 내림차순으로 두어
+    # 이후 세대 행이 legacy 앞에 오는 배치 규칙을 유지한다.
+    ("gemini-3.1-pro-preview", 0.002, 0.012),
+    ("gemini-3.1-flash-lite-preview", 0.00025, 0.0015),
+    ("gemini-3-flash-preview", 0.0005, 0.003),
+    ("gemini-2.5-pro", 0.00125, 0.01),
+    ("gemini-2.5-flash", 0.0003, 0.0025),
     ("gemini-2.0-flash", 0.00025, 0.001),
     ("gemini-1.5-pro", 0.00125, 0.005),
 ]
@@ -121,10 +148,13 @@ def _extract_usage(provider: str, response_json: dict) -> tuple[int, int, str]:
         )
     # google_gemini or unknown
     usage_meta = response_json.get("usageMetadata", {})
+    # Gemini generateContent 응답에는 top-level "model" 이 없고 "modelVersion" 만 있다
+    # (공식 GenerateContentResponse 스키마). 이걸 읽지 않으면 model="unknown" 이라
+    # COST_TABLE 의 gemini 행이 전부 도달 불가가 되어 _calc_cost 가 0.0 을 돌려준다.
     return (
         usage_meta.get("promptTokenCount", 0),
         usage_meta.get("candidatesTokenCount", 0),
-        model,
+        response_json.get("modelVersion") or model,
     )
 
 

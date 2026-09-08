@@ -367,8 +367,10 @@ _MODELS: list[LLMModelConfig] = [
         display_name="OpenAI o4 Mini",
         provider=LLMProvider.OPENAI,
         context_window=200000,
-        input_price=0.00055,  # $0.55/1M tokens
-        output_price=0.0022,  # $2.20/1M tokens
+        # 표준 티어 단가. $0.55/$2.20 은 Batch/Flex 가격이라 표준 사용분을
+        # 2배 과소 집계했다 (공식 가격표 대조, 2026-09-08 교정).
+        input_price=0.0011,  # $1.10/1M tokens
+        output_price=0.0044,  # $4.40/1M tokens
         is_default=False,
         supports_tools=True,
         supports_vision=True,
@@ -456,7 +458,7 @@ _MODEL_INDEX: dict[str, LLMModelConfig] = {m.id: m for m in _MODELS}
 # Code-seed revision stamp — bump when policy-relevant seed contents change
 # (defaults, enabled flags, model set). Recorded on Playground executions as
 # optional audit metadata; see LLMModelRegistry.get_revision().
-REGISTRY_REVISION = "2026-09-07"
+REGISTRY_REVISION = "2026-09-08"
 
 
 class LLMModelRegistry:

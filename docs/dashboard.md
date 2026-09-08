@@ -276,7 +276,7 @@ import { cn } from '@/lib/utils';
 > 소비자가 `AnalyticsPage` 하나뿐인 **내부 전용**이라 `index.ts`는 `ProjectMultiSelect`만
 > 재노출합니다 — 외부에서 쓰려면 먼저 공개 대상인지 판단해야 합니다.
 
-> **Note**: Analytics 데이터는 Claude 세션 파일에서 직접 수집됩니다 (DB 모드와 무관). 트렌드 차트는 세션 `created_at` 기준으로 버킷팅되며, 에이전트 성능은 실제 모델명(claude-opus-4-6 등)으로 그룹화됩니다.
+> **Note**: Analytics 데이터는 Claude 세션 파일에서 직접 수집됩니다 (DB 모드와 무관). 트렌드 차트는 세션 `created_at` 기준으로 버킷팅되며, 에이전트 성능은 실제 모델명(claude-opus-5 등)으로 그룹화됩니다.
 
 ### Audit Components
 

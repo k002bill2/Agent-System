@@ -306,7 +306,7 @@ class AnalyticsService:
 
 **버킷팅 기준**: `created_at` (세션 생성 시점) 기준 시간별 분포
 
-**에이전트 그룹화**: 실제 모델명 기준 (claude-opus-4-6, claude-haiku 등)
+**에이전트 그룹화**: 실제 모델명 기준 (claude-opus-5, claude-haiku 등)
 
 **비용 분류**: 프로젝트별 + 모델별 이중 분류
 

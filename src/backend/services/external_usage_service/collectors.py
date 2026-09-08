@@ -48,6 +48,23 @@ class OpenAIUsageCollector(BaseUsageCollector):
         ("gpt-4o", 0.005, 0.015),
         ("o1-mini", 0.003, 0.012),
         ("o1", 0.015, 0.060),
+        # GPT-5.6/5.5/5.4 · o-series: 값은 models/llm_models.py `_MODELS`(SSOT) 그대로.
+        # llm_proxy.COST_TABLE 과 동일한 선착 매칭이라 구체 변종(-sol/-terra/-luna,
+        # -mini/-nano)이 bare alias("gpt-5.6"/"gpt-5.4")보다 **먼저** 와야 한다.
+        # disabled seed(5.5/5.4 계열)도 admin PATCH 로 즉시 라이브가 되므로 함께 둔다.
+        ("gpt-5.6-sol", 0.004, 0.02),
+        ("gpt-5.6-terra", 0.002, 0.012),
+        ("gpt-5.6-luna", 0.0002, 0.0012),
+        ("gpt-5.6", 0.004, 0.02),
+        ("gpt-5.5", 0.005, 0.03),
+        ("gpt-5.4-mini", 0.00075, 0.0045),
+        ("gpt-5.4-nano", 0.0002, 0.00125),
+        ("gpt-5.4", 0.0025, 0.015),
+        ("o4-mini", 0.0011, 0.0044),
+        # generic "o3" 가 o3-mini/o3-pro 를 삼키지 않도록 변종을 앞에 둔다.
+        ("o3-pro", 0.020, 0.080),
+        ("o3-mini", 0.0011, 0.0044),
+        ("o3", 0.002, 0.008),
     )
 
     def __init__(self, api_key: str) -> None:
