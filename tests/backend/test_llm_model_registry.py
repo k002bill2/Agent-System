@@ -2,6 +2,7 @@
 
 import logging
 import re
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,22 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql.dml import Insert
 
 from models.llm_models import _MODELS, LLMModelRegistry, LLMProvider
+
+# 공식 가격표(ai.google.dev/gemini-api/docs/pricing, 2026-09-08 확인)가
+# "$0.75/$3.75 through December 31, 2026, $1.50/$7.50 starting January 1, 2027"
+# 로 고지한다. 코드 주석은 알림을 주지 않으므로 게이트가 대신 기억한다 —
+# 발효일이 지나면 이 테스트가 실패하고, 가격을 갱신하면 다시 통과한다.
+GEMINI_FLASH_PRICE_CHANGE = date(2027, 1, 1)
+_GEMINI_FLASH_IDS = ("gemini-3.8-flash", "gemini-3.7-flash")
+_GEMINI_FLASH_PRICE_BEFORE = (0.00075, 0.00375)  # $0.75 / $3.75 per 1M
+_GEMINI_FLASH_PRICE_ON_OR_AFTER = (0.0015, 0.0075)  # $1.50 / $7.50 per 1M
+
+
+def _expected_gemini_flash_price(today: date) -> tuple[float, float]:
+    """발효일 기준으로 그날 유효한 (input, output) per-1k 단가."""
+    if today >= GEMINI_FLASH_PRICE_CHANGE:
+        return _GEMINI_FLASH_PRICE_ON_OR_AFTER
+    return _GEMINI_FLASH_PRICE_BEFORE
 
 
 @pytest.fixture(autouse=True)
@@ -90,7 +107,14 @@ class TestCurrentModelRefreshEntries:
         [
             ("claude-opus-5", LLMProvider.ANTHROPIC, 1_000_000, 0.005, 0.025),
             ("claude-fable-5-1", LLMProvider.ANTHROPIC, 1_000_000, 0.010, 0.050),
-            ("gemini-3.8-flash", LLMProvider.GOOGLE, 1_048_576, 0.00075, 0.00375),
+            # 예고된 인상(2027-01-01)이 있어 단가를 날짜에서 유도한다 — 박아 두면
+            # 발효일에 이 테스트가 별도로 깨져 갱신 후에도 초록이 되지 않는다.
+            (
+                "gemini-3.8-flash",
+                LLMProvider.GOOGLE,
+                1_048_576,
+                *_expected_gemini_flash_price(datetime.now(UTC).date()),
+            ),
             ("gpt-6-astra", LLMProvider.OPENAI, 1_050_000, 0.010, 0.050),
         ],
     )
@@ -158,8 +182,9 @@ class TestGemini37FlashRegistryEntry:
         assert model is not None
         assert model.provider == LLMProvider.GOOGLE
         assert model.context_window == 1_048_576
-        assert model.input_price == 0.00075  # $0.75/1M tokens (per-1k)
-        assert model.output_price == 0.00375  # $3.75/1M tokens (per-1k)
+        expected_in, expected_out = _expected_gemini_flash_price(datetime.now(UTC).date())
+        assert model.input_price == expected_in
+        assert model.output_price == expected_out
         assert model.supports_tools is True
         assert model.supports_vision is True
         assert model.is_enabled is True
@@ -810,8 +835,9 @@ class TestLLMProxyCostTable:
         """미매칭 모델은 조용히 $0 로 정산된다 — Flash 3.7/3.8 은 행이 있어야 한다."""
         from api.llm_proxy import _calc_cost
 
+        expected = sum(_expected_gemini_flash_price(datetime.now(UTC).date()))
         for model in ("gemini-3.8-flash", "gemini-3.7-flash"):
-            assert _calc_cost(model, 1000, 1000) == pytest.approx(0.00075 + 0.00375), model
+            assert _calc_cost(model, 1000, 1000) == pytest.approx(expected), model
 
     def test_opus_4_8_matches_before_legacy_opus_4(self):
         from api.llm_proxy import _calc_cost
@@ -1172,7 +1198,11 @@ class TestProxyUsageExtraction:
         assert (in_tok, out_tok) == (1000, 3000)
         assert model == "gemini-3.7-flash"
         # 비용표까지 실제로 이어지는지 — 0.0 이면 gemini 행이 도달 불가라는 뜻이다.
-        assert _calc_cost(model, in_tok, out_tok) == pytest.approx(0.00075 + 3 * 0.00375)
+        # 단가는 날짜에서 유도한다(2027-01-01 예고 인상). 박아 두면 발효일 갱신
+        # 후에도 이 테스트가 남아 스위트가 초록으로 돌아오지 못한다.
+        price_in, price_out = _expected_gemini_flash_price(datetime.now(UTC).date())
+        expected = price_in * (in_tok / 1000) + price_out * (out_tok / 1000)
+        assert _calc_cost(model, in_tok, out_tok) == pytest.approx(expected)
 
     def test_openai_and_anthropic_keep_reading_top_level_model(self):
         from api.llm_proxy import _extract_usage
@@ -1185,3 +1215,61 @@ class TestProxyUsageExtraction:
 
         assert _extract_usage("openai", openai_resp)[2] == "gpt-5.6"
         assert _extract_usage("anthropic", anthropic_resp)[2] == "claude-sonnet-5"
+
+
+# ─────────────────────────────────────────────────────────────
+# (g) 예고된 가격 변경 — 발효일에 스스로 RED 가 되는 가드
+# ─────────────────────────────────────────────────────────────
+
+
+def _gemini_flash_price_mismatches(today: date) -> list[tuple[str, str, tuple, tuple]]:
+    """레지스트리·COST_TABLE 이 그날 유효한 단가와 어긋나는 지점."""
+    from api.llm_proxy import COST_TABLE
+
+    expected = _expected_gemini_flash_price(today)
+    mismatches: list[tuple[str, str, tuple, tuple]] = []
+
+    index = {m.id: m for m in _MODELS}
+    for model_id in _GEMINI_FLASH_IDS:
+        model = index[model_id]
+        actual = (model.input_price, model.output_price)
+        if actual != pytest.approx(expected):
+            mismatches.append(("_MODELS", model_id, expected, actual))
+
+    table = {row[0]: (row[1], row[2]) for row in COST_TABLE}
+    for model_id in _GEMINI_FLASH_IDS:
+        actual = table[model_id]
+        if actual != pytest.approx(expected):
+            mismatches.append(("COST_TABLE", model_id, expected, actual))
+
+    return mismatches
+
+
+class TestGeminiFlashScheduledPriceChange:
+    """Gemini 3.x Flash 는 2027-01-01 부터 단가가 2배가 된다고 공식 고지돼 있다.
+    그날 갱신을 잊으면 절반 가격으로 조용히 집계되므로 게이트가 기억한다."""
+
+    def test_two_tiers_are_actually_different(self):
+        """두 티어가 같으면 이 가드는 아무것도 지키지 못한다."""
+        # 경계 날짜는 상수에서 유도한다 — 하드코딩하면 발효일을 옮길 때
+        # 이 sanity 테스트가 같이 깨져 진짜 신호를 가린다.
+        day_before = GEMINI_FLASH_PRICE_CHANGE - timedelta(days=1)
+
+        assert _GEMINI_FLASH_PRICE_BEFORE != _GEMINI_FLASH_PRICE_ON_OR_AFTER
+        assert _expected_gemini_flash_price(day_before) == _GEMINI_FLASH_PRICE_BEFORE
+        assert _expected_gemini_flash_price(GEMINI_FLASH_PRICE_CHANGE) == (
+            _GEMINI_FLASH_PRICE_ON_OR_AFTER
+        )
+
+    def test_prices_match_the_tier_in_effect_today(self):
+        """발효일이 지나면 여기서 실패한다. 조치는 두 곳을 새 단가로 올리는 것:
+        `models/llm_models.py` 의 gemini-3.8/3.7-flash 항목과
+        `api/llm_proxy.py` COST_TABLE 의 같은 두 행."""
+        today = datetime.now(UTC).date()
+
+        mismatches = _gemini_flash_price_mismatches(today)
+
+        assert not mismatches, (
+            f"{today} 기준 Gemini Flash 단가가 어긋난다(발효일 "
+            f"{GEMINI_FLASH_PRICE_CHANGE}). (위치, 모델, 기대, 실제): {mismatches}"
+        )
