@@ -17,6 +17,27 @@ os.environ["USE_DATABASE"] = "false"
 os.environ["LLM_PROVIDER"] = "ollama"
 os.environ["OLLAMA_MODEL"] = "qwen2.5:7b"
 
+# db.database builds its module-global engine from DATABASE_URL at *import*
+# time, so there is no per-test state to reset — whichever value os.environ
+# holds when that import first happens is baked in for the whole session. That
+# makes reachability of the developer's real Postgres a function of import
+# order: api/app.py calls load_dotenv(PROJECT_ROOT_ENV), so a module that
+# touches api.app before db.database gets the repo-root .env credentials,
+# while one that imports db.database first gets the unreachable default.
+# tests/backend/api/test_bootstrap.py hit exactly that split — its autouse
+# pool-disposal fixture imports db.database before the app fixture, so alone
+# the ACL registry was unreachable (fail-closed 503, as asserted) and after any
+# earlier api.app importer it was live with 9 rows (200). Pinning the value
+# here, before any backend import, removes the ordering dependency and stops
+# the suite from reading and writing a real development database.
+# setdefault (not a plain assignment) preserves CI, which exports its own
+# DATABASE_URL for the ephemeral aos_test service container, and keeps the
+# escape hatch open: DATABASE_URL=... pytest ...
+# Port 1 on the loopback address is refused immediately and needs no DNS; the
+# opt-in real-database suites are unaffected because they read their own
+# AOS_TEST_DATABASE_URL.
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://aos:aos@127.0.0.1:1/aos_unreachable")
+
 # RateLimitService is a process-global singleton keyed by client IP, and every
 # suite here shares the one TestClient IP. A request-heavy module therefore
 # drains the shared free-tier budget (60 req/min) and whichever module runs
