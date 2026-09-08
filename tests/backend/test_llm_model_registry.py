@@ -969,6 +969,25 @@ class TestCostTableRegistryDrift:
 
         assert not mismatched, f"OpenAIUsageCollector._COST_TABLE 미커버/오단가: {mismatched}"
 
+    def test_every_anthropic_registry_model_is_in_claude_session_costs(self):
+        """MODEL_COSTS 는 정확-ID 조회라 신규 Anthropic 모델이 빠지면 sonnet 단가로
+        폴백해 오집계된다(비싼 모델이면 과소, 싼 모델이면 과대)."""
+        from models.claude_session import MODEL_COSTS
+
+        mismatched = []
+        for model in _PRICED_MODELS:
+            if model.provider != LLMProvider.ANTHROPIC:
+                continue
+            entry = MODEL_COSTS.get(model.id)
+            if entry is None:
+                mismatched.append((model.id, "미등록"))
+            elif entry["input"] != pytest.approx(model.input_price) or entry[
+                "output"
+            ] != pytest.approx(model.output_price):
+                mismatched.append((model.id, entry))
+
+        assert not mismatched, f"claude_session.MODEL_COSTS 미커버/오단가: {mismatched}"
+
 
 class TestCostTablePrefixOrdering:
     """비용표는 startswith 선착 매칭이라 삽입 순서가 계약이다: 구체 변종이
