@@ -25,6 +25,11 @@ AOS의 LLM 모델 레지스트리(SSOT: `src/backend/models/llm_models.py` `_MOD
   - **자동화 전제 조건:** 24h 폴링 태스크는 `USE_DATABASE=true`에서만 기동되고(`api/app.py` lifespan, ~304행 `if USE_DATABASE:`), 폴링 자체도 해당 provider의 API key가 env에 설정된 경우만 수행된다(`model_update_service.py` `check_all_providers`, ~320행 — 키 없는 provider는 skip). 자동 발견에 맡기기 전에 이 두 조건을 확인하라.
 - **가격 단위 주의: 공식 가격은 $/1M tokens, AOS 테이블은 전부 per-1k.** 예: $3/$15 → `0.003`/`0.015`.
   - 왜: 단위 혼동 시 1000배 과대/과소 정산 — 이 절차에서 가장 흔한 실수.
+- **티어 열 주의: 공식 가격표는 한 모델에 Standard / Batch / Flex / Cached 를 나란히 싣는다. AOS 가 쓰는 값은 Standard 뿐이다.**
+  - 실사례(2026-09-08 교정): `o4-mini` 가 `$0.55/$2.20` 으로 등록돼 있었는데 이는 **Batch·Flex 단가**였고 표준은 `$1.10/$4.40` — 표준 사용분을 2배 과소 집계했다.
+  - 왜 안 걸리나: 오차가 정확히 2배라 per-1k 환산 자릿수 검산(위 항목)으로는 통과한다. 검색 요약도 출처마다 열이 갈려 같은 모델에 두 값이 동시에 나온다.
+  - 어떻게: 1차 출처(https://developers.openai.com/api/docs/pricing, https://ai.google.dev/gemini-api/docs/pricing)에서 **행 전체를 열 이름째 인용**한 뒤 Standard 열만 옮긴다. 검색 스니펫으로 옮기지 않는다.
+  - **날짜 조건부 가격도 같은 계열이다.** 예: Gemini 3.8 Flash 는 `$0.75/$3.75` 이지만 공식 표에 "through December 31, 2026 / $1.50·$7.50 starting January 1, 2027" 로 적혀 있다(2026-09-08 확인). `_MODELS` 는 시점 가격만 담으므로 **발효일에 갱신이 필요하다** — 옮길 때 발효 조건이 붙어 있는지 확인하고, 붙어 있으면 행 주석에 남긴다.
 
 ## 1. SSOT 갱신: `src/backend/models/llm_models.py` `_MODELS`
 
@@ -44,6 +49,10 @@ prefix 불일치·ID 누락 시 $0 정산 또는 오정산이 조용히 발생�
 | Anthropic | ① llm_proxy `COST_TABLE` + ② `AnthropicUsageCollector` costs + ③ claude_session `MODEL_COSTS` — **3곳** |
 | OpenAI (코드 레벨 추가 시) | ① llm_proxy `COST_TABLE` + ④ `OpenAIUsageCollector._COST_TABLE` |
 | Google | ① llm_proxy `COST_TABLE` |
+
+**prefix 테이블 두 가지 추가 함정 (2026-09-08 실사례):**
+- **generic 행은 SSOT 미등재 변종까지 삼킨다.** `("o3", ...)` 하나만 넣으면 `o3-mini`·`o3-pro` 도 o3 단가로 청구된다(외부 usage 수집은 레지스트리 밖 id 를 그대로 받는다). 신규 행이 generic 이면 그 family 의 실재 변종을 조사해 구체 행을 **앞에** 함께 넣어라. 넣을 단가의 출처가 없으면 넣지 말고 PR 본문에 남긴다.
+- **표에 행이 있어도 응답에서 모델 id 를 못 읽으면 무효다.** `llm_proxy._extract_usage` 가 provider 별로 다른 필드를 읽는다 — OpenAI/Anthropic 은 top-level `model`, **Gemini 는 `modelVersion`**(공식 `GenerateContentResponse` 에 top-level `model` 이 없다). 새 provider 를 붙일 때 이 추출 경로를 함께 확인하지 않으면 표를 다 채워도 계속 $0 이다.
 
 각 테이블의 위치·매칭 방식 (행번호는 2026-07-11 기준 앵커 — 드리프트 시 심볼로 검색):
 
@@ -73,6 +82,8 @@ prefix 불일치·ID 누락 시 $0 정산 또는 오정산이 조용히 발생�
 ## 5. 테스트
 
 - `tests/backend/test_llm_model_registry.py`: 신모델 존재·스펙·default 해석, 가격 prefix 매칭(구체 vs generic 순서), `calculate_cost` 정확값.
+  - **이미 있는 불변식이 먼저 RED 로 잡아준다** (2026-09-08 추가): `TestCostTableRegistryDrift`(`_MODELS` 전수 ↔ 두 비용표, `is_enabled` 무관), `TestCostTablePrefixOrdering`(구체 prefix 가 generic 뒤에 오면 실패), `TestDashboardFallbackMirror`(`settings.ts` 미러 집합 비교), `TestOpenAIStandardTierPricing`(Batch 단가 복귀 감지). 2단계·4단계를 빼먹으면 여기서 실패하므로, 실패 메시지의 모델 id 를 보고 어느 표가 빠졌는지 판단하라.
+  - 새로 단가를 단언할 때 **입력·출력 토큰 수를 다르게 준다**(예: 1000/3000). 같은 수면 비용이 `in+out` 대칭 합이라 두 단가를 뒤바꿔 적은 전치 오류가 그대로 통과한다(실측).
   - **신규 async 테스트는 `@pytest.mark.asyncio` 명시를 관례로 유지하라.** `src/backend/pyproject.toml`에 `asyncio_mode=auto`가 있으나, pytest rootdir이 repo 루트로 해석되는 실행 경로에서는 이 설정이 적용되지 않아 CI "async not supported"로 실패한 실사례가 있다. auto가 적용되는 환경에서도 marker는 무해하므로 항상 붙인다.
 - `src/dashboard/src/stores/__tests__/settings.test.ts`: fallback 목록/default 검증을 갱신.
 
@@ -121,6 +132,7 @@ cd src/dashboard && npx tsc --noEmit && npm run lint && npm test -- --run && npm
 
 - [ ] 모델 ID를 공식 소스(claude-api 스킬 / platform.claude.com 모델표)로 확인 (추측 금지)
 - [ ] 가격을 per-1k로 환산해 입력 ($/1M ÷ 1000)
+- [ ] 공식 가격표의 **Standard 열**에서 옮겼는지 확인 (Batch/Flex/Cached 아님 — 오차가 2배라 단위 검산으로 안 걸린다)
 - [ ] `_MODELS`에 신규 항목 추가, 기존 항목 삭제 없음
 - [ ] 가격표 매트릭스(2단계) 확인: provider별 대상 테이블에서 prefix 테이블은 매칭·가격 검증(필요 시 구체 prefix를 generic보다 앞에 추가), `MODEL_COSTS`는 신규 정확 ID 무조건 추가 + **기존 ID 가격 변경 시 기존 값도 갱신**
 - [ ] `settings.ts` `fallbackModels` + `fallbackDefaultModelIds` 동기화 (enabled 모델만 추가)
@@ -129,5 +141,6 @@ cd src/dashboard && npx tsc --noEmit && npm run lint && npm test -- --run && npm
 - [ ] 프론트 게이트 fresh 통과: `cd src/dashboard && npx tsc --noEmit && npm run lint && npm test -- --run && npm run build`
 - [ ] 런타임 스모크: 백엔드 재시작 후 `GET /api/llm/models`에 신모델 존재 확인
 - [ ] `docs/api/llm.md`·`docs/dashboard.md` 동기화
+- [ ] generic prefix 행을 추가했다면 그 family 의 실재 변종에 구체 행을 앞에 배치 (없으면 PR 본문에 기록)
 - [ ] `/codex:review` 통과 (지적사항 반영 완료)
 - [ ] 기존 DB에 enabled default가 있는 경우 default 전환은 admin 수동 절차임을 사용자에게 안내
