@@ -457,7 +457,9 @@ def test_codex_plan_usage_reads_chatgpt_subscription_limits(
             "rateLimitResetCredits": {"availableCount": 1},
         }
 
-    monkeypatch.setattr(usage_mod.routes, "_read_codex_app_server_rate_limits", _fake_read_rate_limits)
+    monkeypatch.setattr(
+        usage_mod.routes, "_read_codex_app_server_rate_limits", _fake_read_rate_limits
+    )
 
     response = usage_mod.routes.get_codex_plan_usage()
 

@@ -128,6 +128,4 @@ async def test_apply_changes_self_heals_suppressed_config_rows(monkeypatch):
     sql = str(compiled)
     assert "DELETE FROM llm_model_configs" in sql
     assert "llm_model_suppressions" in sql
-    assert (
-        session.deletes[0].get_execution_options().get("synchronize_session") is False
-    )
+    assert session.deletes[0].get_execution_options().get("synchronize_session") is False

@@ -3,8 +3,6 @@
 import hashlib
 import secrets
 
-import pytest
-
 from services.auth_service import AuthService
 
 

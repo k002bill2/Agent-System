@@ -10,10 +10,10 @@ Usage:
     python ../../tests/backend/run_e2e_tests.py
 """
 
-import sys
 import asyncio
+import sys
+from datetime import UTC, datetime
 from pathlib import Path
-from datetime import datetime, timezone
 
 # Add src/backend to path
 backend_path = Path(__file__).parent.parent.parent / "src" / "backend"
@@ -101,9 +101,10 @@ async def test_api_endpoints():
     """Test FastAPI endpoints."""
     print("\n2. Testing API Endpoints...")
 
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
+
     from api.app import create_app
-    from api.deps import set_engine, clear_engine
+    from api.deps import clear_engine, set_engine
     from orchestrator import OrchestrationEngine
 
     engine = OrchestrationEngine()
@@ -161,11 +162,12 @@ async def test_hitl_flow():
     """Test HITL (Human-in-the-Loop) flow."""
     print("\n3. Testing HITL Flow...")
 
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
+
     from api.app import create_app
-    from api.deps import set_engine, clear_engine
-    from orchestrator import OrchestrationEngine
+    from api.deps import clear_engine, set_engine
     from models.hitl import ApprovalStatus
+    from orchestrator import OrchestrationEngine
 
     engine = OrchestrationEngine()
     set_engine(engine)
@@ -189,7 +191,7 @@ async def test_hitl_flow():
                 "risk_level": "HIGH",
                 "risk_description": "Shell command execution",
                 "status": ApprovalStatus.PENDING.value,
-                "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_at": datetime.now(UTC).isoformat(),
             }
             state["waiting_for_approval"] = True
             engine._sessions[session_id] = state
@@ -223,7 +225,7 @@ async def test_hitl_flow():
                 "risk_level": "HIGH",
                 "risk_description": "Dangerous command",
                 "status": ApprovalStatus.PENDING.value,
-                "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_at": datetime.now(UTC).isoformat(),
             }
             state2["waiting_for_approval"] = True
             engine._sessions[session_id2] = state2
@@ -246,8 +248,8 @@ async def test_parallel_execution():
     """Test parallel execution capabilities."""
     print("\n4. Testing Parallel Execution...")
 
+    from models.agent_state import TaskNode, TaskStatus, create_initial_state
     from orchestrator import OrchestrationEngine
-    from models.agent_state import TaskStatus, TaskNode, create_initial_state
 
     try:
         engine = OrchestrationEngine()
@@ -296,9 +298,7 @@ async def test_parallel_execution():
                 await asyncio.sleep(0.05)
                 return f"{task_id} done"
 
-        all_results = await asyncio.gather(*[
-            limited_execute(f"task-{i}") for i in range(5)
-        ])
+        all_results = await asyncio.gather(*[limited_execute(f"task-{i}") for i in range(5)])
         assert len(all_results) == 5
         result.add_pass("Semaphore limiting")
 

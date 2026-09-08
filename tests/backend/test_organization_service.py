@@ -78,8 +78,10 @@ def _create_org(
 ) -> Organization:
     """Create an org through the service (with file I/O patched out)."""
     data = _make_org_create(name=name, slug=slug, plan=plan)
-    with patch("services.organization_service._save_organizations"), \
-         patch("services.organization_service._save_members"):
+    with (
+        patch("services.organization_service._save_organizations"),
+        patch("services.organization_service._save_members"),
+    ):
         return OrganizationService.create_organization(
             data=data,
             owner_user_id=owner_id,
@@ -91,6 +93,7 @@ def _create_org(
 # ---------------------------------------------------------------------------
 # Test Class
 # ---------------------------------------------------------------------------
+
 
 class TestOrganizationService:
     """Unit tests for OrganizationService (in-memory mode)."""
@@ -105,8 +108,10 @@ class TestOrganizationService:
 
     def test_create_organization_success(self):
         """Creating an org stores it and adds an OWNER member."""
-        with patch("services.organization_service._save_organizations"), \
-             patch("services.organization_service._save_members"):
+        with (
+            patch("services.organization_service._save_organizations"),
+            patch("services.organization_service._save_members"),
+        ):
             org = OrganizationService.create_organization(
                 data=_make_org_create(),
                 owner_user_id="user-1",
@@ -134,8 +139,10 @@ class TestOrganizationService:
 
     def test_create_organization_applies_plan_limits(self):
         """Plan limits are applied to max_members etc. at creation time."""
-        with patch("services.organization_service._save_organizations"), \
-             patch("services.organization_service._save_members"):
+        with (
+            patch("services.organization_service._save_organizations"),
+            patch("services.organization_service._save_members"),
+        ):
             org = OrganizationService.create_organization(
                 data=_make_org_create(slug="starter-org", plan=OrganizationPlan.STARTER),
                 owner_user_id="u1",
@@ -153,8 +160,10 @@ class TestOrganizationService:
         _create_org(slug="dup-slug")
 
         with pytest.raises(ValueError, match="already taken"):
-            with patch("services.organization_service._save_organizations"), \
-                 patch("services.organization_service._save_members"):
+            with (
+                patch("services.organization_service._save_organizations"),
+                patch("services.organization_service._save_members"),
+            ):
                 OrganizationService.create_organization(
                     data=_make_org_create(slug="dup-slug"),
                     owner_user_id="u2",
@@ -258,9 +267,7 @@ class TestOrganizationService:
 
     def test_update_organization_not_found_returns_none(self):
         """update_organization returns None for unknown org_id."""
-        result = OrganizationService.update_organization(
-            "bad-id", OrganizationUpdate(name="X")
-        )
+        result = OrganizationService.update_organization("bad-id", OrganizationUpdate(name="X"))
         assert result is None
 
     # -----------------------------------------------------------------------
@@ -289,8 +296,10 @@ class TestOrganizationService:
             )
 
         # Create new org with same slug - should not raise
-        with patch("services.organization_service._save_organizations"), \
-             patch("services.organization_service._save_members"):
+        with (
+            patch("services.organization_service._save_organizations"),
+            patch("services.organization_service._save_members"),
+        ):
             new_org = OrganizationService.create_organization(
                 data=_make_org_create(slug="reusable-slug"),
                 owner_user_id="u2",
@@ -328,9 +337,12 @@ class TestOrganizationService:
         mock_quota = MagicMock()
         mock_quota.allowed = True
 
-        with patch("services.quota_service.QuotaService.check_member_quota",
-                   return_value=mock_quota), \
-             patch("services.organization_service._save_invitations"):
+        with (
+            patch(
+                "services.quota_service.QuotaService.check_member_quota", return_value=mock_quota
+            ),
+            patch("services.organization_service._save_invitations"),
+        ):
             inv = OrganizationService.invite_member(
                 org_id=org.id,
                 request=InviteMemberRequest(email="newmember@example.com", role=MemberRole.MEMBER),
@@ -352,8 +364,9 @@ class TestOrganizationService:
         mock_quota.allowed = False
         mock_quota.message = "Member limit reached (5)"
 
-        with patch("services.quota_service.QuotaService.check_member_quota",
-                   return_value=mock_quota):
+        with patch(
+            "services.quota_service.QuotaService.check_member_quota", return_value=mock_quota
+        ):
             with pytest.raises(ValueError, match="Member limit reached"):
                 OrganizationService.invite_member(
                     org_id=org.id,
@@ -368,8 +381,9 @@ class TestOrganizationService:
         mock_quota = MagicMock()
         mock_quota.allowed = True
 
-        with patch("services.quota_service.QuotaService.check_member_quota",
-                   return_value=mock_quota):
+        with patch(
+            "services.quota_service.QuotaService.check_member_quota", return_value=mock_quota
+        ):
             with pytest.raises(ValueError, match="already a member"):
                 OrganizationService.invite_member(
                     org_id=org.id,
@@ -385,9 +399,12 @@ class TestOrganizationService:
         mock_quota.allowed = True
 
         # First invite
-        with patch("services.quota_service.QuotaService.check_member_quota",
-                   return_value=mock_quota), \
-             patch("services.organization_service._save_invitations"):
+        with (
+            patch(
+                "services.quota_service.QuotaService.check_member_quota", return_value=mock_quota
+            ),
+            patch("services.organization_service._save_invitations"),
+        ):
             OrganizationService.invite_member(
                 org_id=org.id,
                 request=InviteMemberRequest(email="new@example.com"),
@@ -395,8 +412,9 @@ class TestOrganizationService:
             )
 
         # Second invite for same email
-        with patch("services.quota_service.QuotaService.check_member_quota",
-                   return_value=mock_quota):
+        with patch(
+            "services.quota_service.QuotaService.check_member_quota", return_value=mock_quota
+        ):
             with pytest.raises(ValueError, match="already pending"):
                 OrganizationService.invite_member(
                     org_id=org.id,
@@ -418,9 +436,11 @@ class TestOrganizationService:
         )
         org_module._invitations[inv.id] = inv
 
-        with patch("services.organization_service._save_members"), \
-             patch("services.organization_service._save_invitations"), \
-             patch("services.organization_service._save_organizations"):
+        with (
+            patch("services.organization_service._save_members"),
+            patch("services.organization_service._save_invitations"),
+            patch("services.organization_service._save_organizations"),
+        ):
             member = OrganizationService.accept_invitation(
                 token=inv.token,
                 user_id="user-invited",
@@ -512,8 +532,10 @@ class TestOrganizationService:
         org.current_members = 2
         org_module._user_orgs.setdefault("user-2", []).append(org.id)
 
-        with patch("services.organization_service._save_members"), \
-             patch("services.organization_service._save_organizations"):
+        with (
+            patch("services.organization_service._save_members"),
+            patch("services.organization_service._save_organizations"),
+        ):
             result = OrganizationService.remove_member(second.id)
 
         assert result is True
@@ -682,9 +704,10 @@ class TestOrganizationService:
         mock_quota = MagicMock()
         mock_quota.allowed = True
 
-        with patch("services.quota_service.QuotaService.check_token_quota",
-                   return_value=mock_quota), \
-             patch("services.organization_service._save_organizations"):
+        with (
+            patch("services.quota_service.QuotaService.check_token_quota", return_value=mock_quota),
+            patch("services.organization_service._save_organizations"),
+        ):
             success = OrganizationService.track_token_usage(org.id, 500)
 
         assert success is True
@@ -697,8 +720,9 @@ class TestOrganizationService:
         mock_quota = MagicMock()
         mock_quota.allowed = False
 
-        with patch("services.quota_service.QuotaService.check_token_quota",
-                   return_value=mock_quota):
+        with patch(
+            "services.quota_service.QuotaService.check_token_quota", return_value=mock_quota
+        ):
             result = OrganizationService.track_token_usage(org.id, 99999)
 
         assert result is False
@@ -709,7 +733,9 @@ class TestOrganizationService:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_track_token_usage_async_can_skip_quota_and_commit_for_ledger_post_processing(self):
+    async def test_track_token_usage_async_can_skip_quota_and_commit_for_ledger_post_processing(
+        self,
+    ):
         """Ledger post-processing updates counters inside the caller transaction."""
         org = SimpleNamespace(id="org-1", tokens_used_this_month=100)
         db = SimpleNamespace(
@@ -772,9 +798,7 @@ class TestOrganizationService:
         assert response.total_tokens == 300
         assert len(response.members) >= 1
 
-        owner_summary = next(
-            (m for m in response.members if m.user_id == "uid-usage"), None
-        )
+        owner_summary = next((m for m in response.members if m.user_id == "uid-usage"), None)
         assert owner_summary is not None
         assert owner_summary.tokens_used_this_month == 300
 

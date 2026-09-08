@@ -1,6 +1,8 @@
 """Tests for project active filter based on project-registry is_active."""
-import pytest
+
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # USE_DATABASE=true로 설정해야 get_inactive_project_paths가 DB 조회를 수행함
 _USE_DB_ENV = {"USE_DATABASE": "true"}

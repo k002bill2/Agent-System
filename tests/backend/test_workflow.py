@@ -5,9 +5,6 @@ import asyncio
 import pytest
 
 from models.workflow import (
-    JobStatus,
-    RunnerType,
-    StepStatus,
     TriggerType,
     WorkflowCreate,
     WorkflowDefinitionSchema,
@@ -21,7 +18,6 @@ from models.workflow import (
 from services.workflow_engine import WorkflowEngine
 from services.workflow_service import WorkflowService
 from services.workflow_yaml_parser import parse_workflow_yaml, workflow_to_yaml
-
 
 # ── YAML Parser Tests ──────────────────────────────────────
 
@@ -70,9 +66,7 @@ jobs:
 
     def test_step_without_run_or_uses_raises(self):
         with pytest.raises(ValueError, match="run.*uses"):
-            parse_workflow_yaml(
-                "name: test\njobs:\n  test:\n    steps:\n      - name: bad step"
-            )
+            parse_workflow_yaml("name: test\njobs:\n  test:\n    steps:\n      - name: bad step")
 
     def test_trigger_normalization_string(self):
         result = parse_workflow_yaml(
@@ -213,11 +207,7 @@ class TestWorkflowEngine:
     async def test_execute_simple_run(self):
         definition = WorkflowDefinitionSchema(
             name="test",
-            jobs={
-                "echo": WorkflowJobDef(
-                    steps=[WorkflowStepDef(name="hello", run="echo hello")]
-                )
-            },
+            jobs={"echo": WorkflowJobDef(steps=[WorkflowStepDef(name="hello", run="echo hello")])},
         )
         result = await self.engine.execute_run(
             run_id="test-run-1",
@@ -231,11 +221,7 @@ class TestWorkflowEngine:
     async def test_execute_failing_run(self):
         definition = WorkflowDefinitionSchema(
             name="fail",
-            jobs={
-                "fail": WorkflowJobDef(
-                    steps=[WorkflowStepDef(name="fail", run="exit 1")]
-                )
-            },
+            jobs={"fail": WorkflowJobDef(steps=[WorkflowStepDef(name="fail", run="exit 1")])},
         )
         result = await self.engine.execute_run(
             run_id="test-fail-1",
@@ -271,9 +257,7 @@ class TestWorkflowEngine:
         definition = WorkflowDefinitionSchema(
             name="skip",
             jobs={
-                "fail": WorkflowJobDef(
-                    steps=[WorkflowStepDef(name="fail", run="exit 1")]
-                ),
+                "fail": WorkflowJobDef(steps=[WorkflowStepDef(name="fail", run="exit 1")]),
                 "should-skip": WorkflowJobDef(
                     needs=["fail"],
                     steps=[WorkflowStepDef(name="skip", run="echo skip")],
@@ -292,11 +276,7 @@ class TestWorkflowEngine:
     async def test_logs_are_emitted(self):
         definition = WorkflowDefinitionSchema(
             name="logs",
-            jobs={
-                "test": WorkflowJobDef(
-                    steps=[WorkflowStepDef(name="log", run="echo logtest")]
-                )
-            },
+            jobs={"test": WorkflowJobDef(steps=[WorkflowStepDef(name="log", run="echo logtest")])},
         )
         await self.engine.execute_run(
             run_id="test-logs-1",
@@ -336,20 +316,14 @@ jobs:
             self.svc.delete_workflow(wf["id"])
 
     def test_create_workflow(self):
-        wf = self.svc.create_workflow(
-            WorkflowCreate(name="Test", yaml_content=self.SAMPLE_YAML)
-        )
+        wf = self.svc.create_workflow(WorkflowCreate(name="Test", yaml_content=self.SAMPLE_YAML))
         assert wf["name"] == "Test"
         assert wf["status"] == WorkflowStatus.ACTIVE
         assert wf["version"] == 1
 
     def test_list_workflows(self):
-        self.svc.create_workflow(
-            WorkflowCreate(name="A", yaml_content=self.SAMPLE_YAML)
-        )
-        self.svc.create_workflow(
-            WorkflowCreate(name="B", yaml_content=self.SAMPLE_YAML)
-        )
+        self.svc.create_workflow(WorkflowCreate(name="A", yaml_content=self.SAMPLE_YAML))
+        self.svc.create_workflow(WorkflowCreate(name="B", yaml_content=self.SAMPLE_YAML))
         assert len(self.svc.list_workflows()) == 2
 
     def test_list_workflows_project_filter(self):
@@ -362,9 +336,7 @@ jobs:
         assert len(self.svc.list_workflows(project_id="p1")) == 1
 
     def test_get_workflow(self):
-        wf = self.svc.create_workflow(
-            WorkflowCreate(name="Get", yaml_content=self.SAMPLE_YAML)
-        )
+        wf = self.svc.create_workflow(WorkflowCreate(name="Get", yaml_content=self.SAMPLE_YAML))
         fetched = self.svc.get_workflow(wf["id"])
         assert fetched is not None
         assert fetched["name"] == "Get"
@@ -373,28 +345,18 @@ jobs:
         assert self.svc.get_workflow("nonexistent") is None
 
     def test_update_workflow(self):
-        wf = self.svc.create_workflow(
-            WorkflowCreate(name="Upd", yaml_content=self.SAMPLE_YAML)
-        )
-        updated = self.svc.update_workflow(
-            wf["id"], WorkflowUpdate(description="new desc")
-        )
+        wf = self.svc.create_workflow(WorkflowCreate(name="Upd", yaml_content=self.SAMPLE_YAML))
+        updated = self.svc.update_workflow(wf["id"], WorkflowUpdate(description="new desc"))
         assert updated["description"] == "new desc"
 
     def test_update_yaml_increments_version(self):
-        wf = self.svc.create_workflow(
-            WorkflowCreate(name="Ver", yaml_content=self.SAMPLE_YAML)
-        )
+        wf = self.svc.create_workflow(WorkflowCreate(name="Ver", yaml_content=self.SAMPLE_YAML))
         assert wf["version"] == 1
-        updated = self.svc.update_workflow(
-            wf["id"], WorkflowUpdate(yaml_content=self.SAMPLE_YAML)
-        )
+        updated = self.svc.update_workflow(wf["id"], WorkflowUpdate(yaml_content=self.SAMPLE_YAML))
         assert updated["version"] == 2
 
     def test_delete_workflow(self):
-        wf = self.svc.create_workflow(
-            WorkflowCreate(name="Del", yaml_content=self.SAMPLE_YAML)
-        )
+        wf = self.svc.create_workflow(WorkflowCreate(name="Del", yaml_content=self.SAMPLE_YAML))
         assert self.svc.delete_workflow(wf["id"]) is True
         assert self.svc.get_workflow(wf["id"]) is None
 
@@ -407,9 +369,7 @@ jobs:
 
     @pytest.mark.asyncio
     async def test_trigger_and_complete_run(self):
-        wf = self.svc.create_workflow(
-            WorkflowCreate(name="Run", yaml_content=self.SAMPLE_YAML)
-        )
+        wf = self.svc.create_workflow(WorkflowCreate(name="Run", yaml_content=self.SAMPLE_YAML))
         run = await self.svc.trigger_run(wf["id"], WorkflowRunTrigger())
 
         # Wait for completion
@@ -427,27 +387,21 @@ jobs:
 
     @pytest.mark.asyncio
     async def test_trigger_inactive_workflow_raises(self):
-        wf = self.svc.create_workflow(
-            WorkflowCreate(name="Inact", yaml_content=self.SAMPLE_YAML)
-        )
+        wf = self.svc.create_workflow(WorkflowCreate(name="Inact", yaml_content=self.SAMPLE_YAML))
         self.svc.update_workflow(wf["id"], WorkflowUpdate(status=WorkflowStatus.INACTIVE))
         with pytest.raises(ValueError, match="not active"):
             await self.svc.trigger_run(wf["id"], WorkflowRunTrigger())
 
     @pytest.mark.asyncio
     async def test_list_runs(self):
-        wf = self.svc.create_workflow(
-            WorkflowCreate(name="Runs", yaml_content=self.SAMPLE_YAML)
-        )
+        wf = self.svc.create_workflow(WorkflowCreate(name="Runs", yaml_content=self.SAMPLE_YAML))
         await self.svc.trigger_run(wf["id"], WorkflowRunTrigger())
         runs = self.svc.list_runs(workflow_id=wf["id"])
         assert len(runs) == 1
 
     @pytest.mark.asyncio
     async def test_cancel_run(self):
-        wf = self.svc.create_workflow(
-            WorkflowCreate(name="Cancel", yaml_content=self.SAMPLE_YAML)
-        )
+        wf = self.svc.create_workflow(WorkflowCreate(name="Cancel", yaml_content=self.SAMPLE_YAML))
         run = await self.svc.trigger_run(wf["id"], WorkflowRunTrigger())
         cancelled = self.svc.cancel_run(run["id"])
         assert cancelled is not None
@@ -467,9 +421,10 @@ class TestWorkflowAPI:
         """Create async httpx test client with an explicit privileged test user."""
         from types import SimpleNamespace
 
+        from httpx import ASGITransport, AsyncClient
+
         from api.app import app
         from api.deps import get_current_user
-        from httpx import ASGITransport, AsyncClient
 
         app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
             id="test-admin",

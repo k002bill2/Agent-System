@@ -45,9 +45,9 @@ class TestWebhookService:
     def test_verify_signature_valid(self):
         webhook = self.svc.create_webhook("wf1")
         payload = b'{"ref":"refs/heads/main"}'
-        expected = "sha256=" + hmac.new(
-            webhook["secret"].encode(), payload, hashlib.sha256
-        ).hexdigest()
+        expected = (
+            "sha256=" + hmac.new(webhook["secret"].encode(), payload, hashlib.sha256).hexdigest()
+        )
         assert self.svc.verify_signature(webhook["id"], payload, expected) is True
 
     def test_verify_signature_invalid(self):

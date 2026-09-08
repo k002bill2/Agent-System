@@ -10,26 +10,23 @@ import time
 import jwt
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
 from fastapi import FastAPI, HTTPException
+from httpx import ASGITransport, AsyncClient
 
 from api.v1.agent_registry import (
-    router,
+    _seed_default_agents,
     get_cache,
     reset_agent_store,
-    _seed_default_agents,
+    router,
 )
 from api.v1.auth_middleware import (
     JWT_ALGORITHM,
     UserRole,
     create_access_token,
-    create_token_pair,
-    create_refresh_token,
     reset_user_store,
     verify_token,
 )
 from api.v1.rate_limiter import get_rate_limiter
-
 
 # ─────────────────────────────────────────────────────────────
 # Fixtures
@@ -255,7 +252,7 @@ async def test_anonymous_rate_limit(client):
     # Make 10 requests (should all succeed)
     for i in range(10):
         response = await client.get("/api/v1/agents")
-        assert response.status_code == 200, f"Request {i+1} failed unexpectedly"
+        assert response.status_code == 200, f"Request {i + 1} failed unexpectedly"
 
     # 11th request should be rate limited
     response = await client.get("/api/v1/agents")
@@ -272,7 +269,7 @@ async def test_admin_unlimited_rate(client):
     # Make 15 requests (beyond anonymous limit) - all should succeed
     for i in range(15):
         response = await client.get("/api/v1/agents", headers=headers)
-        assert response.status_code == 200, f"Admin request {i+1} failed"
+        assert response.status_code == 200, f"Admin request {i + 1} failed"
 
 
 # ─────────────────────────────────────────────────────────────
@@ -294,9 +291,7 @@ async def test_list_agents_returns_seeded(client):
 @pytest.mark.asyncio
 async def test_get_agent_by_id(client):
     """Test 14: Get a single agent by ID."""
-    response = await client.get(
-        "/api/v1/agents/agent-web-ui", headers=_user_headers()
-    )
+    response = await client.get("/api/v1/agents/agent-web-ui", headers=_user_headers())
 
     assert response.status_code == 200
     data = response.json()
@@ -307,9 +302,7 @@ async def test_get_agent_by_id(client):
 @pytest.mark.asyncio
 async def test_get_agent_not_found(client):
     """Test 15: Get non-existent agent returns 404."""
-    response = await client.get(
-        "/api/v1/agents/nonexistent-agent", headers=_user_headers()
-    )
+    response = await client.get("/api/v1/agents/nonexistent-agent", headers=_user_headers())
 
     assert response.status_code == 404
 
@@ -343,9 +336,7 @@ async def test_filter_by_status(client):
     assert data["total"] == 2  # agent-web-ui and agent-backend
 
     # Filter for multiple statuses
-    response = await client.get(
-        "/api/v1/agents?status=available,busy", headers=headers
-    )
+    response = await client.get("/api/v1/agents?status=available,busy", headers=headers)
     data = response.json()
     assert data["total"] == 3  # available + busy
 
@@ -355,9 +346,7 @@ async def test_filter_by_category(client):
     """Test 18: Filter agents by category."""
     headers = _user_headers()
 
-    response = await client.get(
-        "/api/v1/agents?category=development", headers=headers
-    )
+    response = await client.get("/api/v1/agents?category=development", headers=headers)
     data = response.json()
     assert data["total"] == 2  # agent-web-ui and agent-backend
     for item in data["items"]:
@@ -369,9 +358,7 @@ async def test_filter_by_min_success_rate(client):
     """Test 19: Filter agents by minimum success rate."""
     headers = _user_headers()
 
-    response = await client.get(
-        "/api/v1/agents?min_success_rate=0.95", headers=headers
-    )
+    response = await client.get("/api/v1/agents?min_success_rate=0.95", headers=headers)
     data = response.json()
     # agent-web-ui (0.95) and agent-quality (0.98)
     assert data["total"] == 2
@@ -384,9 +371,7 @@ async def test_search_agents(client):
     """Test 20: Search agents by keyword in name/description."""
     headers = _user_headers()
 
-    response = await client.get(
-        "/api/v1/agents?search=backend", headers=headers
-    )
+    response = await client.get("/api/v1/agents?search=backend", headers=headers)
     data = response.json()
     assert data["total"] == 1
     assert data["items"][0]["id"] == "agent-backend"
@@ -397,9 +382,7 @@ async def test_multi_sort(client):
     """Test 21: Sort agents by multiple fields."""
     headers = _user_headers()
 
-    response = await client.get(
-        "/api/v1/agents?sort=success_rate:desc", headers=headers
-    )
+    response = await client.get("/api/v1/agents?sort=success_rate:desc", headers=headers)
     data = response.json()
 
     rates = [item["success_rate"] for item in data["items"]]
@@ -411,9 +394,7 @@ async def test_offset_pagination(client):
     """Test 22: Offset-based pagination works correctly."""
     headers = _user_headers()
 
-    response = await client.get(
-        "/api/v1/agents?page=1&page_size=2", headers=headers
-    )
+    response = await client.get("/api/v1/agents?page=1&page_size=2", headers=headers)
     data = response.json()
 
     assert len(data["items"]) == 2
@@ -424,9 +405,7 @@ async def test_offset_pagination(client):
     assert data["has_more"] is True
 
     # Page 2
-    response2 = await client.get(
-        "/api/v1/agents?page=2&page_size=2", headers=headers
-    )
+    response2 = await client.get("/api/v1/agents?page=2&page_size=2", headers=headers)
     data2 = response2.json()
     assert len(data2["items"]) == 2
     assert data2["has_more"] is False
@@ -438,24 +417,20 @@ async def test_cursor_pagination(client):
     headers = _user_headers()
 
     # Get first page
-    response = await client.get(
-        "/api/v1/agents?page_size=2&sort=name:asc", headers=headers
-    )
+    response = await client.get("/api/v1/agents?page_size=2&sort=name:asc", headers=headers)
     data = response.json()
     assert len(data["items"]) == 2
-    first_page_ids = [item["id"] for item in data["items"]]
 
     # Use cursor from first page to get next page (if cursor available)
     # Since we didn't use cursor initially, let's build one
     # Get all sorted, then use cursor
-    response_all = await client.get(
-        "/api/v1/agents?sort=name:asc", headers=headers
-    )
+    response_all = await client.get("/api/v1/agents?sort=name:asc", headers=headers)
     all_data = response_all.json()
     all_ids = [item["id"] for item in all_data["items"]]
 
     # Construct cursor from the second item
     import base64
+
     cursor = base64.urlsafe_b64encode(all_ids[1].encode()).decode()
 
     response2 = await client.get(
@@ -761,9 +736,7 @@ def test_env_secret_signs_tokens_after_reload(monkeypatch):
         token = auth_middleware.create_access_token(
             "usr_admin_001", "admin", auth_middleware.UserRole.ADMIN
         )
-        decoded = jwt.decode(
-            token, env_secret, algorithms=[auth_middleware.JWT_ALGORITHM]
-        )
+        decoded = jwt.decode(token, env_secret, algorithms=[auth_middleware.JWT_ALGORITHM])
         assert decoded["sub"] == "usr_admin_001"
         assert decoded["token_type"] == "access"
     finally:
@@ -786,9 +759,7 @@ def test_session_secret_derived_key_after_reload(monkeypatch):
     try:
         importlib.reload(auth_middleware)
 
-        derived = hashlib.sha256(
-            f"agent-registry:{session_secret}".encode()
-        ).hexdigest()
+        derived = hashlib.sha256(f"agent-registry:{session_secret}".encode()).hexdigest()
         # Derived key is stable and NOT the raw session secret (no confusion).
         assert auth_middleware.JWT_SECRET_KEY == derived
         assert auth_middleware.JWT_SECRET_KEY != session_secret
@@ -797,9 +768,7 @@ def test_session_secret_derived_key_after_reload(monkeypatch):
         token = auth_middleware.create_access_token(
             "usr_admin_001", "admin", auth_middleware.UserRole.ADMIN
         )
-        decoded = jwt.decode(
-            token, derived, algorithms=[auth_middleware.JWT_ALGORITHM]
-        )
+        decoded = jwt.decode(token, derived, algorithms=[auth_middleware.JWT_ALGORITHM])
         assert decoded["sub"] == "usr_admin_001"
     finally:
         # Restore original module state to avoid polluting other tests.

@@ -15,7 +15,6 @@ from models.playground import PlaygroundSession
 from models.project_config import MemoryConfig, RuleConfig
 from services.playground_context import build_effective_system_prompt
 
-
 # ─────────────────────────────────────────────────────────────
 # Stub config source
 # ─────────────────────────────────────────────────────────────
@@ -211,9 +210,7 @@ def test_budget_truncates_longest_entry_first() -> None:
 
 
 def test_zero_budget_returns_base_prompt() -> None:
-    session = _session(
-        rules_mode="global", memory_mode="off", context_budget_tokens=500
-    )
+    session = _session(rules_mode="global", memory_mode="off", context_budget_tokens=500)
     # With empty rules, nothing to inject — should fall through to base.
     stub = _Stub()
     result = build_effective_system_prompt(session, source=stub)

@@ -194,9 +194,7 @@ async def test_viewer_can_read_but_not_mutate(db_project_app, monkeypatch):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         read = await ac.get(f"/api/git/projects/{DB_UUID}/status")
-        write = await ac.post(
-            f"/api/git/projects/{DB_UUID}/branches", json={"name": "feature/x"}
-        )
+        write = await ac.post(f"/api/git/projects/{DB_UUID}/branches", json={"name": "feature/x"})
 
     assert read.status_code == 200, read.text
     assert write.status_code == 403, write.text

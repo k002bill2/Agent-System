@@ -2,10 +2,10 @@
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
 from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
-from api.v1.stations import router, _stations
+from api.v1.stations import _stations, router
 
 
 @pytest.fixture

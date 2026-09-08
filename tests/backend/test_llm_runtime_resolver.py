@@ -291,9 +291,7 @@ def test_resolve_fails_closed_when_entitled_provider_has_no_enabled_models(
         user_id="user-1",
         api_fallback_enabled=False,
         profiles=[],
-        entitlements=[
-            _entitlement(provider="ollama", mode="local", cli_profile_id=None)
-        ],
+        entitlements=[_entitlement(provider="ollama", mode="local", cli_profile_id=None)],
     )
 
     with pytest.raises(LLMRuntimeResolutionError, match="ollama"):

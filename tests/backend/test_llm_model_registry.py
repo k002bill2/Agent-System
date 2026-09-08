@@ -47,11 +47,7 @@ class TestSonnet5RegistryEntry:
         assert LLMModelRegistry.get_default("anthropic") == "claude-sonnet-5"
 
     def test_anthropic_has_exactly_one_code_default(self):
-        defaults = [
-            m.id
-            for m in _MODELS
-            if m.provider == LLMProvider.ANTHROPIC and m.is_default
-        ]
+        defaults = [m.id for m in _MODELS if m.provider == LLMProvider.ANTHROPIC and m.is_default]
         assert defaults == ["claude-sonnet-5"]
 
 
@@ -134,11 +130,7 @@ class TestGpt56RegistryEntry:
         assert LLMModelRegistry.get_default("openai") == "gpt-5.6"
 
     def test_openai_has_exactly_one_code_default(self):
-        defaults = [
-            m.id
-            for m in _MODELS
-            if m.provider == LLMProvider.OPENAI and m.is_default
-        ]
+        defaults = [m.id for m in _MODELS if m.provider == LLMProvider.OPENAI and m.is_default]
         assert defaults == ["gpt-5.6"]
 
     @pytest.mark.parametrize(
@@ -176,11 +168,7 @@ class TestGemini37FlashRegistryEntry:
         assert LLMModelRegistry.get_default("google") == "gemini-3.7-flash"
 
     def test_google_has_exactly_one_code_default(self):
-        defaults = [
-            m.id
-            for m in _MODELS
-            if m.provider == LLMProvider.GOOGLE and m.is_default
-        ]
+        defaults = [m.id for m in _MODELS if m.provider == LLMProvider.GOOGLE and m.is_default]
         assert defaults == ["gemini-3.7-flash"]
 
 
@@ -280,12 +268,8 @@ class TestGetDefaultSelectionPolicy:
         providers = {m.provider for m in _MODELS}
         for provider in providers:
             defaults = [m for m in _MODELS if m.provider == provider and m.is_default]
-            assert len(defaults) == 1, (
-                f"{provider.value}: defaults={[m.id for m in defaults]}"
-            )
-            assert defaults[0].is_enabled, (
-                f"{provider.value}: default {defaults[0].id} is disabled"
-            )
+            assert len(defaults) == 1, f"{provider.value}: defaults={[m.id for m in defaults]}"
+            assert defaults[0].is_enabled, f"{provider.value}: default {defaults[0].id} is disabled"
 
     def test_no_enabled_default_falls_back_to_cheapest_deterministically(self, caplog):
         """default 가 disabled 된 provider: 목록 순서(첫 요소)가 아니라
@@ -409,11 +393,7 @@ class TestClaudeCliRegistryEntry:
         assert LLMModelRegistry.get_default("claude_cli") == "claude-cli"
 
     def test_claude_cli_provider_has_exactly_one_code_default(self):
-        defaults = [
-            m.id
-            for m in _MODELS
-            if m.provider == LLMProvider.CLAUDE_CLI and m.is_default
-        ]
+        defaults = [m.id for m in _MODELS if m.provider == LLMProvider.CLAUDE_CLI and m.is_default]
         assert defaults == ["claude-cli"]
 
     def test_claude_cli_is_always_available(self):
@@ -577,9 +557,7 @@ async def test_sync_to_db_new_default_demoted_when_prior_default_is_disabled():
 
     params = _insert_params(_find_insert(session, "claude-sonnet-5"))
     assert params["is_default"] is False
-    assert session.updates == [], (
-        "sync must not clear/override admin flags on existing rows"
-    )
+    assert session.updates == [], "sync must not clear/override admin flags on existing rows"
 
 
 @pytest.mark.asyncio
@@ -845,9 +823,7 @@ class TestLLMProxyCostTable:
         from api.llm_proxy import _calc_cost
 
         # Must hit the claude-haiku-4-5 row ($1/$5), not claude-haiku-4
-        assert _calc_cost("claude-haiku-4-5-20251001", 1000, 1000) == pytest.approx(
-            0.001 + 0.005
-        )
+        assert _calc_cost("claude-haiku-4-5-20251001", 1000, 1000) == pytest.approx(0.001 + 0.005)
 
     def test_opus_4_5_and_later_match_post_price_cut_rows(self):
         """Opus price cut ($5/$25) applies from 4.5 onward: the specific
@@ -1082,9 +1058,7 @@ class TestCostTablePrefixOrdering:
             assert calc("gpt-4o-mini", 1000, 3000) == pytest.approx(0.00015 + 3 * 0.0006)
 
         # Gemini 는 수집기가 없어 llm_proxy 만 해당
-        assert _calc_cost("gemini-2.5-flash-lite", 1000, 3000) == pytest.approx(
-            0.0001 + 3 * 0.0004
-        )
+        assert _calc_cost("gemini-2.5-flash-lite", 1000, 3000) == pytest.approx(0.0001 + 3 * 0.0004)
         assert _calc_cost("gemini-2.5-flash", 1000, 3000) == pytest.approx(0.0003 + 3 * 0.0025)
 
     def test_usage_collector_keeps_the_same_variant_ordering(self):

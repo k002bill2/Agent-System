@@ -10,7 +10,7 @@ The DB session and auth user are injected via FastAPI dependency overrides with
 lightweight fakes (no real DB in the test env).
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -28,7 +28,7 @@ from models.llm_models import LLMModelRegistry
 _ADMIN = SimpleNamespace(id="admin-1", role="admin", is_admin=True, is_active=True)
 _NON_ADMIN = SimpleNamespace(id="user-1", role="user", is_admin=False, is_active=True)
 _INACTIVE_ADMIN = SimpleNamespace(id="admin-2", role="admin", is_admin=True, is_active=False)
-_SUPPRESSED_AT = datetime(2026, 7, 12, 4, 30, tzinfo=timezone.utc)
+_SUPPRESSED_AT = datetime(2026, 7, 12, 4, 30, tzinfo=UTC)
 
 
 def _insert_params(stmt) -> dict:
@@ -142,9 +142,9 @@ async def test_delete_model_success(monkeypatch, make_client):
     )
     db = _FakeDB(
         select_results=[
-            _Result(scalar=db_model),                # SELECT config row (FOR UPDATE)
-            _Result(scalar=suppression),             # read-back suppression
-            _Result(scalars_list=[remaining]),       # load_from_db reload
+            _Result(scalar=db_model),  # SELECT config row (FOR UPDATE)
+            _Result(scalar=suppression),  # read-back suppression
+            _Result(scalars_list=[remaining]),  # load_from_db reload
         ]
     )
     client = await make_client(db, _ADMIN)
@@ -180,9 +180,9 @@ async def test_delete_model_suppression_readback_none_stays_200(monkeypatch, mak
     db_model = SimpleNamespace(id="gpt-5.4-nano", provider="openai", is_default=False)
     db = _FakeDB(
         select_results=[
-            _Result(scalar=db_model),   # SELECT config FOR UPDATE
-            _Result(scalar=None),       # suppression readback → None (raced away)
-            _Result(scalars_list=[]),   # load_from_db
+            _Result(scalar=db_model),  # SELECT config FOR UPDATE
+            _Result(scalar=None),  # suppression readback → None (raced away)
+            _Result(scalars_list=[]),  # load_from_db
         ]
     )
     client = await make_client(db, _ADMIN)
@@ -328,7 +328,7 @@ async def test_patch_model_success_with_row_lock(monkeypatch, make_client):
     )
     db = _FakeDB(
         select_results=[
-            _Result(scalar=db_model),          # SELECT config FOR UPDATE
+            _Result(scalar=db_model),  # SELECT config FOR UPDATE
             _Result(scalars_list=[reloaded]),  # load_from_db reload
         ]
     )

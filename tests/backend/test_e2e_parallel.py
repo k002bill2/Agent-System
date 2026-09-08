@@ -1,10 +1,10 @@
 """E2E parallel execution tests."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 import asyncio
 
-from models.agent_state import TaskStatus, TaskNode, create_initial_state
+import pytest
+
+from models.agent_state import TaskNode, TaskStatus, create_initial_state
 
 
 @pytest.mark.asyncio
@@ -98,10 +98,7 @@ class TestConcurrentTaskExecution:
             )
             state["tasks"][f"task-{i}"] = task
 
-        pending_count = sum(
-            1 for t in state["tasks"].values()
-            if t.status == TaskStatus.PENDING
-        )
+        pending_count = sum(1 for t in state["tasks"].values() if t.status == TaskStatus.PENDING)
         assert pending_count == 5
 
     async def test_tasks_can_be_marked_in_progress(self):
@@ -122,8 +119,7 @@ class TestConcurrentTaskExecution:
             state["tasks"][tid].status = TaskStatus.IN_PROGRESS
 
         in_progress_count = sum(
-            1 for t in state["tasks"].values()
-            if t.status == TaskStatus.IN_PROGRESS
+            1 for t in state["tasks"].values() if t.status == TaskStatus.IN_PROGRESS
         )
         assert in_progress_count == 3
 

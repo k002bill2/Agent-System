@@ -1,7 +1,5 @@
 """Tests for StructuredError model and exception classification."""
 
-import pytest
-
 from models.errors import (
     ErrorCategory,
     ErrorSeverity,
@@ -90,15 +88,22 @@ class TestClassifyException:
 
     def test_httpx_timeout_by_class_name(self):
         """Test classification by exception class name (for httpx/aiohttp)."""
-        class TimeoutException(Exception):
+
+        # 이름이 부하를 진다: models/errors.py `_classify_exception` 이
+        # `type(exc).__name__ in ("TimeoutException", ...)` 로 정확 매칭하므로
+        # 개명하면 이 테스트가 겨냥한 분기가 조용히 죽는다.
+        class TimeoutException(Exception):  # noqa: N818
             pass
+
         cat, sev = _classify_exception(TimeoutException("read timeout"))
         assert cat == ErrorCategory.TRANSIENT
 
     def test_rate_limit_error_by_class_name(self):
         """Test classification by class name for RateLimitError."""
+
         class RateLimitError(Exception):
             pass
+
         cat, sev = _classify_exception(RateLimitError("Too many requests"))
         assert cat == ErrorCategory.LLM_ERROR
 

@@ -1,14 +1,13 @@
 """Tests for artifact service."""
 
-import pytest
-
-from utils.time import utcnow
 from services.artifact_service import ArtifactService
+from utils.time import utcnow
 
 
 class TestArtifactService:
     def setup_method(self):
         import tempfile
+
         self._tmpdir = tempfile.mkdtemp()
         self.svc = ArtifactService(base_dir=self._tmpdir)
 
@@ -56,6 +55,7 @@ class TestArtifactService:
 
     def test_cleanup_expired(self):
         from datetime import timedelta
+
         artifact = self.svc.create_artifact(
             run_id="run1", name="old.txt", data=b"old", retention_days=0
         )
@@ -67,8 +67,11 @@ class TestArtifactService:
 
     def test_artifact_with_job_and_step(self):
         artifact = self.svc.create_artifact(
-            run_id="run1", name="log.txt", data=b"log",
-            job_id="job1", step_id="step1",
+            run_id="run1",
+            name="log.txt",
+            data=b"log",
+            job_id="job1",
+            step_id="step1",
         )
         assert artifact["job_id"] == "job1"
         assert artifact["step_id"] == "step1"

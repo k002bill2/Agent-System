@@ -17,7 +17,6 @@ from services.pipeline.stages.collect_stage import CollectStage
 from services.pipeline.stages.output_stage import OutputStage
 from services.pipeline.stages.transform_stage import TransformStage
 
-
 # ── Fixtures ────────────────────────────────────────────────
 
 
@@ -224,9 +223,7 @@ class TestTransformStage:
 
     @pytest.mark.asyncio
     async def test_filter_list_by_value(self):
-        stage = TransformStage(
-            {"operation": "filter", "field": "status", "value": "active"}
-        )
+        stage = TransformStage({"operation": "filter", "field": "status", "value": "active"})
         ctx = PipelineContext()
         ctx.set(
             "collected",
@@ -241,9 +238,7 @@ class TestTransformStage:
 
     @pytest.mark.asyncio
     async def test_map_fields(self):
-        stage = TransformStage(
-            {"operation": "map", "field_map": {"old_name": "new_name"}}
-        )
+        stage = TransformStage({"operation": "map", "field_map": {"old_name": "new_name"}})
         ctx = PipelineContext()
         ctx.set("collected", {"old_name": "value", "keep": True})
         result = await stage.execute(ctx)
@@ -401,9 +396,7 @@ class TestOutputStage:
     @pytest.mark.asyncio
     async def test_file_output_path_traversal_blocked(self):
         """Path traversal should be blocked on write."""
-        stage = OutputStage(
-            {"output_type": "file", "file_path": "/tmp/evil/output.json"}
-        )
+        stage = OutputStage({"output_type": "file", "file_path": "/tmp/evil/output.json"})
         ctx = PipelineContext()
         ctx.set("collected", {"x": 1})
         result = await stage.execute(ctx)
@@ -422,12 +415,8 @@ class TestOutputStage:
     async def test_summary_output(self):
         stage = OutputStage({"output_type": "summary"})
         ctx = PipelineContext()
-        ctx.add_result(
-            StageResult(stage_name="collect", status="success", duration_ms=10)
-        )
-        ctx.add_result(
-            StageResult(stage_name="transform", status="success", duration_ms=5)
-        )
+        ctx.add_result(StageResult(stage_name="collect", status="success", duration_ms=10))
+        ctx.add_result(StageResult(stage_name="transform", status="success", duration_ms=5))
         result = await stage.execute(ctx)
         assert result.status == "success"
         assert result.data["output"]["total_stages"] == 2
@@ -484,9 +473,7 @@ class TestPipelineCRUD:
                 pass
 
             async def execute(self, context: PipelineContext) -> StageResult:
-                return StageResult(
-                    stage_name=self.name, status="success", data={"custom": True}
-                )
+                return StageResult(stage_name=self.name, status="success", data={"custom": True})
 
         service.register_stage("custom", CustomStage)
         assert "custom" in service.get_registered_stages()
@@ -524,9 +511,7 @@ class TestPipelineExecution:
             ],
         )
         pid = await service.create_pipeline(config)
-        result = await service.execute_pipeline(
-            pid, initial_data={"collected": [1, 2, 3]}
-        )
+        result = await service.execute_pipeline(pid, initial_data={"collected": [1, 2, 3]})
         assert result.status == "success"
 
     @pytest.mark.asyncio

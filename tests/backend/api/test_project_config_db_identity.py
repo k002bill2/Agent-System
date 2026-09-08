@@ -113,15 +113,15 @@ async def db_mode_app(authenticated_app, tmp_path, monkeypatch, isolated_monitor
         updated_at=None,
     )
 
-    Database = _database_stub(row)
+    database_cls = _database_stub(row)
 
     async def _override():
-        yield Database()
+        yield database_cls()
 
     monkeypatch.setenv("USE_DATABASE", "true")
     # 목록 필터(`_get_db_filtered_projects`)는 주입된 세션이 아니라 자체
     # `async_session_factory()` 를 연다. override 만으로는 실 DB 에 붙는다.
-    monkeypatch.setattr("db.database.async_session_factory", lambda: Database())
+    monkeypatch.setattr("db.database.async_session_factory", lambda: database_cls())
     authenticated_app.dependency_overrides[get_db_session] = _override
     yield authenticated_app, str(project_path)
     authenticated_app.dependency_overrides.pop(get_db_session, None)

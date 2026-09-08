@@ -220,10 +220,12 @@ class _FakeSequenceDb:
 async def test_delete_cli_profile_removes_profile_and_unassigns_entitlements() -> None:
     profile = SimpleNamespace(id="profile-1")
     entitlement = SimpleNamespace(cli_profile_id="profile-1", updated_at=None)
-    db = _FakeSequenceDb([
-        _FakeScalarResult(profile),
-        _FakeListResult([entitlement]),
-    ])
+    db = _FakeSequenceDb(
+        [
+            _FakeScalarResult(profile),
+            _FakeListResult([entitlement]),
+        ]
+    )
 
     deleted = await delete_cli_profile(db, "profile-1")
 

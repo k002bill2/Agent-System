@@ -91,9 +91,7 @@ async def test_executor_accumulates_token_usage_across_iterations(
 
 
 @pytest.mark.asyncio
-async def test_executor_total_cost_matches_ledger_sum(
-    monkeypatch, executor_state, usage_recorder
-):
+async def test_executor_total_cost_matches_ledger_sum(monkeypatch, executor_state, usage_recorder):
     """state 의 total_cost 는 원장에 기록된 회차별 비용의 합과 일치해야 한다."""
     node = _build_node(
         monkeypatch,

@@ -1,10 +1,11 @@
 """Tests for MCPService (MCP protocol handler)."""
 
 import json
+
 import pytest
 
 from models.mcp import MCPRequest, MCPToolResult
-from services.mcp_service import MCPService, get_mcp_service
+from services.mcp_service import MCPService
 
 
 @pytest.fixture
@@ -50,7 +51,9 @@ class TestHandleRequest:
         assert mcp_service._initialized is True
 
     @pytest.mark.asyncio
-    async def test_unknown_method_returns_method_not_found_error(self, mcp_service: MCPService) -> None:
+    async def test_unknown_method_returns_method_not_found_error(
+        self, mcp_service: MCPService
+    ) -> None:
         req = MCPRequest(id=2, method="unknown/method", params={})
 
         resp = await mcp_service.handle_request(req)
@@ -61,7 +64,9 @@ class TestHandleRequest:
         assert "Method not found" in resp.error["message"]
 
     @pytest.mark.asyncio
-    async def test_internal_error_is_wrapped(self, mcp_service: MCPService, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_internal_error_is_wrapped(
+        self, mcp_service: MCPService, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # Force _handle_initialize to raise to exercise the generic error handler
         def boom(_params: dict):  # type: ignore[override]
             raise RuntimeError("boom")
@@ -108,7 +113,9 @@ class TestExecuteToolDispatch:
         assert any("Unknown tool" in c.get("text", "") for c in result.content)
 
     @pytest.mark.asyncio
-    async def test_execute_tool_wraps_exceptions(self, mcp_service: MCPService, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_execute_tool_wraps_exceptions(
+        self, mcp_service: MCPService, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         async def boom(_args: dict):  # type: ignore[override]
             raise RuntimeError("tool failed")
 
@@ -159,7 +166,9 @@ class TestCreateTaskAndStatusTools:
 
         # Patch project lookup/registry
         monkeypatch.setattr("services.mcp_service.get_project", lambda _pid: dummy_project)
-        monkeypatch.setattr("services.mcp_service.PROJECTS_REGISTRY", {"demo": dummy_project}, raising=False)
+        monkeypatch.setattr(
+            "services.mcp_service.PROJECTS_REGISTRY", {"demo": dummy_project}, raising=False
+        )
 
         # Create task
         create_result = await mcp_service._tool_create_task(
@@ -265,7 +274,9 @@ class TestRunCheckTool:
         # Patch get_runner so we don't touch the real filesystem when constructing ProjectRunner
         monkeypatch.setattr("services.mcp_service.get_runner", lambda _path: DummyRunner())
 
-        result = await mcp_service._tool_run_check({"project_id": "demo", "check_type": "not-a-check"})
+        result = await mcp_service._tool_run_check(
+            {"project_id": "demo", "check_type": "not-a-check"}
+        )
 
         assert result.isError is True
         text = "\n".join(c.get("text", "") for c in result.content)
@@ -335,7 +346,11 @@ class TestRunCheckTool:
                 return type(
                     "R",
                     (),
-                    {"status": status, "duration_ms": 50, "stderr": "boom" if status != "success" else ""},
+                    {
+                        "status": status,
+                        "duration_ms": 50,
+                        "stderr": "boom" if status != "success" else "",
+                    },
                 )()
 
         monkeypatch.setattr("services.mcp_service.get_runner", lambda _path: DummyRunner())

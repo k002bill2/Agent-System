@@ -65,6 +65,7 @@ class TestToNaiveUtc:
 
     def test_aware_non_utc_converts_then_strips(self):
         from datetime import timedelta, timezone
+
         kst = timezone(timedelta(hours=9))
         dt = datetime(2026, 5, 2, 3, 0, 0, tzinfo=kst)  # KST 03:00 = UTC 18:00 (전날)
         result = to_naive_utc(dt)

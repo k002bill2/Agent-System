@@ -1,7 +1,5 @@
 """Tests for variable expander."""
 
-import pytest
-
 from services.variable_expander import expand_variables, mask_secrets, parse_step_outputs
 
 

@@ -10,13 +10,10 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from api.v1.agents import (
-    AgentCategory,
-    AgentStatus,
     reset_agent_store,
     router,
     seed_default_agents,
 )
-
 
 # ─────────────────────────────────────────────────────────────
 # Fixtures

@@ -142,9 +142,7 @@ async def test_record_usage_resolves_unique_user_org_and_updates_quota_counter()
         add=MagicMock(),
         flush=AsyncMock(side_effect=flush_side_effect),
         execute=AsyncMock(
-            return_value=_FakeResult(
-                [SimpleNamespace(organization_id="org-1", is_active=True)]
-            )
+            return_value=_FakeResult([SimpleNamespace(organization_id="org-1", is_active=True)])
         ),
     )
     data = LLMUsageRecordCreate(
@@ -235,9 +233,7 @@ async def test_record_usage_accepts_explicit_org_scope_for_active_member() -> No
         add=MagicMock(),
         flush=AsyncMock(side_effect=flush_side_effect),
         execute=AsyncMock(
-            return_value=_FakeResult(
-                [SimpleNamespace(organization_id="org-2", is_active=True)]
-            )
+            return_value=_FakeResult([SimpleNamespace(organization_id="org-2", is_active=True)])
         ),
     )
     data = LLMUsageRecordCreate(
@@ -303,9 +299,7 @@ async def test_record_usage_rejects_explicit_org_scope_for_non_member() -> None:
 async def test_enforce_usage_quota_preflight_allows_with_remaining_quota() -> None:
     db = SimpleNamespace(
         execute=AsyncMock(
-            return_value=_FakeResult(
-                [SimpleNamespace(organization_id="org-1", is_active=True)]
-            )
+            return_value=_FakeResult([SimpleNamespace(organization_id="org-1", is_active=True)])
         ),
     )
     org = SimpleNamespace(
@@ -333,9 +327,7 @@ async def test_enforce_usage_quota_preflight_allows_with_remaining_quota() -> No
 async def test_enforce_usage_quota_preflight_raises_when_quota_exceeded() -> None:
     db = SimpleNamespace(
         execute=AsyncMock(
-            return_value=_FakeResult(
-                [SimpleNamespace(organization_id="org-1", is_active=True)]
-            )
+            return_value=_FakeResult([SimpleNamespace(organization_id="org-1", is_active=True)])
         ),
     )
     org = SimpleNamespace(

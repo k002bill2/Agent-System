@@ -168,7 +168,9 @@ async def test_retry_budget_stays_under_dashboard_timeout() -> None:
         anthropic_mod.USAGE_FETCH_MAX_ATTEMPTS * anthropic_mod.USAGE_FETCH_TIMEOUT_SECONDS
         + sum(anthropic_mod.USAGE_FETCH_BACKOFF_SECONDS)
     )
-    assert len(anthropic_mod.USAGE_FETCH_BACKOFF_SECONDS) >= anthropic_mod.USAGE_FETCH_MAX_ATTEMPTS - 1
+    assert (
+        len(anthropic_mod.USAGE_FETCH_BACKOFF_SECONDS) >= anthropic_mod.USAGE_FETCH_MAX_ATTEMPTS - 1
+    )
     assert worst_case <= dashboard_timeout_seconds - 5.0, (
         f"retry budget {worst_case}s leaves too little margin under "
         f"{dashboard_timeout_seconds}s dashboard timeout"

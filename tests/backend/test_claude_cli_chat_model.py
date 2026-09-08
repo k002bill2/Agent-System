@@ -52,9 +52,7 @@ def test_message_role_maps_known_types() -> None:
 
 
 def test_format_messages_includes_roles_and_trailing_assistant() -> None:
-    prompt = _format_messages(
-        [SystemMessage(content="be terse"), HumanMessage(content="hi")]
-    )
+    prompt = _format_messages([SystemMessage(content="be terse"), HumanMessage(content="hi")])
     assert "## System\nbe terse" in prompt
     assert "## User\nhi" in prompt
     # Must end by cueing the assistant turn so Claude completes the response.
@@ -65,15 +63,15 @@ def test_format_messages_includes_roles_and_trailing_assistant() -> None:
 
 
 def test_call_reads_answer_from_stdout() -> None:
-    with patch(f"{MODULE}.subprocess.run",
-               side_effect=_run_side_effect(stdout="claude answer")):
+    with patch(f"{MODULE}.subprocess.run", side_effect=_run_side_effect(stdout="claude answer")):
         out = _model()._call([HumanMessage(content="q")])
     assert out == "claude answer"
 
 
 def test_call_strips_stdout_whitespace() -> None:
-    with patch(f"{MODULE}.subprocess.run",
-               side_effect=_run_side_effect(stdout="  spaced answer \n")):
+    with patch(
+        f"{MODULE}.subprocess.run", side_effect=_run_side_effect(stdout="  spaced answer \n")
+    ):
         out = _model()._call([HumanMessage(content="q")])
     assert out == "spaced answer"
 
@@ -110,8 +108,9 @@ def test_call_detaches_stdin_to_avoid_interactive_hang() -> None:
 
 
 def test_call_raises_on_nonzero_exit(caplog: pytest.LogCaptureFixture) -> None:
-    with patch(f"{MODULE}.subprocess.run",
-               side_effect=_run_side_effect(returncode=1, stderr="boom")):
+    with patch(
+        f"{MODULE}.subprocess.run", side_effect=_run_side_effect(returncode=1, stderr="boom")
+    ):
         with caplog.at_level("WARNING", logger=MODULE):
             with pytest.raises(RuntimeError, match="boom"):
                 _model()._call([HumanMessage(content="q")])
@@ -129,8 +128,9 @@ def test_call_raises_when_command_not_found() -> None:
 def test_call_raises_on_timeout() -> None:
     import subprocess
 
-    with patch(f"{MODULE}.subprocess.run",
-               side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=1)):
+    with patch(
+        f"{MODULE}.subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=1)
+    ):
         with pytest.raises(RuntimeError, match="timed out"):
             _model()._call([HumanMessage(content="q")])
 
@@ -155,8 +155,10 @@ class _Plan(BaseModel):
 
 @pytest.mark.asyncio
 async def test_structured_output_parses_pydantic() -> None:
-    with patch(f"{MODULE}.subprocess.run",
-               side_effect=_run_side_effect(stdout='{"title": "x", "steps": 3}')):
+    with patch(
+        f"{MODULE}.subprocess.run",
+        side_effect=_run_side_effect(stdout='{"title": "x", "steps": 3}'),
+    ):
         runnable = _model().with_structured_output(_Plan)
         result = await runnable.ainvoke([HumanMessage(content="plan it")])
     assert isinstance(result, _Plan)
@@ -166,9 +168,8 @@ async def test_structured_output_parses_pydantic() -> None:
 
 @pytest.mark.asyncio
 async def test_structured_output_strips_surrounding_markdown() -> None:
-    fenced = "Here you go:\n```json\n{\"title\": \"y\", \"steps\": 1}\n```\nThanks!"
-    with patch(f"{MODULE}.subprocess.run",
-               side_effect=_run_side_effect(stdout=fenced)):
+    fenced = 'Here you go:\n```json\n{"title": "y", "steps": 1}\n```\nThanks!'
+    with patch(f"{MODULE}.subprocess.run", side_effect=_run_side_effect(stdout=fenced)):
         runnable = _model().with_structured_output(_Plan)
         result = await runnable.ainvoke([HumanMessage(content="plan it")])
     assert result == _Plan(title="y", steps=1)
@@ -176,8 +177,7 @@ async def test_structured_output_strips_surrounding_markdown() -> None:
 
 @pytest.mark.asyncio
 async def test_structured_output_raises_without_json() -> None:
-    with patch(f"{MODULE}.subprocess.run",
-               side_effect=_run_side_effect(stdout="no json here")):
+    with patch(f"{MODULE}.subprocess.run", side_effect=_run_side_effect(stdout="no json here")):
         runnable = _model().with_structured_output(_Plan)
         with pytest.raises(ValueError, match="did not contain a JSON object"):
             await runnable.ainvoke([HumanMessage(content="plan it")])
@@ -193,8 +193,7 @@ def test_structured_output_include_raw_unsupported() -> None:
 
 @pytest.mark.asyncio
 async def test_acall_delegates_to_call() -> None:
-    with patch(f"{MODULE}.subprocess.run",
-               side_effect=_run_side_effect(stdout="async answer")):
+    with patch(f"{MODULE}.subprocess.run", side_effect=_run_side_effect(stdout="async answer")):
         out = await _model()._acall([HumanMessage(content="q")])
     assert out == "async answer"
 

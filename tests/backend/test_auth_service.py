@@ -10,10 +10,10 @@ import pytest
 
 from services.auth_service import AuthService, TokenPair, UserInfo
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_settings(
     secret: str = "test-secret-key-32-bytes-long-abc",
@@ -72,6 +72,7 @@ def _make_user_model(
 # ---------------------------------------------------------------------------
 # JWT Token Tests
 # ---------------------------------------------------------------------------
+
 
 class TestJwtTokenCreation:
     """Tests for create_access_token, create_refresh_token, and create_token_pair."""
@@ -149,6 +150,7 @@ class TestJwtTokenCreation:
 # JWT Token Verification Tests
 # ---------------------------------------------------------------------------
 
+
 class TestJwtTokenVerification:
     """Tests for verify_token."""
 
@@ -212,6 +214,7 @@ class TestJwtTokenVerification:
 # ---------------------------------------------------------------------------
 # Password Hashing Tests
 # ---------------------------------------------------------------------------
+
 
 class TestPasswordHashing:
     """Tests for hash_password, verify_password, and verify_and_upgrade_password."""
@@ -279,6 +282,7 @@ class TestPasswordHashing:
 # OAuth URL Generation Tests
 # ---------------------------------------------------------------------------
 
+
 class TestOAuthUrlGeneration:
     """Tests for get_google_auth_url and get_github_auth_url."""
 
@@ -321,6 +325,7 @@ class TestOAuthUrlGeneration:
 # OAuth Code Exchange Tests
 # ---------------------------------------------------------------------------
 
+
 class TestGoogleCodeExchange:
     """Tests for exchange_google_code."""
 
@@ -352,7 +357,9 @@ class TestGoogleCodeExchange:
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("services.auth_service.httpx.AsyncClient", return_value=mock_client):
-            user_info = await self.service.exchange_google_code("auth-code", "https://cb.example.com")
+            user_info = await self.service.exchange_google_code(
+                "auth-code", "https://cb.example.com"
+            )
 
         assert isinstance(user_info, UserInfo)
         assert user_info.id == "goog-123"
@@ -475,6 +482,7 @@ class TestGithubCodeExchange:
 # Email / Password Registration and Login Tests
 # ---------------------------------------------------------------------------
 
+
 class TestEmailPasswordAuth:
     """Tests for register_user and login_user."""
 
@@ -523,7 +531,9 @@ class TestEmailPasswordAuth:
         async def passthrough_sync(user):
             return user
 
-        with patch.object(service, "sync_user_role_from_org", new=AsyncMock(side_effect=passthrough_sync)):
+        with patch.object(
+            service, "sync_user_role_from_org", new=AsyncMock(side_effect=passthrough_sync)
+        ):
             user = await service.register_user("new@example.com", "mypassword", name="Alice")
 
         db.add.assert_called_once()
@@ -616,6 +626,7 @@ class TestEmailPasswordAuth:
 # get_or_create_user Tests
 # ---------------------------------------------------------------------------
 
+
 class TestGetOrCreateUser:
     """Tests for get_or_create_user."""
 
@@ -690,6 +701,7 @@ class TestGetOrCreateUser:
 # ---------------------------------------------------------------------------
 # sync_user_role_from_org Tests
 # ---------------------------------------------------------------------------
+
 
 class TestSyncUserRoleFromOrg:
     """Tests for sync_user_role_from_org."""

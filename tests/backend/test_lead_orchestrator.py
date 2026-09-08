@@ -1,15 +1,15 @@
 """Tests for Lead Orchestrator Agent."""
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from agents.lead_orchestrator import (
-    LeadOrchestratorAgent,
-    TaskAnalysis,
-    SubtaskPlan,
-    ExecutionStrategy,
     EffortLevel,
-    get_lead_orchestrator,
+    ExecutionStrategy,
+    LeadOrchestratorAgent,
+    SubtaskPlan,
+    TaskAnalysis,
 )
 
 
@@ -30,7 +30,7 @@ class TestLeadOrchestratorAgent:
     async def test_execute_simple_task(self):
         """간단한 태스크 실행 테스트."""
         # LLM 응답 모킹
-        mock_response = '''```json
+        mock_response = """```json
 {
   "analysis": {
     "complexity_score": 3,
@@ -52,9 +52,9 @@ class TestLeadOrchestratorAgent:
   "execution_strategy": "sequential",
   "reasoning": "Simple task, no decomposition needed"
 }
-```'''
+```"""
 
-        with patch.object(self.orchestrator, '_invoke_llm', new_callable=AsyncMock) as mock_llm:
+        with patch.object(self.orchestrator, "_invoke_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = mock_response
 
             result = await self.orchestrator.execute("Create a button component")
@@ -66,7 +66,7 @@ class TestLeadOrchestratorAgent:
     @pytest.mark.asyncio
     async def test_execute_complex_task(self):
         """복잡한 태스크 실행 테스트 (분해 필요)."""
-        mock_response = '''```json
+        mock_response = """```json
 {
   "analysis": {
     "complexity_score": 8,
@@ -104,9 +104,9 @@ class TestLeadOrchestratorAgent:
   "execution_strategy": "mixed",
   "reasoning": "Complex feature requires multiple specialists"
 }
-```'''
+```"""
 
-        with patch.object(self.orchestrator, '_invoke_llm', new_callable=AsyncMock) as mock_llm:
+        with patch.object(self.orchestrator, "_invoke_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = mock_response
 
             result = await self.orchestrator.execute("Implement user login with Firebase")
@@ -119,9 +119,19 @@ class TestLeadOrchestratorAgent:
         """위상 정렬 테스트."""
         subtasks = [
             SubtaskPlan(id="st-1", title="Task 1", description="First", priority=10),
-            SubtaskPlan(id="st-2", title="Task 2", description="Second", dependencies=["st-1"], priority=5),
-            SubtaskPlan(id="st-3", title="Task 3", description="Third", dependencies=["st-1"], priority=8),
-            SubtaskPlan(id="st-4", title="Task 4", description="Fourth", dependencies=["st-2", "st-3"], priority=1),
+            SubtaskPlan(
+                id="st-2", title="Task 2", description="Second", dependencies=["st-1"], priority=5
+            ),
+            SubtaskPlan(
+                id="st-3", title="Task 3", description="Third", dependencies=["st-1"], priority=8
+            ),
+            SubtaskPlan(
+                id="st-4",
+                title="Task 4",
+                description="Fourth",
+                dependencies=["st-2", "st-3"],
+                priority=1,
+            ),
         ]
 
         order = self.orchestrator._topological_sort(subtasks)
@@ -292,7 +302,7 @@ class TestAnalyzeTaskParsing:
     @pytest.mark.asyncio
     async def test_parse_new_fields(self):
         """safety_flags, dependency_rationale, task_boundaries 파싱 테스트."""
-        mock_response = '''```json
+        mock_response = """```json
 {
   "analysis": {
     "complexity_score": 7,
@@ -334,9 +344,9 @@ class TestAnalyzeTaskParsing:
   "execution_strategy": "sequential",
   "reasoning": "API 먼저 구현 후 UI 연동"
 }
-```'''
+```"""
 
-        with patch.object(self.orchestrator, '_invoke_llm', new_callable=AsyncMock) as mock_llm:
+        with patch.object(self.orchestrator, "_invoke_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = mock_response
 
             result = await self.orchestrator.execute("API와 UI 기능 구현")
@@ -356,7 +366,7 @@ class TestAnalyzeTaskParsing:
     @pytest.mark.asyncio
     async def test_parse_without_new_fields_backward_compat(self):
         """새 필드 없는 기존 응답도 정상 파싱 (하위 호환)."""
-        mock_response = '''```json
+        mock_response = """```json
 {
   "analysis": {
     "complexity_score": 3,
@@ -378,9 +388,9 @@ class TestAnalyzeTaskParsing:
   "execution_strategy": "sequential",
   "reasoning": "간단한 작업"
 }
-```'''
+```"""
 
-        with patch.object(self.orchestrator, '_invoke_llm', new_callable=AsyncMock) as mock_llm:
+        with patch.object(self.orchestrator, "_invoke_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = mock_response
 
             result = await self.orchestrator.execute("버튼 추가")

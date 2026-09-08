@@ -6,7 +6,6 @@ without LLM analysis for PERMANENT, TRANSIENT, and RESOURCE errors.
 
 from __future__ import annotations
 
-from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -206,7 +205,7 @@ class TestLogicError:
         mock_llm.with_structured_output.return_value = MagicMock()
         mock_llm.with_structured_output.return_value.ainvoke = structured_llm
 
-        result = await node.run(state)
+        await node.run(state)
 
         # LLM SHOULD be called (unlike TRANSIENT/PERMANENT)
         assert mock_llm.with_structured_output.called or mock_llm.ainvoke.called
@@ -267,7 +266,7 @@ class TestNoStructuredError:
         mock_llm.with_structured_output.return_value = MagicMock()
         mock_llm.with_structured_output.return_value.ainvoke = structured_llm
 
-        result = await node.run(state)
+        await node.run(state)
 
         # LLM should be called since no structured error for fast path
         assert mock_llm.with_structured_output.called or mock_llm.ainvoke.called

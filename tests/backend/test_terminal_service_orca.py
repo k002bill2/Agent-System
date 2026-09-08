@@ -15,8 +15,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from services.terminal_service import (
-    OrcaAdapter,
     TERMINAL_INFO,
+    OrcaAdapter,
     TerminalService,
     TerminalType,
     _resolve_orca_command,
@@ -52,9 +52,7 @@ def _ok_json() -> str:
 
 
 def _err_json(code: str, message: str | None = None) -> str:
-    return json.dumps(
-        {"id": "x", "ok": False, "error": {"code": code, "message": message or code}}
-    )
+    return json.dumps({"id": "x", "ok": False, "error": {"code": code, "message": message or code}})
 
 
 # ---------------------------------------------------------------------------

@@ -154,9 +154,7 @@ class TestApprovalAPI:
         session_id = create_resp.json()["session_id"]
 
         try:
-            response = await client.post(
-                f"/api/sessions/{session_id}/approve/nonexistent-approval"
-            )
+            response = await client.post(f"/api/sessions/{session_id}/approve/nonexistent-approval")
         finally:
             app.dependency_overrides.pop(get_current_user, None)
 

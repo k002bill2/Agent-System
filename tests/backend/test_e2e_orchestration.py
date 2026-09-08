@@ -1,9 +1,8 @@
 """E2E orchestration integration tests."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
-from models.agent_state import TaskStatus, TaskNode
+from models.agent_state import TaskNode
 
 
 @pytest.mark.asyncio

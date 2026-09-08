@@ -22,6 +22,10 @@
     "src/backend/**/*.py": [
       "uv run --project src/backend ruff check --fix",
       "uv run --project src/backend ruff format"
+    ],
+    "tests/backend/**/*.py": [
+      "uv run --project src/backend ruff check --fix",
+      "uv run --project src/backend ruff format"
     ]
   }
 }

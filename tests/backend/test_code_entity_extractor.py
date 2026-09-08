@@ -3,8 +3,6 @@
 import pytest
 
 from services.code_entity_extractor import (
-    CodeDependency,
-    CodeEntity,
     CodeEntityType,
     PythonEntityExtractor,
     TypeScriptEntityExtractor,
@@ -69,13 +67,13 @@ class MyService(BaseService):
         assert methods[1].name == "async_method"
 
     def test_import_extraction(self, extractor):
-        source = '''
+        source = """
 import os
 import json
 from pathlib import Path
 from typing import Any, Optional
 from ..models import TaskNode
-'''
+"""
         entities = extractor.extract(source, "test.py")
         imports = [e for e in entities if e.entity_type == CodeEntityType.IMPORT]
 
@@ -87,12 +85,12 @@ from ..models import TaskNode
         assert "Any" in names
 
     def test_variable_extraction(self, extractor):
-        source = '''
+        source = """
 MAX_RETRIES = 3
 DEFAULT_TIMEOUT = 30
 _private = "hidden"
 simple = 42
-'''
+"""
         entities = extractor.extract(source, "test.py")
         vars_ = [e for e in entities if e.entity_type == CodeEntityType.VARIABLE]
 
@@ -102,12 +100,12 @@ simple = 42
         assert "DEFAULT_TIMEOUT" in names
 
     def test_decorator_extraction(self, extractor):
-        source = '''
+        source = """
 @app.route("/api")
 @require_auth
 def endpoint():
     pass
-'''
+"""
         entities = extractor.extract(source, "test.py")
         funcs = [e for e in entities if e.entity_type == CodeEntityType.FUNCTION]
 
@@ -121,14 +119,14 @@ def endpoint():
         assert entities == []
 
     def test_dependency_extraction(self, extractor):
-        source = '''
+        source = """
 import os
 from pathlib import Path
 from models.base import BaseModel
 
 class Child(BaseModel):
     pass
-'''
+"""
         deps = extractor.extract_dependencies(source, "test.py")
 
         import_deps = [d for d in deps if d.dependency_type == "imports"]
@@ -147,7 +145,7 @@ class TestTypeScriptEntityExtractor:
         return TypeScriptEntityExtractor()
 
     def test_function_extraction(self, extractor):
-        source = '''
+        source = """
 export function fetchData(url: string): Promise<Data> {
   return fetch(url);
 }
@@ -155,7 +153,7 @@ export function fetchData(url: string): Promise<Data> {
 export async function processItems(items: Item[]): Promise<void> {
   // process
 }
-'''
+"""
         entities = extractor.extract(source, "test.ts")
         funcs = [e for e in entities if e.entity_type == CodeEntityType.FUNCTION]
 
@@ -165,7 +163,7 @@ export async function processItems(items: Item[]): Promise<void> {
         assert "processItems" in names
 
     def test_class_extraction(self, extractor):
-        source = '''
+        source = """
 export class UserService {
   async getUser(id: string) { }
 }
@@ -173,7 +171,7 @@ export class UserService {
 export default class AppController {
   start() { }
 }
-'''
+"""
         entities = extractor.extract(source, "test.ts")
         classes = [e for e in entities if e.entity_type == CodeEntityType.CLASS]
 
@@ -183,7 +181,7 @@ export default class AppController {
         assert "AppController" in names
 
     def test_interface_extraction(self, extractor):
-        source = '''
+        source = """
 export interface UserProps {
   name: string;
   age: number;
@@ -192,7 +190,7 @@ export interface UserProps {
 export default interface Config {
   apiUrl: string;
 }
-'''
+"""
         entities = extractor.extract(source, "test.ts")
         interfaces = [e for e in entities if e.entity_type == CodeEntityType.INTERFACE]
 
@@ -202,11 +200,11 @@ export default interface Config {
         assert "Config" in names
 
     def test_type_alias_extraction(self, extractor):
-        source = '''
+        source = """
 export type UserId = string;
 export type Status = 'active' | 'inactive';
 export type Result<T> = { data: T; error: string | null };
-'''
+"""
         entities = extractor.extract(source, "test.ts")
         types = [e for e in entities if e.entity_type == CodeEntityType.TYPE_ALIAS]
 
@@ -217,7 +215,7 @@ export type Result<T> = { data: T; error: string | null };
         assert "Result" in names
 
     def test_enum_extraction(self, extractor):
-        source = '''
+        source = """
 export enum Direction {
   Up = "UP",
   Down = "DOWN",
@@ -227,7 +225,7 @@ export const enum Color {
   Red,
   Blue,
 }
-'''
+"""
         entities = extractor.extract(source, "test.ts")
         enums = [e for e in entities if e.entity_type == CodeEntityType.ENUM]
 
@@ -237,12 +235,12 @@ export const enum Color {
         assert "Color" in names
 
     def test_import_extraction(self, extractor):
-        source = '''
+        source = """
 import { useState, useEffect } from 'react';
 import type { FC } from 'react';
 import axios from 'axios';
 import * as utils from './utils';
-'''
+"""
         entities = extractor.extract(source, "test.ts")
         imports = [e for e in entities if e.entity_type == CodeEntityType.IMPORT]
 
@@ -252,10 +250,10 @@ import * as utils from './utils';
         assert "axios" in import_paths
 
     def test_dependency_extraction(self, extractor):
-        source = '''
+        source = """
 import { api } from './api';
 import { User } from '../types';
-'''
+"""
         deps = extractor.extract_dependencies(source, "test.ts")
 
         assert len(deps) == 2

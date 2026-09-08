@@ -1,6 +1,7 @@
-import pytest
 from datetime import datetime, timedelta
+
 from db.models import ProjectInvitationModel
+
 
 def test_invitation_model_fields():
     inv = ProjectInvitationModel(

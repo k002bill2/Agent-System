@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 # Add src/backend to path
 backend_path = Path(__file__).parent.parent.parent / "src" / "backend"
@@ -49,7 +49,7 @@ def anyio_backend():
 async def app():
     """Create FastAPI app for testing."""
     from api.app import create_app
-    from api.deps import set_engine, clear_engine
+    from api.deps import clear_engine, set_engine
     from orchestrator import OrchestrationEngine
 
     # Set up engine for tests (simulating lifespan startup)

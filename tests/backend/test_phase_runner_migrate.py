@@ -7,7 +7,6 @@ import pytest
 from phase_runner.migrate import infer_frontmatter, migrate_file
 from phase_runner.schema import PhaseSpec
 
-
 SAMPLE_BODY = """# React 19 Migration — Tasks
 
 ## Wave 0 — 사전 조사

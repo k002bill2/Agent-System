@@ -32,9 +32,7 @@ class TestGrantAccess:
     async def test_grant_access_new_user(self, mock_db, project_id, user_id):
         """Should create a new access record for a user."""
         # Mock check_access to return None (no existing access)
-        with patch.object(
-            ProjectAccessService, "check_access", return_value=None
-        ):
+        with patch.object(ProjectAccessService, "check_access", return_value=None):
             mock_db.flush = AsyncMock()
 
             result = await ProjectAccessService.grant_access(
@@ -54,9 +52,7 @@ class TestGrantAccess:
     @pytest.mark.asyncio
     async def test_grant_access_existing_user_raises(self, mock_db, project_id, user_id):
         """Should raise ValueError when user already has access."""
-        with patch.object(
-            ProjectAccessService, "check_access", return_value="viewer"
-        ):
+        with patch.object(ProjectAccessService, "check_access", return_value="viewer"):
             with pytest.raises(ValueError, match="already has"):
                 await ProjectAccessService.grant_access(
                     db=mock_db,

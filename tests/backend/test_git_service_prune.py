@@ -235,9 +235,7 @@ class TestFindPruneCandidates:
 
     @patch("services.git_service.Repo")
     @patch("services.git_service.GIT_AVAILABLE", True)
-    def test_unpushed_commits_skipped(
-        self, mock_repo_class, mock_github_service, tmp_path
-    ):
+    def test_unpushed_commits_skipped(self, mock_repo_class, mock_github_service, tmp_path):
         """Branch with ahead>0 vs origin → skipped with 'unpushed_commits'."""
         repo = MagicMock()
         repo.is_dirty.return_value = False
@@ -580,9 +578,7 @@ class TestScanErrorSurfacing:
 class TestHasUnpushedCommitsFallback:
     @patch("services.git_service.Repo")
     @patch("services.git_service.GIT_AVAILABLE", True)
-    def test_untracked_branch_with_remote_ref_not_unpushed(
-        self, mock_repo_class, tmp_path
-    ):
+    def test_untracked_branch_with_remote_ref_not_unpushed(self, mock_repo_class, tmp_path):
         """No upstream config but origin/<name> exists at same tip → not unpushed."""
         repo = MagicMock()
         branch = _make_branch("feat/pushed", tracking_ref=None, ahead=0)
@@ -605,9 +601,7 @@ class TestHasUnpushedCommitsFallback:
 
     @patch("services.git_service.Repo")
     @patch("services.git_service.GIT_AVAILABLE", True)
-    def test_untracked_branch_without_remote_ref_is_unpushed(
-        self, mock_repo_class, tmp_path
-    ):
+    def test_untracked_branch_without_remote_ref_is_unpushed(self, mock_repo_class, tmp_path):
         """Genuinely-local branch (no upstream, no origin/<name>) stays protected."""
         repo = MagicMock()
         branch = _make_branch("wip/local-only", tracking_ref=None, ahead=0)
