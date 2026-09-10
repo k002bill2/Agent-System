@@ -127,8 +127,19 @@ export GITHUB_TOKEN=$(grep "^GITHUB_TOKEN=" "$PROJECT_ROOT/.env" | cut -d'=' -f2
 export GOOGLE_API_KEY=$(grep "^GOOGLE_API_KEY=" "$PROJECT_ROOT/.env" | cut -d'=' -f2-)
 export ANTHROPIC_API_KEY=$(grep "^ANTHROPIC_API_KEY=" "$PROJECT_ROOT/.env" | cut -d'=' -f2-)
 
-# Start backend in background
-USE_DATABASE=true nohup uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload \
+# Start backend in background.
+#
+# 바인드 기본값은 루프백이다. 와일드카드 바인드는 개발 노트북을 켜 두는 것만으로
+# 백엔드를 같은 네트워크(카페 Wi-Fi, 공유 오피스)에 노출하며, AOS 는 로컬 파일
+# 시스템·터미널·MCP 서버를 조작하는 표면이라 노출 비용이 크다.
+#
+# 이 스크립트는 uvicorn 에 --host 를 직접 넘기므로 config.Settings 의 안전한
+# 기본값(127.0.0.1)을 거치지 않는다 — 그래서 여기서도 같은 기본값을 명시한다.
+#
+# 배포·원격 접근이 필요하면 호출자가 명시적으로 덮어쓴다:
+#   HOST=0.0.0.0 ./infra/scripts/start-all.sh
+BACKEND_HOST="${HOST:-127.0.0.1}"
+USE_DATABASE=true nohup uvicorn api.app:app --host "$BACKEND_HOST" --port 8000 --reload \
     --reload-exclude ".claude/*" --reload-exclude ".temp/*" --reload-exclude "*.json" \
     --reload-exclude "logs/*" --reload-exclude "node_modules/*" \
     > "$PROJECT_ROOT/logs/backend.log" 2>&1 &
