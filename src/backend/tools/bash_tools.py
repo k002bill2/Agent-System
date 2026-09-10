@@ -9,6 +9,37 @@ from langchain_core.tools import tool
 
 from services.sandbox_manager import execute_sandboxed, get_sandbox_manager
 
+# 호스트 쉘 실행 opt-in 스위치.
+#
+# `execute_bash` / `execute_bash_async` 는 샌드박스 없이 호스트에서 임의 명령을
+# 돌린다. 아래의 위험 패턴 목록은 문자열 부분일치라 우회가 쉬워(`rm -r -f /`,
+# 변수 치환, base64 디코드 등) 경계로 쓸 수 없는 완화책일 뿐이다.
+# 실제 경계는 "명시적으로 켜지 않으면 subprocess 를 만들지 않는다"이며,
+# 이 파일의 두 함수는 그 판정을 **첫 문장에서** 수행한다.
+#
+# 샌드박스 경로(`execute_bash_sandboxed`)는 이 스위치의 대상이 아니다 —
+# Docker 격리·네트워크 차단·non-root 로 실행되어 위협 모델이 다르다.
+HOST_SHELL_ENV_VAR = "AOS_ALLOW_HOST_SHELL"
+
+# 화이트리스트로 판정한다. `if os.getenv(VAR):` 는 "false"·"0" 같은 비어 있지
+# 않은 문자열도 참이라 조용히 fail-open 된다.
+_HOST_SHELL_TRUTHY_VALUES = frozenset({"1", "true", "yes", "on"})
+
+HOST_SHELL_DISABLED_MESSAGE = (
+    "Error: host shell execution is disabled. "
+    f"Set {HOST_SHELL_ENV_VAR}=true to opt in for approved local development, "
+    "or use execute_bash_sandboxed for isolated execution."
+)
+
+
+def is_host_shell_execution_enabled() -> bool:
+    """호스트 쉘 실행이 명시적으로 승인됐는가.
+
+    호출 시점에 환경변수를 읽는다 — 모듈 로드 시점에 고정하면 런타임 토글도,
+    테스트의 monkeypatch 도 반영되지 않는다.
+    """
+    return os.getenv(HOST_SHELL_ENV_VAR, "").strip().lower() in _HOST_SHELL_TRUTHY_VALUES
+
 
 @tool
 def execute_bash(
@@ -27,6 +58,10 @@ def execute_bash(
     Returns:
         명령어 출력 또는 오류 메시지
     """
+    # Fail closed before anything else: 켜져 있지 않으면 subprocess 를 만들지 않는다.
+    if not is_host_shell_execution_enabled():
+        return HOST_SHELL_DISABLED_MESSAGE
+
     # Security check - block dangerous commands
     dangerous_patterns = [
         "rm -rf /",
@@ -101,6 +136,10 @@ async def execute_bash_async(
     Returns:
         명령어 출력 또는 오류 메시지
     """
+    # Fail closed before anything else: 켜져 있지 않으면 subprocess 를 만들지 않는다.
+    if not is_host_shell_execution_enabled():
+        return HOST_SHELL_DISABLED_MESSAGE
+
     # Security check
     dangerous_patterns = [
         "rm -rf /",

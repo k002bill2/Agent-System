@@ -42,7 +42,11 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # Server
-    host: str = "0.0.0.0"
+    # 기본은 루프백이다. 와일드카드 바인드는 개발 노트북을 켜 두는 것만으로
+    # 백엔드를 같은 네트워크에 노출하며, AOS 는 로컬 파일 시스템·터미널·MCP
+    # 서버를 조작하는 표면이라 노출 비용이 크다.
+    # 배포에서 외부 인터페이스가 필요하면 HOST 환경변수로 명시 지정한다.
+    host: str = "127.0.0.1"
     port: int = 8000
     debug: bool = False
     log_level: str = "INFO"

@@ -141,6 +141,22 @@ DEFAULT_RISK = OperationRisk(
     description="Unknown operation",
 )
 
+# `orchestrator/tools.py:create_mcp_tool` 이 MCP 서버의 도구를
+# `mcp_<server_id>_<tool_name>` 이름으로 **런타임에** 만든다. 어떤 서버가 무엇을
+# 노출할지는 붙어 봐야 알기 때문에 이 이름들은 정의상 TOOL_RISK_CONFIG 에 없고,
+# 그래서 전부 DEFAULT_RISK(LOW·승인 불필요)로 떨어졌다 — 외부 프로세스가 노출한
+# 임의의 능력이 HITL 을 통과하지 않고 실행된다는 뜻이다.
+#
+# 접두사로 판정한다. 세그먼트 개수(`mcp_<server>_<tool>` = 3토막)로 좁히면
+# server_id 와 tool 이름 양쪽에 밑줄이 들어가는 실제 사례(claude_ai_Figma 등)를
+# 놓친다. 넓게 잡는 쪽이 fail-closed 이고, 명시 등록된 이름은 위 조회가 먼저
+# 가로채므로 기존 정책은 그대로다.
+MCP_TOOL_NAME_PREFIX = "mcp_"
+
+MCP_DYNAMIC_TOOL_RISK_DESCRIPTION = (
+    "Dynamic MCP tool from an external server - capability not reviewed by the risk registry"
+)
+
 
 def is_task_resumable_after_approval(
     task: TaskNode,
@@ -194,8 +210,27 @@ def is_task_orphaned_by_consumed_approval(
 
 
 def get_tool_risk(tool_name: str) -> OperationRisk:
-    """Get risk configuration for a tool."""
-    return TOOL_RISK_CONFIG.get(tool_name, DEFAULT_RISK)
+    """Get risk configuration for a tool.
+
+    명시 등록 > 동적 MCP fail-closed > 기본값 순으로 판정한다. 반환은 매번
+    새 객체이며 DEFAULT_RISK·TOOL_RISK_CONFIG 항목을 변형하지 않는다(싱글턴).
+    """
+    configured = TOOL_RISK_CONFIG.get(tool_name)
+    if configured is not None:
+        return configured
+
+    if tool_name.startswith(MCP_TOOL_NAME_PREFIX):
+        return OperationRisk(
+            tool_name=tool_name,
+            risk_level=RiskLevel.HIGH,
+            requires_approval=True,
+            description=MCP_DYNAMIC_TOOL_RISK_DESCRIPTION,
+            # 비워 둔다 — assess_operation_risk 의 패턴 승격 루프가 무동작이 되어
+            # HIGH·승인필요가 인자 내용과 무관하게 그대로 흘러간다.
+            patterns=[],
+        )
+
+    return DEFAULT_RISK
 
 
 def assess_operation_risk(
