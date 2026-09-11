@@ -1,20 +1,24 @@
-import { render, screen, fireEvent } from '@testing-library/react'
-import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 // Mock lucide-react icons
 vi.mock('lucide-react', () => ({
   X: (props: Record<string, unknown>) => <span data-testid="icon-x" {...props} />,
   Loader2: (props: Record<string, unknown>) => <span data-testid="icon-loader" {...props} />,
-  FolderPlus: (props: Record<string, unknown>) => <span data-testid="icon-folder-plus" {...props} />,
+  FolderPlus: (props: Record<string, unknown>) => (
+    <span data-testid="icon-folder-plus" {...props} />
+  ),
   Link: (props: Record<string, unknown>) => <span data-testid="icon-link" {...props} />,
   Pencil: (props: Record<string, unknown>) => <span data-testid="icon-pencil" {...props} />,
-  FolderOpen: (props: Record<string, unknown>) => <span data-testid="icon-folder-open" {...props} />,
-}))
+  FolderOpen: (props: Record<string, unknown>) => (
+    <span data-testid="icon-folder-open" {...props} />
+  ),
+}));
 
-const mockCloseModal = vi.fn()
-const mockCreateProject = vi.fn()
-const mockLinkProject = vi.fn()
-const mockUpdateProject = vi.fn()
+const mockCloseModal = vi.fn();
+const mockCreateProject = vi.fn();
+const mockLinkProject = vi.fn();
+const mockUpdateProject = vi.fn();
 
 let storeState: Record<string, unknown> = {
   modalMode: null,
@@ -29,17 +33,17 @@ let storeState: Record<string, unknown> = {
   createProject: mockCreateProject,
   linkProject: mockLinkProject,
   updateProject: mockUpdateProject,
-}
+};
 
 vi.mock('../../stores/projects', () => ({
   useProjectsStore: vi.fn(() => storeState),
-}))
+}));
 
-import { ProjectFormModal } from '../ProjectFormModal'
+import { ProjectFormModal } from '../ProjectFormModal';
 
 describe('ProjectFormModal', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.clearAllMocks();
     storeState = {
       modalMode: null,
       editingProject: null,
@@ -53,179 +57,201 @@ describe('ProjectFormModal', () => {
       createProject: mockCreateProject,
       linkProject: mockLinkProject,
       updateProject: mockUpdateProject,
-    }
-  })
+    };
+  });
 
   it('returns null when modalMode is null', () => {
-    const { container } = render(<ProjectFormModal />)
-    expect(container.firstChild).toBeNull()
-  })
+    const { container } = render(<ProjectFormModal />);
+    expect(container.firstChild).toBeNull();
+  });
 
   it('renders create modal with title', () => {
-    storeState.modalMode = 'create'
-    render(<ProjectFormModal />)
-    expect(screen.getByText('Create New Project')).toBeInTheDocument()
-  })
+    storeState.modalMode = 'create';
+    render(<ProjectFormModal />);
+    expect(screen.getByText('Create New Project')).toBeInTheDocument();
+  });
 
   it('renders link modal with title', () => {
-    storeState.modalMode = 'link'
-    render(<ProjectFormModal />)
-    expect(screen.getByText('Link Existing Project')).toBeInTheDocument()
-  })
+    storeState.modalMode = 'link';
+    render(<ProjectFormModal />);
+    expect(screen.getByText('Link Existing Project')).toBeInTheDocument();
+  });
 
   it('renders edit modal with title', () => {
-    storeState.modalMode = 'edit'
-    storeState.editingProject = { id: 'test', name: 'Test', path: '/path', description: 'Desc' }
-    render(<ProjectFormModal />)
-    expect(screen.getByText('Edit Project')).toBeInTheDocument()
-  })
+    storeState.modalMode = 'edit';
+    storeState.editingProject = { id: 'test', name: 'Test', path: '/path', description: 'Desc' };
+    render(<ProjectFormModal />);
+    expect(screen.getByText('Edit Project')).toBeInTheDocument();
+  });
 
   it('shows template selector in create mode', () => {
-    storeState.modalMode = 'create'
-    render(<ProjectFormModal />)
-    expect(screen.getByText('Template')).toBeInTheDocument()
-    expect(screen.getByText('Default project template')).toBeInTheDocument()
-  })
+    storeState.modalMode = 'create';
+    render(<ProjectFormModal />);
+    expect(screen.getByText('Template')).toBeInTheDocument();
+    expect(screen.getByText('Default project template')).toBeInTheDocument();
+  });
 
   it('does not show template selector in link mode', () => {
-    storeState.modalMode = 'link'
-    render(<ProjectFormModal />)
-    expect(screen.queryByText('Template')).not.toBeInTheDocument()
-  })
+    storeState.modalMode = 'link';
+    render(<ProjectFormModal />);
+    expect(screen.queryByText('Template')).not.toBeInTheDocument();
+  });
 
   it('shows source path field in link mode', () => {
-    storeState.modalMode = 'link'
-    render(<ProjectFormModal />)
-    expect(screen.getByText('Source Path *')).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('/absolute/path/to/project')).toBeInTheDocument()
-  })
+    storeState.modalMode = 'link';
+    render(<ProjectFormModal />);
+    expect(screen.getByText('Source Path *')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('/absolute/path/to/project')).toBeInTheDocument();
+  });
 
   it('does not show source path in create mode', () => {
-    storeState.modalMode = 'create'
-    render(<ProjectFormModal />)
-    expect(screen.queryByText('Source Path *')).not.toBeInTheDocument()
-  })
+    storeState.modalMode = 'create';
+    render(<ProjectFormModal />);
+    expect(screen.queryByText('Source Path *')).not.toBeInTheDocument();
+  });
 
   it('shows project name field', () => {
-    storeState.modalMode = 'create'
-    render(<ProjectFormModal />)
-    expect(screen.getByText('Project Name *')).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('My Project')).toBeInTheDocument()
-  })
+    storeState.modalMode = 'create';
+    render(<ProjectFormModal />);
+    expect(screen.getByText('Project Name *')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('My Project')).toBeInTheDocument();
+  });
 
   it('shows project ID field in create mode', () => {
-    storeState.modalMode = 'create'
-    render(<ProjectFormModal />)
-    expect(screen.getByText('Project ID *')).toBeInTheDocument()
-  })
+    storeState.modalMode = 'create';
+    render(<ProjectFormModal />);
+    expect(screen.getByText('Project ID *')).toBeInTheDocument();
+  });
 
   it('does not show project ID field in edit mode', () => {
-    storeState.modalMode = 'edit'
-    storeState.editingProject = { id: 'test', name: 'Test', path: '/path', description: 'Desc' }
-    render(<ProjectFormModal />)
-    expect(screen.queryByText('Project ID *')).not.toBeInTheDocument()
-  })
+    storeState.modalMode = 'edit';
+    storeState.editingProject = { id: 'test', name: 'Test', path: '/path', description: 'Desc' };
+    render(<ProjectFormModal />);
+    expect(screen.queryByText('Project ID *')).not.toBeInTheDocument();
+  });
 
   it('shows project path field in edit mode', () => {
-    storeState.modalMode = 'edit'
-    storeState.editingProject = { id: 'test', name: 'Test', path: '/path', description: 'Desc' }
-    render(<ProjectFormModal />)
-    expect(screen.getByText('Project Path')).toBeInTheDocument()
-  })
+    storeState.modalMode = 'edit';
+    storeState.editingProject = { id: 'test', name: 'Test', path: '/path', description: 'Desc' };
+    render(<ProjectFormModal />);
+    expect(screen.getByText('Project Path')).toBeInTheDocument();
+  });
 
   it('shows description field', () => {
-    storeState.modalMode = 'create'
-    render(<ProjectFormModal />)
-    expect(screen.getByText('Description')).toBeInTheDocument()
-  })
+    storeState.modalMode = 'create';
+    render(<ProjectFormModal />);
+    expect(screen.getByText('Description')).toBeInTheDocument();
+  });
 
   it('shows cancel button', () => {
-    storeState.modalMode = 'create'
-    render(<ProjectFormModal />)
-    expect(screen.getByText('Cancel')).toBeInTheDocument()
-  })
+    storeState.modalMode = 'create';
+    render(<ProjectFormModal />);
+    expect(screen.getByText('Cancel')).toBeInTheDocument();
+  });
 
   it('calls closeModal when cancel is clicked', () => {
-    storeState.modalMode = 'create'
-    render(<ProjectFormModal />)
-    fireEvent.click(screen.getByText('Cancel'))
-    expect(mockCloseModal).toHaveBeenCalled()
-  })
+    storeState.modalMode = 'create';
+    render(<ProjectFormModal />);
+    fireEvent.click(screen.getByText('Cancel'));
+    expect(mockCloseModal).toHaveBeenCalled();
+  });
 
   it('shows "Create Project" submit button in create mode', () => {
-    storeState.modalMode = 'create'
-    render(<ProjectFormModal />)
-    expect(screen.getByText('Create Project')).toBeInTheDocument()
-  })
+    storeState.modalMode = 'create';
+    render(<ProjectFormModal />);
+    expect(screen.getByText('Create Project')).toBeInTheDocument();
+  });
 
   it('shows "Link Project" submit button in link mode', () => {
-    storeState.modalMode = 'link'
-    render(<ProjectFormModal />)
-    expect(screen.getByText('Link Project')).toBeInTheDocument()
-  })
+    storeState.modalMode = 'link';
+    render(<ProjectFormModal />);
+    expect(screen.getByText('Link Project')).toBeInTheDocument();
+  });
 
   it('shows "Save Changes" submit button in edit mode', () => {
-    storeState.modalMode = 'edit'
-    storeState.editingProject = { id: 'test', name: 'Test', path: '/path', description: 'Desc' }
-    render(<ProjectFormModal />)
-    expect(screen.getByText('Save Changes')).toBeInTheDocument()
-  })
+    storeState.modalMode = 'edit';
+    storeState.editingProject = { id: 'test', name: 'Test', path: '/path', description: 'Desc' };
+    render(<ProjectFormModal />);
+    expect(screen.getByText('Save Changes')).toBeInTheDocument();
+  });
 
   it('shows error message when error is set', () => {
-    storeState.modalMode = 'create'
-    storeState.error = 'Project already exists'
-    render(<ProjectFormModal />)
-    expect(screen.getByText('Project already exists')).toBeInTheDocument()
-  })
+    storeState.modalMode = 'create';
+    storeState.error = 'Project already exists';
+    render(<ProjectFormModal />);
+    expect(screen.getByText('Project already exists')).toBeInTheDocument();
+  });
 
   it('disables submit button when loading', () => {
-    storeState.modalMode = 'create'
-    storeState.isLoading = true
-    render(<ProjectFormModal />)
-    expect(screen.getByText('Create Project').closest('button')).toBeDisabled()
-  })
+    storeState.modalMode = 'create';
+    storeState.isLoading = true;
+    render(<ProjectFormModal />);
+    expect(screen.getByText('Create Project').closest('button')).toBeDisabled();
+  });
 
   it('shows loader icon when loading', () => {
-    storeState.modalMode = 'create'
-    storeState.isLoading = true
-    render(<ProjectFormModal />)
-    expect(screen.getByTestId('icon-loader')).toBeInTheDocument()
-  })
+    storeState.modalMode = 'create';
+    storeState.isLoading = true;
+    render(<ProjectFormModal />);
+    expect(screen.getByTestId('icon-loader')).toBeInTheDocument();
+  });
 
   it('populates form fields in edit mode', () => {
-    storeState.modalMode = 'edit'
-    storeState.editingProject = { id: 'my-proj', name: 'My Project', path: '/my/path', description: 'Some desc' }
-    render(<ProjectFormModal />)
-    expect(screen.getByDisplayValue('My Project')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('Some desc')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('/my/path')).toBeInTheDocument()
-  })
+    storeState.modalMode = 'edit';
+    storeState.editingProject = {
+      id: 'my-proj',
+      name: 'My Project',
+      path: '/my/path',
+      description: 'Some desc',
+    };
+    render(<ProjectFormModal />);
+    expect(screen.getByDisplayValue('My Project')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Some desc')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('/my/path')).toBeInTheDocument();
+  });
 
   // 백엔드 계약(models/project.py: PROJECT_ID_PATTERN / PROJECT_ID_MAX_LENGTH=36)과
   // 폼 제약이 어긋나면 제출 후 422 로만 드러난다. 아래 3건이 그 간극을 잡는다.
   describe('project ID constraints mirror the backend contract', () => {
-    const getIdInput = () => screen.getByPlaceholderText('my-project') as HTMLInputElement
+    const getIdInput = () => screen.getByPlaceholderText('my-project') as HTMLInputElement;
 
     it('caps the ID input at the backend max length', () => {
-      storeState.modalMode = 'create'
-      render(<ProjectFormModal />)
-      expect(getIdInput().maxLength).toBe(36)
-    })
+      storeState.modalMode = 'create';
+      render(<ProjectFormModal />);
+      expect(getIdInput().maxLength).toBe(36);
+    });
 
     it('requires the ID to start with an alphanumeric character', () => {
-      storeState.modalMode = 'create'
-      render(<ProjectFormModal />)
+      storeState.modalMode = 'create';
+      render(<ProjectFormModal />);
       // 선행 하이픈은 백엔드가 거부하므로 폼 pattern 도 허용하면 안 된다
-      expect(new RegExp(`^(?:${getIdInput().pattern})$`).test('-leading')).toBe(false)
-      expect(new RegExp(`^(?:${getIdInput().pattern})$`).test('my-project')).toBe(true)
-    })
+      expect(new RegExp(`^(?:${getIdInput().pattern})$`).test('-leading')).toBe(false);
+      expect(new RegExp(`^(?:${getIdInput().pattern})$`).test('my-project')).toBe(true);
+    });
 
     it('truncates the auto-generated ID from a long project name', () => {
-      storeState.modalMode = 'create'
-      render(<ProjectFormModal />)
-      const longName = 'A'.repeat(80)
-      fireEvent.change(screen.getByPlaceholderText('My Project'), { target: { value: longName } })
-      expect(getIdInput().value.length).toBeLessThanOrEqual(36)
-    })
-  })
-})
+      storeState.modalMode = 'create';
+      render(<ProjectFormModal />);
+      const longName = 'A'.repeat(80);
+      fireEvent.change(screen.getByPlaceholderText('My Project'), { target: { value: longName } });
+      expect(getIdInput().value.length).toBeLessThanOrEqual(36);
+    });
+  });
+
+  it('submits name and description along with id and source path in link mode', () => {
+    storeState.modalMode = 'link';
+    mockLinkProject.mockResolvedValue(true);
+    render(<ProjectFormModal />);
+
+    fireEvent.change(screen.getByPlaceholderText('/absolute/path/to/project'), {
+      target: { value: '/work/KVCA' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('My Project'), { target: { value: 'KVCA' } });
+    fireEvent.change(screen.getByPlaceholderText('Brief description of the project...'), {
+      target: { value: 'Venture capital' },
+    });
+    fireEvent.submit(screen.getByRole('button', { name: 'Link Project' }).closest('form')!);
+
+    expect(mockLinkProject).toHaveBeenCalledWith('kvca', '/work/KVCA', 'KVCA', 'Venture capital');
+  });
+});

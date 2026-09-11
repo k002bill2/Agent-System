@@ -68,7 +68,7 @@ export function ProjectFormModal() {
         await createProject(id, name, description, template)
         break
       case 'link':
-        await linkProject(id, sourcePath)
+        await linkProject(id, sourcePath, name, description)
         break
       case 'edit': {
         // 경로가 변경되었는지 확인하고 전달

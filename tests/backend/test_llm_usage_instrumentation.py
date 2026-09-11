@@ -734,7 +734,7 @@ async def test_warp_open_claude_launch_records_usage_intent(monkeypatch, tmp_pat
     recorder = AsyncMock()
     preflight = AsyncMock()
 
-    monkeypatch.setattr("api.warp.get_project", MagicMock(return_value=project))
+    monkeypatch.setattr("api.git._shared.get_project", MagicMock(return_value=project))
     monkeypatch.setattr("api.warp.get_warp_service", MagicMock(return_value=fake_warp))
     monkeypatch.setattr("api.warp.record_usage_best_effort", recorder)
     monkeypatch.setattr(
@@ -796,7 +796,7 @@ async def test_warp_open_claude_launch_preflight_quota_blocks_launch(
         )
     )
 
-    monkeypatch.setattr("api.warp.get_project", MagicMock(return_value=project))
+    monkeypatch.setattr("api.git._shared.get_project", MagicMock(return_value=project))
     monkeypatch.setattr("api.warp.get_warp_service", MagicMock(return_value=fake_warp))
     monkeypatch.setattr("api.warp.record_usage_best_effort", recorder)
     monkeypatch.setattr(

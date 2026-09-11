@@ -162,6 +162,11 @@ class ProjectLinkRequest(BaseModel):
         description="Unique project identifier (slug; used as a path segment)",
     )
     source_path: str = Field(..., description="Absolute path to source project")
+    # DB 모드(`USE_DATABASE=true`)에서 `ProjectModel` 행에 그대로 들어간다. 대시보드
+    # 모달은 둘 다 입력받지만 파일시스템 모드는 디렉터리명·.aos-project.json 에서
+    # 파생하므로 선택 필드로 둔다 — 기존 호출자(id+source_path)는 그대로 유효하다.
+    name: str | None = Field(None, max_length=255, description="Display name (DB mode)")
+    description: str | None = Field(None, description="Project description (DB mode)")
 
 
 class ProjectCreateFromTemplate(BaseModel):
