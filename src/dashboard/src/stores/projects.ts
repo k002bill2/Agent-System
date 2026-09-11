@@ -67,7 +67,7 @@ interface ProjectsState {
   reset: () => void
   fetchTemplates: () => Promise<void>
   createProject: (id: string, name: string, description: string, template: string) => Promise<boolean>
-  linkProject: (id: string, sourcePath: string) => Promise<boolean>
+  linkProject: (id: string, sourcePath: string, name?: string, description?: string) => Promise<boolean>
   updateProject: (id: string, name?: string, description?: string, path?: string) => Promise<boolean>
   deleteProject: (id: string) => Promise<boolean>
   indexProject: (id: string) => Promise<boolean>
@@ -168,11 +168,13 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
     }
   },
 
-  // Link an external project
-  linkProject: async (id, sourcePath) => {
+  // Link an external project.
+  // name/description: DB 모드(USE_DATABASE=true)의 백엔드가 ProjectModel 행에 그대로
+  // 쓴다. 파일시스템 모드는 무시하고 디렉터리명·.aos-project.json 에서 파생한다.
+  linkProject: async (id, sourcePath, name, description) => {
     set({ isLoading: true, error: null })
     try {
-      await apiClient.post('/api/projects/link', { id, source_path: sourcePath })
+      await apiClient.post('/api/projects/link', { id, source_path: sourcePath, name, description })
       await get().fetchProjects()
       set({ isLoading: false, modalMode: null })
       return true

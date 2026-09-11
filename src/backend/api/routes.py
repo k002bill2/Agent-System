@@ -17,6 +17,10 @@ so that ``app.py`` can keep a single ``include_router(router, prefix="/api")``.
 """
 
 import os
+import re
+import shutil
+import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -259,11 +263,18 @@ async def get_projects(
                     name=p.name,
                     path=p.path or "",
                     description=p.description or "",
+                    # `has_claude_md` 의 근거. 비워 두면 DB 모드 카드가 항상 '없음'이라
+                    # Claude 설정 액션이 숨는다 — `Project.from_path` 와 같은 소스.
+                    claude_md=_read_claude_md(p.path),
                     sort_order=(p.settings or {}).get("sort_order", 0),
                     organization_id=p.organization_id,
                 )
                 for p in visible_projects
             ]
+            # 위 쿼리는 name 순이다. `POST /projects/reorder` 가 기록한
+            # settings.sort_order 를 여기서 적용하지 않으면 새로고침 한 번에
+            # 드래그 정렬이 풀린다 — 파일시스템 모드의 `list_projects()` 와 같은 키.
+            projects.sort(key=lambda p: (p.sort_order, p.name.lower()))
         except HTTPException:
             raise
         except Exception as exc:
@@ -335,19 +346,171 @@ async def get_projects(
     return result
 
 
+# ─────────────────────────────────────────────────────────────
+# DB-mode project writes (USE_DATABASE=true)
+# ─────────────────────────────────────────────────────────────
+#
+# PR #318 은 link/create/reorder 를 DB 모드에서 503 으로 잠갔다. 그러나 대시보드
+# (`stores/projects.ts`)는 이 세 경로를 계속 호출하고 `.env` 기본값은 DB 모드라,
+# 기본 설치에서 Link Existing / Create New / 드래그 정렬이 전부 실패했다.
+# `/api/project-registry` 로 옮기는 것은 답이 아니다 — 그 API 는 사용자가 고른 id 를
+# 버리고 UUID 를 찍으며(기존 행은 slug id), 템플릿 스캐폴딩과 정렬이 없다. 그래서
+# `PUT /projects/{project_id}` 와 같은 방식으로 핸들러 안에 DB 분기를 둔다.
+#
+# `services.project_sync_service.sync_project_to_db` 를 쓰지 않는다: 이름 기준
+# upsert 인 데다 모든 예외를 warning 으로 삼켜 INSERT 가 실패해도 200 이 돌아간다.
+
+
+def _use_database() -> bool:
+    return os.getenv("USE_DATABASE", "false").lower() == "true"
+
+
+def _read_claude_md(path: str | None) -> str | None:
+    """`Project.from_path` 가 하는 것과 같은 CLAUDE.md 읽기. 없거나 못 읽으면 None."""
+    if not path:
+        return None
+    claude_md = Path(path) / "CLAUDE.md"
+    try:
+        return claude_md.read_text(encoding="utf-8") if claude_md.is_file() else None
+    except OSError:
+        return None
+
+
+def _db_slug(name: str, fallback: str) -> str:
+    """`project_sync_service._slugify` 와 같은 규칙. 비면 id 로 대체한다."""
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return slug or fallback
+
+
+async def _resolve_free_slug(db: AsyncSession, *, project_id: str, name: str) -> str:
+    """id·name·slug 셋 다 unique 컬럼이다. 미리 검사해 id·name 충돌은 409 로 답한다.
+
+    안 하면 IntegrityError 가 일반 503 으로 새어 사용자는 원인을 모른다. create 는
+    이 검사를 스캐폴딩보다 **먼저** 불러야 409 가 고아 디렉터리를 남기지 않는다.
+
+    slug 만 겹치면 409 가 아니라 `api/projects/registry.py::create_project` 와 같은
+    `-{id[:8]}` 접미사로 피한다 — 모달은 slug 를 보여주지 않아 slug 409 는 사용자가
+    해석할 수 없다. 반환값이 실제로 쓸 slug 다.
+    """
+    from sqlalchemy import or_, select
+
+    from db.models import ProjectModel
+
+    slug = _db_slug(name, project_id)
+    result = await db.execute(
+        select(ProjectModel).where(
+            or_(
+                ProjectModel.id == project_id,
+                ProjectModel.name == name,
+                ProjectModel.slug == slug,
+            )
+        )
+    )
+    slug_taken = False
+    for existing in result.scalars().all():
+        if existing.id == project_id:
+            raise HTTPException(status_code=409, detail=f"Project ID '{project_id}' already exists")
+        if existing.name == name:
+            raise HTTPException(status_code=409, detail=f"Project '{name}' already exists")
+        slug_taken = True
+    return f"{slug}-{project_id[:8]}" if slug_taken else slug
+
+
+async def _insert_db_project(
+    db: AsyncSession,
+    *,
+    project_id: str,
+    name: str,
+    slug: str,
+    description: str | None,
+    path: str,
+    current_user,
+) -> ProjectResponse:
+    """`ProjectModel` 행 + 등록자 owner 접근권 한 쌍을 커밋한다 (registry 와 동일)."""
+    from db.models import ProjectAccessModel, ProjectModel
+
+    project = ProjectModel(
+        id=project_id,
+        name=name,
+        slug=slug,
+        description=description or "",
+        path=path,
+        is_active=True,
+        settings={},
+        organization_id=None,
+        created_by=current_user.id,
+    )
+    db.add(project)
+    db.add(
+        ProjectAccessModel(
+            id=str(uuid.uuid4()),
+            project_id=project_id,
+            user_id=current_user.id,
+            role="owner",
+            granted_by=current_user.id,
+        )
+    )
+    await db.commit()
+    await db.refresh(project)
+
+    return ProjectResponse(
+        id=project.id,
+        name=project.name,
+        path=project.path or "",
+        description=project.description or "",
+        has_claude_md=(Path(path) / "CLAUDE.md").is_file(),
+        is_active=True,
+    )
+
+
+def _registry_unavailable() -> HTTPException:
+    return HTTPException(status_code=503, detail="Project registry is temporarily unavailable")
+
+
 @router.post("/projects/reorder", response_model=list[ProjectResponse])
 async def reorder_projects_endpoint(
     request: ProjectReorderRequest,
     _admin=Depends(get_current_admin_or_manager_user),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Reorder projects by providing a list of project IDs in the desired order.
 
     This updates the sort_order field for each project and persists it
-    to the .aos-project.json metadata file.
+    to the .aos-project.json metadata file (filesystem mode) or to
+    ``ProjectModel.settings["sort_order"]`` (DB mode).
     """
-    if os.getenv("USE_DATABASE", "false").lower() == "true":
-        raise HTTPException(status_code=503, detail="Use the database project registry")
+    if _use_database():
+        from sqlalchemy import select
+
+        from db.models import ProjectModel
+
+        try:
+            result = await db.execute(
+                select(ProjectModel).where(ProjectModel.id.in_(request.project_ids))
+            )
+            rows = {p.id: p for p in result.scalars().all()}
+        except Exception as exc:
+            raise _registry_unavailable() from exc
+
+        missing = [pid for pid in request.project_ids if pid not in rows]
+        if missing:
+            raise HTTPException(status_code=404, detail=f"Project '{missing[0]}' not found")
+
+        for index, pid in enumerate(request.project_ids):
+            row = rows[pid]
+            # JSONB 제자리 변경은 SQLAlchemy 가 dirty 로 잡지 않는다 — 새 dict 재할당.
+            row.settings = {**(row.settings or {}), "sort_order": index}
+
+        try:
+            await db.commit()
+        except Exception as exc:
+            raise _registry_unavailable() from exc
+
+        # store 는 응답을 `projects` 전체로 덮어쓴다 — 요청에 없던(필터로 가려진)
+        # 프로젝트가 화면에서 사라지지 않도록 GET 과 같은 전체 목록을 돌려준다.
+        return await get_projects(current_user=_admin, db=db)
+
     # Validate all project IDs exist
     for project_id in request.project_ids:
         if not get_project(project_id):
@@ -400,17 +563,17 @@ async def list_templates(_current_user=Depends(get_current_user)):
 @router.post("/projects/link", response_model=ProjectResponse)
 async def link_project(
     request: ProjectLinkRequest,
-    _admin=Depends(get_current_admin_or_manager_user),
+    current_user=Depends(get_current_admin_or_manager_user),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
-    Link an external project by creating a symlink.
+    Link an external project.
 
-    Creates a symbolic link in the projects/ directory pointing to the source.
+    Filesystem mode: creates a symbolic link in the projects/ directory pointing
+    to the source. DB mode: registers a ``ProjectModel`` row with the requested
+    id and path — no symlink (that filesystem side effect is what the DB-mode
+    gate protects against).
     """
-    if os.getenv("USE_DATABASE", "false").lower() == "true":
-        raise HTTPException(status_code=503, detail="Use the database project registry")
-    from pathlib import Path
-
     # Normalize path to remove shell escape characters (e.g., "Mobile\ Documents" -> "Mobile Documents")
     normalized_path = normalize_path(request.source_path)
     source_path = Path(normalized_path)
@@ -425,6 +588,24 @@ async def link_project(
             raise HTTPException(
                 status_code=400, detail=f"Source path is not a directory: {request.source_path}"
             )
+
+    if _use_database():
+        name = request.name or source_path.name
+        try:
+            slug = await _resolve_free_slug(db, project_id=request.id, name=name)
+            return await _insert_db_project(
+                db,
+                project_id=request.id,
+                name=name,
+                slug=slug,
+                description=request.description,
+                path=normalized_path,
+                current_user=current_user,
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise _registry_unavailable() from exc
 
     # Check if project ID already exists
     if get_project(request.id):
@@ -461,7 +642,8 @@ async def link_project(
 @router.post("/projects/create", response_model=ProjectResponse)
 async def create_project_from_template(
     request: ProjectCreateFromTemplate,
-    _admin=Depends(get_current_admin_or_manager_user),
+    current_user=Depends(get_current_admin_or_manager_user),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Create a new project from a template.
@@ -471,10 +653,10 @@ async def create_project_from_template(
     - react-native: React Native Expo project
     - python: Python package with pyproject.toml
     - fastapi: FastAPI service
-    """
-    if os.getenv("USE_DATABASE", "false").lower() == "true":
-        raise HTTPException(status_code=503, detail="Use the database project registry")
 
+    In DB mode the scaffolded directory is registered as a ``ProjectModel``
+    row (id = request id) instead of the in-memory filesystem registry.
+    """
     from services.project_template_service import (
         create_project_from_template as create_from_template,
     )
@@ -485,8 +667,19 @@ async def create_project_from_template(
     if not template:
         raise HTTPException(status_code=400, detail=f"Unknown template: {request.template}")
 
-    # Check if project ID already exists
-    if get_project(request.id):
+    use_database = _use_database()
+    slug = ""
+
+    # Check if project ID already exists — DB 모드는 스캐폴딩보다 먼저 검사해야
+    # 409 가 projects/ 아래에 고아 디렉터리를 남기지 않는다.
+    if use_database:
+        try:
+            slug = await _resolve_free_slug(db, project_id=request.id, name=request.name)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise _registry_unavailable() from exc
+    elif get_project(request.id):
         raise HTTPException(status_code=400, detail=f"Project ID '{request.id}' already exists")
 
     # Create project in projects/ directory
@@ -509,6 +702,25 @@ async def create_project_from_template(
 
     if not success:
         raise HTTPException(status_code=500, detail="Failed to create project from template")
+
+    if use_database:
+        try:
+            return await _insert_db_project(
+                db,
+                project_id=request.id,
+                name=request.name,
+                slug=slug,
+                description=request.description,
+                path=str(project_path),
+                current_user=current_user,
+            )
+        except Exception as exc:
+            # 사전 검사 뒤 경쟁 INSERT·commit 실패. 스캐폴드를 남기면 재시도가
+            # `Path already exists` 로 영영 막히고 등록 안 된 고아 디렉터리가 남는다.
+            shutil.rmtree(project_path, ignore_errors=True)
+            if isinstance(exc, HTTPException):
+                raise
+            raise _registry_unavailable() from exc
 
     # Register the project
     project = register_project(request.id, str(project_path))

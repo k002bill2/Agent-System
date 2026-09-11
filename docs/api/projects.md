@@ -81,6 +81,38 @@ id 는 `projects/<id>` 경로 세그먼트로 그대로 쓰여 심볼릭 링크�
 
 > 회귀 테스트: `tests/backend/test_project_id_path_traversal.py`
 
+### DB 모드(`USE_DATABASE=true`)에서의 쓰기 동작
+
+`.env.example` 기본값이 DB 모드이고 대시보드(`stores/projects.ts`)는 아래 세 경로를 호출하므로,
+세 핸들러는 `PUT /api/projects/{id}` 와 같은 방식으로 **DB 인지형 분기**를 가진다
+(`api/routes.py`). `/api/project-registry` 는 대체가 아니다 — 사용자가 고른 id 를 버리고
+UUID 를 찍으며 템플릿 스캐폴딩·정렬 엔드포인트가 없다.
+
+| 경로 | 파일시스템 모드 | DB 모드 |
+|------|----------------|---------|
+| `POST /api/projects/link` | `projects/<id>` 심볼릭 링크 + 메모리 레지스트리 | `ProjectModel(id=요청 id, path=source_path)` 행 + 등록자 `owner` 접근권. **심볼릭 링크 없음** |
+| `POST /api/projects/create` | 템플릿 스캐폴딩 + 메모리 레지스트리 | 중복 검사 → 템플릿 스캐폴딩 → `ProjectModel` 행 (검사가 먼저라 409 가 고아 디렉터리를 남기지 않음) |
+| `POST /api/projects/reorder` | `.aos-project.json` 의 `sort_order` | `ProjectModel.settings["sort_order"]`. 응답은 `GET /api/projects` 와 같은 **전체** 목록 |
+| `POST /api/projects` | 경로 등록 + 백그라운드 인덱싱 | 503 (대시보드 미사용, 미전환) |
+| `DELETE /api/projects/{id}` | cascade 삭제 | 503 (미전환 — `reject_legacy_project_operation_in_database_mode`) |
+
+- `link` 요청 본문에 선택 필드 `name`·`description` 이 추가됐다. DB 모드는 그대로 행에 쓰고
+  (`name` 생략 시 디렉터리명), 파일시스템 모드는 무시한다.
+- 중복 `id`·`name` 은 **409** 다. slug 만 겹치면 `/api/project-registry` 와 같은 규칙으로
+  `-{id[:8]}` 접미사를 붙인다(모달은 slug 를 보여주지 않아 slug 409 는 해석 불가).
+  DB 오류는 503 `Project registry is temporarily unavailable`.
+- `GET /api/projects` 의 DB 분기는 `(settings.sort_order, name)` 순으로 정렬하고, 행의 `path` 에서
+  CLAUDE.md 를 읽어 `has_claude_md` 를 채운다 — reorder 결과가 새로고침 뒤에도 유지되고, 템플릿이 만든
+  CLAUDE.md 가 카드에 '없음'으로 보이지 않는 근거.
+- `create` 는 스캐폴딩 뒤 DB 등록이 실패하면(사전 검사 뒤 경쟁 INSERT·commit 실패) 스캐폴드를 지우고
+  503 을 돌려준다 — 남기면 재시도가 `Path already exists` 로 막힌다.
+- `POST /api/terminal/execute`·`POST /api/warp/open` 은 `api/git/_shared.resolve_project` 로 프로젝트를
+  해석한다(DB 모드는 `ProjectModel` 행만, 파일시스템 모드는 레거시 레지스트리). 심링크 없이 등록된
+  DB 모드 프로젝트도 터미널에서 열 수 있어야 하기 때문이다.
+
+> 회귀 테스트: `tests/backend/api/test_projects_db_mode_writes.py`,
+> `tests/backend/api/test_terminal_db_project_resolution.py`
+
 ---
 
 ## Project Configs

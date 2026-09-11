@@ -313,7 +313,7 @@ async def test_terminal_execution_writes_audit_event(client, app, monkeypatch):
         id="operator-user", role="admin", is_admin=True, is_active=True
     )
     monkeypatch.setattr(
-        "api.terminal.get_project", lambda _project_id: SimpleNamespace(path="/tmp")
+        "api.git._shared.get_project", lambda _project_id: SimpleNamespace(path="/tmp")
     )
     monkeypatch.setattr("api.terminal.get_terminal_service", lambda: Service())
     try:
@@ -420,7 +420,7 @@ async def test_terminal_resolution_failure_is_audited(client, app, monkeypatch):
         id="operator", role="admin", is_admin=True, is_active=True
     )
     monkeypatch.setattr(
-        "api.terminal.get_project", lambda _project_id: SimpleNamespace(path="/tmp")
+        "api.git._shared.get_project", lambda _project_id: SimpleNamespace(path="/tmp")
     )
     monkeypatch.setattr(
         "api.terminal.get_terminal_service",
@@ -464,7 +464,7 @@ async def test_terminal_malformed_result_is_audited(client, app, monkeypatch):
         id="operator", role="admin", is_admin=True, is_active=True
     )
     monkeypatch.setattr(
-        "api.terminal.get_project", lambda _project_id: SimpleNamespace(path="/tmp")
+        "api.git._shared.get_project", lambda _project_id: SimpleNamespace(path="/tmp")
     )
     monkeypatch.setattr("api.terminal.get_terminal_service", lambda: Service())
     before = len(_audit_logs)

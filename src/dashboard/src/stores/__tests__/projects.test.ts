@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 vi.mock('../../services/apiClient', () => ({
   apiClient: {
@@ -9,12 +9,12 @@ vi.mock('../../services/apiClient', () => ({
     patch: vi.fn(),
     delete: vi.fn(),
   },
-}))
+}));
 
-import { useProjectsStore } from '../projects'
-import { apiClient } from '../../services/apiClient'
+import { useProjectsStore } from '../projects';
+import { apiClient } from '../../services/apiClient';
 
-const mockApiClient = vi.mocked(apiClient)
+const mockApiClient = vi.mocked(apiClient);
 
 function resetStore() {
   useProjectsStore.setState({
@@ -26,7 +26,7 @@ function resetStore() {
     editingProject: null,
     searchQuery: '',
     selectedProjectId: null,
-  })
+  });
 }
 
 const mockProject = (id: string, name: string) => ({
@@ -40,90 +40,90 @@ const mockProject = (id: string, name: string) => ({
   git_path: null,
   git_enabled: false,
   sort_order: 0,
-})
+});
 
 describe('projects store', () => {
   beforeEach(() => {
-    resetStore()
-    vi.clearAllMocks()
-  })
+    resetStore();
+    vi.clearAllMocks();
+  });
 
   // ── Initial State ──────────────────────────────────────
 
   describe('initial state', () => {
     it('has empty projects', () => {
-      expect(useProjectsStore.getState().projects).toEqual([])
-    })
+      expect(useProjectsStore.getState().projects).toEqual([]);
+    });
 
     it('has no modal open', () => {
-      expect(useProjectsStore.getState().modalMode).toBeNull()
-    })
+      expect(useProjectsStore.getState().modalMode).toBeNull();
+    });
 
     it('has empty search query', () => {
-      expect(useProjectsStore.getState().searchQuery).toBe('')
-    })
+      expect(useProjectsStore.getState().searchQuery).toBe('');
+    });
 
     it('has no selected project', () => {
-      expect(useProjectsStore.getState().selectedProjectId).toBeNull()
-    })
-  })
+      expect(useProjectsStore.getState().selectedProjectId).toBeNull();
+    });
+  });
 
   // ── Modal Actions ──────────────────────────────────────
 
   describe('modal actions', () => {
     it('openCreateModal sets create mode', () => {
-      useProjectsStore.getState().openCreateModal()
-      expect(useProjectsStore.getState().modalMode).toBe('create')
-      expect(useProjectsStore.getState().editingProject).toBeNull()
-    })
+      useProjectsStore.getState().openCreateModal();
+      expect(useProjectsStore.getState().modalMode).toBe('create');
+      expect(useProjectsStore.getState().editingProject).toBeNull();
+    });
 
     it('openLinkModal sets link mode', () => {
-      useProjectsStore.getState().openLinkModal()
-      expect(useProjectsStore.getState().modalMode).toBe('link')
-    })
+      useProjectsStore.getState().openLinkModal();
+      expect(useProjectsStore.getState().modalMode).toBe('link');
+    });
 
     it('openEditModal sets edit mode with project', () => {
-      const project = mockProject('p-1', 'Test')
-      useProjectsStore.getState().openEditModal(project as any)
-      expect(useProjectsStore.getState().modalMode).toBe('edit')
-      expect(useProjectsStore.getState().editingProject).toEqual(project)
-    })
+      const project = mockProject('p-1', 'Test');
+      useProjectsStore.getState().openEditModal(project as any);
+      expect(useProjectsStore.getState().modalMode).toBe('edit');
+      expect(useProjectsStore.getState().editingProject).toEqual(project);
+    });
 
     it('closeModal clears modal state', () => {
       useProjectsStore.setState({
         modalMode: 'edit',
         editingProject: mockProject('p-1', 'Test') as any,
         error: 'some error',
-      })
+      });
 
-      useProjectsStore.getState().closeModal()
+      useProjectsStore.getState().closeModal();
 
-      const state = useProjectsStore.getState()
-      expect(state.modalMode).toBeNull()
-      expect(state.editingProject).toBeNull()
-      expect(state.error).toBeNull()
-    })
-  })
+      const state = useProjectsStore.getState();
+      expect(state.modalMode).toBeNull();
+      expect(state.editingProject).toBeNull();
+      expect(state.error).toBeNull();
+    });
+  });
 
   // ── Search & Selection ─────────────────────────────────
 
   describe('search and selection', () => {
     it('setSearchQuery updates query', () => {
-      useProjectsStore.getState().setSearchQuery('test')
-      expect(useProjectsStore.getState().searchQuery).toBe('test')
-    })
+      useProjectsStore.getState().setSearchQuery('test');
+      expect(useProjectsStore.getState().searchQuery).toBe('test');
+    });
 
     it('selectProject sets selectedProjectId', () => {
-      useProjectsStore.getState().selectProject('p-1')
-      expect(useProjectsStore.getState().selectedProjectId).toBe('p-1')
-    })
+      useProjectsStore.getState().selectProject('p-1');
+      expect(useProjectsStore.getState().selectedProjectId).toBe('p-1');
+    });
 
     it('selectProject with null clears selection', () => {
-      useProjectsStore.setState({ selectedProjectId: 'p-1' })
-      useProjectsStore.getState().selectProject(null)
-      expect(useProjectsStore.getState().selectedProjectId).toBeNull()
-    })
-  })
+      useProjectsStore.setState({ selectedProjectId: 'p-1' });
+      useProjectsStore.getState().selectProject(null);
+      expect(useProjectsStore.getState().selectedProjectId).toBeNull();
+    });
+  });
 
   // ── filteredProjects ───────────────────────────────────
 
@@ -135,42 +135,42 @@ describe('projects store', () => {
           mockProject('web-app', 'Web Application'),
           mockProject('cli-tool', 'CLI Tool'),
         ] as any[],
-      })
-    })
+      });
+    });
 
     it('returns all projects when no search query', () => {
-      expect(useProjectsStore.getState().filteredProjects()).toHaveLength(3)
-    })
+      expect(useProjectsStore.getState().filteredProjects()).toHaveLength(3);
+    });
 
     it('filters by name', () => {
-      useProjectsStore.setState({ searchQuery: 'agent' })
-      const filtered = useProjectsStore.getState().filteredProjects()
-      expect(filtered).toHaveLength(1)
-      expect(filtered[0].id).toBe('agent-system')
-    })
+      useProjectsStore.setState({ searchQuery: 'agent' });
+      const filtered = useProjectsStore.getState().filteredProjects();
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0].id).toBe('agent-system');
+    });
 
     it('filters by id', () => {
-      useProjectsStore.setState({ searchQuery: 'cli' })
-      const filtered = useProjectsStore.getState().filteredProjects()
-      expect(filtered).toHaveLength(1)
-      expect(filtered[0].id).toBe('cli-tool')
-    })
+      useProjectsStore.setState({ searchQuery: 'cli' });
+      const filtered = useProjectsStore.getState().filteredProjects();
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0].id).toBe('cli-tool');
+    });
 
     it('filters case-insensitively', () => {
-      useProjectsStore.setState({ searchQuery: 'WEB' })
-      expect(useProjectsStore.getState().filteredProjects()).toHaveLength(1)
-    })
+      useProjectsStore.setState({ searchQuery: 'WEB' });
+      expect(useProjectsStore.getState().filteredProjects()).toHaveLength(1);
+    });
 
     it('filters by description', () => {
-      useProjectsStore.setState({ searchQuery: 'project' })
-      expect(useProjectsStore.getState().filteredProjects()).toHaveLength(3)
-    })
+      useProjectsStore.setState({ searchQuery: 'project' });
+      expect(useProjectsStore.getState().filteredProjects()).toHaveLength(3);
+    });
 
     it('returns empty for no match', () => {
-      useProjectsStore.setState({ searchQuery: 'nonexistent' })
-      expect(useProjectsStore.getState().filteredProjects()).toHaveLength(0)
-    })
-  })
+      useProjectsStore.setState({ searchQuery: 'nonexistent' });
+      expect(useProjectsStore.getState().filteredProjects()).toHaveLength(0);
+    });
+  });
 
   // ── getSelectedProject ─────────────────────────────────
 
@@ -179,260 +179,285 @@ describe('projects store', () => {
       useProjectsStore.setState({
         projects: [mockProject('p-1', 'Test')] as any[],
         selectedProjectId: 'p-1',
-      })
+      });
 
-      expect(useProjectsStore.getState().getSelectedProject()?.id).toBe('p-1')
-    })
+      expect(useProjectsStore.getState().getSelectedProject()?.id).toBe('p-1');
+    });
 
     it('returns null when no selection', () => {
-      expect(useProjectsStore.getState().getSelectedProject()).toBeNull()
-    })
+      expect(useProjectsStore.getState().getSelectedProject()).toBeNull();
+    });
 
     it('returns null when selected project not found', () => {
       useProjectsStore.setState({
         projects: [mockProject('p-1', 'Test')] as any[],
         selectedProjectId: 'p-nonexistent',
-      })
+      });
 
-      expect(useProjectsStore.getState().getSelectedProject()).toBeNull()
-    })
-  })
+      expect(useProjectsStore.getState().getSelectedProject()).toBeNull();
+    });
+  });
 
   // ── fetchProjects ──────────────────────────────────────
 
   describe('fetchProjects', () => {
     it('fetches and stores projects', async () => {
-      const projects = [mockProject('p-1', 'Test')]
-      mockApiClient.get.mockResolvedValueOnce(projects)
+      const projects = [mockProject('p-1', 'Test')];
+      mockApiClient.get.mockResolvedValueOnce(projects);
 
-      await useProjectsStore.getState().fetchProjects()
+      await useProjectsStore.getState().fetchProjects();
 
-      const state = useProjectsStore.getState()
-      expect(state.projects).toEqual(projects)
-      expect(state.isLoading).toBe(false)
-    })
+      const state = useProjectsStore.getState();
+      expect(state.projects).toEqual(projects);
+      expect(state.isLoading).toBe(false);
+    });
 
     it('auto-selects first project if none selected', async () => {
-      mockApiClient.get.mockResolvedValueOnce([mockProject('p-1', 'Test')])
+      mockApiClient.get.mockResolvedValueOnce([mockProject('p-1', 'Test')]);
 
-      await useProjectsStore.getState().fetchProjects()
+      await useProjectsStore.getState().fetchProjects();
 
-      expect(useProjectsStore.getState().selectedProjectId).toBe('p-1')
-    })
+      expect(useProjectsStore.getState().selectedProjectId).toBe('p-1');
+    });
 
     it('preserves existing selection', async () => {
-      useProjectsStore.setState({ selectedProjectId: 'p-2' })
-      mockApiClient.get.mockResolvedValueOnce([mockProject('p-1', 'Test'), mockProject('p-2', 'Other')])
+      useProjectsStore.setState({ selectedProjectId: 'p-2' });
+      mockApiClient.get.mockResolvedValueOnce([
+        mockProject('p-1', 'Test'),
+        mockProject('p-2', 'Other'),
+      ]);
 
-      await useProjectsStore.getState().fetchProjects()
+      await useProjectsStore.getState().fetchProjects();
 
-      expect(useProjectsStore.getState().selectedProjectId).toBe('p-2')
-    })
+      expect(useProjectsStore.getState().selectedProjectId).toBe('p-2');
+    });
 
     it('sets error on fetch failure', async () => {
-      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch projects'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch projects'));
 
-      await useProjectsStore.getState().fetchProjects()
+      await useProjectsStore.getState().fetchProjects();
 
-      expect(useProjectsStore.getState().error).toContain('Failed to fetch projects')
-    })
-  })
+      expect(useProjectsStore.getState().error).toContain('Failed to fetch projects');
+    });
+  });
 
   // ── createProject ──────────────────────────────────────
 
   describe('createProject', () => {
     it('creates project and refreshes list', async () => {
       // First call: post (create). Second call: get (fetchProjects)
-      mockApiClient.post.mockResolvedValueOnce({ id: 'new-proj' })
-      mockApiClient.get.mockResolvedValueOnce([mockProject('new-proj', 'New')])
+      mockApiClient.post.mockResolvedValueOnce({ id: 'new-proj' });
+      mockApiClient.get.mockResolvedValueOnce([mockProject('new-proj', 'New')]);
 
-      const result = await useProjectsStore.getState().createProject(
-        'new-proj', 'New', 'desc', 'default'
-      )
+      const result = await useProjectsStore
+        .getState()
+        .createProject('new-proj', 'New', 'desc', 'default');
 
-      expect(result).toBe(true)
-      expect(useProjectsStore.getState().modalMode).toBeNull()
-    })
+      expect(result).toBe(true);
+      expect(useProjectsStore.getState().modalMode).toBeNull();
+    });
 
     it('returns false on error', async () => {
-      mockApiClient.post.mockRejectedValueOnce(new Error('Project already exists'))
+      mockApiClient.post.mockRejectedValueOnce(new Error('Project already exists'));
 
-      const result = await useProjectsStore.getState().createProject(
-        'dup', 'Dup', 'desc', 'default'
-      )
+      const result = await useProjectsStore
+        .getState()
+        .createProject('dup', 'Dup', 'desc', 'default');
 
-      expect(result).toBe(false)
-      expect(useProjectsStore.getState().error).toBe('Project already exists')
-    })
-  })
+      expect(result).toBe(false);
+      expect(useProjectsStore.getState().error).toBe('Project already exists');
+    });
+  });
 
   // ── deleteProject ──────────────────────────────────────
 
   describe('deleteProject', () => {
     it('deletes project and refreshes list', async () => {
-      mockApiClient.delete.mockResolvedValueOnce(undefined)
-      mockApiClient.get.mockResolvedValueOnce([])
+      mockApiClient.delete.mockResolvedValueOnce(undefined);
+      mockApiClient.get.mockResolvedValueOnce([]);
 
-      const result = await useProjectsStore.getState().deleteProject('p-1')
+      const result = await useProjectsStore.getState().deleteProject('p-1');
 
-      expect(result).toBe(true)
-    })
+      expect(result).toBe(true);
+    });
 
     it('returns false on error', async () => {
-      mockApiClient.delete.mockRejectedValueOnce(new Error('Not found'))
+      mockApiClient.delete.mockRejectedValueOnce(new Error('Not found'));
 
-      const result = await useProjectsStore.getState().deleteProject('p-x')
+      const result = await useProjectsStore.getState().deleteProject('p-x');
 
-      expect(result).toBe(false)
-      expect(useProjectsStore.getState().error).toBe('Not found')
-    })
-  })
+      expect(result).toBe(false);
+      expect(useProjectsStore.getState().error).toBe('Not found');
+    });
+  });
 
   // ── reorderProjects ────────────────────────────────────
 
   describe('reorderProjects', () => {
     it('reorders and updates projects list', async () => {
-      const reordered = [mockProject('p-2', 'B'), mockProject('p-1', 'A')]
-      mockApiClient.post.mockResolvedValueOnce(reordered)
+      const reordered = [mockProject('p-2', 'B'), mockProject('p-1', 'A')];
+      mockApiClient.post.mockResolvedValueOnce(reordered);
 
-      const result = await useProjectsStore.getState().reorderProjects(['p-2', 'p-1'])
+      const result = await useProjectsStore.getState().reorderProjects(['p-2', 'p-1']);
 
-      expect(result).toBe(true)
-      expect(useProjectsStore.getState().projects).toEqual(reordered)
-    })
+      expect(result).toBe(true);
+      expect(useProjectsStore.getState().projects).toEqual(reordered);
+    });
 
     it('returns false and sets error on failure', async () => {
-      mockApiClient.post.mockRejectedValueOnce(new Error('Reorder failed'))
+      mockApiClient.post.mockRejectedValueOnce(new Error('Reorder failed'));
 
-      const result = await useProjectsStore.getState().reorderProjects(['p-1', 'p-2'])
+      const result = await useProjectsStore.getState().reorderProjects(['p-1', 'p-2']);
 
-      expect(result).toBe(false)
-      expect(useProjectsStore.getState().error).toBeTruthy()
-    })
-  })
+      expect(result).toBe(false);
+      expect(useProjectsStore.getState().error).toBeTruthy();
+    });
+  });
 
   // ── fetchTemplates ─────────────────────────────────────
 
   describe('fetchTemplates', () => {
     it('fetches and stores templates', async () => {
-      const templates = [{ id: 't-1', name: 'Python', description: 'Python project' }]
-      mockApiClient.get.mockResolvedValueOnce(templates)
+      const templates = [{ id: 't-1', name: 'Python', description: 'Python project' }];
+      mockApiClient.get.mockResolvedValueOnce(templates);
 
-      await useProjectsStore.getState().fetchTemplates()
+      await useProjectsStore.getState().fetchTemplates();
 
-      expect(useProjectsStore.getState().templates).toEqual(templates)
-    })
+      expect(useProjectsStore.getState().templates).toEqual(templates);
+    });
 
     it('handles fetch failure gracefully', async () => {
-      mockApiClient.get.mockRejectedValueOnce(new Error('Network error'))
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      mockApiClient.get.mockRejectedValueOnce(new Error('Network error'));
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      await useProjectsStore.getState().fetchTemplates()
+      await useProjectsStore.getState().fetchTemplates();
 
-      expect(consoleSpy).toHaveBeenCalled()
-      consoleSpy.mockRestore()
-    })
-  })
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+  });
 
   // ── linkProject ────────────────────────────────────────
 
   describe('linkProject', () => {
     it('links project and refreshes list', async () => {
-      mockApiClient.post.mockResolvedValueOnce({})
-      mockApiClient.get.mockResolvedValueOnce([])
+      mockApiClient.post.mockResolvedValueOnce({});
+      mockApiClient.get.mockResolvedValueOnce([]);
 
-      const result = await useProjectsStore.getState().linkProject('p-link', '/path/to/project')
+      const result = await useProjectsStore.getState().linkProject('p-link', '/path/to/project');
 
-      expect(result).toBe(true)
-    })
+      expect(result).toBe(true);
+    });
+
+    // DB 모드(USE_DATABASE=true)의 백엔드는 name/description 을 그대로 ProjectModel 행에
+    // 쓴다. 모달이 입력받은 값을 여기서 떨어뜨리면 DB 에는 디렉터리명만 남는다.
+    it('sends name and description with the link request', async () => {
+      mockApiClient.post.mockResolvedValueOnce({});
+      mockApiClient.get.mockResolvedValueOnce([]);
+
+      await useProjectsStore
+        .getState()
+        .linkProject('kvca', '/work/KVCA', 'KVCA', 'Venture capital');
+
+      expect(mockApiClient.post).toHaveBeenCalledWith('/api/projects/link', {
+        id: 'kvca',
+        source_path: '/work/KVCA',
+        name: 'KVCA',
+        description: 'Venture capital',
+      });
+    });
 
     it('returns false on error', async () => {
-      mockApiClient.post.mockRejectedValueOnce(new Error('Path not found'))
+      mockApiClient.post.mockRejectedValueOnce(new Error('Path not found'));
 
-      const result = await useProjectsStore.getState().linkProject('p-link', '/bad/path')
+      const result = await useProjectsStore.getState().linkProject('p-link', '/bad/path');
 
-      expect(result).toBe(false)
-      expect(useProjectsStore.getState().error).toBeTruthy()
-    })
-  })
+      expect(result).toBe(false);
+      expect(useProjectsStore.getState().error).toBeTruthy();
+    });
+  });
 
   // ── updateProject ──────────────────────────────────────
 
   describe('updateProject', () => {
     it('updates project and refreshes list', async () => {
-      mockApiClient.put.mockResolvedValueOnce({})
-      mockApiClient.get.mockResolvedValueOnce([mockProject('p-1', 'Updated')])
+      mockApiClient.put.mockResolvedValueOnce({});
+      mockApiClient.get.mockResolvedValueOnce([mockProject('p-1', 'Updated')]);
 
-      const result = await useProjectsStore.getState().updateProject('p-1', 'Updated', 'New desc', '/new/path')
+      const result = await useProjectsStore
+        .getState()
+        .updateProject('p-1', 'Updated', 'New desc', '/new/path');
 
-      expect(result).toBe(true)
-      expect(useProjectsStore.getState().modalMode).toBeNull()
-    })
+      expect(result).toBe(true);
+      expect(useProjectsStore.getState().modalMode).toBeNull();
+    });
 
     it('returns false on error', async () => {
-      mockApiClient.put.mockRejectedValueOnce(new Error('Not found'))
+      mockApiClient.put.mockRejectedValueOnce(new Error('Not found'));
 
-      const result = await useProjectsStore.getState().updateProject('p-1', 'Name', 'Desc', '/path')
+      const result = await useProjectsStore
+        .getState()
+        .updateProject('p-1', 'Name', 'Desc', '/path');
 
-      expect(result).toBe(false)
-    })
-  })
+      expect(result).toBe(false);
+    });
+  });
 
   // ── indexProject ───────────────────────────────────────
 
   describe('indexProject', () => {
     it('indexes project and refreshes list', async () => {
-      mockApiClient.post.mockResolvedValueOnce({})
-      mockApiClient.get.mockResolvedValueOnce([])
+      mockApiClient.post.mockResolvedValueOnce({});
+      mockApiClient.get.mockResolvedValueOnce([]);
 
-      const result = await useProjectsStore.getState().indexProject('p-1')
+      const result = await useProjectsStore.getState().indexProject('p-1');
 
-      expect(result).toBe(true)
-    })
+      expect(result).toBe(true);
+    });
 
     it('returns false on error', async () => {
-      mockApiClient.post.mockRejectedValueOnce(new Error('Index failed'))
+      mockApiClient.post.mockRejectedValueOnce(new Error('Index failed'));
 
-      const result = await useProjectsStore.getState().indexProject('p-1')
+      const result = await useProjectsStore.getState().indexProject('p-1');
 
-      expect(result).toBe(false)
-    })
-  })
+      expect(result).toBe(false);
+    });
+  });
 
   // ── fetchDeletionPreview ───────────────────────────────
 
   describe('fetchDeletionPreview', () => {
     it('returns deletion preview data', async () => {
-      const preview = { tasks_count: 5, agents_count: 2 }
-      mockApiClient.get.mockResolvedValueOnce(preview)
+      const preview = { tasks_count: 5, agents_count: 2 };
+      mockApiClient.get.mockResolvedValueOnce(preview);
 
-      const result = await useProjectsStore.getState().fetchDeletionPreview('p-1')
+      const result = await useProjectsStore.getState().fetchDeletionPreview('p-1');
 
-      expect(result).toEqual(preview)
-    })
+      expect(result).toEqual(preview);
+    });
 
     it('returns null on error', async () => {
-      mockApiClient.get.mockRejectedValueOnce(new Error('Not found'))
+      mockApiClient.get.mockRejectedValueOnce(new Error('Not found'));
 
-      const result = await useProjectsStore.getState().fetchDeletionPreview('p-1')
+      const result = await useProjectsStore.getState().fetchDeletionPreview('p-1');
 
-      expect(result).toBeNull()
-    })
-  })
+      expect(result).toBeNull();
+    });
+  });
 
   // ── setShowInactive ────────────────────────────────────
 
   describe('setShowInactive', () => {
     it('sets showInactive to false', () => {
-      useProjectsStore.getState().setShowInactive(false)
-      expect(useProjectsStore.getState().showInactive).toBe(false)
-    })
+      useProjectsStore.getState().setShowInactive(false);
+      expect(useProjectsStore.getState().showInactive).toBe(false);
+    });
 
     it('sets showInactive to true', () => {
-      useProjectsStore.setState({ showInactive: false })
-      useProjectsStore.getState().setShowInactive(true)
-      expect(useProjectsStore.getState().showInactive).toBe(true)
-    })
+      useProjectsStore.setState({ showInactive: false });
+      useProjectsStore.getState().setShowInactive(true);
+      expect(useProjectsStore.getState().showInactive).toBe(true);
+    });
 
     it('filteredProjects respects showInactive=false', () => {
       useProjectsStore.setState({
@@ -442,13 +467,13 @@ describe('projects store', () => {
         ],
         showInactive: false,
         searchQuery: '',
-      })
-      const result = useProjectsStore.getState().filteredProjects()
-      expect(result).toHaveLength(1)
-      expect(result[0].id).toBe('p-1')
-    })
-  })
-})
+      });
+      const result = useProjectsStore.getState().filteredProjects();
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('p-1');
+    });
+  });
+});
 
 // ── Startup hydration guard ──────────────────────────────
 // Bootstrap seeds the store once; page mounts must not refetch the same list.
@@ -461,70 +486,70 @@ describe('projects store hydration guard', () => {
       error: null,
       selectedProjectId: null,
       isHydrated: false,
-    })
-    vi.clearAllMocks()
-  })
+    });
+    vi.clearAllMocks();
+  });
 
   it('marks the store hydrated after bootstrap seeding', () => {
-    useProjectsStore.getState().hydrateProjects([mockProject('p-1', 'One')] as any)
+    useProjectsStore.getState().hydrateProjects([mockProject('p-1', 'One')] as any);
 
-    expect(useProjectsStore.getState().isHydrated).toBe(true)
-  })
+    expect(useProjectsStore.getState().isHydrated).toBe(true);
+  });
 
   it('marks the store hydrated after a successful fetch', async () => {
-    mockApiClient.get.mockResolvedValueOnce([mockProject('p-1', 'One')])
+    mockApiClient.get.mockResolvedValueOnce([mockProject('p-1', 'One')]);
 
-    await useProjectsStore.getState().fetchProjects()
+    await useProjectsStore.getState().fetchProjects();
 
-    expect(useProjectsStore.getState().isHydrated).toBe(true)
-  })
+    expect(useProjectsStore.getState().isHydrated).toBe(true);
+  });
 
   it('does not mark the store hydrated when the fetch fails', async () => {
-    mockApiClient.get.mockRejectedValueOnce(new Error('boom'))
+    mockApiClient.get.mockRejectedValueOnce(new Error('boom'));
 
-    await useProjectsStore.getState().fetchProjects()
+    await useProjectsStore.getState().fetchProjects();
 
-    expect(useProjectsStore.getState().isHydrated).toBe(false)
-  })
+    expect(useProjectsStore.getState().isHydrated).toBe(false);
+  });
 
   it('clears hydration on reset so a new session refetches', () => {
-    useProjectsStore.getState().hydrateProjects([mockProject('p-1', 'One')] as any)
-    useProjectsStore.getState().reset()
+    useProjectsStore.getState().hydrateProjects([mockProject('p-1', 'One')] as any);
+    useProjectsStore.getState().reset();
 
-    expect(useProjectsStore.getState().isHydrated).toBe(false)
-  })
+    expect(useProjectsStore.getState().isHydrated).toBe(false);
+  });
 
   it('ensureProjects skips the request when already hydrated', async () => {
-    useProjectsStore.getState().hydrateProjects([mockProject('p-1', 'One')] as any)
+    useProjectsStore.getState().hydrateProjects([mockProject('p-1', 'One')] as any);
 
-    await useProjectsStore.getState().ensureProjects()
+    await useProjectsStore.getState().ensureProjects();
 
-    expect(mockApiClient.get).not.toHaveBeenCalled()
-  })
+    expect(mockApiClient.get).not.toHaveBeenCalled();
+  });
 
   it('ensureProjects skips an empty-but-hydrated store', async () => {
-    useProjectsStore.getState().hydrateProjects([])
+    useProjectsStore.getState().hydrateProjects([]);
 
-    await useProjectsStore.getState().ensureProjects()
+    await useProjectsStore.getState().ensureProjects();
 
-    expect(mockApiClient.get).not.toHaveBeenCalled()
-  })
+    expect(mockApiClient.get).not.toHaveBeenCalled();
+  });
 
   it('ensureProjects fetches when the store was never hydrated', async () => {
-    mockApiClient.get.mockResolvedValueOnce([mockProject('p-1', 'One')])
+    mockApiClient.get.mockResolvedValueOnce([mockProject('p-1', 'One')]);
 
-    await useProjectsStore.getState().ensureProjects()
+    await useProjectsStore.getState().ensureProjects();
 
-    expect(mockApiClient.get).toHaveBeenCalledWith('/api/projects')
-  })
+    expect(mockApiClient.get).toHaveBeenCalledWith('/api/projects');
+  });
 
   it('explicit fetchProjects still refetches a hydrated store (retry/mutation refresh)', async () => {
-    useProjectsStore.getState().hydrateProjects([mockProject('p-1', 'One')] as any)
-    mockApiClient.get.mockResolvedValueOnce([mockProject('p-2', 'Two')])
+    useProjectsStore.getState().hydrateProjects([mockProject('p-1', 'One')] as any);
+    mockApiClient.get.mockResolvedValueOnce([mockProject('p-2', 'Two')]);
 
-    await useProjectsStore.getState().fetchProjects()
+    await useProjectsStore.getState().fetchProjects();
 
-    expect(mockApiClient.get).toHaveBeenCalledWith('/api/projects')
-    expect(useProjectsStore.getState().projects[0].id).toBe('p-2')
-  })
-})
+    expect(mockApiClient.get).toHaveBeenCalledWith('/api/projects');
+    expect(useProjectsStore.getState().projects[0].id).toBe('p-2');
+  });
+});

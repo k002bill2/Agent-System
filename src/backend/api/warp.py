@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from api.deps import get_current_admin_or_manager_user
+from api.git._shared import resolve_project
 from models.llm_usage import (
     LLMRuntimeMode,
     LLMUsageMeasurementMethod,
@@ -19,7 +20,6 @@ from models.llm_usage import (
     LLMUsageSource,
     LLMUsageStatus,
 )
-from models.project import get_project
 from services.llm_usage_ledger_service import (
     LLMUsageQuotaExceededError,
     enforce_usage_quota_preflight_best_effort,
@@ -152,10 +152,8 @@ async def open_in_warp(request: WarpOpenRequest):
     If a command is provided without use_claude_cli, it will be executed directly.
     Without any command, Warp will simply open a new window/tab at the project path.
     """
-    # Get project
-    project = get_project(request.project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail=f"Project '{request.project_id}' not found")
+    # Get project — DB 모드는 `ProjectModel` 행이 유일한 권위다 (api/terminal.py 와 동일).
+    project = await resolve_project(request.project_id)
 
     warp = get_warp_service()
 

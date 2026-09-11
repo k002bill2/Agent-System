@@ -12,8 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from api.deps import get_current_admin_or_manager_user, get_current_user
+from api.git._shared import resolve_project
 from db.models import UserModel
-from models.project import get_project
 from services.audit_service import AuditAction, AuditService, ResourceType
 from services.terminal_service import (
     TERMINAL_INFO,
@@ -132,10 +132,9 @@ async def execute_in_terminal(
             detail=f"Unknown terminal type: {request.terminal}",
         )
 
-    # Resolve project path
-    project = get_project(request.project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    # Resolve project path — DB 모드는 `ProjectModel` 행이 유일한 권위다. 레거시
+    # `get_project()` 만 보면 DB 모드에서 link/create 한 프로젝트(심링크 없음)가 404 다.
+    project = await resolve_project(request.project_id)
 
     try:
         service = get_terminal_service()
