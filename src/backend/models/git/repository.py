@@ -161,12 +161,18 @@ def sync_git_repositories_from_projects() -> int:
     from pathlib import Path as _Path
 
     # Import here to avoid circular dependency at module load.
-    from models.project import list_projects
+    from models.project import is_project_deferred, list_projects
 
     known_paths = {repo.path for repo in GIT_REPOSITORIES.values()}
     added = 0
 
     for project in list_projects():
+        # 자동 등록이 데드라인을 넘겨 placeholder 로 남은 프로젝트는 건너뛴다.
+        # 아래의 resolve()/exists() 가 같은 느린 대상을 다시 stat 해서, 기동 경로에
+        # 상한 없는 블로킹을 되살리기 때문이다 (issue #410).
+        if is_project_deferred(project.id):
+            continue
+
         raw_path = project.git_path or project.path
         if not raw_path:
             continue
