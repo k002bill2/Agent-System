@@ -2,7 +2,12 @@
 
 import json
 import logging
+import math
+import os
+import queue
 import re
+import threading
+import time
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -289,17 +294,34 @@ def register_project(project_id: str, project_path: str) -> Project:
     project_path = normalize_path(project_path)
     project = Project.from_path(project_id, project_path)
     PROJECTS_REGISTRY[project_id] = project
+    PROJECT_INIT_ISSUES.pop(project_id, None)
+    DEFERRED_PROJECTS.pop(project_id, None)
     return project
 
 
 def get_project(project_id: str) -> Project | None:
-    """Get project from registry."""
+    """Get an available project from the registry.
+
+    Deferred auto-registration placeholders retain a target path only for diagnosis.
+    They must not enter terminal/MCP/RAG paths, which could touch the same unavailable
+    filesystem and bypass the startup deadline.
+    """
+    if is_project_deferred(project_id):
+        return None
     return PROJECTS_REGISTRY.get(project_id)
 
 
 def list_projects() -> list[Project]:
-    """List all registered projects, sorted by sort_order."""
-    projects = list(PROJECTS_REGISTRY.values())
+    """List available projects, sorted by sort_order.
+
+    Deferred placeholders stay in ``PROJECTS_REGISTRY`` for issue reporting but are
+    excluded so ordinary callers cannot perform unbounded path I/O against them.
+    """
+    projects = [
+        project
+        for project_id, project in PROJECTS_REGISTRY.items()
+        if not is_project_deferred(project_id)
+    ]
     return sorted(projects, key=lambda p: (p.sort_order, p.name.lower()))
 
 
@@ -499,21 +521,268 @@ def reorder_projects(project_ids: list[str]) -> list[Project]:
     return updated_projects
 
 
-# Auto-register projects from projects/ directory
-def init_projects(base_path: str = None):
-    """Initialize projects from projects/ directory.
+# ========================================
+# Auto-registration from projects/ directory
+# ========================================
+
+# 항목 하나가 자동 등록에서 점유할 수 있는 최대 시간(초).
+# projects/ 링크의 대상은 iCloud 같은 네트워크 백업 저장소일 수 있고, 그런 경로의
+# stat/read 는 materialize 를 유발해 수 분 걸린다. init_projects 는 FastAPI lifespan
+# 에서 동기 호출되므로 상한이 없으면 그 시간만큼 readiness 가 통째로 막힌다 (issue #410).
+DEFAULT_PROJECT_INIT_TIMEOUT = 2.0
+
+# 대상 파일시스템이 무응답이면 Python에서 I/O 스레드를 강제 취소할 수 없다. 따라서
+# 자동 등록 워커 수 자체를 제한해, 느린 링크가 많아도 남는 daemon이 무한히 쌓이지 않게 한다.
+MAX_PROJECT_INIT_WORKERS = 4
+PROJECT_INIT_WORKER_SLOTS = threading.BoundedSemaphore(MAX_PROJECT_INIT_WORKERS)
+PROJECT_INIT_WORKER_RELEASED = threading.Semaphore(0)
+PROJECT_INIT_RETRY_LOCK = threading.Lock()
+
+# 자동 등록에서 정상 처리되지 못한 항목: project_id -> "deferred" | "pending" | "unavailable"
+# - deferred:    링크는 있는데 대상이 느려 데드라인을 넘김. 대상 경로는 진단 전용
+#                DEFERRED_PROJECTS 에 두고 운영 레지스트리에는 넣지 않는다.
+# - unavailable: 대상이 없거나 접근에서 예외. 등록하지 않는다.
+PROJECT_INIT_ISSUES: dict[str, str] = {}
+DEFERRED_PROJECTS: dict[str, Project] = {}
+
+
+def get_project_init_issues() -> dict[str, str]:
+    """Return a copy of the deferred/unavailable state from the last auto-registration."""
+    return dict(PROJECT_INIT_ISSUES)
+
+
+def is_project_deferred(project_id: str) -> bool:
+    """True if the project is registered as a placeholder whose target never responded."""
+    return PROJECT_INIT_ISSUES.get(project_id) == "deferred"
+
+
+def _load_project_entry(item: Path) -> Project | None:
+    """Build a Project from one `projects/` entry (all blocking filesystem work).
+
+    자동 등록에서 대상 파일시스템을 건드리는 부분은 전부 여기 모여 있다 —
+    `init_projects` 가 이 함수만 데드라인 안에서 돌리면 되도록.
+
+    Returns:
+        Project, 또는 대상이 디렉터리가 아니면 None.
+    """
+    real_path = item.resolve() if item.is_symlink() else item
+    if not real_path.is_dir():
+        return None
+    return Project.from_path(item.name, normalize_path(str(real_path)))
+
+
+def _project_init_timeout(entry_timeout: float | None) -> float:
+    """Return a finite, positive auto-registration budget from arg/env/default."""
+    if entry_timeout is None:
+        try:
+            entry_timeout = float(
+                os.getenv("PROJECT_INIT_TIMEOUT_SECONDS", str(DEFAULT_PROJECT_INIT_TIMEOUT))
+            )
+        except ValueError:
+            entry_timeout = DEFAULT_PROJECT_INIT_TIMEOUT
+
+    if not math.isfinite(entry_timeout) or entry_timeout <= 0:
+        return DEFAULT_PROJECT_INIT_TIMEOUT
+    return entry_timeout
+
+
+def _schedule_project_init_retry(
+    root: Path, entry_timeout: float, wait_for_worker_release: bool
+) -> None:
+    """Retry queued entries once a bounded worker becomes available.
+
+    A hung syscall cannot be cancelled. If all workers are occupied, retain at most
+    one daemon scheduler rather than creating another worker per project; it retries
+    discovery when one of the existing workers eventually returns.
+    """
+    if not PROJECT_INIT_RETRY_LOCK.acquire(blocking=False):
+        return
+
+    def _retry() -> None:
+        try:
+            if wait_for_worker_release:
+                PROJECT_INIT_WORKER_RELEASED.acquire()
+            init_projects(str(root), entry_timeout=entry_timeout)
+        finally:
+            PROJECT_INIT_RETRY_LOCK.release()
+
+    threading.Thread(target=_retry, name="aos-project-init-retry", daemon=True).start()
+
+
+def _deferred_project(item: Path, is_symlink: bool) -> Project:
+    """Placeholder for an entry whose target never answered within the deadline.
+
+    대상 파일시스템에는 접근하지 않는다 — `os.readlink` 는 링크 자신의 메타데이터만
+    읽으므로 느린 대상에서도 즉시 반환한다. 그래서 이름/설명/CLAUDE.md 는 비어 있고
+    `git_enabled` 는 False 다.
+    """
+    target = str(item)
+    if is_symlink:
+        try:
+            raw = os.readlink(item)
+            target = raw if os.path.isabs(raw) else str(item.parent / raw)
+        except OSError:
+            pass
+    return Project(id=item.name, name=item.name, path=target, git_enabled=False)
+
+
+def init_projects(base_path: str | None = None, entry_timeout: float | None = None) -> None:
+    """Initialize projects from the `projects/` directory.
 
     Only symlinks are registered as projects. Regular directories
     (e.g. e2e test artifacts) are ignored.
-    """
-    if base_path is None:
-        # Default to Agent System root
-        base_path = Path(__file__).parent.parent.parent.parent
 
-    projects_dir = Path(base_path) / "projects"
-    if projects_dir.exists():
-        for item in projects_dir.iterdir():
-            if item.is_symlink() or (item.is_dir() and not item.name.startswith("test-")):
-                real_path = item.resolve() if item.is_symlink() else item
-                if real_path.is_dir():
-                    register_project(item.name, str(real_path))
+    `projects/` 의 **최상위 항목만** 훑는다. `projects/agent-orchestration` 처럼
+    저장소 루트를 도로 가리키는 자기참조 링크가 있어도 하위로 내려가지 않는다.
+
+    전체 작업 시간을 `entry_timeout` 으로 제한하고, 예외는 항목 단위로 잡는다.
+    느리거나 사라진 대상 하나, 또는 많은 느린 대상이 기동을 막거나 lifespan 을
+    죽이지 못하게 하기 위함이다.
+
+    Args:
+        base_path: Agent System 루트. None 이면 이 파일 기준으로 추론.
+        entry_timeout: 전체 자동 등록 상한(초). None 이면
+            `PROJECT_INIT_TIMEOUT_SECONDS` 환경변수, 그것도 없으면
+            `DEFAULT_PROJECT_INIT_TIMEOUT`.
+    """
+    root = Path(base_path) if base_path is not None else Path(__file__).parent.parent.parent.parent
+
+    entry_timeout = _project_init_timeout(entry_timeout)
+
+    projects_dir = root / "projects"
+    if not projects_dir.exists():
+        return
+
+    try:
+        entries = list(projects_dir.iterdir())
+    except OSError as exc:
+        # lifespan 은 이 호출을 감싸지 않는다 — 여기서 새면 기동이 통째로 실패한다.
+        logger.warning("project_discovery_failed: %s (%s)", projects_dir, exc)
+        return
+
+    candidates: list[tuple[Path, bool]] = []
+    for item in entries:
+        is_symlink = item.is_symlink()
+        # Regular entries can themselves be on a stalled mount. Do not call
+        # `is_dir()` here: all target probing belongs inside the bounded worker.
+        if not item.name.startswith("test-"):
+            candidates.append((item, is_symlink))
+
+    deadline = time.monotonic() + entry_timeout
+    work: queue.Queue[Path] = queue.Queue()
+    for item, _ in candidates:
+        work.put(item)
+
+    results: dict[str, tuple[Project | None, BaseException | None]] = {}
+    attempted: set[str] = set()
+    results_lock = threading.Lock()
+    result_available = threading.Event()
+
+    def _worker() -> None:
+        try:
+            while time.monotonic() < deadline:
+                try:
+                    item = work.get_nowait()
+                except queue.Empty:
+                    return
+
+                with results_lock:
+                    attempted.add(item.name)
+
+                try:
+                    project = _load_project_entry(item)
+                    error: BaseException | None = None
+                except BaseException as exc:  # noqa: BLE001 - report per-entry failure
+                    project = None
+                    error = exc
+
+                with results_lock:
+                    results[item.name] = (project, error)
+                result_available.set()
+        finally:
+            PROJECT_INIT_WORKER_SLOTS.release()
+            PROJECT_INIT_WORKER_RELEASED.release()
+
+    workers = []
+    for _ in range(min(MAX_PROJECT_INIT_WORKERS, len(candidates))):
+        if not PROJECT_INIT_WORKER_SLOTS.acquire(blocking=False):
+            break
+        workers.append(threading.Thread(target=_worker, name="aos-project-init", daemon=True))
+
+    # 다른 초기화 시도에서 이미 제한된 모든 워커를 점유 중이면 이번 스캔은 상태를
+    # 바꾸지 않는다. 응답하지 않은 것으로 오인해 정상 프로젝트를 숨기지 않고,
+    # 먼저 시작된 bounded 작업이 끝난 뒤 다음 재시도에서 다시 검사한다.
+    if candidates and not workers:
+        logger.warning(
+            "project_discovery_skipped: all %s bounded workers are occupied",
+            MAX_PROJECT_INIT_WORKERS,
+        )
+        return
+
+    for worker in workers:
+        worker.start()
+
+    while time.monotonic() < deadline:
+        with results_lock:
+            if len(results) == len(candidates):
+                break
+        result_available.wait(timeout=max(0.0, deadline - time.monotonic()))
+        result_available.clear()
+
+    with results_lock:
+        completed_results = dict(results)
+        attempted_names = set(attempted)
+
+    retry_needed = False
+    for item, is_symlink in candidates:
+        result = completed_results.get(item.name)
+        if result is None:
+            PROJECTS_REGISTRY.pop(item.name, None)
+            if item.name in attempted_names:
+                PROJECT_INIT_ISSUES[item.name] = "deferred"
+                DEFERRED_PROJECTS[item.name] = _deferred_project(item, is_symlink)
+                retry_needed = True
+                logger.warning(
+                    "project_registration_deferred: %s did not respond within the %.1fs "
+                    "startup discovery budget",
+                    item.name,
+                    entry_timeout,
+                )
+            else:
+                PROJECT_INIT_ISSUES[item.name] = "pending"
+                DEFERRED_PROJECTS.pop(item.name, None)
+                retry_needed = True
+                logger.warning(
+                    "project_registration_pending: %s was not assigned a bounded worker; "
+                    "will retry when a worker returns",
+                    item.name,
+                )
+            continue
+
+        project, error = result
+
+        if error is not None or project is None:
+            # Non-directory regular entries are not projects and retain the prior
+            # behavior of being ignored. Symlinks remain reportable diagnostics.
+            if not is_symlink and project is None:
+                continue
+            PROJECT_INIT_ISSUES[item.name] = "unavailable"
+            PROJECTS_REGISTRY.pop(item.name, None)
+            DEFERRED_PROJECTS.pop(item.name, None)
+            logger.warning(
+                "project_registration_unavailable: %s (%s)",
+                item.name,
+                error if error is not None else "target is not a directory",
+            )
+            continue
+
+        PROJECT_INIT_ISSUES.pop(item.name, None)
+        DEFERRED_PROJECTS.pop(item.name, None)
+        PROJECTS_REGISTRY[item.name] = project
+
+    if retry_needed:
+        _schedule_project_init_retry(
+            root,
+            entry_timeout,
+            wait_for_worker_release=any(worker.is_alive() for worker in workers),
+        )
