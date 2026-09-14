@@ -16,7 +16,9 @@ dependencies = [
     # API Framework
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
-    "websockets>=14.0",
+    # 상한 <17.0 은 google-genai(langchain-google-genai 경유)와 langgraph-sdk 의
+    # `websockets<17` 제약에서 온다. 상류가 풀리기 전에 올리면 uv 해석이 깨진다.
+    "websockets>=14.0,<17.0",
     # Database
     "sqlalchemy>=2.0.52",
     "asyncpg>=0.30.0",
