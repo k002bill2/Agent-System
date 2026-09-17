@@ -421,3 +421,82 @@ def test_bumped_default_server_package_is_not_automatically_trusted(monkeypatch)
     assert compute_candidate_fingerprint(bumped) not in builtin_trusted_fingerprints()
     with pytest.raises(MCPAdmissionError):
         MCPManager(admission_gate=default_admission_gate()).register_server(bumped)
+
+
+# ------------------------------------------------- 소스 드리프트 (스캐너 증빙 전용)
+
+
+def _scanned_evidence(config: MCPServerConfig, target):
+    """SkillSpector 어댑터가 발급하는 것과 같은 모양의 증빙 — 대상 digest 를 포함한다."""
+    from services.skillspector_adapter import digest_scan_target
+
+    return build_evidence(
+        config,
+        scanner_id="skillspector",
+        scanner_version="2.5.1",
+        scan_status=ScanStatus.PASS,
+        scanned_at=utcnow() - timedelta(hours=1),
+        reviewer="security@example.test",
+        review_decision=ReviewDecision.APPROVED,
+        reviewed_at=utcnow() - timedelta(minutes=30),
+        report_sha256="0" * 64,
+        scan_target=str(target),
+        scan_target_digest=digest_scan_target(target),
+    )
+
+
+def _manager_with_scanned_evidence(config: MCPServerConfig, target) -> MCPManager:
+    store = InMemoryEvidenceStore()
+    store.put(_scanned_evidence(config, target))
+    return MCPManager(admission_gate=AdmissionGate(store=store))
+
+
+def _vendored(tmp_path):
+    target = tmp_path / "vendored-mcp"
+    target.mkdir()
+    (target / "package.json").write_text('{"name": "totally-not-malware"}\n')
+    return target
+
+
+@pytest.mark.asyncio
+async def test_unchanged_scanned_source_still_starts(config, popen, tmp_path):
+    """대조군 — 드리프트가 없으면 기동은 그대로 된다.
+
+    이 대조군이 없으면 아래 차단 테스트는 '전부 막혀 있어서' 통과할 수도 있다.
+    """
+    target = _vendored(tmp_path)
+    manager = _manager_with_scanned_evidence(config, target)
+    manager.register_server(config)
+
+    assert await manager.start_server(EXTERNAL_ID) is True
+    popen.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_source_drift_after_approval_blocks_start(config, popen, tmp_path):
+    """승인 이후 스캔된 소스가 바뀌면 그 증빙은 더 이상 이 아티팩트를 가리키지 않는다.
+
+    fingerprint 는 그대로다 — command/args/env 는 하나도 안 바뀌었다. 바뀐 것은
+    **그 command 가 실행할 내용**이다. fingerprint 만 보는 게이트는 여기서 통과시킨다.
+    """
+    target = _vendored(tmp_path)
+    manager = _manager_with_scanned_evidence(config, target)
+    manager.register_server(config)
+
+    (target / "postinstall.js").write_text("// added after approval\n")
+
+    started = await manager.start_server(EXTERNAL_ID)
+
+    assert started is False
+    popen.assert_not_called()
+    assert "drift" in manager.get_server(EXTERNAL_ID).last_error
+
+
+@pytest.mark.asyncio
+async def test_manual_review_evidence_is_not_source_checked(config, popen):
+    """대상 digest 가 없는 수동 검토 증빙은 기존대로 동작한다 (없던 검사를 만들지 않는다)."""
+    manager = _manager(config)
+    manager.register_server(config)
+
+    assert await manager.start_server(EXTERNAL_ID) is True
+    popen.assert_called_once()

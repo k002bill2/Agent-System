@@ -16,8 +16,8 @@
 원본 값은 메모리를 벗어나지 않는다.
 
 **스캐너 연결 경계**: 이 모듈은 어댑터 **계약**(`SupplyChainScanner`)만 정의한다.
-실제 CLI 연결은 인자·출력 스키마를 실측한 뒤의 후속 Security 작업이다
-(docs/mcp-admission.md 참조).
+실제 CLI 구현은 `services.skillspector_adapter` 가 SkillSpector v2.5.1 을 실측해 연결한다
+(docs/mcp-admission.md 참조). 이 모듈은 어느 스캐너가 붙든 판정 계약만 본다.
 """
 
 import hashlib
@@ -129,6 +129,16 @@ class AdmissionEvidence(BaseModel):
     expires_at: datetime | None = None
     notes: str = ""
 
+    # --- 스캐너 결속 (실제 CLI 어댑터가 발급한 증빙에만 있다) ---
+    # 수동 검토 기록은 이 값들이 없다. 따라서 `None` 은 "검사에 실패했다" 가 아니라
+    # "이 증빙은 소스 결속을 주장하지 않는다" 는 뜻이며, 소스 검증의 대상이 아니다.
+    #: 스캐너 리포트 원본 바이트의 sha256 — 어떤 리포트가 근거였는가.
+    report_sha256: str | None = None
+    #: 실제로 스캔된 대상의 정규화 경로 — 표시 이름이 아니라 소스 신원.
+    scan_target: str | None = None
+    #: 스캔 시점 대상 내용의 digest — 승인 이후 변경(source drift)의 판정 기준.
+    scan_target_digest: str | None = None
+
     @field_validator("scanned_at", "reviewed_at", "expires_at")
     @classmethod
     def _normalize_clock(cls, value: datetime | None) -> datetime | None:
@@ -152,6 +162,9 @@ def build_evidence(
     reviewed_at: datetime,
     expires_at: datetime | None = None,
     notes: str = "",
+    report_sha256: str | None = None,
+    scan_target: str | None = None,
+    scan_target_digest: str | None = None,
 ) -> AdmissionEvidence:
     """후보와 결속된 증빙을 만든다 — fingerprint 를 손으로 옮겨 적지 않게 한다."""
     return AdmissionEvidence(
@@ -166,11 +179,19 @@ def build_evidence(
         reviewed_at=reviewed_at,
         expires_at=expires_at,
         notes=notes,
+        report_sha256=report_sha256,
+        scan_target=scan_target,
+        scan_target_digest=scan_target_digest,
     )
 
 
 class ScanReport(BaseModel):
-    """스캐너 어댑터의 출력 계약 (실제 CLI 연결 전 fixture 로 대체되는 지점)."""
+    """스캐너 어댑터의 출력 계약.
+
+    구현체는 `services.skillspector_adapter.SkillSpectorScanner` 이며, 결속 필드
+    (`report_sha256`·`scan_target`·`scan_target_digest`)는 실제 CLI 를 거친 판정에만
+    채워진다. 수동 검토 기록은 그 자리를 비워 두므로 소스 결속을 주장하지 않는다.
+    """
 
     scanner_id: str = Field(min_length=1)
     scanner_version: str = Field(min_length=1)
@@ -179,12 +200,21 @@ class ScanReport(BaseModel):
     findings: list[dict[str, Any]] = Field(default_factory=list)
     raw_summary: str = ""
 
+    # --- 결속(binding) 재료 — 실제 CLI 어댑터가 채운다 (수동 검토 기록은 비워 둔다) ---
+    #: 스캐너가 내놓은 리포트 **원본 바이트** 의 sha256.
+    report_sha256: str | None = None
+    #: 실제로 스캔된 대상의 정규화된 경로 (표시 이름이 아니라 소스 신원).
+    scan_target: str | None = None
+    #: 스캔 시점의 대상 내용 digest — 이후 변경(source drift)을 탐지하는 근거.
+    scan_target_digest: str | None = None
+
 
 class SupplyChainScanner(Protocol):
     """어댑터 계약. 구현체는 후보를 받아 `ScanReport` 를 돌려준다.
 
-    실제 도구(SkillSpector 등)의 인자·출력은 아직 실측하지 않았으므로
-    추측 실행 대신 이 계약과 fixture 구현만 둔다.
+    구현: `services.skillspector_adapter.SkillSpectorScanner` (SkillSpector CLI v2.5.1).
+    판정을 얻지 못한 경우는 전부 `ScanStatus.ERROR` 여야 한다 — 구현체가 실패를
+    PASS 로 접으면 이 계약 위에 쌓인 게이트 전체가 무의미해진다.
     """
 
     def scan(self, candidate: MCPCandidate) -> ScanReport: ...

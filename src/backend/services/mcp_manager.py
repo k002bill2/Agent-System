@@ -31,6 +31,7 @@ from services.mcp_admission import (
     InMemoryEvidenceStore,
     MCPAdmissionError,
 )
+from services.skillspector_adapter import verify_evidence_binding
 from utils.time import utcnow
 
 logger = logging.getLogger(__name__)
@@ -296,6 +297,17 @@ class MCPManager:
         self._rejected.pop(config.id, None)
         self._servers[config.id] = MCPServerInfo(config=config)
 
+    def _scanned_source_problem(self, server_id: str) -> str | None:
+        """스캐너 증빙이 가리키는 소스가 지금도 그때 그 내용인가 (아니면 사유).
+
+        증빙이 없거나(built-in 신뢰 앵커) 소스 결속을 주장하지 않는 증빙(수동 검토
+        기록)은 `None` — 없던 검사를 만들지 않는다.
+        """
+        evidence = self._admission.store.get(server_id)
+        if evidence is None:
+            return None
+        return verify_evidence_binding(evidence)
+
     @property
     def admission(self) -> AdmissionGate:
         """등록·기동을 지키는 게이트 (증빙 등록/회수의 진입점)."""
@@ -356,6 +368,19 @@ class MCPManager:
             info.status = MCPServerStatus.ERROR
             info.last_error = str(e)
             logger.warning("MCP admission denied at start: %s", e)
+            return False
+
+        # fingerprint 는 "무엇을 실행하는가"(command/args/env) 만 묶는다. 같은 명령이
+        # 실행할 **내용**이 승인 이후 바뀐 경우는 fingerprint 가 그대로이므로 위 판정을
+        # 통과한다. 스캐너 증빙이 소스 결속을 주장할 때만, 기동 직전에 그 주장을 재확인한다.
+        # 이 검사를 `AdmissionGate.decide()` 가 아니라 여기 두는 이유: decide 는 등록 루프에서
+        # 후보마다 호출되는 순수 판정이고, 파일시스템 순회는 subprocess 를 띄우기 직전인
+        # 이 지점에서만 값을 한다.
+        drift = self._scanned_source_problem(server_id)
+        if drift is not None:
+            info.status = MCPServerStatus.ERROR
+            info.last_error = f"MCP admission denied for '{server_id}' [source_drift]: {drift}"
+            logger.warning("MCP source drift denied at start: %s — %s", server_id, drift)
             return False
 
         info.status = MCPServerStatus.STARTING
