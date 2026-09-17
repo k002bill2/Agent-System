@@ -2,10 +2,19 @@
 
 외부 MCP 서버(파일시스템, GitHub, Playwright 등)를 연동하고
 도구 호출을 라우팅합니다.
+
+**Admission 게이트**: `start_server()` 는 설정의 command/args/env 로 subprocess 를
+띄우므로, 외부 MCP 를 등록하는 것은 곧 임의 코드 실행을 허용하는 일이다. 그래서
+`_servers` 로 들어가는 두 경로(`register_server`·`initialize`)와 프로세스를 띄우는
+경로(`start_server`)가 모두 `services.mcp_admission` 의 fail-closed 게이트를 지난다.
+built-in 기본 서버는 **fingerprint** 로 신뢰 앵커에 등록돼 기존 동작이 보존된다
+(id 만 같은 가짜는 통과하지 못한다). 운영 절차는 docs/mcp-admission.md 참조.
 """
 
 import asyncio
 import json
+import logging
+import os
 import subprocess
 from collections.abc import Callable
 from datetime import datetime
@@ -14,7 +23,20 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from services.mcp_admission import (
+    AdmissionDecision,
+    AdmissionGate,
+    FileEvidenceStore,
+    InMemoryEvidenceStore,
+    MCPAdmissionError,
+    compute_candidate_fingerprint,
+)
 from utils.time import utcnow
+
+logger = logging.getLogger(__name__)
+
+#: 증빙 저장 파일 경로. 미설정이면 in-memory 저장소 = 외부 MCP 전부 거부(fail closed).
+EVIDENCE_PATH_ENV = "AOS_MCP_ADMISSION_EVIDENCE"
 
 
 class MCPServerType(str, Enum):
@@ -166,18 +188,40 @@ DEFAULT_MCP_SERVERS: list[MCPServerConfig] = [
 ]
 
 
+def builtin_trusted_fingerprints() -> frozenset[str]:
+    """기본 서버들의 신뢰 앵커.
+
+    id 가 아니라 fingerprint 를 신뢰한다 — `id="filesystem"` 을 달고 `command="curl"`
+    로 바꾼 후보는 앵커에 걸리지 않아 증빙 없이는 등록되지 않는다.
+    """
+    return frozenset(compute_candidate_fingerprint(c) for c in DEFAULT_MCP_SERVERS)
+
+
+def default_admission_gate() -> AdmissionGate:
+    """기본 게이트: built-in 신뢰 + `EVIDENCE_PATH_ENV` 파일 저장소(없으면 in-memory)."""
+    path = os.getenv(EVIDENCE_PATH_ENV, "").strip()
+    store = FileEvidenceStore(path) if path else InMemoryEvidenceStore()
+    return AdmissionGate(store=store, trusted_fingerprints=builtin_trusted_fingerprints())
+
+
 class MCPManager:
     """
     MCP 서버 관리자.
 
     외부 MCP 서버들을 관리하고 도구 호출을 라우팅합니다.
+
+    Args:
+        admission_gate: 등록·기동 전에 증빙을 확인하는 게이트. None 이면
+            `default_admission_gate()` — built-in 만 통과하고 외부는 전부 거부한다.
     """
 
-    def __init__(self):
+    def __init__(self, admission_gate: AdmissionGate | None = None):
         self._servers: dict[str, MCPServerInfo] = {}
         self._processes: dict[str, subprocess.Popen] = {}
         self._tool_handlers: dict[str, Callable] = {}
         self._initialized = False
+        self._admission = admission_gate if admission_gate is not None else default_admission_gate()
+        self._rejected: dict[str, AdmissionDecision] = {}
 
     async def initialize(self, configs: list[MCPServerConfig] | None = None) -> None:
         """
@@ -192,6 +236,17 @@ class MCPManager:
         configs = configs or DEFAULT_MCP_SERVERS
 
         for config in configs:
+            decision = self._admission.decide(config)
+            if not decision.allowed:
+                # 조용히 건너뛰지 않는다 — 사유는 get_rejected_candidates() 로 조회된다.
+                self._rejected[config.id] = decision
+                logger.warning(
+                    "MCP admission denied at initialize: %s [%s] %s",
+                    config.id,
+                    decision.code.value if decision.code else "unknown",
+                    decision.reason,
+                )
+                continue
             self._servers[config.id] = MCPServerInfo(config=config)
 
         # 자동 시작 서버 시작
@@ -208,8 +263,28 @@ class MCPManager:
         self._initialized = False
 
     def register_server(self, config: MCPServerConfig) -> None:
-        """새 MCP 서버 등록."""
+        """새 MCP 서버 등록.
+
+        Raises:
+            MCPAdmissionError: 승인 증빙이 없거나 후보와 불일치/만료/실패인 경우.
+                거부된 후보는 `_servers` 에 남지 않는다 — 나중에 start 로 되살릴 수 없다.
+        """
+        self._admission.authorize(config)
+        self._rejected.pop(config.id, None)
         self._servers[config.id] = MCPServerInfo(config=config)
+
+    @property
+    def admission(self) -> AdmissionGate:
+        """등록·기동을 지키는 게이트 (증빙 등록/회수의 진입점)."""
+        return self._admission
+
+    def get_rejected_candidates(self) -> dict[str, AdmissionDecision]:
+        """admission 에서 거부된 후보와 사유 (initialize 경로의 가시성)."""
+        return dict(self._rejected)
+
+    def revoke_admission(self, server_id: str) -> bool:
+        """증빙을 회수한다. 이후 기동 시도는 다시 차단된다 (운영 롤백 절차)."""
+        return self._admission.store.revoke(server_id)
 
     def unregister_server(self, server_id: str) -> bool:
         """MCP 서버 등록 해제."""
@@ -249,6 +324,16 @@ class MCPManager:
 
         if info.status == MCPServerStatus.RUNNING:
             return True
+
+        # 등록 이후 설정이 바뀌었을 수 있으므로 기동 시점에 다시 판정한다.
+        # 여기서 막히면 subprocess 는 만들어지지 않는다.
+        try:
+            self._admission.authorize(info.config)
+        except MCPAdmissionError as e:
+            info.status = MCPServerStatus.ERROR
+            info.last_error = str(e)
+            logger.warning("MCP admission denied at start: %s", e)
+            return False
 
         info.status = MCPServerStatus.STARTING
 

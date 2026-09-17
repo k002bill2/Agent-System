@@ -278,8 +278,10 @@ src/backend/
 │   ├── llm_router_service.py      # LLM 라우팅/Failover
 │   ├── llm_service.py             # LLM 프로바이더 팩토리
 │   ├── logging_service.py         # 구조화된 로깅
+│   ├── eval_hard_gate.py          # 평가 결과 결정론적 veto (`.claude/agents/eval-grader.md` 계약 강제)
+│   ├── mcp_admission.py           # 외부 MCP 공급망 입장 게이트 (fail closed, docs/mcp-admission.md)
 │   ├── mcp_config_manager.py      # MCP 설정 파일 관리
-│   ├── mcp_manager.py             # MCP 서버 생명주기 관리
+│   ├── mcp_manager.py             # MCP 서버 생명주기 관리 (등록·기동 전 admission 판정)
 │   ├── mcp_service.py             # MCP 서버 관리
 │   ├── merge_service/             # Git 머지/충돌 해결 (패키지: errors·service·requests)
 │   ├── notification_service/      # 알림 서비스 (패키지: config·adapters·service)
@@ -491,6 +493,14 @@ class MCPService:
 | `filesystem` | FILESYSTEM | 파일 시스템 접근 |
 | `github` | GITHUB | GitHub API 연동 |
 | `playwright` | PLAYWRIGHT | 브라우저 자동화 |
+
+**Admission 게이트 (fail closed)**: `start_server()` 가 `command`/`args`/`env` 로
+subprocess 를 띄우므로, 등록은 곧 임의 코드 실행 권한이다. `_servers` 로 들어가는 두
+경로(`register_server`·`initialize`)와 프로세스를 띄우는 `start_server` 가 모두
+`services/mcp_admission.py` 의 증빙 검사를 지난다 — 증빙 없음/후보 불일치/스캔 실패/
+미승인/만료는 전부 거부다. 위 기본 3종은 **fingerprint** 신뢰 앵커로 기존 동작이
+보존된다(id 만 같은 가짜는 통과하지 못한다). 승인·회수·스캐너 어댑터 계약은
+`docs/mcp-admission.md` 참조.
 
 ## Parallel Execution
 
