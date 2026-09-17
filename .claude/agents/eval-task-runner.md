@@ -61,7 +61,8 @@ EVALUATION RUN FLOW
 5. Capture outcome into `code_checks` 게이트 키 (files_exist/type_check/tests_pass/lint = "pass"/"fail")
 6. Stop transcript recording
 7. Invoke eval-grader
-8. Store run result
+8. **Enforce the hard gate** (아래 "Hard Gate Enforcement") — 저장 앞 필수
+9. Store run result
 ```
 
 ### 3. Calculate Metrics
@@ -96,7 +97,8 @@ pass^k = (c/n)^k
 3. Wait for completion (timeout: {timeout_minutes}min)
 4. Capture outcome into `code_checks` 게이트 키 (`type_check`/`tests_pass`/`lint` = "pass"/"fail", `files_exist`, `code_checks_score`)
 5. Send to eval-grader
-6. Record result
+6. **Enforce the hard gate** (아래 "Hard Gate Enforcement") — 저장 앞 필수
+7. Record result
 ```
 
 ### Multiple Runs (pass@k)
@@ -134,6 +136,34 @@ Provide the agent with:
 Collect: status, duration, files created, self-assessment, notes.
 
 ## Result Storage
+
+### Hard Gate Enforcement (저장 **전** 필수)
+
+채점 결과를 최종 경로에 남기기 전에 결정론적 게이트를 실행한다. 이 단계는 선택이
+아니다 — 이것이 없던 동안 `.claude/evals/results/` 에 "테스트 실패 + `passed: true`"
+가 실제로 기록됐다. 판정 로직의 SSOT 는 `src/backend/services/eval_hard_gate.py` 이고,
+아래 CLI 는 그것을 호출하는 유일한 실행 경계다.
+
+```bash
+DATE=2026-02-13; TASK=task_ui_001                       # 실제 값으로 치환
+RESULT=".claude/evals/results/$DATE/$TASK.json"
+# 1) 채점 결과를 후보 경로에 쓴다 — 최종 경로가 아니다 (아직 저장이 아니다)
+#    (요약도 함께 검증하려면 summary.json 도 후보로 쓰고 --summary 를 붙인다)
+# 2) 저장 전에 게이트를 강제한다. --write 는 보정본을 후보 파일에 되쓴다
+cd src/backend && PYTHONPATH="$PWD" python -m services.eval_hard_gate_cli \
+  --task-result "../../$RESULT.candidate" \
+  --require-gate tests_pass --write
+GATE=$?   # 0=통과, 1=차단(강등됨), 2=입력 무효(아무것도 쓰지 않음)
+cd ../..
+# 3) 게이트가 보정한 문서만 최종 경로로 승격한다.
+#    차단이어도 승격한다 — 목적은 실패를 숨기는 게 아니라 passed:false 로 남기는 것이다.
+[ $GATE -ne 2 ] && mv "$RESULT.candidate" "$RESULT"
+# 4) GATE != 0 이면 이 run 을 어떤 집계에도 PASS 로 올리지 않는다 (pass@k 의 c 에서 제외).
+```
+
+실행에는 백엔드 환경이 필요하다(`services/__init__.py` 가 패키지 import 시 서비스
+모듈들을 끌어온다). 게이트가 쓴 `hard_gate` 블록은 아래 Result Format 대로 결과
+파일에 그대로 남긴다 — 지우면 다음 감사에서 게이트를 통과했는지 알 수 없다.
 
 ### File Structure
 ```
@@ -233,6 +263,16 @@ done | sort | shasum -a 256   # suite_manifest_sha256
         "grade": "A"
       },
       "veto": false,
+      "veto_reason": null,
+      "hard_gate": {
+        "passed": true,
+        "final_score": 0.90,
+        "grade": "A",
+        "failed_gates": [],
+        "missing_gates": [],
+        "unverified": false,
+        "contradicts_recorded": false
+      },
       "passed": true
     }
   ],
@@ -244,9 +284,23 @@ done | sort | shasum -a 256   # suite_manifest_sha256
     "success_rate": 0.67,
     "vetoed_runs": 0
   },
+  "hard_gate": {
+    "passed": true,
+    "total_runs": 1,
+    "blocked_runs": [],
+    "vetoed_runs": 0,
+    "pass_rate": 1.0,
+    "contradictions": []
+  },
   "summary": "Task completed successfully. 2/3 runs passed threshold."
 }
 ```
+
+`veto`·`veto_reason`·`hard_gate`(run 별·문서 최상위)는 **게이트 CLI 가 쓴다** — 손으로
+채우지 말고 위 Hard Gate Enforcement 의 출력을 그대로 보존한다. `metrics.vetoed_runs`
+도 CLI 가 갱신한다. 문서 최상위 `hard_gate.contradictions` 는 기록된 `metrics` 의
+합격 지표가 재계산값과 어긋날 때 채워진다 — CLI 는 기록값을 **덮어쓰지 않고**
+모순만 적어 차단한다(거부 정책). 비어 있지 않으면 그 태스크는 PASS 로 보고할 수 없다.
 
 각 run의 `veto`(및 veto 시 grader의 `veto_reason`)를 그대로 보존하고, 태스크 metrics에는
 게이트 veto된 run 수를 `vetoed_runs`로 집계한다. 태스크 전체(summary.json) 단위 집계는

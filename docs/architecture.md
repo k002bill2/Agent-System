@@ -279,6 +279,7 @@ src/backend/
 │   ├── llm_service.py             # LLM 프로바이더 팩토리
 │   ├── logging_service.py         # 구조화된 로깅
 │   ├── eval_hard_gate.py          # 평가 결과 결정론적 veto (`.claude/agents/eval-grader.md` 계약 강제)
+│   ├── eval_hard_gate_cli.py      # 위 게이트의 실행 경계 (저장 전 강제, `python -m services.eval_hard_gate_cli`)
 │   ├── mcp_admission.py           # 외부 MCP 공급망 입장 게이트 (fail closed, docs/mcp-admission.md)
 │   ├── mcp_config_manager.py      # MCP 설정 파일 관리
 │   ├── mcp_manager.py             # MCP 서버 생명주기 관리 (등록·기동 전 admission 판정)
