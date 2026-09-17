@@ -16,9 +16,10 @@ import json
 import logging
 import os
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from enum import Enum
+from types import MappingProxyType
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -29,7 +30,6 @@ from services.mcp_admission import (
     FileEvidenceStore,
     InMemoryEvidenceStore,
     MCPAdmissionError,
-    compute_candidate_fingerprint,
 )
 from utils.time import utcnow
 
@@ -188,13 +188,36 @@ DEFAULT_MCP_SERVERS: list[MCPServerConfig] = [
 ]
 
 
+#: 검토를 거쳐 **소스에 못 박은** built-in 신뢰 앵커 (id → fingerprint).
+#:
+#: `DEFAULT_MCP_SERVERS` 에서 파생하지 않는다. 파생하면 목록에 한 줄 추가하는 것이
+#: 곧 무증빙 실행 권한 부여가 되고, 커버리지 테스트는 양변이 같은 소스를 읽어
+#: 영원히 통과한다(자기 갱신). 여기 없는 후보는 기본 서버와 모양이 같아도 증빙을
+#: 요구받는다.
+#:
+#: 기본 서버의 패키지·인자·env 를 바꾸면 이 값도 **의도적으로** 갱신해야 한다:
+#:   cd src/backend && uv run python -c "from services.mcp_manager import \
+#:     DEFAULT_MCP_SERVERS as D; from services.mcp_admission import \
+#:     compute_candidate_fingerprint as f; print({c.id: f(c) for c in D})"
+#: 갱신하지 않으면 test_pinned_trust_anchors_match_the_current_default_servers 가
+#: RED 가 된다 — 그 diff 가 곧 리뷰 지점이다.
+BUILTIN_TRUST_ANCHORS: Mapping[str, str] = MappingProxyType(
+    {
+        "filesystem": "a549f64b79fa212874648b9db9f683a3bb0b1d4db3ffe8e5dbb36b42b1700230",
+        "github": "1951b72a109cb8373902bf75ef825e6998ff00a75cc01da29aa21cf7ef0c3d67",
+        "playwright": "2a9c1c8979679cc970c4b769b63369321dc75cc4838cc85c8682610437335f9d",
+    }
+)
+
+
 def builtin_trusted_fingerprints() -> frozenset[str]:
-    """기본 서버들의 신뢰 앵커.
+    """검토되어 못 박힌 신뢰 앵커의 fingerprint 집합.
 
     id 가 아니라 fingerprint 를 신뢰한다 — `id="filesystem"` 을 달고 `command="curl"`
-    로 바꾼 후보는 앵커에 걸리지 않아 증빙 없이는 등록되지 않는다.
+    로 바꾼 후보는 앵커에 걸리지 않아 증빙 없이는 등록되지 않는다. 마찬가지로
+    `DEFAULT_MCP_SERVERS` 에 항목이 늘거나 바뀌어도 앵커는 따라 늘지 않는다.
     """
-    return frozenset(compute_candidate_fingerprint(c) for c in DEFAULT_MCP_SERVERS)
+    return frozenset(BUILTIN_TRUST_ANCHORS.values())
 
 
 def default_admission_gate() -> AdmissionGate:

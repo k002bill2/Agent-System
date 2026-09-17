@@ -9,6 +9,8 @@
 """
 
 import json
+import os
+import stat
 from datetime import timedelta
 
 import pytest
@@ -19,6 +21,7 @@ from services.mcp_admission import (
     AdmissionDenialCode,
     AdmissionEvidence,
     AdmissionGate,
+    EvidenceStoreError,
     FileEvidenceStore,
     InMemoryEvidenceStore,
     MCPAdmissionError,
@@ -377,3 +380,157 @@ def test_file_store_gate_denies_when_file_is_corrupt(tmp_path):
     gate = AdmissionGate(store=FileEvidenceStore(path), clock=lambda: NOW)
 
     assert gate.decide(FakeCandidate()).allowed is False
+
+
+# ------------------------------------------------- FileEvidenceStore 무결성 기전
+#
+# 증빙 파일은 "무증빙 실행"을 막는 유일한 근거다. 같은 OS 사용자 권한에서는
+# 암호학적 승인 무결성이 되지 못하지만, 최소한 (1) 소유자 전용 권한, (2) 심링크
+# 미추종, (3) 제자리 truncate 없는 원자적 교체, (4) 모든 읽기/쓰기 실패의
+# fail-closed 는 지킨다.
+
+
+def _mode(path) -> int:
+    """심링크를 따라가지 않는 권한 비트."""
+    return stat.S_IMODE(path.lstat().st_mode)
+
+
+def _boom(*_args, **_kwargs):
+    raise OSError("replace failed")
+
+
+def test_put_creates_an_owner_only_file(tmp_path):
+    path = tmp_path / "admission.json"
+
+    FileEvidenceStore(path).put(_evidence())
+
+    assert _mode(path) == 0o600
+
+
+@pytest.mark.parametrize("mode", [0o640, 0o604, 0o660])
+def test_group_or_world_accessible_file_is_no_evidence(tmp_path, mode):
+    """다른 사용자가 건드릴 수 있는 파일은 읽지 않는다 — 읽으면 그게 승인 근거가 된다."""
+    path = tmp_path / "admission.json"
+    FileEvidenceStore(path).put(_evidence())
+    path.chmod(mode)
+
+    assert FileEvidenceStore(path).get("ext") is None
+
+
+def test_symlinked_evidence_path_is_not_followed(tmp_path):
+    """경로가 심링크면 대상이 유효한 증빙이어도 거부한다."""
+    real = tmp_path / "real.json"
+    FileEvidenceStore(real).put(_evidence())
+    link = tmp_path / "admission.json"
+    link.symlink_to(real)
+
+    assert FileEvidenceStore(link).get("ext") is None
+
+
+def test_invalid_utf8_file_is_no_evidence(tmp_path):
+    """권한이 0600 이어도 바이트가 깨졌으면 예외가 아니라 '증빙 없음' 이다."""
+    path = tmp_path / "admission.json"
+    path.write_bytes(b"\xff\xfe\x00not-utf8")
+    path.chmod(0o600)
+
+    assert FileEvidenceStore(path).get("ext") is None
+
+
+def test_gate_denies_when_the_evidence_file_is_group_accessible(tmp_path):
+    """권한 이완은 게이트 층에서도 '증빙 없음' 으로 접힌다."""
+    path = tmp_path / "admission.json"
+    FileEvidenceStore(path).put(_evidence())
+    path.chmod(0o640)
+    gate = AdmissionGate(store=FileEvidenceStore(path), clock=lambda: NOW)
+
+    decision = gate.decide(FakeCandidate())
+
+    assert decision.allowed is False
+    assert decision.code is AdmissionDenialCode.NO_EVIDENCE
+
+
+def test_failed_replace_leaves_the_original_file_intact(tmp_path, monkeypatch):
+    """교체가 실패해도 기존 증빙은 잘리지 않고 임시 파일도 남지 않는다."""
+    path = tmp_path / "admission.json"
+    store = FileEvidenceStore(path)
+    store.put(_evidence())
+    before = path.read_bytes()
+    monkeypatch.setattr(os, "replace", _boom)
+
+    with pytest.raises(RuntimeError):
+        store.put(_evidence(FakeCandidate(server_id="other")))
+
+    assert path.read_bytes() == before
+    assert [p.name for p in tmp_path.iterdir()] == ["admission.json"]
+
+
+def test_put_keeps_owner_only_mode_when_overwriting(tmp_path):
+    path = tmp_path / "admission.json"
+    store = FileEvidenceStore(path)
+    store.put(_evidence())
+
+    store.put(_evidence(FakeCandidate(server_id="second")))
+
+    assert _mode(path) == 0o600
+
+
+def test_revoke_on_a_group_accessible_file_reports_failure_without_writing(tmp_path):
+    """이완된 파일에는 쓰지 않는다 — 제거했다고 보고하지도 않는다."""
+    path = tmp_path / "admission.json"
+    FileEvidenceStore(path).put(_evidence())
+    path.chmod(0o640)
+    before = path.read_bytes()
+
+    assert FileEvidenceStore(path).revoke("ext") is False
+    assert path.read_bytes() == before
+
+
+def test_revoke_keeps_owner_only_mode_and_other_entries(tmp_path):
+    path = tmp_path / "admission.json"
+    store = FileEvidenceStore(path)
+    store.put(_evidence())
+    store.put(_evidence(FakeCandidate(server_id="second")))
+
+    assert store.revoke("ext") is True
+    assert _mode(path) == 0o600
+    assert FileEvidenceStore(path).get("second") is not None
+
+
+def test_put_refuses_a_symlinked_path(tmp_path):
+    """심링크에는 기록하지 않는다 — 대상 파일도 건드리지 않는다."""
+    real = tmp_path / "real.json"
+    FileEvidenceStore(real).put(_evidence())
+    before = real.read_bytes()
+    link = tmp_path / "admission.json"
+    link.symlink_to(real)
+
+    with pytest.raises(EvidenceStoreError):
+        FileEvidenceStore(link).put(_evidence(FakeCandidate(server_id="other")))
+
+    assert real.read_bytes() == before
+
+
+def test_put_refuses_a_group_accessible_file(tmp_path):
+    """이완된 파일을 조용히 덮어써서 '기록됐다' 고 믿게 만들지 않는다."""
+    path = tmp_path / "admission.json"
+    FileEvidenceStore(path).put(_evidence())
+    path.chmod(0o660)
+    before = path.read_bytes()
+
+    with pytest.raises(EvidenceStoreError):
+        FileEvidenceStore(path).put(_evidence())
+
+    assert path.read_bytes() == before
+
+
+def test_store_refusal_does_not_leak_env_values(tmp_path):
+    """거부 예외에는 경로와 사유만 담긴다 — env 원본은 digest 로만 존재한다."""
+    secret = "sk-live-must-not-appear"
+    candidate = FakeCandidate(env={"TOKEN": secret})
+    link = tmp_path / "admission.json"
+    link.symlink_to(tmp_path / "real.json")
+
+    with pytest.raises(EvidenceStoreError) as exc:
+        FileEvidenceStore(link).put(_evidence(candidate))
+
+    assert secret not in str(exc.value)

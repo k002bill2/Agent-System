@@ -24,6 +24,7 @@ from services.mcp_admission import (
     compute_candidate_fingerprint,
 )
 from services.mcp_manager import (
+    BUILTIN_TRUST_ANCHORS,
     DEFAULT_MCP_SERVERS,
     MCPManager,
     MCPServerConfig,
@@ -242,11 +243,22 @@ async def test_default_servers_still_register():
     assert {s.config.id for s in manager.get_all_servers()} == {c.id for c in DEFAULT_MCP_SERVERS}
 
 
-def test_builtin_trust_covers_every_default_server():
-    """기본 서버 목록이 늘어나면 신뢰 앵커도 함께 늘어난다 (드리프트 감지)."""
-    trusted = builtin_trusted_fingerprints()
+def test_pinned_trust_anchors_match_the_current_default_servers():
+    """못 박은 앵커와 기본 목록이 어긋나면 RED — 갱신은 소스 리뷰를 거쳐야 한다.
 
-    assert {compute_candidate_fingerprint(c) for c in DEFAULT_MCP_SERVERS} == trusted
+    이 단언은 항진명제가 아니다: 좌변은 소스에 적힌 리터럴, 우변은 현재 설정에서
+    계산한 값이다. 기본 서버의 패키지·인자·env 를 바꾸면 여기서 먼저 걸린다.
+    """
+    for config in DEFAULT_MCP_SERVERS:
+        assert config.id in BUILTIN_TRUST_ANCHORS, (
+            f"기본 서버 '{config.id}' 에 신뢰 앵커가 없다 — 증빙 없이는 등록되지 않는다"
+        )
+        assert BUILTIN_TRUST_ANCHORS[config.id] == compute_candidate_fingerprint(config), (
+            f"'{config.id}' 의 신뢰 앵커가 어긋났다 — 의도된 변경이면 앵커도 함께 갱신한다"
+        )
+    assert builtin_trusted_fingerprints() >= {
+        compute_candidate_fingerprint(c) for c in DEFAULT_MCP_SERVERS
+    }
 
 
 def test_builtin_trust_is_bound_to_fingerprint_not_id():
@@ -361,3 +373,51 @@ async def test_vendor_style_config_cannot_start_without_evidence(popen):
 
     assert manager.get_server("declared-in-mcp-json") is None
     popen.assert_not_called()
+
+
+# ------------------------------------------------ built-in 신뢰 앵커 (핀 고정 계약)
+#
+# 앵커가 `DEFAULT_MCP_SERVERS` 에서 파생되면, 목록에 한 줄 추가하는 것만으로 무증빙
+# 실행 권한이 생긴다. 아래 두 테스트는 **읽는 쪽 모듈 속성**(`services.mcp_manager.
+# DEFAULT_MCP_SERVERS`)을 갈아끼워 그 파생을 실제로 재현한다 — 테스트 모듈이 import
+# 해 둔 이름을 바꾸는 것으로는 재현되지 않는다.
+
+
+def _default_style(server_id: str, *, args: list[str]) -> MCPServerConfig:
+    """기본 목록에 그대로 끼워 넣을 수 있는 모양의 후보."""
+    return MCPServerConfig(
+        id=server_id,
+        type=MCPServerType.CUSTOM,
+        name=f"{server_id} MCP",
+        command="npx",
+        args=args,
+    )
+
+
+def test_appended_default_server_is_not_automatically_trusted(monkeypatch):
+    """기본 목록에 새 서버를 덧붙여도 신뢰 앵커는 따라 늘어나지 않는다."""
+    newcomer = _default_style("supply-chain-newcomer", args=["-y", "brand-new-mcp"])
+    monkeypatch.setattr(
+        "services.mcp_manager.DEFAULT_MCP_SERVERS",
+        [*DEFAULT_MCP_SERVERS, newcomer],
+    )
+
+    assert compute_candidate_fingerprint(newcomer) not in builtin_trusted_fingerprints()
+    with pytest.raises(MCPAdmissionError):
+        MCPManager(admission_gate=default_admission_gate()).register_server(newcomer)
+
+
+def test_bumped_default_server_package_is_not_automatically_trusted(monkeypatch):
+    """기본 서버의 패키지/인자를 바꾸면 앵커가 자동으로 따라오지 않는다."""
+    original = DEFAULT_MCP_SERVERS[0]
+    bumped = original.model_copy(
+        update={"args": ["-y", "@modelcontextprotocol/server-filesystem@99.0.0", "."]}
+    )
+    monkeypatch.setattr(
+        "services.mcp_manager.DEFAULT_MCP_SERVERS",
+        [bumped, *DEFAULT_MCP_SERVERS[1:]],
+    )
+
+    assert compute_candidate_fingerprint(bumped) not in builtin_trusted_fingerprints()
+    with pytest.raises(MCPAdmissionError):
+        MCPManager(admission_gate=default_admission_gate()).register_server(bumped)

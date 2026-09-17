@@ -22,6 +22,9 @@
 
 import hashlib
 import json
+import os
+import stat
+import tempfile
 from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta
 from enum import Enum
@@ -34,6 +37,25 @@ from utils.time import to_aware_utc, utcnow
 
 #: 명시적 만료가 없는 증빙의 기본 수명.
 DEFAULT_EVIDENCE_MAX_AGE = timedelta(days=90)
+
+#: 증빙 파일 권한 — 소유자 읽기/쓰기만.
+EVIDENCE_FILE_MODE = 0o600
+
+#: 이 비트가 하나라도 켜져 있으면 소유자 외 다른 사용자가 건드릴 수 있다는 뜻이다.
+_UNSAFE_PERMISSION_BITS = 0o077
+
+
+def _is_unsafe_mode(mode: int) -> bool:
+    """그룹/기타 사용자 권한 비트가 켜져 있는가."""
+    return bool(stat.S_IMODE(mode) & _UNSAFE_PERMISSION_BITS)
+
+
+class EvidenceStoreError(RuntimeError):
+    """증빙 저장소가 안전하게 기록할 수 없는 상태다.
+
+    읽기와 달리 쓰기는 **조용히 실패하지 않는다** — 기록한 척하면 운영자는 증빙이
+    등록됐다고 믿고, 그 믿음이 다음 심사에서 허용의 근거가 된다.
+    """
 
 
 class ScanStatus(str, Enum):
@@ -169,7 +191,12 @@ class SupplyChainScanner(Protocol):
 
 
 class EvidenceStore(Protocol):
-    """증빙 영속화 인터페이스 (server_id 로 색인)."""
+    """증빙 영속화 인터페이스 (server_id 로 색인).
+
+    `get` 은 어떤 실패든 `None`(증빙 없음)으로 접는다. `put` 은 반대로 실패를 드러낼
+    수 있다 — 구현체는 무결성을 지킬 수 없으면 `EvidenceStoreError` 를 던진다
+    (`InMemoryEvidenceStore` 는 던질 일이 없다).
+    """
 
     def get(self, server_id: str) -> AdmissionEvidence | None: ...
 
@@ -195,21 +222,93 @@ class InMemoryEvidenceStore:
 
 
 class FileEvidenceStore:
-    """JSON 파일 저장소.
+    """JSON 파일 저장소 — 소유자 전용 권한 · 심링크 미추종 · 원자적 교체.
 
-    읽기 실패(파일 없음·깨진 JSON·스키마 불일치)는 모두 **증빙 없음** 으로 접힌다.
-    저장소가 고장 났을 때 열어주는 것이 가장 위험한 실패 모드이기 때문이다.
+    읽기 실패(파일 없음·깨진 바이트·깨진 JSON·스키마 불일치·권한 이완·심링크)는 모두
+    **증빙 없음** 으로 접힌다. 저장소가 고장 났을 때 열어주는 것이 가장 위험한 실패
+    모드이기 때문이다.
+
+    쓰기는 방향이 반대다 — 안전하게 기록할 수 없으면 `EvidenceStoreError` 를 던진다.
+
+    **경계**: 같은 OS 사용자 권한의 변조는 이 계층이 막지 못한다(암호학적 승인
+    무결성이 아니다). 여기서 막는 것은 다른 사용자의 접근, 심링크 유도, 그리고
+    제자리 truncate 로 인한 부분 기록이다.
     """
 
     def __init__(self, path: Path | str) -> None:
         self._path = Path(path)
 
-    def _load(self) -> dict[str, Any]:
+    def _integrity_problem(self) -> str | None:
+        """경로를 그대로 읽거나 덮어써도 되는가 — 문제가 있으면 사유, 없으면 None.
+
+        파일이 아직 없으면 문제 없음이다(새로 만들면 된다). 내용은 보지 않는다.
+        """
         try:
-            raw = json.loads(self._path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+            info = os.lstat(self._path)
+        except OSError:
+            return None
+        if stat.S_ISLNK(info.st_mode):
+            return "evidence path is a symlink"
+        if not stat.S_ISREG(info.st_mode):
+            return "evidence path is not a regular file"
+        if _is_unsafe_mode(info.st_mode):
+            return "evidence file is group/world accessible"
+        return None
+
+    def _read_text(self) -> str | None:
+        """심링크를 따라가지 않고 읽는다. 권한 판정은 **열린 기술자** 기준이다.
+
+        경로를 stat 한 뒤 다시 open 하면 그 사이에 바뀔 수 있으므로(TOCTOU),
+        `O_NOFOLLOW` 로 연 fd 를 `fstat` 해 같은 객체를 검사한다.
+        """
+        try:
+            fd = os.open(self._path, os.O_RDONLY | os.O_NOFOLLOW)
+        except OSError:
+            return None
+        with os.fdopen(fd, "rb") as handle:
+            try:
+                info = os.fstat(handle.fileno())
+                if not stat.S_ISREG(info.st_mode) or _is_unsafe_mode(info.st_mode):
+                    return None
+                return handle.read().decode("utf-8")
+            except (OSError, ValueError):
+                # ValueError 가 UnicodeDecodeError 를 덮는다 — 깨진 바이트도 '증빙 없음'.
+                return None
+
+    def _load(self) -> dict[str, Any]:
+        text = self._read_text()
+        if text is None:
+            return {}
+        try:
+            raw = json.loads(text)
+        except ValueError:
             return {}
         return raw if isinstance(raw, dict) else {}
+
+    def _atomic_write(self, data: dict[str, Any]) -> None:
+        """같은 디렉터리에 0600 임시 파일로 쓰고 `os.replace` 로 갈아끼운다.
+
+        제자리 truncate 를 하지 않으므로 도중에 실패해도 기존 증빙은 온전하다.
+        교체는 같은 파일시스템 안에서 일어나야 원자적이라 임시 파일도 같은 곳에 둔다.
+        """
+        payload = json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
+        directory = self._path.parent
+        directory.mkdir(parents=True, exist_ok=True)
+        fd, tmp_name = tempfile.mkstemp(prefix=f".{self._path.name}.", suffix=".tmp", dir=directory)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                # mkstemp 도 0600 으로 만들지만 umask 와 무관하게 명시적으로 고정한다.
+                os.fchmod(handle.fileno(), EVIDENCE_FILE_MODE)
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(tmp_name, self._path)
+        except OSError as exc:
+            Path(tmp_name).unlink(missing_ok=True)
+            # 사유만 남긴다 — 파일 내용·env 원본은 예외 메시지에 싣지 않는다.
+            raise EvidenceStoreError(
+                f"could not write evidence to {self._path}: {exc.strerror or type(exc).__name__}"
+            ) from exc
 
     def get(self, server_id: str) -> AdmissionEvidence | None:
         entry = self._load().get(server_id)
@@ -221,23 +320,33 @@ class FileEvidenceStore:
             return None
 
     def put(self, evidence: AdmissionEvidence) -> None:
+        """증빙을 기록한다 (0600 · 원자적 교체).
+
+        Raises:
+            EvidenceStoreError: 경로가 심링크이거나 권한이 이완돼 있거나 기록이 실패한
+                경우. 조용한 no-op 은 운영자가 증빙이 등록됐다고 믿게 만든다.
+        """
+        problem = self._integrity_problem()
+        if problem is not None:
+            raise EvidenceStoreError(f"{problem}: {self._path}")
         data = self._load()
         data[evidence.server_id] = json.loads(evidence.model_dump_json())
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+        self._atomic_write(data)
 
     def revoke(self, server_id: str) -> bool:
+        """증빙을 제거한다.
+
+        안전하지 않은 파일(심링크·권한 이완)에는 **쓰지 않고** False 를 돌려준다.
+        그 파일은 `get` 이 이미 '증빙 없음' 으로 접으므로 해당 서버는 이미 차단
+        상태다. 여기서 False 는 "항목이 없었다" 가 아니라 "제거하지 않았다" 는 뜻이다.
+        """
+        if self._integrity_problem() is not None:
+            return False
         data = self._load()
         if server_id not in data:
             return False
         del data[server_id]
-        self._path.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+        self._atomic_write(data)
         return True
 
 
