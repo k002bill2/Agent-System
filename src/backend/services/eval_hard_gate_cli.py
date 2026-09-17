@@ -150,18 +150,25 @@ def _resolve_passing_score(document: dict[str, Any], fallback: float | None) -> 
 def _rate_contradictions(
     document: dict[str, Any], pass_rate: float, blocked: Sequence[str]
 ) -> list[str]:
-    """기록된 합격 지표가 재계산값보다 높으면 모순으로 적는다 (덮어쓰지 않는다)."""
+    """기록된 합격 지표가 재계산값보다 높으면 모순으로 적는다 (덮어쓰지 않는다).
+
+    차단된 run 이 없어도 검사한다. 합격률이 1.0 인데 `pass_at_1` 이 1.0 을 넘게
+    기록된 경우처럼, 수학적으로 불가능한 주장 자체가 모순이기 때문이다.
+    (`blocked` 가 있을 때만 검사하면 `passed` 술어의 `not contradictions` 항이
+    도달 불가능해져, 지워도 테스트가 전부 통과한다 — mutation 으로 확인.)
+    """
     metrics = document.get("metrics")
-    if not blocked or not isinstance(metrics, dict):
+    if not isinstance(metrics, dict):
         return []
 
+    detail = f"{len(blocked)} run(s) blocked: {', '.join(blocked)}" if blocked else "no run blocked"
     messages: list[str] = []
     for key in TASK_RATE_KEYS:
         value = metrics.get(key)
         if isinstance(value, int | float) and not isinstance(value, bool) and value > pass_rate:
             messages.append(
-                f"metrics.{key}={value} recorded, but hard gate recomputes {pass_rate:.3f} "
-                f"({len(blocked)} run(s) blocked: {', '.join(blocked)})"
+                f"metrics.{key}={value} recorded, but hard gate recomputes "
+                f"{pass_rate:.3f} ({detail})"
             )
     return messages
 

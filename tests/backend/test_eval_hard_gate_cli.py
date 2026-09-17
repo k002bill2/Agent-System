@@ -467,3 +467,69 @@ def test_task_result_without_runs_is_blocked(tmp_path, capsys):
     assert exit_code == 1
     assert gate["passed"] is False
     assert gate["total_runs"] == 0
+
+
+# ---------------------------------- mutation 으로 드러난 미고정 항 (커버 ≠ 고정)
+
+
+def test_impossible_recorded_rate_is_blocked_even_when_no_run_is_blocked(tmp_path, capsys):
+    """차단이 하나도 없어도 수학적으로 불가능한 기록 지표는 모순이다.
+
+    `passed` 술어의 `not contradictions` 항은 mutation 에서 살아남았다 —
+    모순이 차단된 run 이 있을 때만 생기면 그 항은 도달 불가능이기 때문이다.
+    합격률이 1.0 인데 `pass_at_1` 이 1.0 을 넘는다고 기록된 경우가 그 반례다.
+    """
+    document = _clean_task_result()
+    document["metrics"] = {"pass_at_1": 1.5}
+    target = _write(tmp_path / "task_ui_002.json", document)
+
+    exit_code = main(["--task-result", str(target)])
+
+    gate = json.loads(capsys.readouterr().out)["task_result"]["hard_gate"]
+    assert exit_code == 1
+    assert gate["blocked_runs"] == []
+    assert gate["passed"] is False
+    assert any("pass_at_1" in message for message in gate["contradictions"])
+
+
+def test_failing_summary_without_recorded_metrics_is_still_blocked(tmp_path, capsys):
+    """기록된 집계가 아예 없어도 항목이 불합격이면 요약은 차단된다.
+
+    모순 목록이 비어 있을 때 `not verdict.passed` 항만이 차단을 만든다.
+    """
+    document = {
+        "results": {
+            "completed": [
+                {"task_id": "task_ui_001", "tests_pass": False, "score": 0.9, "passed": True}
+            ]
+        }
+    }
+    target = _write(tmp_path / "summary.json", document)
+    task = _write(tmp_path / "task.json", _clean_task_result())
+
+    exit_code = main(["--task-result", str(task), "--summary", str(target)])
+
+    gate = json.loads(capsys.readouterr().out)["summary"]["hard_gate"]
+    assert exit_code == 1
+    assert gate["contradictions"] == []
+    assert gate["passed"] is False
+
+
+def test_summary_contradiction_blocks_even_when_every_task_passes(tmp_path, capsys):
+    """전 항목이 통과여도 기록된 합격률이 재계산값을 넘으면 차단한다.
+
+    `not verdict.passed` 는 False 이므로 `contradictions` 항만이 차단을 만든다.
+    """
+    document = _contradictory_summary()
+    document["results"]["completed"][1]["tests_pass"] = True
+    document["metrics"] = {"pass_rate": 1.5}
+    target = _write(tmp_path / "summary.json", document)
+    task = _write(tmp_path / "task.json", _clean_task_result())
+
+    exit_code = main(["--task-result", str(task), "--summary", str(target)])
+
+    gate = json.loads(capsys.readouterr().out)["summary"]["hard_gate"]
+    assert exit_code == 1
+    assert gate["pass_rate"] == 1.0
+    assert gate["passed"] is True, "라이브러리 판정 자체는 통과 — 차단은 모순 항이 만든다"
+    assert any("pass_rate" in message for message in gate["contradictions"])
