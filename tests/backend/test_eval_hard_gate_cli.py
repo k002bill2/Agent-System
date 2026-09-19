@@ -733,3 +733,88 @@ def test_task_threshold_does_not_leak_onto_summary_entries(tmp_path, capsys):
 
     gate = json.loads(capsys.readouterr().out)["summary"]["hard_gate"]
     assert gate["blocked_tasks"] == [], "태스크의 0.75 가 요약 항목에 새어 들어갔다"
+
+
+# ----------------------------------------- Codex 라운드 3 반영
+
+
+def test_rounded_metrics_are_not_reported_as_contradictions(tmp_path, capsys):
+    """반올림된 지표를 모순으로 적지 않는다 (허용오차는 라이브러리와 공유).
+
+    2/3 성공의 재계산 비율은 0.6667 인데 저장 관례는 `0.67` 로 반올림한다 —
+    `eval-task-runner.md` 의 Result Format 예시가 실제로 `success_rate: 0.67` 이다.
+    엄격 비교(`>`)로는 그 반올림이 모순으로 기록돼 저장물에 틀린 감사 텍스트가
+    남는다. 차단 자체는 `blocked_runs` 가 만들므로 거짓 차단은 아니지만,
+    거짓 증거도 남기지 않는다.
+    """
+    passing = {"code_checks": {"tests_pass": "pass"}, "grades": {"final_score": 0.9}}
+    document = {
+        "task_id": "task_ui_001",
+        "passing_score": 0.7,
+        "runs": [
+            {"run_id": "r1", **passing, "passed": True},
+            {"run_id": "r2", **passing, "passed": True},
+            {
+                "run_id": "r3",
+                "code_checks": {"tests_pass": "fail"},
+                "grades": {"final_score": 0.4},
+                "passed": False,
+            },
+        ],
+        "metrics": {"success_rate": 0.67, "pass_at_1": 0.67},
+    }
+    target = _write(tmp_path / "task_ui_001.json", document)
+
+    exit_code = main(["--task-result", str(target)])
+
+    gate = json.loads(capsys.readouterr().out)["task_result"]["hard_gate"]
+    assert gate["contradictions"] == []
+    assert gate["blocked_runs"] == ["r3"], "차단은 그대로 유지된다"
+    assert exit_code == 1
+
+
+def test_overstated_metrics_beyond_the_tolerance_are_still_flagged(tmp_path, capsys):
+    """허용오차가 실제 과대 주장을 덮지 않는다 (가드가 무력화되지 않았다)."""
+    document = _failing_task_result()
+    document["metrics"] = {"success_rate": 1.0}
+    target = _write(tmp_path / "task_ui_001.json", document)
+
+    main(["--task-result", str(target)])
+
+    gate = json.loads(capsys.readouterr().out)["task_result"]["hard_gate"]
+    assert any("success_rate" in message for message in gate["contradictions"])
+
+
+def test_understated_metrics_are_not_contradictions(tmp_path, capsys):
+    """재계산값보다 **낮게** 기록된 지표는 모순이 아니다.
+
+    과소 기록은 거짓 합격 위험이 없다(보수적). 그걸 모순으로 잡으면 정상 결과가
+    차단된다. `value > pass_rate` 항이 그 방향을 지키는데, 빼도 테스트가 전부
+    통과했다(mutation 확인) — 그래서 이 테스트로 고정한다.
+    """
+    document = _clean_task_result()
+    document["metrics"] = {"success_rate": 0.5, "pass_at_1": 0.0}
+    target = _write(tmp_path / "task_ui_002.json", document)
+
+    exit_code = main(["--task-result", str(target)])
+
+    gate = json.loads(capsys.readouterr().out)["task_result"]["hard_gate"]
+    assert gate["pass_rate"] == 1.0
+    assert gate["contradictions"] == []
+    assert exit_code == 0
+
+
+def test_overstated_pass_power_k_is_a_contradiction(tmp_path, capsys):
+    """`pass_power_k` 과대 기록도 모순이다 — `(c/n)^k` 는 언제나 `c/n` 이하다.
+
+    라운드 2 에서 이 키를 비교 대상에 넣었는데 테스트가 없어, 키를 빼도 전부
+    통과했다(mutation 확인).
+    """
+    document = _failing_task_result()
+    document["metrics"] = {"pass_power_k": 0.9}
+    target = _write(tmp_path / "task_ui_001.json", document)
+
+    main(["--task-result", str(target)])
+
+    gate = json.loads(capsys.readouterr().out)["task_result"]["hard_gate"]
+    assert any("pass_power_k" in message for message in gate["contradictions"])

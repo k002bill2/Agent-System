@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 import tempfile
@@ -34,7 +35,12 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from services.eval_hard_gate import GATE_ORDER, evaluate_summary, evaluate_task_result
+from services.eval_hard_gate import (
+    _RATE_TOLERANCE,
+    GATE_ORDER,
+    evaluate_summary,
+    evaluate_task_result,
+)
 
 EXIT_OK = 0
 EXIT_BLOCKED = 1
@@ -184,7 +190,16 @@ def _rate_contradictions(
     messages: list[str] = []
     for key in TASK_RATE_KEYS:
         value = metrics.get(key)
-        if isinstance(value, int | float) and not isinstance(value, bool) and value > pass_rate:
+        # 허용오차는 라이브러리(`_rate_contradiction`)와 같은 값을 쓴다. 비교식을 두 벌
+        # 두면 한쪽만 반올림을 봐주는 발산이 생긴다 — 실제로 그렇게 어긋나 있었다.
+        # 저장 관례가 `success_rate: 0.67`(2/3=0.6667)이라 엄격 비교는 정상 지표를
+        # 모순으로 기록한다.
+        if (
+            isinstance(value, int | float)
+            and not isinstance(value, bool)
+            and value > pass_rate
+            and not math.isclose(value, pass_rate, abs_tol=_RATE_TOLERANCE)
+        ):
             messages.append(
                 f"metrics.{key}={value} recorded, but hard gate recomputes "
                 f"{pass_rate:.3f} ({detail})"
