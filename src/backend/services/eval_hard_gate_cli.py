@@ -119,8 +119,15 @@ def _apply_to_run(
         _canonicalize(run), required_gates=required_gates, passing_score=passing_score
     )
 
-    run["veto"] = verdict.veto
-    run["veto_reason"] = verdict.veto_reason
+    # 기록된 veto 는 지우지 않는다. 라이브러리는 `veto: true` 를 불합격으로 존중하지만
+    # 재계산 판정에는 게이트 fail 이 없어 `verdict.veto` 가 False 다 — 그 값을 그대로
+    # 쓰면 grader 가 남긴 사유가 사라지고 `vetoed_runs` 가 과소 집계된다. veto 는
+    # 누적이지 대체가 아니다.
+    recorded_veto = run.get("veto") is True
+    recorded_reason = run.get("veto_reason")
+
+    run["veto"] = verdict.veto or recorded_veto
+    run["veto_reason"] = verdict.veto_reason or (recorded_reason if recorded_veto else None)
     run["hard_gate"] = {
         "passed": verdict.passed,
         "final_score": verdict.final_score,
@@ -135,16 +142,23 @@ def _apply_to_run(
     return not verdict.passed
 
 
-def _resolve_passing_score(document: dict[str, Any], fallback: float | None) -> float | None:
-    """임계 해석 순서: 파일이 선언한 값 → `--passing-score` → 라이브러리 기본값.
+def _resolve_passing_score(document: dict[str, Any], explicit: float | None) -> float | None:
+    """임계 해석 순서: `--passing-score` → 결과 파일의 값 → 라이브러리 기본값.
 
-    태스크 정의가 SSOT 라 파일 값이 우선한다. 플래그는 그 값이 없을 때만 쓰는
-    보조 수단이다 — 반대로 두면 플래그 하나로 저장된 태스크 계약을 덮어쓸 수 있다.
+    임계의 SSOT 는 태스크 정의(`evaluation.passing_score`)다. 결과 파일의
+    `passing_score` 는 runner 가 써 넣은 **사본**이라 낡거나 틀릴 수 있으므로,
+    호출자가 태스크 정의에서 읽어 명시한 값이 사본을 이긴다.
+
+    반대로 두면(사본 우선) 플래그가 필요한 바로 그 경우에 무력해진다: 0.75 로
+    선언된 태스크의 결과 파일에 0.7 이 복사돼 있으면 0.72 가 통과한다.
     """
+    if explicit is not None:
+        return explicit
+
     declared = document.get("passing_score")
     if isinstance(declared, int | float) and not isinstance(declared, bool):
         return float(declared)
-    return fallback
+    return None
 
 
 def _rate_contradictions(
@@ -179,24 +193,29 @@ def _apply_to_task_result(
     """태스크 결과 문서의 모든 run 에 게이트를 적용한다. 차단되면 True."""
     threshold = _resolve_passing_score(document, passing_score)
     raw_runs = document.get("runs")
-    runs = [r for r in raw_runs if isinstance(r, dict)] if isinstance(raw_runs, list) else []
+    entries = raw_runs if isinstance(raw_runs, list) else []
 
-    blocked = [
-        _run_label(run, index)
-        for index, run in enumerate(runs)
-        if _apply_to_run(run, required_gates=required_gates, passing_score=threshold)
-    ]
-    vetoed = sum(1 for run in runs if run.get("veto") is True)
-    pass_rate = (len(runs) - len(blocked)) / len(runs) if runs else 0.0
+    # 비-객체 항목(`null` 등)은 걸러내지 않고 **차단으로 센다**. 걸러내면 분모가
+    # 줄어 "정상 run 1건 + null 1건" 이 100% 합격으로 보고된다 — 게이트가 증거
+    # 부재를 통과로 바꾸는 형태다.
+    blocked: list[str] = []
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            blocked.append(f"#{index} (malformed)")
+        elif _apply_to_run(entry, required_gates=required_gates, passing_score=threshold):
+            blocked.append(_run_label(entry, index))
+
+    vetoed = sum(1 for e in entries if isinstance(e, dict) and e.get("veto") is True)
+    pass_rate = (len(entries) - len(blocked)) / len(entries) if entries else 0.0
     contradictions = _rate_contradictions(document, pass_rate, blocked)
 
     # run 이 하나도 없으면 "전원 합격" 이 아니라 불합격이다 — 증거가 없으면
     # 통과시키지 않는다 (`evaluate_summary` 의 빈 요약 처리와 같은 규칙).
-    passed = bool(runs) and not blocked and not contradictions
+    passed = bool(entries) and not blocked and not contradictions
 
     document["hard_gate"] = {
         "passed": passed,
-        "total_runs": len(runs),
+        "total_runs": len(entries),
         "blocked_runs": blocked,
         "vetoed_runs": vetoed,
         "pass_rate": pass_rate,
@@ -210,7 +229,9 @@ def _apply_to_task_result(
     return not passed
 
 
-def _apply_to_summary(document: dict[str, Any]) -> bool:
+def _apply_to_summary(
+    document: dict[str, Any], *, required_gates: Sequence[str], passing_score: float | None
+) -> bool:
     """요약 문서의 합격률을 재계산하고 모순을 표면화한다. 차단되면 True.
 
     **정책: 거부하되 재작성하지 않는다.** 기록된 집계(`metrics.pass_rate` 등)는
@@ -221,7 +242,7 @@ def _apply_to_summary(document: dict[str, Any]) -> bool:
     항목은 `_canonicalize` 를 거치지 않는다 — 저장된 요약의 항목은 점수가 평면
     (`score` 가 항목 최상위)이고, `evaluate_summary` 의 의미를 바꾸지 않기 위해서다.
     """
-    verdict = evaluate_summary(document)
+    verdict = evaluate_summary(document, required_gates=required_gates, passing_score=passing_score)
 
     document["hard_gate"] = {
         "total": verdict.total,
@@ -290,7 +311,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--passing-score",
         type=float,
         default=None,
-        help="파일이 임계를 선언하지 않았을 때만 쓰이는 대체 임계값.",
+        help="태스크 정의(SSOT)의 임계값. 결과 파일에 복사된 값보다 우선한다.",
     )
     parser.add_argument(
         "--write",
@@ -315,7 +336,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         document, required_gates=args.required_gates, passing_score=args.passing_score
     )
     if summary is not None:
-        blocked |= _apply_to_summary(summary)
+        blocked |= _apply_to_summary(
+            summary, required_gates=args.required_gates, passing_score=args.passing_score
+        )
 
     if args.write:
         # 두 문서를 먼저 전부 직렬화한 뒤에 교체한다. 파일 2개에 걸친 원자성은

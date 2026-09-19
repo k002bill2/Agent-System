@@ -344,14 +344,34 @@ def test_passing_score_flag_applies_when_the_file_declares_none(tmp_path, capsys
     assert run["hard_gate"]["final_score"] == 0.90
 
 
-def test_in_file_passing_score_wins_over_the_flag(tmp_path, capsys):
-    """파일이 선언한 임계가 플래그보다 우선한다 — 태스크 정의가 SSOT 다."""
-    target = _write(tmp_path / "task_ui_002.json", _clean_task_result())
+def test_explicit_passing_score_overrides_the_value_copied_into_the_result(tmp_path, capsys):
+    """명시된 임계가 결과 파일에 복사된 값을 이긴다.
+
+    임계의 SSOT 는 태스크 정의(`evaluation.passing_score`)이고, 결과 파일의
+    `passing_score` 는 runner 가 써 넣은 **사본**이다. 사본이 플래그를 이기게 두면
+    0.75 로 선언된 태스크의 결과에 0.7 이 복사돼 있을 때 0.72 가 통과한다 —
+    플래그가 필요한 바로 그 경우에 플래그가 무력해진다.
+    """
+    document = _clean_task_result()  # 파일 사본은 0.7, 점수는 0.90
+    target = _write(tmp_path / "task_ui_002.json", document)
 
     exit_code = main(["--task-result", str(target), "--passing-score", "0.95"])
 
-    assert exit_code == 0
-    assert json.loads(capsys.readouterr().out)["task_result"]["runs"][0]["passed"] is True
+    run = json.loads(capsys.readouterr().out)["task_result"]["runs"][0]
+    assert exit_code == 1
+    assert run["passed"] is False
+
+
+def test_result_file_score_is_used_when_no_flag_is_given(tmp_path, capsys):
+    """플래그가 없으면 결과 파일에 복사된 임계를 쓴다 (기본값 0.7 보다 우선)."""
+    document = _clean_task_result()
+    document["passing_score"] = 0.95
+    target = _write(tmp_path / "task_ui_002.json", document)
+
+    exit_code = main(["--task-result", str(target)])
+
+    assert exit_code == 1
+    assert json.loads(capsys.readouterr().out)["task_result"]["runs"][0]["passed"] is False
 
 
 # --------------------------------------- 실제 셸 계약 (에이전트 문서가 약속하는 형태)
@@ -570,3 +590,75 @@ def test_atomic_write_refuses_a_vanished_target_and_leaves_no_temp_file(tmp_path
         cli_mod._atomic_write(missing, '{"a": 1}\n')
 
     assert list(tmp_path.iterdir()) == [], "임시 파일이 남으면 안 된다"
+
+
+# ------------------------------------------------- Codex 리뷰 반영 (P1/P2)
+
+
+def test_malformed_run_entry_is_counted_and_blocked(tmp_path, capsys):
+    """runs 안의 비-객체 항목을 조용히 버리지 않는다 (fail-open 차단).
+
+    걸러내면 `total_runs`·`pass_rate` 가 줄어들어, 정상 run 1건 + null 1건이
+    "100% 합격" 으로 보고된다 — 게이트가 증거 부재를 통과로 바꾸는 형태다.
+    """
+    document = _clean_task_result()
+    document["runs"].append(None)
+    target = _write(tmp_path / "task_ui_002.json", document)
+
+    exit_code = main(["--task-result", str(target)])
+
+    gate = json.loads(capsys.readouterr().out)["task_result"]["hard_gate"]
+    assert exit_code == 1
+    assert gate["total_runs"] == 2
+    assert gate["pass_rate"] == 0.5
+    assert gate["passed"] is False
+    assert any("malformed" in label for label in gate["blocked_runs"])
+
+
+def test_required_gates_apply_to_the_summary_too(tmp_path, capsys):
+    """`--require-gate` 는 태스크 결과뿐 아니라 요약 항목에도 적용된다.
+
+    한쪽에만 걸면 "lint 증빙 없는 항목" 이 요약에서는 통과로 남아, 같은 실행에서
+    두 문서가 서로 다른 계약으로 채점된다.
+    """
+    document = {
+        "results": {
+            "completed": [
+                {"task_id": "task_ui_001", "tests_pass": True, "score": 0.95, "passed": True}
+            ]
+        }
+    }
+    target = _write(tmp_path / "summary.json", document)
+    task = _write(tmp_path / "task.json", _clean_task_result())
+
+    exit_code = main(
+        ["--task-result", str(task), "--summary", str(target), "--require-gate", "lint"]
+    )
+
+    gate = json.loads(capsys.readouterr().out)["summary"]["hard_gate"]
+    assert exit_code == 1
+    assert gate["passed"] is False
+    assert gate["blocked_tasks"] == ["task_ui_001"]
+
+
+def test_recorded_veto_provenance_survives_reprocessing(tmp_path, capsys):
+    """grader 가 기록한 veto 와 사유를 게이트가 덮어써 지우지 않는다.
+
+    라이브러리는 기록된 `veto: true` 를 불합격으로 존중하지만, 재계산 판정에는
+    게이트 fail 이 없으므로 `verdict.veto` 가 False 다. 그 값을 그대로 쓰면
+    감사 증거가 사라지고 `vetoed_runs` 가 과소 집계된다.
+    """
+    document = _clean_task_result()
+    document["runs"][0]["veto"] = True
+    document["runs"][0]["veto_reason"] = "grader: fabricated test evidence"
+    target = _write(tmp_path / "task_ui_002.json", document)
+
+    exit_code = main(["--task-result", str(target)])
+
+    payload = json.loads(capsys.readouterr().out)["task_result"]
+    run = payload["runs"][0]
+    assert exit_code == 1
+    assert run["passed"] is False
+    assert run["veto"] is True, "기록된 veto 가 false 로 지워졌다"
+    assert run["veto_reason"] == "grader: fabricated test evidence"
+    assert payload["hard_gate"]["vetoed_runs"] == 1
