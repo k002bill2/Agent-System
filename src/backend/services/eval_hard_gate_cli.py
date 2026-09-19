@@ -40,9 +40,14 @@ EXIT_OK = 0
 EXIT_BLOCKED = 1
 EXIT_INVALID = 2
 
-#: 태스크 결과에서 "합격 비율" 을 주장하는 지표. 차단이 있는데 이 값이 재계산
-#: 합격률보다 높으면 모순이다. 덮어쓰지 않고 표면화만 한다.
-TASK_RATE_KEYS: tuple[str, ...] = ("pass_at_1", "pass_at_k", "success_rate", "pass_rate")
+#: 재계산 합격률과 **직접 비교 가능한** 지표만 담는다. 이 값이 비율보다 높으면
+#: 모순이므로 덮어쓰지 않고 표면화한다.
+#:
+#: `pass_at_k` 는 일부러 제외한다 — `pass@k = 1 - C(n-c,k)/C(n,k)` 는 성공 비율에
+#: 묶이지 않는다(3회 중 1회 성공이면 pass@3 은 정당하게 1.0, 비율은 0.333). 넣으면
+#: 정상 메타데이터에 거짓 모순 증거를 써 넣는다. 남은 세 키는 비교가 성립한다:
+#: `pass_at_1`·`success_rate` 는 c/n 이고 `pass_power_k` 는 (c/n)^k ≤ c/n 이다.
+TASK_RATE_KEYS: tuple[str, ...] = ("pass_at_1", "pass_power_k", "success_rate", "pass_rate")
 
 
 class InvalidInputError(Exception):
@@ -229,9 +234,7 @@ def _apply_to_task_result(
     return not passed
 
 
-def _apply_to_summary(
-    document: dict[str, Any], *, required_gates: Sequence[str], passing_score: float | None
-) -> bool:
+def _apply_to_summary(document: dict[str, Any], *, required_gates: Sequence[str]) -> bool:
     """요약 문서의 합격률을 재계산하고 모순을 표면화한다. 차단되면 True.
 
     **정책: 거부하되 재작성하지 않는다.** 기록된 집계(`metrics.pass_rate` 등)는
@@ -241,8 +244,18 @@ def _apply_to_summary(
 
     항목은 `_canonicalize` 를 거치지 않는다 — 저장된 요약의 항목은 점수가 평면
     (`score` 가 항목 최상위)이고, `evaluate_summary` 의 의미를 바꾸지 않기 위해서다.
+
+    `--require-gate` 는 전파하지만 `--passing-score` 는 전파하지 않는다. 날짜 단위
+    요약에는 서로 다른 `evaluation.passing_score` 를 가진 태스크가 섞이므로, 호출한
+    태스크 하나의 임계값을 전 항목에 씌우면 항목마다 틀린 계약이 적용된다. 필수
+    게이트는 그런 태스크별 모호성이 없어 전파해도 안전하다.
+
+    잔여 한계: 그래서 요약 항목의 점수는 라이브러리 기본 임계(0.7)로 본다. 0.75
+    태스크 항목은 요약 경로에서 임계 검사가 느슨하다 — 그 태스크의 **개별 결과
+    파일** 검사가 올바른 임계를 받는 정본이고, 요약은 집계·모순 확인용이다.
+    항목별 임계를 제대로 보려면 태스크 YAML 을 읽어야 하는데 범위 밖이다.
     """
-    verdict = evaluate_summary(document, required_gates=required_gates, passing_score=passing_score)
+    verdict = evaluate_summary(document, required_gates=required_gates)
 
     document["hard_gate"] = {
         "total": verdict.total,
@@ -336,9 +349,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         document, required_gates=args.required_gates, passing_score=args.passing_score
     )
     if summary is not None:
-        blocked |= _apply_to_summary(
-            summary, required_gates=args.required_gates, passing_score=args.passing_score
-        )
+        blocked |= _apply_to_summary(summary, required_gates=args.required_gates)
 
     if args.write:
         # 두 문서를 먼저 전부 직렬화한 뒤에 교체한다. 파일 2개에 걸친 원자성은

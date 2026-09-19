@@ -662,3 +662,74 @@ def test_recorded_veto_provenance_survives_reprocessing(tmp_path, capsys):
     assert run["veto"] is True, "기록된 veto 가 false 로 지워졌다"
     assert run["veto_reason"] == "grader: fabricated test evidence"
     assert payload["hard_gate"]["vetoed_runs"] == 1
+
+
+# ----------------------------------------- Codex 라운드 2 반영
+
+
+def test_pass_at_k_is_not_compared_to_the_per_run_rate(tmp_path, capsys):
+    """`pass_at_k` 는 성공 비율에 묶이지 않으므로 모순 비교 대상이 아니다.
+
+    3회 중 1회 성공이면 `pass@3` 은 정당하게 1.0 이고 run 비율은 0.333 이다.
+    그 둘을 비교하면 정상 메타데이터에 거짓 모순 증거를 써 넣는다.
+    `pass_at_1`·`success_rate`(= c/n)와 `pass_power_k`((c/n)^k ≤ 비율)는 유효하다.
+    """
+    document = {
+        "task_id": "task_ui_001",
+        "passing_score": 0.7,
+        "runs": [
+            {
+                "run_id": "run_001",
+                "code_checks": {"tests_pass": "pass"},
+                "grades": {"final_score": 0.9},
+                "passed": True,
+            },
+            {
+                "run_id": "run_002",
+                "code_checks": {"tests_pass": "fail"},
+                "grades": {"final_score": 0.4},
+                "passed": False,
+            },
+        ],
+        "metrics": {"pass_at_1": 0.5, "pass_at_k": 1.0},
+    }
+    target = _write(tmp_path / "task_ui_001.json", document)
+
+    main(["--task-result", str(target)])
+
+    gate = json.loads(capsys.readouterr().out)["task_result"]["hard_gate"]
+    assert gate["pass_rate"] == 0.5
+    assert gate["contradictions"] == [], "pass_at_k=1.0 은 비율 0.5 와 모순이 아니다"
+
+
+def test_task_threshold_does_not_leak_onto_summary_entries(tmp_path, capsys):
+    """태스크 하나의 임계값을 날짜 단위 요약의 모든 항목에 씌우지 않는다.
+
+    날짜 요약에는 서로 다른 `evaluation.passing_score` 를 가진 태스크가 섞인다.
+    0.75 태스크에서 호출했다고 0.7 태스크 항목을 0.75 로 채점하면(또는 반대로)
+    항목마다 틀린 계약이 적용된다. 항목별 임계값은 태스크 YAML 을 읽어야 알 수
+    있고 그건 이 CLI 의 범위 밖이라, 요약에는 임계값을 전파하지 않는다.
+    """
+    summary = {
+        "results": {
+            "completed": [
+                {"task_id": "task_other", "tests_pass": True, "score": 0.72, "passed": True}
+            ]
+        }
+    }
+    target = _write(tmp_path / "summary.json", summary)
+    task = _write(tmp_path / "task.json", _clean_task_result())
+
+    main(
+        [
+            "--task-result",
+            str(task),
+            "--summary",
+            str(target),
+            "--passing-score",
+            "0.75",
+        ]
+    )
+
+    gate = json.loads(capsys.readouterr().out)["summary"]["hard_gate"]
+    assert gate["blocked_tasks"] == [], "태스크의 0.75 가 요약 항목에 새어 들어갔다"
