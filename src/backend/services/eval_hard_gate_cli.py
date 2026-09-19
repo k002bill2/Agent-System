@@ -245,13 +245,26 @@ def _atomic_write(path: Path, payload: str) -> None:
 
     같은 디렉토리에 임시 파일을 만들고 `os.replace` 로 바꾼다 — 다른 파일시스템으로
     건너뛰면 원자성이 깨지기 때문이다.
+
+    권한은 원본에서 가져와 **교체 전에** 입힌다. `NamedTemporaryFile` 은 0600 이고
+    `os.replace` 가 그 비트를 그대로 옮기므로, 아무 것도 하지 않으면 644 결과
+    파일이 조용히 600 이 된다 (git 은 읽기 비트를 추적하지 않아 diff 에도 안 보인다).
+    교체 **후** chmod 는 그 사이에 파일이 0600 인 창을 남긴다. 다만 두 순서는
+    최종 상태가 같아 단위 테스트로 구분되지 않는다(mutation 으로 확인 — 뒤로
+    옮겨도 32건 전부 통과). 이 순서를 지키는 것은 테스트가 아니라 이 주석이다.
+
+    원본 stat 실패는 삼키지 않는다 — 읽을 때 있던 파일이 쓸 때 없다는 뜻이라,
+    추측한 권한으로 새 파일을 만드는 것보다 쓰지 않고 실패하는 쪽이 옳다.
     """
+    original_mode = path.stat().st_mode & 0o777
+
     handle = tempfile.NamedTemporaryFile(
         mode="w", encoding="utf-8", dir=path.parent, prefix=f".{path.name}.", delete=False
     )
     try:
         with handle:
             handle.write(payload)
+        os.chmod(handle.name, original_mode)
         os.replace(handle.name, path)
     except BaseException:
         Path(handle.name).unlink(missing_ok=True)

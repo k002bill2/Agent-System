@@ -17,6 +17,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 import services.eval_hard_gate_cli as cli_mod
 from services.eval_hard_gate_cli import main
 
@@ -533,3 +535,38 @@ def test_summary_contradiction_blocks_even_when_every_task_passes(tmp_path, caps
     assert gate["pass_rate"] == 1.0
     assert gate["passed"] is True, "라이브러리 판정 자체는 통과 — 차단은 모순 항이 만든다"
     assert any("pass_rate" in message for message in gate["contradictions"])
+
+
+# ------------------------------------------------ 원자적 교체가 권한을 보존한다
+
+
+@pytest.mark.parametrize("mode", [0o644, 0o600, 0o664])
+def test_write_preserves_the_original_file_mode(tmp_path, capsys, mode):
+    """`--write` 는 내용만 바꾸고 권한 비트는 그대로 둔다.
+
+    `NamedTemporaryFile` 은 0600 으로 만들어지고 `os.replace` 는 그 권한을 그대로
+    옮긴다. 그래서 아무 것도 선언하지 않으면 644 파일이 조용히 600 이 된다 —
+    git 은 읽기 비트를 추적하지 않아 diff 에도 안 보인다. 증빙 파일(0600 이 의도된
+    `mcp_admission`)과 달리 평가 결과는 비밀이 아니므로 원본 모드를 보존한다.
+    """
+    target = _write(tmp_path / "task_ui_001.json", _failing_task_result())
+    target.chmod(mode)
+
+    main(["--task-result", str(target), "--write"])
+    capsys.readouterr()
+
+    assert target.stat().st_mode & 0o777 == mode
+
+
+def test_atomic_write_refuses_a_vanished_target_and_leaves_no_temp_file(tmp_path):
+    """읽을 때 있던 파일이 쓸 때 없으면 추측한 권한으로 새로 만들지 않고 실패한다.
+
+    `main()` 은 항상 먼저 읽으므로 이 경로는 CLI 로 도달할 수 없다 — 그래서
+    `_atomic_write` 를 직접 부른다. 권한 폴백을 두면 이 테스트가 통과해버린다.
+    """
+    missing = tmp_path / "gone.json"
+
+    with pytest.raises(OSError):
+        cli_mod._atomic_write(missing, '{"a": 1}\n')
+
+    assert list(tmp_path.iterdir()) == [], "임시 파일이 남으면 안 된다"
