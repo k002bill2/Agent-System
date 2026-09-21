@@ -395,9 +395,6 @@ def test_module_is_runnable_as_a_command_and_blocks_a_failed_gate(tmp_path):
         text=True,
     )
 
-    # 종료 코드만으로는 판별되지 않는다: 잘못된 트리를 가리키면 "No module named"
-    # 로도 1 이 나온다 (실측 2026-09-17). 실제 판별자는 stdout 산출 여부다.
-    assert "No module named" not in proc.stderr, "CLI 모듈이 있는 트리를 실행하지 않았다"
     assert proc.returncode == 1, proc.stderr
     run = json.loads(proc.stdout)["task_result"]["runs"][0]
     assert run["passed"] is False
@@ -417,7 +414,6 @@ def test_command_exits_zero_on_a_clean_result(tmp_path):
         text=True,
     )
 
-    assert "No module named" not in proc.stderr, "CLI 모듈이 있는 트리를 실행하지 않았다"
     assert proc.returncode == 0, proc.stderr
 
 
@@ -818,3 +814,33 @@ def test_overstated_pass_power_k_is_a_contradiction(tmp_path, capsys):
 
     gate = json.loads(capsys.readouterr().out)["task_result"]["hard_gate"]
     assert any("pass_power_k" in message for message in gate["contradictions"])
+
+
+def test_the_shell_contract_runs_the_current_module_not_a_stale_copy(tmp_path):
+    """셸 경로가 **이 워크트리의 현재** 코드를 실행하는지 동작으로 확인한다.
+
+    `sys.executable` 의 venv 에는 다른 체크아웃을 가리키는 `.pth` 가 있고, 그
+    체크아웃에 이 모듈의 **낡은 사본**이 놓일 수 있다(실측 2026-09-21: 있었다).
+    낡은 사본도 "게이트 fail 은 강등한다" 는 기본 동작은 하므로, 그 단언만으로는
+    거짓 초록이 난다 — 실측으로 확인했다.
+
+    그래서 판별자를 낡은 사본에 **없는** 동작으로 잡는다: `runs` 의 비-객체 항목을
+    분모에 세고 차단하는 것은 이 워크트리에서만 한다.
+    """
+    backend = Path(cli_mod.__file__).resolve().parents[1]
+    document = _clean_task_result()
+    document["runs"].append(None)
+    target = _write(tmp_path / "task_ui_002.json", document)
+
+    proc = subprocess.run(
+        [sys.executable, "-m", "services.eval_hard_gate_cli", "--task-result", str(target)],
+        cwd=backend,
+        env={**os.environ, "PYTHONPATH": str(backend)},
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 1, proc.stderr
+    gate = json.loads(proc.stdout)["task_result"]["hard_gate"]
+    assert gate["total_runs"] == 2, "낡은 사본은 null 항목을 걸러내 1 을 보고한다"
+    assert any("malformed" in label for label in gate["blocked_runs"])
