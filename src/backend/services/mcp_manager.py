@@ -2,19 +2,42 @@
 
 외부 MCP 서버(파일시스템, GitHub, Playwright 등)를 연동하고
 도구 호출을 라우팅합니다.
+
+**Admission 게이트**: `start_server()` 는 설정의 command/args/env 로 subprocess 를
+띄우므로, 외부 MCP 를 등록하는 것은 곧 임의 코드 실행을 허용하는 일이다. 그래서
+`_servers` 로 들어가는 두 경로(`register_server`·`initialize`)와 프로세스를 띄우는
+경로(`start_server`)가 모두 `services.mcp_admission` 의 fail-closed 게이트를 지난다.
+built-in 기본 서버는 **fingerprint** 로 신뢰 앵커에 등록돼 기존 동작이 보존된다
+(id 만 같은 가짜는 통과하지 못한다). 운영 절차는 docs/mcp-admission.md 참조.
 """
 
 import asyncio
 import json
+import logging
+import os
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from enum import Enum
+from types import MappingProxyType
 from typing import Any
 
 from pydantic import BaseModel, Field
 
+from services.mcp_admission import (
+    AdmissionDecision,
+    AdmissionGate,
+    FileEvidenceStore,
+    InMemoryEvidenceStore,
+    MCPAdmissionError,
+)
+from services.skillspector_adapter import verify_evidence_binding
 from utils.time import utcnow
+
+logger = logging.getLogger(__name__)
+
+#: 증빙 저장 파일 경로. 미설정이면 in-memory 저장소 = 외부 MCP 전부 거부(fail closed).
+EVIDENCE_PATH_ENV = "AOS_MCP_ADMISSION_EVIDENCE"
 
 
 class MCPServerType(str, Enum):
@@ -166,18 +189,63 @@ DEFAULT_MCP_SERVERS: list[MCPServerConfig] = [
 ]
 
 
+#: 검토를 거쳐 **소스에 못 박은** built-in 신뢰 앵커 (id → fingerprint).
+#:
+#: `DEFAULT_MCP_SERVERS` 에서 파생하지 않는다. 파생하면 목록에 한 줄 추가하는 것이
+#: 곧 무증빙 실행 권한 부여가 되고, 커버리지 테스트는 양변이 같은 소스를 읽어
+#: 영원히 통과한다(자기 갱신). 여기 없는 후보는 기본 서버와 모양이 같아도 증빙을
+#: 요구받는다.
+#:
+#: 기본 서버의 패키지·인자·env 를 바꾸면 이 값도 **의도적으로** 갱신해야 한다:
+#:   cd src/backend && uv run python -c "from services.mcp_manager import \
+#:     DEFAULT_MCP_SERVERS as D; from services.mcp_admission import \
+#:     compute_candidate_fingerprint as f; print({c.id: f(c) for c in D})"
+#: 갱신하지 않으면 test_pinned_trust_anchors_match_the_current_default_servers 가
+#: RED 가 된다 — 그 diff 가 곧 리뷰 지점이다.
+BUILTIN_TRUST_ANCHORS: Mapping[str, str] = MappingProxyType(
+    {
+        "filesystem": "a549f64b79fa212874648b9db9f683a3bb0b1d4db3ffe8e5dbb36b42b1700230",
+        "github": "1951b72a109cb8373902bf75ef825e6998ff00a75cc01da29aa21cf7ef0c3d67",
+        "playwright": "2a9c1c8979679cc970c4b769b63369321dc75cc4838cc85c8682610437335f9d",
+    }
+)
+
+
+def builtin_trusted_fingerprints() -> frozenset[str]:
+    """검토되어 못 박힌 신뢰 앵커의 fingerprint 집합.
+
+    id 가 아니라 fingerprint 를 신뢰한다 — `id="filesystem"` 을 달고 `command="curl"`
+    로 바꾼 후보는 앵커에 걸리지 않아 증빙 없이는 등록되지 않는다. 마찬가지로
+    `DEFAULT_MCP_SERVERS` 에 항목이 늘거나 바뀌어도 앵커는 따라 늘지 않는다.
+    """
+    return frozenset(BUILTIN_TRUST_ANCHORS.values())
+
+
+def default_admission_gate() -> AdmissionGate:
+    """기본 게이트: built-in 신뢰 + `EVIDENCE_PATH_ENV` 파일 저장소(없으면 in-memory)."""
+    path = os.getenv(EVIDENCE_PATH_ENV, "").strip()
+    store = FileEvidenceStore(path) if path else InMemoryEvidenceStore()
+    return AdmissionGate(store=store, trusted_fingerprints=builtin_trusted_fingerprints())
+
+
 class MCPManager:
     """
     MCP 서버 관리자.
 
     외부 MCP 서버들을 관리하고 도구 호출을 라우팅합니다.
+
+    Args:
+        admission_gate: 등록·기동 전에 증빙을 확인하는 게이트. None 이면
+            `default_admission_gate()` — built-in 만 통과하고 외부는 전부 거부한다.
     """
 
-    def __init__(self):
+    def __init__(self, admission_gate: AdmissionGate | None = None):
         self._servers: dict[str, MCPServerInfo] = {}
         self._processes: dict[str, subprocess.Popen] = {}
         self._tool_handlers: dict[str, Callable] = {}
         self._initialized = False
+        self._admission = admission_gate if admission_gate is not None else default_admission_gate()
+        self._rejected: dict[str, AdmissionDecision] = {}
 
     async def initialize(self, configs: list[MCPServerConfig] | None = None) -> None:
         """
@@ -192,6 +260,17 @@ class MCPManager:
         configs = configs or DEFAULT_MCP_SERVERS
 
         for config in configs:
+            decision = self._admission.decide(config)
+            if not decision.allowed:
+                # 조용히 건너뛰지 않는다 — 사유는 get_rejected_candidates() 로 조회된다.
+                self._rejected[config.id] = decision
+                logger.warning(
+                    "MCP admission denied at initialize: %s [%s] %s",
+                    config.id,
+                    decision.code.value if decision.code else "unknown",
+                    decision.reason,
+                )
+                continue
             self._servers[config.id] = MCPServerInfo(config=config)
 
         # 자동 시작 서버 시작
@@ -208,8 +287,39 @@ class MCPManager:
         self._initialized = False
 
     def register_server(self, config: MCPServerConfig) -> None:
-        """새 MCP 서버 등록."""
+        """새 MCP 서버 등록.
+
+        Raises:
+            MCPAdmissionError: 승인 증빙이 없거나 후보와 불일치/만료/실패인 경우.
+                거부된 후보는 `_servers` 에 남지 않는다 — 나중에 start 로 되살릴 수 없다.
+        """
+        self._admission.authorize(config)
+        self._rejected.pop(config.id, None)
         self._servers[config.id] = MCPServerInfo(config=config)
+
+    def _scanned_source_problem(self, server_id: str) -> str | None:
+        """스캐너 증빙이 가리키는 소스가 지금도 그때 그 내용인가 (아니면 사유).
+
+        증빙이 없거나(built-in 신뢰 앵커) 소스 결속을 주장하지 않는 증빙(수동 검토
+        기록)은 `None` — 없던 검사를 만들지 않는다.
+        """
+        evidence = self._admission.store.get(server_id)
+        if evidence is None:
+            return None
+        return verify_evidence_binding(evidence)
+
+    @property
+    def admission(self) -> AdmissionGate:
+        """등록·기동을 지키는 게이트 (증빙 등록/회수의 진입점)."""
+        return self._admission
+
+    def get_rejected_candidates(self) -> dict[str, AdmissionDecision]:
+        """admission 에서 거부된 후보와 사유 (initialize 경로의 가시성)."""
+        return dict(self._rejected)
+
+    def revoke_admission(self, server_id: str) -> bool:
+        """증빙을 회수한다. 이후 기동 시도는 다시 차단된다 (운영 롤백 절차)."""
+        return self._admission.store.revoke(server_id)
 
     def unregister_server(self, server_id: str) -> bool:
         """MCP 서버 등록 해제."""
@@ -249,6 +359,29 @@ class MCPManager:
 
         if info.status == MCPServerStatus.RUNNING:
             return True
+
+        # 등록 이후 설정이 바뀌었을 수 있으므로 기동 시점에 다시 판정한다.
+        # 여기서 막히면 subprocess 는 만들어지지 않는다.
+        try:
+            self._admission.authorize(info.config)
+        except MCPAdmissionError as e:
+            info.status = MCPServerStatus.ERROR
+            info.last_error = str(e)
+            logger.warning("MCP admission denied at start: %s", e)
+            return False
+
+        # fingerprint 는 "무엇을 실행하는가"(command/args/env) 만 묶는다. 같은 명령이
+        # 실행할 **내용**이 승인 이후 바뀐 경우는 fingerprint 가 그대로이므로 위 판정을
+        # 통과한다. 스캐너 증빙이 소스 결속을 주장할 때만, 기동 직전에 그 주장을 재확인한다.
+        # 이 검사를 `AdmissionGate.decide()` 가 아니라 여기 두는 이유: decide 는 등록 루프에서
+        # 후보마다 호출되는 순수 판정이고, 파일시스템 순회는 subprocess 를 띄우기 직전인
+        # 이 지점에서만 값을 한다.
+        drift = self._scanned_source_problem(server_id)
+        if drift is not None:
+            info.status = MCPServerStatus.ERROR
+            info.last_error = f"MCP admission denied for '{server_id}' [source_drift]: {drift}"
+            logger.warning("MCP source drift denied at start: %s — %s", server_id, drift)
+            return False
 
         info.status = MCPServerStatus.STARTING
 

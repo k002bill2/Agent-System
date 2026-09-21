@@ -1,9 +1,16 @@
-"""Tests for MCP Manager."""
+"""Tests for MCP Manager.
 
+`register_server` 는 2026-09-17 부터 admission 증빙을 요구한다(fail closed).
+built-in 기본 서버가 아닌 설정은 `_admit()` 로 증빙을 먼저 등록해야 하며,
+증빙 없는 등록이 차단되는지는 `test_mcp_manager_admission.py` 가 따로 잠근다.
+"""
+
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
 
+from services.mcp_admission import ReviewDecision, ScanStatus, build_evidence
 from services.mcp_manager import (
     DEFAULT_MCP_SERVERS,
     MCPBatchToolCall,
@@ -16,6 +23,27 @@ from services.mcp_manager import (
     MCPToolResult,
     MCPToolSchema,
 )
+from utils.time import utcnow
+
+
+def _admit(manager: MCPManager, config: MCPServerConfig) -> None:
+    """이 설정에 대한 승인 증빙을 매니저 저장소에 넣는다.
+
+    게이트를 우회하는 것이 아니라 실제 승인 경로를 밟는다 — 스캔 PASS + 검토 승인이
+    fingerprint 에 결속된 증빙을 저장소에 올린다.
+    """
+    manager.admission.store.put(
+        build_evidence(
+            config,
+            scanner_id="test-fixture-scanner",
+            scanner_version="0.0.0",
+            scan_status=ScanStatus.PASS,
+            scanned_at=utcnow() - timedelta(minutes=5),
+            reviewer="test@example.test",
+            review_decision=ReviewDecision.APPROVED,
+            reviewed_at=utcnow() - timedelta(minutes=1),
+        )
+    )
 
 
 class TestMCPManager:
@@ -57,6 +85,7 @@ class TestMCPManager:
             args=["custom-server.js"],
         )
 
+        _admit(self.manager, config)
         self.manager.register_server(config)
 
         server = self.manager.get_server("custom-server")
@@ -73,6 +102,7 @@ class TestMCPManager:
             args=["temp.js"],
         )
 
+        _admit(self.manager, config)
         self.manager.register_server(config)
         assert self.manager.get_server("temp-server") is not None
 
@@ -89,7 +119,9 @@ class TestMCPManager:
             id="server2", type=MCPServerType.CUSTOM, name="Server 2", command="cmd"
         )
 
+        _admit(self.manager, config1)
         self.manager.register_server(config1)
+        _admit(self.manager, config2)
         self.manager.register_server(config2)
 
         servers = self.manager.get_all_servers()
@@ -104,6 +136,7 @@ class TestMCPManager:
             command="cmd",
         )
 
+        _admit(self.manager, config)
         self.manager.register_server(config)
 
         # 초기에는 실행 중인 서버 없음
@@ -119,6 +152,7 @@ class TestMCPManager:
             command="cmd",
         )
 
+        _admit(self.manager, config)
         self.manager.register_server(config)
 
         # 도구 추가 (수동으로 테스트용)
@@ -142,6 +176,7 @@ class TestMCPManager:
             command="cmd",
         )
 
+        _admit(self.manager, config)
         self.manager.register_server(config)
 
         # 도구 추가
@@ -164,6 +199,7 @@ class TestMCPManager:
             command="cmd",
         )
 
+        _admit(self.manager, config)
         self.manager.register_server(config)
 
         stats = self.manager.get_stats()
@@ -387,7 +423,9 @@ class TestMCPManagerBatchCall:
             name="Mock Server 2",
             command="mock",
         )
+        _admit(self.manager, config1)
         self.manager.register_server(config1)
+        _admit(self.manager, config2)
         self.manager.register_server(config2)
 
         # 호출 목록 (하나는 존재하지 않는 서버)
@@ -428,6 +466,7 @@ class TestMCPManagerBatchCall:
                 name="Error Server",
                 command="mock",
             )
+            _admit(self.manager, config)
             self.manager.register_server(config)
 
             calls = [MCPToolCall(server_id="error-server", tool_name="test")]

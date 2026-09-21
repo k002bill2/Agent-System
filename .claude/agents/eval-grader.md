@@ -96,6 +96,11 @@ passed = final_score >= passing_score
 
 #### Deterministic Veto (상위 규칙)
 
+> **구현**: 이 절의 계약은 `src/backend/services/eval_hard_gate.py` 가 강제한다
+> (`normalize_code_checks` / `evaluate_task_result` / `evaluate_summary`).
+> 계약 변경 시 `tests/backend/test_eval_hard_gate.py` 를 함께 갱신할 것 —
+> 산문만 고치면 실제 채점은 바뀌지 않는다.
+
 veto의 소스는 rubric의 게이트 타입 정의가 **아니라**, runner가 실행 시 기록한 **캡처된 outcome**이다.
 `code_checks` 결과 객체에 캡처된 게이트 키가 하나라도 `fail`(또는 `false`)이면, 가중 점수(`final_score`)와
 무관하게 `passed: false`로 확정한다. `final_score`는 진단용으로 계속 계산·기록하되, veto 발동 시 결과에
