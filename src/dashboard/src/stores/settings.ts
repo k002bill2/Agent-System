@@ -117,7 +117,7 @@ const fallbackModels: Record<LLMProvider, string[]> = {
 // is_default=True (src/backend/models/llm_models.py). Update alongside fallbackModels.
 const fallbackDefaultModelIds: ReadonlySet<string> = new Set([
   'claude-sonnet-5', // anthropic
-  'gemini-3.7-flash', // google
+  'gemini-3.8-flash', // google
   'gpt-5.6', // openai
   'codex-cli', // codex_cli
   'claude-cli', // claude_cli

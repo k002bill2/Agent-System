@@ -148,7 +148,9 @@ _MODELS: list[LLMModelConfig] = [
         context_window=1048576,
         input_price=0.00075,  # $0.75/1M tokens
         output_price=0.00375,  # $3.75/1M tokens
-        is_default=False,  # Do not promote without provider smoke/canary
+        # live smoke 2026-09-22: generateContent HTTP 200,
+        # 응답 modelVersion == "gemini-3.8-flash" 확인 후 승격.
+        is_default=True,  # Default Google model (policy 2026-09-22)
         supports_tools=True,
         supports_vision=True,
     ),
@@ -160,7 +162,9 @@ _MODELS: list[LLMModelConfig] = [
         context_window=1048576,
         input_price=0.00075,  # $0.75/1M tokens
         output_price=0.00375,  # $3.75/1M tokens
-        is_default=True,  # Default Google model (policy 2026-08-31)
+        # gemini-3.8-flash 로 대체(2026-09-22). 행은 남긴다 — 이 id 를 참조하는
+        # 기존 세션이 있고, 삭제하면 로딩이 깨진다.
+        is_default=False,
         supports_tools=True,
         supports_vision=True,
     ),
