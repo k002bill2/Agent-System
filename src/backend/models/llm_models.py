@@ -467,7 +467,7 @@ _MODEL_INDEX: dict[str, LLMModelConfig] = {m.id: m for m in _MODELS}
 # Code-seed revision stamp — bump when policy-relevant seed contents change
 # (defaults, enabled flags, model set). Recorded on Playground executions as
 # optional audit metadata; see LLMModelRegistry.get_revision().
-REGISTRY_REVISION = "2026-09-08"
+REGISTRY_REVISION = "2026-09-22"
 
 
 class LLMModelRegistry:
