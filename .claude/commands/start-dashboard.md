@@ -76,7 +76,7 @@ sleep 3 && curl -s -o /dev/null -w "%{http_code}" http://localhost:5173/ 2>/dev/
 
 ```bash
 # 로그 확인
-tail -f logs/dashboard.log
+tail -F logs/dashboard.log
 
 # 중지
 pkill -f "vite.*5173"

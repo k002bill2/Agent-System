@@ -818,7 +818,7 @@ ws.onmessage = (event) => {
 ```bash
 # 터미널에서 실행 중인 uvicorn 출력 확인
 # 또는
-tail -f logs/backend.log
+tail -F logs/backend.log
 ```
 
 #### Dashboard 로그

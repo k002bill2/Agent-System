@@ -19,6 +19,21 @@ NC='\033[0m'
 PID_DIR="$PROJECT_ROOT/.pids"
 mkdir -p "$PID_DIR"
 
+# 로그는 덮어쓰지 않고 rename 으로 회전시킨다.
+#
+# 종료 중인 이전 프로세스는 로그 fd 를 계속 붙들고 있다. 같은 inode 를
+# O_TRUNC(`>`)로 비우면 그 프로세스가 보존한 offset(수백 KB~MB)에 마지막
+# 줄을 쓰고, 커널이 파일 앞부분을 NUL 로 메워 sparse hole 이 생긴다
+# (실측: backend.log 973KB 중 962KB 가 NUL). rename 하면 옛 fd 는 옛
+# inode 를 따라가므로 새 로그는 깨끗한 inode 에서 offset 0 부터 시작한다.
+rotate_log() {
+    local log_file="$1"
+    mkdir -p "$(dirname "$log_file")"
+    if [ -f "$log_file" ]; then
+        mv -f "$log_file" "$log_file.1"
+    fi
+}
+
 echo -e "${BLUE}============================================================${NC}"
 echo -e "${BLUE}   Agent Orchestration Service - Starting All Services${NC}"
 echo -e "${BLUE}============================================================${NC}"
@@ -119,8 +134,8 @@ pkill -9 -f "uvicorn.*api\.app:app" 2>/dev/null || true
 lsof -ti :8000 -sTCP:LISTEN 2>/dev/null | xargs kill -9 2>/dev/null || true
 sleep 0.5
 
-# Create logs directory
-mkdir -p "$PROJECT_ROOT/logs"
+# Create logs directory / rotate previous backend log
+rotate_log "$PROJECT_ROOT/logs/backend.log"
 
 # Load specific environment variables from .env
 export GITHUB_TOKEN=$(grep "^GITHUB_TOKEN=" "$PROJECT_ROOT/.env" | cut -d'=' -f2-)
@@ -202,6 +217,7 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
 done
 
 # Start dashboard in background
+rotate_log "$PROJECT_ROOT/logs/dashboard.log"
 nohup npm run dev > "$PROJECT_ROOT/logs/dashboard.log" 2>&1 &
 DASHBOARD_PID=$!
 echo $DASHBOARD_PID > "$PID_DIR/dashboard.pid"
@@ -224,8 +240,8 @@ echo -e "  Dashboard:    ${GREEN}http://localhost:5173${NC}"
 echo -e "  API Docs:     ${GREEN}http://localhost:8000/docs${NC}"
 echo ""
 echo -e "${YELLOW}Logs:${NC}"
-echo -e "  Backend:   tail -f $PROJECT_ROOT/logs/backend.log"
-echo -e "  Dashboard: tail -f $PROJECT_ROOT/logs/dashboard.log"
+echo -e "  Backend:   tail -F $PROJECT_ROOT/logs/backend.log"
+echo -e "  Dashboard: tail -F $PROJECT_ROOT/logs/dashboard.log"
 echo ""
 echo -e "${YELLOW}To stop all services:${NC}"
 echo -e "  $SCRIPT_DIR/stop-all.sh"

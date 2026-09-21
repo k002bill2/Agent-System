@@ -35,8 +35,8 @@ curl http://localhost:8000/api/health
 
 3. **로그 확인**
 ```bash
-tail -f logs/backend.log    # 백엔드 로그
-tail -f logs/dashboard.log  # 대시보드 로그
+tail -F logs/backend.log    # 백엔드 로그
+tail -F logs/dashboard.log  # 대시보드 로그
 ```
 
 ## 중지
