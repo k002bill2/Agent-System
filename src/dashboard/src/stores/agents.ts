@@ -72,7 +72,6 @@ interface AgentsState {
 
   // Execution State
   executingAnalysisId: string | null
-  executionSessionId: string | null
   executionError: string | null
 
   // UI State
@@ -112,7 +111,6 @@ interface AgentsState {
   removeMdReadStatus: (fileKey: string) => void
 
   // Execution Actions
-  executeAnalysis: (analysisId: string, projectId?: string | null) => Promise<string | null>
   executeInTerminal: (analysisId: string, projectId?: string | null, branchName?: string) => Promise<boolean>
   clearExecution: () => void
 
@@ -267,7 +265,6 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
 
   // Execution state
   executingAnalysisId: null,
-  executionSessionId: null,
   executionError: null,
 
   // Image state
@@ -436,35 +433,6 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
   },
 
   // Execution Actions
-  executeAnalysis: async (analysisId: string, projectId?: string | null) => {
-    set({ executingAnalysisId: analysisId, executionError: null })
-
-    try {
-      const result = await apiClient.post<{ success: boolean; session_id?: string; error?: string }>(
-        '/api/agents/orchestrate/execute-analysis',
-        { analysis_id: analysisId, project_id: projectId || null }
-      )
-
-      if (!result.success) {
-        set({
-          executingAnalysisId: null,
-          executionError: result.error || 'Execution failed',
-        })
-        return null
-      }
-
-      set({ executionSessionId: result.session_id ?? null })
-      return result.session_id as string
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Failed to execute analysis'
-      set({
-        executingAnalysisId: null,
-        executionError: errorMsg,
-      })
-      return null
-    }
-  },
-
   // Execute analysis via selected terminal with Claude CLI
   executeInTerminal: async (analysisId: string, projectId?: string | null, branchName?: string) => {
     const terminal = useSettingsStore.getState().preferredTerminal
@@ -519,7 +487,6 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
   clearExecution: () => {
     set({
       executingAnalysisId: null,
-      executionSessionId: null,
       executionError: null,
     })
   },

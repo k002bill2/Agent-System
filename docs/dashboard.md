@@ -246,8 +246,6 @@ import { cn } from '@/lib/utils';
 | `ContextPanel` | 컨텍스트 정보 패널 |
 | `OutputLog` | 실시간 출력 로그 |
 | `ResizablePanel` | 리사이즈 가능 패널 |
-| `AgentMonitorPanel` | 에이전트 모니터링 패널 (SSE 스토어 기반, **어느 페이지에도 배선되지 않음**) |
-| `MetricsChart` | 메트릭 차트 시각화 |
 | `WorkflowCheckCard` | 워크플로우 체크 카드 |
 
 ### RAG Components
@@ -373,7 +371,6 @@ import { cn } from '@/lib/utils';
 | `useProjectsStore` | `projects.ts` | 프로젝트 목록 및 상태 |
 | `useProjectConfigsStore` | `projectConfigs.ts` | 프로젝트 설정 (Skills, Agents, MCP, Hooks) + DB 프로젝트 CRUD |
 | `useAgentsStore` | `agents.ts` | 에이전트 레지스트리 |
-| `useAgentMonitorStore` | `agentMonitor.ts` | 에이전트 모니터링 메트릭 |
 | `useTaskStore` | `taskStore.ts` | 태스크 CRUD 관리 |
 | `useFeedbackStore` | `feedback.ts` | RLHF 피드백 |
 | `useClaudeSessionsStore` | `claudeSessions.ts` | Claude 세션 모니터링. 403 은 `permissionDenied` 로 일반 에러와 분리 보관해 소비자가 상태 코드를 각자 비교하지 않게 한다 (성공·비 403 실패 시 함께 내려간다) |
@@ -558,8 +555,6 @@ src/dashboard/
 │   │   │   ├── ContextPanel.tsx
 │   │   │   ├── OutputLog.tsx
 │   │   │   ├── ResizablePanel.tsx
-│   │   │   ├── AgentMonitorPanel.tsx
-│   │   │   ├── MetricsChart.tsx
 │   │   │   └── WorkflowCheckCard.tsx
 │   │   ├── rag/                # RAG 검색
 │   │   │   └── RAGQueryPanel.tsx
@@ -593,7 +588,6 @@ src/dashboard/
 │   │   ├── projects.ts
 │   │   ├── projectConfigs.ts
 │   │   ├── agents.ts
-│   │   ├── agentMonitor.ts
 │   │   ├── taskStore.ts
 │   │   ├── feedback.ts
 │   │   ├── claudeSessions.ts
