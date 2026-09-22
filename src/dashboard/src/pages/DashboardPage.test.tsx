@@ -18,18 +18,12 @@ vi.mock('../components/ProcessMonitorWidget', () => ({
 }))
 
 // Store mocks
-let mockAgents: Record<string, { status: string }> = {}
 let mockSessions: Array<{ session_id: string; status: string; last_activity: string; project_name?: string; summary?: string; slug?: string; message_count?: number }> = []
 let mockIsLoadingSessions = false
 let mockPermissionDenied = false
 const mockFetchSessions = vi.fn()
 const mockSelectSession = vi.fn()
 const mockSetView = vi.fn()
-
-vi.mock('../stores/orchestration', () => ({
-  useOrchestrationStore: (selector: (s: Record<string, unknown>) => unknown) =>
-    selector({ agents: mockAgents }),
-}))
 
 vi.mock('../stores/claudeSessions', () => ({
   useClaudeSessionsStore: (selector: (s: Record<string, unknown>) => unknown) =>
@@ -53,7 +47,6 @@ vi.mock('../stores/navigation', () => ({
 describe('DashboardPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockAgents = {}
     mockSessions = []
     mockIsLoadingSessions = false
     mockPermissionDenied = false
@@ -77,16 +70,6 @@ describe('DashboardPage', () => {
     // Total sessions: 3, Active: 2, Projects: 2, Messages: 18
     expect(screen.getByText('3')).toBeInTheDocument()
     expect(screen.getByText('2', { selector: '.text-green-600, .dark\\:text-green-400' }) || screen.getAllByText('2').length > 0).toBeTruthy()
-  })
-
-  it('renders agent status section', () => {
-    mockAgents = {
-      a1: { status: 'in_progress' },
-      a2: { status: 'idle' },
-    }
-    render(<DashboardPage />)
-    expect(screen.getByText('Agent Status')).toBeInTheDocument()
-    expect(screen.getByText('Total Agents')).toBeInTheDocument()
   })
 
   it('renders dashboard widgets', () => {

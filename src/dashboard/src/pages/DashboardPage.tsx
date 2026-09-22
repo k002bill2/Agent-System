@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useCallback } from 'react'
-import { useOrchestrationStore } from '../stores/orchestration'
 import { useClaudeSessionsStore } from '../stores/claudeSessions'
-import { Users, Terminal, FolderOpen, MessageSquare, Zap } from 'lucide-react'
+import { Terminal, FolderOpen, MessageSquare, Zap } from 'lucide-react'
 import { CostMonitor } from '../components/CostMonitor'
 import { ClaudeUsageDashboard } from '../components/usage/ClaudeUsageDashboard'
 import { ConfigStatsCard, ConfigChartCard } from '../components/ProjectConfigStats'
@@ -22,7 +21,6 @@ function formatTimeAgo(date: Date): string {
 }
 
 export function DashboardPage() {
-  const agents = useOrchestrationStore(s => s.agents)
   const sessions = useClaudeSessionsStore(s => s.sessions)
   const fetchSessions = useClaudeSessionsStore(s => s.fetchSessions)
   const fetchSessionProjects = useClaudeSessionsStore(s => s.fetchProjects)
@@ -43,19 +41,6 @@ export function DashboardPage() {
   useEffect(() => {
     fetchOnMount()
   }, [fetchOnMount])
-
-  const agentStats = useMemo(
-    () =>
-      Object.values(agents).reduce(
-        (acc, agent) => ({
-          total: acc.total + 1,
-          active: acc.active + (agent.status === 'in_progress' ? 1 : 0),
-          idle: acc.idle + (agent.status !== 'in_progress' ? 1 : 0),
-        }),
-        { total: 0, active: 0, idle: 0 },
-      ),
-    [agents],
-  )
 
   // Session-based stats — memoised to avoid recalculation on every render
   const { activeSessions, sessionProjectCount, totalMessages, lastActivityText } = useMemo(() => {
@@ -146,30 +131,8 @@ export function DashboardPage() {
 
       {/* Agent Stats, Cost Monitor, provider-specific usage & Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6 items-start">
-        {/* Column 1: Agent Status + Process Monitor + Cost Monitor (stacked) */}
+        {/* Column 1: Process Monitor + Cost Monitor (stacked) */}
         <div className="space-y-6">
-          {/* Agent Status */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-              <Users className="w-5 h-5" />
-              Agent Status
-            </h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Total Agents</span>
-                <span className="font-medium text-gray-900 dark:text-white">{agentStats.total}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Active</span>
-                <span className="font-medium text-green-600 dark:text-green-400">{agentStats.active}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Idle</span>
-                <span className="font-medium text-gray-500 dark:text-gray-400">{agentStats.idle}</span>
-              </div>
-            </div>
-          </div>
-
           {/* Process Monitor */}
           <ProcessMonitorWidget />
 

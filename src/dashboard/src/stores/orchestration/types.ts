@@ -57,22 +57,6 @@ export interface Task {
   deletedAt: string | null
 }
 
-export interface Agent {
-  id: string
-  name: string
-  role: string
-  status: TaskStatus
-  currentTask: string | null
-}
-
-export interface Message {
-  id: string
-  type: string
-  content: string
-  timestamp: string
-  agentId?: string
-}
-
 export interface ApprovalRequest {
   approval_id: string
   task_id: string
@@ -185,12 +169,7 @@ export interface OrchestrationState {
   rootTaskId: string | null
   currentTaskId: string | null
 
-  // Agents
-  agents: Record<string, Agent>
-  activeAgentId: string | null
-
-  // Messages/Events
-  messages: Message[]
+  // Processing flag (read by ChatInput)
   isProcessing: boolean
 
   // HITL (Human-in-the-Loop)
@@ -216,7 +195,6 @@ export interface OrchestrationState {
   disconnect: () => void
   reconnect: () => void
   refreshSession: () => Promise<boolean>
-  sendMessage: (content: string) => void
   cancelTask: () => void
   approveOperation: (approvalId: string, note?: string) => Promise<void>
   denyOperation: (approvalId: string, note?: string) => Promise<void>

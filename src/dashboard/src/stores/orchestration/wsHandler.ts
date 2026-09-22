@@ -5,7 +5,6 @@ import type {
   OrchestrationState,
   Task,
   TaskStatus,
-  Agent,
 } from './types'
 import { identifyProvider, PROVIDER_CONFIG } from './types'
 
@@ -46,17 +45,7 @@ export function handleMessage(
 
   switch (type) {
     case 'task_started':
-      set((state) => ({
-        messages: [
-          ...state.messages,
-          {
-            id: crypto.randomUUID(),
-            type: 'system',
-            content: 'Task started',
-            timestamp: new Date().toISOString(),
-          },
-        ],
-      }))
+      // No local state to update; task data arrives via `state_update`
       break
 
     case 'task_progress':
@@ -64,67 +53,16 @@ export function handleMessage(
       break
 
     case 'task_completed':
-      set((state) => ({
+      set({
         isProcessing: false,
         rootTaskId: payload.root_task_id as string | null,
-        messages: [
-          ...state.messages,
-          {
-            id: crypto.randomUUID(),
-            type: 'system',
-            content: 'Task completed',
-            timestamp: new Date().toISOString(),
-          },
-        ],
-      }))
+      })
       notificationService.notifyTaskCompleted((payload.title as string) || 'Task completed')
       break
 
     case 'task_failed':
-      set((state) => ({
-        isProcessing: false,
-        messages: [
-          ...state.messages,
-          {
-            id: crypto.randomUUID(),
-            type: 'error',
-            content: `Task failed: ${payload.reason || 'Unknown error'}`,
-            timestamp: new Date().toISOString(),
-          },
-        ],
-      }))
+      set({ isProcessing: false })
       notificationService.notifyTaskFailed((payload.reason as string) || 'Unknown error')
-      break
-
-    case 'agent_thinking':
-      set((state) => ({
-        activeAgentId: payload.agent_id as string,
-        messages: [
-          ...state.messages,
-          {
-            id: crypto.randomUUID(),
-            type: 'thinking',
-            content: payload.thought as string,
-            timestamp: new Date().toISOString(),
-            agentId: payload.agent_id as string,
-          },
-        ],
-      }))
-      break
-
-    case 'agent_action':
-      set((state) => ({
-        messages: [
-          ...state.messages,
-          {
-            id: crypto.randomUUID(),
-            type: 'action',
-            content: `${payload.agent_name}: ${payload.action}`,
-            timestamp: new Date().toISOString(),
-            agentId: payload.agent_id as string,
-          },
-        ],
-      }))
       break
 
     case 'state_update': {
@@ -135,27 +73,14 @@ export function handleMessage(
       }
       set({
         tasks: transformedTasks,
-        agents: (payload.agents as Record<string, Agent>) || {},
         currentTaskId: payload.current_task_id as string | null,
-        activeAgentId: payload.active_agent_id as string | null,
       })
       break
     }
 
     case 'error':
       console.error('[WS] Server error:', payload)
-      set((state) => ({
-        isProcessing: false,
-        messages: [
-          ...state.messages,
-          {
-            id: crypto.randomUUID(),
-            type: 'error',
-            content: payload.message as string,
-            timestamp: new Date().toISOString(),
-          },
-        ],
-      }))
+      set({ isProcessing: false })
       notificationService.notifyTaskFailed(payload.message as string || 'Server error')
       break
 
@@ -180,15 +105,6 @@ export function handleMessage(
           },
         },
         waitingForApproval: true,
-        messages: [
-          ...state.messages,
-          {
-            id: crypto.randomUUID(),
-            type: 'warning',
-            content: `Approval required: ${payload.risk_description}`,
-            timestamp: new Date().toISOString(),
-          },
-        ],
       }))
       notificationService.notifyApprovalRequired(payload.risk_description as string)
       break
@@ -203,15 +119,6 @@ export function handleMessage(
           },
         },
         waitingForApproval: false,
-        messages: [
-          ...state.messages,
-          {
-            id: crypto.randomUUID(),
-            type: 'system',
-            content: 'Operation approved, resuming execution',
-            timestamp: new Date().toISOString(),
-          },
-        ],
       }))
       break
 
@@ -226,15 +133,6 @@ export function handleMessage(
         },
         waitingForApproval: false,
         isProcessing: false,
-        messages: [
-          ...state.messages,
-          {
-            id: crypto.randomUUID(),
-            type: 'error',
-            content: `Operation denied: ${payload.note || 'No reason provided'}`,
-            timestamp: new Date().toISOString(),
-          },
-        ],
       }))
       break
 
