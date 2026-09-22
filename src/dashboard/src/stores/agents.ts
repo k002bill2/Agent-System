@@ -1,7 +1,7 @@
 /**
- * Agent Registry Store
+ * Task Analyzer Store
  *
- * 등록된 에이전트 목록, 상태, 통계를 관리합니다.
+ * 태스크 분석 결과, 분석 히스토리, 실행 상태, 첨부 파일(이미지/MD)을 관리합니다.
  */
 
 import { create } from 'zustand'
@@ -11,45 +11,6 @@ import { useSettingsStore, TERMINAL_DISPLAY_NAMES } from './settings'
 const TASK_ANALYZER_TIMEOUT_MS = 180_000
 
 // Types
-export type AgentCategory = 'development' | 'orchestration' | 'quality' | 'research'
-export type AgentStatus = 'available' | 'busy' | 'unavailable' | 'error'
-
-export interface AgentCapability {
-  name: string
-  description: string
-  keywords: string[]
-  priority: number
-}
-
-export interface Agent {
-  id: string
-  name: string
-  description: string
-  category: AgentCategory
-  status: AgentStatus
-  capabilities: AgentCapability[]
-  specializations: string[]
-  estimated_cost_per_task: number
-  avg_execution_time_ms: number
-  total_tasks_completed: number
-  success_rate: number
-  is_available: boolean
-}
-
-export interface AgentRegistryStats {
-  total_agents: number
-  available_agents: number
-  busy_agents: number
-  by_category: Record<string, number>
-  total_tasks_completed: number
-  avg_success_rate: number
-}
-
-export interface AgentSearchResult {
-  agent: Agent
-  score: number
-}
-
 export interface TaskAnalysisResult {
   success: boolean
   analysis?: {
@@ -99,9 +60,6 @@ export interface TaskAnalysisHistory {
 
 interface AgentsState {
   // Data
-  agents: Agent[]
-  stats: AgentRegistryStats | null
-  searchResults: AgentSearchResult[]
   lastAnalysis: TaskAnalysisResult | null
 
   // History Data
@@ -120,8 +78,6 @@ interface AgentsState {
   // UI State
   isLoading: boolean
   error: string | null
-  selectedAgentId: string | null
-  categoryFilter: AgentCategory | null
 
   // Image state
   attachedImages: File[]
@@ -134,12 +90,7 @@ interface AgentsState {
   mdReadStatuses: Record<string, 'reading' | 'done' | 'error'>
 
   // Actions
-  fetchAgents: (category?: AgentCategory, availableOnly?: boolean) => Promise<void>
-  fetchStats: () => Promise<void>
-  searchAgents: (query: string, category?: AgentCategory) => Promise<void>
   analyzeTask: (task: string, context?: Record<string, unknown>, images?: File[]) => Promise<TaskAnalysisResult | null>
-  setSelectedAgent: (agentId: string | null) => void
-  setCategoryFilter: (category: AgentCategory | null) => void
   clearError: () => void
   setAttachedImages: (images: File[]) => void
   addAttachedImages: (images: File[]) => void
@@ -301,12 +252,9 @@ function buildClaudePrompt(analysis: TaskAnalysisResult['analysis'], taskInput: 
   return lines.join('\n')
 }
 
-/** 에이전트 레지스트리 및 태스크 분석 상태 관리 스토어. */
+/** 태스크 분석 상태 관리 스토어. */
 export const useAgentsStore = create<AgentsState>((set, get) => ({
   // Initial state
-  agents: [],
-  stats: null,
-  searchResults: [],
   lastAnalysis: null,
 
   // History state
@@ -333,60 +281,8 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
   // UI state
   isLoading: false,
   error: null,
-  selectedAgentId: null,
-  categoryFilter: null,
 
   // Actions
-  fetchAgents: async (category?: AgentCategory, availableOnly: boolean = false) => {
-    set({ isLoading: true, error: null })
-
-    try {
-      const params = new URLSearchParams()
-      if (category) {
-        params.append('category', category)
-      }
-      if (availableOnly) {
-        params.append('available_only', 'true')
-      }
-      const query = params.toString() ? `?${params.toString()}` : ''
-
-      const agents = await apiClient.get<Agent[]>(`/api/agents${query}`)
-      set({ agents, isLoading: false })
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to fetch agents',
-        isLoading: false,
-      })
-    }
-  },
-
-  fetchStats: async () => {
-    try {
-      const stats = await apiClient.get<AgentRegistryStats>('/api/agents/stats')
-      set({ stats })
-    } catch (error) {
-      console.error('Failed to fetch agent stats:', error)
-    }
-  },
-
-  searchAgents: async (query: string, category?: AgentCategory) => {
-    set({ isLoading: true, error: null })
-
-    try {
-      const results = await apiClient.post<AgentSearchResult[]>('/api/agents/search', {
-        query,
-        category: category || null,
-        limit: 10,
-      })
-      set({ searchResults: results, isLoading: false })
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to search agents',
-        isLoading: false,
-      })
-    }
-  },
-
   analyzeTask: async (task: string, context?: Record<string, unknown>, images?: File[]) => {
     set({ isLoading: true, error: null })
 
@@ -439,16 +335,6 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
       })
       return null
     }
-  },
-
-  setSelectedAgent: (agentId: string | null) => {
-    set({ selectedAgentId: agentId })
-  },
-
-  setCategoryFilter: (category: AgentCategory | null) => {
-    set({ categoryFilter: category })
-    // 필터 변경 시 다시 fetch
-    get().fetchAgents(category || undefined)
   },
 
   clearError: () => {
