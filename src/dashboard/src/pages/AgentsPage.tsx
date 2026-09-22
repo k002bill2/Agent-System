@@ -11,15 +11,13 @@ import { cn } from '../lib/utils'
 import { ProjectFilter } from '../components/ProjectFilter'
 import { TaskAnalyzer } from '../components/TaskAnalyzer'
 import { FeedbackHistoryPanel, DatasetPanel } from '../components/feedback'
-import { AgentRealtimeStatusBoard } from '../components/monitor'
 import { useFeedbackStore } from '../stores/feedback'
 import {
   Sparkles,
   MessageSquare,
-  Activity,
 } from 'lucide-react'
 
-type TabType = 'analyzer' | 'feedback' | 'status'
+type TabType = 'analyzer' | 'feedback'
 
 export function AgentsPage() {
   const projectFilter = useNavigationStore(s => s.projectFilter)
@@ -48,7 +46,6 @@ export function AgentsPage() {
   const tabs = [
     { id: 'analyzer' as const, label: 'Task Analyzer', icon: Sparkles },
     { id: 'feedback' as const, label: 'Feedback', icon: MessageSquare, count: pendingFeedbackCount || undefined },
-    { id: 'status' as const, label: 'Agent Status', icon: Activity },
   ]
 
   return (
@@ -99,12 +96,6 @@ export function AgentsPage() {
             projectFilter={projectFilter}
             selectedProject={selectedProject}
           />
-        </div>
-      )}
-
-      {activeTab === 'status' && (
-        <div className="flex-1 overflow-y-auto">
-          <AgentRealtimeStatusBoard />
         </div>
       )}
     </div>
