@@ -106,6 +106,9 @@ export const agentService = {
    *
    * Returns a bare array — `GET /api/agents` is declared
    * `response_model=list[AgentResponse]` and has no pagination envelope.
+   *
+   * 프로덕션 소비처는 없으나, 위 응답 형태(맨 배열) 계약의 회귀 방지 테스트가
+   * 이것뿐이므로 유지한다. 지우면 백엔드가 형태를 바꿔도 아무도 잡지 못한다.
    */
   getAgents(params?: AgentQueryParams): Promise<Agent[]> {
     const qs = toQueryString(params as Record<string, string | number | boolean | undefined>)
