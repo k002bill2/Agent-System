@@ -83,9 +83,6 @@ function resetStore() {
     tasks: {},
     rootTaskId: null,
     currentTaskId: null,
-    agents: {},
-    activeAgentId: null,
-    messages: [],
     isProcessing: false,
     pendingApprovals: {},
     waitingForApproval: false,
@@ -279,32 +276,6 @@ describe('orchestration store', () => {
     })
   })
 
-  // ── sendMessage ────────────────────────────────────────
-
-  describe('sendMessage', () => {
-    it('does nothing without ws', () => {
-      useOrchestrationStore.getState().sendMessage('hello')
-
-      expect(useOrchestrationStore.getState().isProcessing).toBe(false)
-    })
-
-    it('sends message via ws and adds to history', () => {
-      const mockWs = { send: vi.fn(), readyState: 1 }
-      useOrchestrationStore.setState({ ws: mockWs as any, sessionId: 'sess-1' })
-
-      useOrchestrationStore.getState().sendMessage('hello world')
-
-      expect(mockWs.send).toHaveBeenCalledTimes(1)
-      const sent = JSON.parse(mockWs.send.mock.calls[0][0])
-      expect(sent.type).toBe('task_create')
-      expect(sent.payload.description).toBe('hello world')
-      expect(sent.session_id).toBe('sess-1')
-      expect(useOrchestrationStore.getState().isProcessing).toBe(true)
-      expect(useOrchestrationStore.getState().messages).toHaveLength(1)
-      expect(useOrchestrationStore.getState().messages[0].type).toBe('user')
-    })
-  })
-
   // ── cancelTask ─────────────────────────────────────────
 
   describe('cancelTask', () => {
@@ -389,7 +360,6 @@ describe('orchestration store', () => {
         sessionId: 'sess-1',
         connected: true,
         tasks: { t1: {} as any },
-        messages: [{ id: '1' } as any],
         reconnectTimer: mockTimer,
         heartbeatTimer: mockHB,
       })
@@ -402,7 +372,6 @@ describe('orchestration store', () => {
       expect(state.connected).toBe(false)
       expect(state.ws).toBeNull()
       expect(state.tasks).toEqual({})
-      expect(state.messages).toEqual([])
       expect(state.connectionStatus).toBe('disconnected')
     })
   })
@@ -995,12 +964,15 @@ describe('orchestration store', () => {
 
       const ws = await connectAndOpen('sess-msg')
 
-      // Simulate receiving a task_started message
-      ws.onmessage!({ data: JSON.stringify({ type: 'task_started', payload: {} }) } as any)
+      // Simulate receiving a state_update message
+      ws.onmessage!({ data: JSON.stringify({
+        type: 'state_update',
+        payload: { tasks: { t1: { id: 't1', title: 'Wired', status: 'pending' } }, current_task_id: 't1' },
+      }) } as any)
 
-      const messages = useOrchestrationStore.getState().messages
-      expect(messages.length).toBeGreaterThanOrEqual(1)
-      expect(messages.some((m: any) => m.content === 'Task started')).toBe(true)
+      const state = useOrchestrationStore.getState()
+      expect(state.tasks['t1'].title).toBe('Wired')
+      expect(state.currentTaskId).toBe('t1')
     })
 
     it('handles invalid JSON in WebSocket message', async () => {
@@ -1185,7 +1157,6 @@ describe('orchestration store', () => {
           },
         },
         root_task_id: 't1',
-        agents: { a1: { id: 'a1', name: 'Agent', role: 'lead', status: 'completed', currentTask: null } },
         pending_approvals: {},
         waiting_for_approval: false,
         token_usage: { Agent: { total_input_tokens: 100, total_output_tokens: 50, total_tokens: 150, total_cost_usd: 0.01, call_count: 1 } },
@@ -1204,7 +1175,6 @@ describe('orchestration store', () => {
       expect(stateBeforeOpen.tasks['t1']).toBeDefined()
       expect(stateBeforeOpen.tasks['t1'].title).toBe('Task 1')
       expect(stateBeforeOpen.tasks['t1'].parentId).toBeNull()
-      expect(stateBeforeOpen.agents).toEqual(syncData.agents)
       expect(stateBeforeOpen.tokenUsage).toEqual(syncData.token_usage)
       expect(stateBeforeOpen.totalCost).toBe(0.01)
 
@@ -1258,7 +1228,6 @@ describe('orchestration store', () => {
         session_info: null,
         tasks: {},
         root_task_id: null,
-        agents: {},
         pending_approvals: {},
         waiting_for_approval: false,
         token_usage: {},
@@ -1284,7 +1253,6 @@ describe('orchestration store', () => {
         session_info: null,
         tasks: {},
         root_task_id: null,
-        agents: {},
         pending_approvals: {},
         waiting_for_approval: false,
         token_usage: {},
@@ -1308,7 +1276,6 @@ describe('orchestration store', () => {
         session_info: null,
         tasks: {},
         root_task_id: null,
-        agents: {},
         pending_approvals: {},
         waiting_for_approval: false,
         token_usage: {},
@@ -1321,11 +1288,12 @@ describe('orchestration store', () => {
       ws.onopen!(new Event('open'))
 
       // Send a message through the reconnected WebSocket
-      ws.onmessage!({ data: JSON.stringify({ type: 'task_started', payload: {} }) } as any)
+      ws.onmessage!({ data: JSON.stringify({
+        type: 'state_update',
+        payload: { tasks: { t1: { id: 't1', title: 'Reconnected', status: 'pending' } }, current_task_id: 't1' },
+      }) } as any)
 
-      expect(useOrchestrationStore.getState().messages.some(
-        (m: any) => m.content === 'Task started'
-      )).toBe(true)
+      expect(useOrchestrationStore.getState().tasks['t1'].title).toBe('Reconnected')
     })
 
     it('handles invalid JSON in reconnect WebSocket message', async () => {
@@ -1336,7 +1304,6 @@ describe('orchestration store', () => {
         session_info: null,
         tasks: {},
         root_task_id: null,
-        agents: {},
         pending_approvals: {},
         waiting_for_approval: false,
         token_usage: {},
@@ -1375,30 +1342,25 @@ describe('orchestration store', () => {
       return ws
     }
 
-    function sendMessage(ws: MockWebSocket, messageData: any) {
+    function deliver(ws: MockWebSocket, messageData: any) {
       ws.onmessage!({ data: JSON.stringify(messageData) } as any)
     }
 
-    it('handles task_started message', async () => {
-      const ws = await connectAndGetWs()
-      sendMessage(ws, { type: 'task_started', payload: {} })
-
-      const messages = useOrchestrationStore.getState().messages
-      expect(messages.some((m: any) => m.content === 'Task started' && m.type === 'system')).toBe(true)
-    })
-
     it('handles task_progress message (no-op)', async () => {
       const ws = await connectAndGetWs()
-      sendMessage(ws, { type: 'task_progress', payload: {} })
+      useOrchestrationStore.setState({ isProcessing: true })
 
-      const messages = useOrchestrationStore.getState().messages
-      expect(messages.every((m: any) => m.content !== 'Task progress')).toBe(true)
+      deliver(ws, { type: 'task_progress', payload: {} })
+
+      const state = useOrchestrationStore.getState()
+      expect(state.tasks).toEqual({})
+      expect(state.isProcessing).toBe(true)
     })
 
     it('handles task_completed message', async () => {
       useOrchestrationStore.setState({ isProcessing: true })
       const ws = await connectAndGetWs()
-      sendMessage(ws, {
+      deliver(ws, {
         type: 'task_completed',
         payload: { root_task_id: 'root-1', title: 'My Task' },
       })
@@ -1406,7 +1368,6 @@ describe('orchestration store', () => {
       const state = useOrchestrationStore.getState()
       expect(state.isProcessing).toBe(false)
       expect(state.rootTaskId).toBe('root-1')
-      expect(state.messages.some((m: any) => m.content === 'Task completed')).toBe(true)
 
       const { notificationService } = await import('../../services/notificationService')
       expect(notificationService.notifyTaskCompleted).toHaveBeenCalledWith('My Task')
@@ -1414,7 +1375,7 @@ describe('orchestration store', () => {
 
     it('handles task_completed with fallback title', async () => {
       const ws = await connectAndGetWs()
-      sendMessage(ws, {
+      deliver(ws, {
         type: 'task_completed',
         payload: { root_task_id: null },
       })
@@ -1426,14 +1387,13 @@ describe('orchestration store', () => {
     it('handles task_failed message', async () => {
       useOrchestrationStore.setState({ isProcessing: true })
       const ws = await connectAndGetWs()
-      sendMessage(ws, {
+      deliver(ws, {
         type: 'task_failed',
         payload: { reason: 'Timeout error' },
       })
 
       const state = useOrchestrationStore.getState()
       expect(state.isProcessing).toBe(false)
-      expect(state.messages.some((m: any) => m.content.includes('Timeout error'))).toBe(true)
 
       const { notificationService } = await import('../../services/notificationService')
       expect(notificationService.notifyTaskFailed).toHaveBeenCalledWith('Timeout error')
@@ -1441,42 +1401,15 @@ describe('orchestration store', () => {
 
     it('handles task_failed with no reason', async () => {
       const ws = await connectAndGetWs()
-      sendMessage(ws, { type: 'task_failed', payload: {} })
+      deliver(ws, { type: 'task_failed', payload: {} })
 
-      const state = useOrchestrationStore.getState()
-      expect(state.messages.some((m: any) => m.content.includes('Unknown error'))).toBe(true)
-    })
-
-    it('handles agent_thinking message', async () => {
-      const ws = await connectAndGetWs()
-      sendMessage(ws, {
-        type: 'agent_thinking',
-        payload: { agent_id: 'a1', thought: 'Analyzing task...' },
-      })
-
-      const state = useOrchestrationStore.getState()
-      expect(state.activeAgentId).toBe('a1')
-      expect(state.messages.some((m: any) =>
-        m.type === 'thinking' && m.content === 'Analyzing task...' && m.agentId === 'a1'
-      )).toBe(true)
-    })
-
-    it('handles agent_action message', async () => {
-      const ws = await connectAndGetWs()
-      sendMessage(ws, {
-        type: 'agent_action',
-        payload: { agent_id: 'a1', agent_name: 'Coder', action: 'Writing code' },
-      })
-
-      const state = useOrchestrationStore.getState()
-      expect(state.messages.some((m: any) =>
-        m.type === 'action' && m.content === 'Coder: Writing code' && m.agentId === 'a1'
-      )).toBe(true)
+      const { notificationService } = await import('../../services/notificationService')
+      expect(notificationService.notifyTaskFailed).toHaveBeenCalledWith('Unknown error')
     })
 
     it('handles state_update message with task transformation', async () => {
       const ws = await connectAndGetWs()
-      sendMessage(ws, {
+      deliver(ws, {
         type: 'state_update',
         payload: {
           tasks: {
@@ -1505,9 +1438,7 @@ describe('orchestration store', () => {
               updated_at: '2025-01-01',
             },
           },
-          agents: { a1: { id: 'a1', name: 'Lead', role: 'lead', status: 'in_progress', currentTask: 't1' } },
           current_task_id: 't1',
-          active_agent_id: 'a1',
         },
       })
 
@@ -1518,12 +1449,11 @@ describe('orchestration store', () => {
       expect(state.tasks['t1'].isDeleted).toBe(false)
       expect(state.tasks['t2'].parentId).toBe('t1')
       expect(state.currentTaskId).toBe('t1')
-      expect(state.activeAgentId).toBe('a1')
     })
 
     it('handles state_update with camelCase task fields', async () => {
       const ws = await connectAndGetWs()
-      sendMessage(ws, {
+      deliver(ws, {
         type: 'state_update',
         payload: {
           tasks: {
@@ -1543,7 +1473,6 @@ describe('orchestration store', () => {
             },
           },
           current_task_id: null,
-          active_agent_id: null,
         },
       })
 
@@ -1557,33 +1486,29 @@ describe('orchestration store', () => {
 
     it('handles state_update with empty tasks', async () => {
       const ws = await connectAndGetWs()
-      sendMessage(ws, {
+      deliver(ws, {
         type: 'state_update',
         payload: {
           current_task_id: null,
-          active_agent_id: null,
         },
       })
 
       const state = useOrchestrationStore.getState()
       expect(state.tasks).toEqual({})
-      expect(state.agents).toEqual({})
+      expect(state.currentTaskId).toBeNull()
     })
 
     it('handles error message', async () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       useOrchestrationStore.setState({ isProcessing: true })
       const ws = await connectAndGetWs()
-      sendMessage(ws, {
+      deliver(ws, {
         type: 'error',
         payload: { message: 'Internal server error' },
       })
 
       const state = useOrchestrationStore.getState()
       expect(state.isProcessing).toBe(false)
-      expect(state.messages.some((m: any) =>
-        m.type === 'error' && m.content === 'Internal server error'
-      )).toBe(true)
 
       const { notificationService } = await import('../../services/notificationService')
       expect(notificationService.notifyTaskFailed).toHaveBeenCalledWith('Internal server error')
@@ -1593,7 +1518,7 @@ describe('orchestration store', () => {
     it('handles error message with fallback', async () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       const ws = await connectAndGetWs()
-      sendMessage(ws, { type: 'error', payload: {} })
+      deliver(ws, { type: 'error', payload: {} })
 
       const { notificationService } = await import('../../services/notificationService')
       expect(notificationService.notifyTaskFailed).toHaveBeenCalled()
@@ -1602,16 +1527,18 @@ describe('orchestration store', () => {
 
     it('handles pong message (no-op)', async () => {
       const ws = await connectAndGetWs()
-      const messagesBefore = useOrchestrationStore.getState().messages.length
-      sendMessage(ws, { type: 'pong', payload: {} })
+      useOrchestrationStore.setState({ isProcessing: true })
 
-      const messagesAfter = useOrchestrationStore.getState().messages
-      expect(messagesAfter.length).toBe(messagesBefore)
+      deliver(ws, { type: 'pong', payload: {} })
+
+      const state = useOrchestrationStore.getState()
+      expect(state.tasks).toEqual({})
+      expect(state.isProcessing).toBe(true)
     })
 
     it('handles approval_required message', async () => {
       const ws = await connectAndGetWs()
-      sendMessage(ws, {
+      deliver(ws, {
         type: 'approval_required',
         payload: {
           approval_id: 'ap-1',
@@ -1631,9 +1558,6 @@ describe('orchestration store', () => {
       expect(state.pendingApprovals['ap-1'].risk_level).toBe('high')
       expect(state.pendingApprovals['ap-1'].status).toBe('pending')
       expect(state.waitingForApproval).toBe(true)
-      expect(state.messages.some((m: any) =>
-        m.type === 'warning' && m.content.includes('Deleting important file')
-      )).toBe(true)
 
       const { notificationService } = await import('../../services/notificationService')
       expect(notificationService.notifyApprovalRequired).toHaveBeenCalledWith('Deleting important file')
@@ -1648,7 +1572,7 @@ describe('orchestration store', () => {
       })
 
       const ws = await connectAndGetWs()
-      sendMessage(ws, {
+      deliver(ws, {
         type: 'approval_granted',
         payload: { approval_id: 'ap-1' },
       })
@@ -1656,9 +1580,6 @@ describe('orchestration store', () => {
       const state = useOrchestrationStore.getState()
       expect(state.pendingApprovals['ap-1'].status).toBe('approved')
       expect(state.waitingForApproval).toBe(false)
-      expect(state.messages.some((m: any) =>
-        m.content === 'Operation approved, resuming execution'
-      )).toBe(true)
     })
 
     it('handles approval_denied message', async () => {
@@ -1671,7 +1592,7 @@ describe('orchestration store', () => {
       })
 
       const ws = await connectAndGetWs()
-      sendMessage(ws, {
+      deliver(ws, {
         type: 'approval_denied',
         payload: { approval_id: 'ap-2', note: 'Too risky' },
       })
@@ -1680,34 +1601,11 @@ describe('orchestration store', () => {
       expect(state.pendingApprovals['ap-2'].status).toBe('denied')
       expect(state.waitingForApproval).toBe(false)
       expect(state.isProcessing).toBe(false)
-      expect(state.messages.some((m: any) =>
-        m.type === 'error' && m.content.includes('Too risky')
-      )).toBe(true)
-    })
-
-    it('handles approval_denied with no note', async () => {
-      useOrchestrationStore.setState({
-        pendingApprovals: {
-          'ap-3': { approval_id: 'ap-3', status: 'pending' } as any,
-        },
-        waitingForApproval: true,
-      })
-
-      const ws = await connectAndGetWs()
-      sendMessage(ws, {
-        type: 'approval_denied',
-        payload: { approval_id: 'ap-3' },
-      })
-
-      const state = useOrchestrationStore.getState()
-      expect(state.messages.some((m: any) =>
-        m.content.includes('No reason provided')
-      )).toBe(true)
     })
 
     it('handles token_update message', async () => {
       const ws = await connectAndGetWs()
-      sendMessage(ws, {
+      deliver(ws, {
         type: 'token_update',
         payload: {
           agent_name: 'Coder',
@@ -1764,7 +1662,7 @@ describe('orchestration store', () => {
       })
 
       const ws = await connectAndGetWs()
-      sendMessage(ws, {
+      deliver(ws, {
         type: 'token_update',
         payload: {
           agent_name: 'Coder',
@@ -1789,7 +1687,7 @@ describe('orchestration store', () => {
 
     it('handles token_update with empty model string', async () => {
       const ws = await connectAndGetWs()
-      sendMessage(ws, {
+      deliver(ws, {
         type: 'token_update',
         payload: {
           agent_name: 'Agent',
@@ -1813,7 +1711,7 @@ describe('orchestration store', () => {
       const ws = await connectAndGetWs()
 
       // Claude model
-      sendMessage(ws, {
+      deliver(ws, {
         type: 'token_update',
         payload: {
           agent_name: 'Writer',
@@ -1834,38 +1732,15 @@ describe('orchestration store', () => {
 
     it('handles unknown message type gracefully', async () => {
       const ws = await connectAndGetWs()
-      const messagesBefore = useOrchestrationStore.getState().messages.length
+      useOrchestrationStore.setState({ isProcessing: true })
 
       // Should not throw
-      sendMessage(ws, { type: 'some_unknown_type', payload: {} })
+      deliver(ws, { type: 'some_unknown_type', payload: {} })
 
-      // No crash, no new messages
-      expect(useOrchestrationStore.getState().messages.length).toBe(messagesBefore)
-    })
-  })
-
-  // ── sendMessage (additional) ────────────────────────────
-
-  describe('sendMessage (additional)', () => {
-    it('does nothing without sessionId even if ws exists', () => {
-      const mockWs = { send: vi.fn() }
-      useOrchestrationStore.setState({ ws: mockWs as any, sessionId: null })
-
-      useOrchestrationStore.getState().sendMessage('hello')
-
-      expect(mockWs.send).not.toHaveBeenCalled()
-    })
-
-    it('truncates title to 50 chars', () => {
-      const mockWs = { send: vi.fn() }
-      useOrchestrationStore.setState({ ws: mockWs as any, sessionId: 'sess-1' })
-      const longMessage = 'A'.repeat(100)
-
-      useOrchestrationStore.getState().sendMessage(longMessage)
-
-      const sent = JSON.parse(mockWs.send.mock.calls[0][0])
-      expect(sent.payload.title).toHaveLength(50)
-      expect(sent.payload.description).toHaveLength(100)
+      // No crash, no state touched
+      const state = useOrchestrationStore.getState()
+      expect(state.tasks).toEqual({})
+      expect(state.isProcessing).toBe(true)
     })
   })
 

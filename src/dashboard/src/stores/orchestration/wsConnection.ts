@@ -17,7 +17,6 @@ interface SessionSyncResponse {
   session_info: OrchestrationState['sessionInfo']
   tasks?: Record<string, unknown>
   root_task_id: OrchestrationState['rootTaskId']
-  agents?: OrchestrationState['agents']
   pending_approvals?: OrchestrationState['pendingApprovals']
   waiting_for_approval?: boolean
   token_usage?: OrchestrationState['tokenUsage']
@@ -205,7 +204,6 @@ export async function reconnectWebSocket(set: SetFn, get: GetFn) {
       sessionInfo: syncData.session_info,
       tasks: serverTasks,
       rootTaskId: syncData.root_task_id,
-      agents: syncData.agents || {},
       pendingApprovals: syncData.pending_approvals || {},
       waitingForApproval: syncData.waiting_for_approval || false,
       tokenUsage: syncData.token_usage || {},
@@ -222,13 +220,11 @@ export async function reconnectWebSocket(set: SetFn, get: GetFn) {
         sessionInfo: null,
         tasks: {},
         rootTaskId: null,
-        agents: {},
         pendingApprovals: {},
         waitingForApproval: false,
         tokenUsage: {},
         providerUsage: {} as Record<LLMProvider, ProviderUsage>,
         totalCost: 0,
-        messages: [],
         reconnectAttempt: 0,
         connectionStatus: 'disconnected',
         isInitialLoading: false,
@@ -317,9 +313,6 @@ export function clearSessionData(set: SetFn, get: GetFn) {
     tasks: {},
     rootTaskId: null,
     currentTaskId: null,
-    agents: {},
-    activeAgentId: null,
-    messages: [],
     isProcessing: false,
     pendingApprovals: {},
     waitingForApproval: false,

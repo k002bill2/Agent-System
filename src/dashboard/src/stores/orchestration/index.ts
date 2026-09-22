@@ -13,8 +13,6 @@ export type {
   ConnectionStatus,
   Project,
   Task,
-  Agent,
-  Message,
   ApprovalRequest,
   TokenUsage,
   LLMProvider,
@@ -50,9 +48,6 @@ export const useOrchestrationStore = create<OrchestrationState>()(
   tasks: {},
   rootTaskId: null,
   currentTaskId: null,
-  agents: {},
-  activeAgentId: null,
-  messages: [],
   isProcessing: false,
   pendingApprovals: {},
   waitingForApproval: false,
@@ -136,38 +131,6 @@ export const useOrchestrationStore = create<OrchestrationState>()(
       console.error('[Session] Refresh error:', e)
       return false
     }
-  },
-
-  // Send message
-  sendMessage: (content: string) => {
-    const { ws, sessionId } = get()
-    if (!ws || !sessionId) return
-
-    const message = {
-      type: 'task_create',
-      payload: {
-        title: content.slice(0, 50),
-        description: content,
-      },
-      session_id: sessionId,
-      timestamp: new Date().toISOString(),
-    }
-
-    ws.send(JSON.stringify(message))
-    set({ isProcessing: true })
-
-    // Add user message to history
-    set((state) => ({
-      messages: [
-        ...state.messages,
-        {
-          id: crypto.randomUUID(),
-          type: 'user',
-          content,
-          timestamp: new Date().toISOString(),
-        },
-      ],
-    }))
   },
 
   // Cancel current task
@@ -498,8 +461,6 @@ export const useOrchestrationStore = create<OrchestrationState>()(
         selectedProjectId: state.selectedProjectId,
         tasks: state.tasks,
         rootTaskId: state.rootTaskId,
-        agents: state.agents,
-        messages: state.messages,
         pendingApprovals: state.pendingApprovals,
         tokenUsage: state.tokenUsage,
         providerUsage: state.providerUsage,
