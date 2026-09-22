@@ -308,7 +308,7 @@ describe('settings store', () => {
           'claude-sonnet-5',
           'codex-cli',
           'exaone3.5:7.8b',
-          'gemini-3.7-flash',
+          'gemini-3.8-flash',
           'gpt-5.6',
         ].sort()
       )

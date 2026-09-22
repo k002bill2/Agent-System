@@ -109,12 +109,6 @@ class TestCurrentModelRefreshEntries:
             ("claude-fable-5-1", LLMProvider.ANTHROPIC, 1_000_000, 0.010, 0.050),
             # 예고된 인상(2027-01-01)이 있어 단가를 날짜에서 유도한다 — 박아 두면
             # 발효일에 이 테스트가 별도로 깨져 갱신 후에도 초록이 되지 않는다.
-            (
-                "gemini-3.8-flash",
-                LLMProvider.GOOGLE,
-                1_048_576,
-                *_expected_gemini_flash_price(datetime.now(UTC).date()),
-            ),
             ("gpt-6-astra", LLMProvider.OPENAI, 1_050_000, 0.010, 0.050),
         ],
     )
@@ -132,9 +126,15 @@ class TestCurrentModelRefreshEntries:
         assert model.supports_tools is True
         assert model.supports_vision is True
 
-    def test_existing_provider_defaults_are_not_promoted_without_smoke(self):
+    def test_provider_defaults_are_only_smoke_verified_models(self):
+        """승격의 관문은 live smoke 다 (PLANS/MODEL_POLICY_GUARDS_IMPLEMENTATION.md §5).
+
+        google 은 2026-09-22 smoke 통과로 gemini-3.8-flash 승격
+        (generateContent HTTP 200, 응답 modelVersion == "gemini-3.8-flash").
+        anthropic/openai 는 smoke 미수행이라 기존 검증된 기본값을 유지한다.
+        """
         assert LLMModelRegistry.get_default("anthropic") == "claude-sonnet-5"
-        assert LLMModelRegistry.get_default("google") == "gemini-3.7-flash"
+        assert LLMModelRegistry.get_default("google") == "gemini-3.8-flash"
         assert LLMModelRegistry.get_default("openai") == "gpt-5.6"
 
 
@@ -176,6 +176,29 @@ class TestGpt56RegistryEntry:
         assert model.is_default is False
 
 
+class TestGemini38FlashRegistryEntry:
+    """2026-09-22 live smoke 통과 후 google code default 로 승격된 모델."""
+
+    def test_gemini38_flash_exists_with_official_spec(self):
+        model = LLMModelRegistry.get_by_id("gemini-3.8-flash")
+        assert model is not None
+        assert model.provider == LLMProvider.GOOGLE
+        assert model.context_window == 1_048_576
+        expected_in, expected_out = _expected_gemini_flash_price(datetime.now(UTC).date())
+        assert model.input_price == expected_in
+        assert model.output_price == expected_out
+        assert model.supports_tools is True
+        assert model.supports_vision is True
+        assert model.is_enabled is True
+
+    def test_gemini38_flash_is_google_code_default(self):
+        assert LLMModelRegistry.get_default("google") == "gemini-3.8-flash"
+
+    def test_google_has_exactly_one_code_default(self):
+        defaults = [m.id for m in _MODELS if m.provider == LLMProvider.GOOGLE and m.is_default]
+        assert defaults == ["gemini-3.8-flash"]
+
+
 class TestGemini37FlashRegistryEntry:
     def test_gemini37_flash_exists_with_official_spec(self):
         model = LLMModelRegistry.get_by_id("gemini-3.7-flash")
@@ -189,12 +212,12 @@ class TestGemini37FlashRegistryEntry:
         assert model.supports_vision is True
         assert model.is_enabled is True
 
-    def test_gemini37_flash_is_google_code_default(self):
-        assert LLMModelRegistry.get_default("google") == "gemini-3.7-flash"
-
-    def test_google_has_exactly_one_code_default(self):
-        defaults = [m.id for m in _MODELS if m.provider == LLMProvider.GOOGLE and m.is_default]
-        assert defaults == ["gemini-3.7-flash"]
+    def test_gemini37_flash_is_retained_as_non_default(self):
+        """3.8 승격 후에도 행을 지우지 않는다 — 이 id 를 참조하는 기존 세션이 있다."""
+        model = LLMModelRegistry.get_by_id("gemini-3.7-flash")
+        assert model is not None
+        assert model.is_enabled is True
+        assert model.is_default is False
 
 
 # ─────────────────────────────────────────────────────────────
