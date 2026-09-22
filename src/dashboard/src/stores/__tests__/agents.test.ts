@@ -41,7 +41,6 @@ describe('agents store', () => {
       selectedHistoryId: null,
       // Execution state
       executingAnalysisId: null,
-      executionSessionId: null,
       executionError: null,
       // Image/OCR state
       attachedImages: [],
@@ -355,39 +354,14 @@ describe('agents store', () => {
 
   // ── Execution Actions ──────────────────────────────────
 
-  describe('executeAnalysis', () => {
-    it('returns session_id on success', async () => {
-      mockApiClient.post.mockResolvedValueOnce({ success: true, session_id: 'sess-1' })
-      const result = await useAgentsStore.getState().executeAnalysis('analysis-1')
-      expect(result).toBe('sess-1')
-      expect(useAgentsStore.getState().executionSessionId).toBe('sess-1')
-    })
-
-    it('returns null when success=false', async () => {
-      mockApiClient.post.mockResolvedValueOnce({ success: false, error: 'Execution failed' })
-      const result = await useAgentsStore.getState().executeAnalysis('analysis-1')
-      expect(result).toBeNull()
-      expect(useAgentsStore.getState().executionError).toBe('Execution failed')
-    })
-
-    it('returns null on network error', async () => {
-      mockApiClient.post.mockRejectedValueOnce(new Error('Network error'))
-      const result = await useAgentsStore.getState().executeAnalysis('analysis-1')
-      expect(result).toBeNull()
-      expect(useAgentsStore.getState().executionError).toBe('Network error')
-    })
-  })
-
   describe('clearExecution', () => {
     it('clears execution state', () => {
       useAgentsStore.setState({
         executingAnalysisId: 'a1',
-        executionSessionId: 's1',
         executionError: 'err',
       })
       useAgentsStore.getState().clearExecution()
       expect(useAgentsStore.getState().executingAnalysisId).toBeNull()
-      expect(useAgentsStore.getState().executionSessionId).toBeNull()
       expect(useAgentsStore.getState().executionError).toBeNull()
     })
   })
@@ -566,60 +540,6 @@ describe('agents store', () => {
 
       expect(result).toBeNull()
       expect(consoleSpy).toHaveBeenCalledWith('OCR request failed:', expect.any(Error))
-    })
-  })
-
-  // ── executeAnalysis - additional branches ─────────────
-
-  describe('executeAnalysis - additional branches', () => {
-    it('sets executingAnalysisId on start', async () => {
-      let resolvePromise: (v: unknown) => void
-      mockApiClient.post.mockReturnValueOnce(
-        new Promise((resolve) => {
-          resolvePromise = resolve
-        })
-      )
-
-      const promise = useAgentsStore.getState().executeAnalysis('a-1')
-      expect(useAgentsStore.getState().executingAnalysisId).toBe('a-1')
-      resolvePromise!({ success: true, session_id: 'sess-1' })
-      await promise
-    })
-
-    it('passes projectId in request body', async () => {
-      mockApiClient.post.mockResolvedValueOnce({ success: true, session_id: 'sess-1' })
-
-      await useAgentsStore.getState().executeAnalysis('a-1', 'proj-5')
-
-      const body = mockApiClient.post.mock.calls[0][1] as Record<string, unknown>
-      expect(body.project_id).toBe('proj-5')
-    })
-
-    it('sends null project_id when not provided', async () => {
-      mockApiClient.post.mockResolvedValueOnce({ success: true, session_id: 'sess-1' })
-
-      await useAgentsStore.getState().executeAnalysis('a-1')
-
-      const body = mockApiClient.post.mock.calls[0][1] as Record<string, unknown>
-      expect(body.project_id).toBeNull()
-    })
-
-    it('handles non-Error thrown objects in catch', async () => {
-      mockApiClient.post.mockRejectedValueOnce('string error')
-
-      const result = await useAgentsStore.getState().executeAnalysis('a-1')
-
-      expect(result).toBeNull()
-      expect(useAgentsStore.getState().executionError).toBe('Failed to execute analysis')
-    })
-
-    it('uses fallback error message when success is false without error', async () => {
-      mockApiClient.post.mockResolvedValueOnce({ success: false })
-
-      const result = await useAgentsStore.getState().executeAnalysis('a-1')
-
-      expect(result).toBeNull()
-      expect(useAgentsStore.getState().executionError).toBe('Execution failed')
     })
   })
 
