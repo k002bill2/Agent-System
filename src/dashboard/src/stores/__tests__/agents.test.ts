@@ -20,47 +20,18 @@ vi.mock('../settings', async (importOriginal) => {
   }
 })
 
-import { useAgentsStore, Agent, AgentRegistryStats, TaskAnalysisHistory, TaskAnalysisResult } from '../agents'
+import { useAgentsStore, TaskAnalysisHistory, TaskAnalysisResult } from '../agents'
 import { apiClient } from '../../services/apiClient'
 
 const mockApiClient = vi.mocked(apiClient)
-
-const mockAgent: Agent = {
-  id: 'agent-1',
-  name: 'Test Agent',
-  description: 'A test agent',
-  category: 'development',
-  status: 'available',
-  capabilities: [{ name: 'Testing', description: 'Test capability', keywords: ['test'], priority: 1 }],
-  specializations: ['React', 'TypeScript'],
-  estimated_cost_per_task: 0.01,
-  avg_execution_time_ms: 1000,
-  total_tasks_completed: 10,
-  success_rate: 0.95,
-  is_available: true,
-}
-
-const mockStats: AgentRegistryStats = {
-  total_agents: 5,
-  available_agents: 3,
-  busy_agents: 2,
-  by_category: { development: 2, orchestration: 2, quality: 1 },
-  total_tasks_completed: 100,
-  avg_success_rate: 0.92,
-}
 
 describe('agents store', () => {
   beforeEach(() => {
     // Reset store - all fields
     useAgentsStore.setState({
-      agents: [],
-      stats: null,
-      searchResults: [],
       lastAnalysis: null,
       isLoading: false,
       error: null,
-      selectedAgentId: null,
-      categoryFilter: null,
       // History state
       analysisHistory: [],
       historyLoading: false,
@@ -85,41 +56,6 @@ describe('agents store', () => {
     vi.restoreAllMocks()
   })
 
-  describe('initial state', () => {
-    it('has empty agents array', () => {
-      expect(useAgentsStore.getState().agents).toEqual([])
-    })
-
-    it('has null stats', () => {
-      expect(useAgentsStore.getState().stats).toBeNull()
-    })
-
-    it('has no selected agent', () => {
-      expect(useAgentsStore.getState().selectedAgentId).toBeNull()
-    })
-
-    it('has no category filter', () => {
-      expect(useAgentsStore.getState().categoryFilter).toBeNull()
-    })
-  })
-
-  describe('setSelectedAgent', () => {
-    it('sets selected agent id', () => {
-      const { setSelectedAgent } = useAgentsStore.getState()
-
-      setSelectedAgent('agent-1')
-      expect(useAgentsStore.getState().selectedAgentId).toBe('agent-1')
-    })
-
-    it('clears selected agent when null', () => {
-      const { setSelectedAgent } = useAgentsStore.getState()
-
-      setSelectedAgent('agent-1')
-      setSelectedAgent(null)
-      expect(useAgentsStore.getState().selectedAgentId).toBeNull()
-    })
-  })
-
   describe('clearError', () => {
     it('clears error state', () => {
       useAgentsStore.setState({ error: 'Some error' })
@@ -128,122 +64,6 @@ describe('agents store', () => {
       clearError()
 
       expect(useAgentsStore.getState().error).toBeNull()
-    })
-  })
-
-  describe('fetchAgents', () => {
-    it('sets loading state during fetch', async () => {
-      let resolvePromise: (v: unknown) => void
-      mockApiClient.get.mockReturnValueOnce(
-        new Promise((resolve) => {
-          resolvePromise = resolve
-        })
-      )
-
-      const { fetchAgents } = useAgentsStore.getState()
-      const promise = fetchAgents()
-
-      expect(useAgentsStore.getState().isLoading).toBe(true)
-
-      resolvePromise!([mockAgent])
-      await promise
-      expect(useAgentsStore.getState().isLoading).toBe(false)
-    })
-
-    it('updates agents on successful fetch', async () => {
-      mockApiClient.get.mockResolvedValueOnce([mockAgent])
-
-      const { fetchAgents } = useAgentsStore.getState()
-      await fetchAgents()
-
-      expect(useAgentsStore.getState().agents).toHaveLength(1)
-      expect(useAgentsStore.getState().agents[0].name).toBe('Test Agent')
-    })
-
-    it('sets error on fetch failure', async () => {
-      mockApiClient.get.mockRejectedValueOnce(new Error('Failed to fetch agents'))
-
-      const { fetchAgents } = useAgentsStore.getState()
-      await fetchAgents()
-
-      expect(useAgentsStore.getState().error).toContain('Failed to fetch agents')
-    })
-
-    it('handles network error', async () => {
-      mockApiClient.get.mockRejectedValueOnce(new Error('Network error'))
-
-      const { fetchAgents } = useAgentsStore.getState()
-      await fetchAgents()
-
-      expect(useAgentsStore.getState().error).toBe('Network error')
-    })
-
-    it('adds category filter to URL', async () => {
-      mockApiClient.get.mockResolvedValueOnce([])
-
-      const { fetchAgents } = useAgentsStore.getState()
-      await fetchAgents('development')
-
-      expect(mockApiClient.get).toHaveBeenCalledWith(
-        expect.stringContaining('category=development')
-      )
-    })
-
-    it('adds available_only filter to URL', async () => {
-      mockApiClient.get.mockResolvedValueOnce([])
-
-      const { fetchAgents } = useAgentsStore.getState()
-      await fetchAgents(undefined, true)
-
-      expect(mockApiClient.get).toHaveBeenCalledWith(
-        expect.stringContaining('available_only=true')
-      )
-    })
-  })
-
-  describe('fetchStats', () => {
-    it('updates stats on successful fetch', async () => {
-      mockApiClient.get.mockResolvedValueOnce(mockStats)
-
-      const { fetchStats } = useAgentsStore.getState()
-      await fetchStats()
-
-      expect(useAgentsStore.getState().stats).toEqual(mockStats)
-    })
-
-    it('logs error on failure', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      mockApiClient.get.mockRejectedValueOnce(new Error('Network error'))
-
-      const { fetchStats } = useAgentsStore.getState()
-      await fetchStats()
-
-      expect(consoleSpy).toHaveBeenCalled()
-    })
-  })
-
-  describe('searchAgents', () => {
-    it('calls apiClient.post with query', async () => {
-      mockApiClient.post.mockResolvedValueOnce([{ agent: mockAgent, score: 0.9 }])
-
-      const { searchAgents } = useAgentsStore.getState()
-      await searchAgents('react developer')
-
-      expect(mockApiClient.post).toHaveBeenCalledWith(
-        expect.stringContaining('/agents/search'),
-        expect.objectContaining({
-          query: 'react developer',
-        })
-      )
-    })
-
-    it('updates searchResults on success', async () => {
-      mockApiClient.post.mockResolvedValueOnce([{ agent: mockAgent, score: 0.9 }])
-
-      const { searchAgents } = useAgentsStore.getState()
-      await searchAgents('test')
-
-      expect(useAgentsStore.getState().searchResults).toHaveLength(1)
     })
   })
 
@@ -307,28 +127,6 @@ describe('agents store', () => {
 
       expect(result).toBeNull()
       expect(useAgentsStore.getState().error).toBe('API error')
-    })
-  })
-
-  describe('setCategoryFilter', () => {
-    it('sets category filter and triggers fetch', async () => {
-      mockApiClient.get.mockResolvedValueOnce([])
-
-      const { setCategoryFilter } = useAgentsStore.getState()
-      await setCategoryFilter('quality')
-
-      expect(useAgentsStore.getState().categoryFilter).toBe('quality')
-    })
-
-    it('clears filter when null', async () => {
-      mockApiClient.get.mockResolvedValueOnce([])
-
-      useAgentsStore.setState({ categoryFilter: 'development' })
-
-      const { setCategoryFilter } = useAgentsStore.getState()
-      await setCategoryFilter(null)
-
-      expect(useAgentsStore.getState().categoryFilter).toBeNull()
     })
   })
 
@@ -595,77 +393,6 @@ describe('agents store', () => {
   })
 
   // ── Additional coverage tests ──────────────────────────
-
-  describe('fetchAgents - additional branches', () => {
-    it('handles non-Error thrown objects in catch', async () => {
-      mockApiClient.get.mockRejectedValueOnce('string error')
-
-      await useAgentsStore.getState().fetchAgents()
-
-      expect(useAgentsStore.getState().error).toBe('Failed to fetch agents')
-      expect(useAgentsStore.getState().isLoading).toBe(false)
-    })
-
-    it('fetches without query params when no filters provided', async () => {
-      mockApiClient.get.mockResolvedValueOnce([])
-
-      await useAgentsStore.getState().fetchAgents()
-
-      expect(mockApiClient.get).toHaveBeenCalledWith('/api/agents')
-    })
-
-    it('combines category and availableOnly params', async () => {
-      mockApiClient.get.mockResolvedValueOnce([])
-
-      await useAgentsStore.getState().fetchAgents('research', true)
-
-      const url = mockApiClient.get.mock.calls[0][0] as string
-      expect(url).toContain('category=research')
-      expect(url).toContain('available_only=true')
-    })
-  })
-
-  describe('fetchStats - additional branches', () => {
-    it('handles error response', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      mockApiClient.get.mockRejectedValueOnce(new Error('Internal Server Error'))
-
-      await useAgentsStore.getState().fetchStats()
-
-      expect(consoleSpy).toHaveBeenCalled()
-      // Stats should remain unchanged (null) on error
-      expect(useAgentsStore.getState().stats).toBeNull()
-    })
-  })
-
-  describe('searchAgents - additional branches', () => {
-    it('handles error on search', async () => {
-      mockApiClient.post.mockRejectedValueOnce(new Error('Failed to search agents'))
-
-      await useAgentsStore.getState().searchAgents('test query')
-
-      expect(useAgentsStore.getState().error).toContain('Failed to search agents')
-      expect(useAgentsStore.getState().isLoading).toBe(false)
-    })
-
-    it('handles non-Error thrown objects in catch', async () => {
-      mockApiClient.post.mockRejectedValueOnce('some string error')
-
-      await useAgentsStore.getState().searchAgents('test query')
-
-      expect(useAgentsStore.getState().error).toBe('Failed to search agents')
-      expect(useAgentsStore.getState().isLoading).toBe(false)
-    })
-
-    it('includes category in search body when provided', async () => {
-      mockApiClient.post.mockResolvedValueOnce([])
-
-      await useAgentsStore.getState().searchAgents('query', 'quality')
-
-      const body = mockApiClient.post.mock.calls[0][1] as Record<string, unknown>
-      expect(body.category).toBe('quality')
-    })
-  })
 
   describe('analyzeTask - additional branches', () => {
     const mockAnalysisResult = {

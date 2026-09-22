@@ -95,9 +95,7 @@ import { cn } from '@/lib/utils';
 | `ChatInput` | 메시지 입력 인터페이스 |
 | `ApprovalModal` | HITL 승인/거부 모달 |
 | `DiffViewer` | 파일 변경 비교 뷰 (Split/Unified) |
-| `AgentCard` | 글로벌 레지스트리 에이전트 카드 (능력, 상태, 통계) |
 | `ProjectAgentCard` | 프로젝트별 에이전트 카드 |
-| `AgentStatsPanel` | 레지스트리 통계 패널 |
 | `TaskAnalyzer` | 태스크 분석 UI |
 | `DataSourceToggle` | 데이터 소스 선택 토글 |
 | `ProjectFilter` | 프로젝트 필터링 UI |
@@ -105,12 +103,6 @@ import { cn } from '@/lib/utils';
 | `ErrorBoundary` | React 에러 바운더리 |
 | `DeleteTaskDialog` | 태스크 삭제 확인 다이얼로그 |
 | `ExecutionProgress` | 워크플로우 실행 진행 트래커 |
-
-### Agents Subdirectory Components
-
-| 컴포넌트 | 경로 | 설명 |
-|----------|------|------|
-| `AgentCard` | `components/agents/` | 에이전트 카드 (이름, 상태 배지, 도구 수, 엔드포인트 표시) |
 
 ### Claude Code Components
 
@@ -479,8 +471,6 @@ src/dashboard/
 │   │   ├── AuthCallbackPage.tsx
 │   │   └── InvitationAcceptPage.tsx
 │   ├── components/             # 상위 직접 파일 (Sidebar, TaskPanel, TaskBoard, AgentPanel, 등)
-│   │   ├── agents/             # 에이전트 서브디렉토리
-│   │   │   └── AgentCard.tsx
 │   │   ├── ui/                 # 공통 UI 컴포넌트
 │   │   ├── common/             # 범용 컴포넌트
 │   │   │   ├── Pagination.tsx
