@@ -21,6 +21,7 @@ class LLMProvider(str, Enum):
 # does not know (e.g. older gemini-1.5/gpt-3.5 ids).
 PROVIDER_CONTEXT_LIMITS = {
     LLMProvider.ANTHROPIC: {
+        "claude-opus-5-5": 1_000_000,
         "claude-opus-4-8": 200_000,
         "claude-sonnet-5": 200_000,
         "claude-sonnet-4-6": 200_000,

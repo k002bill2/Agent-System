@@ -268,6 +268,8 @@ class AnthropicUsageCollector(BaseUsageCollector):
     # the _MODELS registry — a local dict here silently drifted in the past.
     _COST_TABLE: tuple[tuple[str, float, float], ...] = (
         ("claude-fable-5-1", 0.010, 0.050),
+        # Opus 5.5 ($4/$20 per 1M) must precede the legacy claude-opus-5 prefix.
+        ("claude-opus-5-5", 0.004, 0.020),
         ("claude-opus-5", 0.005, 0.025),
         ("claude-sonnet-5", 0.002, 0.010),
         ("claude-opus-4-8", 0.005, 0.025),
