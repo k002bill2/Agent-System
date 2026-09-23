@@ -315,6 +315,13 @@ else:
 
         cleanup_task = asyncio.create_task(schedule_upload_cleanup())
 
+        # Start expired-session sweep (DB mode only — memory mode dies with the process)
+        session_cleanup_task = None
+        if USE_DATABASE:
+            from services.session_service import start_session_cleanup
+
+            session_cleanup_task = start_session_cleanup()
+
         # Start periodic LLM model sync background task
         model_sync_task = None
         if USE_DATABASE:
@@ -394,6 +401,13 @@ else:
             await cleanup_task
         except asyncio.CancelledError:
             pass
+
+        if session_cleanup_task is not None:
+            session_cleanup_task.cancel()
+            try:
+                await session_cleanup_task
+            except asyncio.CancelledError:
+                pass
 
         if model_sync_task is not None:
             model_sync_task.cancel()

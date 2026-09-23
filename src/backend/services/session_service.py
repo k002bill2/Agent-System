@@ -3,6 +3,7 @@
 Provides an abstraction layer over storage (in-memory or database).
 """
 
+import asyncio
 import logging
 import os
 import uuid
@@ -757,3 +758,38 @@ def set_session_service(service: SessionService) -> None:
     """Set the global session service instance."""
     global _session_service
     _session_service = service
+
+
+def start_session_cleanup() -> asyncio.Task[None]:
+    """만료 세션 sweep 태스크를 띄운다 — DB 모드의 FastAPI lifespan 에서 부른다.
+
+    주기는 ``SESSION_SWEEP_INTERVAL_SECONDS``(초, 기본 86400). 여기서 읽고 검증하는
+    이유: 0 이하면 sleep 이 즉시 반환돼 전체 DB sweep 이 쉬지 않고 도는데, 태스크 안의
+    예외는 조용하므로 기동 시점에 실패해야 한다. import 시점에 읽으면 이 설정을 쓰지
+    않는 메모리 모드까지 기동이 막힌다.
+    """
+    raw = os.getenv("SESSION_SWEEP_INTERVAL_SECONDS", "86400")
+    try:
+        interval_seconds = int(raw)
+    except ValueError:
+        interval_seconds = 0
+    if interval_seconds <= 0:
+        raise ValueError(f"SESSION_SWEEP_INTERVAL_SECONDS must be a positive integer, got {raw!r}")
+    return asyncio.create_task(schedule_session_cleanup(interval_seconds))
+
+
+async def schedule_session_cleanup(interval_seconds: int) -> None:
+    """만료 세션 sweep 을 주기적으로 실행한다 (``start_session_cleanup`` 이 띄운다).
+
+    기동 직후 한 번 돌고 이후 ``interval_seconds`` 마다 돈다. sweep 하나의 실패는
+    로그만 남기고 다음 주기에 재시도한다 — 예외로 태스크가 죽으면 정리가 조용히 멈춘다.
+    취소(``CancelledError``)는 ``Exception`` 이 아니므로 그대로 전파된다.
+    """
+    while True:
+        try:
+            cleaned = await get_session_service().cleanup_expired_sessions()
+            if cleaned > 0:
+                logger.info("session_cleanup_completed: cleaned=%d", cleaned)
+        except Exception:
+            logger.exception("session_cleanup_failed")
+        await asyncio.sleep(interval_seconds)

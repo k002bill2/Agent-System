@@ -108,8 +108,12 @@ high-water mark** 다 — 활동은 누구의 관측이든 실제로 일어난 �
 저장소의 `last_activity` 로 비활성을 판정하면 활발히 읽히지만 쓰이지는 않는 세션이
 삭제된다. DB 모드에서 유휴 세션은 24 시간이 아니라 TTL(`expires_at`) 까지 산다.
 
-**`cleanup_expired_sessions` 에는 아직 프로덕션 호출부가 없다.** 스케줄러에 연결할지는
-별도 결정이며, 그때까지 이 경로는 잠재적 정확성만 확보한 상태다.
+**`cleanup_expired_sessions` 는 lifespan 태스크가 부른다** (`start_session_cleanup`,
+`USE_DATABASE=true` 일 때만). 기동 직후 한 번, 이후 `SESSION_SWEEP_INTERVAL_SECONDS`(기본
+86400) 마다 돈다. 이 값이 양의 정수가 아니면 DB 모드 기동이 실패한다 — 0 이면 sweep 이
+쉬지 않고 돈다. import 시점이 아니라 태스크를 띄울 때 읽으므로 메모리 모드에는 영향이
+없다. sweep 하나가 실패해도 로그만 남기고 다음 주기에 재시도한다 — 예외로 태스크가 죽으면 정리가 조용히 멈추기 때문이다. 메모리 모드는 세션이 프로세스와 함께
+사라지므로 태스크를 띄우지 않는다.
 
 ## 세션 state 동시 쓰기
 
