@@ -105,6 +105,7 @@ class TestCurrentModelRefreshEntries:
     @pytest.mark.parametrize(
         ("model_id", "provider", "context_window", "input_price", "output_price"),
         [
+            ("claude-opus-5-5", LLMProvider.ANTHROPIC, 1_000_000, 0.004, 0.020),
             ("claude-opus-5", LLMProvider.ANTHROPIC, 1_000_000, 0.005, 0.025),
             ("claude-fable-5-1", LLMProvider.ANTHROPIC, 1_000_000, 0.010, 0.050),
             # 예고된 인상(2027-01-01)이 있어 단가를 날짜에서 유도한다 — 박아 두면
@@ -125,6 +126,14 @@ class TestCurrentModelRefreshEntries:
         assert model.is_default is False
         assert model.supports_tools is True
         assert model.supports_vision is True
+
+    def test_opus_5_5_is_newest_selectable_nondefault(self):
+        """Opus 5.5 is the newest selectable Opus entry and is not the code default."""
+        model = LLMModelRegistry.get_by_id("claude-opus-5-5")
+        assert model is not None
+        assert model.is_enabled is True
+        assert model.is_default is False
+        assert model.context_window == 1_000_000
 
     def test_provider_defaults_are_only_smoke_verified_models(self):
         """승격의 관문은 live smoke 다 (PLANS/MODEL_POLICY_GUARDS_IMPLEMENTATION.md §5).
@@ -848,6 +857,11 @@ class TestLLMProxyCostTable:
         assert _calc_cost("gpt-6-astra", 1000, 1000) == pytest.approx(0.010 + 0.050)
         assert _calc_cost("claude-fable-5-1", 1000, 1000) == pytest.approx(0.010 + 0.050)
 
+    def test_opus_5_5_has_lower_current_price_than_legacy_opus_5(self):
+        from api.llm_proxy import _calc_cost
+
+        assert _calc_cost("claude-opus-5-5", 1000, 1000) == pytest.approx(0.004 + 0.020)
+
     def test_opus_5_does_not_fall_through_to_legacy_opus_4(self):
         """`claude-opus-5` 는 generic `claude-opus-4` 행($15/$75)에 걸리면 안 된다."""
         from api.llm_proxy import _calc_cost
@@ -904,6 +918,7 @@ class TestContextLimitRegistrySSOT:
         assert get_context_limit("anthropic", "claude-sonnet-5") == 1_000_000
         assert get_context_limit("anthropic", "claude-sonnet-4-6") == 1_000_000
         assert get_context_limit("anthropic", "claude-opus-4-8") == 1_000_000
+        assert get_context_limit("anthropic", "claude-opus-5-5") == 1_000_000
         assert get_context_limit("openai", "gpt-4o") == 128_000
 
     def test_unknown_model_falls_back_to_legacy_dict(self):
@@ -926,6 +941,11 @@ class TestContextLimitRegistrySSOT:
 
 
 class TestClaudeSessionModelCosts:
+    def test_opus_5_5_session_cost_is_priced(self):
+        from models.claude_session import calculate_cost
+
+        assert calculate_cost("claude-opus-5-5", 1000, 1000) == pytest.approx(0.024)
+
     def test_opus_4_7_has_exact_entry_post_price_cut(self):
         """MODEL_COSTS는 정확-ID 조회 테이블: opus-4-7 항목이 없으면
         calculate_cost가 sonnet 폴백($3/$15)으로 과소 집계된다."""

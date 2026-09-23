@@ -232,6 +232,7 @@ class TasksResponse(BaseModel):
 
 # Cost per 1K tokens for different models
 MODEL_COSTS = {
+    "claude-opus-5-5": {"input": 0.004, "output": 0.020},
     "claude-opus-5": {"input": 0.005, "output": 0.025},
     "claude-fable-5-1": {"input": 0.010, "output": 0.050},
     "claude-opus-4-8": {"input": 0.005, "output": 0.025},

@@ -78,6 +78,22 @@ _MODELS: list[LLMModelConfig] = [
         supports_tools=True,
         supports_vision=True,
     ),
+    # claude-opus-5-5: current Opus release, verified 2026-09-23
+    # Anthropic standard pricing: $4/$20 per 1M tokens; 1M context.
+    # Adaptive thinking is always active; tool use remains supported, but the
+    # migration guide disallows forcing tool_choice=any/tool for this model.
+    LLMModelConfig(
+        id="claude-opus-5-5",
+        display_name="Claude Opus 5.5",
+        provider=LLMProvider.ANTHROPIC,
+        context_window=1_000_000,
+        input_price=0.004,  # $4.00/1M tokens
+        output_price=0.020,  # $20.00/1M tokens
+        is_default=False,
+        is_enabled=True,
+        supports_tools=True,
+        supports_vision=True,
+    ),
     LLMModelConfig(
         id="claude-opus-5",
         display_name="Claude Opus 5",
@@ -467,7 +483,7 @@ _MODEL_INDEX: dict[str, LLMModelConfig] = {m.id: m for m in _MODELS}
 # Code-seed revision stamp — bump when policy-relevant seed contents change
 # (defaults, enabled flags, model set). Recorded on Playground executions as
 # optional audit metadata; see LLMModelRegistry.get_revision().
-REGISTRY_REVISION = "2026-09-22"
+REGISTRY_REVISION = "2026-09-23"
 
 
 class LLMModelRegistry:
