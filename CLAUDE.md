@@ -52,6 +52,7 @@ cd src/dashboard && npm test
 **트리거:** 풀스택/엔드투엔드 기능 개발·수정·부분 재실행 요청 시 `aos-feature-harness` 스킬을 사용하라. 단순 단일 파일 수정·질문은 직접 처리.
 
 **변경 이력:** `docs/harness-changelog.md` (구성 이후 전체 변경·사유 기록 — 하네스 수정·감사 시에만 읽기. 새 항목도 그 파일에 추가)
+- 프론트엔드 시각 기본값(금지 패턴·대체 기준): .claude/rules/frontend-design-defaults.md — src/dashboard 파일 작업 시 자동 로드, 디자인 지시 없는 UI 작업에 적용
 
 ## Compact 시 보존
 

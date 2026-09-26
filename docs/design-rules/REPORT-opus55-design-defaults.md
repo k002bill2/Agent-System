@@ -1,3 +1,4 @@
+> 적용됨: 규칙 본문은 .claude/rules/frontend-design-defaults.md 로 이동(2026-09-27).
 # REPORT — opus55 frontend design defaults (Agent-System)
 
 - 작성: Designer (Claude Opus 5.5), 2026-09-27 / 브리프: `BRIEF-opus55-design-defaults.md`

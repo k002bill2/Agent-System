@@ -1,4 +1,9 @@
-# Frontend Design Defaults (초안 — 적용 전 검토용)
+---
+paths:
+  - "src/dashboard/**"
+---
+
+# Frontend Design Defaults
 
 대상: `src/dashboard/**`. AOS는 운영 대시보드다 — 절제된 실무형 UI, 명확한 정보 계층, 높은 정보 밀도.
 "AI 느낌 피하기" 같은 일반 지시 대신 아래의 **구체 패턴**을 피한다. 결과물이 다른 기본 스타일로 새면 이 목록에 추가한다.
@@ -14,7 +19,7 @@
 7. 카드·패널의 큰 그림자(`shadow-lg` 이상). 큰 그림자는 모달·드로어 전용.
 8. 크림/오프화이트/베이지 배경. 라이트 배경은 흰색(`--background: 0 0% 100%`)과 `gray-50`.
 9. 헤드라인 속 이탤릭 강조어, 세리프 디스플레이 폰트. 폰트는 `--font-sans`(Inter) 하나.
-10. "01/02/03" 식 섹션 번호 라벨, 장식용 monospace 라벨. `font-mono`는 코드·로그·ID·브랜치명에만.
+10. "01/02/03" 식 섹션 번호 라벨, 장식용 monospace 라벨. `font-mono` 허용 범위는 `aos-frontend.md`(코드 컨텍스트 한정)가 정본.
 11. 의미 없는 hero 영역·일러스트·마케팅 문구(환영 배너, "Supercharge your…"). 첫 화면은 데이터.
 12. 장식 애니메이션(`hover:scale`, `animate-bounce`, 떠다니는 요소). `animate-ping`은 라이브 상태 점에만.
 13. 로딩 상태를 직접 만든 원형 스피너로 대신하기(목록·표·카드). 스켈레톤을 쓴다.
