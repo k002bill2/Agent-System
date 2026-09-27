@@ -126,6 +126,17 @@ def _calc_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     return 0.0
 
 
+def _ledger_cost_or_none(model: str | None, input_tokens: int, output_tokens: int) -> float | None:
+    """Ledger cost for one call, or None when it cannot be priced.
+
+    `_calc_cost` returns 0.0 for a model missing from COST_TABLE; persisting that
+    would read as a measured free call. None keeps the row "cost unknown".
+    """
+    if not model or not any(model.startswith(prefix) for prefix, _, _ in COST_TABLE):
+        return None
+    return _calc_cost(model, input_tokens, output_tokens)
+
+
 def _build_headers(provider: str, api_key: str) -> dict[str, str]:
     if provider == "openai":
         return {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -206,9 +217,7 @@ async def _record_internal_proxy_usage(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             measurement_method=measurement_method,
-            estimated_cost_usd=(
-                _calc_cost(model, input_tokens or 0, output_tokens or 0) if model else None
-            ),
+            estimated_cost_usd=_ledger_cost_or_none(model, input_tokens or 0, output_tokens or 0),
             status=status,
             latency_ms=int(latency_ms) if latency_ms is not None else None,
             error_message=error_message,

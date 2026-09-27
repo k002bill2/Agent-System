@@ -596,6 +596,34 @@ async def test_llm_proxy_records_api_fallback_usage(monkeypatch) -> None:
     assert usage.latency_ms == 42
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("model", "priced"),
+    [("gpt-4o-mini", True), ("unregistered-test-model", False)],
+)
+async def test_llm_proxy_ledger_cost_is_none_for_unpriced_model(monkeypatch, model, priced) -> None:
+    """단가표에 없는 모델은 0.0 이 아니라 None 으로 기록한다 — 0.0 은 '측정된 무료'로 읽힌다."""
+    from api import llm_proxy
+
+    recorder = AsyncMock()
+    monkeypatch.setattr("api.llm_proxy.record_usage_best_effort", recorder)
+
+    await llm_proxy._record_internal_proxy_usage(
+        provider_name="openai",
+        user_id="user-1",
+        organization_id="org-1",
+        response_json={"model": model, "usage": {"prompt_tokens": 12, "completion_tokens": 8}},
+        latency_ms=1.0,
+        status_code=200,
+    )
+
+    cost = recorder.await_args.args[0].estimated_cost_usd
+    if priced:
+        assert cost is not None and cost > 0
+    else:
+        assert cost is None
+
+
 def test_llm_proxy_api_fallback_disabled_by_default(monkeypatch) -> None:
     from api import llm_proxy
 
