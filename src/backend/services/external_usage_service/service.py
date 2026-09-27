@@ -31,9 +31,14 @@ from .collectors import (
     OpenAIUsageCollector,
 )
 from .summaries import (
+    COLLECTION_SOURCE_PROVIDER_BILLING,
+    COLLECTION_SOURCE_PROXY,
     build_reconciliation_summary,
+    build_usage_coverage,
+    resolve_cost_state,
     summarize_claude_snapshot_records,
     summarize_internal_ledger_records,
+    summarize_proxy_records_for_coverage,
 )
 
 logger = logging.getLogger(__name__)
@@ -89,8 +94,16 @@ class ExternalUsageService:
         return collectors
 
     def add_record(self, record: UnifiedUsageRecord) -> None:
-        """Add a proxy-collected record to in-memory store."""
-        self._proxy_records.append(record)
+        """Add a proxy-collected record to in-memory store.
+
+        Stamps the collection source so proxy rows are distinguishable in
+        `coverage`. `cost_state` is deliberately left at its fail-closed
+        "unknown" default: the record arrives already built and this method
+        cannot tell a measured zero from an unpriced model.
+        """
+        self._proxy_records.append(
+            record.model_copy(update={"collection_source": COLLECTION_SOURCE_PROXY})
+        )
 
     @staticmethod
     def _mask_key(key: str) -> str:
@@ -228,12 +241,19 @@ class ExternalUsageService:
                         provider=provider,
                         period_start=start_time,
                         period_end=end_time,
+                        collection_source=COLLECTION_SOURCE_PROVIDER_BILLING,
                     )
                     for rec in records:
                         summary.total_input_tokens += rec.input_tokens
                         summary.total_output_tokens += rec.output_tokens
                         summary.total_cost_usd += rec.cost_usd
                         summary.total_requests += rec.request_count
+                        if rec.cost_state == "known":
+                            summary.known_cost_requests += rec.request_count
+                        else:
+                            summary.unknown_cost_requests += rec.request_count
+                        if not rec.user_id:
+                            summary.unattributed_member_requests += rec.request_count
                         if rec.model:
                             summary.model_breakdown[rec.model] = (
                                 summary.model_breakdown.get(rec.model, 0.0) + rec.cost_usd
@@ -242,16 +262,23 @@ class ExternalUsageService:
                             summary.member_breakdown[rec.user_id] = (
                                 summary.member_breakdown.get(rec.user_id, 0.0) + rec.cost_usd
                             )
+                    summary.cost_state = resolve_cost_state(
+                        summary.known_cost_requests, summary.unknown_cost_requests
+                    )
                     provider_billing_summaries.append(summary)
                 except Exception:
                     continue
 
         # Legacy fallback for deployments without the DB ledger enabled.
+        proxy_summaries: list[UsageSummary] = []
         if not ledger_records:
             filtered_proxy = [
                 r for r in self._proxy_records if start_time <= r.timestamp <= end_time
             ]
             all_records.extend(filtered_proxy)
+            proxy_summaries = summarize_proxy_records_for_coverage(
+                filtered_proxy, start_time, end_time
+            )
 
         total_cost = sum(s.total_cost_usd for s in summaries)
         return ExternalUsageSummaryResponse(
@@ -266,6 +293,10 @@ class ExternalUsageService:
                 provider_billing_enabled=provider_billing_enabled,
                 provider_billing_record_count=len(provider_billing_records),
             ),
+            # Provenance for the primary summary only. Provider-billing rows are
+            # a second measurement of the same usage and reach the UI through
+            # `reconciliation`, so including them here would double-report.
+            coverage=build_usage_coverage(summaries + proxy_summaries, start_time, end_time),
         )
 
     async def get_provider_health(self, db: AsyncSession) -> list[ProviderHealthStatus]:

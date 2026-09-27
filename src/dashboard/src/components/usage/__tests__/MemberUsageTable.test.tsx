@@ -156,4 +156,93 @@ describe('MemberUsageTable', () => {
     expect(screen.getByText('100 suggestions')).toBeInTheDocument()
     expect(screen.getByText('30.0% acceptance')).toBeInTheDocument()
   })
+  // ── 미귀속 = "사용자 미확인" 이지 "사용량 0" 이 아니다 (감사 §8) ──
+
+  it('labels records without a user as unattributed rather than Unknown', () => {
+    render(
+      <MemberUsageTable
+        records={[makeRecord({ user_id: null, user_email: null })]}
+        isLoading={false}
+      />
+    )
+    expect(screen.getByText('미귀속 (호스트 세션 · 사용자 정보 없음)')).toBeInTheDocument()
+    expect(screen.queryByText('Unknown')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('사용자를 확인할 수 없는 사용량')).toBeInTheDocument()
+  })
+
+  it('reports the summary-provided unattributed request count', () => {
+    render(
+      <MemberUsageTable
+        records={[makeRecord({ user_id: null, user_email: null })]}
+        isLoading={false}
+        unattributedRequests={42}
+      />
+    )
+    expect(screen.getByText('42건 · 사용자 미확인')).toBeInTheDocument()
+  })
+
+  it('falls back to the record count when the summary omits the count', () => {
+    // 구버전 페이로드에서는 집계값이 0 으로 내려온다. 0 을 그대로 쓰면 행이 존재하는데도
+    // "0건" 이라고 말하게 되므로, 0/누락은 "미보고" 로 보고 레코드에서 센 값을 쓴다.
+    render(
+      <MemberUsageTable
+        records={[makeRecord({ user_id: null, user_email: null, request_count: 7 })]}
+        isLoading={false}
+        unattributedRequests={0}
+      />
+    )
+    expect(screen.getByText('7건 · 사용자 미확인')).toBeInTheDocument()
+    expect(screen.queryByText('0건 · 사용자 미확인')).not.toBeInTheDocument()
+  })
+
+  it('keeps an identified member row unchanged', () => {
+    render(<MemberUsageTable records={[makeRecord()]} isLoading={false} />)
+    expect(screen.queryByText(/사용자 미확인/)).not.toBeInTheDocument()
+    expect(screen.getByText('alice@test.com')).toBeInTheDocument()
+  })
+
+  // ── unknown cost ≠ $0.00 ────────────────────────────────
+
+  it('shows an unmeasured-cost marker instead of a dollar amount', () => {
+    render(
+      <MemberUsageTable
+        records={[makeRecord({ cost_usd: 0, cost_state: 'unknown' })]}
+        isLoading={false}
+      />
+    )
+    expect(screen.getAllByText('비용 미측정').length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByText(/Estimated cost \$0\.00/)).not.toBeInTheDocument()
+    expect(
+      screen.getByLabelText('비용 미측정 — 0 달러라는 뜻이 아닙니다'),
+    ).toBeInTheDocument()
+  })
+
+  it('still shows $0.00 for a measured zero cost', () => {
+    render(
+      <MemberUsageTable
+        records={[makeRecord({ cost_usd: 0, cost_state: 'known' })]}
+        isLoading={false}
+      />
+    )
+    expect(screen.getAllByText('Estimated cost $0.00').length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByText('비용 미측정')).not.toBeInTheDocument()
+  })
+
+  it('labels a mix of measured and unmeasured costs as partial', () => {
+    render(
+      <MemberUsageTable
+        records={[
+          makeRecord({ id: 'r1', cost_usd: 5, cost_state: 'known' }),
+          makeRecord({ id: 'r2', cost_usd: 0, cost_state: 'unknown' }),
+        ]}
+        isLoading={false}
+      />
+    )
+    // provider 셀과 멤버 합계 두 곳 모두 불완전한 금액임을 밝힌다.
+    const partial = screen.getAllByLabelText(
+      '추정 비용 $5.00 — 일부 레코드는 비용 미측정이라 실제보다 작을 수 있습니다',
+    )
+    expect(partial).toHaveLength(2)
+    partial.forEach(el => expect(el).toHaveTextContent('Estimated cost $5.00 · 일부 미측정'))
+  })
 })

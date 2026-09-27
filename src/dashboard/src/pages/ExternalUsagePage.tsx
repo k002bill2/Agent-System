@@ -22,6 +22,16 @@ import {
   YAxis,
 } from 'recharts'
 import { useExternalUsageStore } from '../stores/externalUsage'
+import type { UsageSummary } from '../stores/externalUsage'
+import {
+  DEFAULT_PERIOD_DAYS,
+  collectionSourceNote,
+  countUnattributedMemberRequests,
+  countUnknownCostRequests,
+  formatCoverageSource,
+  isCostMeasured,
+  requestUnitLabel,
+} from '../lib/usageCoverage'
 import MemberUsageTable from '../components/usage/MemberUsageTable'
 import DailyCostTrend from '../components/usage/DailyCostTrend'
 import { AdminKeyManager } from '../components/usage/AdminKeyManager'
@@ -111,15 +121,25 @@ function reconciliationStatusLabel(status: string): string {
 }
 
 export function ExternalUsagePage() {
-  const { summary, providers, isLoading, error, fetchSummary, fetchProviders, syncProvider } =
-    useExternalUsageStore()
-  const [selectedPeriod, setSelectedPeriod] = useState(30)
+  const {
+    summary,
+    providers,
+    isLoading,
+    error,
+    fetchSummary,
+    fetchProviders,
+    syncProvider,
+    period,
+    setPeriod,
+  } = useExternalUsageStore()
+  // 기간은 store 단일 소스다. 로컬 state 를 두면 sync 이후 재조회가 서버 기본값으로
+  // 조용히 되돌아가고 헤더 배지와 기간이 어긋난다 (감사 §7).
+  const selectedPeriod = period?.days ?? DEFAULT_PERIOD_DAYS
   const [isSyncing, setIsSyncing] = useState(false)
 
   useEffect(() => {
-    const endTime = new Date().toISOString()
-    const startTime = new Date(Date.now() - selectedPeriod * 86_400_000).toISOString()
-    fetchSummary(startTime, endTime)
+    // 경계 시각은 store 가 호출 시점에 계산한다.
+    fetchSummary()
     fetchProviders()
   }, [selectedPeriod, fetchSummary, fetchProviders])
 
@@ -137,14 +157,27 @@ export function ExternalUsagePage() {
     ]),
   )
 
-  // Pie chart data
-  const pieData = (summary?.providers ?? [])
-    .filter(p => p.total_cost_usd > 0)
-    .map(p => ({
-      name: PROVIDER_LABELS[p.provider] ?? p.provider,
-      value: p.total_cost_usd,
-      color: PROVIDER_COLORS[p.provider] ?? '#888',
-    }))
+  const providerSummaries: UsageSummary[] = summary?.providers ?? []
+  const coverageSources = summary?.coverage?.sources ?? []
+  const unknownCostRequests = countUnknownCostRequests(providerSummaries)
+  const unattributedMemberRequests = countUnattributedMemberRequests(providerSummaries)
+  const unmeasuredCostProviders = providerSummaries.filter(p => !isCostMeasured(p.cost_state))
+
+  // Pie chart data.
+  // 비용이 미측정인 provider 를 `> 0` 필터로 지우면 "사용량이 없다" 처럼 보인다.
+  // 토큰이 있는 provider 는 남기되, 값이 0 인 조각은 면적이 0 이라 그려지지 않으므로
+  // 차트 아래 텍스트 목록이 실제 표시 수단이다.
+  const pieData = providerSummaries
+    .filter(p => p.total_cost_usd > 0 || totalTokens(p.total_input_tokens, p.total_output_tokens) > 0)
+    .map(p => {
+      const measured = isCostMeasured(p.cost_state)
+      const label = PROVIDER_LABELS[p.provider] ?? p.provider
+      return {
+        name: measured ? label : `${label} (비용 미측정)`,
+        value: p.total_cost_usd,
+        color: measured ? (PROVIDER_COLORS[p.provider] ?? '#888') : '#9ca3af',
+      }
+    })
 
   // Model breakdown bar chart data
   const modelData: Array<{ model: string; [key: string]: string | number }> = []
@@ -193,7 +226,8 @@ export function ExternalUsagePage() {
           {/* Period selector */}
           <select
             value={selectedPeriod}
-            onChange={e => setSelectedPeriod(Number(e.target.value))}
+            onChange={e => setPeriod(Number(e.target.value))}
+            aria-label="조회 기간 선택"
             className="text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
           >
             {PERIOD_OPTIONS.map(o => (
@@ -219,6 +253,40 @@ export function ExternalUsagePage() {
         </div>
       )}
 
+      {/* 기간 · 수집 범위 (provenance) — 헤더 배지와 같은 기간을 명시한다 */}
+      <section
+        aria-label="조회 기간 및 수집 범위"
+        className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400"
+      >
+        <span className="inline-flex items-center rounded-md border border-gray-200 dark:border-gray-700 px-2 py-1 font-medium text-gray-700 dark:text-gray-300">
+          최근 {selectedPeriod}일
+        </span>
+        {coverageSources.length > 0 ? (
+          coverageSources.map(source => (
+            <span
+              key={`${source.collection_source}:${source.provider}`}
+              className="inline-flex items-center rounded-md border border-gray-200 dark:border-gray-700 px-2 py-1"
+              aria-label={`수집 범위: ${formatCoverageSource(source)}${source.note ? `, ${source.note}` : ''}`}
+            >
+              {formatCoverageSource(source)}
+              {source.note ? ` · ${source.note}` : ''}
+            </span>
+          ))
+        ) : (
+          <span className="inline-flex items-center rounded-md border border-dashed border-gray-200 dark:border-gray-700 px-2 py-1">
+            수집 범위 정보 없음
+          </span>
+        )}
+        {unknownCostRequests > 0 && (
+          <span
+            className="inline-flex items-center rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 text-amber-700 dark:text-amber-300"
+            aria-label={`${unknownCostRequests}건은 비용이 측정되지 않아 비용 합계에서 제외됨`}
+          >
+            비용 미측정 {unknownCostRequests.toLocaleString()}건
+          </span>
+        )}
+      </section>
+
       {/* Total tokens + provider cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
         {/* Total */}
@@ -241,6 +309,10 @@ export function ExternalUsagePage() {
           const pConf = providers.find(p => p.provider === pkey)
           const isTracked = Boolean(pData?.total_requests)
           const providerTokens = pData ? totalTokens(pData.total_input_tokens, pData.total_output_tokens) : 0
+          const costMeasured = isCostMeasured(pData?.cost_state)
+          // 두 카드를 같은 모집단으로 오독하지 않도록 수집 경로를 카드에 남긴다 (감사 §3).
+          const sourceNote = collectionSourceNote(pData?.collection_source)
+          const requestUnit = requestUnitLabel(pData?.request_unit)
           return (
             <div
               key={pkey}
@@ -263,8 +335,33 @@ export function ExternalUsagePage() {
                 {isLoading ? '...' : formatTokens(providerTokens)}
               </div>
               <div className="text-xs text-gray-400 mt-0.5">
-                {pData ? `Estimated cost ${formatCost(pData.total_cost_usd)}` : pConf?.enabled ? 'No data' : 'Not tracked'}
+                {pData ? (
+                  costMeasured ? (
+                    `Estimated cost ${formatCost(pData.total_cost_usd)}`
+                  ) : (
+                    <span
+                      className="text-amber-600 dark:text-amber-400"
+                      aria-label={`${PROVIDER_LABELS[pkey] ?? pkey} 비용 미측정 — 0 달러라는 뜻이 아닙니다`}
+                    >
+                      비용 미측정
+                    </span>
+                  )
+                ) : pConf?.enabled ? 'No data' : 'Not tracked'}
               </div>
+              {pData && (
+                <div className="text-xs text-gray-400 mt-0.5">
+                  {pData.total_requests.toLocaleString()}{requestUnit}
+                  {sourceNote ? ` · ${sourceNote}` : ''}
+                </div>
+              )}
+              {pData && (pData.fallback_priced_requests ?? 0) > 0 && (
+                <div
+                  className="text-xs text-amber-600 dark:text-amber-400 mt-0.5"
+                  aria-label={`${PROVIDER_LABELS[pkey] ?? pkey} 비용 중 ${pData.fallback_priced_requests}${requestUnit}은 단가표에 없는 모델이라 기본 단가로 추정`}
+                >
+                  기본 단가 추정 {pData.fallback_priced_requests?.toLocaleString()}{requestUnit}
+                </div>
+              )}
             </div>
           )
         })}
@@ -379,6 +476,7 @@ export function ExternalUsagePage() {
       <MemberUsageTable
         records={summary?.records ?? []}
         isLoading={isLoading}
+        unattributedRequests={unattributedMemberRequests}
       />
 
       {/* Charts */}
@@ -412,6 +510,26 @@ export function ExternalUsagePage() {
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
+          )}
+          {unmeasuredCostProviders.length > 0 && (
+            <div
+              className="mt-3 border-t border-gray-100 dark:border-gray-700 pt-3 text-xs text-gray-500 dark:text-gray-400"
+              aria-label="비용이 측정되지 않아 비용 차트에 그려지지 않은 프로바이더"
+            >
+              <p className="text-amber-600 dark:text-amber-400">
+                {unknownCostRequests.toLocaleString()}건은 비용이 측정되지 않아 비용 합계에서 제외됨
+              </p>
+              <ul className="mt-1 space-y-0.5">
+                {unmeasuredCostProviders.map(item => (
+                  <li key={item.provider}>
+                    비용 미측정: {PROVIDER_LABELS[item.provider] ?? item.provider} (
+                    {(item.unknown_cost_requests ?? item.total_requests).toLocaleString()}
+                    {requestUnitLabel(item.request_unit)} ·{' '}
+                    {formatTokens(totalTokens(item.total_input_tokens, item.total_output_tokens))} tokens)
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
 
@@ -480,10 +598,23 @@ export function ExternalUsagePage() {
                       {pData ? formatTokens(pData.total_output_tokens) : '\u2014'}
                     </td>
                     <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
-                      {pData ? formatCost(pData.total_cost_usd) : '\u2014'}
+                      {pData ? (
+                        isCostMeasured(pData.cost_state) ? (
+                          formatCost(pData.total_cost_usd)
+                        ) : (
+                          <span
+                            className="text-amber-600 dark:text-amber-400 font-normal"
+                            aria-label={`${PROVIDER_LABELS[pkey] ?? pkey} 비용 미측정 — 0 달러라는 뜻이 아닙니다`}
+                          >
+                            비용 미측정
+                          </span>
+                        )
+                      ) : '\u2014'}
                     </td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
-                      {pData ? pData.total_requests.toLocaleString() : '\u2014'}
+                      {pData
+                        ? `${pData.total_requests.toLocaleString()}${requestUnitLabel(pData.request_unit)}`
+                        : '\u2014'}
                     </td>
                     <td className="px-4 py-3">
                       {isTracked ? (

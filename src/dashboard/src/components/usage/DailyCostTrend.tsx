@@ -10,6 +10,7 @@ import {
   YAxis,
 } from 'recharts'
 import type { UnifiedUsageRecord } from '../../stores/externalUsage'
+import { isCostMeasured } from '../../lib/usageCoverage'
 
 interface DailyPoint {
   date: string
@@ -119,11 +120,33 @@ interface Props {
 export default function DailyCostTrend({ records }: Props) {
   const data = useMemo(() => buildDailyTrend(records), [records])
 
-  // Only render Area for providers that have at least one non-zero value
+  // 비용이 실제로 측정된 값이 있는 provider 만 면적을 그린다.
+  // 측정된 0 은 비용 차트에 그릴 것이 없으므로 빠져도 사실과 어긋나지 않는다.
+  // 반면 "모름"을 0 으로 그리면 "0 달러였다"는 거짓 주장이 되므로, 모름은 면적이 아니라
+  // 아래 `unmeasuredProviders` 마커로 표면화한다 (감사 §2).
   const activeProviders = useMemo(
     () => sortProviders(new Set(records.map(record => record.provider)))
       .filter(p => data.some(d => Number(d[p] ?? 0) > 0)),
     [data, records],
+  )
+
+  // 비용이 측정되지 않은 provider — 값이 0 이라 면적이 그려지지 않으므로 텍스트로 표시한다.
+  const unmeasuredProviders = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const record of records) {
+      if (isCostMeasured(record.cost_state)) continue
+      counts.set(record.provider, (counts.get(record.provider) ?? 0) + 1)
+    }
+    return sortProviders(counts.keys()).map(provider => ({
+      provider,
+      count: counts.get(provider) ?? 0,
+    }))
+  }, [records])
+
+  // timestamp 가 실제 발생 시각이 아닌 provider 가 섞여 있는지 (감사 §5).
+  const hasSessionDateBasis = useMemo(
+    () => records.some(record => record.date_basis === 'session_last_activity'),
+    [records],
   )
 
   if (data.length === 0) {
@@ -141,9 +164,19 @@ export default function DailyCostTrend({ records }: Props) {
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5">
-      <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
+      <h2
+        className={`text-sm font-semibold text-gray-700 dark:text-gray-300 ${hasSessionDateBasis ? '' : 'mb-4'}`}
+      >
         Daily Estimated Cost Trend
       </h2>
+      {hasSessionDateBasis && (
+        <p
+          className="mt-1 mb-4 text-xs text-gray-500 dark:text-gray-400"
+          aria-label="일별 차트의 날짜 기준 안내"
+        >
+          Claude 스냅샷은 세션 누계를 마지막 활동일에 배치합니다 (실제 발생일별 분포 아님)
+        </p>
+      )}
       <ResponsiveContainer width="100%" height={260} debounce={80}>
         <AreaChart data={data} margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
           <defs>
@@ -199,6 +232,20 @@ export default function DailyCostTrend({ records }: Props) {
           ))}
         </AreaChart>
       </ResponsiveContainer>
+      {unmeasuredProviders.length > 0 && (
+        <div
+          className="mt-3 border-t border-gray-100 dark:border-gray-700 pt-3 text-xs text-gray-500 dark:text-gray-400"
+          aria-label="비용이 측정되지 않아 추세선에 그려지지 않은 프로바이더"
+        >
+          <ul className="space-y-0.5">
+            {unmeasuredProviders.map(item => (
+              <li key={item.provider} className="text-amber-600 dark:text-amber-400">
+                비용 미측정: {PROVIDER_LABELS[item.provider] ?? item.provider} ({item.count.toLocaleString()}건)
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   )
 }

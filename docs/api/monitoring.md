@@ -52,7 +52,7 @@
 | GET | `/api/analytics/overview` | 개요 메트릭 |
 | GET | `/api/analytics/trends` | 시간별 트렌드 |
 | GET | `/api/analytics/agents` | 모델별 성능 메트릭 |
-| GET | `/api/analytics/costs` | 비용 분석 (모델별/프로젝트별) |
+| GET | `/api/analytics/costs` | 비용 분석 (모델별/프로젝트별). `period_days`, `price_source_counts`(`table`/`fallback`/`unknown`), `by_model[].provider_source`(`session_transcript`/`unattributed` — `unattributed` 는 모델명으로 재추측 금지) 포함 |
 | GET | `/api/analytics/activity` | 활동 히트맵 |
 | GET | `/api/analytics/errors` | 에러 분석 |
 | GET | `/api/analytics/dashboard` | 전체 대시보드 데이터 |
@@ -127,6 +127,11 @@ model 은 `turn_context.payload.model`, 토큰은 `event_msg` 의 `payload.type=
 - `providers`: 필터할 프로바이더 목록
 
 `GET /summary`의 primary usage source는 내부 `llm_usage_ledger`입니다. 응답에는 `reconciliation` 객체가 포함되며, `primary_source`, `provider_billing_enabled`, 내부 ledger totals, provider billing totals, provider별 `delta_tokens`/`delta_cost_usd`/`status`를 제공합니다. Provider billing 수집은 `EXTERNAL_USAGE_INCLUDE_PROVIDER_BILLING=true`일 때만 비교값으로 포함됩니다.
+
+**측정 상태 (provenance)** — `cost_usd == 0.0` 만으로는 "무료"와 "미측정"을 구분할 수 없어 다음 필드를 함께 내린다. 모두 fail-closed 기본값(`"unknown"`)이며, 기존 숫자 필드의 의미는 바뀌지 않는다.
+- record: `cost_state`(`known`/`unknown`), `collection_source`(`internal_ledger`/`claude_session_snapshot`/`provider_billing`/`proxy`), `measurement_method`, `price_source`(`table`/`fallback`/`unpriced`), `date_basis`(`event`/`session_last_activity` — 스냅샷은 세션 누계를 마지막 활동일에 배치)
+- provider summary: `cost_state`(`known`/`partial`/`unknown`), `known_cost_requests`/`unknown_cost_requests`, `request_unit`(`ledger_record`/`session` — 두 카드의 requests 는 같은 단위가 아님), `unattributed_member_requests`, `fallback_priced_requests`(단가표 미등재 모델을 기본 단가로 추정한 건수 — 금액은 합계에 포함), `cache_read_tokens`/`cache_creation_tokens`(`null` = 미수집)
+- 응답 최상위 `coverage`: 요청 기간(`requested_start`/`requested_end`/`period_days`)과 `(collection_source, provider)`별 `sources[]`(`record_count`, `request_unit`, `cost_state`, `date_basis`, `note`). Provider billing 행은 `reconciliation` 으로만 노출되며 `coverage` 에는 넣지 않는다(이중 보고 방지).
 
 ### Deployment Usage Keys (admin/manager 전용)
 

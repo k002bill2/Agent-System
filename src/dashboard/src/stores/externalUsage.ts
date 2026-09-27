@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { apiClient } from '../services/apiClient'
+import { DEFAULT_PERIOD_DAYS } from '../lib/usageCoverage'
 
 export interface ExternalProviderConfig {
   provider: string
@@ -28,6 +29,16 @@ export interface UnifiedUsageRecord {
   code_acceptances: number | null
   acceptance_rate: number | null
   collected_at: string
+  /** 비용이 실제로 측정됐는지 여부. `cost_usd === 0` 과 "모름" 을 구분한다. */
+  cost_state?: 'known' | 'unknown'
+  /** 이 레코드가 수집된 경로 (`internal_ledger` | `claude_session_snapshot` | ...). */
+  collection_source?: string
+  /** 원본이 보고한 측정 방법. */
+  measurement_method?: string | null
+  /** 단가 출처. `unpriced` 는 가격표가 없어 비용을 산출하지 못한 상태. */
+  price_source?: 'table' | 'fallback' | 'unpriced' | null
+  /** timestamp 의 의미. 스냅샷은 세션 누계를 마지막 활동일에 배치한다. */
+  date_basis?: 'event' | 'session_last_activity'
 }
 
 export interface UsageSummary {
@@ -40,6 +51,41 @@ export interface UsageSummary {
   total_requests: number
   model_breakdown: Record<string, number>
   member_breakdown: Record<string, number>
+  /** 이 요약이 만들어진 수집 경로. */
+  collection_source?: string
+  /** 요약 전체의 비용 측정 상태. */
+  cost_state?: 'known' | 'partial' | 'unknown'
+  /** 비용이 측정된 레코드 수. */
+  known_cost_requests?: number
+  /** 비용이 NULL 이던 레코드 수. */
+  unknown_cost_requests?: number
+  /** `total_requests` 의 단위. Claude 의 requests 와 Codex 의 requests 는 같은 단위가 아니다. */
+  request_unit?: 'ledger_record' | 'session' | 'unknown'
+  /** user_id 가 없어 사용자에 귀속되지 않은 레코드 수. */
+  unattributed_member_requests?: number
+  /** 비용은 합계에 포함되지만 단가표에 없는 모델이라 기본 단가로 추정된 레코드 수. */
+  fallback_priced_requests?: number
+  /** `null` 은 "미수집" 이며 `0` 이 아니다. */
+  cache_read_tokens?: number | null
+  /** `null` 은 "미수집" 이며 `0` 이 아니다. */
+  cache_creation_tokens?: number | null
+}
+
+export interface UsageSourceCoverage {
+  collection_source: string
+  provider: string
+  record_count: number
+  request_unit: string
+  cost_state: string
+  date_basis: string
+  note?: string | null
+}
+
+export interface UsageCoverage {
+  requested_start: string
+  requested_end: string
+  period_days: number
+  sources: UsageSourceCoverage[]
 }
 
 export interface UsageReconciliationComparison {
@@ -75,6 +121,13 @@ export interface ExternalUsageSummaryResponse {
   period_start: string
   period_end: string
   reconciliation?: UsageReconciliationSummary | null
+  /** 수집 범위·provenance. 구버전 응답에는 없다. */
+  coverage?: UsageCoverage | null
+}
+
+/** 헤더 배지와 상세 페이지가 공유하는 기간 선택 상태. */
+export interface UsagePeriod {
+  days: number
 }
 
 interface ExternalUsageStore {
@@ -83,7 +136,10 @@ interface ExternalUsageStore {
   isLoading: boolean
   error: string | null
   lastFetched: Date | null
+  /** 선택된 조회 기간. 헤더 배지와 상세 페이지의 단일 소스. */
+  period: UsagePeriod | null
 
+  setPeriod: (days: number) => void
   fetchSummary: (startTime?: string, endTime?: string, providerList?: string[]) => Promise<void>
   fetchProviders: () => Promise<void>
   syncProvider: (provider?: string) => Promise<{ synced_records: number }>
@@ -95,13 +151,26 @@ export const useExternalUsageStore = create<ExternalUsageStore>((set, get) => ({
   isLoading: false,
   error: null,
   lastFetched: null,
+  period: { days: DEFAULT_PERIOD_DAYS },
+
+  setPeriod: (days: number) => {
+    set({ period: { days } })
+  },
 
   fetchSummary: async (startTime?: string, endTime?: string, providerList?: string[]) => {
     set({ isLoading: true, error: null })
     try {
+      // 인자를 주지 않으면 저장된 기간을 쓴다. 경계 시각은 호출 시점에 다시 계산한다 —
+      // 미리 굳혀두면 sync 이후 재조회가 낡은 창을 요청한다.
+      const period = get().period
+      const resolvedEnd = endTime ?? (period ? new Date().toISOString() : undefined)
+      const resolvedStart =
+        startTime ??
+        (period ? new Date(Date.now() - period.days * 86_400_000).toISOString() : undefined)
+
       const params = new URLSearchParams()
-      if (startTime) params.set('start_time', startTime)
-      if (endTime) params.set('end_time', endTime)
+      if (resolvedStart) params.set('start_time', resolvedStart)
+      if (resolvedEnd) params.set('end_time', resolvedEnd)
       if (providerList) {
         providerList.forEach(p => params.append('providers', p))
       }

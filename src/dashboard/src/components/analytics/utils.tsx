@@ -17,6 +17,9 @@ import type {
   TrendDataPoint,
 } from './types'
 
+/** 백엔드가 provider 귀속에 실패했다고 표시하는 `CostBreakdown.provider_source` 값. */
+const UNATTRIBUTED_SOURCE = 'unattributed'
+
 export function formatNumber(num: number): string {
   if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`
   if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`
@@ -95,10 +98,11 @@ export function buildModelTokenBreakdown(
     providerValue: string | null | undefined,
     tokens: number,
     cost: number,
+    providerSource: string | null | undefined,
   ) => {
     if (tokens <= 0) return
     const model = modelName?.trim() || 'unknown'
-    const provider = normalizeProvider(providerValue, model)
+    const provider = normalizeProvider(providerValue, model, providerSource)
     const key = `${provider}:${model}`
     const existing = grouped.get(key)
 
@@ -120,11 +124,13 @@ export function buildModelTokenBreakdown(
   }
 
   models.forEach((model) => {
-    addEntry(model.value, model.provider, model.tokens, model.cost)
+    addEntry(model.value, model.provider, model.tokens, model.cost, model.provider_source)
   })
 
+  // `UnifiedUsageRecord` 에는 `provider_source` 가 없다 (collection_source·price_source 는
+  // 다른 축이다). 레거시 경로와 같게 `undefined` 로 넘겨 모델명 추론을 유지한다.
   externalSummary?.records.forEach((record) => {
-    addEntry(record.model, record.provider, record.total_tokens, record.cost_usd)
+    addEntry(record.model, record.provider, record.total_tokens, record.cost_usd, undefined)
   })
 
   const entries = Array.from(grouped.values())
@@ -148,8 +154,23 @@ export function filterAttributedModelPerformance(agents: AgentPerformance[]): Ag
   })
 }
 
-function normalizeProvider(provider: string | null | undefined, modelName: string): string {
+/**
+ * provider 를 표시 키로 정규화한다.
+ *
+ * `providerSource` 가 있으면 백엔드가 귀속을 판정했다는 뜻이므로 그 판정을 그대로 따른다.
+ * `'unattributed'` 이거나 쓸 수 있는 provider 가 없으면 모델명으로 다시 추측하지 않고
+ * `'unknown'` 으로 fail-closed 한다. 모델명 추론은 `providerSource` 가 아예 없는
+ * 구버전 응답에서만 유지한다 (감사 §1).
+ */
+function normalizeProvider(
+  provider: string | null | undefined,
+  modelName: string,
+  providerSource: string | null | undefined,
+): string {
   const explicit = provider?.trim().toLowerCase()
+  const source = providerSource?.trim().toLowerCase()
+
+  if (source === UNATTRIBUTED_SOURCE) return 'unknown'
   if (explicit) {
     if (explicit === 'codex') return 'codex_cli'
     if (explicit === 'claude') return 'anthropic'
@@ -158,6 +179,8 @@ function normalizeProvider(provider: string | null | undefined, modelName: strin
     }
     return explicit
   }
+  // 백엔드가 출처를 말했는데 provider 가 비어 있다 = 귀속 실패. 추측 금지.
+  if (source) return 'unknown'
 
   const model = modelName.toLowerCase()
   if (model.includes('codex')) return 'codex_cli'

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 
 // Mock lucide-react icons
@@ -17,7 +17,9 @@ vi.mock('recharts', () => ({
   CartesianGrid: () => null,
   Cell: () => null,
   Legend: () => null,
-  Pie: () => null,
+  Pie: ({ data }: { data?: Array<{ name: string }> }) => (
+    <div data-testid="pie" data-names={(data ?? []).map(d => d.name).join('|')} />
+  ),
   PieChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Tooltip: () => null,
@@ -28,6 +30,7 @@ vi.mock('recharts', () => ({
 const mockFetchSummary = vi.fn()
 const mockFetchProviders = vi.fn()
 const mockSyncProvider = vi.fn().mockResolvedValue(undefined)
+const mockSetPeriod = vi.fn()
 
 vi.mock('../stores/externalUsage', () => ({
   useExternalUsageStore: vi.fn(() => ({
@@ -38,6 +41,8 @@ vi.mock('../stores/externalUsage', () => ({
     fetchSummary: mockFetchSummary,
     fetchProviders: mockFetchProviders,
     syncProvider: mockSyncProvider,
+    period: { days: 30 },
+    setPeriod: mockSetPeriod,
   })),
 }))
 
@@ -262,5 +267,249 @@ describe('ExternalUsagePage', () => {
     expect(screen.getByText('1.8M')).toBeInTheDocument()
     expect(screen.getByText('Estimated cost $30.00')).toBeInTheDocument()
     expect(screen.getByText('Estimated cost $12.50')).toBeInTheDocument()
+  })
+  // ── coverage / unknown cost / period (R2, R3, R5) ───────
+
+  const baseStore = {
+    providers: [],
+    isLoading: false,
+    error: null,
+    fetchSummary: mockFetchSummary,
+    fetchProviders: mockFetchProviders,
+    syncProvider: mockSyncProvider,
+    period: { days: 30 },
+    setPeriod: mockSetPeriod,
+  }
+
+  const makeProviderSummary = (overrides: Record<string, unknown> = {}) => ({
+    provider: 'anthropic',
+    period_start: '2025-01-01T00:00:00Z',
+    period_end: '2025-01-31T23:59:59Z',
+    total_input_tokens: 1000,
+    total_output_tokens: 500,
+    total_cost_usd: 0,
+    total_requests: 3,
+    model_breakdown: {},
+    member_breakdown: {},
+    ...overrides,
+  })
+
+  const mockStore = (overrides: Record<string, unknown>) => {
+    vi.mocked(useExternalUsageStore).mockReturnValue({
+      ...baseStore,
+      summary: null,
+      ...overrides,
+    } as unknown as ReturnType<typeof useExternalUsageStore>)
+  }
+
+  const makeSummary = (overrides: Record<string, unknown> = {}) => ({
+    providers: [],
+    total_cost_usd: 0,
+    records: [],
+    period_start: '2025-01-01T00:00:00Z',
+    period_end: '2025-01-31T23:59:59Z',
+    ...overrides,
+  })
+
+  it('keeps an unknown-cost provider in the pie data instead of filtering it out', () => {
+    mockStore({
+      summary: makeSummary({
+        providers: [
+          makeProviderSummary({
+            provider: 'anthropic',
+            total_cost_usd: 0,
+            cost_state: 'unknown',
+            unknown_cost_requests: 3,
+          }),
+        ],
+      }),
+    })
+
+    render(<ExternalUsagePage />)
+
+    // `total_cost_usd > 0` 필터가 남아 있으면 이 이름이 통째로 사라진다.
+    expect(screen.getByTestId('pie').getAttribute('data-names')).toBe('Anthropic (비용 미측정)')
+  })
+
+  it('still omits a provider with no cost and no tokens', () => {
+    mockStore({
+      summary: makeSummary({
+        providers: [
+          makeProviderSummary({
+            provider: 'anthropic',
+            total_input_tokens: 0,
+            total_output_tokens: 0,
+            total_cost_usd: 0,
+            total_requests: 0,
+            cost_state: 'known',
+          }),
+        ],
+      }),
+    })
+
+    render(<ExternalUsagePage />)
+
+    // 그릴 조각이 하나도 없으면 차트 대신 빈 상태를 보여준다.
+    expect(screen.queryByTestId('pie')).not.toBeInTheDocument()
+    expect(screen.getByText('No estimated cost data available')).toBeInTheDocument()
+  })
+
+  it('explains how many records were excluded from the cost total', () => {
+    mockStore({
+      summary: makeSummary({
+        providers: [
+          makeProviderSummary({
+            provider: 'anthropic',
+            cost_state: 'unknown',
+            unknown_cost_requests: 3,
+            request_unit: 'session',
+          }),
+        ],
+      }),
+    })
+
+    render(<ExternalUsagePage />)
+
+    expect(screen.getByText('3건은 비용이 측정되지 않아 비용 합계에서 제외됨')).toBeInTheDocument()
+    expect(screen.getByText(/비용 미측정: Anthropic \(3세션/)).toBeInTheDocument()
+  })
+
+  it('marks an unknown-cost provider card without printing a dollar figure', () => {
+    mockStore({
+      summary: makeSummary({
+        providers: [
+          makeProviderSummary({
+            provider: 'anthropic',
+            cost_state: 'unknown',
+            unknown_cost_requests: 3,
+            collection_source: 'claude_session_snapshot',
+            request_unit: 'session',
+          }),
+        ],
+      }),
+    })
+
+    render(<ExternalUsagePage />)
+
+    // 요약 카드와 상세 표 두 곳 모두에 같은 마커가 붙는다.
+    expect(
+      screen.getAllByLabelText('Anthropic 비용 미측정 — 0 달러라는 뜻이 아닙니다'),
+    ).toHaveLength(2)
+    expect(screen.queryByText('Estimated cost $0.00')).not.toBeInTheDocument()
+    // 두 카드를 같은 모집단으로 오독하지 않도록 수집 경로를 남긴다 (감사 §3).
+    expect(screen.getByText('3세션 · 호스트 세션 스냅샷')).toBeInTheDocument()
+  })
+
+  it('keeps printing the amount for a measured zero cost', () => {
+    mockStore({
+      summary: makeSummary({
+        providers: [
+          makeProviderSummary({ provider: 'anthropic', total_cost_usd: 0, cost_state: 'known' }),
+        ],
+      }),
+    })
+
+    render(<ExternalUsagePage />)
+
+    expect(screen.getAllByText('Estimated cost $0.00').length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByText(/비용 미측정/)).not.toBeInTheDocument()
+  })
+
+  it('keeps the amount but flags sessions priced at the default rate', () => {
+    mockStore({
+      summary: makeSummary({
+        providers: [
+          makeProviderSummary({
+            provider: 'anthropic',
+            total_cost_usd: 1.5,
+            cost_state: 'known',
+            fallback_priced_requests: 2,
+            request_unit: 'session',
+          }),
+        ],
+      }),
+    })
+
+    render(<ExternalUsagePage />)
+
+    expect(screen.getAllByText('Estimated cost $1.50').length).toBeGreaterThanOrEqual(1)
+    expect(
+      screen.getByLabelText('Anthropic 비용 중 2세션은 단가표에 없는 모델이라 기본 단가로 추정'),
+    ).toHaveTextContent('기본 단가 추정 2세션')
+  })
+
+  it('omits the default-rate note when every session has a registered price', () => {
+    mockStore({
+      summary: makeSummary({
+        providers: [
+          makeProviderSummary({ provider: 'anthropic', total_cost_usd: 1.5, cost_state: 'known' }),
+        ],
+      }),
+    })
+
+    render(<ExternalUsagePage />)
+
+    expect(screen.queryByText(/기본 단가 추정/)).not.toBeInTheDocument()
+  })
+
+  it('states the selected period and the collection coverage', () => {
+    mockStore({
+      period: { days: 7 },
+      summary: makeSummary({
+        coverage: {
+          requested_start: '2025-01-01T00:00:00Z',
+          requested_end: '2025-01-08T00:00:00Z',
+          period_days: 7,
+          sources: [
+            {
+              collection_source: 'internal_ledger',
+              provider: 'codex_cli',
+              record_count: 16,
+              request_unit: 'ledger_record',
+              cost_state: 'known',
+              date_basis: 'event',
+              note: 'AOS 내부 호출만',
+            },
+          ],
+        },
+      }),
+    })
+
+    render(<ExternalUsagePage />)
+
+    const section = screen.getByLabelText('조회 기간 및 수집 범위')
+    expect(section).toBeInTheDocument()
+    expect(screen.getByText('최근 7일')).toBeInTheDocument()
+    expect(
+      screen.getByLabelText('수집 범위: AOS 내부 원장 16건, AOS 내부 호출만'),
+    ).toBeInTheDocument()
+  })
+
+  it('says coverage is unavailable rather than showing nothing', () => {
+    mockStore({ summary: makeSummary({}) })
+
+    render(<ExternalUsagePage />)
+
+    expect(screen.getByText('수집 범위 정보 없음')).toBeInTheDocument()
+  })
+
+  it('routes the period selector through the shared store', () => {
+    mockStore({ period: { days: 7 }, summary: null })
+
+    render(<ExternalUsagePage />)
+
+    const select = screen.getByLabelText('조회 기간 선택') as HTMLSelectElement
+    expect(select.value).toBe('7')
+
+    fireEvent.change(select, { target: { value: '90' } })
+    expect(mockSetPeriod).toHaveBeenCalledWith(90)
+  })
+
+  it('lets the store resolve the window instead of passing a locally frozen one', () => {
+    mockStore({ period: { days: 7 }, summary: null })
+
+    render(<ExternalUsagePage />)
+
+    expect(mockFetchSummary).toHaveBeenCalledWith()
   })
 })

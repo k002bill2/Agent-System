@@ -84,8 +84,37 @@ def _has_attributed_model_usage(session) -> bool:
 
 
 def _runtime_provider() -> str:
-    """Return the configured runtime provider used for local session analytics."""
+    """Return the configured runtime provider used for local session analytics.
+
+    No longer used for session cost attribution — `LLM_PROVIDER` describes what
+    AOS *executes with*, not what produced a Claude Code transcript. Attribution
+    goes through `_attribute_session_provider`. Kept for other callers.
+    """
     return os.getenv("LLM_PROVIDER") or get_settings().llm_provider
+
+
+PROVIDER_SOURCE_SESSION_TRANSCRIPT = "session_transcript"
+PROVIDER_SOURCE_UNATTRIBUTED = "unattributed"
+
+
+def _attribute_session_provider(raw_model: str | None) -> tuple[str | None, str]:
+    """Return (provider, provider_source) for one Claude Code session.
+
+    Judged on the RAW model string, before `_normalize_model_name` rewrites
+    "<synthetic>" into a display label — normalizing first would misclassify
+    system-generated sessions as a real model.
+
+    Anything that is not recognizably a Claude model resolves to
+    ``(None, "unattributed")``: an unknown source is surfaced, never guessed.
+    """
+    model = (raw_model or "").strip()
+    if not model or model == "unknown":
+        return None, PROVIDER_SOURCE_UNATTRIBUTED
+    if model.startswith("<") and model.endswith(">"):
+        return None, PROVIDER_SOURCE_UNATTRIBUTED
+    if model.lower().startswith("claude"):
+        return "claude_cli", PROVIDER_SOURCE_SESSION_TRANSCRIPT
+    return None, PROVIDER_SOURCE_UNATTRIBUTED
 
 
 def _get_time_delta(time_range: TimeRange) -> timedelta:
@@ -347,6 +376,7 @@ class AnalyticsService:
             by_agent=by_agent,
             by_model=by_model,
             projected_monthly=round(projected_monthly, 2),
+            period_days=days_in_range,
         )
 
     @staticmethod
@@ -670,25 +700,42 @@ class AnalyticsService:
         total_cost = sum(s.estimated_cost for s in range_sessions)
         total_tokens = sum(s.total_input_tokens + s.total_output_tokens for s in range_sessions)
         total_sessions = len(range_sessions)
-        provider = _runtime_provider()
 
-        # By model
-        model_costs: dict[str, dict] = defaultdict(lambda: {"cost": 0.0, "tokens": 0})
+        # By model. `_get_sessions()` reads Claude Code transcripts only, so
+        # attribution comes from each session's own model string — not from the
+        # `LLM_PROVIDER` runtime setting, which describes an unrelated concern.
+        model_costs: dict[str, dict] = defaultdict(
+            lambda: {"cost": 0.0, "tokens": 0, "providers": set(), "sources": set()}
+        )
         for s in range_sessions:
             if not _has_attributed_model_usage(s):
                 continue
             model = _normalize_model_name(s.model or "unknown")
+            session_provider, session_source = _attribute_session_provider(s.model)
             model_costs[model]["cost"] += s.estimated_cost
             model_costs[model]["tokens"] += s.total_input_tokens + s.total_output_tokens
+            model_costs[model]["providers"].add(session_provider)
+            model_costs[model]["sources"].add(session_source)
 
         by_model = []
         for model, data in model_costs.items():
             pct = (data["cost"] / total_cost * 100) if total_cost > 0 else 0
+            # Fail closed: a bucket whose sessions disagree, or that contains any
+            # unattributed session, is reported as unattributed rather than
+            # inheriting one session's provider.
+            providers = data["providers"]
+            if len(providers) == 1 and None not in providers:
+                bucket_provider = next(iter(providers))
+                bucket_source = PROVIDER_SOURCE_SESSION_TRANSCRIPT
+            else:
+                bucket_provider = None
+                bucket_source = PROVIDER_SOURCE_UNATTRIBUTED
             by_model.append(
                 CostBreakdown(
                     category="model",
                     value=model,
-                    provider=provider,
+                    provider=bucket_provider,
+                    provider_source=bucket_source,
                     cost=round(data["cost"], 4),
                     tokens=data["tokens"],
                     percentage=round(pct, 1),
@@ -724,6 +771,16 @@ class AnalyticsService:
 
         avg_cost = total_cost / total_sessions if total_sessions > 0 else 0
 
+        # Surface how many session cost estimates rest on a default rate rather
+        # than a registered price (audit: the bulk of estimated cost did).
+        price_source_counts: dict[str, int] = defaultdict(int)
+        for s in range_sessions:
+            # Sessions predating `price_source` (and test doubles) have no real
+            # value here; anything that is not a plain string counts as unknown
+            # rather than being passed through as a bogus key.
+            source = getattr(s, "price_source", None)
+            price_source_counts[source if isinstance(source, str) and source else "unknown"] += 1
+
         return CostAnalytics(
             time_range=time_range,
             total_cost=round(total_cost, 2),
@@ -732,6 +789,9 @@ class AnalyticsService:
             by_agent=by_agent,
             by_model=by_model,
             projected_monthly=round(projected_monthly, 2),
+            period_days=days_in_range,
+            provider_attribution=PROVIDER_SOURCE_SESSION_TRANSCRIPT,
+            price_source_counts=dict(price_source_counts),
         )
 
     @staticmethod

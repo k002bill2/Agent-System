@@ -10,6 +10,7 @@ import {
   type ExternalProviderConfig,
   type ExternalUsageSummaryResponse,
 } from '../externalUsage'
+import { DEFAULT_PERIOD_DAYS } from '../../lib/usageCoverage'
 
 // ─────────────────────────────────────────────────────────────
 // Mock Setup
@@ -94,6 +95,7 @@ function resetStore() {
     isLoading: false,
     error: null,
     lastFetched: null,
+    period: { days: DEFAULT_PERIOD_DAYS },
   })
 }
 
@@ -321,6 +323,89 @@ describe('externalUsage store', () => {
       mockGet.mockResolvedValueOnce(mockSummaryResponse)
       await syncPromise
       expect(useExternalUsageStore.getState().isLoading).toBe(false)
+    })
+  })
+  // ── period (감사 §7 / R3, R6) ───────────────────────────
+
+  describe('period', () => {
+    it('starts at the shared default', () => {
+      expect(useExternalUsageStore.getState().period).toEqual({ days: DEFAULT_PERIOD_DAYS })
+    })
+
+    it('setPeriod replaces the stored period', () => {
+      useExternalUsageStore.getState().setPeriod(7)
+      expect(useExternalUsageStore.getState().period).toEqual({ days: 7 })
+    })
+
+    it('fetchSummary without arguments derives the window from the stored period', async () => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date('2025-03-10T00:00:00.000Z'))
+      try {
+        useExternalUsageStore.getState().setPeriod(7)
+        mockGet.mockResolvedValueOnce(mockSummaryResponse)
+
+        await useExternalUsageStore.getState().fetchSummary()
+
+        const calledUrl = mockGet.mock.calls[0][0] as string
+        const params = new URLSearchParams(calledUrl.split('?')[1])
+        expect(params.get('end_time')).toBe('2025-03-10T00:00:00.000Z')
+        expect(params.get('start_time')).toBe('2025-03-03T00:00:00.000Z')
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('explicit arguments still win over the stored period', async () => {
+      useExternalUsageStore.getState().setPeriod(7)
+      mockGet.mockResolvedValueOnce(mockSummaryResponse)
+
+      await useExternalUsageStore.getState().fetchSummary('2025-01-01', '2025-01-31')
+
+      const calledUrl = mockGet.mock.calls[0][0] as string
+      expect(calledUrl).toContain('start_time=2025-01-01')
+      expect(calledUrl).toContain('end_time=2025-01-31')
+    })
+
+    it('syncProvider refreshes with the selected period, not the server default', async () => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date('2025-03-10T00:00:00.000Z'))
+      try {
+        useExternalUsageStore.getState().setPeriod(90)
+        mockPost.mockResolvedValueOnce({ synced_records: 5 })
+        mockGet.mockResolvedValueOnce(mockSummaryResponse)
+
+        await useExternalUsageStore.getState().syncProvider()
+
+        const calledUrl = mockGet.mock.calls[0][0] as string
+        const params = new URLSearchParams(calledUrl.split('?')[1])
+        // 90일 전. 기간이 유실되면 파라미터 자체가 사라진다.
+        expect(params.get('start_time')).toBe('2024-12-10T00:00:00.000Z')
+        expect(useExternalUsageStore.getState().period).toEqual({ days: 90 })
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('recomputes the window on each call instead of freezing it', async () => {
+      vi.useFakeTimers()
+      try {
+        useExternalUsageStore.getState().setPeriod(1)
+
+        vi.setSystemTime(new Date('2025-03-10T00:00:00.000Z'))
+        mockGet.mockResolvedValueOnce(mockSummaryResponse)
+        await useExternalUsageStore.getState().fetchSummary()
+
+        vi.setSystemTime(new Date('2025-03-11T00:00:00.000Z'))
+        mockGet.mockResolvedValueOnce(mockSummaryResponse)
+        await useExternalUsageStore.getState().fetchSummary()
+
+        const first = new URLSearchParams((mockGet.mock.calls[0][0] as string).split('?')[1])
+        const second = new URLSearchParams((mockGet.mock.calls[1][0] as string).split('?')[1])
+        expect(first.get('end_time')).toBe('2025-03-10T00:00:00.000Z')
+        expect(second.get('end_time')).toBe('2025-03-11T00:00:00.000Z')
+      } finally {
+        vi.useRealTimers()
+      }
     })
   })
 })

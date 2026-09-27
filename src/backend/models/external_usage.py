@@ -62,6 +62,19 @@ class UnifiedUsageRecord(BaseModel):
     code_acceptances: int | None = None
     acceptance_rate: float | None = None
 
+    # Provenance / measurement state.
+    #
+    # `cost_usd` keeps its existing meaning (unknown cost still stores 0.0) so
+    # older clients are unaffected; `cost_state` is what distinguishes a measured
+    # zero from an unmeasured one. All of these default fail-closed: a creation
+    # site that forgets to set one reports "unknown", never a false "known".
+    cost_state: str = "unknown"  # "known" | "unknown"
+    collection_source: str = "unknown"
+    # "internal_ledger" | "claude_session_snapshot" | "provider_billing" | "proxy"
+    measurement_method: str | None = None
+    price_source: str | None = None  # "table" | "fallback" | "unpriced"
+    date_basis: str = "event"  # "event" | "session_last_activity"
+
     # Metadata
     raw_data: dict = Field(default_factory=dict)
     collected_at: datetime = Field(default_factory=utcnow)
@@ -79,6 +92,48 @@ class UsageSummary(BaseModel):
     total_requests: int = 0
     model_breakdown: dict[str, float] = Field(default_factory=dict)  # model -> cost_usd
     member_breakdown: dict[str, float] = Field(default_factory=dict)  # user_id -> cost_usd
+
+    # Provenance / coverage. `total_cost_usd == 0.0` alone cannot say whether the
+    # period was free or simply unpriced — these fields carry that distinction.
+    collection_source: str = "unknown"
+    cost_state: str = "unknown"  # "known" | "partial" | "unknown"
+    known_cost_requests: int = 0
+    unknown_cost_requests: int = 0
+    request_unit: str = "unknown"  # "ledger_record" | "session"
+    unattributed_member_requests: int = 0
+    # Requests whose cost is included in the totals but priced at a generic
+    # default rate (model missing from the price table) — an estimate, not a
+    # registered price.
+    fallback_priced_requests: int = 0
+    # None == not collected by this source. Not 0 — that would repeat the very
+    # unknown-vs-zero collapse this model exists to prevent.
+    cache_read_tokens: int | None = None
+    cache_creation_tokens: int | None = None
+
+
+class UsageSourceCoverage(BaseModel):
+    """Coverage and measurement characteristics of one collection source.
+
+    Claude snapshots and the internal Codex ledger cover different populations,
+    so a single unqualified "actual" total across them would be misleading.
+    """
+
+    collection_source: str
+    provider: ExternalProvider
+    record_count: int = 0
+    request_unit: str = "unknown"  # "ledger_record" | "session"
+    cost_state: str = "unknown"  # "known" | "partial" | "unknown"
+    date_basis: str = "event"  # "event" | "session_last_activity"
+    note: str | None = None
+
+
+class UsageCoverage(BaseModel):
+    """Per-source provenance for one requested reporting window."""
+
+    requested_start: datetime
+    requested_end: datetime
+    period_days: int = 0
+    sources: list[UsageSourceCoverage] = Field(default_factory=list)
 
 
 class UsageReconciliationComparison(BaseModel):
@@ -120,6 +175,7 @@ class ExternalUsageSummaryResponse(BaseModel):
     period_start: datetime
     period_end: datetime
     reconciliation: UsageReconciliationSummary | None = None
+    coverage: UsageCoverage | None = None
 
 
 class ProviderConfig(BaseModel):

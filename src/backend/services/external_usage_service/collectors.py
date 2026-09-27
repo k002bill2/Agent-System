@@ -15,6 +15,27 @@ import httpx
 from models.external_usage import ExternalProvider, ProviderHealthStatus, UnifiedUsageRecord
 
 
+def _price_from_table(
+    table: tuple[tuple[str, float, float], ...],
+    model: str | None,
+    input_tokens: int,
+    output_tokens: int,
+) -> tuple[float, str]:
+    """Return (cost_usd, price_source) from a prefix-matched per-1K price table.
+
+    An unlisted model yields ``(0.0, "unpriced")`` — the $0.00 is the absence
+    of a price, not a free call, and callers must surface it as such rather
+    than folding it into a real total.
+    """
+    if not model:
+        return 0.0, "unpriced"
+    for prefix, cost_in, cost_out in table:
+        if model.startswith(prefix):
+            cost = (input_tokens / 1000) * cost_in + (output_tokens / 1000) * cost_out
+            return cost, "table"
+    return 0.0, "unpriced"
+
+
 class BaseUsageCollector(ABC):
     """Abstract base for external LLM usage collectors."""
 
@@ -75,14 +96,16 @@ class OpenAIUsageCollector(BaseUsageCollector):
         self._api_key = api_key
 
     @classmethod
+    def _calc_cost_detail(
+        cls, model: str | None, input_tokens: int, output_tokens: int
+    ) -> tuple[float, str]:
+        """Return (cost_usd, price_source); see ``_price_from_table``."""
+        return _price_from_table(cls._COST_TABLE, model, input_tokens, output_tokens)
+
+    @classmethod
     def _calc_cost(cls, model: str | None, input_tokens: int, output_tokens: int) -> float:
         """Estimate USD cost from the local price table; 0.0 for unlisted models."""
-        if not model:
-            return 0.0
-        for prefix, cost_in, cost_out in cls._COST_TABLE:
-            if model.startswith(prefix):
-                return (input_tokens / 1000) * cost_in + (output_tokens / 1000) * cost_out
-        return 0.0
+        return cls._calc_cost_detail(model, input_tokens, output_tokens)[0]
 
     def get_provider(self) -> ExternalProvider:
         return ExternalProvider.OPENAI
@@ -144,6 +167,7 @@ class OpenAIUsageCollector(BaseUsageCollector):
                         input_tok = result.get("input_tokens", 0) or 0
                         output_tok = result.get("output_tokens", 0) or 0
                         model = result.get("model")
+                        cost, price_source = self._calc_cost_detail(model, input_tok, output_tok)
                         records.append(
                             UnifiedUsageRecord(
                                 provider=ExternalProvider.OPENAI,
@@ -152,10 +176,15 @@ class OpenAIUsageCollector(BaseUsageCollector):
                                 input_tokens=input_tok,
                                 output_tokens=output_tok,
                                 total_tokens=input_tok + output_tok,
-                                cost_usd=self._calc_cost(model, input_tok, output_tok),
+                                cost_usd=cost,
                                 request_count=result.get("num_model_requests", 0) or 0,
                                 model=model,
                                 user_id=result.get("user_id"),
+                                cost_state="known" if price_source == "table" else "unknown",
+                                collection_source="provider_billing",
+                                measurement_method="provider_usage_api",
+                                price_source=price_source,
+                                date_basis="event",
                                 raw_data=result,
                             )
                         )
@@ -248,6 +277,11 @@ class GitHubCopilotCollector(BaseUsageCollector):
                             code_suggestions=suggestions,
                             code_acceptances=acceptances,
                             acceptance_rate=rate,
+                            # Copilot metrics carry no token or cost data at all,
+                            # so `cost_state` stays at its "unknown" default.
+                            collection_source="provider_billing",
+                            measurement_method="provider_metrics_api",
+                            date_basis="event",
                             raw_data=day_data,
                         )
                     )
@@ -288,14 +322,16 @@ class AnthropicUsageCollector(BaseUsageCollector):
         self._admin_key = admin_key
 
     @classmethod
+    def _calc_cost_detail(
+        cls, model: str | None, input_tokens: int, output_tokens: int
+    ) -> tuple[float, str]:
+        """Return (cost_usd, price_source); see ``_price_from_table``."""
+        return _price_from_table(cls._COST_TABLE, model, input_tokens, output_tokens)
+
+    @classmethod
     def _calc_cost(cls, model: str | None, input_tokens: int, output_tokens: int) -> float:
         """Estimate USD cost from the local price table; 0.0 for unlisted models."""
-        if not model:
-            return 0.0
-        for prefix, cost_in, cost_out in cls._COST_TABLE:
-            if model.startswith(prefix):
-                return (input_tokens / 1000) * cost_in + (output_tokens / 1000) * cost_out
-        return 0.0
+        return cls._calc_cost_detail(model, input_tokens, output_tokens)[0]
 
     def get_provider(self) -> ExternalProvider:
         return ExternalProvider.ANTHROPIC
@@ -367,7 +403,7 @@ class AnthropicUsageCollector(BaseUsageCollector):
                     model = item.get("model", "unknown")
                     input_tok = item.get("input_tokens", 0)
                     output_tok = item.get("output_tokens", 0)
-                    cost = self._calc_cost(model, input_tok, output_tok)
+                    cost, price_source = self._calc_cost_detail(model, input_tok, output_tok)
                     records.append(
                         UnifiedUsageRecord(
                             provider=ExternalProvider.ANTHROPIC,
@@ -379,6 +415,11 @@ class AnthropicUsageCollector(BaseUsageCollector):
                             cost_usd=cost,
                             request_count=item.get("num_requests", 0),
                             model=model,
+                            cost_state="known" if price_source == "table" else "unknown",
+                            collection_source="provider_billing",
+                            measurement_method="provider_usage_api",
+                            price_source=price_source,
+                            date_basis="event",
                             raw_data=item,
                         )
                     )
