@@ -415,6 +415,43 @@ describe('ExternalUsagePage', () => {
     expect(screen.queryByText(/비용 미측정/)).not.toBeInTheDocument()
   })
 
+  it('keeps the amount but flags sessions priced at the default rate', () => {
+    mockStore({
+      summary: makeSummary({
+        providers: [
+          makeProviderSummary({
+            provider: 'anthropic',
+            total_cost_usd: 1.5,
+            cost_state: 'known',
+            fallback_priced_requests: 2,
+            request_unit: 'session',
+          }),
+        ],
+      }),
+    })
+
+    render(<ExternalUsagePage />)
+
+    expect(screen.getAllByText('Estimated cost $1.50').length).toBeGreaterThanOrEqual(1)
+    expect(
+      screen.getByLabelText('Anthropic 비용 중 2세션은 단가표에 없는 모델이라 기본 단가로 추정'),
+    ).toHaveTextContent('기본 단가 추정 2세션')
+  })
+
+  it('omits the default-rate note when every session has a registered price', () => {
+    mockStore({
+      summary: makeSummary({
+        providers: [
+          makeProviderSummary({ provider: 'anthropic', total_cost_usd: 1.5, cost_state: 'known' }),
+        ],
+      }),
+    })
+
+    render(<ExternalUsagePage />)
+
+    expect(screen.queryByText(/기본 단가 추정/)).not.toBeInTheDocument()
+  })
+
   it('states the selected period and the collection coverage', () => {
     mockStore({
       period: { days: 7 },

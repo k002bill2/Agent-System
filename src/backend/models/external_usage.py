@@ -101,6 +101,10 @@ class UsageSummary(BaseModel):
     unknown_cost_requests: int = 0
     request_unit: str = "unknown"  # "ledger_record" | "session"
     unattributed_member_requests: int = 0
+    # Requests whose cost is included in the totals but priced at a generic
+    # default rate (model missing from the price table) — an estimate, not a
+    # registered price.
+    fallback_priced_requests: int = 0
     # None == not collected by this source. Not 0 — that would repeat the very
     # unknown-vs-zero collapse this model exists to prevent.
     cache_read_tokens: int | None = None

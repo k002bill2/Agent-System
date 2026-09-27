@@ -690,3 +690,37 @@ async def test_openai_collector_marks_unpriced_model_unknown() -> None:
     assert records[0].cost_usd == 0.0
     assert records[0].cost_state == "unknown"
     assert records[0].price_source == "unpriced"
+
+
+async def test_summarize_claude_snapshot_records_flags_fallback_priced_sessions() -> None:
+    """단가표 미등재 모델의 추정 비용은 금액을 유지하되 기본 단가임을 표면화한다."""
+    start = datetime(2026, 7, 1, tzinfo=UTC)
+    end = datetime(2026, 7, 31, tzinfo=UTC)
+    rows = [
+        SimpleNamespace(
+            id="registered",
+            model="claude-opus-4-8",
+            total_input_tokens=10,
+            total_output_tokens=10,
+            estimated_cost=0.1,
+            session_last_activity=datetime(2026, 7, 5, tzinfo=UTC),
+        ),
+        SimpleNamespace(
+            id="unregistered",
+            model="claude-unregistered-test-model",
+            total_input_tokens=10,
+            total_output_tokens=10,
+            estimated_cost=0.2,
+            session_last_activity=datetime(2026, 7, 6, tzinfo=UTC),
+        ),
+    ]
+
+    records, summaries = summarize_claude_snapshot_records(rows, start, end)
+
+    by_id = {r.id: r for r in records}
+    assert by_id["registered"].price_source == "table"
+    assert by_id["unregistered"].price_source == "fallback"
+    # 금액은 그대로 합산된다 (기존 숫자 계약 유지).
+    assert by_id["unregistered"].cost_usd == pytest.approx(0.2)
+    assert summaries[0].total_cost_usd == pytest.approx(0.3)
+    assert summaries[0].fallback_priced_requests == 1

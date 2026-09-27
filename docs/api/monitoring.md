@@ -130,7 +130,7 @@ model 은 `turn_context.payload.model`, 토큰은 `event_msg` 의 `payload.type=
 
 **측정 상태 (provenance)** — `cost_usd == 0.0` 만으로는 "무료"와 "미측정"을 구분할 수 없어 다음 필드를 함께 내린다. 모두 fail-closed 기본값(`"unknown"`)이며, 기존 숫자 필드의 의미는 바뀌지 않는다.
 - record: `cost_state`(`known`/`unknown`), `collection_source`(`internal_ledger`/`claude_session_snapshot`/`provider_billing`/`proxy`), `measurement_method`, `price_source`(`table`/`fallback`/`unpriced`), `date_basis`(`event`/`session_last_activity` — 스냅샷은 세션 누계를 마지막 활동일에 배치)
-- provider summary: `cost_state`(`known`/`partial`/`unknown`), `known_cost_requests`/`unknown_cost_requests`, `request_unit`(`ledger_record`/`session` — 두 카드의 requests 는 같은 단위가 아님), `unattributed_member_requests`, `cache_read_tokens`/`cache_creation_tokens`(`null` = 미수집)
+- provider summary: `cost_state`(`known`/`partial`/`unknown`), `known_cost_requests`/`unknown_cost_requests`, `request_unit`(`ledger_record`/`session` — 두 카드의 requests 는 같은 단위가 아님), `unattributed_member_requests`, `fallback_priced_requests`(단가표 미등재 모델을 기본 단가로 추정한 건수 — 금액은 합계에 포함), `cache_read_tokens`/`cache_creation_tokens`(`null` = 미수집)
 - 응답 최상위 `coverage`: 요청 기간(`requested_start`/`requested_end`/`period_days`)과 `(collection_source, provider)`별 `sources[]`(`record_count`, `request_unit`, `cost_state`, `date_basis`, `note`). Provider billing 행은 `reconciliation` 으로만 노출되며 `coverage` 에는 넣지 않는다(이중 보고 방지).
 
 ### Deployment Usage Keys (admin/manager 전용)

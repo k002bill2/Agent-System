@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from models.claude_session import PRICE_SOURCE_FALLBACK, resolve_model_price
 from models.external_usage import (
     ExternalProvider,
     UnifiedUsageRecord,
@@ -199,6 +200,11 @@ def summarize_claude_snapshot_records(
         cost_usd = raw_cost or 0.0
         timestamp = getattr(row, "session_last_activity", None) or start_time
         model = getattr(row, "model", None)
+        # The snapshot table does not persist `price_source`, so re-derive it from
+        # the stored model with the same lookup the session monitor priced with.
+        # A fallback rate keeps its amount (numeric contract unchanged) but is
+        # counted separately so it is never presented as a registered price.
+        price_source = resolve_model_price(model or "")[1] if raw_cost is not None else None
         record_id = getattr(row, "id", None) or str(uuid.uuid4())
 
         external_records.append(
@@ -216,6 +222,7 @@ def summarize_claude_snapshot_records(
                 cost_state=cost_state,
                 collection_source=COLLECTION_SOURCE_SNAPSHOT,
                 measurement_method="session_transcript",
+                price_source=price_source,
                 # Snapshots carry a whole session's totals stamped at its last
                 # activity, so this is not a per-event date.
                 date_basis="session_last_activity",
@@ -246,6 +253,8 @@ def summarize_claude_snapshot_records(
             summary.known_cost_requests += 1
         else:
             summary.unknown_cost_requests += 1
+        if price_source == PRICE_SOURCE_FALLBACK:
+            summary.fallback_priced_requests += 1
         # Snapshots come from host OS sessions; mapping `source_user` onto an
         # authenticated user_id is explicitly out of scope, so every snapshot
         # request is member-unattributed.

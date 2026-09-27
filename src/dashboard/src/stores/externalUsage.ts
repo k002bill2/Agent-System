@@ -63,6 +63,8 @@ export interface UsageSummary {
   request_unit?: 'ledger_record' | 'session' | 'unknown'
   /** user_id 가 없어 사용자에 귀속되지 않은 레코드 수. */
   unattributed_member_requests?: number
+  /** 비용은 합계에 포함되지만 단가표에 없는 모델이라 기본 단가로 추정된 레코드 수. */
+  fallback_priced_requests?: number
   /** `null` 은 "미수집" 이며 `0` 이 아니다. */
   cache_read_tokens?: number | null
   /** `null` 은 "미수집" 이며 `0` 이 아니다. */

@@ -354,6 +354,14 @@ export function ExternalUsagePage() {
                   {sourceNote ? ` · ${sourceNote}` : ''}
                 </div>
               )}
+              {pData && (pData.fallback_priced_requests ?? 0) > 0 && (
+                <div
+                  className="text-xs text-amber-600 dark:text-amber-400 mt-0.5"
+                  aria-label={`${PROVIDER_LABELS[pkey] ?? pkey} 비용 중 ${pData.fallback_priced_requests}${requestUnit}은 단가표에 없는 모델이라 기본 단가로 추정`}
+                >
+                  기본 단가 추정 {pData.fallback_priced_requests?.toLocaleString()}{requestUnit}
+                </div>
+              )}
             </div>
           )
         })}
