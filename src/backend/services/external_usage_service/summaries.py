@@ -265,6 +265,36 @@ def summarize_claude_snapshot_records(
     return external_records, ([_finalize_cost_state(summary)] if summary is not None else [])
 
 
+def summarize_proxy_records_for_coverage(
+    records: list[UnifiedUsageRecord],
+    start_time: datetime,
+    end_time: datetime,
+) -> list[UsageSummary]:
+    """Roll legacy proxy fallback records into per-provider summaries for `coverage`.
+
+    Coverage only: the proxy fallback has never fed `providers` or the cost
+    total, and this does not change that — it just keeps the collection path
+    from disappearing out of the provenance report.
+    """
+    by_provider: dict[ExternalProvider, UsageSummary] = {}
+    for record in records:
+        summary = by_provider.setdefault(
+            record.provider,
+            UsageSummary(
+                provider=record.provider,
+                period_start=start_time,
+                period_end=end_time,
+                collection_source=COLLECTION_SOURCE_PROXY,
+            ),
+        )
+        summary.total_requests += record.request_count
+        if record.cost_state == "known":
+            summary.known_cost_requests += record.request_count
+        else:
+            summary.unknown_cost_requests += record.request_count
+    return [_finalize_cost_state(summary) for summary in by_provider.values()]
+
+
 def _summary_tokens(summary: UsageSummary | None) -> int:
     if summary is None:
         return 0

@@ -664,6 +664,34 @@ async def test_summary_response_exposes_coverage_per_source_and_provider() -> No
     assert by_key[("claude_session_snapshot", "claude_cli")].date_basis == ("session_last_activity")
 
 
+async def test_summary_coverage_includes_proxy_fallback_records() -> None:
+    """ledger 가 비어 proxy 레코드로 폴백하면 coverage 에도 proxy 경로가 나타난다."""
+    service = ExternalUsageService()
+    service.add_record(
+        UnifiedUsageRecord(
+            provider=ExternalProvider.ANTHROPIC,
+            timestamp=datetime(2026, 6, 1, tzinfo=UTC),
+            request_count=3,
+        )
+    )
+
+    with (
+        patch.object(
+            ExternalUsageService, "_collect_internal_ledger_records", AsyncMock(return_value=[])
+        ),
+        patch.object(ExternalUsageService, "_collect_claude_snapshots", AsyncMock(return_value=[])),
+    ):
+        response = await service.get_summary(MagicMock(), *_WINDOW)
+
+    assert [r.collection_source for r in response.records] == ["proxy"]
+    assert response.coverage is not None
+    by_key = {(s.collection_source, s.provider.value): s for s in response.coverage.sources}
+    proxy = by_key[("proxy", "anthropic")]
+    assert proxy.record_count == 3
+    assert proxy.cost_state == "unknown"
+    assert proxy.note
+
+
 async def test_openai_collector_marks_priced_records_known() -> None:
     """provider billing 경로도 cost_state 를 명시한다 (기본값 unknown 에 기대지 않는다)."""
     collector = OpenAIUsageCollector("sk-admin-test")
