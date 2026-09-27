@@ -19,11 +19,14 @@ interface MemberSummary {
     acceptances: number
     /** 비용이 실제로 측정된 레코드 수. 0 이면 비용을 "안다"고 말할 수 없다. */
     knownCostRecords: number
+    /** 비용이 측정되지 않은 레코드 수. known 과 함께 양수면 금액은 부분합이다. */
+    unknownCostRecords: number
   }>
   totalCost: number
   totalTokens: number
   totalRequests: number
   knownCostRecords: number
+  unknownCostRecords: number
 }
 
 function aggregateByMember(records: UnifiedUsageRecord[]): MemberSummary[] {
@@ -41,6 +44,7 @@ function aggregateByMember(records: UnifiedUsageRecord[]): MemberSummary[] {
         totalTokens: 0,
         totalRequests: 0,
         knownCostRecords: 0,
+        unknownCostRecords: 0,
       })
     }
     const member = map.get(key)!
@@ -54,6 +58,7 @@ function aggregateByMember(records: UnifiedUsageRecord[]): MemberSummary[] {
         suggestions: 0,
         acceptances: 0,
         knownCostRecords: 0,
+        unknownCostRecords: 0,
       }
     }
 
@@ -65,11 +70,13 @@ function aggregateByMember(records: UnifiedUsageRecord[]): MemberSummary[] {
     p.suggestions += rec.code_suggestions ?? 0
     p.acceptances += rec.code_acceptances ?? 0
     if (costMeasured) p.knownCostRecords += 1
+    else p.unknownCostRecords += 1
 
     member.totalCost += rec.cost_usd
     member.totalTokens += rec.total_tokens
     member.totalRequests += rec.request_count
     if (costMeasured) member.knownCostRecords += 1
+    else member.unknownCostRecords += 1
   }
 
   return Array.from(map.values())
@@ -135,6 +142,38 @@ function sortProviders(providers: Iterable<string>): string[] {
     }
     return a.localeCompare(b)
   })
+}
+
+interface CostCellProps {
+  cost: number
+  knownRecords: number
+  unknownRecords: number
+  unmeasuredAriaLabel: string
+}
+
+/**
+ * 비용 셀의 세 상태: 전부 측정(금액), 전부 미측정(마커), 섞임(금액 + 부분합 표시).
+ * 미측정 레코드는 0 으로 더해지므로 섞인 합계를 그냥 보여주면 실제보다 작은 금액이 된다.
+ */
+function CostCell({ cost, knownRecords, unknownRecords, unmeasuredAriaLabel }: CostCellProps) {
+  if (knownRecords === 0) {
+    return (
+      <div className="text-xs text-amber-600 dark:text-amber-400" aria-label={unmeasuredAriaLabel}>
+        비용 미측정
+      </div>
+    )
+  }
+  if (unknownRecords > 0) {
+    return (
+      <div
+        className="text-xs text-amber-600 dark:text-amber-400"
+        aria-label={`추정 비용 ${formatCost(cost)} — 일부 레코드는 비용 미측정이라 실제보다 작을 수 있습니다`}
+      >
+        Estimated cost {formatCost(cost)} · 일부 미측정
+      </div>
+    )
+  }
+  return <div className="text-xs text-gray-400">Estimated cost {formatCost(cost)}</div>
 }
 
 interface Props {
@@ -301,16 +340,12 @@ export default function MemberUsageTable({ records, isLoading, unattributedReque
                     return (
                       <td key={p} className="px-4 py-3 text-gray-600 dark:text-gray-300">
                         <div className="text-xs font-medium">{formatTokens(pd.tokens)} tokens</div>
-                        {pd.knownCostRecords > 0 ? (
-                          <div className="text-xs text-gray-400">Estimated cost {formatCost(pd.cost)}</div>
-                        ) : (
-                          <div
-                            className="text-xs text-amber-600 dark:text-amber-400"
-                            aria-label={`${PROVIDER_LABELS[p] ?? p} 비용 미측정 — 0 달러라는 뜻이 아닙니다`}
-                          >
-                            비용 미측정
-                          </div>
-                        )}
+                        <CostCell
+                          cost={pd.cost}
+                          knownRecords={pd.knownCostRecords}
+                          unknownRecords={pd.unknownCostRecords}
+                          unmeasuredAriaLabel={`${PROVIDER_LABELS[p] ?? p} 비용 미측정 — 0 달러라는 뜻이 아닙니다`}
+                        />
                       </td>
                     )
                   })}
@@ -323,16 +358,12 @@ export default function MemberUsageTable({ records, isLoading, unattributedReque
                       )}
                       {formatTokens(member.totalTokens)} tokens
                     </span>
-                    {member.knownCostRecords > 0 ? (
-                      <div className="text-xs text-gray-400">Estimated cost {formatCost(member.totalCost)}</div>
-                    ) : (
-                      <div
-                        className="text-xs text-amber-600 dark:text-amber-400"
-                        aria-label="비용 미측정 — 0 달러라는 뜻이 아닙니다"
-                      >
-                        비용 미측정
-                      </div>
-                    )}
+                    <CostCell
+                      cost={member.totalCost}
+                      knownRecords={member.knownCostRecords}
+                      unknownRecords={member.unknownCostRecords}
+                      unmeasuredAriaLabel="비용 미측정 — 0 달러라는 뜻이 아닙니다"
+                    />
                   </td>
                 </tr>
               ))}

@@ -227,4 +227,22 @@ describe('MemberUsageTable', () => {
     expect(screen.getAllByText('Estimated cost $0.00').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByText('비용 미측정')).not.toBeInTheDocument()
   })
+
+  it('labels a mix of measured and unmeasured costs as partial', () => {
+    render(
+      <MemberUsageTable
+        records={[
+          makeRecord({ id: 'r1', cost_usd: 5, cost_state: 'known' }),
+          makeRecord({ id: 'r2', cost_usd: 0, cost_state: 'unknown' }),
+        ]}
+        isLoading={false}
+      />
+    )
+    // provider 셀과 멤버 합계 두 곳 모두 불완전한 금액임을 밝힌다.
+    const partial = screen.getAllByLabelText(
+      '추정 비용 $5.00 — 일부 레코드는 비용 미측정이라 실제보다 작을 수 있습니다',
+    )
+    expect(partial).toHaveLength(2)
+    partial.forEach(el => expect(el).toHaveTextContent('Estimated cost $5.00 · 일부 미측정'))
+  })
 })
