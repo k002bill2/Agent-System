@@ -22,8 +22,11 @@ from utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
-# Track file mtime+size to detect changes (avoids redundant DB writes)
-_sync_cache: dict[str, tuple[float, int]] = {}
+# Track (file_size, last_activity) to detect changes (avoids redundant DB writes).
+# `last_activity` is required: file_size alone never re-syncs a same-size edit,
+# and the previous `_file_mtime` attribute is set nowhere in the codebase, so
+# the comparison silently degraded to file_size only.
+_sync_cache: dict[str, tuple[int, object]] = {}
 _sync_lock = asyncio.Lock()
 
 
@@ -44,11 +47,8 @@ async def _sync_sessions_to_db(sessions: list) -> None:
             # Find sessions with changed files
             changed = []
             for s in sessions:
-                fp = s.file_path
-                key = (s.file_size, hash(fp))
                 cached = _sync_cache.get(s.session_id)
-                current = (getattr(s, "_file_mtime", 0) or s.file_size, s.file_size)
-                if cached != current:
+                if cached != (s.file_size, s.last_activity):
                     changed.append(s)
 
             if not changed:
@@ -84,6 +84,12 @@ async def _sync_sessions_to_db(sessions: list) -> None:
                         "estimated_cost": s.estimated_cost,
                         "file_path": s.file_path,
                         "file_size": s.file_size,
+                        # Both activity columns belong in `data` so the UPDATE
+                        # branch refreshes them too. Setting them only on INSERT
+                        # left period filters and daily-chart dates stale while
+                        # token counts moved on.
+                        "session_created_at": s.created_at,
+                        "session_last_activity": s.last_activity,
                         "updated_at": now,
                     }
 
@@ -94,13 +100,14 @@ async def _sync_sessions_to_db(sessions: list) -> None:
                         snapshot = ClaudeSessionSnapshotModel(
                             id=s.session_id,
                             **data,
-                            session_created_at=s.created_at,
-                            session_last_activity=s.last_activity,
                             created_at=now,
                         )
                         db.add(snapshot)
 
-                    _sync_cache[s.session_id] = (s.file_size, s.file_size)
+                    # Store exactly the tuple the comparison above reads —
+                    # a differently shaped cache entry never matches, so every
+                    # session would look changed on every scan.
+                    _sync_cache[s.session_id] = (s.file_size, s.last_activity)
 
                 await db.commit()
                 logger.debug(f"Synced {len(changed)} claude sessions to DB")

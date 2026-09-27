@@ -149,6 +149,11 @@ class CostBreakdown(BaseModel):
     category: str  # e.g., "agent_name", "model", "session"
     value: str  # e.g., "web-ui-specialist", "claude-sonnet-4-6"
     provider: str | None = None  # e.g., "codex_cli", "anthropic"
+    # Where `provider` came from. Fail-closed: when this says "unattributed" the
+    # provider is genuinely unknown and consumers must not re-guess it from the
+    # model name. `None` means the row does not carry provider attribution.
+    provider_source: str | None = None  # "session_transcript" | "ledger" |
+    # "runtime_config" | "unattributed"
     cost: float
     tokens: int
     percentage: float = 0.0
@@ -164,6 +169,9 @@ class CostAnalytics(BaseModel):
     by_agent: list[CostBreakdown] = Field(default_factory=list)
     by_model: list[CostBreakdown] = Field(default_factory=list)
     projected_monthly: float = 0.0  # Projected based on current usage
+    period_days: int = 0  # Days covered by `time_range`, so the UI can state it
+    provider_attribution: str = "unknown"  # How `by_model[].provider` was derived
+    price_source_counts: dict[str, int] = Field(default_factory=dict)
 
 
 # ─────────────────────────────────────────────────────────────

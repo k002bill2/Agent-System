@@ -53,7 +53,7 @@ from models.claude_session import (
     SessionMessage,
     SessionStatus,
     TokenUsage,
-    calculate_cost,
+    calculate_cost_detail,
 )
 from services.session_file_cache import SessionFileCache
 from services.session_summary import (
@@ -336,8 +336,17 @@ class ClaudeSessionMonitor:
         user_message_count = 0
         assistant_message_count = 0
         tool_call_count = 0
-        total_input_tokens = 0
-        total_output_tokens = 0
+        # Assistant usage is deduped by `message.id` because a transcript records
+        # the same message id more than once (measured: 337 of 400 local session
+        # files). Summing the lines double-counts. Last value wins so a streamed
+        # cumulative update is still picked up. Entries without an id cannot be
+        # deduped, so they are accumulated once and counted separately.
+        usage_by_message_id: dict[str, tuple[int, int, int, int]] = {}
+        untracked_input_tokens = 0
+        untracked_output_tokens = 0
+        untracked_cache_read_tokens = 0
+        untracked_cache_creation_tokens = 0
+        usage_entries_without_id = 0
 
         # Session metadata
         slug = ""
@@ -394,9 +403,23 @@ class ClaudeSessionMonitor:
                     if model == "unknown" and "model" in message_data:
                         model = message_data.get("model", "unknown")
 
-                    usage = message_data.get("usage", {})
-                    total_input_tokens += usage.get("input_tokens", 0)
-                    total_output_tokens += usage.get("output_tokens", 0)
+                    usage = message_data.get("usage") or {}
+                    if usage:
+                        entry_usage = (
+                            usage.get("input_tokens", 0) or 0,
+                            usage.get("output_tokens", 0) or 0,
+                            usage.get("cache_read_input_tokens", 0) or 0,
+                            usage.get("cache_creation_input_tokens", 0) or 0,
+                        )
+                        message_id = message_data.get("id")
+                        if message_id:
+                            usage_by_message_id[str(message_id)] = entry_usage
+                        else:
+                            usage_entries_without_id += 1
+                            untracked_input_tokens += entry_usage[0]
+                            untracked_output_tokens += entry_usage[1]
+                            untracked_cache_read_tokens += entry_usage[2]
+                            untracked_cache_creation_tokens += entry_usage[3]
 
                     # Count tool uses
                     content = message_data.get("content", [])
@@ -404,6 +427,22 @@ class ClaudeSessionMonitor:
                         for item in content:
                             if isinstance(item, dict) and item.get("type") == "tool_use":
                                 tool_call_count += 1
+
+        total_input_tokens = untracked_input_tokens + sum(
+            u[0] for u in usage_by_message_id.values()
+        )
+        total_output_tokens = untracked_output_tokens + sum(
+            u[1] for u in usage_by_message_id.values()
+        )
+        # Cache tokens stay in their own fields: their rate is unverified, so
+        # folding them into the input total or the cost would silently move
+        # numbers that existing consumers already compare against.
+        cache_read_tokens = untracked_cache_read_tokens + sum(
+            u[2] for u in usage_by_message_id.values()
+        )
+        cache_creation_tokens = untracked_cache_creation_tokens + sum(
+            u[3] for u in usage_by_message_id.values()
+        )
 
         if created_at is None:
             created_at = utcnow()
@@ -416,8 +455,12 @@ class ClaudeSessionMonitor:
         # 어긋난 경과 시간이 나온다.
         status = status_for(last_activity)
 
-        # Calculate cost
-        estimated_cost = calculate_cost(model, total_input_tokens, total_output_tokens)
+        # Calculate cost. `price_source` records whether the rate came from the
+        # registered price table or the generic default, so an estimate built on
+        # a default rate is never presented as measured.
+        estimated_cost, price_source = calculate_cost_detail(
+            model, total_input_tokens, total_output_tokens
+        )
 
         # Extract human-readable project name from cwd (preferred) or encoded path (fallback)
         project_name = self._extract_project_name(cwd, project_path)
@@ -441,6 +484,10 @@ class ClaudeSessionMonitor:
             total_input_tokens=total_input_tokens,
             total_output_tokens=total_output_tokens,
             estimated_cost=estimated_cost,
+            cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
+            usage_entries_without_id=usage_entries_without_id,
+            price_source=price_source,
             file_path=str(file_path),
             file_size=file_size,
             source_user=source_user,

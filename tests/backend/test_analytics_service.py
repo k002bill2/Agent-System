@@ -17,6 +17,7 @@ from models.analytics import (
     TrendDataPoint,
 )
 from services.analytics_service import (
+    UNKNOWN_MODEL_NAME,
     AnalyticsService,
     _get_interval,
     _get_time_delta,
@@ -402,7 +403,15 @@ class TestGetCostAnalyticsFromSessions:
             return_value=mock_monitor,
         )
 
-    def test_model_breakdown_uses_runtime_provider_metadata(self, monkeypatch):
+    def test_model_breakdown_attributes_claude_sessions_to_claude_cli(self, monkeypatch):
+        """Claude 트랜스크립트 세션은 `LLM_PROVIDER` 와 무관하게 claude_cli 로 귀속된다.
+
+        이 테스트는 `test_model_breakdown_uses_runtime_provider_metadata` 를 대체한다.
+        구 테스트는 `LLM_PROVIDER=codex_cli` 에서 Claude 모델의 provider 가 `codex_cli`
+        가 되는 것을 *정답으로 기대*했는데, 그것이 정확히 감사 §1 이 확인한 오귀속
+        결함이다. `_get_sessions()` 는 Claude Code 트랜스크립트만 읽으므로 실행 설정
+        (`LLM_PROVIDER`)은 귀속 근거가 될 수 없다.
+        """
         monkeypatch.setenv("LLM_PROVIDER", "codex_cli")
         sessions = [
             _make_mock_session(
@@ -417,7 +426,77 @@ class TestGetCostAnalyticsFromSessions:
             result = AnalyticsService.get_cost_analytics_from_sessions(TimeRange.ALL)
 
         assert result.by_model[0].value == "claude-opus-4-8"
-        assert result.by_model[0].provider == "codex_cli"
+        assert result.by_model[0].provider == "claude_cli"
+        assert result.by_model[0].provider_source == "session_transcript"
+        assert result.provider_attribution == "session_transcript"
+
+    def test_model_breakdown_marks_unknown_model_sessions_unattributed(self):
+        """모델을 모르는 세션은 추측하지 않고 `unattributed` 로 표면화한다 (감사 §1)."""
+        sessions = [
+            _make_mock_session(
+                model="unknown",
+                input_tokens=10,
+                output_tokens=20,
+                estimated_cost=0.01,
+            )
+        ]
+
+        with self._patch_sessions(sessions):
+            result = AnalyticsService.get_cost_analytics_from_sessions(TimeRange.ALL)
+
+        assert result.by_model[0].provider is None
+        assert result.by_model[0].provider_source == "unattributed"
+
+    def test_model_breakdown_marks_synthetic_sessions_unattributed(self):
+        """`<synthetic>` 은 정규화 전 원본 문자열로 판정해 unattributed 로 떨어진다."""
+        sessions = [
+            _make_mock_session(
+                model="<synthetic>",
+                input_tokens=5,
+                output_tokens=5,
+                estimated_cost=0.001,
+            )
+        ]
+
+        with self._patch_sessions(sessions):
+            result = AnalyticsService.get_cost_analytics_from_sessions(TimeRange.ALL)
+
+        assert result.by_model[0].value == "synthetic (system-generated)"
+        assert result.by_model[0].provider is None
+        assert result.by_model[0].provider_source == "unattributed"
+
+    def test_model_bucket_with_mixed_attribution_fails_closed(self):
+        """같은 정규화 모델명 버킷에 귀속·미귀속이 섞이면 fail-closed 로 unattributed."""
+        sessions = [
+            _make_mock_session(model="unknown", input_tokens=1, output_tokens=1),
+            _make_mock_session(model="unknown", input_tokens=2, output_tokens=2),
+        ]
+
+        with self._patch_sessions(sessions):
+            result = AnalyticsService.get_cost_analytics_from_sessions(TimeRange.ALL)
+
+        bucket = next(b for b in result.by_model if b.value == UNKNOWN_MODEL_NAME)
+        assert bucket.provider is None
+        assert bucket.provider_source == "unattributed"
+
+    def test_project_breakdown_keeps_provider_unset(self):
+        """프로젝트(by_agent) 행은 provider 표면이 아니다 — 계약 변경 없음."""
+        sessions = [_make_mock_session(model="claude-opus-4-8")]
+
+        with self._patch_sessions(sessions):
+            result = AnalyticsService.get_cost_analytics_from_sessions(TimeRange.ALL)
+
+        assert result.by_agent[0].provider is None
+        assert result.by_agent[0].provider_source is None
+
+    def test_period_days_reflects_time_range(self):
+        """`period_days` 가 선택 기간을 명시한다 (헤더·상세 기간 동기화 근거)."""
+        sessions = [_make_mock_session(model="claude-opus-4-8")]
+
+        with self._patch_sessions(sessions):
+            result = AnalyticsService.get_cost_analytics_from_sessions(TimeRange.WEEK)
+
+        assert result.period_days == 7
 
     def test_model_breakdown_excludes_zero_usage_sessions_without_model_metadata(self):
         sessions = [

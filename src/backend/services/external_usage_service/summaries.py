@@ -10,10 +10,35 @@ from typing import Any
 from models.external_usage import (
     ExternalProvider,
     UnifiedUsageRecord,
+    UsageCoverage,
     UsageReconciliationComparison,
     UsageReconciliationSummary,
+    UsageSourceCoverage,
     UsageSummary,
 )
+
+COLLECTION_SOURCE_LEDGER = "internal_ledger"
+COLLECTION_SOURCE_SNAPSHOT = "claude_session_snapshot"
+COLLECTION_SOURCE_PROVIDER_BILLING = "provider_billing"
+COLLECTION_SOURCE_PROXY = "proxy"
+
+# Each collection source measures a different population. The note is rendered
+# verbatim so the two dashboard cards are not read as one comparable total.
+_SOURCE_TRAITS: dict[str, tuple[str, str | None]] = {
+    COLLECTION_SOURCE_LEDGER: (
+        "event",
+        "AOS 내부 호출 ledger — 호스트 전역 Codex 사용량이 아님",
+    ),
+    COLLECTION_SOURCE_SNAPSHOT: (
+        "session_last_activity",
+        "호스트 Claude 세션 스냅샷 — 요청 단위는 세션",
+    ),
+    COLLECTION_SOURCE_PROVIDER_BILLING: (
+        "event",
+        "provider 청구 API — 내부 ledger 와 같은 사용을 두 번째로 측정한 값",
+    ),
+    COLLECTION_SOURCE_PROXY: ("event", "AOS LLM 프록시 인메모리 레코드"),
+}
 
 _PROVIDER_ALIASES: dict[str, ExternalProvider] = {
     "google": ExternalProvider.GOOGLE_GEMINI,
@@ -44,6 +69,25 @@ def _record_tokens(record: Any) -> tuple[int, int, int]:
     return input_tokens, output_tokens, total_tokens
 
 
+def resolve_cost_state(known: int, unknown: int) -> str:
+    """Roll per-record cost measurement into a summary-level state.
+
+    Fail-closed: with no records at all the answer is "unknown", not "known".
+    """
+    if known and unknown:
+        return "partial"
+    if known:
+        return "known"
+    return "unknown"
+
+
+def _finalize_cost_state(summary: UsageSummary) -> UsageSummary:
+    summary.cost_state = resolve_cost_state(
+        summary.known_cost_requests, summary.unknown_cost_requests
+    )
+    return summary
+
+
 def summarize_internal_ledger_records(
     records: list[Any],
     start_time: datetime,
@@ -59,7 +103,12 @@ def summarize_internal_ledger_records(
             getattr(record, "mode", None),
         )
         input_tokens, output_tokens, total_tokens = _record_tokens(record)
-        cost_usd = getattr(record, "estimated_cost_usd", None) or 0.0
+        # Decide the state from the RAW value: `or 0.0` collapses None into 0.0
+        # and would make an unmeasured row indistinguishable from a free one.
+        raw_cost = getattr(record, "estimated_cost_usd", None)
+        cost_state = "unknown" if raw_cost is None else "known"
+        cost_usd = raw_cost or 0.0  # existing numeric contract unchanged
+        measurement_method = getattr(record, "measurement_method", None)
         timestamp = getattr(record, "started_at", None) or start_time
         model = getattr(record, "model", None)
         user_id = getattr(record, "user_id", None)
@@ -79,12 +128,18 @@ def summarize_internal_ledger_records(
                 model=model,
                 user_id=user_id,
                 project_id=getattr(record, "project_id", None),
+                cost_state=cost_state,
+                collection_source=COLLECTION_SOURCE_LEDGER,
+                measurement_method=measurement_method,
+                date_basis="event",
+                # `raw_data["measurement_method"]` stays for older consumers; the
+                # top-level field above is the canonical one going forward.
                 raw_data={
                     "ledger_id": getattr(record, "id", None),
                     "source": getattr(record, "source", None),
                     "mode": getattr(record, "mode", None),
                     "status": getattr(record, "status", None),
-                    "measurement_method": getattr(record, "measurement_method", None),
+                    "measurement_method": measurement_method,
                     "organization_id": getattr(record, "organization_id", None),
                 },
             )
@@ -96,12 +151,20 @@ def summarize_internal_ledger_records(
                 provider=provider,
                 period_start=start_time,
                 period_end=end_time,
+                collection_source=COLLECTION_SOURCE_LEDGER,
+                request_unit="ledger_record",
             ),
         )
         summary.total_input_tokens += input_tokens
         summary.total_output_tokens += output_tokens
         summary.total_cost_usd += cost_usd
         summary.total_requests += 1
+        if cost_state == "known":
+            summary.known_cost_requests += 1
+        else:
+            summary.unknown_cost_requests += 1
+        if not user_id:
+            summary.unattributed_member_requests += 1
         if model:
             summary.model_breakdown[model] = summary.model_breakdown.get(model, 0.0) + cost_usd
         if user_id:
@@ -109,7 +172,9 @@ def summarize_internal_ledger_records(
                 summary.member_breakdown.get(user_id, 0.0) + cost_usd
             )
 
-    return external_records, list(summaries_by_provider.values())
+    return external_records, [
+        _finalize_cost_state(summary) for summary in summaries_by_provider.values()
+    ]
 
 
 def summarize_claude_snapshot_records(
@@ -129,7 +194,9 @@ def summarize_claude_snapshot_records(
     for row in rows:
         input_tokens = getattr(row, "total_input_tokens", None) or 0
         output_tokens = getattr(row, "total_output_tokens", None) or 0
-        cost_usd = getattr(row, "estimated_cost", None) or 0.0
+        raw_cost = getattr(row, "estimated_cost", None)
+        cost_state = "unknown" if raw_cost is None else "known"
+        cost_usd = raw_cost or 0.0
         timestamp = getattr(row, "session_last_activity", None) or start_time
         model = getattr(row, "model", None)
         record_id = getattr(row, "id", None) or str(uuid.uuid4())
@@ -146,6 +213,12 @@ def summarize_claude_snapshot_records(
                 cost_usd=cost_usd,
                 request_count=1,
                 model=model,
+                cost_state=cost_state,
+                collection_source=COLLECTION_SOURCE_SNAPSHOT,
+                measurement_method="session_transcript",
+                # Snapshots carry a whole session's totals stamped at its last
+                # activity, so this is not a per-event date.
+                date_basis="session_last_activity",
                 raw_data={
                     "snapshot_id": getattr(row, "id", None),
                     "project_name": getattr(row, "project_name", None),
@@ -159,15 +232,28 @@ def summarize_claude_snapshot_records(
                 provider=ExternalProvider.CLAUDE_CLI,
                 period_start=start_time,
                 period_end=end_time,
+                collection_source=COLLECTION_SOURCE_SNAPSHOT,
+                request_unit="session",
+                # The snapshot table has no cache columns: not collected, not zero.
+                cache_read_tokens=None,
+                cache_creation_tokens=None,
             )
         summary.total_input_tokens += input_tokens
         summary.total_output_tokens += output_tokens
         summary.total_cost_usd += cost_usd
         summary.total_requests += 1
+        if cost_state == "known":
+            summary.known_cost_requests += 1
+        else:
+            summary.unknown_cost_requests += 1
+        # Snapshots come from host OS sessions; mapping `source_user` onto an
+        # authenticated user_id is explicitly out of scope, so every snapshot
+        # request is member-unattributed.
+        summary.unattributed_member_requests += 1
         if model:
             summary.model_breakdown[model] = summary.model_breakdown.get(model, 0.0) + cost_usd
 
-    return external_records, ([summary] if summary is not None else [])
+    return external_records, ([_finalize_cost_state(summary)] if summary is not None else [])
 
 
 def _summary_tokens(summary: UsageSummary | None) -> int:
@@ -281,4 +367,52 @@ def build_reconciliation_summary(
         ),
         provider_billing_record_count=provider_billing_record_count,
         comparisons=comparisons,
+    )
+
+
+def build_usage_coverage(
+    summaries: list[UsageSummary],
+    start_time: datetime,
+    end_time: datetime,
+) -> UsageCoverage:
+    """Describe what each collection source actually covered for this window.
+
+    One entry per (collection_source, provider) pair. Two entries with different
+    `request_unit` values are a signal that their totals are not comparable —
+    a Codex ledger record and a Claude session are not the same "request".
+    """
+    by_key: dict[tuple[str, ExternalProvider], UsageSourceCoverage] = {}
+    # Roll the raw counters, then derive `cost_state` once. Merging the derived
+    # states pairwise instead would let "known" + "unknown" resolve to "known".
+    counters: dict[tuple[str, ExternalProvider], tuple[int, int]] = {}
+
+    for summary in summaries:
+        key = (summary.collection_source, summary.provider)
+        date_basis, note = _SOURCE_TRAITS.get(summary.collection_source, ("event", None))
+        source = by_key.get(key)
+        if source is None:
+            source = UsageSourceCoverage(
+                collection_source=summary.collection_source,
+                provider=summary.provider,
+                request_unit=summary.request_unit,
+                date_basis=date_basis,
+                note=note,
+            )
+            by_key[key] = source
+            counters[key] = (0, 0)
+        source.record_count += summary.total_requests
+        known, unknown = counters[key]
+        counters[key] = (
+            known + summary.known_cost_requests,
+            unknown + summary.unknown_cost_requests,
+        )
+
+    for key, source in by_key.items():
+        source.cost_state = resolve_cost_state(*counters[key])
+
+    return UsageCoverage(
+        requested_start=start_time,
+        requested_end=end_time,
+        period_days=max((end_time - start_time).days, 0),
+        sources=list(by_key.values()),
     )

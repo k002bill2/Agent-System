@@ -7,6 +7,11 @@ from pydantic import BaseModel, Field
 
 from utils.time import utcnow
 
+# Where an estimated cost got its per-token rate. Declared here (ahead of the
+# response models) because `ClaudeSessionInfo.price_source` defaults to it.
+PRICE_SOURCE_TABLE = "table"
+PRICE_SOURCE_FALLBACK = "fallback"
+
 
 class SessionStatus(str, Enum):
     """Session status enum."""
@@ -92,6 +97,23 @@ class ClaudeSessionInfo(BaseModel):
     total_input_tokens: int = Field(default=0)
     total_output_tokens: int = Field(default=0)
     estimated_cost: float = Field(default=0.0)
+    # Cache tokens are collected but deliberately NOT folded into
+    # `total_input_tokens` or `estimated_cost` — their rate is unverified and
+    # folding them would silently move the existing totals.
+    cache_read_tokens: int = Field(
+        default=0, description="Cache read tokens (not included in total_input_tokens)"
+    )
+    cache_creation_tokens: int = Field(
+        default=0, description="Cache creation tokens (not included in total_input_tokens)"
+    )
+    usage_entries_without_id: int = Field(
+        default=0,
+        description="Assistant usage entries with no message id, so they could not be deduped",
+    )
+    price_source: str = Field(
+        default=PRICE_SOURCE_FALLBACK,
+        description='Where estimated_cost got its rate: "table" or "fallback"',
+    )
 
     # File metadata
     file_path: str = Field(default="", description="Path to the .jsonl file")
@@ -249,7 +271,35 @@ MODEL_COSTS = {
 }
 
 
+# `MODEL_COSTS` 에 없는 모델에 적용되는 기본 단가. 이 값이 쓰였다는 사실을
+# `price_source="fallback"` 으로 표면화해야 추정 비용이 "실측"으로 오독되지 않는다.
+FALLBACK_MODEL_COST = {"input": 0.003, "output": 0.015}
+
+
+def resolve_model_price(model: str) -> tuple[dict[str, float], str]:
+    """Return (price table entry, price_source) for a model.
+
+    ``price_source`` is ``"table"`` when the model is registered in
+    ``MODEL_COSTS`` and ``"fallback"`` when the generic default rate applies.
+    """
+    costs = MODEL_COSTS.get(model)
+    if costs is not None:
+        return costs, PRICE_SOURCE_TABLE
+    return FALLBACK_MODEL_COST, PRICE_SOURCE_FALLBACK
+
+
+def calculate_cost_detail(model: str, input_tokens: int, output_tokens: int) -> tuple[float, str]:
+    """Return (estimated cost, price_source) so unpriced models stay visible."""
+    costs, price_source = resolve_model_price(model)
+    cost = (input_tokens / 1000 * costs["input"]) + (output_tokens / 1000 * costs["output"])
+    return cost, price_source
+
+
 def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
-    """Calculate estimated cost for token usage."""
-    costs = MODEL_COSTS.get(model, {"input": 0.003, "output": 0.015})
-    return (input_tokens / 1000 * costs["input"]) + (output_tokens / 1000 * costs["output"])
+    """Calculate estimated cost for token usage.
+
+    Signature and value are unchanged; ``calculate_cost_detail`` is the variant
+    that also reports where the price came from.
+    """
+    cost, _ = calculate_cost_detail(model, input_tokens, output_tokens)
+    return cost

@@ -1276,7 +1276,8 @@ class ExternalUsageService:
 - CLI/API/local runtime 사용량 집계 (`codex_cli`, `claude_cli`, `openai`, `anthropic`, `google`, `ollama`, `internal_cli`)
 - provider/mode/source/model/status/measurement method breakdown
 - 멤버별 및 조직별 사용량 분석
-- estimated cost 보조 표시
+- estimated cost 보조 표시 — 비용 미측정(`cost_state=unknown`)은 $0 이 아니라 "비용 미측정"으로 표시, 수집 경로·요청 단위·날짜 기준(`coverage`) 명시
+- Claude 세션 토큰은 `message.id` 기준 중복 제거(트랜스크립트가 같은 메시지를 여러 번 기록), cache 토큰은 별도 필드로만 수집(비용 미반영)
 - 7/30/90일 기간 선택
 - provider billing reconciliation key와 비교 summary
 - provider 연결 상태 헬스체크

@@ -53,6 +53,11 @@ export interface CostBreakdown {
   category: string
   value: string
   provider?: string | null
+  /**
+   * provider 값이 어디서 왔는지. `'unattributed'` 는 백엔드가 귀속에 실패했다는 뜻이며,
+   * 프론트가 모델명으로 다시 추측해서는 안 된다. 구버전 응답에는 없다(`undefined`).
+   */
+  provider_source?: string | null
   cost: number
   tokens: number
   percentage: number
@@ -66,6 +71,12 @@ export interface CostAnalytics {
   by_agent: CostBreakdown[]
   by_model: CostBreakdown[]
   projected_monthly: number
+  /**
+   * `time_range` 가 실제로 덮는 일수 (백엔드 `_get_time_delta`). `'all'` 은 365 다.
+   * 이 값은 외부 사용량 스토어의 선택 기간과 **다른 값**이며 서로 대체할 수 없다.
+   * 구버전 응답에는 없다(`undefined`) — 없으면 기간을 주장하지 않는다.
+   */
+  period_days?: number
 }
 
 export interface HeatmapCell {

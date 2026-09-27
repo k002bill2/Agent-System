@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react'
 import { AlertTriangle, ChevronDown, ChevronUp, Search } from 'lucide-react'
 import type { UnifiedUsageRecord } from '../../stores/externalUsage'
+import { isCostMeasured } from '../../lib/usageCoverage'
+
+/** user_id / user_email 이 모두 없는 레코드를 모으는 그룹 키. */
+const UNATTRIBUTED_MEMBER_KEY = 'unknown'
+const UNATTRIBUTED_MEMBER_LABEL = '미귀속 (호스트 세션 · 사용자 정보 없음)'
 
 interface MemberSummary {
   key: string
@@ -12,16 +17,20 @@ interface MemberSummary {
     requests: number
     suggestions: number
     acceptances: number
+    /** 비용이 실제로 측정된 레코드 수. 0 이면 비용을 "안다"고 말할 수 없다. */
+    knownCostRecords: number
   }>
   totalCost: number
   totalTokens: number
+  totalRequests: number
+  knownCostRecords: number
 }
 
 function aggregateByMember(records: UnifiedUsageRecord[]): MemberSummary[] {
   const map = new Map<string, MemberSummary>()
 
   for (const rec of records) {
-    const key = rec.user_id ?? rec.user_email ?? 'unknown'
+    const key = rec.user_id ?? rec.user_email ?? UNATTRIBUTED_MEMBER_KEY
     if (!map.has(key)) {
       map.set(key, {
         key,
@@ -30,6 +39,8 @@ function aggregateByMember(records: UnifiedUsageRecord[]): MemberSummary[] {
         byProvider: {},
         totalCost: 0,
         totalTokens: 0,
+        totalRequests: 0,
+        knownCostRecords: 0,
       })
     }
     const member = map.get(key)!
@@ -42,18 +53,23 @@ function aggregateByMember(records: UnifiedUsageRecord[]): MemberSummary[] {
         requests: 0,
         suggestions: 0,
         acceptances: 0,
+        knownCostRecords: 0,
       }
     }
 
+    const costMeasured = isCostMeasured(rec.cost_state)
     const p = member.byProvider[provider]
     p.cost += rec.cost_usd
     p.tokens += rec.total_tokens
     p.requests += rec.request_count
     p.suggestions += rec.code_suggestions ?? 0
     p.acceptances += rec.code_acceptances ?? 0
+    if (costMeasured) p.knownCostRecords += 1
 
     member.totalCost += rec.cost_usd
     member.totalTokens += rec.total_tokens
+    member.totalRequests += rec.request_count
+    if (costMeasured) member.knownCostRecords += 1
   }
 
   return Array.from(map.values())
@@ -124,9 +140,15 @@ function sortProviders(providers: Iterable<string>): string[] {
 interface Props {
   records: UnifiedUsageRecord[]
   isLoading: boolean
+  /**
+   * summary 가 보고한 미귀속 레코드 수 (`unattributed_member_requests`).
+   * 구버전 응답에서는 이 필드가 없어 집계가 `0` 으로 내려온다 — `0` 은 "0건" 이 아니라
+   * "미보고" 이므로, 양수가 아니면 레코드에서 센 값을 쓴다.
+   */
+  unattributedRequests?: number | null
 }
 
-export default function MemberUsageTable({ records, isLoading }: Props) {
+export default function MemberUsageTable({ records, isLoading, unattributedRequests }: Props) {
   const [search, setSearch] = useState('')
   const [sortAsc, setSortAsc] = useState(false)
 
@@ -225,13 +247,33 @@ export default function MemberUsageTable({ records, isLoading }: Props) {
                 <tr key={member.key} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                   {/* Member identity */}
                   <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900 dark:text-white text-xs truncate max-w-[160px]">
-                      {member.userEmail ?? member.userId ?? 'Unknown'}
-                    </div>
-                    {member.userEmail && member.userId && (
-                      <div className="text-gray-400 text-xs truncate max-w-[160px]">
-                        {member.userId}
-                      </div>
+                    {member.key === UNATTRIBUTED_MEMBER_KEY && !member.userEmail && !member.userId ? (
+                      <>
+                        {/* "사용량 0" 이 아니라 "사용자 미확인" 이다 (감사 §8). */}
+                        <div
+                          className="font-medium text-gray-900 dark:text-white text-xs"
+                          aria-label="사용자를 확인할 수 없는 사용량"
+                        >
+                          {UNATTRIBUTED_MEMBER_LABEL}
+                        </div>
+                        <div className="text-gray-400 text-xs">
+                          {(unattributedRequests && unattributedRequests > 0
+                            ? unattributedRequests
+                            : member.totalRequests
+                          ).toLocaleString()}건 · 사용자 미확인
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="font-medium text-gray-900 dark:text-white text-xs truncate max-w-[160px]">
+                          {member.userEmail ?? member.userId ?? 'Unknown'}
+                        </div>
+                        {member.userEmail && member.userId && (
+                          <div className="text-gray-400 text-xs truncate max-w-[160px]">
+                            {member.userId}
+                          </div>
+                        )}
+                      </>
                     )}
                   </td>
 
@@ -259,7 +301,16 @@ export default function MemberUsageTable({ records, isLoading }: Props) {
                     return (
                       <td key={p} className="px-4 py-3 text-gray-600 dark:text-gray-300">
                         <div className="text-xs font-medium">{formatTokens(pd.tokens)} tokens</div>
-                        <div className="text-xs text-gray-400">Estimated cost {formatCost(pd.cost)}</div>
+                        {pd.knownCostRecords > 0 ? (
+                          <div className="text-xs text-gray-400">Estimated cost {formatCost(pd.cost)}</div>
+                        ) : (
+                          <div
+                            className="text-xs text-amber-600 dark:text-amber-400"
+                            aria-label={`${PROVIDER_LABELS[p] ?? p} 비용 미측정 — 0 달러라는 뜻이 아닙니다`}
+                          >
+                            비용 미측정
+                          </div>
+                        )}
                       </td>
                     )
                   })}
@@ -272,7 +323,16 @@ export default function MemberUsageTable({ records, isLoading }: Props) {
                       )}
                       {formatTokens(member.totalTokens)} tokens
                     </span>
-                    <div className="text-xs text-gray-400">Estimated cost {formatCost(member.totalCost)}</div>
+                    {member.knownCostRecords > 0 ? (
+                      <div className="text-xs text-gray-400">Estimated cost {formatCost(member.totalCost)}</div>
+                    ) : (
+                      <div
+                        className="text-xs text-amber-600 dark:text-amber-400"
+                        aria-label="비용 미측정 — 0 달러라는 뜻이 아닙니다"
+                      >
+                        비용 미측정
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

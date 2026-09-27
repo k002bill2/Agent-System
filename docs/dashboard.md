@@ -390,7 +390,7 @@ import { cn } from '@/lib/utils';
 | `useMenuVisibilityStore` | `menuVisibility.ts` | 메뉴 가시성 및 순서 |
 | `useProjectAccessStore` | `projectAccess.ts` | 프로젝트별 멤버/역할 관리 |
 | `useWorkflowStore` | `workflows.ts` | 워크플로우 CRUD, 실행, 시크릿, 스케줄 |
-| `useExternalUsageStore` | `externalUsage.ts` | 내부 ledger 기반 LLM Usage와 reconciliation summary |
+| `useExternalUsageStore` | `externalUsage.ts` | 내부 ledger 기반 LLM Usage와 reconciliation summary. `period`/`setPeriod` 가 헤더 `CostBadge` 와 `ExternalUsagePage` 의 조회 기간 단일 소스 (표시 헬퍼: `lib/usageCoverage.ts`) |
 | `useLLMAccessStore` | `llmAccess.ts` | CLI profile과 user/org entitlement 관리 |
 | `useLLMUsageStore` | `llmUsage.ts` | 내부 `llm_usage_ledger` summary 조회 |
 | `useLLMCredentialStore` | `llmCredentials.ts` | fallback/compatibility API 키 관리 |

@@ -502,3 +502,191 @@ async def test_collect_claude_snapshots_respects_provider_filter() -> None:
 
     assert rows == []
     db.execute.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# 감사 §2/§3: unknown cost ≠ zero cost, 그리고 수집 provenance/coverage
+# ---------------------------------------------------------------------------
+
+
+def _ledger_row(
+    *,
+    cost: float | None,
+    provider: str = "codex_cli",
+    model: str = "gpt-5-codex",
+    user_id: str | None = "user-1",
+    input_tokens: int = 100,
+    output_tokens: int = 50,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        id="ledger-1",
+        provider=provider,
+        mode="cli",
+        model=model,
+        user_id=user_id,
+        project_id=None,
+        organization_id=None,
+        source="cli",
+        status="success",
+        measurement_method="cli_reported",
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        total_tokens=input_tokens + output_tokens,
+        estimated_cost_usd=cost,
+        started_at=datetime(2026, 6, 1, tzinfo=UTC),
+    )
+
+
+def _snapshot_row(*, cost: float | None, model: str = "claude-opus-4-8") -> SimpleNamespace:
+    return SimpleNamespace(
+        id="snap-1",
+        model=model,
+        project_name="demo",
+        source_user="tester",
+        total_input_tokens=10,
+        total_output_tokens=20,
+        estimated_cost=cost,
+        session_last_activity=datetime(2026, 6, 1, tzinfo=UTC),
+    )
+
+
+_WINDOW = (datetime(2026, 5, 1, tzinfo=UTC), datetime(2026, 6, 30, tzinfo=UTC))
+
+
+async def test_ledger_null_cost_is_unknown_not_zero() -> None:
+    """`estimated_cost_usd=None` 은 `cost_state="unknown"` 으로 보존된다 (감사 §2)."""
+    records, summaries = summarize_internal_ledger_records([_ledger_row(cost=None)], *_WINDOW)
+
+    assert records[0].cost_state == "unknown"
+    assert records[0].cost_usd == 0.0  # 기존 숫자 계약 불변
+    assert summaries[0].cost_state == "unknown"
+    assert summaries[0].unknown_cost_requests == 1
+    assert summaries[0].known_cost_requests == 0
+
+
+async def test_ledger_measured_zero_cost_is_known() -> None:
+    """측정된 0 과 미측정 0 이 API 에서 구분된다."""
+    records, summaries = summarize_internal_ledger_records([_ledger_row(cost=0.0)], *_WINDOW)
+
+    assert records[0].cost_state == "known"
+    assert records[0].cost_usd == 0.0
+    assert summaries[0].cost_state == "known"
+    assert summaries[0].known_cost_requests == 1
+    assert summaries[0].unknown_cost_requests == 0
+
+
+async def test_ledger_mixed_cost_state_is_partial() -> None:
+    _, summaries = summarize_internal_ledger_records(
+        [_ledger_row(cost=None), _ledger_row(cost=0.25)], *_WINDOW
+    )
+
+    assert summaries[0].cost_state == "partial"
+    assert summaries[0].known_cost_requests == 1
+    assert summaries[0].unknown_cost_requests == 1
+
+
+async def test_all_null_codex_sample_reports_unknown_cost_state() -> None:
+    """감사 표본(16건 전부 NULL) 재현 — 합계 $0.00 이 '무료'로 읽히지 않는다."""
+    rows = [_ledger_row(cost=None) for _ in range(16)]
+
+    _, summaries = summarize_internal_ledger_records(rows, *_WINDOW)
+
+    assert summaries[0].total_cost_usd == 0.0
+    assert summaries[0].cost_state == "unknown"
+    assert summaries[0].unknown_cost_requests == 16
+
+
+async def test_ledger_records_carry_collection_provenance() -> None:
+    records, summaries = summarize_internal_ledger_records([_ledger_row(cost=1.0)], *_WINDOW)
+
+    assert records[0].collection_source == "internal_ledger"
+    assert records[0].measurement_method == "cli_reported"
+    assert records[0].date_basis == "event"
+    # raw_data 의 기존 키는 구버전 소비자를 위해 그대로 남는다.
+    assert records[0].raw_data["measurement_method"] == "cli_reported"
+    assert summaries[0].collection_source == "internal_ledger"
+    assert summaries[0].request_unit == "ledger_record"
+
+
+async def test_ledger_counts_unattributed_member_requests() -> None:
+    _, summaries = summarize_internal_ledger_records(
+        [_ledger_row(cost=1.0, user_id=None), _ledger_row(cost=1.0, user_id="user-1")],
+        *_WINDOW,
+    )
+
+    assert summaries[0].unattributed_member_requests == 1
+
+
+async def test_snapshot_null_cost_is_unknown_and_unit_is_session() -> None:
+    records, summaries = summarize_claude_snapshot_records([_snapshot_row(cost=None)], *_WINDOW)
+
+    assert records[0].cost_state == "unknown"
+    assert records[0].collection_source == "claude_session_snapshot"
+    assert records[0].measurement_method == "session_transcript"
+    assert records[0].date_basis == "session_last_activity"
+    assert summaries[0].request_unit == "session"
+    assert summaries[0].cost_state == "unknown"
+    # 스냅샷 테이블에 cache 컬럼이 없다 → 0 이 아니라 '미수집'.
+    assert summaries[0].cache_read_tokens is None
+    assert summaries[0].cache_creation_tokens is None
+    assert summaries[0].unattributed_member_requests == 1
+
+
+async def test_summary_response_exposes_coverage_per_source_and_provider() -> None:
+    """`coverage.sources` 가 (collection_source, provider) 쌍별로 1건씩 존재한다 (감사 §3)."""
+    service = ExternalUsageService()
+    ledger_rows = [_ledger_row(cost=None)]
+    snapshot_rows = [_snapshot_row(cost=0.5)]
+
+    with (
+        patch.object(
+            ExternalUsageService,
+            "_collect_internal_ledger_records",
+            AsyncMock(return_value=ledger_rows),
+        ),
+        patch.object(
+            ExternalUsageService,
+            "_collect_claude_snapshots",
+            AsyncMock(return_value=snapshot_rows),
+        ),
+    ):
+        response = await service.get_summary(MagicMock(), *_WINDOW)
+
+    assert response.coverage is not None
+    assert response.coverage.period_days == 60
+    by_key = {(s.collection_source, s.provider.value): s for s in response.coverage.sources}
+    assert ("internal_ledger", "codex_cli") in by_key
+    assert ("claude_session_snapshot", "claude_cli") in by_key
+    assert by_key[("internal_ledger", "codex_cli")].request_unit == "ledger_record"
+    assert by_key[("claude_session_snapshot", "claude_cli")].request_unit == "session"
+    assert by_key[("internal_ledger", "codex_cli")].cost_state == "unknown"
+    assert by_key[("internal_ledger", "codex_cli")].note
+    assert by_key[("claude_session_snapshot", "claude_cli")].date_basis == ("session_last_activity")
+
+
+async def test_openai_collector_marks_priced_records_known() -> None:
+    """provider billing 경로도 cost_state 를 명시한다 (기본값 unknown 에 기대지 않는다)."""
+    collector = OpenAIUsageCollector("sk-admin-test")
+    with patch(
+        "services.external_usage_service.collectors.httpx.AsyncClient",
+        return_value=_mock_client(_usage_payload("gpt-4o-2024-08-06", 1000, 1000)),
+    ):
+        records = await collector.collect(*_WINDOW)
+
+    assert records[0].cost_state == "known"
+    assert records[0].price_source == "table"
+    assert records[0].collection_source == "provider_billing"
+
+
+async def test_openai_collector_marks_unpriced_model_unknown() -> None:
+    """가격표에 없는 모델은 `$0.00` 이 아니라 '미가격'으로 표면화된다 (감사 §6)."""
+    collector = OpenAIUsageCollector("sk-admin-test")
+    with patch(
+        "services.external_usage_service.collectors.httpx.AsyncClient",
+        return_value=_mock_client(_usage_payload("some-unlisted-model", 1000, 1000)),
+    ):
+        records = await collector.collect(*_WINDOW)
+
+    assert records[0].cost_usd == 0.0
+    assert records[0].cost_state == "unknown"
+    assert records[0].price_source == "unpriced"
