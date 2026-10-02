@@ -1,6 +1,6 @@
 # shared-infra 운영
 
-AOS는 자체 DB 스택을 띄우지 않고 `~/Work/shared-infra`를 공유합니다 (ppt-maker, image-maker도 동일).
+AOS는 자체 DB 스택을 띄우지 않고 `~/Work/shared-infra`를 공유합니다 (image-maker도 동일).
 `dev.sh`/`start-all.sh`/`stop-all.sh`는 모두 shared-infra를 대상으로 동작합니다.
 
 **절대 금지**: `docker compose down -v`, `docker volume rm shared-infra_*` — 모든 프로젝트 데이터 소실.
@@ -15,7 +15,7 @@ cd ~/Work/shared-infra
 # 예: ./add-project.sh livemetro 3
 ```
 
-스크립트가 `init-databases.sql` append + 실행 중인 `shared-postgres`에 idempotent SQL 적용. 기존 aos/elitedeck/image_maker 데이터는 건드리지 않음.
+스크립트가 `init-databases.sql` append + 실행 중인 `shared-postgres`에 idempotent SQL 적용. 기존 aos/image_maker 데이터는 건드리지 않음.
 
 ## 문제 해결 후 상태 검증 (read-only)
 

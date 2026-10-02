@@ -46,7 +46,7 @@ if [ ! -f "$PROJECT_ROOT/.env" ]; then
 fi
 
 # Shared infrastructure (Postgres + Redis + Qdrant) at ~/Work/shared-infra
-# All projects (AOS, ppt-maker, image-maker) connect to this single stack.
+# All projects (AOS, image-maker) connect to this single stack.
 COMPOSE_FILE="$HOME/Work/shared-infra/docker-compose.yml"
 
 # Check Docker

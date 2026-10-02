@@ -50,7 +50,7 @@ LLM_API_FALLBACK_ENABLED=false
 
 ### 3. 인프라 실행 (PostgreSQL, Redis, Qdrant)
 
-개발 환경에서는 `~/Work/shared-infra`의 공용 DB 스택을 사용합니다 (ppt-maker, image-maker 등 다른 프로젝트와 공유). AOS는 자체 DB 스택을 띄우지 않습니다.
+개발 환경에서는 `~/Work/shared-infra`의 공용 DB 스택을 사용합니다 (image-maker 등 다른 프로젝트와 공유). AOS는 자체 DB 스택을 띄우지 않습니다.
 
 ```bash
 cd infra/scripts && ./dev.sh
