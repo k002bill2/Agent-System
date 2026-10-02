@@ -103,7 +103,7 @@ class MCPInitializeResult(BaseModel):
 class CreateTaskArgs(BaseModel):
     """Arguments for aos_create_task tool."""
 
-    project_id: str = Field(description="Project identifier (e.g., 'ppt-maker')")
+    project_id: str = Field(description="Project identifier (e.g., 'image-maker')")
     task: str = Field(description="Task description to execute")
     agent_type: str | None = Field(
         default=None, description="Specific agent type to use (e.g., 'web-ui-specialist')"

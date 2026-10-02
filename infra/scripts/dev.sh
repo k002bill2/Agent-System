@@ -40,7 +40,7 @@ if ! docker compose version >/dev/null 2>&1 && ! command_exists docker-compose; 
 fi
 
 # Shared infrastructure (Postgres + Redis + Qdrant) at ~/Work/shared-infra
-# All projects (AOS, EliteDeck/ppt-maker, image-maker) connect to this single stack.
+# All projects (AOS, image-maker) connect to this single stack.
 COMPOSE_FILE="$HOME/Work/shared-infra/docker-compose.yml"
 
 if [ ! -f "$COMPOSE_FILE" ]; then

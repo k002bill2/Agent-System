@@ -17,7 +17,7 @@ AOS는 **두 가지 토폴로지**로 실행되며 컨테이너 이름·DB 유�
 | Qdrant 컨테이너 | `shared-qdrant` | `aos-qdrant` |
 | DB 유저 / DB 이름 | `postgres` / `aos` | `aos` / `aos` |
 | 볼륨 접두사 | `shared-infra_` (디렉토리명) | `aos_` (compose `name: aos`) |
-| 데이터 공유 범위 | **AOS·elitedeck·image_maker 공용** | AOS 전용 |
+| 데이터 공유 범위 | **AOS·image_maker 공용** | AOS 전용 |
 
 **둘 중 하나만** 실행하세요. 두 블록을 연달아 붙여넣으면 뒤의 값이 앞의 값을 덮어써 잘못된 환경을 겨냥합니다.
 
@@ -67,7 +67,7 @@ fi
 
 > **`docker compose`는 실행 위치가 곧 대상입니다.** 로컬 개발에서 `docker compose restart postgres`를 레포 루트에서 실행하면 shared-infra가 아니라 레포의 self-host 스택을 건드립니다. 반드시 `cd "$COMPOSE_DIR"` 후 실행하세요.
 
-> **공유 인프라 경고.** 로컬 개발 스택은 elitedeck·image_maker와 데이터를 공유합니다. `docker compose down -v`와 `docker volume rm shared-infra_*`는 **세 프로젝트 데이터를 모두 영구 삭제**합니다. 복구 작업 중에도 절대 사용하지 마세요.
+> **공유 인프라 경고.** 로컬 개발 스택은 image_maker와 데이터를 공유합니다. `docker compose down -v`와 `docker volume rm shared-infra_*`는 **공유 프로젝트 데이터를 모두 영구 삭제**합니다. 복구 작업 중에도 절대 사용하지 마세요.
 
 ---
 
@@ -238,7 +238,7 @@ docker cp "${RD:?}":/data/dump.rdb ./redis_backup_$(date +%Y%m%d_%H%M%S).rdb
 
 ### RDB 복원
 
-> **🚨 로컬(shared-infra)에서는 조율 없이 실행하지 마세요.** RDB 파일은 **Redis 서버 전체**를 담습니다. `shared-redis`는 elitedeck·image_maker와 논리 DB를 공유하므로, 복원하면 **다른 프로젝트의 캐시·큐가 통째로 과거 시점으로 되돌아가거나 사라집니다**. 공유 환경에서는 (1) 관련 프로젝트와 시점을 합의한 뒤 전체 인스턴스를 함께 복원하거나, (2) AOS 키만 선별 내보내기/복원하세요. 아래 절차는 그 조율이 끝났거나 self-host 전용 인스턴스일 때만 사용합니다.
+> **🚨 로컬(shared-infra)에서는 조율 없이 실행하지 마세요.** RDB 파일은 **Redis 서버 전체**를 담습니다. `shared-redis`는 image_maker와 논리 DB를 공유하므로, 복원하면 **다른 프로젝트의 캐시·큐가 통째로 과거 시점으로 되돌아가거나 사라집니다**. 공유 환경에서는 (1) 관련 프로젝트와 시점을 합의한 뒤 전체 인스턴스를 함께 복원하거나, (2) AOS 키만 선별 내보내기/복원하세요. 아래 절차는 그 조율이 끝났거나 self-host 전용 인스턴스일 때만 사용합니다.
 
 ```bash
 # 1. Redis 컨테이너 중지 (compose 는 반드시 해당 환경 디렉토리에서)
@@ -345,7 +345,7 @@ docker run --rm -v "${VOLPREFIX:?}_qdrant_data":/data -v $(pwd):/backup \
 
 #### 볼륨 복원
 
-> **🚨 로컬 개발(shared-infra)에서는 이 절차를 쓰지 마세요.** 아래 복원은 `rm -rf /data/*`로 볼륨을 통째로 비웁니다. `shared-infra_qdrant_data`는 elitedeck·image_maker와 공유하므로 **다른 프로젝트의 벡터 데이터까지 삭제**됩니다. 공유 환경에서는 컬렉션 단위 스냅샷 복원(위 "스냅샷 복원" 절)을 쓰세요. 아래는 AOS 전용 볼륨을 쓰는 **self-host 환경에서만** 유효합니다.
+> **🚨 로컬 개발(shared-infra)에서는 이 절차를 쓰지 마세요.** 아래 복원은 `rm -rf /data/*`로 볼륨을 통째로 비웁니다. `shared-infra_qdrant_data`는 image_maker와 공유하므로 **다른 프로젝트의 벡터 데이터까지 삭제**됩니다. 공유 환경에서는 컬렉션 단위 스냅샷 복원(위 "스냅샷 복원" 절)을 쓰세요. 아래는 AOS 전용 볼륨을 쓰는 **self-host 환경에서만** 유효합니다.
 
 ```bash
 # self-host 전용 — VOLPREFIX 가 AOS 전용 볼륨인지 반드시 확인

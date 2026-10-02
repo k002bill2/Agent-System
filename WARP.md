@@ -11,7 +11,7 @@ High level:
 - **Dashboard** (`src/dashboard`): Vite + React + TypeScript UI for monitoring sessions, tasks, agents, approvals, diffs, and usage.
 - **Infra** (`infra`): Docker Compose and scripts for local Postgres/Redis and optional full stack.
 - **AI tool config** (`.claude`, `CLAUDE.md`): Claude Code rules, sub-agents, slash commands, and MCP servers; AOS uses these concepts via its own backend (`services/warp_service.py`, MCP APIs, RAG).
-- **Projects** (`projects/`): Additional apps wired into AOS via symlinks (e.g. `projects/ppt-maker`, `projects/image-maker`).
+- **Projects** (`projects/`): Additional apps wired into AOS via symlinks (e.g. `projects/image-maker`).
 
 When in doubt, prefer the commands and architecture described here and in `README.md` / `CLAUDE.md` over guessing.
 
@@ -151,7 +151,6 @@ A Docker-based sandbox is used for isolated execution of risky commands (see `se
 
 - **aos** (`projects/aos`) - Agent Orchestration Service (self-reference)
 - **image-maker** (`projects/image-maker`) - 이미지 생성 프로젝트
-- **ppt-maker** (`projects/ppt-maker`) - PPT 생성 프로젝트
 - **youtube-maker** (`projects/youtube-maker`) - YouTube 콘텐츠 프로젝트
 - **obsidian** (`projects/obsidian`) - Obsidian vault 연결
 

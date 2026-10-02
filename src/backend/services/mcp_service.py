@@ -35,7 +35,7 @@ class MCPService:
                     "properties": {
                         "project_id": {
                             "type": "string",
-                            "description": "Project identifier (e.g., 'ppt-maker')",
+                            "description": "Project identifier (e.g., 'image-maker')",
                         },
                         "task": {"type": "string", "description": "Task description to execute"},
                         "agent_type": {

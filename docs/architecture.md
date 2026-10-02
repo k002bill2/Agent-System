@@ -568,7 +568,7 @@ cd infra/scripts && ./dev.sh
 
 ### Shared Infrastructure (중요)
 
-AOS는 더 이상 자체 DB 스택을 띄우지 않는다. `~/Work/shared-infra/docker-compose.yml` 하나를 다른 프로젝트(ppt-maker, image-maker)와 공유한다.
+AOS는 더 이상 자체 DB 스택을 띄우지 않는다. `~/Work/shared-infra/docker-compose.yml` 하나를 다른 프로젝트(image-maker 등)와 공유한다.
 
 - `infra/scripts/dev.sh`, `start-all.sh`, `stop-all.sh` 모두 shared-infra를 대상으로 동작
 - `infra/docker/docker-compose.yml` 은 **DB 스택 소스가 아님** — 빌드/배포 참조용으로만 유지
