@@ -222,6 +222,23 @@ describe('DeleteProjectModal', () => {
     })
   })
 
+  it('shows error when fetchPreview resolves null (store swallows API errors)', async () => {
+    mockFetchPreview.mockResolvedValue(null)
+    render(
+      <DeleteProjectModal
+        project={mockProject}
+        onClose={mockOnClose}
+        onConfirm={mockOnConfirm}
+        fetchPreview={mockFetchPreview}
+      />
+    )
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/could not load deletion preview/i)
+    })
+    expect(screen.getByRole('alert')).toHaveTextContent(/project registry/i)
+    expect(screen.getByText('Delete Project', { selector: 'button' })).toBeDisabled()
+  })
+
   it('shows no data to delete when preview is empty', async () => {
     mockFetchPreview.mockResolvedValue({
       ...mockPreview,

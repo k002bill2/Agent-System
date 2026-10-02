@@ -19,6 +19,9 @@ interface DeletionPreview {
   source_files_preserved: boolean
 }
 
+const PREVIEW_UNAVAILABLE_MESSAGE =
+  'Could not load deletion preview. If the backend runs in database mode, delete this project from Project Registry instead.'
+
 interface DeleteProjectModalProps {
   project: Project
   onClose: () => void
@@ -121,10 +124,13 @@ export function DeleteProjectModal({
             </div>
           )}
 
-          {/* Error */}
-          {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400 text-sm">
-              {error}
+          {/* Error — fetchPreview resolves null when the store swallows an API error */}
+          {(error || (!isLoading && !preview)) && (
+            <div
+              role="alert"
+              className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400 text-sm"
+            >
+              {error ?? PREVIEW_UNAVAILABLE_MESSAGE}
             </div>
           )}
 
