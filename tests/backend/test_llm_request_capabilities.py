@@ -104,6 +104,54 @@ def test_sonnet_5_5_rejects_forced_tool_choice_but_sonnet_5_does_not():
     assert get_request_capabilities("claude-sonnet-5").supports_forced_tool_choice is True
 
 
+@pytest.mark.parametrize(
+    ("snapshot_id", "base_id"),
+    [
+        ("gpt-6-sol-2026-09-22", "gpt-6-sol"),
+        ("claude-sonnet-5-5-20260928", "claude-sonnet-5-5"),
+    ],
+)
+def test_dated_snapshot_inherits_seed_capabilities(snapshot_id, base_id):
+    """DB-only 날짜 스냅샷 id 는 같은 모델의 고정판 — seed 기본 id 의 제한을 상속."""
+    assert get_request_capabilities(snapshot_id) == get_request_capabilities(base_id)
+
+
+@pytest.mark.parametrize(
+    "model_id",
+    [
+        "claude-sonnet-5-5-preview",  # 날짜 아님 → 근거 없는 확장 금지
+        "gpt-6-sol-mini",
+        "gpt-6.1-sol",
+        "claude-sonnet-5-20260101",  # claude-sonnet-5 스냅샷 → claude-sonnet-5 능력
+    ],
+)
+def test_non_snapshot_or_unrestricted_ids_keep_defaults(model_id):
+    caps = get_request_capabilities(model_id)
+    assert caps.supports_temperature is True
+    assert caps.supports_forced_tool_choice is True
+
+
+def test_db_only_snapshot_of_restricted_model_end_to_end(
+    _clean_llm_instances, _registry_cache, _provider_keys, monkeypatch
+):
+    import langchain_anthropic
+
+    ctor = MagicMock(name="ChatAnthropic")
+    monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", ctor)
+    snapshot = _db_style_config("claude-sonnet-5-5").model_copy(
+        update={"id": "claude-sonnet-5-5-20260928"}
+    )
+    LLMModelRegistry._db_cache = [snapshot]
+    LLMModelRegistry._db_index = {snapshot.id: snapshot}
+
+    LLMService._get_llm("claude-sonnet-5-5-20260928", temperature=0.7, max_tokens=512)
+    assert "temperature" not in ctor.call_args.kwargs
+
+    llm = MagicMock()
+    LLMService.structured(llm, _Schema, "claude-sonnet-5-5-20260928")
+    llm.with_structured_output.assert_called_once_with(_Schema, method="json_schema")
+
+
 def test_unknown_model_gets_permissive_defaults():
     caps = get_request_capabilities("db-only-unknown-model")
     assert caps.supports_temperature is True

@@ -6,6 +6,7 @@
 
 import logging
 import os
+import re
 from enum import Enum
 from typing import Any, NamedTuple
 
@@ -567,14 +568,25 @@ class RequestCapabilities(NamedTuple):
     supports_forced_tool_choice: bool = True
 
 
+# OpenAI `gpt-x-YYYY-MM-DD`, Anthropic `claude-x-YYYYMMDD` 날짜 고정 스냅샷 접미사.
+_DATED_SNAPSHOT_RE = re.compile(r"^(?P<base>.+)-(?:\d{4}-\d{2}-\d{2}|\d{8})$")
+
+
 def get_request_capabilities(model_id: str | None) -> RequestCapabilities:
     """요청 능력의 단일 해석 지점 — 모든 호출처는 이 함수만 쓴다.
 
     능력 필드는 DB 컬럼이 없어 DB-loaded config 에서 기본값(True)으로 떨어지므로
-    활성 레지스트리(_index)가 아니라 코드 seed(_MODEL_INDEX)를 조회한다. seed 에
-    없는 모델(DB-only 등)은 근거가 없으므로 기존 동작(모두 지원)을 유지한다.
+    활성 레지스트리(_index)가 아니라 코드 seed(_MODEL_INDEX)를 조회한다. DB-only
+    날짜 스냅샷 id(`<seed>-YYYY-MM-DD`, `<seed>-YYYYMMDD`)는 같은 모델의 고정판이므로
+    seed 기본 id 로 해석한다. 그 외 seed 에 없는 모델은 근거가 없으므로 기존
+    동작(모두 지원)을 유지한다.
     """
-    seed = _MODEL_INDEX.get(model_id) if model_id else None
+    if not model_id:
+        return RequestCapabilities()
+    seed = _MODEL_INDEX.get(model_id)
+    if seed is None:
+        snapshot = _DATED_SNAPSHOT_RE.match(model_id)
+        seed = _MODEL_INDEX.get(snapshot.group("base")) if snapshot else None
     if seed is None:
         return RequestCapabilities()
     return RequestCapabilities(
