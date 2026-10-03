@@ -41,6 +41,9 @@ PROVIDER_BASE_URLS: dict[str, str] = {
 
 COST_TABLE: list[tuple[str, float, float]] = [
     ("gpt-6-astra", 0.010, 0.050),
+    # GPT-6 Sol/Luna: ≤272K 입력 표준가. gpt-6.1-sol 은 별도 모델이라 행을 두지 않는다.
+    ("gpt-6-sol", 0.002, 0.010),
+    ("gpt-6-luna", 0.0001, 0.0005),
     ("gpt-4o-mini", 0.00015, 0.0006),
     # gpt-4o 현행 표준가는 $2.50/$10. $5/$15 는 2024-05-13 스냅샷 전용이라
     # 그 dated id 를 generic 앞에 두어 과거 정산 근거를 보존한다.
@@ -73,6 +76,8 @@ COST_TABLE: list[tuple[str, float, float]] = [
     # Opus 5.5 ($4/$20 per 1M) must precede the legacy claude-opus-5 prefix.
     ("claude-opus-5-5", 0.004, 0.020),
     ("claude-opus-5", 0.005, 0.025),
+    # Sonnet 5.5 ($2/$10 per 1M) must precede the claude-sonnet-5 prefix.
+    ("claude-sonnet-5-5", 0.002, 0.010),
     ("claude-sonnet-5", 0.002, 0.010),
     ("claude-opus-4-8", 0.005, 0.025),
     # Opus price cut ($5/$25) applies from Opus 4.5 onward; these specific
