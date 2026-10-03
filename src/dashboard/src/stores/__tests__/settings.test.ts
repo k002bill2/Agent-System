@@ -578,6 +578,12 @@ describe('fallback models via store actions (after fetch failure)', () => {
     expect(ids).not.toContain('gpt-5.4')
   })
 
+  it('excludes the shut-down gemini-3.1-flash-lite-preview from google fallback models', () => {
+    const ids = idsFor('google')
+    expect(ids).toContain('gemini-3.8-flash')
+    expect(ids).not.toContain('gemini-3.1-flash-lite-preview')
+  })
+
   it('returns codex cli fallback models', () => {
     expect(idsFor('codex_cli')).toContain('codex-cli')
   })
