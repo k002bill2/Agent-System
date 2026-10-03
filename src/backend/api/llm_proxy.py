@@ -97,7 +97,9 @@ COST_TABLE: list[tuple[str, float, float]] = [
     # prefix 가 겹치지 않으나("gemini-3." vs "gemini-3-"), 세대 내림차순으로 두어
     # 이후 세대 행이 legacy 앞에 오는 배치 규칙을 유지한다.
     ("gemini-3.1-pro-preview", 0.002, 0.012),
-    ("gemini-3.1-flash-lite-preview", 0.00025, 0.0015),
+    # preview ID 는 2026-05-25 shutdown 후 서버가 stable 로 redirect 해 응답 modelVersion 이
+    # "gemini-3.1-flash-lite" 로 온다(2026-10-03 smoke) — 이 prefix 가 preview·stable 둘 다 잡는다.
+    ("gemini-3.1-flash-lite", 0.00025, 0.0015),
     ("gemini-3-flash-preview", 0.0005, 0.003),
     ("gemini-2.5-pro", 0.00125, 0.01),
     # Flash-Lite($0.10/$0.40)는 generic "gemini-2.5-flash" 뒤에 두면 3~6배 과대 집계된다.

@@ -232,6 +232,10 @@ _MODELS: list[LLMModelConfig] = [
         input_price=0.00025,  # $0.25/1M tokens
         output_price=0.0015,  # $1.50/1M tokens
         is_default=False,
+        # Google shutdown 2026-05-25. 현재는 서버가 stable gemini-3.1-flash-lite 로
+        # redirect 하지만 언제 끊길지 모른다. 레지스트리 정책상 신규 Lite 는 등록하지 않고,
+        # 과거 세션·정산 참조 호환을 위해 행은 남긴 채 비활성화한다.
+        is_enabled=False,
         supports_tools=True,
         supports_vision=True,
     ),
@@ -533,7 +537,7 @@ _MODEL_INDEX: dict[str, LLMModelConfig] = {m.id: m for m in _MODELS}
 # Code-seed revision stamp — bump when policy-relevant seed contents change
 # (defaults, enabled flags, model set). Recorded on Playground executions as
 # optional audit metadata; see LLMModelRegistry.get_revision().
-REGISTRY_REVISION = "2026-10-03"
+REGISTRY_REVISION = "2026-10-03.2"
 
 
 class LLMModelRegistry:

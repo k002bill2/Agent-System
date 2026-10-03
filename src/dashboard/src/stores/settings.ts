@@ -102,11 +102,12 @@ interface SettingsState {
 
 // Fallback models when API is unavailable.
 // Mirrors the enabled models in backend `_MODELS` (src/backend/models/llm_models.py).
-// Disabled backend models (gpt-5.5, gpt-5.4 family) are intentionally excluded.
+// Disabled backend models (gpt-5.5, gpt-5.4 family, gemini-3.1-flash-lite-preview) are
+// intentionally excluded.
 // Keep this list AND fallbackDefaultModelIds below in sync when the backend changes.
 const fallbackModels: Record<LLMProvider, string[]> = {
   anthropic: ['claude-opus-5-5', 'claude-opus-5', 'claude-fable-5-1', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
-  google: ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite-preview', 'gemini-2.5-pro', 'gemini-2.5-flash'],
+  google: ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemini-2.5-pro', 'gemini-2.5-flash'],
   openai: ['gpt-6-astra', 'gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-4o-mini', 'gpt-4o', 'o3', 'o4-mini'],
   codex_cli: ['codex-cli'],
   claude_cli: ['claude-cli'],
