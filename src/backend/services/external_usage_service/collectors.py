@@ -65,6 +65,9 @@ class OpenAIUsageCollector(BaseUsageCollector):
     # models fall back to $0 rather than fabricating a price.
     _COST_TABLE: tuple[tuple[str, float, float], ...] = (
         ("gpt-6-astra", 0.010, 0.050),
+        # GPT-6 Sol/Luna: ≤272K 입력 표준가. gpt-6.1-sol 은 별도 모델이라 행을 두지 않는다.
+        ("gpt-6-sol", 0.002, 0.010),
+        ("gpt-6-luna", 0.0001, 0.0005),
         ("gpt-4o-mini", 0.00015, 0.0006),
         # dated 스냅샷은 구 단가($5/$15), 현행 gpt-4o 는 $2.50/$10.
         ("gpt-4o-2024-05-13", 0.005, 0.015),
@@ -305,6 +308,8 @@ class AnthropicUsageCollector(BaseUsageCollector):
         # Opus 5.5 ($4/$20 per 1M) must precede the legacy claude-opus-5 prefix.
         ("claude-opus-5-5", 0.004, 0.020),
         ("claude-opus-5", 0.005, 0.025),
+        # Sonnet 5.5 ($2/$10 per 1M) must precede the claude-sonnet-5 prefix.
+        ("claude-sonnet-5-5", 0.002, 0.010),
         ("claude-sonnet-5", 0.002, 0.010),
         ("claude-opus-4-8", 0.005, 0.025),
         # Opus price cut ($5/$25) applies from Opus 4.5 onward; these specific

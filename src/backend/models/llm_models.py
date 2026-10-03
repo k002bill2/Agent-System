@@ -116,6 +116,24 @@ _MODELS: list[LLMModelConfig] = [
         supports_tools=True,
         supports_vision=True,
     ),
+    # claude-sonnet-5-5: official docs, verified 2026-10-03 (released 2026-09-28).
+    # $2/$10 per 1M (Sonnet 5 와 동일), 1M context / 128K max output.
+    # 400 조건: thinking disabled·budget_tokens, 비기본 temperature/top_p/top_k,
+    # assistant prefill, forced tool_choice(any/tool). 기본 경로가
+    # temperature=0.7 을 보내므로(services/llm_service.py:272, agents/base.py:206)
+    # 어댑터 대응 전까지 비활성 등록. 활성화는 스모크 후 관리자 조치.
+    LLMModelConfig(
+        id="claude-sonnet-5-5",
+        display_name="Claude Sonnet 5.5",
+        provider=LLMProvider.ANTHROPIC,
+        context_window=1_000_000,
+        input_price=0.002,  # $2.00/1M tokens
+        output_price=0.010,  # $10.00/1M tokens
+        is_default=False,
+        is_enabled=False,
+        supports_tools=True,
+        supports_vision=True,
+    ),
     LLMModelConfig(
         id="claude-sonnet-5",
         display_name="Claude Sonnet 5",
@@ -275,6 +293,38 @@ _MODELS: list[LLMModelConfig] = [
         input_price=0.010,  # $10.00/1M tokens
         output_price=0.050,  # $50.00/1M tokens
         is_default=False,  # Do not promote without provider smoke/canary
+        supports_tools=True,
+        supports_vision=True,
+    ),
+    # GPT-6 Sol/Luna: official model/pricing docs, verified 2026-10-03
+    # (released 2026-09-22). 1,050,000 context / 128K max output. 가격은 ≤272K
+    # 입력 표준가 — 272K 초과 요청은 입력·캐시 2배, 출력 1.5배(여기 미반영).
+    # Chat Completions function calling 은 reasoning_effort "none" 일 때만 허용.
+    # tools 요청은 langchain-openai 가 gpt-6* 를 Responses API 로 자동 전환하지만,
+    # 기본 경로가 temperature=0.7 을 보내고 reasoning_effort 를 지정하지 않아(기본
+    # medium — effort≠none 이면 temperature 불허) 거부될 수 있으므로 어댑터 대응 전까지
+    # 비활성 등록 (services/llm_service.py:272,334). 활성화는 스모크 후 관리자 조치.
+    LLMModelConfig(
+        id="gpt-6-sol",
+        display_name="GPT-6 Sol",
+        provider=LLMProvider.OPENAI,
+        context_window=1_050_000,
+        input_price=0.002,  # $2.00/1M tokens
+        output_price=0.010,  # $10.00/1M tokens
+        is_default=False,
+        is_enabled=False,
+        supports_tools=True,
+        supports_vision=True,
+    ),
+    LLMModelConfig(
+        id="gpt-6-luna",
+        display_name="GPT-6 Luna",
+        provider=LLMProvider.OPENAI,
+        context_window=1_050_000,
+        input_price=0.0001,  # $0.10/1M tokens
+        output_price=0.0005,  # $0.50/1M tokens
+        is_default=False,
+        is_enabled=False,
         supports_tools=True,
         supports_vision=True,
     ),
@@ -483,7 +533,7 @@ _MODEL_INDEX: dict[str, LLMModelConfig] = {m.id: m for m in _MODELS}
 # Code-seed revision stamp — bump when policy-relevant seed contents change
 # (defaults, enabled flags, model set). Recorded on Playground executions as
 # optional audit metadata; see LLMModelRegistry.get_revision().
-REGISTRY_REVISION = "2026-09-23"
+REGISTRY_REVISION = "2026-10-03"
 
 
 class LLMModelRegistry:

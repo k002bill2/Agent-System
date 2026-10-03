@@ -258,6 +258,7 @@ MODEL_COSTS = {
     "claude-opus-5": {"input": 0.005, "output": 0.025},
     "claude-fable-5-1": {"input": 0.010, "output": 0.050},
     "claude-opus-4-8": {"input": 0.005, "output": 0.025},
+    "claude-sonnet-5-5": {"input": 0.002, "output": 0.010},
     "claude-sonnet-5": {"input": 0.002, "output": 0.010},
     "claude-sonnet-4-6": {"input": 0.003, "output": 0.015},
     "claude-haiku-4-5-20251001": {"input": 0.001, "output": 0.005},
