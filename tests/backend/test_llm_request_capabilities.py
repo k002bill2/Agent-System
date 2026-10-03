@@ -238,6 +238,82 @@ def test_structured_sonnet_5_5_real_binding_has_no_forced_tool_choice():
     assert legacy_bound.kwargs["tool_choice"]["type"] == "tool"
 
 
+def _object_levels_missing_closed_schema(node, path="schema"):
+    missing = []
+    if isinstance(node, dict):
+        if node.get("type") == "object" and node.get("additionalProperties") is not False:
+            missing.append(path)
+        for key, value in node.items():
+            missing += _object_levels_missing_closed_schema(value, f"{path}.{key}")
+    elif isinstance(node, list):
+        for i, value in enumerate(node):
+            missing += _object_levels_missing_closed_schema(value, f"{path}[{i}]")
+    return missing
+
+
+def test_structured_sonnet_5_5_planner_schema_is_closed_json_schema():
+    """Sonnet 5.5 structured outputs 는 object 마다 additionalProperties:false 필요
+    (Newton newton-1 §체크리스트) — 중첩 SubtaskPlan 까지 SDK 변환 결과를 단언."""
+    from langchain_anthropic import ChatAnthropic
+
+    from models.task_plan import TaskPlanResult
+
+    llm = ChatAnthropic(model="claude-sonnet-5-5", api_key="test", max_tokens=512)
+    bound = LLMService.structured(llm, TaskPlanResult, "claude-sonnet-5-5").first
+    fmt = bound.kwargs["output_config"]["format"]
+    assert fmt["type"] == "json_schema"
+    assert "SubtaskPlan" in fmt["schema"]["$defs"]
+    assert _object_levels_missing_closed_schema(fmt["schema"]) == []
+
+
+@pytest.mark.asyncio
+async def test_self_correction_routes_structured_output_through_helper():
+    from unittest.mock import AsyncMock
+
+    from models.agent_state import TaskNode, TaskStatus, create_initial_state
+    from models.errors import ErrorCategory, ErrorSeverity, StructuredError
+    from orchestrator.nodes import SelfCorrectionNode
+
+    llm = MagicMock()
+    llm.model_name = "claude-sonnet-5-5"
+    correction = MagicMock(
+        error_analysis="a",
+        root_cause="b",
+        correction_strategy="c",
+        updated_description="d",
+        should_retry=True,
+        confidence="medium",
+        response_metadata={},
+    )
+    llm.with_structured_output.return_value.ainvoke = AsyncMock(return_value=correction)
+    error = StructuredError(
+        category=ErrorCategory.LOGIC,
+        severity=ErrorSeverity.MEDIUM,
+        message="Assertion failed",
+        original_type="AssertionError",
+        retry_hint="",
+    )
+    task = TaskNode(
+        id="t1",
+        title="T",
+        description="D",
+        status=TaskStatus.FAILED,
+        error="boom",
+        retry_count=0,
+        max_retries=3,
+        error_history=[],
+        structured_errors=[error],
+    )
+    state = create_initial_state(session_id="s1")
+    state["tasks"] = {task.id: task}
+    state["current_task_id"] = task.id
+
+    await SelfCorrectionNode(llm=llm).run(state)
+
+    llm.with_structured_output.assert_called_once()
+    assert llm.with_structured_output.call_args.kwargs == {"method": "json_schema"}
+
+
 # ─── planner 조용한 축소 관측 ─────────────────────────────────
 
 

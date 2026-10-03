@@ -87,6 +87,10 @@ _MODELS: list[LLMModelConfig] = [
     # Anthropic standard pricing: $4/$20 per 1M tokens; 1M context.
     # Adaptive thinking is always active; tool use remains supported, but the
     # migration guide disallows forcing tool_choice=any/tool for this model.
+    # supports_forced_tool_choice 는 의도적으로 기본값 유지: langchain-anthropic 1.7.4
+    # 가 이 prefix 에는 이미 강제 tool_choice 를 쓰지 않고(chat_models.py:1117-1119,
+    # 2919), Opus 5.5 의 json_schema(output_config.format) 지원은 근거 미확보 —
+    # 활성 모델의 structured 경로를 바꾸지 않는다.
     LLMModelConfig(
         id="claude-opus-5-5",
         display_name="Claude Opus 5.5",
