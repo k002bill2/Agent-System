@@ -402,3 +402,11 @@ def test_defaults_and_enabled_set_unchanged():
         assert _MODEL_INDEX[mid].is_enabled is False
     assert _MODEL_INDEX["gpt-6-astra"].is_enabled is True
     assert LLMProvider.OPENAI in {m.provider for m in LLMModelRegistry.get_enabled()}
+
+
+def test_registry_revision_bumped_for_capability_change():
+    """요청 형태가 바뀌었으므로 실행 감사 메타데이터의 revision 도 달라야 한다
+    (base bcdaa56 = "2026-10-03.2")."""
+    from models.llm_models import REGISTRY_REVISION
+
+    assert REGISTRY_REVISION != "2026-10-03.2"

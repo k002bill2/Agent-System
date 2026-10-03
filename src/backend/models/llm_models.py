@@ -596,9 +596,9 @@ def get_request_capabilities(model_id: str | None) -> RequestCapabilities:
 
 
 # Code-seed revision stamp — bump when policy-relevant seed contents change
-# (defaults, enabled flags, model set). Recorded on Playground executions as
-# optional audit metadata; see LLMModelRegistry.get_revision().
-REGISTRY_REVISION = "2026-10-03.2"
+# (defaults, enabled flags, model set, request capabilities). Recorded on
+# Playground executions as optional audit metadata; see LLMModelRegistry.get_revision().
+REGISTRY_REVISION = "2026-10-03.3"
 
 
 class LLMModelRegistry:
