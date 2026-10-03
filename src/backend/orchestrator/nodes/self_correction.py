@@ -7,6 +7,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from models.agent_state import AgentState, TaskStatus
 from models.errors import ErrorCategory
+from services.llm_service import LLMService
 from utils.time import utcnow
 
 from .base import BaseNode
@@ -205,7 +206,9 @@ Error History: {task.error_history}
                     should_retry: bool
                     confidence: str
 
-                structured_llm = llm.with_structured_output(CorrectionResult)
+                structured_llm = LLMService.structured(
+                    llm, CorrectionResult, resolved_model or self._model_id_from_llm()
+                )
                 response = await structured_llm.ainvoke(
                     [
                         SystemMessage(content=self.SYSTEM_PROMPT),

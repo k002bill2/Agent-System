@@ -6,8 +6,9 @@
 
 import logging
 import os
+import re
 from enum import Enum
-from typing import Any
+from typing import Any, NamedTuple
 
 from pydantic import BaseModel
 
@@ -43,6 +44,11 @@ class LLMModelConfig(BaseModel):
     # DB-loaded config 에서는 항상 None 이다. provider 응답으로 확인된 값이
     # 아니므로 실행 귀속(resolved_model)에는 쓰지 않는다.
     alias_for: str | None = None
+    # Optional code-seed 요청 능력 (alias_for 와 같은 이유로 DB 컬럼 없음 → DB-loaded
+    # config 에서는 항상 기본값 True). 직접 읽지 말고 get_request_capabilities() 로
+    # 해석한다. 근거(공식 문서·SDK·smoke)가 있는 모델만 False 로 둔다.
+    supports_temperature: bool = True  # False → 생성자에 temperature 미전달
+    supports_forced_tool_choice: bool = True  # False → tool_choice any/tool 강제 금지
 
 
 # ─────────────────────────────────────────────────────────────
@@ -82,6 +88,10 @@ _MODELS: list[LLMModelConfig] = [
     # Anthropic standard pricing: $4/$20 per 1M tokens; 1M context.
     # Adaptive thinking is always active; tool use remains supported, but the
     # migration guide disallows forcing tool_choice=any/tool for this model.
+    # supports_forced_tool_choice 는 의도적으로 기본값 유지: langchain-anthropic 1.7.4
+    # 가 이 prefix 에는 이미 강제 tool_choice 를 쓰지 않고(chat_models.py:1117-1119,
+    # 2919), Opus 5.5 의 json_schema(output_config.format) 지원은 근거 미확보 —
+    # 활성 모델의 structured 경로를 바꾸지 않는다.
     LLMModelConfig(
         id="claude-opus-5-5",
         display_name="Claude Opus 5.5",
@@ -132,6 +142,10 @@ _MODELS: list[LLMModelConfig] = [
         is_default=False,
         is_enabled=False,
         supports_tools=True,
+        # 400: 비기본 temperature, forced tool_choice(any/tool) — 위 주석·8191bdc.
+        # langchain-anthropic 1.7.4 _supports_forced_tool_choice 예외 목록에 없음.
+        supports_temperature=False,
+        supports_forced_tool_choice=False,
         supports_vision=True,
     ),
     LLMModelConfig(
@@ -298,6 +312,10 @@ _MODELS: list[LLMModelConfig] = [
         output_price=0.050,  # $50.00/1M tokens
         is_default=False,  # Do not promote without provider smoke/canary
         supports_tools=True,
+        # GPT-6 guide: reasoning effort≠none(기본 medium) 이면 temperature 제거 —
+        # https://developers.openai.com/api/docs/guides/latest-model.md (astra/sol/luna 공통).
+        # langchain-openai 1.6.6 validate_temperature 는 gpt-5* 만 제거 → 직접 미전달.
+        supports_temperature=False,
         supports_vision=True,
     ),
     # GPT-6 Sol/Luna: official model/pricing docs, verified 2026-10-03
@@ -318,6 +336,10 @@ _MODELS: list[LLMModelConfig] = [
         is_default=False,
         is_enabled=False,
         supports_tools=True,
+        # GPT-6 guide: reasoning effort≠none(기본 medium) 이면 temperature 제거 —
+        # https://developers.openai.com/api/docs/guides/latest-model.md (astra/sol/luna 공통).
+        # langchain-openai 1.6.6 validate_temperature 는 gpt-5* 만 제거 → 직접 미전달.
+        supports_temperature=False,
         supports_vision=True,
     ),
     LLMModelConfig(
@@ -330,6 +352,10 @@ _MODELS: list[LLMModelConfig] = [
         is_default=False,
         is_enabled=False,
         supports_tools=True,
+        # GPT-6 guide: reasoning effort≠none(기본 medium) 이면 temperature 제거 —
+        # https://developers.openai.com/api/docs/guides/latest-model.md (astra/sol/luna 공통).
+        # langchain-openai 1.6.6 validate_temperature 는 gpt-5* 만 제거 → 직접 미전달.
+        supports_temperature=False,
         supports_vision=True,
     ),
     # GPT-5.6 family: official model/pricing docs, verified 2026-08-31.
@@ -534,10 +560,45 @@ _MODELS: list[LLMModelConfig] = [
 # Index by model ID for fast lookup
 _MODEL_INDEX: dict[str, LLMModelConfig] = {m.id: m for m in _MODELS}
 
+
+class RequestCapabilities(NamedTuple):
+    """모델별 요청 파라미터 능력 (provider 무관 공통 해석 결과)."""
+
+    supports_temperature: bool = True
+    supports_forced_tool_choice: bool = True
+
+
+# OpenAI `gpt-x-YYYY-MM-DD`, Anthropic `claude-x-YYYYMMDD` 날짜 고정 스냅샷 접미사.
+_DATED_SNAPSHOT_RE = re.compile(r"^(?P<base>.+)-(?:\d{4}-\d{2}-\d{2}|\d{8})$")
+
+
+def get_request_capabilities(model_id: str | None) -> RequestCapabilities:
+    """요청 능력의 단일 해석 지점 — 모든 호출처는 이 함수만 쓴다.
+
+    능력 필드는 DB 컬럼이 없어 DB-loaded config 에서 기본값(True)으로 떨어지므로
+    활성 레지스트리(_index)가 아니라 코드 seed(_MODEL_INDEX)를 조회한다. DB-only
+    날짜 스냅샷 id(`<seed>-YYYY-MM-DD`, `<seed>-YYYYMMDD`)는 같은 모델의 고정판이므로
+    seed 기본 id 로 해석한다. 그 외 seed 에 없는 모델은 근거가 없으므로 기존
+    동작(모두 지원)을 유지한다.
+    """
+    if not model_id:
+        return RequestCapabilities()
+    seed = _MODEL_INDEX.get(model_id)
+    if seed is None:
+        snapshot = _DATED_SNAPSHOT_RE.match(model_id)
+        seed = _MODEL_INDEX.get(snapshot.group("base")) if snapshot else None
+    if seed is None:
+        return RequestCapabilities()
+    return RequestCapabilities(
+        supports_temperature=seed.supports_temperature,
+        supports_forced_tool_choice=seed.supports_forced_tool_choice,
+    )
+
+
 # Code-seed revision stamp — bump when policy-relevant seed contents change
-# (defaults, enabled flags, model set). Recorded on Playground executions as
-# optional audit metadata; see LLMModelRegistry.get_revision().
-REGISTRY_REVISION = "2026-10-03.2"
+# (defaults, enabled flags, model set, request capabilities). Recorded on
+# Playground executions as optional audit metadata; see LLMModelRegistry.get_revision().
+REGISTRY_REVISION = "2026-10-03.3"
 
 
 class LLMModelRegistry:
