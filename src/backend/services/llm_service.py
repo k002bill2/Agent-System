@@ -14,7 +14,7 @@ from langchain_core.messages import (
 )
 
 from models.llm_access import LLMAccessResponse
-from models.llm_models import LLMModelRegistry
+from models.llm_models import LLMModelRegistry, get_request_capabilities
 from models.llm_usage import (
     LLMRuntimeMode,
     LLMUsageMeasurementMethod,
@@ -292,7 +292,13 @@ class LLMService:
 
         provider = model.provider.value
         model_name = model.id
-        cache_key = f"{model_id}:{temperature}:{max_tokens}"
+        # 요청 능력은 단일 해석 지점에서만 읽는다 (DB-loaded config 도 seed 기준).
+        # temperature 미지원 모델은 생성자에 넘기지 않아 provider 기본값을 쓰게 하고,
+        # cache_key 도 실제 전달 파라미터만 반영한다.
+        caps = get_request_capabilities(model_name)
+        sampling: dict[str, Any] = {"temperature": temperature} if caps.supports_temperature else {}
+        sent_temperature = temperature if caps.supports_temperature else "omitted"
+        cache_key = f"{model_id}:{sent_temperature}:{max_tokens}"
 
         if cache_key in cls._instances:
             return cls._instances[cache_key]
@@ -307,7 +313,7 @@ class LLMService:
                 raise ValueError("GOOGLE_API_KEY not set")
             llm = ChatGoogleGenerativeAI(
                 model=model_name,
-                temperature=temperature,
+                **sampling,
                 max_output_tokens=max_tokens,
                 google_api_key=api_key,
             )
@@ -320,7 +326,7 @@ class LLMService:
                 raise ValueError("ANTHROPIC_API_KEY not set")
             llm = ChatAnthropic(
                 model=model_name,
-                temperature=temperature,
+                **sampling,
                 max_tokens=max_tokens,
                 api_key=api_key,
             )
@@ -333,7 +339,7 @@ class LLMService:
                 raise ValueError("OPENAI_API_KEY not set")
             llm = ChatOpenAI(
                 model=model_name,
-                temperature=temperature,
+                **sampling,
                 max_tokens=max_tokens,
                 api_key=api_key,
             )
@@ -353,7 +359,7 @@ class LLMService:
 
             llm = ChatOllama(
                 model=model_name,
-                temperature=temperature,
+                **sampling,
                 num_predict=max_tokens,
                 base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
             )
@@ -363,6 +369,18 @@ class LLMService:
 
         cls._instances[cache_key] = llm
         return llm
+
+    @staticmethod
+    def structured(llm: Any, schema: Any, model_id: str | None) -> Any:
+        """``with_structured_output`` 의 공통 진입점.
+
+        forced tool_choice(any/tool)를 거부하는 모델은 강제 tool_choice 없는
+        provider 네이티브 structured output(``method="json_schema"``)으로 바꾼다.
+        지원 모델·모델 미상은 기존 호출(기본 method)을 그대로 유지한다.
+        """
+        if get_request_capabilities(model_id).supports_forced_tool_choice:
+            return llm.with_structured_output(schema)
+        return llm.with_structured_output(schema, method="json_schema")
 
     @classmethod
     async def invoke(

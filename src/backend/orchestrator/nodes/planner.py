@@ -10,6 +10,7 @@ degradation 구조가 깨진다.
 """
 
 import json
+import logging
 import uuid
 from typing import Any
 
@@ -25,8 +26,11 @@ from models.task_plan import (
     TaskPlanResult,
 )
 from services.audit_service import audit_task_created
+from services.llm_service import LLMService
 
 from .base import BaseNode
+
+logger = logging.getLogger(__name__)
 
 try:
     from services.rag_service import get_project_context
@@ -255,11 +259,12 @@ class PlannerNode(BaseNode):
         )
         llm, resolved_model, runtime_resolution = self._resolved_llm_for_state(state)
         runtime_metadata = runtime_resolution.usage_metadata() if runtime_resolution else {}
+        model_id = resolved_model or self._model_id_from_llm()
 
         try:
             # Use structured output if available, otherwise parse JSON
             if hasattr(llm, "with_structured_output"):
-                structured_llm = llm.with_structured_output(TaskPlanResult)
+                structured_llm = LLMService.structured(llm, TaskPlanResult, model_id)
                 plan_result: TaskPlanResult = await structured_llm.ainvoke(
                     [
                         SystemMessage(content=PLANNER_SYSTEM_PROMPT),
@@ -293,7 +298,12 @@ class PlannerNode(BaseNode):
                     raise ValueError(f"Unexpected response type: {type(content)}")
 
         except Exception as e:
-            # Fallback to simple single-task plan
+            # Fallback to simple single-task plan (동작 유지, 축소 사실만 관측 가능하게)
+            logger.warning(
+                "Planner fell back to single-task plan: model=%s error=%s",
+                model_id or "unknown",
+                type(e).__name__,
+            )
             plan_result = TaskPlanResult(
                 analysis=f"Failed to parse LLM plan: {str(e)}. Using simple execution.",
                 is_complex=False,
