@@ -28,7 +28,13 @@ from models.llm_models import (
 )
 from services.llm_service import LLMService
 
-_NO_TEMPERATURE = ["gpt-6-sol", "gpt-6-luna", "gpt-6-astra", "claude-sonnet-5-5"]
+_NO_TEMPERATURE = [
+    "gpt-6-sol",
+    "gpt-6-luna",
+    "gpt-6-astra",
+    "claude-sonnet-5-5",
+    "claude-haiku-5-5",
+]
 _KEEPS_TEMPERATURE_OPENAI = ["gpt-5.6", "gpt-5.6-sol"]
 _KEEPS_TEMPERATURE_ANTHROPIC = ["claude-sonnet-5", "claude-opus-5"]
 
