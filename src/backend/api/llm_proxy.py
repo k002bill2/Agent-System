@@ -87,6 +87,9 @@ COST_TABLE: list[tuple[str, float, float]] = [
     ("claude-opus-4-5", 0.005, 0.025),
     ("claude-opus-4", 0.015, 0.075),
     ("claude-sonnet-4", 0.003, 0.015),
+    # Haiku 5.5 ($0.10/$0.50 per 1M, ≤100k prompt) — prefix 가 haiku-4 와 겹치지 않으나
+    # 세대 내림차순 배치 규칙을 따른다. >100k 구간($0.50/$2.50)은 단일가 한계로 미반영.
+    ("claude-haiku-5-5", 0.0001, 0.0005),
     ("claude-haiku-4-5", 0.001, 0.005),
     ("claude-haiku-4", 0.00025, 0.00125),
     # Gemini 3.x Flash: $0.75/$3.75 per 1M (공식 가격표, 2026-09-05 확인).

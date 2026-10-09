@@ -48,9 +48,7 @@ def test_haiku_5_5_is_registered_non_default_and_disabled():
 
 def test_anthropic_default_unchanged_and_unique():
     assert LLMModelRegistry.get_default("anthropic") == "claude-sonnet-5"
-    defaults = [
-        m for m in LLMModelRegistry.get_by_provider(LLMProvider.ANTHROPIC) if m.is_default
-    ]
+    defaults = [m for m in LLMModelRegistry.get_by_provider(LLMProvider.ANTHROPIC) if m.is_default]
     assert [m.id for m in defaults] == ["claude-sonnet-5"]
 
 
@@ -109,9 +107,7 @@ def test_haiku_4_family_prices_unchanged():
 
     for calc in (_calc_cost, AnthropicUsageCollector._calc_cost):
         assert calc("claude-haiku-4-5-20251001", 1000, 3000) == pytest.approx(0.001 + 3 * 0.005)
-        assert calc("claude-haiku-4-20250101", 1000, 3000) == pytest.approx(
-            0.00025 + 3 * 0.00125
-        )
+        assert calc("claude-haiku-4-20250101", 1000, 3000) == pytest.approx(0.00025 + 3 * 0.00125)
 
 
 def test_context_limit_is_1m():
