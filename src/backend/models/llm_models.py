@@ -170,6 +170,30 @@ _MODELS: list[LLMModelConfig] = [
         supports_tools=True,
         supports_vision=True,
     ),
+    # claude-haiku-5-5: official docs, verified 2026-10-09 (released 2026-10-07).
+    # https://platform.claude.com/docs/en/models/haiku-5-5/overview
+    # https://platform.claude.com/docs/en/models/haiku-5-5/migration-guide
+    # 1M context / 128K max output. 가격은 프롬프트 길이 2구간 — 레지스트리는 단일가라
+    # ≤100k 단가($0.10/$0.50 per 1M)를 저장한다. >100k 는 $0.50/$2.50 (5배, 과소 집계).
+    # 400 조건: temperature≠1, top_p≠0.99, top_k(모든 값), temperature+top_p 동시,
+    # 수동 thinking {"type":"enabled","budget_tokens":N}, assistant prefill.
+    # forced tool_choice(any/named tool)는 허용 — Sonnet 5.5 와 다름(공식 migration
+    # guide). langchain-anthropic 1.7.5 _supports_forced_tool_choice 예외 목록에도
+    # 없다(chat_models.py:1161-1165). 활성화는 smoke 후 관리자 조치.
+    LLMModelConfig(
+        id="claude-haiku-5-5",
+        display_name="Claude Haiku 5.5",
+        provider=LLMProvider.ANTHROPIC,
+        context_window=1_000_000,
+        input_price=0.0001,  # $0.10/1M tokens (≤100k prompt)
+        output_price=0.0005,  # $0.50/1M tokens (≤100k prompt)
+        is_default=False,
+        is_enabled=False,
+        supports_tools=True,
+        supports_temperature=False,
+        supports_forced_tool_choice=True,
+        supports_vision=True,
+    ),
     LLMModelConfig(
         id="claude-haiku-4-5-20251001",
         display_name="Claude Haiku 4.5",
@@ -598,7 +622,7 @@ def get_request_capabilities(model_id: str | None) -> RequestCapabilities:
 # Code-seed revision stamp — bump when policy-relevant seed contents change
 # (defaults, enabled flags, model set, request capabilities). Recorded on
 # Playground executions as optional audit metadata; see LLMModelRegistry.get_revision().
-REGISTRY_REVISION = "2026-10-03.3"
+REGISTRY_REVISION = "2026-10-09.1"
 
 
 class LLMModelRegistry:

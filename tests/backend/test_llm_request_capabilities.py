@@ -28,7 +28,13 @@ from models.llm_models import (
 )
 from services.llm_service import LLMService
 
-_NO_TEMPERATURE = ["gpt-6-sol", "gpt-6-luna", "gpt-6-astra", "claude-sonnet-5-5"]
+_NO_TEMPERATURE = [
+    "gpt-6-sol",
+    "gpt-6-luna",
+    "gpt-6-astra",
+    "claude-sonnet-5-5",
+    "claude-haiku-5-5",
+]
 _KEEPS_TEMPERATURE_OPENAI = ["gpt-5.6", "gpt-5.6-sol"]
 _KEEPS_TEMPERATURE_ANTHROPIC = ["claude-sonnet-5", "claude-opus-5"]
 
@@ -540,6 +546,7 @@ def test_defaults_and_enabled_set_unchanged():
 # seed 를 바꿨으면 REGISTRY_REVISION 을 올리고 새 쌍을 **추가**한다 (기존 항목 수정 금지).
 _REGISTRY_REVISION_HISTORY = [
     ("2026-10-03.3", "5006bcee91b45941ca1be652ed5ea73929af9f1399d54e932d8841dd9e2f131b"),
+    ("2026-10-09.1", "1d06785cfb29e4d4754c720691bbe56e6d4c180ff4d0daff43dd1ed08c60b7b3"),
 ]
 
 

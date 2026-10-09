@@ -261,6 +261,7 @@ MODEL_COSTS = {
     "claude-sonnet-5-5": {"input": 0.002, "output": 0.010},
     "claude-sonnet-5": {"input": 0.002, "output": 0.010},
     "claude-sonnet-4-6": {"input": 0.003, "output": 0.015},
+    "claude-haiku-5-5": {"input": 0.0001, "output": 0.0005},
     "claude-haiku-4-5-20251001": {"input": 0.001, "output": 0.005},
     # Legacy model IDs for backward compatibility
     "claude-opus-4-7": {"input": 0.005, "output": 0.025},
