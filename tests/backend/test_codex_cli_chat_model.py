@@ -258,8 +258,10 @@ async def test_structured_output_accepts_prompt_value_input() -> None:
 async def test_structured_output_keeps_message_list_input() -> None:
     mock_run = MagicMock(side_effect=_run_side_effect(last_message='{"title": "x", "steps": 1}'))
     with patch(f"{MODULE}.subprocess.run", mock_run):
-        await _model().with_structured_output(_Plan).ainvoke(
-            [SystemMessage(content="be terse"), HumanMessage(content="plan it")]
+        await (
+            _model()
+            .with_structured_output(_Plan)
+            .ainvoke([SystemMessage(content="be terse"), HumanMessage(content="plan it")])
         )
     prompt = _structured_prompt(mock_run)
     assert prompt.count("## User") == 1
