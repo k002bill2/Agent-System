@@ -213,3 +213,56 @@ async def test_acall_delegates_to_call() -> None:
     ):
         out = await _model()._acall([HumanMessage(content="q")])
     assert out == "async answer"
+
+
+# ── with_structured_output: input normalization ──────────────────────────────
+# Regression: ``list(str)`` split a plain string prompt into characters, each of
+# which LangChain then turned into its own HumanMessage (``## User`` per char).
+
+_CLASSIFY_PROMPT = "다음 문장을 [보안|비용|규제] 분류"
+
+
+def _structured_prompt(mock_run: MagicMock) -> str:
+    # Contract: the formatted prompt is the trailing argv element.
+    return mock_run.call_args.args[0][-1]
+
+
+@pytest.mark.asyncio
+async def test_structured_output_accepts_plain_string_input() -> None:
+    mock_run = MagicMock(side_effect=_run_side_effect(last_message='{"title": "x", "steps": 1}'))
+    with patch(f"{MODULE}.subprocess.run", mock_run):
+        result = await _model().with_structured_output(_Plan).ainvoke(_CLASSIFY_PROMPT)
+    assert result == _Plan(title="x", steps=1)
+    prompt = _structured_prompt(mock_run)
+    assert prompt.count("## User") == 1
+    assert f"## User\n{_CLASSIFY_PROMPT}" in prompt
+
+
+@pytest.mark.asyncio
+async def test_structured_output_accepts_prompt_value_input() -> None:
+    from langchain_core.prompts import ChatPromptTemplate
+
+    prompt_value = ChatPromptTemplate.from_messages(
+        [("system", "be terse"), ("human", "{q}")]
+    ).invoke({"q": _CLASSIFY_PROMPT})
+    mock_run = MagicMock(side_effect=_run_side_effect(last_message='{"title": "x", "steps": 1}'))
+    with patch(f"{MODULE}.subprocess.run", mock_run):
+        result = await _model().with_structured_output(_Plan).ainvoke(prompt_value)
+    assert result == _Plan(title="x", steps=1)
+    prompt = _structured_prompt(mock_run)
+    assert prompt.count("## User") == 1
+    assert prompt.index("## System\nbe terse") < prompt.index(f"## User\n{_CLASSIFY_PROMPT}")
+
+
+@pytest.mark.asyncio
+async def test_structured_output_keeps_message_list_input() -> None:
+    mock_run = MagicMock(side_effect=_run_side_effect(last_message='{"title": "x", "steps": 1}'))
+    with patch(f"{MODULE}.subprocess.run", mock_run):
+        await _model().with_structured_output(_Plan).ainvoke(
+            [SystemMessage(content="be terse"), HumanMessage(content="plan it")]
+        )
+    prompt = _structured_prompt(mock_run)
+    assert prompt.count("## User") == 1
+    assert prompt.index("## System\nbe terse") < prompt.index("## User\nplan it")
+    # The schema instruction is still appended as the final assistant turn.
+    assert "Return valid JSON only" in prompt
