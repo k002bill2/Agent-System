@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from langchain_core.callbacks import CallbackManagerForLLMRun
+from langchain_core.language_models import LanguageModelInput
 from langchain_core.language_models.chat_models import SimpleChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from pydantic import BaseModel, Field
@@ -58,9 +59,11 @@ class _StructuredCodexRunnable:
         self.llm = llm
         self.schema = schema
 
-    async def ainvoke(self, messages: list[BaseMessage], *args: Any, **kwargs: Any) -> Any:
+    async def ainvoke(self, messages: LanguageModelInput, *args: Any, **kwargs: Any) -> Any:
         schema_text = self._schema_text()
-        structured_messages = list(messages)
+        # Normalize via LangChain's own coercion (str / PromptValue / message-likes);
+        # list() on a str would split it into one message per character.
+        structured_messages = self.llm._convert_input(messages).to_messages()
         structured_messages.append(
             AIMessage(
                 content=(
